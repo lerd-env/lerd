@@ -39,6 +39,13 @@ func TestParseNmcliOutput_deduplicates(t *testing.T) {
 	assertSliceEqual(t, got, want)
 }
 
+func TestParseNmcliOutput_skipsZonedLinkLocal(t *testing.T) {
+	input := "fe80::46d4:53ff:fe3f:a9a7%18|8.8.8.8\nfe80::1%eth0\n"
+	got := parseNmcliLines(input)
+	want := []string{"8.8.8.8"}
+	assertSliceEqual(t, got, want)
+}
+
 func TestParseNmcliOutput_empty(t *testing.T) {
 	got := parseNmcliLines("")
 	if len(got) != 0 {

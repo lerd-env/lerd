@@ -22,7 +22,7 @@ func isFileContent(path string, content []byte) bool {
 }
 
 // parseNameservers parses nameserver entries from a resolv.conf-style file.
-// Skips loopback and stub resolver addresses.
+// Skips loopback, stub resolver, and zoned link-local addresses.
 func parseNameservers(path string) []string {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -35,13 +35,30 @@ func parseNameservers(path string) []string {
 			continue
 		}
 		ip := strings.TrimSpace(strings.TrimPrefix(line, "nameserver "))
-		// Skip loopback / stub resolver addresses
-		if ip == "" || ip == "127.0.0.1" || ip == "127.0.0.53" || ip == "::1" {
-			continue
+		if ip := sanitizeDNSIP(ip); ip != "" {
+			servers = append(servers, ip)
 		}
-		servers = append(servers, ip)
 	}
 	return servers
+}
+
+// sanitizeDNSIP returns ip if it is usable as an upstream DNS target inside the
+// lerd container netns, or "" if it should be filtered. Loopback, unspecified
+// and zoned addresses (e.g. fe80::...%18) are rejected — podman/netavark cannot
+// consume scoped addresses, and link-local zones are interface-bound anyway.
+func sanitizeDNSIP(ip string) string {
+	ip = strings.TrimSpace(ip)
+	if ip == "" || ip == "--" {
+		return ""
+	}
+	if strings.ContainsRune(ip, '%') {
+		return ""
+	}
+	parsed := net.ParseIP(ip)
+	if parsed == nil || parsed.IsLoopback() || parsed.IsUnspecified() {
+		return ""
+	}
+	return ip
 }
 
 // WaitReady blocks until lerd-dns is accepting TCP connections on port 5300

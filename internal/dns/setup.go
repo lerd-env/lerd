@@ -198,7 +198,16 @@ func ReadContainerDNS() []string {
 	if err := json.Unmarshal(data, &info); err != nil || len(info.DnsForwardIps) == 0 {
 		return readUpstreamDNS()
 	}
-	return info.DnsForwardIps
+	var out []string
+	for _, ip := range info.DnsForwardIps {
+		if clean := sanitizeDNSIP(ip); clean != "" {
+			out = append(out, clean)
+		}
+	}
+	if len(out) == 0 {
+		return readUpstreamDNS()
+	}
+	return out
 }
 
 // ReadUpstreamDNS returns upstream DNS server IPs from the running system.
@@ -234,13 +243,13 @@ func parseNmcliLines(output string) []string {
 	for _, line := range strings.Split(output, "\n") {
 		// nmcli may separate multiple values with |
 		for _, ip := range strings.Split(line, "|") {
-			ip = strings.TrimSpace(ip)
-			if ip == "" || ip == "--" || ip == "127.0.0.1" || ip == "127.0.0.53" || ip == "::1" {
+			clean := sanitizeDNSIP(ip)
+			if clean == "" {
 				continue
 			}
-			if !seen[ip] {
-				seen[ip] = true
-				servers = append(servers, ip)
+			if !seen[clean] {
+				seen[clean] = true
+				servers = append(servers, clean)
 			}
 		}
 	}
