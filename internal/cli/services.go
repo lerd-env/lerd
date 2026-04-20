@@ -645,7 +645,10 @@ func ensureServiceQuadlet(name string) error {
 			content = podman.ApplyImage(content, override)
 		}
 	}
-	if err := podman.WriteContainerUnitFn(quadletName, content); err != nil {
+	// WriteQuadletDiff writes the .container file to QuadletDir (needed on macOS
+	// so quadletImage() can resolve the image for pre-pull in startRestoredServices)
+	// and calls AfterQuadletWriteFn (writes the launchd plist on macOS).
+	if _, err := podman.WriteQuadletDiff(quadletName, content); err != nil {
 		return fmt.Errorf("writing unit for %s: %w", name, err)
 	}
 	return podman.DaemonReloadFn()
