@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -60,6 +61,21 @@ func PullImageTo(image string, w io.Writer) error {
 	cmd := exec.Command(PodmanBin(), "pull", image)
 	cmd.Stdout = w
 	cmd.Stderr = w
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pulling %s: %w", image, err)
+	}
+	return nil
+}
+
+// PullImageIfMissing pulls the named image when it is not already in the
+// local store. No-op when the image exists.
+func PullImageIfMissing(image string) error {
+	if ImageExists(image) {
+		return nil
+	}
+	cmd := exec.Command(PodmanBin(), "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pulling %s: %w", image, err)
 	}

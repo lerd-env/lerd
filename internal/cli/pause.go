@@ -71,6 +71,9 @@ func PauseSite(name string) error {
 	if site.IsCustomContainer() {
 		_ = podman.StopUnit(podman.CustomContainerName(site.Name))
 	}
+	if site.IsFrankenPHP() {
+		_ = podman.StopUnit(podman.FrankenPHPContainerName(site.Name))
+	}
 
 	if err := writePausedHTML(site); err != nil {
 		return fmt.Errorf("writing paused page: %w", err)
@@ -116,7 +119,8 @@ func UnpauseSite(name string) error {
 
 	phpVersion := site.PHPVersion
 
-	if site.IsCustomContainer() {
+	switch {
+	case site.IsCustomContainer():
 		// Start the custom container and restore the proxy vhost.
 		_ = podman.StartUnit(podman.CustomContainerName(site.Name))
 		if site.Secured {
@@ -134,7 +138,24 @@ func UnpauseSite(name string) error {
 				return fmt.Errorf("generating custom vhost: %w", err)
 			}
 		}
-	} else {
+	case site.IsFrankenPHP():
+		_ = podman.StartUnit(podman.FrankenPHPContainerName(site.Name))
+		if site.Secured {
+			if err := nginx.GenerateFrankenPHPSSLVhost(*site); err != nil {
+				return fmt.Errorf("generating FrankenPHP SSL vhost: %w", err)
+			}
+			sslConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
+			mainConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+			_ = os.Remove(mainConf)
+			if err := os.Rename(sslConf, mainConf); err != nil {
+				return fmt.Errorf("installing SSL vhost: %w", err)
+			}
+		} else {
+			if err := nginx.GenerateFrankenPHPVhost(*site); err != nil {
+				return fmt.Errorf("generating FrankenPHP vhost: %w", err)
+			}
+		}
+	default:
 		if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}

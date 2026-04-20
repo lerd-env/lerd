@@ -203,8 +203,8 @@ func coreUnits() []string {
 }
 
 // installedCustomContainerUnits returns units for per-project custom containers
-// that have a unit file installed (plist on macOS, quadlet on Linux).
-// These are started alongside FPM and services.
+// and per-site FrankenPHP containers that have a unit file installed (plist on
+// macOS, quadlet on Linux). These are started alongside FPM and services.
 func installedCustomContainerUnits() []string {
 	var units []string
 	reg, err := config.LoadSites()
@@ -212,10 +212,18 @@ func installedCustomContainerUnits() []string {
 		return nil
 	}
 	for _, site := range reg.Sites {
-		if !site.IsCustomContainer() || site.Paused {
+		if site.Paused {
 			continue
 		}
-		unitName := podman.CustomContainerName(site.Name)
+		var unitName string
+		switch {
+		case site.IsCustomContainer():
+			unitName = podman.CustomContainerName(site.Name)
+		case site.IsFrankenPHP():
+			unitName = podman.FrankenPHPContainerName(site.Name)
+		default:
+			continue
+		}
 		// Use the platform-aware check (plist on macOS, .container quadlet on Linux)
 		// rather than podman.QuadletInstalled which only checks for .container files
 		// and always returns false on macOS where plists are used instead.

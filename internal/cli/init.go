@@ -207,6 +207,12 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	nodeVersion := defaults.NodeVersion
 	secured := defaults.Secured
 
+	// FrankenPHP detection. If the project has signals we offer it as a
+	// choice in the wizard; default to whatever the existing config says.
+	frankenHints := config.DetectFrankenPHPHints(cwd)
+	useFrankenPHP := defaults.Runtime == "frankenphp"
+	useFrankenPHPWorker := defaults.RuntimeWorker
+
 	selectedWorkers := defaults.Workers
 	if len(selectedWorkers) == 0 {
 		selectedWorkers = []string{}
@@ -259,6 +265,23 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	)
 
 	formGroups := []*huh.Group{huh.NewGroup(firstGroupFields...)}
+
+	if len(frankenHints) > 0 || useFrankenPHP {
+		reason := "Detected FrankenPHP signals in this project"
+		if len(frankenHints) > 0 {
+			reason = frankenHints[0].Reason
+		}
+		formGroups = append(formGroups, huh.NewGroup(
+			huh.NewConfirm().
+				Title("Use FrankenPHP runtime?").
+				Description(reason).
+				Value(&useFrankenPHP),
+			huh.NewConfirm().
+				Title("Enable worker mode?").
+				Description("Keeps PHP resident, ~10-50x faster requests, trades some dev ergonomics").
+				Value(&useFrankenPHPWorker),
+		))
+	}
 
 	if len(customWorkerNames) > 0 {
 		formGroups = append(formGroups, huh.NewGroup(
@@ -434,6 +457,13 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 		}
 	}
 
+	runtime := ""
+	runtimeWorker := false
+	if useFrankenPHP {
+		runtime = "frankenphp"
+		runtimeWorker = useFrankenPHPWorker
+	}
+
 	return &config.ProjectConfig{
 		PHPVersion:       phpVersion,
 		NodeVersion:      nodeVersion,
@@ -446,6 +476,8 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 		CustomWorkers:    filteredCustomWorkers,
 		AppURL:           defaults.AppURL,
 		Domains:          defaults.Domains,
+		Runtime:          runtime,
+		RuntimeWorker:    runtimeWorker,
 	}, nil
 }
 

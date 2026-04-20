@@ -49,6 +49,14 @@ func UnlinkSiteCore(site *config.Site, parkedDirs []string) error {
 		_ = podman.RemoveCustomContainerQuadlet(site.Name)
 	}
 
+	// Same cleanup for FrankenPHP sites: stop and remove the per-site
+	// quadlet. The dunglas/frankenphp image is shared across all FrankenPHP
+	// sites on this PHP version, so it stays in the local store.
+	if site.IsFrankenPHP() {
+		_ = podman.StopUnit(podman.FrankenPHPContainerName(site.Name))
+		_ = podman.RemoveFrankenPHPQuadlet(site.Name)
+	}
+
 	if IsParkedSite(site.Path, parkedDirs) {
 		_ = config.IgnoreSite(site.Name)
 	} else {

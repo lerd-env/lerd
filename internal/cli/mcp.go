@@ -818,6 +818,14 @@ Restart the container for a site without rebuilding the image. Takes ` + bt + `s
 ### ` + bt + `site_rebuild` + bt + `
 Rebuild the custom container image from the Containerfile and restart the container. Takes ` + bt + `site` + bt + ` (required). Use after changing the Containerfile. ` + bt + `site_link` + bt + ` reuses the cached image; ` + bt + `site_rebuild` + bt + ` forces a fresh build. Only works for custom container sites.
 
+### ` + bt + `site_runtime` + bt + `
+Switch the PHP runtime for a site between the shared PHP-FPM container (` + bt + `fpm` + bt + `, default) and a per-site FrankenPHP container (` + bt + `frankenphp` + bt + `). Arguments:
+- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
+- ` + bt + `runtime` + bt + ` (required): ` + bt + `fpm` + bt + ` or ` + bt + `frankenphp` + bt + `
+- ` + bt + `worker` + bt + ` (optional, default false): when runtime=frankenphp, enable worker mode (keeps PHP resident for ~10-50x faster requests)
+
+FrankenPHP is framework-aware: Laravel uses ` + bt + `octane:start --server=frankenphp --workers=auto` + bt + ` (needs pcntl, installed at container start); Symfony uses ` + bt + `frankenphp php-server --worker=public/index.php --watch` + bt + ` for live reload; unknown frameworks fall back to ` + bt + `frankenphp php-server` + bt + ` rooted at the framework's public dir. Switching to ` + bt + `fpm` + bt + ` removes the runtime fields from ` + bt + `.lerd.yaml` + bt + ` and regenerates the FPM vhost. Not supported on custom-container sites (their runtime comes from their Containerfile). Xdebug is not wired up for FrankenPHP; switch back to ` + bt + `fpm` + bt + ` to debug.
+
 ### ` + bt + `service_pin` + bt + ` / ` + bt + `service_unpin` + bt + `
 Pin or unpin a service. Both take ` + bt + `name` + bt + ` (required).
 
@@ -1015,6 +1023,13 @@ site_unpause(site: "old-project")  // restore and restart
 ` + "```" + `
 site_restart(site: "nestjs-app")  // restarts container (no rebuild)
 site_rebuild(site: "nestjs-app")  // rebuilds image from Containerfile + restarts
+` + "```" + `
+
+**Switch a site to FrankenPHP (per-site container, optional worker mode):**
+` + "```" + `
+site_runtime(site: "myapp", runtime: "frankenphp")                  // non-worker
+site_runtime(site: "myapp", runtime: "frankenphp", worker: true)    // worker mode
+site_runtime(site: "myapp", runtime: "fpm")                         // back to shared FPM
 ` + "```" + `
 
 **Keep a service always running regardless of active site:**
@@ -1257,6 +1272,7 @@ This project runs on **lerd**, a Podman-based Laravel development environment. T
 | ` + bt + `site_unpause` + bt + ` | Resume a paused site: start container, restore vhost, restart workers |
 | ` + bt + `site_restart` + bt + ` | Restart a site's container (custom container or PHP-FPM) |
 | ` + bt + `site_rebuild` + bt + ` | Rebuild custom container image from Containerfile and restart |
+| ` + bt + `site_runtime` + bt + ` | Switch between shared PHP-FPM and per-site FrankenPHP runtime (supports worker mode) |
 | ` + bt + `service_pin` + bt + ` | Pin a service so it is never auto-stopped even when no sites reference it |
 | ` + bt + `service_unpin` + bt + ` | Unpin a service so it can be auto-stopped when unused |
 | ` + bt + `stripe_listen` + bt + ` | Start a Stripe webhook listener for a site |

@@ -1387,6 +1387,29 @@ func toolList() []mcpTool {
 			},
 		},
 		mcpTool{
+			Name:        "site_runtime",
+			Description: "Switch the PHP runtime for a site. `fpm` (default) uses the shared PHP-FPM container; `frankenphp` spins up a per-site dunglas/frankenphp container that keeps PHP resident. Worker mode is framework-aware: Laravel uses octane:start --workers=auto, Symfony uses frankenphp's --worker flag + --watch for live reload. Falls back to generic `frankenphp php-server` when the framework has no adapter.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"site": {
+						Type:        "string",
+						Description: "Site name as shown by the sites tool",
+					},
+					"runtime": {
+						Type:        "string",
+						Enum:        []string{"fpm", "frankenphp"},
+						Description: "Target runtime: 'fpm' or 'frankenphp'",
+					},
+					"worker": {
+						Type:        "boolean",
+						Description: "When runtime=frankenphp, enable worker mode (PHP stays resident, faster but needs file-watch for dev). Ignored for fpm.",
+					},
+				},
+				Required: []string{"site", "runtime"},
+			},
+		},
+		mcpTool{
 			Name:        "service_pin",
 			Description: "Pin a service so it is never auto-stopped, even when no sites reference it. Starts the service if it is not already running.",
 			InputSchema: mcpSchema{
@@ -1565,6 +1588,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execSiteRestart(args)
 	case "site_rebuild":
 		return execSiteRebuild(args)
+	case "site_runtime":
+		return execSiteRuntime(args)
 	case "service_pin":
 		return execServicePin(args)
 	case "service_unpin":
@@ -4552,17 +4577,27 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 	}
 	_ = config.SetProjectPHPVersion(site.Path, version)
 
+	// Update the site registry so later steps see the new version.
+	site.PHPVersion = version
+	if err := config.AddSite(*site); err != nil {
+		return toolErr("updating site registry: " + err.Error()), nil
+	}
+
+	// FrankenPHP sites get a different image per PHP version; rewrite the
+	// per-site quadlet (with restart-on-change) via the shared link helper
+	// instead of touching FPM state or the FPM vhost.
+	if site.IsFrankenPHP() {
+		if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+			return toolErr("re-linking FrankenPHP site: " + err.Error()), nil
+		}
+		return toolOK(fmt.Sprintf("PHP version for %s set to %s (FrankenPHP image updated).", siteName, version)), nil
+	}
+
 	// Ensure the FPM quadlet and xdebug ini exist for this version.
 	if err := podman.WriteFPMQuadlet(version); err != nil {
 		return toolErr("writing FPM quadlet: " + err.Error()), nil
 	}
 	_ = podman.EnsureXdebugIni(version) // non-fatal if version not yet built
-
-	// Update the site registry.
-	site.PHPVersion = version
-	if err := config.AddSite(*site); err != nil {
-		return toolErr("updating site registry: " + err.Error()), nil
-	}
 
 	// Regenerate the nginx vhost (SSL or plain).
 	if site.Secured {
@@ -4652,6 +4687,65 @@ func execSiteRebuild(args map[string]any) (any, *rpcError) {
 		return toolErr("site is required"), nil
 	}
 	return runLerdCmd("rebuild", siteName)
+}
+
+func execSiteRuntime(args map[string]any) (any, *rpcError) {
+	siteName := strArg(args, "site")
+	if siteName == "" {
+		return toolErr("site is required"), nil
+	}
+	runtime := strArg(args, "runtime")
+	if runtime != "fpm" && runtime != "frankenphp" {
+		return toolErr("runtime must be 'fpm' or 'frankenphp'"), nil
+	}
+	worker := boolArg(args, "worker")
+
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return toolErr(fmt.Sprintf("site %q not found", siteName)), nil
+	}
+	if site.IsCustomContainer() {
+		return toolErr("site uses a custom Containerfile; runtime is defined by Containerfile.lerd"), nil
+	}
+
+	if runtime == "fpm" {
+		if !site.IsFrankenPHP() {
+			return toolOK(fmt.Sprintf("%s already on fpm runtime", siteName)), nil
+		}
+		_ = podman.StopUnit(podman.FrankenPHPContainerName(site.Name))
+		_ = podman.RemoveFrankenPHPQuadlet(site.Name)
+		_ = podman.DaemonReloadFn()
+		site.Runtime = ""
+		site.RuntimeWorker = false
+		if err := config.AddSite(*site); err != nil {
+			return toolErr("updating site: " + err.Error()), nil
+		}
+		_ = config.SetProjectRuntime(site.Path, "", false)
+		if site.Secured {
+			if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
+				return toolErr("regenerating SSL vhost: " + err.Error()), nil
+			}
+		} else if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
+			return toolErr("regenerating vhost: " + err.Error()), nil
+		}
+		_ = nginx.Reload()
+		return toolOK(fmt.Sprintf("%s: runtime set to fpm", siteName)), nil
+	}
+
+	site.Runtime = "frankenphp"
+	site.RuntimeWorker = worker
+	if err := config.AddSite(*site); err != nil {
+		return toolErr("updating site: " + err.Error()), nil
+	}
+	_ = config.SetProjectRuntime(site.Path, "frankenphp", worker)
+	if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+		return toolErr("linking FrankenPHP site: " + err.Error()), nil
+	}
+	label := "frankenphp"
+	if worker {
+		label = "frankenphp (worker mode)"
+	}
+	return toolOK(fmt.Sprintf("%s: runtime set to %s", siteName, label)), nil
 }
 
 func execServicePin(args map[string]any) (any, *rpcError) {

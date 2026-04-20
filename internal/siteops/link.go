@@ -151,6 +151,65 @@ func FinishLink(site config.Site, phpVersion string) error {
 	return nil
 }
 
+// FinishFrankenPHPLink performs the post-registration steps for a site whose
+// runtime is "frankenphp": ensure the image is pulled, write a per-site
+// quadlet that runs the framework's entrypoint, generate an nginx proxy
+// vhost, update container hosts, and reload nginx.
+func FinishFrankenPHPLink(site config.Site) error {
+	fw, _ := config.GetFrameworkForDir(site.Framework, site.Path)
+	entrypoint := fw.FrankenPHPEntrypoint(site.RuntimeWorker)
+	env := fw.FrankenPHPEnv(site.RuntimeWorker)
+
+	_ = podman.WriteContainerHosts()
+
+	image := podman.FrankenPHPImage(site.PHPVersion)
+	if err := podman.PullImageIfMissing(image); err != nil {
+		fmt.Printf("[WARN] pulling %s: %v\n", image, err)
+	}
+
+	unitName := podman.FrankenPHPContainerName(site.Name)
+	changed, err := podman.WriteFrankenPHPQuadletDiff(site.Name, site.Path, site.PHPVersion, entrypoint, env)
+	if err != nil {
+		return fmt.Errorf("writing FrankenPHP quadlet: %w", err)
+	}
+	_ = podman.DaemonReloadFn()
+
+	// Always Start (no-op if already running). If the quadlet content changed
+	// (new PHP version, worker flip, new entrypoint) we also need to restart
+	// so the running container picks up the change, otherwise the updated
+	// image/exec sits unused until the next manual restart.
+	if err := podman.StartUnit(unitName); err != nil {
+		fmt.Printf("[WARN] starting FrankenPHP container: %v\n", err)
+	}
+	if changed {
+		if err := podman.RestartUnit(unitName); err != nil {
+			fmt.Printf("[WARN] restarting FrankenPHP container after quadlet change: %v\n", err)
+		}
+	}
+
+	if site.Secured {
+		if err := certs.SecureSite(site); err != nil {
+			return fmt.Errorf("securing site: %w", err)
+		}
+	} else {
+		if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
+			return fmt.Errorf("generating FrankenPHP vhost: %w", err)
+		}
+	}
+
+	_ = podman.WriteContainerHosts()
+
+	if err := nginx.Reload(); err != nil {
+		return fmt.Errorf("nginx reload: %w", err)
+	}
+
+	if podman.AfterUnitChange != nil {
+		podman.AfterUnitChange("site:" + site.Name)
+	}
+
+	return nil
+}
+
 // FinishCustomLink performs the post-registration steps for a custom container
 // site: build the image, write a dedicated quadlet, generate a proxy vhost,
 // update container hosts, and reload nginx.

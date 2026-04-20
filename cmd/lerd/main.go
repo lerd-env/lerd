@@ -79,6 +79,7 @@ func main() {
 	root.AddCommand(cli.NewUseCmd())
 	root.AddCommand(cli.NewIsolateCmd())
 	root.AddCommand(cli.NewIsolateNodeCmd())
+	root.AddCommand(cli.NewRuntimeCmd())
 	root.AddCommand(cli.NewNodeInstallCmd())
 	root.AddCommand(cli.NewNodeUninstallCmd())
 	root.AddCommand(cli.NewNodeUseCmd())
