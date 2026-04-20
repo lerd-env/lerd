@@ -953,6 +953,10 @@ func installCompletion(lerdBin, shell, dir, filename string) {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return
 	}
+	// Skip if lerdBin looks like a test binary to avoid re-entering test code.
+	if strings.HasSuffix(lerdBin, ".test") || strings.Contains(lerdBin, "/tmp/") {
+		return
+	}
 	out, err := exec.Command(lerdBin, "completion", shell).Output()
 	if err != nil {
 		return
