@@ -27,6 +27,7 @@ func InstallCA() error {
 
 // IssueCert issues a TLS certificate covering all the given domains using mkcert.
 // The cert files are named after primaryDomain. Each domain also gets a wildcard entry.
+// If the cert and key files already exist they are reused without re-running mkcert.
 func IssueCert(primaryDomain string, allDomains []string, certsDir string) error {
 	if err := os.MkdirAll(certsDir, 0755); err != nil {
 		return err
@@ -34,6 +35,13 @@ func IssueCert(primaryDomain string, allDomains []string, certsDir string) error
 
 	certFile := filepath.Join(certsDir, primaryDomain+".crt")
 	keyFile := filepath.Join(certsDir, primaryDomain+".key")
+
+	// Skip re-issuing if both files already exist.
+	if _, certErr := os.Stat(certFile); certErr == nil {
+		if _, keyErr := os.Stat(keyFile); keyErr == nil {
+			return nil
+		}
+	}
 
 	// Build the list of SANs: each domain + its wildcard.
 	var sans []string
