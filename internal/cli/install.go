@@ -825,7 +825,12 @@ func (p *progressReader) Read(b []byte) (int, error) {
 func addShellShims(manageNode bool) error {
 	home, _ := os.UserHomeDir()
 	binDir := config.BinDir()
-	lerdBin := filepath.Join(home, ".local", "bin", "lerd")
+	// Use the running binary so shims work regardless of install method
+	// (Homebrew at /opt/homebrew/bin/lerd, manual at ~/.local/bin/lerd, etc.).
+	lerdBin, _ := os.Executable()
+	if lerdBin == "" {
+		lerdBin = filepath.Join(home, ".local", "bin", "lerd")
+	}
 	fnmBin := filepath.Join(binDir, "fnm")
 
 	// Write php shim
