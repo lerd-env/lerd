@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,7 +79,25 @@ func runInstall(_ *cobra.Command, _ []string) error {
 	// 2. Podman network
 	step("Creating lerd podman network")
 	if err := podman.EnsureNetwork("lerd"); err != nil {
-		return err
+		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
+			fmt.Println()
+			fmt.Println("    Migrating lerd network to dual-stack v4+v6.")
+			fmt.Println("    Existing containers on this network will be recreated.")
+			restored, mErr := podman.MigrateNetworkToIPv6("lerd")
+			if mErr != nil {
+				return fmt.Errorf("migrating lerd network: %w", mErr)
+			}
+			// StartUnit recreates each container from its quadlet (systemd or launchd);
+			// `podman start` would reuse the stale pre-migration network spec.
+			for _, c := range restored {
+				if err := podman.StartUnit(c); err != nil {
+					fmt.Printf("    WARN: failed to restart %s: %v\n", c, err)
+				}
+			}
+			step("Creating lerd podman network")
+		} else {
+			return err
+		}
 	}
 	if err := podman.EnsureNetworkDNS("lerd", dns.ReadContainerDNS()); err != nil {
 		return err

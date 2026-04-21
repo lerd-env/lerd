@@ -310,3 +310,36 @@ func TestIsEnabledBasedOnPlistExistence(t *testing.T) {
 		t.Error("should be enabled when plist exists")
 	}
 }
+
+func TestStripPrivilegedIPBind_v4(t *testing.T) {
+	cases := map[string]string{
+		"127.0.0.1:80:80":     "80:80",
+		"127.0.0.1:443:443":   "443:443",
+		"127.0.0.1:5300:5300": "127.0.0.1:5300:5300",
+		"0.0.0.0:80:80":       "80:80",
+		"3306:3306":           "3306:3306",
+		"127.0.0.1:80:80/tcp": "80:80/tcp",
+		"192.168.1.1:8080:80": "192.168.1.1:8080:80",
+	}
+	for in, want := range cases {
+		if got := stripPrivilegedIPBind(in); got != want {
+			t.Errorf("stripPrivilegedIPBind(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestStripPrivilegedIPBind_v6(t *testing.T) {
+	cases := map[string]string{
+		"[::1]:80:80":         "80:80",
+		"[::1]:443:443":       "443:443",
+		"[::1]:5300:5300":     "[::1]:5300:5300",
+		"[::1]:5300:5300/udp": "[::1]:5300:5300/udp",
+		"[::]:80:80":          "80:80",
+		"[::1]:443:443/tcp":   "443:443/tcp",
+	}
+	for in, want := range cases {
+		if got := stripPrivilegedIPBind(in); got != want {
+			t.Errorf("stripPrivilegedIPBind(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

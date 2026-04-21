@@ -186,11 +186,12 @@ func BindForLAN(content string, lanExposed bool) string {
 			continue
 		}
 		value := strings.TrimPrefix(trimmed, "PublishPort=")
-		// Skip lines that already have an explicit IP prefix (any host
-		// IP, not just 127.0.0.1 — be conservative and leave operator
-		// overrides alone). Detect by checking if the first segment
-		// contains a dot (e.g. 127.0.0.1, 192.168.x.y) rather than being
-		// a bare port number.
+		// Skip lines that already have an explicit IPv4 or IPv6 prefix
+		// (operator override). Detect IPv4 by a dot in the first segment;
+		// IPv6 binds are bracketed, e.g. PublishPort=[::1]:5300:5300.
+		if strings.HasPrefix(value, "[") {
+			continue
+		}
 		firstSeg := strings.SplitN(value, ":", 2)[0]
 		if strings.ContainsRune(firstSeg, '.') {
 			continue
@@ -198,4 +199,76 @@ func BindForLAN(content string, lanExposed bool) string {
 		lines[i] = "PublishPort=127.0.0.1:" + value
 	}
 	return strings.Join(lines, "\n")
+}
+
+// PairIPv6Binds adds an IPv6 PublishPort next to each managed IPv4 line:
+// bare/0.0.0.0 → [::], 127.0.0.1 → [::1]. Idempotent; operator overrides
+// (other v4 IPs, existing v6 lines) are preserved as-is. Skipped entirely
+// when the quadlet has no Network= directive: those containers use pasta
+// (the rootless default), and pasta can't bind v6 ports.
+func PairIPv6Binds(content string) string {
+	hasNetwork := false
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Network=") {
+			hasNetwork = true
+			break
+		}
+	}
+	if !hasNetwork {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+
+	v6PortSpecs := map[string]bool{}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		if !strings.HasPrefix(value, "[") {
+			continue
+		}
+		end := strings.Index(value, "]")
+		if end < 0 || end+1 >= len(value) || value[end+1] != ':' {
+			continue
+		}
+		v6PortSpecs[value[end+2:]] = true
+	}
+
+	out := make([]string, 0, len(lines)*2)
+	for _, line := range lines {
+		out = append(out, line)
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		if strings.HasPrefix(value, "[") {
+			continue
+		}
+
+		var v6Prefix, portSpec string
+		firstSeg := strings.SplitN(value, ":", 2)[0]
+		switch {
+		case !strings.ContainsRune(firstSeg, '.'):
+			v6Prefix = "[::]:"
+			portSpec = value
+		case firstSeg == "0.0.0.0":
+			v6Prefix = "[::]:"
+			portSpec = strings.TrimPrefix(value, "0.0.0.0:")
+		case firstSeg == "127.0.0.1":
+			v6Prefix = "[::1]:"
+			portSpec = strings.TrimPrefix(value, "127.0.0.1:")
+		default:
+			continue
+		}
+
+		if v6PortSpecs[portSpec] {
+			continue
+		}
+		v6PortSpecs[portSpec] = true
+		out = append(out, "PublishPort="+v6Prefix+portSpec)
+	}
+	return strings.Join(out, "\n")
 }

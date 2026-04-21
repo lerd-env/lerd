@@ -53,6 +53,30 @@ func TestParseNmcliOutput_empty(t *testing.T) {
 	}
 }
 
+// --- upstreamOrPasta ---
+
+func TestUpstreamOrPasta_usesUpstreamsWhenPresent(t *testing.T) {
+	fakeResolv := writeTempFile(t, "nameserver 8.8.8.8\n")
+	origPaths := resolvPaths
+	resolvPaths = []string{fakeResolv}
+	defer func() { resolvPaths = origPaths }()
+
+	got := upstreamOrPasta()
+	assertSliceEqual(t, got, []string{"8.8.8.8"})
+}
+
+func TestUpstreamOrPasta_fallsBackToPastaForwarder(t *testing.T) {
+	emptyResolv := writeTempFile(t, "# empty\n")
+	origPaths := resolvPaths
+	origNmcli := nmcliDNSFunc
+	resolvPaths = []string{emptyResolv}
+	nmcliDNSFunc = func() []string { return nil }
+	defer func() { resolvPaths = origPaths; nmcliDNSFunc = origNmcli }()
+
+	got := upstreamOrPasta()
+	assertSliceEqual(t, got, []string{pastaDefaultForwarder})
+}
+
 // --- parseDefaultInterface ---
 
 func TestParseDefaultInterface_typical(t *testing.T) {
@@ -109,7 +133,7 @@ func TestWriteDnsmasqConfig_withUpstreams(t *testing.T) {
 	assertContains(t, content, "address=/.test/127.0.0.1")
 }
 
-func TestWriteDnsmasqConfig_noUpstreams(t *testing.T) {
+func TestWriteDnsmasqConfig_noUpstreamsFallsBackToPasta(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	dir := t.TempDir()
@@ -130,8 +154,11 @@ func TestWriteDnsmasqConfig_noUpstreams(t *testing.T) {
 
 	assertContains(t, content, "port=5300")
 	assertContains(t, content, "address=/.test/127.0.0.1")
-	if strings.Contains(content, "no-resolv") {
-		t.Error("expected no-resolv to be absent when no upstreams detected")
+	assertContains(t, content, "address=/.test/::1")
+	assertContains(t, content, "no-resolv")
+	assertContains(t, content, "server="+pastaDefaultForwarder)
+	if strings.Contains(content, "listen-address") {
+		t.Errorf("dnsmasq must not restrict listen-address (rootlessport forwards via container netif, not loopback), got:\n%s", content)
 	}
 }
 
@@ -152,9 +179,8 @@ func TestWriteDnsmasqConfigFor_customTarget(t *testing.T) {
 	}
 	content := readFile(t, filepath.Join(dir, "lerd.conf"))
 	assertContains(t, content, "address=/.test/10.0.0.5")
-	if strings.Contains(content, "no-resolv") {
-		t.Error("expected no-resolv absent when no upstreams")
-	}
+	assertContains(t, content, "no-resolv")
+	assertContains(t, content, "server="+pastaDefaultForwarder)
 }
 
 func TestWriteDnsmasqConfigFor_emptyTargetDefaults(t *testing.T) {
@@ -172,6 +198,62 @@ func TestWriteDnsmasqConfigFor_emptyTargetDefaults(t *testing.T) {
 	}
 	content := readFile(t, filepath.Join(dir, "lerd.conf"))
 	assertContains(t, content, "address=/.test/127.0.0.1")
+}
+
+// --- v6 dnsmasq output ---
+
+func TestWriteDnsmasqConfig_emitsV6Listen(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	fakeResolv := writeTempFile(t, "nameserver 8.8.8.8\n")
+	origPaths := resolvPaths
+	resolvPaths = []string{fakeResolv}
+	defer func() { resolvPaths = origPaths }()
+
+	if err := WriteDnsmasqConfig(dir); err != nil {
+		t.Fatalf("WriteDnsmasqConfig: %v", err)
+	}
+	content := readFile(t, filepath.Join(dir, "lerd.conf"))
+	assertContains(t, content, "address=/.test/127.0.0.1")
+	assertContains(t, content, "address=/.test/::1")
+}
+
+func TestWriteDnsmasqConfigDual_skipsV6WhenEmpty(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	fakeResolv := writeTempFile(t, "nameserver 8.8.8.8\n")
+	origPaths := resolvPaths
+	resolvPaths = []string{fakeResolv}
+	defer func() { resolvPaths = origPaths }()
+
+	if err := WriteDnsmasqConfigDual(dir, "10.0.0.5", ""); err != nil {
+		t.Fatalf("WriteDnsmasqConfigDual: %v", err)
+	}
+	content := readFile(t, filepath.Join(dir, "lerd.conf"))
+	assertContains(t, content, "address=/.test/10.0.0.5")
+	if strings.Contains(content, "address=/.test/::") {
+		t.Errorf("expected no v6 address record when v6Target empty, got:\n%s", content)
+	}
+}
+
+func TestDeriveV6Target(t *testing.T) {
+	cases := []struct {
+		v4   string
+		want string
+	}{
+		{"", "::1"},
+		{"127.0.0.1", "::1"},
+	}
+	for _, c := range cases {
+		if got := deriveV6Target(c.v4); got != c.want {
+			t.Errorf("deriveV6Target(%q) = %q, want %q", c.v4, got, c.want)
+		}
+	}
+	// LAN target derives to either a global v6 (if host has one) or ::1
+	// fallback. Both are acceptable; assert it never returns empty.
+	if got := deriveV6Target("10.0.0.5"); got == "" {
+		t.Error("deriveV6Target(LAN) returned empty, expected global v6 or ::1")
+	}
 }
 
 // --- lerdDNSInterfaces parsing ---

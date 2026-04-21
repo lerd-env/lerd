@@ -51,6 +51,8 @@ All containers join the rootless Podman network `lerd`. Communication between Ng
 
 **Rootless Podman**: all containers run without root privileges. The only operations requiring `sudo` are DNS setup (configures NetworkManager or systemd-resolved to route `.test` queries) and the initial `net.ipv4.ip_unprivileged_port_start=80` sysctl.
 
+**Dual-stack networking**: the lerd podman bridge is created with both an IPv4 and an IPv6 ULA subnet (`fd00:1e7d::/64`), so containers receive both v4 and v6 addresses. nginx vhosts listen on `0.0.0.0` and `[::]`, lerd-dns answers AAAA records for `*.test` (`::1` locally, the host's primary global v6 when `lerd lan:expose on`), and every managed `PublishPort` in service quadlets is paired (a `127.0.0.1:5432` bind also gets a `[::1]:5432`). Existing v4-only installs are migrated to dual-stack on the next `lerd install`: attached containers stop, the network is recreated, the previous `network_dns_servers` list is restored, and the containers restart. To opt out, set an explicit subnet via `podman network create` before `lerd install` runs, or override the `lerd-*` quadlets to remove the `[::]` / `[::1]` lines before they're written.
+
 **Podman Quadlets**: containers are defined as systemd unit files (`.container` files) managed by the Quadlet generator. This means `systemctl --user start lerd-nginx` works like any other systemd service, and containers restart on failure and at login.
 
 **Shared nginx**: a single nginx container serves all sites via virtual hosts. nginx uses a Podman-network-aware resolver to route `fastcgi_pass` to the correct PHP-FPM container by hostname.

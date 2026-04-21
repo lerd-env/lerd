@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -397,7 +398,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// init or if it was pruned. All service containers use --network lerd so
 	// this must succeed before any container is started.
 	if err := podman.EnsureNetwork("lerd"); err != nil {
-		fmt.Printf("  WARN: ensure lerd network: %v\n", err)
+		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
+			fmt.Println("  WARN: lerd network is missing IPv6 support; run 'lerd install' to migrate")
+		} else {
+			fmt.Printf("  WARN: ensure lerd network: %v\n", err)
+		}
 	}
 
 	// Restore quadlets and worker units that may be missing after an

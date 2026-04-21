@@ -224,3 +224,26 @@ To ensure a clean switch and recreate the networks with the new backend, reset t
 podman system reset
 ```
 :::
+
+::: details Error: unable to parse ip fe80::...%18 specified in AddDNSServer: invalid argument
+Your host's DNS configuration includes a zoned link-local IPv6 nameserver, typically advertised by your router via SLAAC + RDNSS. The zone identifier (`%18` is a kernel interface index) is meaningless inside a container's network namespace, and netavark refuses to accept it.
+
+Lerd 1.18+ filters these addresses automatically before handing them to podman. If you're still on 1.17 or older, upgrade with `lerd update` and rerun `lerd install`. The filter is conservative: only zoned link-local (`fe80::...%iface`) addresses are dropped; globally routable IPv6 nameservers (e.g. `2606:4700:4700::1111`) are preserved.
+
+When filtering empties the entire DNS list, lerd falls back to pasta's standard forwarder (`169.254.1.1`), which bridges into the host's resolver and preserves `.test` routing.
+:::
+
+::: details Containers can resolve `.test` over IPv4 but not over IPv6
+Lerd 1.18+ creates the lerd podman network as dual-stack (v4 + v6) and writes both A and AAAA records for `.test` domains. If you upgraded from an older version, the existing v4-only `lerd` network is migrated automatically the next time you run `lerd install`: attached containers stop, the network is recreated with the `fd00:1e7d::/64` ULA prefix, the previous DNS server list is restored, and the containers restart. Quick check:
+
+```bash
+podman network inspect lerd --format '{{.Subnets}}'
+# expect both an IPv4 subnet and one starting with fd00:1e7d::
+```
+
+If the v6 subnet is missing, run `lerd install` once to migrate. To verify resolution from inside a container:
+
+```bash
+podman run --rm --network lerd alpine sh -c 'nslookup laravel.test; nslookup -type=AAAA laravel.test'
+```
+:::

@@ -251,3 +251,65 @@ func TestSortPaths(t *testing.T) {
 		t.Errorf("expected sorted by length then lex, got: %v", paths)
 	}
 }
+
+// --- PairIPv6Binds ---
+
+func TestPairIPv6Binds_pairsBarePublishPort(t *testing.T) {
+	in := "[Container]\nNetwork=lerd\nPublishPort=80:80\nPublishPort=443:443\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::]:80:80") {
+		t.Errorf("expected v6 pair for :80:80, got:\n%s", out)
+	}
+	if !strings.Contains(out, "PublishPort=[::]:443:443") {
+		t.Errorf("expected v6 pair for :443:443, got:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_pairsLoopbackWithLinkLocal(t *testing.T) {
+	in := "Network=lerd\nPublishPort=127.0.0.1:5300:5300/udp\nPublishPort=127.0.0.1:5300:5300/tcp\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::1]:5300:5300/udp") {
+		t.Errorf("expected v6 pair [::1]:5300:5300/udp, got:\n%s", out)
+	}
+	if !strings.Contains(out, "PublishPort=[::1]:5300:5300/tcp") {
+		t.Errorf("expected v6 pair [::1]:5300:5300/tcp, got:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_idempotent(t *testing.T) {
+	in := "Network=lerd\nPublishPort=80:80\n"
+	once := PairIPv6Binds(in)
+	twice := PairIPv6Binds(once)
+	if once != twice {
+		t.Errorf("PairIPv6Binds is not idempotent:\nonce:\n%s\ntwice:\n%s", once, twice)
+	}
+	if strings.Count(twice, "PublishPort=[::]:80:80") != 1 {
+		t.Errorf("expected exactly one v6 pair, got:\n%s", twice)
+	}
+}
+
+func TestPairIPv6Binds_preservesOperatorOverrides(t *testing.T) {
+	in := "Network=lerd\nPublishPort=192.168.1.10:80:80\nPublishPort=[fe80::1%eth0]:80:80\n"
+	out := PairIPv6Binds(in)
+	if out != in {
+		t.Errorf("operator overrides should be preserved verbatim:\nin:\n%s\nout:\n%s", in, out)
+	}
+}
+
+func TestPairIPv6Binds_handles0000(t *testing.T) {
+	in := "Network=lerd\nPublishPort=0.0.0.0:80:80\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::]:80:80") {
+		t.Errorf("expected v6 :: pair for 0.0.0.0, got:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_skipsWhenNoNetworkDirective(t *testing.T) {
+	// pasta (the rootless default when no Network= is set) cannot bind v6
+	// ports. Adding [::1] pairs would crash the container at startup.
+	in := "[Container]\nPublishPort=127.0.0.1:5300:5300/udp\nPublishPort=127.0.0.1:5300:5300/tcp\n"
+	out := PairIPv6Binds(in)
+	if out != in {
+		t.Errorf("expected no v6 pairs when Network= absent (pasta path); got:\n%s", out)
+	}
+}
