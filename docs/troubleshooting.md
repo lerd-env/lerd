@@ -247,3 +247,23 @@ If the v6 subnet is missing, run `lerd install` once to migrate. To verify resol
 podman run --rm --network lerd alpine sh -c 'nslookup laravel.test; nslookup -type=AAAA laravel.test'
 ```
 :::
+
+::: details Every DNS lookup inside a lerd container stalls ~5 seconds
+Symptom: pages that hit the database or any container-to-container hostname feel slow, and `time dig <anything> @<container>` takes roughly five seconds before returning an answer. The network looks fine in `podman network inspect lerd` (both IPv4 and IPv6 subnets present), but aardvark-dns's on-disk config has the v6 gateway absent from its listen-ips line.
+
+Cause: `podman network rm` doesn't clean up `$XDG_RUNTIME_DIR/containers/networks/aardvark-dns/<name>` between rm and recreate, so a network that was originally v4-only can leave aardvark with a v4-only listen header even after the network is recreated dual-stack. The container's `/etc/resolv.conf` still lists the v6 gateway as the primary nameserver, queries to it time out (~5s), then glibc falls back to the v4 gateway.
+
+Lerd 1.18+ detects this drift on `lerd install` (aardvark listen line is v4-only despite the network being dual-stack) and self-heals by recreating the network with the stale aardvark state wiped. If you're on an earlier 1.18 build or the heal didn't fire, force it:
+
+```bash
+lerd install
+```
+
+Manual verification:
+
+```bash
+cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/networks/aardvark-dns/lerd" | head -1
+# expect both gateways, e.g.: fd00:1e7d::1,10.89.7.1 169.254.1.1
+# if only 10.89.7.1 is present, the drift fix didn't run — re-run lerd install
+```
+:::

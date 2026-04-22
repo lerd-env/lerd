@@ -91,9 +91,16 @@ wget -qO- https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash -
 lerd uninstall
 ```
 
-Stops all containers, disables and removes Quadlet units, removes the watcher service, removes the binary, and cleans up the `PATH` entry from your shell config. Prompts before deleting config and data directories.
+Stops all containers, disables and removes Quadlet units, removes the watcher service, removes the binary, tears down the `lerd` podman network (including aardvark-dns runtime state), and cleans up the `PATH` entry from your shell config.
 
-To skip all prompts:
+Four opt-in prompts before finishing:
+
+1. **Remove all config and data** — deletes `~/.config/lerd` and `~/.local/share/lerd` (takes your `sites.yaml`, bundled binaries, TLS certs, and all service data with it).
+2. **Remove MCP integration** — unregisters lerd from Claude Code, Cursor, Windsurf, and Junie at user scope, removes `~/.claude/skills/lerd/`, `~/.cursor/rules/lerd.mdc`, and strips the lerd block from `~/.junie/guidelines.md`. Also runs across every registered site to clean the same files per-project.
+3. **Uninstall mkcert CA** — runs `mkcert -uninstall` so browsers and OS trust stores stop trusting the lerd CA that `install` originally added.
+4. **Purge lerd-built container images** — removes `lerd-php*-fpm:local`, `lerd-custom-*:local`, and `lerd-dnsmasq:local`. Upstream pulled images (mysql/redis/postgres/etc.) are deliberately left alone; they're expensive to re-pull and your database/app data lives in host bind mounts, not inside the images, so nothing is lost by keeping them.
+
+To answer yes to every prompt without interaction:
 
 ```bash
 lerd uninstall --force

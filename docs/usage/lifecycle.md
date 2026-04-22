@@ -42,6 +42,15 @@ A live spinner shows the per-unit progress. If a single SSL vhost references a m
 If you ran `lerd uninstall` and then reinstalled, worker units and service quadlets are recreated by `lerd start` from each site's `.lerd.yaml`. Sites with a committed `.lerd.yaml` come back fully wired up. Sites without one need their workers restarted manually.
 :::
 
+::: info Deleted project directories are auto-cleaned
+`lerd-watcher` removes sites from `sites.yaml` whenever their project directory disappears on disk. Two paths do this:
+
+- **Instant** — fsnotify on every parked directory (configured via `lerd park`). When a direct subdirectory gets deleted, the corresponding site is unlinked within milliseconds.
+- **Periodic** — every 30 seconds the watcher sweeps the full site registry (parked and non-parked) and removes any site whose path no longer exists. The UI refreshes via the sites eventbus so the dashboard reflects the removal without a manual page reload.
+
+Both paths skip `Ignored: true` sites — those are explicitly parked by the user (e.g. via `lerd unpark` leaving a tombstone) and must not be reaped.
+:::
+
 ---
 
 ## `lerd stop`
