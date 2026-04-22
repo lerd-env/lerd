@@ -228,11 +228,17 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		command = command + " --port=" + port
 	}
 
-	// For custom container sites, exec into the custom container instead of FPM.
+	// Workers exec into the container that hosts the site's runtime:
+	//   - custom container sites → lerd-custom-<site>
+	//   - FrankenPHP sites       → lerd-fp-<site>
+	//   - shared FPM sites       → lerd-php<version>-fpm
 	var fpmUnit string
-	if site, _ := config.FindSite(siteName); site != nil && site.IsCustomContainer() {
+	switch site, _ := config.FindSite(siteName); {
+	case site != nil && site.IsCustomContainer():
 		fpmUnit = podman.CustomContainerName(siteName)
-	} else {
+	case site != nil && site.IsFrankenPHP():
+		fpmUnit = podman.FrankenPHPContainerName(siteName)
+	default:
 		versionShort := strings.ReplaceAll(phpVersion, ".", "")
 		fpmUnit = "lerd-php" + versionShort + "-fpm"
 	}

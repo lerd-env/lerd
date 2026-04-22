@@ -654,7 +654,7 @@
                             <span x-text="serviceByName(svcName) ? serviceLabel(serviceByName(svcName)) : svcName"></span>
                           </button>
                         </template>
-                        <template x-if="!selectedSite.custom_container && selectedSite.php_version">
+                        <template x-if="!selectedSite.custom_container && selectedSite.php_version && selectedSite.runtime !== 'frankenphp'">
                           <button
                             @click="setTab('system'); selectSystem('php-' + selectedSite.php_version)"
                             :title="(xdebugEnabled[selectedSite.php_version] ? 'Xdebug ' + (xdebugMode[selectedSite.php_version] || 'debug') : 'Xdebug off') + ' — click to manage'"
@@ -666,6 +666,17 @@
                             <span>Xdebug</span>
                             <span class="opacity-70" x-text="xdebugEnabled[selectedSite.php_version] ? (xdebugMode[selectedSite.php_version] || 'debug') : 'off'"></span>
                           </button>
+                        </template>
+                        <template x-if="!selectedSite.custom_container && selectedSite.runtime === 'frankenphp'">
+                          <span
+                            :title="selectedSite.runtime_worker ? 'FrankenPHP worker mode' : 'FrankenPHP'"
+                            class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30 text-orange-700 dark:text-orange-300">
+                            <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                            <span>FrankenPHP</span>
+                            <template x-if="selectedSite.runtime_worker">
+                              <span class="opacity-70">worker</span>
+                            </template>
+                          </span>
                         </template>
                       </div>
                     </template>

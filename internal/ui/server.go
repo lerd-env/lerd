@@ -647,6 +647,8 @@ type SiteResponse struct {
 	CustomContainer bool     `json:"custom_container,omitempty"`
 	ContainerPort   int      `json:"container_port,omitempty"`
 	ContainerImage  string   `json:"container_image,omitempty"`
+	Runtime         string   `json:"runtime,omitempty"`
+	RuntimeWorker   bool     `json:"runtime_worker,omitempty"`
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
@@ -735,6 +737,8 @@ func buildSites() []SiteResponse {
 			CustomContainer:    e.ContainerPort > 0,
 			ContainerPort:      e.ContainerPort,
 			ContainerImage:     e.ContainerImage,
+			Runtime:            e.Runtime,
+			RuntimeWorker:      e.RuntimeWorker,
 		})
 	}
 	return sites
@@ -1632,7 +1636,17 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = config.SetProjectPHPVersion(site.Path, version)
 		site.PHPVersion = version
-		// Regenerate vhost with new PHP version
+		if site.IsFrankenPHP() {
+			if err := config.AddSite(*site); err != nil {
+				writeJSON(w, SiteActionResponse{Error: "updating site registry: " + err.Error()})
+				return
+			}
+			if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+				writeJSON(w, SiteActionResponse{Error: "re-linking FrankenPHP site: " + err.Error()})
+				return
+			}
+			break
+		}
 		if site.Secured {
 			if err := certs.SecureSite(*site); err != nil {
 				writeJSON(w, SiteActionResponse{Error: "regenerating SSL vhost: " + err.Error()})

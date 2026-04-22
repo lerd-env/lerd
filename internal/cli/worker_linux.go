@@ -68,6 +68,7 @@ BindsTo=%s.service
 Type=simple
 Restart=%s
 RestartSec=5
+SuccessExitStatus=1 130 143
 ExecStart=%s exec -w %s %s %s
 
 [Install]

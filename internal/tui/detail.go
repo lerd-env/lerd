@@ -405,6 +405,13 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 	if site.FrameworkLabel != "" {
 		info += dimStyle.Render("  fw: ") + site.FrameworkLabel
 	}
+	if site.Runtime == "frankenphp" {
+		rt := "frankenphp"
+		if site.RuntimeWorker {
+			rt = "frankenphp (worker)"
+		}
+		info += dimStyle.Render("  runtime: ") + accentStyle.Render(rt)
+	}
 	if site.Branch != "" {
 		info += dimStyle.Render("  git: ") + site.Branch
 	}

@@ -46,6 +46,14 @@ type ProjectConfig struct {
 	AppURL    string           `yaml:"app_url,omitempty"`
 	DB        ProjectDB        `yaml:"db,omitempty"`
 	Container *ContainerConfig `yaml:"container,omitempty"`
+	// Runtime selects how the site's PHP is served. "fpm" (default) uses the
+	// shared lerd-php{version}-fpm container; "frankenphp" spins up a
+	// per-site dunglas/frankenphp container that keeps PHP resident.
+	Runtime string `yaml:"runtime,omitempty"`
+	// RuntimeWorker, when true and Runtime is "frankenphp", starts the
+	// FrankenPHP container in worker mode. Framework-specific entrypoints
+	// decide whether this flag is honoured.
+	RuntimeWorker bool `yaml:"runtime_worker,omitempty"`
 }
 
 // IsEmpty returns true when the config has no meaningful content, which
@@ -54,7 +62,8 @@ func (c *ProjectConfig) IsEmpty() bool {
 	return len(c.Domains) == 0 && c.PHPVersion == "" && c.NodeVersion == "" &&
 		c.Framework == "" && len(c.Services) == 0 && len(c.Workers) == 0 &&
 		len(c.CustomWorkers) == 0 && !c.Secured && c.AppURL == "" &&
-		c.DB.Service == "" && c.DB.Database == "" && c.Container == nil
+		c.DB.Service == "" && c.DB.Database == "" && c.Container == nil &&
+		c.Runtime == "" && !c.RuntimeWorker
 }
 
 // ServiceNames returns the name of every service in the config, for callers

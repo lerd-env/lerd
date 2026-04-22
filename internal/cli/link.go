@@ -199,11 +199,27 @@ func runLink(args []string) error {
 		PublicDir:   detectedPublicDir,
 	}
 
+	// Honour .lerd.yaml runtime selection (e.g. "frankenphp") so a re-link
+	// rehydrates the site with the committed runtime rather than resetting
+	// to FPM.
+	if proj != nil && proj.Runtime != "" {
+		site.Runtime = proj.Runtime
+		site.RuntimeWorker = proj.RuntimeWorker
+	}
+
 	if err := config.AddSite(site); err != nil {
 		return fmt.Errorf("registering site: %w", err)
 	}
 
 	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
+
+	if site.IsFrankenPHP() {
+		if err := siteops.FinishFrankenPHPLink(site); err != nil {
+			return err
+		}
+		fmt.Printf("Linked: %s -> %s (FrankenPHP, PHP %s, Node %s, Framework: %s)\n", name, strings.Join(domains, ", "), phpVersion, nodeVersion, framework)
+		return linkApplyServices(cwd, proj)
+	}
 
 	if err := siteops.FinishLink(site, phpVersion); err != nil {
 		return err

@@ -42,6 +42,15 @@ func RestartSite(name string) error {
 		return nil
 	}
 
+	if site.IsFrankenPHP() {
+		unit := podman.FrankenPHPContainerName(site.Name)
+		if err := podman.RestartUnit(unit); err != nil {
+			return fmt.Errorf("restarting FrankenPHP container: %w", err)
+		}
+		fmt.Printf("Restarted: %s (%s)\n", name, unit)
+		return nil
+	}
+
 	if site.PHPVersion == "" {
 		return fmt.Errorf("site %q has no PHP version set", name)
 	}

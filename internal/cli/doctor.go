@@ -240,6 +240,21 @@ func runDoctor(_ *cobra.Command, _ []string) error {
 			"check rootless podman / netavark / pasta routing; run: podman unshare --rootless-netns ip addr (expected: 169.254.1.2 on podman bridge or DNAT for it)")
 	}
 
+	// FrankenPHP suggestions: sites with signals but no runtime set get a one-line nudge.
+	if reg, err := config.LoadSites(); err == nil {
+		for _, site := range reg.Sites {
+			if site.Ignored || site.IsCustomContainer() || site.IsFrankenPHP() {
+				continue
+			}
+			hints := config.DetectFrankenPHPHints(site.Path)
+			if len(hints) == 0 {
+				continue
+			}
+			warn(fmt.Sprintf("site %s", site.Name),
+				fmt.Sprintf("%s; switch with: lerd runtime frankenphp", hints[0].Reason))
+		}
+	}
+
 	// ── Version Info ─────────────────────────────────────────────────────────
 	fmt.Println("\n[Version Info]")
 
