@@ -500,3 +500,14 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 		})
 	}
 }
+
+// TestClaudeSkillContent_underSizeCeiling guards against accidental re-bloat
+// of the injected SKILL.md. The skill ships into every registered project
+// and globally; drift upward gets expensive fast. Raise the ceiling only
+// when adding content that justifies the bytes.
+func TestClaudeSkillContent_underSizeCeiling(t *testing.T) {
+	const ceiling = 41000
+	if got := len(claudeSkillContent); got > ceiling {
+		t.Errorf("claudeSkillContent is %d bytes, ceiling is %d — trim before raising", got, ceiling)
+	}
+}

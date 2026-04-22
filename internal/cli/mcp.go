@@ -1140,187 +1140,51 @@ Returns: ` + bt + `{"version": "...", "checks": [{name, status, detail}], "failu
 
 ## Common Workflows
 
-**Check installed runtimes before starting:**
-` + "```" + `
-runtime_versions()   // see PHP and Node.js versions available
-` + "```" + `
+Single-tool tasks are covered by the tool definitions above (e.g. ` + bt + `site_tls` + bt + ` enables HTTPS, ` + bt + `doctor` + bt + ` runs a full diagnostic, ` + bt + `logs` + bt + ` tails FPM/nginx). These flows only cover multi-step compositions where ordering or non-obvious glue matters.
 
-**Create a new Laravel project from scratch (global session, empty directory):**
+**New Laravel project from scratch:**
 ` + "```" + `
 composer(args: ["create-project", "laravel/laravel", "."])
 site_link()           // registers the cwd as a lerd site
-env_setup()           // configures .env, starts services, creates DB, generates APP_KEY (even before composer install)
+env_setup()           // configures .env, starts services, creates DB, generates APP_KEY
 artisan(args: ["migrate"])
 ` + "```" + `
 
-**Set up a cloned project (full flow):**
+**Cloned project setup:**
 ` + "```" + `
-site_link()                          // registers the cwd as a lerd site
+site_link()
 env_setup()                          // auto-configures .env, starts services, creates DB
 composer(args: ["install"])
 artisan(args: ["migrate", "--seed"])
 ` + "```" + `
 
-**Enable HTTPS for a site:**
-` + "```" + `
-site_tls(action: "enable", site: "myapp")
-` + "```" + `
-
-**Enable Xdebug for a debugging session:**
-` + "```" + `
-xdebug(action: "status")                                      // check current state and mode
-xdebug(action: "on", version: "8.4")                          // default mode=debug, restarts FPM
-// ... debug ...
-xdebug(action: "off", version: "8.4")                         // disable when done (Xdebug adds overhead)
-` + "```" + `
-
-**Enable Xdebug coverage mode for phpunit/pest:**
-` + "```" + `
-xdebug(action: "on", version: "8.4", mode: "coverage")        // swap mode without action: "off" first
-vendor_run(name: "pest", args: ["--coverage"])
-xdebug(action: "off", version: "8.4")
-` + "```" + `
-
-**Run migrations after schema changes:**
-` + "```" + `
-artisan(args: ["migrate"])
-` + "```" + `
-
-**Install and configure a service:**
-` + "```" + `
-service_control(action: "start", name: "mysql")
-service_control(action: "start", name: "redis")   // if needed
-composer(args: ["install"])
-artisan(args: ["key:generate"])
-artisan(args: ["migrate", "--seed"])
-` + "```" + `
-
-**Install a new package:**
+**Install a package that needs publish + migration:**
 ` + "```" + `
 composer(args: ["require", "spatie/laravel-permission"])
 artisan(args: ["vendor:publish", "--provider=Spatie\\Permission\\PermissionServiceProvider"])
 artisan(args: ["migrate"])
 ` + "```" + `
 
-**Install a Node.js version and pin it to the project:**
+**Xdebug coverage for phpunit/pest (mode swap, no action: "off" needed between modes):**
 ` + "```" + `
-node(action: "install", version: "20")
-// Then in a terminal: lerd isolate:node 20
-` + "```" + `
-
-**Add a custom service (e.g. MongoDB):**
-` + "```" + `
-service_add(name: "mongodb", image: "docker.io/library/mongo:7", ports: ["27017:27017"], data_dir: "/data/db")
-service_control(action: "start", name: "mongodb")
+xdebug(action: "on", version: "8.4", mode: "coverage")
+vendor_run(name: "pest", args: ["--coverage"])
+xdebug(action: "off", version: "8.4")
 ` + "```" + `
 
-**Back up the database before a risky migration:**
+**Back up before a risky migration:**
 ` + "```" + `
 db_export(output: "/tmp/myapp-backup.sql")
 artisan(args: ["migrate"])
+// on failure: db_import(file: "/tmp/myapp-backup.sql")
 ` + "```" + `
 
-**Restore a database from a dump:**
-` + "```" + `
-db_import(file: "/tmp/myapp-backup.sql")
-` + "```" + `
-
-**Create databases for a new project manually:**
-` + "```" + `
-db_create()   // creates myapp + myapp_testing based on .env DB_DATABASE
-` + "```" + `
-
-**Check and manage PHP extensions:**
-` + "```" + `
-php_list()                                           // see installed PHP versions
-php_ext(action: "list")                              // see custom extensions for current project's PHP version
-php_ext(action: "add", extension: "imagick")         // install imagick (rebuilds FPM image)
-` + "```" + `
-
-**Park a directory of projects:**
-` + "```" + `
-park(path: "/home/user/code")   // registers all PHP projects under ~/code as sites
-` + "```" + `
-
-**Diagnose PHP errors:**
-` + "```" + `
-logs()                  // current site's PHP-FPM errors (no target needed)
-logs(target: "nginx")   // nginx errors
-` + "```" + `
-
-**Site isn't loading — check service health first:**
-` + "```" + `
-status()    // see which of DNS / nginx / PHP-FPM / watcher is down
-` + "```" + `
-
-**Free up resources — pause sites you're not using:**
-` + "```" + `
-sites()                                                  // see all sites
-site_control(action: "pause", site: "old-project")       // stop workers + replace vhost with landing page
-// ... later ...
-site_control(action: "unpause", site: "old-project")     // restore and restart
-` + "```" + `
-
-**Restart a site's container (e.g. after changing Containerfile):**
-` + "```" + `
-site_control(action: "restart", site: "nestjs-app")      // restarts container (no rebuild)
-site_control(action: "rebuild", site: "nestjs-app")      // rebuilds image from Containerfile + restarts
-` + "```" + `
-
-**Switch a site to FrankenPHP (per-site container, optional worker mode):**
-` + "```" + `
-site_runtime(site: "myapp", runtime: "frankenphp")                  // non-worker
-site_runtime(site: "myapp", runtime: "frankenphp", worker: true)    // worker mode
-site_runtime(site: "myapp", runtime: "fpm")                         // back to shared FPM
-` + "```" + `
-
-**Keep a service always running regardless of active site:**
-` + "```" + `
-service_control(action: "pin", name: "mysql")    // never auto-stopped
-service_control(action: "pin", name: "redis")
-` + "```" + `
-
-**User reports setup issues or something unexpected:**
-` + "```" + `
-doctor()    // full diagnostic: podman, systemd, DNS, ports, images, config
-` + "```" + `
-
-**Start a framework worker (Symfony Messenger, Laravel Horizon, etc.):**
-` + "```" + `
-worker_list(site: "myapp")                                      // see what workers are available and their status
-worker(action: "start", site: "myapp", worker: "messenger")     // start by name
-worker(action: "stop", site: "myapp", worker: "messenger")
-` + "```" + `
-
-**Add a custom worker to Laravel (e.g. Horizon):**
+**Add a Laravel Horizon worker (custom framework worker):**
 ` + "```" + `
 framework_add(name: "laravel", workers: {
   "horizon": {"label": "Horizon", "command": "php artisan horizon", "restart": "always"}
 })
 worker(action: "start", site: "myapp", worker: "horizon")
-` + "```" + `
-
-**Work with failed queue jobs:**
-` + "```" + `
-artisan(args: ["queue:failed"])
-artisan(args: ["queue:retry", "all"])
-` + "```" + `
-
-**Generate and run a new migration:**
-` + "```" + `
-artisan(args: ["make:migration", "add_status_to_orders"])
-// ... edit the migration file ...
-artisan(args: ["migrate"])
-` + "```" + `
-
-**Check which PHP and Node versions a site will use:**
-` + "```" + `
-which()   // shows resolved PHP, Node, document root, nginx config
-` + "```" + `
-
-**Validate project config before setup:**
-` + "```" + `
-check()   // validates .lerd.yaml syntax, services, PHP version
 ` + "```" + `
 
 **Set up a custom container site (Node.js, Python, Go, etc.):**
@@ -1332,9 +1196,9 @@ RUN npm install -g nodemon
 CMD ["npm", "run", "start:dev"]
 ` + "```" + `
 
-   > **Hot-reload on macOS**: inotify events do not fire across Podman Machine's virtiofs mount. Use polling: nodemon needs ` + bt + `--legacy-watch` + bt + `, Vite needs ` + bt + `server.watch.usePolling: true` + bt + `, webpack needs ` + bt + `watchOptions: { poll: 1000 }` + bt + `. Example ` + bt + `package.json` + bt + `: ` + "`" + `"start:dev": "nodemon --legacy-watch src/main.js"` + "`" + `.
+   > **Hot-reload on macOS**: inotify events do not fire across Podman Machine's virtiofs mount. Use polling: nodemon needs ` + bt + `--legacy-watch` + bt + `, Vite needs ` + bt + `server.watch.usePolling: true` + bt + `, webpack needs ` + bt + `watchOptions: { poll: 1000 }` + bt + `.
 
-2. Write ` + bt + `.lerd.yaml` + bt + ` with the container section (there is no MCP tool for this — write the file directly, or ask the user to run ` + bt + `lerd init` + bt + ` which runs an interactive wizard and writes it):
+2. Write ` + bt + `.lerd.yaml` + bt + ` with the container section (no MCP tool for this — write the file directly or run ` + bt + `lerd init` + bt + `):
 ` + "```yaml" + `
 domains:
   - myapp
@@ -1343,35 +1207,24 @@ container:
 services:
   - mysql
   - redis
-custom_workers:
-  queue:
-    label: Queue Worker
-    command: node dist/queue.js
-    restart: always
 ` + "```" + `
 
-3. **Configure environment variables BEFORE linking.** The container starts immediately on ` + bt + `site_link` + bt + `, so the app's ` + bt + `.env` + bt + ` (or equivalent config) must already have the correct service connection strings. Lerd services are reachable by container name on the ` + bt + `lerd` + bt + ` network:
+3. **Configure env BEFORE linking.** The container starts immediately on ` + bt + `site_link` + bt + `. Lerd services are reachable by container name on the ` + bt + `lerd` + bt + ` network:
 ` + "```" + `
-DB_HOST=lerd-mysql          # or lerd-postgres
-DB_PORT=3306                # 5432 for postgres
-DB_USERNAME=root            # postgres for postgres
+DB_HOST=lerd-mysql     # or lerd-postgres (port 5432)
+DB_PORT=3306
+DB_USERNAME=root       # postgres for postgres
 DB_PASSWORD=lerd
 REDIS_HOST=lerd-redis
 REDIS_PORT=6379
 ` + "```" + `
-   Start the services first if they're not running:
-` + "```" + `
-service_control(action: "start", name: "mysql")
-service_control(action: "start", name: "redis")
-` + "```" + `
 
-4. Link and verify:
+4. Link:
 ` + "```" + `
 site_link()            // builds image, creates container, generates nginx vhost
-sites()                // verify the site is listed with custom_container: true
 ` + "```" + `
 
-The ` + bt + `container.port` + bt + ` field is required — it's the port the app listens on inside the container. ` + bt + `container.containerfile` + bt + ` defaults to ` + bt + `Containerfile.lerd` + bt + `. Workers defined in ` + bt + `custom_workers` + bt + ` exec into the custom container.
+The ` + bt + `container.port` + bt + ` field is required. ` + bt + `container.containerfile` + bt + ` defaults to ` + bt + `Containerfile.lerd` + bt + `. Workers defined in ` + bt + `custom_workers` + bt + ` exec into the custom container.
 
 ## .lerd.yaml Reference
 
