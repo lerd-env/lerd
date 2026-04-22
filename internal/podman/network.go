@@ -14,6 +14,11 @@ import (
 // common defaults (fd00::, fd00:beef::, etc.).
 const LerdULAv6Subnet = "fd00:1e7d::/64"
 
+// LerdNetworkMTU pins the lerd bridge to the universal safe MTU. Fedora's
+// rootless podman defaults eth0 to 65520 in the netns, which triggers
+// EMSGSIZE on UDP DNS writes and stalls every lookup ~5 seconds.
+const LerdNetworkMTU = "1500"
+
 // ErrNetworkNeedsMigration is returned when the lerd network needs a destroy
 // + recreate: either it has no IPv6 subnet, or aardvark-dns's listen line
 // has drifted to v4-only. Callers should run MigrateNetworkToIPv6 and retry.
@@ -84,6 +89,7 @@ func EnsureNetwork(name string) error {
 		"--driver", "bridge",
 		"--ipv6",
 		"--subnet", LerdULAv6Subnet,
+		"--opt", "mtu="+LerdNetworkMTU,
 		name)
 }
 
@@ -131,12 +137,13 @@ func AardvarkNetworkDrifted(name string) bool {
 	return !aardvarkListenHasV6(string(firstLine))
 }
 
-// RemoveNetwork force-removes the named podman network and wipes the stale
-// aardvark-dns runtime file; the file outlives `podman network rm` and its
-// listen-ips header would otherwise contaminate the next same-name network.
+// RemoveNetwork force-removes the podman network, wipes the aardvark-dns
+// runtime file, and kills aardvark-dns so it respawns fresh against the
+// new config when containers next join (fixes Fedora netavark's stale-inode).
 func RemoveNetwork(name string) error {
 	err := RunSilent("network", "rm", "--force", name)
 	_ = os.Remove(aardvarkConfigPath(name))
+	_ = exec.Command("pkill", "-f", "aardvark-dns").Run()
 	return err
 }
 
@@ -178,6 +185,7 @@ func MigrateNetworkToIPv6(name string) ([]string, error) {
 		"--driver", "bridge",
 		"--ipv6",
 		"--subnet", LerdULAv6Subnet,
+		"--opt", "mtu="+LerdNetworkMTU,
 		name); err != nil {
 		return attached, fmt.Errorf("recreating %s: %w", name, err)
 	}
