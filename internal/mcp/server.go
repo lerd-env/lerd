@@ -432,6 +432,16 @@ func toolList() []mcpTool {
 			},
 		},
 		{
+			Name:        "setup",
+			Description: "Run the framework's post-install bootstrap steps (migrations, storage:link, etc.). Call after env_setup on a fresh project. Idempotent.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
+				},
+			},
+		},
+		{
 			Name:        "db_set",
 			Description: "Pick the project database. Persists to .lerd.yaml, rewrites DB_ keys in .env, starts service, creates DB + _testing. Call before env_setup on fresh clones.",
 			InputSchema: mcpSchema{
@@ -1142,6 +1152,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execFrameworkInstall(args)
 	case "project_new":
 		return execProjectNew(args)
+	case "setup":
+		return execSetup(args)
 	case "site_php":
 		return execSitePHP(args)
 	case "site_node":
@@ -4165,6 +4177,77 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run()
+}
+
+// execSetup runs every Default: true entry in the site framework's Setup list
+// whose Check rule passes, mirroring what the `lerd setup` CLI does when the
+// user keeps the default selections. Commands run in the site's PHP-FPM
+// container via `podman exec`. A single step failure is reported but doesn't
+// abort the rest — these commands are idempotent by convention.
+func execSetup(args map[string]any) (any, *rpcError) {
+	projectPath := resolvedPath(args)
+	if projectPath == "" {
+		return toolErr("path is required — pass a path argument or open Claude in the project directory"), nil
+	}
+	site, err := config.FindSiteByPath(projectPath)
+	if err != nil || site == nil {
+		return toolErr("no site registered at " + projectPath + " — run site_link first"), nil
+	}
+	fwName := site.Framework
+	if fwName == "" {
+		fwName, _ = config.DetectFrameworkForDir(projectPath)
+	}
+	if fwName == "" {
+		return toolErr("no framework detected — nothing to set up"), nil
+	}
+	fw, ok := config.GetFramework(fwName)
+	if !ok {
+		return toolErr(fmt.Sprintf("framework %q is not defined", fwName)), nil
+	}
+
+	phpVersion, phpErr := phpDet.DetectVersion(projectPath)
+	if phpErr != nil || phpVersion == "" {
+		cfg, cfgErr := config.LoadGlobal()
+		if cfgErr != nil || cfg == nil {
+			return toolErr("could not determine PHP version"), nil
+		}
+		phpVersion = cfg.PHP.DefaultVersion
+	}
+	container := "lerd-php" + strings.ReplaceAll(phpVersion, ".", "") + "-fpm"
+
+	var out bytes.Buffer
+	ran, skipped, failed := 0, 0, 0
+	for _, step := range fw.Setup {
+		if !step.Default {
+			skipped++
+			continue
+		}
+		if step.Check != nil && !config.MatchesRule(projectPath, *step.Check) {
+			skipped++
+			continue
+		}
+		parts := strings.Fields(step.Command)
+		if len(parts) == 0 {
+			continue
+		}
+		fmt.Fprintf(&out, "\n--- %s ---\n", step.Label)
+		cmdArgs := append([]string{"exec", "-i", "-w", projectPath, container}, parts...)
+		cmd := podman.Cmd(cmdArgs...)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(&out, "[WARN] %s failed: %v\n", step.Label, err)
+			failed++
+			continue
+		}
+		ran++
+	}
+
+	if ran == 0 && failed == 0 {
+		return toolOK(fmt.Sprintf("No default setup steps to run for %s.", fw.Label)), nil
+	}
+	summary := fmt.Sprintf("%s setup: %d ran, %d skipped, %d failed.", fw.Label, ran, skipped, failed)
+	return toolOK(summary + "\n" + stripANSI(strings.TrimSpace(out.String()))), nil
 }
 
 func execSitePHP(args map[string]any) (any, *rpcError) {
