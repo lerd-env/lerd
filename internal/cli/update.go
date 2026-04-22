@@ -206,7 +206,10 @@ func runUpdate(currentVersion string, beta bool) error {
 
 // refreshGlobalMCPSkills re-writes the user-scope skill, rules, and guidelines
 // files when lerd MCP is registered globally, so the AI's description of
-// available tools stays aligned with the newly installed binary.
+// available tools stays aligned with the newly installed binary. Also heals
+// the Claude Code MCP registration: an install after an uninstall (or a
+// Claude config migration) can lose the `claude mcp add` entry while the
+// marker files remain; re-run the idempotent add so lerd shows up again.
 func refreshGlobalMCPSkills() {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -218,6 +221,10 @@ func refreshGlobalMCPSkills() {
 	fmt.Println("\n==> Refreshing global MCP skills and guidelines")
 	if err := WriteGlobalAISkills(home, true); err != nil {
 		fmt.Fprintf(os.Stderr, "  warn: could not refresh global AI skills: %v\n", err)
+	}
+	if !IsMCPGloballyRegistered() {
+		fmt.Println("  Re-registering lerd with Claude Code (was missing)")
+		ensureClaudeMCPRegistered()
 	}
 }
 

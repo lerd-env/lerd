@@ -307,14 +307,29 @@ func WriteGlobalAISkills(home string, verbose bool) error {
 	return nil
 }
 
-// IsMCPGloballyRegistered reports whether lerd is already registered at user scope
-// in Claude Code. Used by the install command to skip the prompt if already set up.
+// IsMCPGloballyRegistered reports whether lerd is registered with Claude Code.
+// Uses `claude mcp get lerd` which returns exit 0 when the server is known and
+// exit 1 otherwise. The older `claude mcp list --scope user` flag form breaks
+// on newer Claude CLI releases.
 func IsMCPGloballyRegistered() bool {
-	out, err := exec.Command("claude", "mcp", "list", "--scope", "user").CombinedOutput()
-	if err != nil {
+	if _, err := exec.LookPath("claude"); err != nil {
 		return false
 	}
-	return strings.Contains(string(out), "lerd")
+	return exec.Command("claude", "mcp", "get", "lerd").Run() == nil
+}
+
+// ensureClaudeMCPRegistered (re)registers lerd with Claude Code at user scope
+// using the remove-then-add idempotent pattern. Safe to call on every install
+// or update: if Claude Code isn't installed, the LookPath guard returns early.
+func ensureClaudeMCPRegistered() {
+	if _, err := exec.LookPath("claude"); err != nil {
+		return
+	}
+	_ = exec.Command("claude", "mcp", "remove", "-s", "user", "lerd").Run()
+	if err := exec.Command("claude", "mcp", "add", "-s", "user", "lerd", "--", "lerd", "mcp").Run(); err != nil {
+		fmt.Printf("  [WARN] could not register lerd with Claude Code: %v\n", err)
+		fmt.Println("  Run manually: claude mcp add -s user lerd -- lerd mcp")
+	}
 }
 
 // mergeJunieGuidelines upserts the lerd section inside .junie/guidelines.md.
