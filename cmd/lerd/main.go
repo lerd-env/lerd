@@ -321,6 +321,10 @@ func newWatchCmd() *cobra.Command {
 						if err := nginx.Reload(); err != nil {
 							fmt.Printf("[WARN] nginx reload: %v\n", err)
 						}
+						// Tell the UI and anyone else subscribed that the
+						// sites list changed. Without this the browser keeps
+						// showing the deleted site until a manual refresh.
+						eventbus.Default.Publish(eventbus.KindSites)
 					}
 				}
 			}()
@@ -578,9 +582,13 @@ func cleanupWorktreeVhosts(site *config.Site) bool {
 	return changed
 }
 
-// removeStale removes registered sites under parked directories whose paths no
-// longer exist on disk. Returns true if any sites were removed.
-func removeStale(cfg *config.GlobalConfig) bool {
+// removeStale removes registered sites whose paths no longer exist on disk.
+// Covers both parked-dir projects (caught by the fast fsnotify path when it
+// fires) and manually site_link'd projects outside any park. Returns true if
+// any sites were removed so the caller can reload nginx and publish events.
+//
+//nolint:unparam // cfg reserved for future per-park gating
+func removeStale(_ *config.GlobalConfig) bool {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return false
@@ -589,16 +597,6 @@ func removeStale(cfg *config.GlobalConfig) bool {
 	removed := false
 	for _, site := range reg.Sites {
 		if site.Ignored {
-			continue
-		}
-		underParked := false
-		for _, dir := range cfg.ParkedDirectories {
-			if filepath.Dir(site.Path) == dir {
-				underParked = true
-				break
-			}
-		}
-		if !underParked {
 			continue
 		}
 		if _, statErr := os.Stat(site.Path); os.IsNotExist(statErr) {
