@@ -255,9 +255,7 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 			return nil // unknown encoding, leave untouched
 		}
 
-		// Replace https://domain and http://domain with the LAN address.
-		body = bytes.ReplaceAll(body, []byte("https://"+domain), []byte(scheme+"://"+lanHost))
-		body = bytes.ReplaceAll(body, []byte("http://"+domain), []byte(scheme+"://"+lanHost))
+		body = rewriteLANShareBody(body, domain, lanHost)
 
 		resp.Body = io.NopCloser(bytes.NewReader(body))
 		resp.ContentLength = int64(len(body))
@@ -315,6 +313,16 @@ func PrintLANShareQR(rawURL string) {
 
 // LANShareURL returns the URL a LAN device would use to reach the site on the
 // given port, or an empty string if the port is 0 or the LAN IP cannot be detected.
+// rewriteLANShareBody collapses absolute URLs to http://<lanHost>. The third
+// pass catches https://<lanHost> URLs Laravel emitted itself (X-Forwarded-Host
+// honored, APP_URL forced https) so browsers don't TLS-handshake the proxy.
+func rewriteLANShareBody(body []byte, domain, lanHost string) []byte {
+	body = bytes.ReplaceAll(body, []byte("https://"+domain), []byte("http://"+lanHost))
+	body = bytes.ReplaceAll(body, []byte("http://"+domain), []byte("http://"+lanHost))
+	body = bytes.ReplaceAll(body, []byte("https://"+lanHost), []byte("http://"+lanHost))
+	return body
+}
+
 func LANShareURL(lanPort int) string {
 	if lanPort == 0 {
 		return ""
