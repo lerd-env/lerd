@@ -352,6 +352,10 @@ func (e *EnrichedSite) enrichFPM() {
 		e.FPMRunning, _ = containerRunningFn("lerd-custom-" + e.Name)
 		return
 	}
+	if e.Runtime == "frankenphp" {
+		e.FPMRunning, _ = containerRunningFn("lerd-fp-" + e.Name)
+		return
+	}
 	if e.PHPVersion != "" {
 		short := strings.ReplaceAll(e.PHPVersion, ".", "")
 		e.FPMRunning, _ = containerRunningFn("lerd-php" + short + "-fpm")

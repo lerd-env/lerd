@@ -714,6 +714,12 @@ func logTargetsForSite(s *siteinfo.EnrichedSite) []LogTarget {
 			ID:    podman.CustomContainerName(s.Name),
 			Label: s.Name + " · container",
 		})
+	} else if s.Runtime == "frankenphp" {
+		out = append(out, LogTarget{
+			Kind:  kindPodman,
+			ID:    podman.FrankenPHPContainerName(s.Name),
+			Label: s.Name + " · frankenphp " + s.PHPVersion,
+		})
 	} else if s.PHPVersion != "" {
 		out = append(out, LogTarget{
 			Kind:  kindPodman,

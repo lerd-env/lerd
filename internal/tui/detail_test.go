@@ -108,6 +108,28 @@ func TestLogTargetsForSite_IncludesFPMAndWorkers(t *testing.T) {
 	}
 }
 
+func TestLogTargetsForSite_FrankenPHP(t *testing.T) {
+	s := &siteinfo.EnrichedSite{
+		Name:       "beta",
+		Path:       "/tmp/missing-so-no-app-logs",
+		PHPVersion: "8.3",
+		Runtime:    "frankenphp",
+	}
+	targets := logTargetsForSite(s)
+	if len(targets) < 1 {
+		t.Fatalf("expected at least 1 target, got %d", len(targets))
+	}
+	if targets[0].Kind != kindPodman || targets[0].ID != "lerd-fp-beta" {
+		t.Errorf("first target should be frankenphp container, got %+v", targets[0])
+	}
+	if !strings.Contains(targets[0].Label, "frankenphp") {
+		t.Errorf("label should mention frankenphp, got %q", targets[0].Label)
+	}
+	if strings.Contains(targets[0].Label, "fpm 8.3") {
+		t.Errorf("label should not say 'fpm' for frankenphp runtime, got %q", targets[0].Label)
+	}
+}
+
 func TestLogTargetsForSite_CustomContainer(t *testing.T) {
 	s := &siteinfo.EnrichedSite{
 		Name:          "nodeapp",

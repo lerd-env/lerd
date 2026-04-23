@@ -924,7 +924,7 @@
                   <template x-if="selectedSite && selectedSite.has_app_logs">
                     <button @click="setSiteLogsTab('app')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='app' ? 'border-orange-500 text-orange-600 dark:text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">App Logs</button>
                   </template>
-                  <button @click="setSiteLogsTab('fpm')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='fpm' ? 'border-lerd-red text-lerd-red' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.custom_container ? 'Container' : 'PHP-FPM'"></button>
+                  <button @click="setSiteLogsTab('fpm')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='fpm' ? 'border-lerd-red text-lerd-red' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.custom_container ? 'Container' : (selectedSite.runtime === 'frankenphp' ? 'FrankenPHP' : 'PHP-FPM')"></button>
                   <template x-if="selectedSite && (selectedSite.queue_running || selectedSite.queue_failing)">
                     <button @click="setSiteLogsTab('queue')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='queue' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : selectedSite.queue_failing ? 'border-transparent text-red-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.queue_failing ? 'Queue !' : 'Queue'"></button>
                   </template>
@@ -4067,6 +4067,7 @@ function lerdApp() {
 
     fpmContainer(site) {
       if (site.custom_container) return 'lerd-custom-' + site.name;
+      if (site.runtime === 'frankenphp') return 'lerd-fp-' + site.name;
       if (!site.php_version) return '';
       return 'lerd-php' + site.php_version.replace('.', '') + '-fpm';
     },
