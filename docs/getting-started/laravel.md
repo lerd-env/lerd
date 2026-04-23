@@ -164,6 +164,20 @@ lerd worker start reverb
 
 ---
 
+## FrankenPHP / Octane (optional)
+
+By default your site runs on the shared PHP-FPM stack. If you want the persistent-process speedup, switch to a per-site FrankenPHP container:
+
+```bash
+lerd runtime frankenphp            # classic mode, one process per request
+lerd runtime frankenphp --worker   # Laravel Octane, keeps the app in memory
+lerd runtime fpm                   # back to shared PHP-FPM
+```
+
+Worker mode needs `composer require laravel/octane` in the project. FrankenPHP is an alternative to PHP-FPM, not a different framework, so queues, scheduler, Reverb, and services keep working unchanged. See the [FrankenPHP runtime](../features/frankenphp.md) page for the hot-reload tradeoffs.
+
+---
+
 ## Next steps
 
 - [Frameworks & Workers](../usage/frameworks.md): add Horizon, Pulse, or other custom workers

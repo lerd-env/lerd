@@ -24,9 +24,10 @@ If you're a PHP developer on Linux and want frictionless local development — a
 
 - 🌐 **Automatic `.test` domains** with one-command TLS
 - 🐘 **Per-project PHP version** (8.1–8.5), switch with one click
+- ⚡ **FrankenPHP runtime** per site as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode
 - 📦 **Node.js isolation** per project (Node 22, 24)
 - 🖥️ **Built-in Web UI** - 3-pane dashboard to manage sites, services, and logs from a browser
-- 🖥️ **Terminal dashboard** (`lerd tui`) - btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort — the same operations surface as the web UI, for tmux and SSH workflows
+- 💻 **Terminal dashboard** (`lerd tui`) - btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort — the same operations surface as the web UI, for tmux and SSH workflows
 - 🗄️ **One-click services**: MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Stripe Mock, Reverb and more
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required
@@ -47,13 +48,13 @@ Then just ask:
 ```
 You: set up the project I just cloned
 AI:  → site_link()
-     → env_setup()    # detects MySQL + Redis, starts them, creates DB, generates APP_KEY
      → composer install
-     → artisan migrate --seed
+     → env_setup()    # detects MySQL + Redis, starts them, creates DB, generates APP_KEY
+     → setup()        # storage:link + migrate for Laravel, doctrine:migrations:migrate for Symfony
      ✓  myapp → https://myapp.test ready
 ```
 
-60+ tools available: run migrations, manage services, toggle workers, tail logs, enable Xdebug, manage databases, manage PHP extensions, park directories, and more, all from your AI assistant.
+~50 tools available: scaffold new projects, run migrations, manage services, toggle workers, tail logs, enable Xdebug, manage databases, manage PHP extensions, park directories, switch runtimes between PHP-FPM and FrankenPHP, and more, all from your AI assistant.
 
 📖 [MCP documentation](https://geodro.github.io/lerd/features/mcp/)
 

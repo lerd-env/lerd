@@ -39,6 +39,8 @@ For a FrankenPHP site, lerd:
 
 The container joins the shared `lerd` Podman network, so services like `lerd-mysql`, `lerd-redis`, and `lerd-meilisearch` are reachable by hostname.
 
+Pause semantics mirror FPM: `lerd pause <site>` (or the dashboard pause toggle, or `site_control action=pause`) stops `lerd-fp-<site>` alongside the paused-vhost swap, and `lerd unpause <site>` starts it again. The container is only running while the site is active, so a long-idle FrankenPHP site doesn't keep a process resident.
+
 ---
 
 ## Framework adapters

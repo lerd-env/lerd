@@ -65,7 +65,7 @@ The middle panel lists core infrastructure services (MySQL, Redis, PostgreSQL, M
 
 The header has a **+** button that opens the **preset picker modal**: a one-click installer for the bundled service presets. Multi-version presets like `mysql` and `mariadb` show a version dropdown next to the **Add** button. Already-installed entries are filtered out.
 
-Selecting a service opens the detail panel with start/stop controls, status, and the correct `.env` connection values with a one-click copy button. Database service detail panels (mysql, postgres, mongo, and any installed alternate like `mysql-5-7`) get two extras:
+Selecting a service opens the detail panel with Start, Stop, and Restart controls, status, and the correct `.env` connection values with a one-click copy button. Restart is available for every built-in and custom service and wraps `podman restart` (clears the paused flag on success); the grouped per-site workers (Queues, Horizon, Schedules, Workers, Stripe, Reverb) remain start/stop only. Database service detail panels (mysql, postgres, mongo, and any installed alternate like `mysql-5-7`) get two extras:
 
 - **Suggestion banner**: a sky-blue tip offering to install the paired admin UI (phpMyAdmin / pgAdmin / Mongo Express) when it isn't installed yet. Dismissable per-preset; dismissal persists in `localStorage`.
 - **Open admin button**: when the paired admin UI is installed, a button on the header opens its dashboard inline as a full-width iframe overlay and auto-starts the admin service if needed. When no admin UI is installed and the service is active, a fallback **Open connection URL** anchor hands the `mysql://` / `postgresql://` / `mongodb://` URL to your registered DB client (DBeaver, TablePlus, Compass, etc.).

@@ -109,6 +109,18 @@ See [Remote / LAN Development](/usage/remote-development) for the full walkthrou
 | `lerd php:ext list [version]` | List custom extensions for a PHP version |
 | `lerd php:ini [version]` | Open the user php.ini for a PHP version in `$EDITOR` |
 
+## Runtime
+
+Switch the PHP runtime for the current site between shared PHP-FPM and per-site FrankenPHP. See the [FrankenPHP runtime](../features/frankenphp.md) page for adapters, worker mode, and limitations.
+
+| Command | Description |
+|---|---|
+| `lerd runtime` | Print the current runtime for the site in cwd |
+| `lerd runtime frankenphp` | Switch to per-site FrankenPHP (non-worker); writes `runtime: frankenphp` to `.lerd.yaml` |
+| `lerd runtime frankenphp --worker` | Enable FrankenPHP with worker mode (Laravel Octane or Symfony's FrankenPHP adapter with `--watch`) |
+| `lerd runtime frankenphp --no-worker` | Switch to FrankenPHP and explicitly disable worker mode |
+| `lerd runtime fpm` | Back to shared PHP-FPM; clears the runtime field from `.lerd.yaml` |
+
 ## Node
 
 | Command | Description |

@@ -204,6 +204,20 @@ App logs (anything in `var/log/*.log`) show up in the [Web UI](../features/web-u
 
 ---
 
+## FrankenPHP / Symfony Runtime (optional)
+
+By default your site runs on the shared PHP-FPM stack. To run it on a per-site FrankenPHP container instead (useful for testing under the long-running worker model Symfony Runtime provides):
+
+```bash
+lerd runtime frankenphp            # classic mode
+lerd runtime frankenphp --worker   # Symfony Runtime, keeps the kernel in memory
+lerd runtime fpm                   # back to shared PHP-FPM
+```
+
+Worker mode needs `composer require runtime/frankenphp-symfony`. Lerd starts the FrankenPHP container with `--watch` so edits to controllers and config reload within a second or two without restarting the worker manually. See the [FrankenPHP runtime](../features/frankenphp.md) page for limitations.
+
+---
+
 ## Next steps
 
 - [Frameworks & Workers](../usage/frameworks.md): add custom workers, customise log paths, define more setup steps

@@ -90,6 +90,7 @@ Once the MCP server is connected, your AI assistant has access to:
 | `env_setup` | Configure `.env` for lerd: detects services, starts them, creates DB (sqlite auto-created when `DB_CONNECTION=sqlite`), sets APP_KEY and APP_URL. Always follow with `setup` to run migrations. |
 | `setup` | Run the framework's post-install bootstrap steps (Laravel: `storage:link` + `migrate`; Symfony: `doctrine:migrations:migrate` when `doctrine-migrations-bundle` is installed). Mandatory after `env_setup` on new or cloned projects; idempotent. |
 | `env_check` | Compare all `.env` files against `.env.example` and flag missing or extra keys (returns structured JSON) |
+| `project_new` | Scaffold a new project via `composer create-project` in the PHP-FPM container and run `composer install` so the returned directory has a populated `vendor/`. Followed by `site_link` → `env_setup` → `setup`. |
 | `site_link` | Register a directory as a lerd site; generates nginx vhost and `.test` domain |
 | `site_unlink` | Unregister a site and remove its nginx vhost (all domains) |
 | `site_domain` | Add or remove a site domain (without TLD) — `action`: `add` / `remove`; cannot remove last |

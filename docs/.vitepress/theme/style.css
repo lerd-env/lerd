@@ -8,12 +8,19 @@
 }
 
 .VPHero .text {
-  font-size: 40px !important;
+  font-size: 28px !important;
 }
 
 @media (min-width: 640px) {
   .VPHero .text {
-    font-size: 48px !important;
+    font-size: 32px !important;
+  }
+}
+
+@media (min-width: 960px) {
+  .VPHero .text {
+    font-size: 36px !important;
+    white-space: nowrap;
   }
 }
 
@@ -154,4 +161,15 @@
 .VPButton.brand:hover {
   background-color: #e02419 !important;
   border-color: #e02419 !important;
+}
+
+/* Home features: promote the first two cards (MCP, Rootless Podman) to
+   span two columns on wide viewports so the flagship features breathe.
+   VitePress applies .grid-4 when features.length > 3 and not divisible
+   by 3, giving every card 25% width at ≥768px. We override the first
+   two to 50% so they share one row above the rest. */
+@media (min-width: 768px) {
+  .VPFeatures.VPHomeFeatures .items .item:nth-child(-n+2) {
+    width: 50% !important;
+  }
 }
