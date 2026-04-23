@@ -114,22 +114,106 @@ func EnsureNetwork(name string) error {
 	for _, line := range strings.Split(out, "\n") {
 		if strings.TrimSpace(line) == name {
 			netV6 := NetworkHasIPv6(name)
-			if hostV6 != netV6 {
+			if netV6 && !hostV6 {
+				// Network has IPv6 but host no longer does — strip it.
 				return ErrNetworkNeedsMigration
 			}
-			if hostV6 && AardvarkNetworkDrifted(name) {
+			if hostV6 && !netV6 && !ipv6ProbeFailed(name) {
+				// Host gained IPv6 and no previous probe failure — try upgrading.
+				return ErrNetworkNeedsMigration
+			}
+			if hostV6 && netV6 && AardvarkNetworkDrifted(name) {
 				return ErrNetworkNeedsMigration
 			}
 			return nil
 		}
 	}
 
+	_, err = createNetworkWithProbe(name, hostV6)
+	return err
+}
+
+// ipv6ProbeFailedPath returns the marker file path that records a failed
+// IPv6 probe so we don't retry the dual-stack migration on every install.
+func ipv6ProbeFailedPath(networkName string) string {
+	if dir := os.Getenv("XDG_DATA_HOME"); dir != "" {
+		return filepath.Join(dir, "lerd", "ipv6-probe-failed-"+networkName)
+	}
+	home, _ := os.UserHomeDir()
+	return filepath.Join(home, ".local/share/lerd", "ipv6-probe-failed-"+networkName)
+}
+
+// ipv6ProbeFailed reports whether a previous IPv6 probe failed for the
+// named network.
+func ipv6ProbeFailed(name string) bool {
+	_, err := os.Stat(ipv6ProbeFailedPath(name))
+	return err == nil
+}
+
+// markIPv6ProbeFailed writes a marker file to prevent retrying the
+// dual-stack migration on subsequent installs.
+func markIPv6ProbeFailed(name string) {
+	path := ipv6ProbeFailedPath(name)
+	_ = os.MkdirAll(filepath.Dir(path), 0755)
+	_ = os.WriteFile(path, []byte("probe failed\n"), 0644)
+}
+
+// clearIPv6ProbeFailed removes the marker so a future install retries.
+func clearIPv6ProbeFailed(name string) {
+	_ = os.Remove(ipv6ProbeFailedPath(name))
+}
+
+// createNetworkWithProbe creates the podman network. When dualStack is true it
+// first tries a dual-stack network and runs a throw-away container to verify
+// aardvark-dns can bind the IPv6 gateway. If the probe fails, the network is
+// torn down and recreated as v4-only. Returns the actual dual-stack state.
+func createNetworkWithProbe(name string, dualStack bool) (bool, error) {
 	args := []string{"network", "create", "--driver", "bridge"}
-	if hostV6 {
+	if dualStack {
 		args = append(args, "--ipv6", "--subnet", LerdULAv6Subnet)
 	}
 	args = append(args, "--opt", "mtu="+LerdNetworkMTU, name)
-	return RunSilent(args...)
+	if err := RunSilent(args...); err != nil {
+		return dualStack, err
+	}
+
+	if dualStack && !probeNetworkIPv6(name) {
+		markIPv6ProbeFailed(name)
+		// Systemd may have auto-restarted containers on this network
+		// between RecreateNetwork and the probe. Stop and remove them
+		// before tearing down the network.
+		if out, err := Run("ps", "-a", "--filter", "network="+name, "--format", "{{.Names}}"); err == nil {
+			for _, c := range strings.Split(out, "\n") {
+				if c = strings.TrimSpace(c); c != "" {
+					_ = StopUnit(c)
+					_ = RunSilent("rm", "--force", c)
+				}
+			}
+		}
+		_ = RemoveNetwork(name)
+		return createNetworkWithProbe(name, false)
+	}
+
+	if dualStack {
+		clearIPv6ProbeFailed(name)
+	}
+	return dualStack, nil
+}
+
+// probeNetworkIPv6 starts a throw-away container on the named network to
+// verify aardvark-dns can bind the IPv6 gateway. Returns true when the
+// container starts (or when the probe is inconclusive, e.g. missing image),
+// false only for aardvark-dns bind failures.
+func probeNetworkIPv6(name string) bool {
+	cmd := exec.Command(PodmanBin(), "run", "--rm", "--network", name,
+		"--pull", "never", "alpine:latest", "true")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return true
+	}
+	s := string(out)
+	return !strings.Contains(s, "aardvark-dns") &&
+		!strings.Contains(s, "Cannot assign requested address")
 }
 
 // aardvarkConfigPath returns the on-disk path to aardvark-dns's config file
@@ -211,7 +295,7 @@ func RecreateNetwork(name string) ([]string, bool, error) {
 	}
 
 	for _, c := range attached {
-		_ = RunSilent("stop", "--time", "10", c)
+		_ = StopUnit(c)
 		_ = RunSilent("rm", "--force", c)
 	}
 
@@ -220,20 +304,16 @@ func RecreateNetwork(name string) ([]string, bool, error) {
 	}
 
 	hostV6 := HostHasUsableIPv6()
-	args := []string{"network", "create", "--driver", "bridge"}
-	if hostV6 {
-		args = append(args, "--ipv6", "--subnet", LerdULAv6Subnet)
-	}
-	args = append(args, "--opt", "mtu="+LerdNetworkMTU, name)
-	if err := RunSilent(args...); err != nil {
-		return attached, hostV6, fmt.Errorf("recreating %s: %w", name, err)
+	actualV6, err := createNetworkWithProbe(name, hostV6)
+	if err != nil {
+		return attached, actualV6, fmt.Errorf("recreating %s: %w", name, err)
 	}
 
 	for _, dns := range prevDNS {
 		_ = RunSilent("network", "update", "--dns-add", dns, name)
 	}
 
-	return attached, hostV6, nil
+	return attached, actualV6, nil
 }
 
 // EnsureNetworkDNS syncs the DNS servers on the named network to the provided list.

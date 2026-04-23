@@ -91,7 +91,7 @@ func runInstall(_ *cobra.Command, _ []string) error {
 			if dualStack {
 				fmt.Println("    Recreated lerd network as dual-stack v4+v6.")
 			} else {
-				fmt.Println("    Recreated lerd network as v4-only (host has no usable IPv6).")
+				fmt.Println("    Recreated lerd network as v4-only (IPv6 not available for containers).")
 			}
 			fmt.Println("    Existing containers on this network were recreated.")
 			migrated = restored

@@ -175,6 +175,53 @@ func TestHostHasUsableIPv6(t *testing.T) {
 	}
 }
 
+func TestIPv6ProbeFailedMarker(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if ipv6ProbeFailed("lerd") {
+		t.Fatal("should not be marked before any probe")
+	}
+
+	markIPv6ProbeFailed("lerd")
+	if !ipv6ProbeFailed("lerd") {
+		t.Fatal("should be marked after markIPv6ProbeFailed")
+	}
+
+	clearIPv6ProbeFailed("lerd")
+	if ipv6ProbeFailed("lerd") {
+		t.Fatal("should be cleared after clearIPv6ProbeFailed")
+	}
+}
+
+func TestProbeNetworkIPv6_detectsAardvarkFailure(t *testing.T) {
+	// probeNetworkIPv6 shells out to podman, so we only unit-test the output
+	// parsing logic by inlining it. Integration coverage comes from the
+	// full install test.
+	tests := []struct {
+		name   string
+		output string
+		want   bool // true = probe OK (IPv6 works or inconclusive)
+	}{
+		{"success (empty output)", "", true},
+		{"aardvark bind error", "Error: netavark: error while applying dns entries: aardvark-dns failed to start: Error from child process\nError starting server failed to bind udp listener on [fd00:1e7d::1]:53: IO error: Cannot assign requested address (os error 99)", false},
+		{"image not found", "Error: alpine:latest: image not known", true},
+		{"generic error", "Error: some unrelated failure", true},
+		{"cannot assign only", "Cannot assign requested address", false},
+		{"aardvark only", "aardvark-dns crashed", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := tt.output
+			got := !strings.Contains(s, "aardvark-dns") &&
+				!strings.Contains(s, "Cannot assign requested address")
+			if got != tt.want {
+				t.Errorf("probe output %q: got %v, want %v", tt.output, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestRemoveNetwork_wipesAardvarkConfigEvenWhenPodmanFails(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", tmp)
