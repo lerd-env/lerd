@@ -277,6 +277,22 @@ func stripPrivilegedIPBind(port string) string {
 	return port
 }
 
+// stripIPv6PublishPorts removes PublishPort= lines that start with a bracketed
+// IPv6 address (e.g. "[::1]:3306:3306"). gvproxy cannot bind both an IPv4 and
+// an IPv6 loopback address on the same port simultaneously.
+func stripIPv6PublishPorts(content string) string {
+	lines := strings.Split(content, "\n")
+	out := lines[:0]
+	for _, l := range lines {
+		val := strings.TrimPrefix(strings.TrimSpace(l), "PublishPort=")
+		if val != strings.TrimSpace(l) && strings.HasPrefix(val, "[") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return strings.Join(out, "\n")
+}
+
 // containerToPodmanArgs builds a podman run argument list from a parsed [Container] section.
 // On macOS we run detached (-d) so that launchctl bootstrap sees an immediate
 // exit 0 (success); podman's own --restart=always policy handles crash recovery.
@@ -453,7 +469,9 @@ func (m *darwinServiceManager) WriteContainerUnit(name, content string) error {
 		lanExposed = cfg.LAN.Exposed
 	}
 	content = podman.BindForLAN(content, lanExposed)
-	content = podman.PairIPv6Binds(content)
+	// gvproxy (macOS) cannot bind two specific host IPs on the same port;
+	// drop IPv6 PublishPort lines so only IPv4 bindings reach podman run.
+	content = stripIPv6PublishPorts(content)
 
 	c := parseSection(content, "Container")
 	args, err := containerToPodmanArgs(c)
