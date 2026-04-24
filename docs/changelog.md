@@ -15,6 +15,18 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.18.0-beta.6] — 2026-04-24
+
+### Added
+
+- **`--no-ipv6` flag (and `LERD_DISABLE_IPV6=1`) on `lerd install`** so users on dual-stack-capable hosts can force a v4-only `lerd` network without touching the host. Reuses the existing `~/.local/share/lerd/ipv6-probe-failed-lerd` marker, so `EnsureNetwork` honors the opt-out on every path (initial create, host-gained-v6 migration, `RecreateNetwork`). Re-enable by deleting the marker and rerunning `lerd install`. New `MarkIPv6Disabled` / `IPv6DisabledMarkerPath` helpers expose this from `internal/podman` so the install command and the timeout-fallback warning point at the same path.
+
+### Fixed
+
+- **`lerd install` could hang forever on the IPv6 probe** if podman or the netns setup stalled. `probeNetworkIPv6` now runs under a 30s `context.WithTimeout`; on deadline it falls back to v4-only the same way an aardvark bind failure does, writes the marker, and prints a stderr warning telling the user exactly which file to delete to retry dual-stack later. The 5-line WARN block is the only user-visible change on healthy hosts (the probe itself stays well under one second on every distro tested).
+
+---
+
 ## [1.18.0-beta.5] — 2026-04-23
 
 ### Fixed
