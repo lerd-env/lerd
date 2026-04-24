@@ -22,6 +22,8 @@ The dashboard is a Progressive Web App (PWA). You can install it as a standalone
 
 Once installed, Lerd opens in its own window without browser chrome, just like a native app.
 
+A service worker ships with the dashboard, so when lerd-ui is stopped (or restarting) the installed PWA shows a small offline landing page instead of the usual browser "this site can't be reached" error. The page surfaces the command to start lerd-ui again and auto-reloads the dashboard as soon as the backend comes back up.
+
 ---
 
 ## Layout

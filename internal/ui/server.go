@@ -37,6 +37,7 @@ import (
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
+	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/xdebugops"
 )
 
@@ -60,6 +61,12 @@ var iconMaskable192PNG []byte
 
 //go:embed icons/icon-maskable-512.png
 var iconMaskable512PNG []byte
+
+//go:embed sw.js
+var swJS []byte
+
+//go:embed offline.html
+var offlineHTML []byte
 
 // listenAddr is the TCP address lerd-ui binds to. It listens on 0.0.0.0:7073
 // so browsers can hit it directly and LAN clients (gated by the remote-control
@@ -258,6 +265,18 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/icons/icon-maskable-512.png", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
 		w.Write(iconMaskable512PNG) //nolint:errcheck
+	})
+	swBody := bytes.ReplaceAll(swJS, []byte("{{LERD_VERSION}}"), []byte(version.Version+"-"+version.Commit))
+	mux.HandleFunc("/sw.js", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/javascript; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Header().Set("Service-Worker-Allowed", "/")
+		w.Write(swBody) //nolint:errcheck
+	})
+	mux.HandleFunc("/offline.html", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-cache")
+		w.Write(offlineHTML) //nolint:errcheck
 	})
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
