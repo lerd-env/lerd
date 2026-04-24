@@ -142,55 +142,40 @@ func OCIRuntime() string {
 	return strings.TrimSpace(string(out))
 }
 
-// BindForLAN rewrites every PublishPort= line in a quadlet so the host-side
-// bind matches the requested LAN-exposure state. The embedded quadlet files
-// use the unprefixed `PublishPort=80:80` form, which podman interprets as
-// binding 0.0.0.0 (all interfaces). When lanExposed is false (the default
-// safe-on-coffee-shop-wifi state) we rewrite each unprefixed line to
-// `PublishPort=127.0.0.1:80:80` so only the local host can connect; when
-// true, we leave the unprefixed form alone so LAN clients can reach the
-// service.
-//
-// Lines that already have an explicit IP prefix (lerd-dns binds 127.0.0.1
-// directly because the LAN path goes through the userspace forwarder, not
-// the publish) are left untouched in both states.
+// BindForLAN flips every PublishPort= between the loopback and LAN form on
+// both stacks in lockstep: 127.0.0.1 ↔ bare and [::1] ↔ [::]. lerd-dns
+// (:5300) is pinned on 127.0.0.1 in the embed because LAN access routes
+// via the userspace forwarder, so its lines are preserved as-is.
 func BindForLAN(content string, lanExposed bool) string {
-	if lanExposed {
-		// Already in the LAN-exposed form. Strip any explicit 127.0.0.1
-		// prefix we may have written previously, EXCEPT for entries that
-		// were originally pinned in the embed file (lerd-dns).
-		lines := strings.Split(content, "\n")
-		for i, line := range lines {
-			trimmed := strings.TrimSpace(line)
-			if !strings.HasPrefix(trimmed, "PublishPort=127.0.0.1:") {
-				continue
-			}
-			// Preserve lerd-dns: it's the only quadlet that ships with an
-			// explicit 127.0.0.1 prefix in the embed, because LAN access
-			// to DNS is routed through the userspace forwarder rather
-			// than a publish change.
-			if strings.Contains(trimmed, ":5300:5300") {
-				continue
-			}
-			rest := strings.TrimPrefix(trimmed, "PublishPort=127.0.0.1:")
-			lines[i] = "PublishPort=" + rest
-		}
-		return strings.Join(lines, "\n")
-	}
-
-	// Not exposed: prefix every unprefixed PublishPort= with 127.0.0.1.
 	lines := strings.Split(content, "\n")
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if !strings.HasPrefix(trimmed, "PublishPort=") {
 			continue
 		}
+		// Preserve lerd-dns (pinned to 127.0.0.1 in the embed because LAN
+		// DNS is routed via the userspace forwarder, not the publish).
+		if strings.Contains(trimmed, ":5300:5300") {
+			continue
+		}
 		value := strings.TrimPrefix(trimmed, "PublishPort=")
-		// Skip lines that already have an explicit IP prefix (any host
-		// IP, not just 127.0.0.1 — be conservative and leave operator
-		// overrides alone). Detect by checking if the first segment
-		// contains a dot (e.g. 127.0.0.1, 192.168.x.y) rather than being
-		// a bare port number.
+
+		if lanExposed {
+			if rest, ok := strings.CutPrefix(value, "127.0.0.1:"); ok {
+				lines[i] = "PublishPort=" + rest
+			} else if rest, ok := strings.CutPrefix(value, "[::1]:"); ok {
+				lines[i] = "PublishPort=[::]:" + rest
+			}
+			continue
+		}
+
+		if rest, ok := strings.CutPrefix(value, "[::]:"); ok {
+			lines[i] = "PublishPort=[::1]:" + rest
+			continue
+		}
+		if strings.HasPrefix(value, "[") {
+			continue
+		}
 		firstSeg := strings.SplitN(value, ":", 2)[0]
 		if strings.ContainsRune(firstSeg, '.') {
 			continue
@@ -198,4 +183,74 @@ func BindForLAN(content string, lanExposed bool) string {
 		lines[i] = "PublishPort=127.0.0.1:" + value
 	}
 	return strings.Join(lines, "\n")
+}
+
+// PairIPv6Binds normalises PublishPort lines for dual-stack reach:
+// 127.0.0.1:X gets paired with [::1]:X, bare/0.0.0.0:X is rewritten
+// to [::]:X. Idempotent; skipped when Network= is absent (pasta path).
+func PairIPv6Binds(content string) string {
+	hasNetwork := false
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "Network=") {
+			hasNetwork = true
+			break
+		}
+	}
+	if !hasNetwork {
+		return content
+	}
+	lines := strings.Split(content, "\n")
+
+	v6PortSpecs := map[string]bool{}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		if !strings.HasPrefix(value, "[") {
+			continue
+		}
+		end := strings.Index(value, "]")
+		if end < 0 || end+1 >= len(value) || value[end+1] != ':' {
+			continue
+		}
+		v6PortSpecs[value[end+2:]] = true
+	}
+
+	out := make([]string, 0, len(lines)*2)
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			out = append(out, line)
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		if strings.HasPrefix(value, "[") {
+			out = append(out, line)
+			continue
+		}
+
+		firstSeg := strings.SplitN(value, ":", 2)[0]
+		switch {
+		case !strings.ContainsRune(firstSeg, '.'), firstSeg == "0.0.0.0":
+			portSpec := strings.TrimPrefix(value, "0.0.0.0:")
+			if v6PortSpecs[portSpec] {
+				continue
+			}
+			v6PortSpecs[portSpec] = true
+			out = append(out, "PublishPort=[::]:"+portSpec)
+		case firstSeg == "127.0.0.1":
+			out = append(out, line)
+			portSpec := strings.TrimPrefix(value, "127.0.0.1:")
+			if v6PortSpecs[portSpec] {
+				continue
+			}
+			v6PortSpecs[portSpec] = true
+			out = append(out, "PublishPort=[::1]:"+portSpec)
+		default:
+			out = append(out, line)
+		}
+	}
+	return strings.Join(out, "\n")
 }

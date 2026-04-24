@@ -1,0 +1,27 @@
+name: elasticsearch
+image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+description: Elasticsearch single-node search and analytics engine
+ports:
+  - "9200:9200"
+environment:
+  discovery.type: single-node
+  xpack.security.enabled: "false"
+  ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+  http.cors.enabled: "true"
+  # ES parses env vars as YAML, so a bare '*' becomes an alias and crashes
+  # SnakeYAML on boot. Wrap in literal quotes to force a string.
+  http.cors.allow-origin: '"*"'
+  http.cors.allow-headers: X-Requested-With,Content-Type,Content-Length,Authorization
+  http.cors.allow-methods: OPTIONS,HEAD,GET,POST,PUT,DELETE
+data_dir: /usr/share/elasticsearch/data
+# Map host user 1:1 to container UID 1000 and chown the data dir to it
+# so node.lock + indices are writable in rootless podman.
+userns: keep-id:uid=1000,gid=0
+chown_data: true
+env_vars:
+  - ELASTICSEARCH_HOST=lerd-elasticsearch
+  - ELASTICSEARCH_PORT=9200
+  - ELASTICSEARCH_URL=http://lerd-elasticsearch:9200
+env_detect:
+  composer: elasticsearch/elasticsearch
+connection_url: http://127.0.0.1:9200

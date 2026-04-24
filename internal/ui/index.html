@@ -223,7 +223,10 @@
             class="w-full flex items-center gap-2.5 px-3 py-2.5 text-sm text-left transition-colors border-b border-gray-50 dark:border-lerd-border/50"
             :class="selectedSvc===svc.name ? 'bg-lerd-red/10 text-lerd-red' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.03]'">
             <span class="w-2 h-2 rounded-full shrink-0" :class="svc.status==='active' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'"></span>
-            <span class="font-medium truncate flex-1" x-text="serviceLabel(svc)"></span>
+            <span class="font-medium truncate flex-1">
+              <span x-text="serviceLabel(svc)"></span>
+              <template x-if="svc.version"><span class="ml-1 text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-500" x-text="svc.version"></span></template>
+            </span>
             <template x-if="svc.depends_on && svc.depends_on.length > 0">
               <span class="shrink-0 text-gray-300 dark:text-gray-600" title="has dependencies">
                 <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="M8.59 13.51l6.83 3.98M15.41 6.51l-6.82 3.98"/></svg>
@@ -417,7 +420,10 @@
               class="w-full flex items-center gap-2.5 px-4 py-3.5 text-left transition-colors border-b border-gray-100 dark:border-lerd-border"
               :class="selectedSvc===svc.name ? 'bg-lerd-red/5 text-lerd-red' : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/[0.03]'">
               <span class="w-2 h-2 rounded-full shrink-0" :class="svc.status==='active' ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'"></span>
-              <span class="font-medium flex-1" x-text="serviceLabel(svc)"></span>
+              <span class="font-medium flex-1">
+                <span x-text="serviceLabel(svc)"></span>
+                <template x-if="svc.version"><span class="ml-1 text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-500" x-text="svc.version"></span></template>
+              </span>
               <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </button>
           </template>
@@ -654,7 +660,7 @@
                             <span x-text="serviceByName(svcName) ? serviceLabel(serviceByName(svcName)) : svcName"></span>
                           </button>
                         </template>
-                        <template x-if="!selectedSite.custom_container && selectedSite.php_version">
+                        <template x-if="!selectedSite.custom_container && selectedSite.php_version && selectedSite.runtime !== 'frankenphp'">
                           <button
                             @click="setTab('system'); selectSystem('php-' + selectedSite.php_version)"
                             :title="(xdebugEnabled[selectedSite.php_version] ? 'Xdebug ' + (xdebugMode[selectedSite.php_version] || 'debug') : 'Xdebug off') + ' — click to manage'"
@@ -666,6 +672,17 @@
                             <span>Xdebug</span>
                             <span class="opacity-70" x-text="xdebugEnabled[selectedSite.php_version] ? (xdebugMode[selectedSite.php_version] || 'debug') : 'off'"></span>
                           </button>
+                        </template>
+                        <template x-if="!selectedSite.custom_container && selectedSite.runtime === 'frankenphp'">
+                          <span
+                            :title="selectedSite.runtime_worker ? 'FrankenPHP worker mode' : 'FrankenPHP'"
+                            class="inline-flex items-center gap-1.5 text-[11px] font-medium px-2 py-0.5 rounded-full border bg-orange-50 dark:bg-orange-500/10 border-orange-200 dark:border-orange-500/30 text-orange-700 dark:text-orange-300">
+                            <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+                            <span>FrankenPHP</span>
+                            <template x-if="selectedSite.runtime_worker">
+                              <span class="opacity-70">worker</span>
+                            </template>
+                          </span>
                         </template>
                       </div>
                     </template>
@@ -913,7 +930,7 @@
                   <template x-if="selectedSite && selectedSite.has_app_logs">
                     <button @click="setSiteLogsTab('app')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='app' ? 'border-orange-500 text-orange-600 dark:text-orange-400' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'">App Logs</button>
                   </template>
-                  <button @click="setSiteLogsTab('fpm')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='fpm' ? 'border-lerd-red text-lerd-red' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.custom_container ? 'Container' : 'PHP-FPM'"></button>
+                  <button @click="setSiteLogsTab('fpm')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='fpm' ? 'border-lerd-red text-lerd-red' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.custom_container ? 'Container' : (selectedSite.runtime === 'frankenphp' ? 'FrankenPHP' : 'PHP-FPM')"></button>
                   <template x-if="selectedSite && (selectedSite.queue_running || selectedSite.queue_failing)">
                     <button @click="setSiteLogsTab('queue')" class="pb-2 mr-5 text-xs font-medium transition-colors border-b-2" :class="siteLogsTab==='queue' ? 'border-amber-500 text-amber-600 dark:text-amber-400' : selectedSite.queue_failing ? 'border-transparent text-red-500' : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'" x-text="selectedSite.queue_failing ? 'Queue !' : 'Queue'"></button>
                   </template>
@@ -1108,6 +1125,9 @@
                     <div class="flex items-center gap-2">
                       <span class="font-semibold text-gray-900 dark:text-white text-base"
                         x-text="selectedService.queue_site ? 'Queue worker' : selectedService.horizon_site ? 'Horizon' : selectedService.stripe_listener_site ? 'Stripe listener' : serviceLabel(selectedService)"></span>
+                      <template x-if="selectedService.version && !selectedService.queue_site && !selectedService.horizon_site && !selectedService.stripe_listener_site && !selectedService.schedule_worker_site && !selectedService.reverb_site && !selectedService.worker_site">
+                        <span class="text-xs font-normal tabular-nums text-gray-500 dark:text-gray-400" x-text="selectedService.version"></span>
+                      </template>
                       <span class="inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full"
                         :class="selectedService.status === 'active' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-500' : 'bg-gray-100 dark:bg-white/5 text-gray-500'">
                         <span class="w-1.5 h-1.5 rounded-full" :class="selectedService.status === 'active' ? 'bg-emerald-500' : 'bg-gray-400 dark:bg-gray-600'"></span>
@@ -1193,6 +1213,15 @@
                       class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
                       <svg x-show="selectedService.loading" class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
                       <span x-show="!selectedService.loading">Stop</span>
+                    </button>
+                  </template>
+                  <template x-if="selectedService.status === 'active' && !selectedService.queue_site && !selectedService.horizon_site && !selectedService.stripe_listener_site && !selectedService.schedule_worker_site && !selectedService.reverb_site && !selectedService.worker_site">
+                    <button @click="toggleService(selectedService, 'restart')" :disabled="selectedService.loading"
+                      title="Restart container"
+                      class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 transition-colors disabled:opacity-50">
+                      <svg x-show="selectedService.loading" class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                      <svg x-show="!selectedService.loading" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                      <span x-show="!selectedService.loading">Restart</span>
                     </button>
                   </template>
                   <template x-if="!selectedService.queue_site && !selectedService.horizon_site && !selectedService.stripe_listener_site && !selectedService.schedule_worker_site && !selectedService.reverb_site && !selectedService.worker_site">
@@ -1727,10 +1756,10 @@
                   </div>
                   <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
                     <template x-if="lanExposure.exposed">
-                      <span>Sites are reachable from other devices on the LAN at <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono" x-text="lanExposure.lanIP"></code>. The dnsmasq resolver answers <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">*.test</code> with this address. Database, cache, and mail containers stay bound to 127.0.0.1 — Laravel apps reach them through the internal bridge, no need to expose them to the network.</span>
+                      <span>Sites are reachable from other devices on the LAN at <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono" x-text="lanExposure.lanIP"></code>. The dnsmasq resolver answers <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">*.test</code> with this address. Database, cache, and mail containers stay on loopback only (<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">127.0.0.1</code> and <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">::1</code> on dual-stack hosts) — Laravel apps reach them through the internal bridge, no need to expose them to the network.</span>
                     </template>
                     <template x-if="!lanExposure.exposed">
-                      <span>Lerd is bound to 127.0.0.1 only — invisible to other devices on the network. Safe for untrusted wifi (cafés, conference networks). Expose to share your sites with another machine on a trusted LAN.</span>
+                      <span>Lerd is bound to loopback only (<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">127.0.0.1</code> and <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">::1</code> on dual-stack hosts) — invisible to other devices on the network. Safe for untrusted wifi (cafés, conference networks). Expose to share your sites with another machine on a trusted LAN.</span>
                     </template>
                   </p>
                   <template x-if="lanExposure.macos">
@@ -1850,7 +1879,7 @@
                     </span>
                   </div>
                   <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
-                    When disabled, only loopback (127.0.0.1) can reach the dashboard. Enable to grant LAN clients access with HTTP Basic auth. Loopback always bypasses authentication, so you can never lock yourself out from this machine.
+                    When disabled, only loopback (<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">127.0.0.1</code> and <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded font-mono">::1</code>) can reach the dashboard. Enable to grant LAN clients access with HTTP Basic auth. Loopback always bypasses authentication, so you can never lock yourself out from this machine.
                   </p>
                   <template x-if="remoteControl.enabled">
                     <div class="space-y-2">
@@ -2117,7 +2146,7 @@ function lerdApp() {
     linkModal: { open: false, currentDir: '', dirs: [], loading: false, linking: false, error: '', logs: [] },
     presets: [],
     presetModal: { open: false, loading: false },
-    presetSuggestions: { mysql: 'phpmyadmin', postgres: 'pgadmin', mongo: 'mongo-express' },
+    presetSuggestions: { mysql: 'phpmyadmin', postgres: 'pgadmin', mongo: 'mongo-express', elasticsearch: 'elasticvue' },
     dismissedPresetSuggestions: JSON.parse(localStorage.getItem('lerd-dismissed-preset-suggestions') || '[]'),
     phpVersions: [],
     nodeVersions: [],
@@ -2375,19 +2404,22 @@ function lerdApp() {
       mongo: 'MongoDB',
       'mongo-express': 'Mongo Express',
       'stripe-mock': 'Stripe Mock',
+      elasticsearch: 'Elasticsearch',
+      elasticvue: 'Elasticvue',
+      memcached: 'Memcached',
+      rabbitmq: 'RabbitMQ',
     },
     serviceLabel(svc) {
       if (!svc || !svc.name) return '';
       if (this.serviceDisplayLabels[svc.name]) return this.serviceDisplayLabels[svc.name];
       // Versioned alternates: name is "<family>-<sanitized-tag>" where the tag
       // starts with a digit (mysql-5-7, mongo-6, postgres-14-2, mariadb-11).
-      // Display as "<Family Label> <tag-with-dots>".
+      // The tag is rendered separately via the version badge, so return only
+      // the family label here to avoid duplicating the version in the row.
       const m = svc.name.match(/^([a-z][a-z0-9]*?)-(\d[\w-]*)$/);
       if (m) {
         const family = m[1];
-        const tag = m[2].replace(/-/g, '.');
-        const familyLabel = this.serviceDisplayLabels[family] || this.capitalize(family);
-        return familyLabel + ' ' + tag;
+        return this.serviceDisplayLabels[family] || this.capitalize(family);
       }
       return this.capitalize(svc.name);
     },
@@ -3221,10 +3253,17 @@ function lerdApp() {
     },
 
     get dashboardServices() {
-      return this.services.filter(s => s.dashboard && s.status === 'active');
+      // External-dashboard services (rabbitmq) skip the sidebar icon since
+      // they open in a new tab anyway. The detail panel still surfaces the
+      // dashboard URL so they remain discoverable.
+      return this.services.filter(s => s.dashboard && s.status === 'active' && !s.dashboard_external);
     },
 
     openDashboardIframe(svc) {
+      if (svc && svc.dashboard_external && svc.dashboard) {
+        window.open(svc.dashboard, '_blank', 'noopener,noreferrer');
+        return;
+      }
       if (this.dashboardSvc && this.dashboardSvc.name === svc.name) {
         this.dashboardSvc = null;
         location.hash = this.tab;
@@ -3320,6 +3359,7 @@ function lerdApp() {
         mailhog: icons.mail,
         meilisearch: icons.search,
         elasticsearch: icons.search,
+        elasticvue: icons.search,
         typesense: icons.search,
         rustfs: icons.storage,
         minio: icons.storage,
@@ -3515,6 +3555,10 @@ function lerdApp() {
       if (!adminSvc) return;
       if (adminSvc.status !== 'active') {
         await this.toggleService(adminSvc, 'start');
+      }
+      if (adminSvc.dashboard_external) {
+        window.open(adminSvc.dashboard, '_blank', 'noopener,noreferrer');
+        return;
       }
       if (adminSvc.dashboard) {
         const fresh = this.services.find(s => s.name === adminSvc.name) || adminSvc;
@@ -4056,6 +4100,7 @@ function lerdApp() {
 
     fpmContainer(site) {
       if (site.custom_container) return 'lerd-custom-' + site.name;
+      if (site.runtime === 'frankenphp') return 'lerd-fp-' + site.name;
       if (!site.php_version) return '';
       return 'lerd-php' + site.php_version.replace('.', '') + '-fpm';
     },
@@ -4117,17 +4162,17 @@ function lerdApp() {
         const res = await fetch(`/api/services/${svc.name}/${action}`, { method: 'POST', signal: ctrl.signal });
         const data = await res.json();
         if (data.ok) {
-          svc.status = data.status || (action === 'start' ? 'active' : 'inactive');
-          svc.flash = action === 'start' ? 'Service started' : 'Service stopped';
+          svc.status = data.status || (action === 'stop' ? 'inactive' : 'active');
+          svc.flash = action === 'start' ? 'Service started' : action === 'restart' ? 'Service restarted' : 'Service stopped';
           setTimeout(() => { svc.flash = ''; }, 3000);
-          if (action === 'start') this.openServiceLogs(svc);
+          if (action === 'start' || action === 'restart') this.openServiceLogs(svc);
         } else {
           svc.error = data.error || 'Action failed';
         }
         await this.loadServices();
       } catch (e) {
         if (e.name === 'AbortError') {
-          svc.flash = action === 'start' ? 'Starting in background…' : 'Stopping in background…';
+          svc.flash = action === 'start' ? 'Starting in background…' : action === 'restart' ? 'Restarting in background…' : 'Stopping in background…';
           setTimeout(() => { svc.flash = ''; }, 4000);
         } else {
           svc.error = e.message || 'Request failed';

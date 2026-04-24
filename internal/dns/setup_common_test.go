@@ -46,6 +46,42 @@ func TestParseNameservers_missingFile(t *testing.T) {
 	}
 }
 
+func TestParseNameservers_skipsZonedLinkLocal(t *testing.T) {
+	f := writeTempFile(t, `
+nameserver fe80::46d4:53ff:fe3f:a9a7%18
+nameserver fe80::1%eth0
+nameserver 8.8.8.8
+`)
+	got := parseNameservers(f)
+	want := []string{"8.8.8.8"}
+	assertSliceEqual(t, got, want)
+}
+
+func TestSanitizeDNSIP(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"8.8.8.8", "8.8.8.8"},
+		{"  1.1.1.1  ", "1.1.1.1"},
+		{"169.254.1.1", "169.254.1.1"},
+		{"2606:4700:4700::1111", "2606:4700:4700::1111"},
+		{"127.0.0.1", ""},
+		{"127.0.0.53", ""},
+		{"::1", ""},
+		{"0.0.0.0", ""},
+		{"", ""},
+		{"--", ""},
+		{"not-an-ip", ""},
+		{"fe80::46d4:53ff:fe3f:a9a7%18", ""},
+		{"fe80::1%eth0", ""},
+	}
+	for _, c := range cases {
+		if got := sanitizeDNSIP(c.in); got != c.want {
+			t.Errorf("sanitizeDNSIP(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 func TestParseNameservers_commentsIgnored(t *testing.T) {
 	f := writeTempFile(t, `
 # This is a comment

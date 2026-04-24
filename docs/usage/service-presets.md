@@ -1,6 +1,6 @@
 # Service presets
 
-The built-in services (MySQL, Postgres, Redis, etc.) live in [Services](services.md). This page covers the opt-in **service presets** Lerd ships: one-command installers for phpMyAdmin, pgAdmin, MongoDB, alternate MySQL / MariaDB versions, Selenium, and Stripe Mock.
+The built-in services (MySQL, Postgres, Redis, etc.) live in [Services](services.md). This page covers the opt-in **service presets** Lerd ships: one-command installers for phpMyAdmin, pgAdmin, MongoDB, alternate MySQL / MariaDB versions, Selenium, Stripe Mock, Memcached, RabbitMQ, and Elasticsearch.
 
 Lerd ships a small set of opt-in service presets that you can install in one
 command without cluttering the built-in service list. Each preset is just a
@@ -17,6 +17,10 @@ plays nicely with every `lerd service` subcommand (start/stop/remove/expose/pin)
 | `mongo-express` | `docker.io/library/mongo-express:latest` | `mongo` (preset) | `http://localhost:8082` |
 | `selenium` | `docker.io/selenium/standalone-chromium:latest` | - | `http://localhost:7900` (noVNC) |
 | `stripe-mock` | `docker.io/stripemock/stripe-mock:latest` | - | `127.0.0.1:12111` |
+| `memcached` | `docker.io/library/memcached:1.6-alpine` | - | `127.0.0.1:11211` |
+| `rabbitmq` | `docker.io/library/rabbitmq:3-management-alpine` | - | `http://localhost:15672` (mgmt UI, opens in new tab) |
+| `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch:8.13.4` | - | `127.0.0.1:9200` |
+| `elasticvue` | `docker.io/cars10/elasticvue:latest` | `elasticsearch` (preset) | `http://localhost:8083` |
 
 ```bash
 # List the bundled presets and their install state
@@ -140,6 +144,10 @@ A preset's `depends_on` is enforced two ways:
 | `mongo` | root user `root` / `lerd` |
 | `mongo-express` | basic auth disabled, open `http://localhost:8082` directly |
 | `stripe-mock` | no auth (Stripe test mock) |
+| `memcached` | no auth (Memcached has no native authentication) |
+| `rabbitmq` | management UI: `root` / `lerd` (also the default AMQP user) |
+| `elasticsearch` | no auth (`xpack.security.enabled=false` for local dev) |
+| `elasticvue` | no auth, opens straight to the pre-configured `Lerd Elasticsearch` cluster at `http://localhost:9200` |
 
 ## Database service quality-of-life
 

@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // PodmanBin returns the full path to the podman binary. On macOS it searches
@@ -66,6 +70,21 @@ func PullImageTo(image string, w io.Writer) error {
 	return nil
 }
 
+// PullImageIfMissing pulls the named image when it is not already in the
+// local store. No-op when the image exists.
+func PullImageIfMissing(image string) error {
+	if ImageExists(image) {
+		return nil
+	}
+	cmd := exec.Command(PodmanBin(), "pull", image)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("pulling %s: %w", image, err)
+	}
+	return nil
+}
+
 // ServiceImage returns the OCI image name embedded in a named quadlet template.
 // Returns "" if the quadlet or Image line is not found.
 func ServiceImage(quadletName string) string {
@@ -111,6 +130,49 @@ func ServiceVersion(quadletName string) string {
 		return tag
 	}
 	return ""
+}
+
+// InstalledImage returns the Image= from the installed quadlet on disk,
+// or falls back to the embedded template's Image=. Returns "" when neither
+// exists. The installed file reflects user image overrides (global config,
+// platform overrides) so display surfaces use this instead of ServiceImage.
+func InstalledImage(unit string) string {
+	path := filepath.Join(config.QuadletDir(), unit+".container")
+	if data, err := os.ReadFile(path); err == nil {
+		for _, line := range strings.Split(string(data), "\n") {
+			if after, ok := strings.CutPrefix(line, "Image="); ok {
+				return strings.TrimSpace(after)
+			}
+		}
+	}
+	return ServiceImage(unit)
+}
+
+// ServiceVersionLabel returns a human-readable version label from an OCI
+// image reference. Rolling tags like "latest" pass through unchanged; numeric
+// tags are prefixed with "v" and stripped of distro/variant suffixes
+// (mysql:8.0 → v8.0, redis:7-alpine → v7, postgis:16-3.5 → v16).
+func ServiceVersionLabel(image string) string {
+	if image == "" {
+		return ""
+	}
+	idx := strings.LastIndex(image, ":")
+	if idx < 0 {
+		return ""
+	}
+	tag := image[idx+1:]
+	switch tag {
+	case "latest", "main", "master", "edge", "stable", "nightly":
+		return tag
+	}
+	core := strings.TrimPrefix(tag, "v")
+	if dash := strings.Index(core, "-"); dash > 0 {
+		core = core[:dash]
+	}
+	if core == "" || core[0] < '0' || core[0] > '9' {
+		return tag
+	}
+	return "v" + core
 }
 
 // ContainerRunning returns true if the named container is running.

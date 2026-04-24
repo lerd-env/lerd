@@ -57,10 +57,29 @@ data_dir: /data/db                     # mount target inside container
                                        # host path: ~/.local/share/lerd/data/<name>/
                                        # omit to disable persistent storage
 
+chown_data: false                      # add :U to the data_dir mount so podman re-chowns
+                                       # the host dir to the container's expected UID at
+                                       # mount time. Pair with userns when the in-container
+                                       # process runs as a non-root user (e.g. elasticsearch
+                                       # UID 1000) and would otherwise hit EACCES.
+
+userns: ""                             # written verbatim to UserNS= in the quadlet, e.g.
+                                       # "keep-id:uid=1000,gid=0" maps the host user 1:1
+                                       # to container UID 1000 so bind-mounted volumes are
+                                       # writable in rootless podman. Leave empty for
+                                       # images that run as root or drop privileges via
+                                       # their entrypoint.
+
 exec: ""                               # container command override
 
 dashboard: http://localhost:8081       # URL shown as an "Open" button in the web UI
                                        # when the service is active
+
+dashboard_external: false              # open the dashboard in a new browser tab instead of
+                                       # the embedded iframe. Use for admin UIs whose login
+                                       # cookie is dropped on cross-origin iframe POSTs and
+                                       # has no SameSite override (e.g. RabbitMQ Cowboy).
+                                       # External dashboards also skip the sidebar shortcut.
 
 connection_url: mongodb://root:secret@127.0.0.1:27017/?authSource=admin
                                        # host-side scheme URL (mysql://, postgresql://, mongodb://, etc.)

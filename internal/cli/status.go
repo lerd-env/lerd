@@ -135,17 +135,21 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		}
 		installedCount++
 		status, _ := services.Mgr.UnitStatus(unit)
+		label := svc
+		if ver := podman.ServiceVersionLabel(podman.InstalledImage(unit)); ver != "" {
+			label = svc + " " + ver
+		}
 		switch status {
 		case "active":
-			ok2(svc)
+			ok2(label)
 		case "inactive":
 			if config.CountSitesUsingService(svc) == 0 {
-				warn2(svc, "no sites using this service")
+				warn2(label, "no sites using this service")
 			} else {
-				warn2(svc, "inactive — start with: lerd service start "+svc)
+				warn2(label, "inactive — start with: lerd service start "+svc)
 			}
 		default:
-			fail2(svc, status, serviceStatusHint(unit))
+			fail2(label, status, serviceStatusHint(unit))
 		}
 	}
 	customs, _ := config.ListCustomServices()
@@ -160,7 +164,11 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		if svc.Preset != "" {
 			tag = "[preset]"
 		}
-		label := svc.Name + " " + tag
+		label := svc.Name
+		if ver := podman.ServiceVersionLabel(svc.Image); ver != "" {
+			label = svc.Name + " " + ver
+		}
+		label = label + " " + tag
 		switch status {
 		case "active":
 			ok2(label)

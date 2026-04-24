@@ -224,3 +224,78 @@ To ensure a clean switch and recreate the networks with the new backend, reset t
 podman system reset
 ```
 :::
+
+::: details Error: unable to parse ip fe80::...%18 specified in AddDNSServer: invalid argument
+Your host's DNS configuration includes a zoned link-local IPv6 nameserver, typically advertised by your router via SLAAC + RDNSS. The zone identifier (`%18` is a kernel interface index) is meaningless inside a container's network namespace, and netavark refuses to accept it.
+
+Lerd 1.18+ filters these addresses automatically before handing them to podman. If you're still on 1.17 or older, upgrade with `lerd update` and rerun `lerd install`. The filter is conservative: only zoned link-local (`fe80::...%iface`) addresses are dropped; globally routable IPv6 nameservers (e.g. `2606:4700:4700::1111`) are preserved.
+
+When filtering empties the entire DNS list, lerd falls back to pasta's standard forwarder (`169.254.1.1`), which bridges into the host's resolver and preserves `.test` routing.
+:::
+
+::: details Containers can resolve `.test` over IPv4 but not over IPv6
+Lerd 1.18+ creates the lerd podman network as dual-stack (v4 + v6) and writes both A and AAAA records for `.test` domains. If you upgraded from an older version, the existing v4-only `lerd` network is migrated automatically the next time you run `lerd install`: attached containers stop, the network is recreated with the `fd00:1e7d::/64` ULA prefix, the previous DNS server list is restored, and the containers restart. Quick check:
+
+```bash
+podman network inspect lerd --format '{{.Subnets}}'
+# expect both an IPv4 subnet and one starting with fd00:1e7d::
+```
+
+If the v6 subnet is missing, run `lerd install` once to migrate. To verify resolution from inside a container:
+
+```bash
+podman run --rm --network lerd alpine sh -c 'nslookup laravel.test; nslookup -type=AAAA laravel.test'
+```
+:::
+
+::: details Services fail to start with "aardvark-dns failed to bind [fd00:1e7d::1]:53"
+
+Symptom: after `lerd install`, a subset of service containers (commonly `lerd-nginx`, `lerd-postgres`, `lerd-meilisearch`) fail to start. Journal shows:
+
+```
+Error: netavark: error while applying dns entries: IO error: aardvark-dns failed to start
+Error starting server failed to bind udp listener on [fd00:1e7d::1]:53:
+IO error: Cannot assign requested address (os error 99)
+```
+
+Cause: the host advertises IPv6 in the kernel but has no routable v6 address on any interface — only `::1` and `fe80::` — so netavark can't hold the ULA gateway on the rootless bridge, and aardvark-dns bind fails with `EADDRNOTAVAIL`. Typical in headless QEMU/KVM VMs and networks without v6 DHCP.
+
+Lerd 1.18+ detects this on every `lerd install` by reading `/proc/net/if_inet6` (any non-loopback, non-link-local v6 address counts as usable) and falls back to a v4-only `lerd` network. An existing dual-stack network on a v6-less host is recreated as v4-only automatically. Force it:
+
+```bash
+lerd install
+# look for: "Recreated lerd network as v4-only (host has no usable IPv6)."
+```
+
+If the host later gains v6 connectivity, the next `lerd install` will recreate the network as dual-stack again.
+
+If you'd rather skip the dual-stack code path entirely, even on a v6-capable host, opt out:
+
+```bash
+lerd install --no-ipv6
+# or persistently via shell rc:
+export LERD_DISABLE_IPV6=1
+```
+
+Either path writes `~/.local/share/lerd/ipv6-probe-failed-lerd`, which `EnsureNetwork` honors on every code path (initial create, migration, recreate). To re-enable dual-stack, delete that marker file and re-run `lerd install`.
+:::
+
+::: details Every DNS lookup inside a lerd container stalls ~5 seconds
+Symptom: pages that hit the database or any container-to-container hostname feel slow, and `time dig <anything> @<container>` takes roughly five seconds before returning an answer. The network looks fine in `podman network inspect lerd` (both IPv4 and IPv6 subnets present), but aardvark-dns's on-disk config has the v6 gateway absent from its listen-ips line.
+
+Cause: `podman network rm` doesn't clean up `$XDG_RUNTIME_DIR/containers/networks/aardvark-dns/<name>` between rm and recreate, so a network that was originally v4-only can leave aardvark with a v4-only listen header even after the network is recreated dual-stack. The container's `/etc/resolv.conf` still lists the v6 gateway as the primary nameserver, queries to it time out (~5s), then glibc falls back to the v4 gateway.
+
+Lerd 1.18+ detects this drift on `lerd install` (aardvark listen line is v4-only despite the network being dual-stack) and self-heals by recreating the network with the stale aardvark state wiped. If you're on an earlier 1.18 build or the heal didn't fire, force it:
+
+```bash
+lerd install
+```
+
+Manual verification:
+
+```bash
+cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/networks/aardvark-dns/lerd" | head -1
+# expect both gateways, e.g.: fd00:1e7d::1,10.89.7.1 169.254.1.1
+# if only 10.89.7.1 is present, the drift fix didn't run — re-run lerd install
+```
+:::

@@ -16,6 +16,8 @@
 
 Available services: `mysql`, `redis`, `postgres`, `meilisearch`, `rustfs`, `mailpit`.
 
+`lerd service list` shows the version (derived from the image tag) alongside each service, e.g. `mysql v8.0`, `redis v7`, `postgres v16`, `meilisearch v1.7`. The Web UI, the TUI, and `lerd status` display the same label. Services pinned to rolling tags (`latest`, `main`) show the tag verbatim.
+
 ### Exposing extra ports on built-in services
 
 Built-in services publish a fixed set of ports by default. Use `lerd service expose` to bind additional host ports without recompiling or replacing the service:

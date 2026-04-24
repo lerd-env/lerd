@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -203,8 +204,8 @@ func coreUnits() []string {
 }
 
 // installedCustomContainerUnits returns units for per-project custom containers
-// that have a unit file installed (plist on macOS, quadlet on Linux).
-// These are started alongside FPM and services.
+// and per-site FrankenPHP containers that have a unit file installed (plist on
+// macOS, quadlet on Linux). These are started alongside FPM and services.
 func installedCustomContainerUnits() []string {
 	var units []string
 	reg, err := config.LoadSites()
@@ -212,10 +213,18 @@ func installedCustomContainerUnits() []string {
 		return nil
 	}
 	for _, site := range reg.Sites {
-		if !site.IsCustomContainer() || site.Paused {
+		if site.Paused {
 			continue
 		}
-		unitName := podman.CustomContainerName(site.Name)
+		var unitName string
+		switch {
+		case site.IsCustomContainer():
+			unitName = podman.CustomContainerName(site.Name)
+		case site.IsFrankenPHP():
+			unitName = podman.FrankenPHPContainerName(site.Name)
+		default:
+			continue
+		}
 		// Use the platform-aware check (plist on macOS, .container quadlet on Linux)
 		// rather than podman.QuadletInstalled which only checks for .container files
 		// and always returns false on macOS where plists are used instead.
@@ -397,7 +406,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// init or if it was pruned. All service containers use --network lerd so
 	// this must succeed before any container is started.
 	if err := podman.EnsureNetwork("lerd"); err != nil {
-		fmt.Printf("  WARN: ensure lerd network: %v\n", err)
+		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
+			fmt.Println("  WARN: lerd network schema doesn't match host IPv6 support; run 'lerd install' to recreate")
+		} else {
+			fmt.Printf("  WARN: ensure lerd network: %v\n", err)
+		}
 	}
 
 	// Restore quadlets and worker units that may be missing after an
@@ -742,7 +755,7 @@ func restoreSiteInfrastructure() {
 			if w == "stripe" {
 				base := siteURL(s.Path)
 				if base != "" {
-					StripeStartForSite(s.Name, s.Path, base) //nolint:errcheck
+					StripeRestoreUnit(s.Name, s.Path, base) //nolint:errcheck
 				}
 				continue
 			}

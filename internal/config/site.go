@@ -38,12 +38,24 @@ type Site struct {
 	// ContainerSSL, when true, means the app inside the custom container serves
 	// TLS on its port; nginx will proxy_pass via HTTPS with ssl_verify off.
 	ContainerSSL bool `yaml:"container_ssl,omitempty"`
+	// Runtime is "fpm" (default) or "frankenphp". When "frankenphp" the site
+	// runs a per-site dunglas/frankenphp:php<version> container and nginx
+	// reverse-proxies to it on port 8000.
+	Runtime string `yaml:"runtime,omitempty"`
+	// RuntimeWorker toggles FrankenPHP worker mode when Runtime=="frankenphp".
+	RuntimeWorker bool `yaml:"runtime_worker,omitempty"`
 }
 
 // IsCustomContainer returns true when the site uses a per-project custom
 // container instead of the shared PHP-FPM image.
 func (s *Site) IsCustomContainer() bool {
 	return s.ContainerPort > 0
+}
+
+// IsFrankenPHP returns true when the site is served by a per-site
+// dunglas/frankenphp container instead of the shared PHP-FPM image.
+func (s *Site) IsFrankenPHP() bool {
+	return s.Runtime == "frankenphp"
 }
 
 // PrimaryDomain returns the first (primary) domain for the site.
@@ -83,6 +95,8 @@ type siteYAML struct {
 	LANPort       int      `yaml:"lan_port,omitempty"`
 	ContainerPort int      `yaml:"container_port,omitempty"`
 	ContainerSSL  bool     `yaml:"container_ssl,omitempty"`
+	Runtime       string   `yaml:"runtime,omitempty"`
+	RuntimeWorker bool     `yaml:"runtime_worker,omitempty"`
 }
 
 func (s Site) toYAML() siteYAML {
@@ -102,6 +116,8 @@ func (s Site) toYAML() siteYAML {
 		LANPort:       s.LANPort,
 		ContainerPort: s.ContainerPort,
 		ContainerSSL:  s.ContainerSSL,
+		Runtime:       s.Runtime,
+		RuntimeWorker: s.RuntimeWorker,
 	}
 }
 
@@ -126,6 +142,8 @@ func (sy siteYAML) toSite() Site {
 		LANPort:       sy.LANPort,
 		ContainerPort: sy.ContainerPort,
 		ContainerSSL:  sy.ContainerSSL,
+		Runtime:       sy.Runtime,
+		RuntimeWorker: sy.RuntimeWorker,
 	}
 }
 

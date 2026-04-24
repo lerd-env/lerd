@@ -22,6 +22,10 @@ func SecureSite(site config.Site) error {
 		if err := nginx.GenerateCustomSSLVhost(site); err != nil {
 			return fmt.Errorf("generating custom SSL vhost: %w", err)
 		}
+	} else if site.IsFrankenPHP() {
+		if err := nginx.GenerateFrankenPHPSSLVhost(site); err != nil {
+			return fmt.Errorf("generating FrankenPHP SSL vhost: %w", err)
+		}
 	} else if err := nginx.GenerateSSLVhost(site, site.PHPVersion); err != nil {
 		return fmt.Errorf("generating SSL vhost: %w", err)
 	}
@@ -56,6 +60,10 @@ func UnsecureSite(site config.Site) error {
 	if site.IsCustomContainer() {
 		if err := nginx.GenerateCustomVhost(site); err != nil {
 			return fmt.Errorf("generating custom HTTP vhost: %w", err)
+		}
+	} else if site.IsFrankenPHP() {
+		if err := nginx.GenerateFrankenPHPVhost(site); err != nil {
+			return fmt.Errorf("generating FrankenPHP HTTP vhost: %w", err)
 		}
 	} else if err := nginx.GenerateVhost(site, site.PHPVersion); err != nil {
 		return fmt.Errorf("generating HTTP vhost: %w", err)

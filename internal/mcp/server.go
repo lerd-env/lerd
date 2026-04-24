@@ -146,7 +146,7 @@ type mcpSchema struct {
 
 type mcpProp struct {
 	Type        string   `json:"type"`
-	Description string   `json:"description"`
+	Description string   `json:"description,omitempty"`
 	Enum        []string `json:"enum,omitempty"`
 }
 
@@ -241,142 +241,85 @@ func toolList() []mcpTool {
 	tools := []mcpTool{
 		{
 			Name:        "sites",
-			Description: "List all sites registered with lerd, including domain, path, PHP version, Node version, TLS status, worker status, and custom_container/container_port for non-PHP sites. Call this first to find site names for other tools.",
+			Description: "List registered sites (domain, path, PHP/Node version, TLS, workers). Call first to discover site names.",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
 			},
 		},
 		{
-			Name:        "service_start",
-			Description: "Start a lerd infrastructure service (built-in or custom). Ensures the quadlet is written and the systemd unit is running.",
+			Name:        "service_control",
+			Description: "Service control. pin = never auto-stop.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Service to start (built-in: mysql, redis, postgres, meilisearch, rustfs, mailpit — or any custom service name registered with service_add)",
-					},
+					"action": {Type: "string", Enum: []string{"start", "stop", "pin", "unpin"}},
+					"name":   {Type: "string", Description: "Built-in or custom service name."},
 				},
-				Required: []string{"name"},
-			},
-		},
-		{
-			Name:        "service_stop",
-			Description: "Stop a running lerd infrastructure service (built-in or custom).",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Service to stop (built-in: mysql, redis, postgres, meilisearch, rustfs, mailpit — or any custom service name registered with service_add)",
-					},
-				},
-				Required: []string{"name"},
+				Required: []string{"action", "name"},
 			},
 		},
 		{
 			Name:        "logs",
-			Description: `Fetch recent container logs for a lerd service or PHP-FPM container. When target is omitted, logs for the current site's FPM container are returned. Valid targets: "nginx", a service name (mysql, redis, etc.), a PHP version (8.4, 8.5), or a site name.`,
+			Description: "Fetch recent container logs. target: nginx, service, PHP version (8.4), or site name. Defaults to current site's FPM.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"target": {
-						Type:        "string",
-						Description: `Optional. "nginx", service name like "mysql", PHP version like "8.4", or site name. Defaults to the current site's FPM container.`,
-					},
-					"lines": {
-						Type:        "integer",
-						Description: "Number of lines to return from the tail (default: 50)",
-					},
+					"target": {Type: "string", Description: "nginx, service, PHP version, or site name. Defaults to current FPM."},
+					"lines":  {Type: "integer", Description: "Tail count (default 50)."},
 				},
-				Required: []string{},
 			},
 		},
 		{
 			Name:        "composer",
-			Description: "Run a Composer command inside the lerd PHP-FPM container for the project. Use this to install dependencies, require packages, run scripts, or any other composer command.",
+			Description: "Run composer in the PHP-FPM container.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the Laravel project root (e.g. /home/user/code/myapp). Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"args": {
-						Type:        "array",
-						Description: `Composer arguments as an array, e.g. ["install"] or ["require", "laravel/sanctum"] or ["dump-autoload"]`,
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
+					"args": {Type: "array", Description: `e.g. ["install"] or ["require", "laravel/sanctum"].`},
 				},
 				Required: []string{"args"},
 			},
 		},
 		{
 			Name:        "vendor_bins",
-			Description: "List composer-installed binaries available in the project's vendor/bin directory. Use this to discover tools like pest, phpunit, pint, phpstan, rector, etc. before invoking vendor_run.",
+			Description: "List composer-installed binaries in vendor/bin (pest, phpunit, pint, etc.). Call before vendor_run.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 				},
 			},
 		},
 		{
 			Name:        "vendor_run",
-			Description: "Run a composer-installed binary from the project's vendor/bin directory inside the lerd PHP-FPM container. Use vendor_bins first to see what's available.",
+			Description: "Run a vendor/bin binary in the PHP-FPM container. Use vendor_bins first.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"bin": {
-						Type:        "string",
-						Description: `Name of the binary in vendor/bin, e.g. "pest", "phpunit", "pint"`,
-					},
-					"args": {
-						Type:        "array",
-						Description: `Arguments to pass to the binary, e.g. ["--filter", "UserTest"]`,
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
+					"bin":  {Type: "string", Description: "Binary name (pest, phpunit, pint, …)."},
+					"args": {Type: "array", Description: "Arguments to pass."},
 				},
 				Required: []string{"bin"},
 			},
 		},
 		{
-			Name:        "node_install",
-			Description: "Install a Node.js version via fnm so it can be used by lerd sites. Accepts a version number (e.g. \"20\", \"20.11.0\") or alias (e.g. \"lts\").",
+			Name:        "node",
+			Description: "Install or uninstall a Node.js version via fnm.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"version": {
-						Type:        "string",
-						Description: `Node.js version or alias to install, e.g. "20", "20.11.0", "lts"`,
-					},
+					"action":  {Type: "string", Enum: []string{"install", "uninstall"}},
+					"version": {Type: "string", Description: "Version or alias (e.g. 20, 20.11.0, lts)."},
 				},
-				Required: []string{"version"},
-			},
-		},
-		{
-			Name:        "node_uninstall",
-			Description: "Uninstall a Node.js version via fnm.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"version": {
-						Type:        "string",
-						Description: `Node.js version to uninstall, e.g. "20.11.0"`,
-					},
-				},
-				Required: []string{"version"},
+				Required: []string{"action", "version"},
 			},
 		},
 		{
 			Name:        "runtime_versions",
-			Description: "List installed PHP and Node.js versions managed by lerd, plus default versions. Use this to check what runtimes are available before running commands.",
+			Description: "List installed PHP and Node.js versions (plus defaults).",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
@@ -384,7 +327,7 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "status",
-			Description: "Return the health status of core lerd services: DNS resolution, nginx, PHP-FPM containers, and the file watcher. Use this to diagnose why a site isn't loading or before suggesting start/stop commands.",
+			Description: "Health status of DNS, nginx, PHP-FPM containers, and the file watcher. Call when a site is unreachable.",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
@@ -392,7 +335,7 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "doctor",
-			Description: "Run a full lerd environment diagnostic: checks podman, systemd, DNS resolution, port conflicts, PHP images, config validity, and update availability. Use this when the user reports setup issues or unexpected behaviour.",
+			Description: "Full environment diagnostic (podman, systemd, DNS, ports, images, config). Call on setup issues.",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
@@ -400,59 +343,32 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "service_add",
-			Description: "Register a new custom OCI-based service with lerd (e.g. RabbitMQ, Cassandra, a hand-rolled image). Writes a systemd quadlet so the service can be started/stopped like built-in services. For commonly-used services that ship as bundled presets (phpmyadmin, pgadmin, mongo, mongo-express, mysql alternates, mariadb, stripe-mock) prefer service_preset_install instead.",
+			Description: "Register a custom OCI service (writes a systemd quadlet). Use service_preset_install for bundled presets.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Service slug, lowercase letters/digits/hyphens only (e.g. \"mongodb\")",
-					},
-					"image": {
-						Type:        "string",
-						Description: "OCI image reference (e.g. \"docker.io/library/mongo:7\")",
-					},
-					"ports": {
-						Type:        "array",
-						Description: `Port mappings as \"host:container\" strings, e.g. ["27017:27017"]`,
-					},
-					"environment": {
-						Type:        "array",
-						Description: `Container environment variables as \"KEY=VALUE\" strings`,
-					},
-					"env_vars": {
-						Type:        "array",
-						Description: `Project .env variables to inject (shown by lerd env), as \"KEY=VALUE\" strings`,
-					},
-					"data_dir": {
-						Type:        "string",
-						Description: "Mount path inside the container for persistent data (host directory is auto-created)",
-					},
-					"description": {
-						Type:        "string",
-						Description: "Human-readable description of the service",
-					},
-					"dashboard": {
-						Type:        "string",
-						Description: "URL to open for this service's web dashboard (e.g. \"http://localhost:8080\")",
-					},
-					"depends_on": {
-						Type:        "array",
-						Description: `Services that must be running before this one starts, e.g. ["mysql"]. When this service starts its dependencies start first; when a dependency is stopped this service is stopped first.`,
-					},
+					"name":        {Type: "string", Description: "Service slug (lowercase, hyphens)."},
+					"image":       {Type: "string", Description: "OCI image reference."},
+					"ports":       {Type: "array", Description: `host:container mappings, e.g. ["27017:27017"].`},
+					"environment": {Type: "array", Description: `Container env ["KEY=VALUE", ...].`},
+					"env_vars":    {Type: "array", Description: `Project .env keys to inject ["KEY=VALUE", ...].`},
+					"data_dir":    {Type: "string", Description: "Container path for persistent data."},
+					"description": {Type: "string", Description: "Human-readable description."},
+					"dashboard":   {Type: "string", Description: "Web dashboard URL."},
+					"depends_on":  {Type: "array", Description: `Services that must start first, e.g. ["mysql"].`},
 				},
 				Required: []string{"name", "image"},
 			},
 		},
 		{
 			Name:        "service_remove",
-			Description: "Stop and remove a custom lerd service. Built-in services (mysql, redis, etc.) cannot be removed. Persistent data is NOT deleted.",
+			Description: "Stop and remove a custom service. Built-ins cannot be removed. Data is kept.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"name": {
 						Type:        "string",
-						Description: "Name of the custom service to remove",
+						Description: "Custom service name.",
 					},
 				},
 				Required: []string{"name"},
@@ -460,35 +376,26 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "service_expose",
-			Description: "Add or remove an extra published port on a built-in lerd service (mysql, redis, etc.). The port mapping is persisted in the global config. The service is restarted automatically if running.",
+			Description: "Add or remove a published port on a built-in service.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Built-in service name (mysql, redis, postgres, meilisearch, rustfs, mailpit)",
-					},
-					"port": {
-						Type:        "string",
-						Description: `Port mapping as "host:container", e.g. "13306:3306"`,
-					},
-					"remove": {
-						Type:        "boolean",
-						Description: "Set to true to remove the port mapping instead of adding it",
-					},
+					"name":   {Type: "string", Description: "mysql, redis, postgres, meilisearch, rustfs, mailpit."},
+					"port":   {Type: "string", Description: `"host:container" (e.g. "13306:3306").`},
+					"remove": {Type: "boolean", Description: "Set true to remove the mapping."},
 				},
 				Required: []string{"name", "port"},
 			},
 		},
 		{
 			Name:        "service_env",
-			Description: "Return the recommended Laravel .env connection variables for a lerd service (built-in or custom). Use this to see what keys a service needs before calling env_setup or editing .env manually.",
+			Description: "Recommended Laravel .env connection keys for a service.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"name": {
 						Type:        "string",
-						Description: "Service name (e.g. \"mysql\", \"redis\", \"mongodb\")",
+						Description: "Service name (e.g. mysql, redis, mongodb).",
 					},
 				},
 				Required: []string{"name"},
@@ -496,7 +403,7 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "service_preset_list",
-			Description: "List bundled service presets that ship with lerd. Each entry includes the preset name, description, dashboard URL, declared dependencies, available versions (for multi-version presets like mysql or mariadb), and which versions are already installed locally. Use this before service_preset_install to see what's available.",
+			Description: "List bundled service presets (name, description, versions, installed state). Call before service_preset_install.",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
@@ -504,366 +411,211 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "service_preset_install",
-			Description: "Install a bundled service preset as a local custom service. Single-version presets (phpmyadmin, pgadmin, mongo, mongo-express, stripe-mock) are installed by name. Multi-version presets (mysql, mariadb) require a version argument; available versions come from service_preset_list. Dependencies that are themselves presets must be installed first — installing mongo-express without mongo errors out with a clear hint. After install the service can be started, stopped, removed, exposed, or pinned with the usual service_* tools.",
+			Description: "Install a bundled preset (call service_preset_list first). Multi-version presets need version. Install any preset-dependency first.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Preset name (e.g. \"phpmyadmin\", \"pgadmin\", \"mongo\", \"mongo-express\", \"stripe-mock\", \"mysql\", \"mariadb\"). Run service_preset_list to see all bundled presets.",
-					},
-					"version": {
-						Type:        "string",
-						Description: "Version tag for multi-version presets (e.g. \"5.7\" for mysql, \"11\" for mariadb). Required when the preset declares versions. Empty for single-version presets.",
-					},
+					"name":    {Type: "string", Description: "Preset name (from service_preset_list)."},
+					"version": {Type: "string", Description: "Required for multi-version presets (mysql, mariadb)."},
 				},
 				Required: []string{"name"},
 			},
 		},
 		{
 			Name:        "env_setup",
-			Description: "Configure the project's .env for lerd: creates .env from .env.example if missing, detects services (mysql, redis, etc.), starts them, creates databases, generates APP_KEY (works even before composer install), and sets APP_URL. Run this once after cloning a project. Note: when run on a fresh Laravel project where .env still says DB_CONNECTION=sqlite, env_setup leaves the database choice alone — call db_set first to pick a database explicitly.",
+			Description: "Configure .env (services, DBs, APP_KEY, APP_URL). Call after site_link, then ALWAYS follow with setup to run migrations. For sqlite DB_CONNECTION, pick db_set first if you want mysql/postgres instead.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the Laravel project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
+				},
+			},
+		},
+		{
+			Name:        "setup",
+			Description: "Run the framework's post-install steps (migrations, storage:link, etc.). MANDATORY after env_setup on new or cloned projects — otherwise migrations never run. Idempotent.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 				},
 			},
 		},
 		{
 			Name:        "db_set",
-			Description: "Pick the database for a Laravel project: sqlite (local file, no service), mysql (lerd-mysql), or postgres (lerd-postgres). Persists the choice to .lerd.yaml, rewrites the relevant DB_ keys in .env, starts the service if needed, and creates the project database (and a _testing variant) for mysql/postgres. For sqlite, creates database/database.sqlite if missing. Picking a database is exclusive — switching from one to another removes the previous entry from .lerd.yaml. Use this on fresh Laravel clones before env_setup.",
+			Description: "Pick the project database. Persists to .lerd.yaml, rewrites DB_ keys in .env, starts service, creates DB + _testing. Call before env_setup on fresh clones.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the Laravel project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"database": {
-						Type:        "string",
-						Description: `Database to use: "sqlite", "mysql", or "postgres"`,
-						Enum:        []string{"sqlite", "mysql", "postgres"},
-					},
+					"path":     {Type: "string", Description: "Project root."},
+					"database": {Type: "string", Enum: []string{"sqlite", "mysql", "postgres"}},
 				},
 				Required: []string{"database"},
 			},
 		},
 		{
 			Name:        "env_check",
-			Description: "Compare .env against .env.example and flag missing or extra keys. Useful for catching 'works on my machine' bugs caused by env drift.",
+			Description: "Compare .env against .env.example; flag missing/extra keys.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 				},
 			},
 		},
 		{
 			Name:        "site_link",
-			Description: "Register a directory as a lerd site, generating an nginx vhost and a <name>.test domain. Reads .lerd.yaml automatically: if a container:{port:N} section is present, builds the custom container image and proxies nginx to it; otherwise registers as a PHP/framework site. For non-PHP projects (Node.js, Python, Go, etc.): write .lerd.yaml with container:{port:N} and a Containerfile (default name Containerfile.lerd; set container.containerfile for a different name like Dockerfile) BEFORE calling this.",
+			Description: "Register a directory as a lerd site. Non-PHP sites need .lerd.yaml container.port + Containerfile first.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project directory. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"name": {
-						Type:        "string",
-						Description: "Domain name without TLD (e.g. 'myapp' becomes myapp.test). Defaults to the directory name, cleaned up.",
-					},
+					"path": {Type: "string", Description: "Project directory. Defaults to cwd."},
+					"name": {Type: "string", Description: "Without .test TLD. Defaults to dir name."},
 				},
 			},
 		},
 		{
 			Name:        "site_unlink",
-			Description: "Unregister a lerd site and remove its nginx vhost (all domains). The project files are NOT deleted.",
+			Description: "Unregister a site and remove its nginx vhost. Project files are kept.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project directory. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project directory. Defaults to cwd."},
 				},
 			},
 		},
 		{
-			Name:        "site_domain_add",
-			Description: "Add an additional domain to a lerd site. The domain name should not include the .test TLD.",
+			Name:        "site_domain",
+			Description: "Add or remove a site domain (no .test TLD). Can't remove the last one.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project directory. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"domain": {
-						Type:        "string",
-						Description: "Domain name to add (without .test TLD, e.g. 'api')",
-					},
+					"action": {Type: "string", Enum: []string{"add", "remove"}},
+					"path":   {Type: "string", Description: "Project directory."},
+					"domain": {Type: "string", Description: "Without .test TLD."},
 				},
-				Required: []string{"domain"},
+				Required: []string{"action", "domain"},
 			},
 		},
 		{
-			Name:        "site_domain_remove",
-			Description: "Remove a domain from a lerd site. Cannot remove the last domain.",
+			Name:        "site_tls",
+			Description: "Toggle HTTPS for a site (mkcert). Updates APP_URL in .env.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project directory. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"domain": {
-						Type:        "string",
-						Description: "Domain name to remove (without .test TLD, e.g. 'api')",
-					},
+					"action": {Type: "string", Enum: []string{"enable", "disable"}},
+					"site":   {Type: "string"},
 				},
-				Required: []string{"domain"},
+				Required: []string{"action", "site"},
 			},
 		},
 		{
-			Name:        "secure",
-			Description: "Enable HTTPS for a lerd site using a locally-trusted mkcert certificate. Updates APP_URL in .env automatically.",
+			Name:        "xdebug",
+			Description: "Xdebug control on port 9003. on/off restarts FPM; status reports all versions.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"action":  {Type: "string", Enum: []string{"on", "off", "status"}},
+					"version": {Type: "string", Description: "PHP version. Ignored for status."},
+					"mode":    {Type: "string", Description: "debug (default) | coverage | develop | profile | trace | gcstats. Combinable."},
 				},
-				Required: []string{"site"},
-			},
-		},
-		{
-			Name:        "unsecure",
-			Description: "Disable HTTPS for a lerd site and revert APP_URL in .env to http://.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
-				},
-				Required: []string{"site"},
-			},
-		},
-		{
-			Name:        "xdebug_on",
-			Description: "Enable Xdebug for a PHP version and restart the FPM container. Xdebug listens on port 9003 (host.containers.internal).",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"version": {
-						Type:        "string",
-						Description: "PHP version (e.g. \"8.4\"). Defaults to the project or global default.",
-					},
-					"mode": {
-						Type:        "string",
-						Description: "xdebug.mode value. Defaults to \"debug\". Accepts debug, coverage, develop, profile, trace, gcstats, or a comma-separated combo like \"debug,coverage\".",
-					},
-				},
-			},
-		},
-		{
-			Name:        "xdebug_off",
-			Description: "Disable Xdebug for a PHP version and restart the FPM container.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"version": {
-						Type:        "string",
-						Description: "PHP version (e.g. \"8.4\"). Defaults to the project or global default.",
-					},
-				},
-			},
-		},
-		{
-			Name:        "xdebug_status",
-			Description: "Show Xdebug enabled/disabled status for all installed PHP versions.",
-			InputSchema: mcpSchema{
-				Type:       "object",
-				Properties: map[string]mcpProp{},
+				Required: []string{"action"},
 			},
 		},
 		{
 			Name:        "db_export",
-			Description: "Export a database to a SQL dump file. Reads connection details from the project .env.",
+			Description: "Export the project database to a SQL dump.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the Laravel project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"database": {
-						Type:        "string",
-						Description: "Database name to export (defaults to DB_DATABASE from .env)",
-					},
-					"output": {
-						Type:        "string",
-						Description: "Output file path (defaults to <database>.sql in the project root)",
-					},
+					"path":     {Type: "string", Description: "Project root."},
+					"database": {Type: "string", Description: "Defaults to DB_DATABASE."},
+					"output":   {Type: "string", Description: "Defaults to <database>.sql in project root."},
 				},
 			},
 		},
 		{
 			Name:        "db_import",
-			Description: "Import a SQL dump file into the project database. Reads connection details from the project .env. The database service must be running.",
+			Description: "Import a SQL dump into the project database.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
-					"file": {
-						Type:        "string",
-						Description: "Absolute path to the SQL dump file to import",
-					},
-					"database": {
-						Type:        "string",
-						Description: "Database name to import into (defaults to DB_DATABASE from .env)",
-					},
+					"path":     {Type: "string", Description: "Project root."},
+					"file":     {Type: "string", Description: "SQL dump file path."},
+					"database": {Type: "string", Description: "Defaults to DB_DATABASE."},
 				},
 				Required: []string{"file"},
 			},
 		},
 		{
 			Name:        "db_create",
-			Description: "Create a database (and a _testing variant) for the project. Reads the connection type from .env and starts the service if needed. Defaults to the DB_DATABASE name from .env, falling back to the project directory name.",
+			Description: "Create the project database (and a _testing variant). Starts service if needed.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 					"name": {
 						Type:        "string",
-						Description: "Database name (defaults to DB_DATABASE from .env, then to the project directory name)",
+						Description: "Database name (defaults to DB_DATABASE, then project dir name).",
 					},
 				},
 			},
 		},
 		{
 			Name:        "php_list",
-			Description: "List all PHP versions installed by lerd, marking the global default. Use this to check available versions before calling site_php or php_ext_add.",
+			Description: "List installed PHP versions (global default marked).",
 			InputSchema: mcpSchema{
 				Type:       "object",
 				Properties: map[string]mcpProp{},
 			},
 		},
 		{
-			Name:        "php_ext_list",
-			Description: "List custom PHP extensions configured for a PHP version. These are extensions added on top of the bundled lerd image.",
+			Name:        "php_ext",
+			Description: "Manage custom PHP extensions. add/remove rebuild FPM (slow).",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"version": {
-						Type:        "string",
-						Description: "PHP version (e.g. \"8.4\"). Defaults to the project or global default.",
-					},
+					"action":    {Type: "string", Enum: []string{"list", "add", "remove"}},
+					"extension": {Type: "string", Description: "Required for add/remove (e.g. imagick, redis, swoole)."},
+					"version":   {Type: "string", Description: "PHP version. Defaults to project/global."},
 				},
-			},
-		},
-		{
-			Name:        "php_ext_add",
-			Description: "Install a custom PHP extension for a PHP version. Rebuilds the FPM image and restarts the container. This may take a minute.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"extension": {
-						Type:        "string",
-						Description: "Extension name to install (e.g. \"imagick\", \"redis\", \"swoole\")",
-					},
-					"version": {
-						Type:        "string",
-						Description: "PHP version (e.g. \"8.4\"). Defaults to the project or global default.",
-					},
-				},
-				Required: []string{"extension"},
-			},
-		},
-		{
-			Name:        "php_ext_remove",
-			Description: "Remove a custom PHP extension from a PHP version. Rebuilds the FPM image and restarts the container.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"extension": {
-						Type:        "string",
-						Description: "Extension name to remove",
-					},
-					"version": {
-						Type:        "string",
-						Description: "PHP version (e.g. \"8.4\"). Defaults to the project or global default.",
-					},
-				},
-				Required: []string{"extension"},
+				Required: []string{"action"},
 			},
 		},
 		{
 			Name:        "park",
-			Description: "Register a directory as a lerd park: scans all subdirectories and auto-registers any PHP projects as sites. Use this to manage many projects under a single parent directory.",
+			Description: "Register a parent directory as a park (auto-registers all PHP projects under it).",
 			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the directory to park. Defaults to LERD_SITE_PATH when omitted.",
-					},
-				},
+				Type:       "object",
+				Properties: map[string]mcpProp{"path": {Type: "string", Description: "Parent directory."}},
 			},
 		},
 		{
 			Name:        "unpark",
-			Description: "Remove a parked directory from lerd and unlink all sites whose paths are under it. Project files are NOT deleted.",
+			Description: "Remove a parked directory and unlink sites under it. Project files are kept.",
 			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the parked directory to remove",
-					},
-				},
-				Required: []string{"path"},
+				Type:       "object",
+				Properties: map[string]mcpProp{"path": {Type: "string", Description: "Parked directory path."}},
+				Required:   []string{"path"},
 			},
 		},
 		{
 			Name:        "which",
-			Description: "Show the resolved PHP version, Node version, document root, and nginx config path for a site. Useful for confirming which runtime versions a project will use.",
+			Description: "Show resolved PHP/Node versions, docroot, and nginx config path for a site.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 				},
 			},
 		},
 		{
 			Name:        "check",
-			Description: "Validate a project's .lerd.yaml file — checks YAML syntax, PHP version, framework references, service definitions (including preset catalog), worker definitions, container config (port required; containerfile path, default Containerfile.lerd — any filename works, set container.containerfile to point at e.g. Dockerfile), custom_workers (command required), and db.service. Reports OK/WARN/FAIL per field.",
+			Description: "Validate .lerd.yaml (syntax, PHP, framework, services, workers, container, db). Reports OK/WARN/FAIL per field.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root containing .lerd.yaml. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 				},
 			},
 		},
@@ -873,180 +625,94 @@ func toolList() []mcpTool {
 		tools = append(tools,
 			mcpTool{
 				Name:        "artisan",
-				Description: "Run a php artisan command inside the lerd PHP-FPM container for the project. Use this to run migrations, generate files, seed databases, clear caches, or any other artisan command.",
+				Description: "Run `php artisan` in the project's PHP-FPM container.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
 						"path": {
 							Type:        "string",
-							Description: "Absolute path to the Laravel project root (e.g. /home/user/code/myapp). Defaults to LERD_SITE_PATH when omitted.",
+							Description: "Project root (defaults to LERD_SITE_PATH or cwd).",
 						},
 						"args": {
 							Type:        "array",
-							Description: `Artisan arguments as an array, e.g. ["migrate"] or ["make:model", "Post", "-m"] or ["tinker", "--execute=App\\Models\\User::count()"]`,
+							Description: `Artisan arguments, e.g. ["migrate"], ["make:model", "Post", "-m"].`,
 						},
 					},
 					Required: []string{"args"},
 				},
 			},
 			mcpTool{
-				Name:        "queue_start",
-				Description: "Start a Laravel queue worker for a registered site as a systemd user service. The worker runs php artisan queue:work inside the PHP-FPM container.",
+				Name:        "queue",
+				Description: "Start or stop a Laravel queue:work worker (systemd user service) for a site.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
+						"action": {Type: "string", Enum: []string{"start", "stop"}},
+						"site":   {Type: "string", Description: "Site name (from sites)."},
 						"queue": {
 							Type:        "string",
-							Description: `Queue name to process (default: "default")`,
+							Description: `Queue name for action=start (default "default").`,
 						},
 						"tries": {
 							Type:        "integer",
-							Description: "Max job attempts before marking failed (default: 3)",
+							Description: "Max attempts for action=start (default 3).",
 						},
 						"timeout": {
 							Type:        "integer",
-							Description: "Seconds a job may run before timing out (default: 60)",
+							Description: "Job timeout seconds for action=start (default 60).",
 						},
 					},
-					Required: []string{"site"},
+					Required: []string{"action", "site"},
 				},
 			},
 			mcpTool{
-				Name:        "queue_stop",
-				Description: "Stop the Laravel queue worker systemd service for a registered site.",
+				Name:        "reverb",
+				Description: "Start or stop Laravel Reverb (WebSocket server) for a site.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
+						"action": {Type: "string", Enum: []string{"start", "stop"}},
+						"site":   {Type: "string", Description: "Site name (from sites)."},
 					},
-					Required: []string{"site"},
+					Required: []string{"action", "site"},
 				},
 			},
 			mcpTool{
-				Name:        "reverb_start",
-				Description: "Start the Laravel Reverb WebSocket server for a registered site as a systemd user service. The server runs php artisan reverb:start inside the PHP-FPM container.",
+				Name:        "horizon",
+				Description: "Start or stop Laravel Horizon for a site (requires laravel/horizon; replaces queue:work).",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
+						"action": {Type: "string", Enum: []string{"start", "stop"}},
+						"site":   {Type: "string", Description: "Site name (from sites)."},
 					},
-					Required: []string{"site"},
+					Required: []string{"action", "site"},
 				},
 			},
 			mcpTool{
-				Name:        "reverb_stop",
-				Description: "Stop the Laravel Reverb WebSocket server for a registered site.",
+				Name:        "schedule",
+				Description: "Start or stop the Laravel scheduler (schedule:work) for a site.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
+						"action": {Type: "string", Enum: []string{"start", "stop"}},
+						"site":   {Type: "string", Description: "Site name (from sites)."},
 					},
-					Required: []string{"site"},
+					Required: []string{"action", "site"},
 				},
 			},
 			mcpTool{
-				Name:        "horizon_start",
-				Description: "Start Laravel Horizon for a registered site as a systemd user service. Horizon runs php artisan horizon inside the PHP-FPM container and replaces the standard queue worker. Only available for sites that have laravel/horizon in composer.json.",
+				Name:        "stripe",
+				Description: "Start or stop a Stripe webhook listener. Reads STRIPE_SECRET from .env.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
+						"action":       {Type: "string", Enum: []string{"start", "stop"}},
+						"site":         {Type: "string"},
+						"api_key":      {Type: "string", Description: "Defaults to STRIPE_SECRET."},
+						"webhook_path": {Type: "string", Description: "Default /stripe/webhook."},
 					},
-					Required: []string{"site"},
-				},
-			},
-			mcpTool{
-				Name:        "horizon_stop",
-				Description: "Stop the Laravel Horizon service for a registered site.",
-				InputSchema: mcpSchema{
-					Type: "object",
-					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
-					},
-					Required: []string{"site"},
-				},
-			},
-			mcpTool{
-				Name:        "schedule_start",
-				Description: "Start the Laravel task scheduler (php artisan schedule:work) for a registered site as a systemd user service.",
-				InputSchema: mcpSchema{
-					Type: "object",
-					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
-					},
-					Required: []string{"site"},
-				},
-			},
-			mcpTool{
-				Name:        "schedule_stop",
-				Description: "Stop the Laravel task scheduler for a registered site.",
-				InputSchema: mcpSchema{
-					Type: "object",
-					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
-					},
-					Required: []string{"site"},
-				},
-			},
-			mcpTool{
-				Name:        "stripe_listen",
-				Description: "Start a Stripe webhook listener for a registered site using the Stripe CLI container. Reads STRIPE_SECRET from the site's .env. Forwards webhooks to the site's /stripe/webhook route by default.",
-				InputSchema: mcpSchema{
-					Type: "object",
-					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
-						"api_key": {
-							Type:        "string",
-							Description: "Stripe secret key (defaults to STRIPE_SECRET in the site's .env)",
-						},
-						"webhook_path": {
-							Type:        "string",
-							Description: `Webhook route path on the app (default: "/stripe/webhook")`,
-						},
-					},
-					Required: []string{"site"},
-				},
-			},
-			mcpTool{
-				Name:        "stripe_listen_stop",
-				Description: "Stop the Stripe webhook listener for a registered site.",
-				InputSchema: mcpSchema{
-					Type: "object",
-					Properties: map[string]mcpProp{
-						"site": {
-							Type:        "string",
-							Description: "Site name as shown by the sites tool",
-						},
-					},
-					Required: []string{"site"},
+					Required: []string{"action", "site"},
 				},
 			},
 		)
@@ -1055,17 +721,14 @@ func toolList() []mcpTool {
 	if fw, ok := siteFramework(); ok && fw.Console != "" && fw.Console != "artisan" {
 		tools = append(tools, mcpTool{
 			Name:        "console",
-			Description: fmt.Sprintf("Run a framework console command (php %s) inside the lerd PHP-FPM container for the project.", fw.Console),
+			Description: fmt.Sprintf("Run `php %s` in the project's PHP-FPM container.", fw.Console),
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path to the project root. Defaults to LERD_SITE_PATH when omitted.",
-					},
+					"path": {Type: "string", Description: "Project root. Defaults to cwd."},
 					"args": {
 						Type:        "array",
-						Description: fmt.Sprintf(`Console arguments as an array, e.g. ["%s", "cache:clear"]`, fw.Console),
+						Description: fmt.Sprintf(`Console arguments, e.g. ["%s", "cache:clear"].`, fw.Console),
 					},
 				},
 				Required: []string{"args"},
@@ -1075,180 +738,112 @@ func toolList() []mcpTool {
 
 	tools = append(tools,
 		mcpTool{
-			Name:        "worker_start",
-			Description: "Start a framework-defined worker for a registered site as a systemd user service. The worker command is taken from the framework definition. Use worker_list to see available workers.",
+			Name:        "worker",
+			Description: "Start or stop a framework-defined worker. Call worker_list first.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
-					"worker": {
-						Type:        "string",
-						Description: "Worker name as defined in the framework (e.g. messenger, horizon, pulse)",
-					},
+					"action": {Type: "string", Enum: []string{"start", "stop"}},
+					"site":   {Type: "string"},
+					"worker": {Type: "string", Description: "e.g. messenger, horizon, pulse."},
 				},
-				Required: []string{"site", "worker"},
-			},
-		},
-		mcpTool{
-			Name:        "worker_stop",
-			Description: "Stop a framework-defined worker for a registered site.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
-					"worker": {
-						Type:        "string",
-						Description: "Worker name (e.g. messenger, horizon)",
-					},
-				},
-				Required: []string{"site", "worker"},
+				Required: []string{"action", "site", "worker"},
 			},
 		},
 		mcpTool{
 			Name:        "worker_list",
-			Description: "List all workers defined for a site's framework, including their running status.",
+			Description: "List workers defined for a site's framework, including running status.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"site": {Type: "string", Description: "Site name (from sites)."},
 				},
 				Required: []string{"site"},
 			},
 		},
 		mcpTool{
 			Name:        "worker_add",
-			Description: "Add or update a custom worker for a project. Saves to .lerd.yaml custom_workers by default, or to the global user framework overlay (~/.config/lerd/frameworks/) with global: true. Does not auto-start — use worker_start afterwards.",
+			Description: "Add or update a custom worker. Saves to .lerd.yaml (global=true → user overlay). Start via worker.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site":               {Type: "string", Description: "Site name as shown by the sites tool"},
-					"name":               {Type: "string", Description: "Worker name (slug, e.g. pdf-generator)"},
-					"command":            {Type: "string", Description: "Command to run inside the PHP-FPM container"},
-					"label":              {Type: "string", Description: "Human-readable label (optional)"},
-					"restart":            {Type: "string", Description: "Restart policy: always or on-failure (default: always)"},
-					"check_file":         {Type: "string", Description: "Only show worker when this file exists (optional)"},
-					"check_composer":     {Type: "string", Description: "Only show worker when this Composer package is installed (optional)"},
-					"conflicts_with":     {Type: "array", Description: "Workers to stop before starting this one (optional)"},
-					"proxy_path":         {Type: "string", Description: "URL path to proxy (optional, e.g. /app)"},
-					"proxy_port_env_key": {Type: "string", Description: "Env key holding the worker port (optional)"},
-					"proxy_default_port": {Type: "number", Description: "Default port if env key is missing (optional)"},
-					"global":             {Type: "boolean", Description: "Save to global framework overlay instead of project .lerd.yaml (default: false)"},
+					"site":               {Type: "string", Description: "Site name (from sites)."},
+					"name":               {Type: "string", Description: "Worker slug."},
+					"command":            {Type: "string", Description: "Command run in PHP-FPM container."},
+					"label":              {Type: "string", Description: "Human-readable label."},
+					"restart":            {Type: "string", Description: "always (default) | on-failure."},
+					"check_file":         {Type: "string", Description: "Show only if this file exists."},
+					"check_composer":     {Type: "string", Description: "Show only if this Composer package is installed."},
+					"conflicts_with":     {Type: "array", Description: "Workers to stop before starting this one."},
+					"proxy_path":         {Type: "string", Description: "URL path to proxy (e.g. /app)."},
+					"proxy_port_env_key": {Type: "string", Description: "Env key holding the worker port."},
+					"proxy_default_port": {Type: "number", Description: "Fallback port when env key is unset."},
+					"global":             {Type: "boolean", Description: "Save to user overlay."},
 				},
 				Required: []string{"site", "name", "command"},
 			},
 		},
 		mcpTool{
 			Name:        "worker_remove",
-			Description: "Remove a custom worker from a project's .lerd.yaml or global framework overlay. Stops the worker if running.",
+			Description: "Remove a custom worker. Stops if running.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site":   {Type: "string", Description: "Site name as shown by the sites tool"},
-					"name":   {Type: "string", Description: "Worker name to remove"},
-					"global": {Type: "boolean", Description: "Remove from global framework overlay instead of .lerd.yaml (default: false)"},
+					"site":   {Type: "string"},
+					"name":   {Type: "string", Description: "Worker name."},
+					"global": {Type: "boolean", Description: "Target user overlay."},
 				},
 				Required: []string{"site", "name"},
 			},
 		},
 		mcpTool{
 			Name:        "framework_list",
-			Description: "List all available framework definitions (laravel built-in plus any user-defined YAMLs), including their defined workers and setup commands. Use this before framework_add to see what is already defined.",
+			Description: "List framework definitions (built-in + user YAMLs), with their workers and setup commands.",
 			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
 		},
 		mcpTool{
 			Name:        "framework_add",
-			Description: "Create or update a framework definition. For laravel, only the workers and setup fields are used (built-in settings are always preserved). For other frameworks, creates a full definition at ~/.config/lerd/frameworks/<name>.yaml.",
+			Description: "Create or update a framework definition. name=laravel merges workers/setup into the built-in.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: `Framework identifier (slug). Use "laravel" to add custom workers to Laravel (e.g. horizon, pulse). For new frameworks use e.g. symfony, wordpress, drupal.`,
-					},
-					"label": {
-						Type:        "string",
-						Description: "Human-readable name, e.g. Symfony (not required when name is laravel)",
-					},
-					"public_dir": {
-						Type:        "string",
-						Description: `Document root relative to project path (e.g. "public", "web", "."). Not required when name is laravel.`,
-					},
-					"detect_files": {
-						Type:        "array",
-						Description: `List of filenames whose presence signals this framework, e.g. ["wp-login.php"]`,
-					},
-					"detect_packages": {
-						Type:        "array",
-						Description: `List of Composer package names that signal this framework, e.g. ["symfony/framework-bundle"]`,
-					},
-					"env_file": {
-						Type:        "string",
-						Description: `Primary env file path relative to project root (default: ".env")`,
-					},
-					"env_format": {
-						Type:        "string",
-						Description: `Env file format: "dotenv" (default) or "php-const" (for wp-config.php style)`,
-					},
-					"env_fallback_file": {
-						Type:        "string",
-						Description: `Fallback env file if primary doesn't exist (e.g. "wp-config.php")`,
-					},
-					"env_fallback_format": {
-						Type:        "string",
-						Description: `Format for fallback env file`,
-					},
-					"workers": {
-						Type:        "object",
-						Description: `Map of worker name → {label, command, restart, check} definitions. "check" is optional — an object with "file" or "composer" field; the worker is only shown when the check passes. e.g. {"messenger": {"label": "Messenger", "command": "php bin/console messenger:consume async", "restart": "always", "check": {"composer": "symfony/messenger"}}}`,
-					},
-					"setup": {
-						Type:        "array",
-						Description: `List of one-off setup commands shown in "lerd setup" wizard. Each element is an object with "label" (string), "command" (string), optional "default" (boolean, pre-selected in wizard), and optional "check" (object with "file" or "composer" field — command is only shown when the check passes). e.g. [{"label": "Load fixtures", "command": "php bin/console doctrine:fixtures:load", "check": {"composer": "doctrine/doctrine-fixtures-bundle"}}]`,
-					},
-					"logs": {
-						Type:        "array",
-						Description: `List of log source definitions for the app log viewer. Each element is an object with "path" (glob relative to project root, e.g. "storage/logs/*.log") and optional "format" ("monolog" for Monolog format, "raw" for plain text; default: "raw"). e.g. [{"path": "storage/logs/*.log", "format": "monolog"}]`,
-					},
+					"name":                {Type: "string", Description: `Framework slug (e.g. "laravel", "symfony", "wordpress").`},
+					"label":               {Type: "string", Description: "Human-readable name."},
+					"public_dir":          {Type: "string", Description: "Document root."},
+					"detect_files":        {Type: "array", Description: "Filenames that signal this framework."},
+					"detect_packages":     {Type: "array", Description: "Composer packages that signal this framework."},
+					"env_file":            {Type: "string", Description: `Primary env file (default ".env").`},
+					"env_format":          {Type: "string", Description: "dotenv (default) or php-const."},
+					"env_fallback_file":   {Type: "string", Description: `Secondary env file (e.g. "wp-config.php").`},
+					"env_fallback_format": {Type: "string", Description: "Format for the fallback file."},
+					"workers":             {Type: "object", Description: "Map of name → {label, command, restart, check?}."},
+					"setup":               {Type: "array", Description: "{label, command, default?, check?} entries."},
+					"logs":                {Type: "array", Description: `{path, format?: "monolog"|"raw"} entries.`},
 				},
 				Required: []string{"name"},
 			},
 		},
 		mcpTool{
 			Name:        "framework_remove",
-			Description: "Delete a framework definition (user-defined or store-installed) by name. For laravel, removes only custom worker additions (built-in definition remains). Use version to remove a specific version, or omit to remove all.",
+			Description: "Delete a framework. For laravel, removes only custom additions.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Framework name to remove (e.g. 'symfony')",
-					},
-					"version": {
-						Type:        "string",
-						Description: "Specific version to remove (e.g. '7'). Omit to remove all versions.",
-					},
+					"name":    {Type: "string", Description: "Framework slug."},
+					"version": {Type: "string", Description: "Optional. Omit to remove all versions."},
 				},
 				Required: []string{"name"},
 			},
 		},
 		mcpTool{
 			Name:        "framework_search",
-			Description: "Search the community framework store for available definitions. Returns matching frameworks with their available versions.",
+			Description: "Search the community framework store.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"query": {
 						Type:        "string",
-						Description: "Search query (matches framework name or label, case-insensitive)",
+						Description: "Query (matches name or label, case-insensitive).",
 					},
 				},
 				Required: []string{"query"},
@@ -1256,17 +851,17 @@ func toolList() []mcpTool {
 		},
 		mcpTool{
 			Name:        "framework_install",
-			Description: "Install a framework definition from the community store. If no version is specified, auto-detects from composer.lock or uses the latest available version.",
+			Description: "Install a framework from the community store. Auto-detects version from composer.lock if omitted.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"name": {
 						Type:        "string",
-						Description: "Framework name to install (e.g. symfony, wordpress)",
+						Description: "Framework name (e.g. symfony, wordpress).",
 					},
 					"version": {
 						Type:        "string",
-						Description: "Framework major version (e.g. 11, 7). Omit to auto-detect or use latest.",
+						Description: "Major version (e.g. 11, 7). Omit to auto-detect.",
 					},
 				},
 				Required: []string{"name"},
@@ -1274,39 +869,27 @@ func toolList() []mcpTool {
 		},
 		mcpTool{
 			Name:        "project_new",
-			Description: "Scaffold a new PHP project using a framework's create command. For Laravel this runs `composer create-project --no-install --no-plugins --no-scripts laravel/laravel <path>`. Other frameworks must have a `create` field in their YAML definition. After creation, use site_link to register the site.",
+			Description: "Scaffold a new PHP project via framework create command (default laravel). Follow with site_link.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"path": {
-						Type:        "string",
-						Description: "Absolute path for the new project directory (e.g. /home/user/code/myapp)",
-					},
-					"framework": {
-						Type:        "string",
-						Description: `Framework to use (default: "laravel"). Must have a 'create' field defined.`,
-					},
-					"args": {
-						Type:        "array",
-						Description: `Extra arguments to pass to the scaffold command, e.g. ["--no-interaction"]`,
-					},
+					"path":      {Type: "string", Description: "New project directory."},
+					"framework": {Type: "string", Description: `Defaults to "laravel".`},
+					"args":      {Type: "array", Description: "Extra args for the scaffold command."},
 				},
 				Required: []string{"path"},
 			},
 		},
 		mcpTool{
 			Name:        "site_php",
-			Description: "Change the PHP version for a registered lerd site. Writes a .php-version file, updates the site registry, and regenerates the nginx vhost.",
+			Description: "Change a site's PHP version. Writes .php-version and regenerates the nginx vhost.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"site": {Type: "string", Description: "Site name (from sites)."},
 					"version": {
 						Type:        "string",
-						Description: "PHP version to use, e.g. \"8.4\", \"8.3\"",
+						Description: "PHP version (e.g. 8.4, 8.3).",
 					},
 				},
 				Required: []string{"site", "version"},
@@ -1314,104 +897,42 @@ func toolList() []mcpTool {
 		},
 		mcpTool{
 			Name:        "site_node",
-			Description: "Change the Node.js version for a registered lerd site. Writes a .node-version file, installs the version via fnm if needed, and updates the site registry.",
+			Description: "Change a site's Node.js version. Writes .node-version; installs via fnm if needed.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"site": {Type: "string", Description: "Site name (from sites)."},
 					"version": {
 						Type:        "string",
-						Description: "Node.js version to use, e.g. \"22\", \"20\", \"lts\"",
+						Description: "Node.js version (e.g. 22, 20, lts).",
 					},
 				},
 				Required: []string{"site", "version"},
 			},
 		},
 		mcpTool{
-			Name:        "site_pause",
-			Description: "Pause a site: stop all its running workers and its custom container (if applicable), and replace its nginx vhost with a landing page. Auto-stops services no longer needed by any active site.",
+			Name:        "site_control",
+			Description: "pause (stop workers + landing vhost), unpause, restart (no rebuild), rebuild (image rebuild + restart; custom containers only).",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"action": {Type: "string", Enum: []string{"pause", "unpause", "restart", "rebuild"}},
+					"site":   {Type: "string"},
 				},
-				Required: []string{"site"},
+				Required: []string{"action", "site"},
 			},
 		},
 		mcpTool{
-			Name:        "site_unpause",
-			Description: "Resume a paused site: start its custom container (if applicable), restore its nginx vhost, restart any workers that were running when it was paused, and ensure required services are running.",
+			Name:        "site_runtime",
+			Description: "Switch between fpm (shared container) and frankenphp (per-site, keeps PHP resident). worker=true enables framework-aware worker mode.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
+					"site":    {Type: "string"},
+					"runtime": {Type: "string", Enum: []string{"fpm", "frankenphp"}},
+					"worker":  {Type: "boolean", Description: "frankenphp worker mode. Ignored for fpm."},
 				},
-				Required: []string{"site"},
-			},
-		},
-		mcpTool{
-			Name:        "site_restart",
-			Description: "Restart the container for a site. For custom container sites this restarts the dedicated per-project container; for PHP sites it restarts the shared PHP-FPM container for that site's PHP version.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
-				},
-				Required: []string{"site"},
-			},
-		},
-		mcpTool{
-			Name:        "site_rebuild",
-			Description: "Rebuild the custom container image from the Containerfile and restart the container. Use after changing the Containerfile. For PHP sites use php_ext_add/php_ext_remove instead.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site": {
-						Type:        "string",
-						Description: "Site name as shown by the sites tool",
-					},
-				},
-				Required: []string{"site"},
-			},
-		},
-		mcpTool{
-			Name:        "service_pin",
-			Description: "Pin a service so it is never auto-stopped, even when no sites reference it. Starts the service if it is not already running.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Service name to pin (built-in: mysql, redis, postgres, meilisearch, rustfs, mailpit — or any custom service name)",
-					},
-				},
-				Required: []string{"name"},
-			},
-		},
-		mcpTool{
-			Name:        "service_unpin",
-			Description: "Unpin a service so it can be auto-stopped when no active sites reference it.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"name": {
-						Type:        "string",
-						Description: "Service name to unpin",
-					},
-				},
-				Required: []string{"name"},
+				Required: []string{"site", "runtime"},
 			},
 		},
 	)
@@ -1440,6 +961,11 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		args = map[string]any{}
 	}
 
+	action := strArg(args, "action")
+	unknownAction := func(tool string) (any, *rpcError) {
+		return toolErr(fmt.Sprintf("unknown action %q for tool %q", action, tool)), nil
+	}
+
 	switch p.Name {
 	case "artisan":
 		return execArtisan(args)
@@ -1447,40 +973,87 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execArtisan(args)
 	case "sites":
 		return execSites()
-	case "service_start":
-		return execServiceStart(args)
-	case "service_stop":
-		return execServiceStop(args)
-	case "queue_start":
-		return execQueueStart(args)
-	case "queue_stop":
-		return execQueueStop(args)
-	case "reverb_start":
-		return execReverbStart(args)
-	case "reverb_stop":
-		return execReverbStop(args)
-	case "horizon_start":
-		return execHorizonStart(args)
-	case "horizon_stop":
-		return execHorizonStop(args)
-	case "schedule_start":
-		return execScheduleStart(args)
-	case "schedule_stop":
-		return execScheduleStop(args)
-	case "stripe_listen":
-		return execStripeListen(args)
-	case "stripe_listen_stop":
-		return execStripeListenStop(args)
-	case "worker_start":
-		return execWorkerStart(args)
-	case "worker_stop":
-		return execWorkerStop(args)
+
+	case "service_control":
+		switch action {
+		case "start":
+			return execServiceStart(args)
+		case "stop":
+			return execServiceStop(args)
+		case "pin":
+			return execServicePin(args)
+		case "unpin":
+			return execServiceUnpin(args)
+		default:
+			return unknownAction("service_control")
+		}
+
+	case "queue":
+		switch action {
+		case "start":
+			return execQueueStart(args)
+		case "stop":
+			return execQueueStop(args)
+		default:
+			return unknownAction("queue")
+		}
+
+	case "reverb":
+		switch action {
+		case "start":
+			return execReverbStart(args)
+		case "stop":
+			return execReverbStop(args)
+		default:
+			return unknownAction("reverb")
+		}
+
+	case "horizon":
+		switch action {
+		case "start":
+			return execHorizonStart(args)
+		case "stop":
+			return execHorizonStop(args)
+		default:
+			return unknownAction("horizon")
+		}
+
+	case "schedule":
+		switch action {
+		case "start":
+			return execScheduleStart(args)
+		case "stop":
+			return execScheduleStop(args)
+		default:
+			return unknownAction("schedule")
+		}
+
+	case "stripe":
+		switch action {
+		case "start":
+			return execStripeListen(args)
+		case "stop":
+			return execStripeListenStop(args)
+		default:
+			return unknownAction("stripe")
+		}
+
+	case "worker":
+		switch action {
+		case "start":
+			return execWorkerStart(args)
+		case "stop":
+			return execWorkerStop(args)
+		default:
+			return unknownAction("worker")
+		}
 	case "worker_add":
 		return execWorkerAdd(args)
 	case "worker_remove":
 		return execWorkerRemove(args)
 	case "worker_list":
 		return execWorkerList(args)
+
 	case "logs":
 		return execLogs(args)
 	case "composer":
@@ -1489,10 +1062,17 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execVendorBins(args)
 	case "vendor_run":
 		return execVendorRun(args)
-	case "node_install":
-		return execNodeInstall(args)
-	case "node_uninstall":
-		return execNodeUninstall(args)
+
+	case "node":
+		switch action {
+		case "install":
+			return execNodeInstall(args)
+		case "uninstall":
+			return execNodeUninstall(args)
+		default:
+			return unknownAction("node")
+		}
+
 	case "runtime_versions":
 		return execRuntimeVersions()
 	case "status":
@@ -1525,20 +1105,39 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execSiteLink(args)
 	case "site_unlink":
 		return execSiteUnlink(args)
-	case "site_domain_add":
-		return execSiteDomainAdd(args)
-	case "site_domain_remove":
-		return execSiteDomainRemove(args)
-	case "secure":
-		return execSecure(args)
-	case "unsecure":
-		return execUnsecure(args)
-	case "xdebug_on":
-		return execXdebugToggle(args, true)
-	case "xdebug_off":
-		return execXdebugToggle(args, false)
-	case "xdebug_status":
-		return execXdebugStatus()
+
+	case "site_domain":
+		switch action {
+		case "add":
+			return execSiteDomainAdd(args)
+		case "remove":
+			return execSiteDomainRemove(args)
+		default:
+			return unknownAction("site_domain")
+		}
+
+	case "site_tls":
+		switch action {
+		case "enable":
+			return execSecure(args)
+		case "disable":
+			return execUnsecure(args)
+		default:
+			return unknownAction("site_tls")
+		}
+
+	case "xdebug":
+		switch action {
+		case "on":
+			return execXdebugToggle(args, true)
+		case "off":
+			return execXdebugToggle(args, false)
+		case "status":
+			return execXdebugStatus()
+		default:
+			return unknownAction("xdebug")
+		}
+
 	case "db_export":
 		return execDBExport(args)
 	case "framework_list":
@@ -1553,38 +1152,54 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execFrameworkInstall(args)
 	case "project_new":
 		return execProjectNew(args)
+	case "setup":
+		return execSetup(args)
 	case "site_php":
 		return execSitePHP(args)
 	case "site_node":
 		return execSiteNode(args)
-	case "site_pause":
-		return execSitePause(args)
-	case "site_unpause":
-		return execSiteUnpause(args)
-	case "site_restart":
-		return execSiteRestart(args)
-	case "site_rebuild":
-		return execSiteRebuild(args)
-	case "service_pin":
-		return execServicePin(args)
-	case "service_unpin":
-		return execServiceUnpin(args)
+
+	case "site_control":
+		switch action {
+		case "pause":
+			return execSitePause(args)
+		case "unpause":
+			return execSiteUnpause(args)
+		case "restart":
+			return execSiteRestart(args)
+		case "rebuild":
+			return execSiteRebuild(args)
+		default:
+			return unknownAction("site_control")
+		}
+
+	case "site_runtime":
+		return execSiteRuntime(args)
+
 	case "db_import":
 		return execDBImport(args)
 	case "db_create":
 		return execDBCreate(args)
 	case "php_list":
 		return execPHPList()
-	case "php_ext_list":
-		return execPHPExtList(args)
-	case "php_ext_add":
-		return execPHPExtAdd(args)
-	case "php_ext_remove":
-		return execPHPExtRemove(args)
+
+	case "php_ext":
+		switch action {
+		case "list":
+			return execPHPExtList(args)
+		case "add":
+			return execPHPExtAdd(args)
+		case "remove":
+			return execPHPExtRemove(args)
+		default:
+			return unknownAction("php_ext")
+		}
+
 	case "park":
 		return execPark(args)
 	case "unpark":
 		return execUnpark(args)
+
 	default:
 		return toolErr("unknown tool: " + p.Name), nil
 	}
@@ -4523,8 +4138,116 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("scaffold command failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
+
+	// Framework create commands use --no-install --no-plugins --no-scripts so
+	// the scaffolder doesn't race with lerd's post-link setup. Chase with
+	// `composer install` in the FPM container so project_new returns a
+	// ready-to-work vendor/ directory and any post-install scripts fire.
+	if composerErr := runComposerInstallIfNeeded(projectPath, &out); composerErr != nil {
+		return toolErr(fmt.Sprintf("scaffold succeeded but composer install failed: %v\n%s", composerErr, stripANSI(out.String()))), nil
+	}
+
 	return toolOK(fmt.Sprintf("Project created at %s\n\nNext steps:\n  site_link(path: %q)\n  env_setup(path: %q)\n\n%s",
 		projectPath, projectPath, projectPath, stripANSI(strings.TrimSpace(out.String())))), nil
+}
+
+// runComposerInstallIfNeeded runs `composer install` inside the FPM container
+// matching projectPath's PHP version when composer.json exists but vendor/
+// does not. Output is appended to the provided buffer.
+func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
+	if _, err := os.Stat(filepath.Join(projectPath, "composer.json")); err != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(projectPath, "vendor")); err == nil {
+		return nil
+	}
+
+	phpVersion, err := phpDet.DetectVersion(projectPath)
+	if err != nil || phpVersion == "" {
+		cfg, cfgErr := config.LoadGlobal()
+		if cfgErr != nil || cfg == nil {
+			return fmt.Errorf("could not determine PHP version: %w", err)
+		}
+		phpVersion = cfg.PHP.DefaultVersion
+	}
+	container := "lerd-php" + strings.ReplaceAll(phpVersion, ".", "") + "-fpm"
+
+	out.WriteString("\n\n--- composer install ---\n")
+	cmd := podman.Cmd("exec", "-w", projectPath, container, "composer", "install", "--no-interaction")
+	cmd.Stdout = out
+	cmd.Stderr = out
+	return cmd.Run()
+}
+
+// execSetup runs every Default: true entry in the site framework's Setup list
+// whose Check rule passes, mirroring what the `lerd setup` CLI does when the
+// user keeps the default selections. Commands run in the site's PHP-FPM
+// container via `podman exec`. A single step failure is reported but doesn't
+// abort the rest — these commands are idempotent by convention.
+func execSetup(args map[string]any) (any, *rpcError) {
+	projectPath := resolvedPath(args)
+	if projectPath == "" {
+		return toolErr("path is required — pass a path argument or open Claude in the project directory"), nil
+	}
+	site, err := config.FindSiteByPath(projectPath)
+	if err != nil || site == nil {
+		return toolErr("no site registered at " + projectPath + " — run site_link first"), nil
+	}
+	fwName := site.Framework
+	if fwName == "" {
+		fwName, _ = config.DetectFrameworkForDir(projectPath)
+	}
+	if fwName == "" {
+		return toolErr("no framework detected — nothing to set up"), nil
+	}
+	fw, ok := config.GetFramework(fwName)
+	if !ok {
+		return toolErr(fmt.Sprintf("framework %q is not defined", fwName)), nil
+	}
+
+	phpVersion, phpErr := phpDet.DetectVersion(projectPath)
+	if phpErr != nil || phpVersion == "" {
+		cfg, cfgErr := config.LoadGlobal()
+		if cfgErr != nil || cfg == nil {
+			return toolErr("could not determine PHP version"), nil
+		}
+		phpVersion = cfg.PHP.DefaultVersion
+	}
+	container := "lerd-php" + strings.ReplaceAll(phpVersion, ".", "") + "-fpm"
+
+	var out bytes.Buffer
+	ran, skipped, failed := 0, 0, 0
+	for _, step := range fw.Setup {
+		if !step.Default {
+			skipped++
+			continue
+		}
+		if step.Check != nil && !config.MatchesRule(projectPath, *step.Check) {
+			skipped++
+			continue
+		}
+		parts := strings.Fields(step.Command)
+		if len(parts) == 0 {
+			continue
+		}
+		fmt.Fprintf(&out, "\n--- %s ---\n", step.Label)
+		cmdArgs := append([]string{"exec", "-i", "-w", projectPath, container}, parts...)
+		cmd := podman.Cmd(cmdArgs...)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintf(&out, "[WARN] %s failed: %v\n", step.Label, err)
+			failed++
+			continue
+		}
+		ran++
+	}
+
+	if ran == 0 && failed == 0 {
+		return toolOK(fmt.Sprintf("No default setup steps to run for %s.", fw.Label)), nil
+	}
+	summary := fmt.Sprintf("%s setup: %d ran, %d skipped, %d failed.", fw.Label, ran, skipped, failed)
+	return toolOK(summary + "\n" + stripANSI(strings.TrimSpace(out.String()))), nil
 }
 
 func execSitePHP(args map[string]any) (any, *rpcError) {
@@ -4552,17 +4275,27 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 	}
 	_ = config.SetProjectPHPVersion(site.Path, version)
 
+	// Update the site registry so later steps see the new version.
+	site.PHPVersion = version
+	if err := config.AddSite(*site); err != nil {
+		return toolErr("updating site registry: " + err.Error()), nil
+	}
+
+	// FrankenPHP sites get a different image per PHP version; rewrite the
+	// per-site quadlet (with restart-on-change) via the shared link helper
+	// instead of touching FPM state or the FPM vhost.
+	if site.IsFrankenPHP() {
+		if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+			return toolErr("re-linking FrankenPHP site: " + err.Error()), nil
+		}
+		return toolOK(fmt.Sprintf("PHP version for %s set to %s (FrankenPHP image updated).", siteName, version)), nil
+	}
+
 	// Ensure the FPM quadlet and xdebug ini exist for this version.
 	if err := podman.WriteFPMQuadlet(version); err != nil {
 		return toolErr("writing FPM quadlet: " + err.Error()), nil
 	}
 	_ = podman.EnsureXdebugIni(version) // non-fatal if version not yet built
-
-	// Update the site registry.
-	site.PHPVersion = version
-	if err := config.AddSite(*site); err != nil {
-		return toolErr("updating site registry: " + err.Error()), nil
-	}
 
 	// Regenerate the nginx vhost (SSL or plain).
 	if site.Secured {
@@ -4652,6 +4385,65 @@ func execSiteRebuild(args map[string]any) (any, *rpcError) {
 		return toolErr("site is required"), nil
 	}
 	return runLerdCmd("rebuild", siteName)
+}
+
+func execSiteRuntime(args map[string]any) (any, *rpcError) {
+	siteName := strArg(args, "site")
+	if siteName == "" {
+		return toolErr("site is required"), nil
+	}
+	runtime := strArg(args, "runtime")
+	if runtime != "fpm" && runtime != "frankenphp" {
+		return toolErr("runtime must be 'fpm' or 'frankenphp'"), nil
+	}
+	worker := boolArg(args, "worker")
+
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return toolErr(fmt.Sprintf("site %q not found", siteName)), nil
+	}
+	if site.IsCustomContainer() {
+		return toolErr("site uses a custom Containerfile; runtime is defined by Containerfile.lerd"), nil
+	}
+
+	if runtime == "fpm" {
+		if !site.IsFrankenPHP() {
+			return toolOK(fmt.Sprintf("%s already on fpm runtime", siteName)), nil
+		}
+		_ = podman.StopUnit(podman.FrankenPHPContainerName(site.Name))
+		_ = podman.RemoveFrankenPHPQuadlet(site.Name)
+		_ = podman.DaemonReloadFn()
+		site.Runtime = ""
+		site.RuntimeWorker = false
+		if err := config.AddSite(*site); err != nil {
+			return toolErr("updating site: " + err.Error()), nil
+		}
+		_ = config.SetProjectRuntime(site.Path, "", false)
+		if site.Secured {
+			if err := nginx.GenerateSSLVhost(*site, site.PHPVersion); err != nil {
+				return toolErr("regenerating SSL vhost: " + err.Error()), nil
+			}
+		} else if err := nginx.GenerateVhost(*site, site.PHPVersion); err != nil {
+			return toolErr("regenerating vhost: " + err.Error()), nil
+		}
+		_ = nginx.Reload()
+		return toolOK(fmt.Sprintf("%s: runtime set to fpm", siteName)), nil
+	}
+
+	site.Runtime = "frankenphp"
+	site.RuntimeWorker = worker
+	if err := config.AddSite(*site); err != nil {
+		return toolErr("updating site: " + err.Error()), nil
+	}
+	_ = config.SetProjectRuntime(site.Path, "frankenphp", worker)
+	if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+		return toolErr("linking FrankenPHP site: " + err.Error()), nil
+	}
+	label := "frankenphp"
+	if worker {
+		label = "frankenphp (worker mode)"
+	}
+	return toolOK(fmt.Sprintf("%s: runtime set to %s", siteName, label)), nil
 }
 
 func execServicePin(args map[string]any) (any, *rpcError) {

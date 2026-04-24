@@ -181,24 +181,47 @@ var nmcliDNSFunc = func() []string {
 	return parseNmcliLines(string(out))
 }
 
-// ReadContainerDNS returns the DNS servers to configure as aardvark-dns upstreams
-// for the lerd Podman bridge network. It reads DnsForwardIps from the pasta rootless-netns
-// info.json (typically 169.254.1.1), which chains through systemd-resolved and therefore
-// resolves both .test domains (via lerd-dns) and internet domains. Falls back to
-// ReadUpstreamDNS if the file is unavailable (e.g. before Podman initialises the netns).
+// defaultUpstreamFallback returns the last-resort dnsmasq upstream when no
+// system-detected nameservers are usable. On Linux, pasta's 169.254.1.1
+// bridges into the host resolver and preserves .test routing.
+func defaultUpstreamFallback() []string {
+	return []string{pastaDefaultForwarder}
+}
+
+// ReadContainerDNS returns DNS servers for aardvark-dns on the lerd network,
+// preferring pasta's info.json (typically 169.254.1.1) and falling back to
+// host upstreams then pastaDefaultForwarder so the list is never empty.
 func ReadContainerDNS() []string {
 	path := fmt.Sprintf("/run/user/%d/containers/networks/rootless-netns/info.json", os.Getuid())
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return readUpstreamDNS()
+		return upstreamOrPasta()
 	}
 	var info struct {
 		DnsForwardIps []string `json:"DnsForwardIps"`
 	}
 	if err := json.Unmarshal(data, &info); err != nil || len(info.DnsForwardIps) == 0 {
-		return readUpstreamDNS()
+		return upstreamOrPasta()
 	}
-	return info.DnsForwardIps
+	var out []string
+	for _, ip := range info.DnsForwardIps {
+		if clean := sanitizeDNSIP(ip); clean != "" {
+			out = append(out, clean)
+		}
+	}
+	if len(out) == 0 {
+		return upstreamOrPasta()
+	}
+	return out
+}
+
+// upstreamOrPasta returns host upstreams when readable, else pasta's default
+// forwarder, so the lerd network never ends up with an empty DNS list.
+func upstreamOrPasta() []string {
+	if servers := readUpstreamDNS(); len(servers) > 0 {
+		return servers
+	}
+	return []string{pastaDefaultForwarder}
 }
 
 // ReadUpstreamDNS returns upstream DNS server IPs from the running system.
@@ -234,13 +257,13 @@ func parseNmcliLines(output string) []string {
 	for _, line := range strings.Split(output, "\n") {
 		// nmcli may separate multiple values with |
 		for _, ip := range strings.Split(line, "|") {
-			ip = strings.TrimSpace(ip)
-			if ip == "" || ip == "--" || ip == "127.0.0.1" || ip == "127.0.0.53" || ip == "::1" {
+			clean := sanitizeDNSIP(ip)
+			if clean == "" {
 				continue
 			}
-			if !seen[ip] {
-				seen[ip] = true
-				servers = append(servers, ip)
+			if !seen[clean] {
+				seen[clean] = true
+				servers = append(servers, clean)
 			}
 		}
 	}

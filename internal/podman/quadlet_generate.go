@@ -38,7 +38,15 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 
 	if svc.DataDir != "" {
 		hostDir := config.DataSubDir(svc.Name)
-		fmt.Fprintf(&b, "Volume=%s:%s:z\n", hostDir, svc.DataDir)
+		flags := "z"
+		if svc.ChownData {
+			flags += ",U"
+		}
+		fmt.Fprintf(&b, "Volume=%s:%s:%s\n", hostDir, svc.DataDir, flags)
+	}
+
+	if svc.Userns != "" {
+		fmt.Fprintf(&b, "UserNS=%s\n", svc.Userns)
 	}
 
 	for _, f := range config.PresetFiles(svc.Preset) {
@@ -51,7 +59,11 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 	}
 
 	for k, v := range svc.Environment {
-		fmt.Fprintf(&b, "Environment=%s=%s\n", k, v)
+		// systemd splits Environment= on whitespace and strips unescaped
+		// double quotes, so JSON / quoted-wildcard values get mangled.
+		// Wrap the whole pair and escape inner quotes to preserve them.
+		escaped := strings.ReplaceAll(v, `"`, `\"`)
+		fmt.Fprintf(&b, "Environment=\"%s=%s\"\n", k, escaped)
 	}
 
 	if svc.Exec != "" {

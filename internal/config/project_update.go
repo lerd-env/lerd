@@ -105,6 +105,15 @@ func RemoveProjectDomain(dir string, domain string) error {
 	})
 }
 
+// SetProjectRuntime updates runtime and runtime_worker. No-op if .lerd.yaml
+// does not exist. Passing an empty runtime clears both fields.
+func SetProjectRuntime(dir, runtime string, worker bool) error {
+	return updateProjectConfig(dir, func(cfg *ProjectConfig) {
+		cfg.Runtime = runtime
+		cfg.RuntimeWorker = worker && runtime != ""
+	})
+}
+
 // SetProjectFrameworkVersion updates framework_version. No-op if .lerd.yaml
 // does not exist or the version hasn't changed.
 func SetProjectFrameworkVersion(dir string, version string) error {

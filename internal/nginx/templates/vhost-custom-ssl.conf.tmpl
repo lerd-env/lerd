@@ -1,11 +1,13 @@
 server {
     listen 80;
+    listen [::]:80;
     server_name {{.ServerNames}};
     return 302 https://$host$request_uri;
 }
 
 server {
     listen 443 ssl;
+    listen [::]:443 ssl;
     server_name {{.ServerNames}};
 
     ssl_certificate /etc/nginx/certs/{{.CertDomain}}.crt;

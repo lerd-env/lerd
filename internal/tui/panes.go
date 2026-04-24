@@ -421,10 +421,10 @@ func filterBar(text string, active bool) string {
 }
 
 // serviceMetaColWidth is the fixed budget for the trailing meta column
-// (site count + pinned/custom tags). Reserved identically on every row so
-// the meta column starts at the same column regardless of which tags are
-// present, mirroring the aligned layout in the sites pane.
-const serviceMetaColWidth = 22
+// (version + site count + pinned/custom tags). Reserved identically on
+// every row so the meta column starts at the same column regardless of
+// which tags are present, mirroring the aligned layout in the sites pane.
+const serviceMetaColWidth = 32
 
 func renderServiceRow(selected bool, s ServiceRow, paneW int) string {
 	var glyph string
@@ -438,6 +438,9 @@ func renderServiceRow(selected bool, s ServiceRow, paneW int) string {
 	}
 
 	meta := fmt.Sprintf("(%d site%s)", s.SiteCount, plural(s.SiteCount))
+	if s.Version != "" {
+		meta = dimStyle.Render(s.Version) + "  " + meta
+	}
 	if s.Pinned {
 		meta += "  " + accentStyle.Render("pinned")
 	}

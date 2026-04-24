@@ -244,15 +244,16 @@ func newServiceListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all services and their status",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Printf("%-20s %s\n", "Service", "Status")
-			fmt.Printf("%s\n", strings.Repeat("─", 32))
+			fmt.Printf("%-20s %-10s %s\n", "Service", "Version", "Status")
+			fmt.Printf("%s\n", strings.Repeat("─", 44))
 			for _, svc := range knownServices {
 				unit := "lerd-" + svc
 				status, err := podman.UnitStatus(unit)
 				if err != nil {
 					status = "unknown"
 				}
-				fmt.Printf("%-20s %s\n", svc, colorStatus(status))
+				ver := podman.ServiceVersionLabel(podman.InstalledImage(unit))
+				fmt.Printf("%-20s %-10s %s\n", svc, ver, colorStatus(status))
 				if status == "inactive" {
 					if reason := serviceInactiveReason(svc); reason != "" {
 						fmt.Printf("  %s\n", strings.TrimSpace(reason))
@@ -266,7 +267,8 @@ func newServiceListCmd() *cobra.Command {
 				if err != nil {
 					status = "unknown"
 				}
-				fmt.Printf("%-20s %s  [custom]\n", svc.Name, colorStatus(status))
+				ver := podman.ServiceVersionLabel(svc.Image)
+				fmt.Printf("%-20s %-10s %s  [custom]\n", svc.Name, ver, colorStatus(status))
 				if status == "inactive" {
 					if reason := serviceInactiveReason(svc.Name); reason != "" {
 						fmt.Printf("  %s\n", strings.TrimSpace(reason))

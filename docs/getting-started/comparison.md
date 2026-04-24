@@ -10,6 +10,7 @@
 | License | Open source (MIT) | Proprietary, freemium (Herd Pro subscription) |
 | PHP runtime | Rootless Podman containers | Native binaries on macOS, WSL on Windows |
 | PHP versions | 8.1, 8.2, 8.3, 8.4, 8.5 (shared FPM containers) | 7.4 through 8.5 (native) |
+| FrankenPHP / Octane | Built in: `lerd runtime frankenphp [--worker]` per site, free | Available in Herd Pro |
 | `.test` domains | Automatic via dnsmasq container | Automatic via native dnsmasq resolver |
 | HTTPS | `lerd secure` + mkcert, trusted system-wide | Built-in "Secure Site" toggle |
 | Xdebug | `lerd xdebug:on`, tray toggle | Per-site toggle (Herd Pro) |

@@ -7,7 +7,7 @@ You've already run `lerd install` once on this machine. If not, see [Installatio
 :::
 
 ::: tip Drive it from your AI assistant
-Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Junie, Windsurf) can call every command below as an MCP tool: `project_new`, `site_link`, `env_setup`, `db_create`, `secure`, `worker_start`, etc. See [AI Integration](../features/mcp.md).
+Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Junie, Windsurf) can call every command below as an MCP tool: `project_new`, `site_link`, `env_setup`, `setup`, `db_create`, `site_tls`, `worker`, etc. See [AI Integration](../features/mcp.md).
 :::
 
 ---
@@ -161,6 +161,20 @@ If your project uses Laravel Reverb (`composer require laravel/reverb`), a third
 ```bash
 lerd worker start reverb
 ```
+
+---
+
+## FrankenPHP / Octane (optional)
+
+By default your site runs on the shared PHP-FPM stack. If you want the persistent-process speedup, switch to a per-site FrankenPHP container:
+
+```bash
+lerd runtime frankenphp            # classic mode, one process per request
+lerd runtime frankenphp --worker   # Laravel Octane, keeps the app in memory
+lerd runtime fpm                   # back to shared PHP-FPM
+```
+
+Worker mode needs `composer require laravel/octane` in the project. FrankenPHP is an alternative to PHP-FPM, not a different framework, so queues, scheduler, Reverb, and services keep working unchanged. See the [FrankenPHP runtime](../features/frankenphp.md) page for the hot-reload tradeoffs.
 
 ---
 

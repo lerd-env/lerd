@@ -647,6 +647,8 @@ type SiteResponse struct {
 	CustomContainer bool     `json:"custom_container,omitempty"`
 	ContainerPort   int      `json:"container_port,omitempty"`
 	ContainerImage  string   `json:"container_image,omitempty"`
+	Runtime         string   `json:"runtime,omitempty"`
+	RuntimeWorker   bool     `json:"runtime_worker,omitempty"`
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
@@ -735,6 +737,8 @@ func buildSites() []SiteResponse {
 			CustomContainer:    e.ContainerPort > 0,
 			ContainerPort:      e.ContainerPort,
 			ContainerImage:     e.ContainerImage,
+			Runtime:            e.Runtime,
+			RuntimeWorker:      e.RuntimeWorker,
 		})
 	}
 	return sites
@@ -744,8 +748,10 @@ func buildSites() []SiteResponse {
 type ServiceResponse struct {
 	Name               string            `json:"name"`
 	Status             string            `json:"status"`
+	Version            string            `json:"version,omitempty"`
 	EnvVars            map[string]string `json:"env_vars"`
 	Dashboard          string            `json:"dashboard,omitempty"`
+	DashboardExternal  bool              `json:"dashboard_external,omitempty"`
 	ConnectionURL      string            `json:"connection_url,omitempty"`
 	Custom             bool              `json:"custom,omitempty"`
 	SiteCount          int               `json:"site_count"`
@@ -795,6 +801,7 @@ func buildServiceResponse(name string) ServiceResponse {
 	return ServiceResponse{
 		Name:          name,
 		Status:        status,
+		Version:       podman.ServiceVersionLabel(podman.InstalledImage(unit)),
 		EnvVars:       envMap,
 		Dashboard:     builtinDashboards[name],
 		ConnectionURL: builtinConnectionURLs[name],
@@ -866,17 +873,19 @@ func buildServicesList() []ServiceResponse {
 			}
 		}
 		services = append(services, ServiceResponse{
-			Name:          svc.Name,
-			Status:        status,
-			EnvVars:       envMap,
-			Dashboard:     svc.Dashboard,
-			ConnectionURL: svc.ConnectionURL,
-			Custom:        true,
-			SiteCount:     countSitesUsingService(svc.Name),
-			SiteDomains:   sitesUsingService(svc.Name),
-			Pinned:        config.ServiceIsPinned(svc.Name),
-			Paused:        config.ServiceIsPaused(svc.Name),
-			DependsOn:     svc.DependsOn,
+			Name:              svc.Name,
+			Status:            status,
+			Version:           podman.ServiceVersionLabel(svc.Image),
+			EnvVars:           envMap,
+			Dashboard:         svc.Dashboard,
+			DashboardExternal: svc.DashboardExternal,
+			ConnectionURL:     svc.ConnectionURL,
+			Custom:            true,
+			SiteCount:         countSitesUsingService(svc.Name),
+			SiteDomains:       sitesUsingService(svc.Name),
+			Pinned:            config.ServiceIsPinned(svc.Name),
+			Paused:            config.ServiceIsPaused(svc.Name),
+			DependsOn:         svc.DependsOn,
 		})
 	}
 	for _, siteName := range listActiveQueueWorkers() {
@@ -1334,6 +1343,13 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			_ = config.SetServiceManuallyStarted(name, false)
 			cli.RegenerateFamilyConsumersForService(name)
 		}
+	case "restart":
+		opErr = podman.RestartUnit(unit)
+		if opErr == nil {
+			_ = config.SetServicePaused(name, false)
+			_ = config.SetServiceManuallyStarted(name, true)
+			cli.RegenerateFamilyConsumersForService(name)
+		}
 	case "remove":
 		if isBuiltin {
 			http.Error(w, "cannot remove built-in service", http.StatusForbidden)
@@ -1632,7 +1648,17 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = config.SetProjectPHPVersion(site.Path, version)
 		site.PHPVersion = version
-		// Regenerate vhost with new PHP version
+		if site.IsFrankenPHP() {
+			if err := config.AddSite(*site); err != nil {
+				writeJSON(w, SiteActionResponse{Error: "updating site registry: " + err.Error()})
+				return
+			}
+			if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+				writeJSON(w, SiteActionResponse{Error: "re-linking FrankenPHP site: " + err.Error()})
+				return
+			}
+			break
+		}
 		if site.Secured {
 			if err := certs.SecureSite(*site); err != nil {
 				writeJSON(w, SiteActionResponse{Error: "regenerating SSL vhost: " + err.Error()})

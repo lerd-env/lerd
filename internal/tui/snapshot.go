@@ -27,6 +27,7 @@ type Snapshot struct {
 // per-site command instead of `lerd service start/stop` which would fail.
 type ServiceRow struct {
 	Name      string
+	Version   string
 	State     ServiceState
 	Custom    bool
 	Pinned    bool
@@ -152,8 +153,15 @@ func buildServiceRow(name string, custom bool) ServiceRow {
 	if config.ServiceIsPaused(name) {
 		state = statePaused
 	}
+	version := podman.ServiceVersionLabel(podman.InstalledImage(unit))
+	if custom && version == "" {
+		if svc, err := config.LoadCustomService(name); err == nil {
+			version = podman.ServiceVersionLabel(svc.Image)
+		}
+	}
 	return ServiceRow{
 		Name:      name,
+		Version:   version,
 		State:     state,
 		Custom:    custom,
 		Pinned:    config.ServiceIsPinned(name),

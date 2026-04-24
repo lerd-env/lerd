@@ -55,6 +55,32 @@ type Framework struct {
 	// When set, detectFavicon checks this path in addition to the standard candidates.
 	// Example: "core/misc/favicon.ico" for Drupal.
 	Favicon string `yaml:"favicon,omitempty"`
+	// FrankenPHP, when set, tells lerd how to start a FrankenPHP container
+	// for this framework. When absent, lerd falls back to the generic
+	// `frankenphp php-server -r <public>/` entrypoint.
+	FrankenPHP *FrameworkFrankenPHP `yaml:"frankenphp,omitempty"`
+}
+
+// FrameworkFrankenPHP describes how to serve the framework via FrankenPHP.
+// Entrypoints are shell-quoted strings executed inside the container; the
+// working directory is the project root mounted at the same path as the host.
+type FrameworkFrankenPHP struct {
+	// Entrypoint is the command to run when the site is served in normal
+	// (non-worker) FrankenPHP mode. Example: ["php","artisan","octane:start",
+	// "--server=frankenphp","--host=0.0.0.0","--port=8000"].
+	Entrypoint []string `yaml:"entrypoint,omitempty"`
+	// WorkerEntrypoint, when set and the site opts into worker mode, is used
+	// instead of Entrypoint. When SupportsWorker is false the flag is ignored.
+	WorkerEntrypoint []string `yaml:"worker_entrypoint,omitempty"`
+	// SupportsWorker declares whether the framework ships a FrankenPHP worker
+	// script. If false, `--worker` is a no-op and the regular entrypoint is used.
+	SupportsWorker bool `yaml:"supports_worker,omitempty"`
+	// Env is the list of environment variables to set in the container in
+	// normal mode (appended to the defaults lerd always sets).
+	Env map[string]string `yaml:"env,omitempty"`
+	// WorkerEnv, when the site opts into worker mode, is merged on top of Env.
+	// Example for Symfony: {"FRANKENPHP_CONFIG": "worker ./public/index.php"}.
+	WorkerEnv map[string]string `yaml:"worker_env,omitempty"`
 }
 
 // FrameworkWorker describes a long-running process managed as a systemd service.
@@ -325,6 +351,89 @@ var laravelFramework = &Framework{
 	Logs: []FrameworkLogSource{
 		{Path: "storage/logs/*.log", Format: "monolog"},
 	},
+	FrankenPHP: &FrameworkFrankenPHP{
+		// Non-worker serves via plain frankenphp php-server so code edits take effect
+		// immediately (fresh request lifecycle), same UX as FPM.
+		Entrypoint: []string{"frankenphp", "php-server", "-l", ":8000", "-r", "public/"},
+		// Worker runs Octane; pcntl is installed at boot since dunglas/frankenphp
+		// doesn't ship it. Code edits need `lerd restart` until we add --watch.
+		WorkerEntrypoint: []string{"sh", "-c",
+			`install-php-extensions pcntl >/dev/null && ` +
+				`exec php artisan octane:start --server=frankenphp --host=0.0.0.0 --port=8000 --workers=auto`},
+		SupportsWorker: true,
+	},
+}
+
+// symfonyFramework is a built-in Symfony adapter. It detects Symfony via
+// `symfony/runtime` or `symfony/framework-bundle` in composer.json and wires
+// `bin/console messenger:consume`/`schedule:run` as workers. FrankenPHP support
+// uses the `runtime/frankenphp` adapter; worker mode opts into the same entrypoint
+// (Symfony's runtime picks up FRANKENPHP_CONFIG=worker).
+var symfonyFramework = &Framework{
+	Name:      "symfony",
+	Label:     "Symfony",
+	PublicDir: "public",
+	Create:    "composer create-project --no-install --no-plugins --no-scripts symfony/skeleton",
+	Detect: []FrameworkRule{
+		{File: "symfony.lock"},
+		{Composer: "symfony/runtime"},
+		{Composer: "symfony/framework-bundle"},
+	},
+	Env: FrameworkEnvConf{
+		File:        ".env",
+		ExampleFile: ".env.example",
+		Format:      "dotenv",
+		Services: map[string]FrameworkServiceDef{
+			"mysql": {
+				Detect: []FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},
+				Vars:   []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}?serverVersion=8.0"},
+			},
+			"postgres": {
+				Detect: []FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "postgres"}, {Key: "DATABASE_URL", ValuePrefix: "pgsql"}},
+				Vars:   []string{"DATABASE_URL=postgresql://postgres:lerd@lerd-postgres:5432/{{site}}?serverVersion=16"},
+			},
+			"redis": {
+				Detect: []FrameworkServiceDetect{{Key: "REDIS_URL"}, {Key: "MESSENGER_TRANSPORT_DSN", ValuePrefix: "redis"}},
+				Vars:   []string{"REDIS_URL=redis://lerd-redis:6379"},
+			},
+			"mailpit": {
+				Detect: []FrameworkServiceDetect{{Key: "MAILER_DSN"}},
+				Vars:   []string{"MAILER_DSN=smtp://lerd-mailpit:1025"},
+			},
+		},
+	},
+	Composer: "auto",
+	NPM:      "auto",
+	Console:  "bin/console",
+	Workers: map[string]FrameworkWorker{
+		"messenger": {
+			Label:   "Messenger Consumer",
+			Command: "php bin/console messenger:consume async --time-limit=3600",
+			Restart: "always",
+			Check:   &FrameworkRule{Composer: "symfony/messenger"},
+		},
+		"scheduler": {
+			Label:   "Scheduler",
+			Command: "php bin/console messenger:consume scheduler_default",
+			Restart: "always",
+			Check:   &FrameworkRule{Composer: "symfony/scheduler"},
+		},
+	},
+	Setup: []FrameworkSetupCmd{
+		{Label: "php bin/console doctrine:migrations:migrate --no-interaction", Command: "php bin/console doctrine:migrations:migrate --no-interaction", Default: true, Check: &FrameworkRule{Composer: "doctrine/doctrine-migrations-bundle"}},
+	},
+	Logs: []FrameworkLogSource{
+		{Path: "var/log/*.log", Format: "monolog"},
+	},
+	FrankenPHP: &FrameworkFrankenPHP{
+		Entrypoint: []string{"frankenphp", "php-server", "-l", ":8000", "-r", "public/"},
+		// --watch reloads the worker on PHP/env/yaml/twig changes, no restart needed.
+		WorkerEntrypoint: []string{
+			"frankenphp", "php-server", "-l", ":8000", "-r", "public/",
+			"--worker=public/index.php", "--watch",
+		},
+		SupportsWorker: true,
+	},
 }
 
 // GetFramework returns the framework definition for the given name.
@@ -348,21 +457,15 @@ func GetFramework(name string) (*Framework, bool) {
 	}
 
 	// Merge user overlay (if any) on top of the base.
-	return mergeUserOverlay(base), true
+	return mergeBuiltinFrankenPHP(mergeUserOverlay(base)), true
 }
 
 // loadBaseFramework returns the base definition for a framework:
-// built-in for "laravel", then store-installed (versioned > unversioned).
+// built-in for "laravel" and "symfony", then store-installed (versioned >
+// unversioned).
 func loadBaseFramework(name string) *Framework {
-	if name == "laravel" {
-		// Copy built-in so callers don't mutate the global.
-		fw := *laravelFramework
-		workers := make(map[string]FrameworkWorker, len(laravelFramework.Workers))
-		for k, v := range laravelFramework.Workers {
-			workers[k] = v
-		}
-		fw.Workers = workers
-		return &fw
+	if builtin := copyBuiltin(name); builtin != nil {
+		return builtin
 	}
 
 	// Store-installed: unversioned first (backwards compat), then versioned.
@@ -370,6 +473,51 @@ func loadBaseFramework(name string) *Framework {
 		return fw
 	}
 	return loadBestVersionedFramework(name, "")
+}
+
+// copyBuiltin returns a deep-enough copy of a built-in framework so callers
+// can safely merge overlays without mutating the package-level global.
+func copyBuiltin(name string) *Framework {
+	src := builtinFramework(name)
+	if src == nil {
+		return nil
+	}
+	fw := *src
+	workers := make(map[string]FrameworkWorker, len(src.Workers))
+	for k, v := range src.Workers {
+		workers[k] = v
+	}
+	fw.Workers = workers
+	return &fw
+}
+
+// builtinFramework returns the package-level Framework for a known built-in
+// name, or nil if the name is not built in.
+func builtinFramework(name string) *Framework {
+	switch name {
+	case "laravel":
+		return laravelFramework
+	case "symfony":
+		return symfonyFramework
+	}
+	return nil
+}
+
+// mergeBuiltinFrankenPHP backfills the FrankenPHP adapter from a built-in when
+// a store- or user-provided definition doesn't ship one. This keeps existing
+// store yamls for Laravel/Symfony working without needing a store update to
+// pick up FrankenPHP support.
+func mergeBuiltinFrankenPHP(fw *Framework) *Framework {
+	if fw == nil || fw.FrankenPHP != nil {
+		return fw
+	}
+	src := builtinFramework(fw.Name)
+	if src == nil || src.FrankenPHP == nil {
+		return fw
+	}
+	cp := *src.FrankenPHP
+	fw.FrankenPHP = &cp
+	return fw
 }
 
 // mergeUserOverlay checks for a user-defined overlay file in FrameworksDir()
@@ -461,11 +609,12 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 
 	if base != nil {
 		base = mergeUserOverlay(base)
+		base = mergeBuiltinFrankenPHP(base)
 		return mergeProjectWorkers(base, projectDir), true
 	}
 
-	// 4. For Laravel, fall back to the built-in definition.
-	if name == "laravel" {
+	// 4. For built-ins (Laravel, Symfony), fall back to the built-in definition.
+	if builtinFramework(name) != nil {
 		fw, ok := GetFramework(name)
 		if ok {
 			return mergeProjectWorkers(fw, projectDir), true
@@ -503,7 +652,7 @@ func mergeProjectWorkers(fw *Framework, projectDir string) *Framework {
 // Returns SourceBuiltIn for "laravel", SourceUser if a user-defined file exists,
 // SourceStore if a store-installed file exists, or "" if not found.
 func GetFrameworkSource(name string) FrameworkSource {
-	if name == "laravel" {
+	if builtinFramework(name) != nil {
 		return SourceBuiltIn
 	}
 	if loadFrameworkYAML(filepath.Join(FrameworksDir(), name+".yaml")) != nil {
@@ -636,9 +785,11 @@ func DetectFramework(dir string) (string, bool) {
 		}
 	}
 
-	// Built-in Laravel as fallback.
-	if !seen["laravel"] && matchesFramework(dir, laravelFramework) {
-		matches = append(matches, "laravel")
+	// Built-in Laravel and Symfony as fallbacks.
+	for _, fw := range builtinFrameworks() {
+		if !seen[fw.Name] && matchesFramework(dir, fw) {
+			matches = append(matches, fw.Name)
+		}
 	}
 
 	if len(matches) == 0 {
@@ -657,11 +808,19 @@ func DetectFramework(dir string) (string, bool) {
 	return matches[0], true
 }
 
+// builtinFrameworks returns all built-in Framework pointers in a stable order.
+func builtinFrameworks() []*Framework {
+	return []*Framework{laravelFramework, symfonyFramework}
+}
+
 // ListFrameworks returns all available framework definitions:
-// the laravel built-in plus any user-defined YAMLs in FrameworksDir().
+// the built-in frameworks plus any user-defined YAMLs in FrameworksDir().
 func ListFrameworks() []*Framework {
-	result := []*Framework{laravelFramework}
-	seen := map[string]bool{"laravel": true}
+	result := builtinFrameworks()
+	seen := map[string]bool{}
+	for _, fw := range result {
+		seen[fw.Name] = true
+	}
 
 	// User-defined first (unversioned), then store-installed.
 	// For store, include both <name>.yaml and <name>@<version>.yaml.
@@ -736,9 +895,15 @@ func ListFrameworksDetailed() []FrameworkInfo {
 			result = append(result, FrameworkInfo{Framework: fw, Source: SourceBuiltIn})
 		}
 	}
+	// Built-in Symfony.
+	if !seenNameVersion[key("symfony", "")] {
+		if fw, ok := GetFramework("symfony"); ok {
+			result = append(result, FrameworkInfo{Framework: fw, Source: SourceBuiltIn})
+		}
+	}
 
 	// User-only (skip if a store version for the same name already listed).
-	seenName := map[string]bool{"laravel": true}
+	seenName := map[string]bool{"laravel": true, "symfony": true}
 	for _, info := range result {
 		seenName[info.Name] = true
 	}
@@ -882,6 +1047,44 @@ func RemoveFramework(name string) error {
 		os.Remove(f.Path) //nolint:errcheck
 	}
 	return nil
+}
+
+// FrankenPHPEntrypoint returns the argv to launch inside the FrankenPHP
+// container for this framework, preferring the worker entrypoint when worker
+// mode is requested and the framework declares support. A generic fallback
+// uses `frankenphp php-server` rooted at the framework's PublicDir.
+func (fw *Framework) FrankenPHPEntrypoint(worker bool) []string {
+	if fw != nil && fw.FrankenPHP != nil {
+		if worker && fw.FrankenPHP.SupportsWorker && len(fw.FrankenPHP.WorkerEntrypoint) > 0 {
+			return fw.FrankenPHP.WorkerEntrypoint
+		}
+		if len(fw.FrankenPHP.Entrypoint) > 0 {
+			return fw.FrankenPHP.Entrypoint
+		}
+	}
+	root := "public"
+	if fw != nil && fw.PublicDir != "" {
+		root = fw.PublicDir
+	}
+	return []string{"frankenphp", "php-server", "-l", ":8000", "-r", root}
+}
+
+// FrankenPHPEnv returns the environment variables to set in the FrankenPHP
+// container, merging WorkerEnv on top of Env when worker mode is requested.
+func (fw *Framework) FrankenPHPEnv(worker bool) map[string]string {
+	out := make(map[string]string)
+	if fw == nil || fw.FrankenPHP == nil {
+		return out
+	}
+	for k, v := range fw.FrankenPHP.Env {
+		out[k] = v
+	}
+	if worker && fw.FrankenPHP.SupportsWorker {
+		for k, v := range fw.FrankenPHP.WorkerEnv {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 // HasWorker returns true if the framework defines a worker with the given name

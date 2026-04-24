@@ -243,28 +243,54 @@ func stripSELinuxVolOpts(vol string) string {
 }
 
 // stripPrivilegedIPBind removes the host-IP prefix from a PublishPort value
-// (e.g. "127.0.0.1:80:80" → "80:80") when the host port is privileged (< 1024).
-// On macOS, gvproxy handles port forwarding via podman-mac-helper and does not
-// support explicit IP binds for privileged ports — trying them causes
-// "bind: permission denied". Non-privileged ports (3306, 6379, etc.) do support
-// IP binding and are left untouched so LAN restriction still works for them.
+// when the host port is privileged (< 1024). gvproxy on macOS rejects
+// explicit IP binds for privileged ports with "bind: permission denied".
+// Handles both v4 ("127.0.0.1:80:80" → "80:80") and bracketed v6
+// ("[::1]:443:443" → "443:443"). Non-privileged ports keep their bind so
+// LAN restriction is preserved.
 func stripPrivilegedIPBind(port string) string {
-	parts := strings.SplitN(port, ":", 3)
-	if len(parts) != 3 {
-		return port // bare "containerPort" or "hostPort:containerPort" — no IP prefix
+	var rest string
+	if strings.HasPrefix(port, "[") {
+		end := strings.Index(port, "]")
+		if end < 0 || end+1 >= len(port) || port[end+1] != ':' {
+			return port
+		}
+		rest = port[end+2:]
+	} else {
+		parts := strings.SplitN(port, ":", 3)
+		if len(parts) != 3 {
+			return port
+		}
+		rest = parts[1] + ":" + parts[2]
 	}
-	hostPortStr := strings.SplitN(parts[1], "/", 2)[0] // strip "/tcp" etc.
+	hostPortStr := strings.SplitN(strings.SplitN(rest, ":", 2)[0], "/", 2)[0]
 	n := 0
 	for _, c := range hostPortStr {
 		if c < '0' || c > '9' {
-			return port // non-numeric, leave as-is
+			return port
 		}
 		n = n*10 + int(c-'0')
 	}
 	if n > 0 && n < 1024 {
-		return parts[1] + ":" + parts[2] // drop the IP prefix
+		return rest
 	}
 	return port
+}
+
+// stripIPv6PublishPorts removes PublishPort= lines that start with a bracketed
+// IPv6 address (e.g. "[::1]:3306:3306"). gvproxy cannot bind both an IPv4 and
+// an IPv6 loopback address on the same port simultaneously.
+func stripIPv6PublishPorts(content string) string {
+	lines := strings.Split(content, "\n")
+	out := lines[:0]
+	for _, l := range lines {
+		val := strings.TrimPrefix(strings.TrimSpace(l), "PublishPort=")
+		if val != strings.TrimSpace(l) && strings.HasPrefix(val, "[") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return strings.Join(out, "\n")
 }
 
 // containerToPodmanArgs builds a podman run argument list from a parsed [Container] section.
@@ -443,6 +469,9 @@ func (m *darwinServiceManager) WriteContainerUnit(name, content string) error {
 		lanExposed = cfg.LAN.Exposed
 	}
 	content = podman.BindForLAN(content, lanExposed)
+	// gvproxy (macOS) cannot bind two specific host IPs on the same port;
+	// drop IPv6 PublishPort lines so only IPv4 bindings reach podman run.
+	content = stripIPv6PublishPorts(content)
 
 	c := parseSection(content, "Container")
 	args, err := containerToPodmanArgs(c)

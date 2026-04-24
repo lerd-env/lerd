@@ -117,6 +117,12 @@ type EnrichedSite struct {
 	ContainerSSL   bool
 	ContainerImage string
 
+	// Runtime — "" / "fpm" is the shared PHP-FPM image; "frankenphp" is the
+	// per-site dunglas/frankenphp container. RuntimeWorker toggles worker mode
+	// when running under frankenphp.
+	Runtime       string
+	RuntimeWorker bool
+
 	// LAN sharing
 	LANPort int
 
@@ -218,6 +224,8 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		ContainerPort:       s.ContainerPort,
 		ContainerSSL:        s.ContainerSSL,
 		ContainerImage:      containerImage(s),
+		Runtime:             s.Runtime,
+		RuntimeWorker:       s.RuntimeWorker,
 		FrameworkName:       s.Framework,
 		OriginalPHPVersion:  s.PHPVersion,
 		OriginalNodeVersion: s.NodeVersion,
@@ -342,6 +350,10 @@ func (e *EnrichedSite) enrichVersions(s config.Site, fw *config.Framework, hasFw
 func (e *EnrichedSite) enrichFPM() {
 	if e.ContainerPort > 0 {
 		e.FPMRunning, _ = containerRunningFn("lerd-custom-" + e.Name)
+		return
+	}
+	if e.Runtime == "frankenphp" {
+		e.FPMRunning, _ = containerRunningFn("lerd-fp-" + e.Name)
 		return
 	}
 	if e.PHPVersion != "" {

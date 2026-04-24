@@ -1,0 +1,10 @@
+name: elasticvue
+image: docker.io/cars10/elasticvue:latest
+description: Elasticvue web UI for the lerd Elasticsearch service
+ports:
+  - "8083:8080"
+environment:
+  ELASTICVUE_CLUSTERS: '[{"name":"Lerd Elasticsearch","uri":"http://localhost:9200"}]'
+depends_on:
+  - elasticsearch
+dashboard: http://localhost:8083

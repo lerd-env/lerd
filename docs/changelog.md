@@ -11,6 +11,120 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+---
+
+## [1.18.0-beta.6] — 2026-04-24
+
+### Added
+
+- **`--no-ipv6` flag (and `LERD_DISABLE_IPV6=1`) on `lerd install`** so users on dual-stack-capable hosts can force a v4-only `lerd` network without touching the host. Reuses the existing `~/.local/share/lerd/ipv6-probe-failed-lerd` marker, so `EnsureNetwork` honors the opt-out on every path (initial create, host-gained-v6 migration, `RecreateNetwork`). Re-enable by deleting the marker and rerunning `lerd install`. New `MarkIPv6Disabled` / `IPv6DisabledMarkerPath` helpers expose this from `internal/podman` so the install command and the timeout-fallback warning point at the same path.
+
+### Fixed
+
+- **`lerd install` could hang forever on the IPv6 probe** if podman or the netns setup stalled. `probeNetworkIPv6` now runs under a 30s `context.WithTimeout`; on deadline it falls back to v4-only the same way an aardvark bind failure does, writes the marker, and prints a stderr warning telling the user exactly which file to delete to retry dual-stack later. The 5-line WARN block is the only user-visible change on healthy hosts (the probe itself stays well under one second on every distro tested).
+
+---
+
+## [1.18.0-beta.5] — 2026-04-23
+
+### Fixed
+
+- **`lerd lan:expose on` crashed nginx with `bind: address already in use`**. `PairIPv6Binds` paired bare / `0.0.0.0:X` PublishPort lines with `[::]:X`; on Linux default (`bindv6only=0`) the v6 dual-stack socket collides with the v4 bind on the same port, so nginx failed to start and every site plus `lerd.localhost` went offline. Bare / `0.0.0.0` is now rewritten to a single `[::]:X` dual-stack bind instead of paired. `BindForLAN` also flips the v6 stack in lockstep with v4 (`127.0.0.1 ↔ bare` and `[::1] ↔ [::]`) so toggling `lan:expose` from the dual-stack loopback state no longer leaves a stale `[::1]` line that dedups against the bare v4 and loses LAN reach. Loopback-only mode keeps the `127.0.0.1` + `[::1]` pair; LAN-exposed mode is `[::]` only.
+
+### Changed
+
+- **Settings page LAN and remote-dashboard copy** now says "loopback (`127.0.0.1` and `::1`)" instead of "127.0.0.1 only", matching the dual-stack reality since beta.1. Underlying auth gate (`isLoopbackRequest`) uses Go's `ip.IsLoopback()` so the "can't lock yourself out" guarantee already covers both stacks; only the text was stale.
+
+### Docs
+
+- New "Runtime" section in the commands reference covers `lerd runtime fpm|frankenphp` and its `--worker` / `--no-worker` flags.
+- Laravel and Symfony getting-started pages mention FrankenPHP / Octane / Symfony Runtime as optional alternatives to the shared PHP-FPM stack.
+- Herd comparison table gains a FrankenPHP / Octane row (Lerd: built-in, free; Herd: Pro-only).
+- Architecture dual-stack section and the remote-development "Security caveats" list note v4-only firewall rules bypass and globally-routable v6 SLAAC LAN reach.
+- Landing page: two-column hero for MCP + Rootless Podman, new Framework store and Polyglot sites cards, trimmed copy to a 4-row max; hero text scaled down to fit "Local PHP development for Linux" on one line.
+- README feature list mentions FrankenPHP; MCP example updated to the post-1.18 `site_link → composer install → env_setup → setup` sequence; tool count corrected to ~50 after the #232 manifest slim.
+
+---
+
+## [1.18.0-beta.4] — 2026-04-23
+
+### Added
+
+- **Service version label across every surface** (#246). `lerd service list`, `lerd status`, the Web UI service list and detail header, and the TUI services pane now show the version alongside each built-in, preset, and custom service (e.g. `mysql v8.0`, `redis v7`, `postgres v16`, `meilisearch v1.7`). The label is derived from the installed quadlet's `Image=` tag via a new `podman.ServiceVersionLabel` helper that strips distro/variant suffixes (`-alpine`, `-slim`, `-3.5`), keeps leading `v`, and passes rolling tags (`latest`, `main`) through verbatim. Works for any service the user has overridden via `config.yaml` because the label reads the installed file, not the embedded template.
+- **Restart button in the Web UI service detail** (#246). Built-in and custom services now expose a Restart action alongside Start/Stop, matching the site container row. Hits a new `POST /api/services/{name}/restart` handler which wraps `podman.RestartUnit` and clears the paused flag on success. Workers (queue, schedule, horizon, reverb, stripe, site-scoped custom workers) are intentionally excluded since their stop-only flow is unchanged.
+
+### Fixed
+
+- **aardvark-dns still failed to bind the IPv6 gateway on some "v6-capable" hosts** (#247). The beta.3 `HostHasUsableIPv6` probe read `/proc/net/if_inet6` and the `disable_ipv6` sysctl, but on rootless podman with certain netavark/pasta routing gaps (seen on upgrade from 1.17.1 on a handful of Fedora and Arch hosts) aardvark-dns still failed with `Cannot assign requested address` on `[fd00:1e7d::1]:53`, taking php-fpm, mysql, and nginx down with it. The migration path now runs a throw-away probe container against the freshly created dual-stack network; if aardvark-dns cannot bind the v6 gateway, `RecreateNetwork` tears it down and recreates as v4-only, and a marker file is written so the next `lerd install` does not re-enter the dual-stack migration loop. Migrations now stop containers via `StopUnit` (systemctl) instead of `podman stop` to avoid systemd auto-restart races that left aardvark-dns with partial registrations. The rollback path in `lerd update` also runs `RecreateNetwork` before re-execing the old binary, so rolling back from a dual-stack install to an older v4-only build gets a clean network regardless of the target version.
+
+---
+
+## [1.18.0-beta.3] — 2026-04-23
+
+### Fixed
+
+- **Services fail to start on hosts without usable IPv6**. Dual-stack migration from beta.1/beta.2 forced a `fd00:1e7d::/64` subnet on every `lerd install`, but hosts that advertise IPv6 in the kernel yet have no routable v6 address on any interface (typical in headless QEMU/KVM VMs, containers, and v6-less networks) can't hold the ULA gateway on the rootless bridge. aardvark-dns then failed to bind `[fd00:1e7d::1]:53` with `EADDRNOTAVAIL`, so a subset of services (nginx, postgres, meilisearch were the common victims) exited with `exit status 1` during install and stayed in `failed` state. `EnsureNetwork` and the renamed `RecreateNetwork` (was `MigrateNetworkToIPv6`) now probe `/proc/net/if_inet6` + `/proc/sys/net/ipv6/conf/all/disable_ipv6` and create the `lerd` network v4-only when no non-loopback, non-link-local v6 address is present. Existing dual-stack networks on v6-less hosts are recreated as v4-only in place; hosts that later gain v6 are migrated back to dual-stack on the next install.
+
+---
+
+## [1.18.0-beta.2] — 2026-04-23
+
+### Fixed
+
+- **Rootless DNS stalled 5–10s per page after dual-stack migration** (#242). Two separate Fedora rootless podman quirks, both triggered by the IPv6 migration in beta.1. First, the lerd bridge came up with a 65520 MTU and glibc's resolver hit EMSGSIZE on UDP, falling back to TCP and eating 5+ seconds per lookup; `EnsureNetwork` and `MigrateNetworkToIPv6` now pin `--opt mtu=1500`. Second, `RemoveNetwork` only unlinked aardvark-dns's config file, so the running daemon held the stale inode and returned NXDOMAIN for containers that joined the recreated network; `RemoveNetwork` now also runs `pkill -f aardvark-dns` so podman respawns it against the fresh config on the next container join.
+- **FrankenPHP sites rendered a "PHP-FPM" log tab pointing at the wrong container** (#243). The Web UI and TUI both labelled the runtime log tab as "PHP-FPM" and pointed its SSE stream at `lerd-php*-fpm`, which does not exist for per-site FrankenPHP deployments. The tab now reads "FrankenPHP" and streams from `lerd-fp-<site>`, and `enrichFPM` checks the frankenphp container so `fpm_running` is accurate for those sites.
+
+---
+
+## [1.18.0-beta.1] — 2026-04-22
+
+### Added
+
+- **FrankenPHP runtime** (#229). Per-site `dunglas/frankenphp` container as an alternative to the shared PHP-FPM image. Laravel and Symfony adapters; `lerd runtime frankenphp` CLI and `site_runtime` MCP tool to switch; optional worker mode (Laravel Octane, Symfony's FrankenPHP adapter with `--watch`). Runtime badge shown in both the Web UI and TUI. Paused sites stop/start their per-site container alongside FPM.
+- **Dual-stack IPv4 + IPv6 networking** (#230). The lerd podman bridge is now created with both subnets (`fd00:1e7d::/64` for v6). Nginx vhosts listen on `[::]`, dnsmasq answers AAAA for `.test`, and every managed `PublishPort` gets paired with a `[::1]` bind. Existing v4-only networks auto-migrate on the next `lerd install`: containers stop, the network is recreated, previous DNS servers are restored, and containers restart. See [architecture](reference/architecture.md) and [troubleshooting](troubleshooting.md).
+- **`setup` MCP tool** (#240). Runs the framework's `Default: true` bootstrap commands (Laravel: `storage:link` + `migrate`; Symfony: `doctrine:migrations:migrate` when `doctrine-migrations-bundle` is installed). Agents call it after `env_setup` on new or cloned projects; idempotent, no prompts. The interactive `lerd setup` CLI is unchanged.
+- **Uninstall teardown prompts** (#235). `lerd uninstall` now prompts independently for:
+  - Remove MCP integration (global skills + per-site `.claude`/`.cursor`/`.junie`/`.mcp.json` entries, preserves other MCP servers in shared files).
+  - Uninstall mkcert CA from system trust stores.
+  - Purge lerd-built container images (`lerd-php*-fpm:local`, `lerd-custom-*:local`, `lerd-dnsmasq:local`; upstream pulls like mysql/redis are deliberately kept — data lives in host bind mounts, not in the images).
+  `--force` answers yes to all.
+- **`lerd install` refreshes MCP skills and heals Claude Code registration** (#235, #240). Global skill files (`~/.claude/skills/lerd/`, `~/.cursor/rules/lerd.mdc`, `~/.junie/guidelines.md`) and every opted-in site's per-project copies are re-written on install to match the new binary; previously this only ran on `lerd update`. If Claude Code's user-scope MCP config has lost the lerd entry, install also re-adds it via `claude mcp add` (add-only, no remove-then-add race).
+- **Stale-site auto-cleanup covers non-parked sites** (#239). The 30 second watcher sweep now removes any registered site whose directory has been deleted, not only those under `parked_directories`. Publishes a `sites` eventbus event so the dashboard reflects the removal without a manual refresh.
+
+### Changed
+
+- **BREAKING — slimmer MCP tool manifest** (#232). The `tools/list` response merged action pairs (`queue_start` + `queue_stop` → `queue(action: ...)`, `service_start` + `service_stop` → `service_control(action: ...)`, and similar) and trimmed long descriptions. AI sessions started against the old tool names must be restarted. The new names are reflected in the injected SKILL.md and in `docs/features/mcp.md`.
+- **`project_new` runs `composer install` after scaffolding** (#240). The `create-project --no-install` scaffold is chased by `composer install` inside the FPM container, so the returned project has a populated `vendor/` ready for `env_setup` + `setup`.
+- **`env_setup` auto-creates `database/database.sqlite` non-interactively** (#240). Laravel's default `DB_CONNECTION=sqlite` triggered an interactive prompt in `lerd env` that MCP/script callers silently skipped, leaving the sqlite file uncreated and the first request 500'ing. Non-interactive callers now default to sqlite, persist the choice to `.lerd.yaml`, and run the existing file-creation block. Call `db_set` to switch to mysql/postgres afterwards.
+- **Per-session MCP token cost reduced** (#236, #237). `tools/list` trimmed ~14% (20 KB → 17 KB), injected `SKILL.md` trimmed from 44 KB → 40 KB by collapsing redundant single-tool workflow recipes. Descriptions are preserved where weaker local LLMs rely on them (`site` fields, `path` defaulting, enum-valued descriptions).
+- **SKILL.md bootstrap workflows rewritten** (#240). Replaced the per-framework `artisan migrate` / `console doctrine:migrations:migrate` fork with a framework-agnostic sequence: new project = `project_new → site_link → env_setup → setup`, cloned project = `site_link → composer install → env_setup → setup`. Debug-500 flow calls `setup()` for pending migrations.
+- **Install flow starts per-site containers and stripe workers in the correct phase** (#234). `lerd install` now starts per-site custom containers and FrankenPHP runtimes after service containers, and stripe listeners fire in the worker phase instead of during `restoreSiteInfrastructure` (no more "stripe starts before FPM" out-of-order).
+
+### Fixed
+
+- **Aardvark-dns drift after dual-stack migration** (#234, #240). When a network is rm'd and recreated with the same name, netavark can preserve the old v4-only listen-ips header in aardvark's runtime config, stalling every container DNS lookup ~5 seconds while glibc waits for the non-listening v6 gateway to time out. `EnsureNetwork` now detects the drift (via `AardvarkNetworkDrifted`) and triggers a recreate; `MigrateNetworkToIPv6` and `lerd uninstall`'s network teardown both wipe `$XDG_RUNTIME_DIR/containers/networks/aardvark-dns/<name>` between `rm` and `create` so the condition can't re-occur.
+- **Custom container and FrankenPHP sites not started after `lerd install`** (#234). `install.go` now calls `startPerSiteContainers` after `startRestoredServices`, so `lerd-custom-<site>` and `lerd-fp-<site>` units come up alongside FPM and global services. Previously they sat enabled-but-stopped until the user ran `lerd start`.
+- **FrankenPHP quadlets not refreshed on upgrade migrations** (#234). The v4→v6 network migration rewrote service and custom-container quadlets but skipped FrankenPHP sites. `refreshUnreferencedCustomQuadlets` now rewrites `lerd-fp-<site>.container` too.
+- **FrankenPHP vhosts overwritten with FPM template on every install** (#234). The vhost regeneration loop only branched on `IsCustomContainer`, so FrankenPHP sites fell through to `GenerateVhost` and had their proxy template replaced. Added an `IsFrankenPHP` branch that uses `GenerateFrankenPHPVhost`.
+- **Stripe listeners started before FPM and nginx were up** (#234). `restoreSiteInfrastructure` called `StripeStartForSite` synchronously, unlike other workers which write their unit file and defer `Start` to the worker phase. New `writeStripeUnit` / `StripeRestoreUnit` split so the start fires in `startRestoredServices`'s worker phase, matching queue/schedule/reverb ordering.
+- **`lerd share` collapsed https asset URLs on LAN** (#231). HTTPS sites sharing on LAN had asset URLs stripped back to HTTP by the nginx rewrite; the collapse now only fires for http assets on https pages.
+
+### Docs
+
+- New troubleshooting entry for the aardvark-dns drift case (symptoms, cause, manual verification via the aardvark config file).
+- Uninstall instructions now cover the three new teardown prompts and `--force` semantics.
+- Lifecycle reference documents the stale-site auto-cleanup (fsnotify fast path + 30s sweep + eventbus refresh).
+- `docs/features/mcp.md` tool table adds `setup` and updates example interactions to the four-step bootstrap sequence.
+- Getting-started guides (laravel / symfony / wordpress) mention `setup` in the AI-assistant tip.
+
+### CI
+
+- Skip docs deploy and brew tap upload on pre-release tags (#233). The docs site and the Homebrew tap now track stable tags only; beta and rc tags still build binaries but don't publish.
+
+---
+
 ## [1.17.1] — 2026-04-20
 
 ### Fixed

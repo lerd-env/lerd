@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -159,5 +160,54 @@ func TestExecEnvCheck_missingKeys(t *testing.T) {
 		if k.Files[".env"] {
 			t.Errorf("key %s should be missing from .env", k.Key)
 		}
+	}
+}
+
+// TestToolList_underSizeCeiling guards against regrowth of the tools/list
+// manifest sent on every MCP session. Every byte above the ceiling is in
+// context for the whole session; raise the ceiling only with a justified
+// content addition, not by accreting description verbosity.
+func TestToolList_underSizeCeiling(t *testing.T) {
+	const ceiling = 17000
+	got, err := json.Marshal(toolList())
+	if err != nil {
+		t.Fatalf("marshal tool list: %v", err)
+	}
+	if len(got) > ceiling {
+		t.Errorf("toolList JSON is %d bytes, ceiling is %d — trim before raising", len(got), ceiling)
+	}
+}
+
+// TestRunComposerInstallIfNeeded_noComposerJsonIsNoop confirms the helper
+// silently returns when composer.json doesn't exist (non-PHP scaffolds,
+// accidental calls from other framework paths).
+func TestRunComposerInstallIfNeeded_noComposerJsonIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	if err := runComposerInstallIfNeeded(dir, &buf); err != nil {
+		t.Errorf("expected nil for missing composer.json, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty buffer, got %q", buf.String())
+	}
+}
+
+// TestRunComposerInstallIfNeeded_vendorExistsIsNoop confirms the helper
+// skips the install when vendor/ is already populated (re-running the tool
+// on an existing project should not re-download dependencies).
+func TestRunComposerInstallIfNeeded_vendorExistsIsNoop(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte("{}"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "vendor"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	var buf bytes.Buffer
+	if err := runComposerInstallIfNeeded(dir, &buf); err != nil {
+		t.Errorf("expected nil when vendor/ exists, got %v", err)
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected empty buffer when vendor/ exists, got %q", buf.String())
 	}
 }

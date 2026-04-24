@@ -40,6 +40,7 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 		autostartDisabled = cfg.Autostart.Disabled
 	}
 	content = BindForLAN(content, lanExposed)
+	content = PairIPv6Binds(content)
 	content = StripInstallSection(content, autostartDisabled)
 	path := filepath.Join(dir, name+".container")
 	fileChanged := true

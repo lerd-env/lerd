@@ -4,9 +4,11 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/podman"
@@ -42,6 +44,9 @@ func runUninstall(force bool) error {
 	// Ask about data removal up front — the StepRunner puts stdin into raw
 	// mode and its reader goroutine would consume bytes meant for this prompt.
 	removeData := force || confirmRemoveData()
+	removeMCP := force || confirmRemoveMCPIntegration()
+	removeMkcertCA := force || confirmRemoveMkcertCA()
+	purgeImages := force || confirmPurgeLerdImages()
 
 	// DNS teardown runs outside the step runner because it may prompt for sudo.
 	fmt.Println("  --> Removing DNS configuration")
@@ -105,8 +110,37 @@ func runUninstall(force bool) error {
 	ok()
 
 	step("Removing lerd Podman network")
-	_ = podman.RunSilent("network", "rm", "lerd")
+	_ = podman.RemoveNetwork("lerd")
 	ok()
+
+	if purgeImages {
+		fmt.Println("  --> Purging lerd-built container images")
+		removeLerdImages()
+	}
+
+	if removeMkcertCA {
+		fmt.Println("  --> Uninstalling mkcert CA from system trust stores")
+		cmd := exec.Command(certs.MkcertPath(), "-uninstall")
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		_ = cmd.Run()
+	}
+
+	if removeMCP {
+		fmt.Println("  --> Removing MCP integration (global)")
+		if home, err := os.UserHomeDir(); err == nil {
+			_ = RemoveGlobalAISkills(home, true)
+		}
+		fmt.Println("  --> Removing MCP integration (registered sites)")
+		if reg, err := config.LoadSites(); err == nil {
+			for _, s := range reg.Sites {
+				if err := RemoveProjectAISkills(s.Path, false); err == nil {
+					fmt.Printf("    cleaned %s\n", s.Path)
+				}
+			}
+		}
+	}
 
 	step("Removing shell PATH entry")
 	removeShellEntry()
@@ -131,6 +165,59 @@ func runUninstall(force bool) error {
 
 	fmt.Println("\nLerd uninstalled.")
 	return nil
+}
+
+func confirmRemoveMCPIntegration() bool {
+	fmt.Print("  Remove MCP integration (global skills + per-site .mcp/.claude/.cursor/.junie files)? [y/N] ")
+	return readYes()
+}
+
+func confirmRemoveMkcertCA() bool {
+	fmt.Print("  Uninstall mkcert CA from system trust stores? [y/N] ")
+	return readYes()
+}
+
+func confirmPurgeLerdImages() bool {
+	fmt.Print("  Purge lerd-built container images (lerd-php*-fpm, lerd-custom-*, lerd-dnsmasq)? Databases and app files are unaffected. [y/N] ")
+	return readYes()
+}
+
+// removeLerdImages removes locally-built lerd images. Upstream pulls
+// (mysql/redis/postgres/etc.) are left alone since they're expensive to
+// re-pull and not lerd-owned.
+func removeLerdImages() {
+	out, err := exec.Command(podman.PodmanBin(), "images", "--format", "{{.Repository}}:{{.Tag}}").Output()
+	if err != nil {
+		fmt.Printf("    WARN: listing images: %v\n", err)
+		return
+	}
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		if !isLerdBuiltImage(line) {
+			continue
+		}
+		if err := exec.Command(podman.PodmanBin(), "image", "rm", "-f", line).Run(); err != nil {
+			fmt.Printf("    WARN: removing %s: %v\n", line, err)
+			continue
+		}
+		fmt.Printf("    removed %s\n", line)
+	}
+}
+
+// isLerdBuiltImage matches the locally-built tags lerd owns.
+func isLerdBuiltImage(ref string) bool {
+	switch {
+	case strings.HasPrefix(ref, "lerd-php") && strings.HasSuffix(ref, "-fpm:local"):
+		return true
+	case strings.HasPrefix(ref, "lerd-custom-") && strings.HasSuffix(ref, ":local"):
+		return true
+	case ref == "lerd-dnsmasq:local":
+		return true
+	}
+	return false
 }
 
 func confirmRemoveData() bool {

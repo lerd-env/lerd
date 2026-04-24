@@ -18,6 +18,12 @@ func readUpstreamDNS() []string {
 	return parseNameservers("/etc/resolv.conf")
 }
 
+// defaultUpstreamFallback returns nil on macOS: pasta's 169.254.1.1 isn't
+// routable from inside Podman Machine. With no fallback dnsmasq omits
+// no-resolv and uses the container's /etc/resolv.conf, which podman seeds
+// from the host.
+func defaultUpstreamFallback() []string { return nil }
+
 // ConfigureResolver writes /etc/resolver/<tld> so macOS routes .<tld> queries to
 // the lerd-dns dnsmasq container on port 5300. macOS checks /etc/resolver/<tld>
 // automatically for per-TLD DNS overrides — no daemon restart required.

@@ -18,6 +18,10 @@ func TestListPresets_IncludesShippedPresets(t *testing.T) {
 		"selenium":      false,
 		"stripe-mock":   false,
 		"mysql":         false,
+		"memcached":     false,
+		"rabbitmq":      false,
+		"elasticsearch": false,
+		"elasticvue":    false,
 	}
 	for _, p := range presets {
 		if _, ok := want[p.Name]; ok {
@@ -83,6 +87,95 @@ func TestLoadPreset_PgAdmin(t *testing.T) {
 	}
 	if !foundFramingCfg {
 		t.Errorf("pgadmin preset must ship config_local.py clearing X_FRAME_OPTIONS for iframe embedding")
+	}
+}
+
+func TestLoadPreset_Memcached(t *testing.T) {
+	p, err := LoadPreset("memcached")
+	if err != nil {
+		t.Fatalf("LoadPreset(memcached) error = %v", err)
+	}
+	if p.Image == "" || len(p.Ports) != 1 || p.Ports[0] != "11211:11211" {
+		t.Errorf("memcached preset missing image or 11211:11211 port, got: %+v", p)
+	}
+	if p.DataDir != "" {
+		t.Errorf("memcached is in-memory and must not declare data_dir, got %q", p.DataDir)
+	}
+	if p.EnvDetect == nil || p.EnvDetect.Key != "MEMCACHED_HOST" {
+		t.Errorf("memcached env_detect should be key=MEMCACHED_HOST, got %+v", p.EnvDetect)
+	}
+}
+
+func TestLoadPreset_RabbitMQ(t *testing.T) {
+	p, err := LoadPreset("rabbitmq")
+	if err != nil {
+		t.Fatalf("LoadPreset(rabbitmq) error = %v", err)
+	}
+	if len(p.Ports) != 2 {
+		t.Errorf("rabbitmq should publish AMQP (5672) and management UI (15672), got %v", p.Ports)
+	}
+	if p.Dashboard == "" {
+		t.Errorf("rabbitmq should expose the management UI as dashboard")
+	}
+	if p.DataDir == "" {
+		t.Errorf("rabbitmq should persist /var/lib/rabbitmq for queue durability across restarts")
+	}
+	if !p.DashboardExternal {
+		t.Errorf("rabbitmq must set dashboard_external because Cowboy's session cookie can't be carried by the iframe")
+	}
+}
+
+func TestLoadPreset_Elasticvue(t *testing.T) {
+	p, err := LoadPreset("elasticvue")
+	if err != nil {
+		t.Fatalf("LoadPreset(elasticvue) error = %v", err)
+	}
+	if len(p.DependsOn) != 1 || p.DependsOn[0] != "elasticsearch" {
+		t.Errorf("elasticvue should depend on elasticsearch, got %v", p.DependsOn)
+	}
+	if p.Dashboard == "" {
+		t.Errorf("elasticvue must expose its UI as dashboard")
+	}
+	if got := p.Environment["ELASTICVUE_CLUSTERS"]; got == "" {
+		t.Errorf("elasticvue must pre-configure the lerd ES cluster via ELASTICVUE_CLUSTERS")
+	}
+}
+
+func TestLoadPreset_ElasticsearchEnablesCors(t *testing.T) {
+	p, err := LoadPreset("elasticsearch")
+	if err != nil {
+		t.Fatalf("LoadPreset(elasticsearch) error = %v", err)
+	}
+	if p.Environment["http.cors.enabled"] != "true" {
+		t.Errorf("elasticsearch must enable CORS so the elasticvue browser SPA can reach it, got %q", p.Environment["http.cors.enabled"])
+	}
+	// The wildcard must be wrapped in literal quotes because ES parses env
+	// vars as YAML and a bare '*' becomes an alias token that crashes the
+	// SnakeYAML scanner on boot.
+	if p.Environment["http.cors.allow-origin"] != `"*"` {
+		t.Errorf(`elasticsearch must allow any origin for local dev (quoted to survive YAML parse), got %q`, p.Environment["http.cors.allow-origin"])
+	}
+}
+
+func TestLoadPreset_Elasticsearch(t *testing.T) {
+	p, err := LoadPreset("elasticsearch")
+	if err != nil {
+		t.Fatalf("LoadPreset(elasticsearch) error = %v", err)
+	}
+	if p.Environment["discovery.type"] != "single-node" {
+		t.Errorf("elasticsearch must run in single-node mode for local dev (skips production bootstrap checks), got %q", p.Environment["discovery.type"])
+	}
+	if p.Environment["xpack.security.enabled"] != "false" {
+		t.Errorf("elasticsearch must disable xpack security so apps can connect without TLS+auth in dev, got %q", p.Environment["xpack.security.enabled"])
+	}
+	if p.EnvDetect == nil || p.EnvDetect.Composer != "elasticsearch/elasticsearch" {
+		t.Errorf("elasticsearch env_detect should fire on composer elasticsearch/elasticsearch, got %+v", p.EnvDetect)
+	}
+	if p.Userns != "keep-id:uid=1000,gid=0" {
+		t.Errorf("elasticsearch must map host user to container UID 1000 via keep-id, got %q", p.Userns)
+	}
+	if !p.ChownData {
+		t.Errorf("elasticsearch must set chown_data so the host data dir is owned by the container UID at mount time")
 	}
 }
 

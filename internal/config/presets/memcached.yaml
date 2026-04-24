@@ -1,0 +1,11 @@
+name: memcached
+image: docker.io/library/memcached:1.6-alpine
+description: Memcached in-memory key/value cache
+ports:
+  - "11211:11211"
+env_vars:
+  - MEMCACHED_HOST=lerd-memcached
+  - MEMCACHED_PORT=11211
+env_detect:
+  key: MEMCACHED_HOST
+connection_url: memcached://127.0.0.1:11211

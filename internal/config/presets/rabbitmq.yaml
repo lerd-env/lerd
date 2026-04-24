@@ -1,0 +1,23 @@
+name: rabbitmq
+image: docker.io/library/rabbitmq:3-management-alpine
+description: RabbitMQ message broker with management UI
+ports:
+  - "5672:5672"
+  - "15672:15672"
+environment:
+  RABBITMQ_DEFAULT_USER: root
+  RABBITMQ_DEFAULT_PASS: lerd
+data_dir: /var/lib/rabbitmq
+env_vars:
+  - RABBITMQ_HOST=lerd-rabbitmq
+  - RABBITMQ_PORT=5672
+  - RABBITMQ_USER=root
+  - RABBITMQ_PASSWORD=lerd
+  - RABBITMQ_VHOST=/
+env_detect:
+  key: RABBITMQ_HOST
+dashboard: http://localhost:15672
+# Cowboy session cookie has no SameSite override, so iframe login fails.
+# Force the dashboard to open in a new tab to keep auth working.
+dashboard_external: true
+connection_url: amqp://root:lerd@127.0.0.1:5672/

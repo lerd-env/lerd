@@ -149,6 +149,27 @@ func TestBindForLANHandlesProtocolSuffixes(t *testing.T) {
 	}
 }
 
+func TestBindForLANTogglesIPv6InLockstep(t *testing.T) {
+	// Both stacks must flip together. Leaving [::1] behind on expose
+	// dedups against the bare v4 line and loses LAN reach; leaving [::]
+	// behind on unexpose loses loopback-only safety.
+	loopback := "PublishPort=127.0.0.1:80:80\nPublishPort=[::1]:80:80\n"
+	exposed := BindForLAN(loopback, true)
+	if strings.Contains(exposed, "127.0.0.1:") || strings.Contains(exposed, "[::1]:") {
+		t.Errorf("loopback prefixes must be stripped on expose, got:\n%s", exposed)
+	}
+	if !strings.Contains(exposed, "PublishPort=80:80") || !strings.Contains(exposed, "PublishPort=[::]:80:80") {
+		t.Errorf("expected bare + [::] after expose, got:\n%s", exposed)
+	}
+	back := BindForLAN(exposed, false)
+	if !strings.Contains(back, "PublishPort=127.0.0.1:80:80") || !strings.Contains(back, "PublishPort=[::1]:80:80") {
+		t.Errorf("expected 127.0.0.1 + [::1] after unexpose, got:\n%s", back)
+	}
+	if strings.Contains(back, "PublishPort=[::]:80:80") {
+		t.Errorf("[::] should be converted back to [::1] on unexpose, got:\n%s", back)
+	}
+}
+
 func TestInjectExtraVolumesAfterHomeMount(t *testing.T) {
 	in := strings.Join([]string{
 		"[Container]",
@@ -217,6 +238,57 @@ func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 	}
 }
 
+func TestGenerateCustomQuadlet_UsernsAndChownData(t *testing.T) {
+	svc := &config.CustomService{
+		Name:      "elasticsearch",
+		Image:     "docker.elastic.co/elasticsearch/elasticsearch:8.13.4",
+		DataDir:   "/usr/share/elasticsearch/data",
+		Userns:    "keep-id:uid=1000,gid=0",
+		ChownData: true,
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "UserNS=keep-id:uid=1000,gid=0") {
+		t.Errorf("expected UserNS line when Userns set, got:\n%s", out)
+	}
+	if !strings.Contains(out, ":/usr/share/elasticsearch/data:z,U") {
+		t.Errorf("expected :z,U flags on data_dir mount when ChownData=true, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_DataDirDefaultsToZOnly(t *testing.T) {
+	svc := &config.CustomService{
+		Name:    "postgres-test",
+		Image:   "docker.io/library/postgres:16",
+		DataDir: "/var/lib/postgresql/data",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, ":/var/lib/postgresql/data:z\n") {
+		t.Errorf("data_dir mount must default to :z (no ,U) when ChownData unset, got:\n%s", out)
+	}
+	if strings.Contains(out, "UserNS=") {
+		t.Errorf("must not emit UserNS line when Userns unset, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_EnvWithJSONPreservesQuotes(t *testing.T) {
+	svc := &config.CustomService{
+		Name:  "elasticvue",
+		Image: "docker.io/cars10/elasticvue:latest",
+		Environment: map[string]string{
+			"ELASTICVUE_CLUSTERS": `[{"name":"Lerd","uri":"http://localhost:9200"}]`,
+			"WILDCARD":            `"*"`,
+		},
+	}
+	out := GenerateCustomQuadlet(svc)
+	wantClusters := `Environment="ELASTICVUE_CLUSTERS=[{\"name\":\"Lerd\",\"uri\":\"http://localhost:9200\"}]"`
+	if !strings.Contains(out, wantClusters) {
+		t.Errorf("env value with JSON quotes must be wrapped + escaped (otherwise systemd strips inner quotes), got:\n%s", out)
+	}
+	if !strings.Contains(out, `Environment="WILDCARD=\"*\""`) {
+		t.Errorf("env value with quoted wildcard must round-trip, got:\n%s", out)
+	}
+}
+
 func TestGenerateCustomQuadlet_StopTimeout(t *testing.T) {
 	// Images like selenium/standalone-chromium hang for 30s+ on graceful
 	// shutdown. StopTimeout=5 bounds podman's SIGTERM-wait so systemctl stop
@@ -249,5 +321,79 @@ func TestSortPaths(t *testing.T) {
 	sortPaths(paths)
 	if paths[0] != "/opt" || paths[1] != "/var/www" || paths[2] != "/var/www/app" {
 		t.Errorf("expected sorted by length then lex, got: %v", paths)
+	}
+}
+
+// --- PairIPv6Binds ---
+
+func TestPairIPv6Binds_rewritesBareToDualStack(t *testing.T) {
+	// Bare binds are rewritten to [::] (single dual-stack socket), not
+	// paired. Keeping both 80:80 and [::]:80:80 collides on Linux default
+	// bindv6only=0 and crashes nginx with `bind: address already in use`.
+	in := "[Container]\nNetwork=lerd\nPublishPort=80:80\nPublishPort=443:443\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::]:80:80") {
+		t.Errorf("expected [::]:80:80, got:\n%s", out)
+	}
+	if !strings.Contains(out, "PublishPort=[::]:443:443") {
+		t.Errorf("expected [::]:443:443, got:\n%s", out)
+	}
+	if strings.Contains(out, "PublishPort=80:80\n") || strings.HasSuffix(out, "PublishPort=80:80") {
+		t.Errorf("bare 80:80 must be replaced, not paired (conflicts with [::]:80:80 on bindv6only=0):\n%s", out)
+	}
+	if strings.Contains(out, "PublishPort=443:443\n") || strings.HasSuffix(out, "PublishPort=443:443") {
+		t.Errorf("bare 443:443 must be replaced, not paired:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_pairsLoopbackWithLinkLocal(t *testing.T) {
+	in := "Network=lerd\nPublishPort=127.0.0.1:5300:5300/udp\nPublishPort=127.0.0.1:5300:5300/tcp\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::1]:5300:5300/udp") {
+		t.Errorf("expected v6 pair [::1]:5300:5300/udp, got:\n%s", out)
+	}
+	if !strings.Contains(out, "PublishPort=[::1]:5300:5300/tcp") {
+		t.Errorf("expected v6 pair [::1]:5300:5300/tcp, got:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_idempotent(t *testing.T) {
+	in := "Network=lerd\nPublishPort=80:80\n"
+	once := PairIPv6Binds(in)
+	twice := PairIPv6Binds(once)
+	if once != twice {
+		t.Errorf("PairIPv6Binds is not idempotent:\nonce:\n%s\ntwice:\n%s", once, twice)
+	}
+	if strings.Count(twice, "PublishPort=[::]:80:80") != 1 {
+		t.Errorf("expected exactly one v6 pair, got:\n%s", twice)
+	}
+}
+
+func TestPairIPv6Binds_preservesOperatorOverrides(t *testing.T) {
+	in := "Network=lerd\nPublishPort=192.168.1.10:80:80\nPublishPort=[fe80::1%eth0]:80:80\n"
+	out := PairIPv6Binds(in)
+	if out != in {
+		t.Errorf("operator overrides should be preserved verbatim:\nin:\n%s\nout:\n%s", in, out)
+	}
+}
+
+func TestPairIPv6Binds_handles0000(t *testing.T) {
+	in := "Network=lerd\nPublishPort=0.0.0.0:80:80\n"
+	out := PairIPv6Binds(in)
+	if !strings.Contains(out, "PublishPort=[::]:80:80") {
+		t.Errorf("expected [::]:80:80, got:\n%s", out)
+	}
+	if strings.Contains(out, "PublishPort=0.0.0.0:80:80") {
+		t.Errorf("0.0.0.0 must be rewritten, not paired:\n%s", out)
+	}
+}
+
+func TestPairIPv6Binds_skipsWhenNoNetworkDirective(t *testing.T) {
+	// pasta (the rootless default when no Network= is set) cannot bind v6
+	// ports. Adding [::1] pairs would crash the container at startup.
+	in := "[Container]\nPublishPort=127.0.0.1:5300:5300/udp\nPublishPort=127.0.0.1:5300:5300/tcp\n"
+	out := PairIPv6Binds(in)
+	if out != in {
+		t.Errorf("expected no v6 pairs when Network= absent (pasta path); got:\n%s", out)
 	}
 }

@@ -7,7 +7,7 @@ You've already run `lerd install` once on this machine. If not, see [Installatio
 :::
 
 ::: tip Drive it from your AI assistant
-Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Junie, Windsurf) can call every command below as an MCP tool: `project_new`, `site_link`, `env_setup`, `db_create`, `secure`, `worker_start`, etc. See [AI Integration](../features/mcp.md).
+Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Junie, Windsurf) can call every command below as an MCP tool: `project_new`, `site_link`, `env_setup`, `setup`, `db_create`, `site_tls`, `worker`, etc. See [AI Integration](../features/mcp.md).
 :::
 
 ---
@@ -201,6 +201,20 @@ App logs (anything in `var/log/*.log`) show up in the [Web UI](../features/web-u
 | `lerd secure` (via setup) | Issued mkcert cert, set `DEFAULT_URI=https://myapp.test` |
 | Doctrine migrations + cache:clear | Ran via the framework's `setup:` block |
 | `lerd worker start messenger` (via setup) | Launched `lerd-messenger-myapp` |
+
+---
+
+## FrankenPHP / Symfony Runtime (optional)
+
+By default your site runs on the shared PHP-FPM stack. To run it on a per-site FrankenPHP container instead (useful for testing under the long-running worker model Symfony Runtime provides):
+
+```bash
+lerd runtime frankenphp            # classic mode
+lerd runtime frankenphp --worker   # Symfony Runtime, keeps the kernel in memory
+lerd runtime fpm                   # back to shared PHP-FPM
+```
+
+Worker mode needs `composer require runtime/frankenphp-symfony`. Lerd starts the FrankenPHP container with `--watch` so edits to controllers and config reload within a second or two without restarting the worker manually. See the [FrankenPHP runtime](../features/frankenphp.md) page for limitations.
 
 ---
 

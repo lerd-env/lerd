@@ -328,6 +328,8 @@ The browser handles the Basic auth prompt natively the first time the user visit
 - **The mkcert root CA has authority over any HTTPS site on the trusting machine.** Only install the CA on devices you own. Treat the private key (which never leaves the server) as a high-value secret.
 - **The `/api/remote-setup` endpoint hands out the public CA to anyone who can pass the source-IP and code checks.** Don't share active codes.
 - **`lerd remote-control on` uses HTTP, not HTTPS.** The Basic auth credentials travel in plaintext on the LAN. Use only on networks you trust. The dashboard does not currently support HTTPS for itself; if you need TLS, run lerd behind a reverse proxy that terminates HTTPS.
+- **IPv6 bypasses v4-only firewall rules.** Lerd runs dual-stack where the host supports it (nginx listens on `[::]` alongside `0.0.0.0`, every `PublishPort` is paired with a `[::1]` / `[::]` bind). Host firewalls that only filter IPv4 (iptables without matching ip6tables, or UFW / firewalld profiles that quietly default to v4 only) will not block the v6 side. Check both stacks when locking down a LAN-exposed host, e.g. `sudo ip6tables -L` and `sudo ufw status verbose` before trusting your ruleset.
+- **`lan:expose` on a globally routable v6 LAN can reach beyond your v4 NAT.** With `lan:expose on`, lerd-dns answers AAAA for `*.test` with the host's primary global-unicast v6. On an ISP that hands out routable /64s via SLAAC (common for consumer v6 deployments) there is no NAT translating that address, so only the upstream router's v6 firewall stands between your dev sites and the wider internet. If you're not confident the router drops unsolicited inbound v6, keep `lan:expose` off or block inbound 80 / 443 on v6 explicitly.
 
 ## Reverting
 
