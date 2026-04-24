@@ -3253,10 +3253,17 @@ function lerdApp() {
     },
 
     get dashboardServices() {
-      return this.services.filter(s => s.dashboard && s.status === 'active');
+      // External-dashboard services (rabbitmq) skip the sidebar icon since
+      // they open in a new tab anyway. The detail panel still surfaces the
+      // dashboard URL so they remain discoverable.
+      return this.services.filter(s => s.dashboard && s.status === 'active' && !s.dashboard_external);
     },
 
     openDashboardIframe(svc) {
+      if (svc && svc.dashboard_external && svc.dashboard) {
+        window.open(svc.dashboard, '_blank', 'noopener,noreferrer');
+        return;
+      }
       if (this.dashboardSvc && this.dashboardSvc.name === svc.name) {
         this.dashboardSvc = null;
         location.hash = this.tab;
@@ -3548,6 +3555,10 @@ function lerdApp() {
       if (!adminSvc) return;
       if (adminSvc.status !== 'active') {
         await this.toggleService(adminSvc, 'start');
+      }
+      if (adminSvc.dashboard_external) {
+        window.open(adminSvc.dashboard, '_blank', 'noopener,noreferrer');
+        return;
       }
       if (adminSvc.dashboard) {
         const fresh = this.services.find(s => s.name === adminSvc.name) || adminSvc;

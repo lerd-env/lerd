@@ -105,6 +105,10 @@ type CustomService struct {
 	// directory to the container's expected UID at mount time. Pair with
 	// Userns to keep bind-mounted data writable to non-root container users.
 	ChownData bool `yaml:"chown_data,omitempty"`
+	// DashboardExternal opens the dashboard URL in a new browser tab instead
+	// of embedding it as an iframe. Use for admin UIs that set session
+	// cookies the iframe can't carry across origins (e.g. RabbitMQ Cowboy).
+	DashboardExternal bool `yaml:"dashboard_external,omitempty" json:"dashboard_external,omitempty"`
 }
 
 // ServiceFilePath returns the deterministic host path for a single FileMount

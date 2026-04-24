@@ -751,6 +751,7 @@ type ServiceResponse struct {
 	Version            string            `json:"version,omitempty"`
 	EnvVars            map[string]string `json:"env_vars"`
 	Dashboard          string            `json:"dashboard,omitempty"`
+	DashboardExternal  bool              `json:"dashboard_external,omitempty"`
 	ConnectionURL      string            `json:"connection_url,omitempty"`
 	Custom             bool              `json:"custom,omitempty"`
 	SiteCount          int               `json:"site_count"`
@@ -872,18 +873,19 @@ func buildServicesList() []ServiceResponse {
 			}
 		}
 		services = append(services, ServiceResponse{
-			Name:          svc.Name,
-			Status:        status,
-			Version:       podman.ServiceVersionLabel(svc.Image),
-			EnvVars:       envMap,
-			Dashboard:     svc.Dashboard,
-			ConnectionURL: svc.ConnectionURL,
-			Custom:        true,
-			SiteCount:     countSitesUsingService(svc.Name),
-			SiteDomains:   sitesUsingService(svc.Name),
-			Pinned:        config.ServiceIsPinned(svc.Name),
-			Paused:        config.ServiceIsPaused(svc.Name),
-			DependsOn:     svc.DependsOn,
+			Name:              svc.Name,
+			Status:            status,
+			Version:           podman.ServiceVersionLabel(svc.Image),
+			EnvVars:           envMap,
+			Dashboard:         svc.Dashboard,
+			DashboardExternal: svc.DashboardExternal,
+			ConnectionURL:     svc.ConnectionURL,
+			Custom:            true,
+			SiteCount:         countSitesUsingService(svc.Name),
+			SiteDomains:       sitesUsingService(svc.Name),
+			Pinned:            config.ServiceIsPinned(svc.Name),
+			Paused:            config.ServiceIsPaused(svc.Name),
+			DependsOn:         svc.DependsOn,
 		})
 	}
 	for _, siteName := range listActiveQueueWorkers() {

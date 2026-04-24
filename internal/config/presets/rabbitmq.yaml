@@ -17,4 +17,7 @@ env_vars:
 env_detect:
   key: RABBITMQ_HOST
 dashboard: http://localhost:15672
+# Cowboy session cookie has no SameSite override, so iframe login fails.
+# Force the dashboard to open in a new tab to keep auth working.
+dashboard_external: true
 connection_url: amqp://root:lerd@127.0.0.1:5672/

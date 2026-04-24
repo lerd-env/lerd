@@ -75,6 +75,12 @@ exec: ""                               # container command override
 dashboard: http://localhost:8081       # URL shown as an "Open" button in the web UI
                                        # when the service is active
 
+dashboard_external: false              # open the dashboard in a new browser tab instead of
+                                       # the embedded iframe. Use for admin UIs whose login
+                                       # cookie is dropped on cross-origin iframe POSTs and
+                                       # has no SameSite override (e.g. RabbitMQ Cowboy).
+                                       # External dashboards also skip the sidebar shortcut.
+
 connection_url: mongodb://root:secret@127.0.0.1:27017/?authSource=admin
                                        # host-side scheme URL (mysql://, postgresql://, mongodb://, etc.)
                                        # Surfaced as an "Open connection URL" link on the service detail

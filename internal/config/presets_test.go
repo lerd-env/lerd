@@ -120,6 +120,9 @@ func TestLoadPreset_RabbitMQ(t *testing.T) {
 	if p.DataDir == "" {
 		t.Errorf("rabbitmq should persist /var/lib/rabbitmq for queue durability across restarts")
 	}
+	if !p.DashboardExternal {
+		t.Errorf("rabbitmq must set dashboard_external because Cowboy's session cookie can't be carried by the iframe")
+	}
 }
 
 func TestLoadPreset_Elasticvue(t *testing.T) {
@@ -167,6 +170,12 @@ func TestLoadPreset_Elasticsearch(t *testing.T) {
 	}
 	if p.EnvDetect == nil || p.EnvDetect.Composer != "elasticsearch/elasticsearch" {
 		t.Errorf("elasticsearch env_detect should fire on composer elasticsearch/elasticsearch, got %+v", p.EnvDetect)
+	}
+	if p.Userns != "keep-id:uid=1000,gid=0" {
+		t.Errorf("elasticsearch must map host user to container UID 1000 via keep-id, got %q", p.Userns)
+	}
+	if !p.ChownData {
+		t.Errorf("elasticsearch must set chown_data so the host data dir is owned by the container UID at mount time")
 	}
 }
 

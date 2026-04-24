@@ -18,7 +18,7 @@ plays nicely with every `lerd service` subcommand (start/stop/remove/expose/pin)
 | `selenium` | `docker.io/selenium/standalone-chromium:latest` | - | `http://localhost:7900` (noVNC) |
 | `stripe-mock` | `docker.io/stripemock/stripe-mock:latest` | - | `127.0.0.1:12111` |
 | `memcached` | `docker.io/library/memcached:1.6-alpine` | - | `127.0.0.1:11211` |
-| `rabbitmq` | `docker.io/library/rabbitmq:3-management-alpine` | - | `http://localhost:15672` (mgmt UI) |
+| `rabbitmq` | `docker.io/library/rabbitmq:3-management-alpine` | - | `http://localhost:15672` (mgmt UI, opens in new tab) |
 | `elasticsearch` | `docker.elastic.co/elasticsearch/elasticsearch:8.13.4` | - | `127.0.0.1:9200` |
 | `elasticvue` | `docker.io/cars10/elasticvue:latest` | `elasticsearch` (preset) | `http://localhost:8083` |
 
