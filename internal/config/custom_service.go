@@ -97,6 +97,14 @@ type CustomService struct {
 	//   discover_family:<name>  -> comma-joined hostnames of every installed
 	//   service in the named family (built-in or custom).
 	DynamicEnv map[string]string `yaml:"dynamic_env,omitempty"`
+	// Userns sets the quadlet UserNS= line verbatim, e.g. "keep-id:uid=1000,gid=0"
+	// for images whose process runs as a non-root UID and needs that UID
+	// mapped to the host user for bind-mounted volumes.
+	Userns string `yaml:"userns,omitempty"`
+	// ChownData adds :U to the data_dir mount so podman re-chowns the host
+	// directory to the container's expected UID at mount time. Pair with
+	// Userns to keep bind-mounted data writable to non-root container users.
+	ChownData bool `yaml:"chown_data,omitempty"`
 }
 
 // ServiceFilePath returns the deterministic host path for a single FileMount

@@ -38,7 +38,15 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 
 	if svc.DataDir != "" {
 		hostDir := config.DataSubDir(svc.Name)
-		fmt.Fprintf(&b, "Volume=%s:%s:z\n", hostDir, svc.DataDir)
+		flags := "z"
+		if svc.ChownData {
+			flags += ",U"
+		}
+		fmt.Fprintf(&b, "Volume=%s:%s:%s\n", hostDir, svc.DataDir, flags)
+	}
+
+	if svc.Userns != "" {
+		fmt.Fprintf(&b, "UserNS=%s\n", svc.Userns)
 	}
 
 	for _, f := range config.PresetFiles(svc.Preset) {

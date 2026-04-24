@@ -8,6 +8,10 @@ environment:
   xpack.security.enabled: "false"
   ES_JAVA_OPTS: "-Xms512m -Xmx512m"
 data_dir: /usr/share/elasticsearch/data
+# Map host user 1:1 to container UID 1000 and chown the data dir to it
+# so node.lock + indices are writable in rootless podman.
+userns: keep-id:uid=1000,gid=0
+chown_data: true
 env_vars:
   - ELASTICSEARCH_HOST=lerd-elasticsearch
   - ELASTICSEARCH_PORT=9200

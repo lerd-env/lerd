@@ -57,6 +57,19 @@ data_dir: /data/db                     # mount target inside container
                                        # host path: ~/.local/share/lerd/data/<name>/
                                        # omit to disable persistent storage
 
+chown_data: false                      # add :U to the data_dir mount so podman re-chowns
+                                       # the host dir to the container's expected UID at
+                                       # mount time. Pair with userns when the in-container
+                                       # process runs as a non-root user (e.g. elasticsearch
+                                       # UID 1000) and would otherwise hit EACCES.
+
+userns: ""                             # written verbatim to UserNS= in the quadlet, e.g.
+                                       # "keep-id:uid=1000,gid=0" maps the host user 1:1
+                                       # to container UID 1000 so bind-mounted volumes are
+                                       # writable in rootless podman. Leave empty for
+                                       # images that run as root or drop privileges via
+                                       # their entrypoint.
+
 exec: ""                               # container command override
 
 dashboard: http://localhost:8081       # URL shown as an "Open" button in the web UI

@@ -238,6 +238,38 @@ func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 	}
 }
 
+func TestGenerateCustomQuadlet_UsernsAndChownData(t *testing.T) {
+	svc := &config.CustomService{
+		Name:      "elasticsearch",
+		Image:     "docker.elastic.co/elasticsearch/elasticsearch:8.13.4",
+		DataDir:   "/usr/share/elasticsearch/data",
+		Userns:    "keep-id:uid=1000,gid=0",
+		ChownData: true,
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "UserNS=keep-id:uid=1000,gid=0") {
+		t.Errorf("expected UserNS line when Userns set, got:\n%s", out)
+	}
+	if !strings.Contains(out, ":/usr/share/elasticsearch/data:z,U") {
+		t.Errorf("expected :z,U flags on data_dir mount when ChownData=true, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_DataDirDefaultsToZOnly(t *testing.T) {
+	svc := &config.CustomService{
+		Name:    "postgres-test",
+		Image:   "docker.io/library/postgres:16",
+		DataDir: "/var/lib/postgresql/data",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, ":/var/lib/postgresql/data:z\n") {
+		t.Errorf("data_dir mount must default to :z (no ,U) when ChownData unset, got:\n%s", out)
+	}
+	if strings.Contains(out, "UserNS=") {
+		t.Errorf("must not emit UserNS line when Userns unset, got:\n%s", out)
+	}
+}
+
 func TestGenerateCustomQuadlet_StopTimeout(t *testing.T) {
 	// Images like selenium/standalone-chromium hang for 30s+ on graceful
 	// shutdown. StopTimeout=5 bounds podman's SIGTERM-wait so systemctl stop
