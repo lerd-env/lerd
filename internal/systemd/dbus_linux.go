@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/coreos/go-systemd/v22/dbus"
 )
 
@@ -197,4 +198,19 @@ func withDefaultSuffix(name string) string {
 		return name
 	}
 	return name + ".service"
+}
+
+// NotifyReady tells systemd the current process has finished its startup
+// work and is ready to serve. Used by Type=notify units so systemctl start
+// blocks until the service is actually up, not just spawned. No-op outside
+// a systemd-managed process (returns false without error).
+func NotifyReady() {
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
+}
+
+// NotifyStopping tells systemd the process is winding down, letting
+// dependent units start their own teardown early instead of waiting for
+// the process to actually exit.
+func NotifyStopping() {
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyStopping)
 }

@@ -325,8 +325,15 @@ func Start(currentVersion string) error {
 		}
 	}
 
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", listenAddr, err)
+	}
 	fmt.Printf("Lerd UI listening on http://%s\n", listenAddr)
-	return http.ListenAndServe(listenAddr, handler)
+	// Notify systemd we're ready only after the listener is accepting, so
+	// Type=notify units make systemctl start block until the UI can serve.
+	lerdSystemd.NotifyReady()
+	return http.Serve(ln, handler)
 }
 
 var allowedCORSOrigins = map[string]bool{

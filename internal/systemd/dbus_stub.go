@@ -19,3 +19,9 @@ func DBusEnableService(string) error  { return errNoDBus }
 func DBusDisableService(string) error { return errNoDBus }
 func DBusActiveState(string) string   { return "" }
 func DBusIsEnabled(string) bool       { return false }
+
+// NotifyReady is a no-op on non-Linux platforms (no sd_notify).
+func NotifyReady() {}
+
+// NotifyStopping is a no-op on non-Linux platforms (no sd_notify).
+func NotifyStopping() {}

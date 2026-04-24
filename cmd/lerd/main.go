@@ -21,6 +21,7 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/watcher"
@@ -472,6 +473,11 @@ func newWatchCmd() *cobra.Command {
 					fmt.Printf("[WARN] site file watcher: %v\n", err)
 				}
 			}()
+
+			// Initial setup and goroutines are live; tell systemd we're
+			// ready so Type=notify unit starts unblock for any dependent
+			// startup sequence (lerd-ui, lerd-tray, test harnesses).
+			lerdSystemd.NotifyReady()
 
 			return watcher.Watch(cfg.ParkedDirectories, func(projectPath string) {
 				fmt.Printf("New project detected: %s\n", projectPath)
