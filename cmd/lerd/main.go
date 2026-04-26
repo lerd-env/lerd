@@ -569,6 +569,7 @@ func cleanupWorktreeVhosts(site *config.Site) bool {
 	// Re-generate for worktrees still present
 	worktrees, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
 	for _, wt := range worktrees {
+		gitpkg.EnsureWorktreeDeps(site.Path, wt.Path, wt.Domain, site.Secured)
 		var vhostErr error
 		if site.Secured {
 			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, site.PHPVersion, site.PrimaryDomain())
