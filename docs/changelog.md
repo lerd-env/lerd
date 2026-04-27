@@ -13,6 +13,10 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+
+- **Web UI cache poll backs off when the desktop session is idle or locked** (#255). The `podman ps` cache that drives the dashboard already drops from 15 s to 60 s when no tab is visible. It now also drops to 60 s while at least one tab is visible but systemd-logind reports the session as idle or locked, so a focused tab on an unattended laptop stops paying the per-15 s subprocess cost. Recomputes on every transition via a 30 s logind poll. Linux only; macOS keeps the visibility-only behavior via the existing `SessionIsIdleOrLocked` stub.
+
 ---
 
 ## [1.18.0] — 2026-04-25

@@ -170,6 +170,11 @@ func Start(currentVersion string) error {
 		}()
 	}
 
+	// Drop the cache to idle cadence whenever the desktop session is idle
+	// or locked, so a focused tab on an unattended laptop still saves
+	// battery. Recomputes on every transition.
+	startIdleWatcher(context.Background())
+
 	// Event-driven push from systemd covers mutations that didn't go through
 	// lerd-ui's AfterUnitChange path: external systemctl calls, container
 	// crashes, external podman restart, unit timeouts. Mirrors the same
