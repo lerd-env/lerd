@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import type { Site } from '$stores/sites';
   import {
     listAppLogFiles,
@@ -51,9 +51,7 @@
     if (scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   }
 
-  $effect(() => {
-    // Reload whenever the bound site changes
-    site.domain;
+  onMount(() => {
     loadFiles();
   });
 
