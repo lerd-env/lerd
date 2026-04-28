@@ -72,13 +72,13 @@ lerd service start <svc>
 
 ## Rollback — undo the last update
 
-Every successful Update / Upgrade / Migrate records the previous image in `~/.config/lerd/config.yaml` (or the custom service YAML). The grey **Rollback → \<tag\>** button swaps back to it, pulling first if the image isn't local anymore. A second rollback returns to the post-update image — the swap is symmetric, so you can flip-flop while debugging.
+Every successful Update / Upgrade records the previous image in `~/.config/lerd/config.yaml` (or the custom service YAML). The grey **Rollback → \<tag\>** button swaps back to it, pulling first if the image isn't local anymore. A second rollback returns to the post-update image — the swap is symmetric, so you can flip-flop while debugging.
 
 ```bash
 lerd service rollback redis
 ```
 
-Rollback uses no dump-and-restore: it's a pure image swap. Cross-data-format rollbacks (mysql 8.4 → 8.0 after a minor migration) will fail at startup because the older binary refuses the upgraded data dir. The confirm dialog warns about this. Use the migration recovery procedure above for that case.
+Rollback uses no dump-and-restore: it's a pure image swap. Rollback is refused after a Migrate — running the previous binary against the freshly-migrated data dir would corrupt it. The Rollback button is hidden in that case (the API exposes `can_rollback: false`), and the CLI prints an error pointing at the pre-migrate backup directory for manual recovery.
 
 ## Configuration knobs
 

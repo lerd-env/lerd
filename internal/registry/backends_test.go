@@ -241,3 +241,126 @@ func TestListTags_CacheTTL(t *testing.T) {
 		t.Errorf("expected exactly one HTTP hit (cache should serve the second), got %d", hits)
 	}
 }
+
+// TestListTags_404 surfaces NotFoundErr so callers can show a typo hint
+// rather than swallowing into "no update info".
+func TestListTags_404(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte(`{"detail": "object not found"}`))
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	_, err := ListTags("docker.io/typo/typo:1")
+	var nf *NotFoundErr
+	if !errors.As(err, &nf) {
+		t.Fatalf("expected NotFoundErr, got %T %v", err, err)
+	}
+}
+
+// TestListTags_429 wraps as UnreachableErr so the UI silently retries later.
+func TestListTags_429(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	_, err := ListTags("docker.io/library/redis:7")
+	var ur *UnreachableErr
+	if !errors.As(err, &ur) {
+		t.Fatalf("expected UnreachableErr, got %T %v", err, err)
+	}
+}
+
+// TestListTags_5xx wraps as UnreachableErr.
+func TestListTags_5xx(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	_, err := ListTags("docker.io/library/redis:7")
+	var ur *UnreachableErr
+	if !errors.As(err, &ur) {
+		t.Fatalf("expected UnreachableErr for 502, got %T %v", err, err)
+	}
+}
+
+// TestListTags_Pagination follows the next link until the registry stops
+// returning one. Without it large repos lose newer tags.
+func TestListTags_Pagination(t *testing.T) {
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		w.Header().Set("Content-Type", "application/json")
+		switch hits {
+		case 1:
+			w.Write([]byte(`{
+				"next": "/page2",
+				"results": [{"name": "8.0", "last_updated": "2024-01-01T00:00:00Z"}]
+			}`))
+		case 2:
+			w.Write([]byte(`{
+				"next": null,
+				"results": [{"name": "8.4.3", "last_updated": "2026-04-15T00:00:00Z"}]
+			}`))
+		default:
+			t.Fatalf("unexpected page %d", hits)
+		}
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	tags, err := ListTags("docker.io/library/mysql:8.0")
+	if err != nil {
+		t.Fatalf("ListTags: %v", err)
+	}
+	if len(tags) != 2 {
+		t.Fatalf("expected 2 tags across pages, got %d: %+v", len(tags), tags)
+	}
+	if hits != 2 {
+		t.Errorf("expected 2 HTTP hits across pages, got %d", hits)
+	}
+}
+
+// TestListTags_ConcurrentSingleflight collapses concurrent fetches for the
+// same image into a single registry call.
+func TestListTags_ConcurrentSingleflight(t *testing.T) {
+	hits := 0
+	gate := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		<-gate
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"results": [{"name": "1.0"}]}`))
+	}))
+	defer srv.Close()
+	withStubHTTP(t, srv)
+	withTempCacheDir(t)
+
+	const N = 8
+	done := make(chan error, N)
+	for range N {
+		go func() {
+			_, err := ListTags("docker.io/library/redis:7")
+			done <- err
+		}()
+	}
+	time.Sleep(50 * time.Millisecond)
+	close(gate)
+	for range N {
+		if err := <-done; err != nil {
+			t.Errorf("ListTags: %v", err)
+		}
+	}
+	if hits != 1 {
+		t.Errorf("expected singleflight to collapse %d concurrent calls into 1 hit, got %d", N, hits)
+	}
+}

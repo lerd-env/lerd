@@ -16,6 +16,15 @@ type ServiceConfig struct {
 	Port          int      `yaml:"port"           mapstructure:"port"`
 	ExtraPorts    []string `yaml:"extra_ports"    mapstructure:"extra_ports"`
 	PreviousImage string   `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
+	// LastOp records the most recent mutation kind ("update" or "migrate") so
+	// the rollback flow can refuse a swap that would race the new image
+	// against the post-migrate (fresh) data dir. Empty means no recent op or a
+	// state predating the field — treated as plain update for compatibility.
+	LastOp string `yaml:"last_op,omitempty" mapstructure:"last_op"`
+	// PreMigrateBackup is the absolute path to the data dir that was preserved
+	// when the most recent operation was a migrate. Used by rollback to refuse
+	// (or, in future, restore) when undoing the migrate would corrupt data.
+	PreMigrateBackup string `yaml:"pre_migrate_backup,omitempty" mapstructure:"pre_migrate_backup"`
 }
 
 // GlobalConfig is the top-level lerd configuration.

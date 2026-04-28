@@ -11,68 +11,48 @@ import (
 )
 
 // UpdateAvailability is the metadata returned by CheckUpdateAvailable so the
-// UI can render an "update available → v8.4.3" badge without performing the
-// update yet. Latest* fields surface newer versions outside the safe-update
-// strategy (e.g. meilisearch v1.7.6 patch-update + v1.42.1 cross-minor) so
-// the UI can offer them as an explicit, manual-migration upgrade.
+// UI can render an "update available → v8.4.3" badge without applying it.
 type UpdateAvailability struct {
-	Service      string `json:"service"`
-	CurrentImage string `json:"current_image"`
-	CurrentTag   string `json:"current_tag"`
-	LatestTag    string `json:"latest_tag,omitempty"`
-	LatestImage  string `json:"latest_image,omitempty"`
-	Available    bool   `json:"available"`
-	Strategy     string `json:"strategy"`
-	// Upgrade* points at the newest version regardless of update_strategy.
-	// Set only when it differs from LatestTag, i.e. there's a cross-strategy
-	// upgrade the user could opt into manually.
-	UpgradeTag   string `json:"upgrade_tag,omitempty"`
-	UpgradeImage string `json:"upgrade_image,omitempty"`
-	// PreviousImage is the image running before the most recent update; set
-	// when the user can roll back to it without an extra registry roundtrip.
+	Service       string `json:"service"`
+	CurrentImage  string `json:"current_image"`
+	CurrentTag    string `json:"current_tag"`
+	LatestTag     string `json:"latest_tag,omitempty"`
+	LatestImage   string `json:"latest_image,omitempty"`
+	Available     bool   `json:"available"`
+	Strategy      string `json:"strategy"`
+	UpgradeTag    string `json:"upgrade_tag,omitempty"`
+	UpgradeImage  string `json:"upgrade_image,omitempty"`
 	PreviousImage string `json:"previous_image,omitempty"`
+	// CanRollback is false when the most recent op was a migrate (rolling the
+	// image back without restoring the pre-migrate data dir would corrupt it).
+	CanRollback bool `json:"can_rollback"`
 }
 
 // CheckUpdateAvailable queries the registry for a newer tag matching the
 // preset's update_strategy. Network and unsupported-registry errors are
-// swallowed (returning Available=false) so the UI stays quiet on offline /
-// custom-registry installs.
+// swallowed so the UI stays quiet on offline / custom-registry installs.
 func CheckUpdateAvailable(name string) (*UpdateAvailability, error) {
 	svc, strategy, allowMajor, err := resolveServiceForUpdate(name)
 	if err != nil {
 		return nil, err
 	}
-	prevImage, _, _ := previousImageFor(name)
+	prevImage, _, lastOp, _ := previousImageFor(name)
 	out := &UpdateAvailability{
 		Service:       name,
 		CurrentImage:  svc.Image,
 		Strategy:      string(strategy),
 		PreviousImage: prevImage,
+		CanRollback:   prevImage != "" && lastOp != "migrate",
 	}
 	ref, parseErr := registry.ParseImage(svc.Image)
 	if parseErr == nil {
 		out.CurrentTag = ref.Tag
 	}
-	// The safe in-strategy update suggestion (auto-applicable, no migration).
 	var newer *registry.TagInfo
 	if strategy != registry.StrategyNone && strategy != "" {
 		newer, _ = registry.MaybeNewerTag(svc.Image, strategy)
-		// If the locally-pulled image already has the same digest as the
-		// recommended candidate, the user is effectively already on it.
-		// Probe both the configured tag (svc.Image) and whatever's actually
-		// in the on-disk quadlet (which may have drifted, e.g. config says
-		// :8.4 but quadlet pinned :8.4.9 from a previous update).
-		if newer != nil && newer.Digest != "" {
-			candidates := podman.LocalImageDigest(svc.Image)
-			if installed := podman.InstalledImage("lerd-" + name); installed != "" && installed != svc.Image {
-				candidates = append(candidates, podman.LocalImageDigest(installed)...)
-			}
-			for _, local := range candidates {
-				if local == newer.Digest {
-					newer = nil
-					break
-				}
-			}
+		if newer != nil && newer.Digest != "" && alreadyOnDigest(name, svc.Image, newer.Digest) {
+			newer = nil
 		}
 	}
 	if newer != nil {
@@ -82,13 +62,8 @@ func CheckUpdateAvailable(name string) (*UpdateAvailability, error) {
 			out.LatestImage = ref.Registry + "/" + ref.Repo + ":" + newer.Name
 		}
 	}
-	// The absolute newest stable tag, regardless of strategy. Surfaced as an
-	// opt-in cross-strategy upgrade. Cross-major boundaries only when the
-	// preset opts in via allow_major_upgrade. Skipped for strategy=none so
-	// opted-out presets stay quiet, and skipped for patch-strategy presets
-	// without a registered migrator — for those (e.g. meilisearch) crossing
-	// the minor boundary corrupts data and an in-place Upgrade button would
-	// be a trap; the user must follow upstream's manual upgrade guide.
+	// Cross-strategy upgrade: skipped for strategy=none and for patch presets
+	// without a registered migrator (otherwise the in-place button is a trap).
 	if strategy == registry.StrategyNone || strategy == "" {
 		return out, nil
 	}
@@ -96,19 +71,7 @@ func CheckUpdateAvailable(name string) (*UpdateAvailability, error) {
 		return out, nil
 	}
 	if upgrade, _ := registry.NewestStable(svc.Image, allowMajor); upgrade != nil {
-		alreadyOn := false
-		if upgrade.Digest != "" {
-			candidates := podman.LocalImageDigest(svc.Image)
-			if installed := podman.InstalledImage("lerd-" + name); installed != "" && installed != svc.Image {
-				candidates = append(candidates, podman.LocalImageDigest(installed)...)
-			}
-			for _, local := range candidates {
-				if local == upgrade.Digest {
-					alreadyOn = true
-					break
-				}
-			}
-		}
+		alreadyOn := upgrade.Digest != "" && alreadyOnDigest(name, svc.Image, upgrade.Digest)
 		if !alreadyOn && (newer == nil || upgrade.Name != newer.Name) {
 			out.UpgradeTag = upgrade.Name
 			if parseErr == nil {
@@ -119,12 +82,39 @@ func CheckUpdateAvailable(name string) (*UpdateAvailability, error) {
 	return out, nil
 }
 
-// UpdateServiceStreaming pulls the recommended newer image (or the
-// caller-supplied targetImage when non-empty for explicit upgrades), persists
-// it (in cfg.Services for default presets, in the on-disk YAML for installed
-// custom services), rewrites the quadlet, and restarts the unit. Phase
-// events: checking_registry, pulling_image, writing_quadlet, restarting_unit, done.
+// alreadyOnDigest reports whether a local image already matches the candidate
+// digest. Both sides are lowercased so registry casing differences don't
+// register as a mismatch.
+func alreadyOnDigest(name, configuredImage, candidate string) bool {
+	if candidate == "" {
+		return false
+	}
+	want := strings.ToLower(strings.TrimSpace(candidate))
+	check := func(local string) bool {
+		return strings.ToLower(strings.TrimSpace(local)) == want
+	}
+	for _, local := range podman.LocalImageDigest(configuredImage) {
+		if check(local) {
+			return true
+		}
+	}
+	if installed := podman.InstalledImage("lerd-" + name); installed != "" && installed != configuredImage {
+		for _, local := range podman.LocalImageDigest(installed) {
+			if check(local) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// UpdateServiceStreaming pulls the chosen image, persists it, rewrites the
+// quadlet, and restarts the unit. Phases: checking_registry, pulling_image,
+// writing_quadlet, restarting_unit, done.
 func UpdateServiceStreaming(name, targetImage string, emit func(PhaseEvent)) error {
+	unlock := lockService(name)
+	defer unlock()
+
 	emit(PhaseEvent{Phase: "checking_registry"})
 	chosenImage := targetImage
 	if chosenImage == "" {
@@ -137,6 +127,8 @@ func UpdateServiceStreaming(name, targetImage string, emit func(PhaseEvent)) err
 			return nil
 		}
 		chosenImage = avail.LatestImage
+	} else if err := enforceMajorUpgradeGate(name, chosenImage); err != nil {
+		return err
 	}
 
 	emit(PhaseEvent{Phase: "pulling_image", Image: chosenImage})
@@ -147,33 +139,87 @@ func UpdateServiceStreaming(name, targetImage string, emit func(PhaseEvent)) err
 	}
 
 	emit(PhaseEvent{Phase: "writing_quadlet", Image: chosenImage})
-	if err := persistImageChoice(name, chosenImage); err != nil {
+	if err := persistImageChoice(name, chosenImage, "update"); err != nil {
 		return err
 	}
 
 	unit := "lerd-" + name
 	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
-	var restartErr error
-	for attempt := range 5 {
-		restartErr = podman.RestartUnit(unit)
-		if restartErr == nil || !strings.Contains(restartErr.Error(), "not found") {
-			break
-		}
-		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-	}
-	if restartErr != nil {
-		return restartErr
+	if err := restartWithRetry(unit); err != nil {
+		return err
 	}
 	emit(PhaseEvent{Phase: "done", Image: chosenImage, Unit: unit})
 	return nil
 }
 
+// restartWithRetry handles the "unit not found" race after writing a fresh
+// quadlet. Other errors return immediately. Surfaces the last error rather
+// than swallowing it after retries.
+func restartWithRetry(unit string) error {
+	var lastErr error
+	for attempt := range 5 {
+		err := podman.RestartUnit(unit)
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		if !strings.Contains(err.Error(), "not found") {
+			return err
+		}
+		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
+	}
+	if lastErr == nil {
+		return fmt.Errorf("restarting %s: gave up after retries", unit)
+	}
+	return lastErr
+}
+
+// enforceMajorUpgradeGate refuses an explicit cross-major target when the
+// preset has not opted in via allow_major_upgrade — same gate as the registry
+// recommendation path, so a CLI tag arg can't bypass it.
+func enforceMajorUpgradeGate(name, target string) error {
+	svc, _, allowMajor, err := resolveServiceForUpdate(name)
+	if err != nil || svc == nil {
+		return err
+	}
+	if allowMajor {
+		return nil
+	}
+	currentRef, perr := registry.ParseImage(svc.Image)
+	if perr != nil {
+		return nil
+	}
+	targetRef, perr := registry.ParseImage(target)
+	if perr != nil {
+		return nil
+	}
+	cur := leadingMajor(currentRef.Tag)
+	tgt := leadingMajor(targetRef.Tag)
+	if cur < 0 || tgt < 0 || cur == tgt {
+		return nil
+	}
+	return fmt.Errorf("refusing major-version jump %s → %s for %s; preset has allow_major_upgrade=false (use the Migrate flow instead)", currentRef.Tag, targetRef.Tag, name)
+}
+
+func leadingMajor(tag string) int {
+	t := strings.TrimPrefix(tag, "v")
+	end := 0
+	for end < len(t) && t[end] >= '0' && t[end] <= '9' {
+		end++
+	}
+	if end == 0 {
+		return -1
+	}
+	n := 0
+	for i := 0; i < end; i++ {
+		n = n*10 + int(t[i]-'0')
+	}
+	return n
+}
+
 // resolveServiceForUpdate returns the resolved CustomService, update strategy,
-// and major-upgrade policy for either a default preset or an installed
-// custom service. Alternates installed via service preset (e.g. mysql-8-0)
-// override the preset's broader strategy with patch, so a user who explicitly
-// pinned 8.0 doesn't get suggested 8.4.9 — that crosses a minor and (for
-// mysql) a documented LTS line. Use the alternates picker for cross-minor.
+// and major-upgrade policy. Alternates installed via service preset (e.g.
+// mysql-8-0) downgrade the preset's strategy to patch.
 func resolveServiceForUpdate(name string) (*config.CustomService, registry.Strategy, bool, error) {
 	if config.IsDefaultPreset(name) {
 		p, err := config.LoadPreset(name)
@@ -184,11 +230,8 @@ func resolveServiceForUpdate(name string) (*config.CustomService, registry.Strat
 		if err != nil {
 			return nil, "", false, err
 		}
-		// Prefer the on-disk quadlet's image — it reflects what's actually
-		// running. With track_latest, the freshly-resolved canonical can drift
-		// ahead of the installed image (e.g. data dir is v1.7.6 but track_latest
-		// would now resolve to v1.42), and the update-check must report the
-		// real current state, not the would-be-fresh-install state.
+		// Prefer the installed image — track_latest can drift the resolved
+		// canonical ahead of what's actually on disk.
 		if installed := podman.InstalledImage("lerd-" + name); installed != "" {
 			svc.Image = installed
 		}
@@ -218,54 +261,102 @@ func resolveServiceForUpdate(name string) (*config.CustomService, registry.Strat
 	return svc, strategy, allowMajor, nil
 }
 
-// persistImageChoice records the chosen image so a subsequent service start
-// picks it up. For default presets this means writing to global config's
-// Services[name].Image; for installed custom services it means rewriting the
-// on-disk YAML and regenerating the quadlet. The previous image is preserved
-// alongside so a subsequent rollback can swap back without re-querying the
-// registry.
-func persistImageChoice(name, newImage string) error {
+// persistImageChoice records the chosen image and regenerates the quadlet.
+// Atomic: if the quadlet write fails the config write is rolled back so the
+// on-disk pair (config + quadlet) stays consistent.
+func persistImageChoice(name, newImage, op string) error {
 	if config.IsDefaultPreset(name) {
 		cfg, err := config.LoadGlobal()
 		if err != nil {
 			return err
 		}
-		svcCfg := cfg.Services[name]
-		if svcCfg.Image != "" && svcCfg.Image != newImage {
-			svcCfg.PreviousImage = svcCfg.Image
+		prev := cfg.Services[name]
+		next := prev
+		if next.Image != "" && next.Image != newImage {
+			next.PreviousImage = next.Image
 		}
-		svcCfg.Image = newImage
-		cfg.Services[name] = svcCfg
+		next.Image = newImage
+		next.LastOp = op
+		if op != "migrate" {
+			next.PreMigrateBackup = ""
+		}
+		cfg.Services[name] = next
 		if err := config.SaveGlobal(cfg); err != nil {
 			return fmt.Errorf("saving global config: %w", err)
 		}
-		return EnsureDefaultPresetQuadlet(name)
+		if err := EnsureDefaultPresetQuadlet(name); err != nil {
+			cfg.Services[name] = prev
+			if rbErr := config.SaveGlobal(cfg); rbErr != nil {
+				return fmt.Errorf("writing quadlet failed: %w; AND rolling config back failed: %v", err, rbErr)
+			}
+			return fmt.Errorf("writing quadlet: %w", err)
+		}
+		return nil
 	}
 	svc, err := config.LoadCustomService(name)
 	if err != nil {
 		return err
 	}
+	prevSvc := *svc
 	if svc.Image != "" && svc.Image != newImage {
 		svc.PreviousImage = svc.Image
 	}
 	svc.Image = newImage
+	svc.LastOp = op
+	if op != "migrate" {
+		svc.PreMigrateBackup = ""
+	}
 	if err := config.SaveCustomService(svc); err != nil {
 		return fmt.Errorf("saving service config: %w", err)
 	}
-	return EnsureCustomServiceQuadlet(svc)
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		if rbErr := config.SaveCustomService(&prevSvc); rbErr != nil {
+			return fmt.Errorf("writing quadlet failed: %w; AND rolling config back failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("writing quadlet: %w", err)
+	}
+	return nil
+}
+
+// recordMigrateBackup stamps the post-migrate state onto the service config
+// so a later rollback can detect and refuse the unsafe path.
+func recordMigrateBackup(name, backup string) error {
+	if config.IsDefaultPreset(name) {
+		cfg, err := config.LoadGlobal()
+		if err != nil {
+			return err
+		}
+		entry := cfg.Services[name]
+		entry.LastOp = "migrate"
+		entry.PreMigrateBackup = backup
+		cfg.Services[name] = entry
+		return config.SaveGlobal(cfg)
+	}
+	svc, err := config.LoadCustomService(name)
+	if err != nil {
+		return err
+	}
+	svc.LastOp = "migrate"
+	svc.PreMigrateBackup = backup
+	return config.SaveCustomService(svc)
 }
 
 // RollbackService swaps a service back to its previously-running image.
-// The previous image is recorded on every update via persistImageChoice; a
-// rollback toggles current/previous so the next rollback redoes the update.
-// Errors when no previous image is recorded (nothing to roll back to).
+// Refuses when no previous image is recorded or when the most recent op was
+// a migrate (binary/schema mismatch would corrupt the data dir).
 func RollbackService(name string, emit func(PhaseEvent)) error {
-	prev, current, err := previousImageFor(name)
+	unlock := lockService(name)
+	defer unlock()
+
+	prev, current, lastOp, err := previousImageFor(name)
 	if err != nil {
 		return err
 	}
 	if prev == "" {
 		return fmt.Errorf("no previous image recorded for %s — nothing to roll back to", name)
+	}
+	if lastOp == "migrate" {
+		return fmt.Errorf("refusing rollback for %s: last op was a migrate. Restoring %s would mismatch binary against schema. Restore the pre-migrate data dir manually if you really want to revert", name, prev)
 	}
 	emit(PhaseEvent{Phase: "pulling_image", Image: prev})
 	if err := podman.PullImageWithProgress(prev, func(line string) {
@@ -279,64 +370,76 @@ func RollbackService(name string, emit func(PhaseEvent)) error {
 	}
 	unit := "lerd-" + name
 	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
-	var restartErr error
-	for attempt := range 5 {
-		restartErr = podman.RestartUnit(unit)
-		if restartErr == nil || !strings.Contains(restartErr.Error(), "not found") {
-			break
-		}
-		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-	}
-	if restartErr != nil {
-		return restartErr
+	if err := restartWithRetry(unit); err != nil {
+		return err
 	}
 	emit(PhaseEvent{Phase: "done", Image: prev, Unit: unit})
 	return nil
 }
 
-// previousImageFor returns the recorded previous image and the current pinned
-// image for a service. Either may be empty.
-func previousImageFor(name string) (prev, current string, err error) {
+// previousImageFor returns the recorded previous image, current pinned image,
+// and the kind of the most recent op for a service. Any field may be empty.
+func previousImageFor(name string) (prev, current, lastOp string, err error) {
 	if config.IsDefaultPreset(name) {
 		cfg, lErr := config.LoadGlobal()
 		if lErr != nil {
-			return "", "", lErr
+			return "", "", "", lErr
 		}
 		svcCfg := cfg.Services[name]
-		return svcCfg.PreviousImage, svcCfg.Image, nil
+		return svcCfg.PreviousImage, svcCfg.Image, svcCfg.LastOp, nil
 	}
 	svc, lErr := config.LoadCustomService(name)
 	if lErr != nil {
-		return "", "", fmt.Errorf("unknown service %q", name)
+		return "", "", "", fmt.Errorf("unknown service %q", name)
 	}
-	return svc.PreviousImage, svc.Image, nil
+	return svc.PreviousImage, svc.Image, svc.LastOp, nil
 }
 
-// swapImagePin moves PreviousImage→Image and the old Image→PreviousImage so
-// the rollback is reversible: clicking rollback again returns to the original.
+// swapImagePin moves PreviousImage→Image and old Image→PreviousImage so the
+// rollback is reversible. Atomic: rolls back the config write if the quadlet
+// regeneration fails.
 func swapImagePin(name, newImage, newPrev string) error {
 	if config.IsDefaultPreset(name) {
 		cfg, err := config.LoadGlobal()
 		if err != nil {
 			return err
 		}
-		svcCfg := cfg.Services[name]
-		svcCfg.Image = newImage
-		svcCfg.PreviousImage = newPrev
-		cfg.Services[name] = svcCfg
+		prev := cfg.Services[name]
+		next := prev
+		next.Image = newImage
+		next.PreviousImage = newPrev
+		next.LastOp = "update"
+		next.PreMigrateBackup = ""
+		cfg.Services[name] = next
 		if err := config.SaveGlobal(cfg); err != nil {
 			return fmt.Errorf("saving global config: %w", err)
 		}
-		return EnsureDefaultPresetQuadlet(name)
+		if err := EnsureDefaultPresetQuadlet(name); err != nil {
+			cfg.Services[name] = prev
+			if rbErr := config.SaveGlobal(cfg); rbErr != nil {
+				return fmt.Errorf("writing quadlet failed: %w; AND rolling config back failed: %v", err, rbErr)
+			}
+			return fmt.Errorf("writing quadlet: %w", err)
+		}
+		return nil
 	}
 	svc, err := config.LoadCustomService(name)
 	if err != nil {
 		return err
 	}
+	prevSvc := *svc
 	svc.Image = newImage
 	svc.PreviousImage = newPrev
+	svc.LastOp = "update"
+	svc.PreMigrateBackup = ""
 	if err := config.SaveCustomService(svc); err != nil {
 		return fmt.Errorf("saving service config: %w", err)
 	}
-	return EnsureCustomServiceQuadlet(svc)
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		if rbErr := config.SaveCustomService(&prevSvc); rbErr != nil {
+			return fmt.Errorf("writing quadlet failed: %w; AND rolling config back failed: %v", err, rbErr)
+		}
+		return fmt.Errorf("writing quadlet: %w", err)
+	}
+	return nil
 }

@@ -149,7 +149,7 @@
       });
     }
 
-    if (svc.upgrade_version && !svc.migration_supported && !updating) {
+    if (svc.upgrade_version && svc.migration_supported === false && !updating) {
       const tag = svc.upgrade_version;
       list.push({
         id: 'upgrade',
@@ -161,7 +161,7 @@
       });
     }
 
-    if (svc.upgrade_version && svc.migration_supported && !updating) {
+    if (svc.upgrade_version && svc.migration_supported === true && !updating) {
       const tag = svc.upgrade_version;
       list.push({
         id: 'migrate',
@@ -173,7 +173,7 @@
       });
     }
 
-    if (svc.previous_version && !updating) {
+    if (svc.previous_version && svc.can_rollback !== false && !updating) {
       const tag = rollbackTagFromImage(svc.previous_version);
       list.push({
         id: 'rollback',

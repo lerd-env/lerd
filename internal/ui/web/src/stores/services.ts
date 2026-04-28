@@ -29,6 +29,7 @@ export interface Service {
   upgrade_version?: string;
   previous_version?: string;
   migration_supported?: boolean;
+  can_rollback?: boolean;
 }
 
 export interface PhaseEvent {
@@ -44,6 +45,7 @@ export interface PhaseEvent {
 export interface UpdateProgress {
   phase: string;
   message: string;
+  error?: boolean;
 }
 
 export const updateProgress = writable<Record<string, UpdateProgress>>({});
@@ -197,6 +199,7 @@ export async function streamServiceAction(
         }
         if (evt.phase === 'error') {
           finalError = evt.error || 'failed';
+          setProgress(name, { phase: 'error', message: finalError, error: true });
           continue;
         }
         if (evt.phase === 'done') continue;
@@ -207,7 +210,11 @@ export async function streamServiceAction(
         setProgress(name, { phase: evt.phase, message });
       }
     }
-    setProgress(name, null);
+    if (finalError) {
+      setTimeout(() => setProgress(name, null), 5000);
+    } else {
+      setProgress(name, null);
+    }
     await loadServices();
     return { ok: !finalError, error: finalError };
   } catch (e) {

@@ -33,6 +33,27 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `internal/podman/quadlets/lerd-{mysql,redis,postgres,meilisearch,rustfs,mailpit}.container` deleted — quadlets are now generated from preset YAML on demand. `internal/cli/service_image_{darwin,linux}.go` deleted — platform image overrides moved into `Preset.PlatformOverrides` with optional `{{tag}}` template substitution so `track_latest`-resolved tags survive the platform swap.
 - `applyServices` in the Web UI now refreshes every server-supplied field on each WS push (was only `status` / `pinned` / `site_count`), so update / upgrade / version state propagates over the socket without a page reload. Client-only flags (`loading`, `error`, `flash`) still survive across pushes for in-flight UI state.
 
+### Fixed
+
+- **Concurrent update / migrate / rollback now serialised per service** (`internal/serviceops/locks.go`). Double-clicking the Update button, or a CLI run racing the dashboard, can no longer interleave config writes, image pulls and data-dir swaps.
+- **`persistImageChoice` and `swapImagePin` are now atomic with quadlet regeneration**. If the on-disk quadlet write fails after the config write, the config is rolled back so `~/.config/lerd/config.yaml` and the generated `.container` file can't disagree. Joined-error output if the rollback itself fails.
+- **Migrate failures now restore the pre-migrate data dir.** A new `abortMigrate` helper bubbles errors from `restoreDataDirFromBackup` (was `_ = restoreDataDirFromBackup(...)`) and restarts the old unit when appropriate.
+- **Rollback after a Migrate is refused.** New `LastOp` and `PreMigrateBackup` fields on `ServiceConfig` / `CustomService`. `RollbackService` errors out when the last op was a migrate (running the old binary against the upgraded data dir would corrupt it). The dashboard hides the Rollback button via the new `can_rollback` field on `/api/services`.
+- **SQL dump credentials no longer leak through argv.** `mysqldump` and `pg_dumpall` receive `MYSQL_PWD` / `PGPASSWORD` via `podman exec --env`, not on the command line. Dump files now open with mode `0600`; the backups directory is `0700`.
+- **30-minute timeout on every in-container migrate exec.** A wedged container can no longer block migrate forever; `containerExec` / `dumpToHost` / `restoreFromHost` use `exec.CommandContext` with a hard cap.
+- **`allow_major_upgrade` is enforced even when the CLI passes a tag explicitly.** A new `enforceMajorUpgradeGate` check refuses `lerd service update mysql 9.0` for presets where `allow_major_upgrade: false`. The registry-recommendation gate could previously be bypassed by direct tag invocation.
+- **Server-side NDJSON streams stop on client disconnect.** A new `startNDJSONStream` helper short-circuits writes once `r.Context()` is cancelled or `w.Write` returns an error, replacing four copies of the `_, _ = w.Write(...)` closure in update / migrate / rollback / preset-install handlers.
+- **Client surfaces stream errors instead of freezing the spinner.** `streamServiceAction` now calls `setProgress` with phase `error` before continuing, so a failed update shows the message in the UI instead of leaving the inline status stuck on the last visible phase.
+- **Update-button gate uses strict equality.** `migration_supported === false` / `=== true` and `can_rollback !== false` so a missing field doesn't accidentally show the wrong button. JSON tags lose `omitempty` on those bool fields so the false case is always wire-visible.
+- **`lerd service restart` warns instead of failing when quadlet regeneration trips.** A transient template error (e.g. a malformed env var) no longer strands a healthy unit; the restart proceeds against the existing on-disk quadlet.
+- **Registry: Docker Hub pagination followed.** `dockerHubResponse.Next` was previously read but never followed; long-tail repos (postgres, mysql) lost newer tags past page 1. Capped at 20 pages and 5000 tags so a pathological response can't drive unbounded traffic.
+- **Registry: distinct error classes.** New `*AuthRequiredErr` and `*NotFoundErr`. 401/403 → auth needed, 404 → repo doesn't exist, 429/5xx → unreachable. All four collapse to "no update info" via `isQuietRegistryErr` but stay distinguishable.
+- **Registry: token and tag-list calls have separate timeout budgets** (15 s each). A slow GHCR token endpoint can no longer starve the subsequent tag-list request.
+- **Registry: concurrent cache writes now safe.** In-process `cacheMu` plus an inline singleflight collapses concurrent `ListTags` calls; cache writes go to a temp file and `os.Rename` atomically. Cache write failures emit a rate-limited `log.Printf` instead of disappearing into `_ = os.WriteFile(...)`.
+- **Registry: response body capped at 5 MB and tag list at 5000 entries** so a malicious or misconfigured registry can't OOM the process.
+- **Digest comparisons normalised** (lowercase + trim) in the `alreadyOnDigest` helper so registries returning differently-cased digests don't cause a permanent "update available" badge.
+- New tests: `TestRollback_RefusesAfterMigrate`, `TestCheckUpdateAvailable_CanRollback`, `TestEnforceMajorUpgradeGate`, `TestLeadingMajor`, plus registry tests for 404, 429, 5xx, pagination, and concurrent-singleflight de-duplication.
+
 ---
 
 ## [1.18.0] — 2026-04-25
