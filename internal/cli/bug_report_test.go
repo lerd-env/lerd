@@ -85,7 +85,11 @@ func TestWriteBugReport_defaultPath(t *testing.T) {
 	if !strings.HasPrefix(filepath.Base(got), "lerd-bug-report-") {
 		t.Errorf("default filename doesn't start with lerd-bug-report-: %s", got)
 	}
-	if filepath.Dir(got) != dir {
+	// EvalSymlinks both sides because macOS resolves /var → /private/var,
+	// so t.TempDir() and os.Getwd()-after-chdir return different forms.
+	gotDir, _ := filepath.EvalSymlinks(filepath.Dir(got))
+	wantDir, _ := filepath.EvalSymlinks(dir)
+	if gotDir != wantDir {
 		t.Errorf("default file not in cwd: %s (cwd=%s)", got, dir)
 	}
 }
