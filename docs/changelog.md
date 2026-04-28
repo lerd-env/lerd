@@ -13,6 +13,24 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **Default services as YAML presets**. The 6 built-in services (mysql, postgres, redis, meilisearch, rustfs, mailpit) moved out of hardcoded Go lists/maps/embedded `.container` templates into `internal/config/presets/*.yaml` files marked `default: true`. Adding or replacing a default service is now a YAML edit. The same code path serves default and add-on presets — one quadlet writer, one env-var resolver, one dependency engine. Six duplicated service-name lists collapsed into `config.DefaultPresetNames()`; three duplicated env-var maps collapsed into `config.DefaultPresetEnvVars(name)`.
+- **MySQL canonical bumped to 8.4 LTS** (was 8.0). Existing users on saved 8.0 are untouched (viper merge wins; `migrateStaleServiceImages` skipped for `track_latest` presets); fresh installs land on 8.4.x. 5.6 alternate removed; 5.7 and 8.0 remain pickable. `mysql.cnf` `loose-` prefixes added so the same config file works across mysql 5.6 / 5.7 / 8.0 / 8.4 (8.4 hard-rejects `innodb_large_prefix` / `innodb_file_format` without the prefix).
+- **Update / Upgrade / Migrate / Rollback flow**. `serviceops.UpdateServiceStreaming`, `serviceops.MigrateService`, `serviceops.RollbackService` plus a new `internal/registry` package querying Docker Hub and GHCR for newer tags. Per-preset `update_strategy` (`patch` / `minor` / `rolling` / `none`), `track_latest` (fresh installs resolve current upstream), and `allow_major_upgrade` (gates cross-major NewestStable).
+  - **CLI**: `lerd service update <name> [tag]`, `lerd service migrate <name> <tag>`, `lerd service rollback <name>`. `lerd service list` gains an Update column with green / amber badges showing pending updates.
+  - **Web UI**: green Update, amber Upgrade, violet Migrate (mysql / postgres / mariadb only), grey Rollback buttons in the service detail panel. Streaming NDJSON phase events into the existing in-flight UI machinery.
+  - **MCP**: `service_check_updates` for read-only status; `service_control` extended with `update`, `migrate`, `rollback`, `restart`, `remove` actions on top of the existing lifecycle ones. `service_remove` and `service_update` removed as standalone tools — folded into `service_control` action enum.
+- **Migration safety guards**. Rolling-tag updates suppressed when local manifest digest matches remote (no phantom badges on `:latest`). Cross-major upgrades hidden from the Upgrade button by default; opt-in via per-preset `allow_major_upgrade`. Cross-strategy upgrade button suppressed for `update_strategy: patch` presets without a registered SQL migrator (Meilisearch — clicking would brick the data dir). Alternates installed via preset (e.g. `mysql-8-0`) internally promote to `patch` strategy so they don't get auto-suggested cross-LTS jumps.
+- **`internal/registry` package**. `ListTags`, `MaybeNewerTag`, `NewestStable` against Docker Hub and GHCR with a 6-hour disk cache. Typed `*UnreachableErr` and `*UnsupportedRegistryErr` are swallowed by the high-level helpers so offline / unsupported-registry installs stay quiet rather than spamming errors.
+- **`/api/services/<name>/{updates,update,rollback,migrate}`**. Read JSON + streaming NDJSON endpoints mirroring the existing preset-install streaming flow.
+
+### Changed
+
+- `lerd service restart` now refreshes the quadlet before restarting (same path as `start`), so config edits and preset file mounts (mysql `lerd.cnf`) land on disk before the unit picks them up. Previously a stale quadlet from an earlier release could keep running until an explicit stop+start.
+- `internal/podman/quadlets/lerd-{mysql,redis,postgres,meilisearch,rustfs,mailpit}.container` deleted — quadlets are now generated from preset YAML on demand. `internal/cli/service_image_{darwin,linux}.go` deleted — platform image overrides moved into `Preset.PlatformOverrides` with optional `{{tag}}` template substitution so `track_latest`-resolved tags survive the platform swap.
+- `applyServices` in the Web UI now refreshes every server-supplied field on each WS push (was only `status` / `pinned` / `site_count`), so update / upgrade / version state propagates over the socket without a page reload. Client-only flags (`loading`, `error`, `flash`) still survive across pushes for in-flight UI state.
+
 ---
 
 ## [1.18.0] — 2026-04-25

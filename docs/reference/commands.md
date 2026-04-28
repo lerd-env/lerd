@@ -139,14 +139,18 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 |---|---|
 | `lerd service start <name>` | Start a service (auto-installs on first use) |
 | `lerd service stop <name>` | Stop a service container |
-| `lerd service restart <name>` | Restart a service container |
+| `lerd service restart <name>` | Restart a service container; refreshes the quadlet first so config edits take effect |
 | `lerd service status <name>` | Show systemd unit status |
-| `lerd service list` | Show all services and their current state |
+| `lerd service list` | All services with status, version, and an Update column showing pending updates |
+| `lerd service update <name> [tag]` | Pull a newer image and restart; with no tag applies the safe in-strategy update, with a tag targets an explicit upgrade |
+| `lerd service migrate <name> <target-tag>` | SQL dump + restore for cross-version mysql / postgres moves; old data dir and dump preserved under `~/.local/share/lerd/backups` |
+| `lerd service rollback <name>` | Swap back to the previously-running image; toggles, so a second rollback redoes the update |
 | `lerd service expose <name> <host:container>` | Publish an extra port on a built-in service (persisted, auto-restarts if running) |
 | `lerd service expose <name> <host:container> --remove` | Remove a previously exposed port |
 | `lerd service pin <name>` | Pin a service so it is never auto-stopped when no sites use it |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |
+| `lerd service preset [name]` | List bundled presets, or install one (use `--version` for multi-version presets) |
 | `lerd service remove <name>` | Stop and remove a custom service |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |
 

@@ -226,6 +226,7 @@
             <span class="font-medium truncate flex-1">
               <span x-text="serviceLabel(svc)"></span>
               <template x-if="svc.version"><span class="ml-1 text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-500" x-text="svc.version"></span></template>
+              <template x-if="svc.update_available"><span class="ml-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400" :title="'Update available: ' + svc.latest_version">↑</span></template>
             </span>
             <template x-if="svc.depends_on && svc.depends_on.length > 0">
               <span class="shrink-0 text-gray-300 dark:text-gray-600" title="has dependencies">
@@ -423,6 +424,7 @@
               <span class="font-medium flex-1">
                 <span x-text="serviceLabel(svc)"></span>
                 <template x-if="svc.version"><span class="ml-1 text-[10px] font-normal tabular-nums text-gray-400 dark:text-gray-500" x-text="svc.version"></span></template>
+              <template x-if="svc.update_available"><span class="ml-1 text-[10px] font-medium text-emerald-600 dark:text-emerald-400" :title="'Update available: ' + svc.latest_version">↑</span></template>
               </span>
               <svg class="w-4 h-4 text-gray-300 dark:text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
             </button>
@@ -1222,6 +1224,39 @@
                       <svg x-show="selectedService.loading" class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
                       <svg x-show="!selectedService.loading" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
                       <span x-show="!selectedService.loading">Restart</span>
+                    </button>
+                  </template>
+                  <template x-if="(selectedService.update_available || isUpdating(selectedService)) && selectedService.status === 'active'">
+                    <button type="button" @click.stop="updateService(selectedService)" :disabled="isUpdating(selectedService)"
+                      :title="'Pull ' + (selectedService.latest_version || '') + ' and restart'"
+                      class="flex items-center gap-1.5 text-xs font-medium bg-emerald-50 dark:bg-emerald-500/10 hover:bg-emerald-100 dark:hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30 rounded-lg px-3 py-1.5 transition-colors disabled:opacity-70">
+                      <svg x-show="isUpdating(selectedService)" class="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>
+                      <svg x-show="!isUpdating(selectedService)" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                      <span x-text="updatePhaseLabel(selectedService)"></span>
+                    </button>
+                  </template>
+                  <template x-if="selectedService.upgrade_version && !selectedService.migration_supported && !isUpdating(selectedService) && selectedService.status === 'active'">
+                    <button type="button" @click.stop="upgradeService(selectedService)"
+                      :title="'Upgrade to ' + selectedService.upgrade_version + ' (may require manual data migration — review the service docs first)'"
+                      class="flex items-center gap-1.5 text-xs font-medium bg-amber-50 dark:bg-amber-500/10 hover:bg-amber-100 dark:hover:bg-amber-500/20 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-1.5 transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+                      <span x-text="'Upgrade → ' + selectedService.upgrade_version"></span>
+                    </button>
+                  </template>
+                  <template x-if="selectedService.upgrade_version && selectedService.migration_supported && !isUpdating(selectedService) && selectedService.status === 'active'">
+                    <button type="button" @click.stop="migrateService(selectedService)"
+                      :title="'Migrate to ' + selectedService.upgrade_version + ' via dump+restore (safer than Upgrade for data-incompatible jumps)'"
+                      class="flex items-center gap-1.5 text-xs font-medium bg-violet-50 dark:bg-violet-500/10 hover:bg-violet-100 dark:hover:bg-violet-500/20 text-violet-700 dark:text-violet-400 border border-violet-200 dark:border-violet-500/30 rounded-lg px-3 py-1.5 transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+                      <span x-text="'Migrate → ' + selectedService.upgrade_version"></span>
+                    </button>
+                  </template>
+                  <template x-if="selectedService.previous_version && !isUpdating(selectedService) && selectedService.status === 'active'">
+                    <button type="button" @click.stop="rollbackService(selectedService)"
+                      :title="'Roll back to ' + selectedService.previous_version + ' (the image running before the last update)'"
+                      class="flex items-center gap-1.5 text-xs font-medium bg-gray-100 dark:bg-white/5 hover:bg-gray-200 dark:hover:bg-white/10 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-lerd-border rounded-lg px-3 py-1.5 transition-colors">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 10 9 10"/></svg>
+                      <span x-text="'Rollback → ' + rollbackTagFromImage(selectedService.previous_version)"></span>
                     </button>
                   </template>
                   <template x-if="!selectedService.queue_site && !selectedService.horizon_site && !selectedService.stripe_listener_site && !selectedService.schedule_worker_site && !selectedService.reverb_site && !selectedService.worker_site">
@@ -2155,6 +2190,9 @@ function lerdApp() {
     servicesLoading: false,
     selectedSvc: null,
     svcDetailTab: 'logs',
+    updatingServices: {},
+    updatingPhase: {},
+    updatingMessage: {},
     dashboardSvc: null,
     openWorkerGroup: null,
     systemStatus: {},
@@ -3119,9 +3157,14 @@ function lerdApp() {
       }
     },
 
-    // applyServices: see applySites.
+    // applyServices: replace each entry's server-supplied fields with the
+    // new payload. Object.assign alone wouldn't clear booleans that flipped
+    // false (Go's omitempty drops them, leaving the stale true on the entry),
+    // so wipe non-local keys first. Client-only flags (loading, error, flash,
+    // copied) survive so in-flight UI state isn't lost across a push.
     applyServices(raw) {
       if (!Array.isArray(raw)) return;
+      const localKeys = ['loading', 'error', 'flash', 'copied'];
       if (this.services.length === 0) {
         this.services = raw.map(s => ({ ...s, loading: false, error: '', flash: '', copied: false }));
         return;
@@ -3129,9 +3172,12 @@ function lerdApp() {
       raw.forEach(s => {
         const e = this.services.find(x => x.name === s.name);
         if (e) {
-          e.status = s.status;
-          e.pinned = s.pinned;
-          e.site_count = s.site_count;
+          const preserved = {};
+          for (const k of localKeys) preserved[k] = e[k];
+          for (const k of Object.keys(e)) {
+            if (!localKeys.includes(k)) delete e[k];
+          }
+          Object.assign(e, s, preserved);
         } else {
           this.services.push({ ...s, loading: false, error: '', flash: '', copied: false });
         }
@@ -4264,6 +4310,218 @@ function lerdApp() {
         svc.error = e.message || 'Request failed';
       } finally {
         svc.loading = false;
+      }
+    },
+
+    isUpdating(svc) { return !!(svc && this.updatingServices[svc.name]); },
+
+    async updateService(svc) {
+      if (!svc || this.updatingServices[svc.name]) return;
+      this.updatingServices = { ...this.updatingServices, [svc.name]: true };
+      this.updatingPhase = { ...this.updatingPhase, [svc.name]: 'checking_registry' };
+      this.updatingMessage = { ...this.updatingMessage, [svc.name]: '' };
+      svc.error = '';
+      try {
+        const res = await fetch(`/api/services/${svc.name}/update`, { method: 'POST' });
+        if (!res.body) throw new Error('streaming not supported');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let finalEvt = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let evt;
+            try { evt = JSON.parse(line); } catch (_) { continue; }
+            if (evt.phase === 'done' || evt.phase === 'error') { finalEvt = evt; continue; }
+            this.updatingPhase = { ...this.updatingPhase, [svc.name]: evt.phase || '' };
+            const msg = evt.phase === 'pulling_image' ? (evt.message || (evt.image ? 'pulling ' + evt.image : '')) : '';
+            this.updatingMessage = { ...this.updatingMessage, [svc.name]: msg };
+          }
+        }
+        if (finalEvt && finalEvt.phase === 'error') svc.error = finalEvt.error || 'update failed';
+        await this.loadServices();
+        const refreshed = this.services.find(s => s.name === svc.name);
+        if (refreshed) this.selectService(refreshed);
+      } catch (e) {
+        svc.error = e.message || 'Update failed';
+      } finally {
+        const u = { ...this.updatingServices }; delete u[svc.name]; this.updatingServices = u;
+        const p = { ...this.updatingPhase }; delete p[svc.name]; this.updatingPhase = p;
+        const m = { ...this.updatingMessage }; delete m[svc.name]; this.updatingMessage = m;
+      }
+    },
+
+    async upgradeService(svc) {
+      if (!svc || !svc.upgrade_version || this.updatingServices[svc.name]) return;
+      const ok = confirm(
+        'Upgrading ' + svc.name + ' to ' + svc.upgrade_version + ' may require manual data migration.\n\n' +
+        'Some services (e.g. Meilisearch, Elasticsearch) need a dump/restore between minor versions; otherwise the container will fail to start.\n\n' +
+        'Continue?'
+      );
+      if (!ok) return;
+      const targetImage = svc.upgrade_version;
+      this.updatingServices = { ...this.updatingServices, [svc.name]: true };
+      this.updatingPhase = { ...this.updatingPhase, [svc.name]: 'checking_registry' };
+      svc.error = '';
+      try {
+        const url = '/api/services/' + svc.name + '/update?tag=' + encodeURIComponent(svc.upgrade_version);
+        const res = await fetch(url, { method: 'POST' });
+        if (!res.body) throw new Error('streaming not supported');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let finalEvt = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let evt; try { evt = JSON.parse(line); } catch (_) { continue; }
+            if (evt.phase === 'done' || evt.phase === 'error') { finalEvt = evt; continue; }
+            this.updatingPhase = { ...this.updatingPhase, [svc.name]: evt.phase || '' };
+            const msg = evt.phase === 'pulling_image' ? (evt.message || (evt.image ? 'pulling ' + evt.image : '')) : '';
+            this.updatingMessage = { ...this.updatingMessage, [svc.name]: msg };
+          }
+        }
+        if (finalEvt && finalEvt.phase === 'error') svc.error = finalEvt.error || 'upgrade failed';
+        await this.loadServices();
+      } catch (e) {
+        svc.error = e.message || 'Upgrade failed';
+      } finally {
+        const u = { ...this.updatingServices }; delete u[svc.name]; this.updatingServices = u;
+        const p = { ...this.updatingPhase }; delete p[svc.name]; this.updatingPhase = p;
+        const m = { ...this.updatingMessage }; delete m[svc.name]; this.updatingMessage = m;
+      }
+    },
+
+    async migrateService(svc) {
+      if (!svc || !svc.upgrade_version || this.updatingServices[svc.name]) return;
+      const ok = confirm(
+        'Migrate ' + svc.name + ' to ' + svc.upgrade_version + '?\n\n' +
+        'This will:\n' +
+        '  1. Dump current data to ~/.local/share/lerd/backups/\n' +
+        '  2. Stop the service and move its data dir aside (preserved, not deleted)\n' +
+        '  3. Pull and start the new image with a fresh data dir\n' +
+        '  4. Restore the dump into the new container\n\n' +
+        'Backups stay on disk so you can recover manually if anything goes wrong. Continue?'
+      );
+      if (!ok) return;
+      this.updatingServices = { ...this.updatingServices, [svc.name]: true };
+      this.updatingPhase = { ...this.updatingPhase, [svc.name]: 'dumping_data' };
+      svc.error = '';
+      try {
+        const url = '/api/services/' + svc.name + '/migrate?tag=' + encodeURIComponent(svc.upgrade_version);
+        const res = await fetch(url, { method: 'POST' });
+        if (!res.body) throw new Error('streaming not supported');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let finalEvt = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let evt; try { evt = JSON.parse(line); } catch (_) { continue; }
+            if (evt.phase === 'done' || evt.phase === 'error') { finalEvt = evt; continue; }
+            this.updatingPhase = { ...this.updatingPhase, [svc.name]: evt.phase || '' };
+            const msg = (evt.phase === 'pulling_image' || evt.phase === 'dumping_data' || evt.phase === 'restoring_data') ? (evt.message || (evt.image ? 'pulling ' + evt.image : '')) : '';
+            this.updatingMessage = { ...this.updatingMessage, [svc.name]: msg };
+          }
+        }
+        if (finalEvt && finalEvt.phase === 'error') {
+          svc.error = finalEvt.error || 'migration failed';
+        } else if (finalEvt && finalEvt.message) {
+          svc.flash = finalEvt.message;
+          setTimeout(() => { svc.flash = ''; }, 8000);
+        }
+        await this.loadServices();
+      } catch (e) {
+        svc.error = e.message || 'Migration failed';
+      } finally {
+        const u = { ...this.updatingServices }; delete u[svc.name]; this.updatingServices = u;
+        const p = { ...this.updatingPhase }; delete p[svc.name]; this.updatingPhase = p;
+        const m = { ...this.updatingMessage }; delete m[svc.name]; this.updatingMessage = m;
+      }
+    },
+
+    rollbackTagFromImage(image) {
+      if (!image) return '';
+      const at = image.lastIndexOf(':');
+      return at > 0 ? image.slice(at + 1) : image;
+    },
+
+    async rollbackService(svc) {
+      if (!svc || !svc.previous_version || this.updatingServices[svc.name]) return;
+      const targetTag = this.rollbackTagFromImage(svc.previous_version);
+      if (!confirm('Roll back ' + svc.name + ' to ' + targetTag + '?\n\nWarning: rolling back across data-format boundaries can corrupt the data dir (mysql 8.4 → 8.0, meilisearch v1.42 → v1.7). Only safe if the previous image was using the same data format.')) return;
+      this.updatingServices = { ...this.updatingServices, [svc.name]: true };
+      this.updatingPhase = { ...this.updatingPhase, [svc.name]: 'pulling_image' };
+      svc.error = '';
+      try {
+        const res = await fetch('/api/services/' + svc.name + '/rollback', { method: 'POST' });
+        if (!res.body) throw new Error('streaming not supported');
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buf = '';
+        let finalEvt = null;
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += decoder.decode(value, { stream: true });
+          let nl;
+          while ((nl = buf.indexOf('\n')) >= 0) {
+            const line = buf.slice(0, nl).trim();
+            buf = buf.slice(nl + 1);
+            if (!line) continue;
+            let evt; try { evt = JSON.parse(line); } catch (_) { continue; }
+            if (evt.phase === 'done' || evt.phase === 'error') { finalEvt = evt; continue; }
+            this.updatingPhase = { ...this.updatingPhase, [svc.name]: evt.phase || '' };
+            const msg = evt.phase === 'pulling_image' ? (evt.message || (evt.image ? 'pulling ' + evt.image : '')) : '';
+            this.updatingMessage = { ...this.updatingMessage, [svc.name]: msg };
+          }
+        }
+        if (finalEvt && finalEvt.phase === 'error') svc.error = finalEvt.error || 'rollback failed';
+        await this.loadServices();
+      } catch (e) {
+        svc.error = e.message || 'Rollback failed';
+      } finally {
+        const u = { ...this.updatingServices }; delete u[svc.name]; this.updatingServices = u;
+        const p = { ...this.updatingPhase }; delete p[svc.name]; this.updatingPhase = p;
+        const m = { ...this.updatingMessage }; delete m[svc.name]; this.updatingMessage = m;
+      }
+    },
+
+    updatePhaseLabel(svc) {
+      if (!svc || !this.updatingServices[svc.name]) return 'Update → ' + (svc && svc.latest_version || '');
+      const phase = this.updatingPhase[svc.name] || '';
+      const message = this.updatingMessage[svc.name] || '';
+      switch (phase) {
+        case 'checking_registry': return 'Checking registry…';
+        case 'dumping_data':      return 'Dumping data…';
+        case 'stopping_unit':     return 'Stopping…';
+        case 'swapping_data_dir': return 'Swapping data dir…';
+        case 'pulling_image':     return message ? 'Pulling: ' + message.slice(0, 28) : 'Pulling image…';
+        case 'writing_quadlet':   return 'Writing quadlet…';
+        case 'restarting_unit':   return 'Restarting…';
+        case 'waiting_ready':     return 'Waiting for ready…';
+        case 'restoring_data':    return 'Restoring data…';
+        default:                  return 'Working…';
       }
     },
 
