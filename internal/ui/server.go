@@ -41,9 +41,6 @@ import (
 	"github.com/geodro/lerd/internal/xdebugops"
 )
 
-//go:embed index.html
-var indexHTML []byte
-
 //go:embed icons/icon.svg
 var iconSVG []byte
 
@@ -118,6 +115,27 @@ func Start(currentVersion string) error {
 			eventbus.Default.Publish(eventbus.KindStatus)
 		}()
 	}
+
+	// Drop the cache to idle cadence whenever the desktop session is idle
+	// or locked, so a focused tab on an unattended laptop still saves
+	// battery. Recomputes on every transition.
+	startIdleWatcher(context.Background())
+
+	// Event-driven push from systemd covers mutations that didn't go through
+	// lerd-ui's AfterUnitChange path: external systemctl calls, container
+	// crashes, external podman restart, unit timeouts. Mirrors the same
+	// invalidate-and-broadcast flow so the dashboard stays current without
+	// waiting for the 15s cache poll. AfterUnitChange stays as a fast path
+	// for in-process mutations; the DBus push catches everything else.
+	_ = lerdSystemd.SubscribeLerdUnitStateChanges(context.Background(), func(string) {
+		go func() {
+			podman.Cache.PollNow()
+			siteinfo.InvalidateUnitCache()
+			eventbus.Default.Publish(eventbus.KindSites)
+			eventbus.Default.Publish(eventbus.KindServices)
+			eventbus.Default.Publish(eventbus.KindStatus)
+		}()
+	})
 
 	// A single goroutine subscribes to the eventbus and invalidates the
 	// relevant snapshot on every mutation. The /api/ws handler broadcasts
@@ -227,15 +245,7 @@ func Start(currentVersion string) error {
 		w.Header().Set("Cache-Control", "no-cache")
 		w.Write(offlineHTML) //nolint:errcheck
 	})
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		// The shell embeds the entire JS/CSS inline and changes on
-		// every binary update. Without this, browsers cache the HTML
-		// indefinitely and keep running stale client code — which hid
-		// the WebSocket URL-rewrite fix during local testing.
-		w.Header().Set("Cache-Control", "no-store")
-		w.Write(indexHTML) //nolint:errcheck
-	})
+	mux.Handle("/", serveSvelte())
 
 	handler := withRemoteControlGate(mux)
 
@@ -274,8 +284,15 @@ func Start(currentVersion string) error {
 		}
 	}
 
+	ln, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", listenAddr, err)
+	}
 	fmt.Printf("Lerd UI listening on http://%s\n", listenAddr)
-	return http.ListenAndServe(listenAddr, handler)
+	// Notify systemd we're ready only after the listener is accepting, so
+	// Type=notify units make systemctl start block until the UI can serve.
+	lerdSystemd.NotifyReady()
+	return http.Serve(ln, handler)
 }
 
 var allowedCORSOrigins = map[string]bool{
@@ -769,19 +786,17 @@ func buildServiceResponse(name string) ServiceResponse {
 		Pinned:        config.ServiceIsPinned(name),
 		Paused:        config.ServiceIsPaused(name),
 	}
-	// Active default-preset services advertise update availability so the
-	// dashboard can show an "→ v8.4.3" badge. Inactive services skip the
-	// check (no point recommending an upgrade for something not running),
-	// and the registry layer's 6h disk cache absorbs repeated lookups.
-	if status == "active" {
-		if avail, err := serviceops.CheckUpdateAvailable(name); err == nil && avail != nil {
-			resp.UpdateStrategy = avail.Strategy
-			resp.UpdateAvailable = avail.Available
-			resp.LatestVersion = avail.LatestTag
-			resp.UpgradeVersion = avail.UpgradeTag
-			resp.PreviousVersion = avail.PreviousImage
-			resp.MigrationSupported = serviceops.SupportsMigration(name)
-		}
+	// Default-preset services advertise update availability so the dashboard
+	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
+	// user can pull a newer image without first starting the unit; the registry
+	// layer's 6h disk cache absorbs repeated lookups.
+	if avail, err := serviceops.CheckUpdateAvailable(name); err == nil && avail != nil {
+		resp.UpdateStrategy = avail.Strategy
+		resp.UpdateAvailable = avail.Available
+		resp.LatestVersion = avail.LatestTag
+		resp.UpgradeVersion = avail.UpgradeTag
+		resp.PreviousVersion = avail.PreviousImage
+		resp.MigrationSupported = serviceops.SupportsMigration(name)
 	}
 	return resp
 }
@@ -2273,6 +2288,13 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // tell nginx not to buffer
+
+	// Flush headers immediately so the EventSource client fires `onopen` even
+	// when the container is idle (e.g. dnsmasq with no log-queries). Without
+	// this, scanner.Scan below blocks before any bytes hit the wire and the
+	// browser's "live" indicator never turns on.
+	_, _ = io.WriteString(w, ": connected\n\n")
+	flusher.Flush()
 
 	// If no container exists for this unit, route to the platform log stream
 	// (file tail for native services) or report not-running for container units.

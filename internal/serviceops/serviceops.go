@@ -182,8 +182,9 @@ func EnsureDefaultPresetQuadlet(name string) error {
 }
 
 // EnsureCustomServiceQuadlet writes the quadlet for a custom service and
-// reloads systemd. Materialises any declared file mounts and resolves
-// dynamic_env directives so the rendered quadlet has the computed values.
+// reloads systemd only when the file actually changed on disk. Materialises
+// any declared file mounts and resolves dynamic_env directives so the
+// rendered quadlet has the computed values.
 func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	if svc.DataDir != "" {
 		if err := os.MkdirAll(config.DataSubDir(svc.Name), 0755); err != nil {
@@ -198,10 +199,11 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	}
 	content := podman.GenerateCustomQuadlet(svc)
 	quadletName := "lerd-" + svc.Name
-	if _, err := podman.WriteQuadletDiff(quadletName, content); err != nil {
+	changed, err := podman.WriteQuadletDiff(quadletName, content)
+	if err != nil {
 		return fmt.Errorf("writing unit for %s: %w", svc.Name, err)
 	}
-	return podman.DaemonReloadFn()
+	return podman.DaemonReloadIfNeeded(changed)
 }
 
 // EnsureServiceRunning starts the service if it is not already active and
