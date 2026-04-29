@@ -7,11 +7,12 @@ import (
 
 // assertNoWildcardArgs walks the sudoers drop-in line by line and fails the
 // test if any command argument (token after the verb) contains a sudo
-// wildcard character. sudo >= 1.9.16 hard-rejects wildcards in command
-// arguments and falls back to the password-prompt path on every call,
+// wildcard character. Modern strict parsers — sudo-rs (Ubuntu 26.04 LTS+)
+// and C sudo from 1.9.16 onward (Fedora 41+, Arch / CachyOS, openSUSE
+// Tumbleweed, NixOS unstable) — hard-reject wildcards in command
+// arguments and fall back to the password-prompt path on every call,
 // which is what bug #269 reported. Catching this in CI prevents a
-// regression that would silently break installs on strict-sudo distros
-// (Ubuntu 26.04, Fedora 41+, Arch / CachyOS, openSUSE Tumbleweed, etc).
+// regression that would silently break installs on those distros.
 //
 // Shared helper used from the platform-tagged test files
 // (sudoers_wildcard_linux_test.go, sudoers_wildcard_darwin_test.go) so

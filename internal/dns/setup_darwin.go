@@ -99,18 +99,21 @@ func InstallSudoers() error {
 }
 
 // renderDarwinSudoers returns the macOS sudoers content for user + the
-// configured TLD. Every command argument is fully qualified — no wildcards
-// — so the rules will pass strict sudo (>= 1.9.16). macOS bundled sudo is
-// still permissive today but Apple is following upstream, so writing the
-// rules with no wildcards now avoids a future surprise breakage on
-// Tahoe / Sequoia point updates.
+// configured TLD. Every command argument is fully qualified — no
+// wildcards — so the rules pass modern strict sudo parsers (sudo-rs on
+// Ubuntu 26.04+, C sudo >= 1.9.16 on Fedora 41+ / Arch / openSUSE
+// Tumbleweed / NixOS unstable). macOS bundled sudo is still permissive
+// today but Apple is following upstream; writing the rules with no
+// wildcards now avoids surprise breakage on a future Tahoe / Sequoia
+// point update.
 func renderDarwinSudoers(user, tld string) string {
 	resolverPath := "/etc/resolver/" + tld
 	return fmt.Sprintf(
 		"# Lerd: passwordless DNS resolver writes for /etc/resolver/%s.\n"+
 			"# Rules are fully qualified with no wildcards in command\n"+
-			"# arguments so they pass strict sudo (>= 1.9.16). The matching\n"+
-			"# code path pipes content through `sudo tee <dest>` instead of\n"+
+			"# arguments so they pass strict sudo parsers (sudo-rs, C\n"+
+			"# sudo >= 1.9.16). The matching code path pipes content\n"+
+			"# through `sudo tee <dest>` instead of\n"+
 			"# `sudo cp /var/folders/.../lerd-sudo-* <dest>` for the same reason.\n"+
 			"%s ALL=(root) NOPASSWD: /bin/mkdir -p /etc/resolver\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee %s\n"+

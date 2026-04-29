@@ -87,12 +87,14 @@ func WaitReady(timeout time.Duration) error {
 // sudoWriteFile writes content to a system path by piping it through
 // `sudo tee <path>`. Earlier versions wrote a /tmp/lerd-sudo-XXXXXX
 // staging file then ran `sudo cp tmp dst`, which required a sudoers rule
-// with a wildcard in the source argument. sudo >= 1.9.16 (Ubuntu 26.04,
-// Fedora 41+, Arch / CachyOS, openSUSE Tumbleweed, etc.) hard-rejects
-// wildcards in command arguments and falls back to the password-prompt
-// path on every call, which broke install on those distros (issue #269).
-// Piping to tee with a fully qualified destination has no wildcard, so
-// the matching sudoers rule grants `tee /exact/path` cleanly.
+// with a wildcard in the source argument. Modern strict sudo parsers —
+// sudo-rs (the Rust rewrite that Ubuntu 26.04 LTS made the default) and
+// C sudo from 1.9.16 onward (Fedora 41+, Arch / CachyOS, openSUSE
+// Tumbleweed, NixOS unstable) — hard-reject wildcards in command
+// arguments and fall back to the password-prompt path on every call,
+// which broke install on those distros (issue #269). Piping to tee with
+// a fully qualified destination has no wildcard, so the matching sudoers
+// rule grants `tee /exact/path` cleanly.
 func sudoWriteFile(path string, content []byte, mode os.FileMode) error {
 	dir := filepath.Dir(path)
 	mkdirCmd := exec.Command("sudo", "mkdir", "-p", dir)
