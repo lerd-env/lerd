@@ -9,7 +9,6 @@ package registry
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -67,6 +66,21 @@ type UnsupportedRegistryErr struct{ Registry string }
 
 func (e *UnsupportedRegistryErr) Error() string {
 	return "unsupported registry: " + e.Registry
+}
+
+// isQuietRegistryErr reports whether err is one of the registry conditions
+// the UI is happy to swallow into "no update info" (offline, unsupported
+// registry, repo doesn't exist, or auth needed). Distinct error types are
+// preserved so callers that want richer feedback still can.
+func isQuietRegistryErr(err error) bool {
+	var unreachable *UnreachableErr
+	var unsupported *UnsupportedRegistryErr
+	var notFound *NotFoundErr
+	var authReq *AuthRequiredErr
+	return errors.As(err, &unreachable) ||
+		errors.As(err, &unsupported) ||
+		errors.As(err, &notFound) ||
+		errors.As(err, &authReq)
 }
 
 // ParseImage splits an image reference into registry, repo and tag. Implicit
@@ -236,5 +250,3 @@ func numericGreater(a, b []int) bool {
 	}
 	return len(a) > len(b)
 }
-
-var _ = fmt.Sprintf // placate compiler if errors path is later removed

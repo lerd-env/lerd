@@ -78,15 +78,13 @@ func InstallSudoers() error {
 		return fmt.Errorf("cannot determine current user")
 	}
 
-	// sudoWriteFile calls: sudo mkdir -p <dir>, sudo cp <tmp> <dst>, sudo chmod <mode> <dst>
-	// $TMPDIR on macOS is /var/folders/<2-char>/<hash>/T/ — two wildcard levels needed.
-	content := fmt.Sprintf(
-		"# Lerd: allow writing /etc/resolver/<tld> without password\n"+
-			"%s ALL=(root) NOPASSWD: /bin/mkdir -p /etc/resolver\n"+
-			"%s ALL=(root) NOPASSWD: /bin/cp /var/folders/*/*/T/lerd-sudo-* /etc/resolver/*\n"+
-			"%s ALL=(root) NOPASSWD: /bin/chmod 644 /etc/resolver/*\n",
-		user, user, user,
-	)
+	cfg, _ := config.LoadGlobal()
+	tld := "test"
+	if cfg != nil && cfg.DNS.TLD != "" {
+		tld = cfg.DNS.TLD
+	}
+
+	content := renderDarwinSudoers(user, tld)
 
 	const sudoersPath = "/etc/sudoers.d/lerd"
 	if isFileContent(sudoersPath, []byte(content)) {
@@ -98,6 +96,30 @@ func InstallSudoers() error {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
 	return nil
+}
+
+// renderDarwinSudoers returns the macOS sudoers content for user + the
+// configured TLD. Every command argument is fully qualified — no
+// wildcards — so the rules pass modern strict sudo parsers (sudo-rs on
+// Ubuntu 26.04+, C sudo >= 1.9.16 on Fedora 41+ / Arch / openSUSE
+// Tumbleweed / NixOS unstable). macOS bundled sudo is still permissive
+// today but Apple is following upstream; writing the rules with no
+// wildcards now avoids surprise breakage on a future Tahoe / Sequoia
+// point update.
+func renderDarwinSudoers(user, tld string) string {
+	resolverPath := "/etc/resolver/" + tld
+	return fmt.Sprintf(
+		"# Lerd: passwordless DNS resolver writes for /etc/resolver/%s.\n"+
+			"# Rules are fully qualified with no wildcards in command\n"+
+			"# arguments so they pass strict sudo parsers (sudo-rs, C\n"+
+			"# sudo >= 1.9.16). The matching code path pipes content\n"+
+			"# through `sudo tee <dest>` instead of\n"+
+			"# `sudo cp /var/folders/.../lerd-sudo-* <dest>` for the same reason.\n"+
+			"%s ALL=(root) NOPASSWD: /bin/mkdir -p /etc/resolver\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee %s\n"+
+			"%s ALL=(root) NOPASSWD: /bin/chmod 644 %s\n",
+		tld, user, user, resolverPath, user, resolverPath,
+	)
 }
 
 // ReadContainerDNS returns nil on macOS — the Podman network does not need

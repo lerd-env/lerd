@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -333,16 +334,17 @@ func newServiceRestartCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 			unit := "lerd-" + name
-			// Refresh the quadlet first so config edits (image override,
-			// extra ports) and preset file mounts (mysql lerd.cnf) land
-			// on disk before the unit picks them up.
+			// Refresh the quadlet first so config edits and preset file
+			// mounts land before the unit picks them up. If regen fails,
+			// warn and restart the existing quadlet — failing here would
+			// strand a healthy unit on a transient render error.
 			if isKnownService(name) {
 				if err := ensureServiceQuadlet(name); err != nil {
-					return err
+					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
 				}
 			} else if svc, err := config.LoadCustomService(name); err == nil {
 				if err := ensureCustomServiceQuadlet(svc); err != nil {
-					return err
+					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
 				}
 			}
 			fmt.Printf("Restarting %s...\n", unit)

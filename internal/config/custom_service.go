@@ -92,6 +92,15 @@ type CustomService struct {
 	// before the last update, so a one-click rollback can swap back to it.
 	// Toggled on each rollback so consecutive rollbacks redo the update.
 	PreviousImage string `yaml:"previous_image,omitempty"`
+	// LastOp is "update" or "migrate" — set by serviceops to mark whether the
+	// most recent change is rollback-safe. Migrate is one-way: rolling back the
+	// image without restoring the pre-migrate data dir would run the old binary
+	// against the new schema, so the rollback path refuses unless this is empty
+	// or "update".
+	LastOp string `yaml:"last_op,omitempty"`
+	// PreMigrateBackup is the absolute host path to the data dir that was
+	// preserved when the most recent op was a migrate.
+	PreMigrateBackup string `yaml:"pre_migrate_backup,omitempty"`
 	// ShareHosts mounts the browser-testing hosts file
 	// (~/.local/share/lerd/browser-hosts) into the container at /etc/hosts,
 	// so the container can resolve .test domains to the nginx container's IP
