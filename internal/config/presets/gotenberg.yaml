@@ -1,0 +1,13 @@
+name: gotenberg
+image: docker.io/gotenberg/gotenberg:8
+ports:
+  - 3000:3000
+environment:
+  API_ENABLE_BASIC_AUTH: "true"
+  GOTENBERG_API_BASIC_AUTH_USERNAME: lerd
+  GOTENBERG_API_BASIC_AUTH_PASSWORD: secret
+description: "Gotenberg API for PDF generation and document conversion"
+env_vars:
+  - GOTENBERG_URL=http://lerd-gotenberg:3000
+  - GOTENBERG_USERNAME=lerd
+  - GOTENBERG_PASSWORD=secret
