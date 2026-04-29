@@ -121,7 +121,7 @@ func NewModel(version string) *Model {
 func (m *Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadCmd(),
-		tickCmd(2*time.Second),
+		tickCmd(10*time.Second),
 		busCmd(m.sub),
 		updateCheckCmd(m.version),
 	)
@@ -160,7 +160,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case snapshotMsg:
 		m.snap = msg.snap
 		m.clampCursors()
-		return m, tickCmd(2 * time.Second)
+		return m, tickCmd(10 * time.Second)
 
 	case ActionResult:
 		m.setStatus(formatAction(msg), 5*time.Second)
@@ -1000,6 +1000,17 @@ func Run(version string) error {
 	podman.Cache.Start(context.Background())
 	m := NewModel(version)
 	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	// Wire the cache's change callback into the program so an external
+	// state change (CLI mutation in another process, container crash,
+	// systemctl outside lerd) shows up at the next 15s cache poll instead
+	// of waiting up to 2s+15s. Cleared on exit so the package-level Cache
+	// doesn't keep holding a reference to a dead program.
+	podman.Cache.SetOnChange(func() {
+		p.Send(refreshMsg{})
+	})
+	defer podman.Cache.SetOnChange(nil)
+
 	_, err := p.Run()
 	return err
 }
