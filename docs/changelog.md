@@ -13,6 +13,10 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [1.19.0-beta.1] — 2026-04-29
+
 ### Added
 
 - **Default services as YAML presets**. The 6 built-in services (mysql, postgres, redis, meilisearch, rustfs, mailpit) moved out of hardcoded Go lists/maps/embedded `.container` templates into `internal/config/presets/*.yaml` files marked `default: true`. Adding or replacing a default service is now a YAML edit. The same code path serves default and add-on presets — one quadlet writer, one env-var resolver, one dependency engine. Six duplicated service-name lists collapsed into `config.DefaultPresetNames()`; three duplicated env-var maps collapsed into `config.DefaultPresetEnvVars(name)`.
