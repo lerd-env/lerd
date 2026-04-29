@@ -12,6 +12,11 @@ import (
 // which is what bug #269 reported. Catching this in CI prevents a
 // regression that would silently break installs on strict-sudo distros
 // (Ubuntu 26.04, Fedora 41+, Arch / CachyOS, openSUSE Tumbleweed, etc).
+//
+// Shared helper used from the platform-tagged test files
+// (sudoers_wildcard_linux_test.go, sudoers_wildcard_darwin_test.go) so
+// the file stays buildable on both platforms while the renderers it
+// exercises are platform-specific.
 func assertNoWildcardArgs(t *testing.T, content string) {
 	t.Helper()
 	for _, line := range strings.Split(content, "\n") {
@@ -37,26 +42,5 @@ func assertNoWildcardArgs(t *testing.T, content string) {
 				}
 			}
 		}
-	}
-}
-
-func TestRenderLinuxSudoers_NoWildcardArgs(t *testing.T) {
-	content := renderLinuxSudoers("alice")
-	assertNoWildcardArgs(t, content)
-}
-
-func TestRenderLinuxSudoers_IncludesUserOnEveryRule(t *testing.T) {
-	content := renderLinuxSudoers("alice")
-	rules := 0
-	for _, line := range strings.Split(content, "\n") {
-		if strings.Contains(line, "NOPASSWD:") {
-			rules++
-			if !strings.HasPrefix(line, "alice ") {
-				t.Errorf("rule does not start with the user: %q", line)
-			}
-		}
-	}
-	if rules == 0 {
-		t.Fatal("expected at least one sudoers rule, got none")
 	}
 }

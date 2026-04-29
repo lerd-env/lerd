@@ -15,6 +15,14 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.18.1] — 2026-04-29
+
+### Fixed
+
+- **DNS sudoers rules use wildcards in command arguments, breaking install on strict-sudo distros** (#269, #272). sudo >= 1.9.16 (Ubuntu 26.04, Fedora 41+, Arch / CachyOS, openSUSE Tumbleweed, NixOS unstable) hard-rejects wildcards in command arguments where older sudo only warned and matched literally. The `cp /tmp/lerd-sudo-* /etc/...` and `resolvectl <verb> *` rules lerd wrote to `/etc/sudoers.d/lerd` never matched on those distros, so every DNS reconfigure fell through to the password-prompt path and emitted parse errors visibly during `lerd install` ("wildcards are not allowed in command arguments"). Fixed by piping content through `sudo tee <fully-qualified-path>` instead of staging in `/tmp` and copying, and by dropping the trailing `*` from the resolvectl line. The Darwin path got the same treatment so future Apple-bundled sudo updates don't surface the same break. Existing installs heal automatically on the next `lerd install`: one password prompt to migrate, then the new rules grant passwordless operation for every subsequent DNS reconfigure.
+
+---
+
 ## [1.18.0] — 2026-04-25
 
 ### Added
