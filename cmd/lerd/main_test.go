@@ -97,3 +97,47 @@ func TestRemoveStale_skipsIgnoredSites(t *testing.T) {
 		t.Errorf("ignored site should be preserved, got %d sites", len(after.Sites))
 	}
 }
+
+// cleanupWorktreeVhosts runs after a worktree is removed and re-generates
+// vhosts for surviving worktrees. It must NOT touch the surviving worktree's
+// .env or kick off EnsureWorktreeDeps (which would trigger composer install
+// and the JS install on every survivor on every removal).
+func TestCleanupWorktreeVhosts_doesNotTouchSurvivorEnv(t *testing.T) {
+	isolateConfig(t)
+
+	mainSite := filepath.Join(t.TempDir(), "myapp")
+	survivor := filepath.Join(t.TempDir(), "myapp-feat")
+	for _, d := range []string{
+		filepath.Join(mainSite, ".git", "worktrees", "feat"),
+		survivor,
+	} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(mainSite, ".env"), []byte("APP_URL=http://myapp.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wtMeta := filepath.Join(mainSite, ".git", "worktrees", "feat")
+	if err := os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(survivor, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	site := &config.Site{
+		Name:       "myapp",
+		Domains:    []string{"myapp.test"},
+		Path:       mainSite,
+		PHPVersion: "8.3",
+	}
+
+	cleanupWorktreeVhosts(site)
+
+	if _, err := os.Stat(filepath.Join(survivor, ".env")); err == nil {
+		t.Fatal("cleanupWorktreeVhosts copied .env into survivor — EnsureWorktreeDeps must not run from cleanup path")
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("unexpected stat error on survivor .env: %v", err)
+	}
+}

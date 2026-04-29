@@ -24,6 +24,8 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Migration safety guards**. Rolling-tag updates suppressed when local manifest digest matches remote (no phantom badges on `:latest`). Cross-major upgrades hidden from the Upgrade button by default; opt-in via per-preset `allow_major_upgrade`. Cross-strategy upgrade button suppressed for `update_strategy: patch` presets without a registered SQL migrator (Meilisearch — clicking would brick the data dir). Alternates installed via preset (e.g. `mysql-8-0`) internally promote to `patch` strategy so they don't get auto-suggested cross-LTS jumps.
 - **`internal/registry` package**. `ListTags`, `MaybeNewerTag`, `NewestStable` against Docker Hub and GHCR with a 6-hour disk cache. Typed `*UnreachableErr` and `*UnsupportedRegistryErr` are swallowed by the high-level helpers so offline / unsupported-registry installs stay quiet rather than spamming errors.
 - **`/api/services/<name>/{updates,update,rollback,migrate}`**. Read JSON + streaming NDJSON endpoints mirroring the existing preset-install streaming flow.
+- **Worktree branch renames are picked up automatically** (#264). The watcher now monitors each `.git/worktrees/<name>/HEAD` for writes, so a `git branch -m` or a `git checkout -b` inside a worktree re-syncs the nginx vhost and `.env` `APP_URL` to the renamed branch without a manual restart. Stale subdomain vhosts are removed surgically (only the now stale one), not by nuking and regenerating every vhost on the site. Thanks to @ropi-bc for the contribution.
+- **`APP_URL` realigns to the worktree domain on every scan** (#263). Previously `EnsureWorktreeDeps` only rewrote `APP_URL` when it first created the `.env`; renames and external workflows that relied on a manual `git branch -m` left it pointing at the stale subdomain. The worktree scan now updates `APP_URL` on existing `.env` files too, completing the rename flow added in #264. Thanks to @ropi-bc for the contribution.
 
 ### Changed
 
@@ -53,6 +55,8 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Registry: response body capped at 5 MB and tag list at 5000 entries** so a malicious or misconfigured registry can't OOM the process.
 - **Digest comparisons normalised** (lowercase + trim) in the `alreadyOnDigest` helper so registries returning differently-cased digests don't cause a permanent "update available" badge.
 - New tests: `TestRollback_RefusesAfterMigrate`, `TestCheckUpdateAvailable_CanRollback`, `TestEnforceMajorUpgradeGate`, `TestLeadingMajor`, plus registry tests for 404, 429, 5xx, pagination, and concurrent-singleflight de-duplication.
+- **`cleanupWorktreeVhosts` no longer triggers `composer install` and the JS install on every surviving worktree.** When one worktree was removed, the cleanup pass that re-generated vhosts for the survivors also called `EnsureWorktreeDeps` on each one, which kicked off a full `composer install` plus the JS package-manager install. The rename and add paths handle deps via `syncWorktree`; doing it from cleanup burned cycles for no benefit. Survivors keep their existing `.env` and the cleanup pass only touches nginx config now.
+- **`.env` `APP_URL` rewrite is skipped when the value is already correct.** `rewriteAppURL` now compares the new bytes against the file before writing, so a no-op worktree scan no longer bumps `.env`'s mtime. Dev-side watchers (vite, IDE indexers, opcache `file_update_protection`) used to react to every scan even when the URL hadn't changed.
 
 ---
 

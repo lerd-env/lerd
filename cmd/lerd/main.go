@@ -574,14 +574,13 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 	return false
 }
 
-// cleanupWorktreeVhosts removes all subdomain vhosts for the given site's domain,
-// then re-generates for worktrees still on disk. Returns true if any change was made.
+// cleanupWorktreeVhosts removes all subdomain vhosts for the given site's
+// domain, then re-generates for worktrees still on disk. Survivors keep their
+// .env; deps and APP_URL are handled by syncWorktree on add/rename, not here.
 func cleanupWorktreeVhosts(site *config.Site) bool {
 	changed := removeWorktreeVhosts(site)
-	// Re-generate for worktrees still present
 	worktrees, _ := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
 	for _, wt := range worktrees {
-		gitpkg.EnsureWorktreeDeps(site.Path, wt.Path, wt.Domain, site.Secured)
 		var vhostErr error
 		if site.Secured {
 			vhostErr = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, site.PHPVersion, site.PrimaryDomain())

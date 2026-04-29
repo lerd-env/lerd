@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ── SanitizeBranch ───────────────────────────────────────────────────────────
@@ -350,6 +351,74 @@ func TestEnsureWorktreeDeps_updatesExistingEnvAppURL(t *testing.T) {
 	}
 	if strings.Contains(content, "http://stale.test") {
 		t.Fatalf("stale APP_URL should have been replaced, got:\n%s", content)
+	}
+}
+
+// EnsureWorktreeDeps must not downgrade the .env file mode when rewriting
+// APP_URL. .env holds APP_KEY and DB credentials and users routinely chmod it
+// to 0600.
+func TestEnsureWorktreeDeps_preservesEnvMode(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local/share"))
+
+	main := filepath.Join(home, "main")
+	wt := filepath.Join(home, "wt")
+	for _, d := range []string{main, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	envPath := filepath.Join(wt, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_URL=http://stale.test\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+
+	info, err := os.Stat(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0o600 {
+		t.Fatalf("env mode = %o, want 0600", got)
+	}
+}
+
+// EnsureWorktreeDeps must not bump .env mtime when APP_URL already matches
+// the worktree domain. Dev-side watchers (vite, IDE indexers, opcache) react
+// to mtime changes, so a no-op scan should be a no-op on disk.
+func TestEnsureWorktreeDeps_skipsWriteWhenAppURLUnchanged(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local/share"))
+
+	main := filepath.Join(home, "main")
+	wt := filepath.Join(home, "wt")
+	for _, d := range []string{main, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	envPath := filepath.Join(wt, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_NAME=Worktree\nAPP_URL=https://branch.main.test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(envPath, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+
+	info, err := os.Stat(envPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Fatalf("env mtime bumped from %v to %v on a no-op rewrite", old, info.ModTime())
 	}
 }
 
