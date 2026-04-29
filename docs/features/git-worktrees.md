@@ -26,6 +26,8 @@ When the Lerd watcher daemon is running it watches each registered site's `.git/
 
 When `git worktree remove` is run the vhost is removed and nginx is reloaded.
 
+Renaming the branch inside a worktree (`git branch -m`, `git checkout -b`) is also picked up: Lerd watches each worktree's `HEAD` and re-syncs the vhost and `.env` to the new branch name without a manual restart.
+
 Existing worktrees are also picked up on watcher startup, so nothing is lost after a reboot.
 
 ---
@@ -38,7 +40,7 @@ When a worktree vhost is first created, Lerd sets up three things in the checkou
 |---|---|
 | `vendor/` | Copied from the main repo using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS), then reconciled against the worktree's own `composer.lock` via `composer install` |
 | `node_modules/` | Copied from the main repo (reflink where supported), then reconciled against the worktree's own lockfile via the matching package manager (pnpm / yarn / bun / npm, auto-detected from `pnpm-lock.yaml`, `yarn.lock`, `bun.lock*`, or `package-lock.json`) |
-| `.env` | Copied from the main repo with `APP_URL` rewritten to `http://<branch>.<site>.test` |
+| `.env` | Copied from the main repo with `APP_URL` rewritten to `http://<branch>.<site>.test`. On every subsequent worktree scan `APP_URL` is realigned with the current vhost domain, so a `git branch -m` or a manual rename keeps the `.env` in sync. The write is skipped when the value is already correct, so dev-side watchers don't see spurious mtime bumps. |
 
 If `vendor/` or `node_modules/` already exist as real directories they are left untouched. Legacy symlinks left by earlier lerd versions are replaced with real copies.
 

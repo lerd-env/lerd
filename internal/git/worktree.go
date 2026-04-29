@@ -1,6 +1,7 @@
 package git
 
 import (
+	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -183,7 +184,9 @@ func copyFile(src, dst string) error {
 	return err
 }
 
-// rewriteAppURL replaces APP_URL in the given .env file.
+// rewriteAppURL replaces APP_URL in the given .env file. The write is skipped
+// when the new contents match the existing file so dev-side watchers (vite,
+// IDE indexers, opcache) don't see mtime churn on no-op scans.
 func rewriteAppURL(envPath, appURL string) error {
 	data, err := os.ReadFile(envPath)
 	if err != nil {
@@ -201,7 +204,11 @@ func rewriteAppURL(envPath, appURL string) error {
 	if !found {
 		lines = append(lines, "APP_URL="+appURL)
 	}
-	return os.WriteFile(envPath, []byte(strings.Join(lines, "\n")), 0644)
+	out := []byte(strings.Join(lines, "\n"))
+	if bytes.Equal(out, data) {
+		return nil
+	}
+	return os.WriteFile(envPath, out, 0644)
 }
 
 var nonSlugChars = regexp.MustCompile(`[^a-z0-9-]`)
