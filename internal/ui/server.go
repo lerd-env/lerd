@@ -100,42 +100,44 @@ func Start(currentVersion string) error {
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
 
-	podman.AfterUnitChange = func(name string) {
-		// Run the poll and snapshot publish in a goroutine so the HTTP
-		// handler (and the unit start/stop call that triggered this) returns
-		// immediately. PollNow blocks until podman ps completes, ensuring
-		// the snapshot broadcast carries current container states rather than
-		// a stale pre-mutation value — which would cause the UI toggle to
-		// appear to revert.
-		go func() {
+	// Single coalescer for the three event sources that need to refresh the
+	// container cache and broadcast a snapshot: in-process mutations
+	// (AfterUnitChange), DBus push notifications (SubscribeLerdUnitStateChanges),
+	// and CLI/MCP notifications (/api/internal/notify). A burst of state
+	// transitions (e.g. a unit cycling activating→active during start) used to
+	// spawn one podman ps subprocess per transition; the coalescer collapses
+	// them into one poll + one publish per ~250ms quiet period.
+	//
+	// When no UI tab is open we don't fork podman ps — runSnapshotInvalidator
+	// also skips the rebuild for the same reason, and the periodic cache poll
+	// (60s while idle) catches container state on its own. An incoming WS
+	// connection forces a fresh PollNow before sending the initial snapshot.
+	publisher := newPollPublisher(250*time.Millisecond, func() {
+		if visibleClients.Load() > 0 {
 			podman.Cache.PollNow()
-			siteinfo.InvalidateUnitCache()
-			eventbus.Default.Publish(eventbus.KindSites)
-			eventbus.Default.Publish(eventbus.KindServices)
-			eventbus.Default.Publish(eventbus.KindStatus)
-		}()
-	}
+		}
+		siteinfo.InvalidateUnitCache()
+		eventbus.Default.Publish(eventbus.KindSites)
+		eventbus.Default.Publish(eventbus.KindServices)
+		eventbus.Default.Publish(eventbus.KindStatus)
+	})
+
+	podman.AfterUnitChange = func(string) { publisher.trigger() }
+
+	// External state changes (container crash, systemctl outside lerd-ui,
+	// timer firings) are caught by the periodic podman cache poll instead
+	// of a DBus PropertiesChanged subscription. The subscription used to
+	// burn ~50% of one core because go-systemd's dispatch goroutine fetches
+	// unit properties on every signal, and active containers emit a steady
+	// stream of property updates (CPU accounting, exec status, restart
+	// counters). Polling at 15s when a UI tab is focused / 60s otherwise
+	// trades off-up-to-15s latency for an order-of-magnitude CPU saving.
+	podman.Cache.SetOnChange(publisher.trigger)
 
 	// Drop the cache to idle cadence whenever the desktop session is idle
 	// or locked, so a focused tab on an unattended laptop still saves
 	// battery. Recomputes on every transition.
 	startIdleWatcher(context.Background())
-
-	// Event-driven push from systemd covers mutations that didn't go through
-	// lerd-ui's AfterUnitChange path: external systemctl calls, container
-	// crashes, external podman restart, unit timeouts. Mirrors the same
-	// invalidate-and-broadcast flow so the dashboard stays current without
-	// waiting for the 15s cache poll. AfterUnitChange stays as a fast path
-	// for in-process mutations; the DBus push catches everything else.
-	_ = lerdSystemd.SubscribeLerdUnitStateChanges(context.Background(), func(string) {
-		go func() {
-			podman.Cache.PollNow()
-			siteinfo.InvalidateUnitCache()
-			eventbus.Default.Publish(eventbus.KindSites)
-			eventbus.Default.Publish(eventbus.KindServices)
-			eventbus.Default.Publish(eventbus.KindStatus)
-		}()
-	})
 
 	// A single goroutine subscribes to the eventbus and invalidates the
 	// relevant snapshot on every mutation. The /api/ws handler broadcasts
@@ -158,13 +160,7 @@ func Start(currentVersion string) error {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
-		go func() {
-			podman.Cache.PollNow()
-			siteinfo.InvalidateUnitCache()
-			eventbus.Default.Publish(eventbus.KindSites)
-			eventbus.Default.Publish(eventbus.KindServices)
-			eventbus.Default.Publish(eventbus.KindStatus)
-		}()
+		publisher.trigger()
 		w.WriteHeader(http.StatusNoContent)
 	})
 
@@ -756,7 +752,11 @@ type ServiceResponse struct {
 	LatestVersion      string            `json:"latest_version,omitempty"`
 	UpgradeVersion     string            `json:"upgrade_version,omitempty"`
 	PreviousVersion    string            `json:"previous_version,omitempty"`
-	MigrationSupported bool              `json:"migration_supported,omitempty"`
+	// MigrationSupported and CanRollback intentionally drop omitempty so the
+	// false case still appears in the JSON. The UI uses === to distinguish
+	// "field missing" (no avail check ran) from "explicitly false".
+	MigrationSupported bool `json:"migration_supported"`
+	CanRollback        bool `json:"can_rollback"`
 }
 
 func buildServiceResponse(name string) ServiceResponse {
@@ -797,6 +797,7 @@ func buildServiceResponse(name string) ServiceResponse {
 		resp.UpgradeVersion = avail.UpgradeTag
 		resp.PreviousVersion = avail.PreviousImage
 		resp.MigrationSupported = serviceops.SupportsMigration(name)
+		resp.CanRollback = avail.CanRollback
 	}
 	return resp
 }
@@ -1044,17 +1045,7 @@ func handleServicePresetInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	version := r.URL.Query().Get("version")
 
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusOK)
-	flusher, _ := w.(http.Flusher)
-	writeLine := func(payload any) {
-		data, _ := json.Marshal(payload)
-		_, _ = w.Write(append(data, '\n'))
-		if flusher != nil {
-			flusher.Flush()
-		}
-	}
+	writeLine, _ := startNDJSONStream(w, r)
 
 	svc, err := serviceops.InstallPresetStreaming(name, version, func(ev serviceops.PhaseEvent) {
 		writeLine(ev)
@@ -1070,6 +1061,42 @@ func handleServicePresetInstall(w http.ResponseWriter, r *http.Request) {
 		"dashboard":  svc.Dashboard,
 		"depends_on": svc.DependsOn,
 	})
+}
+
+// startNDJSONStream writes the streaming-response headers and returns a
+// writeLine that stops after the first failed write or when the client
+// disconnects, so a refreshed browser tab can't drive the server to keep
+// writing into a broken connection.
+func startNDJSONStream(w http.ResponseWriter, r *http.Request) (writeLine func(payload any), alive func() bool) {
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	dead := false
+	ctx := r.Context()
+	writeLine = func(payload any) {
+		if dead {
+			return
+		}
+		if ctx.Err() != nil {
+			dead = true
+			return
+		}
+		data, err := json.Marshal(payload)
+		if err != nil {
+			dead = true
+			return
+		}
+		if _, err := w.Write(append(data, '\n')); err != nil {
+			dead = true
+			return
+		}
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+	alive = func() bool { return !dead && ctx.Err() == nil }
+	return writeLine, alive
 }
 
 // ServiceActionResponse wraps the service state plus any error details.
@@ -1123,17 +1150,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		if at := strings.LastIndex(targetImage, ":"); at > 0 {
 			targetImage = targetImage[:at] + ":" + targetTag
 		}
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		flusher, _ := w.(http.Flusher)
-		writeLine := func(payload any) {
-			data, _ := json.Marshal(payload)
-			_, _ = w.Write(append(data, '\n'))
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeLine, _ := startNDJSONStream(w, r)
 		if err := serviceops.MigrateService(name, targetImage, func(ev serviceops.PhaseEvent) { writeLine(ev) }); err != nil {
 			writeLine(map[string]any{"phase": "error", "error": err.Error()})
 		}
@@ -1142,17 +1159,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 
 	// Streaming rollback: pull the previously-running image and restart.
 	if action == "rollback" && r.Method == http.MethodPost {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		flusher, _ := w.(http.Flusher)
-		writeLine := func(payload any) {
-			data, _ := json.Marshal(payload)
-			_, _ = w.Write(append(data, '\n'))
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeLine, _ := startNDJSONStream(w, r)
 		if err := serviceops.RollbackService(name, func(ev serviceops.PhaseEvent) { writeLine(ev) }); err != nil {
 			writeLine(map[string]any{"phase": "error", "error": err.Error()})
 		}
@@ -1173,17 +1180,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("Cache-Control", "no-store")
-		w.WriteHeader(http.StatusOK)
-		flusher, _ := w.(http.Flusher)
-		writeLine := func(payload any) {
-			data, _ := json.Marshal(payload)
-			_, _ = w.Write(append(data, '\n'))
-			if flusher != nil {
-				flusher.Flush()
-			}
-		}
+		writeLine, _ := startNDJSONStream(w, r)
 		err := serviceops.UpdateServiceStreaming(name, targetImage, func(ev serviceops.PhaseEvent) {
 			writeLine(ev)
 		})

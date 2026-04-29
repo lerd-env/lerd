@@ -15,10 +15,11 @@ type refreshMsg struct{}
 // back into the tea program.
 type snapshotMsg struct{ snap Snapshot }
 
-// tickCmd schedules the next refreshMsg. Called from Update after each
-// snapshot lands so the model polls at a steady cadence even when no
-// eventbus traffic arrives (cross-process changes show up within the
-// interval).
+// tickCmd schedules the next refreshMsg. The TUI is push-driven via the
+// podman cache OnChange callback (wired in Run) plus the eventbus
+// subscription, so this passive tick is a safety net only — bumping the
+// interval up to 10s avoids waking siteinfo.LoadAll and the snapshot
+// rebuild every 2 seconds when nothing has changed.
 func tickCmd(d time.Duration) tea.Cmd {
 	return tea.Tick(d, func(time.Time) tea.Msg { return refreshMsg{} })
 }

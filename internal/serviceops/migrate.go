@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,38 +14,37 @@ import (
 )
 
 // migratorFn drives a one-shot version migration for a single service family.
-// It receives the lerd service name, the target image to migrate to, and an
-// emit channel for streaming phase events. Implementations are expected to:
-//   - Dump current data while the running container is still on the old image.
-//   - Move the on-disk data dir aside (so the new container sees a fresh dir).
-//   - Persist the new image into the user config and regenerate the quadlet.
-//   - Restart the unit on the new image and wait for it ready.
-//   - Restore the dump into the new container.
-//
-// Backups land in config.BackupsDir() so manual recovery is always possible.
+// Implementations dump current data, swap the data dir aside, switch image,
+// restart, and restore the dump. Backups land in config.BackupsDir().
 type migratorFn func(name, targetImage string, emit func(PhaseEvent)) error
 
 // migrators is restricted to families with stable text-format dumps that load
-// cleanly across versions (SQL via mysqldump / pg_dumpall). Engines whose
-// dumps are version-specific binary blobs need manual upgrades.
+// cleanly across versions (mysqldump / pg_dumpall). Engines whose dumps are
+// version-specific binary blobs need manual upgrades.
 var migrators = map[string]migratorFn{
 	"mysql":    migrateMysql,
 	"mariadb":  migrateMysql,
 	"postgres": migratePostgres,
 }
 
+// dumpRestoreTimeout caps any single in-container dump or restore exec so a
+// wedged container can't block the migrate forever.
+const dumpRestoreTimeout = 30 * time.Minute
+
 // SupportsMigration reports whether a registered family migrator exists for
-// the named service. Used by the UI to decide whether to render the Migrate
-// button alongside (or instead of) Upgrade.
+// the named service.
 func SupportsMigration(name string) bool {
 	_, ok := migrators[familyOf(name)]
 	return ok
 }
 
 // MigrateService runs a per-family dump/restore migration so the service can
-// move across data-incompatible SQL versions (e.g. mysql 8.0 → 9.0, postgres
-// 16 → 17). Errors when no handler is registered for the service family.
+// move across data-incompatible SQL versions (e.g. mysql 8.0 → 9.0). Errors
+// when no handler is registered for the service family.
 func MigrateService(name, targetImage string, emit func(PhaseEvent)) error {
+	unlock := lockService(name)
+	defer unlock()
+
 	fam := familyOf(name)
 	fn, ok := migrators[fam]
 	if !ok {
@@ -53,14 +53,14 @@ func MigrateService(name, targetImage string, emit func(PhaseEvent)) error {
 	if targetImage == "" {
 		return fmt.Errorf("targetImage is required")
 	}
-	if err := os.MkdirAll(config.BackupsDir(), 0755); err != nil {
+	if err := os.MkdirAll(config.BackupsDir(), 0700); err != nil {
 		return fmt.Errorf("creating backups dir: %w", err)
 	}
 	return fn(name, targetImage, emit)
 }
 
-// familyOf returns the service family for a default preset or installed custom
-// service. Used to dispatch to the right migrator handler.
+// familyOf returns the service family for a default preset or installed
+// custom service.
 func familyOf(name string) string {
 	if config.IsDefaultPreset(name) {
 		if p, err := config.LoadPreset(name); err == nil {
@@ -76,28 +76,43 @@ func familyOf(name string) string {
 	return ""
 }
 
-// timestamped returns a UTC ISO-ish timestamp safe for filenames.
 func timestamped() string { return time.Now().UTC().Format("20060102-150405") }
 
-// containerExec runs a command inside a running container with stdin piped
-// from r and stdout/stderr captured. Used by every migrator's dump+restore
-// steps so we don't ship per-family copies of this plumbing.
-func containerExec(container, shellCmd string, stdin *os.File) ([]byte, error) {
-	cmd := exec.Command(podman.PodmanBin(), "exec", "-i", container, "sh", "-c", shellCmd)
+// containerExec runs shellCmd inside a running container with a hard timeout.
+// envPairs are passed via the exec env (not argv) so secrets don't leak into
+// /proc/<pid>/cmdline. Captured output includes stderr.
+func containerExec(container, shellCmd string, envPairs []string, stdin *os.File, timeout time.Duration) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	args := []string{"exec", "-i"}
+	for _, kv := range envPairs {
+		args = append(args, "--env", kv)
+	}
+	args = append(args, container, "sh", "-c", shellCmd)
+	cmd := exec.CommandContext(ctx, podman.PodmanBin(), args...)
 	if stdin != nil {
 		cmd.Stdin = stdin
 	}
 	return cmd.CombinedOutput()
 }
 
-// dumpToHost streams the output of a container command into a host file path.
-func dumpToHost(container, shellCmd, hostPath string) error {
-	out, err := os.Create(hostPath)
+// dumpToHost streams the output of a container command into a host file with
+// 0600 permissions. envPairs go through podman exec --env so secrets stay out
+// of argv.
+func dumpToHost(container, shellCmd string, envPairs []string, hostPath string, timeout time.Duration) error {
+	out, err := os.OpenFile(hostPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("creating dump file %s: %w", hostPath, err)
 	}
 	defer out.Close()
-	cmd := exec.Command(podman.PodmanBin(), "exec", container, "sh", "-c", shellCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	args := []string{"exec"}
+	for _, kv := range envPairs {
+		args = append(args, "--env", kv)
+	}
+	args = append(args, container, "sh", "-c", shellCmd)
+	cmd := exec.CommandContext(ctx, podman.PodmanBin(), args...)
 	cmd.Stdout = out
 	stderr, err := cmd.CombinedOutput()
 	if err != nil {
@@ -107,13 +122,20 @@ func dumpToHost(container, shellCmd, hostPath string) error {
 }
 
 // restoreFromHost streams a host file into a container command's stdin.
-func restoreFromHost(container, shellCmd, hostPath string) error {
+func restoreFromHost(container, shellCmd string, envPairs []string, hostPath string, timeout time.Duration) error {
 	in, err := os.Open(hostPath)
 	if err != nil {
 		return fmt.Errorf("opening dump file %s: %w", hostPath, err)
 	}
 	defer in.Close()
-	cmd := exec.Command(podman.PodmanBin(), "exec", "-i", container, "sh", "-c", shellCmd)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	args := []string{"exec", "-i"}
+	for _, kv := range envPairs {
+		args = append(args, "--env", kv)
+	}
+	args = append(args, container, "sh", "-c", shellCmd)
+	cmd := exec.CommandContext(ctx, podman.PodmanBin(), args...)
 	cmd.Stdin = in
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -123,19 +145,18 @@ func restoreFromHost(container, shellCmd, hostPath string) error {
 }
 
 // swapDataDirAside moves the current data dir to a timestamped backup name so
-// the new container starts from an empty dir. Returns the backup path so the
-// caller can restore it on failure.
+// the new container starts empty. Returns the backup path on success; empty
+// string with no error means there was no data dir to swap.
 func swapDataDirAside(svcName string) (string, error) {
 	src := config.DataSubDir(svcName)
 	if _, err := os.Stat(src); err != nil {
-		return "", nil // no data to swap — fresh container or volume-managed
+		return "", nil
 	}
 	dst := src + ".pre-migrate-" + timestamped()
 	if err := os.Rename(src, dst); err != nil {
 		return "", fmt.Errorf("moving data dir aside: %w", err)
 	}
 	if err := os.MkdirAll(src, 0755); err != nil {
-		// Best-effort restore: put the original back if we can't make a new one.
 		_ = os.Rename(dst, src)
 		return "", fmt.Errorf("creating fresh data dir: %w", err)
 	}
@@ -143,43 +164,40 @@ func swapDataDirAside(svcName string) (string, error) {
 }
 
 // restoreDataDirFromBackup undoes swapDataDirAside, used when migration fails
-// before the new image is committed.
+// before the new image is committed. Errors are bubbled — silent failure here
+// would leave the data destroyed without operator awareness.
 func restoreDataDirFromBackup(svcName, backupPath string) error {
 	if backupPath == "" {
 		return nil
 	}
 	src := config.DataSubDir(svcName)
-	_ = os.RemoveAll(src)
-	return os.Rename(backupPath, src)
+	if err := os.RemoveAll(src); err != nil {
+		return fmt.Errorf("clearing fresh data dir: %w", err)
+	}
+	if err := os.Rename(backupPath, src); err != nil {
+		return fmt.Errorf("restoring data dir from %s: %w", backupPath, err)
+	}
+	return nil
 }
 
 // switchToTargetImage persists the new image, regenerates the quadlet, and
-// restarts the unit. Reuses the same path the streaming Update flow uses so
-// behavior is consistent across update/upgrade/migrate.
+// restarts the unit.
 func switchToTargetImage(name, targetImage string, emit func(PhaseEvent)) error {
 	emit(PhaseEvent{Phase: "writing_quadlet", Image: targetImage})
-	if err := persistImageChoice(name, targetImage); err != nil {
+	if err := persistImageChoice(name, targetImage, "migrate"); err != nil {
 		return err
 	}
 	unit := "lerd-" + name
 	emit(PhaseEvent{Phase: "restarting_unit", Unit: unit})
-	for attempt := range 5 {
-		if err := podman.RestartUnit(unit); err == nil {
-			return nil
-		} else if !strings.Contains(err.Error(), "not found") {
-			return err
-		}
-		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-	}
-	return fmt.Errorf("restarting %s timed out", unit)
+	return restartWithRetry(unit)
 }
 
-// waitContainerReady polls a service-specific readiness probe by exec'ing a
-// trivial command inside the container until it succeeds or timeout elapses.
-func waitContainerReady(container, probeCmd string, timeout time.Duration) error {
+// waitContainerReady polls a service-specific readiness probe until it
+// succeeds or timeout elapses.
+func waitContainerReady(container, probeCmd string, envPairs []string, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
-		if _, err := containerExec(container, probeCmd, nil); err == nil {
+		if _, err := containerExec(container, probeCmd, envPairs, nil, 5*time.Second); err == nil {
 			return nil
 		}
 		time.Sleep(500 * time.Millisecond)
@@ -187,15 +205,33 @@ func waitContainerReady(container, probeCmd string, timeout time.Duration) error
 	return fmt.Errorf("container %s never became ready within %s", container, timeout)
 }
 
-// ---- mysql / mariadb ---------------------------------------------------------
+// abortMigrate is the shared post-failure recovery: try to put the old data
+// dir back and restart the old unit, joining errors so neither fix is silent.
+func abortMigrate(unit, name, backup string, restartOldUnit bool, cause error) error {
+	parts := []string{cause.Error()}
+	if backup != "" {
+		if err := restoreDataDirFromBackup(name, backup); err != nil {
+			parts = append(parts, "data-dir restore failed: "+err.Error()+" (backup left at "+backup+")")
+		}
+	}
+	if restartOldUnit {
+		if err := podman.StartUnit(unit); err != nil {
+			parts = append(parts, "restarting old unit failed: "+err.Error())
+		}
+	}
+	return fmt.Errorf("%s", strings.Join(parts, "; "))
+}
+
+// ---- mysql / mariadb -------------------------------------------------------
 
 func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	unit := "lerd-" + name
 	dump := filepath.Join(config.BackupsDir(), name+"-"+timestamped()+".sql")
+	rootEnv := []string{"MYSQL_PWD=lerd"}
 
 	emit(PhaseEvent{Phase: "dumping_data", Message: "mysqldump → " + dump})
-	dumpCmd := "mysqldump -uroot -plerd --all-databases --single-transaction --routines --triggers --events --quick"
-	if err := dumpToHost(unit, dumpCmd, dump); err != nil {
+	dumpCmd := "mysqldump -uroot --all-databases --single-transaction --routines --triggers --events --quick"
+	if err := dumpToHost(unit, dumpCmd, rootEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("mysqldump: %w", err)
 	}
 
@@ -207,49 +243,49 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	emit(PhaseEvent{Phase: "swapping_data_dir", Message: "old data preserved alongside the dump"})
 	backup, err := swapDataDirAside(name)
 	if err != nil {
-		_ = podman.StartUnit(unit)
-		return err
+		return abortMigrate(unit, name, "", true, err)
 	}
 
 	emit(PhaseEvent{Phase: "pulling_image", Image: targetImage})
 	if err := podman.PullImageWithProgress(targetImage, func(line string) {
 		emit(PhaseEvent{Phase: "pulling_image", Message: line})
 	}); err != nil {
-		_ = restoreDataDirFromBackup(name, backup)
-		_ = podman.StartUnit(unit)
-		return fmt.Errorf("pulling target: %w", err)
+		return abortMigrate(unit, name, backup, true, fmt.Errorf("pulling target: %w", err))
 	}
 
 	if err := switchToTargetImage(name, targetImage, emit); err != nil {
-		_ = restoreDataDirFromBackup(name, backup)
-		return err
+		return abortMigrate(unit, name, backup, false, err)
 	}
 
 	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
-	probe := "mysql -uroot -plerd -e 'SELECT 1' >/dev/null 2>&1 || mariadb -uroot -plerd -e 'SELECT 1' >/dev/null 2>&1"
-	if err := waitContainerReady(unit, probe, 90*time.Second); err != nil {
-		return fmt.Errorf("%w. Dump preserved at %s", err, dump)
+	probe := "mysql -uroot -e 'SELECT 1' >/dev/null 2>&1 || mariadb -uroot -e 'SELECT 1' >/dev/null 2>&1"
+	if err := waitContainerReady(unit, probe, rootEnv, 90*time.Second); err != nil {
+		return fmt.Errorf("%w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
-	restoreCmd := "mysql -uroot -plerd 2>&1 || mariadb -uroot -plerd 2>&1"
-	if err := restoreFromHost(unit, restoreCmd, dump); err != nil {
+	restoreCmd := "mysql -uroot 2>&1 || mariadb -uroot 2>&1"
+	if err := restoreFromHost(unit, restoreCmd, rootEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
+	if err := recordMigrateBackup(name, backup); err != nil {
+		return fmt.Errorf("recording migrate backup: %w. Old data dir kept at %s", err, backup)
+	}
 	emit(PhaseEvent{Phase: "done", Image: targetImage, Unit: unit, Message: "Migrated. Old data dir kept at " + backup + "; remove when verified."})
 	return nil
 }
 
-// ---- postgres ----------------------------------------------------------------
+// ---- postgres --------------------------------------------------------------
 
 func migratePostgres(name, targetImage string, emit func(PhaseEvent)) error {
 	unit := "lerd-" + name
 	dump := filepath.Join(config.BackupsDir(), name+"-"+timestamped()+".sql")
+	pgEnv := []string{"PGPASSWORD=lerd"}
 
 	emit(PhaseEvent{Phase: "dumping_data", Message: "pg_dumpall → " + dump})
-	dumpCmd := "PGPASSWORD=lerd pg_dumpall -h 127.0.0.1 -U postgres --clean --if-exists"
-	if err := dumpToHost(unit, dumpCmd, dump); err != nil {
+	dumpCmd := "pg_dumpall -h 127.0.0.1 -U postgres --clean --if-exists"
+	if err := dumpToHost(unit, dumpCmd, pgEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("pg_dumpall: %w", err)
 	}
 
@@ -261,36 +297,35 @@ func migratePostgres(name, targetImage string, emit func(PhaseEvent)) error {
 	emit(PhaseEvent{Phase: "swapping_data_dir"})
 	backup, err := swapDataDirAside(name)
 	if err != nil {
-		_ = podman.StartUnit(unit)
-		return err
+		return abortMigrate(unit, name, "", true, err)
 	}
 
 	emit(PhaseEvent{Phase: "pulling_image", Image: targetImage})
 	if err := podman.PullImageWithProgress(targetImage, func(line string) {
 		emit(PhaseEvent{Phase: "pulling_image", Message: line})
 	}); err != nil {
-		_ = restoreDataDirFromBackup(name, backup)
-		_ = podman.StartUnit(unit)
-		return fmt.Errorf("pulling target: %w", err)
+		return abortMigrate(unit, name, backup, true, fmt.Errorf("pulling target: %w", err))
 	}
 
 	if err := switchToTargetImage(name, targetImage, emit); err != nil {
-		_ = restoreDataDirFromBackup(name, backup)
-		return err
+		return abortMigrate(unit, name, backup, false, err)
 	}
 
 	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
-	probe := "PGPASSWORD=lerd psql -h 127.0.0.1 -U postgres -c 'SELECT 1' >/dev/null 2>&1"
-	if err := waitContainerReady(unit, probe, 90*time.Second); err != nil {
-		return fmt.Errorf("%w. Dump preserved at %s", err, dump)
+	probe := "psql -h 127.0.0.1 -U postgres -c 'SELECT 1' >/dev/null 2>&1"
+	if err := waitContainerReady(unit, probe, pgEnv, 90*time.Second); err != nil {
+		return fmt.Errorf("%w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
-	restoreCmd := "PGPASSWORD=lerd psql -h 127.0.0.1 -U postgres -d postgres 2>&1"
-	if err := restoreFromHost(unit, restoreCmd, dump); err != nil {
+	restoreCmd := "psql -h 127.0.0.1 -U postgres -d postgres 2>&1"
+	if err := restoreFromHost(unit, restoreCmd, pgEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
+	if err := recordMigrateBackup(name, backup); err != nil {
+		return fmt.Errorf("recording migrate backup: %w. Old data dir kept at %s", err, backup)
+	}
 	emit(PhaseEvent{Phase: "done", Image: targetImage, Unit: unit, Message: "Migrated. Old data dir kept at " + backup + "; remove when verified."})
 	return nil
 }

@@ -519,18 +519,7 @@ func InstallSudoers() error {
 		return fmt.Errorf("cannot determine current user")
 	}
 
-	content := fmt.Sprintf(
-		"# Lerd: allow resolvectl and NM dispatcher script install without password\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/resolvectl dns *, /usr/bin/resolvectl domain *, /usr/bin/resolvectl revert *\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/dispatcher.d\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/cp /tmp/lerd-sudo-* /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 755 /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/cp /tmp/lerd-sudo-* /etc/systemd/resolved.conf.d/lerd.conf\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n",
-		user, user, user, user, user, user, user, user,
-	)
+	content := renderLinuxSudoers(user)
 
 	const sudoersPath = "/etc/sudoers.d/lerd"
 	if isFileContent(sudoersPath, []byte(content)) {
@@ -541,4 +530,33 @@ func InstallSudoers() error {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
 	return nil
+}
+
+// renderLinuxSudoers returns the sudoers drop-in content for the given user.
+// Every rule uses a fully qualified command argument so modern strict
+// parsers (sudo-rs on Ubuntu 26.04+, C sudo >= 1.9.16 on Fedora 41+ /
+// Arch / CachyOS / openSUSE Tumbleweed / NixOS unstable) accept the file.
+// The resolvectl line drops the per-verb "*" suffixes that older lerd
+// builds shipped — sudoers cannot match a verb plus open-ended args
+// without a wildcard, and "any resolvectl invocation" is the same
+// effective grant since the watcher already calls every verb.
+func renderLinuxSudoers(user string) string {
+	return fmt.Sprintf(
+		"# Lerd: passwordless DNS resolver / NM dispatcher operations.\n"+
+			"# Rules are fully qualified with no wildcards in command\n"+
+			"# arguments so they pass strict sudo parsers (sudo-rs on Ubuntu\n"+
+			"# 26.04+; C sudo >= 1.9.16 on Fedora 41+, Arch, openSUSE\n"+
+			"# Tumbleweed, NixOS unstable). The matching code path pipes\n"+
+			"# content through `sudo tee <dest>` instead of\n"+
+			"# `sudo cp /tmp/lerd-sudo-* <dest>` for the same reason.\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/resolvectl\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/dispatcher.d\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 755 /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n",
+		user, user, user, user, user, user, user, user,
+	)
 }
