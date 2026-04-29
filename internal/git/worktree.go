@@ -149,20 +149,23 @@ func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secur
 		_, _ = os.Stderr.WriteString("[WARN] worktree dependency install: " + err.Error() + "\n")
 	}
 
-	// .env: copy from main repo and set APP_URL to the worktree domain.
+	// .env: copy from main repo when missing, and always keep APP_URL aligned
+	// with the worktree vhost domain on subsequent scans.
+	scheme := "http"
+	if secured {
+		scheme = "https"
+	}
+	appURL := scheme + "://" + worktreeDomain
 	worktreeEnv := filepath.Join(worktreePath, ".env")
 	if _, err := os.Lstat(worktreeEnv); err == nil {
-		return // already exists
+		_ = rewriteAppURL(worktreeEnv, appURL)
+		return
 	}
 	mainEnv := filepath.Join(mainRepoPath, ".env")
 	if err := copyFile(mainEnv, worktreeEnv); err != nil {
 		return
 	}
-	scheme := "http"
-	if secured {
-		scheme = "https"
-	}
-	_ = rewriteAppURL(worktreeEnv, scheme+"://"+worktreeDomain)
+	_ = rewriteAppURL(worktreeEnv, appURL)
 }
 
 func copyFile(src, dst string) error {

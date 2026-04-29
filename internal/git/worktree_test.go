@@ -321,6 +321,38 @@ func TestEnsureWorktreeDeps_migratesLegacySymlink(t *testing.T) {
 	}
 }
 
+func TestEnsureWorktreeDeps_updatesExistingEnvAppURL(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local/share"))
+
+	main := filepath.Join(home, "main")
+	wt := filepath.Join(home, "wt")
+	for _, d := range []string{main, wt} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".env"), []byte("APP_NAME=Worktree\nAPP_URL=http://stale.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+
+	data, err := os.ReadFile(filepath.Join(wt, ".env"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := string(data)
+	if !strings.Contains(content, "APP_URL=https://branch.main.test") {
+		t.Fatalf("expected APP_URL to match worktree vhost domain, got:\n%s", content)
+	}
+	if strings.Contains(content, "http://stale.test") {
+		t.Fatalf("stale APP_URL should have been replaced, got:\n%s", content)
+	}
+}
+
 // When main has no vendor/ yet, EnsureWorktreeDeps must not create an
 // empty directory in the worktree; it should simply do nothing for that
 // tree.
