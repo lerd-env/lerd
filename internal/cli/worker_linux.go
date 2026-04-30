@@ -14,6 +14,12 @@ import (
 	"github.com/geodro/lerd/internal/services"
 )
 
+// removeWorkerExecArtifacts is a no-op on Linux: workers run as systemd
+// service units that exec directly into podman, no guard script or pid
+// file is written. The macOS build cleans up the script + pid file it
+// generates alongside the plist.
+func removeWorkerExecArtifacts(_ string) {}
+
 // writeWorkerUnitFile writes a systemd service unit for the worker on Linux.
 // Workers exec into the running FPM container.
 //

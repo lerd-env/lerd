@@ -4,9 +4,7 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -26,16 +24,51 @@ import (
 // fromMode is the mode workers were actually launched in; toMode is what
 // the user just requested. Safe to call with fromMode == toMode (no-op).
 func migrateWorkersOnModeChange(fromMode, toMode string) error {
+	return migrateWorkersOnModeChangeStreaming(fromMode, toMode, nil)
+}
+
+// migrateWorkersOnModeChangeStreaming is the streaming variant. emit is
+// invoked at every meaningful step (saving, per-worker stop/clean/start,
+// final sweep) so the dashboard modal can reflect live progress. nil emit
+// is allowed for the CLI path that doesn't need streaming.
+func migrateWorkersOnModeChangeStreaming(fromMode, toMode string, emit func(WorkerModePhaseEvent)) error {
+	if emit == nil {
+		emit = func(WorkerModePhaseEvent) {}
+	}
 	if fromMode == toMode {
+		emit(WorkerModePhaseEvent{Phase: "done"})
 		return nil
 	}
 	units := discoverActiveWorkerUnits()
+	// Quiesce competing podman traffic before we touch anything: cancel
+	// open `podman logs -f` SSE streams in lerd-ui and pause the cache
+	// poller. Otherwise those long-lived connections race the migration's
+	// `podman rm -f` and saturate gvproxy, wedging the API socket. nil on
+	// CLI (no UI streams, no poller).
+	if BeforeWorkerMigration != nil {
+		BeforeWorkerMigration(units)
+	}
+	if AfterWorkerMigration != nil {
+		defer AfterWorkerMigration()
+	}
 	steps := planWorkerMigration(fromMode, toMode, units)
 	if len(steps) == 0 {
+		// Discovery saw no plists, but the runtime state may still be
+		// dirty: a previous migration could have removed plists without
+		// stopping their containers (kickstart interrupting in-flight
+		// work, etc.). When landing in exec mode, run the orphan-container
+		// sweep unconditionally so leftover container-mode workers don't
+		// keep running with `--restart=always` after the toggle.
+		if toMode == config.WorkerExecModeExec {
+			emit(WorkerModePhaseEvent{Phase: "sweeping_orphans"})
+			sweepOrphanWorkerContainers()
+		}
+		emit(WorkerModePhaseEvent{Phase: "done", Message: "no active workers to migrate"})
 		return nil
 	}
 
 	for _, step := range steps {
+		emit(WorkerModePhaseEvent{Phase: "migrating_worker", Unit: step.Unit, Step: "stopping"})
 		// Stop in old shape. podman.StopUnit handles both container
 		// quadlets and plain service units — it boots out of launchd
 		// and stops the container if any.
@@ -43,6 +76,7 @@ func migrateWorkersOnModeChange(fromMode, toMode string) error {
 			fmt.Printf("[WARN] stopping %s: %v\n", step.Unit, err)
 		}
 
+		emit(WorkerModePhaseEvent{Phase: "migrating_worker", Unit: step.Unit, Step: "cleaning"})
 		// Remove the old on-disk artifacts so the new shape doesn't
 		// coexist with a stale one. Failures here are warnings — the
 		// new start still takes effect, stale files just linger.
@@ -58,6 +92,7 @@ func migrateWorkersOnModeChange(fromMode, toMode string) error {
 	// from the site's framework metadata. writeWorkerUnitFile sees the
 	// new config and produces the correct shape.
 	for _, step := range steps {
+		emit(WorkerModePhaseEvent{Phase: "migrating_worker", Unit: step.Unit, Step: "starting"})
 		if err := restartWorkerByUnitName(step.Unit); err != nil {
 			fmt.Printf("[WARN] restart %s in %s mode: %v\n", step.Unit, step.To, err)
 		}
@@ -70,8 +105,10 @@ func migrateWorkersOnModeChange(fromMode, toMode string) error {
 	// containers, so any lerd-{queue,schedule,horizon,reverb,custom}-*
 	// container is by definition stale and safe to drop.
 	if toMode == config.WorkerExecModeExec {
+		emit(WorkerModePhaseEvent{Phase: "sweeping_orphans"})
 		sweepOrphanWorkerContainers()
 	}
+	emit(WorkerModePhaseEvent{Phase: "done"})
 	return nil
 }
 
@@ -186,10 +223,7 @@ func removeOldWorkerArtifacts(unit string, kind workerArtifactKind) {
 		_ = services.Mgr.RemoveContainerUnit(unit)
 	case artifactService:
 		_ = services.Mgr.RemoveServiceUnit(unit)
-		workersDir := filepath.Join(config.RunDir(), "workers")
-		// Guard script and pid file — non-fatal if either is missing.
-		_ = os.Remove(filepath.Join(workersDir, unit+".sh"))
-		_ = os.Remove(filepath.Join(workersDir, unit+".pid"))
+		removeWorkerExecArtifacts(unit)
 	}
 }
 

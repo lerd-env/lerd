@@ -51,7 +51,7 @@ func TestApplyWorkersMode_UpdatesConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	if err := applyWorkersMode(config.WorkerExecModeContainer); err != nil {
+	if err := applyWorkersMode(config.WorkerExecModeContainer, nil); err != nil {
 		t.Fatalf("applyWorkersMode: %v", err)
 	}
 	cfg, err := config.LoadGlobal()
@@ -63,7 +63,7 @@ func TestApplyWorkersMode_UpdatesConfig(t *testing.T) {
 	}
 
 	// Flip back to exec to ensure both directions work.
-	if err := applyWorkersMode(config.WorkerExecModeExec); err != nil {
+	if err := applyWorkersMode(config.WorkerExecModeExec, nil); err != nil {
 		t.Fatalf("apply exec: %v", err)
 	}
 	cfg2, _ := config.LoadGlobal()
@@ -76,7 +76,7 @@ func TestApplyWorkersMode_SameValueIsNoOp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	// Default is exec; applying exec should succeed without error.
-	if err := applyWorkersMode(config.WorkerExecModeExec); err != nil {
+	if err := applyWorkersMode(config.WorkerExecModeExec, nil); err != nil {
 		t.Fatalf("applyWorkersMode no-op: %v", err)
 	}
 }

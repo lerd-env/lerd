@@ -32,12 +32,14 @@ WantedBy=default.target
 // to disk for each worker in exec mode. It wraps buildWorkerGuard with a
 // shebang so launchd's /bin/sh invocation has a self-contained executable.
 //
-// podmanBin / container / workerCmd are also threaded through so the
+// podmanBin / container / sitePath / workerCmd are threaded through so the
 // guard can reach into the container and clean up an orphan worker that
-// survived a host-side podman-exec death (suspend/wake). runCmd is the
-// full `podman exec ...` invocation that is finally `exec`'d.
-func buildDarwinExecWorkerGuardScript(pidFile, podmanBin, container, workerCmd, runCmd string) string {
-	return "#!/bin/sh\n" + buildWorkerGuard(pidFile, podmanBin, container, workerCmd, runCmd)
+// survived a host-side podman-exec death (suspend/wake), scoped to the
+// site's working directory so multi-site shared FPM containers stay
+// isolated. runCmd is the full `podman exec ...` invocation that is
+// finally `exec`'d.
+func buildDarwinExecWorkerGuardScript(pidFile, podmanBin, container, sitePath, workerCmd, runCmd string) string {
+	return "#!/bin/sh\n" + buildWorkerGuard(pidFile, podmanBin, container, sitePath, workerCmd, runCmd)
 }
 
 // buildDarwinContainerWorkerUnit renders the quadlet `[Container]` body

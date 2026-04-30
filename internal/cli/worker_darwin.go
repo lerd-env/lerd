@@ -67,7 +67,7 @@ func writeWorkerExecUnit(unitName, siteName, sitePath, phpVersion, command, rest
 	}
 
 	podmanExec := fmt.Sprintf("%s exec -w %s %s %s", podman.PodmanBin(), sitePath, container, command)
-	script := buildDarwinExecWorkerGuardScript(pidFile, podman.PodmanBin(), container, command, podmanExec)
+	script := buildDarwinExecWorkerGuardScript(pidFile, podman.PodmanBin(), container, sitePath, command, podmanExec)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing worker guard script: %w", err)
 	}
@@ -120,6 +120,21 @@ func workerLogHint(unitName string) string {
 		return "tail -f " + filepath.Join(home, "Library", "Logs", "lerd", unitName+".log")
 	}
 	return "podman logs -f " + unitName
+}
+
+// removeWorkerExecArtifacts deletes the on-disk files writeWorkerExecUnit
+// produces alongside the launchd plist: the guard shell script and its
+// pid file. Both live in config.RunDir()/workers and are macOS-only —
+// the Linux build provides a stub.
+//
+// Called on every worker stop so the artifacts don't outlive the unit
+// (an orphan script with no plist isn't actively harmful but accumulates
+// noise in ~/.local/share/lerd/run/workers and can confuse later
+// migration / discovery code).
+func removeWorkerExecArtifacts(unitName string) {
+	workersDir := filepath.Join(config.RunDir(), "workers")
+	_ = os.Remove(filepath.Join(workersDir, unitName+".sh"))
+	_ = os.Remove(filepath.Join(workersDir, unitName+".pid"))
 }
 
 // restoreWorker is called from restoreSiteInfrastructure during `lerd start`.

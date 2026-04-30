@@ -2312,8 +2312,18 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 		tail = "0"
 	}
 
+	// Wrap r.Context() in a cancel so the worker-mode migration can kill
+	// this stream pre-emptively. Otherwise its `podman logs -f` child holds
+	// a gvproxy slot and races the migration's `podman rm -f` against the
+	// same container, jamming the podman API socket.
+	streamCtx, streamCancel := context.WithCancel(r.Context())
+	defer streamCancel()
+	if isFrameworkWorkerUnit(container) {
+		defer logStreams.Register(container, streamCancel)()
+	}
+
 	pr, pw := io.Pipe()
-	cmd := exec.CommandContext(r.Context(), podman.PodmanBin(), "logs", "-f", "--tail", tail, container)
+	cmd := exec.CommandContext(streamCtx, podman.PodmanBin(), "logs", "-f", "--tail", tail, container)
 	cmd.Stdout = pw
 	cmd.Stderr = pw
 
@@ -2404,11 +2414,16 @@ func handleSettingsWorkerMode(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "unknown mode"})
 		return
 	}
-	if err := cli.ApplyWorkersMode(body.Mode); err != nil {
-		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
-		return
+	// NDJSON: stream phase events so the dashboard modal can show live
+	// per-worker progress instead of a 30-60s blank spinner. Each line is
+	// a cli.WorkerModePhaseEvent; the client treats {"phase":"done"} as
+	// success and {"phase":"error"} as failure.
+	writeLine, _ := startNDJSONStream(w, r)
+	if err := cli.ApplyWorkersModeStreaming(body.Mode, func(evt cli.WorkerModePhaseEvent) {
+		writeLine(evt)
+	}); err != nil {
+		writeLine(cli.WorkerModePhaseEvent{Phase: "error", Error: err.Error()})
 	}
-	writeJSON(w, map[string]any{"ok": true, "worker_exec_mode": body.Mode})
 }
 
 func handleSettingsAutostart(w http.ResponseWriter, r *http.Request) {

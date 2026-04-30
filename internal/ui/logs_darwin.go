@@ -50,17 +50,6 @@ func isContainerUnit(unit string) bool {
 	return true
 }
 
-// isFrameworkWorkerUnit reports whether unit looks like a built-in framework
-// worker. Guards the config-based fallback so infrastructure containers
-// (FPM, nginx, services) are never misclassified as service units.
-func isFrameworkWorkerUnit(unit string) bool {
-	for _, prefix := range []string{"lerd-queue-", "lerd-schedule-", "lerd-horizon-", "lerd-reverb-"} {
-		if strings.HasPrefix(unit, prefix) {
-			return true
-		}
-	}
-	return false
-}
 
 func serviceRecentLogs(unit string) string {
 	if isContainerUnit(unit) {
@@ -114,8 +103,17 @@ func streamUnitLogs(w http.ResponseWriter, r *http.Request, unit string) {
 		if r.Header.Get("Last-Event-ID") != "" {
 			tail = "0"
 		}
+		// Wrap r.Context() in a cancel so the worker-mode migration can
+		// kill this stream pre-emptively. Otherwise its `podman logs -f`
+		// child holds a gvproxy slot and races the migration's `podman
+		// rm -f` against the same container.
+		streamCtx, streamCancel := context.WithCancel(r.Context())
+		defer streamCancel()
+		if isFrameworkWorkerUnit(unit) {
+			defer logStreams.Register(unit, streamCancel)()
+		}
 		script := `for i in $(seq 1 20); do ` + bin + ` container exists ` + unit + ` 2>/dev/null && break; sleep 0.5; done; exec ` + bin + ` logs -f --tail ` + tail + ` ` + unit
-		cmd := exec.CommandContext(r.Context(), "/bin/sh", "-c", script)
+		cmd := exec.CommandContext(streamCtx, "/bin/sh", "-c", script)
 		pr, pw := io.Pipe()
 		cmd.Stdout = pw
 		cmd.Stderr = pw

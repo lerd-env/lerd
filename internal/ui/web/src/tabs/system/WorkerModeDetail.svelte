@@ -4,6 +4,7 @@
     workerExecMode,
     workerModeApplies,
     workerModeLoading,
+    workerModeProgress,
     loadWorkerMode,
     setWorkerMode,
     type WorkerExecMode
@@ -41,11 +42,42 @@
 
   async function applyChange() {
     applyError = '';
-    const ok = await setWorkerMode(draft);
-    if (ok) {
+    const r = await setWorkerMode(draft);
+    if (r.ok) {
+      workerModeProgress.set(null);
       confirmOpen = false;
     } else {
-      applyError = m.system_workerMode_apply_failed();
+      applyError = r.error
+        ? m.system_workerMode_apply_failed() + ' (' + r.error + ')'
+        : m.system_workerMode_apply_failed();
+    }
+  }
+
+  // Human-readable progress line for the modal. Maps phase + unit + step
+  // into something like "Stopping lerd-horizon-parkapp" / "Starting …".
+  function progressLabel(p: { phase: string; unit?: string; step?: string; message?: string } | null): string {
+    if (!p) return m.system_workerMode_apply_running();
+    if (p.message) return p.message;
+    switch (p.phase) {
+      case 'saving_config':
+        return m.system_workerMode_progress_savingConfig();
+      case 'sweeping_orphans':
+        return m.system_workerMode_progress_sweeping();
+      case 'migrating_worker': {
+        const unit = p.unit || '';
+        switch (p.step) {
+          case 'stopping':
+            return m.system_workerMode_progress_stopping({ unit });
+          case 'cleaning':
+            return m.system_workerMode_progress_cleaning({ unit });
+          case 'starting':
+            return m.system_workerMode_progress_starting({ unit });
+          default:
+            return unit;
+        }
+      }
+      default:
+        return m.system_workerMode_apply_running();
     }
   }
 </script>
@@ -157,7 +189,7 @@
           <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
           <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
         </svg>
-        {m.system_workerMode_apply_running()}
+        <span class="truncate max-w-[26ch]">{progressLabel($workerModeProgress)}</span>
       {:else}
         {m.system_workerMode_apply_confirm()}
       {/if}

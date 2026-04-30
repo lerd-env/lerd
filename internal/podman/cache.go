@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -22,6 +23,11 @@ type ContainerCache struct {
 	// refresh is signalled to trigger an immediate out-of-cycle refresh
 	// (e.g. after a container start/stop mutation).
 	refresh chan struct{}
+
+	// pauseCount is the number of active Pause() calls. While > 0, the
+	// background loop skips its podman ps call so a worker-mode migration
+	// doesn't compete with the cache poller for podman API connections.
+	pauseCount int32
 
 	// pollFn fetches container states; defaults to the real podman ps call.
 	// Swappable in tests.
@@ -145,6 +151,13 @@ func (c *ContainerCache) SetInterval(d time.Duration) {
 	c.intervalMu.Unlock()
 }
 
+// Pause suspends the background poll loop. Refcounted: nested Pause/Resume
+// pairs work correctly. Used during worker-mode migrations so the poller
+// doesn't compete with the migration's stop/start podman calls for gvproxy
+// connection slots.
+func (c *ContainerCache) Pause()  { atomic.AddInt32(&c.pauseCount, 1) }
+func (c *ContainerCache) Resume() { atomic.AddInt32(&c.pauseCount, -1) }
+
 func (c *ContainerCache) loop(ctx context.Context) {
 	for {
 		c.intervalMu.Lock()
@@ -155,8 +168,14 @@ func (c *ContainerCache) loop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-time.After(d):
+			if atomic.LoadInt32(&c.pauseCount) > 0 {
+				continue
+			}
 			c.poll()
 		case <-c.refresh:
+			if atomic.LoadInt32(&c.pauseCount) > 0 {
+				continue
+			}
 			c.poll()
 		}
 	}

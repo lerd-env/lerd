@@ -16,35 +16,46 @@ import "fmt"
 //     dies (its TCP/vsock link to the machine was torn down) but the inner
 //     artisan process inside the container resumed normally. The pid-file
 //     mutex doesn't help — its EXIT trap removed the file when the outer
-//     process died — so step 2 reaches into the container with `pkill -f`
-//     to graceful-stop any orphan worker matching the command line, then
-//     step 3 launches a fresh one. Laravel/Symfony workers respond to
-//     SIGTERM by finishing the current job before exiting, so the queue
-//     layer never sees a half-processed message.
+//     process died — so step 2 reaches into the container, finds processes
+//     matching the worker command WHOSE WORKING DIR EQUALS THIS SITE'S
+//     PATH, and graceful-stops them. Then step 3 launches a fresh one.
+//
+// Cwd-scoping in step 2 is critical: every Laravel site shares the same
+// FPM container and runs identical argv for `php artisan queue:work` /
+// `schedule:work` / `horizon`. A naive argv-only pkill would nuke the
+// same worker type running in *other* sites. Each site's `podman exec
+// -w <sitePath>` sets a unique cwd, so /proc/<pid>/cwd is the disambig.
 //
 // On launch:
 //
 //  1. If the pid file exists AND its PID is alive, the previous outer
 //     process is still driving the worker — exit 0.
-//  2. Otherwise pkill any container-side process matching workerCmd
-//     (the inner Laravel/Symfony command, sans `podman exec` prefix).
-//     Failures are swallowed — pkill returns non-zero when nothing
-//     matches, which is the common case.
+//  2. Otherwise SIGTERM any in-container process matching workerCmd
+//     whose cwd is sitePath. Failures are swallowed.
 //  3. Record our own PID, install an EXIT trap to clean up, and replace
-//     ourselves with runCmd so signals (TERM from launchd on shutdown)
-//     reach it directly.
+//     ourselves with runCmd.
 //
 // Stale pid files (previous process crashed) resolve on their own: the
 // kill -0 check in step 1 fails and the new instance takes over.
-func buildWorkerGuard(pidFile, podmanBin, container, workerCmd, runCmd string) string {
+func buildWorkerGuard(pidFile, podmanBin, container, sitePath, workerCmd, runCmd string) string {
+	// Inner sh script: enumerate pgrep matches, filter by cwd. Single
+	// quotes around literal arg interpolations because shellQuote already
+	// produces single-quoted strings; they nest correctly when the whole
+	// inner is itself shellQuoted as a sh -c argument.
+	inner := fmt.Sprintf(
+		`for p in $(pgrep -f -- %s 2>/dev/null); do `+
+			`[ "$(readlink /proc/$p/cwd 2>/dev/null)" = %s ] && kill -TERM $p 2>/dev/null; `+
+			`done`,
+		shellQuote(workerCmd), shellQuote(sitePath))
+
 	return fmt.Sprintf(`if [ -f %[1]s ] && kill -0 "$(cat %[1]s 2>/dev/null)" 2>/dev/null; then
   exit 0
 fi
-%[2]s exec %[3]s pkill -f -- %[4]s >/dev/null 2>&1 || true
+%[2]s exec %[3]s sh -c %[4]s >/dev/null 2>&1 || true
 echo $$ > %[1]s
 trap 'rm -f %[1]s' EXIT
 exec %[5]s
-`, pidFile, podmanBin, container, shellQuote(workerCmd), runCmd)
+`, pidFile, podmanBin, container, shellQuote(inner), runCmd)
 }
 
 // shellQuote single-quotes s for safe inclusion as one shell argument.

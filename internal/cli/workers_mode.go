@@ -55,7 +55,7 @@ No manual 'lerd stop && lerd start' needed.`,
 				return printWorkersMode(cfg)
 			}
 			prev := cfg.WorkerExecMode()
-			if err := applyWorkersMode(mode); err != nil {
+			if err := applyWorkersMode(mode, nil); err != nil {
 				return err
 			}
 			if prev == mode {
@@ -87,17 +87,55 @@ func workersModeFromArgs(args []string) (mode string, show bool, err error) {
 		args[0], config.WorkerExecModeExec, config.WorkerExecModeContainer)
 }
 
+// BeforeWorkerMigration is invoked once at the start of a worker-mode
+// migration with the unit names about to be touched. The UI registers a
+// callback that cancels any open `podman logs -f` SSE streams for those
+// units and pauses the container-state cache poller, so the migration's
+// stop/rm/start podman calls don't compete with the daemon's own podman
+// connections for gvproxy connection slots. nil on the CLI path (no UI
+// streams to cancel, no cache poller running).
+var BeforeWorkerMigration func(units []string)
+
+// AfterWorkerMigration is invoked once when the migration loop ends,
+// regardless of success. The UI uses it to resume the cache poller it
+// paused in BeforeWorkerMigration.
+var AfterWorkerMigration func()
+
+// WorkerModePhaseEvent is one step in the migration. The dashboard streams
+// these as NDJSON so the confirm modal can show real progress instead of
+// a blind 30-60s spinner.
+type WorkerModePhaseEvent struct {
+	Phase   string `json:"phase"` // "saving_config" | "migrating_worker" | "done" | "error"
+	Unit    string `json:"unit,omitempty"`
+	Step    string `json:"step,omitempty"` // "stopping" | "cleaning" | "starting"
+	Message string `json:"message,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
 // ApplyWorkersMode is the exported wrapper around applyWorkersMode used
 // by the dashboard handler so the web toggle drives the same migration
-// path as the CLI.
-func ApplyWorkersMode(newMode string) error { return applyWorkersMode(newMode) }
+// path as the CLI. emit may be nil when called from the CLI; the streaming
+// path is only used by the dashboard for live progress.
+func ApplyWorkersMode(newMode string) error { return applyWorkersMode(newMode, nil) }
+
+// ApplyWorkersModeStreaming is the streaming variant called by the web
+// dashboard. Emits phase events at every meaningful step so the modal
+// shows "Stopping lerd-horizon-parkapp", "Starting lerd-schedule-frontend",
+// etc. rather than a blank spinner for the whole migration.
+func ApplyWorkersModeStreaming(newMode string, emit func(WorkerModePhaseEvent)) error {
+	return applyWorkersMode(newMode, emit)
+}
 
 // applyWorkersMode writes newMode to global config, then (on macOS, if
 // the mode actually changed) stops every active worker in its old shape,
 // removes stale on-disk artifacts, and restarts each in the new shape.
 // On Linux it's a pure config write since workers always use exec under
 // systemd. Idempotent for same-value writes.
-func applyWorkersMode(newMode string) error {
+func applyWorkersMode(newMode string, emit func(WorkerModePhaseEvent)) error {
+	if emit == nil {
+		emit = func(WorkerModePhaseEvent) {}
+	}
+	emit(WorkerModePhaseEvent{Phase: "saving_config"})
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return err
@@ -109,7 +147,7 @@ func applyWorkersMode(newMode string) error {
 	}
 	// migrateWorkersOnModeChange is a no-op on Linux (build-tag linked).
 	// On macOS it executes the stop → clean → restart dance per worker.
-	return migrateWorkersOnModeChange(prev, newMode)
+	return migrateWorkersOnModeChangeStreaming(prev, newMode, emit)
 }
 
 func printWorkersMode(cfg *config.GlobalConfig) error {

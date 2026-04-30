@@ -489,6 +489,10 @@ func WorkerStopForSite(siteName, workerName string) error {
 	if err := services.Mgr.RemoveServiceUnit(unitName); err != nil {
 		return fmt.Errorf("removing unit file: %w", err)
 	}
+	// Drop the macOS exec-mode guard script + pid file (no-op on Linux).
+	// Without this they linger in ~/.local/share/lerd/run/workers after
+	// a normal stop and confuse later mode-migration discovery.
+	removeWorkerExecArtifacts(unitName)
 	if err := podman.DaemonReloadFn(); err != nil {
 		fmt.Printf("[WARN] daemon-reload: %v\n", err)
 	}

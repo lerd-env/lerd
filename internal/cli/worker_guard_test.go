@@ -12,7 +12,7 @@ import (
 // `true` is used as the podman binary so the orphan-cleanup step always
 // succeeds quickly without contacting a real podman machine.
 type guardArgs struct {
-	pidFile, podmanBin, container, workerCmd, runCmd string
+	pidFile, podmanBin, container, sitePath, workerCmd, runCmd string
 }
 
 func defaultGuardArgs(pidFile, runCmd string) guardArgs {
@@ -20,20 +20,21 @@ func defaultGuardArgs(pidFile, runCmd string) guardArgs {
 		pidFile:   pidFile,
 		podmanBin: "true",
 		container: "lerd-php84-fpm",
+		sitePath:  "/Users/test/site",
 		workerCmd: "php artisan queue:work",
 		runCmd:    runCmd,
 	}
 }
 
 func (a guardArgs) build() string {
-	return buildWorkerGuard(a.pidFile, a.podmanBin, a.container, a.workerCmd, a.runCmd)
+	return buildWorkerGuard(a.pidFile, a.podmanBin, a.container, a.sitePath, a.workerCmd, a.runCmd)
 }
 
 func TestBuildWorkerGuard_WrapsCommand(t *testing.T) {
 	a := defaultGuardArgs("/tmp/lerd-queue-alpha.pid", "podman exec -w /site lerd-php84-fpm php artisan queue:work")
 	got := a.build()
 
-	for _, want := range []string{a.pidFile, a.runCmd, "kill -0", "exec ", "pkill -f", "'php artisan queue:work'"} {
+	for _, want := range []string{a.pidFile, a.runCmd, "kill -0", "exec ", "pgrep -f", "readlink /proc/$p/cwd", "'php artisan queue:work'", "'/Users/test/site'"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("guard missing %q:\n%s", want, got)
 		}
@@ -97,18 +98,16 @@ func TestBuildWorkerGuard_WritesPIDFileBeforeExec(t *testing.T) {
 }
 
 // TestBuildWorkerGuard_RunsOrphanCleanupBeforeExec verifies the orphan
-// pkill step (step 2) runs even when the pid file is missing — this is
-// the suspend/wake codepath. We swap `podman` for a stub that touches a
-// marker file so the test asserts the call happened without needing a
-// real container.
+// cleanup step (step 2) runs even when the pid file is missing — this is
+// the suspend/wake codepath. We swap `podman` for a stub that records
+// each argument so the test asserts the inner sh -c script contains
+// both the worker command and the site path (the cwd-scoping that
+// keeps cross-site sibling workers from being killed).
 func TestBuildWorkerGuard_RunsOrphanCleanupBeforeExec(t *testing.T) {
 	tmp := t.TempDir()
 	pidFile := filepath.Join(tmp, "worker.pid")
 	pkillMarker := filepath.Join(tmp, "pkill-ran")
 
-	// Stub records each arg between angle brackets so the test can assert
-	// the worker command was passed as a single shell argument (i.e. the
-	// quoting in buildWorkerGuard worked) rather than being word-split.
 	stub := filepath.Join(tmp, "podman-stub")
 	stubScript := "#!/bin/sh\nfor a in \"$@\"; do printf '<%s>' \"$a\" >> " + pkillMarker + "; done\nexit 0\n"
 	if err := os.WriteFile(stub, []byte(stubScript), 0755); err != nil {
@@ -119,6 +118,7 @@ func TestBuildWorkerGuard_RunsOrphanCleanupBeforeExec(t *testing.T) {
 		pidFile:   pidFile,
 		podmanBin: stub,
 		container: "lerd-php84-fpm",
+		sitePath:  "/Users/u/parkapp",
 		workerCmd: "php artisan queue:work --queue=default",
 		runCmd:    "true",
 	}
@@ -131,9 +131,23 @@ func TestBuildWorkerGuard_RunsOrphanCleanupBeforeExec(t *testing.T) {
 	if err != nil {
 		t.Fatalf("orphan cleanup did not invoke podman: %v", err)
 	}
-	want := "<exec><lerd-php84-fpm><pkill><-f><--><php artisan queue:work --queue=default>"
-	if string(got) != want {
-		t.Errorf("orphan cleanup args mismatch.\ngot:  %s\nwant: %s", got, want)
+	// The first three args are the literal `exec`, container name, and
+	// `sh -c`. The fourth is the inner script (one shell arg) — must
+	// contain both the worker command and the site path so the cwd
+	// scoping is in effect.
+	gotStr := string(got)
+	for _, want := range []string{
+		"<exec>",
+		"<lerd-php84-fpm>",
+		"<sh>",
+		"<-c>",
+		"php artisan queue:work --queue=default",
+		"/Users/u/parkapp",
+		"readlink /proc/$p/cwd",
+	} {
+		if !strings.Contains(gotStr, want) {
+			t.Errorf("orphan cleanup missing %q in args:\n%s", want, gotStr)
+		}
 	}
 }
 
@@ -158,6 +172,7 @@ func TestBuildWorkerGuard_SkipsOrphanCleanupWhenOuterAlive(t *testing.T) {
 		pidFile:   pidFile,
 		podmanBin: stub,
 		container: "lerd-php84-fpm",
+		sitePath:  "/Users/u/parkapp",
 		workerCmd: "php artisan queue:work",
 		runCmd:    "false",
 	}
