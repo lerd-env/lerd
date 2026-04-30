@@ -1,7 +1,9 @@
 package dns
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -82,21 +84,18 @@ func WaitReady(timeout time.Duration) error {
 	return fmt.Errorf("lerd-dns not ready after %s", timeout)
 }
 
-// sudoWriteFile writes content to a system path by writing to a temp file
-// then using sudo cp, so sudo can prompt for a password on the terminal.
-// The mode parameter sets the file permissions (e.g. 0644, 0755).
+// sudoWriteFile writes content to a system path by piping it through
+// `sudo tee <path>`. Earlier versions wrote a /tmp/lerd-sudo-XXXXXX
+// staging file then ran `sudo cp tmp dst`, which required a sudoers rule
+// with a wildcard in the source argument. Modern strict sudo parsers —
+// sudo-rs (the Rust rewrite that Ubuntu 26.04 LTS made the default) and
+// C sudo from 1.9.16 onward (Fedora 41+, Arch / CachyOS, openSUSE
+// Tumbleweed, NixOS unstable) — hard-reject wildcards in command
+// arguments and fall back to the password-prompt path on every call,
+// which broke install on those distros (issue #269). Piping to tee with
+// a fully qualified destination has no wildcard, so the matching sudoers
+// rule grants `tee /exact/path` cleanly.
 func sudoWriteFile(path string, content []byte, mode os.FileMode) error {
-	tmp, err := os.CreateTemp("", "lerd-sudo-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write(content); err != nil {
-		tmp.Close()
-		return err
-	}
-	tmp.Close()
-
 	dir := filepath.Dir(path)
 	mkdirCmd := exec.Command("sudo", "mkdir", "-p", dir)
 	mkdirCmd.Stdin = os.Stdin
@@ -106,12 +105,14 @@ func sudoWriteFile(path string, content []byte, mode os.FileMode) error {
 		return fmt.Errorf("mkdir %s: %w", dir, err)
 	}
 
-	cpCmd := exec.Command("sudo", "cp", tmp.Name(), path)
-	cpCmd.Stdin = os.Stdin
-	cpCmd.Stdout = os.Stdout
-	cpCmd.Stderr = os.Stderr
-	if err := cpCmd.Run(); err != nil {
-		return fmt.Errorf("cp to %s: %w", path, err)
+	teeCmd := exec.Command("sudo", "tee", path)
+	teeCmd.Stdin = bytes.NewReader(content)
+	// tee echoes its input on stdout; discard that or it spams the
+	// terminal during install.
+	teeCmd.Stdout = io.Discard
+	teeCmd.Stderr = os.Stderr
+	if err := teeCmd.Run(); err != nil {
+		return fmt.Errorf("tee to %s: %w", path, err)
 	}
 
 	chmodCmd := exec.Command("sudo", "chmod", fmt.Sprintf("%o", mode), path)

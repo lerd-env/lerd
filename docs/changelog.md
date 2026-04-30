@@ -13,6 +13,10 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+---
+
+## [1.19.0-beta.1] — 2026-04-29
+
 ### Added
 
 - **Default services as YAML presets**. The 6 built-in services (mysql, postgres, redis, meilisearch, rustfs, mailpit) moved out of hardcoded Go lists/maps/embedded `.container` templates into `internal/config/presets/*.yaml` files marked `default: true`. Adding or replacing a default service is now a YAML edit. The same code path serves default and add-on presets — one quadlet writer, one env-var resolver, one dependency engine. Six duplicated service-name lists collapsed into `config.DefaultPresetNames()`; three duplicated env-var maps collapsed into `config.DefaultPresetEnvVars(name)`.
@@ -24,6 +28,8 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Migration safety guards**. Rolling-tag updates suppressed when local manifest digest matches remote (no phantom badges on `:latest`). Cross-major upgrades hidden from the Upgrade button by default; opt-in via per-preset `allow_major_upgrade`. Cross-strategy upgrade button suppressed for `update_strategy: patch` presets without a registered SQL migrator (Meilisearch — clicking would brick the data dir). Alternates installed via preset (e.g. `mysql-8-0`) internally promote to `patch` strategy so they don't get auto-suggested cross-LTS jumps.
 - **`internal/registry` package**. `ListTags`, `MaybeNewerTag`, `NewestStable` against Docker Hub and GHCR with a 6-hour disk cache. Typed `*UnreachableErr` and `*UnsupportedRegistryErr` are swallowed by the high-level helpers so offline / unsupported-registry installs stay quiet rather than spamming errors.
 - **`/api/services/<name>/{updates,update,rollback,migrate}`**. Read JSON + streaming NDJSON endpoints mirroring the existing preset-install streaming flow.
+- **Worktree branch renames are picked up automatically** (#264). The watcher now monitors each `.git/worktrees/<name>/HEAD` for writes, so a `git branch -m` or a `git checkout -b` inside a worktree re-syncs the nginx vhost and `.env` `APP_URL` to the renamed branch without a manual restart. Stale subdomain vhosts are removed surgically (only the now stale one), not by nuking and regenerating every vhost on the site. Thanks to @ropi-bc for the contribution.
+- **`APP_URL` realigns to the worktree domain on every scan** (#263). Previously `EnsureWorktreeDeps` only rewrote `APP_URL` when it first created the `.env`; renames and external workflows that relied on a manual `git branch -m` left it pointing at the stale subdomain. The worktree scan now updates `APP_URL` on existing `.env` files too, completing the rename flow added in #264. Thanks to @ropi-bc for the contribution.
 
 ### Changed
 
@@ -54,6 +60,16 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **Digest comparisons normalised** (lowercase + trim) in the `alreadyOnDigest` helper so registries returning differently-cased digests don't cause a permanent "update available" badge.
 - New tests: `TestRollback_RefusesAfterMigrate`, `TestCheckUpdateAvailable_CanRollback`, `TestEnforceMajorUpgradeGate`, `TestLeadingMajor`, plus registry tests for 404, 429, 5xx, pagination, and concurrent-singleflight de-duplication.
 - **Worker runtime mode on macOS** (`lerd workers mode <exec|container>`). macOS now runs framework workers (queue, schedule, horizon, reverb, custom) via a pid-file-guarded `podman exec` into the shared FPM container by default (`exec` mode), matching the memory profile of the Linux systemd path. Each worker adds near-zero RAM compared to the previous per-worker-container model, which could push a site's queue + schedule + horizon + reverb footprint past a gigabyte before any actual work. Users who prefer the previous 1:1 supervisor boundary can opt back in with `lerd workers mode container`. Setting is also surfaced in the TUI settings overlay (`S`) and via `GET/POST /api/settings/worker-mode` in `lerd-ui`. The dedup guard prevents duplicate workers when the podman-machine SSH bridge hiccups: if a previous `podman exec` is still alive, launchd's relaunch exits cleanly and waits for the real process to exit. Docs: [/usage/worker-runtime](/usage/worker-runtime). No change on Linux, which always uses the exec path under systemd.
+- **`cleanupWorktreeVhosts` no longer triggers `composer install` and the JS install on every surviving worktree.** When one worktree was removed, the cleanup pass that re-generated vhosts for the survivors also called `EnsureWorktreeDeps` on each one, which kicked off a full `composer install` plus the JS package-manager install. The rename and add paths handle deps via `syncWorktree`; doing it from cleanup burned cycles for no benefit. Survivors keep their existing `.env` and the cleanup pass only touches nginx config now.
+- **`.env` `APP_URL` rewrite is skipped when the value is already correct.** `rewriteAppURL` now compares the new bytes against the file before writing, so a no-op worktree scan no longer bumps `.env`'s mtime. Dev-side watchers (vite, IDE indexers, opcache `file_update_protection`) used to react to every scan even when the URL hadn't changed.
+
+---
+
+## [1.18.1] — 2026-04-29
+
+### Fixed
+
+- **DNS sudoers rules use wildcards in command arguments, breaking install on strict-sudo distros** (#269, #272). Ubuntu 26.04 LTS made `sudo-rs` (the memory-safe Rust rewrite of sudo) the default; sudo-rs's parser rejects wildcards in command arguments outright. The same pattern is rejected by upstream C sudo from 1.9.16 onward, which ships on Fedora 41+, Arch / CachyOS, openSUSE Tumbleweed, and NixOS unstable. The `cp /tmp/lerd-sudo-* /etc/...` and `resolvectl <verb> *` rules lerd wrote to `/etc/sudoers.d/lerd` never matched on those parsers, so every DNS reconfigure fell through to the password-prompt path and emitted parse errors visibly during `lerd install` ("wildcards are not allowed in command arguments"). Fixed by piping content through `sudo tee <fully-qualified-path>` instead of staging in `/tmp` and copying, and by dropping the trailing `*` from the resolvectl line. The Darwin path got the same treatment so future Apple-bundled sudo updates don't surface the same break. Existing installs heal automatically on the next `lerd install`: one password prompt to migrate, then the new rules grant passwordless operation for every subsequent DNS reconfigure. Verified end-to-end on a fresh Ubuntu 26.04 LTS VM running sudo-rs 0.2.13.
 
 ---
 
