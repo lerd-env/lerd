@@ -3,10 +3,22 @@ package cli
 import (
 	"fmt"
 	"runtime"
+	"sync/atomic"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/spf13/cobra"
 )
+
+// workerMigrationActive is incremented while a worker-mode migration is in
+// flight. Read by external supervisors (the exec-mode self-heal watcher in
+// internal/watcher) so they don't race the migration's stop/start loop —
+// e.g. a watcher tick that sees "no plist" mid-stop and tries to repair it
+// would clobber the migration's pending start with a stale shape.
+var workerMigrationActive atomic.Int32
+
+// WorkerMigrationActive reports whether a worker-mode migration is currently
+// running on this process. Nil-safe and zero-cost when not active.
+func WorkerMigrationActive() bool { return workerMigrationActive.Load() > 0 }
 
 // NewWorkersCmd returns the `lerd workers` parent command. Currently only
 // `lerd workers mode [exec|container]` lives here, but the subcommand is

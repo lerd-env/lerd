@@ -39,6 +39,8 @@ func migrateWorkersOnModeChangeStreaming(fromMode, toMode string, emit func(Work
 		emit(WorkerModePhaseEvent{Phase: "done"})
 		return nil
 	}
+	workerMigrationActive.Add(1)
+	defer workerMigrationActive.Add(-1)
 	units := discoverActiveWorkerUnits()
 	// Quiesce competing podman traffic before we touch anything: cancel
 	// open `podman logs -f` SSE streams in lerd-ui and pause the cache

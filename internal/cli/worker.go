@@ -210,6 +210,10 @@ func requireFrameworkWorker(cwd, workerName string) error {
 // If the worker has a Proxy config, the proxy port is auto-assigned and the
 // nginx vhost is regenerated to include the WebSocket/HTTP proxy block.
 func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker) error {
+	if err := workerStartPreflight(sitePath, workerName, w); err != nil {
+		return err
+	}
+
 	// Stop conflicting workers before starting.
 	for _, conflict := range w.ConflictsWith {
 		WorkerStopForSite(siteName, conflict) //nolint:errcheck

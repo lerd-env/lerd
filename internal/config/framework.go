@@ -92,6 +92,7 @@ type FrameworkWorker struct {
 	Restart       string         `yaml:"restart,omitempty"`        // always | on-failure (default: always)
 	Schedule      string         `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
 	Check         *FrameworkRule `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
+	ExcludeCheck  *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
 	ConflictsWith []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
 	Proxy         *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
 }
@@ -316,9 +317,10 @@ var laravelFramework = &Framework{
 	Console:  "artisan",
 	Workers: map[string]FrameworkWorker{
 		"queue": {
-			Label:   "Queue Worker",
-			Command: "php artisan queue:work --queue=default --tries=3 --timeout=60",
-			Restart: "always",
+			Label:        "Queue Worker",
+			Command:      "php artisan queue:work --queue=default --tries=3 --timeout=60",
+			Restart:      "always",
+			ExcludeCheck: &FrameworkRule{Composer: "laravel/horizon"}, // horizon supersedes queue
 		},
 		"schedule": {
 			Label:   "Task Scheduler",

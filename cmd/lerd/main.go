@@ -381,6 +381,12 @@ func newWatchCmd() *cobra.Command {
 			// only when it stops responding.
 			go watcher.WatchHostGateway(30 * time.Second)
 
+			// Self-heal exec-mode framework workers on macOS. Container mode
+			// uses podman --restart=always; exec mode runs guard scripts
+			// under launchd that can be left orphaned by an interrupted
+			// migration or sleep/wake bridge churn. No-op on Linux.
+			go watcher.WatchExecWorkers(60 * time.Second)
+
 			// Watch key site config files and signal queue:restart on change.
 			go func() {
 				err := watcher.WatchSiteFiles(
