@@ -13,7 +13,7 @@
     "i18n": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy localStorage preferredLanguage baseLocale --silent"
   },
   "devDependencies": {
-    "@sveltejs/vite-plugin-svelte": "^4.0.0",
+    "@sveltejs/vite-plugin-svelte": "^6.2.4",
     "@testing-library/jest-dom": "^6.5.0",
     "@testing-library/svelte": "^5.2.4",
     "@tsconfig/svelte": "^5.0.4",
@@ -25,8 +25,8 @@
     "tailwindcss": "^3.4.14",
     "tslib": "^2.8.0",
     "typescript": "^5.6.3",
-    "vite": "^5.4.10",
-    "vitest": "^2.1.4"
+    "vite": "^7.1.12",
+    "vitest": "^3.2.4"
   },
   "dependencies": {
     "@inlang/paraglide-js": "^2.16.1"

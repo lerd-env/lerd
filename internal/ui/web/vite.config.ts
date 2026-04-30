@@ -2,7 +2,7 @@ import { defineConfig } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { resolve } from 'node:path';
 
-export default defineConfig(({ mode }) => ({
+export default defineConfig(() => ({
   base: '/',
   plugins: [svelte()],
   resolve: {
@@ -12,7 +12,7 @@ export default defineConfig(({ mode }) => ({
       $stores: resolve(__dirname, 'src/stores'),
       $tabs: resolve(__dirname, 'src/tabs')
     },
-    conditions: mode === 'test' ? ['browser'] : []
+    conditions: ['browser']
   },
   build: {
     outDir: 'dist',

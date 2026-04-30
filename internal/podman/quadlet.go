@@ -159,11 +159,10 @@ func DaemonReload() error {
 var AfterUnitChange func(name string)
 
 // UnitOpDebug controls whether unit-lifecycle calls log a one-line caller
-// trace. Defaults to on; set LERD_UNIT_OP_DEBUG=0 to disable. Cheap when
-// off — runtime.Caller is only invoked when the flag is set. The log line
-// is one line per unit op, so volume is low in normal operation but jumps
-// out immediately during a "who keeps stopping FPM?" cascade.
-var UnitOpDebug = os.Getenv("LERD_UNIT_OP_DEBUG") != "0"
+// trace. Defaults to off; set LERD_UNIT_OP_DEBUG=1 to enable when chasing
+// a "who keeps stopping FPM?" cascade. Cheap when off — runtime.Caller is
+// only invoked when the flag is set.
+var UnitOpDebug = os.Getenv("LERD_UNIT_OP_DEBUG") == "1"
 
 func notifyUnitChange(name string) {
 	InvalidateUnitStatusCache(name)
