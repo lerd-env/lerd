@@ -50,7 +50,6 @@ func isContainerUnit(unit string) bool {
 	return true
 }
 
-
 func serviceRecentLogs(unit string) string {
 	if isContainerUnit(unit) {
 		out, err := exec.Command(podman.PodmanBin(), "logs", "--tail", "20", unit).CombinedOutput()
