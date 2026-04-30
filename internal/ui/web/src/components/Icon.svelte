@@ -1,5 +1,6 @@
 <script lang="ts" module>
   export type IconName =
+    | 'dashboard'
     | 'sites'
     | 'services'
     | 'system'
@@ -15,6 +16,8 @@
     | 'play'
     | 'stop'
     | 'back'
+    | 'globe'
+    | 'terminal'
     | 'spinner';
 </script>
 
@@ -26,6 +29,8 @@
   let { name, class: cls = 'w-5 h-5' }: Props = $props();
 
   const paths: Record<IconName, string> = {
+    dashboard:
+      'M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z',
     sites:
       'M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1',
     services:
@@ -44,6 +49,10 @@
     play: 'M5 3l14 9-14 9V3z',
     stop: 'M6 6h12v12H6z',
     back: 'M15 19l-7-7 7-7',
+    globe:
+      'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18',
+    terminal:
+      'M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
     spinner: 'M12 4v4m0 8v4m8-8h-4M8 12H4m12.95-7.05l-2.83 2.83M7.88 16.12l-2.83 2.83m0-14.14l2.83 2.83m8.24 8.24l2.83 2.83'
   };
 </script>

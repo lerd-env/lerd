@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestCopyTreeNative_RegularFilesAndDirs(t *testing.T) {
@@ -134,6 +135,154 @@ func TestJSPackageManager_PnpmBeatsOtherLockfiles(t *testing.T) {
 	bin, _ := jsPackageManager(dir)
 	if bin != "pnpm" {
 		t.Errorf("expected pnpm to win over npm lockfile, got %q", bin)
+	}
+}
+
+func TestComposerNeedsInstall(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(dir string)
+		want bool
+	}{
+		{
+			name: "no composer.json",
+			set:  func(string) {},
+			want: false,
+		},
+		{
+			name: "lock newer than installed.json",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "composer.json"))
+				touch(t, filepath.Join(dir, "composer.lock"))
+				touchAt(t, filepath.Join(dir, "vendor", "composer", "installed.json"), time.Now().Add(-time.Hour))
+			},
+			want: true,
+		},
+		{
+			name: "installed.json newer than lock",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "composer.json"))
+				touchAt(t, filepath.Join(dir, "composer.lock"), time.Now().Add(-time.Hour))
+				touch(t, filepath.Join(dir, "vendor", "composer", "installed.json"))
+			},
+			want: false,
+		},
+		{
+			name: "no installed.json marker",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "composer.json"))
+				touch(t, filepath.Join(dir, "composer.lock"))
+			},
+			want: true,
+		},
+		{
+			name: "no lockfile but installed.json exists",
+			set: func(dir string) {
+				touchAt(t, filepath.Join(dir, "composer.json"), time.Now().Add(-time.Hour))
+				touch(t, filepath.Join(dir, "vendor", "composer", "installed.json"))
+			},
+			want: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			c.set(dir)
+			if got := composerNeedsInstall(dir); got != c.want {
+				t.Errorf("composerNeedsInstall=%v want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestJSNeedsInstall(t *testing.T) {
+	cases := []struct {
+		name string
+		set  func(dir string)
+		want bool
+	}{
+		{
+			name: "no package.json",
+			set:  func(string) {},
+			want: false,
+		},
+		{
+			name: "npm: lock newer than node_modules marker",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "package.json"))
+				touch(t, filepath.Join(dir, "package-lock.json"))
+				touchAt(t, filepath.Join(dir, "node_modules", ".package-lock.json"), time.Now().Add(-time.Hour))
+			},
+			want: true,
+		},
+		{
+			name: "npm: marker newer than lock",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "package.json"))
+				touchAt(t, filepath.Join(dir, "package-lock.json"), time.Now().Add(-time.Hour))
+				touch(t, filepath.Join(dir, "node_modules", ".package-lock.json"))
+			},
+			want: false,
+		},
+		{
+			name: "npm: no node_modules at all",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "package.json"))
+				touch(t, filepath.Join(dir, "package-lock.json"))
+			},
+			want: true,
+		},
+		{
+			name: "pnpm: marker newer",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "package.json"))
+				touchAt(t, filepath.Join(dir, "pnpm-lock.yaml"), time.Now().Add(-time.Hour))
+				touch(t, filepath.Join(dir, "node_modules", ".modules.yaml"))
+			},
+			want: false,
+		},
+		{
+			name: "no lockfile and no node_modules",
+			set: func(dir string) {
+				touch(t, filepath.Join(dir, "package.json"))
+			},
+			want: true,
+		},
+		{
+			name: "no lockfile but node_modules already populated",
+			set: func(dir string) {
+				touchAt(t, filepath.Join(dir, "package.json"), time.Now().Add(-time.Hour))
+				touch(t, filepath.Join(dir, "node_modules", ".package-lock.json"))
+			},
+			want: false,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			c.set(dir)
+			if got := jsNeedsInstall(dir); got != c.want {
+				t.Errorf("jsNeedsInstall=%v want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func touch(t *testing.T, path string) {
+	t.Helper()
+	touchAt(t, path, time.Now())
+}
+
+func touchAt(t *testing.T, path string, when time.Time) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(path, when, when); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -74,11 +74,14 @@ func healthSignature(ws []workerheal.UnhealthyWorker) string {
 
 // buildUnhealthyWorkersJSON serialises the current detector output. Errors
 // degrade to an empty array so the dashboard never sees a malformed frame.
+// Each entry is enriched with the last journal line so the dashboard can
+// surface "why did this fail?" without a drill-down.
 func buildUnhealthyWorkersJSON() []byte {
 	out, err := workerheal.Detect()
 	if err != nil || len(out) == 0 {
 		return []byte("[]")
 	}
+	out = workerheal.Enrich(out)
 	b, err := json.Marshal(out)
 	if err != nil {
 		return []byte("[]")

@@ -17,10 +17,12 @@
   import { loadWorkerHealth } from '$stores/workerHealth';
   import { connectWs, disconnectWs } from '$lib/ws';
   import { initDashboardRoute } from '$stores/dashboard';
+  import '$stores/activity';
   import { mobileView } from '$stores/mobileView';
   import ModalHost from './modals/ModalHost.svelte';
   import DashboardOverlay from '$components/DashboardOverlay.svelte';
   import WorkerHealthBanner from '$components/WorkerHealthBanner.svelte';
+  import CommandPalette from '$components/CommandPalette.svelte';
 
   import SitesTab from '$tabs/SitesTab.svelte';
   import ServicesTab from '$tabs/ServicesTab.svelte';
@@ -29,6 +31,7 @@
   import ServicesDetail from '$tabs/ServicesDetail.svelte';
   import SystemDetail from '$tabs/SystemDetail.svelte';
   import AppsPage from '$tabs/AppsPage.svelte';
+  import DashboardTab from '$tabs/DashboardTab.svelte';
 
   function handlePageHide() {
     disconnectWs();
@@ -59,20 +62,23 @@
   // if the user explicitly picked something, to avoid jumping past the list.
   const showMobileDetail = $derived(Boolean($routeRest));
   const onApps = $derived($mobileView === 'apps');
+  const onDashboard = $derived($tab === 'dashboard');
 </script>
 
 <div class="h-screen flex">
   <NavRail />
 
-  <SidePanel>
-    {#if $tab === 'sites'}
-      <SitesTab />
-    {:else if $tab === 'services'}
-      <ServicesTab />
-    {:else if $tab === 'system'}
-      <SystemTab />
-    {/if}
-  </SidePanel>
+  {#if !onDashboard}
+    <SidePanel>
+      {#if $tab === 'sites'}
+        <SitesTab />
+      {:else if $tab === 'services'}
+        <ServicesTab />
+      {:else if $tab === 'system'}
+        <SystemTab />
+      {/if}
+    </SidePanel>
+  {/if}
 
   <main class="flex-1 flex flex-col overflow-hidden">
     {#if !showMobileDetail}
@@ -80,7 +86,9 @@
     {/if}
 
     <div class="hidden md:flex flex-col flex-1 overflow-hidden">
-      {#if $tab === 'sites'}
+      {#if $tab === 'dashboard'}
+        <DashboardTab />
+      {:else if $tab === 'sites'}
         <SitesDetail />
       {:else if $tab === 'services'}
         <ServicesDetail />
@@ -92,6 +100,10 @@
     {#if onApps}
       <div class="md:hidden flex-1 flex flex-col overflow-hidden pb-16">
         <AppsPage />
+      </div>
+    {:else if onDashboard}
+      <div class="md:hidden flex-1 overflow-y-auto pb-16">
+        <DashboardTab />
       </div>
     {:else if !showMobileDetail}
       <div class="md:hidden flex-1 overflow-y-auto pb-16">
@@ -121,4 +133,5 @@
   <ModalHost />
   <DashboardOverlay />
   <WorkerHealthBanner />
+  <CommandPalette />
 </div>

@@ -5,9 +5,9 @@
 </script>
 
 <button
-  class="mb-4 flex items-center justify-center relative"
-  title={$version.hasUpdate ? m.system_lerd_updateAvailable() : 'Lerd'}
-  onclick={() => goToTab('system', 'lerd')}
+  class="mb-4 flex items-center justify-center relative rounded-lg p-0.5 transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
+  title={$version.hasUpdate ? m.system_lerd_updateAvailable() : m.nav_dashboard()}
+  onclick={() => goToTab('dashboard')}
 >
   <img src="/icons/icon.svg" class="w-7 h-7 rounded-lg" alt="Lerd" />
   {#if $version.hasUpdate}

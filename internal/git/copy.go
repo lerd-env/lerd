@@ -91,26 +91,105 @@ func copyFileWithMode(src, dst string, mode os.FileMode) error {
 // npm shim from BinDir when the project uses npm so the fnm Node version
 // is picked up.
 //
+// Each install is skipped when the relevant install marker
+// (vendor/composer/installed.json for composer, the package manager's own
+// marker under node_modules for JS) is at-or-newer than the lockfile —
+// nothing has drifted, so re-running install would just burn cycles on
+// post-autoload-dump scripts (Laravel package:discover, Filament asset
+// publish, etc.) for no observable change.
+//
 // Errors are aggregated and returned; callers should log them rather than
 // treat them as fatal since the worktree is still usable with the copied
 // trees from main.
 func InstallDependencies(projectPath string) error {
 	var errs []error
 
-	if hasFile(projectPath, "composer.json") {
+	if composerNeedsInstall(projectPath) {
 		composer := filepath.Join(config.BinDir(), "composer")
 		if err := runIn(projectPath, composer, "install", "--no-interaction", "--no-progress"); err != nil {
 			errs = append(errs, fmt.Errorf("composer install: %w", err))
 		}
 	}
 
-	if hasFile(projectPath, "package.json") {
+	if jsNeedsInstall(projectPath) {
 		if err := runJSInstall(projectPath); err != nil {
 			errs = append(errs, err)
 		}
 	}
 
 	return errors.Join(errs...)
+}
+
+// composerNeedsInstall reports whether composer install must run for the
+// project at projectPath. It returns false when there is no composer.json,
+// when vendor/composer/installed.json exists and is at-or-newer than
+// composer.lock (or composer.json when there is no lockfile yet), and
+// true otherwise.
+func composerNeedsInstall(projectPath string) bool {
+	if !hasFile(projectPath, "composer.json") {
+		return false
+	}
+	marker := filepath.Join(projectPath, "vendor", "composer", "installed.json")
+	ref := filepath.Join(projectPath, "composer.lock")
+	if !hasFile(projectPath, "composer.lock") {
+		ref = filepath.Join(projectPath, "composer.json")
+	}
+	return markerStale(marker, ref)
+}
+
+// jsNeedsInstall reports whether the JS package install must run for the
+// project at projectPath. False when there is no package.json or when the
+// package manager's install marker under node_modules/ is at-or-newer than
+// the lockfile; true otherwise.
+func jsNeedsInstall(projectPath string) bool {
+	if !hasFile(projectPath, "package.json") {
+		return false
+	}
+	marker, ref := jsInstallPaths(projectPath)
+	return markerStale(marker, ref)
+}
+
+// jsInstallPaths returns the absolute paths to the install marker and the
+// lockfile reference for whichever JS package manager owns the project, in
+// the same preference order as jsPackageManager. The marker for npm is the
+// .package-lock.json snapshot npm writes inside node_modules; for pnpm we
+// use .modules.yaml, for yarn install-state.gz, and for bun the package
+// manager's own per-install lockfile inside node_modules. When no lockfile
+// is present the package.json itself is the reference (a manifest edit is
+// the only thing that can require a re-install).
+func jsInstallPaths(projectPath string) (marker, ref string) {
+	nm := filepath.Join(projectPath, "node_modules")
+	switch {
+	case hasFile(projectPath, "pnpm-lock.yaml"):
+		return filepath.Join(nm, ".modules.yaml"), filepath.Join(projectPath, "pnpm-lock.yaml")
+	case hasFile(projectPath, "yarn.lock"):
+		return filepath.Join(projectPath, ".yarn", "install-state.gz"), filepath.Join(projectPath, "yarn.lock")
+	case hasFile(projectPath, "bun.lockb"):
+		return filepath.Join(nm, ".bun-tag"), filepath.Join(projectPath, "bun.lockb")
+	case hasFile(projectPath, "bun.lock"):
+		return filepath.Join(nm, ".bun-tag"), filepath.Join(projectPath, "bun.lock")
+	case hasFile(projectPath, "package-lock.json"):
+		return filepath.Join(nm, ".package-lock.json"), filepath.Join(projectPath, "package-lock.json")
+	case hasFile(projectPath, "npm-shrinkwrap.json"):
+		return filepath.Join(nm, ".package-lock.json"), filepath.Join(projectPath, "npm-shrinkwrap.json")
+	}
+	return filepath.Join(nm, ".package-lock.json"), filepath.Join(projectPath, "package.json")
+}
+
+// markerStale returns true when the marker file is missing or older than
+// the reference file. A missing reference (lockfile/manifest) is treated
+// as "no signal" and the marker is trusted: in that pathological case we
+// avoid spurious reinstalls.
+func markerStale(marker, ref string) bool {
+	refInfo, err := os.Stat(ref)
+	if err != nil {
+		return false
+	}
+	markerInfo, err := os.Stat(marker)
+	if err != nil {
+		return true
+	}
+	return markerInfo.ModTime().Before(refInfo.ModTime())
 }
 
 // jsPackageManager returns the name and install args for the package

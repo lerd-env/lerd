@@ -8,7 +8,9 @@ package workerheal
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -17,10 +19,11 @@ import (
 
 // UnhealthyWorker is a single failing/stuck worker unit.
 type UnhealthyWorker struct {
-	Site   string `json:"site"`
-	Worker string `json:"worker"`
-	Unit   string `json:"unit"`
-	State  string `json:"state"` // "failed" today; reserve for future "start-limit-hit", "expected-but-stopped"
+	Site      string `json:"site"`
+	Worker    string `json:"worker"`
+	Unit      string `json:"unit"`
+	State     string `json:"state"` // "failed" today; reserve for future "start-limit-hit", "expected-but-stopped"
+	LastError string `json:"last_error,omitempty"`
 }
 
 // Event is one line in the streaming heal report. Dashboard, MCP, and TUI
@@ -58,7 +61,56 @@ var nonWorkerPerSitePrefixes = map[string]bool{
 var (
 	unitStatesFn = siteinfo.AllUnitStates
 	healFn       = podman.StartUnit
+	lastErrorFn  = readLastError
 )
+
+// lastErrorMaxLen caps how many characters of an error line are surfaced.
+// Truncated lines keep the dashboard frame small and avoid leaking long
+// stack traces over the WS push.
+const lastErrorMaxLen = 220
+
+// readLastError invokes journalctl to read the last log line emitted for a
+// failed worker unit. Best-effort: if journalctl is missing, the unit has
+// no journal entries, or anything else goes wrong, the empty string is
+// returned and the dashboard simply omits the error excerpt.
+func readLastError(unit string) string {
+	if _, err := exec.LookPath("journalctl"); err != nil {
+		return ""
+	}
+	cmd := exec.Command("journalctl", "--user", "-u", unit, "-n", "1", "--no-pager", "-o", "cat")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	line := strings.TrimSpace(string(out))
+	if len(line) > lastErrorMaxLen {
+		line = line[:lastErrorMaxLen] + "…"
+	}
+	return line
+}
+
+// enrichBudget caps total time spent reading journals across all units in
+// one Enrich call so a slow journal can't stall the snapshot rebuild.
+const enrichBudget = 500 * time.Millisecond
+
+// Enrich populates LastError on every entry by reading the journal once per
+// unit. Walks in slice order until the per-call budget is hit, leaving any
+// remaining entries' LastError empty. Safe with a nil or empty slice.
+// Intended for the dashboard pre-serialization step where there are
+// typically 0–3 entries, so the budget is rarely exercised.
+func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
+	deadline := time.Now().Add(enrichBudget)
+	for i := range in {
+		if in[i].LastError != "" {
+			continue
+		}
+		if time.Now().After(deadline) {
+			break
+		}
+		in[i].LastError = lastErrorFn(in[i].Unit)
+	}
+	return in
+}
 
 // Detect returns every worker unit systemd considers "failed". Cheap by
 // design: it reads only the existing batched unit-state cache (one

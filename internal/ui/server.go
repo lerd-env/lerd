@@ -38,6 +38,7 @@ import (
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
+	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
 )
 
@@ -199,6 +200,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
+	mux.HandleFunc("/api/stats", withCORS(handleStats))
 	mux.HandleFunc("/api/xdebug/", withCORS(publishAfter(handleXdebugAction, eventbus.KindStatus)))
 	mux.HandleFunc("/api/lerd/start", withCORS(handleLerdStart))
 	mux.HandleFunc("/api/lerd/stop", withCORS(handleLerdStop))
@@ -2436,7 +2438,9 @@ func handleSettingsWorkerMode(w http.ResponseWriter, r *http.Request) {
 
 // handleWorkersHealth reports every worker unit currently in the systemd
 // "failed" state, grouped per site. Reads the existing batched unit-state
-// cache so polling stays cheap (no extra subprocess per request).
+// cache so polling stays cheap (no extra subprocess per request); each
+// entry is enriched with the last journal line so the dashboard can show
+// "why did this fail?" without a drill-down.
 func handleWorkersHealth(w http.ResponseWriter, _ *http.Request) {
 	unhealthy, err := cli.DetectUnhealthyWorkers()
 	if err != nil {
@@ -2446,6 +2450,7 @@ func handleWorkersHealth(w http.ResponseWriter, _ *http.Request) {
 	if unhealthy == nil {
 		unhealthy = []cli.UnhealthyWorker{}
 	}
+	unhealthy = workerheal.Enrich(unhealthy)
 	writeJSON(w, map[string]any{"unhealthy": unhealthy})
 }
 

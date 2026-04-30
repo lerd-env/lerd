@@ -281,3 +281,55 @@ func TestSummary_NoUnhealthy(t *testing.T) {
 		t.Errorf("Summary(empty) = %q", got)
 	}
 }
+
+func TestEnrich_PopulatesLastError(t *testing.T) {
+	prev := lastErrorFn
+	t.Cleanup(func() { lastErrorFn = prev })
+	lastErrorFn = func(unit string) string { return "boom on " + unit }
+
+	in := []UnhealthyWorker{
+		{Unit: "lerd-queue-foo", Site: "foo", Worker: "queue", State: "failed"},
+		{Unit: "lerd-schedule-bar", Site: "bar", Worker: "schedule", State: "failed"},
+	}
+	out := Enrich(in)
+	if out[0].LastError != "boom on lerd-queue-foo" {
+		t.Errorf("queue last_error = %q", out[0].LastError)
+	}
+	if out[1].LastError != "boom on lerd-schedule-bar" {
+		t.Errorf("schedule last_error = %q", out[1].LastError)
+	}
+}
+
+func TestEnrich_KeepsPreSetErrorAndSkipsCall(t *testing.T) {
+	prev := lastErrorFn
+	t.Cleanup(func() { lastErrorFn = prev })
+	calls := 0
+	lastErrorFn = func(unit string) string {
+		calls++
+		return "fresh"
+	}
+
+	in := []UnhealthyWorker{
+		{Unit: "a", LastError: "preserved"},
+		{Unit: "b"},
+	}
+	out := Enrich(in)
+	if out[0].LastError != "preserved" {
+		t.Errorf("pre-set error overwritten: %q", out[0].LastError)
+	}
+	if out[1].LastError != "fresh" {
+		t.Errorf("missing fill: %q", out[1].LastError)
+	}
+	if calls != 1 {
+		t.Errorf("lastErrorFn calls = %d, want 1", calls)
+	}
+}
+
+func TestEnrich_NilAndEmpty(t *testing.T) {
+	if got := Enrich(nil); got != nil {
+		t.Errorf("Enrich(nil) = %v, want nil", got)
+	}
+	if got := Enrich([]UnhealthyWorker{}); len(got) != 0 {
+		t.Errorf("Enrich(empty) = %v, want empty", got)
+	}
+}

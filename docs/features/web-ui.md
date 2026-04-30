@@ -30,13 +30,38 @@ A service worker ships with the dashboard, so when lerd is stopped (including vi
 
 ## Layout
 
-The dashboard uses a three-pane layout:
+The default landing page is a **Dashboard** with at-a-glance widgets across sites, services, workers, and system health. Selecting Sites, Services, or System switches to a three-pane layout:
 
-- **Left icon rail**: switch between Sites, Services, and System with icon buttons; a separator below lists a per-service icon for every running service that exposes a dashboard (phpMyAdmin, pgAdmin, Mailpit, RustFS, Meilisearch, Mongo Express, Selenium, etc.), and clicking one opens the dashboard inline as a full-width iframe over the middle and detail panels; theme toggle and docs link at the bottom
-- **Middle list panel**: scrollable list of all items in the active section; status dots, compact rows, collapsible groups
+- **Left icon rail**: the lerd logo at the top is the link back to the Dashboard; below it sit the Sites, Services, and System icon buttons; a separator further down lists a per-service icon for every running service that exposes a dashboard (phpMyAdmin, pgAdmin, Mailpit, RustFS, Meilisearch, Mongo Express, Selenium, etc.), and clicking one opens that dashboard inline as a full-width iframe over the middle and detail panels; theme toggle and docs link at the bottom
+- **Middle list panel**: scrollable list of all items in the active section; status dots, compact rows, collapsible groups (hidden on the Dashboard)
 - **Detail panel**: full controls and live logs for the selected item
 
-On mobile the list and detail panels are full-screen with a bottom tab bar for navigation.
+On mobile the dashboard, list, and detail panels are full-screen with a bottom tab bar for navigation that includes Dashboard alongside Sites, Services, and System.
+
+---
+
+## Dashboard
+
+The Dashboard is the root page (`#dashboard`) and the default destination when the UI loads. It hides the middle list panel and fills the main pane with a responsive grid of widgets:
+
+- **Sites**: total / running / paused / failing counts, the top frameworks across linked sites as red badges, and a **Link site** call to action (loopback only) that opens the same modal as the Sites tab `+` button.
+- **Services**: an active-vs-total summary pill, a click-through banner when one or more services have updates available, a two-column list of every core service with status dot and version, an **Add** button (loopback only) that opens the preset picker, and a link into the Services tab.
+- **Workers**: per-group counts (Queues, Schedules, Horizon, Reverb, Stripe, custom Workers), a red pulsing dot when any unit in a group is failing, and a **Heal all** button that runs the same heal flow as the worker-health banner. Otherwise shows an "All healthy" pill.
+- **System health**: overall pill (Healthy / Attention / Problem) derived from DNS, Nginx, and the file watcher, plus a row per component and a chip per installed PHP-FPM version coloured by its running state.
+- **Lerd**: current version, "Up to date" or a yellow "update available" banner with an **Open terminal & update** button (loopback only), Autostart and LAN status pills, plus **Check for updates** and **Manage →** in the footer.
+
+Every widget is driven by the same Svelte stores that power the rest of the dashboard, so all values stay live over the WebSocket without polling.
+
+### Command palette
+
+Press **`Cmd+K`** (macOS) / **`Ctrl+K`** (Linux/Windows), or **`/`** anywhere outside an input, to open a global command palette overlay. It searches across:
+
+- **Pages** — Dashboard, Sites, Services, System
+- **Sites** — every linked domain, with framework hint
+- **Services** — every core service, with version hint
+- **Actions** — Link a site, Add a service, Heal failing workers (when any), Check for updates, Open documentation, Open current site in browser, Toggle theme
+
+Use `↑` / `↓` to move the selection, `↵` to execute, `esc` to close. The palette is available on every tab, not just the dashboard.
 
 ---
 
@@ -88,7 +113,7 @@ Selecting an item opens its detail panel:
 - **Node.js cards**: show which sites use the version, with a remove button. The **Install Node.js version** entry has an inline form; enter a version number (e.g. `22`) and click **Install**, equivalent to `lerd node:install <version>`.
 - **Watcher card**: shows whether `lerd-watcher` is running; a Start button appears when stopped. Streams live watcher logs (DNS repair events, fsnotify errors, worktree timeouts).
 - **Autostart card**: enable or disable automatic start of all services at login.
-- **Lerd card**: shows the current version and a **Check for updates** button. The status dot next to the entry is green when DNS, nginx, and the watcher are all running, red when any of them is down, and yellow when an update is available. When an update is available, an **Open terminal & update** button spawns the user's preferred terminal emulator with `lerd update` pre-filled (loopback only, the host needs to prompt for sudo). A small yellow dot also appears on the lerd logo in the left rail; clicking the logo jumps straight to this entry.
+- **Lerd card**: shows the current version and a **Check for updates** button. The status dot next to the entry is green when DNS, nginx, and the watcher are all running, red when any of them is down, and yellow when an update is available. When an update is available, an **Open terminal & update** button spawns the user's preferred terminal emulator with `lerd update` pre-filled (loopback only, the host needs to prompt for sudo). A small yellow dot also appears on the lerd logo in the left rail; clicking the logo always returns to the Dashboard, where the same update banner is surfaced on the Lerd widget.
 
 The **Start** / **Stop** buttons in the System panel header start or stop all core services (DNS, nginx, and all PHP-FPM containers for versions that have active sites).
 

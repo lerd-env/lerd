@@ -1,8 +1,8 @@
 import { writable, derived } from 'svelte/store';
 
-export type TabId = 'sites' | 'services' | 'system';
+export type TabId = 'dashboard' | 'sites' | 'services' | 'system';
 
-export const TABS: TabId[] = ['sites', 'services', 'system'];
+export const TABS: TabId[] = ['dashboard', 'sites', 'services', 'system'];
 
 export function parseHash(hash: string): { tab: TabId; rest: string } {
   const h = hash.startsWith('#') ? hash.slice(1) : hash;
@@ -10,7 +10,7 @@ export function parseHash(hash: string): { tab: TabId; rest: string } {
     if (h === t) return { tab: t, rest: '' };
     if (h.startsWith(t + '/')) return { tab: t, rest: h.slice(t.length + 1) };
   }
-  return { tab: 'sites', rest: '' };
+  return { tab: 'dashboard', rest: '' };
 }
 
 const initial = parseHash(location.hash);

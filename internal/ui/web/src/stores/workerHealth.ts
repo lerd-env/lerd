@@ -7,6 +7,7 @@ export interface UnhealthyWorker {
   worker: string;
   unit: string;
   state: string;
+  last_error?: string;
 }
 
 interface HealthResponse {

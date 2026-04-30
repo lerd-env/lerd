@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { parseHash, goToTab, TABS } from './route';
 
 describe('parseHash', () => {
-  it('defaults to sites for empty hash', () => {
-    expect(parseHash('')).toEqual({ tab: 'sites', rest: '' });
-    expect(parseHash('#')).toEqual({ tab: 'sites', rest: '' });
+  it('defaults to dashboard for empty hash', () => {
+    expect(parseHash('')).toEqual({ tab: 'dashboard', rest: '' });
+    expect(parseHash('#')).toEqual({ tab: 'dashboard', rest: '' });
   });
 
   it('parses bare tab', () => {
@@ -19,8 +19,8 @@ describe('parseHash', () => {
     expect(parseHash('#sites/foo.test/logs')).toEqual({ tab: 'sites', rest: 'foo.test/logs' });
   });
 
-  it('falls back to sites for unknown tab', () => {
-    expect(parseHash('#nope')).toEqual({ tab: 'sites', rest: '' });
+  it('falls back to dashboard for unknown tab', () => {
+    expect(parseHash('#nope')).toEqual({ tab: 'dashboard', rest: '' });
   });
 });
 

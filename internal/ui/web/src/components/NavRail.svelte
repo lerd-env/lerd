@@ -11,12 +11,14 @@
   import { m } from '../paraglide/messages.js';
 
   const labels = $derived<Record<TabId, string>>({
+    dashboard: m.nav_dashboard(),
     sites: m.nav_sites(),
     services: m.nav_services(),
     system: m.nav_system()
   });
 
   const icons: Record<TabId, IconName> = {
+    dashboard: 'dashboard',
     sites: 'sites',
     services: 'services',
     system: 'system'
@@ -29,7 +31,7 @@
   <RailLogo />
 
   <div class="flex flex-col gap-1">
-    {#each TABS as t (t)}
+    {#each TABS.filter((t) => t !== 'dashboard') as t (t)}
       <IconButton
         title={labels[t]}
         active={!$dashboardOpen && $tab === t}
