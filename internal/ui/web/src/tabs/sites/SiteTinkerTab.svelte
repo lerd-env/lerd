@@ -613,6 +613,22 @@
   :global(html.dark .cm-completionDetail) {
     color: #9ca3af;
   }
+  /* CodeMirror's default gutter is white-on-light. Override for dark
+     mode (lerd-card background, muted slate text) so the line numbers
+     blend with the rest of the dashboard. */
+  :global(html.dark .cm-gutters) {
+    background-color: #161616;
+    border-right: 1px solid #262626;
+    color: #6b7280;
+  }
+  :global(html.dark .cm-lineNumbers .cm-gutterElement) {
+    color: #6b7280;
+  }
+  :global(html.dark .cm-activeLineGutter) {
+    background-color: rgba(255, 255, 255, 0.04);
+    color: #d1d5db;
+  }
+
   /* Output panel — visually mirrors the CodeMirror editor on the left:
      bordered box, monospace, line-number gutter that the user can't
      mouse-select or copy. Numbers come from `data-line` via `::before`,
