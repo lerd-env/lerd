@@ -123,6 +123,7 @@ Once the MCP server is connected, your AI assistant has access to:
 | `logs` | Fetch container logs; defaults to current site's FPM; optionally specify nginx, service name, PHP version, or site name |
 | `status` | Health snapshot of DNS, nginx, PHP-FPM containers, and the watcher; use when a site isn't loading |
 | `doctor` | Full diagnostic as structured JSON: podman, systemd, DNS, ports, PHP images, config, updates; use when the user reports setup issues |
+| `dns_diagnose` | Layered DNS chain walk (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup); each rung returns `status` + `hint` with a `first_failure` index pointing at the broken layer |
 | `which` | Show the resolved PHP version, Node version, document root, and nginx config for the current site |
 | `check` | Validate `.lerd.yaml` as structured JSON (PHP version, services, framework); returns valid/errors/warnings with per-field status |
 
