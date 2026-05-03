@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // ContainerStat is one row in the resources panel: a single lerd-prefixed
@@ -110,7 +112,7 @@ func readPodmanStats() ([]ContainerStat, error) {
 	defer cancel()
 	cmd := exec.CommandContext(
 		ctx,
-		"podman", "stats", "--no-stream",
+		podman.PodmanBin(), "stats", "--no-stream",
 		"--format", "{{.Name}}|{{.CPU}}|{{.MemUsage}}|{{.MemPerc}}",
 	)
 	out, err := cmd.Output()
