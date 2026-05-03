@@ -34,16 +34,20 @@ func uidDomain() string {
 var podmanStartSem = make(chan struct{}, 4)
 
 func init() {
-	Mgr = &darwinServiceManager{}
+	mgr := &darwinServiceManager{}
+	Mgr = mgr
 	// Override service-manager hooks to use launchd instead of systemd.
-	podman.WriteContainerUnitFn = Mgr.WriteContainerUnit
-	podman.DaemonReloadFn = Mgr.DaemonReload
+	podman.WriteContainerUnitFn = mgr.WriteContainerUnit
+	podman.DaemonReloadFn = mgr.DaemonReload
 	podman.SkipQuadletUpToDateCheck = true
-	podman.UnitLifecycle = Mgr
-	podman.RemoveContainerUnitFn = Mgr.RemoveContainerUnit
+	// Bind the concrete type so UnitLifecycle picks up AllUnitStates, which
+	// isn't part of services.ServiceManager (Linux has no need for it — the
+	// systemctl batched-list path covers Linux callers).
+	podman.UnitLifecycle = mgr
+	podman.RemoveContainerUnitFn = mgr.RemoveContainerUnit
 	// Keep launchd plists in sync when WriteQuadletDiff updates a .container file.
 	podman.AfterQuadletWriteFn = func(name, content string) error {
-		return Mgr.WriteContainerUnit(name, content)
+		return mgr.WriteContainerUnit(name, content)
 	}
 }
 
@@ -758,4 +762,33 @@ func (m *darwinServiceManager) UnitStatus(name string) (string, error) {
 		return "inactive", nil
 	}
 	return "failed", nil
+}
+
+// AllUnitStates enumerates every lerd-* plist in ~/Library/LaunchAgents and
+// returns a snapshot keyed by unit name → systemd-style state string. Both
+// "lerd-foo" and "lerd-foo.service" forms are populated so cross-platform
+// callers (workerheal, dashboard banner) can use a single suffix-based lookup.
+//
+// This is the launchd analogue of `systemctl --user list-units lerd-*` and
+// is wired onto siteinfo.AllUnitStates from siteinfo/unitcache_darwin.go.
+func (m *darwinServiceManager) AllUnitStates() map[string]string {
+	pattern := filepath.Join(launchAgentsDir(), "lerd-*.plist")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return map[string]string{}
+	}
+	out := make(map[string]string, len(matches)*2)
+	for _, path := range matches {
+		name := strings.TrimSuffix(filepath.Base(path), ".plist")
+		if !strings.HasPrefix(name, "lerd-") {
+			continue
+		}
+		state, _ := m.UnitStatus(name)
+		if state == "" || state == "unknown" {
+			continue
+		}
+		out[name] = state
+		out[name+".service"] = state
+	}
+	return out
 }

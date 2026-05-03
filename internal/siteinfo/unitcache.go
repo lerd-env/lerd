@@ -23,6 +23,12 @@ var (
 	// unitCacheListFn is swappable for tests. It returns the raw output of
 	// `systemctl --user list-units --all --no-legend --plain 'lerd-*'`.
 	unitCacheListFn = defaultUnitCacheList
+
+	// allUnitStatesFn lets non-systemd platforms override the enumeration
+	// entirely. When non-nil it bypasses unitCacheListFn and returns the
+	// unit→state map directly. Set from unitcache_darwin.go's init() to
+	// route through podman.UnitLifecycle (launchd-backed on macOS).
+	allUnitStatesFn func() map[string]string
 )
 
 func defaultUnitCacheList() (string, error) {
@@ -46,6 +52,9 @@ func InvalidateUnitCache() {
 // systemctl snapshot the dashboard's enrichment path is already populating
 // — zero extra subprocess cost for callers like the worker-health detector.
 func AllUnitStates() map[string]string {
+	if allUnitStatesFn != nil {
+		return allUnitStatesFn()
+	}
 	globalUnitCache.mu.Lock()
 	defer globalUnitCache.mu.Unlock()
 	if globalUnitCache.states == nil || time.Since(globalUnitCache.at) > unitCacheTTL {

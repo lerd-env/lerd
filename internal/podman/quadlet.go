@@ -126,6 +126,7 @@ var UnitLifecycle interface {
 	Stop(name string) error
 	Restart(name string) error
 	UnitStatus(name string) (string, error)
+	AllUnitStates() map[string]string
 }
 
 // DaemonReload runs the equivalent of systemctl --user daemon-reload.

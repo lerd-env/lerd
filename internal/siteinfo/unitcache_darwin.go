@@ -11,10 +11,18 @@ func init() {
 	// which checks launchd state and the running podman container directly.
 	unitStatusFn = podman.UnitStatus
 
-	// AllUnitStates is the batched-state accessor used by the worker-health
-	// detector. On macOS there is no systemctl batched-list equivalent (each
-	// `launchctl print` is one process), so return empty rather than shell
-	// out per call. The macOS exec-mode self-heal watcher already covers the
-	// drift cases the Linux detector targets.
+	// Stub out the legacy systemctl list-units path. AllUnitStates routes
+	// through podman.UnitLifecycle below so this fallback is never reached.
 	unitCacheListFn = func() (string, error) { return "", nil }
+
+	// Plug the launchd plist walker (implemented in services/launchd_darwin.go
+	// on darwinServiceManager) into AllUnitStates so cross-platform callers —
+	// worker-heal Detect, dashboard banner, MCP workers_health — see real
+	// failed-unit state instead of an empty map.
+	allUnitStatesFn = func() map[string]string {
+		if podman.UnitLifecycle == nil {
+			return map[string]string{}
+		}
+		return podman.UnitLifecycle.AllUnitStates()
+	}
 }
