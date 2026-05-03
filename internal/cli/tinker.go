@@ -28,6 +28,13 @@ var psyshEvalLocRe = regexp.MustCompile(` // vendor/psy/psysh/[^\s]+\(\d+\) : ev
 // used. They're internal REPL chatter, not user output.
 var tinkerAliasNoticeRe = regexp.MustCompile(`(?m)^\[!\] Aliasing '[^']+' to '[^']+' for this Tinker session\.\s*\n?`)
 
+// tinkerMemoryLimit overrides PHP's 128M CLI default. Laravel's tinker
+// boot path (ClassAliasAutoloader requires the full composer class map)
+// blows past the default on any non-trivial project. 512M leaves enough
+// headroom for medium projects with fat vendor trees while still surfacing
+// runaway code (deep recursion, accidental N+1 over a large table).
+const tinkerMemoryLimit = "512M"
+
 func cleanTinkerOutput(s string) string {
 	// Split on the multi-statement separator first so per-chunk regexes that
 	// rely on `^` (start-of-line) also match notices that landed at the
@@ -111,7 +118,7 @@ func RunTinker(ctx context.Context, sitePath, code string) (TinkerResult, error)
 		// separator to render one block per statement.
 		payload := transformForMultiStatementWithDump(code, dumpFn)
 		argv = append([]string{"exec", "-i", "-w", sitePath}, envArgs...)
-		argv = append(argv, container, "php")
+		argv = append(argv, container, "php", "-d", "memory_limit="+tinkerMemoryLimit)
 		argv = append(argv, tinkerSpec.Command...)
 		switch {
 		case tinkerSpec.ExecuteFlag != "":
@@ -131,7 +138,7 @@ func RunTinker(ctx context.Context, sitePath, code string) (TinkerResult, error)
 		}
 		defer os.Remove(tmpFile)
 		argv = append([]string{"exec", "-i", "-w", sitePath}, envArgs...)
-		argv = append(argv, container, "php", tmpFile)
+		argv = append(argv, container, "php", "-d", "memory_limit="+tinkerMemoryLimit, tmpFile)
 	}
 
 	var stdout, stderr bytes.Buffer
