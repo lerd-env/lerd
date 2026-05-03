@@ -167,10 +167,36 @@ func EnsureDefaultPresetQuadlet(name string) error {
 			}
 		}
 	}
-	// track_latest: when there's no user pin, query the registry for the actual
-	// newest tag in the current major + variant line. The YAML preset.Image
-	// stays as a fallback when the registry is unreachable.
-	if !hasUserPin && p.TrackLatest {
+	// Honor the on-disk image when the preset's update_strategy says we
+	// shouldn't auto-jump to a newer line. Without this, the install rewrite
+	// (`lerd update` → `install --from-update` → this function) silently bumps
+	// users from their installed minor (e.g. meilisearch v1.7.x) to whatever
+	// the new preset.Image declares (v1.42), bypassing the per-service
+	// migration UX that `lerd service update` enforces. Rolling-strategy
+	// services (mailpit, rustfs, gotenberg) intentionally fall through to the
+	// preset image and the track_latest block below.
+	preservedExisting := false
+	if !hasUserPin {
+		strategy := registry.Strategy(p.UpdateStrategy)
+		if strategy == registry.StrategyPatch || strategy == registry.StrategyMinor || strategy == registry.StrategyNone {
+			if installed := podman.InstalledImage("lerd-" + name); installed != "" {
+				svc.Image = installed
+				preservedExisting = true
+				if strategy != registry.StrategyNone {
+					if newer, _ := registry.MaybeNewerTag(installed, strategy); newer != nil {
+						if at := strings.LastIndex(svc.Image, ":"); at > 0 {
+							svc.Image = svc.Image[:at] + ":" + newer.Name
+						}
+					}
+				}
+			}
+		}
+	}
+	// track_latest: when there's no user pin and we did not preserve an
+	// existing on-disk image, query the registry for the actual newest tag
+	// in the current major + variant line. The YAML preset.Image stays as a
+	// fallback when the registry is unreachable.
+	if !hasUserPin && !preservedExisting && p.TrackLatest {
 		if latest, _ := registry.NewestStable(svc.Image, p.AllowMajorUpgrade); latest != nil {
 			if at := strings.LastIndex(svc.Image, ":"); at > 0 {
 				svc.Image = svc.Image[:at] + ":" + latest.Name

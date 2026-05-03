@@ -2,6 +2,14 @@
 Description=Lerd System Tray Applet
 After=graphical-session.target lerd-ui.service
 Wants=lerd-ui.service
+# Cap the restart loop. lerd-tray dies for two known unrecoverable reasons
+# that don't fix themselves on retry: missing libayatana-appindicator3.so.1
+# (Fedora 43 doesn't install it by default, dlopen fails with status 127),
+# and "Error reading events from display: Broken pipe" when the Wayland/X
+# session dies under it. Without these limits the unit restart-loops forever
+# at RestartSec cadence, spamming journalctl indefinitely.
+StartLimitBurst=3
+StartLimitIntervalSec=60
 
 [Service]
 # lerd-tray directly (not `lerd tray`, which is a nogui-build stub that
@@ -9,7 +17,7 @@ Wants=lerd-ui.service
 ExecStart=%h/.local/bin/lerd-tray
 Environment=LERD_TRAY_DAEMON=1
 Restart=on-failure
-RestartSec=5
+RestartSec=10
 Environment=DISPLAY=:0
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/%U/bus
 

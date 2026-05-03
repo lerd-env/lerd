@@ -19,7 +19,6 @@
   type HeroPriority = 'error' | 'updates' | 'ok';
 
   const failingWorkers = $derived($unhealthyWorkers.length);
-  const updatableServices = $derived($coreServices.filter((s) => s.update_available));
   const hasLerdUpdate = $derived($version.hasUpdate);
 
   const coreDown = $derived.by(() => {
@@ -33,7 +32,7 @@
 
   const priority = $derived.by((): HeroPriority => {
     if (failingWorkers > 0 || coreDown.length > 0) return 'error';
-    if (updatableServices.length > 0 || hasLerdUpdate) return 'updates';
+    if (hasLerdUpdate) return 'updates';
     return 'ok';
   });
 
@@ -116,21 +115,10 @@
       </svg>
       <div class="flex-1 min-w-0">
         <p class="text-sm font-semibold text-yellow-900 dark:text-yellow-200">
-          {#if hasLerdUpdate && updatableServices.length > 0}
-            {m.dashboard_hero_updatesMixed({ lerd: $version.latest, count: updatableServices.length })}
-          {:else if hasLerdUpdate}
-            {m.dashboard_hero_lerdUpdate({ version: $version.latest })}
-          {:else}
-            {m.dashboard_hero_serviceUpdates({ count: updatableServices.length })}
-          {/if}
+          {m.dashboard_hero_lerdUpdate({ version: $version.latest })}
         </p>
-        {#if updatableServices.length > 0}
-          <p class="text-xs text-yellow-700 dark:text-yellow-300/80 mt-0.5 truncate">
-            {updatableServices.map((s) => s.name).join(', ')}
-          </p>
-        {/if}
       </div>
-      {#if hasLerdUpdate && $accessMode.loopback}
+      {#if $accessMode.loopback}
         <button
           onclick={onUpdateLerd}
           disabled={updateTerminalLoading}
@@ -138,11 +126,6 @@
         >
           {updateTerminalLoading ? m.system_lerd_openingTerminal() : m.system_lerd_openTerminal()}
         </button>
-      {:else if updatableServices.length > 0}
-        <button
-          onclick={() => goToTab('services', updatableServices[0].name)}
-          class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-yellow-600 hover:bg-yellow-700 text-white transition-colors"
-        >{m.dashboard_hero_review()}</button>
       {/if}
     </div>
   </div>
