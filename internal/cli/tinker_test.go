@@ -16,6 +16,7 @@ func TestTinkerEnvArgs(t *testing.T) {
 		"--env", "PATH=/home/u/site/vendor/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/u/.config/composer/vendor/bin",
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
+		"--env", "PSYSH_TRUST_PROJECT=1",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("env args mismatch.\n got:  %v\n want: %v", got, want)

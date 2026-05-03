@@ -170,8 +170,10 @@ func RunTinker(ctx context.Context, sitePath, code string) (TinkerResult, error)
 
 // tinkerEnvArgs builds the shared `--env KEY=VAL` argv chunks used by
 // every tinker exec invocation: HOME, COMPOSER_HOME, PATH (so vendor/bin
-// shims work inside the container), and TERM/NO_COLOR so dump output is
-// not ANSI-colored.
+// shims work inside the container), TERM/NO_COLOR so dump output is not
+// ANSI-colored, and PSYSH_TRUST_PROJECT so PsySH skips its non-interactive
+// "Restricted Mode" warning — the user is running their own project code
+// in their own container; restricting it adds noise without security gain.
 func tinkerEnvArgs(sitePath, home, composerHome string) []string {
 	projectVendorBin := filepath.Join(sitePath, "vendor", "bin")
 	composerBin := filepath.Join(composerHome, "vendor", "bin")
@@ -181,6 +183,7 @@ func tinkerEnvArgs(sitePath, home, composerHome string) []string {
 		"--env", "PATH=" + projectVendorBin + ":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:" + composerBin,
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
+		"--env", "PSYSH_TRUST_PROJECT=1",
 	}
 }
 
