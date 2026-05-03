@@ -8,7 +8,6 @@ package workerheal
 
 import (
 	"fmt"
-	"os/exec"
 	"strings"
 	"time"
 
@@ -69,24 +68,19 @@ var (
 // stack traces over the WS push.
 const lastErrorMaxLen = 220
 
-// readLastError invokes journalctl to read the last log line emitted for a
-// failed worker unit. Best-effort: if journalctl is missing, the unit has
-// no journal entries, or anything else goes wrong, the empty string is
-// returned and the dashboard simply omits the error excerpt.
+// readLastError returns the last log line emitted for a failed worker unit.
+// Best-effort: if no log source is available, the empty string is returned
+// and the dashboard simply omits the error excerpt. On Linux it reads the
+// systemd journal via journalctl; on macOS it tails ~/Library/Logs/lerd/
+// where launchd redirects each unit's stdout+stderr.
 func readLastError(unit string) string {
-	if _, err := exec.LookPath("journalctl"); err != nil {
-		return ""
+	if line := readLastErrorPlatform(unit); line != "" {
+		if len(line) > lastErrorMaxLen {
+			line = line[:lastErrorMaxLen] + "…"
+		}
+		return line
 	}
-	cmd := exec.Command("journalctl", "--user", "-u", unit, "-n", "1", "--no-pager", "-o", "cat")
-	out, err := cmd.Output()
-	if err != nil {
-		return ""
-	}
-	line := strings.TrimSpace(string(out))
-	if len(line) > lastErrorMaxLen {
-		line = line[:lastErrorMaxLen] + "…"
-	}
-	return line
+	return ""
 }
 
 // enrichBudget caps total time spent reading journals across all units in
