@@ -4,13 +4,13 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // lanExposureContainers is the canonical list of lerd containers whose
@@ -153,12 +153,12 @@ func DisableLANExposure(progress LANProgressFunc) error {
 
 	if cfg.DNS.Enabled {
 		emit("Stopping lerd-dns-forwarder")
-		_ = exec.Command("systemctl", "--user", "stop", "lerd-dns-forwarder").Run()
-		_ = exec.Command("systemctl", "--user", "disable", "lerd-dns-forwarder").Run()
-		if err := os.Remove(dnsForwarderUnitPath()); err != nil && !os.IsNotExist(err) {
+		_ = services.Mgr.Stop("lerd-dns-forwarder")
+		_ = services.Mgr.Disable("lerd-dns-forwarder")
+		if err := services.Mgr.RemoveServiceUnit("lerd-dns-forwarder"); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing forwarder unit: %w", err)
 		}
-		_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
+		_ = services.Mgr.DaemonReload()
 
 		emit("Reverting dnsmasq to 127.0.0.1")
 		if err := dns.WriteDnsmasqConfigFor(config.DnsmasqDir(), "127.0.0.1"); err != nil {
@@ -202,8 +202,8 @@ func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
 		return nil
 	}
 
-	if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
-		return fmt.Errorf("systemctl --user daemon-reload: %w", err)
+	if err := services.Mgr.DaemonReload(); err != nil {
+		return fmt.Errorf("daemon-reload: %w", err)
 	}
 	for _, name := range restarted {
 		if progress != nil {
@@ -212,27 +212,19 @@ func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
 		// Ignore individual container restart errors so a single dead
 		// service doesn't block the rest of the toggle. The user will
 		// see the bad state via `lerd doctor` / podman ps.
-		_ = exec.Command("systemctl", "--user", "restart", name).Run()
+		_ = services.Mgr.Restart(name)
 	}
 	return nil
 }
 
-// dnsForwarderUnitPath returns the path to the systemd user unit file.
-func dnsForwarderUnitPath() string {
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".config", "systemd", "user", "lerd-dns-forwarder.service")
-}
-
-// installDNSForwarderUnit writes the systemd user service that runs the
+// installDNSForwarderUnit writes the user service that runs the
 // `lerd dns-forwarder` daemon, listening on lanIP:5300 and forwarding to
-// 127.0.0.1:5300. Idempotent — overwrites the existing file.
+// 127.0.0.1:5300. Routes through services.Mgr so the unit content is
+// rendered as a systemd .service on Linux and a launchd plist on macOS
+// (see services/launchd_darwin.go::parseServiceUnit). Idempotent.
 func installDNSForwarderUnit(lanIP string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return err
-	}
-	unitDir := filepath.Join(home, ".config", "systemd", "user")
-	if err := os.MkdirAll(unitDir, 0o755); err != nil {
 		return err
 	}
 	binPath := filepath.Join(home, ".local", "bin", "lerd")
@@ -249,25 +241,22 @@ RestartSec=2
 [Install]
 WantedBy=default.target
 `, binPath, lanIP)
-	if err := os.WriteFile(dnsForwarderUnitPath(), []byte(content), 0o644); err != nil {
+	if err := services.Mgr.WriteServiceUnit("lerd-dns-forwarder", content); err != nil {
 		return err
 	}
-	_ = exec.Command("systemctl", "--user", "enable", "lerd-dns-forwarder").Run()
+	_ = services.Mgr.Enable("lerd-dns-forwarder")
 	return nil
 }
 
-// reloadAndRestartUnit runs `systemctl --user daemon-reload` followed by a
-// restart of the given unit. Used by `lan:expose` / `lan:unexpose` after
-// rewriting a quadlet or unit file so the new content takes effect.
+// reloadAndRestartUnit reloads the service manager and restarts the given
+// unit. Used by `lan:expose` / `lan:unexpose` after rewriting a quadlet or
+// unit file so the new content takes effect.
 func reloadAndRestartUnit(unit string) error {
-	if err := exec.Command("systemctl", "--user", "daemon-reload").Run(); err != nil {
-		return fmt.Errorf("systemctl --user daemon-reload: %w", err)
+	if err := services.Mgr.DaemonReload(); err != nil {
+		return fmt.Errorf("daemon-reload: %w", err)
 	}
-	cmd := exec.Command("systemctl", "--user", "restart", unit)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("systemctl --user restart %s: %w", unit, err)
+	if err := services.Mgr.Restart(unit); err != nil {
+		return fmt.Errorf("restart %s: %w", unit, err)
 	}
 	return nil
 }

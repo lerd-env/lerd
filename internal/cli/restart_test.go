@@ -18,6 +18,7 @@ func (f *fakeUnitLifecycle) Start(name string) error                { return nil
 func (f *fakeUnitLifecycle) Stop(name string) error                 { return nil }
 func (f *fakeUnitLifecycle) Restart(name string) error              { f.restartedUnit = name; return nil }
 func (f *fakeUnitLifecycle) UnitStatus(name string) (string, error) { return "active", nil }
+func (f *fakeUnitLifecycle) AllUnitStates() map[string]string       { return nil }
 
 func TestRestartSite_CustomContainer(t *testing.T) {
 	tmp := t.TempDir()

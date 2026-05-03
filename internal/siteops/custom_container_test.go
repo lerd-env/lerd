@@ -351,3 +351,4 @@ func (n *noopLifecycle) Start(name string) error                { return nil }
 func (n *noopLifecycle) Stop(name string) error                 { return nil }
 func (n *noopLifecycle) Restart(name string) error              { return nil }
 func (n *noopLifecycle) UnitStatus(name string) (string, error) { return "inactive", nil }
+func (n *noopLifecycle) AllUnitStates() map[string]string       { return nil }
