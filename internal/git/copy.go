@@ -135,7 +135,7 @@ func RunNpmScript(projectPath, script string) error {
 	var bin string
 	if name == "npm" {
 		bin = filepath.Join(config.BinDir(), "npm")
-	} else if p, err := exec.LookPath(name); err == nil {
+	} else if p, ok := lookJSBin(name); ok {
 		bin = p
 	} else {
 		return fmt.Errorf("%s not found on PATH", name)
@@ -248,7 +248,7 @@ func runJSInstall(projectPath string) error {
 	var bin string
 	if name == "npm" {
 		bin = filepath.Join(config.BinDir(), "npm")
-	} else if p, err := exec.LookPath(name); err == nil {
+	} else if p, ok := lookJSBin(name); ok {
 		bin = p
 	} else {
 		return fmt.Errorf("%s (lockfile present) not found on PATH — install it to hydrate node_modules", name)
@@ -271,4 +271,23 @@ func runIn(dir, name string, args ...string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// lookJSBin resolves a JS package-manager binary (pnpm, yarn, bun) honoring
+// PATH first, then falling back to well-known macOS package-manager prefixes
+// when the lerd-watcher daemon runs under launchd's restricted PATH.
+func lookJSBin(name string) (string, bool) {
+	if p, err := exec.LookPath(name); err == nil {
+		return p, true
+	}
+	if runtime.GOOS != "darwin" {
+		return "", false
+	}
+	for _, dir := range []string{"/opt/homebrew/bin", "/usr/local/bin"} {
+		candidate := filepath.Join(dir, name)
+		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
+			return candidate, true
+		}
+	}
+	return "", false
 }
