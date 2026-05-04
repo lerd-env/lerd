@@ -153,36 +153,43 @@ func CountSitesUsingPHP(version string) int {
 	return count
 }
 
-// CountSitesUsingService returns how many active (non-ignored, non-paused) site
-// .env files reference lerd-{name}, i.e. are configured to use the service.
-func CountSitesUsingService(name string) int {
+// SitesUsingService returns the active (non-ignored, non-paused) sites whose
+// .lerd.yaml lists the service or whose .env references lerd-{name}.
+func SitesUsingService(name string) []Site {
 	reg, err := LoadSites()
 	if err != nil {
-		return 0
+		return nil
 	}
 	needle := "lerd-" + name
-	count := 0
+	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
 			continue
 		}
-		// Check .lerd.yaml services list (covers custom container sites
-		// that may not have a .env with lerd-{name} references).
 		if proj, pErr := LoadProjectConfig(s.Path); pErr == nil {
+			matched := false
 			for _, svc := range proj.Services {
 				if svc.Name == name {
-					count++
-					goto next
+					out = append(out, s)
+					matched = true
+					break
 				}
 			}
-		}
-		// Fall back to .env scanning for PHP sites.
-		if data, err := os.ReadFile(filepath.Join(s.Path, ".env")); err == nil {
-			if strings.Contains(string(data), needle) {
-				count++
+			if matched {
+				continue
 			}
 		}
-	next:
+		if data, err := os.ReadFile(filepath.Join(s.Path, ".env")); err == nil {
+			if strings.Contains(string(data), needle) {
+				out = append(out, s)
+			}
+		}
 	}
-	return count
+	return out
+}
+
+// CountSitesUsingService returns how many active (non-ignored, non-paused) site
+// .env files reference lerd-{name}, i.e. are configured to use the service.
+func CountSitesUsingService(name string) int {
+	return len(SitesUsingService(name))
 }
