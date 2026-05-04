@@ -30,13 +30,38 @@ lerd service add \
   --init-exec "mongosh admin -u root -p secret --eval \"db.getSiblingDB('{{site}}').createCollection('_init')\""
 ```
 
-## Removing a custom service
+## Removing a service (custom or default)
 
 ```bash
-lerd service remove mongodb
+lerd service remove mongodb            # stops + removes; data preserved
+lerd service remove mongodb --purge    # also wipes data dir
 ```
 
-This stops the container, removes the quadlet and config file. **Data at `~/.local/share/lerd/data/mongodb/` is not deleted**. Remove it manually if you no longer need it.
+`lerd service remove` works for any service, including default presets (postgres, redis, mariadb, mysql, meilisearch, mailpit, rustfs). The flow stops the unit if it's running, removes the container, deletes the quadlet, and removes the on-disk config (a no-op for default presets, which are embedded in the binary).
+
+Pass `--purge` to also wipe the persistent data. The data dir at `~/.local/share/lerd/data/<service>/` is **renamed aside** to `<service>.pre-remove-<timestamp>` (a sibling directory), not hard-deleted. To recover, rename it back before reinstalling. The orphaned aside copies can be cleaned up later by hand.
+
+Without `--purge`, data is preserved and a subsequent `lerd service preset install <name>` (for default presets) or `lerd service add` (for custom services) will pick up where you left off.
+
+## Reinstalling a service
+
+```bash
+lerd service reinstall postgres                # same version, data preserved
+lerd service reinstall postgres --reset-data   # same version, fresh data
+```
+
+`reinstall` stops, removes, and reinstalls the service at its current version. Use it when:
+
+- A service update produced data incompatible with the new image and you want a clean slate.
+- The container has drifted into a bad state and a full quadlet rewrite would be cleaner than a restart.
+
+`--reset-data` adds a data-dir rename-aside (same recovery semantics as `--purge`) and **automatically reprovisions linked-site state** on the freshly installed service:
+
+- For database families (mysql, mariadb, postgres): each linked site's expected database is created via `CREATE DATABASE IF NOT EXISTS`. The database name comes from `.lerd.yaml` `db.database`, then `.env` `DB_DATABASE`, then the site name with hyphens converted to underscores.
+- For object-storage families (rustfs): each linked site's expected bucket is created via `mc mb`. The bucket name comes from `.env` `AWS_BUCKET`, otherwise derived from the site name.
+- For cache services (redis, memcached): no per-site state to recreate, so reprovisioning is a no-op.
+
+If a single linked site fails to reprovision (e.g. malformed `.env`), the reinstall continues with the remaining sites and reports the joined errors at the end.
 
 ## YAML schema
 
