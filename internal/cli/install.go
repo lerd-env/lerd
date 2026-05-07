@@ -1174,8 +1174,9 @@ func addShellShims(manageNode bool) error {
 
 	// Write node/npm/npx shims — use fnm directly so they work inside containers
 	// (lerd is glibc-linked and cannot run inside Alpine-based PHP containers).
-	// Only written when lerd is managing Node versions; skipped when the user
-	// declined the prompt because they already have their own node installed.
+	// Only written when lerd is managing Node versions; otherwise existing
+	// shims are removed so the user's system node stops being masked by a
+	// stale fnm shim from a prior managed install.
 	if manageNode {
 		nodeShimTmpl := `#!/bin/sh
 FNM="%s"
@@ -1198,6 +1199,12 @@ fi
 			shim := fmt.Sprintf(nodeShimTmpl, fnmBin, bin, bin)
 			if err := os.WriteFile(filepath.Join(binDir, bin), []byte(shim), 0755); err != nil {
 				return fmt.Errorf("writing %s shim: %w", bin, err)
+			}
+		}
+	} else {
+		for _, bin := range []string{"node", "npm", "npx"} {
+			if err := os.Remove(filepath.Join(binDir, bin)); err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("removing %s shim: %w", bin, err)
 			}
 		}
 	}
