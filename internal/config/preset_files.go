@@ -23,6 +23,7 @@ innodb_file_per_table=ON
 innodb_strict_mode=OFF
 loose-innodb_default_row_format=DYNAMIC
 loose-mysql-native-password=ON
+authentication_policy='mysql_native_password,,'
 loose-restrict-fk-on-non-standard-key=OFF
 `,
 		},
