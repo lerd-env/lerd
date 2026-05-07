@@ -89,7 +89,8 @@ type FrameworkFrankenPHP struct {
 }
 
 // FrameworkWorker describes a long-running process managed as a systemd service.
-// The Command is executed inside the PHP-FPM container for the site.
+// The Command is executed inside the PHP-FPM container for the site unless
+// Host is true, in which case it runs directly on the host via fnm.
 type FrameworkWorker struct {
 	Label         string         `yaml:"label,omitempty"`
 	Command       string         `yaml:"command"`
@@ -99,6 +100,7 @@ type FrameworkWorker struct {
 	ExcludeCheck  *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
 	ConflictsWith []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
 	Proxy         *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	Host          bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 }
 
 // WorkerProxy describes an HTTP/WebSocket proxy that nginx should configure
@@ -355,6 +357,13 @@ var laravelFramework = &Framework{
 			Check:         &FrameworkRule{Composer: "laravel/horizon"},
 			ConflictsWith: []string{"queue"},
 		},
+		"vite": {
+			Label:   "Vite Dev Server",
+			Command: "npm run dev",
+			Restart: "on-failure",
+			Host:    true,
+			Check:   &FrameworkRule{File: "vite.config.js"},
+		},
 	},
 	Setup: []FrameworkSetupCmd{
 		{Label: "php artisan storage:link", Command: "php artisan storage:link", Default: true},
@@ -548,6 +557,29 @@ func mergeBuiltinTinker(fw *Framework) *Framework {
 	return fw
 }
 
+// mergeBuiltinWorkers adds workers from the built-in framework definition that
+// are missing in the store definition. Store workers take precedence so user
+// customisations are preserved; this only fills in newly added built-in workers
+// (e.g. vite) that the store YAML doesn't know about yet.
+func mergeBuiltinWorkers(fw *Framework) *Framework {
+	if fw == nil {
+		return fw
+	}
+	src := builtinFramework(fw.Name)
+	if src == nil || len(src.Workers) == 0 {
+		return fw
+	}
+	if fw.Workers == nil {
+		fw.Workers = make(map[string]FrameworkWorker)
+	}
+	for name, w := range src.Workers {
+		if _, exists := fw.Workers[name]; !exists {
+			fw.Workers[name] = w
+		}
+	}
+	return fw
+}
+
 // mergeUserOverlay checks for a user-defined overlay file in FrameworksDir()
 // and merges its workers and setup commands on top of base.
 // User additions/overrides win. If no overlay exists, base is returned as-is.
@@ -639,6 +671,7 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 		base = mergeUserOverlay(base)
 		base = mergeBuiltinFrankenPHP(base)
 		base = mergeBuiltinTinker(base)
+		base = mergeBuiltinWorkers(base)
 		return mergeProjectWorkers(base, projectDir), true
 	}
 

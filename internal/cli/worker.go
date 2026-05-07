@@ -156,7 +156,11 @@ func newWorkerListCmd() *cobra.Command {
 func resolveSiteAndFramework(cwd string) (*config.Site, *config.Framework, string, error) {
 	site, err := config.FindSiteByPath(cwd)
 	if err != nil {
-		return nil, nil, "", fmt.Errorf("not a registered site — run 'lerd link' first")
+		if parent, ok := config.ParentSiteForWorktreeDir(cwd); ok {
+			site = parent
+		} else {
+			return nil, nil, "", fmt.Errorf("not a registered site — run 'lerd link' first")
+		}
 	}
 
 	// Custom container sites may not have a framework. Build a synthetic
@@ -248,6 +252,12 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		fpmUnit = "lerd-php" + versionShort + "-fpm"
 	}
 	unitName := "lerd-" + workerName + "-" + siteName
+	unitSiteName := siteName
+	if s, _ := config.FindSite(siteName); s != nil && s.Path != sitePath {
+		wtDir := filepath.Base(sitePath)
+		unitName = "lerd-" + workerName + "-" + siteName + "-" + wtDir
+		unitSiteName = siteName + "/" + wtDir
+	}
 
 	restart := w.Restart
 	if restart == "" {
@@ -258,7 +268,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		label = workerName
 	}
 
-	changed, err := writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit)
+	changed, err := writeWorkerUnitFile(unitName, label, unitSiteName, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit, w.Host)
 	if err != nil {
 		return fmt.Errorf("writing worker unit: %w", err)
 	}
