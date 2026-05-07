@@ -62,7 +62,7 @@ The chain in order:
 |---|---|---|
 | `lerd-dns container` | The dnsmasq container is running. | `lerd start` (or `podman logs lerd-dns` to see why it crashed). |
 | `dnsmasq config` | `~/.local/share/lerd/dnsmasq/lerd.conf` exists with `port=5300` and `address=/.<tld>/`. | `lerd start` regenerates the config from your registered TLD. |
-| `port 5300 listening` | TCP/UDP 5300 is reachable on 127.0.0.1. | Another process owns the port. Find it with `ss -tlnp sport = :5300`. |
+| `port 5300 listening` | TCP/UDP 5300 is reachable on 127.0.0.1. | Another process owns the port. Find it with `ss -tlnp sport = :5300` on Linux, or `lsof -nP -iTCP:5300 -sTCP:LISTEN` on macOS. |
 | `dig @127.0.0.1 -p 5300` | A direct query at port 5300 returns 127.0.0.1 for `lerd-probe.<tld>`. | dnsmasq is up but its config drifted. `systemctl --user restart lerd-dns`. |
 | `resolver hookup` | The NetworkManager dispatcher script or systemd-resolved drop-in is installed. | Rerun `lerd install`. |
 | `interface routes .test to 5300` | `resolvectl status` shows `127.0.0.1:5300` and `~<tld>` on the active interface. | `sudo systemctl restart NetworkManager`, or set the routing manually with `sudo resolvectl domain <iface> ~test ~.`. |
@@ -216,10 +216,16 @@ Port conflicts detected:
 Common culprits are Apache, another nginx instance, or a previously running lerd that wasn't stopped cleanly. Find and stop the conflicting process:
 
 ```bash
-ss -tlnp sport = :80    # show what's listening on port 80
+# Linux
+ss -tlnp sport = :80
+
+# macOS
+lsof -nP -iTCP:80 -sTCP:LISTEN
 ```
 
-`lerd doctor` also checks for port conflicts as part of its full diagnostic.
+The exact command lerd suggests in `lerd doctor` and `lerd start` output is already platform-correct, so you can copy it from there.
+
+`lerd doctor` also checks for port conflicts as part of its full diagnostic, and adds a dedicated **[Stopped service ports]** section that flags installed services whose host port is already bound by another process. The same warning is shown next to the inactive status pill in the web UI, so you can spot the conflict without running anything: most often this is a system-installed service (Postgres, MySQL, Redis) listening on the default port. Stop the conflicting process and the warning clears on the next snapshot refresh.
 :::
 
 ::: details Workers missing after reinstall

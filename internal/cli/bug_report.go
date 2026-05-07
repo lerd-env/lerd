@@ -433,7 +433,7 @@ func dumpContainerLogs(w io.Writer, n int, filter *logFilter) {
 
 func dumpNetwork(w io.Writer) {
 	fmt.Fprintln(w, "── listening sockets (lerd-relevant ports)")
-	listing := portListOutput()
+	listing := PortListOutput()
 	for _, port := range []string{"53", "80", "443", "5300", "7073"} {
 		for _, line := range strings.Split(listing, "\n") {
 			if strings.Contains(line, ":"+port+" ") {

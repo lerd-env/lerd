@@ -203,8 +203,8 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 				dnsRunning = true
 			}
 		}
-		if !dnsRunning && portInUse("5300") {
-			warn("DNS port 5300", "port in use by another process — lerd-dns may fail to start")
+		if !dnsRunning && PortInUse("5300") {
+			warn("DNS port 5300", "port in use by another process, lerd-dns may fail to start (find: "+FindListenerCmd("5300")+")")
 		}
 	}
 
@@ -216,15 +216,66 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 		ok("port 80  (nginx running)")
 		ok("port 443 (nginx running)")
 	} else {
-		if portInUse("80") {
-			fail("port 80", "in use by another process", "find the process: ss -tlnp sport = :80")
+		if PortInUse("80") {
+			fail("port 80", "in use by another process", "find the process: "+FindListenerCmd("80"))
 		} else {
 			ok("port 80  (free)")
 		}
-		if portInUse("443") {
-			fail("port 443", "in use by another process", "find the process: ss -tlnp sport = :443")
+		if PortInUse("443") {
+			fail("port 443", "in use by another process", "find the process: "+FindListenerCmd("443"))
 		} else {
 			ok("port 443 (free)")
+		}
+	}
+
+	// ── Stopped service ports ────────────────────────────────────────────────
+	// Surfaces the same diagnosis the UI shows on inactive service cards: if
+	// a service unit is installed but stopped and its host port is already
+	// bound by another process (a system-installed postgres, a stray docker
+	// container, etc.), Start will fail with a generic bind error. List those
+	// upfront so the user sees the conflict before clicking anything.
+	fmt.Fprintln(w, "\n[Stopped service ports]")
+	{
+		var stoppedUnits []string
+		for _, name := range append([]string{}, knownServices()...) {
+			unit := "lerd-" + name
+			if !services.Mgr.ContainerUnitInstalled(unit) {
+				continue
+			}
+			if services.Mgr.IsActive(unit) {
+				continue
+			}
+			stoppedUnits = append(stoppedUnits, unit)
+		}
+		customs, _ := config.ListCustomServices()
+		for _, svc := range customs {
+			unit := "lerd-" + svc.Name
+			if !services.Mgr.ContainerUnitInstalled(unit) {
+				continue
+			}
+			if services.Mgr.IsActive(unit) {
+				continue
+			}
+			stoppedUnits = append(stoppedUnits, unit)
+		}
+
+		if len(stoppedUnits) == 0 {
+			ok("no stopped services to check")
+		} else {
+			ssOut := PortListOutput()
+			conflictsFound := 0
+			for _, unit := range stoppedUnits {
+				for _, c := range CollectPortChecks([]string{unit}) {
+					if PortInUseIn(c.Port, ssOut) {
+						conflictsFound++
+						warn(fmt.Sprintf("%s port %s", c.Label, c.Port),
+							fmt.Sprintf("in use by another process, %s start may fail (find: %s)", c.Label, FindListenerCmd(c.Port)))
+					}
+				}
+			}
+			if conflictsFound == 0 {
+				ok(fmt.Sprintf("%d stopped service(s), no port conflicts", len(stoppedUnits)))
+			}
 		}
 	}
 
@@ -338,11 +389,11 @@ func checkDirWritable(dir string) error {
 	return nil
 }
 
-// portInUse is implemented per-platform in doctor_linux.go / doctor_darwin.go.
+// PortInUse is implemented per-platform in doctor_linux.go / doctor_darwin.go.
 //
-// portInUseIn checks whether the given TCP port appears in pre-fetched output
+// PortInUseIn checks whether the given TCP port appears in pre-fetched output
 // from a port listing command (ss on Linux, lsof on macOS). Used by
 // checkPortConflicts in startstop.go for batch checks.
-func portInUseIn(port, output string) bool {
+func PortInUseIn(port, output string) bool {
 	return strings.Contains(output, ":"+port+" ")
 }

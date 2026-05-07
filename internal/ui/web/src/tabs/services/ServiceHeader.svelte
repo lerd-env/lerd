@@ -53,6 +53,16 @@
   const isWorker = $derived(isServiceWorker(svc));
   const active = $derived(svc.status === 'active');
   const parent = $derived(parentSiteDomain(svc));
+  const portConflicts = $derived(
+    !active && svc.port_conflicts && svc.port_conflicts.length > 0 ? svc.port_conflicts : []
+  );
+  const portConflictTitle = $derived(
+    portConflicts.length > 0
+      ? 'Port ' +
+        portConflicts.map((c) => c.port).join(', ') +
+        ' already in use on the host. Stop the conflicting process or change the lerd port. Run `lerd doctor` for the find command on your OS.'
+      : ''
+  );
 
   let localBusy = $state(false);
   let deleteOpen = $state(false);
@@ -271,6 +281,21 @@
           <span class="text-xs font-normal tabular-nums text-gray-500 dark:text-gray-400">{svc.version}</span>
         {/if}
         <StatusPill tone={active ? 'ok' : 'muted'} label={svc.status} />
+        {#if portConflicts.length > 0}
+          <span
+            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"
+            title={portConflictTitle}
+            role="status"
+            aria-label={portConflictTitle}
+          >
+            <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+              <line x1="12" y1="9" x2="12" y2="13"/>
+              <line x1="12" y1="17" x2="12.01" y2="17"/>
+            </svg>
+            <span>port {portConflicts.map((c) => c.port).join(', ')} in use</span>
+          </span>
+        {/if}
       </div>
 
       {#if parent}

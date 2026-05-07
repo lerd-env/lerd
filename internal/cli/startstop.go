@@ -275,11 +275,11 @@ func allInstalledServiceUnits() []string {
 	return units
 }
 
-// portCheck pairs a host port with a human-readable label and container name.
-type portCheck struct {
-	port      string // host port number
-	label     string // e.g. "nginx HTTP", "mysql"
-	container string // lerd container name
+// PortCheck pairs a host port with a human-readable label and container name.
+type PortCheck struct {
+	Port      string // host port number
+	Label     string // e.g. "nginx HTTP", "mysql"
+	Container string // lerd container name
 }
 
 // builtinExtraPorts lists secondary host ports for built-in services that are
@@ -298,14 +298,14 @@ func hostPort(mapping string) string {
 	return mapping
 }
 
-// collectPortChecks builds the list of ports to verify for the given units.
-func collectPortChecks(units []string) []portCheck {
+// CollectPortChecks builds the list of ports to verify for the given units.
+func CollectPortChecks(units []string) []PortCheck {
 	unitSet := make(map[string]bool, len(units))
 	for _, u := range units {
 		unitSet[u] = true
 	}
 
-	var checks []portCheck
+	var checks []PortCheck
 
 	// Nginx ports (configurable).
 	if unitSet["lerd-nginx"] {
@@ -321,14 +321,14 @@ func collectPortChecks(units []string) []portCheck {
 			}
 		}
 		checks = append(checks,
-			portCheck{strconv.Itoa(httpPort), "nginx HTTP", "lerd-nginx"},
-			portCheck{strconv.Itoa(httpsPort), "nginx HTTPS", "lerd-nginx"},
+			PortCheck{strconv.Itoa(httpPort), "nginx HTTP", "lerd-nginx"},
+			PortCheck{strconv.Itoa(httpsPort), "nginx HTTPS", "lerd-nginx"},
 		)
 	}
 
 	// DNS port.
 	if unitSet["lerd-dns"] {
-		checks = append(checks, portCheck{"5300", "dns", "lerd-dns"})
+		checks = append(checks, PortCheck{"5300", "dns", "lerd-dns"})
 	}
 
 	// Built-in services.
@@ -340,16 +340,16 @@ func collectPortChecks(units []string) []portCheck {
 		container := "lerd-" + svc
 		if cfg != nil {
 			if sc, ok := cfg.Services[svc]; ok && sc.Port > 0 {
-				checks = append(checks, portCheck{strconv.Itoa(sc.Port), svc, container})
+				checks = append(checks, PortCheck{strconv.Itoa(sc.Port), svc, container})
 			}
 			if sc, ok := cfg.Services[svc]; ok {
 				for _, ep := range sc.ExtraPorts {
-					checks = append(checks, portCheck{hostPort(ep), svc, container})
+					checks = append(checks, PortCheck{hostPort(ep), svc, container})
 				}
 			}
 		}
 		for _, ep := range builtinExtraPorts[svc] {
-			checks = append(checks, portCheck{ep, svc, container})
+			checks = append(checks, PortCheck{ep, svc, container})
 		}
 	}
 
@@ -361,7 +361,7 @@ func collectPortChecks(units []string) []portCheck {
 		}
 		container := "lerd-" + svc.Name
 		for _, p := range svc.Ports {
-			checks = append(checks, portCheck{hostPort(p), svc.Name, container})
+			checks = append(checks, PortCheck{hostPort(p), svc.Name, container})
 		}
 	}
 
@@ -370,25 +370,25 @@ func collectPortChecks(units []string) []portCheck {
 
 // checkPortConflicts warns about ports already in use by non-lerd processes.
 func checkPortConflicts(units []string) {
-	checks := collectPortChecks(units)
+	checks := CollectPortChecks(units)
 	if len(checks) == 0 {
 		return
 	}
 
-	ss := portListOutput()
+	ss := PortListOutput()
 	if ss == "" {
 		return
 	}
 
 	var conflicts []string
 	for _, c := range checks {
-		running, _ := podman.ContainerRunning(c.container)
+		running, _ := podman.ContainerRunning(c.Container)
 		if running {
 			continue
 		}
-		if portInUseIn(c.port, ss) {
+		if PortInUseIn(c.Port, ss) {
 			conflicts = append(conflicts,
-				fmt.Sprintf("  WARN: port %s (%s) already in use — may fail to start (check: ss -tlnp sport = :%s)", c.port, c.label, c.port))
+				fmt.Sprintf("  WARN: port %s (%s) already in use, may fail to start (check: %s)", c.Port, c.Label, FindListenerCmd(c.Port)))
 		}
 	}
 	if len(conflicts) > 0 {

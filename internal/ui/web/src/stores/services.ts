@@ -31,6 +31,12 @@ export interface Service {
   previous_version?: string;
   migration_supported?: boolean;
   can_rollback?: boolean;
+  port_conflicts?: PortConflict[];
+}
+
+export interface PortConflict {
+  port: string;
+  label?: string;
 }
 
 export interface PhaseEvent {

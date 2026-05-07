@@ -104,7 +104,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 			Name:   "port 5300 listening",
 			Status: StepFail,
 			Detail: "no TCP listener on 127.0.0.1:5300",
-			Hint:   "check whether another process owns the port: ss -tlnp sport = :5300",
+			Hint:   "check whether another process owns the port: " + findListenerCmd(5300),
 		})
 		return finalize(d)
 	}
@@ -222,6 +222,16 @@ func contains(haystack []string, needle string) bool {
 		}
 	}
 	return false
+}
+
+// findListenerCmd returns the shell command the user can run to identify
+// the process bound to a TCP port. macOS lacks ss(8), so we point users at
+// lsof which ships with the OS; everywhere else we assume iproute2 ss.
+func findListenerCmd(port int) string {
+	if runtime.GOOS == "darwin" {
+		return fmt.Sprintf("lsof -nP -iTCP:%d -sTCP:LISTEN", port)
+	}
+	return fmt.Sprintf("ss -tlnp sport = :%d", port)
 }
 
 // defaultProbes wires the production implementations for each rung.

@@ -58,8 +58,9 @@ func TestDiagnose_portClosedStopsChain(t *testing.T) {
 	if d.FirstFailure != 2 {
 		t.Errorf("FirstFailure = %d, want 2 (port rung)", d.FirstFailure)
 	}
-	if !strings.Contains(d.Steps[2].Hint, "ss -tlnp") {
-		t.Errorf("hint %q should suggest ss -tlnp", d.Steps[2].Hint)
+	hint := d.Steps[2].Hint
+	if !strings.Contains(hint, "ss -tlnp") && !strings.Contains(hint, "lsof") {
+		t.Errorf("hint %q should suggest ss/lsof for the bound port", hint)
 	}
 }
 

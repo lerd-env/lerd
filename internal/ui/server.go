@@ -799,11 +799,44 @@ type ServiceResponse struct {
 	// MigrationSupported and CanRollback intentionally drop omitempty so the
 	// false case still appears in the JSON. The UI uses === to distinguish
 	// "field missing" (no avail check ran) from "explicitly false".
-	MigrationSupported bool `json:"migration_supported"`
-	CanRollback        bool `json:"can_rollback"`
+	MigrationSupported bool           `json:"migration_supported"`
+	CanRollback        bool           `json:"can_rollback"`
+	PortConflicts      []PortConflict `json:"port_conflicts,omitempty"`
+}
+
+// PortConflict reports a host port lerd wants to bind that is already taken
+// by another process. Surfaced for inactive services so the user sees the
+// blocker before clicking Start.
+type PortConflict struct {
+	Port  string `json:"port"`
+	Label string `json:"label,omitempty"`
+}
+
+// portConflictsFor returns conflicts for a single unit using a pre-fetched
+// listening-port listing. ssOutput is shared across the whole snapshot
+// rebuild so we never spawn ss/lsof more than once per refresh.
+func portConflictsFor(unit, ssOutput string) []PortConflict {
+	if ssOutput == "" {
+		return nil
+	}
+	checks := cli.CollectPortChecks([]string{unit})
+	if len(checks) == 0 {
+		return nil
+	}
+	var out []PortConflict
+	for _, c := range checks {
+		if cli.PortInUseIn(c.Port, ssOutput) {
+			out = append(out, PortConflict{Port: c.Port, Label: c.Label})
+		}
+	}
+	return out
 }
 
 func buildServiceResponse(name string) ServiceResponse {
+	return buildServiceResponseWithPortList(name, "")
+}
+
+func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status == "" {
@@ -843,6 +876,9 @@ func buildServiceResponse(name string) ServiceResponse {
 		resp.PreviousVersion = avail.PreviousImage
 		resp.MigrationSupported = serviceops.SupportsMigration(name)
 		resp.CanRollback = avail.CanRollback
+	}
+	if status != "active" {
+		resp.PortConflicts = portConflictsFor(unit, ssOutput)
 	}
 	return resp
 }
@@ -886,10 +922,14 @@ func handleServices(w http.ResponseWriter, _ *http.Request) {
 func buildServicesJSON() []byte { return []byte(mustJSON(buildServicesList())) }
 
 func buildServicesList() []ServiceResponse {
+	// One ss/lsof call shared across all installed-but-stopped services in
+	// this rebuild; portConflictsFor is a no-op when ssOutput is empty.
+	ssOutput := cli.PortListOutput()
+
 	defaultNames := siteinfo.KnownServices()
 	services := make([]ServiceResponse, 0, len(defaultNames))
 	for _, name := range defaultNames {
-		services = append(services, buildServiceResponse(name))
+		services = append(services, buildServiceResponseWithPortList(name, ssOutput))
 	}
 	customs, _ := config.ListCustomServices()
 	for _, svc := range customs {
@@ -908,6 +948,10 @@ func buildServicesList() []ServiceResponse {
 				envMap[parts[0]] = v
 			}
 		}
+		var conflicts []PortConflict
+		if status != "active" {
+			conflicts = portConflictsFor(unit, ssOutput)
+		}
 		services = append(services, ServiceResponse{
 			Name:              svc.Name,
 			Status:            status,
@@ -922,6 +966,7 @@ func buildServicesList() []ServiceResponse {
 			Pinned:            config.ServiceIsPinned(svc.Name),
 			Paused:            config.ServiceIsPaused(svc.Name),
 			DependsOn:         svc.DependsOn,
+			PortConflicts:     conflicts,
 		})
 	}
 	for _, siteName := range listActiveQueueWorkers() {
