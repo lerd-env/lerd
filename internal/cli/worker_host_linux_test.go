@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestWriteHostWorkerUnitFile_useFnmExec(t *testing.T) {
@@ -91,5 +93,55 @@ func TestWriteWorkerUnitFile_hostFalse_usesPodman(t *testing.T) {
 	}
 	if !strings.Contains(unit, "BindsTo=lerd-php84-fpm.service") {
 		t.Error("container worker must bind to FPM unit")
+	}
+}
+
+func TestWorkerStartForSite_worktreeUnitNaming(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	// Register a site so FindSite works
+	sitePath := t.TempDir()
+	reg := &config.SiteRegistry{Sites: []config.Site{{Name: "mysite", Domains: []string{"mysite.test"}, Path: sitePath}}}
+	if err := config.SaveSites(reg); err != nil {
+		t.Fatalf("SaveSites: %v", err)
+	}
+
+	// Create a worktree path different from site path
+	wtPath := t.TempDir()
+	os.WriteFile(filepath.Join(wtPath, ".node-version"), []byte("20"), 0644)
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "fnm"), []byte("#!/bin/sh"), 0755)
+
+	w := config.FrameworkWorker{
+		Label:   "Vite Dev Server",
+		Command: "npm run dev",
+		Restart: "on-failure",
+		Host:    true,
+	}
+
+	err := WorkerStartForSite("mysite", wtPath, "8.4", "vite", w, false)
+	// Will fail to start the unit (no real systemd), but unit file should be written
+	// with per-worktree naming
+	_ = err
+
+	systemdDir := filepath.Join(tmp, "systemd", "user")
+	entries, _ := os.ReadDir(systemdDir)
+	var found bool
+	for _, e := range entries {
+		if strings.Contains(e.Name(), "lerd-vite-mysite-") && strings.HasSuffix(e.Name(), ".service") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Errorf("expected per-worktree unit name lerd-vite-mysite-<dir>, got: %v", names)
 	}
 }

@@ -214,7 +214,9 @@ func requireFrameworkWorker(cwd, workerName string) error {
 // The unit name is lerd-{workerName}-{siteName}.
 // If the worker has a Proxy config, the proxy port is auto-assigned and the
 // nginx vhost is regenerated to include the WebSocket/HTTP proxy block.
-func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker) error {
+// When persist is false the worker is not added to .lerd.yaml — used by the
+// auto-start path so worktree vite workers don't appear as user-opted entries.
+func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, persist ...bool) error {
 	if err := workerStartPreflight(sitePath, workerName, w); err != nil {
 		return err
 	}
@@ -309,8 +311,12 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// Persist this worker to .lerd.yaml so lerd install can restore it.
 	// Additive: other workers already in the list are not removed. This covers
 	// callers like setup and pause that start workers sequentially and must not
-	// clobber each other's entries.
-	_ = config.AddProjectWorker(sitePath, workerName)
+	// clobber each other's entries. Skipped when persist is explicitly false
+	// (auto-start path) so worktree workers don't appear as user-opted entries.
+	shouldPersist := len(persist) == 0 || persist[0]
+	if shouldPersist {
+		_ = config.AddProjectWorker(sitePath, workerName)
+	}
 
 	return nil
 }

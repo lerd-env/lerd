@@ -651,7 +651,7 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 				if w.Check != nil && !config.MatchesRule(wt.Path, *w.Check) {
 					continue
 				}
-				if err := cli.WorkerStartForSite(site.Name, wt.Path, effectivePHP, name, w); err != nil {
+				if err := cli.WorkerStartForSite(site.Name, wt.Path, effectivePHP, name, w, false); err != nil {
 					fmt.Printf("[WARN] auto-start %s for worktree %s: %v\n", name, wt.Branch, err)
 				}
 			}
