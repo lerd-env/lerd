@@ -72,14 +72,13 @@ func ReissueCertForWorktree(site config.Site) error {
 func issueCertWithWorktrees(site config.Site) error {
 	certsDir := filepath.Join(config.CertsDir(), "sites")
 
-	domains := make([]string, len(site.Domains))
-	copy(domains, site.Domains)
-
+	var wtDomains []string
 	if worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain()); err == nil {
 		for _, wt := range worktrees {
-			domains = append(domains, wt.Domain)
+			wtDomains = append(wtDomains, wt.Domain)
 		}
 	}
+	domains := WorktreeCertDomains(site.Domains, wtDomains)
 
 	// Remove existing cert so IssueCert regenerates it with the updated SANs.
 	certFile := filepath.Join(certsDir, site.PrimaryDomain()+".crt")
@@ -88,6 +87,17 @@ func issueCertWithWorktrees(site config.Site) error {
 	os.Remove(keyFile)  //nolint:errcheck
 
 	return IssueCert(site.PrimaryDomain(), domains, certsDir)
+}
+
+// WorktreeCertDomains builds the full domain list for a certificate that covers
+// the site's own domains plus all worktree domains. Each domain gets a wildcard
+// entry via IssueCert, so worktree domains like branch.myapp.test produce
+// *.branch.myapp.test SANs for deep subdomain coverage.
+func WorktreeCertDomains(siteDomains []string, worktreeDomains []string) []string {
+	domains := make([]string, len(siteDomains))
+	copy(domains, siteDomains)
+	domains = append(domains, worktreeDomains...)
+	return domains
 }
 
 // UnsecureSite regenerates a plain HTTP vhost for the site, removing TLS.
