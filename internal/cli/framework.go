@@ -561,37 +561,45 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 		if info.Source == config.SourceBuiltIn {
 			continue
 		}
-		for _, entry := range idx.Frameworks {
-			if entry.Name != info.Name {
-				continue
+		// Refresh the same version that's cached; previously this fetched
+		// entry.Latest for every entry, so users with multiple versions
+		// (laravel@10..@13) ended up only refreshing the latest file and
+		// the others stayed stale forever.
+		var indexed *store.IndexEntry
+		for i, entry := range idx.Frameworks {
+			if entry.Name == info.Name {
+				indexed = &idx.Frameworks[i]
+				break
 			}
-			remote, fetchErr := client.FetchFramework(entry.Name, entry.Latest)
-			if fetchErr != nil {
-				fmt.Printf("  [WARN] %s: %v\n", entry.Name, fetchErr)
-				continue
-			}
-
-			if showDiff {
-				changed, diffErr := showFrameworkDiff(entry.Name, info.Framework, remote)
-				if diffErr != nil {
-					fmt.Printf("  [WARN] %s: %v\n", entry.Name, diffErr)
-					continue
-				}
-				if !changed {
-					fmt.Printf("  %s@%s — up to date\n", entry.Name, versionOrLatest(remote))
-					continue
-				}
-			}
-
-			if saveErr := config.SaveStoreFramework(remote); saveErr != nil {
-				fmt.Printf("  [WARN] %s: %v\n", entry.Name, saveErr)
-				continue
-			}
-			config.RemoveUserFramework(entry.Name)
-			fmt.Printf("  Updated %s@%s\n", remote.Name, versionOrLatest(remote))
-			updated++
-			break
 		}
+		if indexed == nil {
+			continue
+		}
+		remote, fetchErr := client.FetchFramework(info.Name, info.Version)
+		if fetchErr != nil {
+			fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, fetchErr)
+			continue
+		}
+
+		if showDiff {
+			changed, diffErr := showFrameworkDiff(info.Name, info.Framework, remote)
+			if diffErr != nil {
+				fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, diffErr)
+				continue
+			}
+			if !changed {
+				fmt.Printf("  %s@%s — up to date\n", info.Name, versionOrLatest(remote))
+				continue
+			}
+		}
+
+		if saveErr := config.SaveStoreFramework(remote); saveErr != nil {
+			fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, saveErr)
+			continue
+		}
+		config.RemoveUserFramework(info.Name)
+		fmt.Printf("  Updated %s@%s\n", remote.Name, versionOrLatest(remote))
+		updated++
 	}
 	if updated == 0 {
 		fmt.Println("No frameworks to update.")
