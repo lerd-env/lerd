@@ -1,6 +1,10 @@
 package config
 
-import "testing"
+import (
+	"testing"
+
+	"gopkg.in/yaml.v3"
+)
 
 func TestIsPerWorktree_defaultFalse(t *testing.T) {
 	// Per-worktree is opt-in: framework yamls set per_worktree:true on
@@ -36,3 +40,54 @@ func TestBuiltinSymfony_workersStayParentOnly(t *testing.T) {
 		}
 	}
 }
+
+// TestFrameworkWorker_YAMLRoundtrip pins that per_worktree and replaces_build
+// survive marshal -> unmarshal. The pointer-typed PerWorktree is the easy one
+// to break since gopkg.in/yaml.v3 has different rules for pointers vs scalars.
+func TestFrameworkWorker_YAMLRoundtrip(t *testing.T) {
+	cases := []struct {
+		name string
+		yaml string
+		want FrameworkWorker
+	}{
+		{
+			name: "per_worktree true + replaces_build true",
+			yaml: "command: x\nper_worktree: true\nreplaces_build: true\n",
+			want: FrameworkWorker{Command: "x", PerWorktree: ptr(true), ReplacesBuild: true},
+		},
+		{
+			name: "per_worktree false explicit",
+			yaml: "command: x\nper_worktree: false\n",
+			want: FrameworkWorker{Command: "x", PerWorktree: ptr(false)},
+		},
+		{
+			name: "fields omitted",
+			yaml: "command: x\n",
+			want: FrameworkWorker{Command: "x"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var got FrameworkWorker
+			if err := yaml.Unmarshal([]byte(tc.yaml), &got); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if got.Command != tc.want.Command {
+				t.Errorf("Command = %q, want %q", got.Command, tc.want.Command)
+			}
+			if got.ReplacesBuild != tc.want.ReplacesBuild {
+				t.Errorf("ReplacesBuild = %v, want %v", got.ReplacesBuild, tc.want.ReplacesBuild)
+			}
+			switch {
+			case tc.want.PerWorktree == nil && got.PerWorktree != nil:
+				t.Errorf("PerWorktree = %v, want nil", *got.PerWorktree)
+			case tc.want.PerWorktree != nil && got.PerWorktree == nil:
+				t.Errorf("PerWorktree = nil, want %v", *tc.want.PerWorktree)
+			case tc.want.PerWorktree != nil && *got.PerWorktree != *tc.want.PerWorktree:
+				t.Errorf("PerWorktree = %v, want %v", *got.PerWorktree, *tc.want.PerWorktree)
+			}
+		})
+	}
+}
+
+func ptr[T any](v T) *T { return &v }
