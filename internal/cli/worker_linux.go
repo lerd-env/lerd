@@ -93,6 +93,8 @@ WantedBy=default.target
 	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
 }
 
+const defaultNodeVersion = "22"
+
 // writeHostWorkerUnitFile writes a systemd service unit for a worker that runs
 // on the host via fnm rather than inside a container. Used for Node.js tools
 // like Vite that need direct host access for HMR.
@@ -104,7 +106,7 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 			nodeVersion = cfg.Node.DefaultVersion
 		}
 		if nodeVersion == "" {
-			nodeVersion = "22"
+			nodeVersion = defaultNodeVersion
 		}
 	}
 
