@@ -77,12 +77,13 @@ Earlier lerd versions symlinked `vendor/` to save disk. PHP resolves `__DIR__` t
 
 ## HTTPS
 
-If the parent site is secured with `lerd secure`, worktree subdomains inherit HTTPS automatically. Lerd reuses the parent's wildcard mkcert certificate (`*.myapp.test`).
+If the parent site is secured with `lerd secure`, worktree subdomains inherit HTTPS automatically. When a worktree is created on a secured site, lerd reissues the parent's mkcert certificate to include `*.branch.myapp.test` SANs, so deep subdomains (e.g. `app.feature-auth.myapp.test` for multi-tenant apps) are also covered. The worktree's nginx vhost includes `*.branch.myapp.test` in its `server_name` directive.
 
 ```bash
 lerd secure myapp
-# myapp.test                  → https
-# feature-auth.myapp.test     → https  (automatic)
+# myapp.test                          → https
+# feature-auth.myapp.test             → https  (automatic)
+# app.feature-auth.myapp.test         → https  (wildcard SAN)
 ```
 
 `APP_URL` in each worktree's `.env` is rewritten to `https://` when you secure the parent (and back to `http://` on `lerd unsecure`).
