@@ -259,7 +259,7 @@ func restartWorkerByUnitName(unit string) error {
 	if !ok {
 		return fmt.Errorf("worker %q not defined for framework %q", kind, fw.Label)
 	}
-	return WorkerStartForSite(siteName, site.Path, site.PHPVersion, kind, worker)
+	return WorkerStartForSite(siteName, site.Path, site.PHPVersion, kind, worker, true)
 }
 
 // splitWorkerUnit splits "<kind>-<siteName>" into (kind, siteName, ok).

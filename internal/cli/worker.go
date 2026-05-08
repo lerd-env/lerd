@@ -53,7 +53,7 @@ func newWorkerStartCmd() *cobra.Command {
 			if worker.Check != nil && !config.MatchesRule(cwd, *worker.Check) {
 				return fmt.Errorf("worker %q requires a dependency that is not installed\nCheck the framework definition for required packages", workerName)
 			}
-			if err := WorkerStartForSite(site.Name, cwd, phpVersion, workerName, worker); err != nil {
+			if err := WorkerStartForSite(site.Name, cwd, phpVersion, workerName, worker, true); err != nil {
 				return err
 			}
 			if !site.Paused {
@@ -214,9 +214,9 @@ func requireFrameworkWorker(cwd, workerName string) error {
 // The unit name is lerd-{workerName}-{siteName}.
 // If the worker has a Proxy config, the proxy port is auto-assigned and the
 // nginx vhost is regenerated to include the WebSocket/HTTP proxy block.
-// When persist is false the worker is not added to .lerd.yaml — used by the
+// When persist is false the worker is not added to .lerd.yaml, used by the
 // auto-start path so worktree vite workers don't appear as user-opted entries.
-func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, persist ...bool) error {
+func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker, persist bool) error {
 	if err := workerStartPreflight(sitePath, workerName, w); err != nil {
 		return err
 	}
@@ -309,12 +309,10 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	}
 
 	// Persist this worker to .lerd.yaml so lerd install can restore it.
-	// Additive: other workers already in the list are not removed. This covers
-	// callers like setup and pause that start workers sequentially and must not
-	// clobber each other's entries. Skipped when persist is explicitly false
-	// (auto-start path) so worktree workers don't appear as user-opted entries.
-	shouldPersist := len(persist) == 0 || persist[0]
-	if shouldPersist {
+	// Additive: other workers already in the list are not removed. Skipped
+	// when persist is false (auto-start path) so worktree workers don't
+	// appear as user-opted entries.
+	if persist {
 		_ = config.AddProjectWorker(sitePath, workerName)
 	}
 

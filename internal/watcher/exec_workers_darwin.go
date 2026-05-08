@@ -87,7 +87,7 @@ func WatchExecWorkers(interval time.Duration) {
 			cooldown[w.unit] = time.Now()
 			logger.Warn("self-healing exec-mode worker",
 				"unit", w.unit, "reason", reason)
-			if err := cli.WorkerStartForSite(w.site, w.sitePath, w.phpVersion, w.kind, w.def); err != nil {
+			if err := cli.WorkerStartForSite(w.site, w.sitePath, w.phpVersion, w.kind, w.def, true); err != nil {
 				logger.Error("self-heal failed",
 					"unit", w.unit, "err", err)
 			}

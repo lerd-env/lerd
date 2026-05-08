@@ -99,7 +99,7 @@ func HorizonStartForSite(siteName, sitePath, phpVersion string) error {
 	if !ok {
 		return fmt.Errorf("framework %q has no worker named \"horizon\"", fw.Label)
 	}
-	return WorkerStartForSite(siteName, sitePath, phpVersion, "horizon", worker)
+	return WorkerStartForSite(siteName, sitePath, phpVersion, "horizon", worker, true)
 }
 
 // buildHorizonUnit renders the Horizon systemd unit body. Horizon always

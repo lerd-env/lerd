@@ -2337,7 +2337,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 					if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 						phpVersion = detected
 					}
-					go cli.WorkerStartForSite(site.Name, site.Path, phpVersion, workerName, worker) //nolint:errcheck
+					go cli.WorkerStartForSite(site.Name, site.Path, phpVersion, workerName, worker, true) //nolint:errcheck
 					go syncLerdYAMLWorkersDelayed(site)
 				}
 				writeJSON(w, SiteActionResponse{OK: true})

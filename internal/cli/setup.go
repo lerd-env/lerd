@@ -269,7 +269,7 @@ func runSetup(allSteps, skipOpen bool) error {
 						for _, conflict := range wd.ConflictsWith {
 							WorkerStopForSite(s.Name, conflict) //nolint:errcheck
 						}
-						return WorkerStartForSite(s.Name, cwd, phpVersion, wn, wd)
+						return WorkerStartForSite(s.Name, cwd, phpVersion, wn, wd, true)
 					},
 				})
 			}

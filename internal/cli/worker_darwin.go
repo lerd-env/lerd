@@ -23,8 +23,14 @@ import (
 //   - "container": one detached container per worker, spawned from the
 //     FPM image. Higher memory but 1:1 supervisor boundary.
 //
-// Scheduled workers (Schedule != "") still aren't supported on macOS.
+// Scheduled workers (Schedule != "") and host workers still aren't supported
+// on macOS. Host workers would need a launchd plist that runs through fnm on
+// the host instead of routing through the podman-machine FPM container.
 func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, schedule, fpmUnit string, host bool) (bool, error) {
+	if host {
+		fmt.Printf("[WARN] worker %s is host: true which is not yet supported on macOS — skipping. Run the command manually from the project root.\n", unitName)
+		return false, nil
+	}
 	if schedule != "" {
 		fmt.Printf("[WARN] worker %s has schedule=%q which is not yet supported on macOS — skipping\n", unitName, schedule)
 		return false, nil

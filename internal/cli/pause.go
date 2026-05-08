@@ -345,7 +345,7 @@ func resumeWorkerByName(site *config.Site, workerName, phpVersion string) {
 	if !ok {
 		return
 	}
-	WorkerStartForSite(site.Name, site.Path, phpVersion, workerName, worker) //nolint:errcheck
+	WorkerStartForSite(site.Name, site.Path, phpVersion, workerName, worker, true) //nolint:errcheck
 }
 
 // pausedPageHTML is the static HTML for the shared paused-site landing page.

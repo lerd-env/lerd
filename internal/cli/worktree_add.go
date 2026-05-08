@@ -75,7 +75,7 @@ func newWorktreeAddCmd() *cobra.Command {
 				fmt.Println("Dependencies installed.")
 			}
 
-			if hasHostWorkerAutoStart(site) {
+			if hasHostWorkerAutoStart(site, worktreePath) {
 				fmt.Println("Vite dev server auto-started by the watcher — skipping build prompt.")
 			} else if script := promptFrontendBuild(worktreePath); script != "" {
 				fmt.Printf("Running npm run %s...\n", script)
@@ -392,11 +392,13 @@ func worktreePathForBranch(site *config.Site, branch string) (string, error) {
 	return "", fmt.Errorf("worktree %q not found", branch)
 }
 
-// hasHostWorkerAutoStart returns true when the site's framework defines at
-// least one host worker whose check passes, meaning the watcher will auto-start
-// it for new worktrees (e.g. vite). When true the CLI skips the build prompt
-// to avoid running npm run build in parallel with npm run dev.
-func hasHostWorkerAutoStart(site *config.Site) bool {
+// hasHostWorkerAutoStart returns true when the worktree path matches a
+// host worker check rule, meaning the watcher will auto-start that worker
+// for the new worktree. The check must run against worktreePath (not the
+// parent site path) because syncWorktree uses worktreePath when deciding
+// whether to spawn, and a divergence between the suppression check and the
+// spawn check causes either a duplicate build or a missing manifest.
+func hasHostWorkerAutoStart(site *config.Site, worktreePath string) bool {
 	if site.Framework == "" {
 		return false
 	}
@@ -405,7 +407,7 @@ func hasHostWorkerAutoStart(site *config.Site) bool {
 		return false
 	}
 	for _, w := range fw.Workers {
-		if w.Host && (w.Check == nil || config.MatchesRule(site.Path, *w.Check)) {
+		if w.Host && (w.Check == nil || config.MatchesRule(worktreePath, *w.Check)) {
 			return true
 		}
 	}

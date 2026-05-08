@@ -108,7 +108,7 @@ func ReverbStartForSite(siteName, sitePath, phpVersion string) error {
 	if !ok {
 		return fmt.Errorf("framework %q has no worker named \"reverb\"", fw.Label)
 	}
-	return WorkerStartForSite(siteName, sitePath, phpVersion, "reverb", worker)
+	return WorkerStartForSite(siteName, sitePath, phpVersion, "reverb", worker, true)
 }
 
 // ReverbStopForSite stops and removes the Reverb unit for the named site.
