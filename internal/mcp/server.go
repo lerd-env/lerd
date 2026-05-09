@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -695,24 +696,26 @@ func toolList() []mcpTool {
 	tools = append(tools,
 		mcpTool{
 			Name:        "worker",
-			Description: "Start or stop a framework-defined worker. Call worker_list first.",
+			Description: "Start or stop a framework-defined worker. Call worker_list first. Pass branch=<name> to target a per-worktree unit (lerd-<worker>-<site>-<branch>) for workers with per_worktree:true (e.g. vite). Without branch, the parent site's unit is targeted.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"action": {Type: "string", Enum: []string{"start", "stop"}},
 					"site":   {Type: "string"},
-					"worker": {Type: "string", Description: "e.g. messenger, horizon, pulse."},
+					"worker": {Type: "string", Description: "e.g. messenger, horizon, vite."},
+					"branch": {Type: "string", Description: "Optional. Worktree branch name. Required to start a per_worktree:true worker on a specific worktree."},
 				},
 				Required: []string{"action", "site", "worker"},
 			},
 		},
 		mcpTool{
 			Name:        "worker_list",
-			Description: "List workers defined for a site's framework, including running status.",
+			Description: "List workers defined for a site's framework, including running status. Pass branch=<name> to see per-worktree unit status; without branch, parent-site units are reported.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
-					"site": {Type: "string", Description: "Site name (from sites)."},
+					"site":   {Type: "string", Description: "Site name (from sites)."},
+					"branch": {Type: "string", Description: "Optional. Worktree branch — reports lerd-<worker>-<site>-<branch> unit state and host/per_worktree/replaces_build flags."},
 				},
 				Required: []string{"site"},
 			},
@@ -3796,6 +3799,21 @@ func execFrameworkAdd(args map[string]any) (any, *rpcError) {
 	return toolOK(fmt.Sprintf("Framework %q saved. Use site_link to register a project using this framework.", name)), nil
 }
 
+// resolveWorkerCwd picks the cwd to shell `lerd worker` into: site.Path for
+// parent, worktree path when branch is set. The CLI's workerNames helper
+// keys off cwd to pick parent vs per-worktree unit names.
+func resolveWorkerCwd(site *config.Site, branch string) (string, map[string]any) {
+	if branch == "" {
+		return site.Path, nil
+	}
+	sanitized := gitpkg.SanitizeBranch(branch)
+	wtPath := worktreePathFor(site, sanitized)
+	if wtPath == "" {
+		return "", toolErr(fmt.Sprintf("worktree branch %q not found on site %q", branch, site.Name))
+	}
+	return wtPath, nil
+}
+
 func execWorkerStart(args map[string]any) (any, *rpcError) {
 	siteName := strArg(args, "site")
 	if siteName == "" {
@@ -3805,73 +3823,23 @@ func execWorkerStart(args map[string]any) (any, *rpcError) {
 	if workerName == "" {
 		return toolErr("worker is required"), nil
 	}
-
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return toolErr("site not found: " + siteName), nil
 	}
-
-	fwName := site.Framework
-	if fwName == "" {
-		return toolErr("site has no framework assigned — run lerd link first"), nil
+	cwd, errResp := resolveWorkerCwd(site, strArg(args, "branch"))
+	if errResp != nil {
+		return errResp, nil
 	}
-	fw, ok := config.GetFrameworkForDir(fwName, site.Path)
-	if !ok {
-		return toolErr("framework not found: " + fwName), nil
+	out, err := runIn(cwd, "lerd", "worker", "start", workerName)
+	if err != nil {
+		msg := strings.TrimSpace(out)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return toolErr(fmt.Sprintf("starting worker %q: %s", workerName, msg)), nil
 	}
-	worker, ok := fw.Workers[workerName]
-	if !ok {
-		return toolErr(fmt.Sprintf("worker %q not found in framework %q — use worker_list to see available workers", workerName, fwName)), nil
-	}
-
-	if worker.Check != nil && !config.MatchesRule(site.Path, *worker.Check) {
-		return toolErr(fmt.Sprintf("worker %q requires a dependency that is not installed (check the framework definition for required packages)", workerName)), nil
-	}
-
-	phpVersion := site.PHPVersion
-	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
-		phpVersion = detected
-	}
-	versionShort := strings.ReplaceAll(phpVersion, ".", "")
-	fpmUnit := "lerd-php" + versionShort + "-fpm"
-	container := "lerd-php" + versionShort + "-fpm"
-	unitName := "lerd-" + workerName + "-" + siteName
-
-	label := worker.Label
-	if label == "" {
-		label = workerName
-	}
-	restart := worker.Restart
-	if restart == "" {
-		restart = "always"
-	}
-
-	unit := fmt.Sprintf(`[Unit]
-Description=Lerd %s (%s)
-After=network.target %s.service
-BindsTo=%s.service
-
-[Service]
-Type=simple
-Restart=%s
-RestartSec=5
-ExecStart=%s exec -w %s %s %s
-
-[Install]
-WantedBy=default.target
-`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), site.Path, container, worker.Command)
-
-	if err := lerdSystemd.WriteService(unitName, unit); err != nil {
-		return toolErr("writing service unit: " + err.Error()), nil
-	}
-	if err := podman.DaemonReloadFn(); err != nil {
-		return toolErr("daemon-reload: " + err.Error()), nil
-	}
-	_ = lerdSystemd.EnableService(unitName)
-	if err := lerdSystemd.StartService(unitName); err != nil {
-		return toolErr(fmt.Sprintf("starting %s: %v", workerName, err)), nil
-	}
-	return toolOK(fmt.Sprintf("%s started for %s\nLogs: journalctl --user -u %s -f", label, siteName, unitName)), nil
+	return toolOK(out), nil
 }
 
 func execWorkerStop(args map[string]any) (any, *rpcError) {
@@ -3883,15 +3851,23 @@ func execWorkerStop(args map[string]any) (any, *rpcError) {
 	if workerName == "" {
 		return toolErr("worker is required"), nil
 	}
-	unitName := "lerd-" + workerName + "-" + siteName
-	unitFile := filepath.Join(config.SystemdUserDir(), unitName+".service")
-	_ = lerdSystemd.DisableService(unitName)
-	_ = podman.StopUnit(unitName)
-	if err := os.Remove(unitFile); err != nil && !os.IsNotExist(err) {
-		return toolErr("removing unit file: " + err.Error()), nil
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return toolErr("site not found: " + siteName), nil
 	}
-	_ = podman.DaemonReloadFn()
-	return toolOK(fmt.Sprintf("%s worker stopped for %s", workerName, siteName)), nil
+	cwd, errResp := resolveWorkerCwd(site, strArg(args, "branch"))
+	if errResp != nil {
+		return errResp, nil
+	}
+	out, err := runIn(cwd, "lerd", "worker", "stop", workerName)
+	if err != nil {
+		msg := strings.TrimSpace(out)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return toolErr(fmt.Sprintf("stopping worker %q: %s", workerName, msg)), nil
+	}
+	return toolOK(out), nil
 }
 
 func execWorkerList(args map[string]any) (any, *rpcError) {
@@ -3916,21 +3892,35 @@ func execWorkerList(args map[string]any) (any, *rpcError) {
 		return toolOK(string(data)), nil
 	}
 
+	branchArg := strArg(args, "branch")
+	var unitSuffix string
+	if branchArg != "" {
+		sanitized := gitpkg.SanitizeBranch(branchArg)
+		if worktreePathFor(site, sanitized) == "" {
+			return toolErr(fmt.Sprintf("worktree branch %q not found on site %q", branchArg, siteName)), nil
+		}
+		unitSuffix = "-" + sanitized
+	}
+
 	type workerInfo struct {
-		Name     string `json:"name"`
-		Label    string `json:"label"`
-		Command  string `json:"command"`
-		Restart  string `json:"restart"`
-		Running  bool   `json:"running"`
-		Unit     string `json:"unit"`
-		Orphaned bool   `json:"orphaned,omitempty"`
+		Name          string `json:"name"`
+		Label         string `json:"label"`
+		Command       string `json:"command"`
+		Restart       string `json:"restart"`
+		Running       bool   `json:"running"`
+		Unit          string `json:"unit"`
+		Branch        string `json:"branch,omitempty"`
+		Host          bool   `json:"host,omitempty"`
+		PerWorktree   bool   `json:"per_worktree,omitempty"`
+		ReplacesBuild bool   `json:"replaces_build,omitempty"`
+		Orphaned      bool   `json:"orphaned,omitempty"`
 	}
 
 	known := make(map[string]bool, len(fw.Workers))
 	var result []workerInfo
 	for wname, w := range fw.Workers {
 		known[wname] = true
-		unitName := "lerd-" + wname + "-" + siteName
+		unitName := "lerd-" + wname + "-" + siteName + unitSuffix
 		status, _ := podman.UnitStatus(unitName)
 		label := w.Label
 		if label == "" {
@@ -3941,26 +3931,33 @@ func execWorkerList(args map[string]any) (any, *rpcError) {
 			restart = "always"
 		}
 		result = append(result, workerInfo{
-			Name:    wname,
-			Label:   label,
-			Command: w.Command,
-			Restart: restart,
-			Running: status == "active",
-			Unit:    unitName,
+			Name:          wname,
+			Label:         label,
+			Command:       w.Command,
+			Restart:       restart,
+			Running:       status == "active",
+			Unit:          unitName,
+			Branch:        branchArg,
+			Host:          w.Host,
+			PerWorktree:   w.IsPerWorktree(),
+			ReplacesBuild: w.ReplacesBuild,
 		})
 	}
 
-	// Detect orphaned workers — running units with no framework definition.
-	orphans := lerdSystemd.FindOrphanedWorkers(siteName, known)
-	for _, wname := range orphans {
-		unitName := "lerd-" + wname + "-" + siteName
-		result = append(result, workerInfo{
-			Name:     wname,
-			Label:    wname + " (orphaned)",
-			Running:  true,
-			Unit:     unitName,
-			Orphaned: true,
-		})
+	// Skip orphan detection when scoped to a worktree — FindOrphanedWorkers
+	// walks the parent site only.
+	if branchArg == "" {
+		orphans := lerdSystemd.FindOrphanedWorkers(siteName, known)
+		for _, wname := range orphans {
+			unitName := "lerd-" + wname + "-" + siteName
+			result = append(result, workerInfo{
+				Name:     wname,
+				Label:    wname + " (orphaned)",
+				Running:  true,
+				Unit:     unitName,
+				Orphaned: true,
+			})
+		}
 	}
 
 	sort.Slice(result, func(i, j int) bool { return result[i].Name < result[j].Name })

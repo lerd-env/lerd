@@ -32,12 +32,14 @@ func NewWorktreeCmd() *cobra.Command {
 // newWorktreeAddCmd is the `lerd worktree add` subcommand. All arguments are
 // forwarded verbatim to `git worktree add`, so every git flag works (-b,
 // --detach, --track, --lock, etc.). After git completes, the wrapper waits
-// for lerd's watcher-driven install pipeline, runs `npm run build`, and
-// prompts for DB isolation. LAN share is intentionally not prompted.
+// for lerd's watcher-driven install pipeline, presents a unified asset-worker
+// / npm-build prompt (eligible per_worktree+replaces_build workers + npm
+// production-build scripts + Skip), and prompts for DB isolation. LAN share
+// is intentionally not prompted.
 func newWorktreeAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:                "add [git-worktree-add args...]",
-		Short:              "Create a git worktree (any git flags) and run lerd's interactive setup",
+		Short:              "Create a git worktree (any git flags) and run lerd's interactive setup (asset-worker / build prompt + DB isolation)",
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		Args:               cobra.MinimumNArgs(1),

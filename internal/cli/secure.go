@@ -17,7 +17,7 @@ import (
 func NewSecureCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "secure [name]",
-		Short: "Enable HTTPS for the current site using mkcert",
+		Short: "Enable HTTPS for the current site using mkcert (cert SANs cover *.<branch>.<site>.test for worktrees)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runSecure,
 	}

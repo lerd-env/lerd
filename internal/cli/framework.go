@@ -495,13 +495,15 @@ func newFrameworkUpdateCmd() *cobra.Command {
 		Long: `Re-fetch framework definitions from the store.
 
 If a name is given, only that framework is updated.
-If no name is given, all locally installed store frameworks are updated.
+If no name is given, every cached version of every installed framework is
+re-fetched (e.g. laravel@10, @11, @12, @13 are all refreshed individually,
+not just the latest).
 Use --diff to preview changes before applying.
 
 Examples:
   lerd framework update symfony       # update to latest
   lerd framework update symfony@7     # update specific version
-  lerd framework update               # update all
+  lerd framework update               # update all (every cached version)
   lerd framework update --diff        # show what would change`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
