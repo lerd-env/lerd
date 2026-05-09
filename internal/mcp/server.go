@@ -771,6 +771,30 @@ func toolList() []mcpTool {
 			},
 		},
 		mcpTool{
+			Name:        "workers_mode",
+			Description: "Show or set the macOS worker runtime mode. exec=one podman exec per worker, supervised by launchd (default; lower memory). container=one detached container per worker (1:1 supervisor boundary). Linux always uses exec under systemd, this setting is a no-op there. Setting on macOS restarts active workers in the new shape.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"action": {Type: "string", Enum: []string{"get", "set"}, Description: "get reports current mode; set switches to `mode`."},
+					"mode":   {Type: "string", Enum: []string{"exec", "container"}, Description: "Required for set. exec or container."},
+				},
+				Required: []string{"action"},
+			},
+		},
+		mcpTool{
+			Name:        "bug_report",
+			Description: "Generate a plain-text diagnostic report (lerd doctor + config + systemd / podman state + recent logs + env vars) for attaching to a GitHub issue. Site names, domains and parked-directory paths are anonymised by default. Returns the file path.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"output":          {Type: "string", Description: "Output file path. Defaults to ./lerd-bug-report-<timestamp>.txt"},
+					"log_lines":       {Type: "integer", Description: "Lines per service / container log. Default 200."},
+					"show_real_names": {Type: "boolean", Description: "Skip anonymisation. Use only for local debugging."},
+				},
+			},
+		},
+		mcpTool{
 			Name:        "framework_list",
 			Description: "List framework definitions (built-in + user YAMLs), with their workers and setup commands.",
 			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
@@ -856,7 +880,7 @@ func toolList() []mcpTool {
 		},
 		mcpTool{
 			Name:        "site_php",
-			Description: "Change a site's PHP version. Writes .php-version and regenerates the nginx vhost.",
+			Description: "Change a site's PHP version. Writes .php-version and regenerates the nginx vhost. Pass branch=<name> to pin the version on a specific worktree (writes .php-version + .lerd.yaml override inside the worktree's checkout, regenerates only that worktree's vhost) instead of the parent site.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
@@ -865,13 +889,14 @@ func toolList() []mcpTool {
 						Type:        "string",
 						Description: "PHP version (e.g. 8.4, 8.3).",
 					},
+					"branch": {Type: "string", Description: "Optional. Worktree branch — writes .php-version inside the worktree and persists php_version to its .lerd.yaml so the override travels with the branch."},
 				},
 				Required: []string{"site", "version"},
 			},
 		},
 		mcpTool{
 			Name:        "site_node",
-			Description: "Change a site's Node.js version. Writes .node-version; installs via fnm if needed.",
+			Description: "Change a site's Node.js version. Writes .node-version; installs via fnm if needed. Pass branch=<name> to pin the version on a specific worktree (writes .node-version + .lerd.yaml override inside the worktree's checkout) instead of the parent site.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
@@ -880,6 +905,7 @@ func toolList() []mcpTool {
 						Type:        "string",
 						Description: "Node.js version (e.g. 22, 20, lts).",
 					},
+					"branch": {Type: "string", Description: "Optional. Worktree branch — writes .node-version inside the worktree and persists node_version to its .lerd.yaml."},
 				},
 				Required: []string{"site", "version"},
 			},
@@ -1045,6 +1071,10 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execWorkersHealth()
 	case "workers_heal":
 		return execWorkersHeal(args)
+	case "workers_mode":
+		return execWorkersMode(args)
+	case "bug_report":
+		return execBugReport(args)
 
 	case "logs":
 		return execLogs(args)
@@ -4004,6 +4034,71 @@ func execWorkersHeal(args map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+// execWorkersMode shells out to `lerd workers mode` so the same migration
+// path that restarts active workers in their new shape on macOS runs from
+// MCP too. Linux is a no-op at the CLI layer.
+func execWorkersMode(args map[string]any) (any, *rpcError) {
+	action := strArg(args, "action")
+	switch action {
+	case "get":
+		out, err := runIn("", "lerd", "workers", "mode")
+		if err != nil {
+			msg := strings.TrimSpace(out)
+			if msg == "" {
+				msg = err.Error()
+			}
+			return toolErr("workers mode: " + msg), nil
+		}
+		return toolOK(out), nil
+	case "set":
+		mode := strArg(args, "mode")
+		if mode != "exec" && mode != "container" {
+			return toolErr("mode must be exec or container"), nil
+		}
+		out, err := runIn("", "lerd", "workers", "mode", mode)
+		if err != nil {
+			msg := strings.TrimSpace(out)
+			if msg == "" {
+				msg = err.Error()
+			}
+			return toolErr("workers mode " + mode + ": " + msg), nil
+		}
+		return toolOK(out), nil
+	default:
+		return toolErr("action must be get or set"), nil
+	}
+}
+
+// execBugReport shells out to `lerd bug-report` rather than re-implementing
+// the doctor-output / config-collection logic. Returns the file path so the
+// agent can read or upload it; flags map 1:1 onto the CLI.
+func execBugReport(args map[string]any) (any, *rpcError) {
+	cmd := []string{"bug-report"}
+	if out := strArg(args, "output"); out != "" {
+		cmd = append(cmd, "--output", out)
+	}
+	if v, ok := args["log_lines"]; ok {
+		switch n := v.(type) {
+		case float64:
+			cmd = append(cmd, "--log-lines", fmt.Sprintf("%d", int(n)))
+		case int:
+			cmd = append(cmd, "--log-lines", fmt.Sprintf("%d", n))
+		}
+	}
+	if v, ok := args["show_real_names"].(bool); ok && v {
+		cmd = append(cmd, "--show-real-names")
+	}
+	output, err := runIn("", "lerd", cmd...)
+	if err != nil {
+		msg := strings.TrimSpace(output)
+		if msg == "" {
+			msg = err.Error()
+		}
+		return toolErr("bug-report: " + msg), nil
+	}
+	return toolOK(output), nil
+}
+
 func execWorkerAdd(args map[string]any) (any, *rpcError) {
 	siteName := strArg(args, "site")
 	if siteName == "" {
@@ -4409,6 +4504,22 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 		return toolErr("custom container sites do not use PHP versions — the container defines its own runtime"), nil
 	}
 
+	if branch := strArg(args, "branch"); branch != "" {
+		cwd, errResp := resolveWorkerCwd(site, branch)
+		if errResp != nil {
+			return errResp, nil
+		}
+		out, runErr := runIn(cwd, "lerd", "isolate", version)
+		if runErr != nil {
+			msg := strings.TrimSpace(out)
+			if msg == "" {
+				msg = runErr.Error()
+			}
+			return toolErr(fmt.Sprintf("isolate PHP %s on %s: %s", version, branch, msg)), nil
+		}
+		return toolOK(out), nil
+	}
+
 	// Write .php-version pin file (keeps CLI php and other tools in sync).
 	phpVersionFile := filepath.Join(site.Path, ".php-version")
 	if err := os.WriteFile(phpVersionFile, []byte(version+"\n"), 0644); err != nil {
@@ -4469,6 +4580,22 @@ func execSiteNode(args map[string]any) (any, *rpcError) {
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return toolErr(fmt.Sprintf("site %q not found — run sites to list registered sites", siteName)), nil
+	}
+
+	if branch := strArg(args, "branch"); branch != "" {
+		cwd, errResp := resolveWorkerCwd(site, branch)
+		if errResp != nil {
+			return errResp, nil
+		}
+		out, runErr := runIn(cwd, "lerd", "isolate:node", version)
+		if runErr != nil {
+			msg := strings.TrimSpace(out)
+			if msg == "" {
+				msg = runErr.Error()
+			}
+			return toolErr(fmt.Sprintf("isolate Node %s on %s: %s", version, branch, msg)), nil
+		}
+		return toolOK(out), nil
 	}
 
 	// Write .node-version pin file in the project.

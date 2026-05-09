@@ -506,10 +506,9 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // and globally; drift upward gets expensive fast. Raise the ceiling only
 // when adding content that justifies the bytes.
 func TestClaudeSkillContent_underSizeCeiling(t *testing.T) {
-	// Bumped to 47500 in v1.20.0-beta.1 for the worktree surface (env_overrides
-	// templating, host / per_worktree / replaces_build flags, worker `branch`
-	// param, dedicated worktree tool section).
-	const ceiling = 47500
+	// Bumped to 49000 for site_php / site_node `branch` param + new
+	// workers_mode and bug_report tool sections (post-1.20.0-beta.1 audit).
+	const ceiling = 49000
 	if got := len(claudeSkillContent); got > ceiling {
 		t.Errorf("claudeSkillContent is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

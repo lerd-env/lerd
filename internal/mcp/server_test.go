@@ -170,10 +170,9 @@ func TestExecEnvCheck_missingKeys(t *testing.T) {
 // context for the whole session; raise the ceiling only with a justified
 // content addition, not by accreting description verbosity.
 func TestToolList_underSizeCeiling(t *testing.T) {
-	// Bumped to 20500 in v1.20.0-beta.1 for the worker / worker_list `branch`
-	// param + per_worktree/replaces_build flag schema and expanded worktree
-	// tool description (env_overrides + wildcard cert + ad-hoc asset worker).
-	const ceiling = 20500
+	// Bumped to 22500 for site_php / site_node `branch` param + new
+	// workers_mode and bug_report tools (post-1.20.0-beta.1 audit).
+	const ceiling = 22500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)
@@ -243,5 +242,34 @@ func TestResolveWorkerCwd_unknownBranchErrors(t *testing.T) {
 	}
 	if cwd != "" {
 		t.Errorf("expected empty cwd on error, got %q", cwd)
+	}
+}
+
+// TestExecWorkersMode_RejectsBadAction pins the validation that keeps the
+// tool from silently no-op-ing on a typo'd action. Real exec paths shell
+// out to the lerd CLI, which we don't run from unit tests; the bad-arg
+// branch is what we can pin without an integration setup.
+func TestExecWorkersMode_RejectsBadAction(t *testing.T) {
+	resp, rpcErr := execWorkersMode(map[string]any{"action": "toggle"})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	got, _ := json.Marshal(resp)
+	if !bytes.Contains(got, []byte("get or set")) {
+		t.Errorf("bad action should be rejected with hint, got %s", got)
+	}
+}
+
+// TestExecWorkersMode_SetRequiresValidMode verifies that `set` without a
+// valid mode value short-circuits before shelling out so a typo doesn't
+// reach the CLI as a real attempt.
+func TestExecWorkersMode_SetRequiresValidMode(t *testing.T) {
+	resp, rpcErr := execWorkersMode(map[string]any{"action": "set", "mode": "fast"})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	got, _ := json.Marshal(resp)
+	if !bytes.Contains(got, []byte("exec or container")) {
+		t.Errorf("invalid mode should be rejected, got %s", got)
 	}
 }

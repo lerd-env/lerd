@@ -1098,11 +1098,32 @@ framework_add(
 Delete a user-defined framework YAML. For ` + bt + `laravel` + bt + `, removes only custom worker and setup command additions (built-in queue/schedule/reverb workers and storage:link/migrate/db:seed setup remain). Takes ` + bt + `name` + bt + ` (required).
 
 ### ` + bt + `site_php` + bt + ` / ` + bt + `site_node` + bt + `
-Change the PHP or Node.js version for a registered site. Both take ` + bt + `site` + bt + ` (required) and ` + bt + `version` + bt + ` (required).
+Change the PHP or Node.js version for a registered site. Both take ` + bt + `site` + bt + ` (required), ` + bt + `version` + bt + ` (required), and an optional ` + bt + `branch` + bt + ` (worktree).
 
 ` + bt + `site_php` + bt + ` writes a ` + bt + `.php-version` + bt + ` pin file to the project root, updates the site registry, and regenerates the nginx vhost. The FPM container for the target PHP version must be running — start it with ` + bt + `service_control(action: "start", name: "php<version>")` + bt + ` if needed.
 
 ` + bt + `site_node` + bt + ` writes a ` + bt + `.node-version` + bt + ` pin file and installs the version via fnm if it isn't already installed. Run ` + bt + `npm install` + bt + ` inside the project if dependencies need rebuilding against the new version.
+
+Pass ` + bt + `branch` + bt + ` to pin the version on a specific worktree instead of the parent site. The pin file is written inside the worktree's checkout, ` + bt + `php_version` + bt + ` / ` + bt + `node_version` + bt + ` is persisted to that worktree's ` + bt + `.lerd.yaml` + bt + ` (so the override travels with the branch in git), and only that worktree's nginx vhost is regenerated. The parent site's version stays unchanged.
+
+### ` + bt + `workers_mode` + bt + `
+Show or set the macOS worker runtime mode.
+
+Arguments:
+- ` + bt + `action` + bt + ` (required): ` + bt + `"get"` + bt + ` or ` + bt + `"set"` + bt + `
+- ` + bt + `mode` + bt + ` (required for set): ` + bt + `"exec"` + bt + ` (default; one ` + bt + `podman exec` + bt + ` per worker, supervised by launchd, lower memory) or ` + bt + `"container"` + bt + ` (one detached container per worker, 1:1 supervisor boundary, higher memory)
+
+Linux always uses exec under systemd — this setting is a no-op there. Setting on macOS stops each active worker in its old shape, cleans up the stale on-disk artifacts, and restarts it in the new shape.
+
+### ` + bt + `bug_report` + bt + `
+Generate a plain-text diagnostic report for a GitHub issue. Collects ` + bt + `lerd doctor` + bt + ` output, config files, systemd / podman state, recent service logs and a curated set of environment variables.
+
+Arguments:
+- ` + bt + `output` + bt + ` (optional): file path. Defaults to ` + bt + `./lerd-bug-report-<timestamp>.txt` + bt + `
+- ` + bt + `log_lines` + bt + ` (optional): lines per service / container log. Default 200.
+- ` + bt + `show_real_names` + bt + ` (optional): keep real site names, domains and parked-directory paths instead of replacing them with ` + bt + `site-1` + bt + ` / ` + bt + `$PARK_1` + bt + ` / etc. Use only for local debugging — anonymisation is on by default for issue posting.
+
+Returns the file path so the user can attach it to the issue.
 
 ### ` + bt + `site_control` + bt + `
 Pause, unpause, restart, or rebuild a site.
@@ -1436,8 +1457,10 @@ Read ` + bt + `status()` + bt + ` for ` + bt + `dns.tld` + bt + ` and ` + bt + `
 | ` + bt + `framework_list` + bt + ` | List all framework definitions with their workers and setup commands |
 | ` + bt + `framework_add` + bt + ` | Add or update a framework definition; use ` + bt + `name: "laravel"` + bt + ` to add custom workers or setup commands to Laravel |
 | ` + bt + `framework_remove` + bt + ` | Remove a user-defined framework; for laravel removes only custom worker and setup additions |
-| ` + bt + `site_php` + bt + ` | Change PHP version for a site — writes ` + bt + `.php-version` + bt + `, updates registry, regenerates nginx vhost |
-| ` + bt + `site_node` + bt + ` | Change Node.js version for a site — writes ` + bt + `.node-version` + bt + `, installs via fnm if needed |
+| ` + bt + `site_php` + bt + ` | Change PHP version for a site — writes ` + bt + `.php-version` + bt + `, updates registry, regenerates nginx vhost; pass ` + bt + `branch` + bt + ` to pin per-worktree (writes inside the worktree, persists to its ` + bt + `.lerd.yaml` + bt + `) |
+| ` + bt + `site_node` + bt + ` | Change Node.js version for a site — writes ` + bt + `.node-version` + bt + `, installs via fnm if needed; pass ` + bt + `branch` + bt + ` to pin per-worktree |
+| ` + bt + `workers_mode` + bt + ` | Show or set the macOS worker runtime mode (exec / container); no-op on Linux |
+| ` + bt + `bug_report` + bt + ` | Generate a diagnostic report for GitHub issues — anonymises site names / domains / parked paths by default; returns the file path |
 | ` + bt + `site_control` + bt + ` | Pause, unpause, restart, or rebuild a site — ` + bt + `action` + bt + `: ` + bt + `pause` + bt + ` / ` + bt + `unpause` + bt + ` / ` + bt + `restart` + bt + ` / ` + bt + `rebuild` + bt + ` (pause replaces vhost with landing page; rebuild only for custom containers) |
 | ` + bt + `site_runtime` + bt + ` | Switch between shared PHP-FPM and per-site FrankenPHP runtime (supports worker mode) |
 | ` + bt + `stripe` + bt + ` | Start or stop a Stripe webhook listener for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` |
