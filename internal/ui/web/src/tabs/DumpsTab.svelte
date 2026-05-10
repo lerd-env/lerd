@@ -121,7 +121,7 @@
     </select>
   </div>
 
-  <div class="flex-1 overflow-y-auto px-4 py-3">
+  <div class="flex-1 overflow-y-auto px-4 pb-3">
     {#if groups.length === 0}
       <EmptyState title={$status?.enabled ? 'Waiting for dumps…' : 'Dump bridge is disabled'}>
         {#snippet hint()}
