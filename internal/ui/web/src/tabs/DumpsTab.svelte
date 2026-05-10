@@ -27,11 +27,19 @@
   let { siteScope = '' }: Props = $props();
   const scoped = $derived(siteScope !== '');
 
-  // Local derived: build groups from the always-fresh dumps store using
-  // either siteScope (per-site embed) or the global filterSite (standalone
-  // view). No store mutation, no race with sibling instances.
+  // When scoped (embedded in SiteDetail), search and context filters are
+  // local-only — the global filterCtx / filterText writables stay
+  // untouched so the System > Dump bridge view doesn't inherit a stale
+  // search and vice versa. The unscoped instance keeps using the global
+  // stores so user choices persist between visits.
+  let localCtx = $state<'' | 'fpm' | 'cli'>('');
+  let localText = $state('');
+
+  const effectiveCtx = $derived(scoped ? localCtx : $filterCtx);
+  const effectiveText = $derived(scoped ? localText : $filterText);
+
   const groups = $derived(
-    buildDumpGroups($dumps, scoped ? siteScope : $filterSite, $filterCtx, $filterText, scoped)
+    buildDumpGroups($dumps, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
   );
 
   onMount(() => {
@@ -48,7 +56,13 @@
   $effect(() => {
     const v = textInput;
     if (textTimer) clearTimeout(textTimer);
-    textTimer = setTimeout(() => filterText.set(v), 100);
+    textTimer = setTimeout(() => {
+      if (scoped) {
+        localText = v;
+      } else {
+        filterText.set(v);
+      }
+    }, 100);
   });
 
   async function onClear() {
@@ -86,14 +100,25 @@
         {/each}
       </select>
     {/if}
-    <select
-      class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
-      bind:value={$filterCtx}
-    >
-      <option value="">All contexts</option>
-      <option value="fpm">Web (fpm)</option>
-      <option value="cli">CLI</option>
-    </select>
+    {#if scoped}
+      <select
+        class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
+        bind:value={localCtx}
+      >
+        <option value="">All contexts</option>
+        <option value="fpm">Web (fpm)</option>
+        <option value="cli">CLI</option>
+      </select>
+    {:else}
+      <select
+        class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
+        bind:value={$filterCtx}
+      >
+        <option value="">All contexts</option>
+        <option value="fpm">Web (fpm)</option>
+        <option value="cli">CLI</option>
+      </select>
+    {/if}
     <button
       type="button"
       class="text-xs rounded border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-lerd-hover"

@@ -83,18 +83,21 @@ func handleDumpsStatus(w http.ResponseWriter, r *http.Request) {
 	srv := dumpsServer.Load()
 	resp := struct {
 		Enabled     bool   `json:"enabled"`
+		Passthrough bool   `json:"passthrough"`
 		Listening   bool   `json:"listening"`
 		Addr        string `json:"addr"`
 		Count       int    `json:"count"`
 		Subscribers int    `json:"subscribers"`
 		LastTS      string `json:"last_ts"`
 	}{
-		Enabled: cfg != nil && cfg.IsDumpsEnabled(),
-		Addr:    "unix:" + config.DumpsSocketPath(),
+		Enabled:     cfg != nil && cfg.IsDumpsEnabled(),
+		Passthrough: cfg != nil && cfg.IsDumpsPassthrough(),
+		Addr:        "unix:" + config.DumpsSocketPath(),
 	}
 	if srv != nil {
 		resp.Listening = true
-		resp.Addr = srv.Addr()
+		// Keep the "unix:" prefix that resp.Addr was initialised with;
+		// srv.Addr() returns just the path which reads as ambiguous.
 		resp.Count = srv.Len()
 		resp.Subscribers = srv.Subscribers()
 		if snap := srv.Snapshot(); len(snap) > 0 {
@@ -126,8 +129,8 @@ func handleDumpsStream(w http.ResponseWriter, r *http.Request) {
 	srv := dumpsServer.Load()
 	if srv == nil {
 		// No receiver bound; keep the connection alive so the client retries
-		// transparently once startDumpsServer succeeds (e.g. after another
-		// process holding :9913 has exited).
+		// transparently once startDumpsServer succeeds (e.g. after a stale
+		// Unix socket has been cleared and lerd-ui rebound).
 		<-r.Context().Done()
 		return
 	}
@@ -213,9 +216,36 @@ func handleDumpsClear(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleDumpsPassthrough flips Dumps.Passthrough by delegating to
+// dumpsops.SetPassthrough. Loopback-only because this restarts every
+// installed FPM container — same trust boundary as the toggle.
+func handleDumpsPassthrough(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !isLoopbackRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	var req struct {
+		Enable bool `json:"enable"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	res, err := dumpsops.SetPassthrough(req.Enable)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, res)
+}
+
 // handleDumpsToggle flips Dumps.Enabled by delegating to dumpsops.Apply,
 // then returns the post-state JSON. Loopback-only so LAN clients can't
-// silently bind FPM volumes when remote control is enabled.
+// toggle capture state without authorization.
 func handleDumpsToggle(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

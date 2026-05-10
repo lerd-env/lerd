@@ -29,7 +29,7 @@
   }
 
   const title = $derived(
-    busy ? 'Toggling dump bridge…' : enabled ? 'Dump bridge is on — click to disable' : 'Dump bridge is off — click to enable'
+    busy ? 'Toggling dump bridge…' : enabled ? 'Dump bridge is on, click to disable' : 'Dump bridge is off, click to enable'
   );
 </script>
 

@@ -38,10 +38,9 @@ namespace Lerd\DumpBridge {
         if (is_string($cfg) && $cfg !== '') {
             return $cfg;
         }
-        // Conservative default — the lerd installer rewrites the ini with the
-        // real Unix socket path; this string only kicks in if the ini is
-        // missing for some reason.
-        return 'tcp://host.containers.internal:9913';
+        // No configured target — send() returns early on the empty string
+        // rather than attempt a stale-default connection.
+        return '';
     }
 
     // passthrough_enabled reports whether the dashboard capture should ALSO
@@ -62,6 +61,9 @@ namespace Lerd\DumpBridge {
     function send(array $payload): void
     {
         $target = target();
+        if ($target === '') {
+            return;
+        }
         // Allow both `unix:///path/to/sock` and `tcp://host:port`. The
         // installer defaults to the unix scheme so dumps stay confined to
         // the user's home directory.

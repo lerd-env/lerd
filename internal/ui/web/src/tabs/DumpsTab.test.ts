@@ -51,6 +51,7 @@ describe('DumpsTab', () => {
     filterText.set('');
     status.set({
       enabled: true,
+      passthrough: false,
       listening: true,
       addr: 'unix:/tmp/x',
       count: 0,
@@ -100,6 +101,23 @@ describe('DumpsTab', () => {
     // Give onMount + effects a chance to run.
     await new Promise((r) => setTimeout(r, 20));
     expect(get(filterSite)).toBe('previously-selected');
+  });
+
+  it('shows an Enable button when the bridge is off and the ring is empty', async () => {
+    status.set({
+      enabled: false,
+      passthrough: false,
+      listening: true,
+      addr: 'unix:/tmp/x',
+      count: 0,
+      subscribers: 0,
+      last_ts: ''
+    });
+    const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
+    await waitFor(() => {
+      expect(container.textContent).toMatch(/Enable dump bridge/);
+    });
+    expect(container.textContent).toMatch(/Dump bridge is disabled/);
   });
 
   it('reacts to new events pushed into the dumps store', async () => {

@@ -1,6 +1,7 @@
 // Package dumps receives, buffers, and fans out PHP `dump()`/`dd()` events
 // captured by the lerd dump bridge (auto_prepend_file). The wire format is
-// newline-delimited JSON over a loopback TCP socket. See docs/features/dumps.md.
+// newline-delimited JSON. Production lerd-ui listens on a per-user Unix
+// socket; tests bind TCP loopback. See docs/features/dumps.md.
 package dumps
 
 import "encoding/json"

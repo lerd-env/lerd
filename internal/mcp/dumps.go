@@ -44,7 +44,7 @@ func dumpToolDefs() []mcpTool {
 		},
 		{
 			Name:        "dumps_toggle",
-			Description: "Enable/disable the dump bridge. enable=true mounts dump-bridge.php into every FPM container.",
+			Description: "Enable/disable the dump bridge. enable=true creates the sentinel that activates the always-mounted bridge; enable=false removes it. No FPM restart.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{

@@ -4,6 +4,7 @@ import { createDumpsStream, type DumpEvent } from '$lib/dumpsStream';
 
 export interface DumpsStatus {
   enabled: boolean;
+  passthrough: boolean;
   listening: boolean;
   addr: string;
   count: number;
@@ -191,6 +192,27 @@ export async function toggleDumps(enable: boolean): Promise<void> {
     body: JSON.stringify({ enable })
   });
   void refreshStatus();
+}
+
+export interface PassthroughResult {
+  passthrough: boolean;
+  no_change?: boolean;
+  restarted?: string[];
+}
+
+// togglePassthrough flips the response-passthrough flag and triggers a
+// restart of every installed PHP-FPM container so the new ini value
+// takes effect. This is the only dumps path that intentionally
+// restarts FPM; enable/disable is restart-free.
+export async function togglePassthrough(enable: boolean): Promise<PassthroughResult> {
+  const res = await apiFetch('/api/dumps/passthrough', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enable })
+  });
+  const out = (await res.json()) as PassthroughResult;
+  void refreshStatus();
+  return out;
 }
 
 // Derived list of unique site names seen in the buffered events, for the

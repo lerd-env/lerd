@@ -24,13 +24,18 @@ services:
   rustfs:      { enabled: false, image: "docker.io/rustfs/rustfs:latest",          port: 9000 }
   mailpit:     { enabled: false, image: "docker.io/axllent/mailpit:latest",        port: 1025 }
 dumps:
-  enabled: false        # toggle via `lerd dump on/off` — when true, every PHP-FPM container
-                        # gets the dump-bridge.php auto_prepend and dump()/dd() calls ship
-                        # to the dashboard via a per-user Unix socket. See features/dumps.md.
+  enabled: false        # toggle via `lerd dump on/off` (or the antenna button in the
+                        # dashboard). The bridge file and its conf.d ini are always
+                        # mounted into every PHP-FPM container; this flag controls a
+                        # runtime sentinel that the bridge stats on each request.
+                        # True = capture, false = fast no-op. No FPM restart on toggle.
+                        # See features/dumps.md.
   passthrough: false    # when true (and the bridge is on), dump()/dd() ALSO emit to the
                         # response via Symfony's stock VarDumper handler. Default off so
-                        # responses stay clean; flip on if you'd rather still see dumps
-                        # inline as well as in the dashboard.
+                        # responses stay clean. Read at PHP-FPM startup, so changing it
+                        # requires restarting the FPM container for the value to take
+                        # effect (`systemctl --user restart lerd-php<ver>-fpm` or
+                        # `lerd restart`).
 ```
 
 ---

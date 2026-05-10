@@ -113,13 +113,13 @@ type GlobalConfig struct {
 		ExecMode string `yaml:"exec_mode,omitempty" mapstructure:"exec_mode"`
 	} `yaml:"workers,omitempty" mapstructure:"workers"`
 	Dumps struct {
-		// Enabled toggles the lerd dump bridge on every PHP-FPM container
-		// and the CLI php wrapper. When true, WriteFPMQuadlet splices two
-		// extra Volume= lines (the bridge PHP file and the conf.d ini) so
-		// userland calls to dump()/dd() ship to the lerd-ui receiver in
-		// place of their default response output. When false (the default),
-		// the volumes are absent and the FPM container behaves as before.
-		// Toggled via `lerd dump on/off`.
+		// Enabled toggles the lerd dump bridge for every PHP-FPM container
+		// and the CLI php wrapper. The bridge PHP file and its conf.d ini
+		// are always volume-mounted into FPM (regardless of this flag);
+		// what Enabled actually controls is the runtime sentinel file
+		// (`enabled.flag`) the bridge stats on every request. Touch =
+		// capture, missing = fast no-op. Flipping this flag never restarts
+		// the FPM container. Toggled via `lerd dump on/off`.
 		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
 		// Passthrough controls whether dump()/dd() ALSO emit to the response
 		// while the bridge is enabled. False (default) means captured-only:
@@ -492,6 +492,13 @@ func (c *GlobalConfig) SetDumpsEnabled(enabled bool) {
 // Always false in effect when the bridge itself is disabled.
 func (c *GlobalConfig) IsDumpsPassthrough() bool {
 	return c.Dumps.Passthrough
+}
+
+// SetDumpsPassthrough flips the passthrough flag. Persist via SaveGlobal
+// and follow up with a `lerd-php*-fpm` restart so the new ini value takes
+// effect (PHP reads ini directives at FPM startup, not per request).
+func (c *GlobalConfig) SetDumpsPassthrough(enabled bool) {
+	c.Dumps.Passthrough = enabled
 }
 
 // SaveGlobal writes the configuration to config.yaml.
