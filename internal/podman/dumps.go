@@ -13,14 +13,6 @@ import (
 //go:embed dumpbridge
 var dumpBridgeFS embed.FS
 
-// In-container mount targets for the bridge assets. The bridge file lives
-// outside conf.d so it isn't auto-loaded as a php.ini; the conf.d ini is the
-// only thing that activates it (auto_prepend_file=...).
-const (
-	containerDumpBridgePath = "/usr/local/etc/lerd/dump-bridge.php"
-	containerDumpIniPath    = "/usr/local/etc/php/conf.d/97-lerd-dump.ini"
-)
-
 // DumpBridgePHP returns the embedded contents of dump-bridge.php as a string.
 // Exposed for tests so they can assert the on-disk file is byte-identical to
 // the embed without re-reading the embed FS.
@@ -94,17 +86,20 @@ func WriteDumpBridgeAssets() error {
 	return nil
 }
 
-// RemoveDumpAssets deletes the host-side bridge file and ini. Safe to call
-// when the assets are already absent (the missing-file errors are swallowed).
-// The caller is responsible for rewriting FPM quadlets so the (now stale)
-// Volume= lines disappear.
+// RemoveDumpAssets deletes the host-side bridge file, ini, and enable flag.
+// Used by `lerd uninstall` and tests; not called on `lerd dump off` because
+// the assets are always-mounted into FPM and removing them would force a
+// container restart on the next FPM start. Safe to call repeatedly.
 func RemoveDumpAssets() error {
-	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile()} {
+	for _, p := range []string{
+		config.DumpsBridgeFile(),
+		config.DumpsIniFile(),
+		config.DumpsEnabledFlagFile(),
+	} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing %s: %w", p, err)
 		}
 	}
-	// Clean up the empty directory if nothing else lives in it.
 	dir := config.DumpsAssetsDir()
 	entries, err := os.ReadDir(dir)
 	if err == nil && len(entries) == 0 {
@@ -113,88 +108,39 @@ func RemoveDumpAssets() error {
 	return nil
 }
 
-// dumpVolumeLines builds the two FPM Volume= lines that bind-mount the bridge
-// assets read-only into the container. Returned with a trailing newline so
-// callers can drop the result straight into the quadlet template.
-func dumpVolumeLines() string {
-	var sb strings.Builder
-	fmt.Fprintf(&sb, "Volume=%s:%s:ro\n", config.DumpsBridgeFile(), containerDumpBridgePath)
-	fmt.Fprintf(&sb, "Volume=%s:%s:ro\n", config.DumpsIniFile(), containerDumpIniPath)
-	return sb.String()
-}
-
-// ApplyDumpVolumes splices the two dump-bridge Volume= lines into a rendered
-// FPM container quadlet when enabled. When disabled, any previously injected
-// lines are stripped so a freshly written quadlet matches the embedded
-// template byte-for-byte and WriteQuadletDiff sees a clean diff.
-//
-// Insertion is keyed off the existing 98-lerd-user.ini Volume line so we
-// never end up wedging the bridge above /etc/hosts (which would change
-// container startup ordering for no reason). When the anchor line isn't
-// present (e.g. tests calling with a stripped template), insertion is a
-// no-op: the caller is expected to handle that as misconfiguration upstream.
-func ApplyDumpVolumes(content string, enabled bool) string {
-	stripped := stripDumpVolumes(content)
-	if !enabled {
-		return stripped
-	}
-	lines := strings.Split(stripped, "\n")
-	for i, line := range lines {
-		if !strings.Contains(line, "98-lerd-user.ini:ro") {
-			continue
-		}
-		insert := strings.TrimRight(dumpVolumeLines(), "\n")
-		out := make([]string, 0, len(lines)+2)
-		out = append(out, lines[:i+1]...)
-		out = append(out, strings.Split(insert, "\n")...)
-		out = append(out, lines[i+1:]...)
-		return strings.Join(out, "\n")
-	}
-	return stripped
-}
-
-// stripDumpVolumes removes any Volume= line that targets the bridge mount
-// points, regardless of host path. Keeps ApplyDumpVolumes idempotent across
-// repeated calls and lets us migrate the host path later without orphan
-// lines piling up in old quadlets.
-func stripDumpVolumes(content string) string {
-	lines := strings.Split(content, "\n")
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "Volume=") &&
-			(strings.Contains(trimmed, containerDumpBridgePath) || strings.Contains(trimmed, containerDumpIniPath)) {
-			continue
-		}
-		out = append(out, line)
-	}
-	return strings.Join(out, "\n")
-}
-
-// EnsureDumpAssets is the partner of EnsureXdebugIni. It guarantees the
-// bridge and ini exist as regular files when Dumps.Enabled is true, so podman
-// doesn't auto-create directories at the bind-mount source paths if a fresh
-// install hasn't run `lerd dump on` yet.
+// EnsureDumpAssets guarantees the bridge PHP file and conf.d ini exist as
+// regular files on disk so podman doesn't auto-create directories at the
+// bind-mount source paths when an FPM container first starts. Always runs
+// regardless of Dumps.Enabled because the FPM quadlet always mounts these
+// paths; the bridge's runtime sentinel check controls active behaviour.
 func EnsureDumpAssets() error {
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return err
-	}
-	if !cfg.IsDumpsEnabled() {
-		return nil
-	}
 	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile()} {
-		if info, err := os.Stat(p); err == nil && !info.IsDir() {
-			continue
-		} else if err == nil && info.IsDir() {
+		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			if rmErr := os.RemoveAll(p); rmErr != nil {
 				return fmt.Errorf("removing stale dump asset directory %s: %w", p, rmErr)
 			}
 		}
-		// Missing or just removed: write a fresh copy.
-		if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
-			return err
-		}
 	}
 	return WriteDumpBridgeAssets()
+}
+
+// SetDumpsBridgeFlag flips the on-disk sentinel the bridge reads on every
+// request. Touching the flag = capture is on; removing it = capture is off.
+// No container action is needed because the file path is always
+// volume-mounted into every FPM container.
+func SetDumpsBridgeFlag(enabled bool) error {
+	flag := config.DumpsEnabledFlagFile()
+	if enabled {
+		if err := os.MkdirAll(filepath.Dir(flag), 0755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(flag, []byte("1\n"), 0644); err != nil {
+			return fmt.Errorf("writing dumps flag: %w", err)
+		}
+		return nil
+	}
+	if err := os.Remove(flag); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing dumps flag: %w", err)
+	}
+	return nil
 }

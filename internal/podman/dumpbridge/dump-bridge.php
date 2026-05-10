@@ -1,17 +1,22 @@
 <?php
 // /usr/local/etc/lerd/dump-bridge.php
 //
-// Auto-prepended PHP file installed by `lerd dump on`. Hooks Symfony's
-// VarDumper so calls to dump()/dd() ship JSON payloads to lerd-ui's TCP
-// receiver instead of (only) emitting to the response. See
-// docs/features/dumps.md for the wire protocol.
+// Always-mounted auto_prepend_file. The runtime sentinel
+// `/usr/local/etc/lerd/enabled.flag` controls whether this file installs
+// the dump()/dd() override or short-circuits and lets Symfony's stock
+// helpers stay in charge. Flipping the bridge on or off is a single
+// touch/rm of that file — no FPM restart, no worker cascade.
 //
 // This file must never throw, never block, and never emit output.
-//
-// PHP requires all namespace declarations in a single file to use the
-// same bracketed-or-not form, hence the explicit `namespace Lerd\DumpBridge`
-// block for helpers and the trailing `namespace {}` block for the global
-// dump() / dd() overrides.
+
+namespace {
+    // Fast no-op when the toggle file is absent. One stat() per request
+    // in the disabled case; nothing else loads, no functions defined,
+    // no namespaces declared further down in this scope.
+    if (!@file_exists('/usr/local/etc/lerd/enabled.flag')) {
+        return;
+    }
+}
 
 namespace Lerd\DumpBridge {
     if (defined(__NAMESPACE__.'\\LOADED')) {

@@ -135,6 +135,14 @@ func DumpsSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-dumps.sock")
 }
 
+// DumpsEnabledFlagFile is the sentinel the dump bridge checks on every
+// request. Present file = bridge captures dump()/dd() calls; absent file
+// = bridge is a fast no-op. Toggling is a single touch/rm on this file
+// so the FPM container never restarts.
+func DumpsEnabledFlagFile() string {
+	return filepath.Join(DumpsAssetsDir(), "enabled.flag")
+}
+
 // CustomServicesDir returns the directory for custom service YAML files.
 func CustomServicesDir() string {
 	return filepath.Join(ConfigDir(), "services")

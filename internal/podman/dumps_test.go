@@ -11,8 +11,7 @@ import (
 
 // withTempXDG redirects XDG_DATA_HOME / XDG_CONFIG_HOME / HOME for the
 // duration of the test so config.DataDir / DumpsAssetsDir resolve under a
-// throwaway tempdir. The default DataDir() under $HOME would otherwise mix
-// real and test state and tests on a developer machine would be flaky.
+// throwaway tempdir.
 func withTempXDG(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -33,11 +32,8 @@ func TestWriteDumpBridgeAssets_WritesPHPAndIni(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read bridge: %v", err)
 	}
-	if !strings.Contains(string(php), "namespace Lerd\\DumpBridge") {
-		t.Errorf("bridge content missing namespace: %s", string(php)[:min(80, len(string(php)))])
-	}
-	if !strings.Contains(string(php), "function dump") {
-		t.Errorf("bridge content missing dump() definition")
+	if !strings.Contains(string(php), "enabled.flag") {
+		t.Errorf("bridge content missing sentinel check: %s", string(php)[:min(80, len(string(php)))])
 	}
 
 	ini, err := os.ReadFile(config.DumpsIniFile())
@@ -46,9 +42,6 @@ func TestWriteDumpBridgeAssets_WritesPHPAndIni(t *testing.T) {
 	}
 	if !strings.Contains(string(ini), "auto_prepend_file=") {
 		t.Errorf("ini missing auto_prepend_file: %s", string(ini))
-	}
-	if !strings.Contains(string(ini), "lerd.dump_host=") {
-		t.Errorf("ini missing lerd.dump_host: %s", string(ini))
 	}
 }
 
@@ -75,8 +68,6 @@ func TestWriteDumpBridgeAssets_Idempotent(t *testing.T) {
 
 func TestWriteDumpBridgeAssets_ReplacesDirectory(t *testing.T) {
 	withTempXDG(t)
-	// Simulate podman auto-creating a directory at the bridge path on a
-	// previous failed start. WriteDumpBridgeAssets must remove and replace.
 	if err := os.MkdirAll(config.DumpsBridgeFile(), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -97,124 +88,66 @@ func TestRemoveDumpAssets(t *testing.T) {
 	if err := WriteDumpBridgeAssets(); err != nil {
 		t.Fatal(err)
 	}
+	if err := SetDumpsBridgeFlag(true); err != nil {
+		t.Fatal(err)
+	}
 	if err := RemoveDumpAssets(); err != nil {
 		t.Fatalf("RemoveDumpAssets: %v", err)
 	}
-	if _, err := os.Stat(config.DumpsBridgeFile()); !os.IsNotExist(err) {
-		t.Errorf("bridge still present: %v", err)
+	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.DumpsEnabledFlagFile()} {
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("%s still present: %v", filepath.Base(p), err)
+		}
 	}
-	if _, err := os.Stat(config.DumpsIniFile()); !os.IsNotExist(err) {
-		t.Errorf("ini still present: %v", err)
-	}
-	// Calling twice is fine.
 	if err := RemoveDumpAssets(); err != nil {
 		t.Errorf("second remove: %v", err)
 	}
 }
 
-func TestApplyDumpVolumes_InjectsAfterUserIni(t *testing.T) {
-	tmpl := strings.Join([]string{
-		"[Container]",
-		"Image=lerd-php83-fpm:local",
-		"Volume=%h/.local/share/lerd/hosts:/etc/hosts:ro,z",
-		"Volume=%h:%h:rw",
-		"Volume=/host/99-xdebug.ini:/usr/local/etc/php/conf.d/99-xdebug.ini:ro",
-		"Volume=/host/98-user.ini:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro",
-		"PodmanArgs=--security-opt=label=disable",
-		"Exec=php-fpm -F -R",
-	}, "\n")
-
-	got := ApplyDumpVolumes(tmpl, true)
-	if !strings.Contains(got, containerDumpBridgePath) {
-		t.Errorf("bridge mount missing: %s", got)
-	}
-	if !strings.Contains(got, containerDumpIniPath) {
-		t.Errorf("ini mount missing: %s", got)
-	}
-	// Bridge lines must appear after the user-ini Volume and before PodmanArgs.
-	bridgeIdx := strings.Index(got, containerDumpBridgePath)
-	userIdx := strings.Index(got, "98-lerd-user.ini:ro")
-	podmanIdx := strings.Index(got, "PodmanArgs=")
-	if !(userIdx < bridgeIdx && bridgeIdx < podmanIdx) {
-		t.Errorf("bridge volume not inserted between user-ini and PodmanArgs:\n%s", got)
-	}
-}
-
-func TestApplyDumpVolumes_DisabledStripsExisting(t *testing.T) {
-	tmpl := strings.Join([]string{
-		"[Container]",
-		"Volume=%h:%h:rw",
-		"Volume=/host/98-user.ini:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro",
-		"PodmanArgs=--security-opt=label=disable",
-	}, "\n")
-
-	enabled := ApplyDumpVolumes(tmpl, true)
-	if !strings.Contains(enabled, containerDumpBridgePath) {
-		t.Fatal("setup: enabled form should have bridge")
-	}
-	disabled := ApplyDumpVolumes(enabled, false)
-	if strings.Contains(disabled, containerDumpBridgePath) {
-		t.Errorf("disabled form still contains bridge volume:\n%s", disabled)
-	}
-	if strings.Contains(disabled, containerDumpIniPath) {
-		t.Errorf("disabled form still contains ini volume:\n%s", disabled)
-	}
-}
-
-func TestApplyDumpVolumes_Idempotent(t *testing.T) {
-	tmpl := strings.Join([]string{
-		"[Container]",
-		"Volume=%h:%h:rw",
-		"Volume=/host/98-user.ini:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro",
-	}, "\n")
-	first := ApplyDumpVolumes(tmpl, true)
-	second := ApplyDumpVolumes(first, true)
-	if first != second {
-		t.Errorf("ApplyDumpVolumes not idempotent:\n--- 1 ---\n%s\n--- 2 ---\n%s", first, second)
-	}
-}
-
-func TestApplyDumpVolumes_NoUserIniLineNoOps(t *testing.T) {
-	tmpl := "[Container]\nImage=foo\n"
-	got := ApplyDumpVolumes(tmpl, true)
-	if strings.Contains(got, containerDumpBridgePath) {
-		t.Errorf("bridge inserted without anchor line:\n%s", got)
-	}
-}
-
-func TestEnsureDumpAssets_NoOpWhenDisabled(t *testing.T) {
+func TestSetDumpsBridgeFlag_TogglesFile(t *testing.T) {
 	withTempXDG(t)
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		t.Fatal(err)
+	if err := SetDumpsBridgeFlag(true); err != nil {
+		t.Fatalf("flag on: %v", err)
 	}
+	if _, err := os.Stat(config.DumpsEnabledFlagFile()); err != nil {
+		t.Errorf("flag missing after set true: %v", err)
+	}
+	if err := SetDumpsBridgeFlag(false); err != nil {
+		t.Fatalf("flag off: %v", err)
+	}
+	if _, err := os.Stat(config.DumpsEnabledFlagFile()); !os.IsNotExist(err) {
+		t.Errorf("flag still present after set false")
+	}
+	// Removing again is a no-op.
+	if err := SetDumpsBridgeFlag(false); err != nil {
+		t.Errorf("second off: %v", err)
+	}
+}
+
+func TestEnsureDumpAssets_AlwaysWritesRegardlessOfConfig(t *testing.T) {
+	withTempXDG(t)
+	cfg, _ := config.LoadGlobal()
 	cfg.SetDumpsEnabled(false)
-	if err := config.SaveGlobal(cfg); err != nil {
-		t.Fatal(err)
-	}
-	if err := EnsureDumpAssets(); err != nil {
-		t.Fatalf("EnsureDumpAssets: %v", err)
-	}
-	if _, err := os.Stat(config.DumpsBridgeFile()); !os.IsNotExist(err) {
-		t.Errorf("bridge written when dumps disabled")
-	}
-}
+	_ = config.SaveGlobal(cfg)
 
-func TestEnsureDumpAssets_WritesWhenEnabled(t *testing.T) {
-	withTempXDG(t)
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.SetDumpsEnabled(true)
-	if err := config.SaveGlobal(cfg); err != nil {
-		t.Fatal(err)
-	}
 	if err := EnsureDumpAssets(); err != nil {
 		t.Fatalf("EnsureDumpAssets: %v", err)
 	}
 	if _, err := os.Stat(config.DumpsBridgeFile()); err != nil {
-		t.Errorf("bridge missing after EnsureDumpAssets: %v", err)
+		t.Errorf("bridge missing even though FPM mount needs it: %v", err)
+	}
+}
+
+func TestFPMQuadletAlwaysMountsBridge(t *testing.T) {
+	tmpl, err := GetQuadletTemplate("lerd-php-fpm.container.tmpl")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(tmpl, "{{.DumpsDir}}") {
+		t.Errorf("FPM template missing DumpsDir mount placeholder")
+	}
+	if !strings.Contains(tmpl, "{{.DumpsIniPath}}") {
+		t.Errorf("FPM template missing DumpsIniPath mount placeholder")
 	}
 }
 

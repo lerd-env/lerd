@@ -102,42 +102,19 @@ func runDumpToggle(enable bool) error {
 	if err != nil {
 		return err
 	}
+	state := "disabled"
+	if res.Enabled {
+		state = "enabled"
+	}
 	if res.NoChange {
-		state := "disabled"
-		if res.Enabled {
-			state = "enabled"
-		}
 		fmt.Printf("Dump bridge already %s.\n", state)
 		return nil
 	}
 	if res.Enabled {
-		fmt.Printf("Dump bridge enabled. ")
+		fmt.Println("Dump bridge enabled. Next dump() / dd() call will land in the dashboard.")
 	} else {
-		fmt.Printf("Dump bridge disabled. ")
+		fmt.Println("Dump bridge disabled.")
 	}
-	if len(res.Changed) == 0 {
-		fmt.Println("No PHP versions installed yet — bridge will activate on next FPM start.")
-		return nil
-	}
-	if res.RestartErr != nil {
-		fmt.Println()
-		fmt.Printf("[WARN] some FPM units failed to restart: %v\n", res.RestartErr)
-		var pending []string
-		restartedSet := map[string]bool{}
-		for _, u := range res.Restarted {
-			restartedSet[u] = true
-		}
-		for _, u := range res.Changed {
-			if !restartedSet[u] {
-				pending = append(pending, u)
-			}
-		}
-		if len(pending) > 0 {
-			fmt.Printf("Run: systemctl --user restart %s\n", strings.Join(pending, " "))
-		}
-		return nil
-	}
-	fmt.Printf("Restarted FPM unit(s): %s\n", strings.Join(res.Restarted, ", "))
 	return nil
 }
 
