@@ -42,6 +42,7 @@ A portable, self-contained description of a project's local environment. Created
 | `secured` | When `true`, HTTPS is enabled on apply |
 | `domains` | Site hostnames without the TLD (e.g. `[myapp, api]`). The first entry is the primary; additional entries become aliases. Conflict-filtered domains stay in this list on disk but are not registered |
 | `app_url` | Override for `APP_URL` (or the framework's URL key) written to `.env`. Highest priority, it beats the per-machine `sites.yaml` override and the default `<scheme>://<primary-domain>` generator. Use for custom path prefixes, ports, or unrelated hostnames you want shared across machines |
+| `env_overrides` | Map of env var names to templated or static values applied to `.env` on `lerd setup` and to per-worktree `.env` files when worktrees are created. Values may use `{{domain}}`, `{{scheme}}`, and `{{site}}` placeholders, or be plain strings. When `APP_URL` is in `env_overrides` it takes precedence over the default rewrite; declared keys override defaults, undeclared defaults still apply. See [Env overrides](../features/git-worktrees.md#env-overrides) |
 | `services` | Services to start on apply. Accepts built-in names, custom service names, or full inline definitions |
 | `workers` | Active worker names for the site (e.g. `queue`, `horizon`, `schedule`, `reverb`, `stripe`). Automatically kept in sync by start/stop commands. Used by `lerd start` to restore workers after reinstall |
 | `container` | Custom container config for non-PHP sites. When present, lerd builds a dedicated container from the project's Containerfile and nginx reverse-proxies to it. See below and [Custom Containers](../usage/custom-containers.md) |
@@ -118,6 +119,9 @@ custom_workers:
 | `restart` | no | `always` | `always` or `on-failure` |
 | `schedule` | no | | systemd OnCalendar expression for timer-based workers (e.g. `minutely`, `*-*-* *:00:00`) |
 | `conflicts_with` | no | | List of worker names to stop before starting this one |
+| `host` | no | `false` | Run on the host via fnm instead of inside the PHP-FPM container. Used for Node.js tools (Vite, Tailwind watcher, Encore) that need direct filesystem access for HMR |
+| `per_worktree` | no | `false` | Worker can run independently per git worktree under `lerd-<wname>-<site>-<wt>`. Required for worktree auto-start; without it, host workers stay bound to the parent site only |
+| `replaces_build` | no | `false` | While running, the worker provides the asset manifest so the static `npm run build` step is unnecessary. `lerd worktree add` skips its build prompt when an opted-in `replaces_build` worker is present |
 
 Worker definitions stay in `custom_workers` permanently. The `workers` field (a separate list of names) tracks which are currently active and is synced automatically by start/stop commands.
 

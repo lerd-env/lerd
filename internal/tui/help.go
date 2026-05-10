@@ -37,6 +37,8 @@ var helpReference = []helpSection{
 			{"r", "restart the focused site or service"},
 			{"p", "pause / unpause toggle for a site"},
 			{"t", "open an interactive shell inside the focused container"},
+			{"u", "service update — pull a newer image and restart (services pane)"},
+			{"b", "service rollback — revert to the previously-running image (services pane)"},
 		},
 	},
 	{
@@ -45,6 +47,12 @@ var helpReference = []helpSection{
 			{"a", "add a new domain to the focused site (inline input)"},
 			{"e", "edit / rename the focused domain row (add new + remove old)"},
 			{"x", "remove the focused domain"},
+		},
+	},
+	{
+		title: "Worktrees",
+		rows: [][2]string{
+			{"space / enter", "toggle the focused per-worktree row (worker, isolated DB)"},
 		},
 	},
 	{

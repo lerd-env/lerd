@@ -74,9 +74,14 @@ type Model struct {
 
 	// Picker state (PHP/Node version). When active, up/down navigates
 	// pickerOptions instead of detail rows and enter applies the pick.
-	pickerKind    detailKind
-	pickerOptions []string
-	pickerCursor  int
+	// pickerWorktreePath is set when the picker was opened from a per-
+	// worktree row; applyPicker uses it as the cwd so the change writes
+	// .php-version / .node-version inside the worktree's checkout.
+	pickerKind         detailKind
+	pickerOptions      []string
+	pickerCursor       int
+	pickerWorktreePath string
+	pickerWorktreeName string
 
 	// Domain-input state: when active, typing adds characters to the
 	// pending domain name; enter runs `lerd domain add`, esc cancels.
@@ -368,8 +373,43 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "H":
 		return m, m.actionHealWorkers()
+
+	case "u":
+		return m, m.actionServiceUpdate()
+
+	case "b":
+		return m, m.actionServiceRollback()
 	}
 	return m, nil
+}
+
+// actionServiceUpdate runs `lerd service update <name>` for the focused
+// service row (no tag — applies the safe in-strategy update). Worker rows
+// have no upstream image so we no-op there.
+func (m *Model) actionServiceUpdate() tea.Cmd {
+	if m.focus != paneServices {
+		return nil
+	}
+	svc := m.currentService()
+	if svc == nil || svc.WorkerKind != "" {
+		return nil
+	}
+	m.setStatus("updating "+svc.Name+"…", 30*time.Second)
+	return runLerd("", "service", "update", svc.Name)
+}
+
+// actionServiceRollback runs `lerd service rollback <name>` for the focused
+// service row, reverting to the previously-running image.
+func (m *Model) actionServiceRollback() tea.Cmd {
+	if m.focus != paneServices {
+		return nil
+	}
+	svc := m.currentService()
+	if svc == nil || svc.WorkerKind != "" {
+		return nil
+	}
+	m.setStatus("rolling back "+svc.Name+"…", 30*time.Second)
+	return runLerd("", "service", "rollback", svc.Name)
 }
 
 // actionHealWorkers shells out to `lerd worker heal` so every failed
