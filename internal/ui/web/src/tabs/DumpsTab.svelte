@@ -2,7 +2,6 @@
   import { onMount, onDestroy } from 'svelte';
   import {
     dumps,
-    dumpsConnected,
     status,
     filterSite,
     filterCtx,
@@ -12,7 +11,6 @@
     stopDumpsStream,
     refreshStatus,
     clearDumps,
-    toggleDumps,
     buildDumpGroups
   } from '$stores/dumps';
   import DumpEntry from '$components/DumpEntry.svelte';
@@ -52,48 +50,12 @@
     textTimer = setTimeout(() => filterText.set(v), 100);
   });
 
-  async function onToggle() {
-    const target = !$status?.enabled;
-    await toggleDumps(target);
-  }
-
   async function onClear() {
     await clearDumps();
   }
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card flex-wrap">
-    <h2 class="font-medium">Dumps</h2>
-    <span
-      class="px-2 py-0.5 rounded text-xs font-mono"
-      class:bg-emerald-100={$status?.enabled}
-      class:text-emerald-700={$status?.enabled}
-      class:bg-gray-200={!$status?.enabled}
-      class:text-gray-600={!$status?.enabled}
-    >
-      {$status?.enabled ? 'bridge on' : 'bridge off'}
-    </span>
-    <span class="text-xs text-gray-500">
-      {$dumpsConnected ? '● live' : '○ disconnected'}
-    </span>
-
-    <button
-      type="button"
-      class="ml-auto text-xs rounded border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-lerd-hover"
-      onclick={onToggle}
-    >
-      {$status?.enabled ? 'Disable bridge' : 'Enable bridge'}
-    </button>
-    <button
-      type="button"
-      class="text-xs rounded border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-lerd-hover"
-      onclick={onClear}
-    >
-      Clear
-    </button>
-  </div>
-
   <div class="flex items-center gap-2 px-4 py-2 border-b border-gray-200 dark:border-lerd-border flex-wrap">
     <input
       class="text-xs px-2 py-1 rounded border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
@@ -119,6 +81,13 @@
       <option value="fpm">Web (fpm)</option>
       <option value="cli">CLI</option>
     </select>
+    <button
+      type="button"
+      class="text-xs rounded border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-lerd-hover"
+      onclick={onClear}
+    >
+      Clear
+    </button>
   </div>
 
   <div class="flex-1 overflow-y-auto px-4 pb-3">
