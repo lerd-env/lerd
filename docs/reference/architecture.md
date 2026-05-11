@@ -50,7 +50,7 @@ On Linux, lerd requires systemd. Every container runs as a Podman Quadlet (syste
 | Services | Podman Quadlet containers |
 | DNS | dnsmasq container + NetworkManager or systemd-resolved integration |
 | TLS | [mkcert](https://github.com/FiloSottile/mkcert), locally trusted CA |
-| Dump bridge | Always-mounted `auto_prepend_file` PHP file in each FPM container; runtime sentinel toggles capture without a container restart. NDJSON over a per-user Unix socket (`~/.local/share/lerd/run/lerd-dumps.sock`) to an in-process receiver inside `lerd-ui`. See [features/dumps.md](../features/dumps.md). |
+| Dump bridge | Always-mounted `auto_prepend_file` PHP file in each FPM container; runtime sentinel toggles capture without a container restart. NDJSON to an in-process receiver inside `lerd-ui` — per-user Unix socket on Linux (`~/.local/share/lerd/run/lerd-dumps.sock`, via the `%h:%h` mount); TCP loopback `127.0.0.1:9913` on macOS (FPM reaches it via gvproxy's `host.containers.internal:9913` because unix sockets don't traverse the podman-machine virtio-fs boundary). See [features/dumps.md](../features/dumps.md). |
 
 ## Key design decisions
 

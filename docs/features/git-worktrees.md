@@ -35,7 +35,7 @@ After git completes, the wrapper:
 
 The asset-worker option appears even when the worker isn't in the parent's `workers:` list — as long as the framework declares it and its `check` passes (e.g. `node_modules/vite` exists). That lets you opt into vite for a single worktree without editing the parent yaml. The choice is per-session: on a daemon restart only opted-in workers get auto-started by `scanWorktrees`, so an ad-hoc pick won't survive a `lerd stop && lerd start`. If you want it permanent, run `lerd setup` to add it to `workers:`.
 
-When an asset worker is opted-in on the parent, the watcher also auto-starts it as a per-worktree systemd unit independently of the prompt. Multiple worktrees can run Vite simultaneously — each gets its own unit (`lerd-vite-<site>-<branch>`) and Vite auto-increments ports. The same auto-start runs at daemon boot too, so per-worktree units recover after a host reboot or `lerd stop && lerd start` even when fsnotify hasn't fired. On `lerd worktree remove`, the matching units are stopped and their `.service` files removed before git tears the worktree down — without that step, systemd would restart-loop the unit against the deleted `WorkingDirectory`.
+When an asset worker is opted-in on the parent, the watcher also auto-starts it as a per-worktree unit independently of the prompt — a systemd `.service` on Linux, a launchd plist on macOS. Multiple worktrees can run Vite simultaneously — each gets its own unit (`lerd-vite-<site>-<branch>`) and Vite auto-increments ports. The same auto-start runs at daemon boot too, so per-worktree units recover after a host reboot or `lerd stop && lerd start` even when fsnotify hasn't fired. On `lerd worktree remove`, the matching units are stopped and their unit files removed before git tears the worktree down — without that step, the supervisor would restart-loop the unit against the deleted `WorkingDirectory`.
 
 Skipping both the asset worker and the npm script leaves the worktree without a Vite manifest, which means the first request will throw `ViteManifestNotFoundException` until you run `npm run dev` or `npm run build` yourself. That's intentional — the alternative is silently rendering main's compiled UI on the worktree, which is worse.
 
@@ -176,7 +176,7 @@ LAN share has a separate toggle that's worktree-aware: when a worktree is active
 
 When a worktree is removed (via `git worktree remove` directly or `lerd worktree remove`) the watcher tears state down in this order so that any earlier failure leaves the database intact:
 
-1. Per-worktree host-worker units (`lerd-<worker>-<site>-<branch>.service`) — stopped and removed so systemd doesn't restart-loop them against the deleted `WorkingDirectory`.
+1. Per-worktree host-worker units (`lerd-<worker>-<site>-<branch>`; systemd `.service` on Linux, launchd plist on macOS) — stopped and removed so the supervisor doesn't restart-loop them against the deleted `WorkingDirectory`.
 2. nginx vhost (URL stops resolving).
 3. LAN-share proxy + registry entry (port released).
 4. Isolated database — *only* via `lerd worktree remove`'s explicit prompt or the daemon's `scanWorktrees` startup sweep. Plain `git worktree remove` leaves the DB and its registry entry alone, so the user can recover by re-adding the worktree without losing migrations or seed data.

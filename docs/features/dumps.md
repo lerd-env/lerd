@@ -14,7 +14,12 @@ The bridge is always mounted into every PHP-FPM container regardless of the togg
 
 Toggling the bridge writes or removes that sentinel file. **No FPM container restart, no worker cascade, no quadlet rewrite.** The bridge file and its conf.d ini stay mounted whether or not captures are active.
 
-The receiver is a per-user Unix socket bound by `lerd-ui` at `~/.local/share/lerd/run/lerd-dumps.sock`. PHP-FPM containers reach it via the existing `%h:%h` bind mount, so no host TCP listener and no LAN exposure. `lerd-ui` buffers the last 500 events in memory and fans them out to four surfaces:
+The receiver's transport depends on the host:
+
+- **Linux** — a per-user Unix socket bound by `lerd-ui` at `~/.local/share/lerd/run/lerd-dumps.sock`. PHP-FPM containers reach it via the existing `%h:%h` bind mount. No host TCP listener, no LAN exposure.
+- **macOS** — TCP loopback `127.0.0.1:9913`. Unix sockets don't traverse the podman-machine virtio-fs boundary as functional sockets, so FPM senders inside the VM reach `lerd-ui` on the host via `host.containers.internal:9913` (gvproxy forwards that upstream).
+
+`lerd-ui` buffers the last 500 events in memory and fans them out to four surfaces:
 
 - **Web dashboard** — three places:
   - Each site detail pane has a **Dumps** tab next to Overview and Tinker, pre-filtered to that site.
@@ -67,6 +72,6 @@ None of these commands restart any FPM container or worker.
 - **Only `dump()` / `dd()` are intercepted** in this revision. Eloquent queries, jobs, blade renders, and outgoing HTTP requests are not captured (planned for follow-up work).
 - **Response output is suppressed by default.** While the bridge is on, `dump()` and `dd()` ship to the dashboard only, the HTTP response stays clean. If you'd rather keep the original `sf-dump` output in the response too (useful as a fallback when `lerd-ui` isn't running), flip the "Also print to response (passthrough)" toggle on **System > Dump bridge**, or set `dumps.passthrough: true` in `~/.config/lerd/config.yaml`. Passthrough is read at PHP-FPM startup, so toggling it via the UI restarts every `lerd-php*-fpm` unit; editing the config file by hand requires a manual restart for the change to take effect.
 - **VarCloner caps.** Defaults are `setMaxItems(2500)` and `setMaxString(4096)`. Override via `LERD_DUMP_MAX_ITEMS` in the site's `.env`.
-- **No host TCP listener.** The receiver binds a per-user Unix socket under `~/.local/share/lerd/run/lerd-dumps.sock`. No LAN exposure, no firewall configuration.
+- **Loopback only.** On Linux the receiver binds a per-user Unix socket under `~/.local/share/lerd/run/lerd-dumps.sock` (no host TCP listener). On macOS it binds `127.0.0.1:9913` — reachable from FPM inside podman-machine via gvproxy's `host.containers.internal:9913` mapping, not from the LAN.
 - **No persistence.** Buffer is in-memory only and resets when `lerd-ui` restarts.
 - **First upgrade restarts FPM once.** Existing installs that update to v1.20 will see their FPM `.container` files rewritten on the next `lerd install` / `lerd start` to add the always-mounted bridge volumes. Every subsequent toggle is restart-free.
