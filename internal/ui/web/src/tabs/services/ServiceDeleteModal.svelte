@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$components/Modal.svelte';
   import type { Service } from '$stores/services';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     open: boolean;
@@ -38,11 +39,11 @@
   }
 </script>
 
-<Modal {open} {onclose} title={`Remove ${svc.name}`} size="sm">
+<Modal {open} {onclose} title={m.services_delete_title({ name: svc.name })} size="sm">
   <div class="px-5 py-4 space-y-3">
     {#if requiresTypedConfirm}
       <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/40 rounded px-3 py-2 text-xs text-red-700 dark:text-red-300">
-        <p class="font-medium mb-1">{dependents} site{dependents === 1 ? '' : 's'} depend on this service.</p>
+        <p class="font-medium mb-1">{m.services_delete_dependentsWarn({ count: dependents })}</p>
         {#if svc.site_domains && svc.site_domains.length > 0}
           <ul class="list-disc list-inside space-y-0.5">
             {#each svc.site_domains as d (d)}
@@ -50,12 +51,12 @@
             {/each}
           </ul>
         {/if}
-        <p class="mt-2">Removing it will break those sites until you reinstall.</p>
+        <p class="mt-2">{m.services_delete_breakWarn()}</p>
       </div>
     {/if}
 
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      Stops the unit, removes the container, and deletes the service config. Default services can be reinstalled later from the preset list.
+      {m.services_delete_body()}
     </p>
 
     <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
@@ -65,9 +66,9 @@
         class="mt-0.5 w-4 h-4 rounded border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-bg text-lerd-red focus:ring-lerd-red/40 cursor-pointer"
       />
       <span>
-        Also remove service data
+        {m.services_delete_removeDataLabel()}
         <span class="block text-[11px] text-gray-500 dark:text-gray-400">
-          Renames <span class="font-mono">~/.local/share/lerd/data/{svc.name}</span> to <span class="font-mono">{svc.name}.pre-remove-&lt;ts&gt;</span> (recoverable).
+          {m.services_delete_removeDataHint({ name: svc.name })}
         </span>
       </span>
     </label>
@@ -75,7 +76,7 @@
     {#if requiresTypedConfirm}
       <div class="space-y-1">
         <label for="confirm-name" class="text-xs text-gray-600 dark:text-gray-400">
-          Type <span class="font-mono font-medium text-gray-800 dark:text-gray-200">{svc.name}</span> to confirm:
+          {m.services_confirm_typeBefore()} <span class="font-mono font-medium text-gray-800 dark:text-gray-200">{svc.name}</span> {m.services_confirm_typeAfter()}
         </label>
         <input
           id="confirm-name"
@@ -92,12 +93,12 @@
       type="button"
       onclick={onclose}
       class="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-    >Cancel</button>
+    >{m.common_cancel()}</button>
     <button
       type="button"
       onclick={confirm}
       disabled={!canConfirm}
       class="text-xs px-3 py-1.5 rounded bg-lerd-red hover:bg-lerd-redhov text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-    >{submitting ? 'Removing…' : 'Remove'}</button>
+    >{submitting ? m.services_delete_submitting() : m.common_remove()}</button>
   {/snippet}
 </Modal>

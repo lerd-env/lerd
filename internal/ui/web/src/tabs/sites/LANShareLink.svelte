@@ -1,5 +1,6 @@
 <script lang="ts">
   import { apiBase } from '$lib/api';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     domain: string;
@@ -45,7 +46,7 @@
       style="position:fixed; left:{x}px; top:{y}px; z-index:9999"
       class="p-1.5 bg-white dark:bg-lerd-card rounded shadow-lg border border-gray-200 dark:border-lerd-border"
     >
-      <img src={qrSrc} width="160" height="160" alt="QR code" />
+      <img src={qrSrc} width="160" height="160" alt={m.lanShare_qrAlt()} />
     </div>
   {/if}
 </div>

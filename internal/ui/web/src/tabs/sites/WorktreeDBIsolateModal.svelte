@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$components/Modal.svelte';
   import type { Site } from '$stores/sites';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     open: boolean;
@@ -15,12 +16,17 @@
 
   const options = $derived.by<Option[]>(() => {
     const opts: Option[] = [
-      { value: 'main', label: `Clone from main (${site.domain})` },
-      { value: '', label: 'Empty database' }
+      { value: 'main', label: m.worktreeDb_cloneFromMain({ domain: site.domain }) },
+      { value: '', label: m.worktreeDb_empty() }
     ];
     for (const w of site.worktrees || []) {
       if (w.db_isolated && w.branch && w.branch !== branch) {
-        opts.push({ value: w.branch, label: `Clone from ${w.branch}${w.db_database ? ` (${w.db_database})` : ''}` });
+        opts.push({
+          value: w.branch,
+          label: w.db_database
+            ? m.worktreeDb_cloneFromBranchDb({ branch: w.branch, db: w.db_database })
+            : m.worktreeDb_cloneFromBranch({ branch: w.branch })
+        });
       }
     }
     return opts;
@@ -38,10 +44,10 @@
   }
 </script>
 
-<Modal {open} {onclose} title="Isolate worktree database" size="sm">
+<Modal {open} {onclose} title={m.worktreeDb_title()} size="sm">
   <div class="px-5 py-4 space-y-3">
     <p class="text-sm text-gray-600 dark:text-gray-400">
-      A new database will be created for the <span class="font-mono text-gray-800 dark:text-gray-200">{branch}</span> worktree. Pick what it should start from.
+      {m.worktreeDb_body({ branch })}
     </p>
     <select
       bind:value={selected}
@@ -52,7 +58,7 @@
       {/each}
     </select>
     <p class="text-[11px] text-gray-400 dark:text-gray-500">
-      Cloning runs <span class="font-mono">mysqldump | mysql</span> (or <span class="font-mono">pg_dump | psql</span>) inside the service container.
+      {m.worktreeDb_cloningHint()}
     </p>
   </div>
   {#snippet footer()}
@@ -60,11 +66,11 @@
       type="button"
       onclick={onclose}
       class="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-    >Cancel</button>
+    >{m.common_cancel()}</button>
     <button
       type="button"
       onclick={confirm}
       class="text-xs px-3 py-1.5 rounded bg-lerd-red hover:bg-lerd-redhov text-white transition-colors"
-    >Isolate</button>
+    >{m.worktreeDb_isolateAction()}</button>
   {/snippet}
 </Modal>

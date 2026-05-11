@@ -12,7 +12,7 @@
 | `lerd xdebug on [version] [--mode MODE]` | Enable Xdebug for a PHP version with the given mode (default `debug`) and restart the FPM container |
 | `lerd xdebug off [version]` | Disable Xdebug and restart the FPM container |
 | `lerd xdebug status` | Show Xdebug enabled/disabled state and active mode for all installed PHP versions |
-| `lerd php:ext add <ext> [version]` | Add a custom PHP extension to the FPM image and rebuild |
+| `lerd php:ext add <ext> [version] [--apk-deps "pkg ..."]` | Add a custom PHP extension to the FPM image and rebuild; `--apk-deps` lists extra Alpine packages the extension needs to build |
 | `lerd php:ext remove <ext> [version]` | Remove a custom PHP extension and rebuild |
 | `lerd php:ext list [version]` | List custom extensions configured for a PHP version |
 | `lerd php:ini [version]` | Open the user php.ini for a PHP version in `$EDITOR` |
@@ -160,7 +160,7 @@ Toggling never restarts FPM or its workers. The bridge auto-prepend file and its
 
 ## Pre-built images
 
-lerd ships pre-built PHP-FPM base images on ghcr.io for all supported versions (8.1–8.5), covering both `amd64` and `arm64`. When you run `lerd fetch` or `lerd php:rebuild`, lerd pulls the matching base image and layers just your mkcert CA certificate on top, bringing first-time build time from ~5 minutes down to ~30 seconds.
+lerd ships pre-built PHP-FPM base images on ghcr.io for all supported versions (7.4 and 8.0–8.5), covering both `amd64` and `arm64`. When you run `lerd fetch` or `lerd php:rebuild`, lerd pulls the matching base image and layers just your mkcert CA certificate on top, bringing first-time build time from ~5 minutes down to ~30 seconds.
 
 The base image tag is derived from the embedded Containerfile, so lerd always pulls the exact image that matches the version of lerd you have installed. If the pull fails (no internet, image not yet published) lerd falls back to a full local build transparently.
 
@@ -178,6 +178,25 @@ lerd php:rebuild --local
 
 ---
 
+## Legacy PHP versions
+
+PHP 7.4 and 8.0 are available as a frozen legacy tier for old projects (Laravel 6–8 on 7.4, Laravel 8–9 on 8.0). They build from the same Alpine-based recipe as the current versions, including ICU full locale data, but with a few caveats:
+
+- They are end-of-life upstream and get no security patches. Use them only for local work on legacy apps.
+- Xdebug is pinned to the last release supporting that PHP line (3.1.6 for 7.4, 3.3.2 for 8.0).
+- The `mongodb` extension is unavailable (it requires PHP 8.1+); everything else in the standard bundle is present.
+- The base image is Alpine 3.16, so the bundled Node.js is 16.x.
+
+Use them like any other version:
+
+```bash
+lerd use 7.4
+lerd isolate 8.0
+lerd fetch 7.4 8.0
+```
+
+---
+
 ## Custom extensions
 
 The default lerd FPM image ships ~30 extensions covering the vast majority of Laravel projects (`bcmath`, `bz2`, `calendar`, `curl`, `dba`, `exif`, `gd`, `gmp`, `igbinary`, `imagick`, `intl`, `ldap`, `mbstring`, `mongodb`, `mysqli`, `opcache`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `redis`, `soap`, `shmop`, `sockets`, `sqlite3`, `sysvmsg`, `sysvsem`, `sysvshm`, `xdebug`, `xsl`, `zip`, and more).
@@ -191,8 +210,19 @@ lerd php:ext add swoole 8.3      # explicit version
 
 This rebuilds the FPM image with the extension installed and restarts the container. Extensions are persisted in `~/.config/lerd/config.yaml` so they survive `lerd php:rebuild`.
 
+After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there.
+
+Some extensions need extra Alpine packages to compile. lerd already knows the ones for `imap` (`imap-dev krb5-dev openssl-dev c-client`); for anything else, pass them with `--apk-deps`:
+
 ```bash
-lerd php:ext list                # show custom extensions for current version
+lerd php:ext add ssh2 --apk-deps "libssh2-dev"
+lerd php:ext add imap                                  # deps known to lerd, no flag needed
+```
+
+The packages are saved alongside the extension in `~/.config/lerd/config.yaml` (under `php.ext_apk_deps`), so they reapply on every `lerd php:rebuild`.
+
+```bash
+lerd php:ext list                # show custom extensions (and their apk deps) for current version
 lerd php:ext remove swoole       # remove and rebuild
 ```
 
@@ -212,6 +242,15 @@ systemctl --user restart lerd-php84-fpm
 ```
 
 The file is created automatically with commented-out examples when lerd first sets up the PHP version.
+
+### Locales and internationalisation
+
+The FPM image is Alpine-based, so it uses musl libc rather than glibc. Two consequences worth knowing:
+
+- **`ext-intl` (`NumberFormatter`, `IntlDateFormatter`, Laravel's `Number::currency()`, `money` formatting) works for every locale.** The image bundles ICU's full CLDR locale database (`icu-data-full`), so `new NumberFormatter('nl_NL', NumberFormatter::CURRENCY)` correctly produces `€ 13.943,20`. This is the recommended way to do locale-aware formatting and it does not depend on the system locale at all.
+- **The C-library `setlocale()` / `localeconv()` path stays in the C locale.** musl does not implement locale-specific `LC_NUMERIC` / `LC_MONETARY` rules, so `setlocale(LC_ALL, 'nl_NL')` will return a value but `localeconv()` keeps returning `.` / empty separators, and `number_format()` without explicit separators won't switch. Pass separators explicitly (`number_format($n, 2, ',', '.')`) or use `ext-intl`.
+
+If a library you depend on calls `setlocale()` and branches on whether it succeeded, adding the `musl-locales` / `musl-locales-lang` apk packages makes the call return a value, but it still will not change number or currency formatting.
 
 ---
 

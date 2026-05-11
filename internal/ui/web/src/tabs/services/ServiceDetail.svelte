@@ -6,6 +6,7 @@
   import ServiceEnvTab from './ServiceEnvTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import type { Service } from '$stores/services';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     svc: Service;
@@ -17,7 +18,7 @@
 
   const hasEnv = $derived(Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0));
   const tabs = $derived<TabItem<TabId>[]>([
-    { id: 'logs', label: 'Logs' },
+    { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: '.env', hidden: !hasEnv }
   ]);
 

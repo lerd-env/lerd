@@ -370,6 +370,34 @@ func TestNginxQuadletMountsCustomD(t *testing.T) {
 	}
 }
 
+func TestPHPFPMContainerfileBundlesFullICUData(t *testing.T) {
+	// Alpine splits ICU's locale database: the base php:*-fpm-alpine image
+	// only carries icu-data-en, so ext-intl (NumberFormatter, IntlDateFormatter,
+	// Laravel Number::currency) silently falls back to the root/en locale for
+	// every non-English locale. icu-data-full carries the full CLDR set. See #332.
+	content, err := GetQuadletTemplate("lerd-php-fpm.Containerfile")
+	if err != nil {
+		t.Fatalf("GetQuadletTemplate: %v", err)
+	}
+	if !strings.Contains(content, "icu-data-full") {
+		t.Errorf("lerd-php-fpm.Containerfile must apk add icu-data-full so non-English locales work in ext-intl:\n%s", content)
+	}
+}
+
+func TestPHPFPMContainerfilePinsLegacyXdebug(t *testing.T) {
+	// xdebug 3.2+ requires PHP 8.0+ and 3.4+ requires PHP 8.1+, so the frozen
+	// legacy 7.4 / 8.0 images must select an older xdebug release at build time.
+	content, err := GetQuadletTemplate("lerd-php-fpm.Containerfile")
+	if err != nil {
+		t.Fatalf("GetQuadletTemplate: %v", err)
+	}
+	for _, want := range []string{`7.4) XDEBUG_PKG="xdebug-3.1.6"`, `8.0) XDEBUG_PKG="xdebug-3.3.2"`} {
+		if !strings.Contains(content, want) {
+			t.Errorf("lerd-php-fpm.Containerfile must pin legacy xdebug (%q):\n%s", want, content)
+		}
+	}
+}
+
 func TestSortPaths(t *testing.T) {
 	paths := []string{"/var/www/app", "/opt", "/var/www"}
 	sortPaths(paths)

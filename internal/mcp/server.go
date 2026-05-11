@@ -535,6 +535,7 @@ func toolList() []mcpTool {
 					"action":    {Type: "string", Enum: []string{"list", "add", "remove"}},
 					"extension": {Type: "string", Description: "Required for add/remove (e.g. imagick, redis, swoole)."},
 					"version":   {Type: "string", Description: "PHP version. Defaults to project/global."},
+					"apk_deps":  {Type: "string", Description: "Optional (add only): extra Alpine build packages, space-separated."},
 				},
 				Required: []string{"action"},
 			},
@@ -4970,12 +4971,20 @@ func execPHPExtAdd(args map[string]any) (any, *rpcError) {
 		return toolErr(err.Error()), nil
 	}
 
+	deps, err := podman.ParseApkDeps(strArg(args, "apk_deps"))
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return toolErr("loading config: " + err.Error()), nil
 	}
 
 	cfg.AddExtension(version, ext)
+	if len(deps) > 0 {
+		cfg.SetExtApkDeps(ext, deps)
+	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		return toolErr("saving config: " + err.Error()), nil
 	}
@@ -4983,6 +4992,12 @@ func execPHPExtAdd(args map[string]any) (any, *rpcError) {
 	var out bytes.Buffer
 	if err := podman.RebuildFPMImageTo(version, false, &out); err != nil {
 		return toolErr(fmt.Sprintf("rebuilding PHP %s image (%v):\n%s", version, err, out.String())), nil
+	}
+
+	if err := podman.VerifyExtensionLoaded(version, ext); err != nil {
+		cfg.RemoveExtension(version, ext)
+		_ = config.SaveGlobal(cfg)
+		return toolErr(fmt.Sprintf("extension %q was not installed for PHP %s (config reverted): %v", ext, version, err)), nil
 	}
 
 	short := strings.ReplaceAll(version, ".", "")

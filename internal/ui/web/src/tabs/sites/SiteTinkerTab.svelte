@@ -27,6 +27,7 @@
   } from '$stores/sites';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
   import DumpView from '$components/DumpView.svelte';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     site: Site;
@@ -195,7 +196,7 @@
     return () => view?.destroy();
   });
 
-  const placeholder = `// Try one of:\n//   echo 1 + 1;\n//   User::count();\n//   collect([1,2,3])->sum();\n`;
+  const placeholder = m.tinker_placeholder();
 
   // Laravel facades and helpers — built-ins, always offered on Laravel sites.
   const laravelFacades = [
@@ -440,7 +441,7 @@
     <div class="flex items-center gap-2">
       <span
         class="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400"
-        title={result?.mode === 'tinker' ? 'Bootstraps Laravel via artisan tinker' : 'Plain PHP runtime'}
+        title={result?.mode === 'tinker' ? m.tinker_mode_tinkerTitle() : m.tinker_mode_phpTitle()}
       >
         {result?.mode ?? (site.is_laravel ? 'tinker' : 'php')}
       </span>
@@ -453,15 +454,15 @@
         onclick={clearAll}
         disabled={!code && !result}
         class="text-xs px-2 py-1 rounded border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
-        title="Clear editor and output"
-      >Clear</button>
+        title={m.tinker_clearTitle()}
+      >{m.common_clear()}</button>
       <button
         onclick={run}
         disabled={running || !code.trim()}
         class="text-xs px-3 py-1 rounded bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 transition-colors"
-        title="Run (Ctrl+Enter)"
+        title={m.tinker_runTitle()}
       >
-        {running ? 'Running…' : 'Run'}
+        {running ? m.tinker_running() : m.tinker_run()}
       </button>
     </div>
   </div>
@@ -474,9 +475,9 @@
       {#if code.trim()}
         <button
           onclick={() => copyText(code)}
-          title="Copy editor contents to clipboard"
+          title={m.tinker_copyEditorTitle()}
           class="absolute top-2 right-2 z-10 opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-lerd-border bg-white/90 dark:bg-lerd-card/90 text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-opacity"
-        >Copy</button>
+        >{m.common_copy()}</button>
       {/if}
     </div>
 
@@ -484,7 +485,7 @@
       class="flex-1 min-h-[120px] md:min-h-0 md:basis-1/2 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 tinker-output py-2"
     >
       {#if !result && running}
-        <p class="text-xs text-gray-400">Running…</p>
+        <p class="text-xs text-gray-400">{m.tinker_running()}</p>
       {:else if !result}
         <p class="text-[11px] text-gray-400 dark:text-gray-500 font-mono whitespace-pre-line">{placeholder}</p>
       {:else}
@@ -520,9 +521,9 @@
                   block.kind === 'tree' ? block.raw :
                   block.kind === 'error' ? block.raw : block.text
                 )}
-              title="Copy this output"
+              title={m.tinker_copyOutputTitle()}
               class="output-copy opacity-0 group-hover:opacity-100 text-[10px] px-1.5 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 hover:text-gray-700 dark:hover:text-gray-200 transition-opacity shrink-0"
-            >Copy</button>
+            >{m.common_copy()}</button>
           </div>
         {/each}
         {#if result.stderr}
@@ -534,7 +535,7 @@
         {/if}
         {#if stdoutBlocks.length === 0 && !result.stderr && !result.error}
           <div class="output-row" data-line="·">
-            <div class="output-content text-gray-400">(no output)</div>
+            <div class="output-content text-gray-400">{m.tinker_noOutput()}</div>
           </div>
         {/if}
       {/if}

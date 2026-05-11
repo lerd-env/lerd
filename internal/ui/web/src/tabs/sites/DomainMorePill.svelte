@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Site } from '$stores/sites';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     site: Site;
@@ -37,7 +38,7 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M4.93 19h14.14a2 2 0 001.74-3l-7.07-12a2 2 0 00-3.48 0L3.19 16a2 2 0 001.74 3z"/>
         </svg>
       {/if}
-      +{count} more
+      {m.sites_extraMore({ count })}
     </span>
     {#if show}
       <div class="absolute left-0 top-full z-50 pt-1">

@@ -226,6 +226,57 @@ func TestExtensions_AddRemoveGet(t *testing.T) {
 	}
 }
 
+func TestExtApkDeps_SetGetClear(t *testing.T) {
+	cfg := &GlobalConfig{}
+
+	if deps := cfg.GetExtApkDeps("imap"); deps != nil {
+		t.Errorf("expected nil deps, got %v", deps)
+	}
+
+	cfg.SetExtApkDeps("imap", []string{"imap-dev", "krb5-dev"})
+	if got := cfg.GetExtApkDeps("imap"); len(got) != 2 || got[0] != "imap-dev" || got[1] != "krb5-dev" {
+		t.Fatalf("expected [imap-dev krb5-dev], got %v", got)
+	}
+	if all := cfg.AllExtApkDeps(); len(all) != 1 {
+		t.Errorf("expected 1 entry in AllExtApkDeps, got %v", all)
+	}
+
+	// SetExtApkDeps with empty deps clears the entry and nils the map.
+	cfg.SetExtApkDeps("imap", nil)
+	if cfg.GetExtApkDeps("imap") != nil || cfg.AllExtApkDeps() != nil {
+		t.Errorf("empty SetExtApkDeps should clear the entry and the map")
+	}
+}
+
+func TestExtApkDeps_DroppedWhenExtensionRemoved(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.AddExtension("8.4", "ssh2")
+	cfg.AddExtension("8.5", "ssh2")
+	cfg.SetExtApkDeps("ssh2", []string{"libssh2-dev"})
+
+	// Still used by 8.5, so deps stay.
+	cfg.RemoveExtension("8.4", "ssh2")
+	if cfg.GetExtApkDeps("ssh2") == nil {
+		t.Error("deps should remain while another version still uses the extension")
+	}
+
+	// No version uses it anymore, so deps go too.
+	cfg.RemoveExtension("8.5", "ssh2")
+	if cfg.GetExtApkDeps("ssh2") != nil {
+		t.Error("deps should be dropped once no version uses the extension")
+	}
+}
+
+func TestExtApkDeps_DeepCopied(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.SetExtApkDeps("imap", []string{"imap-dev"})
+	clone := cloneGlobalConfig(cfg)
+	clone.SetExtApkDeps("imap", []string{"imap-dev", "krb5-dev"})
+	if len(cfg.GetExtApkDeps("imap")) != 1 {
+		t.Errorf("mutating the clone must not affect the original: %v", cfg.GetExtApkDeps("imap"))
+	}
+}
+
 func TestExtensions_AddIdempotent(t *testing.T) {
 	cfg := &GlobalConfig{}
 	cfg.AddExtension("8.3", "redis")

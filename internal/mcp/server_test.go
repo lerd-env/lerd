@@ -172,7 +172,8 @@ func TestExecEnvCheck_missingKeys(t *testing.T) {
 func TestToolList_underSizeCeiling(t *testing.T) {
 	// Bumped to 23000 for the four new dumps_* tools (recent/status/clear/toggle).
 	// Descriptions trimmed in dumpToolDefs to keep the delta as small as possible.
-	const ceiling = 23000
+	// Bumped to 23200 for the php_ext `apk_deps` parameter (new content, not verbosity).
+	const ceiling = 23200
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

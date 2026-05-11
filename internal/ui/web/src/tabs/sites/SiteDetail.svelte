@@ -6,6 +6,7 @@
   import SiteTinkerTab from './SiteTinkerTab.svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
   import type { Site } from '$stores/sites';
+  import { m } from '../../paraglide/messages.js';
 
   interface Props {
     site: Site;
@@ -51,11 +52,11 @@
 </script>
 
 {#snippet tabs()}
-  <button class={tabBtn('overview', active === 'overview')} onclick={() => (active = 'overview')}>Overview</button>
+  <button class={tabBtn('overview', active === 'overview')} onclick={() => (active = 'overview')}>{m.sites_tabs_overview()}</button>
   {#if canTinker}
-    <button class={tabBtn('tinker', active === 'tinker')} onclick={() => (active = 'tinker')}>Tinker</button>
+    <button class={tabBtn('tinker', active === 'tinker')} onclick={() => (active = 'tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
-  <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>Dumps</button>
+  <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>{m.nav_dumps()}</button>
 {/snippet}
 
 <DetailPanel>

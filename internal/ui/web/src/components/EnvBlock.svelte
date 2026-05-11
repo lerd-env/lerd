@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../paraglide/messages.js';
   interface Props {
     vars: Record<string, string>;
     label?: string;
@@ -37,9 +38,9 @@
       class="text-[10px] font-medium text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors"
     >
       {#if copied}
-        <span class="text-emerald-600 dark:text-emerald-500">Copied!</span>
+        <span class="text-emerald-600 dark:text-emerald-500">{m.common_copied()}</span>
       {:else}
-        Copy
+        {m.common_copy()}
       {/if}
     </button>
   </div>

@@ -82,7 +82,7 @@ Once the MCP server is connected, your AI assistant has access to:
 | `sites` | List all registered lerd sites (name, domain, path, PHP/Node version, framework, worker status) |
 | `runtime_versions` | List installed PHP and Node.js versions with configured defaults |
 | `php_list` | List all PHP versions installed by lerd, marking the global default |
-| `php_ext` | Manage custom PHP extensions for a PHP version — `action`: `list` / `add` / `remove` (`add` and `remove` rebuild the FPM image and restart the container) |
+| `php_ext` | Manage custom PHP extensions for a PHP version — `action`: `list` / `add` / `remove` (`add` and `remove` rebuild the FPM image and restart the container); `add` verifies the extension loaded and accepts `apk_deps` for extra Alpine build packages |
 | `artisan` | Run `php artisan` in the PHP-FPM container: migrations, generators, seeders, cache, tinker (Laravel only) |
 | `console` | Run the framework's console command (e.g. `php bin/console` for Symfony); shown for non-Laravel frameworks that define a `console` field |
 | `composer` | Run `composer` in the PHP-FPM container: install, require, dump-autoload, etc. |

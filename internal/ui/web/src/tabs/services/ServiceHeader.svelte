@@ -58,9 +58,7 @@
   );
   const portConflictTitle = $derived(
     portConflicts.length > 0
-      ? 'Port ' +
-        portConflicts.map((c) => c.port).join(', ') +
-        ' already in use on the host. Stop the conflicting process or change the lerd port. Run `lerd doctor` for the find command on your OS.'
+      ? m.services_portConflictTitle({ ports: portConflicts.map((c) => c.port).join(', ') })
       : ''
   );
 
@@ -236,8 +234,8 @@
         id: 'reinstall',
         tone: 'secondary',
         icon: icons.restart,
-        label: 'Reinstall',
-        title: 'Stop, remove, and reinstall at the current version. Optional reset-data wipes the data dir and reprovisions linked sites.',
+        label: m.services_reinstall_action(),
+        title: m.services_reinstall_menuTitle(),
         onclick: () => (reinstallOpen = true)
       });
     }
@@ -255,7 +253,7 @@
     }
 
     if (!isWorker) {
-      const removeLabel = svc.is_default ? 'Remove' : m.services_removeCustom();
+      const removeLabel = svc.is_default ? m.common_remove() : m.services_removeCustom();
       rest.push({
         id: 'remove',
         tone: 'danger',
@@ -409,7 +407,7 @@
       >{updating.message}</span>
     {:else if svc.update_available && svc.latest_version}
       <span class="text-[11px] text-emerald-600 dark:text-emerald-400 truncate max-w-[32ch]">
-        {svc.latest_version} available
+        {m.system_lerd_available({ version: svc.latest_version })}
       </span>
     {/if}
   </div>
