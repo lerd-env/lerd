@@ -19,10 +19,10 @@ import (
 // streamed nothing.
 func TestIsContainerUnit_darwin(t *testing.T) {
 	cases := []struct {
-		name      string
-		unit      string
-		setup     func(t *testing.T, home string)
-		want      bool
+		name  string
+		unit  string
+		setup func(t *testing.T, home string)
+		want  bool
 	}{
 		{
 			name: "service plist (RunAtLoad) -> not a container",

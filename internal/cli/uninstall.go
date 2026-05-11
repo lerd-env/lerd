@@ -248,8 +248,8 @@ func readYes() bool {
 // install` (which is most of them). User-visible: `# Lerd … export
 // PATH …` lingering in `~/.zshrc` after a clean uninstall.
 var shellRCMarkers = []struct {
-	marker     string
-	skipAfter  int
+	marker    string
+	skipAfter int
 }{
 	{"# Added by Lerd installer", 1},
 	{"# Lerd completions", 2}, // must be before "# Lerd" — longer prefix wins

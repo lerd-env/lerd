@@ -18,10 +18,10 @@ import (
 // be asserted without going through the real launchd translator.
 type trackingHostMgr struct {
 	stopTrackingMgr
-	mu        sync.Mutex
-	unitName  string
-	unitBody  string
-	called    bool
+	mu       sync.Mutex
+	unitName string
+	unitBody string
+	called   bool
 }
 
 func (m *trackingHostMgr) WriteServiceUnit(name, content string) error {
