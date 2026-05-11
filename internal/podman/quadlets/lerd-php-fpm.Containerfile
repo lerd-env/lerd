@@ -14,6 +14,7 @@ RUN apk update && apk add --no-cache \
         freetype-dev \
         libwebp-dev \
         icu-dev \
+        icu-data-full \
         oniguruma-dev \
         libxml2-dev \
         postgresql-dev \

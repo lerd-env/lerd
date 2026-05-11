@@ -213,6 +213,15 @@ systemctl --user restart lerd-php84-fpm
 
 The file is created automatically with commented-out examples when lerd first sets up the PHP version.
 
+### Locales and internationalisation
+
+The FPM image is Alpine-based, so it uses musl libc rather than glibc. Two consequences worth knowing:
+
+- **`ext-intl` (`NumberFormatter`, `IntlDateFormatter`, Laravel's `Number::currency()`, `money` formatting) works for every locale.** The image bundles ICU's full CLDR locale database (`icu-data-full`), so `new NumberFormatter('nl_NL', NumberFormatter::CURRENCY)` correctly produces `€ 13.943,20`. This is the recommended way to do locale-aware formatting and it does not depend on the system locale at all.
+- **The C-library `setlocale()` / `localeconv()` path stays in the C locale.** musl does not implement locale-specific `LC_NUMERIC` / `LC_MONETARY` rules, so `setlocale(LC_ALL, 'nl_NL')` will return a value but `localeconv()` keeps returning `.` / empty separators, and `number_format()` without explicit separators won't switch. Pass separators explicitly (`number_format($n, 2, ',', '.')`) or use `ext-intl`.
+
+If a library you depend on calls `setlocale()` and branches on whether it succeeded, adding the `musl-locales` / `musl-locales-lang` apk packages makes the call return a value, but it still will not change number or currency formatting.
+
 ---
 
 ## PHP shell
