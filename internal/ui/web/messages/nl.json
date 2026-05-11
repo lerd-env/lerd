@@ -478,5 +478,15 @@
   "dumps_bridge_passthrough": "Ook in de respons tonen (passthrough)",
   "dumps_bridge_passthroughRestarting": "FPM-containers herstarten…",
   "dumps_bridge_passthroughHint": "Wisselen herstart elke lerd-php*-fpm-unit.",
-  "dumps_bridge_description": "Legt elke dump()/dd()-aanroep vanuit PHP-FPM en CLI vast in het dashboard."
+  "dumps_bridge_description": "Legt elke dump()/dd()-aanroep vanuit PHP-FPM en CLI vast in het dashboard.",
+  "tinker_mode_tinkerTitle": "Start Laravel via artisan tinker",
+  "tinker_mode_phpTitle": "Kale PHP-runtime",
+  "tinker_clearTitle": "Editor en uitvoer wissen",
+  "tinker_runTitle": "Uitvoeren (Ctrl+Enter)",
+  "tinker_run": "Uitvoeren",
+  "tinker_running": "Bezig met uitvoeren…",
+  "tinker_copyEditorTitle": "Editor-inhoud naar klembord kopiëren",
+  "tinker_copyOutputTitle": "Deze uitvoer kopiëren",
+  "tinker_placeholder": "// Probeer een van deze:\n//   echo 1 + 1;\n//   User::count();\n//   collect([1,2,3])->sum();\n",
+  "tinker_noOutput": "(geen uitvoer)"
 }

@@ -478,5 +478,15 @@
   "dumps_bridge_passthrough": "Auch in die Antwort ausgeben (Passthrough)",
   "dumps_bridge_passthroughRestarting": "FPM-Container werden neu gestartet…",
   "dumps_bridge_passthroughHint": "Das Umschalten startet jede lerd-php*-fpm-Unit neu.",
-  "dumps_bridge_description": "Erfasst jeden dump()/dd()-Aufruf von PHP-FPM und CLI im Dashboard."
+  "dumps_bridge_description": "Erfasst jeden dump()/dd()-Aufruf von PHP-FPM und CLI im Dashboard.",
+  "tinker_mode_tinkerTitle": "Bootet Laravel über artisan tinker",
+  "tinker_mode_phpTitle": "Reines PHP-Runtime",
+  "tinker_clearTitle": "Editor und Ausgabe leeren",
+  "tinker_runTitle": "Ausführen (Strg+Enter)",
+  "tinker_run": "Ausführen",
+  "tinker_running": "Wird ausgeführt…",
+  "tinker_copyEditorTitle": "Editor-Inhalt in die Zwischenablage kopieren",
+  "tinker_copyOutputTitle": "Diese Ausgabe kopieren",
+  "tinker_placeholder": "// Probiere eines davon:\n//   echo 1 + 1;\n//   User::count();\n//   collect([1,2,3])->sum();\n",
+  "tinker_noOutput": "(keine Ausgabe)"
 }

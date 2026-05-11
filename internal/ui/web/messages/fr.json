@@ -478,5 +478,15 @@
   "dumps_bridge_passthrough": "Aussi afficher dans la réponse (passthrough)",
   "dumps_bridge_passthroughRestarting": "Redémarrage des conteneurs FPM…",
   "dumps_bridge_passthroughHint": "Le basculer redémarre chaque unité lerd-php*-fpm.",
-  "dumps_bridge_description": "Capture chaque appel dump() / dd() de PHP-FPM et CLI dans le tableau de bord."
+  "dumps_bridge_description": "Capture chaque appel dump() / dd() de PHP-FPM et CLI dans le tableau de bord.",
+  "tinker_mode_tinkerTitle": "Démarre Laravel via artisan tinker",
+  "tinker_mode_phpTitle": "Environnement PHP simple",
+  "tinker_clearTitle": "Effacer l'éditeur et la sortie",
+  "tinker_runTitle": "Exécuter (Ctrl+Entrée)",
+  "tinker_run": "Exécuter",
+  "tinker_running": "Exécution…",
+  "tinker_copyEditorTitle": "Copier le contenu de l'éditeur dans le presse-papiers",
+  "tinker_copyOutputTitle": "Copier cette sortie",
+  "tinker_placeholder": "// Essaie l'un de ceux-ci :\n//   echo 1 + 1;\n//   User::count();\n//   collect([1,2,3])->sum();\n",
+  "tinker_noOutput": "(aucune sortie)"
 }

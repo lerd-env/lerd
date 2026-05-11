@@ -478,5 +478,15 @@
   "dumps_bridge_passthrough": "Juga cetak ke respons (passthrough)",
   "dumps_bridge_passthroughRestarting": "Memulai ulang kontainer FPM…",
   "dumps_bridge_passthroughHint": "Mengalihkannya memulai ulang setiap unit lerd-php*-fpm.",
-  "dumps_bridge_description": "Menangkap setiap pemanggilan dump() / dd() dari PHP-FPM dan CLI ke dasbor."
+  "dumps_bridge_description": "Menangkap setiap pemanggilan dump() / dd() dari PHP-FPM dan CLI ke dasbor.",
+  "tinker_mode_tinkerTitle": "Memuat Laravel via artisan tinker",
+  "tinker_mode_phpTitle": "Runtime PHP biasa",
+  "tinker_clearTitle": "Bersihkan editor dan keluaran",
+  "tinker_runTitle": "Jalankan (Ctrl+Enter)",
+  "tinker_run": "Jalankan",
+  "tinker_running": "Menjalankan…",
+  "tinker_copyEditorTitle": "Salin isi editor ke papan klip",
+  "tinker_copyOutputTitle": "Salin keluaran ini",
+  "tinker_placeholder": "// Coba salah satu:\n//   echo 1 + 1;\n//   User::count();\n//   collect([1,2,3])->sum();\n",
+  "tinker_noOutput": "(tidak ada keluaran)"
 }
