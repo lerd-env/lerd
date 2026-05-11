@@ -11,6 +11,16 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.19.2] — 2026-05-11
+
+A one-fix patch release: locale-aware formatting now works inside the PHP-FPM containers.
+
+### Fixed
+
+- **`NumberFormatter` / locale-aware currency and number formatting produced English output (`€ 13,943.20` instead of `€ 13.943,20`) inside PHP-FPM containers** (#332). The Alpine PHP image only bundled `icu-data-en` (Alpine splits ICU's locale database into a separate package), so `ext-intl` silently fell back to the root/en locale for every non-English locale, breaking `NumberFormatter('nl_NL', …)`, `IntlDateFormatter`, Laravel's `Number::currency()` and money formatting, and any test that asserts localised output. The Containerfile now installs `icu-data-full`, which carries the full CLDR locale set. This bumps the Containerfile hash so existing images rebuild on next use (or `lerd php:rebuild`). Note this does not change the C-library `setlocale()` / `localeconv()` path: musl libc does not implement non-C `LC_NUMERIC` / `LC_MONETARY`, so apps relying on locale-aware formatting should use `ext-intl` (`NumberFormatter`), which is locale-data driven and unaffected by the system locale.
+
+---
+
 ## [1.19.1] — 2026-05-07
 
 A maintenance release rolling up the post-v1.19.0 fix queue: Podman 4.x compatibility on Ubuntu 24.04, MySQL 8.4 client + driver compatibility for Laravel sites, broader system-node detection so users on nvm/volta/mise/asdf/fnm aren't quietly shimmed, host-port conflict surfacing on stopped services, and a `.lerd.yaml` honour fix on Laravel `lerd init`.
