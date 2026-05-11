@@ -82,8 +82,15 @@ RUN apk add --no-cache nodejs npm ffmpeg
 # Override pool: run workers as root, log errors to stderr
 RUN printf '[www]\nuser=root\ngroup=root\ncatch_workers_output=yes\nphp_flag[display_errors]=off\nphp_admin_value[error_log]=/proc/self/fd/2\nphp_admin_flag[log_errors]=on\n' > /usr/local/etc/php-fpm.d/zz-lerd.conf
 
-# Xdebug always installed; mode controlled via mounted ini (mode=off by default)
-RUN pecl install xdebug && docker-php-ext-enable xdebug \
+# Xdebug always installed; mode controlled via mounted ini (mode=off by default).
+# Legacy PHP needs an older line: xdebug 3.2+ requires PHP 8.0+, 3.4+ requires 8.1+.
+RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
+    && case "$PHPVER" in \
+        7.4) XDEBUG_PKG="xdebug-3.1.6" ;; \
+        8.0) XDEBUG_PKG="xdebug-3.3.2" ;; \
+        *)   XDEBUG_PKG="xdebug" ;; \
+    esac \
+    && pecl install "$XDEBUG_PKG" && docker-php-ext-enable xdebug \
     && rm -rf /tmp/pear /var/cache/apk/*
 
 {{.CustomExtensions}}

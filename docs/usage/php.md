@@ -160,7 +160,7 @@ Toggling never restarts FPM or its workers. The bridge auto-prepend file and its
 
 ## Pre-built images
 
-lerd ships pre-built PHP-FPM base images on ghcr.io for all supported versions (8.1–8.5), covering both `amd64` and `arm64`. When you run `lerd fetch` or `lerd php:rebuild`, lerd pulls the matching base image and layers just your mkcert CA certificate on top, bringing first-time build time from ~5 minutes down to ~30 seconds.
+lerd ships pre-built PHP-FPM base images on ghcr.io for all supported versions (7.4 and 8.0–8.5), covering both `amd64` and `arm64`. When you run `lerd fetch` or `lerd php:rebuild`, lerd pulls the matching base image and layers just your mkcert CA certificate on top, bringing first-time build time from ~5 minutes down to ~30 seconds.
 
 The base image tag is derived from the embedded Containerfile, so lerd always pulls the exact image that matches the version of lerd you have installed. If the pull fails (no internet, image not yet published) lerd falls back to a full local build transparently.
 
@@ -174,6 +174,25 @@ To build entirely from source instead:
 lerd fetch --local
 lerd fetch --local 8.5
 lerd php:rebuild --local
+```
+
+---
+
+## Legacy PHP versions
+
+PHP 7.4 and 8.0 are available as a frozen legacy tier for old projects (Laravel 6–8 on 7.4, Laravel 8–9 on 8.0). They build from the same Alpine-based recipe as the current versions, including ICU full locale data, but with a few caveats:
+
+- They are end-of-life upstream and get no security patches. Use them only for local work on legacy apps.
+- Xdebug is pinned to the last release supporting that PHP line (3.1.6 for 7.4, 3.3.2 for 8.0).
+- The `mongodb` extension is unavailable (it requires PHP 8.1+); everything else in the standard bundle is present.
+- The base image is Alpine 3.16, so the bundled Node.js is 16.x.
+
+Use them like any other version:
+
+```bash
+lerd use 7.4
+lerd isolate 8.0
+lerd fetch 7.4 8.0
 ```
 
 ---
