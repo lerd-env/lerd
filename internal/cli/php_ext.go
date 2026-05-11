@@ -27,16 +27,21 @@ func NewPhpExtCmd() *cobra.Command {
 }
 
 func newPhpExtAddCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "add <ext> [version]",
 		Short: "Install a custom PHP extension (rebuilds the FPM image)",
 		Args:  cobra.RangeArgs(1, 2),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
 			ext := args[0]
 			if !validExtNameRe.MatchString(ext) {
 				return fmt.Errorf("invalid extension name %q: must contain only letters, digits, hyphens, and underscores", ext)
 			}
 			version, err := phpExtVersion(args[1:])
+			if err != nil {
+				return err
+			}
+			rawDeps, _ := cmd.Flags().GetString("apk-deps")
+			deps, err := podman.ParseApkDeps(rawDeps)
 			if err != nil {
 				return err
 			}
@@ -47,11 +52,17 @@ func newPhpExtAddCmd() *cobra.Command {
 			}
 
 			cfg.AddExtension(version, ext)
+			if len(deps) > 0 {
+				cfg.SetExtApkDeps(ext, deps)
+			}
 			if err := config.SaveGlobal(cfg); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
 			fmt.Printf("Adding extension %q to PHP %s image...\n", ext, version)
+			if len(deps) > 0 {
+				fmt.Printf("  with Alpine packages: %s\n", strings.Join(deps, " "))
+			}
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				return err
 			}
@@ -77,6 +88,8 @@ func newPhpExtAddCmd() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().String("apk-deps", "", "extra Alpine packages the extension needs to build (space- or comma-separated, e.g. \"libssh2-dev\")")
+	return cmd
 }
 
 func newPhpExtRemoveCmd() *cobra.Command {
@@ -148,7 +161,11 @@ func newPhpExtListCmd() *cobra.Command {
 
 			fmt.Printf("Custom extensions for PHP %s:\n", version)
 			for _, ext := range exts {
-				fmt.Printf("  - %s\n", ext)
+				if deps := cfg.GetExtApkDeps(ext); len(deps) > 0 {
+					fmt.Printf("  - %s (apk: %s)\n", ext, strings.Join(deps, " "))
+				} else {
+					fmt.Printf("  - %s\n", ext)
+				}
 			}
 			return nil
 		},

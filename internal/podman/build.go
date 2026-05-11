@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -174,7 +175,7 @@ func BuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(version), os.Stdout)
+	return buildFPMImage(version, false, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), os.Stdout)
 }
 
 // BuildFPMImageTo builds the PHP-FPM image writing output to w.
@@ -184,7 +185,7 @@ func BuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(version), w)
+	return buildFPMImage(version, false, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), w)
 }
 
 // RebuildFPMImage force-removes and rebuilds the PHP-FPM image for the given version.
@@ -194,7 +195,7 @@ func RebuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(version), os.Stdout)
+	return buildFPMImage(version, true, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), os.Stdout)
 }
 
 // RebuildFPMImageTo force-rebuilds the PHP-FPM image writing output to w.
@@ -204,7 +205,7 @@ func RebuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(version), w)
+	return buildFPMImage(version, true, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), w)
 }
 
 // baseContainerfileHash returns a 12-character SHA-256 prefix of the Containerfile
@@ -259,7 +260,7 @@ func tryPullBaseImage(version string, w io.Writer) string {
 	return ref
 }
 
-func buildFPMImage(version string, force, local bool, customExts []string, w io.Writer) error {
+func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, w io.Writer) error {
 	short := strings.ReplaceAll(version, ".", "")
 	imageName := "lerd-php" + short + "-fpm:local"
 
@@ -286,7 +287,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, w io.
 		if baseRef := tryPullBaseImage(version, w); baseRef != "" {
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
-				buildCustomExtBlock(customExts) +
+				buildCustomExtBlock(customExts, extDeps) +
 				mkcertCABlock(tmp)
 			if force {
 				buildArgs = append(buildArgs, "--no-cache")
@@ -302,7 +303,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, w io.
 			return tmplErr
 		}
 		containerfile = strings.ReplaceAll(tmpl, "{{.Version}}", version)
-		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts))
+		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.MkcertCA}}", mkcertCABlock(tmp))
 		if force {
 			// Bypass layer cache so changes are fully applied. The old image stays
@@ -332,14 +333,60 @@ build:
 // extApkDeps maps a custom PHP extension to the Alpine packages its build needs.
 // The standard bundle's -dev packages are already in the base image, so this only
 // lists extensions whose build deps aren't there; without them PECL fails (e.g.
-// imap's "U8T_CANONICAL is missing"). The "|| true" in the RUN block would then
-// hide the failure, so VerifyExtensionLoaded checks the result afterward.
+// imap's "U8T_CANONICAL is missing"). Users can add more via `lerd php:ext add
+// --apk-deps`; the two sets are unioned. The "|| true" in the RUN block keeps a
+// broken build from bricking later rebuilds, so VerifyExtensionLoaded checks the
+// result afterward.
 var extApkDeps = map[string][]string{
 	"imap": {"imap-dev", "krb5-dev", "openssl-dev", "c-client"},
 }
 
-// buildCustomExtBlock generates Dockerfile RUN blocks for user-configured extensions.
-func buildCustomExtBlock(exts []string) string {
+// validApkPkgName matches Alpine package names; used to reject anything that
+// could break out of the `apk add` shell command in the generated Containerfile.
+var validApkPkgName = regexp.MustCompile(`^[a-zA-Z0-9._+-]+$`)
+
+// ParseApkDeps splits a space/comma/whitespace-separated package list and
+// validates each name. Returns nil for empty input.
+func ParseApkDeps(raw string) ([]string, error) {
+	fields := strings.FieldsFunc(raw, func(r rune) bool {
+		return r == ' ' || r == ',' || r == '\t' || r == '\n' || r == '\r'
+	})
+	if len(fields) == 0 {
+		return nil, nil
+	}
+	deps := make([]string, 0, len(fields))
+	for _, f := range fields {
+		if !validApkPkgName.MatchString(f) {
+			return nil, fmt.Errorf("invalid Alpine package name %q", f)
+		}
+		deps = append(deps, f)
+	}
+	return deps, nil
+}
+
+// apkDepsForExt returns the union of the built-in and user-configured Alpine
+// packages for ext, deduplicated, in a stable order.
+func apkDepsForExt(ext string, userDeps map[string][]string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(pkgs []string) {
+		for _, p := range pkgs {
+			p = strings.TrimSpace(p)
+			if p == "" || seen[p] {
+				continue
+			}
+			seen[p] = true
+			out = append(out, p)
+		}
+	}
+	add(extApkDeps[ext])
+	add(userDeps[ext])
+	return out
+}
+
+// buildCustomExtBlock generates Dockerfile RUN blocks for user-configured
+// extensions, apk-adding any extra build deps (built-in map ∪ userDeps) first.
+func buildCustomExtBlock(exts []string, userDeps map[string][]string) string {
 	if len(exts) == 0 {
 		return ""
 	}
@@ -347,7 +394,7 @@ func buildCustomExtBlock(exts []string) string {
 	sb.WriteString("# User-configured extensions\n")
 	for _, ext := range exts {
 		prefix := ""
-		if deps, ok := extApkDeps[ext]; ok {
+		if deps := apkDepsForExt(ext, userDeps); len(deps) > 0 {
 			prefix = "apk add --no-cache " + strings.Join(deps, " ") + " && "
 		}
 		// `yes ''` feeds default answers to interactive PECL prompts (imap asks
@@ -386,7 +433,7 @@ func VerifyExtensionLoaded(version, ext string) error {
 		return fmt.Errorf("inspecting extensions in %s: %w\n%s", imageName, err, out)
 	}
 	if !phpExtensionLoaded(string(out), ext) {
-		return fmt.Errorf("extension %q did not load in the rebuilt image (its build likely failed; check the extension name is correct and that any required Alpine packages are known to lerd)", ext)
+		return fmt.Errorf("extension %q did not load in the rebuilt image (its build likely failed; check the extension name is correct, or pass --apk-deps with the Alpine packages it needs)", ext)
 	}
 	return nil
 }

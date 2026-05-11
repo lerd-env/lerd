@@ -12,7 +12,7 @@
 | `lerd xdebug on [version] [--mode MODE]` | Enable Xdebug for a PHP version with the given mode (default `debug`) and restart the FPM container |
 | `lerd xdebug off [version]` | Disable Xdebug and restart the FPM container |
 | `lerd xdebug status` | Show Xdebug enabled/disabled state and active mode for all installed PHP versions |
-| `lerd php:ext add <ext> [version]` | Add a custom PHP extension to the FPM image and rebuild |
+| `lerd php:ext add <ext> [version] [--apk-deps "pkg ..."]` | Add a custom PHP extension to the FPM image and rebuild; `--apk-deps` lists extra Alpine packages the extension needs to build |
 | `lerd php:ext remove <ext> [version]` | Remove a custom PHP extension and rebuild |
 | `lerd php:ext list [version]` | List custom extensions configured for a PHP version |
 | `lerd php:ini [version]` | Open the user php.ini for a PHP version in `$EDITOR` |
@@ -210,10 +210,19 @@ lerd php:ext add swoole 8.3      # explicit version
 
 This rebuilds the FPM image with the extension installed and restarts the container. Extensions are persisted in `~/.config/lerd/config.yaml` so they survive `lerd php:rebuild`.
 
-After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there. Some extensions need extra Alpine packages to compile — lerd bundles the required ones for those it knows about (currently `imap`, which needs `imap-dev krb5-dev openssl-dev c-client`); if you hit a build failure for an extension that needs other packages, open an issue so it can be added.
+After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there.
+
+Some extensions need extra Alpine packages to compile. lerd already knows the ones for `imap` (`imap-dev krb5-dev openssl-dev c-client`); for anything else, pass them with `--apk-deps`:
 
 ```bash
-lerd php:ext list                # show custom extensions for current version
+lerd php:ext add ssh2 --apk-deps "libssh2-dev"
+lerd php:ext add imap                                  # deps known to lerd, no flag needed
+```
+
+The packages are saved alongside the extension in `~/.config/lerd/config.yaml` (under `php.ext_apk_deps`), so they reapply on every `lerd php:rebuild`.
+
+```bash
+lerd php:ext list                # show custom extensions (and their apk deps) for current version
 lerd php:ext remove swoole       # remove and rebuild
 ```
 

@@ -636,17 +636,20 @@ List all PHP versions installed by lerd as JSON, with each version's ` + bt + `d
 ### ` + bt + `php_ext` + bt + `
 Manage custom PHP extensions for a PHP version. Extensions are added on top of the bundled lerd FPM image. Adding or removing an extension rebuilds the image and restarts the FPM container (may take a minute).
 
+` + bt + `add` + bt + ` verifies the extension loaded (` + bt + `php -m` + bt + `); a failed PECL build is reported as an error and the config entry removed. Pass ` + bt + `apk_deps` + bt + ` for extensions that need extra Alpine build packages (lerd already knows ` + bt + `imap` + bt + `'s).
+
 Arguments:
 - ` + bt + `action` + bt + ` (required): ` + bt + `"list"` + bt + `, ` + bt + `"add"` + bt + `, or ` + bt + `"remove"` + bt + `
 - ` + bt + `version` + bt + ` (optional): defaults to the project or global PHP version
 - ` + bt + `extension` + bt + ` (required for ` + bt + `add` + bt + ` and ` + bt + `remove` + bt + `)
+- ` + bt + `apk_deps` + bt + ` (optional, ` + bt + `add` + bt + ` only): space-separated extra Alpine packages
 
 Examples:
 ` + "```" + `
-php_ext(action: "list")                                        // list extensions for current project's PHP version
-php_ext(action: "list", version: "8.4")                        // list extensions for 8.4
-php_ext(action: "add", extension: "imagick")                   // add imagick to current project's PHP version
+php_ext(action: "list")
+php_ext(action: "add", extension: "imagick")
 php_ext(action: "add", extension: "redis", version: "8.3")
+php_ext(action: "add", extension: "ssh2", apk_deps: "libssh2-dev")
 php_ext(action: "remove", extension: "imagick")
 ` + "```" + `
 
@@ -1427,7 +1430,7 @@ Read ` + bt + `status()` + bt + ` for ` + bt + `dns.tld` + bt + ` and ` + bt + `
 | ` + bt + `sites` + bt + ` | List all registered sites with framework and worker status — call this first |
 | ` + bt + `runtime_versions` + bt + ` | List installed PHP and Node.js versions with defaults |
 | ` + bt + `php_list` + bt + ` | List installed PHP versions, marking the global default |
-| ` + bt + `php_ext` + bt + ` | Manage custom PHP extensions — ` + bt + `action` + bt + `: ` + bt + `list` + bt + ` / ` + bt + `add` + bt + ` / ` + bt + `remove` + bt + `; ` + bt + `add` + bt + ` and ` + bt + `remove` + bt + ` rebuild FPM image and restart container |
+| ` + bt + `php_ext` + bt + ` | Manage custom PHP extensions — ` + bt + `action` + bt + `: ` + bt + `list` + bt + ` / ` + bt + `add` + bt + ` / ` + bt + `remove` + bt + `; ` + bt + `add` + bt + ` and ` + bt + `remove` + bt + ` rebuild FPM image and restart container; ` + bt + `add` + bt + ` verifies the extension loaded and accepts ` + bt + `apk_deps` + bt + ` for extra Alpine build packages |
 | ` + bt + `artisan` + bt + ` | Run ` + bt + `php artisan` + bt + ` inside the PHP-FPM container (Laravel only) |
 | ` + bt + `console` + bt + ` | Run the framework's console command (e.g. ` + bt + `php bin/console` + bt + ` for Symfony) — non-Laravel frameworks with a ` + bt + `console` + bt + ` field |
 | ` + bt + `composer` + bt + ` | Run ` + bt + `composer` + bt + ` inside the PHP-FPM container |

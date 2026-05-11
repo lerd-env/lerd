@@ -36,6 +36,10 @@ type GlobalConfig struct {
 		XdebugEnabled  map[string]bool     `yaml:"xdebug_enabled"  mapstructure:"xdebug_enabled"`
 		XdebugMode     map[string]string   `yaml:"xdebug_mode,omitempty" mapstructure:"xdebug_mode"`
 		Extensions     map[string][]string `yaml:"extensions"      mapstructure:"extensions"`
+		// ExtApkDeps maps a custom extension name to extra Alpine packages its
+		// build needs. Keyed by extension (deps don't vary by PHP version).
+		// lerd already knows the deps for some extensions; this is for the rest.
+		ExtApkDeps map[string][]string `yaml:"ext_apk_deps,omitempty" mapstructure:"ext_apk_deps"`
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
@@ -303,6 +307,14 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			out.PHP.Extensions[k] = cp
 		}
 	}
+	if in.PHP.ExtApkDeps != nil {
+		out.PHP.ExtApkDeps = make(map[string][]string, len(in.PHP.ExtApkDeps))
+		for k, v := range in.PHP.ExtApkDeps {
+			cp := make([]string, len(v))
+			copy(cp, v)
+			out.PHP.ExtApkDeps[k] = cp
+		}
+	}
 	if in.ParkedDirectories != nil {
 		out.ParkedDirectories = append([]string(nil), in.ParkedDirectories...)
 	}
@@ -455,7 +467,8 @@ func (c *GlobalConfig) AddExtension(version, ext string) {
 	c.PHP.Extensions[version] = append(c.PHP.Extensions[version], ext)
 }
 
-// RemoveExtension removes ext from the custom extension list for version.
+// RemoveExtension removes ext from the custom extension list for version, and
+// drops any extra apk deps recorded for it once no version still uses it.
 func (c *GlobalConfig) RemoveExtension(version, ext string) {
 	if c.PHP.Extensions == nil {
 		return
@@ -472,6 +485,51 @@ func (c *GlobalConfig) RemoveExtension(version, ext string) {
 	} else {
 		c.PHP.Extensions[version] = filtered
 	}
+	stillUsed := false
+	for _, list := range c.PHP.Extensions {
+		for _, e := range list {
+			if e == ext {
+				stillUsed = true
+			}
+		}
+	}
+	if !stillUsed {
+		delete(c.PHP.ExtApkDeps, ext)
+		if len(c.PHP.ExtApkDeps) == 0 {
+			c.PHP.ExtApkDeps = nil
+		}
+	}
+}
+
+// GetExtApkDeps returns the user-configured extra Alpine packages for ext.
+func (c *GlobalConfig) GetExtApkDeps(ext string) []string {
+	if c.PHP.ExtApkDeps == nil {
+		return nil
+	}
+	return c.PHP.ExtApkDeps[ext]
+}
+
+// AllExtApkDeps returns the full user-configured extension → apk deps map.
+func (c *GlobalConfig) AllExtApkDeps() map[string][]string {
+	return c.PHP.ExtApkDeps
+}
+
+// SetExtApkDeps records (or clears, when deps is empty) the extra Alpine
+// packages needed to build ext.
+func (c *GlobalConfig) SetExtApkDeps(ext string, deps []string) {
+	if len(deps) == 0 {
+		delete(c.PHP.ExtApkDeps, ext)
+		if len(c.PHP.ExtApkDeps) == 0 {
+			c.PHP.ExtApkDeps = nil
+		}
+		return
+	}
+	if c.PHP.ExtApkDeps == nil {
+		c.PHP.ExtApkDeps = map[string][]string{}
+	}
+	cp := make([]string, len(deps))
+	copy(cp, deps)
+	c.PHP.ExtApkDeps[ext] = cp
 }
 
 // IsDumpsEnabled reports whether the lerd dump bridge is on for all PHP
