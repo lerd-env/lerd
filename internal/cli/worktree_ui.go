@@ -239,6 +239,10 @@ func applyWorktreeBuildRequest(site *config.Site, worktreePath, requested string
 	scripts := AvailableBuildScripts(worktreePath)
 	kind, value := resolveBuildChoice(requested, eligible, optedIn, scripts)
 
+	if requested == "" || requested == "auto" {
+		logAutoBuildResolution(log, kind, value)
+	}
+
 	choice := worktreeBuildChoice{kind: kind, value: value}
 	if kind == "worker" {
 		if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok {
@@ -246,6 +250,20 @@ func applyWorktreeBuildRequest(site *config.Site, worktreePath, requested string
 		}
 	}
 	ApplyWorktreeBuildChoice(site, worktreePath, choice, log)
+}
+
+// logAutoBuildResolution announces what "Automatic" picked and why, so the UI
+// modal log makes the decision visible instead of burying it under the
+// existing per-kind action line.
+func logAutoBuildResolution(log io.Writer, kind, value string) {
+	switch kind {
+	case "worker":
+		logf(log, "Automatic: starting asset worker %q (opted-in via parent .lerd.yaml, replaces_build:true). No `npm run build` will run, the worker serves assets itself.", value)
+	case "script":
+		logf(log, "Automatic: running `npm run %s` (no asset worker opted in to replace the build).", value)
+	case "skip":
+		logf(log, "Automatic: nothing to do, no eligible asset worker and no production build script (build/prod/build:prod/build-prod/production) found. First request may throw ViteManifestNotFoundException until you run `npm run dev` or `npm run build`.")
+	}
 }
 
 func dbChoiceYieldsEmptySchema(choice string) bool {

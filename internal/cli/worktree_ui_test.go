@@ -1,10 +1,12 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -189,4 +191,52 @@ func TestResolveBuildChoice(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestLogAutoBuildResolution(t *testing.T) {
+	cases := []struct {
+		name     string
+		kind     string
+		value    string
+		contains []string
+	}{
+		{
+			name:     "worker explains opt-in and that no build runs",
+			kind:     "worker",
+			value:    "vite",
+			contains: []string{"Automatic", "asset worker", "\"vite\"", "opted-in", "replaces_build", "No `npm run build`"},
+		},
+		{
+			name:     "script reports the chosen npm script",
+			kind:     "script",
+			value:    "build",
+			contains: []string{"Automatic", "`npm run build`", "no asset worker opted in"},
+		},
+		{
+			name:     "skip lists candidate script names and warns about manifest",
+			kind:     "skip",
+			value:    "",
+			contains: []string{"Automatic", "nothing to do", "build/prod/build:prod/build-prod/production", "ViteManifestNotFoundException"},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			logAutoBuildResolution(&buf, c.kind, c.value)
+			got := buf.String()
+			for _, want := range c.contains {
+				if !strings.Contains(got, want) {
+					t.Errorf("missing %q in output:\n%s", want, got)
+				}
+			}
+		})
+	}
+
+	t.Run("unknown kind emits nothing", func(t *testing.T) {
+		var buf bytes.Buffer
+		logAutoBuildResolution(&buf, "weird", "x")
+		if buf.Len() != 0 {
+			t.Errorf("expected no output, got %q", buf.String())
+		}
+	})
 }

@@ -128,6 +128,8 @@ func ApplyWorktreeBuildChoice(site *config.Site, worktreePath string, choice wor
 		} else {
 			logf(log, "Frontend built.")
 		}
+	case "skip":
+		logf(log, "Skipping frontend asset build. Run `npm run dev` or `npm run build` in the worktree before the first request.")
 	}
 }
 
