@@ -43,6 +43,7 @@ Each event is one line of JSON. The shape is stable from v1 of the protocol:
   "ctx": {
     "type": "fpm",
     "site": "acme",
+    "branch": "feat-a",
     "domain": "acme.test",
     "request": "GET /users/42",
     "pid": 1234
@@ -52,6 +53,8 @@ Each event is one line of JSON. The shape is stable from v1 of the protocol:
   "text": "App\\Models\\User {#42 ...}"
 }
 ```
+
+`ctx.branch` is set when the dump came from a worktree, so a request to `feat-a.acme.test` carries `branch: "feat-a"` alongside the parent `site: "acme"`. Plumbed end-to-end via `LERD_SITE` and `LERD_BRANCH` fastcgi params on the worktree vhost, so the dashboard renders a branch chip per row, the CLI tail prints `<site>/<branch>` in the header, and TUI / MCP filters can scope by branch. Parent-site requests leave the field empty.
 
 Reserved fields: `tree` (structured cloner output, populated in a future revision) and `trunc` (set to `true` when the cloner output exceeded the per-event cap).
 

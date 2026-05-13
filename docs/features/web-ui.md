@@ -38,6 +38,10 @@ The default landing page is a **Dashboard** with at-a-glance widgets across site
 
 On mobile the dashboard, list, and detail panels are full-screen with a bottom tab bar for navigation that includes Dashboard alongside Sites, Services, and System.
 
+### Language
+
+The dashboard ships in seven languages: English, German, Spanish, French, Indonesian, Dutch, and Portuguese. A language switcher at the bottom of the left rail cycles through the installed locales; the choice persists in `localStorage` and applies on the next render without a page reload. Strings are wired through Paraglide; new keys fall back to English when a locale hasn't been translated yet.
+
 ---
 
 ## Dashboard
@@ -83,6 +87,7 @@ Selecting a site opens the detail panel with:
 - **Pause / Resume**: suspend a site's nginx vhost without unlinking it; the site stays registered and FPM keeps running. When a paused site is selected, the detail pane hides the overview/tinker/dumps tabs and shows a centered Resume placeholder so it's obvious the site is offline on purpose rather than broken
 - **Unlink button**: remove a site from nginx without touching the terminal
 - **Git Worktrees**: when the project uses git worktrees, each branch and its domain are listed with a direct open link. Each row exposes its own framework-worker toggles next to the parent toggles, so a per-worktree Vite dev server, queue, or schedule worker can be flipped on without affecting the parent. Worktree workers run under `lerd-<wname>-<site>-<wt>` units; the Workers group on the Services tab groups them under the same label as the parent site (e.g. "Vite") with a `branch` chip per row
+- **Worktree management modal**: the worktrees icon next to the branch picker opens a modal for adding and removing worktrees without dropping to the CLI. Adding asks for a new branch or existing branch, the database choice (share parent / isolated empty / clone main / clone another worktree / reuse a preserved isolated DB), an optional Run migrations checkbox, and the frontend-asset build choice (Automatic / asset worker / npm script / skip). Removing each worktree row inline-confirms with a *Discard uncommitted changes* checkbox and, when isolated, an *Also drop database* checkbox. Submission streams the underlying `lerd worktree add/remove` output live in the modal, including the `Automatic: ...` resolution line so the picked build path is never silent
 - **Live PHP-FPM log**: streams FPM output for the selected site; tab switches to queue/horizon/schedule/reverb logs when those workers are running
 - **Service badges**: beneath the path / git branch line, every service from the project's `.lerd.yaml` is shown as a small pill (green when running, grey when stopped). Click any badge to jump to that service's detail panel on the Services tab.
 
