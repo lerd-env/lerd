@@ -110,13 +110,16 @@ Once the MCP server is connected, your AI assistant has access to:
 | `horizon` | Start or stop Laravel Horizon for a site — `action`: `start` / `stop` (use instead of `queue` when `laravel/horizon` is installed) |
 | `reverb` | Start or stop the Reverb WebSocket server for a site — `action`: `start` / `stop` |
 | `schedule` | Start or stop the task scheduler for a site — `action`: `start` / `stop` |
-| `worker` | Start or stop any named framework worker (e.g. `messenger`, `pulse`) — `action`: `start` / `stop` |
-| `worker_list` | List all workers defined for a site's framework with running status |
+| `worker` | Start or stop any named framework worker (e.g. `messenger`, `pulse`) — `action`: `start` / `stop`. Accepts an optional `branch` to target a per-worktree unit (e.g. `vite` on `feat-a`) instead of the parent site's worker |
+| `worker_list` | List all workers defined for a site's framework with running status. Accepts an optional `branch` so worktree-scoped runtime can be inspected separately from the parent |
+| `workers_mode` | Get or set the worker exec mode for a site — `action`: `get` / `set`, `mode`: `exec` (default; one container shared by all workers) or `container` (one container per worker). Used when an Octane-style runtime needs process isolation per worker |
+| `workers_heal` | Restart every worker reported as failing in one pass. Mirrors the dashboard's heal-all button and the TUI `H` keybind |
+| `workers_health` | Snapshot of every framework worker across every site with its running / failing state and the last error captured from journalctl, useful before deciding to heal |
 | `framework_list` | List all framework definitions including their workers |
 | `framework_add` | Add or update a framework definition; use `name: "laravel"` to add custom workers to Laravel |
 | `framework_remove` | Remove a user-defined framework; for `laravel` removes only custom worker additions |
-| `site_php` | Change the PHP version for a registered site: writes `.php-version`, updates registry, regenerates nginx vhost |
-| `site_node` | Change the Node.js version for a registered site: writes `.node-version`, installs via fnm if needed |
+| `site_php` | Change the PHP version for a registered site: writes `.php-version`, updates registry, regenerates nginx vhost. Accepts an optional `branch` to override the worktree's PHP version without touching the parent |
+| `site_node` | Change the Node.js version for a registered site: writes `.node-version`, installs via fnm if needed. Accepts an optional `branch` to set the version per worktree |
 | `site_control` | Pause, unpause, restart, or rebuild a site — `action`: `pause` / `unpause` / `restart` / `rebuild` (pause replaces vhost with landing page; rebuild only for custom containers) |
 | `site_runtime` | Switch between shared PHP-FPM and per-site FrankenPHP runtime; supports framework-aware worker mode (Laravel Octane, Symfony runtime) |
 | `stripe` | Start or stop a Stripe webhook listener for a site — `action`: `start` / `stop` (reads `STRIPE_SECRET` from `.env` on start) |
@@ -126,6 +129,11 @@ Once the MCP server is connected, your AI assistant has access to:
 | `dns_diagnose` | Layered DNS chain walk (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup); each rung returns `status` + `hint` with a `first_failure` index pointing at the broken layer |
 | `which` | Show the resolved PHP version, Node version, document root, and nginx config for the current site |
 | `check` | Validate `.lerd.yaml` as structured JSON (PHP version, services, framework); returns valid/errors/warnings with per-field status |
+| `dumps_status` | Report whether the in-process dump bridge is enabled, with the socket path and queue depth |
+| `dumps_recent` | Fetch the last N `dump()` / `dd()` events from the in-memory ring with optional `site`, `ctx` (`fpm` / `cli`), `since_id`, and `limit` filters |
+| `dumps_clear` | Drop every event from the ring so the dashboard, TUI, and CLI viewers start fresh |
+| `dumps_toggle` | Enable or disable the dump bridge — `action`: `on` / `off`. `on` writes the FPM `auto_prepend_file` sentinel and restarts the FPM units; `off` removes the sentinel so requests stop being intercepted |
+| `bug_report` | Generate a structured bug report bundle (system info, lerd version, podman state, recent logs) so the assistant can paste a single block into a GitHub issue |
 
 ---
 
