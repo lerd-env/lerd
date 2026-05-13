@@ -5,8 +5,19 @@
   import SiteLogs from './SiteLogs.svelte';
   import SiteTinkerTab from './SiteTinkerTab.svelte';
   import DumpsTab from '$tabs/DumpsTab.svelte';
-  import type { Site } from '$stores/sites';
+  import { resumeSite, loadSites, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
+
+  let resumeBusy = $state(false);
+  async function onResume() {
+    resumeBusy = true;
+    try {
+      await resumeSite(site.domain);
+      await loadSites();
+    } finally {
+      resumeBusy = false;
+    }
+  }
 
   interface Props {
     site: Site;
@@ -62,14 +73,33 @@
 <DetailPanel>
   <SiteHeader
     {site}
-    {tabs}
+    tabs={site.paused ? undefined : tabs}
     {activeWorktreeBranch}
     onWorktreeChange={(b) => (activeWorktreeBranch = b)}
   />
-  {#if active === 'overview'}
-    {#if !site.paused}
-      <SiteControls {site} {activeWorktreeBranch} />
-    {/if}
+  {#if site.paused}
+    <div class="flex-1 flex items-center justify-center px-6">
+      <div class="flex flex-col items-center gap-3 max-w-md text-center">
+        <svg class="w-10 h-10 text-gray-400 dark:text-gray-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="6" y="5" width="4" height="14" rx="1" />
+          <rect x="14" y="5" width="4" height="14" rx="1" />
+        </svg>
+        <h2 class="text-base font-semibold text-gray-700 dark:text-gray-200">{m.sites_pausedDetail_title()}</h2>
+        <p class="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+          {m.sites_pausedDetail_hint({ domain: site.domain })}
+        </p>
+        <button
+          type="button"
+          onclick={onResume}
+          disabled={resumeBusy}
+          class="mt-1 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-50 transition-colors"
+        >
+          {resumeBusy ? m.sites_pausedDetail_busy() : m.sites_pausedDetail_action()}
+        </button>
+      </div>
+    </div>
+  {:else if active === 'overview'}
+    <SiteControls {site} {activeWorktreeBranch} />
     <SiteLogs {site} {activeWorktreeBranch} />
   {:else if active === 'tinker'}
     {#key site.domain + '@' + activeWorktreeBranch}
