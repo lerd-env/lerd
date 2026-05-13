@@ -46,6 +46,9 @@ features:
   - icon: 🧪
     title: Tinker tab
     details: In-browser PHP REPL per site with autocomplete, live linting, and collapsible dump trees. Works on Laravel, Symfony, and any composer-based PHP project.
+  - icon: 🛰️
+    title: Live dump() / dd() viewer
+    details: Every dump() and dd() call from your running app streams to the dashboard, TUI, MCP, and `lerd dump tail`, scoped per site and per worktree branch. Response bodies stay clean unless you flip passthrough on.
   - icon: 🧩
     title: Framework store
     details: YAML framework definitions for Laravel, Symfony, WordPress, Drupal, CakePHP, and Statamic, auto-detected on `lerd link`.
