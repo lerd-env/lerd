@@ -9,7 +9,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS-lightgrey)]()
 [![Docs](https://img.shields.io/badge/docs-geodro.github.io%2Flerd-blue)](https://geodro.github.io/lerd/)
 
-![Lerd Web UI](screenshots/app-1.png)
+![Lerd dashboard tour](docs/assets/screenshots/tour.gif)
 
 Lerd runs Nginx, PHP-FPM, and your services as rootless Podman containers,
 designed for PHP developers on Linux and macOS.
