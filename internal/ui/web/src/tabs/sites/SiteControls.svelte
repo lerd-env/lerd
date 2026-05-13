@@ -52,13 +52,13 @@
   }
 
   async function disableIsolation() {
-    if (!confirm('Drop the isolated database for this worktree? Migrations applied here will be lost.')) {
+    if (!confirm(m.sites_controls_dbDropConfirm())) {
       return;
     }
     dbBusy = true;
     try {
       const res = await setWorktreeDBIsolated(site.domain, activeWorktreeBranch, false);
-      if (!res.ok) alert('Failed to toggle worktree DB: ' + (res.error || ''));
+      if (!res.ok) alert(m.sites_controls_dbToggleFailed({ error: res.error || '' }));
       await loadSites();
     } finally {
       dbBusy = false;
@@ -69,7 +69,7 @@
     dbBusy = true;
     try {
       const res = await setWorktreeDBIsolated(site.domain, activeWorktreeBranch, true, source);
-      if (!res.ok) alert('Failed to isolate worktree DB: ' + (res.error || ''));
+      if (!res.ok) alert(m.sites_controls_dbIsolateFailed({ error: res.error || '' }));
       await loadSites();
     } finally {
       dbBusy = false;
@@ -198,11 +198,11 @@
         value={effectivePhp}
         onchange={onPhpChange}
         disabled={versionBusy}
-        title={phpInherited ? 'Inherits from main' : ''}
+        title={phpInherited ? m.sites_controls_inheritsFromMain() : ''}
         class="text-xs bg-white dark:bg-lerd-bg border rounded-sm px-2 py-1 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-lerd-muted focus:outline-hidden focus:border-lerd-red/50 disabled:opacity-50 cursor-pointer transition-colors {phpInherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
       >
         <option value="" disabled class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">{m.sites_controls_phpPlaceholder()}</option>
-        {#each $phpVersions as v (v)}<option value={v} class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">PHP {v}{activeWorktreeBranch && v === effectivePhp && phpInherited ? ' (inherited)' : ''}</option>{/each}
+        {#each $phpVersions as v (v)}<option value={v} class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">PHP {v}{activeWorktreeBranch && v === effectivePhp && phpInherited ? ' ' + m.sites_controls_inheritedSuffix() : ''}</option>{/each}
       </select>
     {:else}
       <span class="text-xs text-gray-400 border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1 opacity-50">PHP ...</span>
@@ -213,11 +213,11 @@
         value={effectiveNode}
         onchange={onNodeChange}
         disabled={versionBusy}
-        title={nodeInherited ? 'Inherits from main' : ''}
+        title={nodeInherited ? m.sites_controls_inheritsFromMain() : ''}
         class="text-xs bg-white dark:bg-lerd-bg border rounded-sm px-2 py-1 text-gray-700 dark:text-gray-300 hover:border-gray-300 dark:hover:border-lerd-muted focus:outline-hidden focus:border-lerd-red/50 disabled:opacity-50 cursor-pointer transition-colors {nodeInherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
       >
         <option value="" class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">{m.sites_controls_nodeDefault()}</option>
-        {#each $nodeVersions as v (v)}<option value={v} class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">Node {v}{activeWorktreeBranch && v === effectiveNode && nodeInherited ? ' (inherited)' : ''}</option>{/each}
+        {#each $nodeVersions as v (v)}<option value={v} class="bg-white text-gray-700 dark:bg-lerd-bg dark:text-gray-300">Node {v}{activeWorktreeBranch && v === effectiveNode && nodeInherited ? ' ' + m.sites_controls_inheritedSuffix() : ''}</option>{/each}
       </select>
     {/if}
 
@@ -234,14 +234,14 @@
     {/if}
 
     {#if activeWorktreeBranch && dbCapable}
-      <div class="flex items-center gap-1.5" title={dbIsolated ? `Worktree DB: ${activeWorktree?.db_database ?? ''}` : 'Share parent database'}>
+      <div class="flex items-center gap-1.5" title={dbIsolated ? m.sites_controls_dbIsolatedTitle({ db: activeWorktree?.db_database ?? '' }) : m.sites_controls_dbShareParent()}>
         <Toggle
           on={dbIsolated}
           tone="teal"
           loading={dbBusy}
           onclick={onDBIsolatedChange}
         />
-        <span class="text-xs text-gray-500 dark:text-gray-400">Isolated DB</span>
+        <span class="text-xs text-gray-500 dark:text-gray-400">{m.sites_controls_dbIsolated()}</span>
       </div>
     {/if}
 
@@ -287,7 +287,7 @@
               loading={isPending('worker:' + w.name)}
               disabled={isPending('worker:' + w.name)}
               onclick={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w, activeWorktreeBranch))}
-              title={w.running ? 'Stop ' + (w.label || w.name) : 'Start ' + (w.label || w.name)}
+              title={w.running ? m.sites_controls_workerToggle_on({ label: w.label || w.name }) : m.sites_controls_workerToggle_off({ label: w.label || w.name })}
             />
             <span class="text-xs text-gray-500 dark:text-gray-400">{w.label || w.name}</span>
           </div>
