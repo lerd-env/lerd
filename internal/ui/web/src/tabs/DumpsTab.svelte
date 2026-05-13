@@ -122,7 +122,7 @@
     {/if}
     <button
       type="button"
-      class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-lerd-hover"
+      class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5"
       onclick={onClear}
     >
       {m.common_clear()}
