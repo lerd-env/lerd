@@ -186,6 +186,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case refreshMsg:
 		return m, loadCmd()
 
+	case busMsg:
+		// Re-chain busCmd or the subscription stops draining after the
+		// first publish. The snapshot reload runs in parallel.
+		return m, tea.Batch(loadCmd(), busCmd(m.sub))
+
 	case snapshotMsg:
 		m.snap = msg.snap
 		m.clampCursors()

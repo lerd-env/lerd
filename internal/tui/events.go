@@ -7,9 +7,15 @@ import (
 	"github.com/geodro/lerd/internal/eventbus"
 )
 
-// refreshMsg arrives on every tick and on every eventbus publish. Update's
-// handler reloads the snapshot off the main loop.
+// refreshMsg arrives on every tick. Update's handler reloads the snapshot
+// off the main loop.
 type refreshMsg struct{}
+
+// busMsg signals that the eventbus subscription fired a publish. Distinct
+// from refreshMsg so Update can re-chain busCmd to keep the subscription
+// long-lived. tea.Cmd returns a single tea.Msg per invocation, so without
+// the re-chain the channel stops being drained after the first publish.
+type busMsg struct{}
 
 // snapshotMsg carries a freshly-loaded Snapshot from a background goroutine
 // back into the tea program.
@@ -31,15 +37,15 @@ func loadCmd() tea.Cmd {
 	return func() tea.Msg { return snapshotMsg{snap: loadSnapshot()} }
 }
 
-// busCmd subscribes to the in-process eventbus and emits a refreshMsg the
-// first time a publish lands. The caller chains busCmd to itself from Update
-// so the subscription is long-lived.
+// busCmd waits for the next publish on the eventbus subscription and
+// emits a busMsg. The Update handler must re-chain busCmd on every busMsg
+// or subsequent publishes pile up on the channel unread.
 func busCmd(sub *eventbus.Subscriber) tea.Cmd {
 	return func() tea.Msg {
 		_, ok := <-sub.C
 		if !ok {
 			return nil
 		}
-		return refreshMsg{}
+		return busMsg{}
 	}
 }
