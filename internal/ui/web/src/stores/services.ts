@@ -385,6 +385,7 @@ export function detailLabel(s: Service): string {
   if (s.stripe_listener_site) return 'Stripe listener';
   if (s.schedule_worker_site) return 'Scheduler';
   if (s.reverb_site) return 'Reverb';
+  if (s.worker_site && s.worker_name === 'vite') return 'Vite';
   if (s.worker_site && s.worker_name) return s.worker_name + ' worker';
   return serviceLabel(s.name);
 }

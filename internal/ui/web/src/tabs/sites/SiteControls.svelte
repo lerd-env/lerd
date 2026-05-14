@@ -369,6 +369,8 @@
       {/if}
 
       {#each site.framework_workers || [] as w (w.name)}
+        {@const isVite = w.name === 'vite'}
+        {@const shortLabel = isVite ? m.sites_controls_vite() : w.label || w.name}
         <div class="flex items-center gap-1.5">
           <Toggle
             on={Boolean(w.running)}
@@ -377,9 +379,15 @@
             loading={isPending('worker:' + w.name)}
             disabled={isPending('worker:' + w.name)}
             onclick={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w))}
-            title={w.running ? 'Stop ' + (w.label || w.name) : 'Start ' + (w.label || w.name)}
+            title={isVite
+              ? w.running
+                ? m.sites_controls_viteToggle_on()
+                : m.sites_controls_viteToggle_off()
+              : w.running
+                ? 'Stop ' + shortLabel
+                : 'Start ' + shortLabel}
           />
-          <span class="text-xs text-gray-500 dark:text-gray-400">{w.label || w.name}</span>
+          <span class="text-xs text-gray-500 dark:text-gray-400">{shortLabel}</span>
         </div>
       {/each}
     {/if}
