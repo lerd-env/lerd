@@ -622,6 +622,9 @@ func TestEnsureForwardedConf_writesMapBlocks(t *testing.T) {
 	if !strings.Contains(content, "map $http_x_forwarded_proto $real_forwarded_proto") {
 		t.Errorf("expected real_forwarded_proto map, got:\n%s", content)
 	}
+	if !strings.Contains(content, "map $http_x_forwarded_port $real_forwarded_port") {
+		t.Errorf("expected real_forwarded_port map, got:\n%s", content)
+	}
 }
 
 func TestEnsureCustomD_createsDirectory(t *testing.T) {
@@ -652,7 +655,7 @@ func TestGenerateVhost_includesForwardedFastcgiParams(t *testing.T) {
 		"fastcgi_param SERVER_NAME $real_forwarded_host",
 		"fastcgi_param HTTP_X_FORWARDED_HOST $real_forwarded_host",
 		"fastcgi_param HTTP_X_FORWARDED_PROTO $real_forwarded_proto",
-		"fastcgi_param HTTP_X_FORWARDED_PORT $server_port",
+		"fastcgi_param HTTP_X_FORWARDED_PORT $real_forwarded_port",
 		"fastcgi_param HTTP_X_REAL_IP $remote_addr",
 		"fastcgi_param HTTP_X_FORWARDED_FOR $remote_addr",
 	}

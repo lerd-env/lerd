@@ -456,7 +456,7 @@ func toolList() []mcpTool {
 		},
 		{
 			Name:        "site_tls",
-			Description: "Toggle HTTPS for a site (mkcert). Updates APP_URL in .env.",
+			Description: "Toggle HTTPS for a site (mkcert). Syncs APP_URL + VITE_REVERB_* in .env, reloads nginx, restarts Stripe listener and LAN share.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
@@ -3366,74 +3366,36 @@ func execSiteDomainRemove(args map[string]any) (any, *rpcError) {
 }
 
 func execSecure(args map[string]any) (any, *rpcError) {
-	siteName := strArg(args, "site")
-	if siteName == "" {
-		return toolErr("site is required"), nil
-	}
-
-	site, err := config.FindSite(siteName)
-	if err != nil {
-		return toolErr(fmt.Sprintf("site %q not found — run site_link first", siteName)), nil
-	}
-
-	if err := certs.SecureSite(*site); err != nil {
-		return toolErr("issuing certificate: " + err.Error()), nil
-	}
-
-	site.Secured = true
-	if err := config.AddSite(*site); err != nil {
-		return toolErr("updating site registry: " + err.Error()), nil
-	}
-
-	if err := envfile.ApplyUpdates(site.Path, map[string]string{
-		"APP_URL": "https://" + site.PrimaryDomain(),
-	}); err != nil {
-		// Non-fatal — .env may not exist.
-		_ = err
-	}
-
-	_ = config.SetProjectSecured(site.Path, true)
-
-	if err := nginx.Reload(); err != nil {
-		return toolErr("reloading nginx: " + err.Error()), nil
-	}
-
-	return toolOK(fmt.Sprintf("Secured: https://%s", site.PrimaryDomain())), nil
+	return execToggleSecure(args, true)
 }
 
 func execUnsecure(args map[string]any) (any, *rpcError) {
+	return execToggleSecure(args, false)
+}
+
+// execToggleSecure is the MCP entry-point shared by site_secure / site_unsecure.
+// It funnels through siteops.SetSecured, the single source of truth shared
+// with CLI and UI. All post-toggle work (Stripe restart, LAN share refresh)
+// lives inside SetSecured so MCP, CLI, and UI all do exactly the same thing.
+func execToggleSecure(args map[string]any, secured bool) (any, *rpcError) {
 	siteName := strArg(args, "site")
 	if siteName == "" {
 		return toolErr("site is required"), nil
 	}
-
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return toolErr(fmt.Sprintf("site %q not found", siteName)), nil
 	}
-
-	if err := certs.UnsecureSite(*site); err != nil {
-		return toolErr("removing certificate: " + err.Error()), nil
+	if err := siteops.SetSecured(site, secured); err != nil {
+		return toolErr(err.Error()), nil
 	}
-
-	site.Secured = false
-	if err := config.AddSite(*site); err != nil {
-		return toolErr("updating site registry: " + err.Error()), nil
+	scheme := "http"
+	state := "Unsecured"
+	if secured {
+		scheme = "https"
+		state = "Secured"
 	}
-
-	if err := envfile.ApplyUpdates(site.Path, map[string]string{
-		"APP_URL": "http://" + site.PrimaryDomain(),
-	}); err != nil {
-		_ = err
-	}
-
-	_ = config.SetProjectSecured(site.Path, false)
-
-	if err := nginx.Reload(); err != nil {
-		return toolErr("reloading nginx: " + err.Error()), nil
-	}
-
-	return toolOK(fmt.Sprintf("Unsecured: http://%s", site.PrimaryDomain())), nil
+	return toolOK(fmt.Sprintf("%s: %s://%s", state, scheme, site.PrimaryDomain())), nil
 }
 
 func execXdebugToggle(args map[string]any, enable bool) (any, *rpcError) {

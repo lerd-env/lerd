@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"compress/gzip"
 	"crypto/tls"
 	"fmt"
 	"io"
@@ -263,6 +264,9 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 		req.Header.Set("X-Forwarded-Proto", "https")
 		// Rewrite Host so nginx routes to the right vhost.
 		req.Host = domain
+		// Ask upstream to send uncompressed bodies so ModifyResponse can rewrite
+		// asset URLs without having to decompress every text response.
+		req.Header.Set("Accept-Encoding", "identity")
 	}
 
 	proxy.ModifyResponse = func(resp *http.Response) error {
@@ -280,23 +284,45 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 			resp.Header.Set("Location", loc)
 		}
 
+		ct := resp.Header.Get("Content-Type")
+		if !isTextContent(ct) {
+			return nil
+		}
+
 		// Rewrite body for text content (HTML/CSS/JS) so absolute asset URLs
 		// pointing to the local .test domain are replaced with the tunnel host.
-		// Skip encoded responses to avoid corrupting compressed data.
-		ct := resp.Header.Get("Content-Type")
+		// Most upstreams honour Accept-Encoding: identity, but some (PHP-FPM
+		// behind nginx with gzip on) compress anyway, so decode gzip ourselves.
 		enc := resp.Header.Get("Content-Encoding")
-		if isTextContent(ct) && (enc == "" || enc == "identity") {
-			body, err := io.ReadAll(resp.Body)
+		var body []byte
+		var err error
+		switch enc {
+		case "", "identity":
+			body, err = io.ReadAll(resp.Body)
 			resp.Body.Close()
 			if err != nil {
 				return err
 			}
-			body = bytes.ReplaceAll(body, []byte("://"+domain), []byte("://"+tunnelHost))
-			resp.Body = io.NopCloser(bytes.NewReader(body))
-			resp.ContentLength = int64(len(body))
-			resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		case "gzip":
+			gr, gErr := gzip.NewReader(resp.Body)
+			if gErr != nil {
+				return nil // leave untouched if we can't decompress
+			}
+			body, err = io.ReadAll(gr)
+			gr.Close()
+			resp.Body.Close()
+			if err != nil {
+				return err
+			}
+			resp.Header.Del("Content-Encoding")
+		default:
+			return nil // unknown encoding, leave untouched
 		}
 
+		body = bytes.ReplaceAll(body, []byte("://"+domain), []byte("://"+tunnelHost))
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		resp.ContentLength = int64(len(body))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
 		return nil
 	}
 

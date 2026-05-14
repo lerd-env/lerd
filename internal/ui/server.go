@@ -26,7 +26,6 @@ import (
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/eventbus"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
@@ -1921,24 +1920,19 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 
 	needsReload := false
 	switch action {
-	case "secure":
-		if err := certs.SecureSite(*site); err != nil {
+	case "secure", "unsecure":
+		// Funnel through the shared helper so cert + .env + .lerd.yaml +
+		// nginx reload + Stripe restart + LAN share refresh all stay in
+		// sync with the CLI and MCP paths. SetSecured posts to this same
+		// daemon's stripe:refresh / lan:refresh endpoints for the
+		// dependent listeners, so the in-process Stripe and share handlers
+		// run via the existing case handlers below.
+		if err := siteops.SetSecured(site, action == "secure"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
-		site.Secured = true
-		envfile.SyncPrimaryDomain(site.Path, site.PrimaryDomain(), true) //nolint:errcheck
-		_ = config.SetProjectSecured(site.Path, true)
-		needsReload = true
-	case "unsecure":
-		if err := certs.UnsecureSite(*site); err != nil {
-			writeJSON(w, SiteActionResponse{Error: err.Error()})
-			return
-		}
-		site.Secured = false
-		envfile.SyncPrimaryDomain(site.Path, site.PrimaryDomain(), false) //nolint:errcheck
-		_ = config.SetProjectSecured(site.Path, false)
-		needsReload = true
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
 	case "php":
 		version := r.URL.Query().Get("version")
 		if version == "" {
@@ -2157,6 +2151,23 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "lan:refresh":
+		// Re-bind the share proxy to the current site config. Called from
+		// CLI commands (secure/unsecure) that change the backend port the
+		// proxy targets so the running listener picks up the change.
+		if err := cli.LANShareRefreshIfRunning(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "stripe:refresh":
+		// Restart the Stripe listener with the current scheme/host so its
+		// --forward-to flag matches reality. Used by callers (MCP) that
+		// can't run the systemd commands inline.
+		cli.RestartStripeIfActive(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "lan:unshare":

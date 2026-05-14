@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"net"
@@ -431,6 +433,66 @@ func TestStartHostProxy_listensOnLoopback(t *testing.T) {
 		t.Fatalf("proxy not reachable on 127.0.0.1: %v", err)
 	}
 	resp.Body.Close()
+}
+
+func TestStartHostProxy_requestsIdentityEncoding(t *testing.T) {
+	var gotAE string
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAE = r.Header.Get("Accept-Encoding")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	resp := doProxy(t, port, "abc.trycloudflare.com")
+	resp.Body.Close()
+
+	if gotAE != "identity" {
+		t.Errorf("upstream Accept-Encoding = %q, want %q", gotAE, "identity")
+	}
+}
+
+func TestStartHostProxy_rewritesGzippedHTMLBody(t *testing.T) {
+	original := `<link rel="stylesheet" href="http://mysite.test/app.css"><script src="http://mysite.test/app.js"></script>`
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	if _, err := gw.Write([]byte(original)); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	gw.Close()
+	compressed := buf.Bytes()
+
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Write(compressed)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	resp := doProxy(t, port, "abc.trycloudflare.com")
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if resp.Header.Get("Content-Encoding") != "" {
+		t.Errorf("Content-Encoding = %q, want empty after rewrite", resp.Header.Get("Content-Encoding"))
+	}
+	if strings.Contains(string(body), "mysite.test") {
+		t.Errorf("body still contains local domain: %s", body)
+	}
+	if !strings.Contains(string(body), "abc.trycloudflare.com") {
+		t.Errorf("body does not contain tunnel host: %s", body)
+	}
 }
 
 func TestStartHostProxy_stopClosesListener(t *testing.T) {

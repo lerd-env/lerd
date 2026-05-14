@@ -35,7 +35,7 @@ server {
         fastcgi_param SERVER_NAME $real_forwarded_host;
         fastcgi_param HTTP_X_FORWARDED_HOST $real_forwarded_host;
         fastcgi_param HTTP_X_FORWARDED_PROTO $real_forwarded_proto;
-        fastcgi_param HTTP_X_FORWARDED_PORT $server_port;
+        fastcgi_param HTTP_X_FORWARDED_PORT $real_forwarded_port;
         fastcgi_param HTTP_X_REAL_IP $remote_addr;
         fastcgi_param HTTP_X_FORWARDED_FOR $remote_addr;
 {{if .LerdSite}}        fastcgi_param LERD_SITE {{.LerdSite}};

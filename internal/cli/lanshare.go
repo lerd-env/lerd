@@ -11,6 +11,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -134,6 +135,39 @@ func LANShareRunning(siteName string) bool {
 	defer lanShareMu.Unlock()
 	_, ok := lanShareServers[siteName]
 	return ok
+}
+
+// LANShareRefreshIfRunning closes any running share proxy for the site and
+// re-opens it using the current site config — needed when TLS gets toggled
+// (the proxy was bound to the previous backend port and Secured flag).
+// No-op when no proxy is running. Also refreshes any worktree shares so the
+// branch listeners pick up the same change.
+func LANShareRefreshIfRunning(siteName string) error {
+	wasRunning := LANShareRunning(siteName)
+	if wasRunning {
+		closeLANShareServer(siteName)
+		if _, err := LANShareStart(siteName); err != nil {
+			return fmt.Errorf("restarting LAN share for %s: %w", siteName, err)
+		}
+	}
+	entries, err := config.WorktreeLANsForSite(siteName)
+	if err != nil {
+		return nil
+	}
+	for _, e := range entries {
+		key := worktreeLANServerKey(e.Site, e.Branch)
+		lanShareMu.Lock()
+		_, running := lanShareServers[key]
+		lanShareMu.Unlock()
+		if !running {
+			continue
+		}
+		closeLANShareServer(key)
+		if _, err := LANShareStartWorktree(e.Site, e.Branch); err != nil {
+			return fmt.Errorf("restarting worktree share %s/%s: %w", e.Site, e.Branch, err)
+		}
+	}
+	return nil
 }
 
 // RestoreLANShareProxies restarts share proxies for every site that has a
@@ -363,10 +397,18 @@ func DropOrphanedWorktreeLANShares(site *config.Site, liveBranches map[string]bo
 	}
 }
 
+// vitePrefix is the URL prefix the LAN share proxy uses to forward requests
+// to a per-site Vite dev server running on loopback. Body rewriting maps
+// leaked loopback URLs like http://[::1]:5173/ to http://<lanHost><vitePrefix>5173/
+// so LAN clients hit them through the share proxy (same-origin, WebSocket-capable).
+const vitePrefix = "/__lerd_vite__/"
+
 // startLANShareProxy starts an HTTP reverse proxy listening on 0.0.0.0:<port>.
 // It rewrites the Host header to domain so nginx routes to the right vhost,
 // sets X-Forwarded-Host to the incoming address, and rewrites response bodies
-// and Location headers to replace domain URLs with the LAN address.
+// and Location headers to replace domain URLs with the LAN address. Requests
+// under vitePrefix are forwarded to a Vite dev server on loopback so dev-mode
+// JS/CSS assets and the HMR websocket work from LAN devices.
 func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bool) (*http.Server, error) {
 	var target *url.URL
 	if secured {
@@ -391,6 +433,12 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 		orig(req)
 		req.Header.Set("X-Forwarded-Host", lanHost)
 		req.Header.Set("X-Forwarded-Proto", scheme)
+		// Tell upstream the public port so frameworks don't fall back to
+		// nginx's SERVER_PORT (e.g. 443 on the HTTPS vhost) when building
+		// absolute URLs — that caused asset URLs like http://<ip>:443/foo.
+		if _, p, err := net.SplitHostPort(lanHost); err == nil && p != "" {
+			req.Header.Set("X-Forwarded-Port", p)
+		}
 		req.Host = domain
 		// Tell upstream not to compress so we can rewrite bodies without
 		// having to decompress/recompress every response.
@@ -456,9 +504,296 @@ func startLANShareProxy(domain string, port, httpPort, httpsPort int, secured bo
 		return nil, fmt.Errorf("binding port %d: %w", port, err)
 	}
 
-	srv := &http.Server{Handler: proxy}
+	handler := newLANShareHandler(proxy)
+	srv := &http.Server{Handler: handler}
 	go srv.Serve(ln) //nolint:errcheck
 	return srv, nil
+}
+
+// lanShareHandler dispatches LAN share requests: requests with the Vite
+// prefix go to a per-port loopback reverse proxy, everything else flows to
+// the main (nginx) proxy. Per-port proxies are cached to keep connection
+// pools warm across requests. activeVitePort remembers the most recently
+// seen Vite port so Vite-internal paths without our prefix still route to
+// the dev server — module imports lose the prefix after one hop and the
+// Referer alone can't be relied on.
+type lanShareHandler struct {
+	main http.Handler
+
+	mu             sync.Mutex
+	viteProxies    map[int]*httputil.ReverseProxy
+	activeVitePort int
+}
+
+func newLANShareHandler(main http.Handler) *lanShareHandler {
+	return &lanShareHandler{main: main, viteProxies: map[int]*httputil.ReverseProxy{}}
+}
+
+func (h *lanShareHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if port, rest, ok := parseVitePrefixPath(r.URL.Path); ok {
+		r.URL.Path = rest
+		r.URL.RawPath = "" // force re-encode from Path
+		// The loopback body rewriter also catches non-Vite services running
+		// on loopback (RustFS/S3 on :9000, mailpit, etc.). Only mark this
+		// port as the active Vite when the stripped path actually looks
+		// like Vite-served content — otherwise a RustFS image fetch would
+		// poison activeVitePort and break subsequent transitive Vite
+		// imports.
+		if isViteInternalPath(r.URL) {
+			h.setActiveVitePort(port)
+		}
+		h.viteProxy(port).ServeHTTP(w, r)
+		return
+	}
+	// Vite's HMR client opens a WebSocket to the page origin with no
+	// distinguishing path (just "/?token=..."). When we know the active
+	// Vite port, forward any WS upgrade there so HMR can connect.
+	if isWebSocketUpgrade(r) {
+		if port := h.getActiveVitePort(); port > 0 {
+			h.viteProxy(port).ServeHTTP(w, r)
+			return
+		}
+	}
+	// Vite-transformed JS imports absolute paths like /node_modules/... that
+	// don't carry our prefix. Route them to the most recently active Vite
+	// port for this share. Falls through to the main proxy if no Vite has
+	// been observed yet. We deliberately do NOT trust the Referer header —
+	// the share binds to 0.0.0.0 so any LAN device could forge a Referer
+	// pointing at an arbitrary loopback port (SSRF). activeVitePort, set
+	// only by genuine /__lerd_vite__/<port>/ path requests, already covers
+	// transitive imports past the first hop.
+	if isViteInternalPath(r.URL) {
+		if port := h.getActiveVitePort(); port > 0 {
+			h.viteProxy(port).ServeHTTP(w, r)
+			return
+		}
+	}
+	h.main.ServeHTTP(w, r)
+}
+
+// isWebSocketUpgrade reports whether r is an HTTP upgrade to WebSocket.
+// Per RFC 6455 the request carries Connection: upgrade + Upgrade: websocket
+// (header names case-insensitive, values can include other tokens).
+func isWebSocketUpgrade(r *http.Request) bool {
+	if !strings.EqualFold(r.Header.Get("Upgrade"), "websocket") {
+		return false
+	}
+	for _, t := range strings.Split(r.Header.Get("Connection"), ",") {
+		if strings.EqualFold(strings.TrimSpace(t), "upgrade") {
+			return true
+		}
+	}
+	return false
+}
+
+func (h *lanShareHandler) setActiveVitePort(port int) {
+	h.mu.Lock()
+	h.activeVitePort = port
+	h.mu.Unlock()
+}
+
+func (h *lanShareHandler) getActiveVitePort() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.activeVitePort
+}
+
+// vitePathPrefixes are URL prefixes Vite owns by convention (its own runtime,
+// the node_modules resolver, framework source roots). When a request for one
+// of these arrives without our /__lerd_vite__/<port>/ prefix we route it to
+// the active Vite dev server so module resolution keeps working past the
+// first hop (transitive imports drop the prefix from their URL).
+var vitePathPrefixes = []string{
+	"/@vite/",
+	"/@id/",
+	"/@fs/",
+	"/@react-refresh",
+	"/node_modules/",
+	"/__vite_ping",
+	"/__vite_dev",
+	"/resources/", // Laravel project source root
+	"/src/",       // common Vite/Vue/React convention
+	"/vendor/",    // Vite aliases like ziggy-js → /vendor/tightenco/ziggy
+}
+
+// viteSourceExtensions are file extensions Vite serves in dev mode that
+// nginx + Laravel never serve directly. A request ending in one of these
+// goes to Vite whenever we know a port (even without a matching path prefix
+// or Referer), since the alternative is a guaranteed 404 from the main app.
+var viteSourceExtensions = []string{
+	".vue",
+	".ts", ".tsx",
+	".jsx",
+	".mjs", ".cjs",
+	".svelte",
+	".scss", ".sass", ".less", ".styl", ".stylus",
+	".astro",
+	".mdx",
+}
+
+// viteQueryHints are query-string markers Vite stamps on transformed
+// modules. Their presence is a strong signal the URL is dev-only.
+var viteQueryHints = []string{
+	"import",
+	"worker",
+	"sharedworker",
+	"raw",
+	"inline",
+	"url",
+}
+
+func isViteInternalPath(u *url.URL) bool {
+	for _, p := range vitePathPrefixes {
+		if strings.HasPrefix(u.Path, p) {
+			return true
+		}
+	}
+	if ext := pathExt(u.Path); ext != "" {
+		for _, e := range viteSourceExtensions {
+			if ext == e {
+				return true
+			}
+		}
+	}
+	if u.RawQuery != "" && queryHasViteHint(u.RawQuery) {
+		return true
+	}
+	return false
+}
+
+func pathExt(path string) string {
+	i := strings.LastIndexByte(path, '.')
+	if i < 0 {
+		return ""
+	}
+	// Don't pick up a dot from an earlier path segment.
+	if strings.IndexByte(path[i:], '/') >= 0 {
+		return ""
+	}
+	return strings.ToLower(path[i:])
+}
+
+func queryHasViteHint(query string) bool {
+	// Note: we deliberately do NOT match ?v=<hash>. Vite uses it for cache
+	// busting, but so does every Laravel/Symfony/CDN URL out there. The
+	// path-prefix and extension rules already cover Vite's legitimate
+	// cases (e.g. /node_modules/...?v= is caught by /node_modules/).
+	for _, part := range strings.Split(query, "&") {
+		key := part
+		if i := strings.IndexByte(part, '='); i >= 0 {
+			key = part[:i]
+		}
+		for _, h := range viteQueryHints {
+			if key == h {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (h *lanShareHandler) viteProxy(port int) *httputil.ReverseProxy {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if p, ok := h.viteProxies[port]; ok {
+		return p
+	}
+	// Use "localhost" so Go's dual-stack dialer reaches Vite whether it bound
+	// to 127.0.0.1, [::1], or both — vite defaults vary by version and OS.
+	target := &url.URL{Scheme: "http", Host: fmt.Sprintf("localhost:%d", port)}
+	p := httputil.NewSingleHostReverseProxy(target)
+	orig := p.Director
+	p.Director = func(req *http.Request) {
+		// Capture the lanHost (incoming Host header) before the default
+		// director rewrites req.URL — ModifyResponse needs it to rewrite
+		// loopback URLs leaking through Vite-served content.
+		lanHost := req.Host
+		orig(req)
+		// Pretend the request came from the dev server's own origin so Vite
+		// doesn't reject it on Origin/Host checks.
+		req.Host = target.Host
+		req.Header.Set("Origin", "http://"+target.Host)
+		if lanHost != "" {
+			req.Header.Set("X-Forwarded-Host", lanHost)
+			req.Header.Set("X-Forwarded-Proto", "http")
+		}
+	}
+	p.ModifyResponse = func(resp *http.Response) error {
+		// Vite responses that include absolute references back to the dev
+		// server (e.g. import paths in transformed JS) need the same
+		// loopback→prefix rewrite as the main proxy applies.
+		ct := resp.Header.Get("Content-Type")
+		if !isTextContent(ct) && !strings.Contains(strings.ToLower(ct), "javascript") {
+			return nil
+		}
+		lanHost := resp.Request.Header.Get("X-Forwarded-Host")
+		if lanHost == "" {
+			return nil
+		}
+		body, err := readMaybeGzipped(resp)
+		if err != nil || body == nil {
+			return err
+		}
+		body = rewriteLoopbackViteURLs(body, lanHost)
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+		resp.ContentLength = int64(len(body))
+		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
+		return nil
+	}
+	h.viteProxies[port] = p
+	return p
+}
+
+// parseVitePrefixPath returns the Vite target port and the remaining path
+// (with a leading "/") when path starts with vitePrefix and the next segment
+// parses as a port number. Returns ok=false otherwise.
+func parseVitePrefixPath(path string) (port int, rest string, ok bool) {
+	if !strings.HasPrefix(path, vitePrefix) {
+		return 0, "", false
+	}
+	tail := path[len(vitePrefix):]
+	slash := strings.IndexByte(tail, '/')
+	var portStr string
+	if slash == -1 {
+		portStr = tail
+		rest = "/"
+	} else {
+		portStr = tail[:slash]
+		rest = tail[slash:]
+	}
+	p, err := strconv.Atoi(portStr)
+	if err != nil || p <= 0 || p > 65535 {
+		return 0, "", false
+	}
+	return p, rest, true
+}
+
+// readMaybeGzipped reads resp.Body, transparently decompressing gzip and
+// stripping the Content-Encoding header. Returns nil body for unknown
+// encodings so the caller can leave the response untouched.
+func readMaybeGzipped(resp *http.Response) ([]byte, error) {
+	enc := resp.Header.Get("Content-Encoding")
+	switch enc {
+	case "", "identity":
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return body, err
+	case "gzip":
+		gr, err := gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, nil
+		}
+		body, rerr := io.ReadAll(gr)
+		gr.Close()
+		resp.Body.Close()
+		if rerr != nil {
+			return nil, rerr
+		}
+		resp.Header.Del("Content-Encoding")
+		return body, nil
+	default:
+		return nil, nil
+	}
 }
 
 // PrintLANShareQR prints a compact QR code for the given URL to stdout using
@@ -504,10 +839,80 @@ func PrintLANShareQR(rawURL string) {
 // rewriteLANShareBody collapses absolute URLs to http://<lanHost>. The third
 // pass catches https://<lanHost> URLs Laravel emitted itself (X-Forwarded-Host
 // honored, APP_URL forced https) so browsers don't TLS-handshake the proxy.
+// The fourth pass fixes URLs that point at the LAN IP with the wrong port
+// (e.g. http://<ip>:443/foo when the framework used SERVER_PORT from nginx).
+// The final pass redirects loopback dev-server URLs (Vite on [::1]:5173 etc.)
+// through the share proxy's Vite prefix so LAN devices can reach them.
 func rewriteLANShareBody(body []byte, domain, lanHost string) []byte {
 	body = bytes.ReplaceAll(body, []byte("https://"+domain), []byte("http://"+lanHost))
 	body = bytes.ReplaceAll(body, []byte("http://"+domain), []byte("http://"+lanHost))
 	body = bytes.ReplaceAll(body, []byte("https://"+lanHost), []byte("http://"+lanHost))
+	if lanIP, _, err := net.SplitHostPort(lanHost); err == nil && lanIP != "" {
+		// Terminator class covers HTML/JS quotes, JSON terminators, plus
+		// `)` for CSS url(...) and `;` for CSS rules.
+		re := regexp.MustCompile(`https?://` + regexp.QuoteMeta(lanIP) + `(?::\d+)?([/"'<>?#;)\s])`)
+		body = re.ReplaceAll(body, []byte("http://"+lanHost+"$1"))
+	}
+	body = rewriteLoopbackViteURLs(body, lanHost)
+	return body
+}
+
+// loopbackViteURLRe matches http(s)://<loopback>:<port> URLs that leaked into
+// a response body. The first capture is the port, the second is the URL
+// terminator (path slash, quote, etc.). Terminator class covers HTML/JS
+// quotes, JSON terminators, plus `)` for CSS url(...) and `;` for CSS rules.
+var loopbackViteURLRe = regexp.MustCompile(`https?://(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)([/"'<>?#;)\s])`)
+
+// loopbackViteURLEscRe matches the JSON-escaped form `http:\/\/host:port\/...`
+// that ends up in Inertia.js page payloads (Laravel's json_encode default
+// escapes forward slashes). Without this pass, framework URLs like
+// "avatar_url":"http:\/\/localhost:9000\/..." in the data-page attribute
+// never get rewritten and LAN devices try to load them from their own
+// localhost. The terminator class covers JSON's `\/` separator plus the
+// HTML-encoded `&quot;` (the `&` is the first byte) and bare quotes/angles.
+var loopbackViteURLEscRe = regexp.MustCompile(`https?:\\/\\/(?:localhost|127\.0\.0\.1|\[::1\]):(\d+)(\\/|["'<>&])`)
+
+// rewriteLoopbackViteURLs maps absolute loopback dev-server URLs onto
+// http://<lanHost><vitePrefix><port>/... so the LAN device fetches them
+// through the share proxy (which forwards them back to the dev server).
+// URLs targeting the share port itself are left alone so we don't loop.
+// Handles both the plain `http://` form and the JSON-escaped `http:\/\/`
+// form that appears in Inertia.js data-page payloads.
+func rewriteLoopbackViteURLs(body []byte, lanHost string) []byte {
+	_, lanPort, err := net.SplitHostPort(lanHost)
+	if err != nil {
+		return body
+	}
+	body = loopbackViteURLRe.ReplaceAllFunc(body, func(match []byte) []byte {
+		sub := loopbackViteURLRe.FindSubmatch(match)
+		port, term := string(sub[1]), sub[2]
+		if port == lanPort {
+			return match
+		}
+		out := make([]byte, 0, len(lanHost)+len(vitePrefix)+len(port)+1+len(term)+len("http://"))
+		out = append(out, "http://"...)
+		out = append(out, lanHost...)
+		out = append(out, vitePrefix...)
+		out = append(out, port...)
+		out = append(out, term...)
+		return out
+	})
+	body = loopbackViteURLEscRe.ReplaceAllFunc(body, func(match []byte) []byte {
+		sub := loopbackViteURLEscRe.FindSubmatch(match)
+		port, term := string(sub[1]), sub[2]
+		if port == lanPort {
+			return match
+		}
+		// Build http:\/\/<lanHost>\/__lerd_vite__\/<port> keeping JSON
+		// slash escaping consistent with the surrounding payload.
+		out := []byte(`http:\/\/`)
+		out = append(out, lanHost...)
+		out = append(out, `\/__lerd_vite__\/`...)
+		out = append(out, port...)
+		// Re-emit the terminator. \/ stays as-is; quotes/angles/& stay too.
+		out = append(out, term...)
+		return out
+	})
 	return body
 }
 
