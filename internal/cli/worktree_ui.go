@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -148,12 +147,7 @@ func logf(w io.Writer, format string, a ...any) {
 
 // localBranchExists reports whether sitePath's repo has a local branch named b.
 func localBranchExists(sitePath, b string) bool {
-	if b == "" {
-		return false
-	}
-	cmd := exec.Command("git", "show-ref", "--verify", "--quiet", "refs/heads/"+b)
-	cmd.Dir = sitePath
-	return cmd.Run() == nil
+	return gitpkg.BranchExists(sitePath, b)
 }
 
 // normalizeAddRequest resolves the "existing branch" case: if the picked branch
@@ -197,11 +191,7 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 		return "", "", capturer.warnings, err
 	}
 	logf(log, "Running: git %s", strings.Join(gitArgs, " "))
-	gitCmd := exec.Command("git", gitArgs...)
-	gitCmd.Dir = site.Path
-	gitCmd.Stdout = log
-	gitCmd.Stderr = log
-	if err := gitCmd.Run(); err != nil {
+	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return "", "", capturer.warnings, fmt.Errorf("git worktree add: %w", err)
 	}
 
@@ -287,11 +277,7 @@ func RemoveWorktreeAndCleanup(site *config.Site, branch string, force, dropDB bo
 	}
 	gitArgs = append(gitArgs, wtPath)
 	logf(log, "Running: git %s", strings.Join(gitArgs, " "))
-	gitCmd := exec.Command("git", gitArgs...)
-	gitCmd.Dir = site.Path
-	gitCmd.Stdout = log
-	gitCmd.Stderr = log
-	if err := gitCmd.Run(); err != nil {
+	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return fmt.Errorf("git worktree remove: %w", err)
 	}
 

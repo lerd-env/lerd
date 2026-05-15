@@ -2,9 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -140,15 +138,12 @@ func runGitWorktreeRemove(args []string) error {
 
 	gitArgs := append([]string{"worktree", "remove"}, args...)
 	fmt.Printf("Running: git %s\n", strings.Join(gitArgs, " "))
-	cmd := exec.Command("git", gitArgs...)
-	cmd.Stdout = os.Stdout
-	stderrBuf := &strings.Builder{}
-	cmd.Stderr = io.MultiWriter(os.Stderr, stderrBuf)
-	if err := cmd.Run(); err == nil {
+	stderr, err := gitpkg.RunCaptureStderr("", gitArgs...)
+	if err == nil {
 		return nil
 	}
 
-	if !strings.Contains(stderrBuf.String(), "--force") {
+	if !strings.Contains(stderr, "--force") {
 		return fmt.Errorf("git worktree remove: exit status from git")
 	}
 
@@ -191,17 +186,16 @@ func hasForceFlag(args []string) bool {
 	return false
 }
 
+// runGit runs `git <args>` in the caller's cwd. mirrorOutput=true keeps the
+// behaviour callers depend on (stream stdout/stderr to the terminal so the
+// user sees git's progress live). The silent branch is kept for future
+// callers; nothing uses it today.
 func runGit(args []string, mirrorOutput bool) error {
 	fmt.Printf("Running: git %s\n", strings.Join(args, " "))
-	cmd := exec.Command("git", args...)
-	if mirrorOutput {
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
+	if !mirrorOutput {
+		return gitpkg.Run("", nil, args...)
 	}
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("git %s: %w", args[1], err)
-	}
-	return nil
+	return gitpkg.RunTTY("", args...)
 }
 
 // guessBranchFromArgs walks the user's git args looking for the last

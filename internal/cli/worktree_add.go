@@ -59,10 +59,7 @@ func newWorktreeAddCmd() *cobra.Command {
 
 			gitArgs := append([]string{"worktree", "add"}, args...)
 			fmt.Printf("Running: git %s\n", strings.Join(gitArgs, " "))
-			gitCmd := exec.Command("git", gitArgs...)
-			gitCmd.Stdout = os.Stdout
-			gitCmd.Stderr = os.Stderr
-			if err := gitCmd.Run(); err != nil {
+			if err := gitpkg.RunTTY("", gitArgs...); err != nil {
 				return fmt.Errorf("git worktree add: %w", err)
 			}
 
