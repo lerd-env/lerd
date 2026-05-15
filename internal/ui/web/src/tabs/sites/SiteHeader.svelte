@@ -183,7 +183,7 @@
     <span class="truncate">{activePath}</span>
     <div class="flex items-center gap-2 shrink-0">
       <WorktreePicker {site} activeBranch={activeWorktreeBranch} onchange={onWorktreeChange} />
-      {#if !site.paused}
+      {#if !site.paused && site.branch}
         <button
                 onclick={() => openWorktreeModal(site)}
                 class="text-gray-400 hover:text-lerd-red transition-colors"
