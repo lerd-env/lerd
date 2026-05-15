@@ -3534,14 +3534,16 @@ func worktreeBranchCandidates(sitePath string) (local []string, remote []string,
 	return local, remote, current
 }
 
+// runGitOutput is a thin wrapper around gitpkg.Output that swallows the
+// error and returns "" on failure, matching the call-sites that treat
+// missing branches / refs as benign empty lists rather than errors to
+// surface in the UI.
 func runGitOutput(dir string, args ...string) string {
-	cmd := exec.Command("git", args...)
-	cmd.Dir = dir
-	out, err := cmd.Output()
+	out, err := gitpkg.Output(dir, args...)
 	if err != nil {
 		return ""
 	}
-	return string(out)
+	return out
 }
 
 // handleSiteWorktreeOptions answers GET /api/sites/worktree-options?domain=...
