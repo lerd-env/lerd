@@ -12,7 +12,8 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   fr: 'Français',
   de: 'Deutsch',
   id: 'Bahasa Indonesia',
-  nl: 'Nederlands'
+  nl: 'Nederlands',
+  tr: 'Türkçe'
 };
 
 export const LOCALE_CODES: Record<Locale, string> = {
@@ -22,7 +23,8 @@ export const LOCALE_CODES: Record<Locale, string> = {
   fr: 'FR',
   de: 'DE',
   id: 'ID',
-  nl: 'NL'
+  nl: 'NL',
+  tr: 'TR'
 };
 
 // Reactive store mirroring Paraglide's active locale. Paraglide stores the

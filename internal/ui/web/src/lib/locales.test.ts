@@ -6,9 +6,10 @@ import fr from '../../messages/fr.json';
 import de from '../../messages/de.json';
 import id from '../../messages/id.json';
 import nl from '../../messages/nl.json';
+import tr from '../../messages/tr.json';
 import { LOCALES, LOCALE_LABELS, LOCALE_CODES } from '../stores/locale';
 
-const locales: Record<string, Record<string, unknown>> = { en, es, pt, fr, de, id, nl };
+const locales: Record<string, Record<string, unknown>> = { en, es, pt, fr, de, id, nl, tr };
 const baseKeys = Object.keys(en).sort();
 
 describe('UI locale message files', () => {
@@ -38,5 +39,6 @@ describe('UI locale message files', () => {
     expect(LOCALES).toContain('de');
     expect(LOCALES).toContain('id');
     expect(LOCALES).toContain('nl');
+    expect(LOCALES).toContain('tr');
   });
 });
