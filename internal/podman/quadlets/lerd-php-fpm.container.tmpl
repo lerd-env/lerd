@@ -13,6 +13,7 @@ StartLimitBurst=20
 [Container]
 Image=lerd-php{{.VersionShort}}-fpm:local
 ContainerName=lerd-php{{.VersionShort}}-fpm
+{{.HostNameLine}}
 Network=lerd
 Volume=%h/.local/share/lerd/hosts:/etc/hosts:ro,z
 Volume=%h:%h:rw
@@ -20,6 +21,8 @@ Volume={{.XdebugIniPath}}:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume={{.UserIniPath}}:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
 Volume={{.DumpsDir}}:/usr/local/etc/lerd:ro
 Volume={{.DumpsIniPath}}:/usr/local/etc/php/conf.d/97-lerd-dump.ini:ro
+Volume={{.ZshHistoryDir}}:/root/.zsh_state:rw
+Environment=HOME=/root
 PodmanArgs=--security-opt=label=disable
 Exec=php-fpm -F -R
 

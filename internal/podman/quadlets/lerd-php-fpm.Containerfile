@@ -79,6 +79,16 @@ RUN mkdir -p /etc/my.cnf.d && printf '[client]\nssl=0\n' > /etc/my.cnf.d/lerd-no
 COPY --from=composer-bin /usr/bin/composer /usr/local/bin/composer
 RUN apk add --no-cache nodejs npm ffmpeg
 
+# Interactive shell for `lerd shell` and the TUI shell action. Ships zsh with
+# a self-contained config (starship prompt, persistent history). Host shell
+# config is intentionally NOT mounted: every developer's host config is
+# different, and sourcing distro-specific paths or host-only binaries
+# cascades into noisy errors. The in-container shell is its own environment.
+RUN apk add --no-cache zsh starship fzf eza bat zoxide \
+    && mkdir -p /etc/zsh /root/.zsh_state \
+    && printf 'export EDITOR=vi\nexport PAGER=less\nexport HISTFILE=/root/.zsh_state/history\nexport HISTSIZE=10000\nexport SAVEHIST=10000\nsetopt INC_APPEND_HISTORY SHARE_HISTORY\nautoload -Uz compinit && compinit -u\nif command -v starship >/dev/null 2>&1; then\n  eval "$(starship init zsh)"\nfi\n' \
+        > /etc/zsh/zshrc
+
 # Override pool: run workers as root, log errors to stderr
 RUN printf '[www]\nuser=root\ngroup=root\ncatch_workers_output=yes\nphp_flag[display_errors]=off\nphp_admin_value[error_log]=/proc/self/fd/2\nphp_admin_flag[log_errors]=on\n' > /usr/local/etc/php-fpm.d/zz-lerd.conf
 

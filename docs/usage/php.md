@@ -256,7 +256,7 @@ If a library you depend on calls `setlocale()` and branches on whether it succee
 
 ## PHP shell
 
-`lerd shell` opens an interactive `sh` session inside the PHP-FPM container for the current project:
+`lerd shell` opens an interactive shell inside the PHP-FPM container for the current project:
 
 ```bash
 lerd shell
@@ -267,6 +267,21 @@ The PHP version is resolved the same way as every other lerd command (`.php-vers
 If the container is not running, lerd prints the `systemctl` command needed to start it rather than silently failing.
 
 If the site is paused, any services referenced in `.env` (MySQL, Redis, etc.) are started automatically before the shell opens; the site itself stays paused.
+
+### Shell environment
+
+The lerd PHP-FPM image ships zsh with a self-contained config (starship prompt, persistent history, sensible defaults). When you run `lerd shell` or open a shell from the TUI, lerd execs zsh inside the container; for non-PHP service containers (Redis, MySQL, etc.) the fallback chain is `zsh > bash > sh` depending on what the upstream image provides.
+
+The in-container shell is deliberately isolated from your host shell config. Every developer's `~/.zshrc` or `~/.config/fish` is different, and sourcing distro-specific paths or host-only binaries inside the alpine container cascades into noisy errors (missing oh-my-zsh, missing pacman, missing fastfetch, etc.). Rather than play whack-a-mole, lerd ships a clean, predictable shell environment that's identical across every machine and contributor.
+
+What you get inside the container:
+
+- **starship** as the default prompt — branch, dir, git status, all the usual.
+- **eza**, **bat**, **fzf**, **zoxide** on `$PATH` for nicer file listing, paging, fuzzy-find, and `cd` history.
+- Shell history persisted under `~/.local/share/lerd/shell-state/php-<version>/zsh/history`, so commands survive container rebuilds.
+- `HostName=` set to your host's hostname so the prompt reads `root@your-machine` instead of the auto-generated container id.
+
+If you want extra packages in the image (additional CLI tools, language toolchains, etc.), use `lerd php:ext` for PHP extensions, or fork the Containerfile at `internal/podman/quadlets/lerd-php-fpm.Containerfile`.
 
 ---
 
