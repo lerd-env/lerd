@@ -217,6 +217,7 @@ func baseContainerfileHash() (string, error) {
 		return "", err
 	}
 	base := strings.ReplaceAll(tmpl, "{{.CustomExtensions}}", "")
+	base = strings.ReplaceAll(base, "{{.CustomExtensionsRuntime}}", "")
 	base = strings.ReplaceAll(base, "{{.MkcertCA}}", "")
 	sum := sha256.Sum256([]byte(base))
 	return fmt.Sprintf("%x", sum)[:12], nil
@@ -304,6 +305,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 		}
 		containerfile = strings.ReplaceAll(tmpl, "{{.Version}}", version)
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
+		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensionsRuntime}}", buildCustomExtRuntimeDeps(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.MkcertCA}}", mkcertCABlock(tmp))
 		if force {
 			// Bypass layer cache so changes are fully applied. The old image stays
@@ -382,6 +384,27 @@ func apkDepsForExt(ext string, userDeps map[string][]string) []string {
 	add(extApkDeps[ext])
 	add(userDeps[ext])
 	return out
+}
+
+// buildCustomExtRuntimeDeps emits an apk RUN line that reinstalls the
+// builder-stage deps in the runtime stage so compiled .so files can
+// dlopen against those system libs. Empty when no custom exts have deps.
+func buildCustomExtRuntimeDeps(exts []string, userDeps map[string][]string) string {
+	seen := map[string]bool{}
+	var deps []string
+	for _, ext := range exts {
+		for _, pkg := range apkDepsForExt(ext, userDeps) {
+			if seen[pkg] {
+				continue
+			}
+			seen[pkg] = true
+			deps = append(deps, pkg)
+		}
+	}
+	if len(deps) == 0 {
+		return ""
+	}
+	return "RUN apk add --no-cache " + strings.Join(deps, " ") + " && rm -rf /var/cache/apk/*\n"
 }
 
 // buildCustomExtBlock generates Dockerfile RUN blocks for user-configured
