@@ -22,17 +22,15 @@ type ActionResult struct {
 
 // runShellIn suspends bubbletea, opens an interactive shell inside the
 // chosen container (FPM for PHP sites, the custom container for Node/Go/etc.
-// sites, and the service's own container for services), then resumes. Uses
-// `sh -c 'command -v bash && exec bash || exec sh'` so bash is used when
-// available and sh is the fallback (matters for minimal service images like
-// alpine where bash isn't installed).
+// sites, and the service's own container for services), then resumes. The
+// shell fallback chain prefers the host user's shell (fish or zsh) when the
+// image has it, falling back through bash to sh for minimal images.
 func runShellIn(container, workDir string) tea.Cmd {
 	args := []string{"exec", "-it"}
 	if workDir != "" {
 		args = append(args, "-w", workDir)
 	}
-	args = append(args, container, "sh", "-c",
-		"command -v bash >/dev/null 2>&1 && exec bash || exec sh")
+	args = append(args, container, "sh", "-c", podman.InteractiveShellScript())
 	cmd := exec.Command(podman.PodmanBin(), args...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout

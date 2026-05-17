@@ -591,6 +591,8 @@ func WriteFPMQuadlet(version string) error {
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
+	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 
 	// Skip the write and daemon-reload if the quadlet is already up to date.
@@ -634,6 +636,8 @@ func RewriteFPMQuadlets() error {
 		content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(v))
 		content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 		content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+		content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
+		content = applyShellMounts(content, short)
 		content = InjectExtraVolumes(content, extraPaths)
 
 		changed, writeErr := WriteQuadletDiff(unitName, content)
@@ -664,6 +668,45 @@ func RewriteFPMQuadlets() error {
 		_ = WriteContainerHosts()
 	}
 	return nil
+}
+
+// zshHistoryDir returns the per-PHP-version host directory that backs the
+// container's /root/.zsh_state mount, creating it so the bind mount succeeds
+// on first start. We deliberately do not mount any host shell config —
+// see internal/podman/quadlets/lerd-php-fpm.Containerfile for the rationale.
+func zshHistoryDir(versionShort string) string {
+	dir := filepath.Join(config.DataDir(), "shell-state", "php-"+versionShort, "zsh")
+	_ = os.MkdirAll(dir, 0o755)
+	return dir
+}
+
+// hostNameLine returns the `HostName=<host>` directive for the FPM quadlet so
+// prompts inside the container read e.g. "root@laptop" instead of the
+// auto-generated podman container id. Returns an empty string when the host
+// hostname can't be read or contains characters podman would reject, so the
+// placeholder line collapses cleanly.
+func hostNameLine() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	h = strings.TrimSpace(h)
+	if h == "" {
+		return ""
+	}
+	for _, r := range h {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9') || r == '-' || r == '.'
+		if !ok {
+			return ""
+		}
+	}
+	return "HostName=" + h
+}
+
+// applyShellMounts substitutes shell-related template fields.
+func applyShellMounts(content, versionShort string) string {
+	return strings.ReplaceAll(content, "{{.ZshHistoryDir}}", zshHistoryDir(versionShort))
 }
 
 // listInstalledPHPVersions returns PHP versions that have a quadlet installed.

@@ -1,0 +1,63 @@
+package podman
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestInteractiveShellScript_PrefersZsh(t *testing.T) {
+	got := InteractiveShellScript()
+	if !strings.HasPrefix(got, "command -v zsh ") {
+		t.Errorf("chain should start with zsh, got: %s", got)
+	}
+	if !strings.Contains(got, "exec bash") {
+		t.Errorf("chain must include bash fallback, got: %s", got)
+	}
+	if !strings.HasSuffix(got, "exec sh") {
+		t.Errorf("chain must end with sh fallback, got: %s", got)
+	}
+}
+
+func TestZshHistoryDir_CreatedAndScoped(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+
+	dir := zshHistoryDir("84")
+	if dir == "" {
+		t.Fatalf("zshHistoryDir returned empty path")
+	}
+	if _, err := os.Stat(dir); err != nil {
+		t.Errorf("zsh history dir should be created: %v", err)
+	}
+	if !strings.Contains(dir, "shell-state/php-84/zsh") {
+		t.Errorf("path should be scoped per PHP version, got: %s", dir)
+	}
+}
+
+func TestHostNameLine_ValidHostnameRenders(t *testing.T) {
+	got := hostNameLine()
+	if got == "" {
+		t.Skip("host hostname unreadable or has unusual characters; nothing to assert")
+	}
+	if !strings.HasPrefix(got, "HostName=") {
+		t.Errorf("expected HostName= prefix, got %q", got)
+	}
+}
+
+func TestApplyShellMounts_RendersZshHistoryDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+
+	tmpl := "Volume=before\nVolume={{.ZshHistoryDir}}:/root/.zsh_state:rw\n"
+	got := applyShellMounts(tmpl, "84")
+	if !strings.Contains(got, "/root/.zsh_state:rw") {
+		t.Errorf("zsh history volume missing:\n%s", got)
+	}
+	if strings.Contains(got, "{{.ZshHistoryDir}}") {
+		t.Errorf("template placeholder not substituted:\n%s", got)
+	}
+}
