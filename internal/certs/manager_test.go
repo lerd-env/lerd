@@ -59,6 +59,88 @@ func TestCertExists_onlyCrtRequired(t *testing.T) {
 	}
 }
 
+// ── IssueCert vs IssueCertForce semantics ────────────────────────────────────
+
+// IssueCert is documented as a no-op when the cert and key already exist on
+// disk. Pins the contract so callers that mutate the SAN list (domain add,
+// edit, remove) keep using IssueCertForce; using IssueCert would silently
+// preserve a stale cert and the browser would reject the new hostname with
+// ERR_CERT_AUTHORITY_INVALID. Regression test for the bug where adding a
+// secondary domain to a secured site never widened the cert's SAN list.
+func TestIssueCert_skipsWhenCertExists(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	// Fake mkcert that records the SAN list it was asked for so we can
+	// detect whether it was invoked at all.
+	fakeMkcert := `#!/bin/sh
+CRT=""
+KEY=""
+SANS=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -cert-file) shift; CRT="$1" ;;
+    -key-file)  shift; KEY="$1" ;;
+    *) SANS="$SANS $1" ;;
+  esac
+  shift
+done
+printf '%s' "$SANS" > "$CRT"
+printf 'KEY' > "$KEY"
+`
+	if err := os.WriteFile(filepath.Join(binDir, "mkcert"), []byte(fakeMkcert), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	certsDir := filepath.Join(tmp, "lerd", "certs", "sites")
+	if err := os.MkdirAll(certsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	certPath := filepath.Join(certsDir, "site.test.crt")
+	keyPath := filepath.Join(certsDir, "site.test.key")
+	stale := []byte("STALE-CERT-ONE-DOMAIN")
+	if err := os.WriteFile(certPath, stale, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyPath, []byte("STALE-KEY"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	// IssueCert should leave the stale cert untouched, even though the SAN
+	// list it was asked for includes a brand-new domain.
+	if err := IssueCert("site.test", []string{"site.test", "extra.test"}, certsDir); err != nil {
+		t.Fatalf("IssueCert returned %v", err)
+	}
+	got, err := os.ReadFile(certPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(stale) {
+		t.Errorf("IssueCert overwrote existing cert; got %q want %q", got, stale)
+	}
+
+	// IssueCertForce must overwrite the file with a cert whose SAN list
+	// includes the new domain. The fake mkcert echoes the SAN args into
+	// the cert body so we can grep for them.
+	if err := IssueCertForce("site.test", []string{"site.test", "extra.test"}, certsDir); err != nil {
+		t.Fatalf("IssueCertForce returned %v", err)
+	}
+	got, err = os.ReadFile(certPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(got), "extra.test") {
+		t.Errorf("IssueCertForce did not include new domain in SAN list; cert body %q", got)
+	}
+	if !strings.Contains(string(got), "*.extra.test") {
+		t.Errorf("IssueCertForce did not include wildcard SAN for new domain; cert body %q", got)
+	}
+}
+
 // ── IssueCertForce concurrency ───────────────────────────────────────────────
 
 // TestIssueCertForce_concurrentCallsDontCollide pins the fix for the shared
