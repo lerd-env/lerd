@@ -133,13 +133,11 @@ RUN mkdir -p /etc/my.cnf.d && printf '[client]\nssl=0\n' > /etc/my.cnf.d/lerd-no
 # Composer from the official image.
 COPY --from=composer-bin /usr/bin/composer /usr/local/bin/composer
 
-# Interactive shell for `lerd shell` and the TUI shell action. Ships zsh
-# with a self-contained config (starship prompt, persistent history).
-# Host shell config is intentionally NOT mounted: every developer's host
-# config is different, and sourcing distro-specific paths or host-only
-# binaries cascades into noisy errors. The in-container shell is its own
-# environment.
-RUN apk add --no-cache zsh starship fzf eza bat zoxide \
+# Interactive shell for lerd shell. zsh/fzf/bat exist on every alpine;
+# starship/eza/zoxide need alpine 3.18+, so legacy php 7.4/8.0 (alpine
+# 3.16) get them via || true and the zshrc inits starship conditionally.
+RUN apk add --no-cache zsh fzf bat \
+    && { apk add --no-cache starship eza zoxide 2>/dev/null || true; } \
     && mkdir -p /etc/zsh /root/.zsh_state \
     && printf 'export EDITOR=vi\nexport PAGER=less\nexport HISTFILE=/root/.zsh_state/history\nexport HISTSIZE=10000\nexport SAVEHIST=10000\nsetopt INC_APPEND_HISTORY SHARE_HISTORY\nautoload -Uz compinit && compinit -u\nif command -v starship >/dev/null 2>&1; then\n  eval "$(starship init zsh)"\nfi\n' \
         > /etc/zsh/zshrc
