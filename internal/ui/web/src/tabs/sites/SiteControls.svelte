@@ -3,8 +3,6 @@
   import {
     type Site,
     setSiteVersion,
-    toggleTLS,
-    toggleLANShare,
     toggleQueue,
     toggleHorizon,
     toggleSchedule,
@@ -18,7 +16,6 @@
   import { phpVersions } from '$stores/phpVersions';
   import { nodeVersions } from '$stores/nodeVersions';
   import { status } from '$stores/status';
-  import LANShareLink from './LANShareLink.svelte';
   import WorktreeDBIsolateModal from './WorktreeDBIsolateModal.svelte';
   import CommandsDropdown from '$components/CommandsDropdown.svelte';
   import Dropdown from '$components/Dropdown.svelte';
@@ -78,8 +75,6 @@
     }
   }
 
-  let tlsBusy = $state(false);
-  let lanBusy = $state(false);
   let versionBusy = $state(false);
 
   // Worker toggles need a different busy semantic than the other toggles:
@@ -151,19 +146,6 @@
     await Promise.all([loadSites(), loadServices()]);
   }
 
-  async function runAction(
-    setBusy: (b: boolean) => void,
-    action: () => Promise<{ ok: boolean; error?: string }>
-  ) {
-    setBusy(true);
-    try {
-      await action();
-      await Promise.all([loadSites(), loadServices()]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function onPhpChange(e: Event) {
     const v = (e.target as HTMLSelectElement).value;
     versionBusy = true;
@@ -189,7 +171,7 @@
   }
 </script>
 
-<div class="px-3 sm:px-5 py-3 border-b border-gray-100 dark:border-lerd-border shrink-0">
+<div class="px-2 pt-2 shrink-0">
   <div class="flex items-center gap-3">
   <div class="flex items-center gap-3 overflow-x-auto flex-1 min-w-0">
     {#if site.custom_container}
@@ -226,16 +208,6 @@
       />
     {/if}
 
-    {#if $status.dns?.enabled !== false}
-      <ToggleButton
-        label={m.sites_controls_https()}
-        on={Boolean(site.tls)}
-        loading={tlsBusy}
-        onclick={() => runAction((b) => (tlsBusy = b), () => toggleTLS(site))}
-        title={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
-      />
-    {/if}
-
     {#if activeWorktreeBranch && dbCapable}
       <ToggleButton
         label={m.sites_controls_dbIsolated()}
@@ -245,25 +217,6 @@
         title={dbIsolated ? m.sites_controls_dbIsolatedTitle({ db: activeWorktree?.db_database ?? '' }) : m.sites_controls_dbShareParent()}
       />
     {/if}
-
-    {#snippet lanShare()}
-      {@const isWT = Boolean(activeWorktreeBranch)}
-      {@const lanPort = isWT ? activeWorktree?.lan_port ?? 0 : site.lan_port ?? 0}
-      {@const lanURL = isWT ? activeWorktree?.lan_share_url ?? '' : site.lan_share_url ?? ''}
-      {@const lanDomain = isWT ? (activeWorktree?.domain ?? site.domain) : site.domain}
-      <ToggleButton
-        label={m.sites_controls_lan()}
-        on={Boolean(lanPort)}
-        loading={lanBusy}
-        onclick={() => runAction((b) => (lanBusy = b), () => toggleLANShare(site, activeWorktreeBranch))}
-        title={lanPort ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
-      />
-      {#if lanURL}
-        <LANShareLink domain={lanDomain} url={lanURL} siteDomain={site.domain} branch={activeWorktreeBranch} />
-      {/if}
-    {/snippet}
-
-    {@render lanShare()}
 
     {#if activeWorktreeBranch}
       {@const wtWorkers = activeWorktree?.framework_workers || []}

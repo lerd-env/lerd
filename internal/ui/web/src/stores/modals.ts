@@ -7,7 +7,8 @@ export type ModalKind =
   | 'preset'
   | 'remoteControl'
   | 'lanProgress'
-  | 'worktree'
+  | 'worktreeAdd'
+  | 'worktreeRemove'
   | null;
 
 export type LANAction = 'expose' | 'unexpose';
@@ -17,6 +18,7 @@ export interface ModalState {
   site?: Site;
   lanAction?: LANAction;
   onSuccess?: () => void;
+  branch?: string;
 }
 
 export const modal = writable<ModalState>({ kind: null });
@@ -41,8 +43,12 @@ export function openLANProgressModal(lanAction: LANAction) {
   modal.set({ kind: 'lanProgress', lanAction });
 }
 
-export function openWorktreeModal(site: Site) {
-  modal.set({ kind: 'worktree', site });
+export function openWorktreeAddModal(site: Site) {
+  modal.set({ kind: 'worktreeAdd', site });
+}
+
+export function openWorktreeRemoveModal(site: Site, branch: string) {
+  modal.set({ kind: 'worktreeRemove', site, branch });
 }
 
 export function closeModal() {

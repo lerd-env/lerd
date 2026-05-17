@@ -131,7 +131,7 @@ export function siteWorkerFailing(s: Site): boolean {
 
 export function openSiteInBrowser(s: Site, branch: string = '') {
   const target = activeWorktreeDomain(s, branch);
-  const useTLS = Boolean(s.tls) && branch === '';
+  const useTLS = Boolean(s.tls);
   const url = (useTLS ? 'https://' : 'http://') + target;
   window.open(url, '_blank', 'noopener');
 }

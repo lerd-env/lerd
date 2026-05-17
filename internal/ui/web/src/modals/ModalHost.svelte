@@ -5,7 +5,8 @@
   import PresetModal from './PresetModal.svelte';
   import RemoteControlModal from './RemoteControlModal.svelte';
   import LANProgressModal from './LANProgressModal.svelte';
-  import WorktreeModal from './WorktreeModal.svelte';
+  import AddWorktreeModal from './AddWorktreeModal.svelte';
+  import RemoveWorktreeModal from './RemoveWorktreeModal.svelte';
 </script>
 
 {#if $modal.kind === 'domain' && $modal.site}
@@ -18,6 +19,8 @@
   <RemoteControlModal />
 {:else if $modal.kind === 'lanProgress'}
   <LANProgressModal />
-{:else if $modal.kind === 'worktree' && $modal.site}
-  <WorktreeModal site={$modal.site} />
+{:else if $modal.kind === 'worktreeAdd' && $modal.site}
+  <AddWorktreeModal site={$modal.site} />
+{:else if $modal.kind === 'worktreeRemove' && $modal.site && $modal.branch}
+  <RemoveWorktreeModal site={$modal.site} branch={$modal.branch} />
 {/if}
