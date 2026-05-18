@@ -278,8 +278,8 @@
           type="button"
           onclick={flipTLS}
           disabled={tlsBusy}
-          title={site.tls ? 'TLS on — click to disable' : 'TLS off — click to enable'}
-          aria-label={site.tls ? 'Disable TLS' : 'Enable TLS'}
+          title={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
+          aria-label={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
           class="shrink-0 -ml-1 p-1 rounded-sm transition-colors disabled:opacity-50 {site.tls
             ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
             : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'}"
@@ -475,8 +475,8 @@
           type="button"
           onclick={flipLAN}
           disabled={lanBusy}
-          title={lanOn ? 'LAN sharing on — click to stop' : 'Share over LAN'}
-          aria-label={lanOn ? 'Stop LAN sharing' : 'Share over LAN'}
+          title={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
+          aria-label={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
           class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md transition-colors disabled:opacity-50 {lanOn
             ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
             : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
@@ -517,7 +517,7 @@
         <button
           type="button"
           onclick={() => (overflowOpen = !overflowOpen)}
-          aria-label="More actions"
+          aria-label={m.common_moreActions()}
           aria-haspopup="menu"
           aria-expanded={overflowOpen}
           class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
@@ -587,7 +587,7 @@
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                   <path d="M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01" />
                 </svg>
-                {lanOn ? 'Stop LAN share' : 'Share over LAN'}
+                {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
               </button>
             {/if}
             <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
