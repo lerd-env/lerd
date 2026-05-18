@@ -264,7 +264,7 @@ lerd shell
 
 The PHP version is resolved the same way as every other lerd command (`.php-version`, `composer.json`, global default). The shell's working directory is set to the project root.
 
-If the container is not running, lerd prints the `systemctl` command needed to start it rather than silently failing.
+If the container is not running, lerd prints the platform-appropriate command (`launchctl kickstart` on macOS, `systemctl --user start` on Linux) to bring it back up rather than silently failing.
 
 If the site is paused, any services referenced in `.env` (MySQL, Redis, etc.) are started automatically before the shell opens; the site itself stays paused.
 

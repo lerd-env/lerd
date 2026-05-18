@@ -100,19 +100,22 @@ func copyFileWithMode(src, dst string, mode os.FileMode) error {
 //
 // Errors are aggregated and returned; callers should log them rather than
 // treat them as fatal since the worktree is still usable with the copied
-// trees from main.
-func InstallDependencies(projectPath string) error {
+// trees from main. out receives both stdout and stderr from composer and
+// the JS package manager; pass nil to fall back to the watcher daemon's
+// own stdout/stderr (which the original launchd unit captures into
+// lerd-watcher.log).
+func InstallDependencies(projectPath string, out io.Writer) error {
 	var errs []error
 
 	if composerNeedsInstall(projectPath) {
 		composer := filepath.Join(config.BinDir(), "composer")
-		if err := runIn(projectPath, composer, "install", "--no-interaction", "--no-progress"); err != nil {
+		if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
 			errs = append(errs, fmt.Errorf("composer install: %w", err))
 		}
 	}
 
 	if jsNeedsInstall(projectPath) {
-		if err := runJSInstall(projectPath); err != nil {
+		if err := runJSInstall(projectPath, out); err != nil {
 			errs = append(errs, err)
 		}
 	}
@@ -150,6 +153,13 @@ func RunNpmScript(projectPath, script string, out io.Writer) error {
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run()
+}
+
+// NeedsInstall reports whether projectPath has a composer or JS install
+// that hasn't completed. Used by the watcher's periodic rescan to recover
+// from a UI install that crashed between `git worktree add` and the seed.
+func NeedsInstall(projectPath string) bool {
+	return composerNeedsInstall(projectPath) || jsNeedsInstall(projectPath)
 }
 
 // composerNeedsInstall reports whether composer install must run for the
@@ -250,8 +260,8 @@ func jsPackageManager(projectPath string) (name string, args []string) {
 // install. For npm we use the lerd shim from BinDir so fnm's current Node
 // version wins; other managers go through PATH since lerd doesn't shim
 // them. Missing binary is logged and returned so the caller aggregates it
-// with other setup errors.
-func runJSInstall(projectPath string) error {
+// with other setup errors. out is forwarded to runIn.
+func runJSInstall(projectPath string, out io.Writer) error {
 	name, args := jsPackageManager(projectPath)
 
 	var bin string
@@ -263,7 +273,7 @@ func runJSInstall(projectPath string) error {
 		return fmt.Errorf("%s (lockfile present) not found on PATH — install it to hydrate node_modules", name)
 	}
 
-	if err := runIn(projectPath, bin, args...); err != nil {
+	if err := runIn(projectPath, out, bin, args...); err != nil {
 		return fmt.Errorf("%s %s: %w", name, args[0], err)
 	}
 	return nil
@@ -274,11 +284,16 @@ func hasFile(dir, name string) bool {
 	return err == nil
 }
 
-func runIn(dir, name string, args ...string) error {
+func runIn(dir string, out io.Writer, name string, args ...string) error {
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	if out != nil {
+		cmd.Stdout = out
+		cmd.Stderr = out
+	} else {
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+	}
 	return cmd.Run()
 }
 

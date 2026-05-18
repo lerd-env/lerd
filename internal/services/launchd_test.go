@@ -234,6 +234,24 @@ func TestContainerToPodmanArgs(t *testing.T) {
 	}
 }
 
+// Quadlet's HostName= maps to --hostname on Linux via podman-systemd; the
+// macOS path was dropping it, so `lerd shell` showed root@<container-id>.
+func TestContainerToPodmanArgs_HostName(t *testing.T) {
+	c := map[string][]string{
+		"ContainerName": {"lerd-php84-fpm"},
+		"Image":         {"localhost/lerd-php-fpm:8.4"},
+		"HostName":      {"laptop"},
+	}
+	args, err := containerToPodmanArgs(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	argStr := strings.Join(args, " ")
+	if !strings.Contains(argStr, "--hostname laptop") {
+		t.Errorf("HostName must produce --hostname: %s", argStr)
+	}
+}
+
 func TestContainerToPodmanArgsNoImage(t *testing.T) {
 	c := map[string][]string{
 		"ContainerName": {"test"},

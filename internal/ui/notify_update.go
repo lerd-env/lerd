@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 
 	"github.com/geodro/lerd/internal/push"
@@ -25,6 +26,7 @@ func notifyOnServiceUpdates(servicesJSON []byte) {
 		LatestVersion   string `json:"latest_version"`
 	}
 	if err := json.Unmarshal(servicesJSON, &list); err != nil {
+		fmt.Printf("[notify-update] snapshot decode: %v\n", err)
 		return
 	}
 	cur := make(map[string]bool, len(list))

@@ -131,7 +131,11 @@ func readCheckoutPath(wtDir string) string {
 // through symlinks, which would make Composer's ClassLoader initialise
 // against the main repo directory and silently load stale classes from
 // there.
-func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secured bool) {
+//
+// out receives composer/npm install output; pass nil for the default
+// stdout/stderr (which is what the watcher daemon's launchd unit captures
+// to lerd-watcher.log).
+func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secured bool, out io.Writer) {
 	// Each entry: filesystem dir to seed from main, plus a sibling lockfile
 	// (or files) that gates the copy. When the worktree's lockfile differs
 	// from main's, skip the copy and let composer/npm rebuild the tree from
@@ -186,8 +190,12 @@ func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secur
 	// APP_URL falling back to literal "/", etc.).
 	EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain, secured)
 
-	if err := InstallDependencies(worktreePath); err != nil {
-		_, _ = os.Stderr.WriteString("[WARN] worktree dependency install: " + err.Error() + "\n")
+	if err := InstallDependencies(worktreePath, out); err != nil {
+		if out != nil {
+			_, _ = io.WriteString(out, "[WARN] worktree dependency install: "+err.Error()+"\n")
+		} else {
+			_, _ = os.Stderr.WriteString("[WARN] worktree dependency install: " + err.Error() + "\n")
+		}
 	}
 }
 

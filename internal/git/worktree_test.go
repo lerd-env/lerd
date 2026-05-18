@@ -225,7 +225,7 @@ func TestEnsureWorktreeDeps_copiesInsteadOfSymlinking(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	info, err := os.Lstat(filepath.Join(wt, "vendor"))
 	if err != nil {
@@ -272,7 +272,7 @@ func TestEnsureWorktreeDeps_skipsVendorCopyWhenComposerLockDiffers(t *testing.T)
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	if _, err := os.Stat(filepath.Join(wt, "vendor")); !os.IsNotExist(err) {
 		t.Errorf("vendor should NOT be copied when composer.lock differs, got err=%v", err)
@@ -308,7 +308,7 @@ func TestEnsureWorktreeDeps_copiesVendorWhenComposerLockMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	if _, err := os.Stat(filepath.Join(wt, "vendor", "autoload.php")); err != nil {
 		t.Errorf("vendor not copied even though composer.lock matches: %v", err)
@@ -339,7 +339,7 @@ func TestEnsureWorktreeDeps_skipsPublicBuild(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	if _, err := os.Stat(filepath.Join(wt, "public", "build", "manifest.json")); !os.IsNotExist(err) {
 		t.Errorf("public/build/manifest.json should NOT be copied into the worktree, got err=%v", err)
@@ -369,7 +369,7 @@ func TestEnsureWorktreeDeps_migratesLegacySymlink(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	info, err := os.Lstat(filepath.Join(wt, "vendor"))
 	if err != nil {
@@ -397,7 +397,7 @@ func TestEnsureWorktreeDeps_updatesExistingEnvAppURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true, nil)
 
 	data, err := os.ReadFile(filepath.Join(wt, ".env"))
 	if err != nil {
@@ -433,7 +433,7 @@ func TestEnsureWorktreeDeps_preservesEnvMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true, nil)
 
 	info, err := os.Stat(envPath)
 	if err != nil {
@@ -469,7 +469,7 @@ func TestEnsureWorktreeDeps_skipsWriteWhenAppURLUnchanged(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", true)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", true, nil)
 
 	info, err := os.Stat(envPath)
 	if err != nil {
@@ -495,7 +495,7 @@ func TestEnsureWorktreeDeps_mainMissingVendor(t *testing.T) {
 		_ = os.MkdirAll(d, 0o755)
 	}
 
-	EnsureWorktreeDeps(main, wt, "branch.main.test", false)
+	EnsureWorktreeDeps(main, wt, "branch.main.test", false, nil)
 
 	if _, err := os.Lstat(filepath.Join(wt, "vendor")); err == nil {
 		t.Error("vendor should not be created when main has none")

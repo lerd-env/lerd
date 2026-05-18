@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -57,6 +58,21 @@ func TestNotificationForDump_TextTruncatedAndSingleLine(t *testing.T) {
 			t.Errorf("Body contains newlines: %q", n.Body)
 			break
 		}
+	}
+}
+
+// Truncating a multi-byte rune mid-byte produced � replacement chars
+// in the notification body. Build a text whose 139-byte cut would split a
+// rune and assert no replacement chars sneak in.
+func TestDumpPreview_UTF8BoundarySafe(t *testing.T) {
+	// 47 × 3-byte rune = 141 bytes — first 139 bytes lands mid-rune.
+	text := strings.Repeat("☃", 47)
+	got := dumpPreview(text)
+	if strings.ContainsRune(got, '�') {
+		t.Errorf("preview contains U+FFFD replacement char: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("preview should end with ellipsis: %q", got)
 	}
 }
 

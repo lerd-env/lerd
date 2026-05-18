@@ -105,7 +105,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}
 
       - name: Smoke-test built image
-        if: steps.check.outputs.exists != 'true' && matrix.arch.name == 'amd64'
+        if: steps.check.outputs.exists != 'true'
         run: |
           IMG="ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
           docker pull "$IMG" >/dev/null

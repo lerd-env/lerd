@@ -182,6 +182,25 @@ func TestLeadingMajor(t *testing.T) {
 	}
 }
 
+// Migrating postgres to a tag like "18-3.6-alpine" must still resolve
+// the canonical pin to "18" — the previous byte-compare against v.Tag
+// missed every preset whose image tag carries a variant suffix.
+func TestCanonicalVersionForMigrate_VariantTag(t *testing.T) {
+	cases := []struct{ image, op, want string }{
+		{"docker.io/postgis/postgis:18-3.6-alpine", "migrate", "18"},
+		{"docker.io/postgis/postgis:17-3.6-alpine", "migrate", "17"},
+		{"docker.io/postgis/postgis:16-3.5-alpine", "migrate", "16"},
+		{"docker.io/postgis/postgis:18-3.6-alpine", "update", ""}, // only migrate syncs the pin
+		{"docker.io/postgis/postgis:99-3.6-alpine", "migrate", ""}, // unknown major
+	}
+	for _, c := range cases {
+		got := canonicalVersionForMigrate("postgres", c.image, c.op)
+		if got != c.want {
+			t.Errorf("canonicalVersionForMigrate(%q, %q) = %q, want %q", c.image, c.op, got, c.want)
+		}
+	}
+}
+
 func persistRecordOnly(name, newImage string) error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {

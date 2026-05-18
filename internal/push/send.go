@@ -3,6 +3,7 @@ package push
 import (
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
@@ -72,19 +73,21 @@ func Send(n Notification) error {
 			}
 			if resp.StatusCode >= 400 {
 				fmt.Printf("[push] %s returned %d\n", endpointShort(s.Endpoint), resp.StatusCode)
+			} else {
+				fmt.Printf("[push] %s kind=%s -> %d\n", endpointShort(s.Endpoint), n.Kind, resp.StatusCode)
 			}
 		}
 	}
 	return nil
 }
 
-// endpointShort strips the per-install secret token from the endpoint URL
-// so logs only show the push service host, not the bearer-equivalent path.
+// endpointShort returns "<scheme>://<host>" so logs don't leak the per-
+// install token in the path. Falls back to the raw string when the URL
+// can't be parsed (e.g. a test endpoint without a scheme).
 func endpointShort(endpoint string) string {
-	for i := len("https://"); i < len(endpoint); i++ {
-		if endpoint[i] == '/' {
-			return endpoint[:i]
-		}
+	u, err := url.Parse(endpoint)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return endpoint
 	}
-	return endpoint
+	return u.Scheme + "://" + u.Host
 }

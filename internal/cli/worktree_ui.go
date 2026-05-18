@@ -77,12 +77,54 @@ func buildWorktreeAddGitArgs(req WorktreeAddRequest, checkoutPath string) ([]str
 	}
 }
 
+// ensureNestedWorktreeExclude appends "/<base>-*/" to .git/info/exclude in
+// sitePath (idempotent) so nested worktree dirs don't show up in git status
+// of the parent repo. No-op when .git isn't a dir or when basename
+// contains gitignore meta-chars we'd have to escape.
+func ensureNestedWorktreeExclude(sitePath string) error {
+	gitInfo, err := os.Stat(filepath.Join(sitePath, ".git"))
+	if err != nil || !gitInfo.IsDir() {
+		return nil
+	}
+	base := filepath.Base(sitePath)
+	if strings.ContainsAny(base, "[]?*!#\\") {
+		return nil
+	}
+	pattern := "/" + base + "-*/"
+	excludePath := filepath.Join(sitePath, ".git", "info", "exclude")
+	existing, _ := os.ReadFile(excludePath)
+	for _, line := range strings.Split(string(existing), "\n") {
+		if strings.TrimSpace(line) == pattern {
+			return nil
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(excludePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	prefix := ""
+	if len(existing) > 0 && existing[len(existing)-1] != '\n' {
+		prefix = "\n"
+	}
+	_, err = f.WriteString(prefix + pattern + "\n")
+	return err
+}
+
 // WorktreeCheckoutPath returns the directory a new worktree for branch should
-// be checked out into: a sibling of the parent site path, "<sitePath>-<slug>".
-// If that path already exists it bumps a numeric suffix so we never reuse a
-// directory.
+// be checked out into: a child of the parent site, "<sitePath>/<base>-<slug>"
+// where <base> is filepath.Base(sitePath). Bumps a numeric suffix if the
+// default path already exists. RunWorktreeAdd also writes a `/<base>-*/`
+// pattern into .git/info/exclude so git status doesn't show siblings.
+// Caveat: non-git tools (composer, IDEs, find/rsync/tar) walking the
+// parent tree DO descend into the worktree — gitignore doesn't hide it
+// from them. Most callers don't care; flag if you do.
 func WorktreeCheckoutPath(sitePath, branch string) string {
-	base := sitePath + "-" + gitpkg.SanitizeBranch(branch)
+	parentBase := filepath.Base(sitePath)
+	base := filepath.Join(sitePath, parentBase+"-"+gitpkg.SanitizeBranch(branch))
 	candidate := base
 	for i := 2; ; i++ {
 		if _, err := os.Stat(candidate); os.IsNotExist(err) {
@@ -169,12 +211,19 @@ func normalizeAddRequest(sitePath string, req WorktreeAddRequest) WorktreeAddReq
 	}
 }
 
-// RunWorktreeAdd creates a git worktree for site, waits for lerd's watcher to
-// install dependencies, applies the build choice, configures the database, and
-// optionally runs migrations. Progress lines are written to log (may be nil).
-// Returns the sanitized branch name, the checkout path, and any "[WARN]" lines
-// emitted along the way so callers (e.g. the dashboard) can keep the modal
-// open and surface them instead of silently treating the setup as success.
+// RunWorktreeAdd creates a git worktree for site, runs composer + JS
+// install with output streamed to log, applies the build choice,
+// configures the database, and optionally runs migrations. Progress lines
+// are written to log (may be nil). Returns the sanitized branch name, the
+// checkout path, and any "[WARN]" lines emitted along the way so callers
+// (e.g. the dashboard) can keep the modal open and surface them instead
+// of silently treating the setup as success.
+//
+// The install runs inside this process — not the watcher daemon — so its
+// stdout/stderr lands directly in the dashboard's SSE stream. A cross-
+// process flock (acquired before git worktree add so the watcher's
+// fsnotify-triggered install loses the race) keeps the watcher from
+// running its own composer install in parallel and clobbering vendor/.
 func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (string, string, []string, error) {
 	capturer := &warningCapturingWriter{w: log}
 	log = capturer
@@ -186,6 +235,12 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 	branch := gitpkg.SanitizeBranch(branchInput)
 	checkoutPath := WorktreeCheckoutPath(site.Path, branchInput)
 
+	release, err := gitpkg.LockInstall(checkoutPath, 30*time.Second)
+	if err != nil {
+		return "", "", capturer.warnings, fmt.Errorf("acquire install lock: %w", err)
+	}
+	defer release()
+
 	gitArgs, err := buildWorktreeAddGitArgs(req, checkoutPath)
 	if err != nil {
 		return "", "", capturer.warnings, err
@@ -194,11 +249,15 @@ func RunWorktreeAdd(site *config.Site, req WorktreeAddRequest, log io.Writer) (s
 	if err := gitpkg.Run(site.Path, log, gitArgs...); err != nil {
 		return "", "", capturer.warnings, fmt.Errorf("git worktree add: %w", err)
 	}
+	if err := ensureNestedWorktreeExclude(site.Path); err != nil {
+		logf(log, "[WARN] writing .git/info/exclude: %v", err)
+	}
 
-	logf(log, "Waiting for lerd to install dependencies (composer + JS)...")
-	if err := WaitForWorktreeReady(checkoutPath, 5*time.Minute); err != nil {
-		logf(log, "[WARN] %v, you can finish setup later from the worktree.", err)
-	} else {
+	worktreeDomain := branch + "." + site.PrimaryDomain()
+	logf(log, "Installing dependencies (composer + JS)...")
+	warnsBefore := len(capturer.warnings)
+	gitpkg.EnsureWorktreeDeps(site.Path, checkoutPath, worktreeDomain, site.Secured, log)
+	if len(capturer.warnings) == warnsBefore {
 		logf(log, "Dependencies installed.")
 	}
 

@@ -274,6 +274,21 @@ func resolveServiceForUpdate(name string) (*config.CustomService, registry.Strat
 	return svc, strategy, allowMajor, nil
 }
 
+// canonicalVersionForMigrate matches newImage's tag against name's preset
+// versions and returns the version Tag (e.g. "18") for postgres images
+// tagged "18-3.6-alpine". Empty when op != "migrate", preset missing, or
+// no version matches.
+func canonicalVersionForMigrate(name, newImage, op string) string {
+	if op != "migrate" {
+		return ""
+	}
+	p, err := config.LoadPreset(name)
+	if err != nil {
+		return ""
+	}
+	return matchVersionByImageTag(newImage, p.Versions)
+}
+
 // persistImageChoice records the chosen image and regenerates the quadlet.
 // Atomic: if the quadlet write fails the config write is rolled back so the
 // on-disk pair (config + quadlet) stays consistent.
@@ -300,18 +315,8 @@ func persistImageChoice(name, newImage, op string) error {
 		// Migrate is the explicit cross-version move, so sync the canonical
 		// pin to the new tag — otherwise a later reconcile would resolve
 		// against the pre-migrate version and clobber the migrated install.
-		if op == "migrate" {
-			if at := strings.LastIndex(newImage, ":"); at > 0 {
-				newTag := newImage[at+1:]
-				if p, perr := config.LoadPreset(name); perr == nil {
-					for _, v := range p.Versions {
-						if v.Tag == newTag {
-							next.CanonicalVersion = v.Tag
-							break
-						}
-					}
-				}
-			}
+		if v := canonicalVersionForMigrate(name, newImage, op); v != "" {
+			next.CanonicalVersion = v
 		}
 		cfg.Services[name] = next
 		if err := config.SaveGlobal(cfg); err != nil {

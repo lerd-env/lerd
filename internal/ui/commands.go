@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
@@ -148,15 +149,16 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 	}
 	defer release()
 
-	// When a worktree branch is in play, run the command from the
-	// worktree's checkout — that way `php artisan migrate` etc hits the
-	// worktree's database (when DB isolation is on) and reads worktree
-	// env vars rather than the main checkout's.
+	// Worktree branch must resolve; falling back to site.Path would point
+	// destructive commands (migrate:fresh) at the main DB.
 	basePath := site.Path
 	if branch != "" {
-		if wt := resolveSitePath(site, branch); wt != "" {
-			basePath = wt
+		wt := resolveSitePath(site, branch)
+		if wt == "" {
+			writeJSON(w, map[string]any{"error": "unknown worktree branch: " + branch})
+			return
 		}
+		basePath = wt
 	}
 	cwd := basePath
 	if target.CWD != "" && target.CWD != "." {
@@ -215,6 +217,14 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 	ctx := r.Context()
 	cmd := exec.CommandContext(ctx, "sh", "-c", target.Command)
 	cmd.Dir = cwd
+	// Prepend BinDir so php/composer/npm shims resolve under launchd's
+	// restricted PATH on macOS. Skip the trailing separator when PATH is
+	// empty — a bare "PATH=<bin>:" would search CWD on POSIX.
+	path := config.BinDir()
+	if existing := os.Getenv("PATH"); existing != "" {
+		path += string(os.PathListSeparator) + existing
+	}
+	cmd.Env = append(os.Environ(), "PATH="+path)
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -247,9 +257,18 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 		}
 	}
 
+	// defer-recover so a panic in streamPipe still releases the wait;
+	// otherwise the handler would hang holding the per-site run lock.
 	done := make(chan struct{}, 2)
-	go func() { streamPipe(stdout, "stdout"); done <- struct{}{} }()
-	go func() { streamPipe(stderr, "stderr"); done <- struct{}{} }()
+	pump := func(pipe io.Reader, event string) {
+		defer func() {
+			_ = recover()
+			done <- struct{}{}
+		}()
+		streamPipe(pipe, event)
+	}
+	go pump(stdout, "stdout")
+	go pump(stderr, "stderr")
 	<-done
 	<-done
 

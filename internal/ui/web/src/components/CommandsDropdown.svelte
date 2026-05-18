@@ -86,8 +86,17 @@
     menuOpen = false;
   }
 
-  function handleScroll() {
-    if (menuOpen) menuOpen = false;
+  function handleScroll(e: Event) {
+    if (!menuOpen) return;
+    // Wheel-scrolling inside the menu (overflow-y-auto on a long command
+    // list) bubbles up through capture and would otherwise close the menu
+    // on the first tick. Only close when the surrounding page or an
+    // ancestor scrolls — that's the case the close-on-scroll exists for,
+    // since the menu is position:fixed and would detach from the trigger.
+    const t = e.target as Node | null;
+    const menu = document.getElementById('cmds-dropdown-menu');
+    if (menu && t && menu.contains(t)) return;
+    menuOpen = false;
   }
 
   function handleKey(e: KeyboardEvent) {
@@ -144,7 +153,7 @@
     <div
       id="cmds-dropdown-menu"
       style="position: fixed; top: {menuPos.top}px; left: {menuPos.left}px; width: {menuPos.width}px;"
-      class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-96 overflow-y-auto no-scrollbar"
+      class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-96 overflow-y-auto"
     >
       {#each commands as c (c.name)}
         <button
