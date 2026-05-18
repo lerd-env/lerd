@@ -199,8 +199,17 @@
     closeMenu();
   }
 
-  function handleScroll() {
-    if (open) closeMenu();
+  function handleScroll(e: Event) {
+    if (!open) return;
+    // Wheel-scrolling inside the menu (overflow-y-auto on a long option
+    // list) bubbles up through capture and would otherwise close the menu
+    // on the first tick. Leave the menu open for those; only close when
+    // the surrounding page or an ancestor scrolls — that's the case the
+    // close-on-scroll exists for, since the menu is position:fixed and
+    // would detach from the trigger.
+    const t = e.target as Node | null;
+    if (menuEl && t && menuEl.contains(t)) return;
+    closeMenu();
   }
 
   $effect(() => {
@@ -243,7 +252,7 @@
       id={menuId}
       role="listbox"
       style="position: fixed; top: {menuPos.top}px; left: {menuPos.left}px; width: {menuPos.width}px;"
-      class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-72 overflow-y-auto no-scrollbar"
+      class="z-50 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl ring-1 ring-black/5 py-1 max-h-72 overflow-y-auto"
     >
       {#each normalized as opt, i (opt.value + ':' + i)}
         {@const selected = opt.value === value}

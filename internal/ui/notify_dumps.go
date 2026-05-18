@@ -4,6 +4,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/push"
@@ -29,7 +30,11 @@ func dumpPreview(text string) string {
 	}, text)
 	flat = strings.Join(strings.Fields(flat), " ")
 	if len(flat) > dumpPreviewMax {
-		flat = flat[:dumpPreviewMax-1] + "…"
+		cut := dumpPreviewMax - 1
+		for cut > 0 && !utf8.RuneStart(flat[cut]) {
+			cut--
+		}
+		flat = flat[:cut] + "…"
 	}
 	return flat
 }

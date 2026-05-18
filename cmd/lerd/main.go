@@ -362,6 +362,13 @@ func newWatchCmd() *cobra.Command {
 				}
 			}()
 
+			// Recover worktrees whose UI-driven install crashed mid-flight.
+			go func() {
+				for range time.Tick(60 * time.Second) {
+					rescanWorktreeInstalls()
+				}
+			}()
+
 			// Watch for git worktree additions/removals.
 			go func() {
 				err := watcher.WatchWorktrees(
@@ -609,7 +616,13 @@ func scanWorktrees() bool {
 			}
 		}
 		for _, wt := range worktrees {
-			gitpkg.EnsureWorktreeDeps(s.Path, wt.Path, wt.Domain, s.Secured)
+			// Skip the install when the UI/CLI holds the cross-process lock:
+			// it is running composer/npm install with streamed output and
+			// would race the watcher's vendor seed otherwise.
+			if release, ok, _ := gitpkg.TryLockInstall(wt.Path); ok {
+				gitpkg.EnsureWorktreeDeps(s.Path, wt.Path, wt.Domain, s.Secured, nil)
+				release()
+			}
 			vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured)
 			if vhostErr != nil {
 				fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, vhostErr)
@@ -626,6 +639,39 @@ func scanWorktrees() bool {
 		}
 	}
 	return generated
+}
+
+// rescanWorktreeInstalls re-runs EnsureWorktreeDeps for any worktree whose
+// composer/JS install never completed. Covers the case where the UI's
+// streamed install crashed between `git worktree add` and EnsureWorktreeDeps
+// (the watcher's onAdded already fired and skipped because the UI held the
+// install lock at the time).
+func rescanWorktreeInstalls() {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return
+	}
+	for _, s := range reg.Sites {
+		if s.Ignored || s.Paused || !gitpkg.IsMainRepo(s.Path) {
+			continue
+		}
+		wts, err := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+		if err != nil {
+			continue
+		}
+		for _, wt := range wts {
+			if !gitpkg.NeedsInstall(wt.Path) {
+				continue
+			}
+			release, ok, _ := gitpkg.TryLockInstall(wt.Path)
+			if !ok {
+				continue
+			}
+			fmt.Printf("Rescan: re-running install for %s (%s)\n", wt.Branch, wt.Path)
+			gitpkg.EnsureWorktreeDeps(s.Path, wt.Path, wt.Domain, s.Secured, nil)
+			release()
+		}
+	}
 }
 
 func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
@@ -647,7 +693,13 @@ func syncWorktree(sitePath, worktreeName, action string, pruneStale bool) bool {
 		if wt.Name != worktreeName {
 			continue
 		}
-		gitpkg.EnsureWorktreeDeps(sitePath, wt.Path, wt.Domain, site.Secured)
+		// Skip the install when the UI/CLI holds the cross-process lock:
+		// it is running composer/npm install with streamed output and
+		// would race the watcher's vendor seed otherwise.
+		if release, ok, _ := gitpkg.TryLockInstall(wt.Path); ok {
+			gitpkg.EnsureWorktreeDeps(sitePath, wt.Path, wt.Domain, site.Secured, nil)
+			release()
+		}
 		effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 		vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch, site.Secured)
 		if site.Secured {

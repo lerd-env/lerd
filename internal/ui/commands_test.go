@@ -300,6 +300,62 @@ commands:
 	}
 }
 
+// Asserts the runner prepends BinDir to PATH so php/composer/npm shims
+// resolve under launchd's restricted PATH on macOS.
+func TestCommandsRun_BinDirOnPath(t *testing.T) {
+	sitePath := registerSite(t, "acme", "acme.test")
+	binDir := config.BinDir()
+	if err := os.MkdirAll(binDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shim := filepath.Join(binDir, "lerdshim")
+	if err := os.WriteFile(shim, []byte("#!/bin/sh\necho shimok\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Strip BinDir from any inherited PATH so only the fix puts it back.
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	writeProjectYAML(t, sitePath, `
+commands:
+  - name: hi
+    label: Hi
+    command: lerdshim
+    output: text
+`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/hi/run", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	body := rec.Body.String()
+	if !strings.Contains(body, "shimok") {
+		t.Errorf("BinDir shim should be on PATH; got: %q", body)
+	}
+}
+
+// Asserts the runner refuses when ?branch= names a worktree that doesn't
+// exist, so destructive commands can't silently hit the main DB.
+func TestCommandsRun_UnknownBranchErrors(t *testing.T) {
+	sitePath := registerSite(t, "acme", "acme.test")
+	writeProjectYAML(t, sitePath, `
+commands:
+  - name: hi
+    label: Hi
+    command: echo hi
+    output: text
+`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/commands/hi/run?branch=does-not-exist", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	body := rec.Body.String()
+	if strings.Contains(body, "event: stdout") {
+		t.Errorf("must not run command when branch is unknown: %q", body)
+	}
+	if !strings.Contains(body, "unknown worktree branch") {
+		t.Errorf("expected unknown worktree branch error: %q", body)
+	}
+}
+
 func TestCommandsRun_DisabledOverride(t *testing.T) {
 	// A project entry with Disabled: true on a framework-provided name
 	// must suppress the framework default, even when the framework is the

@@ -150,6 +150,52 @@ describe('notify dispatcher', () => {
     expect(swShows).toHaveLength(1);
   });
 
+  it('allows a same-tag notification once the dedupe window has passed', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date('2026-05-18T10:00:00Z'));
+      const { initNotify } = await import('./notify');
+      const { wsMessage } = await import('./ws');
+
+      initNotify();
+      const evt: Notification = { kind: 'mail', title: 'first', tag: 'lerd-test' };
+      wsMessage.set({ type: 'notification', notification: evt });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      vi.setSystemTime(new Date('2026-05-18T10:00:05Z'));
+      wsMessage.set({
+        type: 'notification',
+        notification: { ...evt, title: 'second' }
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(swShows).toHaveLength(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('does not dedupe across kinds even with the same tag', async () => {
+    const { initNotify } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'M', tag: 'shared' }
+    });
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'worker_failed', title: 'W', tag: 'shared' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(swShows).toHaveLength(2);
+  });
+
   it('persists and exposes preferences', async () => {
     const { setNotifyPref, setNotifyMaster, notifyPrefs } = await import('./notify');
 

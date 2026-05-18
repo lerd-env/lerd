@@ -117,9 +117,9 @@ func TestBuildWorktreeAddGitArgs(t *testing.T) {
 func TestWorktreeCheckoutPath(t *testing.T) {
 	parent := filepath.Join(t.TempDir(), "myapp")
 
-	// Branch name gets sanitized; base path is "<parent>-<slug>".
+	// Worktrees live under the parent: <parent>/<parentBase>-<slug>.
 	got := WorktreeCheckoutPath(parent, "feature/auth")
-	want := parent + "-feature-auth"
+	want := filepath.Join(parent, "myapp-feature-auth")
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
@@ -131,6 +131,38 @@ func TestWorktreeCheckoutPath(t *testing.T) {
 	got = WorktreeCheckoutPath(parent, "feature/auth")
 	if got != want+"-2" {
 		t.Fatalf("got %q want %q", got, want+"-2")
+	}
+}
+
+// Nested worktree dirs sit inside the parent's working tree, so git status
+// shows them as untracked. ensureNestedWorktreeExclude writes a single
+// /<base>-*/ pattern to .git/info/exclude — idempotently.
+func TestEnsureNestedWorktreeExclude(t *testing.T) {
+	dir := t.TempDir()
+	sitePath := filepath.Join(dir, "myapp")
+	if err := os.MkdirAll(filepath.Join(sitePath, ".git", "info"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureNestedWorktreeExclude(sitePath); err != nil {
+		t.Fatal(err)
+	}
+	if err := ensureNestedWorktreeExclude(sitePath); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(sitePath, ".git", "info", "exclude"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	want := "/myapp-*/"
+	count := 0
+	for _, line := range strings.Split(got, "\n") {
+		if strings.TrimSpace(line) == want {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("expected %q exactly once in exclude, got %d times: %q", want, count, got)
 	}
 }
 

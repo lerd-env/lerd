@@ -217,6 +217,26 @@ func TestSend_PayloadShapeReachesTransport(t *testing.T) {
 	}
 }
 
+// endpointShort returns "<scheme>://<host>" so logs never carry the
+// per-install token. Verify the FCM-style URL is collapsed correctly and
+// that an unparseable string passes through unchanged.
+func TestEndpointShort(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"https://fcm.googleapis.com/fcm/send/aaa-bbb-ccc-secret", "https://fcm.googleapis.com"},
+		{"https://updates.push.services.mozilla.com/wpush/v2/abc.secret", "https://updates.push.services.mozilla.com"},
+		{"https://web.push.apple.com/longtoken", "https://web.push.apple.com"},
+		{"http://example.com/some/path?q=1", "http://example.com"},
+		{"not a url", "not a url"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		got := endpointShort(c.in)
+		if got != c.want {
+			t.Errorf("endpointShort(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
 // Sanity: ensure the webpush-go API surface we depend on still exists at
 // compile time. If this stops compiling, the dependency made a breaking
 // change and the production Send code needs updating.

@@ -138,6 +138,24 @@ func TestJSPackageManager_PnpmBeatsOtherLockfiles(t *testing.T) {
 	}
 }
 
+// NeedsInstall is the OR of composer+JS install-needed checks. Sanity:
+// composer.json without vendor → true; both fully installed → false.
+func TestNeedsInstall(t *testing.T) {
+	dir := t.TempDir()
+	if NeedsInstall(dir) {
+		t.Fatal("empty dir should not need install")
+	}
+	touch(t, filepath.Join(dir, "composer.json"))
+	if !NeedsInstall(dir) {
+		t.Fatal("composer.json with no vendor must need install")
+	}
+	touchAt(t, filepath.Join(dir, "composer.lock"), time.Now().Add(-time.Hour))
+	touch(t, filepath.Join(dir, "vendor", "composer", "installed.json"))
+	if NeedsInstall(dir) {
+		t.Fatal("composer.json + installed.json newer than lock must not need install")
+	}
+}
+
 func TestComposerNeedsInstall(t *testing.T) {
 	cases := []struct {
 		name string

@@ -334,6 +334,9 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 	if userns := c["UserNS"]; len(userns) > 0 {
 		args = append(args, "--userns", userns[0])
 	}
+	if hns := c["HostName"]; len(hns) > 0 {
+		args = append(args, "--hostname", hns[0])
+	}
 	if dirs := c["WorkingDir"]; len(dirs) > 0 {
 		args = append(args, "--workdir", expandSpecifiers(dirs[0]))
 	}
