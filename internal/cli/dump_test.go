@@ -86,8 +86,24 @@ func TestRunDumpToggle_OffRoundTrip(t *testing.T) {
 	}
 }
 
+// withShortDataDir reroutes XDG_DATA_HOME to a tmp dir with a minimal
+// prefix so paths under DataDir() (including the UI socket) fit within
+// macOS's 104-byte sockaddr_un.sun_path limit. t.TempDir() under
+// /var/folders/.../T/<long-test-name>/data/... routinely overflows.
+func withShortDataDir(t *testing.T) {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "ld-")
+	if err != nil {
+		t.Fatalf("mkdir short data dir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Setenv("XDG_DATA_HOME", dir)
+}
+
 // fakeUISocket binds a HTTP server on config.UISocketPath() and records
-// every path it receives. Returns a pointer the test can check.
+// every path it receives. Returns a pointer the test can check. Requires
+// withShortDataDir to have set XDG_DATA_HOME to a short path so the
+// resulting socket path fits within the macOS sun_path limit.
 func fakeUISocket(t *testing.T) *atomic.Pointer[string] {
 	t.Helper()
 	sockPath := config.UISocketPath()
@@ -113,6 +129,7 @@ func fakeUISocket(t *testing.T) *atomic.Pointer[string] {
 
 func TestRunDumpToggle_PingsUIAfterChange(t *testing.T) {
 	withTempXDG(t)
+	withShortDataDir(t)
 	stubPodman(t)
 	seen := fakeUISocket(t)
 
@@ -137,6 +154,7 @@ func TestRunDumpToggle_PingsUIAfterChange(t *testing.T) {
 
 func TestRunDumpToggle_NoPingWhenNoChange(t *testing.T) {
 	withTempXDG(t)
+	withShortDataDir(t)
 	stubPodman(t)
 	// Enable once (will ping).
 	_ = runDumpToggle(true)
