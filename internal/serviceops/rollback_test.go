@@ -190,7 +190,7 @@ func TestCanonicalVersionForMigrate_VariantTag(t *testing.T) {
 		{"docker.io/postgis/postgis:18-3.6-alpine", "migrate", "18"},
 		{"docker.io/postgis/postgis:17-3.6-alpine", "migrate", "17"},
 		{"docker.io/postgis/postgis:16-3.5-alpine", "migrate", "16"},
-		{"docker.io/postgis/postgis:18-3.6-alpine", "update", ""}, // only migrate syncs the pin
+		{"docker.io/postgis/postgis:18-3.6-alpine", "update", ""},  // only migrate syncs the pin
 		{"docker.io/postgis/postgis:99-3.6-alpine", "migrate", ""}, // unknown major
 	}
 	for _, c := range cases {
