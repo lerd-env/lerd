@@ -182,9 +182,13 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 // tinkerEnvArgs builds the shared `--env KEY=VAL` argv chunks used by
 // every tinker exec invocation: HOME, COMPOSER_HOME, PATH (so vendor/bin
 // shims work inside the container), TERM/NO_COLOR so dump output is not
-// ANSI-colored, and PSYSH_TRUST_PROJECT so PsySH skips its non-interactive
-// "Restricted Mode" warning — the user is running their own project code
-// in their own container; restricting it adds noise without security gain.
+// ANSI-colored, PSYSH_TRUST_PROJECT so PsySH skips its non-interactive
+// "Restricted Mode" warning (the user is running their own project code in
+// their own container; restricting it adds noise without security gain),
+// and LERD_DUMP_PASSTHROUGH=1 so when the dump bridge is on the auto-
+// wrapped `dump(expr)` still prints to stdout. Without it the bridge
+// silently swallows the value and the REPL shows nothing for bare
+// expressions like `User::count()`.
 func tinkerEnvArgs(sitePath, home, composerHome string) []string {
 	projectVendorBin := filepath.Join(sitePath, "vendor", "bin")
 	composerBin := filepath.Join(composerHome, "vendor", "bin")
@@ -195,6 +199,7 @@ func tinkerEnvArgs(sitePath, home, composerHome string) []string {
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
 		"--env", "PSYSH_TRUST_PROJECT=1",
+		"--env", "LERD_DUMP_PASSTHROUGH=1",
 	}
 }
 

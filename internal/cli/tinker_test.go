@@ -17,6 +17,7 @@ func TestTinkerEnvArgs(t *testing.T) {
 		"--env", "NO_COLOR=1",
 		"--env", "TERM=dumb",
 		"--env", "PSYSH_TRUST_PROJECT=1",
+		"--env", "LERD_DUMP_PASSTHROUGH=1",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("env args mismatch.\n got:  %v\n want: %v", got, want)
