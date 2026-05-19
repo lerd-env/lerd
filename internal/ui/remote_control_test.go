@@ -364,17 +364,23 @@ func TestRemoteControlGate_mailpitWebhookHostAllowedLanBlocked(t *testing.T) {
 	}
 	var hostIP string
 	for _, a := range addrs {
-		if ipNet, ok := a.(*net.IPNet); ok && ipNet.IP != nil && !ipNet.IP.IsLoopback() {
+		ipNet, ok := a.(*net.IPNet)
+		if !ok || ipNet.IP == nil || ipNet.IP.IsLoopback() {
+			continue
+		}
+		// Prefer IPv4 to avoid IPv6 link-local zone-suffix complications
+		// that differ between Linux and macOS test runners.
+		if ipNet.IP.To4() != nil {
 			hostIP = ipNet.IP.String()
 			break
 		}
 	}
 	if hostIP == "" {
-		t.Skip("no non-loopback host interface to probe")
+		t.Skip("no non-loopback IPv4 host interface to probe")
 	}
 
 	req := httptest.NewRequest(http.MethodPost, "/api/webhooks/mailpit", nil)
-	req.RemoteAddr = hostIP + ":34567"
+	req.RemoteAddr = net.JoinHostPort(hostIP, "34567")
 	rec := httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
 	if !next.called {
@@ -383,7 +389,7 @@ func TestRemoteControlGate_mailpitWebhookHostAllowedLanBlocked(t *testing.T) {
 
 	next.called = false
 	req2 := httptest.NewRequest(http.MethodPost, "/api/webhooks/mailpit", nil)
-	req2.RemoteAddr = "198.51.100.42:34567"
+	req2.RemoteAddr = net.JoinHostPort("198.51.100.42", "34567")
 	rec2 := httptest.NewRecorder()
 	gate.ServeHTTP(rec2, req2)
 	if next.called {
