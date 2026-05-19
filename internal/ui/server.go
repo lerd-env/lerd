@@ -1189,7 +1189,8 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 		}
 		// For single-version presets installed reflects "is the canonical
 		// service installed". For multi-version presets it reflects "are any
-		// version-suffixed instances installed", and InstalledTags lists them.
+		// instances installed" (canonical at the bare preset name OR alternates
+		// at the suffixed name), and InstalledTags lists them.
 		installed := false
 		var installedTags []string
 		if len(p.Versions) == 0 {
@@ -1198,8 +1199,7 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 			}
 		} else {
 			for _, v := range p.Versions {
-				name := p.Name + "-" + config.SanitizeImageTag(v.Tag)
-				if _, err := config.LoadCustomService(name); err == nil {
+				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
 					installed = true
 					installedTags = append(installedTags, v.Tag)
 				}

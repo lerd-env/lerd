@@ -107,37 +107,17 @@ func ListPresets() ([]PresetMeta, error) {
 		if len(p.Versions) > 0 {
 			image = ""
 		}
-		// Canonical version IS the default install; filter it out of the
-		// alternates picker so users only see versions they can install
-		// alongside the canonical.
-		alternates := make([]PresetVersion, 0, len(p.Versions))
-		altDefault := p.DefaultVersion
-		for _, v := range p.Versions {
-			if v.Canonical {
-				continue
-			}
-			alternates = append(alternates, v)
-		}
-		if altDefault != "" {
-			found := false
-			for _, v := range alternates {
-				if v.Tag == altDefault {
-					found = true
-					break
-				}
-			}
-			if !found && len(alternates) > 0 {
-				altDefault = alternates[0].Tag
-			}
-		}
+		// All versions (including canonical) are exposed so the picker shows
+		// the default install explicitly. The canonical's label typically
+		// carries a "(default)" hint and DefaultVersion preselects it.
 		out = append(out, PresetMeta{
 			Name:           p.Name,
 			Description:    p.Description,
 			Dashboard:      p.Dashboard,
 			DependsOn:      p.DependsOn,
 			Image:          image,
-			Versions:       alternates,
-			DefaultVersion: altDefault,
+			Versions:       p.Versions,
+			DefaultVersion: p.DefaultVersion,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
@@ -211,6 +191,18 @@ func ValidatePresetYAML(data []byte, name string) error {
 func PresetExists(name string) bool {
 	_, err := presetFS.Open("presets/" + name + ".yaml")
 	return err == nil
+}
+
+// PresetVersionServiceName returns the resolved service (container) name for
+// a specific version of a multi-version preset. Canonical versions keep the
+// bare preset name; non-canonical versions get the sanitised-tag suffix. Use
+// this anywhere code needs to map a (preset, version) pair to the on-disk
+// custom service name (e.g. install-state probes).
+func PresetVersionServiceName(presetName string, v PresetVersion) string {
+	if v.Canonical {
+		return presetName
+	}
+	return presetName + "-" + SanitizeImageTag(v.Tag)
 }
 
 // SanitizeImageTag returns a container-name-safe form of an image tag by

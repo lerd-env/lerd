@@ -67,13 +67,7 @@ func familyOf(name string) string {
 			return p.Family
 		}
 	}
-	if svc, err := config.LoadCustomService(name); err == nil {
-		if svc.Family != "" {
-			return svc.Family
-		}
-		return config.InferFamily(svc.Name)
-	}
-	return ""
+	return config.FamilyOfName(name)
 }
 
 func timestamped() string { return time.Now().UTC().Format("20060102-150405") }

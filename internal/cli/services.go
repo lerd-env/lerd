@@ -649,7 +649,7 @@ func printPresetList() error {
 		} else {
 			anyInstalled := false
 			for _, v := range p.Versions {
-				if _, err := config.LoadCustomService(p.Name + "-" + config.SanitizeImageTag(v.Tag)); err == nil {
+				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
 					anyInstalled = true
 					break
 				}
@@ -671,7 +671,7 @@ func printPresetList() error {
 			if v.Label != "" {
 				label = v.Label
 			}
-			if _, err := config.LoadCustomService(p.Name + "-" + config.SanitizeImageTag(v.Tag)); err == nil {
+			if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
 				versionStatus = "installed"
 			}
 			marker := " "
