@@ -1374,6 +1374,7 @@ The ` + bt + `container.port` + bt + ` field is required. ` + bt + `container.co
 | ` + bt + `container.port` + bt + ` | yes | | Port the app listens on inside the container |
 | ` + bt + `container.containerfile` + bt + ` | no | ` + bt + `Containerfile.lerd` + bt + ` | Path to the Containerfile (relative to project root) |
 | ` + bt + `container.build_context` + bt + ` | no | ` + bt + `.` + bt + ` | Build context directory |
+| ` + bt + `container.target` + bt + ` | no | (last stage) | Stage to build in a multi-stage Containerfile, passed as ` + bt + `podman build --target` + bt + ` |
 | ` + bt + `custom_workers` + bt + ` | no | | Worker definitions — see below |
 | ` + bt + `domains` + bt + ` | no | | Same as PHP sites |
 | ` + bt + `secured` + bt + ` | no | | Same as PHP sites |

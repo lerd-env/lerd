@@ -59,6 +59,7 @@ The `container` section in `.lerd.yaml` accepts these fields:
 | `port` | yes | | Port the app listens on inside the container |
 | `containerfile` | no | `Containerfile.lerd` | Path to the Containerfile (relative to project root) |
 | `build_context` | no | `.` | Build context directory (relative to project root) |
+| `target` | no | (last stage) | Stage to build in a multi-stage Containerfile, passed as `podman build --target`. Useful when your Containerfile has separate `development` and `production` stages and you want lerd to build the dev one locally. |
 | `ssl` | no | `false` | Set to `true` if the app serves HTTPS on its port (nginx will `proxy_pass https://` with `proxy_ssl_verify off`) |
 
 ## How it works

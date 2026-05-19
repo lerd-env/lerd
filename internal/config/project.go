@@ -26,6 +26,7 @@ type ContainerConfig struct {
 	Port          int    `yaml:"port"`                    // port the app listens on inside the container (required)
 	Containerfile string `yaml:"containerfile,omitempty"` // path to Containerfile, default "Containerfile.lerd"
 	BuildContext  string `yaml:"build_context,omitempty"` // build context directory, default "."
+	Target        string `yaml:"target,omitempty"`        // multi-stage build target passed as --target to podman build
 	SSL           bool   `yaml:"ssl,omitempty"`           // proxy to the container via HTTPS (app serves TLS on its port)
 }
 

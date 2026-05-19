@@ -3,6 +3,7 @@ package podman
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -144,6 +145,29 @@ func TestHashContainerfile_Missing(t *testing.T) {
 	}
 }
 
+// Flipping container.target between stages of an unchanged Containerfile
+// must invalidate the cache so CustomImageUpToDate rebuilds. Without this
+// a `target: development` → `target: production` edit kept serving the
+// dev image (issue #379).
+func TestHashContainerfile_TargetChangeInvalidatesHash(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "Containerfile.lerd"), []byte(
+		"FROM alpine AS production\nFROM alpine AS development\n",
+	), 0644)
+	hDev := hashContainerfile(dir, &config.ContainerConfig{Port: 8080, Target: "development"})
+	hProd := hashContainerfile(dir, &config.ContainerConfig{Port: 8080, Target: "production"})
+	if hDev == "" || hProd == "" {
+		t.Fatal("expected non-empty hashes")
+	}
+	if hDev == hProd {
+		t.Errorf("hash must change when only Target flips; both = %q", hDev)
+	}
+	hNoTarget := hashContainerfile(dir, &config.ContainerConfig{Port: 8080})
+	if hNoTarget == hDev || hNoTarget == hProd {
+		t.Errorf("hash with no target must differ from both targeted variants")
+	}
+}
+
 func TestStoreAndReadContainerfileHash(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -168,5 +192,43 @@ func TestHasContainerfile_Absent(t *testing.T) {
 	dir := t.TempDir()
 	if HasContainerfile(dir) {
 		t.Error("expected HasContainerfile = false")
+	}
+}
+
+// Sn0wCrack's multi-stage Containerfile use case (issue #379): the target:
+// field in .lerd.yaml's container block must translate to --target on the
+// podman build invocation so the right stage gets built.
+func TestBuildCustomImageArgs_TargetEmittedWhenSet(t *testing.T) {
+	args := buildCustomImageArgs(
+		"lerd-custom-acme:local",
+		"/srv/acme/Containerfile.lerd",
+		"/srv/acme",
+		&config.ContainerConfig{Port: 3000, Target: "development"},
+	)
+	want := []string{"build", "-t", "lerd-custom-acme:local", "-f", "/srv/acme/Containerfile.lerd", "--target", "development", "/srv/acme"}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("args = %v\nwant %v", args, want)
+	}
+}
+
+func TestBuildCustomImageArgs_TargetOmittedWhenEmpty(t *testing.T) {
+	args := buildCustomImageArgs(
+		"lerd-custom-acme:local",
+		"/srv/acme/Containerfile.lerd",
+		"/srv/acme",
+		&config.ContainerConfig{Port: 3000},
+	)
+	for _, a := range args {
+		if a == "--target" {
+			t.Errorf("--target must not appear when Target is empty; got %v", args)
+		}
+	}
+}
+
+func TestBuildCustomImageArgs_NilConfigSafe(t *testing.T) {
+	args := buildCustomImageArgs("img:local", "/f", "/ctx", nil)
+	want := []string{"build", "-t", "img:local", "-f", "/f", "/ctx"}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("args = %v\nwant %v", args, want)
 	}
 }

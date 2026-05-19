@@ -97,7 +97,15 @@ func hashContainerfile(projectPath string, cfg *config.ContainerConfig) string {
 	if err != nil {
 		return ""
 	}
-	return fmt.Sprintf("%x", md5.Sum(data))
+	target := ""
+	if cfg != nil {
+		target = cfg.Target
+	}
+	// Mix the build target into the hash so flipping target: development to
+	// target: production in .lerd.yaml invalidates the cache. Without this,
+	// CustomImageUpToDate would return a stale image when only the target
+	// changed (issue #379).
+	return fmt.Sprintf("%x", md5.Sum([]byte(string(data)+"\x00--target="+target)))
 }
 
 func readContainerfileHash(siteName string) string {
@@ -107,6 +115,17 @@ func readContainerfileHash(siteName string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(data))
+}
+
+// buildCustomImageArgs assembles the podman build argv for a custom site
+// image. Centralised so BuildCustomImage and BuildCustomImageTo stay in
+// sync and the --target plumbing only lives in one place.
+func buildCustomImageArgs(imageName, containerfile, buildCtx string, cfg *config.ContainerConfig) []string {
+	args := []string{"build", "-t", imageName, "-f", containerfile}
+	if cfg != nil && cfg.Target != "" {
+		args = append(args, "--target", cfg.Target)
+	}
+	return append(args, buildCtx)
 }
 
 // BuildCustomImage builds the OCI image for a site's custom container from
@@ -120,7 +139,7 @@ func BuildCustomImage(siteName, projectPath string, cfg *config.ContainerConfig)
 	buildCtx := ResolveBuildContext(projectPath, cfg)
 	imageName := CustomImageName(siteName)
 
-	cmd := exec.Command(PodmanBin(), "build", "-t", imageName, "-f", containerfile, buildCtx)
+	cmd := exec.Command(PodmanBin(), buildCustomImageArgs(imageName, containerfile, buildCtx, cfg)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
@@ -139,7 +158,7 @@ func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfi
 	buildCtx := ResolveBuildContext(projectPath, cfg)
 	imageName := CustomImageName(siteName)
 
-	cmd := exec.Command(PodmanBin(), "build", "-t", imageName, "-f", containerfile, buildCtx)
+	cmd := exec.Command(PodmanBin(), buildCustomImageArgs(imageName, containerfile, buildCtx, cfg)...)
 	cmd.Stdout = w
 	cmd.Stderr = w
 	if err := cmd.Run(); err != nil {
