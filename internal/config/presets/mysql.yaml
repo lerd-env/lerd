@@ -5,6 +5,7 @@ track_latest: true
 description: MySQL database
 family: mysql
 default_version: "8.4"
+init: true
 versions:
   - tag: "9.7"
     label: "9.7 LTS"

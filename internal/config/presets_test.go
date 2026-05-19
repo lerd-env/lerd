@@ -193,6 +193,9 @@ func TestLoadPreset_MySQL_MultiVersion(t *testing.T) {
 	if p.DefaultVersion != "8.4" {
 		t.Errorf("DefaultVersion should be 8.4 (the canonical LTS default), got %q", p.DefaultVersion)
 	}
+	if !p.Init {
+		t.Error("mysql preset must set init: true so PID 1 catches SIGTERM (issue #380)")
+	}
 }
 
 func TestPresetResolve_MultiVersion(t *testing.T) {
@@ -586,6 +589,9 @@ func TestPresetCanonicalTag(t *testing.T) {
 	}
 	if got := pm.CanonicalTag(); got != "" {
 		t.Errorf("mariadb has no canonical, CanonicalTag() = %q, want empty", got)
+	}
+	if !pm.Init {
+		t.Error("mariadb preset must set init: true so PID 1 catches SIGTERM (mysql fork, same issue as #380)")
 	}
 }
 

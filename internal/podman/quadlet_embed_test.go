@@ -264,6 +264,33 @@ func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 	}
 }
 
+// mysql 8.4 runs mysqld as PID 1 and the kernel won't deliver SIGTERM
+// to a PID 1 process that hasn't installed a handler; podman stop times
+// out and systemctl restart wedges. --init wires catatonit in as PID 1
+// to forward signals — issue #380.
+func TestGenerateCustomQuadlet_InitTrueEmitsPodmanArgs(t *testing.T) {
+	svc := &config.CustomService{
+		Name:  "mysql",
+		Image: "docker.io/library/mysql:8.4",
+		Init:  true,
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "PodmanArgs=--init\n") {
+		t.Errorf("Init=true must emit PodmanArgs=--init, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_InitFalseOmitsPodmanArgs(t *testing.T) {
+	svc := &config.CustomService{
+		Name:  "postgres",
+		Image: "docker.io/library/postgres:18",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if strings.Contains(out, "PodmanArgs=--init") {
+		t.Errorf("Init=false must omit --init, got:\n%s", out)
+	}
+}
+
 func TestGenerateCustomQuadlet_UsernsAndChownData(t *testing.T) {
 	svc := &config.CustomService{
 		Name:      "elasticsearch",

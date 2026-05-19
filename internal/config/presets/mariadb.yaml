@@ -2,6 +2,7 @@ name: mariadb
 description: MariaDB (MySQL-compatible) versions
 family: mariadb
 default_version: "11"
+init: true
 versions:
   - tag: "11"
     label: "11 (latest)"

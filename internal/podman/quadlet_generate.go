@@ -37,6 +37,13 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		b.WriteString("PodmanArgs=--stop-timeout=5\n")
 	}
 
+	// catatonit as PID 1 so SIGTERM reaches the main process. Without
+	// this, mysqld in 8.4 ignores podman stop and restarts time out at
+	// 90s (issue #380).
+	if svc.Init {
+		b.WriteString("PodmanArgs=--init\n")
+	}
+
 	if svc.ShareHosts {
 		fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.BrowserHostsFile())
 	}

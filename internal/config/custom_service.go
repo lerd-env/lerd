@@ -130,6 +130,12 @@ type CustomService struct {
 	// of embedding it as an iframe. Use for admin UIs that set session
 	// cookies the iframe can't carry across origins (e.g. RabbitMQ Cowboy).
 	DashboardExternal bool `yaml:"dashboard_external,omitempty" json:"dashboard_external,omitempty"`
+	// Init injects podman's catatonit as PID 1 (--init) so SIGTERM gets
+	// forwarded to the container's main process. Required for images whose
+	// main binary (e.g. mysqld in mysql:8.4) doesn't install a signal
+	// handler when it runs as PID 1, which makes podman stop time out and
+	// systemctl restart wedge for ~90s.
+	Init bool `yaml:"init,omitempty" json:"init,omitempty"`
 }
 
 // ServiceFilePath returns the deterministic host path for a single FileMount
