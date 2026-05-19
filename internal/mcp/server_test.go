@@ -277,3 +277,53 @@ func TestExecWorkersMode_SetRequiresValidMode(t *testing.T) {
 		t.Errorf("invalid mode should be rejected, got %s", got)
 	}
 }
+
+// service_add now accepts an init flag so an MCP-driven agent can wire
+// catatonit (--init) for custom services whose main process ignores
+// SIGTERM as PID 1 (mysql forks, certain Elasticsearch versions).
+func TestExecServiceAdd_InitFlagPersists(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	resp, rpcErr := execServiceAdd(map[string]any{
+		"name":  "memcrash",
+		"image": "docker.io/library/alpine:3.19",
+		"init":  true,
+	})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	if got, _ := json.Marshal(resp); bytes.Contains(got, []byte("\"error\"")) {
+		t.Fatalf("execServiceAdd reported error: %s", got)
+	}
+
+	svc, err := config.LoadCustomService("memcrash")
+	if err != nil {
+		t.Fatalf("LoadCustomService: %v", err)
+	}
+	if !svc.Init {
+		t.Error("Init flag did not persist to disk")
+	}
+}
+
+func TestExecServiceAdd_InitDefaultsFalse(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, rpcErr := execServiceAdd(map[string]any{
+		"name":  "redisish",
+		"image": "docker.io/library/alpine:3.19",
+	}); rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+
+	svc, err := config.LoadCustomService("redisish")
+	if err != nil {
+		t.Fatalf("LoadCustomService: %v", err)
+	}
+	if svc.Init {
+		t.Error("Init flag should default to false when not provided")
+	}
+}

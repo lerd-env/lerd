@@ -317,6 +317,7 @@ func toolList() []mcpTool {
 					"description": {Type: "string", Description: "Human-readable description."},
 					"dashboard":   {Type: "string", Description: "Web dashboard URL."},
 					"depends_on":  {Type: "array", Description: `Services that must start first, e.g. ["mysql"].`},
+					"init":        {Type: "boolean", Description: "Pass --init for images that ignore SIGTERM as PID 1 (mysql, mariadb)."},
 				},
 				Required: []string{"name", "image"},
 			},
@@ -2672,6 +2673,7 @@ func execServiceAdd(args map[string]any) (any, *rpcError) {
 		Dashboard:   strArg(args, "dashboard"),
 		DataDir:     strArg(args, "data_dir"),
 		DependsOn:   strSliceArg(args, "depends_on"),
+		Init:        boolArg(args, "init"),
 	}
 
 	if envList := strSliceArg(args, "environment"); len(envList) > 0 {
