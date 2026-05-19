@@ -1241,8 +1241,11 @@ func addShellShims(manageNode bool) error {
 		return fmt.Errorf("writing php shim: %w", err)
 	}
 
-	// Write composer shim
-	composerShim := fmt.Sprintf("#!/bin/sh\nexec %s php %s/.local/share/lerd/bin/composer.phar \"$@\"\n", lerdBin, home)
+	// Write composer shim. Routes through `lerd composer` so global installs
+	// land in lerd's bin dir as wrappers (mirroring the npm flow), falling
+	// back to a direct `lerd php composer.phar` invocation when the lerd
+	// binary is not reachable (containers where the glibc binary can't run).
+	composerShim := fmt.Sprintf("#!/bin/sh\nLERD=%q\nif [ -x \"$LERD\" ]; then\n  exec \"$LERD\" composer \"$@\"\nfi\nexec %s php %s/.local/share/lerd/bin/composer.phar \"$@\"\n", lerdBin, lerdBin, home)
 	if err := os.WriteFile(filepath.Join(binDir, "composer"), []byte(composerShim), 0755); err != nil {
 		return fmt.Errorf("writing composer shim: %w", err)
 	}

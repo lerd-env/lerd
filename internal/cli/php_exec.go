@@ -37,13 +37,31 @@ func runPhp(_ *cobra.Command, args []string) error {
 
 // RunPHP execs `php <args...>` inside the project's PHP-FPM container, with
 // stdio wired to the current terminal. Used by `lerd php`, the vendor/bin
-// fallback, and other passthrough commands that need a PHP runtime.
+// fallback, and other passthrough commands that need a PHP runtime. The
+// child's exit code is propagated via os.Exit; callers that need to do work
+// after the child exits (e.g. sync wrappers after a failed composer remove)
+// should use RunPHPCapture instead.
 func RunPHP(cwd string, args []string) error {
+	code, err := RunPHPCapture(cwd, args)
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		os.Exit(code)
+	}
+	return nil
+}
+
+// RunPHPCapture is the non-exiting variant of RunPHP. It returns the child
+// process's exit code separately from any setup error (container not running,
+// version detection failure, etc.), so callers can run their own work after
+// the child exits before propagating the code to the parent shell.
+func RunPHPCapture(cwd string, args []string) (int, error) {
 	version, err := phpDet.DetectVersion(cwd)
 	if err != nil {
 		cfg, cfgErr := config.LoadGlobal()
 		if cfgErr != nil {
-			return fmt.Errorf("cannot detect PHP version: %w", err)
+			return 0, fmt.Errorf("cannot detect PHP version: %w", err)
 		}
 		version = cfg.PHP.DefaultVersion
 	}
@@ -65,7 +83,7 @@ func RunPHP(cwd string, args []string) error {
 	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
 
 	if running, _ := podman.ContainerRunning(container); !running {
-		return fmt.Errorf("PHP %s FPM container is not running — start it with: systemctl --user start %s", version, container)
+		return 0, fmt.Errorf("PHP %s FPM container is not running — start it with: systemctl --user start %s", version, container)
 	}
 
 	podman.EnsurePathMounted(cwd, version)
@@ -107,9 +125,9 @@ func RunPHP(cwd string, args []string) error {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		if exit, ok := err.(*exec.ExitError); ok {
-			os.Exit(exit.ExitCode())
+			return exit.ExitCode(), nil
 		}
-		return err
+		return 0, err
 	}
-	return nil
+	return 0, nil
 }

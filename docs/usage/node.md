@@ -73,6 +73,8 @@ The wrapper exec's the real binary through `fnm exec --using=default`, so global
 
 `npm uninstall -g <pkg>` removes the wrapper as well. Files in `~/.local/share/lerd/bin/` that lerd did not create with its own marker comment are never touched, so the existing `node`, `npm`, `npx`, `php`, `composer`, and `laravel` shims in the same directory stay safe.
 
+The same mechanism applies to `composer global require`. Composer's global vendor/bin (`~/.config/composer/vendor/bin/` by default, respecting `COMPOSER_HOME` and `XDG_CONFIG_HOME`) is mirrored into `~/.local/share/lerd/bin/` after every `composer` run, with wrappers that exec the real bin through `lerd php` so `#!/usr/bin/env php` shebangs resolve against the FPM container. After `composer global require psy/psysh` you can call `psysh` from any shell directly. `composer global remove` cleans the wrapper too.
+
 ---
 
 ## System-managed vs lerd-managed Node

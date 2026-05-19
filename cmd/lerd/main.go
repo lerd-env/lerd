@@ -101,6 +101,7 @@ func main() {
 	root.AddCommand(cli.NewNodeCmd())
 	root.AddCommand(cli.NewNpmCmd())
 	root.AddCommand(cli.NewNpxCmd())
+	root.AddCommand(cli.NewComposerCmd())
 	root.AddCommand(cli.NewServiceCmd())
 	root.AddCommand(cli.NewStatusCmd())
 	root.AddCommand(cli.NewTuiCmd())

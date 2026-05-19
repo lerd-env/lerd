@@ -405,6 +405,32 @@ func TestAddShellShims_NodeShimChecksDefaultAlias(t *testing.T) {
 	}
 }
 
+func TestAddShellShims_ComposerShimDelegatesToLerd(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("HOME", tmp)
+	t.Setenv("SHELL", "/bin/sh")
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := addShellShims(false); err != nil {
+		t.Fatalf("addShellShims: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(binDir, "composer"))
+	if err != nil {
+		t.Fatalf("composer shim not created: %v", err)
+	}
+	shim := string(data)
+	if !strings.Contains(shim, `exec "$LERD" composer "$@"`) {
+		t.Errorf("composer shim should delegate to lerd composer first, got:\n%s", shim)
+	}
+	if !strings.Contains(shim, "composer.phar") {
+		t.Errorf("composer shim should keep a composer.phar fallback path, got:\n%s", shim)
+	}
+}
+
 func TestDetectSystemNode_findsNvmDirEvenWhenPathIsEmpty(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

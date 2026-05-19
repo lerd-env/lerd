@@ -28,7 +28,7 @@ func TestSyncNodeGlobalBins_CreatesWrappers(t *testing.T) {
 		t.Fatalf("expected wrapper at %s: %v", wrapper, err)
 	}
 	body := string(data)
-	if !strings.Contains(body, shimMarker) {
+	if !strings.Contains(body, nodeShimMarker) {
 		t.Errorf("wrapper missing marker: %q", body)
 	}
 	if !strings.Contains(body, filepath.Join(sourceBin, "pm2")) {
@@ -61,7 +61,7 @@ func TestSyncNodeGlobalBins_RemovesOrphans(t *testing.T) {
 	}
 	// stale wrapper with marker, source no longer present
 	orphan := filepath.Join(targetBin, "vite")
-	content := "#!/bin/sh\n# " + shimMarker + "\nexec /old/path\n"
+	content := "#!/bin/sh\n# " + nodeShimMarker + "\nexec /old/path\n"
 	if err := os.WriteFile(orphan, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +145,7 @@ func TestSyncNodeGlobalBins_MissingSourceIsNoOp(t *testing.T) {
 	}
 	// pre-existing orphan should still be cleaned up even when source is absent
 	orphan := filepath.Join(targetBin, "ghost")
-	content := "#!/bin/sh\n# " + shimMarker + "\n"
+	content := "#!/bin/sh\n# " + nodeShimMarker + "\n"
 	if err := os.WriteFile(orphan, []byte(content), 0o755); err != nil {
 		t.Fatal(err)
 	}
