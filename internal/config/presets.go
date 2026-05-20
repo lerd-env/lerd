@@ -288,13 +288,21 @@ func (p *Preset) Resolve(version string) (*CustomService, error) {
 	return &svc, nil
 }
 
+// canonicalVersion returns the version flagged canonical, or nil when none is.
+func (p *Preset) canonicalVersion() *PresetVersion {
+	for i := range p.Versions {
+		if p.Versions[i].Canonical {
+			return &p.Versions[i]
+		}
+	}
+	return nil
+}
+
 // CanonicalTag returns the tag of the version marked canonical, or empty
 // when no version is flagged (single-version presets or all-alternate families).
 func (p *Preset) CanonicalTag() string {
-	for _, v := range p.Versions {
-		if v.Canonical {
-			return v.Tag
-		}
+	if v := p.canonicalVersion(); v != nil {
+		return v.Tag
 	}
 	return ""
 }
@@ -321,9 +329,16 @@ func (p *Preset) ResolvePinned(tag string) (*CustomService, error) {
 	svc.Image = picked.Image
 	svc.Preset = p.Name
 	svc.PresetVersion = picked.Tag
+	// The bare canonical instance always occupies the canonical port; only the
+	// image follows the pinned version, so {{host_port}} must not drift onto a
+	// non-canonical version's alternate port (e.g. a migrated pg16 → 18).
+	portSource := picked
+	if canon := p.canonicalVersion(); canon != nil {
+		portSource = canon
+	}
 	var hostPort string
-	if picked.HostPort > 0 {
-		hostPort = fmt.Sprintf("%d", picked.HostPort)
+	if portSource.HostPort > 0 {
+		hostPort = fmt.Sprintf("%d", portSource.HostPort)
 	}
 	repl := strings.NewReplacer(
 		"{{name}}", svc.Name,

@@ -2888,9 +2888,9 @@ func execServiceMigrate(args map[string]any) (any, *rpcError) {
 	if err != nil || avail.CurrentImage == "" {
 		return toolErr("could not resolve current image for " + name), nil
 	}
-	target := avail.CurrentImage
-	if at := strings.LastIndex(target, ":"); at > 0 {
-		target = target[:at] + ":" + tag
+	target, err := serviceops.ResolveMigrateTarget(name, avail.CurrentImage, tag)
+	if err != nil {
+		return toolErr(err.Error()), nil
 	}
 	var lastImage string
 	emit := func(ev serviceops.PhaseEvent) {

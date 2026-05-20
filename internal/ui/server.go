@@ -1345,9 +1345,10 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "could not resolve current image", http.StatusBadRequest)
 			return
 		}
-		targetImage := avail.CurrentImage
-		if at := strings.LastIndex(targetImage, ":"); at > 0 {
-			targetImage = targetImage[:at] + ":" + targetTag
+		targetImage, err := serviceops.ResolveMigrateTarget(name, avail.CurrentImage, targetTag)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
 		}
 		writeLine, _ := startNDJSONStream(w, r)
 		start := time.Now()

@@ -1,11 +1,13 @@
 package serviceops
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -70,6 +72,53 @@ func familyOf(name string) string {
 	return config.FamilyOfName(name)
 }
 
+// presetForService returns the bundled preset a service was installed from,
+// resolving a default-preset name directly and an installed custom service via
+// its saved Preset reference. Returns nil when the service has no preset.
+func presetForService(name string) (*config.Preset, error) {
+	if config.IsDefaultPreset(name) {
+		return config.LoadPreset(name)
+	}
+	svc, err := config.LoadCustomService(name)
+	if err != nil {
+		return nil, fmt.Errorf("unknown service %q", name)
+	}
+	if svc.Preset == "" {
+		return nil, nil
+	}
+	return config.LoadPreset(svc.Preset)
+}
+
+// ResolveMigrateTarget maps a migrate version argument to a target image. A
+// bare preset version ("18") resolves to that version's full preset image; an
+// unknown argument is substituted as a literal tag onto the current image.
+func ResolveMigrateTarget(name, currentImage, version string) (string, error) {
+	version = strings.TrimSpace(version)
+	if version == "" {
+		return "", fmt.Errorf("a target version is required")
+	}
+	p, _ := presetForService(name)
+	return migrateTargetImage(p, currentImage, version)
+}
+
+// migrateTargetImage is the pure resolution behind ResolveMigrateTarget, split
+// out so the rules can be tested without an installed service on disk.
+func migrateTargetImage(p *config.Preset, currentImage, version string) (string, error) {
+	if p != nil && len(p.Versions) > 0 {
+		if svc, err := p.Resolve(version); err == nil {
+			p.ApplyPlatformOverride(svc, runtime.GOOS)
+			return svc.Image, nil
+		}
+	}
+	if currentImage == "" {
+		return "", fmt.Errorf("no preset version %q and no current image to derive a tag from", version)
+	}
+	if at := strings.LastIndex(currentImage, ":"); at > 0 {
+		return currentImage[:at] + ":" + version, nil
+	}
+	return currentImage + ":" + version, nil
+}
+
 func timestamped() string { return time.Now().UTC().Format("20060102-150405") }
 
 // containerExec runs shellCmd inside a running container with a hard timeout.
@@ -107,10 +156,21 @@ func dumpToHost(container, shellCmd string, envPairs []string, hostPath string, 
 	}
 	args = append(args, container, "sh", "-c", shellCmd)
 	cmd := exec.CommandContext(ctx, podman.PodmanBin(), args...)
+	if err := runStreaming(cmd, out); err != nil {
+		return fmt.Errorf("dump command failed: %w", err)
+	}
+	return nil
+}
+
+// runStreaming runs cmd with stdout written to out and stderr captured for
+// error context. CombinedOutput refuses to run once Stdout is set, so the dump
+// path has to wire the two streams explicitly instead.
+func runStreaming(cmd *exec.Cmd, out *os.File) error {
+	var stderr bytes.Buffer
 	cmd.Stdout = out
-	stderr, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("dump command failed: %w\n%s", err, string(stderr))
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("%w\n%s", err, stderr.String())
 	}
 	return nil
 }

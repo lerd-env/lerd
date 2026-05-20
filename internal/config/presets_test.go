@@ -618,6 +618,37 @@ func TestPresetCanonicalTag(t *testing.T) {
 	}
 }
 
+// A pinned canonical service keeps the canonical port: ResolvePinned templates
+// {{host_port}} from the canonical version, not the pinned one. Regression
+// guard for the pg16 → 18 migrate binding 5418 instead of 5432.
+func TestResolvePinned_CanonicalKeepsCanonicalPort(t *testing.T) {
+	p, err := LoadPreset("postgres")
+	if err != nil {
+		t.Fatalf("LoadPreset: %v", err)
+	}
+	svc, err := p.ResolvePinned("18")
+	if err != nil {
+		t.Fatalf("ResolvePinned: %v", err)
+	}
+	if svc.Name != "postgres" {
+		t.Errorf("name = %q, want bare postgres", svc.Name)
+	}
+	if svc.Image != "docker.io/postgis/postgis:18-3.6-alpine" {
+		t.Errorf("image = %q, want the pinned pg18 image", svc.Image)
+	}
+	if len(svc.Ports) == 0 || !strings.HasPrefix(svc.Ports[0], "5432:") {
+		t.Errorf("ports = %v, want canonical 5432:5432", svc.Ports)
+	}
+	for _, port := range svc.Ports {
+		if strings.Contains(port, "5418") {
+			t.Errorf("pinned canonical postgres must not adopt version 18's alternate port: %v", svc.Ports)
+		}
+	}
+	if strings.Contains(svc.ConnectionURL, "5418") {
+		t.Errorf("connection url must use the canonical port, got %q", svc.ConnectionURL)
+	}
+}
+
 func TestPresetResolvePinned_KeepsBareName(t *testing.T) {
 	p, err := LoadPreset("postgres")
 	if err != nil {
