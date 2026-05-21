@@ -77,6 +77,10 @@ type ProjectConfig struct {
 	// {{site}} (database-safe name). When APP_URL is present here it takes
 	// precedence over the default scheme://domain rewrite.
 	EnvOverrides map[string]string `yaml:"env_overrides,omitempty"`
+	// RequestTimeout overrides the nginx request timeout for this project, in
+	// seconds. Zero inherits the global nginx.request_timeout (default 60s).
+	// Raise it for apps with deliberately long-running requests.
+	RequestTimeout int `yaml:"request_timeout,omitempty"`
 }
 
 // IsEmpty returns true when the config has no meaningful content, which
@@ -87,7 +91,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		len(c.Workers) == 0 && len(c.CustomWorkers) == 0 && !c.Secured &&
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
 		c.Container == nil && c.Runtime == "" && !c.RuntimeWorker &&
-		!c.DBIsolated && len(c.EnvOverrides) == 0
+		!c.DBIsolated && len(c.EnvOverrides) == 0 && c.RequestTimeout == 0
 }
 
 // ServiceNames returns the name of every service in the config, for callers

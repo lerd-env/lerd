@@ -69,6 +69,26 @@ type VhostData struct {
 	// profiled. SPX_KEY is injected regardless (gated by the $spx_key map)
 	// so the profiler UI is reachable.
 	Profiling bool
+	// RequestTimeout is the nginx request timeout in seconds rendered into the
+	// fastcgi_*_timeout / proxy_*_timeout directives. Resolved per site by
+	// resolveRequestTimeout (project .lerd.yaml, then global config, then 60s).
+	RequestTimeout int
+}
+
+// resolveRequestTimeout returns the effective request timeout in seconds for
+// the site at sitePath: project .lerd.yaml wins, then global config, then 60s.
+// An empty sitePath skips the project lookup (site-less proxy vhosts).
+func resolveRequestTimeout(sitePath string) int {
+	if sitePath != "" {
+		if pc, err := config.LoadProjectConfig(sitePath); err == nil && pc.RequestTimeout > 0 {
+			return pc.RequestTimeout
+		}
+	}
+	gc, err := config.LoadGlobal()
+	if err != nil {
+		return config.DefaultRequestTimeout
+	}
+	return gc.RequestTimeoutSeconds()
 }
 
 // phpShort converts "8.4" → "84".
@@ -142,6 +162,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 		ProxyPort:       proxyPort,
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -185,6 +206,7 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 		ProxyPort:       proxyPort,
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -217,6 +239,7 @@ func GenerateFrankenPHPVhost(site config.Site) error {
 		ServerNames:     serverNamesWithWildcards(site.Domains),
 		CustomContainer: podman.FrankenPHPContainerName(site.Name),
 		CustomPort:      podman.FrankenPHPPort,
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -247,6 +270,7 @@ func GenerateFrankenPHPSSLVhost(site config.Site) error {
 		CertDomain:      site.PrimaryDomain(),
 		CustomContainer: podman.FrankenPHPContainerName(site.Name),
 		CustomPort:      podman.FrankenPHPPort,
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -280,6 +304,7 @@ func GenerateCustomVhost(site config.Site) error {
 		CustomContainer: podman.CustomContainerName(site.Name),
 		CustomPort:      site.ContainerPort,
 		BackendSSL:      site.ContainerSSL,
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -314,6 +339,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 		CustomContainer: podman.CustomContainerName(site.Name),
 		CustomPort:      site.ContainerPort,
 		BackendSSL:      site.ContainerSSL,
+		RequestTimeout:  resolveRequestTimeout(site.Path),
 	}
 
 	var buf bytes.Buffer
@@ -364,6 +390,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		LerdSite:        siteName,
 		LerdBranch:      branch,
 		Profiling:       profilerEnabled(),
+		RequestTimeout:  resolveRequestTimeout(path),
 	}
 
 	var buf bytes.Buffer
@@ -402,6 +429,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		LerdSite:        siteName,
 		LerdBranch:      branch,
 		Profiling:       profilerEnabled(),
+		RequestTimeout:  resolveRequestTimeout(path),
 	}
 
 	var buf bytes.Buffer
@@ -536,9 +564,10 @@ func RemoveVhost(domain string) error {
 
 // proxyVhostData is the template data for vhost-proxy.conf.tmpl.
 type proxyVhostData struct {
-	Domain       string
-	UpstreamHost string
-	UpstreamPort int
+	Domain         string
+	UpstreamHost   string
+	UpstreamPort   int
+	RequestTimeout int
 }
 
 // GenerateProxyVhost renders vhost-proxy.conf.tmpl and writes conf.d/{domain}.conf.
@@ -554,9 +583,10 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 	}
 
 	data := proxyVhostData{
-		Domain:       domain,
-		UpstreamHost: upstreamHost,
-		UpstreamPort: upstreamPort,
+		Domain:         domain,
+		UpstreamHost:   upstreamHost,
+		UpstreamPort:   upstreamPort,
+		RequestTimeout: resolveRequestTimeout(""),
 	}
 
 	var buf bytes.Buffer

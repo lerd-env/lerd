@@ -12,6 +12,12 @@ node:
 nginx:
   http_port: 80
   https_port: 443
+  request_timeout: 60   # optional, default 60. Seconds nginx waits on a slow
+                        # request before returning 504. Maps to
+                        # fastcgi_read_timeout/fastcgi_send_timeout for PHP-FPM
+                        # sites and proxy_read_timeout/proxy_send_timeout for
+                        # proxy and custom-container sites. A project's
+                        # .lerd.yaml request_timeout overrides it per site.
 dns:
   tld: "test"
 parked_directories:
@@ -61,6 +67,7 @@ A portable, self-contained description of a project's local environment. Created
 | `framework` | Framework name (overrides auto-detection) |
 | `framework_def` | Full framework definition, embedded automatically for custom (non-Laravel) frameworks so the project is portable across machines |
 | `public_dir` | Override for the framework's default document-root subdirectory, e.g. `public_html` for a Laravel skeleton that doesn't use the conventional `public/` folder. Empty means use the framework default |
+| `request_timeout` | nginx request timeout in seconds for this site. Maps to `fastcgi_read_timeout`/`fastcgi_send_timeout` for PHP-FPM sites and `proxy_read_timeout`/`proxy_send_timeout` for proxy and custom-container sites. Overrides the global `nginx.request_timeout`. Omit (or `0`) to inherit the global default of 60s. Raise it for apps with deliberately long-running requests |
 | `secured` | When `true`, HTTPS is enabled on apply |
 | `domains` | Site hostnames without the TLD (e.g. `[myapp, api]`). The first entry is the primary; additional entries become aliases. Conflict-filtered domains stay in this list on disk but are not registered |
 | `app_url` | Override for `APP_URL` (or the framework's URL key) written to `.env`. Highest priority, it beats the per-machine `sites.yaml` override and the default `<scheme>://<primary-domain>` generator. Use for custom path prefixes, ports, or unrelated hostnames you want shared across machines |

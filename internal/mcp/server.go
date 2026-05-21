@@ -2455,6 +2455,15 @@ func execCheck(args map[string]any) (any, *rpcError) {
 		add("node_version", "ok", cfg.NodeVersion)
 	}
 
+	// Request timeout
+	if cfg.RequestTimeout != 0 {
+		if cfg.RequestTimeout < 0 {
+			add("request_timeout", "fail", fmt.Sprintf("%d — must be a positive number of seconds", cfg.RequestTimeout))
+		} else {
+			add("request_timeout", "ok", fmt.Sprintf("%ds", cfg.RequestTimeout))
+		}
+	}
+
 	// Framework
 	if cfg.Framework != "" {
 		if cfg.FrameworkDef != nil {

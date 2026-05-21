@@ -59,6 +59,16 @@ func runCheck(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  OK    node_version: %s\n", cfg.NodeVersion)
 	}
 
+	// Request timeout
+	if cfg.RequestTimeout != 0 {
+		if cfg.RequestTimeout < 0 {
+			fmt.Printf("  FAIL  request_timeout: %d — must be a positive number of seconds\n", cfg.RequestTimeout)
+			errors++
+		} else {
+			fmt.Printf("  OK    request_timeout: %ds\n", cfg.RequestTimeout)
+		}
+	}
+
 	// Framework
 	if cfg.Framework != "" {
 		if cfg.FrameworkDef != nil {

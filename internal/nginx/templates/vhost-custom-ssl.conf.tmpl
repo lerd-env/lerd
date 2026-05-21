@@ -25,8 +25,8 @@ server {
         proxy_set_header X-Forwarded-Host $real_forwarded_host;
         proxy_set_header X-Forwarded-Proto $real_forwarded_proto;
         proxy_set_header X-Forwarded-Port $server_port;
-        proxy_read_timeout 60s;
-        proxy_send_timeout 60s;
+        proxy_read_timeout {{.RequestTimeout}}s;
+        proxy_send_timeout {{.RequestTimeout}}s;
         {{- if .BackendSSL}}
         proxy_ssl_verify off;
         {{- end}}

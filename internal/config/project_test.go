@@ -413,6 +413,41 @@ func TestProjectConfig_PublicDir_IsEmpty(t *testing.T) {
 	}
 }
 
+func TestProjectConfig_RequestTimeout(t *testing.T) {
+	input := `php_version: "8.4"
+request_timeout: 300
+`
+	var cfg ProjectConfig
+	if err := yaml.Unmarshal([]byte(input), &cfg); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if cfg.RequestTimeout != 300 {
+		t.Errorf("RequestTimeout = %d, want 300", cfg.RequestTimeout)
+	}
+}
+
+func TestProjectConfig_RequestTimeout_OmittedWhenZero(t *testing.T) {
+	cfg := ProjectConfig{PHPVersion: "8.4"}
+	data, err := yaml.Marshal(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "request_timeout") {
+		t.Errorf("request_timeout should be omitted when zero, got:\n%s", string(data))
+	}
+}
+
+func TestProjectConfig_RequestTimeout_IsEmpty(t *testing.T) {
+	cfg := &ProjectConfig{}
+	if !cfg.IsEmpty() {
+		t.Error("empty config should be empty")
+	}
+	cfg.RequestTimeout = 300
+	if cfg.IsEmpty() {
+		t.Error("config with request_timeout should not be empty")
+	}
+}
+
 func TestProjectConfig_OldFormatCompat(t *testing.T) {
 	// Old .lerd.yaml used services: [mysql, redis] — must still parse.
 	input := `php_version: "8.3"

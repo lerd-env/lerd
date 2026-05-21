@@ -10,11 +10,14 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// setupConfD points NginxConfD() at a temp dir via XDG_DATA_HOME and returns the conf.d path.
+// setupConfD points NginxConfD() at a temp dir via XDG_DATA_HOME and returns the
+// conf.d path. XDG_CONFIG_HOME is redirected too so resolveRequestTimeout reads
+// a hermetic (empty) global config instead of the developer's real one.
 func setupConfD(t *testing.T) string {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
 	return filepath.Join(tmp, "lerd", "nginx", "conf.d")
 }
 
@@ -62,6 +65,113 @@ func TestGenerateVhost_honoursSitePublicDir(t *testing.T) {
 	content := readConf(t, filepath.Join(confD, "myapp.test.conf"))
 	if !strings.Contains(content, "root /srv/myapp/public_html") {
 		t.Errorf("expected custom public_html doc root in:\n%s", content)
+	}
+}
+
+// ── resolveRequestTimeout ─────────────────────────────────────────────────────
+
+func TestResolveRequestTimeout_DefaultsTo60(t *testing.T) {
+	setupConfD(t)
+	if got := resolveRequestTimeout("/srv/nonexistent"); got != 60 {
+		t.Errorf("resolveRequestTimeout = %d, want 60 (nginx default)", got)
+	}
+}
+
+func TestResolveRequestTimeout_GlobalConfigWins(t *testing.T) {
+	setupConfD(t)
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Nginx.RequestTimeout = 120
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if got := resolveRequestTimeout("/srv/nonexistent"); got != 120 {
+		t.Errorf("resolveRequestTimeout = %d, want 120 (global config)", got)
+	}
+}
+
+func TestResolveRequestTimeout_ProjectOverrideWins(t *testing.T) {
+	setupConfD(t)
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Nginx.RequestTimeout = 120
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	projectDir := t.TempDir()
+	if err := config.SaveProjectConfig(projectDir, &config.ProjectConfig{RequestTimeout: 300}); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	if got := resolveRequestTimeout(projectDir); got != 300 {
+		t.Errorf("resolveRequestTimeout = %d, want 300 (.lerd.yaml override)", got)
+	}
+}
+
+// ── request timeout rendering ─────────────────────────────────────────────────
+
+func TestGenerateVhost_rendersDefaultRequestTimeout(t *testing.T) {
+	confD := setupConfD(t)
+	site := config.Site{Name: "app", Domains: []string{"app.test"}, Path: "/srv/app"}
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	for _, want := range []string{"fastcgi_read_timeout 60s;", "fastcgi_send_timeout 60s;"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in:\n%s", want, content)
+		}
+	}
+}
+
+func TestGenerateVhost_honoursProjectRequestTimeout(t *testing.T) {
+	confD := setupConfD(t)
+	projectDir := t.TempDir()
+	if err := config.SaveProjectConfig(projectDir, &config.ProjectConfig{RequestTimeout: 300}); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	site := config.Site{Name: "app", Domains: []string{"app.test"}, Path: projectDir}
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, "fastcgi_read_timeout 300s;") {
+		t.Errorf("expected fastcgi_read_timeout 300s in:\n%s", content)
+	}
+}
+
+func TestGenerateSSLVhost_honoursProjectRequestTimeout(t *testing.T) {
+	confD := setupConfD(t)
+	projectDir := t.TempDir()
+	if err := config.SaveProjectConfig(projectDir, &config.ProjectConfig{RequestTimeout: 240}); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	site := config.Site{Name: "app", Domains: []string{"app.test"}, Path: projectDir}
+	if err := GenerateSSLVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateSSLVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test-ssl.conf"))
+	if !strings.Contains(content, "fastcgi_read_timeout 240s;") {
+		t.Errorf("expected fastcgi_read_timeout 240s in:\n%s", content)
+	}
+}
+
+func TestGenerateCustomVhost_honoursProjectRequestTimeout(t *testing.T) {
+	confD := setupConfD(t)
+	projectDir := t.TempDir()
+	if err := config.SaveProjectConfig(projectDir, &config.ProjectConfig{RequestTimeout: 180}); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	site := config.Site{Name: "nestapp", Domains: []string{"nestapp.test"}, Path: projectDir, ContainerPort: 3000}
+	if err := GenerateCustomVhost(site); err != nil {
+		t.Fatalf("GenerateCustomVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "nestapp.test.conf"))
+	if !strings.Contains(content, "proxy_read_timeout 180s;") {
+		t.Errorf("expected proxy_read_timeout 180s in:\n%s", content)
 	}
 }
 

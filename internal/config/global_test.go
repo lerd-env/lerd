@@ -73,6 +73,50 @@ func TestSaveLoadGlobal_RoundTrip(t *testing.T) {
 	}
 }
 
+// ── RequestTimeoutSeconds ─────────────────────────────────────────────────────
+
+func TestRequestTimeoutSeconds_DefaultsTo60WhenUnset(t *testing.T) {
+	cfg := &GlobalConfig{}
+	if got := cfg.RequestTimeoutSeconds(); got != DefaultRequestTimeout {
+		t.Errorf("RequestTimeoutSeconds = %d, want %d", got, DefaultRequestTimeout)
+	}
+}
+
+func TestRequestTimeoutSeconds_HonoursConfiguredValue(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.Nginx.RequestTimeout = 300
+	if got := cfg.RequestTimeoutSeconds(); got != 300 {
+		t.Errorf("RequestTimeoutSeconds = %d, want 300", got)
+	}
+}
+
+func TestRequestTimeoutSeconds_NonPositiveFallsBack(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.Nginx.RequestTimeout = -5
+	if got := cfg.RequestTimeoutSeconds(); got != DefaultRequestTimeout {
+		t.Errorf("RequestTimeoutSeconds = %d, want %d for non-positive", got, DefaultRequestTimeout)
+	}
+}
+
+func TestSaveLoadGlobal_RequestTimeoutRoundTrip(t *testing.T) {
+	setConfigDir(t)
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Nginx.RequestTimeout = 240
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	got, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal after save: %v", err)
+	}
+	if got.Nginx.RequestTimeout != 240 {
+		t.Errorf("Nginx.RequestTimeout = %d, want 240", got.Nginx.RequestTimeout)
+	}
+}
+
 // ── Cache ─────────────────────────────────────────────────────────────────────
 
 func TestLoadGlobal_CacheReturnsIndependentCopy(t *testing.T) {

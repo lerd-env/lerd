@@ -51,6 +51,10 @@ type GlobalConfig struct {
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`
 		HTTPSPort int `yaml:"https_port" mapstructure:"https_port"`
+		// RequestTimeout is the default nginx request timeout in seconds,
+		// overridable per project via .lerd.yaml request_timeout. Zero falls
+		// back to nginx's own 60s default; read it via RequestTimeoutSeconds.
+		RequestTimeout int `yaml:"request_timeout,omitempty" mapstructure:"request_timeout"`
 	} `yaml:"nginx" mapstructure:"nginx"`
 	DNS struct {
 		// Enabled=false skips lerd-dns, mkcert CA, sudoers, and resolver
@@ -153,6 +157,19 @@ type GlobalConfig struct {
 	} `yaml:"notifications,omitempty" mapstructure:"notifications"`
 	ParkedDirectories []string                 `yaml:"parked_directories" mapstructure:"parked_directories"`
 	Services          map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
+}
+
+// DefaultRequestTimeout is nginx's built-in fastcgi/proxy read-timeout default
+// (seconds), used when neither the project nor the global config sets one.
+const DefaultRequestTimeout = 60
+
+// RequestTimeoutSeconds returns the effective global nginx request timeout in
+// seconds, falling back to nginx's 60s default when unset or non-positive.
+func (c *GlobalConfig) RequestTimeoutSeconds() int {
+	if c.Nginx.RequestTimeout > 0 {
+		return c.Nginx.RequestTimeout
+	}
+	return DefaultRequestTimeout
 }
 
 // Worker exec-mode constants. `exec` is the default on every platform;

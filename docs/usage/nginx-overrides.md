@@ -14,6 +14,27 @@ include /etc/nginx/custom.d/{your-domain}.conf*;
 
 The trailing `*` makes the include a glob, so nginx treats a missing override file as empty (no 500). The directory is bind-mounted read-only into the `lerd-nginx` container and is never touched by lerd after creation.
 
+## Request timeouts
+
+By default nginx waits 60 seconds for a request to complete before returning `504 Gateway Timeout`. Apps with deliberately long-running requests (heavy reports, slow third-party calls, hardware that answers on its own schedule) need that raised, and this does not need a `custom.d` snippet.
+
+Set `request_timeout` in seconds and lerd writes it straight into the generated vhost. Globally, in `~/.config/lerd/config.yaml`:
+
+```yaml
+nginx:
+  request_timeout: 300
+```
+
+or per project in `.lerd.yaml`, which overrides the global value and travels with the repo:
+
+```yaml
+request_timeout: 300
+```
+
+lerd renders this into `fastcgi_read_timeout` and `fastcgi_send_timeout` for PHP-FPM sites, and into `proxy_read_timeout` and `proxy_send_timeout` for proxy, FrankenPHP, and custom-container sites, so the same setting works whatever runtime the site uses. Run `lerd link` (or `lerd install`) afterwards to regenerate the vhost and reload nginx.
+
+A long nginx timeout only helps if PHP is allowed to run that long too. For requests that are CPU-bound rather than waiting on I/O, also raise `max_execution_time` in the per-version php.ini via `lerd php:ini <version>`.
+
 ## Example: raise the upload limit for one site
 
 Create `~/.local/share/lerd/nginx/custom.d/bigapp.test.conf`:
@@ -22,10 +43,10 @@ Create `~/.local/share/lerd/nginx/custom.d/bigapp.test.conf`:
 client_max_body_size 200m;
 ```
 
-Then reload nginx so the include picks it up:
+Then reload nginx so the include picks it up. The `custom.d` directory is read by the nginx container, so restart that container (`lerd restart` only restarts a site's PHP-FPM container and will not pick up a `custom.d` change):
 
 ```sh
-lerd restart bigapp.test
+systemctl --user restart lerd-nginx
 ```
 
 That's it. The snippet is merged into the generated server block for `bigapp.test` and nothing lerd does afterwards (including a version upgrade) will touch it.

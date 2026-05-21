@@ -1368,6 +1368,7 @@ The ` + bt + `container.port` + bt + ` field is required. ` + bt + `container.co
 | ` + bt + `node_version` + bt + ` | Node version (e.g. ` + bt + `"22"` + bt + `) |
 | ` + bt + `framework` + bt + ` | Framework name (e.g. ` + bt + `laravel` + bt + `, ` + bt + `symfony` + bt + `, ` + bt + `wordpress` + bt + `) |
 | ` + bt + `secured` + bt + ` | ` + bt + `true` + bt + ` to enable HTTPS |
+| ` + bt + `request_timeout` + bt + ` | nginx request timeout in seconds (default 60). Raises ` + bt + `fastcgi_read/send_timeout` + bt + ` for FPM sites or ` + bt + `proxy_read/send_timeout` + bt + ` for proxy/container sites — for deliberately long-running requests. Overrides the global ` + bt + `nginx.request_timeout` + bt + ` |
 | ` + bt + `services` + bt + ` | Services to start (e.g. ` + bt + `[mysql, redis]` + bt + `) |
 | ` + bt + `workers` + bt + ` | Active worker names (e.g. ` + bt + `[queue, schedule]` + bt + `) — auto-synced by start/stop |
 | ` + bt + `app_url` + bt + ` | Override for APP_URL in ` + bt + `.env` + bt + ` |
@@ -1384,6 +1385,7 @@ The ` + bt + `container.port` + bt + ` field is required. ` + bt + `container.co
 | ` + bt + `custom_workers` + bt + ` | no | | Worker definitions — see below |
 | ` + bt + `domains` + bt + ` | no | | Same as PHP sites |
 | ` + bt + `secured` + bt + ` | no | | Same as PHP sites |
+| ` + bt + `request_timeout` + bt + ` | no | 60 | Same as PHP sites — sets ` + bt + `proxy_read/send_timeout` + bt + ` for the container |
 | ` + bt + `services` + bt + ` | no | | Same as PHP sites |
 
 When ` + bt + `container` + bt + ` is present, ` + bt + `php_version` + bt + `, ` + bt + `framework` + bt + `, and ` + bt + `node_version` + bt + ` are ignored — the container defines its own runtime.
