@@ -16,6 +16,8 @@ Lerd ships notifications **off by default**. The first time you open the dashboa
 
 Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription — closed-PWA push respects the toggles even when the dashboard isn't running.
 
+The dashboard's System health card also carries a bell toggle, next to the dump bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
+
 Clicking a notification focuses the dashboard (or launches the PWA if closed) and deep-links to the relevant view: the captured email in the Mailpit overlay, the failing worker's site detail, the finished service's tile, the Dumps tab.
 
 ## How it works

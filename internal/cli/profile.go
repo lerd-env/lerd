@@ -24,6 +24,7 @@ Profiler view. Toggling injects an SPX cookie via nginx, with no FPM restart.`,
 	cmd.AddCommand(newProfileStatusCmd())
 	cmd.AddCommand(newProfileOpenCmd())
 	cmd.AddCommand(newProfileRunCmd())
+	cmd.AddCommand(newProfileClearCmd())
 	return cmd
 }
 
@@ -51,6 +52,26 @@ func newProfileStatusCmd() *cobra.Command {
 		Short: "Show whether the SPX profiler is on",
 		Args:  cobra.NoArgs,
 		RunE:  runProfileStatus,
+	}
+}
+
+func newProfileClearCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "clear",
+		Short: "Delete all captured SPX profile reports",
+		Args:  cobra.NoArgs,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			n, err := profiler.ClearData()
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				fmt.Println("No profile reports to clear.")
+			} else {
+				fmt.Printf("Cleared %d profile report(s).\n", n)
+			}
+			return nil
+		},
 	}
 }
 

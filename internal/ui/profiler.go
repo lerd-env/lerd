@@ -45,8 +45,35 @@ func handleProfilerStatus(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	w.Header().Set("Content-Type", "application/json")
+	_, _ = w.Write(buildProfilerStatusJSON())
+}
+
+// buildProfilerStatusJSON renders the same payload as handleProfilerStatus so
+// the websocket broker can ship it as a profiler_status frame.
+func buildProfilerStatusJSON() []byte {
 	cfg, _ := config.LoadGlobal()
-	writeJSON(w, map[string]bool{"enabled": cfg != nil && cfg.IsProfilerEnabled()})
+	b, _ := json.Marshal(map[string]bool{"enabled": cfg != nil && cfg.IsProfilerEnabled()})
+	return b
+}
+
+// handleProfilerClear deletes every captured SPX report. Loopback-only: it
+// removes files from the shared profiler data directory.
+func handleProfilerClear(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !isLoopbackRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	removed, err := profiler.ClearData()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]int{"removed": removed})
 }
 
 // spxStripPrefix removes the /_spx mount prefix so the proxied request path

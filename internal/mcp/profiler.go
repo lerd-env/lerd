@@ -27,6 +27,11 @@ func profilerToolDefs() []mcpTool {
 			Description: "Whether the SPX profiler is on, plus the SPX web UI URL where flame graphs are viewable.",
 			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
 		},
+		{
+			Name:        "profiler_clear",
+			Description: "Delete all captured SPX profile reports. Returns how many were removed.",
+			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
+		},
 	}
 }
 
@@ -57,5 +62,14 @@ func execProfilerStatus(_ map[string]any) (any, *rpcError) {
 		"spx_ui_url": profiler.SpxUIURL,
 	}
 	b, _ := json.Marshal(snap)
+	return toolOK(string(b)), nil
+}
+
+func execProfilerClear(_ map[string]any) (any, *rpcError) {
+	removed, err := profiler.ClearData()
+	if err != nil {
+		return toolErr("clear failed: " + err.Error()), nil
+	}
+	b, _ := json.Marshal(map[string]int{"removed": removed})
 	return toolOK(string(b)), nil
 }

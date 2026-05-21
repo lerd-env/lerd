@@ -1,11 +1,17 @@
 <script lang="ts">
   import { dashboardOpen, closeDashboard } from '$stores/dashboard';
   import { dashboardIconSvg } from '$lib/dashboardIcons';
-  import { profilerEnabled, loadProfilerStatus, setProfiler } from '$stores/profiler';
+  import {
+    profilerEnabled,
+    loadProfilerStatus,
+    setProfiler,
+    clearProfilerData
+  } from '$stores/profiler';
   import Icon from './Icon.svelte';
   import { m } from '../paraglide/messages.js';
 
   let busy = $state(false);
+  let clearing = $state(false);
   let iframeEl = $state<HTMLIFrameElement | null>(null);
   let entryHref = $state('');
   let canGoBack = $state(false);
@@ -67,6 +73,19 @@
       busy = false;
     }
   }
+
+  // clearData wipes every captured SPX report, then reloads the embedded UI
+  // so its report list reflects the now-empty data directory.
+  async function clearProfilerReports() {
+    if (clearing) return;
+    clearing = true;
+    try {
+      await clearProfilerData();
+      reloadIframe();
+    } finally {
+      clearing = false;
+    }
+  }
 </script>
 
 {#if $dashboardOpen}
@@ -99,6 +118,14 @@
       </div>
       <div class="flex items-center gap-2 shrink-0">
         {#if isProfiler}
+          <button
+            onclick={clearProfilerReports}
+            disabled={clearing}
+            title={m.profiler_clear_title()}
+            class="text-xs rounded-sm border border-gray-200 dark:border-lerd-border px-2 py-1 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 transition-colors disabled:opacity-50"
+          >
+            {clearing ? m.profiler_clear_busy() : m.profiler_clear()}
+          </button>
           <button
             onclick={toggleProfiler}
             disabled={busy}

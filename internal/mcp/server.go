@@ -1310,6 +1310,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execProfilerToggle(args)
 	case "profiler_status":
 		return execProfilerStatus(args)
+	case "profiler_clear":
+		return execProfilerClear(args)
 
 	default:
 		return toolErr("unknown tool: " + p.Name), nil

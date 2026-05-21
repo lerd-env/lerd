@@ -33,7 +33,7 @@ func TestBuildDumpsStatusJSON_HasExpectedShape(t *testing.T) {
 
 func TestAssembleSnapshot_IncludesDumpsStatusField(t *testing.T) {
 	payload := []byte(`{"enabled":true,"listening":true}`)
-	frame := assembleSnapshot(nil, nil, nil, nil, payload, nil, []string{eventbus.KindDumpsStatus})
+	frame := assembleSnapshot(nil, nil, nil, nil, payload, nil, nil, []string{eventbus.KindDumpsStatus})
 	var decoded struct {
 		Type        string          `json:"type"`
 		DumpsStatus json.RawMessage `json:"dumps_status"`

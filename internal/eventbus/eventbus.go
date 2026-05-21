@@ -14,10 +14,11 @@ import (
 
 // Event kinds. Callers should use these constants rather than raw strings.
 const (
-	KindSites       = "sites"
-	KindServices    = "services"
-	KindStatus      = "status"
-	KindDumpsStatus = "dumps_status"
+	KindSites          = "sites"
+	KindServices       = "services"
+	KindStatus         = "status"
+	KindDumpsStatus    = "dumps_status"
+	KindProfilerStatus = "profiler_status"
 )
 
 // Event is broadcast to every Subscriber when a publish fires.

@@ -950,11 +950,12 @@ Capture and inspect ` + bt + `dump()` + bt + ` / ` + bt + `dd()` + bt + ` output
 
 Events ship as JSON with ` + bt + `ts` + bt + ` (RFC3339Nano), ` + bt + `ctx` + bt + ` (type, site, request, pid), ` + bt + `src` + bt + ` (file:line of the dump call), ` + bt + `label` + bt + ` (the keyword arg name when present), and ` + bt + `text` + bt + ` (Symfony VarDumper's CliDumper output). Capacity is 500 events; older entries roll off.
 
-### ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + `
+### ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + ` / ` + bt + `profiler_clear` + bt + `
 Turn the SPX profiler on or off globally. While on, every HTTP request to every PHP-FPM site is profiled into a flame graph.
 
 - ` + bt + `profiler_toggle({ enable })` + bt + ` turns profiling on (` + bt + `enable: true` + bt + `) or off. It rewrites every FPM site's nginx vhost to inject an SPX cookie and reloads nginx, with no FPM restart.
 - ` + bt + `profiler_status()` + bt + ` reports whether profiling is on and the SPX web UI URL where the flame graphs are viewable.
+- ` + bt + `profiler_clear()` + bt + ` deletes every captured SPX report and returns how many were removed.
 
 After turning it on, reload a site in the browser, then open the dashboard Profiler view or the SPX web UI to read the flame graphs.
 
@@ -1468,7 +1469,7 @@ Read ` + bt + `status()` + bt + ` for ` + bt + `dns.tld` + bt + ` and ` + bt + `
 | ` + bt + `site_tls` + bt + ` | Enable or disable HTTPS for a site (mkcert) — ` + bt + `action` + bt + `: ` + bt + `enable` + bt + ` / ` + bt + `disable` + bt + `; updates APP_URL automatically |
 | ` + bt + `xdebug` + bt + ` | Manage Xdebug for a PHP version (port 9003) — ` + bt + `action` + bt + `: ` + bt + `on` + bt + ` / ` + bt + `off` + bt + ` / ` + bt + `status` + bt + `; optional ` + bt + `mode` + bt + ` on ` + bt + `on` + bt + ` (default ` + bt + `debug` + bt + `; also ` + bt + `coverage` + bt + `, ` + bt + `develop` + bt + `, ` + bt + `profile` + bt + `, ` + bt + `trace` + bt + `, ` + bt + `gcstats` + bt + `, or comma combos) |
 | ` + bt + `dumps_recent` + bt + ` / ` + bt + `dumps_status` + bt + ` / ` + bt + `dumps_clear` + bt + ` / ` + bt + `dumps_toggle` + bt + ` | Inspect / clear / toggle the lerd dump bridge that captures ` + bt + `dump()` + bt + ` / ` + bt + `dd()` + bt + ` calls. Off by default; enable with ` + bt + `dumps_toggle({enable: true})` + bt + ` |
-| ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + ` | Turn the SPX profiler on/off globally so every PHP-FPM site's HTTP requests are profiled into flame graphs |
+| ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + ` / ` + bt + `profiler_clear` + bt + ` | Turn the SPX profiler on/off globally so every PHP-FPM site's HTTP requests are profiled into flame graphs, or clear captured reports |
 | ` + bt + `service_control` + bt + ` | Start, stop, pin, or unpin a built-in or custom service — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` / ` + bt + `pin` + bt + ` / ` + bt + `unpin` + bt + ` |
 | ` + bt + `service_add` + bt + ` | Register a new custom OCI service (MongoDB, RabbitMQ, …); supports ` + bt + `depends_on` + bt + ` for service dependencies |
 | ` + bt + `service_preset_list` + bt + ` | List bundled service presets (phpmyadmin, pgadmin, mongo, mongo-express, selenium, stripe-mock, …) with versions and install state |

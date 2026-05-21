@@ -205,7 +205,7 @@ func TestMailpitWebhook_RejectsMissingID(t *testing.T) {
 
 func TestAssembleSnapshot_IncludesNotificationField(t *testing.T) {
 	n := []byte(`{"kind":"mail","title":"x"}`)
-	frame := assembleSnapshot(nil, nil, nil, nil, nil, n, []string{"notification"})
+	frame := assembleSnapshot(nil, nil, nil, nil, nil, nil, n, []string{"notification"})
 	var decoded struct {
 		Type         string          `json:"type"`
 		Notification json.RawMessage `json:"notification"`

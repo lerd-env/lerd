@@ -1,24 +1,18 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
   import DashboardCard from './DashboardCard.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import StatusDot from '$components/StatusDot.svelte';
+  import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
+  import ProfilerToggle from '$components/ProfilerToggle.svelte';
+  import NotificationsToggle from '$components/NotificationsToggle.svelte';
   import { status, lerdStatusColor } from '$stores/status';
   import { sitesByPhp, sitesByNode } from '$stores/sites';
   import { goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
-  import { status as dumpsStatus, refreshStatus as refreshDumpsStatus } from '$stores/dumps';
-  import { notifyPrefs, permissionState, autoSubscribeDisabled } from '$lib/notify';
-
-  onMount(() => {
-    void refreshDumpsStatus();
-  });
+  import { status as dumpsStatus } from '$stores/dumps';
 
   const dumpsBuffered = $derived($dumpsStatus?.count ?? 0);
   const dumpsOn = $derived(Boolean($dumpsStatus?.enabled));
-  const notifyOn = $derived(
-    $permissionState === 'granted' && !$autoSubscribeDisabled && $notifyPrefs.enabled
-  );
 
   const nodeVersions = $derived.by(() => {
     const entries = [...$sitesByNode.entries()].sort((a, b) => a[0].localeCompare(b[0]));
@@ -45,33 +39,44 @@
   {#if $status.dns?.enabled !== false}
     <div class="flex items-center justify-between text-sm">
       <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_dns({ tld: $status.dns.tld })}</span>
-      <StatusDot color={$status.dns.ok ? 'green' : 'red'} />
+      <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+        <StatusDot color={$status.dns.ok ? 'green' : 'red'} />
+      </span>
     </div>
   {/if}
 
   <div class="flex items-center justify-between text-sm">
     <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_nginx()}</span>
-    <StatusDot color={$status.nginx.running ? 'green' : 'red'} />
-  </div>
-
-  <div class="flex items-center justify-between text-sm">
-    <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_watcher()}</span>
-    <StatusDot color={$status.watcher_running ? 'green' : 'red'} />
-  </div>
-
-  <div class="flex items-center justify-between text-sm">
-    <span class="text-gray-600 dark:text-gray-300">Dump bridge</span>
-    <span class="flex items-center gap-1.5">
-      {#if dumpsOn && dumpsBuffered > 0}
-        <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500">{dumpsBuffered}</span>
-      {/if}
-      <StatusDot color={dumpsOn ? 'green' : 'gray'} pulse={dumpsOn} />
+    <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+      <StatusDot color={$status.nginx.running ? 'green' : 'red'} />
     </span>
   </div>
 
   <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_watcher()}</span>
+    <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+      <StatusDot color={$status.watcher_running ? 'green' : 'red'} />
+    </span>
+  </div>
+
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_dumpBridge()}</span>
+    <span class="flex items-center gap-1.5">
+      {#if dumpsOn && dumpsBuffered > 0}
+        <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500">{dumpsBuffered}</span>
+      {/if}
+      <DumpBridgeToggle />
+    </span>
+  </div>
+
+  <div class="flex items-center justify-between text-sm">
+    <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_profiler()}</span>
+    <ProfilerToggle />
+  </div>
+
+  <div class="flex items-center justify-between text-sm">
     <span class="text-gray-600 dark:text-gray-300">{m.notify_settings_title()}</span>
-    <StatusDot color={notifyOn ? 'green' : 'red'} />
+    <NotificationsToggle />
   </div>
 
   {#if $status.php_fpms.length > 0}

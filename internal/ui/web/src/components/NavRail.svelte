@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import { tab, goToTab, TABS, type TabId } from '$stores/route';
   import IconButton from './IconButton.svelte';
   import Icon, { type IconName } from './Icon.svelte';
@@ -13,8 +14,13 @@
     openProfiler
   } from '$stores/dashboard';
   import { dashboardIconSvg } from '$lib/dashboardIcons';
+  import { profilerEnabled, loadProfilerStatus } from '$stores/profiler';
   import { serviceLabel } from '$stores/services';
   import { m } from '../paraglide/messages.js';
+
+  onMount(() => {
+    void loadProfilerStatus();
+  });
 
   const labels = $derived<Record<TabId, string>>({
     dashboard: m.nav_dashboard(),
@@ -54,9 +60,17 @@
       active={$dashboardOpen?.name === 'profiler'}
       onclick={openProfiler}
     >
-      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        {@html dashboardIconSvg('profiler')}
-      </svg>
+      <span class="relative flex items-center justify-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          {@html dashboardIconSvg('profiler')}
+        </svg>
+        {#if $profilerEnabled}
+          <span
+            title={m.profiler_toggle_on()}
+            class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-lerd-card"
+          ></span>
+        {/if}
+      </span>
     </IconButton>
     {#each $dashboardServices as svc (svc.name)}
       <IconButton

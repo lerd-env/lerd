@@ -6,6 +6,8 @@ package profiler
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -49,6 +51,29 @@ func SetProfiling(on bool) (Result, error) {
 		return Result{}, fmt.Errorf("reloading nginx: %w", err)
 	}
 	return Result{Enabled: on}, nil
+}
+
+// ClearData deletes every captured SPX report from the profiler data
+// directory. The directory itself is kept so the read-write bind mount into
+// each FPM container stays valid; only its contents go. A missing or empty
+// directory is not an error. Returns how many top-level entries were removed.
+func ClearData() (int, error) {
+	dir := config.SpxDataDir()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return 0, nil
+		}
+		return 0, fmt.Errorf("reading spx data dir: %w", err)
+	}
+	removed := 0
+	for _, e := range entries {
+		if err := os.RemoveAll(filepath.Join(dir, e.Name())); err != nil {
+			return removed, fmt.Errorf("removing %s: %w", e.Name(), err)
+		}
+		removed++
+	}
+	return removed, nil
 }
 
 // regenerateVhosts rewrites the vhost of every active PHP-FPM site so the

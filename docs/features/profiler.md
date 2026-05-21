@@ -2,7 +2,7 @@
 
 The profiler answers the question dumps and logs can't: where is a request actually spending its time. lerd bundles [SPX](https://github.com/NoiseByNorthwest/php-spx), a low-overhead PHP profiler, into every PHP-FPM image and surfaces its flame graphs through a single global **Profiler** entry in the dashboard.
 
-The profiler is **off by default**. Turn it on with `lerd profile on`, the Start profiling button in the dashboard Profiler view, or `profiler_toggle` via MCP. It is a single global switch: while it is on, every HTTP request to every PHP-FPM site is profiled. Turning it on or off costs nothing but an nginx reload, no FPM restart and no code changes.
+The profiler is **off by default**. Turn it on with `lerd profile on`, the Profiler toggle in the dashboard's System health card, the Start profiling button in the Profiler view, or `profiler_toggle` via MCP. It is a single global switch: while it is on, every HTTP request to every PHP-FPM site is profiled. Turning it on or off costs nothing but an nginx reload, no FPM restart and no code changes.
 
 ## How it works
 
@@ -21,9 +21,10 @@ A second nginx variable, `$spx_key`, carries the SPX auth key. It resolves to an
 lerd profile on        # profile every PHP-FPM site
 lerd profile status    # show the state and the SPX UI URL
 lerd profile off       # stop profiling
+lerd profile clear     # delete every captured report
 ```
 
-In the dashboard, click the flame icon in the left rail to open the **Profiler** view, then use the **Start profiling** button in its header.
+In the dashboard, the System health card carries a Profiler toggle next to the dump bridge one: click it to flip profiling on or off, and a pulsing emerald dot marks it as live. The flame icon in the left rail opens the **Profiler** view and shows the same green dot while profiling is on. Inside the Profiler view, the header has a **Start profiling** / **Stop profiling** button and a **Clear data** button.
 
 While the profiler is on, every HTTP request to every PHP-FPM site is profiled. Reload the sites you care about a few times, then open the Profiler view to read the reports. Turn it off when you are done so the profiler is not adding overhead to every request.
 
@@ -57,11 +58,12 @@ This opens `http://profiler.localhost/?SPX_UI_URI=/`, the same UI the Profiler v
 - **PHP-FPM sites only.** FrankenPHP and custom-container sites run images that don't carry the SPX extension, so their requests are not profiled.
 - **Sampling, not exact counts.** SPX is a tracing profiler that records wall and CPU time accurately. It is built for "where did the time go", not for exact call counts.
 - **Local only.** The profiler is never reachable through tunnels or LAN shares.
-- **Reports accumulate** in `~/.local/share/lerd/spx/`. Delete old reports from the SPX UI when the list gets long.
+- **Reports accumulate** in `~/.local/share/lerd/spx/`. Clear them all at once with the **Clear data** button in the Profiler view header, `lerd profile clear`, or `profiler_clear` via MCP; the SPX UI can also delete reports individually.
 
 ## MCP
 
-AI assistants can drive the profiler through two tools:
+AI assistants can drive the profiler through three tools:
 
 - `profiler_toggle({ enable })` turns profiling on or off globally.
 - `profiler_status()` reports whether profiling is on and the SPX web UI URL.
+- `profiler_clear()` deletes every captured report and returns how many were removed.
