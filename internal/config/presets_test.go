@@ -11,17 +11,20 @@ func TestListPresets_IncludesShippedPresets(t *testing.T) {
 		t.Fatalf("ListPresets() error = %v", err)
 	}
 	want := map[string]bool{
-		"phpmyadmin":    false,
-		"pgadmin":       false,
-		"mongo":         false,
-		"mongo-express": false,
-		"selenium":      false,
-		"stripe-mock":   false,
-		"mysql":         false,
-		"memcached":     false,
-		"rabbitmq":      false,
-		"elasticsearch": false,
-		"elasticvue":    false,
+		"phpmyadmin":          false,
+		"pgadmin":             false,
+		"mongo":               false,
+		"mongo-express":       false,
+		"selenium":            false,
+		"stripe-mock":         false,
+		"mysql":               false,
+		"memcached":           false,
+		"rabbitmq":            false,
+		"elasticsearch":       false,
+		"elasticvue":          false,
+		"typesense":           false,
+		"typesense-dashboard": false,
+		"valkey":              false,
 	}
 	for _, p := range presets {
 		if _, ok := want[p.Name]; ok {
@@ -103,6 +106,81 @@ func TestLoadPreset_Memcached(t *testing.T) {
 	}
 	if p.EnvDetect == nil || p.EnvDetect.Key != "MEMCACHED_HOST" {
 		t.Errorf("memcached env_detect should be key=MEMCACHED_HOST, got %+v", p.EnvDetect)
+	}
+}
+
+func TestLoadPreset_Valkey(t *testing.T) {
+	p, err := LoadPreset("valkey")
+	if err != nil {
+		t.Fatalf("LoadPreset(valkey) error = %v", err)
+	}
+	if p.Image == "" || len(p.Ports) != 1 {
+		t.Errorf("valkey preset missing image or port, got: %+v", p)
+	}
+	if p.Ports[0] != "6380:6379" {
+		t.Errorf("valkey must publish 6380:6379 to avoid colliding with redis, got %q", p.Ports[0])
+	}
+	if p.DataDir != "/data" {
+		t.Errorf("valkey should persist /data so its dataset survives restarts, got %q", p.DataDir)
+	}
+	hasRedisHost := false
+	for _, kv := range p.EnvVars {
+		if kv == "REDIS_HOST=lerd-valkey" {
+			hasRedisHost = true
+		}
+	}
+	if !hasRedisHost {
+		t.Errorf("valkey must point REDIS_HOST at lerd-valkey, got %v", p.EnvVars)
+	}
+	if p.Default {
+		t.Errorf("valkey is an opt-in add-on preset and must not be default")
+	}
+}
+
+func TestLoadPreset_Typesense(t *testing.T) {
+	p, err := LoadPreset("typesense")
+	if err != nil {
+		t.Fatalf("LoadPreset(typesense) error = %v", err)
+	}
+	if p.Image == "" || len(p.Ports) != 1 || p.Ports[0] != "8108:8108" {
+		t.Errorf("typesense preset missing image or 8108:8108 port, got: %+v", p)
+	}
+	if p.DataDir != "/data" {
+		t.Errorf("typesense must persist /data so the search index survives restarts, got %q", p.DataDir)
+	}
+	if !strings.Contains(p.Exec, "--api-key=") || !strings.Contains(p.Exec, "--data-dir") {
+		t.Errorf("typesense exec must pass --api-key and --data-dir, got %q", p.Exec)
+	}
+	if p.EnvDetect == nil || p.EnvDetect.Composer != "typesense/typesense-php" {
+		t.Errorf("typesense env_detect should fire on composer typesense/typesense-php, got %+v", p.EnvDetect)
+	}
+	hasScout := false
+	for _, kv := range p.EnvVars {
+		if kv == "SCOUT_DRIVER=typesense" {
+			hasScout = true
+		}
+	}
+	if !hasScout {
+		t.Errorf("typesense must set SCOUT_DRIVER=typesense for Laravel Scout, got %v", p.EnvVars)
+	}
+	if p.Default {
+		t.Errorf("typesense is an opt-in add-on preset and must not be default")
+	}
+}
+
+func TestLoadPreset_TypesenseDashboard(t *testing.T) {
+	p, err := LoadPreset("typesense-dashboard")
+	if err != nil {
+		t.Fatalf("LoadPreset(typesense-dashboard) error = %v", err)
+	}
+	if len(p.DependsOn) != 1 || p.DependsOn[0] != "typesense" {
+		t.Errorf("typesense-dashboard should depend on typesense, got %v", p.DependsOn)
+	}
+	if p.Dashboard == "" {
+		t.Errorf("typesense-dashboard must expose its UI as dashboard")
+	}
+	if p.Environment["TYPESENSE_DASHBOARD_CONFIG"] == "" {
+		t.Errorf("typesense-dashboard must pre-wire the connection via TYPESENSE_DASHBOARD_CONFIG")
 	}
 }
 

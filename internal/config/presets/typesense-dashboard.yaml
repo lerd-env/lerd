@@ -1,0 +1,13 @@
+name: typesense-dashboard
+image: docker.io/bfritscher/typesense-dashboard:latest
+description: Typesense Dashboard web UI for the lerd Typesense service
+ports:
+  - "8084:80"
+environment:
+  # Base64-encoded connection config the image expands into config.json at
+  # startup; decodes to the lerd Typesense node (localhost:8108, api key
+  # "lerd") so the dashboard connects with no manual setup.
+  TYPESENSE_DASHBOARD_CONFIG: eyJhcGlLZXkiOiJsZXJkIiwibm9kZSI6eyJob3N0IjoibG9jYWxob3N0IiwicG9ydCI6IjgxMDgiLCJwcm90b2NvbCI6Imh0dHAiLCJwYXRoIjoiIiwidGxzIjpmYWxzZX0sImhpc3RvcnkiOltdfQ==
+depends_on:
+  - typesense
+dashboard: http://localhost:8084

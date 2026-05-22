@@ -1,0 +1,17 @@
+name: valkey
+description: Valkey in-memory store (Redis-compatible)
+family: valkey
+image: docker.io/valkey/valkey:9-alpine
+# Valkey speaks the Redis protocol on 6379 inside the container; it is
+# published on 6380 so it can coexist with the redis preset on the host.
+ports:
+  - "6380:6379"
+data_dir: /data
+env_vars:
+  - REDIS_HOST=lerd-valkey
+  - REDIS_PORT=6379
+  - REDIS_PASSWORD=null
+  - CACHE_STORE=redis
+  - SESSION_DRIVER=redis
+  - QUEUE_CONNECTION=redis
+connection_url: redis://127.0.0.1:6380
