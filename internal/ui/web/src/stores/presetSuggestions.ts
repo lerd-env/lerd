@@ -6,7 +6,8 @@ const SUGGESTIONS: Record<string, string> = {
   mysql: 'phpmyadmin',
   postgres: 'pgadmin',
   mongo: 'mongo-express',
-  elasticsearch: 'elasticvue'
+  elasticsearch: 'elasticvue',
+  typesense: 'typesense-dashboard'
 };
 
 const STORAGE_KEY = 'lerd-dismissed-preset-suggestions';

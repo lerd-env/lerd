@@ -1,0 +1,19 @@
+name: typesense
+description: Typesense search engine
+family: typesense
+image: docker.io/typesense/typesense:30.2
+# typesense-server refuses to boot without --api-key and --data-dir, and the
+# image entrypoint takes them as flags rather than env vars.
+exec: --data-dir /data --api-key=lerd --enable-cors
+ports:
+  - "8108:8108"
+data_dir: /data
+env_vars:
+  - SCOUT_DRIVER=typesense
+  - TYPESENSE_API_KEY=lerd
+  - TYPESENSE_HOST=lerd-typesense
+  - TYPESENSE_PORT=8108
+  - TYPESENSE_PROTOCOL=http
+env_detect:
+  composer: typesense/typesense-php
+connection_url: http://127.0.0.1:8108

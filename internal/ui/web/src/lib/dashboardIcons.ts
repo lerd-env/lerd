@@ -35,6 +35,7 @@ const BY_NAME: Record<string, string> = {
   elasticsearch: ICONS.search,
   elasticvue: ICONS.search,
   typesense: ICONS.search,
+  'typesense-dashboard': ICONS.search,
   rustfs: ICONS.storage,
   minio: ICONS.storage,
   'mongo-express': ICONS.leaf,

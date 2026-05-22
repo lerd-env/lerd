@@ -74,10 +74,17 @@ func userPickedDBFromYAML(lerdYAMLServices map[string]bool) bool {
 // shouldApplyService decides whether to apply env vars for svc. A built-in
 // DB service that wasn't explicitly picked is skipped when the user picked a
 // different DB, so a fresh-Laravel DB_CONNECTION=sqlite never re-imprints
-// itself when the wizard selected mysql. Otherwise apply when the env file
+// itself when the wizard selected mysql. The built-in redis is likewise
+// skipped when the project picked valkey. Otherwise apply when the env file
 // references the service or .lerd.yaml lists it.
-func shouldApplyService(svc string, detectedFromEnv, pickedFromYAML, userPickedDB bool) bool {
+func shouldApplyService(svc string, detectedFromEnv, pickedFromYAML, userPickedDB, valkeyPicked bool) bool {
 	if userPickedDB && (svc == "mysql" || svc == "postgres") && !pickedFromYAML {
+		return false
+	}
+	// Valkey writes the same REDIS_* keys, so a redis-shaped .env re-detects
+	// the built-in redis on every later run; skip it so valkey projects don't
+	// also boot a redundant redis container.
+	if svc == "redis" && valkeyPicked && !pickedFromYAML {
 		return false
 	}
 	return detectedFromEnv || pickedFromYAML
@@ -267,6 +274,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	}
 
 	userPickedDB := userPickedDBFromYAML(lerdYAMLServices)
+	valkeyPicked := lerdYAMLServices["valkey"]
 
 	if len(fw.Env.Services) > 0 {
 		// Framework defines its own service detection and vars — use those.
@@ -279,7 +287,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			detectedFromEnv := frameworkServiceDetected(def, envMap)
 			pickedFromYAML := lerdYAMLServices[svc]
 
-			if !shouldApplyService(svc, detectedFromEnv, pickedFromYAML, userPickedDB) {
+			if !shouldApplyService(svc, detectedFromEnv, pickedFromYAML, userPickedDB, valkeyPicked) {
 				continue
 			}
 
@@ -350,7 +358,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			detectedFromEnv := ok && detector(envMap)
 			pickedFromYAML := lerdYAMLServices[svc]
 
-			if !shouldApplyService(svc, detectedFromEnv, pickedFromYAML, userPickedDB) {
+			if !shouldApplyService(svc, detectedFromEnv, pickedFromYAML, userPickedDB, valkeyPicked) {
 				continue
 			}
 

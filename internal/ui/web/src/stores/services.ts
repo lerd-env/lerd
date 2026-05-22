@@ -332,7 +332,10 @@ export function serviceLabel(name: string): string {
     elasticsearch: 'Elasticsearch',
     elasticvue: 'Elasticvue',
     memcached: 'Memcached',
-    rabbitmq: 'RabbitMQ'
+    rabbitmq: 'RabbitMQ',
+    valkey: 'Valkey',
+    typesense: 'Typesense',
+    'typesense-dashboard': 'Typesense Dashboard'
   };
   if (overrides[name]) return overrides[name];
   // Versioned variants like "mysql-5-7"; show the family label.
