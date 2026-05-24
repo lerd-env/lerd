@@ -1,0 +1,24 @@
+name: typesense
+default: true
+# Typesense bumps via minor on regular cadence. Patch keeps existing users
+# stable; track_latest lands fresh installs on current upstream.
+update_strategy: patch
+track_latest: true
+description: Typesense — search engine open-source (alternativa ao Algolia)
+family: typesense
+image: docker.io/typesense/typesense:28.0
+ports:
+  - "8108:8108"
+data_dir: /data
+dashboard: http://localhost:8108/health
+environment:
+  TYPESENSE_DATA_DIR: /data
+  TYPESENSE_API_KEY: lerd
+  TYPESENSE_ENABLE_CORS: "true"
+env_vars:
+  - SCOUT_DRIVER=typesense
+  - TYPESENSE_HOST=lerd-typesense
+  - TYPESENSE_PORT=8108
+  - TYPESENSE_PROTOCOL=http
+  - TYPESENSE_API_KEY=lerd
+connection_url: http://lerd:lerd@127.0.0.1:8108

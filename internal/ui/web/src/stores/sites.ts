@@ -170,6 +170,10 @@ export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
 export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
+// Companion to openTerminal — POSTs /api/sites/{d}/editor which fans out to
+// VS Code / Cursor / JetBrains / etc. Fork addition.
+export const openEditor = (d: string, branch: string = '') =>
+  postAction(site(d, 'editor') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 
 export function setWorktreeDBIsolated(
   d: string,

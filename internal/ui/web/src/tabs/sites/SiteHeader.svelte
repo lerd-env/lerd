@@ -9,6 +9,7 @@
     restartSite,
     openSiteInBrowser,
     openTerminal,
+    openEditor,
     loadSites,
     activeWorktreeDomain,
     toggleTLS,
@@ -511,6 +512,28 @@
             />
           </svg>
         </button>
+        <!-- Open in editor (VS Code / Cursor / JetBrains / $EDITOR_GUI). Fork
+             addition; lives next to the terminal button so the pair reads as
+             "abrir terminal aqui" + "abrir editor aqui". Same loopback-only
+             gating because both spawn host-side GUI apps. -->
+        <button
+          type="button"
+          onclick={() => openEditor(site.domain, activeWorktreeBranch)}
+          title="Abrir no editor (VS Code, Cursor, PhpStorm, …)"
+          aria-label="Abrir no editor"
+          class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        >
+          <!-- Code-style angle brackets icon — generic enough to not look
+               like the official VS Code logo (avoids trademark friction). -->
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+            />
+          </svg>
+        </button>
       {/if}
 
       <div class="relative @md:hidden" bind:this={overflowEl}>
@@ -550,6 +573,25 @@
                   />
                 </svg>
                 {m.common_terminal()}
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  openEditor(site.domain, activeWorktreeBranch);
+                }}
+                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"
+                  />
+                </svg>
+                Abrir no editor
               </button>
             {/if}
             {#if !site.paused && !activeWorktreeBranch}

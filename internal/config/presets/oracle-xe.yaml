@@ -1,0 +1,45 @@
+name: oracle-xe
+default: true
+# Oracle XE 21c bumps via gvenzl/oracle-xe — we follow the patch line so existing
+# installs upgrade in-place, but pin the major (21) since 23ai/free is a
+# separate image (gvenzl/oracle-free). Users who want Free 23 can install
+# both side-by-side with version overrides.
+update_strategy: patch
+track_latest: false
+description: Oracle Database 21c XE para dev local (gvenzl/oracle-xe)
+family: oracle
+default_version: "21-slim"
+init: true
+versions:
+  - tag: "21-slim-faststart"
+    label: "21c XE — slim-faststart (snapshot prébuild, ~30s startup)"
+    image: docker.io/gvenzl/oracle-xe:21-slim-faststart
+    canonical: true
+    host_port: 1521
+  - tag: "21-slim"
+    label: "21c XE — slim (~10min na primeira subida)"
+    image: docker.io/gvenzl/oracle-xe:21-slim
+    host_port: 1521
+  - tag: "21-full"
+    label: "21c XE — full (~15min primeira subida, todos os charsets)"
+    image: docker.io/gvenzl/oracle-xe:21-full
+    host_port: 1521
+ports:
+  - "{{host_port}}:1521"
+data_dir: /opt/oracle/oradata
+environment:
+  ORACLE_PASSWORD: lerd
+  ORACLE_DATABASE: LERDPDB
+  APP_USER: lerd_app
+  APP_USER_PASSWORD: lerd
+# yajra/laravel-oci8 lê esses keys. NLS_LANG ajustado pro pt-BR padrão UTF-8.
+env_vars:
+  - DB_CONNECTION=oracle
+  - DB_HOST=lerd-{{name}}
+  - DB_PORT=1521
+  - DB_DATABASE=LERDPDB
+  - DB_USERNAME=lerd_app
+  - DB_PASSWORD=lerd
+  - DB_CHARSET=AL32UTF8
+  - NLS_LANG=BRAZILIAN_PORTUGUESE_BRAZIL.AL32UTF8
+connection_url: oracle://lerd_app:lerd@127.0.0.1:{{host_port}}/LERDPDB

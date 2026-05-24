@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -194,6 +195,19 @@ func runLink(args []string) error {
 					phpVersion, versions.FrameworkLabel, versions.PHPMin, versions.PHPMax)
 			}
 		}
+	}
+
+	// Fork addition: when linking a PHP project that has no DB choice yet
+	// (no Services in .lerd.yaml AND no `oracle:` block), prompt for
+	// DB_CONNECTION right here so .env doesn't end up half-configured. The
+	// wizard-style Database select stays consistent with `lerd init`'s UX
+	// (SQLite / MySQL / PostgreSQL / Oracle externally). Skipped when
+	// non-interactive (CI, MCP) — those callers handle DB config explicitly.
+	if isInteractive() && proj != nil && len(proj.Services) == 0 && proj.Oracle == nil {
+		proj = promptLinkDatabaseChoice(cwd, proj)
+	} else if isInteractive() && proj == nil {
+		// Fresh link with no .lerd.yaml yet — still ask.
+		proj = promptLinkDatabaseChoice(cwd, &config.ProjectConfig{})
 	}
 
 	secured := siteops.CleanupRelink(cwd, name) || (proj != nil && proj.Secured)
@@ -466,6 +480,56 @@ func findOwningWorktree(cwd string) (*config.Site, string, bool) {
 		}
 	}
 	return nil, "", false
+}
+
+// promptLinkDatabaseChoice asks the user which DB the project will use and
+// returns an updated ProjectConfig with the Services entry (and Oracle block,
+// if applicable) populated. Mirrors `lerd init`'s Database select so users
+// who skip the init wizard still get prompted. On any error (or non-TTY),
+// returns the input unchanged.
+func promptLinkDatabaseChoice(cwd string, proj *config.ProjectConfig) *config.ProjectConfig {
+	if proj == nil {
+		proj = &config.ProjectConfig{}
+	}
+	dbOptions, _ := buildDatabaseOptions()
+
+	// Seed default from existing .env when present (DB_CONNECTION).
+	dbChoice := "sqlite"
+	switch detectDBConnection(cwd) {
+	case "mysql", "mariadb":
+		dbChoice = "mysql"
+	case "pgsql", "postgres":
+		dbChoice = "postgres"
+	case "oracle":
+		dbChoice = "oracle"
+	}
+
+	if err := huh.NewForm(huh.NewGroup(
+		huh.NewSelect[string]().
+			Title("Database").
+			Description("Qual DB este projeto usa? (lerd env vai escrever DB_CONNECTION + creds no .env)").
+			Options(dbOptions...).
+			Value(&dbChoice),
+	)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		// User cancelled (Ctrl-C); leave proj unchanged so link still proceeds.
+		return proj
+	}
+
+	proj.Services = append(proj.Services, config.ProjectService{Name: dbChoice})
+
+	// Oracle needs the host/port/credentials sub-form.
+	if dbChoice == "oracle" {
+		if cfg, err := promptOracleConnection(proj.Oracle); err == nil {
+			proj.Oracle = cfg
+		}
+	}
+
+	// Persist immediately so `lerd env` (called from applyProjectConfig
+	// downstream) picks up the choice on the same link invocation.
+	if err := config.SaveProjectConfig(cwd, proj); err != nil {
+		fmt.Printf("[WARN] saving .lerd.yaml: %v\n", err)
+	}
+	return proj
 }
 
 // fetchFrameworkFromStore attempts to install a framework definition from the

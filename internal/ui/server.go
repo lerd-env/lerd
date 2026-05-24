@@ -518,6 +518,65 @@ func openTerminalAt(dir string) error {
 	return fmt.Errorf("no terminal emulator found; set $TERMINAL or install kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, or gnome-terminal")
 }
 
+// openEditorAt opens dir in a GUI editor. Honours $EDITOR_GUI first (so users
+// can pin nvim-qt, sublime, idea, etc.), then probes the usual suspects in a
+// VS Code -> Cursor -> JetBrains -> generic-CLI fallback chain. Same fire-
+// and-forget exec pattern as openTerminalAt; the spawned editor inherits the
+// loginctl graphical env on Linux so it can attach to the user's wayland/X11
+// session even when lerd-ui runs as a systemd user service.
+func openEditorAt(dir string) error {
+	type editorCmd struct {
+		bin  string
+		args []string
+	}
+
+	candidates := []editorCmd{}
+
+	if e := os.Getenv("EDITOR_GUI"); e != "" {
+		candidates = append(candidates, editorCmd{e, []string{dir}})
+	}
+
+	candidates = append(candidates,
+		editorCmd{"code", []string{"--new-window", dir}},
+		editorCmd{"code-insiders", []string{"--new-window", dir}},
+		editorCmd{"codium", []string{"--new-window", dir}},
+		editorCmd{"cursor", []string{"--new-window", dir}},
+		editorCmd{"phpstorm", []string{dir}},
+		editorCmd{"webstorm", []string{dir}},
+		editorCmd{"idea", []string{dir}},
+		editorCmd{"goland", []string{dir}},
+		editorCmd{"subl", []string{dir}},
+		editorCmd{"zed", []string{dir}},
+		editorCmd{"nova", []string{dir}},
+	)
+
+	if runtime.GOOS == "darwin" {
+		candidates = append(candidates,
+			editorCmd{"open", []string{"-a", "Visual Studio Code", dir}},
+			editorCmd{"open", []string{"-a", "Cursor", dir}},
+			editorCmd{"open", []string{"-a", "PhpStorm", dir}},
+		)
+	}
+
+	for _, e := range candidates {
+		bin, err := exec.LookPath(e.bin)
+		if err != nil {
+			continue
+		}
+		cmd := exec.Command(bin, e.args...)
+		cmd.Dir = dir
+		if runtime.GOOS != "darwin" {
+			cmd.Env = graphicalEnv()
+		}
+		if err := cmd.Start(); err != nil {
+			return err
+		}
+		go func() { _ = cmd.Wait() }()
+		return nil
+	}
+	return fmt.Errorf("no GUI editor found; set $EDITOR_GUI or install one of: code, code-insiders, codium, cursor, phpstorm, webstorm, idea, goland, subl, zed")
+}
+
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(v) //nolint:errcheck
@@ -2291,6 +2350,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := openTerminalAt(path); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "editor":
+		// Companion to "terminal": open the project in VS Code (or any IDE
+		// the user has set via $EDITOR_GUI). Fork addition.
+		path := resolveSitePath(site, r.URL.Query().Get("branch"))
+		if path == "" {
+			writeJSON(w, SiteActionResponse{Error: "unknown worktree branch"})
+			return
+		}
+		if err := openEditorAt(path); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
