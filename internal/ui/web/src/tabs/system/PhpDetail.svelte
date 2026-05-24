@@ -8,6 +8,12 @@
   import Dropdown from '$components/Dropdown.svelte';
   import { status, loadStatus, fpmRunning } from '$stores/status';
   import { setDefaultPhp, startPhp, stopPhp, removePhp } from '$stores/phpVersions';
+  import {
+    phpExtensions,
+    loadPhpExtensions,
+    addPhpExtension,
+    removePhpExtension
+  } from '$stores/phpExtensions';
   import { sites, sitesByPhp } from '$stores/sites';
   import { xdebugOn, xdebugOff, XDEBUG_MODES, type XdebugMode } from '$stores/xdebug';
   import { goToTab } from '$stores/route';
@@ -17,6 +23,68 @@
     version: string;
   }
   let { version }: Props = $props();
+
+  // Reload custom extensions whenever the PHP tab swaps version.
+  $effect(() => {
+    loadPhpExtensions(version);
+  });
+
+  const customExts = $derived($phpExtensions[version] ?? []);
+
+  let extAdding = $state(false);
+  let extError = $state('');
+  let extName = $state('');
+  let extApkDeps = $state('');
+  let removingExt = $state(''); // name of ext currently being removed (for per-row spinner)
+
+  async function onAddExtension() {
+    const name = extName.trim();
+    if (!name) {
+      extError = 'Informe o nome da extensão (ex: imap, swoole, sqlsrv)';
+      return;
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+      extError = 'Nome inválido — use apenas letras, dígitos, hífens e sublinhados';
+      return;
+    }
+    extAdding = true;
+    extError = '';
+    const deps = extApkDeps
+      .split(/[\s,]+/)
+      .map((d) => d.trim())
+      .filter(Boolean);
+    try {
+      const res = await addPhpExtension(version, name, deps);
+      if (res.ok) {
+        extName = '';
+        extApkDeps = '';
+        if (res.error) {
+          // Soft warning (installed but FPM restart failed, etc.)
+          extError = res.error;
+        }
+      } else {
+        extError = res.error || 'Falha ao instalar a extensão';
+      }
+    } finally {
+      extAdding = false;
+    }
+  }
+
+  async function onRemoveExtension(name: string) {
+    if (!confirm(`Remover a extensão "${name}" do PHP ${version}? A imagem será reconstruída.`)) {
+      return;
+    }
+    removingExt = name;
+    extError = '';
+    try {
+      const res = await removePhpExtension(version, name);
+      if (!res.ok) {
+        extError = res.error || 'Falha ao remover a extensão';
+      }
+    } finally {
+      removingExt = '';
+    }
+  }
 
   const running = $derived(fpmRunning(version));
   const isDefault = $derived($status.php_default === version);
@@ -166,6 +234,80 @@
     </div>
 
     <InfoRow label={m.system_container()} value={container} />
+
+    <!--
+      Extensões customizadas — gerencia o equivalente de `lerd php:ext add/remove`
+      pelo dashboard. O backend roda `podman build` + restart do FPM unit a cada
+      add/remove (1–3 minutos), por isso o spinner fica de pé durante toda a
+      operação e a UI bloqueia novos cliques.
+    -->
+    <div>
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Extensões customizadas</p>
+        <span class="text-[10px] text-gray-400">{customExts.length} configurada{customExts.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {#if customExts.length === 0}
+        <p class="text-xs text-gray-400 mb-3">Nenhuma extensão extra além das já compiladas na imagem.</p>
+      {:else}
+        <div class="space-y-1.5 mb-3">
+          {#each customExts as ext (ext.name)}
+            <div class="flex items-center justify-between gap-2 px-2.5 py-1.5 bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-lerd-border rounded text-xs">
+              <div class="flex items-center gap-2 min-w-0">
+                <span class="font-mono font-medium text-gray-700 dark:text-gray-200 shrink-0">{ext.name}</span>
+                {#if ext.apk_deps && ext.apk_deps.length > 0}
+                  <span class="text-gray-400 truncate" title="Pacotes Alpine">apk: {ext.apk_deps.join(' ')}</span>
+                {/if}
+              </div>
+              <button
+                onclick={() => onRemoveExtension(ext.name)}
+                disabled={removingExt === ext.name || extAdding}
+                class="text-red-600 dark:text-red-400 hover:underline disabled:opacity-50 disabled:no-underline shrink-0"
+                title="Remover extensão (reconstrói a imagem)"
+              >
+                {removingExt === ext.name ? 'removendo…' : 'remover'}
+              </button>
+            </div>
+          {/each}
+        </div>
+      {/if}
+
+      <div class="space-y-2">
+        <div class="grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-2">
+          <input
+            type="text"
+            placeholder="ext (ex: imap)"
+            bind:value={extName}
+            disabled={extAdding || removingExt !== ''}
+            class="font-mono text-xs px-2.5 py-1.5 bg-white dark:bg-lerd-dark-2 border border-gray-200 dark:border-lerd-border rounded text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+          />
+          <input
+            type="text"
+            placeholder="apk deps opcionais — ex: imap-dev krb5-dev openssl-dev"
+            bind:value={extApkDeps}
+            disabled={extAdding || removingExt !== ''}
+            class="font-mono text-xs px-2.5 py-1.5 bg-white dark:bg-lerd-dark-2 border border-gray-200 dark:border-lerd-border rounded text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-emerald-500 disabled:opacity-50"
+          />
+          <DetailButton
+            tone="success"
+            onclick={onAddExtension}
+            disabled={extAdding || removingExt !== '' || !extName.trim()}
+            loading={extAdding}
+            title="Instala via pecl/docker-php-ext-install, reconstrói a imagem e reinicia o FPM (1–3min)"
+          >Adicionar</DetailButton>
+        </div>
+        <p class="text-[10px] text-gray-400 leading-relaxed">
+          Equivalente a <code class="font-mono">lerd php:ext add &lt;ext&gt; {version} --apk-deps "&lt;pacotes&gt;"</code>.
+          A imagem PHP {version} é reconstruída e o container reinicia ao final.
+        </p>
+      </div>
+
+      {#if extError}
+        <div class="mt-2 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2 break-words">
+          {extError}
+        </div>
+      {/if}
+    </div>
 
     <div>
       <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{m.system_php_sites()}</p>

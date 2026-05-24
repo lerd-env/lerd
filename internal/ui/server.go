@@ -2607,8 +2607,26 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
-	// path: /api/php-versions/{version}/{remove|set-default}
+	// path: /api/php-versions/{version}/{remove|set-default|start|stop|extensions[/<ext>]}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/php-versions/"), "/")
+
+	// Custom extension management — fork addition. Three shapes share the
+	// /api/php-versions/{version}/extensions/... prefix; dispatch here so the
+	// existing 2-part action handler stays single-purpose.
+	if len(parts) >= 2 && parts[1] == "extensions" {
+		switch {
+		case len(parts) == 2 && r.Method == http.MethodGet:
+			handlePhpExtensionsList(w, r)
+		case len(parts) == 2 && r.Method == http.MethodPost:
+			handlePhpExtensionAdd(w, r)
+		case len(parts) == 3 && (r.Method == http.MethodDelete || r.Method == http.MethodPost):
+			handlePhpExtensionRemove(w, r)
+		default:
+			http.NotFound(w, r)
+		}
+		return
+	}
+
 	if len(parts) != 2 || r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return

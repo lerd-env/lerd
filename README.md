@@ -129,7 +129,7 @@ O wizard pergunta:
 
 Ao escolher **Oracle**, abre sub-form pedindo:
 
-- Host (ex: `oracle.unimedvr.com.br`)
+- Host (ex: `oracle.example.com`)
 - Porta (padrão `1521`)
 - Service name / SID (ex: `XEPDB1`, `ORCLPDB1`)
 - Usuário
@@ -201,10 +201,10 @@ Quando definido, `lerd env` escreve `DB_CHARSET` + `NLS_LANG`:
 
 ```yaml
 oracle:
-  host: oracle.unimedvr.com.br
+  host: oracle.example.com
   port: 1521
   service_name: PRODPDB
-  username: app_unimed
+  username: app_user
   password: ${ORACLE_PASSWORD}   # use placeholder e set no shell
   charset: AL32UTF8              # ou WE8MSWIN1252, WE8ISO8859P15
 ```
@@ -376,6 +376,6 @@ Requisitos: Go 1.25+, Node 22+, npm 10+.
 ## Créditos
 
 - **Lerd** original — [George Dumitrescu](https://github.com/geodro) ([geodro/lerd](https://github.com/geodro/lerd))
-- **Suporte Oracle** (este fork) — [Gabriel Sousa](https://github.com/gabriel-sousa99) (Unimed VR)
+- **Suporte Oracle** (este fork) — [Gabriel Sousa](https://github.com/gabriel-sousa99)
 
 Licença: MIT (herdada do upstream — ver [`LICENSE`](LICENSE)).
