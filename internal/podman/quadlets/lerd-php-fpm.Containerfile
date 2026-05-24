@@ -59,7 +59,9 @@ RUN apk update && apk add --no-cache \
         sysvshm \
         xsl \
     && (docker-php-ext-enable opcache || true) \
-    && if [ "$PHP_ID" -lt 70400 ]; then REDIS_PKG=redis-5.3.7; else REDIS_PKG=redis; fi \
+    && if [ "$PHP_ID" -lt 70000 ]; then REDIS_PKG=redis-4.3.0; \
+         elif [ "$PHP_ID" -lt 70400 ]; then REDIS_PKG=redis-5.3.7; \
+         else REDIS_PKG=redis; fi \
     && { (yes '' | pecl install "$REDIS_PKG" && docker-php-ext-enable redis) \
          || (git clone --depth 1 https://github.com/phpredis/phpredis /tmp/phpredis \
              && cd /tmp/phpredis && phpize && ./configure && make -j$(nproc) && make install \
@@ -82,8 +84,10 @@ RUN apk update && apk add --no-cache \
     && rm -rf /tmp/pear /var/cache/apk/*
 
 # Xdebug compiled in the builder too. Legacy PHP needs older xdebug majors.
+# 5.6 stops at xdebug 2.5.5 (last release with 5.x support).
 RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
     && case "$PHPVER" in \
+        5.6) XDEBUG_PKG="xdebug-2.5.5" ;; \
         7.2) XDEBUG_PKG="xdebug-3.1.6" ;; \
         7.4) XDEBUG_PKG="xdebug-3.1.6" ;; \
         8.0) XDEBUG_PKG="xdebug-3.3.2" ;; \
@@ -102,6 +106,7 @@ RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
 # support; PHP 8.2+ tracks the latest.
 RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
     && case "$PHPVER" in \
+        5.6)             OCI8_PKG="oci8-2.0.12" ;; \
         7.2|7.3|7.4)     OCI8_PKG="oci8-2.2.0" ;; \
         8.0)             OCI8_PKG="oci8-3.0.1" ;; \
         8.1|8.2|8.3)     OCI8_PKG="oci8-3.3.0" ;; \
@@ -167,6 +172,11 @@ RUN apk add --no-cache icu-data-full 2>/dev/null || true
 # LD_LIBRARY_PATH so PHP can resolve libclntsh.so at extension load time.
 RUN apk add --no-cache libaio libnsl gcompat libc6-compat libstdc++ \
     && rm -rf /var/cache/apk/*
+# On Alpine 3.8 (PHP 5.6 base) musl doesn't expose libresolv.so.2 separately
+# and Oracle libclntsh.so insists on dlopen'ing it. The shim is harmless on
+# newer Alpine — gcompat already provides resolv.h symbols there, so this
+# symlink is essentially a no-op except on the legacy tier.
+RUN [ -e /lib/libresolv.so.2 ] || ln -sf /lib/libc.musl-x86_64.so.1 /lib/libresolv.so.2
 COPY --from=builder /opt/oracle/instantclient_21_18 /opt/oracle/instantclient_21_18
 RUN ln -sfn /opt/oracle/instantclient_21_18 /opt/oracle/instantclient
 ENV ORACLE_HOME=/opt/oracle/instantclient \

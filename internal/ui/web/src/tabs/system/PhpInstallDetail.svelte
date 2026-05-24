@@ -15,6 +15,7 @@
     note: string;
   }
   const ALL_VERSIONS: AvailableVersion[] = [
+    { version: '5.6', label: 'PHP 5.6', note: 'Legacy estendida — base Alpine 3.8 (oci8 2.0.12, xdebug 2.5.5). Sem memcached/amqp/pcov/spx.' },
     { version: '7.4', label: 'PHP 7.4', note: 'Legacy tier — para apps antigos (oci8 2.2.0, xdebug 3.1).' },
     { version: '8.0', label: 'PHP 8.0', note: 'Legacy tier (oci8 3.0.1, xdebug 3.3).' },
     { version: '8.1', label: 'PHP 8.1', note: 'Estável (oci8 3.3.0).' },

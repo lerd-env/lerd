@@ -39,6 +39,7 @@ type menuState struct {
 	mLAN           *systray.MenuItem
 	mDumps         *systray.MenuItem
 	mNotifications *systray.MenuItem
+	mDebugGuide    *systray.MenuItem
 	mUpdate        *systray.MenuItem
 	mQuit          *systray.MenuItem
 }
@@ -86,6 +87,7 @@ func buildMenu() *menuState {
 	}
 	m.mDumps = systray.AddMenuItem("Dump bridge: Off", "Capture dump() / dd() into the lerd dashboard")
 	m.mNotifications = systray.AddMenuItem("Notifications: On", "Globally enable or disable lerd notifications")
+	m.mDebugGuide = systray.AddMenuItem("Debug & Oracle help…", "Abre os guias de troubleshoot da fork Oracle Edition no navegador")
 	m.mUpdate = systray.AddMenuItem("Check for update...", "Check for a newer version of Lerd")
 	m.mQuit = systray.AddMenuItem("Quit Lerd", "Stop all Lerd processes and containers")
 

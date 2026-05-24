@@ -148,7 +148,7 @@ func onReady(mono bool) {
 		systray.SetIcon(iconPNG)
 	}
 	// SetTitle would show text next to the icon in the macOS menu bar — skip it.
-	systray.SetTooltip("Lerd — local dev environment")
+	systray.SetTooltip("Lerd Oracle Edition — local dev environment + Oracle DB support")
 
 	menu := buildMenu()
 
@@ -179,8 +179,26 @@ func onReady(mono bool) {
 	}
 	go handleDumps(menu.mDumps, refresh)
 	go handleNotifications(menu.mNotifications, refresh)
+	go handleDebugGuide(menu.mDebugGuide)
 	go handleUpdate(menu.mUpdate)
 	go handleQuit(menu.mQuit, cancel)
+}
+
+// handleDebugGuide opens the fork's DEBUG.md (rendered on GitHub) when the
+// tray entry is clicked. xdg-open on Linux, open on macOS — same shellout
+// pattern the systray package recommends.
+func handleDebugGuide(item *systray.MenuItem) {
+	if item == nil {
+		return
+	}
+	for range item.ClickedCh {
+		url := "https://github.com/gabriel-sousa99/lerd/blob/main/docs/DEBUG.md"
+		opener := "xdg-open"
+		if runtime.GOOS == "darwin" {
+			opener = "open"
+		}
+		_ = exec.Command(opener, url).Start()
+	}
 }
 
 func runPoller(ctx context.Context, updateCh chan<- *Snapshot) {
