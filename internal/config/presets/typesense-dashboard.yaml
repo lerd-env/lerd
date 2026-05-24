@@ -1,0 +1,15 @@
+name: typesense-dashboard
+image: docker.io/bfritscher/typesense-dashboard:latest
+description: Dashboard web para o lerd-typesense (gerencia coleções, schemas, busca)
+ports:
+  - "8109:80"
+environment:
+  # bfritscher/typesense-dashboard lê esses para pré-popular o login.
+  # Não há "default admin" — o user cola a API key ao abrir.
+  TYPESENSE_HOSTS: lerd-typesense
+depends_on:
+  - typesense
+dashboard: http://localhost:8109
+# Iframe externo: o dashboard seta cookies que o iframe do lerd não consegue
+# carregar entre origins. Abre em aba nova quando clicado.
+dashboard_external: true

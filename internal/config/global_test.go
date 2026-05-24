@@ -24,11 +24,14 @@ func TestLoadGlobal_Defaults(t *testing.T) {
 	if cfg.PHP.DefaultVersion == "" {
 		t.Error("expected a default PHP version")
 	}
-	if cfg.DNS.TLD == "" {
-		t.Error("expected a default DNS TLD")
+	// Oracle fork: DNS.Enabled defaults FALSE (opt-out) and TLD defaults
+	// "localhost" — sites resolve via RFC 6761 *.localhost instead of
+	// going through the lerd-dns dnsmasq container.
+	if cfg.DNS.TLD != "localhost" {
+		t.Errorf("DNS.TLD = %q, want %q in the Oracle fork", cfg.DNS.TLD, "localhost")
 	}
-	if !cfg.DNS.Enabled {
-		t.Error("expected DNS.Enabled to default true")
+	if cfg.DNS.Enabled {
+		t.Error("expected DNS.Enabled to default false in the Oracle fork")
 	}
 	if cfg.Nginx.HTTPPort == 0 {
 		t.Error("expected a non-zero HTTP port")
@@ -319,7 +322,12 @@ func TestExtensions_IndependentVersions(t *testing.T) {
 // Pre-existing configs from before the dns.enabled field was introduced have
 // no `enabled:` key under `dns:`. LoadGlobal must preserve the `true` default
 // for those users so an upgrade does not silently disable DNS.
-func TestDNSEnabled_DefaultsTrueWhenKeyAbsent(t *testing.T) {
+// Oracle fork: when an existing config carries an explicit `dns.tld` but
+// no `dns.enabled` key, the loader must honour the saved TLD (do not
+// silently migrate) while resolving `enabled` against the fork's default
+// (false). The user can flip enabled back on via `lerd install` if they
+// want lerd-managed DNS; we never override their saved TLD.
+func TestDNSEnabled_DefaultsFalseInForkWhenKeyAbsent(t *testing.T) {
 	setConfigDir(t)
 	invalidateGlobalCache()
 	t.Cleanup(invalidateGlobalCache)
@@ -336,11 +344,11 @@ func TestDNSEnabled_DefaultsTrueWhenKeyAbsent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
-	if !got.DNS.Enabled {
-		t.Errorf("DNS.Enabled = false on legacy config without enabled key, want true")
+	if got.DNS.Enabled {
+		t.Errorf("DNS.Enabled = true on Oracle fork legacy config; expected false (opt-out by default)")
 	}
 	if got.DNS.TLD != "test" {
-		t.Errorf("DNS.TLD = %q, want %q", got.DNS.TLD, "test")
+		t.Errorf("DNS.TLD = %q, want %q (saved TLD must NOT be auto-migrated)", got.DNS.TLD, "test")
 	}
 }
 
