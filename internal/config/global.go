@@ -174,8 +174,13 @@ func defaultConfig() *GlobalConfig {
 	cfg.Node.DefaultVersion = "22"
 	cfg.Nginx.HTTPPort = 80
 	cfg.Nginx.HTTPSPort = 443
-	cfg.DNS.Enabled = true
-	cfg.DNS.TLD = "test"
+	// Oracle fork default: opt out of lerd-managed DNS so sites resolve at
+	// http://<site>.localhost — every modern OS resolves *.localhost to the
+	// loopback per RFC 6761 without dnsmasq, no system resolver tweaks, no
+	// sudo, no port-53 conflicts. Users who want full .test domains can
+	// flip DNS.Enabled back on and set DNS.TLD to "test" in ~/.config/lerd/config.yaml.
+	cfg.DNS.Enabled = false
+	cfg.DNS.TLD = "localhost"
 
 	home, _ := os.UserHomeDir()
 	cfg.ParkedDirectories = []string{home + "/Lerd"}

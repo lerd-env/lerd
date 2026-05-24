@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Lerd installer — https://github.com/geodro/lerd
+# Lerd Oracle Edition installer — https://github.com/gabriel-sousa99/lerd
+# (fork of geodro/lerd with Oracle Instant Client 21.18 + oci8 baked into
+# every PHP-FPM image, plus memcached/amqp for the Laravel ecosystem)
 # Usage:
-#   Install:   curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
-#      or:     wget -qO- https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+#   Install:   curl -fsSL https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/install.sh | bash
+#      or:     wget -qO- https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/install.sh | bash
 #   Update:    lerd-installer --update
 #   Uninstall: lerd-installer --uninstall
 
 set -euo pipefail
 
 # ── Constants ────────────────────────────────────────────────────────────────
-REPO="geodro/lerd"
+REPO="gabriel-sousa99/lerd"
 BINARY="lerd"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"

@@ -14,7 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-const changelogRawURL = "https://raw.githubusercontent.com/geodro/lerd/main/CHANGELOG.md"
+const changelogRawURL = "https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/CHANGELOG.md"
 
 // UpdateInfo holds the result of a successful update check when a newer version exists.
 type UpdateInfo struct {
@@ -160,6 +160,12 @@ func extractChangelogSections(changelog, currentVersion, latestVersion string) s
 // Pre-release suffixes (e.g. "-beta.1", "-rc.1") are handled per semver:
 // a release without a pre-release suffix is greater than one with the same
 // core version, and pre-release suffixes are compared lexicographically.
+//
+// Oracle fork override: -oracle.N is treated as a *fork build* of the same
+// core, NOT a prerelease. -oracle.N > no suffix > standard semver prerelease.
+// Two -oracle.N suffixes compare by the trailing integer (so oracle.2 wins
+// over oracle.1). This lets `lerd update` pull the next Oracle-fork release
+// when staying on upstream-equivalent X.Y.Z while still being notified.
 func VersionGreaterThan(a, b string) bool {
 	aCore, aPre := splitPrerelease(a)
 	bCore, bPre := splitPrerelease(b)
@@ -186,6 +192,18 @@ func VersionGreaterThan(a, b string) bool {
 	}
 
 	// Core versions are equal — compare pre-release suffixes.
+	aFork, aSeq := oracleForkSeq(aPre)
+	bFork, bSeq := oracleForkSeq(bPre)
+	if aFork || bFork {
+		if aFork && !bFork {
+			return true
+		}
+		if !aFork && bFork {
+			return false
+		}
+		return aSeq > bSeq
+	}
+
 	// No pre-release > has pre-release (stable wins).
 	if aPre == "" && bPre != "" {
 		return true
@@ -194,6 +212,32 @@ func VersionGreaterThan(a, b string) bool {
 		return false
 	}
 	return aPre > bPre
+}
+
+// oracleForkSeq reports whether pre is an Oracle fork-build marker and
+// returns the trailing integer (the build counter). Accepted shapes:
+// "oracle" (seq=1), "oracle.N" (seq=N), "or.N" (alias). Anything else
+// returns (false, 0) and is treated as a standard semver prerelease.
+func oracleForkSeq(pre string) (bool, int) {
+	if pre == "" {
+		return false, 0
+	}
+	rest := ""
+	switch {
+	case pre == "oracle":
+		return true, 1
+	case strings.HasPrefix(pre, "oracle."):
+		rest = strings.TrimPrefix(pre, "oracle.")
+	case strings.HasPrefix(pre, "or."):
+		rest = strings.TrimPrefix(pre, "or.")
+	default:
+		return false, 0
+	}
+	n, err := strconv.Atoi(rest)
+	if err != nil || n < 0 {
+		return false, 0
+	}
+	return true, n
 }
 
 // splitPrerelease splits "1.2.3-beta.1" into ("1.2.3", "beta.1").
@@ -208,7 +252,16 @@ func splitPrerelease(v string) (core, pre string) {
 // IsPrerelease reports whether v carries a semver prerelease suffix (any "-"
 // trailer). The input should be StripV-cleaned; git-describe artifacts like
 // "1.20.0-3-gabc1234" must be StripGitDescribe'd first to avoid false positives.
+//
+// Oracle fork override: "-oracle" / "-oracle.N" / "-or.N" suffixes mark a
+// fork build, not a prerelease, so stable users see the update notification.
 func IsPrerelease(v string) bool {
 	_, pre := splitPrerelease(v)
-	return pre != ""
+	if pre == "" {
+		return false
+	}
+	if fork, _ := oracleForkSeq(pre); fork {
+		return false
+	}
+	return true
 }

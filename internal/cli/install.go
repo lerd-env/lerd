@@ -168,9 +168,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// choice, so users can flip the mode without hand-editing config.yaml.
 	// `lerd update` re-execs install with --from-update; in that path the
 	// saved choice is honoured silently so updates are non-interactive.
-	wantDNS := true
-	prevEnabled := true
-	prevTLD := "test"
+	// Oracle fork defaults: lerd-managed DNS off, TLD .localhost. *.localhost
+	// resolves to loopback on every modern OS without dnsmasq or sudo. Existing
+	// installs keep whatever choice they previously saved (read from config below).
+	wantDNS := false
+	prevEnabled := false
+	prevTLD := "localhost"
 	dnsCfg, loadErr := config.LoadGlobal()
 	if loadErr != nil || dnsCfg == nil {
 		if loadErr != nil {
@@ -185,7 +188,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			wantDNS = prevEnabled
 		} else {
 			wantDNS = confirmInstallPromptDefault(
-				"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
+				"Let lerd manage DNS for local sites? (default No — use *.localhost, no dnsmasq, no HTTPS, no sudo)",
 				prevEnabled,
 			)
 		}

@@ -19,7 +19,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const githubRepo = "geodro/lerd"
+const githubRepo = "gabriel-sousa99/lerd"
 
 // These vars are overridden in tests to point at an httptest server.
 var (

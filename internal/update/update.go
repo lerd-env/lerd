@@ -9,10 +9,12 @@ import (
 )
 
 // ReleasesBaseURL is the base GitHub releases URL. Overridable in tests.
-var ReleasesBaseURL = "https://github.com/geodro/lerd/releases"
+// Pointed at the Oracle fork — `lerd update` consumes the releases this
+// repository publishes, not upstream's.
+var ReleasesBaseURL = "https://github.com/gabriel-sousa99/lerd/releases"
 
 // APIBaseURL is the GitHub API base URL for the repo. Overridable in tests.
-var APIBaseURL = "https://api.github.com/repos/geodro/lerd"
+var APIBaseURL = "https://api.github.com/repos/gabriel-sousa99/lerd"
 
 // FetchLatestVersion returns the latest published release tag from GitHub.
 func FetchLatestVersion() (string, error) {
