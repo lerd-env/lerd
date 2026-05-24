@@ -1,3 +1,29 @@
+# Lerd — Oracle Edition
+
+> Fork of [`geodro/lerd`](https://github.com/geodro/lerd) with **Oracle Database
+> support baked into every PHP image**: Oracle Instant Client 21.18 (LTS) +
+> `oci8` PECL extension compiled in the builder stage and shipped to runtime,
+> for PHP 7.4 → 8.5 transparently. Drop-in replacement — every existing `lerd`
+> command works unchanged.
+>
+> Why a fork? Upstream's `lerd php:ext add` only supports `pecl install <ext>
+> --apk-deps`, which can't satisfy `oci8`: the Oracle Instant Client is a
+> closed-source download not on Alpine apk, and `pecl install oci8` is
+> interactive (asks for the instantclient path). This fork patches the
+> embedded PHP-FPM Containerfile template directly — see
+> [`internal/podman/quadlets/lerd-php-fpm.Containerfile`](internal/podman/quadlets/lerd-php-fpm.Containerfile).
+>
+> **Quick sanity check** after `lerd php:rebuild <version>`:
+> ```sh
+> podman run --rm lerd-php84-fpm:local php --ri oci8 | head -6
+> # OCI8 Version => 3.4.1
+> # Oracle Run-time Client Library Version => 21.18.0.0.0
+> ```
+>
+> Original README below.
+>
+> ---
+
 # Lerd
 
 > Open-source Herd-like local PHP development environment for Linux and macOS.

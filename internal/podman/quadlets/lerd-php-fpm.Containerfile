@@ -88,6 +88,33 @@ RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
     && yes '' | pecl install "$XDEBUG_PKG" && docker-php-ext-enable xdebug \
     && rm -rf /tmp/pear /var/cache/apk/*
 
+# ── Oracle Instant Client 21.18 + oci8 (builder) ────────────────────────────
+# Lerd Oracle fork addition. Instant Client 21.18 is glibc-linked; Alpine is
+# musl, so gcompat + libc6-compat provide the ABI shim. libaio/libnsl/
+# libstdc++ are direct deps of libclntsh. The compiled oci8.so travels into
+# the runtime stage via the existing COPY --from=builder block at the bottom;
+# the Instant Client itself is copied separately in the runtime stage below.
+# pecl package is pinned per-PHP-major where the rolling "oci8" tag drops
+# support; PHP 8.2+ tracks the latest.
+RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
+    && case "$PHPVER" in \
+        7.2|7.3|7.4) OCI8_PKG="oci8-2.2.0" ;; \
+        8.0)         OCI8_PKG="oci8-3.0.1" ;; \
+        8.1)         OCI8_PKG="oci8-3.3.0" ;; \
+        *)           OCI8_PKG="oci8" ;; \
+    esac \
+    && apk add --no-cache libaio libnsl gcompat libc6-compat libstdc++ unzip \
+    && mkdir -p /opt/oracle && cd /opt/oracle \
+    && curl -fsSLO https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-basic-linux.x64-21.18.0.0.0dbru.zip \
+    && curl -fsSLO https://download.oracle.com/otn_software/linux/instantclient/2118000/instantclient-sdk-linux.x64-21.18.0.0.0dbru.zip \
+    && unzip -qo instantclient-basic-linux.x64-21.18.0.0.0dbru.zip \
+    && unzip -qo instantclient-sdk-linux.x64-21.18.0.0.0dbru.zip \
+    && rm -f /opt/oracle/*.zip \
+    && ln -sfn /opt/oracle/instantclient_21_18 /opt/oracle/instantclient \
+    && echo "instantclient,/opt/oracle/instantclient" | pecl install "$OCI8_PKG" \
+    && docker-php-ext-enable oci8 \
+    && rm -rf /opt/oracle/instantclient_21_18/sdk /tmp/pear /var/cache/apk/*
+
 # Project-defined custom extensions compile here while the toolchain
 # is available. Their .so files travel through the COPY below.
 {{.CustomExtensions}}
@@ -126,6 +153,18 @@ RUN apk update && apk add --no-cache \
 # 3.16+ ships it as a separate package; older bases fold the full data into
 # icu-libs, so the package is absent there and the install is skipped.
 RUN apk add --no-cache icu-data-full 2>/dev/null || true
+
+# ── Oracle Instant Client 21.18 (runtime) ───────────────────────────────────
+# Lerd Oracle fork addition. Runtime libs for oci8: glibc ABI shim (gcompat/
+# libc6-compat) plus libclntsh's direct deps. The Instant Client itself is
+# copied from the builder stage (sdk/ stripped there) and exposed via
+# LD_LIBRARY_PATH so PHP can resolve libclntsh.so at extension load time.
+RUN apk add --no-cache libaio libnsl gcompat libc6-compat libstdc++ \
+    && rm -rf /var/cache/apk/*
+COPY --from=builder /opt/oracle/instantclient_21_18 /opt/oracle/instantclient_21_18
+RUN ln -sfn /opt/oracle/instantclient_21_18 /opt/oracle/instantclient
+ENV ORACLE_HOME=/opt/oracle/instantclient \
+    LD_LIBRARY_PATH=/opt/oracle/instantclient
 
 # Runtime system libs for user-configured custom extensions (e.g.
 # imap needs c-client.so). Empty when no custom exts have apk deps.
