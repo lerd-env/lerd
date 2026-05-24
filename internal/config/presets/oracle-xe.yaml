@@ -8,25 +8,33 @@ update_strategy: patch
 track_latest: false
 description: Oracle Database 21c XE para dev local (gvenzl/oracle-xe)
 family: oracle
-default_version: "21-slim"
+default_version: "21-slim-faststart"
 init: true
 versions:
   - tag: "21-slim-faststart"
-    label: "21c XE — slim-faststart (snapshot prébuild, ~30s startup)"
+    label: "21c XE — slim-faststart (snapshot prébuild, ~30s startup) — recomendado"
     image: docker.io/gvenzl/oracle-xe:21-slim-faststart
     canonical: true
     host_port: 1521
   - tag: "21-slim"
-    label: "21c XE — slim (~10min na primeira subida)"
+    label: "21c XE — slim (~10min primeira subida; usa quando precisa de schemas/PDBs custom)"
     image: docker.io/gvenzl/oracle-xe:21-slim
     host_port: 1521
   - tag: "21-full"
-    label: "21c XE — full (~15min primeira subida, todos os charsets)"
+    label: "21c XE — full (~15min primeira subida, todos os charsets para apps legados)"
     image: docker.io/gvenzl/oracle-xe:21-full
     host_port: 1521
 ports:
   - "{{host_port}}:1521"
 data_dir: /opt/oracle/oradata
+# gvenzl/oracle-xe roda como uid 54321 (oracle). Sob podman rootless, o
+# bind-mount do data_dir vem do host com uid do user (1000). Sem userns +
+# chown_data o oracle dentro do container não consegue criar os *.dbf/.ctl
+# da seed database e o boot falha com "Cannot open output file" em massa.
+# keep-id:uid=54321,gid=54321 mapeia o oracle uid para o host user atual,
+# e :U faz podman re-chownar a pasta no mount time para esse uid.
+userns: keep-id:uid=54321,gid=54321
+chown_data: true
 environment:
   ORACLE_PASSWORD: lerd
   ORACLE_DATABASE: LERDPDB
