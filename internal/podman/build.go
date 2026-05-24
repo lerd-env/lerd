@@ -527,7 +527,14 @@ func WriteXdebugIni(version, mode string) error {
 	if mode == "" {
 		mode = "off"
 	}
-	content := fmt.Sprintf("[xdebug]\nxdebug.mode=%s\nxdebug.start_with_request=yes\nxdebug.client_host=host.containers.internal\nxdebug.client_port=9003\n", mode)
+	// Oracle fork: start_with_request=trigger (not yes) so xdebug only fires
+	// when the user explicitly opts in per-request via the XDEBUG_TRIGGER
+	// cookie/header/query param. The upstream default of `yes` makes every
+	// CLI command + every web request attempt a TCP connect to 9003 — when
+	// no IDE is listening, that produces "Could not connect to debugging
+	// client" spam on every artisan call. Users who want always-on debug
+	// can flip it back via `lerd php:ini <v>`.
+	content := fmt.Sprintf("[xdebug]\nxdebug.mode=%s\nxdebug.start_with_request=trigger\nxdebug.client_host=host.containers.internal\nxdebug.client_port=9003\n", mode)
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
