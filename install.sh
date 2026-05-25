@@ -1,11 +1,21 @@
 #!/usr/bin/env bash
 # Lerd Oracle Edition installer — https://github.com/gabriel-sousa99/lerd
-# (fork of geodro/lerd with Oracle Instant Client 21.18 + oci8 baked into
-# every PHP-FPM image, plus memcached/amqp for the Laravel ecosystem)
-# Usage:
+#
+# Fork of geodro/lerd with:
+#   • Oracle Instant Client 21.18 (LTS) em /opt/oracle/instantclient
+#   • Extensão oci8 pré-compilada em toda imagem PHP (PHP 7.4 → 8.4)
+#   • Extensões memcached + amqp pré-instaladas (ecossistema Laravel)
+#   • Presets de serviço extras: oracle-xe (Oracle XE 21c) + typesense + typesense-dashboard
+#   • Oracle como opção de DB no `lerd init/link` (DB_CONNECTION=oracle)
+#   • Dashboard com Debug Area, editor de .env, gerenciamento de extensões PHP customizadas
+#   • Auto-update apontado para gabriel-sousa99/lerd
+#
+# Releases seguem o esquema v1.21.2-oracle.N (rebase periódico sobre upstream).
+#
+# Uso:
 #   Install:   curl -fsSL https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/install.sh | bash
-#      or:     wget -qO- https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/install.sh | bash
-#   Update:    lerd-installer --update
+#      ou:     wget -qO- https://raw.githubusercontent.com/gabriel-sousa99/lerd/main/install.sh | bash
+#   Update:    lerd-installer --update      (ou simplesmente: lerd update)
 #   Uninstall: lerd-installer --uninstall
 
 set -euo pipefail
@@ -275,9 +285,16 @@ download_binary() {
   fi
 }
 
+# Extracts the full version string from `lerd --version`, including any
+# pre-release suffix used by this fork (e.g. "1.21.2-oracle.13").
+# The expected stdout from the binary is:
+#   "1.21.2-oracle.13 (commit <sha>, built <date>)"
 installed_version() {
   if command -v lerd &>/dev/null; then
-    lerd --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown"
+    lerd --version 2>/dev/null \
+      | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+\.[0-9]+)?' \
+      | head -1 \
+      || echo "unknown"
   else
     echo ""
   fi
@@ -359,8 +376,11 @@ cmd_install() {
     # ── Local binary path supplied (e.g. ./build/lerd) ──
     [ -f "$local_binary" ] || die "File not found: $local_binary"
     install -m 755 "$local_binary" "${INSTALL_DIR}/${BINARY}"
-    local version; version="$("${INSTALL_DIR}/${BINARY}" --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "dev")"
-    success "Installed lerd ${version} (local) → ${INSTALL_DIR}/${BINARY}"
+    local version
+    version="$("${INSTALL_DIR}/${BINARY}" --version 2>/dev/null \
+      | grep -oE '[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9]+\.[0-9]+)?' \
+      | head -1 || echo "dev")"
+    success "Installed lerd ${version} (local, Oracle Edition) → ${INSTALL_DIR}/${BINARY}"
   else
     # ── Download from GitHub releases ──
     local arch; arch="$(detect_arch)"
@@ -380,7 +400,7 @@ cmd_install() {
     install -m 755 "${tmpdir}/lerd" "${INSTALL_DIR}/${BINARY}"
     [ -f "${tmpdir}/lerd-tray" ] && install -m 755 "${tmpdir}/lerd-tray" "${INSTALL_DIR}/lerd-tray"
     rm -rf "$tmpdir"
-    success "Installed lerd v${version} → ${INSTALL_DIR}/${BINARY}"
+    success "Installed lerd v${version} (Oracle Edition) → ${INSTALL_DIR}/${BINARY}"
   fi
 
   add_to_path
@@ -487,10 +507,16 @@ main() {
   echo "  ██║     █████╗  ██████╔╝██║  ██║"
   echo "  ██║     ██╔══╝  ██╔══██╗██║  ██║"
   echo "  ███████╗███████╗██║  ██║██████╔╝"
-  echo "  ╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ "
+  echo "  ╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝   ${CYAN}Oracle Edition${RESET}${BOLD}"
   echo -e "${RESET}"
   echo "  Lerd — Podman-powered local PHP dev environment for Linux"
-  echo "  https://github.com/${REPO}"
+  echo "  Fork:     https://github.com/${REPO}  (release scheme: v1.21.2-oracle.N)"
+  echo "  Upstream: https://github.com/geodro/lerd"
+  echo ""
+  echo "  Bundled in every PHP-FPM image: Oracle Instant Client 21.18 + oci8,"
+  echo "  memcached, amqp.  Extra service presets: oracle-xe, typesense,"
+  echo "  typesense-dashboard.  Dashboard ships with Debug Area, .env editor"
+  echo "  and PHP-extension manager."
   echo ""
 
   case "${1:-install}" in
@@ -507,11 +533,14 @@ main() {
     --help|-h)
       echo "Usage: $0 [--update | --uninstall | --check | --local <path>]"
       echo ""
-      echo "  (no args)       Install Lerd from latest GitHub release"
-      echo "  --local <path>  Install from a locally built binary"
-      echo "  --update        Update to the latest release"
+      echo "  (no args)       Install Lerd Oracle Edition from latest GitHub release"
+      echo "  --local <path>  Install from a locally built binary (e.g. ./build/lerd)"
+      echo "  --update        Update to the latest release on ${REPO}"
       echo "  --uninstall     Remove Lerd and optionally its data"
-      echo "  --check         Check prerequisites only"
+      echo "  --check         Check prerequisites only (no install)"
+      echo ""
+      echo "Release scheme:  v1.21.2-oracle.N  (fork of geodro/lerd v1.21.2)"
+      echo "Latest releases: https://github.com/${REPO}/releases"
       ;;
     --install|install|"") cmd_install ;;
     *) die "Unknown option: $1. Run with --help for usage." ;;
