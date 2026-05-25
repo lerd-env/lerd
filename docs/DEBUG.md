@@ -7,20 +7,27 @@ Guia rápido pra desbugar problemas comuns. Em pt-BR, comando exato primeiro, te
 
 ## Mapa rápido: sintoma → onde olhar
 
-| Sintoma                                                  | Guia                                                  |
-|----------------------------------------------------------|-------------------------------------------------------|
-| Site retorna `502 Bad Gateway`                           | [nginx](debug/nginx.md), [php-fpm](debug/php-fpm.md)  |
-| `meusite.localhost` (ou `.test`) não resolve             | [dns](debug/dns.md)                                   |
-| Container/unit do PHP-FPM falha ao subir                 | [podman](debug/podman.md), [php-fpm](debug/php-fpm.md)|
-| `lerd php:rebuild` falha no `pecl install <ext>`         | [php-fpm](debug/php-fpm.md)                           |
-| `ORA-12541` / `ORA-12154` / `ORA-01017` no Laravel       | [oracle](debug/oracle.md)                             |
-| `oci_connect` retorna `false` sem mensagem clara         | [oracle](debug/oracle.md)                             |
-| `lerd link` registrou o site mas o vhost não foi gerado  | [sites](debug/sites.md)                               |
-| `lerd-mysql`/`lerd-postgres` não inicia / porta ocupada  | [services](debug/services.md)                         |
-| Worker (`lerd-*-queue`, `*-horizon`) não sobe ou loop    | [workers](debug/workers.md)                           |
-| `lerd update` falhou no meio do caminho                  | [updates](debug/updates.md)                           |
-| Browser não confia no HTTPS local (mkcert)               | [nginx](debug/nginx.md)                               |
-| IPv6 entre containers retornando `connection refused`    | [podman](debug/podman.md), [dns](debug/dns.md)        |
+| Sintoma                                                       | Guia                                                  |
+|---------------------------------------------------------------|-------------------------------------------------------|
+| Site retorna `502 Bad Gateway`                                | [nginx](debug/nginx.md), [php-fpm](debug/php-fpm.md)  |
+| `meusite.localhost` (ou `.test`) não resolve                  | [dns](debug/dns.md)                                   |
+| Container/unit do PHP-FPM falha ao subir                      | [podman](debug/podman.md), [php-fpm](debug/php-fpm.md)|
+| `lerd php:rebuild` falha no `pecl install <ext>`              | [php-fpm](debug/php-fpm.md)                           |
+| `ORA-12541` / `ORA-12154` / `ORA-01017` no Laravel            | [oracle](debug/oracle.md)                             |
+| `oci_connect` retorna `false` sem mensagem clara              | [oracle](debug/oracle.md)                             |
+| `lerd-oracle-xe` falha com `Cannot open output file`          | [oracle](debug/oracle.md) — userns + chown_data       |
+| `composer update` falha com `cannot run ssh`                  | [php-fpm](debug/php-fpm.md) — `openssh-client` no image |
+| `composer update` falha com `Permission denied (publickey)`   | [php-fpm](debug/php-fpm.md) — `/root/.ssh` mount      |
+| Trocar versão PHP no dashboard volta pra versão antiga        | [sites](debug/sites.md) — `.php-version` pin vs framework auto-clamp |
+| Chip do framework mostra "Laravel 13" num projeto Laravel 8   | [sites](debug/sites.md) — `DetectMajorVersion`        |
+| Xdebug spam "Could not connect to debugging client" em CLI    | [php-fpm](debug/php-fpm.md) — `start_with_request=trigger` |
+| `lerd link` registrou o site mas o vhost não foi gerado       | [sites](debug/sites.md)                               |
+| `lerd-mysql`/`lerd-postgres` não inicia / porta ocupada       | [services](debug/services.md)                         |
+| Worker (`lerd-*-queue`, `*-horizon`) não sobe ou loop         | [workers](debug/workers.md)                           |
+| `lerd update` falhou no meio do caminho                       | [updates](debug/updates.md)                           |
+| Browser não confia no HTTPS local (mkcert)                    | [nginx](debug/nginx.md)                               |
+| IPv6 entre containers retornando `connection refused`         | [podman](debug/podman.md), [dns](debug/dns.md)        |
+| `typesense-dashboard` não aparece na sidebar de serviços      | [services](debug/services.md) — instalar via `lerd service preset typesense-dashboard` |
 
 ## Antes de qualquer coisa
 
@@ -44,6 +51,10 @@ Esses 4 comandos resolvem ou pelo menos diagnosticam ~70% dos problemas.
 - **[Services (DB/cache/etc)](debug/services.md)** — quadlets de mysql/postgres/redis, conflitos de porta
 - **[Workers](debug/workers.md)** — queue/horizon/schedule/reverb sob systemd user
 - **[Updates do fork](debug/updates.md)** — `lerd update`, versionamento `-oracle.N`, rollback
+
+## Histórico de releases da fork
+
+Sintoma específico de uma versão recente? Consulte **[`docs/RELEASES.md`](RELEASES.md)** pro changelog completo com causa raiz de cada bug fix e o número da release que introduziu/corrigiu.
 
 ## Última cartada: bug report
 

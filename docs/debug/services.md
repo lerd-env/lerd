@@ -125,6 +125,28 @@ lerd service stop mongo              # nome canônico, sem 'db'
 podman rm -f lerd-mongo
 ```
 
+### 🔴 `typesense-dashboard` (ou `pgadmin`, `mongo-express`) não aparece na sidebar
+
+⚠️ Tooling-presets companion (dashboards UI) **NÃO** têm `default: true` no YAML. Só viram service ativo após `lerd service preset <name>` (cria quadlet) + `lerd service start <name>`.
+
+🔍 Diagnóstico:
+```bash
+lerd service preset | grep -E "typesense-dashboard|pgadmin|mongo-express"
+# se "available" → não está instalado
+podman ps -a --filter "name=lerd-typesense-dashboard"
+```
+
+🟢 Conserto:
+```bash
+lerd service preset typesense-dashboard     # gera quadlet
+lerd service start typesense-dashboard      # sobe container
+# Abra http://localhost:8109 (API key: lerd)
+```
+
+### 🔴 `lerd-oracle-xe` em loop de "Cannot open output file"
+
+Veja [`oracle.md`](oracle.md) — solução é `userns + chown_data` que a fork já tem em oracle.8+.
+
 ## ⚠️ Sobre comandos destrutivos
 
 O dashboard intencionalmente **não expõe** botões para `drop database`, `truncate`, `migrate:fresh`, etc. O fork removeu esses one-click dos defaults do Laravel/Symfony porque é muito fácil disparar contra a DB errada (especialmente em projetos Oracle compartilhados).

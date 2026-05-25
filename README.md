@@ -28,6 +28,7 @@
 - [Atualização](#atualização)
 - [Desinstalação](#desinstalação)
 - [Diagnóstico](#diagnóstico)
+- [Recursos exclusivos do dashboard](#recursos-exclusivos-do-dashboard)
 - [Debug e troubleshooting](#debug-e-troubleshooting)
 - [Lista de comandos](#lista-de-comandos-úteis)
 
@@ -35,23 +36,34 @@
 
 ## O que muda em relação ao upstream
 
-| Recurso                       | Upstream `geodro/lerd` | Esta fork                        |
-|-------------------------------|------------------------|----------------------------------|
-| Driver Oracle (`oci8`)        | precisa instalar manual | **já vem compilado** em toda imagem |
-| Oracle Instant Client         | n/a                    | **21.18 LTS** no PATH (`/opt/oracle/instantclient`) |
-| Extensão `memcached`          | precisa `lerd php:ext` | **pré-instalada**                |
-| Extensão `amqp` (RabbitMQ)    | precisa `lerd php:ext` | **pré-instalada**                |
-| `lerd init` → "Database"      | sqlite / mysql / postgres | **+ Oracle (externo)**         |
-| `.lerd.yaml` → bloco `oracle:`| ✗                      | **host/port/service/user/pass**  |
-| DNS padrão                    | `lerd-dns` + `.test` (precisa sudo no dnsmasq) | **off, `.localhost`** (resolve em qualquer SO) |
-| Auto-update                   | `geodro/lerd/releases` | `gabriel-sousa99/lerd/releases`  |
-| Versão                        | `1.21.2`               | `1.21.2-oracle.N`                |
+| Recurso                                  | Upstream `geodro/lerd`         | Esta fork                                                          |
+|------------------------------------------|--------------------------------|--------------------------------------------------------------------|
+| Driver Oracle (`oci8`)                   | precisa instalar manual         | **compilado em toda imagem** (`oci8` 2.0.12 → 3.4.1 por versão PHP) |
+| Oracle Instant Client                    | n/a                            | **21.18 LTS** em `/opt/oracle/instantclient`                       |
+| Extensão `memcached`                     | precisa `lerd php:ext`         | **pré-instalada**                                                  |
+| Extensão `amqp` (RabbitMQ)               | precisa `lerd php:ext`         | **pré-instalada**                                                  |
+| `openssh-client` no container            | ausente (composer ssh falha)    | **instalado** + `$HOME/.ssh` montado em `/root/.ssh`               |
+| Suporte PHP                              | 7.4 → 8.5                      | **5.6 → 8.5** (5.6 legacy estendida com libresolv shim)            |
+| `lerd init` → "Database"                 | sqlite / mysql / postgres      | **+ Oracle (externo)**                                             |
+| `lerd link` pergunta DB                  | só `lerd init`                 | **também ao `link` se .lerd.yaml não tem DB**                      |
+| `.lerd.yaml` → bloco `oracle:`           | ✗                              | **host/port/service/user/pass/charset**                            |
+| DNS padrão                               | `lerd-dns` + `.test` (sudo)    | **off, `.localhost`**                                              |
+| Comandos destrutivos no dashboard        | `migrate:fresh` etc. um clique | **filtrados em 2 camadas** (lista + run-time HTTP 403)             |
+| Comandos artisan customizados            | só os do framework             | **auto-discovery de `app/Console/Commands/*.php`**                 |
+| Editor de `.env` no dashboard            | só leitura                     | **editor textarea com Save/Discard/Ctrl+S + backup auto**          |
+| Editor de env do serviço no dashboard    | só leitura                     | **editor key=value com restart hint**                              |
+| Instalar nova versão PHP                 | só CLI                         | **botão no dashboard + SSE logs ao vivo + beforeunload guard**     |
+| Botão "Abrir no editor" no site          | só terminal                    | **+ editor (code/cursor/phpstorm/…)**                              |
+| Service presets adicionais               | mysql/postgres/redis/…         | **+ `oracle-xe` + `typesense` + `typesense-dashboard`**            |
+| Auto-update                              | `geodro/lerd/releases`         | `gabriel-sousa99/lerd/releases`                                    |
+| Versão                                   | `1.21.2`                       | `1.21.2-oracle.N`                                                  |
+| Xdebug por padrão                        | `start_with_request=yes`       | **`=trigger`** (sem spam em CLI sem IDE)                           |
 
 ### Lista completa de extensões PHP nas imagens
 
-> 25 extensões compiladas no builder + 6 via PECL — cobre o ecossistema
-> top-10 Laravel (Sanctum, Horizon, Telescope, spatie/* , Filament,
-> Socialite, Livewire, Debugbar) sem `lerd php:ext add`.
+> 25 extensões compiladas no builder + 7 via PECL — cobre o ecossistema
+> top-10 Laravel (Sanctum, Horizon, Telescope, spatie/*, Filament,
+> Socialite, Livewire, Debugbar, Excel, Dompdf) sem `lerd php:ext add`.
 
 ```
 oci8        memcached  amqp        redis      imagick    mongodb
@@ -61,6 +73,11 @@ mysqli      soap       xsl         ldap       pcntl      exif
 bcmath      mbstring   gmp         bz2        sysv*      sockets
 calendar    dba        shmop       (e tudo que o php:X.Y-fpm-alpine já traz)
 ```
+
+⚠️ **PHP 5.6 (legacy estendida)** vem sem `memcached`/`amqp`/`pcov`/`spx`
+(extensões PECL atuais não compilam em 5.6). Tem oci8 2.0.12 + xdebug
+2.5.5 + redis 4.3 + imagick + mongodb 1.7. Para apps Laravel 5.x legados
+que precisam falar com Oracle.
 
 ---
 
@@ -334,6 +351,50 @@ lerd logs <service>       # ex: lerd logs mysql
 
 ---
 
+## Recursos exclusivos do dashboard
+
+Algumas das adições da fork que vivem no painel web (`http://lerd.localhost`):
+
+### Editor de `.env` (sites + serviços)
+
+- **Site** → aba **Env**: textarea editável com Save/Descartar/Ctrl+S, dirty badge, beforeunload prompt. Backend cria `.env.before_lerd` automático na primeira edição (restaurável via `lerd env:restore`).
+- **Serviço** → aba **Env**: editor key=value pro bloco `Environment=` do quadlet. Source badge mostra "preset" vs "override do usuário". + adicionar variável / botão remover por linha. Save escreve em `~/.config/lerd/services/<name>.yaml` — precisa Restart do serviço pra aplicar (avisado na UI).
+
+### Gerenciamento de extensões PHP
+
+`System → PHP X.Y → Extensões customizadas`: chips de exemplo rápido (`imap`, `swoole`, `ssh2`, `apcu`, `event`, `pspell`, `tidy`, `pdo_dblib`) que pré-preenchem nome + `apk-deps`, ou form livre. Build com spinner enquanto reconstrói. Equivalente a `lerd php:ext add <ext> X.Y --apk-deps "..."`.
+
+### Instalador de versão PHP com logs ao vivo
+
+`System → Instalar versão…`: lista versões disponíveis ainda não instaladas (5.6 / 7.4 / 8.0 / 8.1 / 8.2 / 8.3 / 8.4 / 8.5) com 1 clique de instalação. **Logs SSE ao vivo** durante o build (apk add / pecl install / COPY layers / etc.) com auto-scroll + "Copiar log". **beforeunload warning** evita fechar a aba no meio do build.
+
+### Comandos artisan customizados (Laravel)
+
+Dropdown **Commands** em cada site Laravel agora inclui **comandos descobertos automaticamente** em `app/Console/Commands/*.php` — extraídos via regex do `$signature` + `$description` (sem rodar PHP). Ícone ▶ pra distinguir dos defaults do framework.
+
+⛔ **Filtro de destrutivos** em duas camadas:
+
+1. List filter: `GET /api/sites/{d}/commands` nunca retorna `migrate:fresh`, `db:wipe`, `schema:drop`, `doctrine:fixtures:load`, `queue:flush`, `DROP TABLE`, `rm -rf /`, etc.
+2. Runtime block: `handleCommandRun` retorna HTTP 403 mesmo se o comando passar pela lista.
+
+Pra rodar mesmo assim → sempre via CLI: `lerd php artisan migrate:fresh --force`.
+
+### Debug & Troubleshoot
+
+`System → Debug & Troubleshoot`: botões pra rodar diagnósticos contra a instalação atual (`lerd doctor`, `dns:check`, `podman ps -a`, últimos logs) + grid de 9 cards pros guias do `docs/debug/*.md`. Botão "Copiar relatório" gera um bundle pra colar em issue.
+
+### Botão "Abrir no editor" ao lado do terminal
+
+Em cada site: ícone `</>` ao lado do terminal abre o projeto no editor GUI. Sonda: `$EDITOR_GUI` → `code` / `code-insiders` / `codium` / `cursor` → JetBrains (`phpstorm` / `webstorm` / `idea` / `goland`) → `subl` / `zed` / `nova`. macOS: `open -a "Visual Studio Code"` etc.
+
+### Serviços novos (presets)
+
+- **`oracle-xe`** (gvenzl/oracle-xe:21-slim-faststart) — Oracle XE 21c local pra dev. Cria automaticamente `LERDPDB` + usuário `lerd_app/lerd`. `userns: keep-id:uid=54321,gid=54321` + `chown_data` pra funcionar rootless. NLS_LANG pt-BR.
+- **`typesense`** (typesense/typesense:28.0) — search engine open-source, alternativa Meilisearch/Algolia. Configura `SCOUT_DRIVER=typesense` no `.env`.
+- **`typesense-dashboard`** (bfritscher/typesense-dashboard) — companion web pra typesense, segue o padrão do `pgadmin/postgres`.
+
+---
+
 ## Debug e troubleshooting
 
 Quando algo quebra, comece por:
@@ -381,6 +442,12 @@ Também acessível direto pelo dashboard em **System → Debug & Troubleshoot**,
 | `lerd lan`                             | Expõe sites para o LAN                                     |
 | `lerd remote-control`                  | Liga/desliga acesso ao dashboard via LAN                   |
 | `lerd mcp:enable-global`               | Registra MCP server para Claude / IDE / agentes            |
+| `lerd php:install <ver>`               | **(fork)** Provisiona nova versão (5.6 → 8.5) — build + quadlet + start |
+| `lerd php:rebuild [ver]`               | Reconstrói image FPM (após mudar Containerfile)            |
+| `lerd php:ext add <ext> [ver]`         | Instala extensão extra via PECL + apk-deps                 |
+| `lerd php:ini <ver>`                   | Edita `~/.local/share/lerd/php/<ver>/98-user.ini` (com validação) |
+| `lerd service preset <name>`           | Instala um service preset (ex: `oracle-xe`, `typesense`)   |
+| `lerd service start/stop/restart`      | Controle do serviço                                        |
 
 ---
 

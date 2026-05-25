@@ -122,6 +122,56 @@ lerd composer global show -i                    # lista o que tem
 
 Veja [`oracle.md`](oracle.md).
 
+### 🔴 `composer update` falha com `cannot run ssh: No such file or directory`
+
+⚠️ Container PHP **anterior** ao fork v1.21.2-oracle.10 não tinha `openssh-client`. O composer usa git pra clone via ssh e git precisa do binário `/usr/bin/ssh`.
+
+🔍 Diagnóstico:
+```bash
+podman run --rm lerd-php85-fpm:local sh -c 'which ssh 2>&1 || echo NO_SSH'
+```
+
+🟢 Conserto: rebuild a imagem com a versão atual do fork (que tem o `openssh-client` no apk add do runtime stage):
+```bash
+lerd php:rebuild 8.5 --local      # ou a versão do projeto
+```
+
+### 🔴 `composer update` agora encontra ssh mas falha com `Permission denied (publickey)`
+
+⚠️ ssh está no container, mas git procura chaves em `$HOME/.ssh` — que dentro do container é `/root/.ssh` (vazio), não `/home/gabriel/.ssh`.
+
+🔍 Diagnóstico:
+```bash
+podman exec lerd-php85-fpm sh -c 'ls /root/.ssh 2>&1 || echo EMPTY'
+cat ~/.config/containers/systemd/lerd-php85-fpm.container | grep -E "ssh|GIT_SSH"
+```
+
+🟢 Conserto: a partir de oracle.12 o quadlet monta `$HOME/.ssh:/root/.ssh:ro` automaticamente. Pra forçar a regeneração:
+```bash
+lerd php:install 8.5      # re-escreve o quadlet, mantém a imagem
+systemctl --user restart lerd-php85-fpm
+```
+
+💡 Se sua chave tem passphrase, ssh-agent **não** é propagado pro container. Use chave sem passphrase **OU** exporte `SSH_AUTH_SOCK` e adicione `Volume=${SSH_AUTH_SOCK}:${SSH_AUTH_SOCK}` + `Environment=SSH_AUTH_SOCK=...` manualmente.
+
+### 🔴 Xdebug emite "Could not connect to debugging client" em todo comando CLI
+
+⚠️ Antes de oracle.9, o default era `xdebug.start_with_request=yes`, que tenta conectar em `host.containers.internal:9003` em CADA request. Sem IDE escutando = spam.
+
+🔍 Diagnóstico:
+```bash
+cat ~/.local/share/lerd/php/8.5/99-xdebug.ini | grep start_with_request
+```
+
+🟢 Conserto: edite pra `=trigger` (default novo do fork) e restart o FPM:
+```bash
+sed -i 's/start_with_request=yes/start_with_request=trigger/' \
+  ~/.local/share/lerd/php/8.5/99-xdebug.ini
+systemctl --user restart lerd-php85-fpm
+```
+
+💡 Pra acionar o Xdebug agora você precisa de cookie/header `XDEBUG_TRIGGER=1`, ou query `?XDEBUG_TRIGGER=1`, ou a extension PhpStorm/VS Code Toolbox.
+
 ## 💡 Dicas
 
 - `lerd php --ri oci8` (ou outra ext) mostra runtime info: versão, paths, configs ativos.

@@ -112,6 +112,23 @@ lerd restart
 podman exec lerd-php85-fpm sh -c 'getsebool -a 2>/dev/null | grep -i container'
 ```
 
+### 🔴 `lerd service start oracle-xe` falha com cascata de "Cannot open output file"
+
+⚠️ gvenzl/oracle-xe roda como uid 54321 (`oracle`). Sob rootless Podman, o bind-mount do `data_dir` vem do host com uid 1000 (do user), mapeado pra uid shifted (~165535) dentro do container. O oracle não consegue gravar os seed files (`control01.ctl`, `system01.dbf`, `redo*.log`, …).
+
+🔍 Diagnóstico:
+```bash
+podman logs lerd-oracle-xe 2>&1 | grep -i "cannot open" | head
+cat ~/.config/containers/systemd/lerd-oracle-xe.container | grep -E "UserNS|Volume.*oradata"
+```
+
+🟢 Conserto (a partir de oracle.8): o preset já tem `userns: keep-id:uid=54321,gid=54321` + `chown_data: true`. Pra reinstalar limpo:
+```bash
+systemctl --user stop lerd-oracle-xe
+rm -rf ~/.local/share/lerd/data/oracle-xe       # CUIDADO: apaga dados
+lerd service reinstall oracle-xe
+```
+
 ### 🔴 Connection lenta (segundos por query) mesmo em rede local
 
 🔍 Diagnóstico: provavelmente DNS resolution dentro do TNS.

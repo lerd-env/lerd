@@ -99,6 +99,38 @@ env_overrides:
 ```
 Depois `lerd link` na worktree pega o template.
 
+### 🔴 Trocar versão PHP no dashboard volta pra versão antiga
+
+⚠️ Bug do upstream (corrigido em oracle.11 + oracle.13 da fork). Causa em camadas:
+
+1. **oracle.11 fix**: o handler de `/api/sites/{d}/php?version=...` regenerava o vhost mas só chamava `config.AddSite()` pra FrankenPHP — pro caminho FPM (default) o sites.yaml nunca era atualizado.
+2. **oracle.13 fix**: mesmo após persistir, o snapshot `buildSites()` rodava `enrichVersions` que chama `DetectVersionClamped(... fw.PHP.Min, fw.PHP.Max)`. O framework definition é sempre o BUNDLED upstream latest (Laravel 13 = PHP 8.4+). Um projeto Laravel 8 com `.php-version=7.4` era clampado pra cima até a versão "no range".
+
+🔍 Diagnóstico:
+```bash
+cat /caminho/projeto/.php-version
+grep -A 5 "name: meu-site" ~/.local/share/lerd/sites.yaml
+lerd about | head -3       # confirmar oracle.13+
+```
+
+🟢 Conserto: a fork respeita `.php-version` (ou `.lerd.yaml` php_version) absolutamente, sem clamping. Garanta que o pin existe:
+```bash
+echo "7.4" > .php-version
+```
+E que sua versão lerd é oracle.13 ou superior (`lerd update`).
+
+### 🔴 Chip do framework no header mostra "Laravel 13" num projeto Laravel 8
+
+⚠️ Bug do upstream (corrigido em oracle.11 da fork). O label vinha do `fw.Version` do bundled definition (sempre o latest), não do composer.json real do projeto.
+
+🔍 Diagnóstico:
+```bash
+grep '"laravel/framework"' /caminho/projeto/composer.json
+lerd about | head -3       # confirmar oracle.11+
+```
+
+🟢 Conserto: a fork agora prefere `DetectMajorVersion()` (lê o constraint do composer.json) sobre `fw.Version`. Funciona automaticamente após update.
+
 ### 🔴 `.env` ficou com valores estranhos após `lerd init`
 
 🔍 Diagnóstico:
