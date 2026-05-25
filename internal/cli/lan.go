@@ -246,12 +246,19 @@ func newLANUnshareCmd() *cobra.Command {
 }
 
 // notifyDaemon posts an action to the running lerd-ui daemon API. It is a
-// best-effort call; callers should handle errors gracefully.
+// best-effort call; callers should handle errors gracefully. The
+// X-Lerd-CSRF header satisfies the dashboard's CSRF gate — without it
+// the daemon would 403 this loopback POST the same as a malicious page.
 func notifyDaemon(domain, action string) error {
-	resp, err := http.Post(
+	req, err := http.NewRequest(http.MethodPost,
 		fmt.Sprintf("http://127.0.0.1:7073/api/sites/%s/%s", domain, action),
-		"application/json", nil,
-	)
+		nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}

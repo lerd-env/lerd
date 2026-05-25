@@ -23,11 +23,17 @@ var (
 // API. Best-effort: if the daemon isn't running, the systemd services it
 // would have refreshed (Stripe listener, LAN share proxy) aren't being
 // supervised anyway, so silently skipping the notification is correct.
+// X-Lerd-CSRF satisfies the dashboard's CSRF gate for loopback POSTs.
 func defaultNotifyDaemon(domain, action string) error {
-	resp, err := http.Post(
+	req, err := http.NewRequest(http.MethodPost,
 		fmt.Sprintf("http://127.0.0.1:7073/api/sites/%s/%s", domain, action),
-		"application/json", nil,
-	)
+		nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}

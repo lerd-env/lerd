@@ -68,7 +68,8 @@
     let res: Response;
     try {
       res = await fetch(apiUrl('/api/php-versions/' + encodeURIComponent(version) + '/install'), {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'X-Lerd-CSRF': '1' }
       });
     } catch (e) {
       installError = e instanceof Error ? e.message : String(e);

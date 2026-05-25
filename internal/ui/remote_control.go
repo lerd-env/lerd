@@ -38,6 +38,98 @@ var loopbackOnlySiteSubactions = []string{
 	"/env",      // returns raw .env (APP_KEY, DB creds, third-party tokens)
 }
 
+// csrfHeader is the custom request header that mutating HTTP calls must
+// carry. Any non-empty value passes. It exists for two reasons:
+//
+//  1. It is a non-CORS-simple header, which means cross-origin browser
+//     requests must preflight before sending it. Our CORS allowlist only
+//     permits the dashboard's own origins, so a preflight from evil.com
+//     gets refused and the actual request never fires.
+//  2. Non-browser callers (the CLI, the tray, the in-container pause page)
+//     can just set the header — they aren't constrained by browser SOP.
+//
+// The token value is irrelevant; the *presence* of the header is what
+// proves the request didn't come from a no-cors simple-form POST that a
+// malicious page would smuggle in to abuse the localhost dashboard.
+const csrfHeader = "X-Lerd-CSRF"
+
+// csrfExemptPaths are endpoints that bypass the CSRF check because they
+// have their own gate (token + IP for /api/remote-setup, source-IP for
+// /api/webhooks/mailpit) or are reachable only from loopback (the CLI
+// notifier /api/internal/notify). Anything else mutating must satisfy
+// the Sec-Fetch-Site / X-Lerd-CSRF rules below.
+var csrfExemptPaths = map[string]bool{
+	"/api/remote-setup":     true,
+	"/api/webhooks/mailpit": true,
+	"/api/internal/notify":  true,
+}
+
+// csrfExemptSiteSubactions are per-site actions (under /api/sites/{domain}/)
+// that bypass CSRF. /unpause is reached cross-origin from the static "site
+// paused" page nginx serves on the developer's own site domain (a different
+// origin from lerd-ui), so Sec-Fetch-Site would be "cross-site". The action
+// just resumes workers on an already-existing dev site — there's no
+// privilege gain for an attacker, only minor nuisance, so the UX of the
+// resume button takes priority here.
+var csrfExemptSiteSubactions = []string{
+	"/unpause",
+}
+
+func isCSRFExemptPath(path string) bool {
+	if csrfExemptPaths[path] {
+		return true
+	}
+	if strings.HasPrefix(path, "/api/sites/") {
+		for _, suffix := range csrfExemptSiteSubactions {
+			if strings.HasSuffix(path, suffix) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// passesCSRFCheck reports whether a mutating request carries proof that
+// it didn't come from a malicious cross-origin page. The two acceptable
+// proofs are:
+//
+//   - Sec-Fetch-Site: same-origin | none. Modern browsers always set
+//     this; same-origin means the dashboard JS, none means the user typed
+//     the URL or used a bookmark. We reject "cross-site" and "same-site"
+//     unconditionally.
+//   - The X-Lerd-CSRF header is present. A page from evil.com cannot set
+//     this header on a simple cross-origin request without triggering a
+//     CORS preflight, which the dashboard rejects.
+//
+// Unix-socket connections and exempt paths are checked higher up before
+// this runs. GET/HEAD/OPTIONS skip the check too — those are safe per
+// RFC 9110 and the underlying handlers don't mutate state.
+func passesCSRFCheck(r *http.Request) bool {
+	switch site := r.Header.Get("Sec-Fetch-Site"); site {
+	case "same-origin", "none":
+		return true
+	case "cross-site", "same-site":
+		return false
+	}
+	// No Sec-Fetch-Site (older browser, curl, internal HTTP client).
+	// Require the custom header explicitly. Empty string is treated as
+	// absent — a malicious page would have to forge a preflight to send
+	// it cross-origin, which CORS blocks.
+	return r.Header.Get(csrfHeader) != ""
+}
+
+// isMutatingMethod reports whether the HTTP method modifies server state
+// and therefore needs CSRF protection. GET/HEAD/OPTIONS are read-only
+// per RFC 9110 and any handler that mutates on those methods is the bug
+// to fix, not something to paper over with CSRF.
+func isMutatingMethod(m string) bool {
+	switch m {
+	case http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodPatch:
+		return true
+	}
+	return false
+}
+
 // fromHost reports whether r's source IP belongs to one of the host's
 // own interfaces. The mailpit container reaches the dashboard via
 // host.containers.internal, which pasta (Linux) and gvproxy / vmnet
@@ -129,6 +221,27 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
 			return
+		}
+
+		// 1b. CSRF check. Runs before any of the loopback / source-IP
+		// bypasses below because the whole point of CSRF is that the
+		// attacker's request *does* arrive from a trusted source — the
+		// victim's own browser on the same machine. Unix-socket peers,
+		// known internal endpoints (mailpit webhook, /api/internal/notify
+		// from the CLI, /api/remote-setup curl bootstrap) and read-only
+		// methods (GET/HEAD) are exempt; everything else must carry the
+		// X-Lerd-CSRF header or a same-origin/none Sec-Fetch-Site value
+		// so a no-cors simple-form POST from evil.com can't trigger
+		// state-changing actions like /tinker (arbitrary PHP exec) or
+		// /worktree:remove?drop_db=1.
+		if isMutatingMethod(r.Method) && !isCSRFExemptPath(r.URL.Path) {
+			if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); !v {
+				if !passesCSRFCheck(r) {
+					w.Header().Set("Cache-Control", "no-store")
+					http.Error(w, "Forbidden — missing or invalid CSRF token. Add the X-Lerd-CSRF header or call from the dashboard UI.", http.StatusForbidden)
+					return
+				}
+			}
 		}
 
 		// 2. The remote-setup bootstrap endpoint has its own gate (token,
