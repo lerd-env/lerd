@@ -1378,6 +1378,13 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	}
 	name, action := parts[0], parts[1]
 
+	// Service container env editor — fork addition. Both GET (read) and
+	// PUT (write) live here, dispatched into the dedicated handler.
+	if action == "env" {
+		handleServiceEnv(w, r)
+		return
+	}
+
 	// Allow GET for logs sub-resource
 	if action == "logs" {
 		writeJSON(w, map[string]string{"logs": serviceRecentLogs("lerd-" + name)})
@@ -1934,13 +1941,17 @@ func handleSiteFavicon(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-// handleSiteEnv serves the raw contents of the site's (or worktree's) .env
-// file as text/plain. A missing file is reported as 200 with an empty body so
-// the UI can render an empty-state placeholder without a noisy 404.
+// handleSiteEnv serves and (in the fork) accepts writes to the site's (or
+// worktree's) .env file. A missing file on GET is reported as 200 with an
+// empty body so the UI can render an empty-state placeholder without a noisy
+// 404. PUT writes the request body verbatim, replacing the file atomically;
+// a backup at .env.before_lerd is created on the FIRST mutation per project
+// so the user can always restore the pre-edit state via `lerd env:restore`.
 //
 //	GET /api/sites/{domain}/env[?branch=<sanitized>]
+//	PUT /api/sites/{domain}/env[?branch=<sanitized>]   (body: text/plain raw .env)
 func handleSiteEnv(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodPut {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
@@ -1962,10 +1973,48 @@ func handleSiteEnv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	envPath := filepath.Join(dir, ".env")
+
+	if r.Method == http.MethodPut {
+		// Loopback-only — the .env can contain secrets (DB credentials,
+		// API keys, app keys). Refuse if the request didn't originate on
+		// this machine.
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden: env editing is loopback-only", http.StatusForbidden)
+			return
+		}
+		// Cap upload to 1 MiB — .env files in the wild rarely exceed a
+		// few KB and the cap defends against accidental upload of a
+		// huge file via clipboard paste.
+		const maxBody = 1 << 20
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+		body, readErr := io.ReadAll(r.Body)
+		if readErr != nil {
+			http.Error(w, "reading body: "+readErr.Error(), http.StatusBadRequest)
+			return
+		}
+		// First-write backup: mirror what `lerd env` does on .env.example
+		// copy so the user has a "before lerd edited it" snapshot. We
+		// only create it once per project — subsequent edits leave the
+		// existing backup alone.
+		backupPath := filepath.Join(dir, ".env.before_lerd")
+		if _, statErr := os.Stat(backupPath); os.IsNotExist(statErr) {
+			if existing, readErr := os.ReadFile(envPath); readErr == nil && len(existing) > 0 {
+				_ = os.WriteFile(backupPath, existing, 0644)
+			}
+		}
+		if err := writeFileAtomic(envPath, body, 0644); err != nil {
+			http.Error(w, "writing .env: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "bytes": len(body)})
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 
-	data, err := os.ReadFile(filepath.Join(dir, ".env"))
+	data, err := os.ReadFile(envPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return
@@ -1974,6 +2023,32 @@ func handleSiteEnv(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = w.Write(data)
+}
+
+// writeFileAtomic writes data to path via a sibling temp file + os.Rename so
+// readers never see a half-written .env. Mirrors the behaviour the rest of
+// the codebase relies on for config files.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".env.tmp-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	if err := os.Chmod(tmpName, mode); err != nil {
+		os.Remove(tmpName)
+		return err
+	}
+	return os.Rename(tmpName, path)
 }
 
 // handleLANQR serves a QR code PNG for the LAN share URL of a site or one
@@ -2753,27 +2828,13 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		_ = podman.DaemonReloadFn()
 		writeJSON(w, map[string]any{"ok": true})
 	case "install":
-		// Mirrors `lerd php:install <version>`: writes the quadlet, builds the
-		// FPM image (uses the same fast-path/pull-from-ghcr logic as the CLI),
-		// stores the hash, applies xdebug ini, and starts the unit. Blocks for
-		// 1–3 minutes during the local build; the frontend keeps a spinner up.
-		if err := podman.WriteFPMQuadlet(version); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": "write quadlet: " + err.Error()})
-			return
-		}
-		if err := podman.BuildFPMImage(version, false); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": "build image: " + err.Error()})
-			return
-		}
-		_ = podman.StoreFPMHash()
-		_ = podman.EnsureXdebugIni(version)
-		short := strings.ReplaceAll(version, ".", "")
-		unit := "lerd-php" + short + "-fpm"
-		if err := podman.StartUnit(unit); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": "start unit: " + err.Error()})
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true})
+		// Streams `lerd php:install <version>` over SSE: each stdout/stderr line
+		// from the underlying podman build pipes through as an `event: log` frame
+		// so the dashboard can show the user the actual progress (Alpine apk
+		// installs, pecl extensions compiling, COPY layers landing). Closes with
+		// `event: done` carrying ok/error; the frontend uses the ok flag to
+		// decide whether to drop the beforeunload warning.
+		handlePhpVersionInstallStream(w, r, version)
 	default:
 		http.NotFound(w, r)
 	}

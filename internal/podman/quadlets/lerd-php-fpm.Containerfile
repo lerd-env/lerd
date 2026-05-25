@@ -158,6 +158,7 @@ RUN apk update && apk add --no-cache \
         libxslt \
         libmemcached-libs \
         rabbitmq-c \
+        openssh-client \
     && rm -rf /var/cache/apk/*
 
 # icu-data-full carries the full CLDR locale set for ext-intl (#332). Alpine

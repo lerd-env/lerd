@@ -1,5 +1,37 @@
 import { writable, derived, get } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
+
+// Fork addition: service container env (Environment= block in the quadlet)
+// is editable via the dashboard. GET returns the merged map; PUT writes a
+// user override under ~/.config/lerd/services/<name>.yaml and regenerates
+// the quadlet so the next restart picks it up.
+export interface ServiceEnvPayload {
+  name: string;
+  environment: Record<string, string>;
+  env_vars: string[]; // Laravel-side .env hints (read-only here)
+  source: 'preset' | 'custom';
+}
+
+export async function loadServiceEnv(name: string): Promise<ServiceEnvPayload> {
+  return apiJson<ServiceEnvPayload>(
+    '/api/services/' + encodeURIComponent(name) + '/env'
+  );
+}
+
+export async function saveServiceEnv(
+  name: string,
+  environment: Record<string, string>
+): Promise<void> {
+  const res = await apiFetch('/api/services/' + encodeURIComponent(name) + '/env', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ environment })
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Failed to save service env (${res.status}): ${detail}`);
+  }
+}
 import { wsMessage } from '$lib/ws';
 import { sites } from './sites';
 

@@ -164,6 +164,23 @@ export async function loadSiteEnv(domain: string, branch: string = ''): Promise<
   return await res.text();
 }
 
+// saveSiteEnv writes the textarea contents back to the project's .env.
+// The backend creates a one-time .env.before_lerd backup if one doesn't
+// exist yet, then writes atomically (sibling temp + os.Rename), so a
+// crashed write can't leave a partial file behind.
+export async function saveSiteEnv(domain: string, branch: string = '', text: string): Promise<void> {
+  const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+  const res = await apiFetch(site(domain, 'env') + qs, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    body: text
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => '');
+    throw new Error(`Failed to save .env (${res.status}): ${detail}`);
+  }
+}
+
 export const restartSite = (d: string) => postAction(site(d, 'restart'));
 export const pauseSite = (d: string) => postAction(site(d, 'pause'));
 export const resumeSite = (d: string) => postAction(site(d, 'unpause'));
