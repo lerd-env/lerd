@@ -2188,6 +2188,15 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			}
 			break
 		}
+		// Persist php_version in sites.yaml so the next dashboard load reflects
+		// the choice and dependent UIs (status snapshot, sidebar grouping) get
+		// the right value. Without this AddSite call the registry stays on the
+		// previous version even though the vhost + .php-version were updated —
+		// fork fix for the "selecting 7.4 on a site doesn't stick" bug.
+		if err := config.AddSite(*site); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "updating site registry: " + err.Error()})
+			return
+		}
 		if site.Secured {
 			if err := certs.SecureSite(*site); err != nil {
 				writeJSON(w, SiteActionResponse{Error: "regenerating SSL vhost: " + err.Error()})

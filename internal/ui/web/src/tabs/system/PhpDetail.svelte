@@ -139,13 +139,32 @@
     }
   }
 
+  // fpmAction = '' idle, 'starting' | 'stopping' while in flight. Used to
+  // pick the toast message + the inline status badge under the toggle so
+  // the user knows the request is being processed (the systemd unit may
+  // take 1-2s to flip state on slow containers and the click feels dead
+  // without feedback).
+  let fpmAction = $state<'' | 'starting' | 'stopping'>('');
+  let fpmActionError = $state('');
+
   async function onToggleFpm() {
     fpmBusy = true;
+    fpmAction = running ? 'stopping' : 'starting';
+    fpmActionError = '';
     try {
-      await (running ? stopPhp(version) : startPhp(version));
+      const ok = await (running ? stopPhp(version) : startPhp(version));
+      // loadStatus polls the snapshot endpoint until the running flag
+      // actually changes, so the user sees the dot/pill flip after the
+      // server confirms the unit transitioned.
       await loadStatus();
+      if (!ok) {
+        fpmActionError = fpmAction === 'starting'
+          ? `Falha ao iniciar PHP ${version}-fpm (veja journalctl --user -u lerd-php${version.replace('.', '')}-fpm)`
+          : `Falha ao parar PHP ${version}-fpm`;
+      }
     } finally {
       fpmBusy = false;
+      fpmAction = '';
     }
   }
 
@@ -214,7 +233,7 @@
             disabled={fpmBusy}
             loading={fpmBusy}
             title={siteCount > 0 ? m.system_php_stopWarn({ count: siteCount }) : m.system_php_stopTitle()}
-          >{m.common_stop()}</DetailButton>
+          >{fpmAction === 'stopping' ? 'Parando…' : m.common_stop()}</DetailButton>
         {:else}
           <DetailButton
             tone="success"
@@ -222,7 +241,7 @@
             disabled={fpmBusy}
             loading={fpmBusy}
             title={m.system_php_startTitle()}
-          >{m.common_start()}</DetailButton>
+          >{fpmAction === 'starting' ? 'Iniciando…' : m.common_start()}</DetailButton>
         {/if}
         <DetailButton
           tone="danger"
@@ -262,6 +281,21 @@
     </div>
 
     <InfoRow label={m.system_container()} value={container} />
+
+    {#if fpmAction}
+      <div class="text-[11px] text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg px-3 py-2 flex items-center gap-2">
+        <span class="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+        {fpmAction === 'starting'
+          ? `Iniciando container ${container}… (systemctl --user start)`
+          : `Parando container ${container}… (systemctl --user stop)`}
+      </div>
+    {/if}
+
+    {#if fpmActionError}
+      <div class="text-[11px] text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-500/10 rounded-lg px-3 py-2 break-words">
+        {fpmActionError}
+      </div>
+    {/if}
 
     <!--
       Extensões customizadas — gerencia o equivalente de `lerd php:ext add/remove`

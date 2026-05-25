@@ -639,8 +639,17 @@ func frameworkLabel(name, path string, fw *config.Framework, hasFw bool) string 
 		return ""
 	}
 	if hasFw {
-		if fw.Version != "" {
-			return fw.Label + " " + fw.Version
+		// Prefer the version detected from the project's composer.json
+		// constraint (e.g. `"laravel/framework": "^8.75"` → "8") over
+		// fw.Version, which is the bundled definition's version — always
+		// the upstream latest, and stale for older projects. Fork fix for
+		// "Laravel 13 shown on a Laravel 8 project".
+		version := config.DetectMajorVersion(path, name)
+		if version == "" {
+			version = fw.Version
+		}
+		if version != "" {
+			return fw.Label + " " + version
 		}
 		return fw.Label
 	}
