@@ -159,12 +159,18 @@ func NeedsFPMRebuild() bool {
 	return strings.TrimSpace(string(stored)) != current
 }
 
+// fpmHashMu serializes StoreFPMHash so the per-version buildFPMImage calls
+// fired in parallel by php:rebuild can't truncate-and-write each other.
+var fpmHashMu sync.Mutex
+
 // StoreFPMHash writes the current Containerfile hash to disk.
 func StoreFPMHash() error {
 	hash, err := ContainerfileHash()
 	if err != nil {
 		return err
 	}
+	fpmHashMu.Lock()
+	defer fpmHashMu.Unlock()
 	return os.WriteFile(config.PHPImageHashFile(), []byte(hash), 0644)
 }
 
