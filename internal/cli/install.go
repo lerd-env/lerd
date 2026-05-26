@@ -70,8 +70,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			podman.IPv6DisabledMarkerPath("lerd"))
 	}
 
-	// On macOS, Podman Machine must be running before any podman commands.
+	// Sample LastUp before ensure so an internal stop+start isn't mistaken
+	// for an external machine restart by healMachineRestartIfNeeded below.
+	preEnsureLastUp := currentMachineLastUp()
 	ensurePodmanMachineRunning()
+	healMachineRestartIfNeeded(preEnsureLastUp)
 
 	if err := ensureUnprivilegedPorts(); err != nil {
 		return err
