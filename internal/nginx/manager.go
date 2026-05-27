@@ -765,9 +765,21 @@ func EnsureDefaultVhost() error {
 	}
 
 	onDiskHash := contentHashHex(onDisk)
-	lastWritten, _ := os.ReadFile(sentinelPath)
-	if strings.TrimSpace(string(lastWritten)) != onDiskHash {
-		// User-edited (or sentinel missing). Preserve their content.
+	lastWritten := strings.TrimSpace(readFileOrEmpty(sentinelPath))
+	if lastWritten == "" {
+		// Sentinel missing (deleted by user, or a prior sentinel-write
+		// crashed). If the file's content matches the canonical bytes
+		// lerd would write, treat it as ours and re-record the sentinel
+		// so subsequent runs can tell managed from edited. Otherwise
+		// it's effectively user-managed.
+		if onDiskHash == canonicalHash {
+			return os.WriteFile(sentinelPath, []byte(canonicalHash), 0644)
+		}
+		fmt.Printf("  [INFO] preserving user-modified %s; remove the file to re-enable lerd's catch-all\n", path)
+		return nil
+	}
+	if lastWritten != onDiskHash {
+		fmt.Printf("  [INFO] preserving user-modified %s; remove the file to re-enable lerd's catch-all\n", path)
 		return nil
 	}
 	if onDiskHash == canonicalHash {
@@ -778,6 +790,17 @@ func EnsureDefaultVhost() error {
 		return err
 	}
 	return os.WriteFile(sentinelPath, []byte(canonicalHash), 0644)
+}
+
+// readFileOrEmpty returns the file's contents as a string, or "" on any
+// error. Used for the sentinel read so a missing file and an unreadable
+// file collapse to the same "no recorded last-write" state.
+func readFileOrEmpty(path string) string {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // renderDefaultVhost returns the canonical _default.conf content.
