@@ -755,10 +755,10 @@ func EnsureDefaultVhost() error {
 
 	onDisk, readErr := os.ReadFile(path)
 	if errors.Is(readErr, os.ErrNotExist) {
-		if err := os.WriteFile(path, canonical, 0644); err != nil {
+		if err := writeFileAtomic(path, canonical, 0644); err != nil {
 			return err
 		}
-		return os.WriteFile(sentinelPath, []byte(canonicalHash), 0644)
+		return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 	}
 	if readErr != nil {
 		return readErr
@@ -767,17 +767,11 @@ func EnsureDefaultVhost() error {
 	onDiskHash := contentHashHex(onDisk)
 	lastWritten := strings.TrimSpace(readFileOrEmpty(sentinelPath))
 	if lastWritten == "" {
-		// Sentinel missing. Three plausible causes:
-		//   1. Sentinel-write crashed on a prior run (file content is
-		//      lerd's canonical → reclaim by writing the sentinel).
-		//   2. User upgraded from a pre-sentinel lerd binary; on-disk
-		//      content is OLD lerd's template, which the user may not
-		//      have edited but we can't tell apart from a real edit.
-		//   3. User has hand-edited the file.
-		// Cases 2 and 3 are indistinguishable, so we preserve and tell
-		// the user how to opt back in to lerd's catch-all if they want it.
+		// Sentinel missing: sentinel-write crash (reclaim if hashes match),
+		// pre-sentinel binary upgrade, or hand edit. The last two are
+		// indistinguishable, so preserve and tell the user how to opt back in.
 		if onDiskHash == canonicalHash {
-			return os.WriteFile(sentinelPath, []byte(canonicalHash), 0644)
+			return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 		}
 		fmt.Printf("  [INFO] %s has no lerd sentinel; preserving on-disk content. If this is from a lerd upgrade and you haven't edited it, run: rm %s\n", path, path)
 		return nil
@@ -790,10 +784,10 @@ func EnsureDefaultVhost() error {
 		return nil
 	}
 	// On-disk matches what lerd last wrote, but the template moved on.
-	if err := os.WriteFile(path, canonical, 0644); err != nil {
+	if err := writeFileAtomic(path, canonical, 0644); err != nil {
 		return err
 	}
-	return os.WriteFile(sentinelPath, []byte(canonicalHash), 0644)
+	return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 }
 
 // readFileOrEmpty returns the file's contents as a string, or "" on any
@@ -805,6 +799,31 @@ func readFileOrEmpty(path string) string {
 		return ""
 	}
 	return string(b)
+}
+
+// writeFileAtomic writes data to path via a sibling .tmp file followed by
+// a rename, so a crash mid-write can never leave nginx pointing at a
+// half-written conf. Preserves the destination file's mode if it already
+// existed so an out-of-band chmod survives the rewrite; uses the caller's
+// mode only when creating from scratch. Temp file is removed on any error.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	effective := mode
+	if info, err := os.Stat(path); err == nil {
+		effective = info.Mode().Perm()
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, effective); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmp, effective); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	return nil
 }
 
 // renderDefaultVhost returns the canonical _default.conf content.

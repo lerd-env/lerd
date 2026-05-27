@@ -849,6 +849,77 @@ func TestEnsureDefaultVhost_removingFileResetsManagement(t *testing.T) {
 	}
 }
 
+func TestWriteFileAtomic_writesContentAndLeavesNoTempBehind(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.conf")
+	if err := writeFileAtomic(path, []byte("server { listen 80; }\n"), 0644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "server { listen 80; }\n" {
+		t.Fatalf("content mismatch or read err: got=%q err=%v", got, err)
+	}
+	if _, err := os.Stat(path + ".tmp"); !os.IsNotExist(err) {
+		t.Errorf("expected sibling .tmp to be cleaned up, stat err=%v", err)
+	}
+}
+
+func TestWriteFileAtomic_preservesExistingFileMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "managed.conf")
+	if err := os.WriteFile(path, []byte("v1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFileAtomic(path, []byte("v2\n"), 0644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0600 {
+		t.Errorf("existing chmod was reset: got mode %o, want 0600", got)
+	}
+}
+
+func TestWriteFileAtomic_usesCallerModeForNewFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "fresh.conf")
+	if err := writeFileAtomic(path, []byte("x"), 0644); err != nil {
+		t.Fatalf("writeFileAtomic: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := info.Mode().Perm(); got != 0644 {
+		t.Errorf("fresh-create mode: got %o, want 0644", got)
+	}
+}
+
+func TestEnsureDefaultVhost_leavesNoTempFilesInConfD(t *testing.T) {
+	confD := setupConfD(t)
+	if err := EnsureDefaultVhost(); err != nil {
+		t.Fatalf("EnsureDefaultVhost: %v", err)
+	}
+	// Second pass through the "on-disk matches what we last wrote" branch.
+	if err := EnsureDefaultVhost(); err != nil {
+		t.Fatalf("re-run EnsureDefaultVhost: %v", err)
+	}
+	entries, err := os.ReadDir(confD)
+	if err != nil {
+		t.Fatalf("readdir conf.d: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			t.Errorf("unexpected leftover temp file in conf.d: %s", e.Name())
+		}
+	}
+}
+
 func TestEnsureLerdVhost_linuxProxiesUnixSocket(t *testing.T) {
 	if runtime.GOOS == "darwin" {
 		t.Skip("Linux uses the unix socket vhost; macOS uses TCP via host.containers.internal")
