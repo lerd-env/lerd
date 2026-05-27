@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -234,6 +236,9 @@ var (
 	forwarderPortHolderFn = forwarderPortHolderLsof
 )
 
+// forwarderPort is the host port lerd-dns-forwarder listens on.
+const forwarderPort = 5300
+
 // preflightForwarderPort refuses to install the LAN DNS forwarder when
 // something else (typically a legacy host-side dnsmasq) already owns
 // lanIP:5300. Without this check the launchd plist would write fine,
@@ -244,19 +249,19 @@ func preflightForwarderPort(lanIP string) error {
 	if s := forwarderUnitStatusFn(); s == "active" || s == "activating" {
 		return nil
 	}
-	if forwarderPortFreeFn(lanIP) {
+	if forwarderPortFreeFn(lanIP, forwarderPort) {
 		return nil
 	}
-	holder := forwarderPortHolderFn(lanIP)
-	return fmt.Errorf("%s:5300 is already in use; lerd cannot install the LAN DNS forwarder.\n%s\nStop the conflicting service (or rebind it off port 5300) and re-run `lerd lan expose`", lanIP, holder)
+	holder := forwarderPortHolderFn(lanIP, forwarderPort)
+	return fmt.Errorf("%s:%d is already in use; lerd cannot install the LAN DNS forwarder.\n%s\nStop the conflicting service (or rebind it off port %d) and re-run `lerd lan expose`", lanIP, forwarderPort, holder, forwarderPort)
 }
 
-// forwarderPortFree returns true when both UDP and TCP on lanIP:5300 are
-// free to bind. Best-effort: a transient bind in a SO_REUSEPORT-friendly
-// process can still slip through, but covers the common case of a
-// long-running dnsmasq holding the address.
-func forwarderPortFree(lanIP string) bool {
-	addr := lanIP + ":5300"
+// forwarderPortFree returns true when both UDP and TCP on host:port are
+// free to bind. Best-effort: a process using SO_REUSEPORT can share a
+// bound port with our probe and slip through; covers the common case of
+// a long-running dnsmasq holding the address.
+func forwarderPortFree(host string, port int) bool {
+	addr := host + ":" + strconv.Itoa(port)
 	if conn, err := net.ListenPacket("udp", addr); err == nil {
 		conn.Close()
 	} else {
@@ -271,20 +276,25 @@ func forwarderPortFree(lanIP string) bool {
 }
 
 // forwarderPortHolderLsof shells out to lsof to identify the conflicting
-// process. Works on both macOS and Linux. Returns a fallback hint when
-// lsof isn't present or returns nothing.
-func forwarderPortHolderLsof(lanIP string) string {
-	cmd := exec.Command("lsof", "-nP", "-iUDP@"+lanIP+":5300", "-iTCP@"+lanIP+":5300")
+// process. Works on both macOS and Linux when lsof is installed; falls
+// back to a per-platform suggestion (ss on Linux, lsof on macOS) when
+// lsof is missing or returns nothing.
+func forwarderPortHolderLsof(host string, port int) string {
+	addr := host + ":" + strconv.Itoa(port)
+	cmd := exec.Command("lsof", "-nP", "-iUDP@"+addr, "-iTCP@"+addr)
 	out, err := cmd.CombinedOutput()
 	trimmed := strings.TrimSpace(string(out))
-	if err != nil || trimmed == "" {
-		return "  (could not identify the holder; try: sudo lsof -nP -i :5300)"
+	if err == nil && trimmed != "" {
+		var lines []string
+		for _, line := range strings.Split(trimmed, "\n") {
+			lines = append(lines, "  "+line)
+		}
+		return strings.Join(lines, "\n")
 	}
-	var lines []string
-	for _, line := range strings.Split(trimmed, "\n") {
-		lines = append(lines, "  "+line)
+	if runtime.GOOS == "linux" {
+		return fmt.Sprintf("  (could not identify the holder; try: sudo ss -tulpn | grep ':%d')", port)
 	}
-	return strings.Join(lines, "\n")
+	return fmt.Sprintf("  (could not identify the holder; try: sudo lsof -nP -i :%d)", port)
 }
 
 // installDNSForwarderUnit writes the user service that runs the
