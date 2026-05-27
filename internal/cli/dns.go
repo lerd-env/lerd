@@ -104,8 +104,7 @@ func EnableLANExposure(progress LANProgressFunc) (lanIP string, err error) {
 			return "", err
 		}
 
-		emit("Pre-flight: checking " + lanIP + ":5300 is free")
-		if err := preflightForwarderPort(lanIP); err != nil {
+		if err := preflightForwarderPort(lanIP, emit); err != nil {
 			return "", err
 		}
 
@@ -243,11 +242,19 @@ const forwarderPort = 5300
 // something else (typically a legacy host-side dnsmasq) already owns
 // lanIP:5300. Without this check the launchd plist would write fine,
 // then the daemon would race against the existing holder on every boot.
-// Skipped when our own forwarder is already active: that's the
-// re-run-of-lan-expose case where the existing unit will be replaced.
-func preflightForwarderPort(lanIP string) error {
-	if s := forwarderUnitStatusFn(); s == "active" || s == "activating" {
+// Skipped when our own forwarder is already active or activating: that's
+// the re-run-of-lan-expose case where the existing unit will be replaced.
+// emit may be nil; when set it receives one user-visible progress line
+// describing the path taken.
+func preflightForwarderPort(lanIP string, emit func(string)) error {
+	if s := forwarderUnitStatusFn(); s == "active" || s == "activating" || s == "deactivating" {
+		if emit != nil {
+			emit("Pre-flight: lerd-dns-forwarder is " + s + "; skipping port check")
+		}
 		return nil
+	}
+	if emit != nil {
+		emit(fmt.Sprintf("Pre-flight: checking %s:%d is free", lanIP, forwarderPort))
 	}
 	if forwarderPortFreeFn(lanIP, forwarderPort) {
 		return nil
@@ -261,7 +268,7 @@ func preflightForwarderPort(lanIP string) error {
 // bound port with our probe and slip through; covers the common case of
 // a long-running dnsmasq holding the address.
 func forwarderPortFree(host string, port int) bool {
-	addr := host + ":" + strconv.Itoa(port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	if conn, err := net.ListenPacket("udp", addr); err == nil {
 		conn.Close()
 	} else {
@@ -276,13 +283,13 @@ func forwarderPortFree(host string, port int) bool {
 }
 
 // forwarderPortHolderLsof shells out to lsof to identify the conflicting
-// process. Works on both macOS and Linux when lsof is installed; falls
-// back to a per-platform suggestion (ss on Linux, lsof on macOS) when
-// lsof is missing or returns nothing.
+// process. Uses stdout only so transient lsof stderr warnings don't
+// leak into the user-facing error. Falls back to a per-platform hint
+// when lsof is missing or returns nothing.
 func forwarderPortHolderLsof(host string, port int) string {
-	addr := host + ":" + strconv.Itoa(port)
+	addr := net.JoinHostPort(host, strconv.Itoa(port))
 	cmd := exec.Command("lsof", "-nP", "-iUDP@"+addr, "-iTCP@"+addr)
-	out, err := cmd.CombinedOutput()
+	out, err := cmd.Output()
 	trimmed := strings.TrimSpace(string(out))
 	if err == nil && trimmed != "" {
 		var lines []string
@@ -291,7 +298,14 @@ func forwarderPortHolderLsof(host string, port int) string {
 		}
 		return strings.Join(lines, "\n")
 	}
-	if runtime.GOOS == "linux" {
+	return forwarderHolderFallbackHint(runtime.GOOS, port)
+}
+
+// forwarderHolderFallbackHint returns the per-OS suggestion shown when
+// lsof can't identify the conflicting process. Factored out so both
+// branches can be unit-tested from any build host.
+func forwarderHolderFallbackHint(goos string, port int) string {
+	if goos == "linux" {
 		return fmt.Sprintf("  (could not identify the holder; try: sudo ss -tulpn | grep ':%d')", port)
 	}
 	return fmt.Sprintf("  (could not identify the holder; try: sudo lsof -nP -i :%d)", port)
