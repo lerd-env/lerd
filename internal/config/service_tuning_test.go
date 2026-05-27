@@ -16,7 +16,9 @@ func TestServiceTuningMount_KnownFamilies(t *testing.T) {
 		{"mysql family", &CustomService{Name: "mysql", Family: "mysql"}, "/etc/mysql/conf.d/zz-lerd-user.cnf", true},
 		{"mariadb family", &CustomService{Name: "mariadb-10-11", Family: "mariadb"}, "/etc/mysql/conf.d/zz-lerd-user.cnf", true},
 		{"family inferred from name", &CustomService{Name: "mariadb-11"}, "/etc/mysql/conf.d/zz-lerd-user.cnf", true},
-		{"untuned family", &CustomService{Name: "redis", Family: "redis"}, "", false},
+		{"redis family", &CustomService{Name: "redis", Family: "redis"}, "/etc/redis/lerd-user.conf", true},
+		{"postgres family", &CustomService{Name: "postgres", Family: "postgres"}, "/etc/postgresql/conf.d/zz-lerd-user.conf", true},
+		{"untuned family", &CustomService{Name: "meilisearch", Family: "meilisearch"}, "", false},
 		{"unknown family", &CustomService{Name: "whatever"}, "", false},
 		{"nil service", nil, "", false},
 	}
@@ -104,12 +106,38 @@ func TestMaterializeServiceTuning_NeverOverwritesUserEdits(t *testing.T) {
 
 func TestMaterializeServiceTuning_SkipsUntunedFamily(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	svc := &CustomService{Name: "redis", Family: "redis"}
+	svc := &CustomService{Name: "meilisearch", Family: "meilisearch"}
 
 	if err := MaterializeServiceTuning(svc); err != nil {
 		t.Fatalf("MaterializeServiceTuning: %v", err)
 	}
 	if _, err := os.Stat(ServiceTuningFile(svc.Name)); !os.IsNotExist(err) {
 		t.Errorf("expected no tuning file for untuned family, stat err = %v", err)
+	}
+}
+
+func TestServiceTuningCommand(t *testing.T) {
+	cases := []struct {
+		name   string
+		svc    *CustomService
+		want   string
+		wantOK bool
+	}{
+		{"redis needs a command", &CustomService{Name: "redis", Family: "redis"}, "redis-server /etc/redis/lerd-user.conf", true},
+		{"postgres needs a command", &CustomService{Name: "postgres", Family: "postgres"}, "postgres -c include_dir=/etc/postgresql/conf.d", true},
+		{"mysql auto-includes, no command", &CustomService{Name: "mysql", Family: "mysql"}, "", false},
+		{"untuned family", &CustomService{Name: "meilisearch", Family: "meilisearch"}, "", false},
+		{"nil service", nil, "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd, ok := ServiceTuningCommand(tc.svc)
+			if ok != tc.wantOK {
+				t.Fatalf("ok = %v, want %v", ok, tc.wantOK)
+			}
+			if cmd != tc.want {
+				t.Errorf("command = %q, want %q", cmd, tc.want)
+			}
+		})
 	}
 }
