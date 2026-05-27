@@ -922,6 +922,11 @@ func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 		Paused:        config.ServiceIsPaused(name),
 		IsDefault:     config.IsDefaultPreset(name),
 	}
+	if svc, err := config.ResolveServiceForTuning(name); err == nil {
+		if _, ok := config.ServiceTuningMount(svc); ok {
+			resp.Tunable = true
+		}
+	}
 	// Default-preset services advertise update availability so the dashboard
 	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
 	// user can pull a newer image without first starting the unit; the registry
@@ -1434,7 +1439,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	// Tuning override: GET reads the user-editable config file (seeding it on
 	// first access), POST saves it and restarts the service so it re-reads.
 	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
-		svc, err := config.LoadCustomService(name)
+		svc, err := config.ResolveServiceForTuning(name)
 		if err != nil {
 			http.Error(w, "service not installed", http.StatusNotFound)
 			return
@@ -1470,8 +1475,14 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		// Regenerate the quadlet so the mount lands on installs predating this
-		// feature, then restart so the container re-reads the config.
-		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
+		// feature, then restart so the container re-reads the config. Built-in
+		// default presets regenerate through their own path (which also resolves
+		// to EnsureCustomServiceQuadlet); custom services use the svc directly.
+		if config.IsDefaultPreset(name) {
+			if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
+				fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
+			}
+		} else if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
 			fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
 		}
 		if err := podman.RestartUnit("lerd-" + name); err != nil {
