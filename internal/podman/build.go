@@ -157,23 +157,9 @@ var (
 	imageLabelFn         = imageLabel
 )
 
-// NeedsFPMRebuild returns true when at least one installed PHP-FPM image
-// was built from a Containerfile other than the embedded one. Two
-// signals, in order of strength:
-//
-//  1. Cache file (~/.local/share/lerd/php-image-hash) vs the embedded
-//     hash. Fast and correct for well-behaved installs. A missing cache
-//     file is not itself a trigger: we still need at least one signal
-//     that the on-disk images disagree with the embed.
-//  2. The fpmContainerfileHashLabel on each installed image. Authoritative
-//     when the cache file is stale (e.g. an older lerd binary advanced
-//     the hash without rebuilding) or missing entirely, so the rebuild
-//     fires automatically on the next install instead of needing a
-//     manual `lerd php:rebuild`.
-//
-// Returns false when no images are installed (nothing to rebuild) and
-// the cache file isn't disagreeing — first install hits this path and
-// proceeds to build cleanly via ensureFPMQuadlet.
+// NeedsFPMRebuild returns true when the embedded Containerfile differs
+// from the cache file OR from any installed image's hash label (catches
+// the pre-v1.22.0 poisoned-cache state). False on a fresh install.
 func NeedsFPMRebuild() bool {
 	current, err := ContainerfileHash()
 	if err != nil {
@@ -234,11 +220,9 @@ func imageLabel(image, key string) string {
 	return v
 }
 
-// fpmBuildArgs returns the `podman build` flags shared by both the fast
-// (pre-built base) and slow (full local build) paths in buildFPMImage,
-// before either path appends the `-f <containerfile> <ctx>` tail. Factored
-// out so a regression on the load-bearing `--label` arg can be caught in
-// a unit test without spawning podman.
+// fpmBuildArgs returns the `podman build` flags shared by both build
+// paths in buildFPMImage, before either appends the `-f <ctx>` tail.
+// Extracted so the load-bearing `--label` arg has unit-test coverage.
 func fpmBuildArgs(imageName, containerfileHash string, force bool) []string {
 	args := []string{
 		"build",
