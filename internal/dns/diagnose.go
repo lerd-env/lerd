@@ -71,10 +71,36 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	}
 	d := Diagnostic{TLD: tld, FirstFailure: -1}
 
-	// Rung 1 — lerd-dns container.
-	if p.containerRunning() {
+	// Rung 1 — lerd-dns container, with a fallback check for legacy
+	// host-side resolvers. The original chain reported "container not
+	// running" whenever lerd-dns was absent, which was a false negative
+	// for users running a host dnsmasq (Homebrew, system package) that
+	// owns :5300 and resolves .test correctly without lerd's container.
+	switch {
+	case p.containerRunning():
 		d.Steps = append(d.Steps, Step{Name: "lerd-dns container", Status: StepOK, Detail: "running"})
-	} else {
+	case p.portOpen("127.0.0.1", 5300):
+		// Something is on :5300 but it's not our container. Probe it: if
+		// it answers .tld correctly we're looking at a legacy host-side
+		// resolver and lerd just isn't managing DNS here. If it doesn't
+		// answer correctly the port is squatted by something unrelated.
+		if answer, err := p.dnsmasqAnswer(tld); err == nil && answer == "127.0.0.1" {
+			d.Steps = append(d.Steps, Step{
+				Name:   "lerd-dns container",
+				Status: StepWarn,
+				Detail: "not running; a host-side resolver on :5300 is answering ." + tld + " correctly",
+				Hint:   "lerd is not managing DNS here. Either keep your host resolver (no action), or stop it (e.g. `brew services stop dnsmasq`) and run `lerd start` to switch to lerd-managed DNS.",
+			})
+			return finalize(d)
+		}
+		d.Steps = append(d.Steps, Step{
+			Name:   "lerd-dns container",
+			Status: StepFail,
+			Detail: "not running; another process owns :5300 but doesn't resolve ." + tld,
+			Hint:   "identify the holder: " + findListenerCmd(5300),
+		})
+		return finalize(d)
+	default:
 		d.Steps = append(d.Steps, Step{
 			Name:   "lerd-dns container",
 			Status: StepFail,

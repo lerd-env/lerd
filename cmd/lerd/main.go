@@ -281,7 +281,7 @@ func newDNSCheckCmd() *cobra.Command {
 				} else {
 					fmt.Printf("%s%s\n", marker, s.Name)
 				}
-				if s.Status == dns.StepFail && s.Hint != "" {
+				if (s.Status == dns.StepFail || s.Status == dns.StepWarn) && s.Hint != "" {
 					fmt.Printf("    hint: %s\n", s.Hint)
 				}
 			}
