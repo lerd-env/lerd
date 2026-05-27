@@ -6,11 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"syscall"
 	"time"
 
@@ -68,27 +70,39 @@ const daemonEnv = "LERD_TRAY_DAEMON"
 
 // lerdBin resolves the absolute path to the `lerd` binary. The tray often
 // runs under launchd, whose environment has no PATH covering Homebrew or
-// ~/.local/bin, so a bare `exec.Command("lerd", …)` silently fails. Resolved
-// on every call so reinstalls (Homebrew → ~/.local/bin, etc.) don't strand
-// a long-running tray on a stale cached path.
+// ~/.local/bin, so a bare `exec.Command("lerd", …)` silently fails.
+// Resolved on every call so reinstalls don't strand on a cached path.
 func lerdBin() string {
-	if p, err := exec.LookPath("lerd"); err == nil {
+	if p, err := lerdBinLookPath("lerd"); err == nil {
 		return p
 	}
-	candidates := []string{
-		"/opt/homebrew/bin/lerd",
-		"/usr/local/bin/lerd",
-	}
-	if home, err := os.UserHomeDir(); err == nil && home != "" {
-		candidates = append(candidates, filepath.Join(home, ".local", "bin", "lerd"))
-	}
-	for _, c := range candidates {
+	for _, c := range lerdBinCandidates() {
 		if _, err := os.Stat(c); err == nil {
 			return c
 		}
 	}
+	lerdBinFallbackWarn.Do(func() {
+		fmt.Fprintln(lerdBinWarnW, "lerd-tray: could not locate the lerd binary on PATH or in known install dirs; menu actions will fail with 'executable file not found'")
+	})
 	return "lerd"
 }
+
+func defaultLerdBinCandidates() []string {
+	cands := []string{"/opt/homebrew/bin/lerd", "/usr/local/bin/lerd"}
+	if home, err := os.UserHomeDir(); err == nil && home != "" {
+		cands = append(cands, filepath.Join(home, ".local", "bin", "lerd"))
+	}
+	return cands
+}
+
+// Seams for tests so the fallback path can be exercised without depending
+// on what happens to be installed on the host running the tests.
+var (
+	lerdBinCandidates             = defaultLerdBinCandidates
+	lerdBinLookPath               = exec.LookPath
+	lerdBinWarnW        io.Writer = os.Stderr
+	lerdBinFallbackWarn sync.Once
+)
 
 // lerdCmd is a thin wrapper around exec.Command that uses the resolved
 // `lerd` binary path so handlers work under launchd's empty PATH.
