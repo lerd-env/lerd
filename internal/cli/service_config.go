@@ -54,9 +54,9 @@ func newServiceConfigCmd() *cobra.Command {
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
-			svc, err := config.LoadCustomService(name)
+			svc, err := config.ResolveServiceForTuning(name)
 			if err != nil {
-				return fmt.Errorf("service %q is not installed: %w", name, err)
+				return err
 			}
 			if _, ok := config.ServiceTuningMount(svc); !ok {
 				return fmt.Errorf("service %q (family %q) does not support tuning yet (supported: mysql, mariadb)", name, config.FamilyOf(svc))
@@ -82,8 +82,14 @@ func newServiceConfigCmd() *cobra.Command {
 			}
 
 			// Ensure the quadlet carries the tuning volume mount (may be absent on
-			// installs predating this feature) before restarting.
-			if err := ensureCustomServiceQuadlet(svc); err != nil {
+			// installs predating this feature) before restarting. Built-in default
+			// presets regenerate through their own path (which also resolves to
+			// EnsureCustomServiceQuadlet); custom services use the svc directly.
+			if isKnownService(name) {
+				if err := ensureServiceQuadlet(name); err != nil {
+					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
+				}
+			} else if err := ensureCustomServiceQuadlet(svc); err != nil {
 				fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
 			}
 			if noRestart {

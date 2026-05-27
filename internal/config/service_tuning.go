@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 )
@@ -47,6 +48,25 @@ var tuningMounts = map[string]tuningMount{
 		Target:   "/etc/mysql/conf.d/zz-lerd-user.cnf",
 		Template: mysqlTuningTemplate,
 	},
+}
+
+// ResolveServiceForTuning loads the service definition behind name for tuning
+// purposes, whether it is a user custom service (a YAML in the services dir) or
+// a built-in default preset (e.g. the default mysql, which has no YAML on disk).
+// Both kinds render their quadlet through EnsureCustomServiceQuadlet, so the
+// resolved value carries the Family that ServiceTuningMount keys off.
+func ResolveServiceForTuning(name string) (*CustomService, error) {
+	if svc, err := LoadCustomService(name); err == nil {
+		return svc, nil
+	}
+	if IsDefaultPreset(name) {
+		p, err := LoadPreset(name)
+		if err != nil {
+			return nil, err
+		}
+		return p.Resolve("")
+	}
+	return nil, fmt.Errorf("service %q is not installed", name)
 }
 
 // ServiceTuningMount returns the in-container mount target for svc's tuning

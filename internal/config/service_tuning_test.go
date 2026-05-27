@@ -33,6 +33,36 @@ func TestServiceTuningMount_KnownFamilies(t *testing.T) {
 	}
 }
 
+func TestResolveServiceForTuning(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// A custom service resolves from its on-disk YAML.
+	if err := SaveCustomService(&CustomService{Name: "mariadb-10-11", Image: "docker.io/library/mariadb:10.11", Family: "mariadb"}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	svc, err := ResolveServiceForTuning("mariadb-10-11")
+	if err != nil {
+		t.Fatalf("custom resolve: %v", err)
+	}
+	if FamilyOf(svc) != "mariadb" {
+		t.Errorf("custom family = %q, want mariadb", FamilyOf(svc))
+	}
+
+	// A built-in default preset resolves even with no YAML on disk.
+	svc, err = ResolveServiceForTuning("mysql")
+	if err != nil {
+		t.Fatalf("default preset resolve: %v", err)
+	}
+	if FamilyOf(svc) != "mysql" {
+		t.Errorf("default preset family = %q, want mysql", FamilyOf(svc))
+	}
+
+	// An unknown service is an error, not a panic.
+	if _, err := ResolveServiceForTuning("does-not-exist"); err == nil {
+		t.Errorf("expected error for unknown service")
+	}
+}
+
 func TestMaterializeServiceTuning_SeedsTemplateForTunableFamily(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	svc := &CustomService{Name: "mariadb-10-11", Family: "mariadb"}
