@@ -820,28 +820,31 @@ func buildSites() []SiteResponse {
 
 // ServiceResponse is the response for GET /api/services.
 type ServiceResponse struct {
-	Name               string            `json:"name"`
-	Status             string            `json:"status"`
-	Version            string            `json:"version,omitempty"`
-	EnvVars            map[string]string `json:"env_vars"`
-	Dashboard          string            `json:"dashboard,omitempty"`
-	DashboardExternal  bool              `json:"dashboard_external,omitempty"`
-	ConnectionURL      string            `json:"connection_url,omitempty"`
-	Custom             bool              `json:"custom,omitempty"`
-	IsDefault          bool              `json:"is_default,omitempty"`
-	SiteCount          int               `json:"site_count"`
-	SiteDomains        []string          `json:"site_domains,omitempty"`
-	Pinned             bool              `json:"pinned"`
-	Paused             bool              `json:"paused,omitempty"`
-	DependsOn          []string          `json:"depends_on,omitempty"`
-	QueueSite          string            `json:"queue_site,omitempty"`
-	StripeListenerSite string            `json:"stripe_listener_site,omitempty"`
-	ScheduleWorkerSite string            `json:"schedule_worker_site,omitempty"`
-	ReverbSite         string            `json:"reverb_site,omitempty"`
-	HorizonSite        string            `json:"horizon_site,omitempty"`
-	WorkerSite         string            `json:"worker_site,omitempty"`
-	WorkerName         string            `json:"worker_name,omitempty"`
-	WorkerLabel        string            `json:"worker_label,omitempty"`
+	Name              string            `json:"name"`
+	Status            string            `json:"status"`
+	Version           string            `json:"version,omitempty"`
+	EnvVars           map[string]string `json:"env_vars"`
+	Dashboard         string            `json:"dashboard,omitempty"`
+	DashboardExternal bool              `json:"dashboard_external,omitempty"`
+	ConnectionURL     string            `json:"connection_url,omitempty"`
+	Custom            bool              `json:"custom,omitempty"`
+	IsDefault         bool              `json:"is_default,omitempty"`
+	// Tunable is true when the service exposes a user-editable runtime config
+	// override (see config.ServiceTuningMount), so the UI can show a Tuning tab.
+	Tunable            bool     `json:"tunable,omitempty"`
+	SiteCount          int      `json:"site_count"`
+	SiteDomains        []string `json:"site_domains,omitempty"`
+	Pinned             bool     `json:"pinned"`
+	Paused             bool     `json:"paused,omitempty"`
+	DependsOn          []string `json:"depends_on,omitempty"`
+	QueueSite          string   `json:"queue_site,omitempty"`
+	StripeListenerSite string   `json:"stripe_listener_site,omitempty"`
+	ScheduleWorkerSite string   `json:"schedule_worker_site,omitempty"`
+	ReverbSite         string   `json:"reverb_site,omitempty"`
+	HorizonSite        string   `json:"horizon_site,omitempty"`
+	WorkerSite         string   `json:"worker_site,omitempty"`
+	WorkerName         string   `json:"worker_name,omitempty"`
+	WorkerLabel        string   `json:"worker_label,omitempty"`
 	// Set when this worker entry is for a per-worktree unit
 	// (lerd-<wname>-<site>-<wt>); empty for parent-site workers.
 	WorkerWorktree       string `json:"worker_worktree,omitempty"`
@@ -1007,6 +1010,7 @@ func buildServicesList() []ServiceResponse {
 		if status != "active" {
 			conflicts = portConflictsFor(unit, ssOutput)
 		}
+		_, tunable := config.ServiceTuningMount(svc)
 		services = append(services, ServiceResponse{
 			Name:              svc.Name,
 			Status:            status,
@@ -1016,6 +1020,7 @@ func buildServicesList() []ServiceResponse {
 			DashboardExternal: svc.DashboardExternal,
 			ConnectionURL:     svc.ConnectionURL,
 			Custom:            true,
+			Tunable:           tunable,
 			SiteCount:         countSitesUsingService(svc.Name),
 			SiteDomains:       sitesUsingService(svc.Name),
 			Pinned:            config.ServiceIsPinned(svc.Name),
@@ -1423,6 +1428,57 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			writeLine(map[string]any{"phase": "error", "error": err.Error()})
 		}
 		dispatchNotification(notificationForServiceOp("update", name, start, err))
+		return
+	}
+
+	// Tuning override: GET reads the user-editable config file (seeding it on
+	// first access), POST saves it and restarts the service so it re-reads.
+	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		svc, err := config.LoadCustomService(name)
+		if err != nil {
+			http.Error(w, "service not installed", http.StatusNotFound)
+			return
+		}
+		target, ok := config.ServiceTuningMount(svc)
+		if !ok {
+			http.Error(w, "service does not support tuning", http.StatusBadRequest)
+			return
+		}
+		if err := config.MaterializeServiceTuning(svc); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		path := config.ServiceTuningFile(name)
+		if r.Method == http.MethodGet {
+			body, err := os.ReadFile(path)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, map[string]any{"supported": true, "target": target, "content": string(body)})
+			return
+		}
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		// Regenerate the quadlet so the mount lands on installs predating this
+		// feature, then restart so the container re-reads the config.
+		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
+			fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
+		}
+		if err := podman.RestartUnit("lerd-" + name); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true})
 		return
 	}
 

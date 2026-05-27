@@ -53,6 +53,35 @@ describe('services store', () => {
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
   });
 
+  it('getServiceConfig GETs the tuning override', async () => {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ supported: true, target: '/etc/mysql/conf.d/zz-lerd-user.cnf', content: '[mysqld]\n' }), {
+          status: 200
+        })
+    ) as unknown as typeof fetch;
+    const { getServiceConfig } = await import('./services');
+    const cfg = await getServiceConfig('mariadb-10-11');
+    expect(cfg.supported).toBe(true);
+    expect(cfg.target).toBe('/etc/mysql/conf.d/zz-lerd-user.cnf');
+    expect(cfg.content).toContain('[mysqld]');
+  });
+
+  it('saveServiceConfig POSTs the content and reloads', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      return new Response('{"ok":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { saveServiceConfig } = await import('./services');
+    const ok = await saveServiceConfig('mariadb-10-11', '[mysqld]\nmax_allowed_packet = 1G\n');
+    expect(ok).toBe(true);
+    expect(calls[0][0]).toBe('/api/services/mariadb-10-11/config');
+    expect(calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ content: '[mysqld]\nmax_allowed_packet = 1G\n' });
+    expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
+  });
+
   it('serviceLabel handles overrides, versioned names, and fallbacks', async () => {
     const { serviceLabel } = await import('./services');
     expect(serviceLabel('mysql')).toBe('MySQL');

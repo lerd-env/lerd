@@ -13,6 +13,7 @@ export interface Service {
   connection_url?: string;
   custom?: boolean;
   is_default?: boolean;
+  tunable?: boolean;
   site_count: number;
   site_domains?: string[];
   pinned?: boolean;
@@ -357,6 +358,30 @@ export async function streamServiceAction(
   } catch (e) {
     setProgress(name, null);
     return { ok: false, error: e instanceof Error ? e.message : 'request failed' };
+  }
+}
+
+export interface ServiceConfig {
+  supported: boolean;
+  target: string;
+  content: string;
+}
+
+export async function getServiceConfig(name: string): Promise<ServiceConfig> {
+  return apiJson<ServiceConfig>('/api/services/' + encodeURIComponent(name) + '/config');
+}
+
+export async function saveServiceConfig(name: string, content: string): Promise<boolean> {
+  try {
+    const res = await apiFetch('/api/services/' + encodeURIComponent(name) + '/config', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content })
+    });
+    if (res.ok) await loadServices();
+    return res.ok;
+  } catch {
+    return false;
   }
 }
 
