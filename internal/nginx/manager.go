@@ -1114,6 +1114,9 @@ func EnsureNginxConfig() error {
 	if err := EnsureCustomD(); err != nil {
 		return err
 	}
+	if err := EnsureHttpD(); err != nil {
+		return err
+	}
 	if err := EnsureForwardedConf(); err != nil {
 		return err
 	}
@@ -1225,4 +1228,11 @@ func EnsureProfilerVhost() error {
 // after creation, so user snippets survive `lerd update`.
 func EnsureCustomD() error {
 	return os.MkdirAll(config.NginxCustomD(), 0755)
+}
+
+// EnsureHttpD creates the http.d directory for user http-level overrides so the
+// nginx.conf `include /etc/nginx/http.d/*.conf;` always resolves, even before
+// the user has added any override.
+func EnsureHttpD() error {
+	return os.MkdirAll(config.NginxHttpD(), 0755)
 }

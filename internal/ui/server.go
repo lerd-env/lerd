@@ -198,6 +198,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
+	mux.HandleFunc("/api/nginx/config", withCORS(handleNginxConfig))
 	mux.HandleFunc("/api/php-versions", withCORS(handlePHPVersions))
 	mux.HandleFunc("/api/php-versions/", withCORS(publishAfter(handlePHPVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node-versions", withCORS(handleNodeVersions))
@@ -2442,6 +2443,64 @@ func handleSiteNginx(w http.ResponseWriter, r *http.Request, domain string) {
 	}
 	// nginx -s reload validates the new config and keeps the running config if
 	// it's invalid, so a bad edit surfaces here without taking the site down.
+	if err := nginx.Reload(); err != nil {
+		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// nginxHttpTemplate seeds the global http-level override editor when no file
+// exists yet. Loaded inside http{} after lerd's defaults, so user values win.
+const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
+#
+# Loaded inside the http { } block, after lerd's defaults, so your values win.
+# Lerd never overwrites this file; saving reloads nginx.
+
+# client_max_body_size 100m;
+# gzip on;
+# gzip_types text/plain application/json application/javascript text/css;
+# proxy_buffers 8 16k;
+# proxy_buffer_size 32k;
+`
+
+// handleNginxConfig reads (GET) or saves (POST) the global http-level nginx
+// override at ~/.local/share/lerd/nginx/http.d/zz-lerd-user.conf, which is
+// bind-mounted into lerd-nginx and included at http{} level. Saving reloads
+// nginx so the change takes effect without recreating the container.
+func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
+	path := config.NginxHttpUserConf()
+	if r.Method == http.MethodGet {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = []byte(nginxHttpTemplate)
+		}
+		writeJSON(w, map[string]any{"path": path, "content": string(body)})
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := nginx.EnsureHttpD(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	if err := nginx.Reload(); err != nil {
 		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
 		return
