@@ -63,6 +63,18 @@ lerd service reinstall postgres --reset-data   # same version, fresh data
 
 If a single linked site fails to reprovision (e.g. malformed `.env`), the reinstall continues with the remaining sites and reports the joined errors at the end.
 
+## Tuning a service
+
+```bash
+lerd service config mariadb            # open the tuning override in $EDITOR, then restart
+lerd service config mariadb --path     # just print the file path (no editor, no restart)
+lerd service config mariadb --no-restart
+```
+
+`lerd service config` opens a user-editable tuning override for the service in `$EDITOR`. Lerd seeds the file once with a commented template and **never overwrites it afterward**, so your edits survive `lerd service reinstall` and `lerd update`. The override is bind-mounted *after* the bundled preset config, so any value you set wins. Saving restarts the service so it re-reads the config.
+
+Works for both custom services and built-in default presets (e.g. `lerd service preset install mariadb` then `lerd service config mariadb`). Currently the mysql and mariadb families are tunable (mounted at `/etc/mysql/conf.d/zz-lerd-user.cnf`); services without a tuning mount report that they are not supported yet.
+
 ## YAML schema
 
 ```yaml

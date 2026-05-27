@@ -59,7 +59,10 @@ func newServiceConfigCmd() *cobra.Command {
 				return err
 			}
 			if _, ok := config.ServiceTuningMount(svc); !ok {
-				return fmt.Errorf("service %q (family %q) does not support tuning yet (supported: mysql, mariadb)", name, config.FamilyOf(svc))
+				if fam := config.FamilyOf(svc); fam != "" {
+					return fmt.Errorf("service %q (family %q) does not support tuning yet (supported: mysql, mariadb)", name, fam)
+				}
+				return fmt.Errorf("service %q does not support tuning yet (supported: mysql, mariadb)", name)
 			}
 			if err := config.MaterializeServiceTuning(svc); err != nil {
 				return fmt.Errorf("creating tuning file: %w", err)
