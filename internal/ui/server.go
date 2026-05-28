@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -922,9 +923,19 @@ func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 		Paused:        config.ServiceIsPaused(name),
 		IsDefault:     config.IsDefaultPreset(name),
 	}
-	if svc, err := config.ResolveServiceForTuning(name); err == nil {
-		if _, ok := config.ServiceTuningMount(svc); ok {
-			resp.Tunable = true
+	// Only advertise Tunable when the service is actually installed.
+	// ResolveServiceForTuning resolves built-in default presets even when
+	// the user has explicitly `lerd service remove`d them, so without the
+	// ServiceInstalled gate the UI would render a Tuning tab on a removed
+	// service — and clicking through would silently reinstall via the
+	// materialise + quadlet regen + restart path (closed at the handler
+	// level by the same guard, but the tab shouldn't appear in the first
+	// place).
+	if serviceops.ServiceInstalled(name) {
+		if svc, err := config.ResolveServiceForTuning(name); err == nil {
+			if _, ok := config.ServiceTuningMount(svc); ok {
+				resp.Tunable = true
+			}
 		}
 	}
 	// Default-preset services advertise update availability so the dashboard
@@ -1439,6 +1450,14 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	// Tuning override: GET reads the user-editable config file (seeding it on
 	// first access), POST saves it and restarts the service so it re-reads.
 	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		// Install-presence guard: same threat model as the CLI side. Removed
+		// default presets still resolve through ResolveServiceForTuning's
+		// LoadPreset fallback, so without this gate a tab-click would silently
+		// reinstall the service via materialise + quadlet regen + restart.
+		if !serviceops.ServiceInstalled(name) {
+			http.Error(w, "service is not installed", http.StatusNotFound)
+			return
+		}
 		svc, err := config.ResolveServiceForTuning(name)
 		if err != nil {
 			http.Error(w, "service not installed", http.StatusNotFound)
@@ -1466,27 +1485,26 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		var req struct {
 			Content string `json:"content"`
 		}
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		// Cap the POST body so a multi-gigabyte payload can't be streamed
+		// straight to disk via os.WriteFile. 64 KiB matches the tinker /
+		// php.ini / nginx endpoints in this file.
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
 			http.Error(w, "invalid request body", http.StatusBadRequest)
 			return
 		}
-		if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		// Regenerate the quadlet so the mount lands on installs predating this
-		// feature, then restart so the container re-reads the config. Built-in
-		// default presets regenerate through their own path (which also resolves
-		// to EnsureCustomServiceQuadlet); custom services use the svc directly.
-		if config.IsDefaultPreset(name) {
-			if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
-				fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
+		// Write + regen + restart go through the shared serviceops helper
+		// so the CLI command and this handler can't drift from each other.
+		// SaveTuningOverride returns typed sentinels we map back to HTTP
+		// status (errors.Is) — everything else is a 500.
+		if err := serviceops.SaveTuningOverride(name, req.Content); err != nil {
+			switch {
+			case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
+				http.Error(w, err.Error(), http.StatusNotFound)
+			case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
+				http.Error(w, err.Error(), http.StatusBadRequest)
+			default:
+				http.Error(w, err.Error(), http.StatusInternalServerError)
 			}
-		} else if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
-			fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v\n", name, err)
-		}
-		if err := podman.RestartUnit("lerd-" + name); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})

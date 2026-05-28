@@ -74,12 +74,23 @@ describe('services store', () => {
       return new Response('{"ok":true}', { status: 200 });
     }) as unknown as typeof fetch;
     const { saveServiceConfig } = await import('./services');
-    const ok = await saveServiceConfig('mariadb-10-11', '[mysqld]\nmax_allowed_packet = 1G\n');
-    expect(ok).toBe(true);
+    await expect(saveServiceConfig('mariadb-10-11', '[mysqld]\nmax_allowed_packet = 1G\n')).resolves.toBeUndefined();
     expect(calls[0][0]).toBe('/api/services/mariadb-10-11/config');
     expect(calls[0][1]?.method).toBe('POST');
     expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ content: '[mysqld]\nmax_allowed_packet = 1G\n' });
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
+  });
+
+  it('saveServiceConfig throws on non-ok with the server body as the message', async () => {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response('service "mysql" is not installed — run `lerd service preset install mysql` first\n', {
+          status: 404,
+          statusText: 'Not Found'
+        })
+    ) as unknown as typeof fetch;
+    const { saveServiceConfig } = await import('./services');
+    await expect(saveServiceConfig('mysql', 'x = 1')).rejects.toThrow('is not installed');
   });
 
   it('serviceLabel handles overrides, versioned names, and fallbacks', async () => {

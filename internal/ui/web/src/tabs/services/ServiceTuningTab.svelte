@@ -13,14 +13,26 @@
   let saving = $state(false);
   let saved = $state(false);
   let error = $state('');
+  let savedTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function clearSavedTimer() {
+    if (savedTimer !== null) {
+      clearTimeout(savedTimer);
+      savedTimer = null;
+    }
+  }
 
   // Load the override whenever the selected service changes. The name guard
-  // drops a stale response if the user switches services mid-fetch.
+  // drops a stale response if the user switches services mid-fetch. Clear
+  // the saved flag and its pending timer too — otherwise switching services
+  // inside the 2.5s confirmation window leaves the new service showing a
+  // stale "Saved" badge until the old timer fires.
   $effect(() => {
     const name = svc.name;
     loading = true;
     error = '';
     saved = false;
+    clearSavedTimer();
     getServiceConfig(name)
       .then((cfg) => {
         if (name !== svc.name) return;
@@ -40,13 +52,18 @@
     saving = true;
     error = '';
     saved = false;
-    const ok = await saveServiceConfig(svc.name, content);
-    saving = false;
-    if (ok) {
+    clearSavedTimer();
+    try {
+      await saveServiceConfig(svc.name, content);
       saved = true;
-      setTimeout(() => (saved = false), 2500);
-    } else {
-      error = m.services_tuning_saveError();
+      savedTimer = setTimeout(() => {
+        saved = false;
+        savedTimer = null;
+      }, 2500);
+    } catch (e) {
+      error = e instanceof Error && e.message ? e.message : m.services_tuning_saveError();
+    } finally {
+      saving = false;
     }
   }
 </script>
