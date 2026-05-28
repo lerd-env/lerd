@@ -17,7 +17,7 @@ func TestServiceTuningMount_KnownFamilies(t *testing.T) {
 		{"mariadb family", &CustomService{Name: "mariadb-10-11", Family: "mariadb"}, "/etc/mysql/conf.d/zz-lerd-user.cnf", true},
 		{"family inferred from name", &CustomService{Name: "mariadb-11"}, "/etc/mysql/conf.d/zz-lerd-user.cnf", true},
 		{"redis family", &CustomService{Name: "redis", Family: "redis"}, "/etc/redis/lerd-user.conf", true},
-		{"postgres family", &CustomService{Name: "postgres", Family: "postgres"}, "/etc/postgresql/conf.d/zz-lerd-user.conf", true},
+		{"postgres family (unsupported, see service_tuning.go)", &CustomService{Name: "postgres", Family: "postgres"}, "", false},
 		{"untuned family", &CustomService{Name: "meilisearch", Family: "meilisearch"}, "", false},
 		{"unknown family", &CustomService{Name: "whatever"}, "", false},
 		{"nil service", nil, "", false},
@@ -37,7 +37,7 @@ func TestServiceTuningMount_KnownFamilies(t *testing.T) {
 
 func TestTuningFamilies_SortedAndComplete(t *testing.T) {
 	families := TuningFamilies()
-	want := []string{"mariadb", "mysql", "postgres", "redis"}
+	want := []string{"mariadb", "mysql", "redis"}
 	if len(families) != len(want) {
 		t.Fatalf("TuningFamilies length = %d %v, want %d %v", len(families), families, len(want), want)
 	}
@@ -47,9 +47,10 @@ func TestTuningFamilies_SortedAndComplete(t *testing.T) {
 		}
 	}
 	// Anchor the "supported: …" hint shape so the test catches accidental
-	// formatting drift (commas, spacing) when new families land.
-	if got := strings.Join(families, ", "); got != "mariadb, mysql, postgres, redis" {
-		t.Errorf("joined hint = %q, want %q", got, "mariadb, mysql, postgres, redis")
+	// formatting drift (commas, spacing) when new families land. Postgres is
+	// intentionally absent — see the tuningMounts note in service_tuning.go.
+	if got := strings.Join(families, ", "); got != "mariadb, mysql, redis" {
+		t.Errorf("joined hint = %q, want %q", got, "mariadb, mysql, redis")
 	}
 }
 
@@ -142,7 +143,6 @@ func TestServiceTuningCommand(t *testing.T) {
 		wantOK bool
 	}{
 		{"redis needs a command", &CustomService{Name: "redis", Family: "redis"}, "redis-server /etc/redis/lerd-user.conf", true},
-		{"postgres needs a command", &CustomService{Name: "postgres", Family: "postgres"}, "postgres -c include_dir=/etc/postgresql/conf.d", true},
 		{"mysql auto-includes, no command", &CustomService{Name: "mysql", Family: "mysql"}, "", false},
 		{"untuned family", &CustomService{Name: "meilisearch", Family: "meilisearch"}, "", false},
 		{"nil service", nil, "", false},

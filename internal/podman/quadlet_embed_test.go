@@ -306,18 +306,6 @@ func TestGenerateCustomQuadlet_RedisTuningInjectsCommand(t *testing.T) {
 	}
 }
 
-func TestGenerateCustomQuadlet_PostgresTuningInjectsIncludeDir(t *testing.T) {
-	svc := &config.CustomService{
-		Name:   "postgres",
-		Image:  "docker.io/postgis/postgis:16-3.5-alpine",
-		Family: "postgres",
-	}
-	out := GenerateCustomQuadlet(svc)
-	if !strings.Contains(out, "Exec=postgres -c include_dir=/etc/postgresql/conf.d") {
-		t.Errorf("expected postgres include_dir command, got:\n%s", out)
-	}
-}
-
 func TestGenerateCustomQuadlet_ExplicitExecWinsOverTuningCommand(t *testing.T) {
 	// A service that declares its own Exec must keep it; the tuning command is
 	// only a fallback for images that otherwise load no config.

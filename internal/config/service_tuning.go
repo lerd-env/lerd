@@ -60,25 +60,18 @@ const redisTuningTemplate = `# Lerd user tuning for this service.
 # save ""
 `
 
-// postgresTuningTemplate seeds the postgres override. Postgres keeps its config
-// inside PGDATA with no conf.d by default, so lerd points it at one via
-// "-c include_dir" (see the Command below) and drops this file there.
-const postgresTuningTemplate = `# Lerd user tuning for this service.
-#
-# Lerd created this file once and will never overwrite it, so your edits survive
-# ` + "`lerd service reinstall`" + ` and ` + "`lerd update`" + `. It is included via
-# include_dir. Uncomment, tune, then run ` + "`lerd service restart postgres`" + ` to apply.
-
-# shared_buffers = 256MB
-# work_mem = 16MB
-# effective_cache_size = 1GB
-# max_connections = 100
-`
-
-// tuningMounts maps a service family to its tuning mount. mysql and mariadb are
-// distinct families (see their presets) but share the same conf.d include path.
-// redis and postgres need a Command because their images load no config by
-// default.
+// tuningMounts maps a service family to its tuning mount. mysql and mariadb
+// are distinct families (see their presets) but share the same conf.d include
+// path. redis needs a Command because its image loads no config by default.
+//
+// Note: postgres is intentionally NOT here. The natural shape — pointing at an
+// external conf.d via `postgres -c include_dir=...` — does not work, because
+// include_dir is a postgresql.conf directive parsed during config-file load,
+// before -c runtime parameters are applied. Postgres tuning needs an
+// entrypoint-wrapper approach that appends the include line to postgresql.conf
+// before postgres starts, which is a separate PR with proper image-version
+// runtime verification (lerd's default postgis image rejected the -c form
+// outright with FATAL unrecognized configuration parameter "include_dir").
 var tuningMounts = map[string]tuningMount{
 	"mysql": {
 		Target:   "/etc/mysql/conf.d/zz-lerd-user.cnf",
@@ -92,11 +85,6 @@ var tuningMounts = map[string]tuningMount{
 		Target:   "/etc/redis/lerd-user.conf",
 		Template: redisTuningTemplate,
 		Command:  "redis-server /etc/redis/lerd-user.conf",
-	},
-	"postgres": {
-		Target:   "/etc/postgresql/conf.d/zz-lerd-user.conf",
-		Template: postgresTuningTemplate,
-		Command:  "postgres -c include_dir=/etc/postgresql/conf.d",
 	},
 }
 
