@@ -2,16 +2,19 @@ package nginx
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
@@ -608,6 +611,32 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 func Reload() error {
 	_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
 	return err
+}
+
+// Test runs `nginx -t` inside the lerd-nginx container and returns the
+// combined stdout+stderr output along with the exit error. nginx writes its
+// per-directive validation diagnostics to stderr, so the output is the
+// useful payload regardless of success or failure, and callers should
+// surface it as-is.
+//
+// The exec is bounded by a 10 second context so a paused/stuck container
+// cannot wedge the calling HTTP handler indefinitely; nginx -t against a
+// healthy container completes in well under a second. On timeout the
+// returned error wraps context.DeadlineExceeded and the buffer carries
+// whatever podman managed to emit before the deadline fired.
+func Test() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, podman.PodmanBin(), "exec", "lerd-nginx", "nginx", "-t")
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	err := cmd.Run()
+	out := strings.TrimSpace(buf.String())
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, fmt.Errorf("nginx -t timed out after 10s: %w", ctx.Err())
+	}
+	return out, err
 }
 
 // VhostRepair describes a single vhost that was repaired during pre-flight.

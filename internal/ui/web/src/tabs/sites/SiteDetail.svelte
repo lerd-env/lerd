@@ -79,13 +79,13 @@
 
 {#snippet tabs()}
   <button class={tabBtn('overview', active === 'overview')} onclick={() => (active = 'overview')}>{m.sites_tabs_overview()}</button>
+  <button class={tabBtn('nginx', active === 'nginx')} onclick={() => (active = 'nginx')}>{m.sites_tabs_nginx()}</button>
   {#if canEnv}
     <button class={tabBtn('env', active === 'env')} onclick={() => (active = 'env')}>{m.sites_tabs_env()}</button>
   {/if}
   {#if canTinker}
     <button class={tabBtn('tinker', active === 'tinker')} onclick={() => (active = 'tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
-  <button class={tabBtn('nginx', active === 'nginx')} onclick={() => (active = 'nginx')}>{m.sites_tabs_nginx()}</button>
   <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>{m.nav_dumps()}</button>
 {/snippet}
 

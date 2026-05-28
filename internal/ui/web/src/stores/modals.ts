@@ -11,6 +11,9 @@ export type ModalKind =
   | 'worktreeRemove'
   | 'envSave'
   | 'envRestore'
+  | 'nginxSave'
+  | 'nginxRestore'
+  | 'nginxReset'
   | null;
 
 export type LANAction = 'expose' | 'unexpose';
@@ -32,6 +35,28 @@ export interface EnvRestoreTarget {
   backup: string;
 }
 
+export interface NginxSaveTarget {
+  domain: string;
+  content: string;
+  original: string;
+  /** True when the live override already exists on disk. When false, the
+   *  save modal hides the "back up the current file first" checkbox since
+   *  there's nothing on disk worth preserving. */
+  exists: boolean;
+}
+
+export interface NginxRestoreTarget {
+  domain: string;
+  current: string;
+  backupName: string;
+  backup: string;
+}
+
+export interface NginxResetTarget {
+  domain: string;
+  path: string;
+}
+
 export interface ModalState {
   kind: ModalKind;
   site?: Site;
@@ -40,6 +65,9 @@ export interface ModalState {
   branch?: string;
   envSave?: EnvSaveTarget;
   envRestore?: EnvRestoreTarget;
+  nginxSave?: NginxSaveTarget;
+  nginxRestore?: NginxRestoreTarget;
+  nginxReset?: NginxResetTarget;
 }
 
 export const modal = writable<ModalState>({ kind: null });
@@ -78,6 +106,18 @@ export function openEnvSaveModal(target: EnvSaveTarget, onSuccess?: () => void) 
 
 export function openEnvRestoreModal(target: EnvRestoreTarget, onSuccess?: () => void) {
   modal.set({ kind: 'envRestore', envRestore: target, onSuccess });
+}
+
+export function openNginxSaveModal(target: NginxSaveTarget, onSuccess?: () => void) {
+  modal.set({ kind: 'nginxSave', nginxSave: target, onSuccess });
+}
+
+export function openNginxRestoreModal(target: NginxRestoreTarget, onSuccess?: () => void) {
+  modal.set({ kind: 'nginxRestore', nginxRestore: target, onSuccess });
+}
+
+export function openNginxResetModal(target: NginxResetTarget, onSuccess?: () => void) {
+  modal.set({ kind: 'nginxReset', nginxReset: target, onSuccess });
 }
 
 export function closeModal() {

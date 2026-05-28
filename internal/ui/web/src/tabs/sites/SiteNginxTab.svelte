@@ -1,5 +1,13 @@
 <script lang="ts">
-  import { getSiteNginx, saveSiteNginx, type Site } from '$stores/sites';
+  import NginxEditor from '$components/NginxEditor.svelte';
+  import {
+    getSiteNginx,
+    loadSiteNginxBackups,
+    loadSiteNginxBackupContent,
+    type Site,
+    type SiteNginxBackup
+  } from '$stores/sites';
+  import { openNginxSaveModal, openNginxRestoreModal, openNginxResetModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -7,82 +15,280 @@
   }
   let { site }: Props = $props();
 
-  let content = $state('');
-  let path = $state('');
+  let original = $state<string>('');
+  let text = $state<string>('');
+  let path = $state<string>('');
+  let exists = $state<boolean>(false);
   let loading = $state(true);
-  let saving = $state(false);
-  let saved = $state(false);
-  let error = $state('');
+  // `error` is the fatal load-time error that replaces the editor pane.
+  // Anything raised AFTER a successful initial load (restore, reset, save
+  // refresh) writes to `actionError` instead so the editor pane stays
+  // visible and the user can keep editing without losing their buffer.
+  let error = $state<string>('');
+  let actionError = $state<string>('');
+  let backupsError = $state<string>('');
+  let copied = $state(false);
+  let copyTimer: ReturnType<typeof setTimeout> | null = null;
+  let backups = $state<SiteNginxBackup[]>([]);
+  let restoring = $state(false);
 
-  // Load whenever the selected site changes; the domain guard drops a stale
-  // response if the user switches sites mid-fetch.
+  const dirty = $derived(text !== original);
+  const latestBackup = $derived(backups[0]);
+  const hasBackup = $derived(backups.length > 0 && !loading && !error);
+  const canRevert = $derived(dirty && !loading && !error);
+  const canReset = $derived(exists && !loading && !error);
+  const canSave = $derived(dirty && !loading && !error);
+
+  // The domain is the only reactive input that should re-load the editor.
+  // Every site mutation in lerd-ui triggers a sites WebSocket broadcast,
+  // so the parent passes a fresh site object reference on every push
+  // (even when the domain is unchanged). Reading site.domain inside the
+  // effect would re-fire on each push and clobber unsaved edits; pinning
+  // to a $derived(string) lets Svelte short-circuit those false triggers.
+  const currentDomain = $derived(site.domain);
+
+  // Reload content + backups whenever the selected domain changes. The
+  // domain guard in the resolver drops stale responses if the user
+  // switches sites mid-fetch. Backup-listing errors are stored in a
+  // dedicated `backupsError` so a transient 500 doesn't blank the editor
+  // — the override content is still loadable independently.
   $effect(() => {
-    const domain = site.domain;
+    const domain = currentDomain;
     loading = true;
     error = '';
-    saved = false;
-    getSiteNginx(domain)
-      .then((res) => {
-        if (domain !== site.domain) return;
-        content = res.content;
+    actionError = '';
+    backupsError = '';
+    original = '';
+    text = '';
+    path = '';
+    backups = [];
+    Promise.all([getSiteNginx(domain), loadSiteNginxBackups(domain)])
+      .then(([res, listRes]) => {
+        if (currentDomain !== domain) return;
+        original = res.content;
+        text = res.content;
         path = res.path;
+        exists = res.exists;
+        if (listRes.ok) {
+          backups = listRes.list;
+        } else {
+          backupsError = listRes.error || 'Could not load backups';
+        }
       })
-      .catch((e) => {
-        if (domain !== site.domain) return;
-        error = e instanceof Error ? e.message : 'failed';
+      .catch((e: unknown) => {
+        if (currentDomain !== domain) return;
+        error = e instanceof Error ? e.message : String(e);
       })
       .finally(() => {
-        if (domain === site.domain) loading = false;
+        if (currentDomain === domain) loading = false;
       });
   });
 
-  async function save() {
-    saving = true;
-    error = '';
-    saved = false;
-    const ok = await saveSiteNginx(site.domain, content);
-    saving = false;
-    if (ok) {
-      saved = true;
-      setTimeout(() => (saved = false), 2500);
-    } else {
-      error = m.sites_nginx_saveError();
+  // Drop the pending copy-feedback timer on unmount so a 1.5s-late
+  // firing doesn't try to mutate $state after the component is gone.
+  $effect(() => {
+    return () => {
+      if (copyTimer) clearTimeout(copyTimer);
+    };
+  });
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      copied = true;
+      if (copyTimer) clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copied = false), 1500);
+    } catch {
+      /* no-op */
     }
+  }
+
+  // refreshAfterAction reloads the editor state after a successful save /
+  // restore / reset. It is wrapped in try/catch so a transient backend
+  // failure during the refresh surfaces as an inline `actionError` rather
+  // than blanking the editor pane via the load-time `error` slot (which
+  // would wipe the user's visible context).
+  async function refreshAfterAction(domain: string) {
+    try {
+      const [res, listRes] = await Promise.all([
+        getSiteNginx(domain),
+        loadSiteNginxBackups(domain)
+      ]);
+      if (currentDomain !== domain) return;
+      original = res.content;
+      text = res.content;
+      path = res.path;
+      exists = res.exists;
+      if (listRes.ok) {
+        backups = listRes.list;
+        backupsError = '';
+      } else {
+        backupsError = listRes.error || 'Could not load backups';
+      }
+    } catch (e: unknown) {
+      if (currentDomain !== domain) return;
+      actionError = e instanceof Error ? e.message : String(e);
+    }
+  }
+
+  // restore is only reachable when a backup file exists — the button hides
+  // itself otherwise. It loads the backup, opens the diff modal, and on
+  // accept points both the buffer and the on-screen "original" baseline at
+  // the restored bytes so the dirty indicator clears cleanly. The diff
+  // baseline is `original` (the on-disk saved content) rather than `text`
+  // (the in-buffer content possibly carrying unsaved edits) so the diff
+  // the user previews exactly matches what the backend will write.
+  async function restore() {
+    if (!latestBackup) return;
+    restoring = true;
+    actionError = '';
+    try {
+      const restoredDomain = currentDomain;
+      const restoredName = latestBackup.name;
+      const backupContent = await loadSiteNginxBackupContent(restoredDomain, restoredName);
+      openNginxRestoreModal(
+        {
+          domain: restoredDomain,
+          current: original,
+          backupName: restoredName,
+          backup: backupContent
+        },
+        async () => {
+          if (currentDomain !== restoredDomain) return;
+          original = backupContent;
+          text = backupContent;
+          exists = true;
+          const listRes = await loadSiteNginxBackups(restoredDomain);
+          if (currentDomain !== restoredDomain) return;
+          if (listRes.ok) {
+            backups = listRes.list;
+            backupsError = '';
+          } else {
+            backupsError = listRes.error || 'Could not load backups';
+          }
+        }
+      );
+    } catch (e: unknown) {
+      // Inline error so the editor pane stays visible; the user can keep
+      // their buffer intact and try again or pick a different backup.
+      actionError = e instanceof Error ? e.message : String(e);
+    } finally {
+      restoring = false;
+    }
+  }
+
+  // revert is a pure buffer-level action: it discards the user's edits and
+  // re-aligns the editor with whatever was on disk (or the seeded template
+  // if no file existed). The saved file is never touched.
+  function revert() {
+    text = original;
+  }
+
+  // reset deletes the saved override file on disk and reloads nginx. The
+  // confirm modal makes this a deliberate two-click action because it's
+  // disk-destructive (backups are preserved in custom.d.bkp/ but the live
+  // override is gone). On success we re-fetch so the editor returns to the
+  // bundled-template state with exists=false.
+  function reset() {
+    const resetDomain = currentDomain;
+    openNginxResetModal({ domain: resetDomain, path }, () => refreshAfterAction(resetDomain));
+  }
+
+  function save() {
+    const savedDomain = currentDomain;
+    // The onSuccess callback only fires on a SUCCESSFUL save; on validation
+    // failure the modal stays open with the nginx -t diagnostic and the
+    // editor's text is left exactly as the user typed it so a long edit
+    // with one typo isn't lost.
+    openNginxSaveModal(
+      { domain: savedDomain, content: text, original, exists },
+      () => refreshAfterAction(savedDomain)
+    );
   }
 </script>
 
-<div class="p-3 sm:p-5 space-y-3 overflow-y-auto flex flex-col">
-  <p class="text-[11px] text-gray-400 dark:text-gray-500 leading-relaxed">{m.sites_nginx_desc()}</p>
-
-  {#if loading}
-    <p class="text-xs text-gray-400">…</p>
-  {:else}
-    <textarea
-      bind:value={content}
-      spellcheck="false"
-      autocomplete="off"
-      autocapitalize="off"
-      class="w-full h-64 font-mono text-[11px] leading-relaxed rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 text-gray-700 dark:text-gray-300 p-3 resize-y focus:outline-none focus:ring-1 focus:ring-sky-500"
-    ></textarea>
-
-    {#if path}
-      <p class="text-[10px] text-gray-400 dark:text-gray-600 font-mono break-all">{path}</p>
-    {/if}
-
-    <div class="flex items-center gap-3">
-      <button
-        onclick={save}
-        disabled={saving}
-        class="px-3 py-1.5 rounded-md text-xs font-semibold bg-sky-600 hover:bg-sky-500 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {saving ? m.sites_nginx_saving() : m.sites_nginx_save()}
-      </button>
-      {#if saved}
-        <span class="text-xs text-green-600 dark:text-green-400">{m.sites_nginx_saved()}</span>
-      {/if}
-      {#if error}
-        <span class="text-xs text-red-500">{error}</span>
-      {/if}
+<div class="flex flex-col h-full">
+  <div class="sticky top-0 z-10">
+    <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
+      <div class="flex items-center gap-2 min-w-0">
+        {#if path}
+          <span class="text-[10px] text-gray-400 dark:text-gray-600 font-mono truncate" title={path}>{path}</span>
+        {/if}
+        {#if dirty && !loading && !error}
+          <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.nginxEditor_unsaved()}</span>
+        {/if}
+        {#if backups.length > 0 && !loading}
+          <span
+            class="text-[10px] font-medium text-gray-500 dark:text-gray-400"
+            title={latestBackup?.name}
+          >{m.nginxEditor_backupAvailable({ n: backups.length })}</span>
+        {/if}
+        {#if backupsError && !loading}
+          <span class="text-[10px] font-medium text-red-500 dark:text-red-400" title={backupsError}>{backupsError}</span>
+        {/if}
+        {#if actionError}
+          <span class="text-[10px] font-medium text-red-500 dark:text-red-400" title={actionError}>{actionError}</span>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onclick={copy}
+          disabled={loading || !!error}
+          class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
+        >
+          {copied ? m.common_copied() : m.common_copy()}
+        </button>
+        {#if canRevert}
+          <button
+            type="button"
+            onclick={revert}
+            class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
+          >
+            {m.nginxEditor_revert()}
+          </button>
+        {/if}
+        {#if canReset}
+          <button
+            type="button"
+            onclick={reset}
+            class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5"
+          >
+            {m.nginxEditor_reset()}
+          </button>
+        {/if}
+        {#if hasBackup}
+          <button
+            type="button"
+            onclick={restore}
+            disabled={restoring}
+            class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
+          >
+            {m.nginxEditor_restore()}
+          </button>
+        {/if}
+        {#if canSave}
+          <button
+            type="button"
+            onclick={save}
+            class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors"
+          >
+            {m.common_save()}
+          </button>
+        {/if}
+      </div>
     </div>
-  {/if}
+  </div>
+
+  <div class="flex-1 overflow-hidden bg-gray-50 dark:bg-black/40">
+    {#if loading}
+      <p class="text-xs text-gray-400 px-3 py-2.5">{m.common_loading()}</p>
+    {:else if error}
+      <p class="text-xs text-red-500 dark:text-red-400 px-3 py-2.5">{error}</p>
+    {:else}
+      <div class="h-full min-h-64">
+        <NginxEditor bind:value={text} />
+      </div>
+    {/if}
+  </div>
 </div>

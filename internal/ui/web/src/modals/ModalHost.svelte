@@ -9,6 +9,9 @@
   import RemoveWorktreeModal from './RemoveWorktreeModal.svelte';
   import ConfirmEnvSaveModal from './ConfirmEnvSaveModal.svelte';
   import ConfirmEnvRestoreModal from './ConfirmEnvRestoreModal.svelte';
+  import ConfirmNginxSaveModal from './ConfirmNginxSaveModal.svelte';
+  import ConfirmNginxRestoreModal from './ConfirmNginxRestoreModal.svelte';
+  import ConfirmNginxResetModal from './ConfirmNginxResetModal.svelte';
 </script>
 
 {#if $modal.kind === 'domain' && $modal.site}
@@ -29,4 +32,10 @@
   <ConfirmEnvSaveModal />
 {:else if $modal.kind === 'envRestore' && $modal.envRestore}
   <ConfirmEnvRestoreModal />
+{:else if $modal.kind === 'nginxSave' && $modal.nginxSave}
+  <ConfirmNginxSaveModal />
+{:else if $modal.kind === 'nginxRestore' && $modal.nginxRestore}
+  <ConfirmNginxRestoreModal />
+{:else if $modal.kind === 'nginxReset' && $modal.nginxReset}
+  <ConfirmNginxResetModal />
 {/if}

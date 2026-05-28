@@ -68,6 +68,15 @@ func NginxCustomD() string {
 	return filepath.Join(NginxDir(), "custom.d")
 }
 
+// NginxCustomDBkp holds timestamped backups of per-site custom.d overrides
+// produced by the web UI editor. It deliberately sits next to (not inside)
+// custom.d/ because the generated vhost templates include
+// /etc/nginx/custom.d/{domain}.conf*; a backup file in custom.d/ would be
+// auto-loaded by nginx and produce duplicate directives.
+func NginxCustomDBkp() string {
+	return filepath.Join(NginxDir(), "custom.d.bkp")
+}
+
 // NginxHttpD holds user-authored nginx snippets included at the http{} level
 // (e.g. global gzip, proxy buffers, client_max_body_size). Lerd never writes
 // here, so edits survive nginx.conf regeneration and `lerd update`.

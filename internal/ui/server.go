@@ -20,6 +20,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "embed"
@@ -2489,6 +2490,318 @@ const nginxSiteTemplate = `# Lerd per-site nginx overrides.
 # location /ws { proxy_pass http://127.0.0.1:6001; proxy_http_version 1.1; }
 `
 
+// nginxSaveMu serializes save / reset / restore on the per-site nginx
+// override. The flow snapshots, writes, runs `nginx -t`, and reloads — and
+// `nginx -t` validates the whole config tree, so two unsynchronized saves
+// against different domains can race each other into a false-positive
+// rollback (save A snapshots, save B writes broken bytes, save A's
+// nginx -t now sees B's broken file and rolls A's own valid write back).
+// One mutex across the package is sufficient: the operation is rare,
+// short, and the serialization point already exists physically (nginx
+// itself only holds one valid config).
+var nginxSaveMu sync.Mutex
+
+// nginxBackupNameRe matches a fully-qualified per-site backup filename
+// without trusting any layer of routing or prefix checking. Callers build
+// the per-domain regex via nginxBackupRegexFor(domain) so the validation
+// is anchored at both ends and the domain is escaped into the pattern.
+// The earlier unanchored form (`\.conf\.bkp\.\d{8}-\d{6}(-\d+)?$`) matched
+// any string ending with the timestamp suffix and relied on layered
+// HasPrefix checks elsewhere; if any of those layers are dropped or
+// refactored away the regex alone has to be airtight.
+func nginxBackupRegexFor(domain string) *regexp.Regexp {
+	return regexp.MustCompile(`\A` + regexp.QuoteMeta(domain) + `\.conf\.bkp\.\d{8}-\d{6}(-\d+)?\z`)
+}
+
+// uniqueNginxBackupPath returns a backup path inside dir that does not
+// collide with an existing file. Two saves in the same wall-clock second
+// would otherwise overwrite the earlier backup; this function appends a
+// -<n> suffix until it finds a free name, and returns an error once the
+// 1000-collision search exhausts rather than silently overwriting the
+// base path (the previous behaviour, which let pathological save loops
+// destroy the first backup of a given second).
+func uniqueNginxBackupPath(dir, domain string, now time.Time) (string, error) {
+	base := filepath.Join(dir, domain+".conf.bkp."+now.Format("20060102-150405"))
+	if _, err := os.Stat(base); os.IsNotExist(err) {
+		return base, nil
+	}
+	for i := 1; i < 1_000; i++ {
+		candidate := fmt.Sprintf("%s-%d", base, i)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate, nil
+		}
+	}
+	return "", fmt.Errorf("backup name space exhausted for %s in %s", domain, dir)
+}
+
+// nginxSnapshot captures the pre-write state of an override file so a failed
+// validation can roll it back to exactly what was there before.
+type nginxSnapshot struct {
+	existed bool
+	data    []byte
+	mode    os.FileMode
+}
+
+// readNginxSnapshot opens confPath once and captures the contents + mode in
+// a single shot, which closes the TOCTOU window a separate Stat + ReadFile
+// pair would leave open.
+func readNginxSnapshot(confPath string) (nginxSnapshot, error) {
+	f, err := os.Open(confPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nginxSnapshot{mode: 0o644}, nil
+		}
+		return nginxSnapshot{}, fmt.Errorf("opening nginx override: %w", err)
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil {
+		return nginxSnapshot{}, fmt.Errorf("stat nginx override: %w", err)
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nginxSnapshot{}, fmt.Errorf("reading current override: %w", err)
+	}
+	return nginxSnapshot{existed: true, data: data, mode: info.Mode().Perm()}, nil
+}
+
+// restoreNginxSnapshot puts confPath back to the state captured by snap. If
+// the file did not exist before the write, this removes whatever the write
+// just placed there; otherwise the prior bytes are written atomically with
+// the prior mode.
+func restoreNginxSnapshot(confPath string, snap nginxSnapshot) error {
+	if !snap.existed {
+		if err := os.Remove(confPath); err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("rolling back new file: %w", err)
+		}
+		return nil
+	}
+	if err := writeFileAtomic(confPath, snap.data, snap.mode); err != nil {
+		return fmt.Errorf("rolling back contents: %w", err)
+	}
+	return nil
+}
+
+// writeNginxBackup stages snap.data into the backup directory with a unique
+// timestamped name. Mode is preserved from the original file. Returns the
+// absolute backup path (so the caller can delete it on rollback) and the
+// base name for the API response.
+func writeNginxBackup(domain string, snap nginxSnapshot, now time.Time) (string, string, error) {
+	if !snap.existed {
+		return "", "", nil
+	}
+	dir := config.NginxCustomDBkp()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return "", "", fmt.Errorf("creating backup dir: %w", err)
+	}
+	backupPath, err := uniqueNginxBackupPath(dir, domain, now)
+	if err != nil {
+		return "", "", err
+	}
+	if err := writeFileAtomic(backupPath, snap.data, snap.mode); err != nil {
+		return "", "", fmt.Errorf("writing backup: %w", err)
+	}
+	return backupPath, filepath.Base(backupPath), nil
+}
+
+// SiteNginxBackup mirrors SiteEnvBackup so the frontend can reuse the same
+// dropdown / diff modal pattern.
+type SiteNginxBackup struct {
+	Name      string `json:"name"`
+	MtimeUnix int64  `json:"mtime_unix"`
+}
+
+func listNginxBackups(domain string) ([]SiteNginxBackup, error) {
+	dir := config.NginxCustomDBkp()
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	re := nginxBackupRegexFor(domain)
+	out := []SiteNginxBackup{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !re.MatchString(name) {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		out = append(out, SiteNginxBackup{Name: name, MtimeUnix: info.ModTime().Unix()})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name > out[j].Name })
+	return out, nil
+}
+
+// restoreNginxBackup copies the named backup over the live override
+// atomically and returns the restored content. The backup file is NOT
+// removed here — the caller deletes it only after `nginx -s reload`
+// succeeds, so a reload failure leaves a recoverable copy on disk instead
+// of dropping the only safety net before confirming the swap took effect.
+// Mode preservation prefers the existing target's perm bits so a chmod
+// the user made between backup and restore is honoured; when the target
+// is gone, the backup's own mode is reused so previously-locked-down
+// configs are not widened on restore.
+func restoreNginxBackup(domain, name string) (string, string, error) {
+	if !nginxBackupRegexFor(domain).MatchString(name) {
+		return "", "", fmt.Errorf("invalid backup name")
+	}
+	backupPath := filepath.Join(config.NginxCustomDBkp(), name)
+	backupInfo, statErr := os.Stat(backupPath)
+	if statErr != nil {
+		return "", "", fmt.Errorf("stat backup: %w", statErr)
+	}
+	backupData, err := os.ReadFile(backupPath)
+	if err != nil {
+		return "", "", fmt.Errorf("reading backup: %w", err)
+	}
+	// The live override directory may not exist on a fresh install (or
+	// after the user reset the override); writeFileAtomic stages a temp
+	// file in that directory so we have to ensure it is present before
+	// the rename can land.
+	if err := os.MkdirAll(config.NginxCustomD(), 0o755); err != nil {
+		return "", "", fmt.Errorf("creating custom.d: %w", err)
+	}
+	confPath := filepath.Join(config.NginxCustomD(), domain+".conf")
+	mode := backupInfo.Mode().Perm()
+	if info, err := os.Stat(confPath); err == nil {
+		mode = info.Mode().Perm()
+	}
+	if err := writeFileAtomic(confPath, backupData, mode); err != nil {
+		return "", "", err
+	}
+	return string(backupData), backupPath, nil
+}
+
+// SiteNginxReadResponse is the JSON returned by GET /api/sites/{domain}/nginx.
+// Exists distinguishes a real saved override from the seeded template the
+// handler hands back when the file is missing; the frontend uses this to
+// hide the "back up the current file first" checkbox on first save since
+// there's nothing on disk yet to protect.
+type SiteNginxReadResponse struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Exists  bool   `json:"exists"`
+}
+
+// SiteNginxWriteRequest is the JSON body for POST /api/sites/{domain}/nginx.
+type SiteNginxWriteRequest struct {
+	Content string `json:"content"`
+	Backup  bool   `json:"backup"`
+}
+
+// SiteNginxWriteResponse is the JSON response for POST /api/sites/{domain}/nginx.
+// ValidationOutput carries the captured `nginx -t` stdout+stderr when the
+// pre-flight validation step ran (whether it passed or failed) so the modal
+// can show the user exactly which directive / line nginx complained about.
+// Content/Exists round-trip the canonical post-write state so the client
+// can refresh its `original` baseline even on the reload-failure path
+// (file already landed on disk, just the runtime reload step failed).
+type SiteNginxWriteResponse struct {
+	OK               bool   `json:"ok"`
+	Error            string `json:"error,omitempty"`
+	BackupName       string `json:"backup_name,omitempty"`
+	ValidationOutput string `json:"validation_output,omitempty"`
+	Content          string `json:"content,omitempty"`
+	Exists           bool   `json:"exists,omitempty"`
+}
+
+// SiteNginxRestoreRequest is the JSON body for POST /api/sites/{d}/nginx/restore.
+// The frontend always loads a specific backup and previews its diff before
+// the user accepts, so we require the caller to name the backup it
+// rendered; otherwise a concurrent save creating a NEWER backup between
+// modal-open and accept would silently swap the live file with bytes the
+// user never saw and consume the wrong file. Empty name means "newest"
+// for tooling that doesn't have a preview UI.
+type SiteNginxRestoreRequest struct {
+	Name string `json:"name"`
+}
+
+// SiteNginxRestoreResponse is the JSON response for POST /api/sites/{domain}/nginx/restore.
+type SiteNginxRestoreResponse struct {
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Restored string `json:"restored,omitempty"`
+	Content  string `json:"content,omitempty"`
+}
+
+// nginxReloadFn lets tests stub out the podman-bound nginx reload that the
+// real handler invokes after every save and restore. Defaults to the real
+// reload; tests swap it for a no-op so the handler exercises the on-disk
+// state without needing a running lerd-nginx container.
+var nginxReloadFn = nginx.Reload
+
+// nginxTestFn lets tests stub out the `nginx -t` pre-flight validation.
+// Returns the captured combined output (stdout+stderr from inside the
+// container) plus the exit error. A nil error means the new config validates;
+// a non-nil error means validation failed and the bytes on disk should be
+// rolled back to the pre-write snapshot.
+var nginxTestFn = nginx.Test
+
+// writeNginxOverride stages the new bytes via a temp file that lives
+// OUTSIDE custom.d/ and renames the result into place. The vhost include
+// glob in every generated server block is `custom.d/{domain}.conf*`, so a
+// temp file named `{domain}.conf.tmp.<n>` inside custom.d/ briefly matches
+// the glob; a concurrent `nginx -s reload` triggered by an unrelated site
+// operation during that window would include the partial file and fail to
+// parse. Staging in custom.d.bkp/ (already created as a sibling for
+// timestamped backups, never included by any glob) and then renaming
+// across into custom.d/ keeps the half-written file invisible to nginx
+// while preserving the cross-process atomicity of same-filesystem renames
+// (custom.d/ and custom.d.bkp/ both live under NginxDir()).
+func writeNginxOverride(confPath string, data []byte, mode os.FileMode) error {
+	if err := os.MkdirAll(config.NginxCustomD(), 0o755); err != nil {
+		return fmt.Errorf("creating custom.d: %w", err)
+	}
+	stageDir := config.NginxCustomDBkp()
+	if err := os.MkdirAll(stageDir, 0o755); err != nil {
+		return fmt.Errorf("creating stage dir: %w", err)
+	}
+	tmp, err := os.CreateTemp(stageDir, filepath.Base(confPath)+".tmp.*")
+	if err != nil {
+		return fmt.Errorf("creating temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("writing temp file: %w", err)
+	}
+	if err := tmp.Chmod(mode); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("closing temp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, confPath); err != nil {
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("renaming into place: %w", err)
+	}
+	return nil
+}
+
+// validationMentionsOurFile checks whether the `nginx -t` output names
+// the file we just wrote. nginx -t walks the entire config tree, so a
+// pre-existing broken vhost in any OTHER site's custom.d entry would
+// otherwise cause our innocent save to roll back with a confusing error
+// pointing at the unrelated file. By matching the basename against the
+// diagnostic we only treat failures attributable to our write as our
+// own; everything else is a pre-existing condition the save did not
+// create and should not own.
+func validationMentionsOurFile(output, confPath string) bool {
+	return strings.Contains(output, filepath.Base(confPath))
+}
+
 // handleSiteNginx reads (GET) or saves (POST) a site's custom.d nginx override.
 // The override is bind-mounted into lerd-nginx and included at the end of the
 // site's server block; saving reloads nginx so the change takes effect. The
@@ -2502,6 +2815,7 @@ func handleSiteNginx(w http.ResponseWriter, r *http.Request, domain string) {
 	path := filepath.Join(config.NginxCustomD(), domain+".conf")
 	if r.Method == http.MethodGet {
 		body, err := os.ReadFile(path)
+		exists := err == nil
 		if err != nil {
 			if !os.IsNotExist(err) {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -2509,35 +2823,297 @@ func handleSiteNginx(w http.ResponseWriter, r *http.Request, domain string) {
 			}
 			body = []byte(nginxSiteTemplate)
 		}
-		writeJSON(w, map[string]any{"path": path, "content": string(body)})
+		writeJSON(w, SiteNginxReadResponse{Path: path, Content: string(body), Exists: exists})
 		return
 	}
-	var req struct {
-		Content string `json:"content"`
-	}
+	var req SiteNginxWriteRequest
 	// Cap the POST body so a multi-gigabyte payload can't stream straight to
 	// disk via os.WriteFile. 64 KiB matches the tinker / php.ini / global
 	// nginx endpoints. nginx itself would reject an oversized server-block
-	// override only at reload time — after the bytes already landed.
+	// override only at reload time, after the bytes already landed.
 	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
+		writeJSON(w, SiteNginxWriteResponse{OK: false, Error: "invalid body: " + err.Error()})
 		return
 	}
-	if err := os.MkdirAll(config.NginxCustomD(), 0755); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+
+	// Serialize the whole snapshot/write/test/reload pipeline. Without
+	// this an interleaved save against a different domain could land its
+	// (broken) bytes between our write and our nginx -t, causing -t to
+	// fail and our innocent save to roll back. The lock is process-wide
+	// because nginx itself only holds one valid config at a time.
+	nginxSaveMu.Lock()
+	defer nginxSaveMu.Unlock()
+
+	// 1. Snapshot the current bytes + mode so a failed validation can roll
+	//    the file back to exactly what was there before.
+	snap, err := readNginxSnapshot(path)
+	if err != nil {
+		writeJSON(w, SiteNginxWriteResponse{OK: false, Error: err.Error()})
 		return
 	}
-	if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	// 2. Stage the prior contents into the backup directory (outside the
+	//    nginx include glob) when the user opted in. Doing the backup
+	//    BEFORE the write means a crash between steps 2 and 3 still leaves
+	//    a recoverable copy on disk.
+	backupPath := ""
+	backupName := ""
+	if req.Backup {
+		bp, bn, err := writeNginxBackup(domain, snap, time.Now())
+		if err != nil {
+			writeJSON(w, SiteNginxWriteResponse{OK: false, Error: err.Error()})
+			return
+		}
+		backupPath = bp
+		backupName = bn
+	}
+	// 3. Write the new contents via the off-glob staging helper. If this
+	//    fails the file is untouched and any staged backup we made is
+	//    stale, so clean it up before bailing.
+	if err := writeNginxOverride(path, []byte(req.Content), snap.mode); err != nil {
+		if backupPath != "" {
+			_ = os.Remove(backupPath)
+		}
+		writeJSON(w, SiteNginxWriteResponse{OK: false, Error: err.Error()})
 		return
 	}
-	// nginx -s reload validates the new config and keeps the running config if
-	// it's invalid, so a bad edit surfaces here without taking the site down.
-	if err := nginx.Reload(); err != nil {
-		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
+	// 4. Run `nginx -t` against the new contents. nginx validates the whole
+	//    config (the include glob picks up the new file automatically) but
+	//    holds the running config — nothing in lerd-nginx changes until
+	//    reload — so a failure here is safe to roll back to the snapshot.
+	//    We only own the failure if -t's output mentions our file; if a
+	//    pre-existing broken neighbour is the culprit the save is fine
+	//    and we proceed to reload (which will also fail, but with a more
+	//    accurate error message that doesn't blame our edit).
+	output, testErr := nginxTestFn()
+	if testErr != nil && validationMentionsOurFile(output, path) {
+		// Drop the staged backup BEFORE the rollback step. The backup
+		// only existed to protect the now-failed save; doing it first
+		// means the early-return on a failed rollback can never leave
+		// the backup orphaned on disk.
+		if backupPath != "" {
+			_ = os.Remove(backupPath)
+		}
+		if rbErr := restoreNginxSnapshot(path, snap); rbErr != nil {
+			writeJSON(w, SiteNginxWriteResponse{
+				OK:               false,
+				Error:            "nginx config invalid and rollback failed: " + rbErr.Error(),
+				ValidationOutput: output,
+			})
+			return
+		}
+		// testErr is the os/exec exit code ("exit status 1") which leaks
+		// implementation detail without any operational value; the real
+		// per-directive diagnostic is already captured in ValidationOutput,
+		// so the Error field stays short and the modal renders the nginx -t
+		// stderr in its own block.
+		writeJSON(w, SiteNginxWriteResponse{
+			OK:               false,
+			Error:            "nginx config invalid, rolled back to previous contents",
+			ValidationOutput: output,
+		})
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true})
+	// 5. Validation passed (or the failure was someone else's vhost). Reload
+	//    nginx to pick up the new file. On reload failure the bytes ARE on
+	//    disk, so we return the canonical content + exists=true so the
+	//    client can refresh its `original` baseline rather than going
+	//    perpetually-dirty against persisted bytes.
+	if err := nginxReloadFn(); err != nil {
+		writeJSON(w, SiteNginxWriteResponse{
+			OK:               false,
+			Error:            "saved, but nginx reload failed: " + err.Error(),
+			BackupName:       backupName,
+			ValidationOutput: output,
+			Content:          req.Content,
+			Exists:           true,
+		})
+		return
+	}
+	writeJSON(w, SiteNginxWriteResponse{
+		OK:               true,
+		BackupName:       backupName,
+		ValidationOutput: output,
+		Content:          req.Content,
+		Exists:           true,
+	})
+}
+
+// handleSiteNginxBackups lists the per-site nginx override backups for the
+// domain, newest first. Mirrors handleSiteEnvBackups.
+func handleSiteNginxBackups(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := config.FindSiteByDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := listNginxBackups(domain)
+	if err != nil {
+		http.Error(w, "listing backups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []SiteNginxBackup{}
+	}
+	writeJSON(w, list)
+}
+
+// handleSiteNginxBackupContent serves the raw bytes of a single backup so the
+// restore modal can show a diff before the user accepts. Mirrors the env
+// backup-content handler.
+func handleSiteNginxBackupContent(w http.ResponseWriter, r *http.Request, domain, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := config.FindSiteByDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if !nginxBackupRegexFor(domain).MatchString(name) {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := os.ReadFile(filepath.Join(config.NginxCustomDBkp(), name))
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "reading backup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+// SiteNginxResetResponse is the JSON returned by POST /api/sites/{d}/nginx/reset.
+type SiteNginxResetResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// handleSiteNginxReset deletes the per-site nginx override file so the
+// generated vhost falls back to the bundled defaults (the include glob
+// silently expands to nothing when no file matches). Backups are
+// intentionally preserved in custom.d.bkp/ so a Restore can recover from
+// an accidental reset. Skips the nginx reload when the file was already
+// missing because there is genuinely nothing for nginx to re-read in
+// that case and the round-trip via podman exec is wasted.
+func handleSiteNginxReset(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := config.FindSiteByDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	nginxSaveMu.Lock()
+	defer nginxSaveMu.Unlock()
+	path := filepath.Join(config.NginxCustomD(), domain+".conf")
+	removeErr := os.Remove(path)
+	if removeErr != nil && !os.IsNotExist(removeErr) {
+		writeJSON(w, SiteNginxResetResponse{OK: false, Error: removeErr.Error()})
+		return
+	}
+	if os.IsNotExist(removeErr) {
+		writeJSON(w, SiteNginxResetResponse{OK: true})
+		return
+	}
+	if err := nginxReloadFn(); err != nil {
+		writeJSON(w, SiteNginxResetResponse{OK: false, Error: "reset, but nginx reload failed: " + err.Error()})
+		return
+	}
+	writeJSON(w, SiteNginxResetResponse{OK: true})
+}
+
+// handleSiteNginxRestore restores a specific backup over the current
+// override, reloads nginx, and only then removes the backup. Taking the
+// backup name from the request body (rather than picking newest server-
+// side) eliminates the preview-vs-action race: the frontend always
+// loaded a specific backup's bytes and showed a diff for THAT one, so
+// the server must restore the same file the user just inspected.
+// Deferring the backup deletion until AFTER the reload succeeds means a
+// failed reload leaves the recovery copy intact for the user to retry.
+func handleSiteNginxRestore(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := config.FindSiteByDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var req SiteNginxRestoreRequest
+	// Body is optional (legacy tooling / CLI tests). Decode error is
+	// allowed when the body is empty; we only refuse outright if the
+	// caller sent a malformed JSON envelope.
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: "invalid body: " + err.Error()})
+			return
+		}
+	}
+
+	nginxSaveMu.Lock()
+	defer nginxSaveMu.Unlock()
+
+	list, err := listNginxBackups(domain)
+	if err != nil {
+		writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	if len(list) == 0 {
+		writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: "no backup available"})
+		return
+	}
+	name := req.Name
+	if name == "" {
+		name = list[0].Name
+	} else {
+		// Refuse to restore a name the frontend asked for that is no
+		// longer on disk (or was never a valid backup for this site).
+		// The regex inside restoreNginxBackup already blocks traversal
+		// and cross-domain names; this check additionally surfaces a
+		// clearer error when the file simply does not exist anymore.
+		found := false
+		for _, b := range list {
+			if b.Name == name {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: "backup not found: " + name})
+			return
+		}
+	}
+	content, backupPath, err := restoreNginxBackup(domain, name)
+	if err != nil {
+		writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	if err := nginxReloadFn(); err != nil {
+		// Reload failed but the file was already swapped. The backup is
+		// deliberately NOT removed so the user can retry the restore or
+		// roll forward / backward via the editor.
+		writeJSON(w, SiteNginxRestoreResponse{
+			OK:       false,
+			Error:    "restored, but nginx reload failed: " + err.Error(),
+			Restored: name,
+			Content:  content,
+		})
+		return
+	}
+	// Reload succeeded — the swap is live. Now it is safe to drop the
+	// backup. Best-effort: a failed remove leaves a harmless extra file
+	// behind but never breaks the success path.
+	_ = os.Remove(backupPath)
+	writeJSON(w, SiteNginxRestoreResponse{OK: true, Restored: name, Content: content})
 }
 
 // nginxHttpTemplate seeds the global http-level override editor when no file
@@ -2641,6 +3217,34 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	// Commands subroutes have more than two segments
 	// (/api/sites/{d}/commands and /api/sites/{d}/commands/{name}/run).
 	if commandRoute(w, r, domain, parts[1:]) {
+		return
+	}
+	// /nginx subroutes (backups, restore) sit alongside the GET/POST on
+	// /nginx. The domain validation inside each handler closes the path
+	// traversal vector that the {domain} segment would otherwise open.
+	if len(parts) >= 3 && parts[1] == "nginx" {
+		switch parts[2] {
+		case "backups":
+			if len(parts) == 3 {
+				handleSiteNginxBackups(w, r, domain)
+				return
+			}
+			if len(parts) == 4 {
+				handleSiteNginxBackupContent(w, r, domain, parts[3])
+				return
+			}
+		case "restore":
+			if len(parts) == 3 {
+				handleSiteNginxRestore(w, r, domain)
+				return
+			}
+		case "reset":
+			if len(parts) == 3 {
+				handleSiteNginxReset(w, r, domain)
+				return
+			}
+		}
+		http.NotFound(w, r)
 		return
 	}
 	// /env subroutes (backups, restore) sit alongside the GET/PUT on /env.

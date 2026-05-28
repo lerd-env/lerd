@@ -262,22 +262,128 @@ export async function saveSiteEnv(
 export interface SiteNginx {
   path: string;
   content: string;
+  exists: boolean;
+}
+
+export interface SiteNginxBackup {
+  name: string;
+  mtime_unix: number;
+}
+
+export interface SaveNginxResult {
+  ok: boolean;
+  error?: string;
+  backupName?: string;
+  validationOutput?: string;
+  /** Canonical content after save; populated even on reload-failure so the
+   *  client can refresh its `original` baseline (the bytes are on disk
+   *  regardless of whether the runtime reload step succeeded). */
+  content?: string;
+  exists?: boolean;
+}
+
+export interface RestoreNginxResult {
+  ok: boolean;
+  error?: string;
+  restored?: string;
+  content?: string;
+}
+
+/** loadSiteNginxBackups returns either a list or an explicit failure.
+ *  The earlier shape collapsed transport errors and 500s into [], so the
+ *  UI could not tell "no backups exist" from "the server failed to read
+ *  the backup directory" — the Restore button silently disappeared in
+ *  both cases. Callers now have to handle the error branch explicitly. */
+export interface LoadNginxBackupsResult {
+  ok: boolean;
+  list: SiteNginxBackup[];
+  error?: string;
 }
 
 export async function getSiteNginx(domain: string): Promise<SiteNginx> {
   return apiJson<SiteNginx>(site(domain, 'nginx'));
 }
 
-export async function saveSiteNginx(domain: string, content: string): Promise<boolean> {
+export async function saveSiteNginx(
+  domain: string,
+  content: string,
+  backup: boolean = false
+): Promise<SaveNginxResult> {
   try {
     const res = await apiFetch(site(domain, 'nginx'), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content })
+      body: JSON.stringify({ content, backup })
     });
-    return res.ok;
-  } catch {
-    return false;
+    const data = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      backup_name?: string;
+      validation_output?: string;
+      content?: string;
+      exists?: boolean;
+    };
+    return {
+      ok: Boolean(data.ok),
+      error: data.error,
+      backupName: data.backup_name,
+      validationOutput: data.validation_output,
+      content: data.content,
+      exists: data.exists
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+  }
+}
+
+export async function loadSiteNginxBackups(domain: string): Promise<LoadNginxBackupsResult> {
+  try {
+    const res = await apiFetch(site(domain, 'nginx') + '/backups');
+    if (!res.ok) {
+      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+    }
+    const list = (await res.json()) as SiteNginxBackup[];
+    return { ok: true, list: Array.isArray(list) ? list : [] };
+  } catch (e) {
+    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+  }
+}
+
+export async function loadSiteNginxBackupContent(domain: string, name: string): Promise<string> {
+  const res = await apiFetch(site(domain, 'nginx') + '/backups/' + encodeURIComponent(name));
+  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  return await res.text();
+}
+
+export interface ResetNginxResult {
+  ok: boolean;
+  error?: string;
+}
+
+export async function resetSiteNginx(domain: string): Promise<ResetNginxResult> {
+  try {
+    const res = await apiFetch(site(domain, 'nginx') + '/reset', { method: 'POST' });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+  }
+}
+
+export async function restoreSiteNginx(
+  domain: string,
+  name: string = ''
+): Promise<RestoreNginxResult> {
+  try {
+    const res = await apiFetch(site(domain, 'nginx') + '/restore', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string; restored?: string; content?: string };
+    return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
   }
 }
 

@@ -2,7 +2,7 @@
 
 Lerd generates one nginx config per site under `~/.local/share/lerd/nginx/conf.d/{domain}.conf`. These files are fully managed: `lerd link`, `lerd secure`, `lerd site rebuild`, and every `lerd install` (including the one that runs at the end of `lerd update`) regenerate them from the built-in templates. Any edits made directly to those files are overwritten.
 
-To add per-site directives that survive every regeneration, drop a snippet in `~/.local/share/lerd/nginx/custom.d/`.
+To add per-site directives that survive every regeneration, drop a snippet in `~/.local/share/lerd/nginx/custom.d/`, or edit it from the web UI's **Nginx** tab on the site detail page. The web UI tab is the same editor surface as **Env**: changes go through a confirmation modal with an optional "back up the current file first" checkbox, and if a backup exists a **Restore** button opens a diff modal before rolling the override back. Backups are written to a sibling `custom.d.bkp/` directory (the live `custom.d/` is auto-included by every site vhost via a `{domain}.conf*` glob, so backups have to live outside of it to avoid being loaded as duplicate directives) and the most recent one is consumed when you restore. Every save runs `nginx -t` inside the lerd-nginx container before the new bytes are committed to the live config: if validation fails, the file is rolled back to its previous contents (or removed if there was no previous file), the staged backup is dropped, and nginx's diagnostic is shown in the save modal so you can fix the line and retry without leaving the live nginx config broken.
 
 ## How it works
 
