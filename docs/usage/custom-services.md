@@ -73,7 +73,21 @@ lerd service config mariadb --no-restart
 
 `lerd service config` opens a user-editable tuning override for the service in `$EDITOR`. Lerd seeds the file once with a commented template and **never overwrites it afterward**, so your edits survive `lerd service reinstall` and `lerd update`. The override is bind-mounted *after* the bundled preset config, so any value you set wins. Saving restarts the service so it re-reads the config.
 
-Works for both custom services and built-in default presets (e.g. `lerd service preset install mariadb` then `lerd service config mariadb`). Currently the mysql and mariadb families are tunable (mounted at `/etc/mysql/conf.d/zz-lerd-user.cnf`); services without a tuning mount report that they are not supported yet.
+Works for both custom services and built-in default presets (e.g. `lerd service preset install mariadb` then `lerd service config mariadb`). The bundled mysql, mariadb, and redis families ship with a built-in tuning mount; postgres is not yet supported because of how its include_dir directive is parsed. For any other image, declare your own tuning mount in the service YAML with a `tuning:` block:
+
+```yaml
+name: my-cache
+image: docker.io/library/memcached:1.6-alpine
+tuning:
+  target: /etc/memcached.conf         # required, where the override mounts in the container
+  template: |                          # optional, the seed body shown on first edit
+    # Lerd user tuning for memcached
+    # Uncomment, tune, then save to apply.
+    # -m 128
+  command: memcached -f /etc/memcached.conf   # optional, only when the image needs to be told to read the file
+```
+
+The inline `tuning:` block exposes the Config tab and the `lerd service config <name>` CLI for any custom service. `target` is required; if your image already auto-includes its target path, leave `command` empty (mysql / mariadb work this way). Set `command` when the image loads no config by default (redis is the built-in example). Inline tuning wins over the family-keyed defaults, so you can override the bundled mysql/mariadb/redis paths if you ship a non-standard image.
 
 The service must already be installed — running `lerd service config <name>` against a service whose quadlet isn't on disk errors out with a hint to `lerd service preset install <name>` first, rather than silently reinstalling it as a side effect of an edit.
 
@@ -140,6 +154,18 @@ depends_on:
 # of the same name. Multi-version preset alternates inherit this through the
 # preset YAML; hand-rolled custom services can opt in by setting the field.
 family: mysql
+
+# Tuning exposes the Config tab + `lerd service config` for this service.
+# Only target is required; template seeds the first-edit body, command sets
+# the container Exec when the image needs to be told to read the file
+# (mysql/mariadb auto-include their conf dir; redis needs `redis-server <path>`).
+# When set, inline tuning wins over the family-keyed defaults.
+tuning:
+  target: /etc/memcached.conf
+  template: |
+    # Lerd user tuning for memcached.
+    # -m 128
+  command: memcached -f /etc/memcached.conf
 
 # Dynamic env vars are computed at quadlet generation time. Currently supported
 # directive: discover_family:<name>[,<name>...] which expands to a comma-joined

@@ -135,6 +135,95 @@ func TestMaterializeServiceTuning_SkipsUntunedFamily(t *testing.T) {
 	}
 }
 
+// TestServiceTuningMount_InlineTuningSpec covers the user-extensible path:
+// a custom service that doesn't match any known family can still expose
+// the Config tab by declaring tuning: inline in its YAML. The inline
+// spec wins over the family map, so users can opt arbitrary services
+// into the editor without lerd having to recognise their image.
+func TestServiceTuningMount_InlineTuningSpec(t *testing.T) {
+	svc := &CustomService{
+		Name:   "my-cache",
+		Family: "memcached", // intentionally not in tuningMounts
+		Tuning: &TuningSpec{
+			Target:   "/etc/memcached.conf",
+			Template: "# my memcached overrides\n",
+			Command:  "memcached -f /etc/memcached.conf",
+		},
+	}
+	target, ok := ServiceTuningMount(svc)
+	if !ok {
+		t.Fatal("inline tuning spec should make the service tunable")
+	}
+	if target != "/etc/memcached.conf" {
+		t.Errorf("target = %q, want /etc/memcached.conf", target)
+	}
+	cmd, ok := ServiceTuningCommand(svc)
+	if !ok || cmd != "memcached -f /etc/memcached.conf" {
+		t.Errorf("command = %q ok=%v, want inline command", cmd, ok)
+	}
+	tmpl, ok := ServiceTuningTemplate(svc)
+	if !ok || tmpl != "# my memcached overrides\n" {
+		t.Errorf("template = %q ok=%v, want inline template", tmpl, ok)
+	}
+}
+
+// TestServiceTuningMount_InlineWinsOverFamily verifies an inline spec
+// takes precedence over the family-keyed fallback so a user can override
+// the bundled mysql/mariadb/redis defaults if they ship a non-standard
+// image whose conf path differs.
+func TestServiceTuningMount_InlineWinsOverFamily(t *testing.T) {
+	svc := &CustomService{
+		Name:   "weird-mysql",
+		Family: "mysql",
+		Tuning: &TuningSpec{
+			Target: "/custom/path/mysql.cnf",
+		},
+	}
+	target, ok := ServiceTuningMount(svc)
+	if !ok || target != "/custom/path/mysql.cnf" {
+		t.Errorf("inline target should override family default: got %q ok=%v", target, ok)
+	}
+}
+
+// TestServiceTuningMount_InlineRequiresTarget makes sure an empty / zero-
+// value TuningSpec doesn't accidentally enable tuning on a service that
+// would otherwise be untunable. Target is required; without it the spec
+// is treated as absent and the family fallback applies normally.
+func TestServiceTuningMount_InlineRequiresTarget(t *testing.T) {
+	svc := &CustomService{
+		Name:   "no-target",
+		Family: "memcached",
+		Tuning: &TuningSpec{Template: "anything"},
+	}
+	if _, ok := ServiceTuningMount(svc); ok {
+		t.Error("inline spec without target must not enable tuning")
+	}
+}
+
+// TestMaterializeServiceTuning_InlineSeedsTemplate covers the seeding
+// path for inline specs: lerd writes the template once and never
+// clobbers afterwards, same contract as the family-keyed path.
+func TestMaterializeServiceTuning_InlineSeedsTemplate(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	svc := &CustomService{
+		Name: "my-cache",
+		Tuning: &TuningSpec{
+			Target:   "/etc/memcached.conf",
+			Template: "# user-defined override hints\n",
+		},
+	}
+	if err := MaterializeServiceTuning(svc); err != nil {
+		t.Fatalf("MaterializeServiceTuning: %v", err)
+	}
+	body, err := os.ReadFile(ServiceTuningFile(svc.Name))
+	if err != nil {
+		t.Fatalf("tuning file not created: %v", err)
+	}
+	if string(body) != "# user-defined override hints\n" {
+		t.Errorf("inline template not seeded:\ngot:\n%s", body)
+	}
+}
+
 func TestServiceTuningCommand(t *testing.T) {
 	cases := []struct {
 		name   string

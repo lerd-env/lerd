@@ -103,6 +103,7 @@ Once the MCP server is connected, your AI assistant has access to:
 | `service_add` | Register a new custom OCI-based service (MongoDB, RabbitMQ, etc.); supports `depends_on` for service dependencies |
 | `service_expose` | Add or remove an extra published port on a built-in service (persisted, auto-restarts if running) |
 | `service_env` | Return the recommended `.env` connection variables for a built-in or custom service |
+| `service_config` | Read / write / restore / reset / list_backups for a service's runtime tuning override. `action` defaults to `read`. `write` takes `content` and optional `backup`. `restore` takes optional `backup_name` (newest by default). `reset` writes the bundled template and stages an implicit recovery backup. Works for built-in mysql/mariadb/redis and any custom service that declares a `tuning:` block in its YAML. |
 | `db_export` | Export a database to a SQL dump file (defaults to site DB from `.env`) |
 | `db_import` | Import a SQL dump file into the project database (reads connection from `.env`) |
 | `db_create` | Create a database and `_testing` variant for the project (infers name from `.env` or project dir) |
