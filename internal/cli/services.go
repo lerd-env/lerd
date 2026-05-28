@@ -508,7 +508,7 @@ Or specify inline with flags (--name and --image are required):
 			if isKnownService(svc.Name) {
 				return fmt.Errorf("%q is a built-in service and cannot be redefined", svc.Name)
 			}
-			if _, err := config.LoadCustomService(svc.Name); err == nil {
+			if serviceops.ServiceInstalled(svc.Name) {
 				return fmt.Errorf("custom service %q already exists; remove it first with: lerd service remove %s", svc.Name, svc.Name)
 			}
 
@@ -603,12 +603,11 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 func promptPresetVersion(p *config.Preset) (string, error) {
 	options := make([]huh.Option[string], 0, len(p.Versions))
 	for _, v := range p.Versions {
-		svcName := p.Name + "-" + config.SanitizeImageTag(v.Tag)
 		label := v.Label
 		if label == "" {
 			label = v.Tag
 		}
-		if _, err := config.LoadCustomService(svcName); err == nil {
+		if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 			label += " (already installed)"
 		}
 		options = append(options, huh.NewOption(label, v.Tag))
@@ -647,13 +646,13 @@ func printPresetList() error {
 	for _, p := range presets {
 		status := "available"
 		if len(p.Versions) == 0 {
-			if _, err := config.LoadCustomService(p.Name); err == nil {
+			if serviceops.ServiceInstalled(p.Name) {
 				status = "installed"
 			}
 		} else {
 			anyInstalled := false
 			for _, v := range p.Versions {
-				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
+				if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 					anyInstalled = true
 					break
 				}
@@ -675,7 +674,7 @@ func printPresetList() error {
 			if v.Label != "" {
 				label = v.Label
 			}
-			if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
+			if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 				versionStatus = "installed"
 			}
 			marker := " "

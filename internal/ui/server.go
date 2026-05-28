@@ -1201,12 +1201,12 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 		installed := false
 		var installedTags []string
 		if len(p.Versions) == 0 {
-			if _, err := config.LoadCustomService(p.Name); err == nil {
+			if serviceops.ServiceInstalled(p.Name) {
 				installed = true
 			}
 		} else {
 			for _, v := range p.Versions {
-				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
+				if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 					installed = true
 					installedTags = append(installedTags, v.Tag)
 				}

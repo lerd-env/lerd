@@ -2608,7 +2608,7 @@ func execCheck(args map[string]any) (any, *rpcError) {
 		if svc.Preset != "" {
 			if _, err := config.LoadPreset(svc.Preset); err != nil {
 				add("service_"+svc.Name, "fail", fmt.Sprintf("unknown preset %q", svc.Preset))
-			} else if _, err := config.LoadCustomService(svc.Name); err != nil {
+			} else if !serviceops.ServiceInstalled(svc.Name) {
 				add("service_"+svc.Name, "warn", fmt.Sprintf("preset %q not installed — run: lerd service preset install %s", svc.Preset, svc.Preset))
 			} else {
 				add("service_"+svc.Name, "ok", "preset: "+svc.Preset)
@@ -2619,10 +2619,10 @@ func execCheck(args map[string]any) (any, *rpcError) {
 			add("service_"+svc.Name, "ok", "")
 			continue
 		}
-		if _, err := config.LoadCustomService(svc.Name); err == nil {
+		if serviceops.ServiceInstalled(svc.Name) {
 			add("service_"+svc.Name, "ok", "custom")
 		} else {
-			add("service_"+svc.Name, "fail", "not a built-in and no definition found")
+			add("service_"+svc.Name, "fail", fmt.Sprintf("not installed — run `lerd service preset install %s` (if it's a bundled preset) or `lerd service add --name %s ...`", svc.Name, svc.Name))
 		}
 	}
 
@@ -2667,7 +2667,7 @@ func execCheck(args map[string]any) (any, *rpcError) {
 	if cfg.DB.Service != "" {
 		if isKnownService(cfg.DB.Service) {
 			add("db.service", "ok", cfg.DB.Service)
-		} else if _, err := config.LoadCustomService(cfg.DB.Service); err == nil {
+		} else if serviceops.ServiceInstalled(cfg.DB.Service) {
 			add("db.service", "ok", cfg.DB.Service+" (custom)")
 		} else {
 			add("db.service", "fail", cfg.DB.Service+" is not a known service")
@@ -2727,7 +2727,7 @@ func execServiceAdd(args map[string]any) (any, *rpcError) {
 	if isKnownService(name) {
 		return toolErr(name + " is a built-in service and cannot be redefined"), nil
 	}
-	if _, err := config.LoadCustomService(name); err == nil {
+	if serviceops.ServiceInstalled(name) {
 		return toolErr("custom service " + name + " already exists; remove it first with service_remove"), nil
 	}
 
@@ -2826,18 +2826,17 @@ func execServicePresetList(_ map[string]any) (any, *rpcError) {
 			DefaultVersion: p.DefaultVersion,
 		}
 		if len(p.Versions) == 0 {
-			if _, err := config.LoadCustomService(p.Name); err == nil {
+			if serviceops.ServiceInstalled(p.Name) {
 				e.Installed = true
 			}
 		} else {
 			anyInstalled := false
 			for _, v := range p.Versions {
-				_, loadErr := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v))
 				vi := versionEntry{
 					Tag:       v.Tag,
 					Label:     v.Label,
 					Image:     v.Image,
-					Installed: loadErr == nil,
+					Installed: serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)),
 				}
 				if vi.Installed {
 					anyInstalled = true

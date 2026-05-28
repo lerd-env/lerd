@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
 )
 
@@ -185,12 +186,11 @@ func runCheck(_ *cobra.Command, _ []string) error {
 			continue
 		}
 
-		// Check for custom service definition on disk.
-		if _, err := config.LoadCustomService(svc.Name); err == nil {
+		if serviceops.ServiceInstalled(svc.Name) {
 			fmt.Printf("  OK    service: %s (custom)\n", svc.Name)
 		} else {
-			fmt.Printf("  FAIL  service %q: not a built-in service and no definition found at %s\n",
-				svc.Name, filepath.Join(config.CustomServicesDir(), svc.Name+".yaml"))
+			fmt.Printf("  FAIL  service %q: not installed — run `lerd service preset install %s` (if it's a bundled preset) or `lerd service add --name %s ...`\n",
+				svc.Name, svc.Name, svc.Name)
 			errors++
 		}
 	}
@@ -279,7 +279,7 @@ func runCheck(_ *cobra.Command, _ []string) error {
 	if cfg.DB.Service != "" {
 		if isKnownService(cfg.DB.Service) {
 			fmt.Printf("  OK    db.service: %s\n", cfg.DB.Service)
-		} else if _, err := config.LoadCustomService(cfg.DB.Service); err == nil {
+		} else if serviceops.ServiceInstalled(cfg.DB.Service) {
 			fmt.Printf("  OK    db.service: %s (custom)\n", cfg.DB.Service)
 		} else {
 			fmt.Printf("  FAIL  db.service: %q is not a known service\n", cfg.DB.Service)
