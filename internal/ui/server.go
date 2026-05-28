@@ -199,6 +199,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
+	mux.HandleFunc("/api/nginx/config", withCORS(handleNginxConfig))
 	mux.HandleFunc("/api/php-versions", withCORS(handlePHPVersions))
 	mux.HandleFunc("/api/php-versions/", withCORS(publishAfter(handlePHPVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node-versions", withCORS(handleNodeVersions))
@@ -2390,6 +2391,154 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
 }
 
+// nginxSiteTemplate seeds the per-site nginx override editor when no file
+// exists yet. It documents the contract and shows a couple of common snippets,
+// all commented so the file is an inert no-op until the user opts in.
+const nginxSiteTemplate = `# Lerd per-site nginx overrides.
+#
+# Included at the end of this site's server { } block. Lerd never overwrites
+# this file, so edits survive vhost regeneration and ` + "`lerd update`" + `. Add
+# directives valid inside a server block, then save to reload nginx.
+
+# client_max_body_size 100m;
+# location /ws { proxy_pass http://127.0.0.1:6001; proxy_http_version 1.1; }
+`
+
+// handleSiteNginx reads (GET) or saves (POST) a site's custom.d nginx override.
+// The override is bind-mounted into lerd-nginx and included at the end of the
+// site's server block; saving reloads nginx so the change takes effect. The
+// domain is validated against the registered sites, which also blocks any path
+// traversal via the {domain} segment.
+func handleSiteNginx(w http.ResponseWriter, r *http.Request, domain string) {
+	if _, err := config.FindSiteByDomain(domain); err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	path := filepath.Join(config.NginxCustomD(), domain+".conf")
+	if r.Method == http.MethodGet {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = []byte(nginxSiteTemplate)
+		}
+		writeJSON(w, map[string]any{"path": path, "content": string(body)})
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	// Cap the POST body so a multi-gigabyte payload can't stream straight to
+	// disk via os.WriteFile. 64 KiB matches the tinker / php.ini / global
+	// nginx endpoints. nginx itself would reject an oversized server-block
+	// override only at reload time — after the bytes already landed.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if err := os.MkdirAll(config.NginxCustomD(), 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// nginx -s reload validates the new config and keeps the running config if
+	// it's invalid, so a bad edit surfaces here without taking the site down.
+	if err := nginx.Reload(); err != nil {
+		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
+// nginxHttpTemplate seeds the global http-level override editor when no file
+// exists yet. Loaded inside http{} after lerd's defaults, so user values win.
+const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
+#
+# Loaded inside the http { } block, after lerd's defaults, so your values win.
+# Lerd never overwrites this file; saving reloads nginx.
+
+# client_max_body_size 100m;
+# gzip on;
+# gzip_types text/plain application/json application/javascript text/css;
+# proxy_buffers 8 16k;
+# proxy_buffer_size 32k;
+`
+
+// handleNginxConfig reads (GET) or saves (POST) the global http-level nginx
+// override at ~/.local/share/lerd/nginx/http.d/zz-lerd-user.conf, which is
+// bind-mounted into lerd-nginx and included at http{} level. Saving reloads
+// nginx so the change takes effect without recreating the container.
+func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
+	path := config.NginxHttpUserConf()
+	if r.Method == http.MethodGet {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			body = []byte(nginxHttpTemplate)
+		}
+		writeJSON(w, map[string]any{"path": path, "content": string(body)})
+		return
+	}
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Content string `json:"content"`
+	}
+	// Cap the POST body so a hostile (or accidental) multi-gigabyte
+	// payload can't be streamed straight to disk via os.WriteFile.
+	// 64 KiB matches the tinker / php.ini endpoints in this file.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	// Heal preconditions for installs predating this feature: rerender
+	// nginx.conf (which now carries the `include /etc/nginx/http.d/*.conf`
+	// line) and rewrite the lerd-nginx quadlet from the bundled template
+	// (which now carries the http.d Volume= mount). Without this, a freshly
+	// written http.d file is orphaned — nginx never includes it, the
+	// container never mounts the dir, and the editor would return ok:true
+	// while the change silently never takes effect. Mirrors how the
+	// php.ini handler calls WriteFPMQuadlet before restart.
+	if err := nginx.EnsureNginxConfig(); err != nil {
+		http.Error(w, "ensuring nginx config: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	quadletChanged, err := nginx.RewriteNginxQuadlet()
+	if err != nil {
+		http.Error(w, "rewriting nginx quadlet: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	// A new Volume= mount only takes effect on container (re)start —
+	// `nginx -s reload` won't pick up a quadlet change. Fall back to
+	// reload when the quadlet was already current (the common case after
+	// the first heal).
+	if quadletChanged {
+		_ = podman.DaemonReloadFn()
+		if err := podman.RestartUnit("lerd-nginx"); err != nil {
+			http.Error(w, "saved, but nginx restart failed: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else if err := nginx.Reload(); err != nil {
+		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
+}
+
 // SiteActionResponse is returned by POST /api/sites/{domain}/secure|unsecure.
 type SiteActionResponse struct {
 	OK    bool   `json:"ok"`
@@ -2455,6 +2604,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	// .env file viewer is a GET endpoint served separately.
 	if action == "env" {
 		handleSiteEnv(w, r)
+		return
+	}
+
+	// Per-site nginx override editor (GET reads, POST saves + reloads).
+	if action == "nginx" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		handleSiteNginx(w, r, domain)
 		return
 	}
 
