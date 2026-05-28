@@ -20,6 +20,16 @@ import (
 // Kept as a passthrough so callers don't have to import config.
 func IsBuiltin(name string) bool { return config.IsDefaultPreset(name) }
 
+// ServiceInstalled is the single source of truth for whether a lerd service
+// is installed on this host. It checks for the quadlet (lerd-<name>.container)
+// because that's what podman actually uses to run the service, and it can
+// outlive the YAML when the on-disk config drifts (older installs, partial
+// removes, etc.). Use this instead of probing config.LoadCustomService when
+// you only care about install presence.
+func ServiceInstalled(name string) bool {
+	return podman.QuadletInstalled("lerd-" + name)
+}
+
 // PhaseEvent is one step of the streaming preset-install flow.
 type PhaseEvent struct {
 	Phase   string `json:"phase"`
@@ -99,7 +109,10 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 	if IsBuiltin(svc.Name) {
 		return nil, fmt.Errorf("%q collides with the built-in service of the same name", svc.Name)
 	}
-	if _, err := config.LoadCustomService(svc.Name); err == nil {
+	// Quadlet presence is the install-state truth (see ServiceInstalled); a
+	// yaml-only remnant from a partial install gets silently rewritten by
+	// SaveCustomService + EnsureCustomServiceQuadlet below as the heal path.
+	if ServiceInstalled(svc.Name) {
 		return nil, fmt.Errorf("custom service %q already exists; remove it first with: lerd service remove %s", svc.Name, svc.Name)
 	}
 	if missing := MissingPresetDependencies(svc); len(missing) > 0 {
@@ -118,23 +131,13 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 }
 
 // MissingPresetDependencies returns the names of services that svc declares
-// in depends_on but which are not currently installed. A built-in (default
-// preset) counts as installed only when its quadlet is on disk: the legacy
-// "built-ins are always available" assumption broke once
-// `lerd service remove <builtin>` shipped, and a dependent install that
-// later hits EnsureServiceRunning on a missing built-in would fail with no
-// rollback (which is exactly what reinstall pre-flight is meant to prevent).
+// in depends_on but which are not currently installed. Install-state is
+// resolved through ServiceInstalled (quadlet presence), so a dep that has a
+// quadlet but a missing YAML still counts as installed.
 func MissingPresetDependencies(svc *config.CustomService) []string {
 	var missing []string
 	for _, dep := range svc.DependsOn {
-		if IsBuiltin(dep) {
-			if podman.QuadletInstalled("lerd-" + dep) {
-				continue
-			}
-			missing = append(missing, dep)
-			continue
-		}
-		if _, err := config.LoadCustomService(dep); err == nil {
+		if ServiceInstalled(dep) {
 			continue
 		}
 		missing = append(missing, dep)

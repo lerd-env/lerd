@@ -1202,12 +1202,12 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 		installed := false
 		var installedTags []string
 		if len(p.Versions) == 0 {
-			if _, err := config.LoadCustomService(p.Name); err == nil {
+			if serviceops.ServiceInstalled(p.Name) {
 				installed = true
 			}
 		} else {
 			for _, v := range p.Versions {
-				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
+				if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 					installed = true
 					installedTags = append(installedTags, v.Tag)
 				}
@@ -2797,6 +2797,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "domain:edit":
@@ -2844,6 +2847,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "domain:remove":
@@ -2916,6 +2922,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "tinker:symbols":

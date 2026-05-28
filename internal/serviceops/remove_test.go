@@ -190,6 +190,40 @@ func TestRemoveService_DefaultPresetSucceeds(t *testing.T) {
 	}
 }
 
+// TestRemoveService_OrphanQuadlet_NoYAML_Succeeds covers the recovery path for
+// the orphan-quadlet bug: a service whose YAML config is missing but whose
+// .container quadlet still exists must be removable so users can fully clean
+// up the drift that motivated unifying installed-detection on the quadlet.
+func TestRemoveService_OrphanQuadlet_NoYAML_Succeeds(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	rec := stubPodmanRemove(t)
+
+	qdir := config.QuadletDir()
+	if err := os.MkdirAll(qdir, 0o755); err != nil {
+		t.Fatalf("mkdir quadlet dir: %v", err)
+	}
+	quadletPath := filepath.Join(qdir, "lerd-mysql.container")
+	if err := os.WriteFile(quadletPath, []byte("[Container]\nImage=docker.io/library/mysql:8.4\n"), 0o644); err != nil {
+		t.Fatalf("write quadlet: %v", err)
+	}
+	if !ServiceInstalled("mysql") {
+		t.Fatalf("precondition: ServiceInstalled should report true with quadlet on disk")
+	}
+	if _, err := config.LoadCustomService("mysql"); err == nil {
+		t.Fatalf("precondition: no YAML expected for mysql in this temp tree")
+	}
+
+	if err := RemoveService("mysql", RemoveOptions{RemoveData: false}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService for orphan quadlet should not error: %v", err)
+	}
+	if got := rec.removedQuadlets; len(got) != 1 || got[0] != "lerd-mysql" {
+		t.Errorf("expected RemoveQuadlet(\"lerd-mysql\"), got %v", got)
+	}
+}
+
 func TestRemoveService_InactiveUnit_SkipsStop(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)

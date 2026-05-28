@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // presetSuggestions mirrors internal/ui/web/src/stores/presetSuggestions.ts:
@@ -160,7 +161,7 @@ func serviceEnvLines(name string, custom bool) []string {
 // presetSuggestionFor returns a one-line nudge string when the focused
 // service has an associated admin-dashboard preset the user hasn't
 // installed yet. Returns "" when there's no suggestion or the admin
-// service is already running (we detect via custom service registration).
+// service is already installed (detected via serviceops.ServiceInstalled).
 func presetSuggestionFor(svc *ServiceRow) string {
 	if svc == nil {
 		return ""
@@ -169,8 +170,7 @@ func presetSuggestionFor(svc *ServiceRow) string {
 	if !ok {
 		return ""
 	}
-	if _, err := config.LoadCustomService(target); err == nil {
-		// Already installed — no banner.
+	if serviceops.ServiceInstalled(target) {
 		return ""
 	}
 	return "install " + target + " for a browser dashboard (run `lerd preset install " + target + "`)"
