@@ -87,6 +87,13 @@ type CustomService struct {
 	// member. e.g. the mysql preset declares family: mysql, and phpMyAdmin
 	// uses dynamic_env to read all family members at quadlet generation time.
 	Family string `yaml:"family,omitempty"`
+	// Tuning, when set, exposes a user-editable runtime config override
+	// for this service via the web UI's Config tab and the
+	// `lerd service config` CLI. Custom services declare their own
+	// override path here without needing a known family — the built-in
+	// mysql/mariadb/redis families remain the fallback when this is nil.
+	// See ServiceTuningMount / ServiceTuningTemplate / ServiceTuningCommand.
+	Tuning *TuningSpec `yaml:"tuning,omitempty"`
 	// Preset is the bundled preset name this service was installed from.
 	// Set by InstallPresetByName. Used so the init wizard can store a
 	// preset reference in .lerd.yaml instead of an inlined definition.

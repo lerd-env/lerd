@@ -17,7 +17,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -201,7 +200,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
-	mux.HandleFunc("/api/nginx/config", withCORS(handleNginxConfig))
+	mux.HandleFunc("/api/nginx/", withCORS(handleNginxRoutes))
 	mux.HandleFunc("/api/php-versions", withCORS(handlePHPVersions))
 	mux.HandleFunc("/api/php-versions/", withCORS(publishAfter(handlePHPVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node-versions", withCORS(handleNodeVersions))
@@ -1338,9 +1337,336 @@ type ServiceActionResponse struct {
 	Logs  string `json:"logs,omitempty"`
 }
 
+// ServiceTuningReadResponse is the JSON returned by GET /api/services/{name}/config.
+// Exists distinguishes a real saved override from the seeded template the
+// handler hands back when the file is missing — the frontend uses this
+// to hide the "back up the current file first" checkbox on first save
+// since there's nothing on disk yet to protect.
+type ServiceTuningReadResponse struct {
+	Supported bool   `json:"supported"`
+	Target    string `json:"target"`
+	Content   string `json:"content"`
+	Exists    bool   `json:"exists"`
+}
+
+// ServiceTuningWriteRequest is the JSON body for POST /api/services/{name}/config.
+type ServiceTuningWriteRequest struct {
+	Content string `json:"content"`
+	Backup  bool   `json:"backup"`
+}
+
+// ServiceTuningWriteResponse mirrors SiteNginxWriteResponse so the
+// frontend can share refresh logic between the two editors. Content +
+// Exists round-trip the canonical post-write state (whether or not
+// the restart succeeded) so the client can refresh its baseline even
+// on the auto-rollback path.
+type ServiceTuningWriteResponse struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+	BackupName string `json:"backup_name,omitempty"`
+	Content    string `json:"content,omitempty"`
+	Exists     bool   `json:"exists,omitempty"`
+	// RolledBack is true when the restart failed and the handler
+	// successfully restored the previous bytes; the editor uses this
+	// to refresh `original` back to the rolled-back state instead of
+	// staying perpetually-dirty against bytes that never landed.
+	RolledBack bool `json:"rolled_back,omitempty"`
+}
+
+// ServiceTuningRestoreRequest carries the exact backup name the frontend
+// previewed in the diff modal. Empty means "newest" for tooling that has
+// no preview UI.
+type ServiceTuningRestoreRequest struct {
+	Name string `json:"name"`
+}
+
+// ServiceTuningRestoreResponse is the JSON response for POST /api/services/{name}/config/restore.
+// RolledBack is true when the restored bytes themselves crashed the
+// service and the handler auto-reverted to the pre-restore content;
+// the modal uses this to distinguish "restore succeeded" from
+// "restore reverted, service is back on its prior config".
+type ServiceTuningRestoreResponse struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+	Restored   string `json:"restored,omitempty"`
+	Content    string `json:"content,omitempty"`
+	RolledBack bool   `json:"rolled_back,omitempty"`
+}
+
+// ServiceTuningResetResponse is the JSON returned by POST /api/services/{name}/config/reset.
+// AutoBackupName surfaces the implicit recovery snapshot Reset always
+// stages of the pre-reset content (separate from the user-opted-in
+// backup flag on Save); the modal can show "your previous config is
+// kept as <name>, restore it any time" so users don't fear the action.
+type ServiceTuningResetResponse struct {
+	OK             bool   `json:"ok"`
+	Error          string `json:"error,omitempty"`
+	RolledBack     bool   `json:"rolled_back,omitempty"`
+	AutoBackupName string `json:"auto_backup_name,omitempty"`
+	Content        string `json:"content,omitempty"`
+	Exists         bool   `json:"exists,omitempty"`
+}
+
+// handleServiceTuning reads (GET) or saves (POST) a service's user
+// tuning override. The save path optionally stages a timestamped
+// backup, writes the new bytes, regenerates the quadlet so the mount
+// is present, restarts the unit, and waits for the service to come
+// ready — if it doesn't, the previous bytes are restored and the
+// service is restarted again so the user only loses their unsaved
+// edits, not the running service.
+func handleServiceTuning(w http.ResponseWriter, r *http.Request, name string) {
+	if !serviceops.ServiceInstalled(name) {
+		http.Error(w, "service is not installed", http.StatusNotFound)
+		return
+	}
+	svc, err := config.ResolveServiceForTuning(name)
+	if err != nil {
+		http.Error(w, "service not installed", http.StatusNotFound)
+		return
+	}
+	target, ok := config.ServiceTuningMount(svc)
+	if !ok {
+		http.Error(w, "service does not support tuning", http.StatusBadRequest)
+		return
+	}
+	if err := config.MaterializeServiceTuning(svc); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	path := config.ServiceTuningFile(name)
+	if r.Method == http.MethodGet {
+		body, err := os.ReadFile(path)
+		exists := err == nil
+		if err != nil && !os.IsNotExist(err) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, ServiceTuningReadResponse{Supported: true, Target: target, Content: string(body), Exists: exists})
+		return
+	}
+	var req ServiceTuningWriteRequest
+	// Cap the POST body so a multi-gigabyte payload can't be streamed
+	// straight to disk via os.WriteFile. 64 KiB matches the tinker /
+	// php.ini / nginx endpoints in this file.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		writeJSON(w, ServiceTuningWriteResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	saveRes, err := serviceops.SaveTuningOverride(name, req.Content, req.Backup)
+	if err != nil {
+		// Auto-rollback path: the file is back to its pre-save bytes
+		// and the service was restarted against those bytes. We still
+		// return ok:false so the modal stays open with the error, but
+		// the response carries the rolled-back content/exists so the
+		// editor can update its baseline.
+		switch {
+		case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, ServiceTuningWriteResponse{
+			OK:         false,
+			Error:      err.Error(),
+			BackupName: saveRes.BackupName,
+			Content:    saveRes.ContentOnDisk,
+			Exists:     saveRes.Exists,
+			RolledBack: saveRes.RolledBack,
+		})
+		return
+	}
+	writeJSON(w, ServiceTuningWriteResponse{
+		OK:         true,
+		BackupName: saveRes.BackupName,
+		Content:    saveRes.ContentOnDisk,
+		Exists:     saveRes.Exists,
+	})
+}
+
+func handleServiceTuningBackups(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := serviceops.ListTuningBackups(name)
+	if err != nil {
+		http.Error(w, "listing backups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []serviceops.TuningBackup{}
+	}
+	writeJSON(w, list)
+}
+
+func handleServiceTuningBackupContent(w http.ResponseWriter, r *http.Request, name, backupName string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := serviceops.ReadTuningBackupContent(name, backupName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "reading backup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func handleServiceTuningRestore(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	var req ServiceTuningRestoreRequest
+	// Always attempt decode regardless of ContentLength. Chunked
+	// Transfer-Encoding sets ContentLength to -1, so the previous
+	// `> 0` guard silently dropped the backup name and served the
+	// newest backup instead of the one the user previewed. An empty
+	// body still parses as the zero value via io.EOF, which we
+	// accept as "no name, restore newest".
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&req); err != nil && err != io.EOF {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	list, err := serviceops.ListTuningBackups(name)
+	if err != nil {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	if len(list) == 0 {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "no backup available"})
+		return
+	}
+	backupName := req.Name
+	if backupName == "" {
+		backupName = list[0].Name
+	} else {
+		found := false
+		for _, b := range list {
+			if b.Name == backupName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "backup not found: " + backupName})
+			return
+		}
+	}
+	res, err := serviceops.RestoreTuningFromBackup(name, backupName)
+	if err != nil {
+		// On failure RestoreTuningFromBackup may have auto-rolled
+		// back to the pre-restore bytes; the response surfaces both
+		// the canonical on-disk content (so the editor refreshes its
+		// baseline) and the RolledBack flag so the modal can render
+		// a recovery-aware message.
+		writeJSON(w, ServiceTuningRestoreResponse{
+			OK:         false,
+			Error:      err.Error(),
+			Restored:   backupName,
+			Content:    res.ContentOnDisk,
+			RolledBack: res.RolledBack,
+		})
+		return
+	}
+	writeJSON(w, ServiceTuningRestoreResponse{
+		OK:       true,
+		Restored: backupName,
+		Content:  res.Content,
+	})
+}
+
+func handleServiceTuningReset(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	res, err := serviceops.ResetTuningOverride(name)
+	if err != nil {
+		switch {
+		case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			writeJSON(w, ServiceTuningResetResponse{
+				OK:             false,
+				Error:          err.Error(),
+				RolledBack:     res.RolledBack,
+				AutoBackupName: res.AutoBackupName,
+				Content:        res.ContentOnDisk,
+				Exists:         res.Exists,
+			})
+		}
+		return
+	}
+	writeJSON(w, ServiceTuningResetResponse{
+		OK:             true,
+		AutoBackupName: res.AutoBackupName,
+		Content:        res.ContentOnDisk,
+		Exists:         res.Exists,
+	})
+}
+
 func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	// path: /api/services/{name}/start or /api/services/{name}/stop
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/")
+	if len(parts) < 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	// /config subroutes (backups, restore, reset) sit alongside the
+	// existing GET/POST on /config. Domain validation inside each
+	// handler keeps the {name} segment from leaking path traversal.
+	if len(parts) >= 3 && parts[1] == "config" {
+		name := parts[0]
+		switch parts[2] {
+		case "backups":
+			if len(parts) == 3 {
+				handleServiceTuningBackups(w, r, name)
+				return
+			}
+			if len(parts) == 4 {
+				handleServiceTuningBackupContent(w, r, name, parts[3])
+				return
+			}
+		case "restore":
+			if len(parts) == 3 {
+				handleServiceTuningRestore(w, r, name)
+				return
+			}
+		case "reset":
+			if len(parts) == 3 {
+				handleServiceTuningReset(w, r, name)
+				return
+			}
+		}
+		http.NotFound(w, r)
+		return
+	}
+
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
@@ -1453,64 +1779,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	// Tuning override: GET reads the user-editable config file (seeding it on
 	// first access), POST saves it and restarts the service so it re-reads.
 	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
-		// Install-presence guard: same threat model as the CLI side. Removed
-		// default presets still resolve through ResolveServiceForTuning's
-		// LoadPreset fallback, so without this gate a tab-click would silently
-		// reinstall the service via materialise + quadlet regen + restart.
-		if !serviceops.ServiceInstalled(name) {
-			http.Error(w, "service is not installed", http.StatusNotFound)
-			return
-		}
-		svc, err := config.ResolveServiceForTuning(name)
-		if err != nil {
-			http.Error(w, "service not installed", http.StatusNotFound)
-			return
-		}
-		target, ok := config.ServiceTuningMount(svc)
-		if !ok {
-			http.Error(w, "service does not support tuning", http.StatusBadRequest)
-			return
-		}
-		if err := config.MaterializeServiceTuning(svc); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		path := config.ServiceTuningFile(name)
-		if r.Method == http.MethodGet {
-			body, err := os.ReadFile(path)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, map[string]any{"supported": true, "target": target, "content": string(body)})
-			return
-		}
-		var req struct {
-			Content string `json:"content"`
-		}
-		// Cap the POST body so a multi-gigabyte payload can't be streamed
-		// straight to disk via os.WriteFile. 64 KiB matches the tinker /
-		// php.ini / nginx endpoints in this file.
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		// Write + regen + restart go through the shared serviceops helper
-		// so the CLI command and this handler can't drift from each other.
-		// SaveTuningOverride returns typed sentinels we map back to HTTP
-		// status (errors.Is) — everything else is a 500.
-		if err := serviceops.SaveTuningOverride(name, req.Content); err != nil {
-			switch {
-			case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
-				http.Error(w, err.Error(), http.StatusNotFound)
-			case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
-				http.Error(w, err.Error(), http.StatusBadRequest)
-			default:
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-			}
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true})
+		handleServiceTuning(w, r, name)
 		return
 	}
 
@@ -3130,76 +3399,6 @@ const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 # proxy_buffer_size 32k;
 `
 
-// handleNginxConfig reads (GET) or saves (POST) the global http-level nginx
-// override at ~/.local/share/lerd/nginx/http.d/zz-lerd-user.conf, which is
-// bind-mounted into lerd-nginx and included at http{} level. Saving reloads
-// nginx so the change takes effect without recreating the container.
-func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
-	path := config.NginxHttpUserConf()
-	if r.Method == http.MethodGet {
-		body, err := os.ReadFile(path)
-		if err != nil {
-			if !os.IsNotExist(err) {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			body = []byte(nginxHttpTemplate)
-		}
-		writeJSON(w, map[string]any{"path": path, "content": string(body)})
-		return
-	}
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-	var req struct {
-		Content string `json:"content"`
-	}
-	// Cap the POST body so a hostile (or accidental) multi-gigabyte
-	// payload can't be streamed straight to disk via os.WriteFile.
-	// 64 KiB matches the tinker / php.ini endpoints in this file.
-	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-		http.Error(w, "invalid request body", http.StatusBadRequest)
-		return
-	}
-	// Heal preconditions for installs predating this feature: rerender
-	// nginx.conf (which now carries the `include /etc/nginx/http.d/*.conf`
-	// line) and rewrite the lerd-nginx quadlet from the bundled template
-	// (which now carries the http.d Volume= mount). Without this, a freshly
-	// written http.d file is orphaned — nginx never includes it, the
-	// container never mounts the dir, and the editor would return ok:true
-	// while the change silently never takes effect. Mirrors how the
-	// php.ini handler calls WriteFPMQuadlet before restart.
-	if err := nginx.EnsureNginxConfig(); err != nil {
-		http.Error(w, "ensuring nginx config: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	quadletChanged, err := nginx.RewriteNginxQuadlet()
-	if err != nil {
-		http.Error(w, "rewriting nginx quadlet: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	// A new Volume= mount only takes effect on container (re)start —
-	// `nginx -s reload` won't pick up a quadlet change. Fall back to
-	// reload when the quadlet was already current (the common case after
-	// the first heal).
-	if quadletChanged {
-		_ = podman.DaemonReloadFn()
-		if err := podman.RestartUnit("lerd-nginx"); err != nil {
-			http.Error(w, "saved, but nginx restart failed: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-	} else if err := nginx.Reload(); err != nil {
-		http.Error(w, "saved, but nginx reload failed: "+err.Error(), http.StatusInternalServerError)
-		return
-	}
-	writeJSON(w, map[string]any{"ok": true})
-}
-
 // SiteActionResponse is returned by POST /api/sites/{domain}/secure|unsecure.
 type SiteActionResponse struct {
 	OK    bool   `json:"ok"`
@@ -3930,9 +4129,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
-	// path: /api/php-versions/{version}/{remove|set-default|config}
+	// path: /api/php-versions/{version}/{remove|set-default|config|...}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/php-versions/"), "/")
-	if len(parts) != 2 {
+	if len(parts) < 2 {
 		http.NotFound(w, r)
 		return
 	}
@@ -3942,65 +4141,35 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// User php.ini override: GET reads the per-version 98-user.ini (seeding it
-	// on first access), POST saves it and restarts the FPM container so it
-	// re-reads the config. Mirrors the `lerd php:ini` CLI command.
-	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
-		// Reject versions that are not actually installed before we touch
-		// disk. The regex above only enforces shape; without this guard a GET
-		// against e.g. /api/php-versions/99.9/config would seed a brand-new
-		// 98-user.ini under a phantom version directory.
-		installed, _ := phpPkg.ListInstalled()
-		if !slices.Contains(installed, version) {
-			http.NotFound(w, r)
+	// User php.ini override + backup/restore/reset subroutes. The save flow
+	// snapshots and rolls back on FPM restart failure; mirrors the per-site
+	// nginx editor's mechanic so the frontend can share the modal pattern.
+	if action == "config" {
+		switch {
+		case len(parts) == 2:
+			handlePhpIniConfig(w, r, version)
+			return
+		case len(parts) == 3 && parts[2] == "backups":
+			handlePhpIniBackups(w, r, version)
+			return
+		case len(parts) == 4 && parts[2] == "backups":
+			handlePhpIniBackupContent(w, r, version, parts[3])
+			return
+		case len(parts) == 3 && parts[2] == "reset":
+			handlePhpIniReset(w, r, version)
+			return
+		case len(parts) == 3 && parts[2] == "restore":
+			handlePhpIniRestore(w, r, version)
 			return
 		}
-		if err := podman.EnsureUserIni(version); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		path := config.PHPUserIniFile(version)
-		if r.Method == http.MethodGet {
-			body, err := os.ReadFile(path)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			writeJSON(w, map[string]any{"path": path, "content": string(body)})
-			return
-		}
-		// Cap the POST body so a hostile (or accidental) multi-gigabyte
-		// payload can't be streamed straight to disk via os.WriteFile.
-		// 64 KiB matches the tinker endpoints in this file.
-		var req struct {
-			Content string `json:"content"`
-		}
-		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		if err := os.WriteFile(path, []byte(req.Content), 0644); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		// Ensure the quadlet carries the user-ini mount (may be absent on
-		// installs predating the feature). Surface failures as 500 — otherwise
-		// the freshly written file is orphaned, the container reads nothing,
-		// and the UI shows a successful save with no signal that the change
-		// never took effect.
-		if err := podman.WriteFPMQuadlet(version); err != nil {
-			http.Error(w, "updating php quadlet: "+err.Error(), http.StatusInternalServerError)
-			return
-		}
-		short := strings.ReplaceAll(version, ".", "")
-		if err := podman.RestartUnit("lerd-php" + short + "-fpm"); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true})
+		http.NotFound(w, r)
 		return
 	}
 
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
 	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return

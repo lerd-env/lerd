@@ -90,6 +90,14 @@ func NginxHttpUserConf() string {
 	return filepath.Join(NginxHttpD(), "zz-lerd-user.conf")
 }
 
+// NginxHttpDBkp holds timestamped backups of the global http-level override
+// produced by the web UI editor. It sits next to (not inside) http.d/ because
+// nginx.conf includes /etc/nginx/http.d/*.conf; a backup inside http.d/ would
+// be loaded too and produce duplicate http{} directives.
+func NginxHttpDBkp() string {
+	return filepath.Join(NginxDir(), "http.d.bkp")
+}
+
 // CertsDir returns the certs directory.
 func CertsDir() string {
 	return filepath.Join(DataDir(), "certs")
@@ -150,6 +158,14 @@ func PHPConfFile(version string) string {
 // PHPUserIniFile returns the host path for the per-version user php.ini file.
 func PHPUserIniFile(version string) string {
 	return filepath.Join(DataDir(), "php", version, "98-user.ini")
+}
+
+// PHPUserIniBkpDir holds timestamped backups of the per-version user ini
+// produced by the web UI editor. It sits next to (not inside) the version
+// directory's ini scan path so the FPM container does not load backup files
+// as live config.
+func PHPUserIniBkpDir(version string) string {
+	return filepath.Join(DataDir(), "php", version, "ini.bkp")
 }
 
 // DumpsAssetsDir returns the host directory holding the version-agnostic dump
@@ -261,6 +277,17 @@ func ServiceFilesDir(name string) string {
 // per-version PHP 98-user.ini.
 func ServiceTuningFile(name string) string {
 	return filepath.Join(DataDir(), "service-tuning", name+".conf")
+}
+
+// ServiceTuningBkpDir holds timestamped backups of per-service tuning
+// overrides produced when the user ticks "back up the current file first"
+// before saving in the web UI editor. It lives next to (not inside) the
+// service-tuning/ directory so it cannot be picked up by any future
+// include glob and never gets bind-mounted into the service container,
+// keeping backups invisible to the running service even if it tries to
+// scan its config dir.
+func ServiceTuningBkpDir() string {
+	return filepath.Join(DataDir(), "service-tuning.bkp")
 }
 
 // FrameworksDir returns the directory for user-defined framework YAML files.

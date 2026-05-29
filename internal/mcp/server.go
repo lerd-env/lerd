@@ -351,6 +351,21 @@ func toolList() []mcpTool {
 			},
 		},
 		{
+			Name:        "service_config",
+			Description: "Read/write/restore/reset/list_backups a service's runtime tuning override. Built-in mysql/mariadb/redis; custom services opt in via `tuning:` block in YAML.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"name":        {Type: "string", Description: "Service name."},
+					"action":      {Type: "string", Description: "read|write|restore|reset|list_backups (default read)."},
+					"content":     {Type: "string", Description: "New contents (write only)."},
+					"backup":      {Type: "boolean", Description: "Stage backup before write (write only)."},
+					"backup_name": {Type: "string", Description: "Backup to restore (restore only). Omit for newest."},
+				},
+				Required: []string{"name"},
+			},
+		},
+		{
 			Name:        "service_preset_list",
 			Description: "List bundled service presets (name, description, versions, installed state). Call before service_preset_install.",
 			InputSchema: mcpSchema{
@@ -1120,6 +1135,28 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 			return execServiceReinstall(args)
 		default:
 			return unknownAction("service_control")
+		}
+
+	case "service_config":
+		// Default to read so the most common operation works without an
+		// explicit action — matches the CLI's `lerd service config --path`
+		// where the bare invocation is also a read.
+		if action == "" {
+			action = "read"
+		}
+		switch action {
+		case "read":
+			return execServiceConfigRead(args)
+		case "write":
+			return execServiceConfigWrite(args)
+		case "list_backups":
+			return execServiceConfigListBackups(args)
+		case "restore":
+			return execServiceConfigRestore(args)
+		case "reset":
+			return execServiceConfigReset(args)
+		default:
+			return unknownAction("service_config")
 		}
 
 	case "queue":
@@ -2792,6 +2829,154 @@ func execServiceReinstall(args map[string]any) (any, *rpcError) {
 		return toolOK(fmt.Sprintf("Service %q reinstalled with fresh data; linked sites' DBs/buckets were recreated.", name)), nil
 	}
 	return toolOK(fmt.Sprintf("Service %q reinstalled (data preserved).", name)), nil
+}
+
+// resolveTunableService returns the resolved service definition + the
+// in-container mount target, or a typed MCP error mapping the sentinel
+// errors from serviceops. Used as the shared preamble of every
+// service_config action so install / family checks stay in sync with
+// the HTTP handlers.
+func resolveTunableService(name string) (*config.CustomService, string, map[string]any) {
+	if name == "" {
+		return nil, "", toolErr("name is required")
+	}
+	if !serviceops.ServiceInstalled(name) {
+		return nil, "", toolErr(fmt.Sprintf("service %q is not installed; run `lerd service preset install %s` first", name, name))
+	}
+	svc, err := config.ResolveServiceForTuning(name)
+	if err != nil {
+		return nil, "", toolErr(fmt.Sprintf("service %q: %v", name, err))
+	}
+	target, ok := config.ServiceTuningMount(svc)
+	if !ok {
+		return nil, "", toolErr(fmt.Sprintf("service %q does not support tuning (family %q). Built-in tunable families: %s. Custom services can opt in via a `tuning:` block in the service YAML.", name, config.FamilyOf(svc), strings.Join(config.TuningFamilies(), ", ")))
+	}
+	return svc, target, nil
+}
+
+func execServiceConfigRead(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	svc, target, errResp := resolveTunableService(name)
+	if errResp != nil {
+		return errResp, nil
+	}
+	if err := config.MaterializeServiceTuning(svc); err != nil {
+		return toolErr("creating tuning file: " + err.Error()), nil
+	}
+	body, err := os.ReadFile(config.ServiceTuningFile(name))
+	exists := err == nil
+	if err != nil && !os.IsNotExist(err) {
+		return toolErr("reading tuning file: " + err.Error()), nil
+	}
+	backups, _ := serviceops.ListTuningBackups(name)
+	backupNames := make([]string, 0, len(backups))
+	for _, b := range backups {
+		backupNames = append(backupNames, b.Name)
+	}
+	payload, _ := json.MarshalIndent(map[string]any{
+		"name":    name,
+		"target":  target,
+		"path":    config.ServiceTuningFile(name),
+		"exists":  exists,
+		"content": string(body),
+		"backups": backupNames,
+	}, "", "  ")
+	return toolOK(string(payload)), nil
+}
+
+func execServiceConfigWrite(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	content := strArg(args, "content")
+	backup := boolArg(args, "backup")
+	if _, _, errResp := resolveTunableService(name); errResp != nil {
+		return errResp, nil
+	}
+	res, err := serviceops.SaveTuningOverride(name, content, backup)
+	if err != nil {
+		// The save may have auto-rolled back; surface that distinctly so
+		// callers know the running service is back on its prior bytes
+		// rather than wedged on the broken save.
+		msg := err.Error()
+		if res.RolledBack {
+			msg = "save reverted (prior config restored): " + msg
+		}
+		return toolErr(msg), nil
+	}
+	out := fmt.Sprintf("Saved tuning override for %q. ", name)
+	if res.BackupName != "" {
+		out += "Backup staged as " + res.BackupName + ". "
+	}
+	out += "Service restarted and ready."
+	return toolOK(out), nil
+}
+
+func execServiceConfigListBackups(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	if _, _, errResp := resolveTunableService(name); errResp != nil {
+		return errResp, nil
+	}
+	backups, err := serviceops.ListTuningBackups(name)
+	if err != nil {
+		return toolErr("listing backups: " + err.Error()), nil
+	}
+	if backups == nil {
+		backups = []serviceops.TuningBackup{}
+	}
+	payload, _ := json.MarshalIndent(map[string]any{
+		"name":    name,
+		"backups": backups,
+	}, "", "  ")
+	return toolOK(string(payload)), nil
+}
+
+func execServiceConfigRestore(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	backupName := strArg(args, "backup_name")
+	if _, _, errResp := resolveTunableService(name); errResp != nil {
+		return errResp, nil
+	}
+	// Resolve "newest" server-side so callers that omit backup_name still
+	// hit the same code path as the HTTP handler, and the response can
+	// report exactly which backup was consumed.
+	if backupName == "" {
+		list, err := serviceops.ListTuningBackups(name)
+		if err != nil {
+			return toolErr("listing backups: " + err.Error()), nil
+		}
+		if len(list) == 0 {
+			return toolErr("no backup available for " + name), nil
+		}
+		backupName = list[0].Name
+	}
+	res, err := serviceops.RestoreTuningFromBackup(name, backupName)
+	if err != nil {
+		msg := err.Error()
+		if res.RolledBack {
+			msg = "restore reverted (prior config restored): " + msg
+		}
+		return toolErr(msg), nil
+	}
+	return toolOK(fmt.Sprintf("Restored %q from %s. Service restarted and ready.", name, backupName)), nil
+}
+
+func execServiceConfigReset(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	if _, _, errResp := resolveTunableService(name); errResp != nil {
+		return errResp, nil
+	}
+	res, err := serviceops.ResetTuningOverride(name)
+	if err != nil {
+		msg := err.Error()
+		if res.RolledBack {
+			msg = "reset reverted (prior config restored): " + msg
+		}
+		return toolErr(msg), nil
+	}
+	out := fmt.Sprintf("Reset %q to the bundled template; service restarted.", name)
+	if res.AutoBackupName != "" {
+		out += " Prior config staged as " + res.AutoBackupName + " (use action=restore to recover)."
+	}
+	return toolOK(out), nil
 }
 
 func execServicePresetList(_ map[string]any) (any, *rpcError) {

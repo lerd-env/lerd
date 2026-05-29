@@ -180,7 +180,10 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// descriptions trimmed to keep the delta small.
 	// Bumped to 29000 for db_snapshot / db_snapshots / db_restore /
 	// db_snapshot_delete (database snapshots); descriptions kept terse.
-	const ceiling = 29000
+	// Bumped to 29500 for service_config (five actions in one tool:
+	// read / write / restore / reset / list_backups); descriptions
+	// already trimmed to single-line shape.
+	const ceiling = 29500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)
@@ -329,5 +332,133 @@ func TestExecServiceAdd_InitDefaultsFalse(t *testing.T) {
 	}
 	if svc.Init {
 		t.Error("Init flag should default to false when not provided")
+	}
+}
+
+// installFakeQuadlet drops a stub .container file on disk so
+// serviceops.ServiceInstalled returns true without going through podman.
+// Mirrors the helper pattern in serviceops_test and internal/ui tests.
+func installFakeQuadlet(t *testing.T, name string) {
+	t.Helper()
+	dir := config.QuadletDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir quadlet dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "lerd-"+name+".container"), []byte("[Container]\n"), 0o644); err != nil {
+		t.Fatalf("write fake quadlet: %v", err)
+	}
+}
+
+// TestExecServiceConfig_ReadSurfacesTemplateOnFirstAccess covers the
+// most common MCP-driven path: an agent calls service_config (default
+// action=read) to see what tuning knobs the service exposes. The handler
+// materialises the seeded template on first read so the response always
+// has body content for the model to learn from.
+func TestExecServiceConfig_ReadSurfacesTemplateOnFirstAccess(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	installFakeQuadlet(t, "mysql")
+
+	resp, rpcErr := execServiceConfigRead(map[string]any{"name": "mysql"})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	raw, _ := json.Marshal(resp)
+	if bytes.Contains(raw, []byte("\"isError\":true")) {
+		t.Fatalf("read reported error: %s", raw)
+	}
+	// The text payload is itself JSON with target/exists/content fields.
+	if !bytes.Contains(raw, []byte("/etc/mysql/conf.d/zz-lerd-user.cnf")) {
+		t.Errorf("response missing target path: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte("[mysqld]")) {
+		t.Errorf("response missing template body: %s", raw)
+	}
+}
+
+// TestExecServiceConfig_NotInstalledHintsAtInstall verifies the install
+// guard surfaces the same lerd CLI hint the HTTP handler does, so an
+// MCP-driven agent can recover without guessing the command.
+func TestExecServiceConfig_NotInstalledHintsAtInstall(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	// No installFakeQuadlet: ServiceInstalled returns false.
+
+	resp, _ := execServiceConfigRead(map[string]any{"name": "mysql"})
+	raw, _ := json.Marshal(resp)
+	if !bytes.Contains(raw, []byte("isError")) {
+		t.Fatalf("expected error response: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte("lerd service preset install mysql")) {
+		t.Errorf("expected install hint in error: %s", raw)
+	}
+}
+
+// TestExecServiceConfig_UnsupportedFamilyListsTunable verifies that a
+// service whose family is not on the built-in allowlist (and which has
+// no inline TuningSpec) gets a helpful error listing the supported
+// families, so the agent can either pick a different service or learn
+// to set tuning: inline.
+func TestExecServiceConfig_UnsupportedFamilyListsTunable(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name:   "meilisearch",
+		Image:  "docker.io/getmeili/meilisearch:v1",
+		Family: "meilisearch",
+	}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	installFakeQuadlet(t, "meilisearch")
+
+	resp, _ := execServiceConfigRead(map[string]any{"name": "meilisearch"})
+	raw, _ := json.Marshal(resp)
+	if !bytes.Contains(raw, []byte("isError")) {
+		t.Fatalf("expected error: %s", raw)
+	}
+	// Hint should mention the inline `tuning:` opt-in so a model can
+	// fix the YAML itself.
+	if !bytes.Contains(raw, []byte("tuning:")) {
+		t.Errorf("expected inline-tuning hint in error: %s", raw)
+	}
+}
+
+// TestExecServiceConfig_ReadHonoursInlineTuningSpec covers the new
+// user-extensible path: a custom service with an inline tuning: block
+// surfaces in MCP's read response without lerd having to recognise its
+// family.
+func TestExecServiceConfig_ReadHonoursInlineTuningSpec(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name:   "my-cache",
+		Image:  "docker.io/library/memcached:1.6-alpine",
+		Family: "memcached",
+		Tuning: &config.TuningSpec{
+			Target:   "/etc/memcached.conf",
+			Template: "# user-defined memcached overrides\n",
+		},
+	}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	installFakeQuadlet(t, "my-cache")
+
+	resp, rpcErr := execServiceConfigRead(map[string]any{"name": "my-cache"})
+	if rpcErr != nil {
+		t.Fatalf("rpc error: %v", rpcErr)
+	}
+	raw, _ := json.Marshal(resp)
+	if bytes.Contains(raw, []byte("isError")) {
+		t.Fatalf("inline tuning should be supported: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte("/etc/memcached.conf")) {
+		t.Errorf("response missing inline target: %s", raw)
+	}
+	if !bytes.Contains(raw, []byte("user-defined memcached overrides")) {
+		t.Errorf("response missing inline template: %s", raw)
 	}
 }
