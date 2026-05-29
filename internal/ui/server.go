@@ -3399,7 +3399,6 @@ const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 # proxy_buffer_size 32k;
 `
 
-
 // SiteActionResponse is returned by POST /api/sites/{domain}/secure|unsecure.
 type SiteActionResponse struct {
 	OK    bool   `json:"ok"`
