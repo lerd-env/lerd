@@ -63,7 +63,9 @@ describe('sites store', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toMatch(/\/api\/sites\/acme\.test\/env$/);
     expect(init.method).toBe('PUT');
-    expect(init.headers).toMatchObject({ 'Content-Type': 'application/json' });
+    const sentHeaders = new Headers(init.headers);
+    expect(sentHeaders.get('Content-Type')).toBe('application/json');
+    expect(sentHeaders.get('X-Lerd-CSRF')).toBe('1');
     expect(JSON.parse(init.body as string)).toEqual({ content: 'FOO=bar\n', backup: true });
     vi.unstubAllGlobals();
   });

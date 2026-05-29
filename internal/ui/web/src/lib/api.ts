@@ -8,7 +8,17 @@ export function apiUrl(path: string): string {
   return apiBase + path;
 }
 
+// State-changing requests carry X-Lerd-CSRF so the daemon's cross-origin gate
+// can tell a dashboard request apart from a CORS-simple POST forged by another
+// page in the browser. Read-only methods are left untouched to avoid turning
+// every cross-origin GET into a preflighted request.
 export async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (method !== 'GET' && method !== 'HEAD') {
+    const headers = new Headers(init?.headers);
+    if (!headers.has('X-Lerd-CSRF')) headers.set('X-Lerd-CSRF', '1');
+    init = { ...init, headers };
+  }
   return fetch(apiUrl(path), init);
 }
 
