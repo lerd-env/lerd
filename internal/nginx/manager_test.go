@@ -1121,7 +1121,7 @@ func TestEnsureNginxConfigServerNamesHashBucket(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read rendered nginx.conf: %v", err)
 	}
-	if !strings.Contains(string(body), "server_names_hash_bucket_size 128;") {
+	if !strings.Contains(string(body), "server_names_hash_bucket_size 256;") {
 		t.Errorf("rendered nginx.conf missing server_names_hash_bucket_size directive, got:\n%s", body)
 	}
 	if !strings.Contains(string(body), "server_names_hash_max_size 1024;") {
