@@ -112,7 +112,11 @@ func ensurePodmanMachineRunning() {
 
 	if len(machines) == 0 {
 		fmt.Println("  --> Initialising Podman Machine (first run, this may take a minute) ...")
-		cmd := exec.Command(podman.PodmanBin(), "machine", "init", "--rootful")
+		cmd := exec.Command(podman.PodmanBin(), "machine", "init", "--rootful",
+			"-v", "/Users:/Users",
+			"-v", "/private:/private",
+			"-v", "/var/folders:/var/folders",
+			"-v", "/Volumes:/Volumes")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
