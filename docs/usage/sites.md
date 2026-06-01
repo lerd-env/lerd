@@ -152,7 +152,7 @@ domains:
   - admin
 ```
 
-You can also manage domains from the web UI: click the pencil icon next to the domain in the site header to open the domain management modal.
+You can also manage domains from the web UI: click the pencil icon next to the domain in the site header to open the domain management modal. Changing the primary domain there also rewrites `APP_URL` in the project's `.env` to match the new primary, unless you have pinned a custom `app_url` (see [Custom `APP_URL`](#custom-app-url) below).
 
 When a site is secured with HTTPS, the certificate is automatically reissued to cover all domains.
 

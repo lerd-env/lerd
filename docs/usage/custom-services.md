@@ -73,7 +73,7 @@ lerd service config mariadb --no-restart
 
 `lerd service config` opens a user-editable tuning override for the service in `$EDITOR`. Lerd seeds the file once with a commented template and **never overwrites it afterward**, so your edits survive `lerd service reinstall` and `lerd update`. The override is bind-mounted *after* the bundled preset config, so any value you set wins. Saving restarts the service so it re-reads the config.
 
-Works for both custom services and built-in default presets (e.g. `lerd service preset install mariadb` then `lerd service config mariadb`). The bundled mysql, mariadb, and redis families ship with a built-in tuning mount; postgres is not yet supported because of how its include_dir directive is parsed. For any other image, declare your own tuning mount in the service YAML with a `tuning:` block:
+Works for both custom services and built-in default presets (e.g. `lerd service preset install mariadb` then `lerd service config mariadb`). The bundled mysql, mariadb, redis, and postgres families ship with a built-in tuning mount. Postgres needs a small wrapper: a bare `-c include_dir=...` is rejected at runtime, so lerd points postgres at a managed `config_file` that loads the cluster's own `postgresql.conf` first and then your override directory, additive, so your values win. For any other image, declare your own tuning mount in the service YAML with a `tuning:` block:
 
 ```yaml
 name: my-cache

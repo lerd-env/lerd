@@ -63,7 +63,9 @@ That's it. The snippet is merged into the generated server block for `bigapp.tes
 
 Lines you put in `custom.d/{domain}.conf` land inside the site's `server { ... }` block, so you can use anything nginx allows at server level: `client_max_body_size`, `add_header`, extra `location` blocks, `proxy_pass` overrides, `rewrite`, and so on.
 
-If you need directives at `http {}` level (like a new `map`), add them to `~/.local/share/lerd/nginx/conf.d/` with a filename that starts with an underscore (e.g. `_myorg.conf`). Files in `conf.d/` that lerd does not know about are left alone during regeneration.
+If you need directives at `http {}` level (gzip, proxy buffers, a global `client_max_body_size`, a new `map`), edit the **global override** from the web UI: open **System → Nginx** and pick the **Config** tab. It edits `~/.local/share/lerd/nginx/http.d/zz-lerd-user.conf`, which the generated `nginx.conf` includes last inside its `http {}` block, after lerd's own settings, so your values win. The editor is the same surface as the per-site one: Save runs `nginx -t` before the new bytes are committed, there is an optional backup-first checkbox with a **Restore** button, and **Reset** drops the file back to empty. The `http.d` directory is bind-mounted read-only into the `lerd-nginx` container and lerd never writes into it itself.
+
+Prefer keeping it on disk? Drop a snippet into `~/.local/share/lerd/nginx/conf.d/` with a filename that starts with an underscore (e.g. `_myorg.conf`). Files in `conf.d/` that lerd does not know about are left alone during regeneration.
 
 ## Customising the catch-all (`_default.conf`)
 

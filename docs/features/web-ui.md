@@ -111,6 +111,8 @@ Selecting a site opens the detail panel with:
 - **App logs tab**: parses every `*.log` file the framework declares (Laravel: `storage/logs/*.log`) into level-coloured entries with click-to-expand stack traces and a live-search box. The dropdown switches between log files; the Latest / All toggle controls how many entries to fetch.
 
   ![App Logs tab on the site detail](/assets/screenshots/site-detail-applogs.png)
+- **Env tab**: edit the project's `.env` (and any `.env.*` variant) right in the browser. Saving goes through a confirmation modal with an optional back-up-first checkbox and an atomic write that preserves the file mode; when a backup exists a **Restore** button opens a diff before rolling back. See [Environment Setup](./env-setup.md).
+- **Edit nginx**: the sliders button at the end of the address bar opens the site's nginx override in a modal code editor with Save / Reset / Restore and timestamped backups, and every save runs `nginx -t` before committing. With a worktree tab selected it edits that worktree's override instead of the main branch's. See [Nginx Overrides](../usage/nginx-overrides.md).
 - **Service badges**: beneath the path / git branch line, every service from the project's `.lerd.yaml` is shown as a small pill (green when running, grey when stopped). Click any badge to jump to that service's detail panel on the Services tab.
 
 ## Services
@@ -129,6 +131,8 @@ Selecting a service opens the detail panel with Start, Stop, and Restart control
 - **Open admin button**: when the paired admin UI is installed, a button on the header opens its dashboard inline as a full-width iframe overlay and auto-starts the admin service if needed. When no admin UI is installed and the service is active, a fallback **Open connection URL** anchor hands the `mysql://` / `postgresql://` / `mongodb://` URL to your registered DB client (DBeaver, TablePlus, Compass, etc.).
 - **Dashboard button**: for any service that exposes a dashboard URL (Mailpit, RustFS, Meilisearch, phpMyAdmin, etc.), a Dashboard button in the header opens it as an inline full-width iframe. The iframe overlay has its own header with the service URL, an **Open in new tab** escape hatch, and a close button. Clicking one of the main nav icons (Sites / Services / System) also closes the overlay.
 
+Services with a tuning mount (mysql, mariadb, redis, postgres, and any custom service that declares a `tuning:` block) also get a **Config** tab on their detail panel. It edits the runtime tuning override in a code editor with the same Save / Reset / Revert / Restore-from-backup flow as the nginx and `.env` editors; saving restarts the service so it re-reads the file. See [Tuning a service](../usage/custom-services.md#tuning-a-service).
+
 ## System
 
 ![System tab](/assets/screenshots/system.png)
@@ -138,9 +142,11 @@ The middle panel lists individual system components: DNS, Nginx, Watcher, each i
 Selecting an item opens its detail panel:
 
 - **PHP-FPM cards**: show which sites use the version, Xdebug toggle with an inline mode selector (debug, coverage, debug-plus-coverage, develop, profile, trace, gcstats, visible when Xdebug is on), custom extension list, and a live FPM log stream. For versions with no active sites, a manual Start/Stop button is shown.
+- **Edit php.ini**: each PHP version's detail has a **php.ini** tab (next to Logs and Sites) that edits that version's user `php.ini` override in a code editor, with Save / Reset / Revert and timestamped backups you can **Restore**. Changes apply to the shared FPM container for that version. The same file is reachable from the CLI via `lerd php:ini <version>`.
 - **Install a PHP version**: a **+** button sits after the last PHP version tab (browser-tab style). It opens a modal with a dropdown of the supported versions that are not already installed; picking one and clicking Install builds the FPM image and streams the build log live. The build runs server-side, so closing the modal does not cancel it, and an *operation finished/failed* notification fires when it is done (see [Notifications](./notifications.md)).
 - **Site Xdebug button**: every PHP site detail shows an Xdebug (bug) button in the address-bar row, between the LAN-share and terminal buttons. It turns green when Xdebug is on for that site's PHP version, and clicking it toggles Xdebug on or off in place (restarting the shared FPM container for that version). The button is hidden for static sites, custom containers, and FrankenPHP sites.
 - **Node.js cards**: show which sites use the version, with a remove button. The **Install Node.js version** entry has an inline form; enter a version number (e.g. `22`) and click **Install**, equivalent to `lerd node:install <version>`.
+- **Nginx card**: a **Logs** tab streaming the `lerd-nginx` container log, and a **Config** tab that edits the global http-level nginx override (gzip, proxy buffers, a global `client_max_body_size`, custom `map` blocks) with the same Save / Reset / Restore / backup flow as the per-site editor; every save runs `nginx -t` first. See [Nginx Overrides](../usage/nginx-overrides.md#scope).
 - **Watcher card**: shows whether `lerd-watcher` is running; a Start button appears when stopped. Streams live watcher logs (DNS repair events, fsnotify errors, worktree timeouts).
 - **Notifications card**: per-category toggles (mail captured, worker failures, finished service operations, service updates, dumps), a *Send a test notification* button, and the list of subscribed browsers with *Forget* actions. See [Notifications](./notifications.md).
 - **Autostart card**: enable or disable automatic start of all services at login.

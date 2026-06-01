@@ -27,7 +27,8 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - 🐘 **Per-project PHP version** (8.1–8.5, plus a frozen 7.4 / 8.0 legacy tier for hosted-on-the-old-stack projects), switch with one click
 - ⚡ **FrankenPHP runtime** per site as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode
 - 📦 **Node.js isolation** per project (Node 22, 24)
-- 🖥️ **Built-in Web UI** with a dashboard root, live widgets, a global Cmd+K command palette, and seven dashboard languages (English, German, Spanish, French, Indonesian, Dutch, Portuguese)
+- 🖥️ **Built-in Web UI** with a dashboard root, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions from the System page, and seven dashboard languages (English, German, Spanish, French, Indonesian, Dutch, Portuguese)
+- ✏️ **Edit config in the browser** — per-site and global nginx, per-version `php.ini`, `.env` files, and database/service runtime tuning, each validated (`nginx -t` where it applies), with timestamped backups and one-click restore
 - 🧪 **Tinker tab** - in-browser PHP REPL per site with autocomplete (project models, composer helpers, PHP built-ins), live `php -l` syntax checking, and a collapsible tree view for `dump()` output. Works on Laravel (`artisan tinker`), Symfony, and any composer-based PHP project
 - 🛰️ **Live dump() / dd() viewer** that intercepts every `dump()` and `dd()` call from your running app and streams it to the dashboard, TUI (`D` key), MCP, and `lerd dump tail`, scoped per site and per worktree branch, with the original response left clean unless you flip passthrough on
 - 🔥 **SPX profiler** with one-click on/off, every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard. No FPM restart, no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command
