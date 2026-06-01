@@ -128,7 +128,7 @@ func ensurePodmanMachineMounts(name string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Decode with number preservation to avoid float64 corruption of
 	// integer fields like VSockNumber.
 	dec := json.NewDecoder(bytes.NewReader(data))
