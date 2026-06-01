@@ -10,7 +10,7 @@
   import { m } from '../paraglide/messages.js';
   import PulseToggle from './PulseToggle.svelte';
 
-  // Bell toggle for lerd notifications, matching the dump bridge and
+  // Bell toggle for lerd notifications, matching the debug bridge and
   // profiler toggles. A browser-denied permission can't be flipped here;
   // the toggle dims and System > Notifications carries the recovery flow.
 

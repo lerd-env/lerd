@@ -138,10 +138,11 @@ Once the MCP server is connected, your AI assistant has access to:
 | `dns_diagnose` | Layered DNS chain walk (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup); each rung returns `status` + `hint` with a `first_failure` index pointing at the broken layer |
 | `which` | Show the resolved PHP version, Node version, document root, and nginx config for the current site |
 | `check` | Validate `.lerd.yaml` as structured JSON (PHP version, services, framework); returns valid/errors/warnings with per-field status |
-| `dumps_status` | Report whether the in-process dump bridge is enabled, with the socket path and queue depth |
-| `dumps_recent` | Fetch the last N `dump()` / `dd()` events from the in-memory ring with optional `site`, `ctx` (`fpm` / `cli`), `since_id`, and `limit` filters |
+| `dumps_status` | Report whether debug capture is enabled, with the socket path and queue depth |
+| `dumps_recent` | Fetch recent debug events from the in-memory ring: `dump()`/`dd()` output, SQL queries (with bindings and timing), outgoing mail, rendered views, and Laravel jobs/cache/events/http. Filter by `site`, `ctx` (`fpm` / `cli`), `kind` (e.g. `query`), `since`, and `limit` |
+| `analyze_queries` | N+1 and slow-query report over the captured queries, grouped per request, each finding tagged with the originating `file:line` so the assistant can fix it (e.g. add a `with()` eager-load). Debug loop: `dumps_toggle` enable → `dumps_clear` → hit the page/job → `analyze_queries`. Optional `site`, `min_repeat` (N+1 threshold, default 3), `slow_ms` (default 100) |
 | `dumps_clear` | Drop every event from the ring so the dashboard, TUI, and CLI viewers start fresh |
-| `dumps_toggle` | Enable or disable the dump bridge — `action`: `on` / `off`. `on` writes the FPM `auto_prepend_file` sentinel and restarts the FPM units; `off` removes the sentinel so requests stop being intercepted |
+| `dumps_toggle` | Enable or disable debug capture — `enable`: `true` / `false`. One switch arms both the debug bridge and the `lerd_devtools` collector (queries, mail, views, events, jobs, http); restart-free (touches a shared sentinel the bridge and extension read per request) |
 | `bug_report` | Generate a structured bug report bundle (system info, lerd version, podman state, recent logs) so the assistant can paste a single block into a GitHub issue |
 
 ---

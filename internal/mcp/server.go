@@ -1434,6 +1434,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execDumpsClear(args)
 	case "dumps_toggle":
 		return execDumpsToggle(args)
+	case "analyze_queries":
+		return execAnalyzeQueries(args)
 
 	case "profiler_toggle":
 		return execProfilerToggle(args)

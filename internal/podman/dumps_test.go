@@ -153,11 +153,17 @@ func TestFPMQuadletAlwaysMountsBridge(t *testing.T) {
 
 func TestDumpBridgeIsLegacyPHPCompatible(t *testing.T) {
 	// dump-bridge.php is an auto_prepend_file loaded by every PHP version lerd
-	// builds, down to the 7.2 legacy tier. A single newer-than-7.2 token makes
-	// it unparseable and takes down every CLI command and web request there.
-	src, err := DumpBridgePHP()
+	// builds, down to the 7.2 legacy tier. It now requires devtools-collector.php
+	// for its shared transport, so that file rides the same constraint: a single
+	// newer-than-7.2 token in either makes the prepend unparseable and takes
+	// down every CLI command and web request there.
+	bridge, err := DumpBridgePHP()
 	if err != nil {
 		t.Fatalf("DumpBridgePHP: %v", err)
+	}
+	collector, err := DevtoolsCollectorPHP()
+	if err != nil {
+		t.Fatalf("DevtoolsCollectorPHP: %v", err)
 	}
 	forbidden := map[string]string{
 		"match (":          "match expression (PHP 8.0+)",
@@ -172,10 +178,20 @@ func TestDumpBridgeIsLegacyPHPCompatible(t *testing.T) {
 		": never":          "never return type (PHP 8.1+)",
 		"?->":              "nullsafe operator (PHP 8.0+)",
 		"??=":              "null-coalescing assignment (PHP 7.4+)",
+		"fn(":              "arrow function (PHP 7.4+)",
+		"fn (":             "arrow function (PHP 7.4+)",
 	}
-	for tok, desc := range forbidden {
-		if strings.Contains(src, tok) {
-			t.Errorf("dump-bridge.php contains %q — %s; it must parse on PHP 7.2", tok, desc)
+	for _, f := range []struct {
+		name string
+		src  string
+	}{
+		{"dump-bridge.php", bridge},
+		{"devtools-collector.php", collector},
+	} {
+		for tok, desc := range forbidden {
+			if strings.Contains(f.src, tok) {
+				t.Errorf("%s contains %q — %s; it must parse on PHP 7.2", f.name, tok, desc)
+			}
 		}
 	}
 }

@@ -367,7 +367,7 @@ func (m *Model) toggleDumpsBridge() tea.Cmd {
 	if enabled {
 		verb = "off"
 	}
-	m.setStatus("dump bridge "+verb+"…", 5*time.Second)
+	m.setStatus("debug bridge "+verb+"…", 5*time.Second)
 	return runLerd("", "dump", verb)
 }
 

@@ -63,9 +63,36 @@ func TestEvent_OmitsEmptyFields(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := string(b)
-	for _, k := range []string{`"label"`, `"text"`, `"tree"`, `"trunc"`, `"site"`, `"domain"`} {
+	for _, k := range []string{`"label"`, `"text"`, `"tree"`, `"data"`, `"trunc"`, `"site"`, `"domain"`} {
 		if strings.Contains(s, k) {
 			t.Errorf("expected %s omitted, got %s", k, s)
 		}
+	}
+}
+
+func TestEvent_Query(t *testing.T) {
+	q := Event{
+		V:    1,
+		ID:   "q1",
+		Kind: KindQuery,
+		Src:  Source{File: "/app/Models/User.php", Line: 30},
+		Data: json.RawMessage(`{"sql":"select * from users where id = ?","bindings":[7],"time_ms":1.4,"connection":"mysql","rw_type":"read"}`),
+	}
+	got, ok := q.Query()
+	if !ok {
+		t.Fatal("Query() ok = false, want true")
+	}
+	if got.SQL != "select * from users where id = ?" || got.TimeMS != 1.4 || got.Connection != "mysql" || got.RWType != "read" {
+		t.Errorf("decoded query drift: %+v", got)
+	}
+	if len(got.Bindings) != 1 {
+		t.Errorf("bindings len = %d, want 1", len(got.Bindings))
+	}
+
+	if _, ok := (Event{Kind: KindDump, Data: q.Data}).Query(); ok {
+		t.Error("Query() on a dump returned ok = true")
+	}
+	if _, ok := (Event{Kind: KindQuery, Data: json.RawMessage(`{`)}).Query(); ok {
+		t.Error("Query() on malformed data returned ok = true")
 	}
 }

@@ -100,7 +100,7 @@ func TestNotificationForWorkerFailures_GroupedShape(t *testing.T) {
 	if got.URL != "#sites" {
 		t.Errorf("URL = %q, want top-level sites view", got.URL)
 	}
-	if got.Title != "3 workers failed" {
+	if got.Title != "3 workers need healing" {
 		t.Errorf("Title = %q", got.Title)
 	}
 }

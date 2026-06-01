@@ -44,8 +44,8 @@ BindsTo=%s.service
 
 [Service]
 Type=oneshot
-ExecStart=%s exec -w %s %s %s
-`, label, siteName, fpmUnit, fpmUnit, podman.PodmanBin(), sitePath, container, command)
+ExecStart=%s exec -w %s --env=LERD_SITE=%s %s %s
+`, label, siteName, fpmUnit, fpmUnit, podman.PodmanBin(), sitePath, siteName, container, command)
 
 		timerUnit := fmt.Sprintf(`[Unit]
 Description=Lerd %s timer (%s)
@@ -80,11 +80,11 @@ Type=simple
 Restart=%s
 RestartSec=5
 SuccessExitStatus=1 130 143
-ExecStart=%s exec -w %s %s %s
+ExecStart=%s exec -w %s --env=LERD_SITE=%s %s %s
 
 [Install]
 WantedBy=default.target
-`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), sitePath, container, command)
+`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), sitePath, siteName, container, command)
 
 	// A previous run may have written a sibling .timer for this unit
 	// (e.g. before the framework yaml dropped its `schedule:` field).

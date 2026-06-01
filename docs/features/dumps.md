@@ -4,7 +4,7 @@
 
 ![Dump viewer on a site's Dumps tab](/assets/screenshots/site-detail-dumps.png)
 
-The feature is **off by default**. Enable it with `lerd dump on`, the antenna toggle in the Sites sidebar, the Enable button on a per-site Dumps tab, the *Dump bridge* item in the system tray menu, or `dumps_toggle` via MCP. All of these flip the same global flag.
+The feature is **off by default**. Enable it with `lerd dump on`, the antenna toggle in the Sites sidebar, the Enable button on a per-site Dumps tab, the *Debug bridge* item in the system tray menu, or `dumps_toggle` via MCP. All of these flip the same global flag — and that one flag arms the entire Debug window: `dump()` / `dd()` capture plus the `lerd_devtools` collector (queries, mail, views, events, jobs, outgoing HTTP).
 
 ## How it works
 
@@ -21,13 +21,13 @@ The receiver's transport depends on the host:
 - **Linux** — a per-user Unix socket bound by `lerd-ui` at `~/.local/share/lerd/run/lerd-dumps.sock`. PHP-FPM containers reach it via the existing `%h:%h` bind mount. No host TCP listener, no LAN exposure.
 - **macOS** — TCP loopback `127.0.0.1:9913`. Unix sockets don't traverse the podman-machine virtio-fs boundary as functional sockets, so FPM senders inside the VM reach `lerd-ui` on the host via `host.containers.internal:9913` (gvproxy forwards that upstream).
 
-`lerd-ui` buffers the last 500 events in memory and fans them out to four surfaces:
+`lerd-ui` keeps a 500-event in-memory ring as the receiver buffer and replays it to each newly-connecting client; the open dashboard then accumulates the full session on top of that replay, so events stay visible until you refresh the page rather than scrolling out as new traffic arrives. Events fan out to four surfaces:
 
 - **Web dashboard** — three places:
   - Each site detail pane has a **Dumps** tab next to Overview and Tinker, pre-filtered to that site.
-  - **System > Dump bridge** opens a global view with the listener address, the buffered count, an Enable/Disable button, and every dump across every project.
+  - **System > Debug bridge** opens a global view with the listener address, the buffered count, an Enable/Disable button, and every dump across every project.
 
-    ![System Dump bridge detail](/assets/screenshots/system-dump-bridge.png)
+    ![System Debug bridge detail](/assets/screenshots/system-dump-bridge.png)
 
   - The Sites list header has a small antenna toggle. Pulsing emerald dot when capturing, grey when off.
   - The System Health card on the dashboard shows the bridge state alongside DNS / nginx / watcher.
@@ -77,8 +77,8 @@ None of these commands restart any FPM container or worker.
 
 ## Caveats
 
-- **Only `dump()` / `dd()` are intercepted** in this revision. Eloquent queries, jobs, blade renders, and outgoing HTTP requests are not captured (planned for follow-up work).
-- **Response output is suppressed by default.** While the bridge is on, `dump()` and `dd()` ship to the dashboard only, the HTTP response stays clean. If you'd rather keep the original `sf-dump` output in the response too (useful as a fallback when `lerd-ui` isn't running), flip the "Also print to response (passthrough)" toggle on **System > Dump bridge**, or set `dumps.passthrough: true` in `~/.config/lerd/config.yaml`. Passthrough is read at PHP-FPM startup, so toggling it via the UI restarts every `lerd-php*-fpm` unit; editing the config file by hand requires a manual restart for the change to take effect. Tinker invocations always run with passthrough on regardless of this setting, otherwise the REPL would print nothing when a bare expression like `User::count()` gets auto-wrapped in `dump()`.
+- **The bridge intercepts `dump()` / `dd()`; the rest of the Debug window comes from the engine-level collector.** Database queries, outgoing mail, rendered views, dispatched events, queued jobs, and outgoing HTTP requests are all captured by the `lerd_devtools` extension and shown as sibling tabs in the same Debug view — see the [Query viewer](queries.md) for the full set, the framework-agnostic seams, and the N+1 / slow-query analysis. The bridge and the collector share one enable flag, so a single toggle arms the whole window.
+- **Response output is suppressed by default.** While the bridge is on, `dump()` and `dd()` ship to the dashboard only, the HTTP response stays clean. If you'd rather keep the original `sf-dump` output in the response too (useful as a fallback when `lerd-ui` isn't running), flip the "Also print to response (passthrough)" toggle on **System > Debug bridge**, or set `dumps.passthrough: true` in `~/.config/lerd/config.yaml`. Passthrough is read at PHP-FPM startup, so toggling it via the UI restarts every `lerd-php*-fpm` unit; editing the config file by hand requires a manual restart for the change to take effect. Tinker invocations always run with passthrough on regardless of this setting, otherwise the REPL would print nothing when a bare expression like `User::count()` gets auto-wrapped in `dump()`.
 - **VarCloner caps.** Defaults are `setMaxItems(2500)` and `setMaxString(4096)`. Override via `LERD_DUMP_MAX_ITEMS` in the site's `.env`.
 - **Loopback only.** On Linux the receiver binds a per-user Unix socket under `~/.local/share/lerd/run/lerd-dumps.sock` (no host TCP listener). On macOS it binds `127.0.0.1:9913` — reachable from FPM inside podman-machine via gvproxy's `host.containers.internal:9913` mapping, not from the LAN.
 - **No persistence.** Buffer is in-memory only and resets when `lerd-ui` restarts.

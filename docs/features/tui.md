@@ -82,7 +82,7 @@ Available when focus is on the Detail pane with the cursor on a domain row.
 | `v` | Show / hide the Services pane |
 | `F` | Swap the Detail pane for the Dashboard (counts, system health, container resources) and focus it |
 | `S` | Swap the Detail pane for global Settings (LAN expose, autostart, Xdebug) and focus it |
-| `Y` | Swap the Detail pane for the System overview (DNS, Nginx, Watcher, Notifications, Dump bridge, PHP per-version, Node, Lerd) and focus it |
+| `Y` | Swap the Detail pane for the System overview (DNS, Nginx, Watcher, Notifications, Debug bridge, PHP per-version, Node, Lerd) and focus it |
 | `D` | Swap the Detail pane for the live `dump()` / `dd()` feed. Use `/` to search across site / request / label / file / text / type · `1`/`2` toggle FPM / CLI context-filter chips · `enter` to expand the selected entry to full content · `c` to clear the buffer (and run `lerd dump clear`) · `T` to toggle the bridge globally. New events ring-flash as they arrive; the buffer is independent of the lerd-ui ring because the TUI runs in its own process and only sees what the SSE connection delivers |
 | `?` | Open the Keybindings reference as a centered modal overlay; `?` again or `esc` closes it |
 | `esc` | Dismiss the active modal (palette / picker / help / confirm), return to the pane underneath |
@@ -175,7 +175,7 @@ Press `Y` to swap the detail pane for the System overview — the terminal-side 
 - **Nginx** — running / stopped.
 - **Watcher** — running / stopped.
 - **Notifications** — `Enabled` toggle (runs `lerd notify on/off`).
-- **Dump bridge** — `Enabled` toggle (runs `lerd dump on/off`), passthrough indicator (web-UI managed), listen socket address, and the current TUI buffered count.
+- **Debug bridge** — `Enabled` toggle (runs `lerd dump on/off`), passthrough indicator (web-UI managed), listen socket address, and the current TUI buffered count.
 - **PHP versions** — default version plus one row per installed PHP showing FPM running state and an Xdebug toggle that reflects the configured mode (`debug`, `profile`, or `trace`).
 - **Node** — default version (from the global config) and the installed major versions reported by `fnm list`.
 - **Worker mode** — macOS only; toggles `lerd workers mode exec|container`. Hidden on Linux where workers always run under systemd.

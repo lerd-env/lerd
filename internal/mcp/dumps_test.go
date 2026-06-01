@@ -1,17 +1,20 @@
 package mcp
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
 
-func TestDumpToolDefs_ListsAllFour(t *testing.T) {
+var dumpToolNames = []string{"dumps_recent", "analyze_queries", "dumps_status", "dumps_clear", "dumps_toggle"}
+
+func TestDumpToolDefs_ListsAll(t *testing.T) {
 	got := dumpToolDefs()
 	names := map[string]bool{}
 	for _, d := range got {
 		names[d.Name] = true
 	}
-	for _, want := range []string{"dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle"} {
+	for _, want := range dumpToolNames {
 		if !names[want] {
 			t.Errorf("missing tool %q (got %v)", want, names)
 		}
@@ -24,10 +27,54 @@ func TestDumpToolDefs_AppearInToolList(t *testing.T) {
 	for _, d := range tools {
 		names[d.Name] = true
 	}
-	for _, want := range []string{"dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle"} {
+	for _, want := range dumpToolNames {
 		if !names[want] {
 			t.Errorf("toolList missing %q", want)
 		}
+	}
+}
+
+// stubRoundTrip swaps the MCP HTTP round-trip for one that records the request
+// path and returns a canned body, so an exec's URL building can be asserted
+// without a live lerd-ui socket.
+func stubRoundTrip(t *testing.T, body string) *string {
+	t.Helper()
+	prev := uiRoundTrip
+	var gotPath string
+	uiRoundTrip = func(req *http.Request) ([]byte, int, error) {
+		gotPath = req.URL.RequestURI()
+		return []byte(body), http.StatusOK, nil
+	}
+	t.Cleanup(func() { uiRoundTrip = prev })
+	return &gotPath
+}
+
+func TestExecAnalyzeQueries_BuildsQueryAndPassesBody(t *testing.T) {
+	path := stubRoundTrip(t, `{"summary":{"n_plus_one_findings":2}}`)
+	got, rpcErr := execAnalyzeQueries(map[string]any{"site": "acme", "min_repeat": 5, "slow_ms": 50})
+	if rpcErr != nil {
+		t.Fatalf("rpcErr: %v", rpcErr)
+	}
+	if !strings.HasPrefix(*path, "/api/queries/analyze?") {
+		t.Errorf("path = %q, want /api/queries/analyze?…", *path)
+	}
+	for _, frag := range []string{"site=acme", "min_repeat=5", "slow_ms=50"} {
+		if !strings.Contains(*path, frag) {
+			t.Errorf("path %q missing %q", *path, frag)
+		}
+	}
+	if !strings.Contains(toolText(got), "n_plus_one_findings") {
+		t.Errorf("body not passed through: %q", toolText(got))
+	}
+}
+
+func TestExecDumpsRecent_KindPassedThrough(t *testing.T) {
+	path := stubRoundTrip(t, `[]`)
+	if _, rpcErr := execDumpsRecent(map[string]any{"kind": "query", "site": "acme"}); rpcErr != nil {
+		t.Fatalf("rpcErr: %v", rpcErr)
+	}
+	if !strings.Contains(*path, "kind=query") || !strings.Contains(*path, "site=acme") {
+		t.Errorf("path %q missing kind/site", *path)
 	}
 }
 

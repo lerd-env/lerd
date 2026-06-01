@@ -9,14 +9,15 @@ Lerd ships notifications **off by default**. The first time you open the dashboa
 | Kind | Fires when | Default | Urgency |
 | --- | --- | --- | --- |
 | `mail` | Mailpit captures an outgoing email | on | normal |
-| `worker_failed` | A queue / horizon / reverb / schedule / stripe worker enters the `failed` state | on | high |
+| `worker_failed` | A queue / horizon / reverb / schedule / stripe worker needs healing: it entered the `failed` state, or it's still enabled yet found stopped (drift, e.g. an FPM restart knocked it out). The dashboard banner surfaces both and offers a one-click heal | on | high |
+| `nplusone` | A request (or worker invocation) runs the same query shape 3+ times — a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
 | `update_available` | The registry has a newer image tag for an installed service | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
 Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription — closed-PWA push respects the toggles even when the dashboard isn't running.
 
-The dashboard's System health card also carries a bell toggle, next to the dump bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
+The dashboard's System health card also carries a bell toggle, next to the debug bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
 
 Clicking a notification focuses the dashboard (or launches the PWA if closed) and deep-links to the relevant view: the captured email in the Mailpit overlay, the failing worker's site detail, the finished service's tile, the Dumps tab.
 

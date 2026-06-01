@@ -35,7 +35,12 @@ type ServiceConfig struct {
 
 // GlobalConfig is the top-level lerd configuration.
 type GlobalConfig struct {
-	PHP struct {
+	// Editor is the command lerd runs to open a file at a line (the
+	// "open in editor" links in the dashboard). Optional {file} and {line}
+	// placeholders; if omitted, lerd appends the file. Empty = autodetect a
+	// known GUI editor (code/cursor/phpstorm/subl/zed), then xdg-open/open.
+	Editor string `yaml:"editor,omitempty" mapstructure:"editor"`
+	PHP    struct {
 		DefaultVersion string              `yaml:"default_version" mapstructure:"default_version"`
 		XdebugEnabled  map[string]bool     `yaml:"xdebug_enabled"  mapstructure:"xdebug_enabled"`
 		XdebugMode     map[string]string   `yaml:"xdebug_mode,omitempty" mapstructure:"xdebug_mode"`
@@ -125,13 +130,13 @@ type GlobalConfig struct {
 		ExecMode string `yaml:"exec_mode,omitempty" mapstructure:"exec_mode"`
 	} `yaml:"workers,omitempty" mapstructure:"workers"`
 	Dumps struct {
-		// Enabled toggles the lerd dump bridge for every PHP-FPM container
-		// and the CLI php wrapper. The bridge PHP file and its conf.d ini
-		// are always volume-mounted into FPM (regardless of this flag);
-		// what Enabled actually controls is the runtime sentinel file
-		// (`enabled.flag`) the bridge stats on every request. Touch =
-		// capture, missing = fast no-op. Flipping this flag never restarts
-		// the FPM container. Toggled via `lerd dump on/off`.
+		// Enabled is the single switch for the whole debug window: the dump
+		// bridge AND the lerd_devtools collector (queries, mail, views, events,
+		// jobs, http). Both the bridge and the extension read one runtime
+		// sentinel (`enabled.flag`); their PHP/ini assets are always mounted
+		// regardless of this flag, so what Enabled controls is just that
+		// sentinel — touch = capture, missing = fast no-op, no FPM restart.
+		// Toggled via `lerd dump on/off` or the dashboard Debug view.
 		Enabled bool `yaml:"enabled,omitempty" mapstructure:"enabled"`
 		// Passthrough controls whether dump()/dd() ALSO emit to the response
 		// while the bridge is enabled. False (default) means captured-only:
@@ -143,6 +148,15 @@ type GlobalConfig struct {
 		// ships it.
 		Passthrough bool `yaml:"passthrough,omitempty" mapstructure:"passthrough"`
 	} `yaml:"dumps,omitempty" mapstructure:"dumps"`
+	Devtools struct {
+		// Workers includes long-running queue/scheduler worker queries in
+		// capture. Off by default because their constant polling floods the
+		// buffer; toggled from the dashboard "Show worker queries" checkbox.
+		// The collector's enable state is shared with the debug bridge: one
+		// sentinel (enabled.flag) and one config flag (Dumps.Enabled) arm both,
+		// so there is no separate devtools enable toggle.
+		Workers bool `yaml:"workers,omitempty" mapstructure:"workers"`
+	} `yaml:"devtools,omitempty" mapstructure:"devtools"`
 	Profiler struct {
 		// Enabled toggles the SPX profiler globally. When on, nginx injects
 		// SPX_ENABLED into every PHP-FPM site's requests so each is profiled.
@@ -565,17 +579,28 @@ func (c *GlobalConfig) SetExtApkDeps(ext string, deps []string) {
 	c.PHP.ExtApkDeps[ext] = cp
 }
 
-// IsDumpsEnabled reports whether the lerd dump bridge is on for all PHP
+// IsDumpsEnabled reports whether the lerd debug bridge is on for all PHP
 // versions. The toggle is global because the bridge file is a single,
 // version-agnostic asset bind-mounted into every FPM container.
 func (c *GlobalConfig) IsDumpsEnabled() bool {
 	return c.Dumps.Enabled
 }
 
-// SetDumpsEnabled flips the dump bridge toggle. Persist via SaveGlobal and
+// SetDumpsEnabled flips the debug bridge toggle. Persist via SaveGlobal and
 // run dumpsops.Apply to actually rewrite the FPM quadlets.
 func (c *GlobalConfig) SetDumpsEnabled(enabled bool) {
 	c.Dumps.Enabled = enabled
+}
+
+// IsDevtoolsWorkers reports whether queue/scheduler worker queries are captured.
+func (c *GlobalConfig) IsDevtoolsWorkers() bool {
+	return c.Devtools.Workers
+}
+
+// SetDevtoolsWorkers flips worker-query capture. Persist via SaveGlobal and run
+// devtoolsops.SetWorkers to touch the runtime sentinel.
+func (c *GlobalConfig) SetDevtoolsWorkers(enabled bool) {
+	c.Devtools.Workers = enabled
 }
 
 // IsProfilerEnabled reports whether the SPX profiler is globally armed.
