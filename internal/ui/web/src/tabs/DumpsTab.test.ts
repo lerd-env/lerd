@@ -115,9 +115,9 @@ describe('DumpsTab', () => {
     });
     const { container } = render(DumpsTab, { siteScope: 'whitewaters' });
     await waitFor(() => {
-      expect(container.textContent).toMatch(/Enable dump bridge/);
+      expect(container.textContent).toMatch(/Enable debug bridge/);
     });
-    expect(container.textContent).toMatch(/Dump bridge is disabled/);
+    expect(container.textContent).toMatch(/Debug bridge is disabled/);
   });
 
   it('reacts to new events pushed into the dumps store', async () => {

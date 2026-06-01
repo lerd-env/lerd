@@ -132,4 +132,28 @@ describe('createDumpsStream', () => {
     MockEventSource.instances[0].fire('error', {});
     expect(get(s.connected)).toBe(false);
   });
+
+  it('retains a full session past the old 500-event window', async () => {
+    // The shared ring means ~7 events per request, so the dashboard must keep
+    // far more than 500 or dumps vanish as queries/etc flow in. Default cap is
+    // a high safety ceiling, not the working size.
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    for (let i = 0; i < 600; i++) {
+      MockEventSource.instances[0].fire('message', { data: payload('e' + i) });
+    }
+    expect(get(s.events).length).toBe(600);
+    expect(get(s.events)[0].id).toBe('e0');
+  });
+
+  it('clear resets the de-dup set so a replayed id is welcome again', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.clear();
+    MockEventSource.instances[0].fire('message', { data: payload('a') });
+    expect(get(s.events).map((e) => e.id)).toEqual(['a']);
+  });
 });

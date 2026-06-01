@@ -111,8 +111,8 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, and the fro
 | `lerd php:ext remove <ext> [version]` | Remove a custom PHP extension and rebuild |
 | `lerd php:ext list [version]` | List custom extensions for a PHP version |
 | `lerd php:ini [version]` | Open the user php.ini for a PHP version in `$EDITOR` |
-| `lerd dump on` | Enable the dump bridge so `dump()` / `dd()` calls ship to the lerd dashboard, TUI, and MCP tools |
-| `lerd dump off` | Disable the dump bridge and restore FPM containers to their default state |
+| `lerd dump on` | Enable the debug bridge so `dump()` / `dd()` calls ship to the lerd dashboard, TUI, and MCP tools |
+| `lerd dump off` | Disable the debug bridge and restore FPM containers to their default state |
 | `lerd dump status` | Show whether the bridge is enabled and how many events are buffered |
 | `lerd dump tail [--site X] [--ctx fpm\|cli]` | Stream captured dumps to the terminal until Ctrl-C |
 | `lerd dump clear` | Clear the in-memory dump ring without disabling the bridge |

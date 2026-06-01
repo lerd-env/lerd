@@ -145,6 +145,7 @@ export default defineConfig({
             { text: 'AI Integration (MCP)', link: '/features/mcp' },
             { text: 'Tinker tab', link: '/features/tinker' },
             { text: 'Dump viewer', link: '/features/dumps' },
+            { text: 'Query viewer', link: '/features/queries' },
             { text: 'Profiler', link: '/features/profiler' },
             { text: 'Notifications', link: '/features/notifications' },
           ],

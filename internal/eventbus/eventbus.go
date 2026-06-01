@@ -18,6 +18,7 @@ const (
 	KindServices       = "services"
 	KindStatus         = "status"
 	KindDumpsStatus    = "dumps_status"
+	KindDevtoolsStatus = "devtools_status"
 	KindProfilerStatus = "profiler_status"
 )
 

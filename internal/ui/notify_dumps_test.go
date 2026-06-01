@@ -7,7 +7,42 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
+	"github.com/geodro/lerd/internal/push"
 )
+
+// fakeSubscriber feeds a fixed set of events to runDumpsNotifier then closes.
+type fakeSubscriber struct{ evs []dumps.Event }
+
+func (f *fakeSubscriber) Subscribe() (<-chan dumps.Event, func()) {
+	ch := make(chan dumps.Event, len(f.evs))
+	for _, e := range f.evs {
+		ch <- e
+	}
+	close(ch)
+	return ch, func() {}
+}
+
+func TestRunDumpsNotifier_OnlyNotifiesDumpKind(t *testing.T) {
+	var got []dumps.Event
+	prev := notifyDispatch
+	notifyDispatch = func(n push.Notification) { got = append(got, dumps.Event{ID: n.Data["id"]}) }
+	t.Cleanup(func() { notifyDispatch = prev })
+
+	src := &fakeSubscriber{evs: []dumps.Event{
+		{ID: "q1", Kind: dumps.KindQuery, Ctx: dumps.Context{Site: "a"}},
+		{ID: "d1", Kind: dumps.KindDump, Ctx: dumps.Context{Site: "b"}},
+		{ID: "j1", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "c"}},
+	}}
+	runDumpsNotifier(src)
+
+	if len(got) != 1 || got[0].ID != "d1" {
+		ids := make([]string, len(got))
+		for i, e := range got {
+			ids[i] = e.ID
+		}
+		t.Errorf("expected only the dump to notify, got %v", ids)
+	}
+}
 
 func TestNotificationForDump_Shape(t *testing.T) {
 	evt := dumps.Event{ID: "abc", Kind: "dump", Ctx: dumps.Context{Site: "astrolov.test", Type: "fpm"}}

@@ -77,6 +77,7 @@ func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 	out := srv.Filter(dumps.FilterOpts{
 		Site:    q.Get("site"),
 		Ctx:     q.Get("ctx"),
+		Kind:    q.Get("kind"),
 		SinceID: q.Get("since"),
 		Limit:   limit,
 	})

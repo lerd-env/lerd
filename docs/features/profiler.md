@@ -24,7 +24,7 @@ lerd profile off       # stop profiling
 lerd profile clear     # delete every captured report
 ```
 
-In the dashboard, the System health card carries a Profiler toggle next to the dump bridge one: click it to flip profiling on or off, and a pulsing emerald dot marks it as live. The Sites column carries the same toggle above the site list. The flame icon in the left rail opens the **Profiler** view and shows the same green dot while profiling is on. Inside the Profiler view, the header has a **Start profiling** / **Stop profiling** button and a **Clear data** button. The button is emerald with a live pulsing dot while profiling is on, and muted grey while it is off.
+In the dashboard, the System health card carries a Profiler toggle next to the debug bridge one: click it to flip profiling on or off, and a pulsing emerald dot marks it as live. The Sites column carries the same toggle above the site list. The flame icon in the left rail opens the **Profiler** view and shows the same green dot while profiling is on. Inside the Profiler view, the header has a **Start profiling** / **Stop profiling** button and a **Clear data** button. The button is emerald with a live pulsing dot while profiling is on, and muted grey while it is off.
 
 While the profiler is on, every HTTP request to every PHP-FPM site is profiled. Reload the sites you care about a few times, then open the Profiler view to read the reports. The report list refreshes itself while profiling is on, so new captures appear without a manual reload. Turn it off when you are done so the profiler is not adding overhead to every request.
 

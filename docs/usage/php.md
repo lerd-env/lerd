@@ -144,7 +144,7 @@ Re-run `lerd xdebug on --mode <new>` at any time to swap modes without going thr
 
 ---
 
-## Dump bridge
+## Debug bridge
 
 Calls to `dump()` and `dd()` can be captured into the lerd dashboard, TUI, and MCP tools instead of (or alongside) the response. Enable with:
 

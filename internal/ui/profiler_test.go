@@ -23,7 +23,7 @@ func TestBuildProfilerStatusJSON_HasEnabledField(t *testing.T) {
 
 func TestAssembleSnapshot_IncludesProfilerStatusField(t *testing.T) {
 	payload := []byte(`{"enabled":true}`)
-	frame := assembleSnapshot(nil, nil, nil, nil, nil, payload, nil, []string{eventbus.KindProfilerStatus})
+	frame := assembleSnapshot(nil, nil, nil, nil, nil, nil, payload, nil, []string{eventbus.KindProfilerStatus})
 	var decoded struct {
 		Type           string          `json:"type"`
 		ProfilerStatus json.RawMessage `json:"profiler_status"`

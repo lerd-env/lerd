@@ -15,26 +15,40 @@ import (
 	"github.com/geodro/lerd/internal/dumpsops"
 )
 
-// dumpToolDefs returns the four dump-related tool definitions. Plugged into
-// toolList() in server.go alongside the existing entries.
+// dumpToolDefs returns the debug-capture tool definitions (recent events,
+// query analysis, status, clear, toggle). Plugged into toolList() in server.go
+// alongside the existing entries.
 func dumpToolDefs() []mcpTool {
 	return []mcpTool{
 		{
 			Name:        "dumps_recent",
-			Description: "Recent PHP dump()/dd() events captured by the lerd bridge. Optional site/ctx/since/limit filters.",
+			Description: "Recent lerd debug events: dumps, queries (bindings+timing), mail, views, jobs/cache/events/http. Filter site/ctx/kind/since/limit.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
 					"site":  {Type: "string"},
 					"ctx":   {Type: "string", Enum: []string{"fpm", "cli"}},
-					"since": {Type: "string", Description: "Event id; return events lexicographically > this."},
+					"kind":  {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http"}},
+					"since": {Type: "string"},
 					"limit": {Type: "integer"},
 				},
 			},
 		},
 		{
+			Name:        "analyze_queries",
+			Description: "N+1 + slow-query report over captured queries, grouped per request with the file:line to fix. Loop: dumps_toggle enable, dumps_clear, hit the page, analyze_queries. Opts: site, min_repeat, slow_ms.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"site":       {Type: "string"},
+					"min_repeat": {Type: "integer"},
+					"slow_ms":    {Type: "number"},
+				},
+			},
+		},
+		{
 			Name:        "dumps_status",
-			Description: "Whether the dump bridge is enabled plus buffered count and last-event ts.",
+			Description: "Whether the debug bridge is enabled plus buffered count and last-event ts.",
 			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
 		},
 		{
@@ -44,7 +58,7 @@ func dumpToolDefs() []mcpTool {
 		},
 		{
 			Name:        "dumps_toggle",
-			Description: "Enable/disable the dump bridge. enable=true creates the sentinel that activates the always-mounted bridge; enable=false removes it. No FPM restart.",
+			Description: "Enable/disable the debug bridge. enable=true creates the sentinel that activates the always-mounted bridge; enable=false removes it. No FPM restart.",
 			InputSchema: mcpSchema{
 				Type: "object",
 				Properties: map[string]mcpProp{
@@ -71,6 +85,9 @@ func execDumpsRecent(args map[string]any) (any, *rpcError) {
 		}
 		q = append(q, "ctx="+c)
 	}
+	if k := strArg(args, "kind"); k != "" {
+		q = append(q, "kind="+k)
+	}
 	if s := strArg(args, "since"); s != "" {
 		q = append(q, "since="+s)
 	}
@@ -78,6 +95,35 @@ func execDumpsRecent(args map[string]any) (any, *rpcError) {
 		q = append(q, fmt.Sprintf("limit=%v", limit))
 	}
 	path := "/api/dumps"
+	if len(q) > 0 {
+		path += "?" + strings.Join(q, "&")
+	}
+	body, status, err := uiGET(path)
+	if err != nil {
+		return toolErr("lerd-ui not reachable: " + err.Error()), nil
+	}
+	if status != http.StatusOK {
+		return toolErr(fmt.Sprintf("lerd-ui returned %d: %s", status, body)), nil
+	}
+	return toolOK(string(body)), nil
+}
+
+// execAnalyzeQueries calls lerd-ui's /api/queries/analyze endpoint, returning
+// the N+1 / slow-query report verbatim. Lives next to dumps_recent because it
+// reads the same captured-query ring; the analysis itself is server-side so the
+// fingerprinting matches the dashboard and the N+1 notifications.
+func execAnalyzeQueries(args map[string]any) (any, *rpcError) {
+	q := []string{}
+	if s := strArg(args, "site"); s != "" {
+		q = append(q, "site="+s)
+	}
+	if v, ok := args["min_repeat"]; ok {
+		q = append(q, fmt.Sprintf("min_repeat=%v", v))
+	}
+	if v, ok := args["slow_ms"]; ok {
+		q = append(q, fmt.Sprintf("slow_ms=%v", v))
+	}
+	path := "/api/queries/analyze"
 	if len(q) > 0 {
 		path += "?" + strings.Join(q, "&")
 	}
@@ -143,11 +189,13 @@ func execDumpsToggle(args map[string]any) (any, *rpcError) {
 }
 
 // uiGET / uiPOST: tiny HTTP-over-Unix-socket helpers. Local to mcp so callers
-// don't have to import a heavier client.
+// don't have to import a heavier client. uiRoundTrip is swappable so tests can
+// assert the path/body an exec builds without a live lerd-ui socket.
+var uiRoundTrip = uiDo
 
 func uiGET(path string) ([]byte, int, error) {
 	req, _ := http.NewRequest("GET", "http://lerd"+path, nil)
-	return uiDo(req)
+	return uiRoundTrip(req)
 }
 
 func uiPOST(path string, body []byte) ([]byte, int, error) {
@@ -155,7 +203,7 @@ func uiPOST(path string, body []byte) ([]byte, int, error) {
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	return uiDo(req)
+	return uiRoundTrip(req)
 }
 
 func uiDo(req *http.Request) ([]byte, int, error) {

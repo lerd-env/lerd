@@ -16,6 +16,12 @@ export interface DumpContext {
   domain?: string;
   request?: string;
   pid?: number;
+  // rid is a unique per-request id from the lerd_devtools extension. When
+  // present it's the precise grouping boundary; dump-bridge events lack it.
+  rid?: string;
+  // worker names the queue/scheduler command an event came from (e.g.
+  // "queue:work", "scrape:rtb-data"). Set only for worker-process events.
+  worker?: string;
 }
 
 export interface DumpEvent {
@@ -30,7 +36,30 @@ export interface DumpEvent {
   // tree is opaque JSON the receiver passes through unchanged. Deferred to
   // a later PR; the current bridge only ships `text`.
   tree?: unknown;
+  // data carries kind-specific structured fields (e.g. QueryData for
+  // kind === 'query'). Dumps leave it unset and use text/tree.
+  data?: unknown;
   trunc?: boolean;
+}
+
+// QueryData is the `data` payload on kind === 'query' events. Mirrors
+// internal/dumps.QueryData; the lerd_devtools extension fills sql/bindings/
+// time_ms, the Laravel adapter additionally sets connection/rw_type.
+export interface QueryFrame {
+  file: string;
+  line: number;
+  func: string;
+}
+
+export interface QueryData {
+  sql: string;
+  bindings?: unknown[];
+  time_ms: number;
+  connection?: string;
+  rw_type?: string;
+  // trace is the full call stack (innermost first) so vendor-heavy apps where
+  // the single src line is unhelpful can still be traced to the real origin.
+  trace?: QueryFrame[];
 }
 
 export interface DumpsStream {
@@ -41,12 +70,24 @@ export interface DumpsStream {
   clear: () => void;
 }
 
-const DEFAULT_MAX = 500;
+// The receiver ring is shared across every kind (dump, query, mail, view,
+// event, job, http), so a single request now emits ~7+ events. The UI keeps a
+// far larger window than the server's replay ring so the dashboard accumulates
+// a full session's history — events stay until the page is refreshed rather
+// than getting evicted the moment newer traffic of any kind flows in. The cap
+// is a memory safety ceiling, not the working size; it sits well above the
+// server ring so an evicted event can never still be in a replay (which is
+// what made stale events reappear when the two limits were equal).
+const DEFAULT_MAX = 10000;
 
 export function createDumpsStream(query: Record<string, string> = {}, maxEvents = DEFAULT_MAX): DumpsStream {
   const events = writable<DumpEvent[]>([]);
   const connected = writable<boolean>(false);
   let source: EventSource | null = null;
+  // Mirrors the ids currently in `events` for O(1) de-dup. Kept in sync on
+  // every push/evict so reconnect replays never double-add an event we already
+  // show, no matter how large the list grows.
+  const seen = new Set<string>();
 
   function close() {
     if (source) {
@@ -58,6 +99,7 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
 
   function clear() {
     events.set([]);
+    seen.clear();
   }
 
   function buildPath() {
@@ -70,12 +112,20 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
   }
 
   function append(ev: DumpEvent) {
+    // De-dupe by id against everything currently held. The replay-on-reconnect
+    // path resends the server ring, so without this a reconnect would re-add
+    // events the dashboard already shows.
+    if (seen.has(ev.id)) return;
     events.update((list) => {
-      // De-dupe by ID. The replay-on-reconnect path can resend events the
-      // browser already has if Last-Event-ID isn't honoured by an
-      // intermediate proxy.
-      if (list.some((e) => e.id === ev.id)) return list;
-      const next = list.length >= maxEvents ? list.slice(list.length - maxEvents + 1) : list.slice();
+      let next: DumpEvent[];
+      if (list.length >= maxEvents) {
+        const drop = list.length - maxEvents + 1;
+        for (let i = 0; i < drop; i++) seen.delete(list[i].id);
+        next = list.slice(drop);
+      } else {
+        next = list.slice();
+      }
+      seen.add(ev.id);
       next.push(ev);
       return next;
     });

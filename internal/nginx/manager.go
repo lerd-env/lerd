@@ -66,7 +66,7 @@ type VhostData struct {
 	CustomPort      int    // port the app listens on inside the custom container
 	BackendSSL      bool   // proxy to the container via HTTPS (app serves TLS on its own port)
 	// LerdSite / LerdBranch surface the parent site name and (for worktrees)
-	// the branch to PHP via fastcgi_param so the dump bridge can tag events
+	// the branch to PHP via fastcgi_param so the debug bridge can tag events
 	// with stable identifiers instead of guessing from DOCUMENT_ROOT.
 	LerdSite   string
 	LerdBranch string
