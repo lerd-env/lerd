@@ -19,7 +19,18 @@ var dumpBridgeFS embed.FS
 func DumpBridgePHP() (string, error) {
 	b, err := dumpBridgeFS.ReadFile("dumpbridge/dump-bridge.php")
 	if err != nil {
-		return "", fmt.Errorf("dump bridge embed: %w", err)
+		return "", fmt.Errorf("debug bridge embed: %w", err)
+	}
+	return string(b), nil
+}
+
+// DevtoolsCollectorPHP returns the embedded devtools-collector.php. The dump
+// bridge's auto_prepend requires it for its shared transport, so it rides the
+// same down-to-7.2 parse constraint and tests assert that.
+func DevtoolsCollectorPHP() (string, error) {
+	b, err := dumpBridgeFS.ReadFile("dumpbridge/devtools-collector.php")
+	if err != nil {
+		return "", fmt.Errorf("devtools collector embed: %w", err)
 	}
 	return string(b), nil
 }
@@ -33,7 +44,7 @@ func DumpBridgePHP() (string, error) {
 func DumpBridgeIni() (string, error) {
 	b, err := dumpBridgeFS.ReadFile("dumpbridge/97-lerd-dump.ini")
 	if err != nil {
-		return "", fmt.Errorf("dump bridge ini embed: %w", err)
+		return "", fmt.Errorf("debug bridge ini embed: %w", err)
 	}
 	target := config.DumpsBridgeTarget()
 	passthrough := "0"
@@ -63,6 +74,14 @@ func WriteDumpBridgeAssets() error {
 	if err != nil {
 		return err
 	}
+	adapterContent, err := dumpBridgeFS.ReadFile("dumpbridge/laravel-adapter.php")
+	if err != nil {
+		return fmt.Errorf("laravel adapter embed: %w", err)
+	}
+	collectorContent, err := dumpBridgeFS.ReadFile("dumpbridge/devtools-collector.php")
+	if err != nil {
+		return fmt.Errorf("devtools collector embed: %w", err)
+	}
 
 	for _, asset := range []struct {
 		path    string
@@ -70,6 +89,8 @@ func WriteDumpBridgeAssets() error {
 	}{
 		{config.DumpsBridgeFile(), phpContent},
 		{config.DumpsIniFile(), iniContent},
+		{config.LaravelAdapterFile(), string(adapterContent)},
+		{config.DevtoolsCollectorFile(), string(collectorContent)},
 	} {
 		if info, err := os.Stat(asset.path); err == nil {
 			if info.IsDir() {
@@ -95,7 +116,14 @@ func RemoveDumpAssets() error {
 	for _, p := range []string{
 		config.DumpsBridgeFile(),
 		config.DumpsIniFile(),
+		config.LaravelAdapterFile(),
+		config.DevtoolsCollectorFile(),
 		config.DumpsEnabledFlagFile(),
+		config.DevtoolsWorkersFlagFile(),
+		// Legacy: the devtools collector used to have its own enable sentinel
+		// before it was unified onto enabled.flag. Clean up any stale copy so
+		// an old install doesn't leave an orphan nothing reads.
+		filepath.Join(config.DumpsAssetsDir(), "devtools.flag"),
 	} {
 		if err := os.Remove(p); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("removing %s: %w", p, err)
@@ -115,7 +143,7 @@ func RemoveDumpAssets() error {
 // regardless of Dumps.Enabled because the FPM quadlet always mounts these
 // paths; the bridge's runtime sentinel check controls active behaviour.
 func EnsureDumpAssets() error {
-	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile()} {
+	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.LaravelAdapterFile(), config.DevtoolsCollectorFile()} {
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			if rmErr := os.RemoveAll(p); rmErr != nil {
 				return fmt.Errorf("removing stale dump asset directory %s: %w", p, rmErr)

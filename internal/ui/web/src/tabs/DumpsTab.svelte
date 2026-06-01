@@ -31,7 +31,7 @@
 
   // When scoped (embedded in SiteDetail), search and context filters are
   // local-only — the global filterCtx / filterText writables stay
-  // untouched so the System > Dump bridge view doesn't inherit a stale
+  // untouched so the System > Debug bridge view doesn't inherit a stale
   // search and vice versa. The unscoped instance keeps using the global
   // stores so user choices persist between visits.
   let localCtx = $state<'' | 'fpm' | 'cli'>('');

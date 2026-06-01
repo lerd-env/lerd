@@ -80,6 +80,17 @@ func TestRing_FilterByCtx(t *testing.T) {
 	}
 }
 
+func TestRing_FilterByKind(t *testing.T) {
+	r := NewRing(8)
+	r.Append(Event{V: 1, ID: "a", Kind: KindDump, Ctx: Context{Type: "fpm"}})
+	r.Append(Event{V: 1, ID: "b", Kind: KindQuery, Ctx: Context{Type: "fpm"}})
+	r.Append(Event{V: 1, ID: "c", Kind: KindQuery, Ctx: Context{Type: "cli"}})
+	got := r.Filter(FilterOpts{Kind: KindQuery})
+	if !equalIDs(got, []string{"b", "c"}) {
+		t.Errorf("filter kind query = %v", ids(got))
+	}
+}
+
 func TestRing_FilterSinceID(t *testing.T) {
 	r := NewRing(8)
 	for _, id := range []string{"a", "b", "c", "d"} {

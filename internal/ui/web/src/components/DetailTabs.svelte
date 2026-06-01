@@ -3,6 +3,7 @@
     id: T;
     label: string;
     hidden?: boolean;
+    count?: number;
   }
 </script>
 
@@ -24,10 +25,10 @@
     {#each visible as t (t.id)}
       <button
         onclick={() => onchange(t.id)}
-        class="pb-1 text-xs font-medium transition-colors border-b-2 {active === t.id
+        class="pb-1 text-xs font-medium transition-colors border-b-2 flex items-center gap-1 {active === t.id
           ? 'border-lerd-red text-lerd-red'
           : 'border-transparent text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'}"
-      >{t.label}</button>
+      >{t.label}{#if t.count}<span class="text-[10px] tabular-nums rounded-full px-1.5 py-px bg-gray-200/70 dark:bg-white/10 text-gray-600 dark:text-gray-300">{t.count}</span>{/if}</button>
     {/each}
   </div>
 {/if}

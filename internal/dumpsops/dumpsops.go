@@ -1,5 +1,5 @@
 // Package dumpsops contains the shared business logic for toggling the lerd
-// dump bridge. Implementation is restart-free: the bridge PHP file and its
+// debug bridge. Implementation is restart-free: the bridge PHP file and its
 // conf.d ini are always volume-mounted into every FPM container, and the
 // active/inactive state is signalled by a sentinel file inside the same
 // mount. Toggling is a single filesystem touch and applies on the next
@@ -54,6 +54,11 @@ func Apply(enabled bool) (Result, error) {
 	// start.
 	if err := podman.WriteDumpBridgeAssets(); err != nil {
 		return Result{Enabled: enabled}, fmt.Errorf("writing dump assets: %w", err)
+	}
+	// The lerd_devtools extension shares this enable flag, so guarantee its
+	// conf.d ini is present too — it reads the same sentinel to arm capture.
+	if err := podman.EnsureDevtoolsAssets(); err != nil {
+		return Result{Enabled: enabled}, fmt.Errorf("writing devtools assets: %w", err)
 	}
 
 	if enabled {

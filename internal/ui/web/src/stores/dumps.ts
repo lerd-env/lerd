@@ -48,6 +48,9 @@ export function buildDumpGroups(
 ): DumpGroup[] {
   const needle = text ? text.toLowerCase() : '';
   const filtered = events.filter((ev) => {
+    // The receiver ring is shared across kinds (dumps, queries, …). The Dumps
+    // view only renders dump()/dd() output; queries live in their own lens.
+    if (ev.kind !== 'dump') return false;
     if (site && ev.ctx.site !== site) return false;
     if (ctx && ev.ctx.type !== ctx) return false;
     if (needle) {

@@ -6,7 +6,7 @@
   import SiteTinkerTab from './SiteTinkerTab.svelte';
   import SiteEnvTab from './SiteEnvTab.svelte';
   import SiteNginxModal from '../../modals/SiteNginxModal.svelte';
-  import DumpsTab from '$tabs/DumpsTab.svelte';
+  import SiteDebugTab from '$tabs/sites/SiteDebugTab.svelte';
   import { resumeSite, loadSites, activeWorktreeDomain, type Site } from '$stores/sites';
   import { routeRest } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
@@ -94,7 +94,7 @@
     <button class={tabBtn('tinker', active === 'tinker')} onclick={() => (active = 'tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
   {#if canDumps}
-    <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>{m.nav_dumps()}</button>
+    <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>{m.debug_title()}</button>
   {/if}
 {/snippet}
 
@@ -139,7 +139,7 @@
       <SiteTinkerTab {site} branch={activeWorktreeBranch} />
     {/key}
   {:else if active === 'dumps'}
-    <DumpsTab siteScope={site.name} />
+    <SiteDebugTab siteName={site.name} framework={site.framework} />
   {/if}
 </DetailPanel>
 

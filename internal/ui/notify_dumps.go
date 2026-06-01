@@ -97,6 +97,10 @@ func notificationForDump(evt dumps.Event) push.Notification {
 	}
 }
 
+// notifyDispatch is the dispatch seam runDumpsNotifier uses, swappable in
+// tests to capture what would have been notified.
+var notifyDispatch = dispatchNotification
+
 // runDumpsNotifier subscribes to the dumps server and dispatches one
 // debounced notification per site per window for incoming dump events.
 // Exits when the source closes the subscriber channel.
@@ -106,10 +110,20 @@ func runDumpsNotifier(src dumpsSubscriber) {
 	}
 	ch, _ := src.Subscribe()
 	d := newDumpDebouncer(dumpDebounceWindow)
+	np := newNPlusOneTracker()
 	for evt := range ch {
-		if !d.allow(evt.Ctx.Site) {
-			continue
+		switch evt.Kind {
+		case dumps.KindDump:
+			if d.allow(evt.Ctx.Site) {
+				notifyDispatch(notificationForDump(evt))
+			}
+		case dumps.KindQuery:
+			// Queries are far too high-volume to notify on individually, but a
+			// repeated query shape within one request is an N+1 worth a single
+			// warning per route/script.
+			if n := np.observe(evt); n != nil {
+				notifyDispatch(*n)
+			}
 		}
-		dispatchNotification(notificationForDump(evt))
 	}
 }

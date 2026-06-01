@@ -4,7 +4,7 @@
   import { m } from '../paraglide/messages.js';
   import PulseToggle from './PulseToggle.svelte';
 
-  // Antenna-style toggle for the lerd dump bridge. When on, every PHP-FPM
+  // Antenna-style toggle for the lerd debug bridge. When on, every PHP-FPM
   // container has dump()/dd() shipped into the dashboard; the pulsing dot
   // advertises that captures are live.
 

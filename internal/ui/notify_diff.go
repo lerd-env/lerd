@@ -53,16 +53,13 @@ func notificationForWorkerFailure(w workerheal.UnhealthyWorker) push.Notificatio
 	if worker == "" {
 		worker = w.Unit
 	}
-	state := w.State
-	if state == "" {
-		state = "failed"
-	}
+	state := workerheal.HumanState(w.State)
 	return push.Notification{
 		Kind:     "worker_failed",
 		TitleKey: "notify_worker_failed_title",
-		Title:    "Worker failed on " + site,
+		Title:    "Worker needs healing on " + site,
 		BodyKey:  "notify_worker_failed_body",
-		Body:     worker + " is in " + state + ". Open lerd to heal.",
+		Body:     worker + " is " + state + ". Open lerd to heal.",
 		Params:   map[string]string{"site": site, "worker": worker, "state": state},
 		Tag:      "lerd-worker-" + w.Unit,
 		URL:      "#sites/" + siteDomainForRoute(site),
@@ -106,7 +103,7 @@ func notificationForWorkerFailures(ws []workerheal.UnhealthyWorker) push.Notific
 	return push.Notification{
 		Kind:     "worker_failed",
 		TitleKey: "notify_worker_failed_group_title",
-		Title:    count + " workers failed",
+		Title:    count + " workers need healing",
 		BodyKey:  "notify_worker_failed_group_body",
 		Body:     workers + ". Open lerd to heal.",
 		Params: map[string]string{

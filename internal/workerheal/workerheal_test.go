@@ -33,7 +33,7 @@ func stubEnv(t *testing.T, sites []string, paused map[string]bool, states map[st
 		t.Fatalf("write sites.yaml: %v", err)
 	}
 
-	prevStates, prevHeal := unitStatesFn, healFn
+	prevStates, prevHeal, prevEnabled := unitStatesFn, healFn, unitEnabledFn
 	unitStatesFn = func() map[string]string {
 		out := make(map[string]string, len(states))
 		for k, v := range states {
@@ -42,9 +42,13 @@ func stubEnv(t *testing.T, sites []string, paused map[string]bool, states map[st
 		return out
 	}
 	healFn = heal
+	// Default to "disabled" so existing failed-state tests are unaffected by
+	// the expected-but-stopped path; tests that exercise it override this.
+	unitEnabledFn = func(string) bool { return false }
 	t.Cleanup(func() {
 		unitStatesFn = prevStates
 		healFn = prevHeal
+		unitEnabledFn = prevEnabled
 	})
 }
 
@@ -197,6 +201,68 @@ func TestDetect_OnlyFailedStateMatches(t *testing.T) {
 	}
 	if names := unitNames(got); len(names) != 1 || names[0] != "lerd-reverb-myapp" {
 		t.Errorf("got %v, want [lerd-reverb-myapp]", names)
+	}
+}
+
+func TestDetect_EnabledStoppedWorkerFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{
+			"lerd-queue-myapp.service": "inactive",
+			"lerd-php85-fpm.service":   "active",
+		},
+		nil,
+	)
+	// Enabled yet inactive = drift (e.g. an FPM restart cascaded through BindsTo).
+	unitEnabledFn = func(u string) bool { return u == "lerd-queue-myapp.service" }
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 || got[0].Unit != "lerd-queue-myapp" {
+		t.Fatalf("got %+v, want one lerd-queue-myapp", got)
+	}
+	if got[0].State != "expected-but-stopped" {
+		t.Errorf("state = %q, want expected-but-stopped", got[0].State)
+	}
+}
+
+func TestDetect_DisabledStoppedWorkerIgnored(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-queue-myapp.service": "inactive"},
+		nil,
+	)
+	// stubEnv defaults enabled=false: a disabled stopped worker was stopped on
+	// purpose (`lerd worker stop` disables), so it must not be flagged.
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("disabled stopped worker should be ignored, got %+v", got)
+	}
+}
+
+func TestDetect_TimerDrivenServiceNotFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{
+			"lerd-schedule-myapp.service": "inactive",
+			"lerd-schedule-myapp.timer":   "active",
+		},
+		nil,
+	)
+	// Even enabled, a timer-driven oneshot is normally idle between ticks.
+	unitEnabledFn = func(string) bool { return true }
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("timer-driven idle oneshot must not be flagged, got %+v", got)
 	}
 }
 
