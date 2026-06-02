@@ -37,13 +37,17 @@ export function buildKindGroups(
   site = '',
   text = '',
   hideSitePrefix = false,
-  worker = ''
+  worker = '',
+  showWorkers = true
 ): DebugGroup[] {
   const needle = text ? text.toLowerCase() : '';
   const groups = new Map<string, DebugGroup>();
   for (const ev of events) {
     if (ev.kind !== kind) continue;
     if (site && ev.ctx.site !== site) continue;
+    // "Show worker queries" off hides worker-emitted events from the view,
+    // not just future capture, matching buildQueryGroups.
+    if (!showWorkers && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
     if (needle) {
       const hay = (JSON.stringify(ev.data ?? {}) + ' ' + (ev.ctx.worker ?? '')).toLowerCase();

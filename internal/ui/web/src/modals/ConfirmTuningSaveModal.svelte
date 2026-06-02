@@ -10,6 +10,7 @@
   let backup = $state(false);
   let busy = $state(false);
   let error = $state('');
+  let rolledBack = $state(false);
 
   function safeClose() {
     if (busy) return;
@@ -25,6 +26,7 @@
     const onSuccess = $modal.onSuccess;
     busy = true;
     error = '';
+    rolledBack = false;
     try {
       const res = await saveServiceConfig(target.name, target.content, backup);
       if (!res.ok) {
@@ -41,6 +43,7 @@
         // means the dirty indicator and a re-save still target their
         // intended changes.
         error = res.error || m.tuningEditor_saveFailed();
+        rolledBack = res.rolledBack ?? false;
         return;
       }
       closeModal();
@@ -83,6 +86,9 @@
 
       {#if error}
         <p class="text-xs text-red-500">{error}</p>
+      {/if}
+      {#if rolledBack}
+        <p class="text-xs text-emerald-600 dark:text-emerald-400">{m.tuningEditor_rolledBack()}</p>
       {/if}
     {/if}
   </div>

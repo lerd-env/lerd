@@ -7,28 +7,43 @@ import (
 	"github.com/geodro/lerd/internal/dumps"
 )
 
-func TestAppendDump_DedupesByID(t *testing.T) {
-	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "a", Text: "first"})
-	m.appendDump(DumpEntry{ID: "a", Text: "second"})
-	if len(m.dumps) != 1 {
-		t.Errorf("expected 1 entry after dedup, got %d", len(m.dumps))
-	}
-	if m.dumps[0].Text != "first" {
-		t.Errorf("dedup kept the wrong copy: %q", m.dumps[0].Text)
+// dumpEv builds a dump-kind event from the DumpEntry fields the tests use, so
+// the model-level tests can keep expressing fixtures compactly while the buffer
+// holds raw events.
+func dumpEv(e DumpEntry) dumps.Event {
+	return dumps.Event{
+		ID:    e.ID,
+		TS:    e.TS,
+		Kind:  dumps.KindDump,
+		Ctx:   dumps.Context{Type: e.Type, Site: e.Site, Request: e.Request},
+		Src:   dumps.Source{File: e.File, Line: e.Line},
+		Label: e.Label,
+		Text:  e.Text,
 	}
 }
 
-func TestAppendDump_CapsAtBufferLimit(t *testing.T) {
+func TestAppendDebug_DedupesByID(t *testing.T) {
+	m := NewModel("test")
+	m.appendDebug(dumpEv(DumpEntry{ID: "a", Text: "first"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "a", Text: "second"}))
+	if len(m.debug) != 1 {
+		t.Errorf("expected 1 entry after dedup, got %d", len(m.debug))
+	}
+	if m.debug[0].Text != "first" {
+		t.Errorf("dedup kept the wrong copy: %q", m.debug[0].Text)
+	}
+}
+
+func TestAppendDebug_CapsAtBufferLimit(t *testing.T) {
 	m := NewModel("test")
 	for i := 0; i < dumpsBufferCap+50; i++ {
-		m.appendDump(DumpEntry{ID: rune2id(i)})
+		m.appendDebug(dumpEv(DumpEntry{ID: rune2id(i)}))
 	}
-	if len(m.dumps) != dumpsBufferCap {
-		t.Errorf("len = %d, want %d", len(m.dumps), dumpsBufferCap)
+	if len(m.debug) != dumpsBufferCap {
+		t.Errorf("len = %d, want %d", len(m.debug), dumpsBufferCap)
 	}
 	// Oldest should be 50 (we sent 0..cap+49; first 50 evicted).
-	if got := m.dumps[0].ID; got != rune2id(50) {
+	if got := m.debug[0].ID; got != rune2id(50) {
 		t.Errorf("oldest = %q, want %q", got, rune2id(50))
 	}
 }
@@ -52,9 +67,9 @@ func TestToDumpEntry_CopiesNestedFields(t *testing.T) {
 	}
 }
 
-func TestDumpsContentLines_EmptyShowsHint(t *testing.T) {
+func TestDebugContentLines_EmptyShowsHint(t *testing.T) {
 	m := NewModel("test")
-	lines, _ := dumpsContentLines(m, false, 80)
+	lines, _ := debugContentLines(m, false, 80)
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "no dumps yet") {
 		t.Errorf("empty state hint missing:\n%s", joined)
@@ -64,9 +79,9 @@ func TestDumpsContentLines_EmptyShowsHint(t *testing.T) {
 	}
 }
 
-func TestDumpsContentLines_ShowsHeaderAndPreview(t *testing.T) {
+func TestDebugContentLines_ShowsHeaderAndPreview(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{
+	m.appendDebug(dumpEv(DumpEntry{
 		ID:      "a",
 		TS:      "2026-05-10T12:34:56.000Z",
 		Type:    "fpm",
@@ -76,8 +91,8 @@ func TestDumpsContentLines_ShowsHeaderAndPreview(t *testing.T) {
 		Line:    42,
 		Label:   "user",
 		Text:    "App\\Models\\User {#1\n  name: \"alice\"\n}",
-	})
-	lines, _ := dumpsContentLines(m, true, 100)
+	}))
+	lines, _ := debugContentLines(m, true, 100)
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "fpm") {
 		t.Errorf("ctx type missing: %q", joined)
@@ -157,12 +172,12 @@ func TestDumpBodyLines_PreviewVsExpanded(t *testing.T) {
 	}
 }
 
-func TestDumpsContentLines_FilterNarrowsList(t *testing.T) {
+func TestDebugContentLines_FilterNarrowsList(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "1", Site: "acme", Text: "alice"})
-	m.appendDump(DumpEntry{ID: "2", Site: "other", Text: "bob"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "1", Site: "acme", Text: "alice"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "2", Site: "other", Text: "bob"}))
 	m.dumpsFilter = "acme"
-	lines, _ := dumpsContentLines(m, true, 100)
+	lines, _ := debugContentLines(m, true, 100)
 	joined := stripANSI(strings.Join(lines, "\n"))
 	if !strings.Contains(joined, "alice") {
 		t.Errorf("expected matching entry to render:\n%s", joined)
@@ -177,21 +192,17 @@ func TestDumpsContentLines_FilterNarrowsList(t *testing.T) {
 
 func TestToggleDumpExpand_FlipsMap(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "alpha", Text: "x"})
-	m.appendDump(DumpEntry{ID: "beta", Text: "y"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "alpha", TS: "2026-05-10T00:00:00.000Z", Text: "x"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "beta", TS: "2026-05-10T00:00:01.000Z", Text: "y"}))
+	// Cursor 0 targets the newest visible entry, which the Dumps lens renders
+	// at the top: beta (appended last).
 	m.dumpsCursor = 0
 	m.toggleDumpExpand()
 	if !m.dumpsExpanded["beta"] {
-		// dumpsCursor=0 points at the newest entry, which is beta (renders top).
-		// But filteredDumps preserves insertion order; cursor 0 = filtered[0] = alpha.
-		// Verify whichever ID was flipped is the one at cursor 0 of the filter view.
-		if !m.dumpsExpanded["alpha"] {
-			t.Error("expected one entry to be expanded after toggle")
-		}
+		t.Errorf("expected cursor-0 (newest) entry to expand; got map %v", m.dumpsExpanded)
 	}
 	m.toggleDumpExpand()
-	// Same row flipped back.
-	if m.dumpsExpanded["alpha"] || m.dumpsExpanded["beta"] {
+	if m.dumpsExpanded["beta"] {
 		t.Errorf("expected re-toggle to clear; got map %v", m.dumpsExpanded)
 	}
 }
@@ -237,8 +248,8 @@ func TestRenderDumpsChips_HighlightsActive(t *testing.T) {
 
 func TestClearDumps_PromptsConfirmWhenBufferNonEmpty(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "a"})
-	m.appendDump(DumpEntry{ID: "b"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "a"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "b"}))
 
 	cmd := m.clearDumps()
 	if cmd != nil {
@@ -248,8 +259,8 @@ func TestClearDumps_PromptsConfirmWhenBufferNonEmpty(t *testing.T) {
 		t.Error("clearDumps with a non-empty buffer should open a confirm modal")
 	}
 	// The buffer is intact until the user presses y.
-	if len(m.dumps) != 2 {
-		t.Errorf("buffer should not be cleared before confirm: %d", len(m.dumps))
+	if len(m.debug) != 2 {
+		t.Errorf("buffer should not be cleared before confirm: %d", len(m.debug))
 	}
 }
 
@@ -266,31 +277,31 @@ func TestClearDumps_EmptyBufferSkipsPrompt(t *testing.T) {
 
 func TestClearDumps_DefersBufferMutationToUpdate(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "a"})
-	m.appendDump(DumpEntry{ID: "b"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "a"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "b"}))
 	if cmd := m.clearDumps(); cmd != nil {
 		t.Fatalf("clearDumps should stage a confirm, got cmd %v", cmd)
 	}
 	// Clearing happens in Update via dumpsClearedMsg, so the buffer must be
 	// untouched until then; mutating it from the command goroutine would race
 	// the render path.
-	if len(m.dumps) != 2 {
-		t.Errorf("clearDumps mutated the buffer before confirmation: len=%d", len(m.dumps))
+	if len(m.debug) != 2 {
+		t.Errorf("clearDumps mutated the buffer before confirmation: len=%d", len(m.debug))
 	}
 }
 
 func TestDumpsClearedMsg_ZeroesBuffer(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "a"})
-	m.appendDump(DumpEntry{ID: "b"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "a"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "b"}))
 	m.dumpsExpanded = map[string]bool{"a": true}
 	m.dumpsCursor = 1
 	m.dumpsScroll = 5
 	if _, cmd := m.Update(dumpsClearedMsg{}); cmd != nil {
 		t.Errorf("dumpsClearedMsg should not emit a command, got %v", cmd)
 	}
-	if len(m.dumps) != 0 {
-		t.Errorf("dumps not cleared: %d", len(m.dumps))
+	if len(m.debug) != 0 {
+		t.Errorf("dumps not cleared: %d", len(m.debug))
 	}
 	if m.dumpsExpanded != nil {
 		t.Error("dumpsExpanded not cleared")

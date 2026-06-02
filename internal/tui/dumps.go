@@ -30,8 +30,18 @@ func toggleString(current, target string) string {
 // and visible viewport is small; older events scroll off the visible list.
 const dumpsBufferCap = 200
 
-// dumpEventMsg is delivered to Update when the SSE listener gets a new event.
-type dumpEventMsg DumpEntry
+// debugBatchMsg carries a coalesced batch of raw events (every kind) from the
+// SSE listener. Batching caps the TUI's render rate: a busy debug stream (e.g.
+// worker capture on a hot queue) can fire hundreds of events a second, and
+// rendering once per event would peg the grouped lenses' N+1 grouping. The
+// listener flushes on a short ticker instead, so the UI re-renders ~10×/s
+// regardless of event throughput. The Dumps lens projects to DumpEntry on
+// render; the other lenses read the raw events.
+type debugBatchMsg []lerddumps.Event
+
+// debugFlushInterval bounds how often buffered SSE events are handed to the
+// program, capping render frequency under a firehose.
+const debugFlushInterval = 100 * time.Millisecond
 
 // runDumpsListener opens the lerd-ui Unix-socket SSE endpoint and pumps
 // parsed events into the bubbletea program. Reconnects with backoff so the
@@ -82,21 +92,58 @@ func streamDumpsOnce(ctx context.Context, p *tea.Program) error {
 		conn.Close()
 	}()
 
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 64*1024), lerddumps.MaxLineBytes)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if !strings.HasPrefix(line, "data: ") {
-			continue
+	// A reader goroutine parses SSE lines into events; the main loop coalesces
+	// them and flushes a batch on a short ticker so a high event rate can't
+	// drive one render per event.
+	events := make(chan lerddumps.Event, 512)
+	go func() {
+		defer close(events)
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 64*1024), lerddumps.MaxLineBytes)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !strings.HasPrefix(line, "data: ") {
+				continue
+			}
+			var ev lerddumps.Event
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &ev); err != nil {
+				continue
+			}
+			select {
+			case events <- ev:
+			case <-ctx.Done():
+				return
+			}
 		}
-		raw := strings.TrimPrefix(line, "data: ")
-		var ev lerddumps.Event
-		if err := json.Unmarshal([]byte(raw), &ev); err != nil {
-			continue
+	}()
+
+	flush := time.NewTicker(debugFlushInterval)
+	defer flush.Stop()
+	var batch []lerddumps.Event
+	send := func() {
+		if len(batch) > 0 {
+			p.Send(debugBatchMsg(batch))
+			batch = nil
 		}
-		p.Send(dumpEventMsg(toDumpEntry(ev)))
 	}
-	return scanner.Err()
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case ev, ok := <-events:
+			if !ok {
+				send()
+				return nil
+			}
+			batch = append(batch, ev)
+			// Cap a single batch so one render never folds an unbounded burst.
+			if len(batch) >= dumpsBufferCap {
+				send()
+			}
+		case <-flush.C:
+			send()
+		}
+	}
 }
 
 func toDumpEntry(ev lerddumps.Event) DumpEntry {
@@ -113,101 +160,33 @@ func toDumpEntry(ev lerddumps.Event) DumpEntry {
 	}
 }
 
-// appendDump folds a new event into the model, capping the buffer at
-// dumpsBufferCap and de-duping on ID (replays from the SSE replay path).
-// Cursor 0 in the dumps view always targets the newest entry; if the user
-// has scrolled off newest (cursor > 0) we bump their cursor by one when a
-// fresh dump lands so the marker keeps pointing at the same dump rather
-// than silently slipping to the row that just moved into place.
-func (m *Model) appendDump(e DumpEntry) {
-	for _, existing := range m.dumps {
-		if existing.ID == e.ID {
+// appendDebug folds a new event of any kind into the model, capping the
+// buffer at dumpsBufferCap and de-duping on ID (replays from the SSE replay
+// path). The cursor is clamped on the next render/nav rather than nudged
+// here, since which events are visible depends on the active lens.
+func (m *Model) appendDebug(ev lerddumps.Event) {
+	for _, existing := range m.debug {
+		if existing.ID == ev.ID {
 			return
 		}
 	}
-	m.dumps = append(m.dumps, e)
-	if len(m.dumps) > dumpsBufferCap {
-		m.dumps = m.dumps[len(m.dumps)-dumpsBufferCap:]
-	}
-	if m.dumpsCursor > 0 {
-		m.dumpsCursor++
-		if m.dumpsCursor >= len(m.dumps) {
-			m.dumpsCursor = len(m.dumps) - 1
-		}
+	m.debug = append(m.debug, ev)
+	if len(m.debug) > dumpsBufferCap {
+		m.debug = m.debug[len(m.debug)-dumpsBufferCap:]
 	}
 }
 
-// dumpsContentLines builds the lines rendered when detailMode == detailDumps.
-// Each entry shows a one-line header (time, ctx, site, request) plus a
-// brief preview, or the full text when expanded. j/k scrolls through
-// entries; enter/space toggles expansion of the focused entry; / filters by
-// substring across site/request/label/file/text; c clears the buffer.
-// cursorLine is returned so the viewport keeps the selection on screen.
-func dumpsContentLines(m *Model, focused bool, innerW int) ([]string, int) {
-	out := make([]string, 0, len(m.dumps)*4+8)
-	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
-
-	filtered := filteredDumpsWithCtx(m.dumps, m.dumpsFilter, m.dumpsCtxFilter)
-	add(sectionStyle.Render("Dumps") + "  " + dimStyle.Render(dumpsBridgeStateLabel()))
-
-	header := fmt.Sprintf("  %d shown / %d buffered (cap %d)", len(filtered), len(m.dumps), dumpsBufferCap)
-	add(dimStyle.Render(header))
-	add(dimStyle.Render("  / search · 1/2 ctx chips · enter expand · c clear · T toggle bridge · D return"))
-	add("  " + renderDumpsChips(m.dumpsCtxFilter))
-
-	if m.dumpsFilterActive || m.dumpsFilter != "" {
-		add(padToWidth(filterBar(m.dumpsFilter, m.dumpsFilterActive), innerW))
-	}
-	add("")
-
-	if len(m.dumps) == 0 {
-		add(dimStyle.Render("  no dumps yet"))
-		add("")
-		add("  " + dimStyle.Render("1. enable the bridge with ") + accentStyle.Render("T") + dimStyle.Render(" or ") + accentStyle.Render("lerd dump on"))
-		add("  " + dimStyle.Render("2. trigger a ") + accentStyle.Render("dump()") + dimStyle.Render(" or ") + accentStyle.Render("dd()") + dimStyle.Render(" call in your PHP code"))
-		add("  " + dimStyle.Render("3. events stream into this pane as they arrive"))
-		return out, 0
-	}
-	if len(filtered) == 0 {
-		add(dimStyle.Render("  no dumps match this filter"))
-		return out, 0
-	}
-
-	if m.dumpsCursor < 0 {
-		m.dumpsCursor = 0
-	}
-	if m.dumpsCursor >= len(filtered) {
-		m.dumpsCursor = len(filtered) - 1
-	}
-	cursorLine := 3
-
-	// Newest first for at-a-glance most-recent-on-top, and cursor 0 also
-	// targets the newest entry so j/k feel right: down moves the marker
-	// from newest at the top toward older entries below. The render loop
-	// walks the slice backwards but compares against a converted "row
-	// index from the top" rather than the slice index, so the cursor
-	// direction stays intuitive regardless of how the buffer is laid out.
-	for row, i := 0, len(filtered)-1; i >= 0; i-- {
-		e := filtered[i]
-		marker := "  "
-		if row == m.dumpsCursor {
-			marker = "▶ "
-			cursorLine = len(out)
+// dumpEntries projects the dump-kind events in the buffer to the DumpEntry
+// shape the Dumps lens and the per-site Dumps tab render. Non-dump kinds
+// (queries, jobs, …) are skipped; each lens reads the raw buffer itself.
+func (m *Model) dumpEntries() []DumpEntry {
+	out := make([]DumpEntry, 0, len(m.debug))
+	for _, ev := range m.debug {
+		if ev.Kind == lerddumps.KindDump {
+			out = append(out, toDumpEntry(ev))
 		}
-		hdr := marker + dumpHeaderLine(e)
-		if focused && row == m.dumpsCursor {
-			hdr = selectedStyle.Render(hdr)
-		}
-		add(hdr)
-		expanded := m.dumpsExpanded != nil && m.dumpsExpanded[e.ID]
-		body := dumpBodyLines(e, innerW-4, expanded)
-		for _, ln := range body {
-			add("    " + dimStyle.Render(ln))
-		}
-		add("")
-		row++
 	}
-	return out, cursorLine
+	return out
 }
 
 // filteredDumps returns entries that match needle across any of the
@@ -310,24 +289,6 @@ func dumpsBridgeStateLabel() string {
 	return failingStyle.Render("bridge off") + dimStyle.Render(" (T to enable)")
 }
 
-// toggleDumpExpand flips the expansion state for the currently-selected
-// dump entry, returning no command (the next render reads the new state).
-// Cursor 0 means the newest entry, which sits at filtered[len-1] in
-// insertion order — invert when indexing.
-func (m *Model) toggleDumpExpand() tea.Cmd {
-	filtered := filteredDumpsWithCtx(m.dumps, m.dumpsFilter, m.dumpsCtxFilter)
-	if len(filtered) == 0 || m.dumpsCursor < 0 || m.dumpsCursor >= len(filtered) {
-		return nil
-	}
-	if m.dumpsExpanded == nil {
-		m.dumpsExpanded = map[string]bool{}
-	}
-	idx := len(filtered) - 1 - m.dumpsCursor
-	id := filtered[idx].ID
-	m.dumpsExpanded[id] = !m.dumpsExpanded[id]
-	return nil
-}
-
 // clearDumps stages a confirm modal so a stray `c` keypress doesn't wipe
 // buffered events the user is actively reading. On y the local buffer is
 // zeroed and `lerd dump clear` runs against the daemon ring. Matches the
@@ -339,7 +300,7 @@ func (m *Model) toggleDumpExpand() tea.Cmd {
 type dumpsClearedMsg struct{}
 
 func (m *Model) clearDumps() tea.Cmd {
-	count := len(m.dumps)
+	count := len(m.debug)
 	if count == 0 {
 		// Empty buffer — go straight to the daemon clear without a prompt
 		// since there's nothing local to lose.

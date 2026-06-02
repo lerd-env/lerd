@@ -460,6 +460,57 @@ func TestHandleSiteEnv_restoreUsesMostRecentBackup(t *testing.T) {
 	}
 }
 
+func TestHandleSiteEnv_restoreHonoursNamedBackup(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("NEW=2\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.bkp.20260101-100000"), []byte("ANCIENT=0\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.bkp.20260528-103045"), []byte("OLD=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "acme", Path: sitePath, Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Ask for the OLDER backup by name; it must win over the newest.
+	body := strings.NewReader(`{"name":".env.bkp.20260101-100000"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/env/restore", body)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp SiteEnvRestoreResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if !resp.OK {
+		t.Fatalf("ok=false: %q", resp.Error)
+	}
+	if resp.Restored != ".env.bkp.20260101-100000" {
+		t.Errorf("Restored: got %q want the named older backup", resp.Restored)
+	}
+	if resp.Content != "ANCIENT=0\n" {
+		t.Errorf("Content: got %q want ANCIENT=0", resp.Content)
+	}
+	got, _ := os.ReadFile(filepath.Join(sitePath, ".env"))
+	if string(got) != "ANCIENT=0\n" {
+		t.Errorf(".env: got %q want ANCIENT=0", string(got))
+	}
+	// The newer backup the user did NOT pick must stay on disk.
+	if _, err := os.Stat(filepath.Join(sitePath, ".env.bkp.20260528-103045")); err != nil {
+		t.Errorf("unpicked newer backup gone: %v", err)
+	}
+}
+
 func TestHandleSiteEnv_restoreWithoutBackupReturnsError(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())

@@ -2504,6 +2504,12 @@ func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Sit
 	writeJSON(w, files)
 }
 
+// SiteEnvRestoreRequest carries the previewed backup name so the restore
+// applies the exact bytes the user saw, not whatever is newest at accept time.
+type SiteEnvRestoreRequest struct {
+	Name string `json:"name"`
+}
+
 // SiteEnvRestoreResponse is the JSON body returned by POST /env/restore.
 type SiteEnvRestoreResponse struct {
 	OK       bool   `json:"ok"`
@@ -2529,7 +2535,16 @@ func handleSiteEnvRestore(w http.ResponseWriter, r *http.Request, site *config.S
 		http.NotFound(w, r)
 		return
 	}
-	res, err := envCfgFile(dir, envFile).Restore("", nil)
+	// Always attempt the decode: an empty body parses as the zero value via
+	// io.EOF, which Restore treats as "restore newest". A previewed name is
+	// validated against the live backup list inside Restore.
+	var req SiteEnvRestoreRequest
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&req); err != nil && err != io.EOF {
+		writeJSON(w, SiteEnvRestoreResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	res, err := envCfgFile(dir, envFile).Restore(req.Name, nil)
 	if err != nil {
 		writeJSON(w, SiteEnvRestoreResponse{OK: false, Error: err.Error()})
 		return

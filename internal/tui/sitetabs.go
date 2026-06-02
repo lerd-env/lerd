@@ -10,6 +10,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	lerddumps "github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
@@ -22,7 +23,7 @@ type siteTab int
 const (
 	tabSiteOverview siteTab = iota
 	tabSiteEnv
-	tabSiteDumps
+	tabSiteDebug
 	tabSiteAppLogs
 )
 
@@ -36,8 +37,8 @@ func siteTabLabel(t siteTab) string {
 	switch t {
 	case tabSiteEnv:
 		return "Env"
-	case tabSiteDumps:
-		return "Dumps"
+	case tabSiteDebug:
+		return "Debug"
 	case tabSiteAppLogs:
 		return "App logs"
 	default:
@@ -51,7 +52,7 @@ func siteTabLabel(t siteTab) string {
 // the head of every site detail variant so the user always sees the
 // shortcuts and which tab is active without scrolling.
 func siteTabsHeader(active siteTab) string {
-	tabs := []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDumps, tabSiteAppLogs}
+	tabs := []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug, tabSiteAppLogs}
 	parts := make([]string, 0, len(tabs))
 	for i, t := range tabs {
 		label := fmt.Sprintf("[%d] %s", i+1, siteTabLabel(t))
@@ -111,13 +112,15 @@ func siteEnvContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []st
 	return out
 }
 
-// siteDumpsContentLines filters the global dump buffer down to events whose
-// Site matches the focused site, then renders them with the same chrome the
-// global Dumps view uses. Mirrors what the web UI's per-site Dumps tab
-// shows: only this site's emissions, in newest-first order.
-func siteDumpsContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
+// siteDebugContentLines renders the focused site's slice of the Debug window:
+// the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events ·
+// HTTP) scoped to this site, read-only. `[` / `]` switch lens; the global ctx
+// chips and search needle set on the D view still apply. Rows are shown with
+// their detail inline (no cursor/expand on a site scroll surface), so the tab
+// is a per-site debug feed, not just dumps.
+func siteDebugContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
 	out := make([]string, 0, 32)
-	out = append(out, renderSiteTabHeader(tabSiteDumps, innerW)...)
+	out = append(out, renderSiteTabHeader(tabSiteDebug, innerW)...)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
 	if site == nil {
@@ -125,46 +128,79 @@ func siteDumpsContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []
 		return out
 	}
 
-	// Restrict to this site first, then route through the same global
-	// pipeline so the chip filter (m.dumpsCtxFilter) and search needle
-	// (m.dumpsFilter) the user already set on the D view apply here too.
-	scoped := make([]DumpEntry, 0, len(m.dumps))
-	for _, d := range m.dumps {
-		if d.Site == site.Name {
-			scoped = append(scoped, d)
-		}
-	}
-	matching := filteredDumpsWithCtx(scoped, m.dumpsFilter, m.dumpsCtxFilter)
-
-	add(sectionStyle.Render("Dumps for " + site.Name))
-	hint := ""
+	kind := m.activeLensKind()
+	add(sectionStyle.Render("Debug for "+site.Name) + "  " + dumpsBridgeStateLabel())
+	add("  " + renderDebugTabs(m, site.Name))
+	hint := "  [ ] switch lens · D for the full window"
 	if m.dumpsCtxFilter != "" {
 		hint += " · ctx:" + m.dumpsCtxFilter
 	}
 	if needle := strings.TrimSpace(m.dumpsFilter); needle != "" {
 		hint += " · /" + needle
 	}
-	add(dimStyle.Render(fmt.Sprintf("  %d of %d match this site%s", len(matching), len(scoped), hint)))
+	add(dimStyle.Render(hint))
 	add("")
 
-	if len(matching) == 0 {
-		if len(scoped) == 0 {
+	buffered := countKind(m.debug, kind, site.Name)
+
+	if kind == lerddumps.KindDump {
+		vis := m.debugVisibleEvents(site.Name) // newest-first dump events
+		add(dimStyle.Render(fmt.Sprintf("  %d shown / %d buffered", len(vis), buffered)))
+		add("")
+		if len(vis) == 0 {
 			add(dimStyle.Render("  no dumps from this site yet"))
 			add("")
-			add("  " + dimStyle.Render("press ") + accentStyle.Render("D") + dimStyle.Render(" to open the global dumps view, then ") + accentStyle.Render("T") + dimStyle.Render(" to enable the bridge"))
-			add("  " + dimStyle.Render("dumps from ") + accentStyle.Render(site.Name) + dimStyle.Render(" will appear here automatically"))
-		} else {
-			add(dimStyle.Render("  no dumps match the active filter for this site"))
-			add("  " + dimStyle.Render("clear from the global D view: ") + accentStyle.Render("/") + dimStyle.Render(" for search, ") + accentStyle.Render("1") + dimStyle.Render("/") + accentStyle.Render("2") + dimStyle.Render(" for chips"))
+			add("  " + dimStyle.Render("press ") + accentStyle.Render("D") + dimStyle.Render(" then ") + accentStyle.Render("T") + dimStyle.Render(" to enable the bridge; this site's dumps land here"))
+			return out
+		}
+		for _, ev := range vis {
+			e := toDumpEntry(ev)
+			add(dumpHeaderLine(e))
+			for _, ln := range dumpPreviewLines(e, innerW-4) {
+				add("    " + dimStyle.Render(ln))
+			}
+			add("")
 		}
 		return out
 	}
 
-	for i := len(matching) - 1; i >= 0; i-- {
-		e := matching[i]
-		add(dumpHeaderLine(e))
-		for _, ln := range dumpPreviewLines(e, innerW-4) {
-			add("    " + dimStyle.Render(ln))
+	groups := m.debugGroups(site.Name)
+	total := 0
+	for _, g := range groups {
+		total += len(g.events)
+	}
+	add(dimStyle.Render(fmt.Sprintf("  %d shown / %d buffered", total, buffered)))
+	add("")
+	if total == 0 {
+		add(dimStyle.Render("  no " + lensNoun(kind) + " from this site yet"))
+		add("")
+		add("  " + dimStyle.Render("press ") + accentStyle.Render("D") + dimStyle.Render(" then ") + accentStyle.Render("T") + dimStyle.Render(" to enable capture; worker events also need ") + accentStyle.Render("w"))
+		return out
+	}
+	for _, g := range groups {
+		meta := fmt.Sprintf("  %s · %d", shortTime(g.ts), len(g.events))
+		if g.worker != "" {
+			meta = "  worker" + meta
+		}
+		head := "  " + accentStyle.Render(g.label) + dimStyle.Render(meta)
+		if g.nPlusOne {
+			head += "  " + failingStyle.Render("N+1")
+		}
+		add(head)
+		var dup map[string]int
+		if kind == lerddumps.KindQuery {
+			dup = map[string]int{}
+			for _, ev := range g.events {
+				if q, ok := ev.Query(); ok {
+					dup[normalizeSQL(q.SQL)]++
+				}
+			}
+		}
+		for _, ev := range g.events {
+			add("  " + debugRowMain(kind, ev, dup))
+			for _, ln := range debugRowDetail(kind, ev) {
+				add("      " + dimStyle.Render(ln))
+			}
 		}
 		add("")
 	}
