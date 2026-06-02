@@ -98,7 +98,7 @@ func (m *Model) systemRows() []systemRow {
 	add(systemRow{kind: sysDumpsEnabled, label: "Enabled", on: dumpsOn})
 	add(systemRow{kind: sysDumpsPassthrough, label: "Passthrough", on: cfg != nil && cfg.IsDumpsPassthrough()})
 	info("Listen", config.DumpsListenAddr())
-	info("Buffered", fmt.Sprintf("%d events (cap %d)", len(m.dumps), dumpsBufferCap))
+	info("Buffered", fmt.Sprintf("%d events (cap %d)", len(m.debug), dumpsBufferCap))
 
 	// PHP versions
 	header("PHP versions")

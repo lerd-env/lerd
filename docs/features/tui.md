@@ -83,7 +83,7 @@ Available when focus is on the Detail pane with the cursor on a domain row.
 | `F` | Swap the Detail pane for the Dashboard (counts, system health, container resources) and focus it |
 | `S` | Swap the Detail pane for global Settings (LAN expose, autostart, Xdebug) and focus it |
 | `Y` | Swap the Detail pane for the System overview (DNS, Nginx, Watcher, Notifications, Debug bridge, PHP per-version, Node, Lerd) and focus it |
-| `D` | Swap the Detail pane for the live `dump()` / `dd()` feed. Use `/` to search across site / request / label / file / text / type · `1`/`2` toggle FPM / CLI context-filter chips · `enter` to expand the selected entry to full content · `c` to clear the buffer (and run `lerd dump clear`) · `T` to toggle the bridge globally. New events ring-flash as they arrive; the buffer is independent of the lerd-ui ring because the TUI runs in its own process and only sees what the SSE connection delivers |
+| `D` | Open the Debug window, the same capture the web dashboard shows. `[` / `]` switch lens across `Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP`; the Queries lens groups by request with N+1 and slow-query (≥100ms) flags, and the other lenses group by request too. Use `/` to search the active lens (site, request, worker, file, text, payload) · `1`/`2` toggle the FPM / CLI context-filter chips · `enter` expands the selected row (query bindings and caller, job exception, view template, mail recipients, …) · `w` toggles worker capture (queue / scheduler events, off by default) · `c` clears the buffer (and runs `lerd dump clear`) · `T` toggles the bridge globally. The buffer is independent of the lerd-ui ring because the TUI runs in its own process and only sees what the SSE connection delivers |
 | `?` | Open the Keybindings reference as a centered modal overlay; `?` again or `esc` closes it |
 | `esc` | Dismiss the active modal (palette / picker / help / confirm), return to the pane underneath |
 
@@ -120,13 +120,13 @@ For worker rows (queue-X, schedule-X, custom framework workers) the detail varia
 
 ## Site detail tabs
 
-The site detail pane is split into four read-side tabs the user can jump between with the number keys, mirroring the web UI's `Overview / Env / Tinker / Dumps` strip (Tinker is CLI-only since it needs an interactive REPL):
+The site detail pane is split into four read-side tabs the user can jump between with the number keys, mirroring the web UI's `Overview / Env / Tinker / Debug` strip (Tinker is CLI-only since it needs an interactive REPL):
 
 | Key | Tab | Contents |
 | --- | --- | --- |
 | `1` | Overview | The default — domains, services used, workers, worktrees, toggles (HTTPS / LAN / PHP / Node) |
 | `2` | Env | Read-only display of the site's `.env` file (read up to 256 KB so a runaway file can't wedge the render loop) |
-| `3` | Dumps | The global `dump() / dd()` buffer filtered to events whose `site` matches the focused site, newest first |
+| `3` | Debug | This site's slice of the Debug window: the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP) scoped to the focused site, with `[` / `]` to switch lens and `w` to toggle worker capture. Rows show their detail inline; press `D` for the full cross-site window |
 | `4` | App logs | Every framework-declared log file with size and modification time; press `l` to actually tail one — the file targets are wired into `logTargetsForSite`, so `[` / `]` cycle through them once the log pane is open |
 
 Switching tabs resets the detail-pane scroll so the user lands at the top of the new tab. Picker overlays (PHP / Node version) only show in Overview; selecting a different tab dismisses them.
