@@ -45,7 +45,7 @@
   });
 
   const groups = $derived(
-    buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, localText, scoped, $queryFilterWorker)
+    buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, localText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
   let enabling = $state(false);

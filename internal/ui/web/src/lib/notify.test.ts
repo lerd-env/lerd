@@ -136,6 +136,31 @@ describe('notify dispatcher', () => {
     expect(swShows).toHaveLength(0);
   });
 
+  it('fires N+1 notifications by default and suppresses them once toggled off', async () => {
+    const { initNotify, setNotifyPref } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    // nplusone defaults on, so the first warning fires.
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'nplusone', title: 'N+1 on acme', tag: 'lerd-nplusone-a' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(swShows).toHaveLength(1);
+
+    // Turning the category off suppresses subsequent N+1 warnings.
+    setNotifyPref('nplusone', false);
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'nplusone', title: 'N+1 on beta', tag: 'lerd-nplusone-b' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(swShows).toHaveLength(1);
+  });
+
   it('deduplicates back-to-back notifications with the same tag', async () => {
     const { initNotify } = await import('./notify');
     const { wsMessage } = await import('./ws');

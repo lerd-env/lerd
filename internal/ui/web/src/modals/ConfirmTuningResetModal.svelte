@@ -9,6 +9,8 @@
 
   let busy = $state(false);
   let error = $state('');
+  let rolledBack = $state(false);
+  let autoBackupName = $state('');
 
   function safeClose() {
     if (busy) return;
@@ -20,10 +22,14 @@
     const onSuccess = $modal.onSuccess;
     busy = true;
     error = '';
+    rolledBack = false;
+    autoBackupName = '';
     try {
       const res = await resetServiceTuning(target.name);
       if (!res.ok) {
         error = res.error || m.tuningEditor_resetFailed();
+        rolledBack = res.rolledBack ?? false;
+        autoBackupName = res.autoBackupName ?? '';
         return;
       }
       closeModal();
@@ -52,6 +58,11 @@
 
       {#if error}
         <p class="text-xs text-red-500">{error}</p>
+      {/if}
+      {#if rolledBack}
+        <p class="text-xs text-emerald-600 dark:text-emerald-400">
+          {autoBackupName ? m.tuningEditor_resetRolledBack({ name: autoBackupName }) : m.tuningEditor_rolledBack()}
+        </p>
       {/if}
     {/if}
   </div>

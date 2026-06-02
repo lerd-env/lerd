@@ -38,7 +38,7 @@
 
   let localText = $state('');
   const groups = $derived(
-    buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? localText : $queryFilterText, scoped, $queryFilterWorker)
+    buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? localText : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
   let togglingWorkers = $state(false);

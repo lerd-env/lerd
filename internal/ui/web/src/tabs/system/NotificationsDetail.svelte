@@ -119,6 +119,7 @@
     worker_failed: m.notify_settings_category_worker_failed(),
     op_done: m.notify_settings_category_op_done(),
     update_available: m.notify_settings_category_update_available(),
+    nplusone: m.notify_settings_category_nplusone(),
     dump: m.notify_settings_category_dump()
   };
   const kindHint: Record<NotifyKind, string> = {
@@ -126,6 +127,7 @@
     worker_failed: m.notify_settings_category_worker_failed_hint(),
     op_done: m.notify_settings_category_op_done_hint(),
     update_available: m.notify_settings_category_update_available_hint(),
+    nplusone: m.notify_settings_category_nplusone_hint(),
     dump: m.notify_settings_category_dump_hint()
   };
 

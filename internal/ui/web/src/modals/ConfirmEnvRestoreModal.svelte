@@ -29,7 +29,7 @@
     busy = true;
     error = '';
     try {
-      const res = await restoreSiteEnv(target.domain, target.branch, target.file);
+      const res = await restoreSiteEnv(target.domain, target.branch, target.file, target.backupName);
       if (!res.ok) {
         error = res.error || m.envEditor_restoreFailed();
         return;
