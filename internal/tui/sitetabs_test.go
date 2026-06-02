@@ -6,11 +6,12 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
 func TestSiteTabsHeader_HighlightsActive(t *testing.T) {
-	for _, tab := range []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDumps, tabSiteAppLogs} {
+	for _, tab := range []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug, tabSiteAppLogs} {
 		got := stripANSI(siteTabsHeader(tab))
 		want := siteTabLabel(tab)
 		if !strings.Contains(got, want) {
@@ -59,12 +60,14 @@ func TestSiteEnvContent_EmptyFileShowsHint(t *testing.T) {
 
 func TestSiteDumpsContent_FiltersToFocusedSite(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "1", Site: "acme", Text: "alice"})
-	m.appendDump(DumpEntry{ID: "2", Site: "other", Text: "bob"})
-	m.appendDump(DumpEntry{ID: "3", Site: "acme", Text: "carol"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "1", Site: "acme", Text: "alice"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "2", Site: "other", Text: "bob"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "3", Site: "acme", Text: "carol"}))
 
 	site := &siteinfo.EnrichedSite{Name: "acme"}
-	lines := siteDumpsContentLines(m, site, 120)
+	// debugLens defaults to the Dumps lens, so this exercises the dump path
+	// of the per-site Debug tab.
+	lines := siteDebugContentLines(m, site, 120)
 	joined := stripANSI(strings.Join(lines, "\n"))
 	if !strings.Contains(joined, "alice") || !strings.Contains(joined, "carol") {
 		t.Errorf("expected acme entries:\n%s", joined)
@@ -72,19 +75,38 @@ func TestSiteDumpsContent_FiltersToFocusedSite(t *testing.T) {
 	if strings.Contains(joined, "bob") {
 		t.Errorf("expected other-site entry to be filtered out:\n%s", joined)
 	}
-	// Header now compares the matched count against site-scoped buffer
-	// rather than total buffer (because chip/search filters are AND'd in
-	// the new pipeline). Two acme entries / two acme entries in the
-	// scoped slice = "2 of 2".
-	if !strings.Contains(joined, "2 of 2 match this site") {
-		t.Errorf("expected count summary '2 of 2 match this site':\n%s", joined)
+	// Two acme dumps shown out of two acme dumps buffered (site-scoped count).
+	if !strings.Contains(joined, "2 shown / 2 buffered") {
+		t.Errorf("expected site-scoped count '2 shown / 2 buffered':\n%s", joined)
+	}
+}
+
+func TestSiteDebugContent_QueryLensScopesToSite(t *testing.T) {
+	m := NewModel("test")
+	setLens(m, dumps.KindQuery)
+	m.appendDebug(qEv("1", "r1", "select * from acme_orders", 250))
+	// A query from a different site must not leak into acme's Debug tab.
+	other := qEv("2", "r2", "select * from other_table", 2)
+	other.Ctx.Site = "other"
+	m.appendDebug(other)
+
+	site := &siteinfo.EnrichedSite{Name: "acme"}
+	joined := stripANSI(strings.Join(siteDebugContentLines(m, site, 120), "\n"))
+	if !strings.Contains(joined, "Debug for acme") {
+		t.Errorf("expected per-site Debug header:\n%s", joined)
+	}
+	if !strings.Contains(joined, "select * from acme_orders") || !strings.Contains(joined, "slow") {
+		t.Errorf("expected this site's slow query to render:\n%s", joined)
+	}
+	if strings.Contains(joined, "other_table") {
+		t.Errorf("another site's query leaked into the tab:\n%s", joined)
 	}
 }
 
 func TestSiteDumpsContent_EmptyShowsHint(t *testing.T) {
 	m := NewModel("test")
 	site := &siteinfo.EnrichedSite{Name: "acme"}
-	lines := siteDumpsContentLines(m, site, 120)
+	lines := siteDebugContentLines(m, site, 120)
 	joined := stripANSI(strings.Join(lines, "\n"))
 	if !strings.Contains(joined, "no dumps from this site") {
 		t.Errorf("expected empty-state hint:\n%s", joined)

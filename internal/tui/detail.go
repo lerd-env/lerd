@@ -416,7 +416,7 @@ func (m *Model) renderDetailInline(w, h int, focused bool) string {
 	case detailDashboard:
 		content, cursorLine = dashboardContentLinesWithCursor(m, focused, contentW)
 	case detailDumps:
-		content, cursorLine = dumpsContentLines(m, focused, contentW)
+		content, cursorLine = debugContentLines(m, focused, contentW)
 	default:
 		// When focus is on the services list, the detail pane shows the
 		// matching service — same surface area the web UI's ServiceDetail
@@ -438,8 +438,8 @@ func (m *Model) renderDetailInline(w, h int, focused bool) string {
 			case tabSiteEnv:
 				content = siteEnvContentLines(m, site, contentW)
 				cursorLine = -1
-			case tabSiteDumps:
-				content = siteDumpsContentLines(m, site, contentW)
+			case tabSiteDebug:
+				content = siteDebugContentLines(m, site, contentW)
 				cursorLine = -1
 			case tabSiteAppLogs:
 				content = siteAppLogsContentLines(m, site, contentW)
