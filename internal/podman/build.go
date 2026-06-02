@@ -352,11 +352,6 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 	defer os.RemoveAll(tmp)
 
-	// Both build paths COPY the lerd_devtools source from the context.
-	if err := writeDevtoolsSource(tmp); err != nil {
-		return fmt.Errorf("staging devtools source: %w", err)
-	}
-
 	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
 	// can detect drift even when the on-disk cache file is stale (the
 	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
@@ -374,14 +369,20 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
 				buildCustomExtBlock(customExts, extDeps) +
-				devtoolsBuildBlock() +
 				mkcertCABlock(tmp)
 			goto build
 		}
 	}
 
 	// Slow path: full local build from the embedded Containerfile template.
+	// The template compiles lerd_devtools in the builder stage via
+	// `COPY internal/podman/devtools`, so stage that source into the build
+	// context (the prebuilt base already carries it, so the fast path above
+	// doesn't need it).
 	{
+		if err := writeDevtoolsSource(tmp); err != nil {
+			return fmt.Errorf("staging devtools source: %w", err)
+		}
 		tmpl, tmplErr := GetQuadletTemplate("lerd-php-fpm.Containerfile")
 		if tmplErr != nil {
 			return tmplErr
@@ -390,10 +391,6 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensionsRuntime}}", buildCustomExtRuntimeDeps(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.MkcertCA}}", mkcertCABlock(tmp))
-		// Layer lerd_devtools onto the finished runtime stage (kept out of the
-		// base template so the base-image hash and its fast-path pull are
-		// unchanged).
-		containerfile += devtoolsBuildBlock()
 	}
 
 build:

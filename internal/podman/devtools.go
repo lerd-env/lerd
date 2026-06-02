@@ -1,18 +1,21 @@
 package podman
 
 import (
+	"crypto/sha256"
 	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 )
 
-// lerd_devtools C source, compiled into every FPM image. Written into the
-// build context so the Containerfile's COPY can pick it up; see
-// devtoolsBuildBlock and buildFPMImage.
+// lerd_devtools C source, compiled into every FPM image by the Containerfile's
+// builder stage. writeDevtoolsSource stages it into the local build context so
+// the `COPY internal/podman/devtools` resolves the same way it does in CI, and
+// devtoolsSourceHash feeds the Containerfile's sync marker.
 //
 //go:embed devtools
 var devtoolsSrcFS embed.FS
@@ -85,10 +88,13 @@ func SetDevtoolsWorkersFlag(enabled bool) error {
 	return nil
 }
 
-// writeDevtoolsSource copies the embedded extension source into ctxDir so the
-// Containerfile's `COPY lerd-devtools …` finds it in the build context.
+// writeDevtoolsSource copies the embedded extension source into the build
+// context at internal/podman/devtools so the Containerfile's
+// `COPY internal/podman/devtools` resolves the same way it does in CI (where
+// the context is the repo root). Only the slow local build needs this; the
+// prebuilt base already carries the compiled extension.
 func writeDevtoolsSource(ctxDir string) error {
-	dst := filepath.Join(ctxDir, "lerd-devtools")
+	dst := filepath.Join(ctxDir, "internal", "podman", "devtools")
 	if err := os.MkdirAll(dst, 0755); err != nil {
 		return err
 	}
@@ -111,19 +117,31 @@ func writeDevtoolsSource(ctxDir string) error {
 	return nil
 }
 
-// devtoolsBuildBlock returns the Containerfile snippet that compiles and
-// enables the lerd_devtools extension. It is layered on top of the final image
-// in both build paths (not baked into the base template), so the base-image
-// hash is unchanged and the prebuilt-base fast path keeps working — the .so
-// just compiles as one extra ~40s layer. The build pulls in the Alpine
-// toolchain and removes it in the same RUN so it adds no weight, and is wrapped
-// so a compile failure degrades to "queries silently unavailable" rather than
-// bricking the whole image, matching the SPX block.
-func devtoolsBuildBlock() string {
-	steps := "apk add --no-cache --virtual .lerd-build autoconf make g++ && " +
-		"cd /tmp/lerd-devtools && phpize && ./configure --enable-lerd-devtools && make -j$(nproc) && make install && docker-php-ext-enable lerd_devtools && " +
-		"apk del .lerd-build"
-	return "COPY lerd-devtools /tmp/lerd-devtools\n" +
-		"RUN { " + steps + "; } || true; \\\n" +
-		"    rm -rf /tmp/lerd-devtools /var/cache/apk/*\n"
+// devtoolsSourceHash is the short sha256 of the extension source (every file
+// under devtools/, in name order). The Containerfile carries this value in its
+// `lerd_devtools-src-sha256:` marker so that any change to the C source drifts
+// the Containerfile hash, which both rebuilds the prebuilt base in CI and trips
+// NeedsFPMRebuild for updating users. TestDevtoolsSourceMarkerInSync asserts the
+// marker matches this, so the marker can't silently fall out of date.
+func devtoolsSourceHash() (string, error) {
+	entries, err := devtoolsSrcFS.ReadDir("devtools")
+	if err != nil {
+		return "", err
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	h := sha256.New()
+	for _, n := range names {
+		b, err := devtoolsSrcFS.ReadFile("devtools/" + n)
+		if err != nil {
+			return "", err
+		}
+		h.Write(b)
+	}
+	return fmt.Sprintf("%x", h.Sum(nil))[:12], nil
 }
