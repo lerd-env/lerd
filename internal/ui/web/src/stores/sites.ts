@@ -229,10 +229,15 @@ export interface RestoreEnvResult {
 export async function restoreSiteEnv(
   domain: string,
   branch: string = '',
-  file: string = '.env'
+  file: string = '.env',
+  name: string = ''
 ): Promise<RestoreEnvResult> {
   try {
-    const res = await apiFetch(site(domain, 'env') + '/restore' + envQS(branch, file), { method: 'POST' });
+    const res = await apiFetch(site(domain, 'env') + '/restore' + envQS(branch, file), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
     const data = (await res.json()) as { ok?: boolean; error?: string; restored?: string; content?: string };
     return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
   } catch (e) {

@@ -94,13 +94,17 @@ function queryData(ev: DumpEvent): QueryData | null {
 
 // buildQueryGroups is the pure derivation, exported for unit tests and so a
 // site-scoped view can pass a pre-filtered slice without touching globals.
-export function buildQueryGroups(events: DumpEvent[], site = '', text = '', hideSitePrefix = false, worker = ''): QueryGroup[] {
+export function buildQueryGroups(events: DumpEvent[], site = '', text = '', hideSitePrefix = false, worker = '', showWorkers = true): QueryGroup[] {
   const needle = text ? text.toLowerCase() : '';
   const groups = new Map<string, QueryGroup>();
 
   for (const ev of events) {
     if (ev.kind !== 'query') continue;
     if (site && ev.ctx.site !== site) continue;
+    // "Show worker queries" off hides everything a queue/scheduler process
+    // emitted from the view, not just future capture, so unchecking it
+    // clears worker queries already buffered in the stream.
+    if (!showWorkers && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
     const data = queryData(ev);
     if (!data) continue;
@@ -168,8 +172,9 @@ export const knownQuerySites: Readable<string[]> = derived(dumps, ($dumps) => {
 });
 
 export const queryGroups: Readable<QueryGroup[]> = derived(
-  [dumps, queryFilterSite, queryFilterText, queryFilterWorker],
-  ([$dumps, $site, $text, $worker]) => buildQueryGroups($dumps, $site, $text, false, $worker)
+  [dumps, queryFilterSite, queryFilterText, queryFilterWorker, devtoolsStatus],
+  ([$dumps, $site, $text, $worker, $status]) =>
+    buildQueryGroups($dumps, $site, $text, false, $worker, Boolean($status?.workers))
 );
 
 export async function refreshDevtoolsStatus(): Promise<void> {

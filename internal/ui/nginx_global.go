@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"os"
 	"strings"
@@ -13,6 +14,10 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 )
+
+// nginxQuadletRestartTimeout bounds the readiness wait after a quadlet-changing
+// global nginx save restarts the container so a crash on bad config is caught.
+const nginxQuadletRestartTimeout = 20 * time.Second
 
 // globalNginxFile is the cfgedit.File for the http-level user override. Backups
 // and write-staging live in http.d.bkp/, kept off the http.d/*.conf glob.
@@ -242,7 +247,29 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 
 	if quadletChanged {
 		_ = podman.DaemonReloadFn()
-		if restartErr := podman.RestartUnit("lerd-nginx"); restartErr != nil {
+		restartErr := podman.RestartUnit("lerd-nginx")
+		if restartErr == nil {
+			// RestartUnit returning nil only means systemd issued the restart,
+			// not that nginx accepted the edited config. The container now
+			// carries the http.d mount, so confirm it actually came up and the
+			// config validates (the authoritative check the reload path uses)
+			// before reporting success, or a broken first save reads as OK.
+			if waitErr := podman.WaitReady("nginx", nginxQuadletRestartTimeout); waitErr != nil {
+				restartErr = waitErr
+			} else if out, testErr := siteops.NginxTestFn(); testErr != nil {
+				// nginx -t ran against the restarted container that now carries
+				// the http.d mount. A failure is either an invalid config (the
+				// output names our file) or the container crash-looping on the
+				// bad config so the test couldn't run at all (Restart=always
+				// can flash "active" mid-loop, fooling the readiness probe).
+				// Roll back on either; a neighbour's broken vhost on a healthy,
+				// running container is left alone, matching the reload path.
+				if running, _ := podman.ContainerRunning("lerd-nginx"); !running || cfgedit.MentionsFile(out, f.Path) {
+					restartErr = errors.New("invalid config: " + out)
+				}
+			}
+		}
+		if restartErr != nil {
 			if rbErr := cfgedit.RestoreSnapshot(f.Path, snap); rbErr != nil {
 				writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx restart failed and rollback failed: " + rbErr.Error() + " (restart error: " + restartErr.Error() + ")", BackupName: backupName, Content: req.Content, Exists: true})
 				return
@@ -251,6 +278,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx config invalid and rollback restart failed: " + rb2Err.Error() + " (original: " + restartErr.Error() + ")"})
 				return
 			}
+			_ = podman.WaitReady("nginx", nginxQuadletRestartTimeout)
 			if backupPath != "" {
 				_ = os.Remove(backupPath)
 			}

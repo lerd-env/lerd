@@ -475,10 +475,21 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 						continue
 					}
 					seenSvc[svc.Name] = true
+					// Diff the quadlet so the safety net restarts a running
+					// custom service whose content changed this run, e.g. a
+					// family/tuning service gaining the new tuning Volume= mount
+					// on a v1.22.1 upgrade. Without this the mount lands on disk
+					// but the live container keeps its old config until a manual
+					// restart, like rewriteDefaultPreset already handles.
+					path := filepath.Join(config.QuadletDir(), "lerd-"+svc.Name+".container")
+					before, _ := os.ReadFile(path)
 					if svc.Custom != nil {
 						ensureCustomServiceQuadlet(svc.Custom) //nolint:errcheck
 					} else {
 						ensureServiceQuadlet(svc.Name) //nolint:errcheck
+					}
+					if after, _ := os.ReadFile(path); string(before) != string(after) {
+						changedQuadlets = append(changedQuadlets, "lerd-"+svc.Name)
 					}
 				}
 			}

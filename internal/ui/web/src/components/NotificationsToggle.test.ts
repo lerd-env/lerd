@@ -9,6 +9,7 @@ const allKinds: Record<NotifyKind, boolean> = {
   worker_failed: true,
   op_done: true,
   update_available: true,
+  nplusone: true,
   dump: false
 };
 

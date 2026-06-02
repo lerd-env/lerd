@@ -180,7 +180,7 @@ describe('sites store', () => {
     vi.stubGlobal('fetch', fetchMock);
     const { restoreSiteEnv } = await import('./sites');
 
-    const res = await restoreSiteEnv('acme.test', 'feature/x');
+    const res = await restoreSiteEnv('acme.test', 'feature/x', '.env', '.env.20260528-103045');
 
     expect(res.ok).toBe(true);
     expect(res.restored).toBe('.env.20260528-103045');
@@ -188,6 +188,7 @@ describe('sites store', () => {
     const [url, init] = fetchMock.mock.calls[0];
     expect(String(url)).toMatch(/\/api\/sites\/acme\.test\/env\/restore\?branch=feature%2Fx$/);
     expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({ name: '.env.20260528-103045' });
     vi.unstubAllGlobals();
   });
 

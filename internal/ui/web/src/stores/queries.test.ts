@@ -109,6 +109,20 @@ describe('buildQueryGroups', () => {
     expect(onlyScrape[0].worker).toBe('scrape:rtb-data');
   });
 
+  it('hides all worker groups when showWorkers is off, keeping web requests', () => {
+    const events = [
+      q({ id: 'w1', ts: '2026-06-01T10:00:00.000Z', rid: 'r1', worker: 'queue:work', data: { sql: 'select 1', time_ms: 1 } }),
+      q({ id: 'w2', ts: '2026-06-01T10:00:01.000Z', rid: 'r2', worker: 'scrape:rtb-data', data: { sql: 'select 2', time_ms: 1 } }),
+      q({ id: 'web', ts: '2026-06-01T10:00:02.000Z', rid: 'r3', request: 'GET /', data: { sql: 'select 3', time_ms: 1 } })
+    ];
+    // showWorkers=false drops buffered worker queries from the view, not just
+    // future capture, leaving only the web request.
+    const noWorkers = buildQueryGroups(events, '', '', false, '', false);
+    expect(noWorkers).toHaveLength(1);
+    expect(noWorkers[0].worker).toBe('');
+    expect(noWorkers[0].rows[0].event.id).toBe('web');
+  });
+
   it('does not flag N+1 for distinct queries', () => {
     const groups = buildQueryGroups([
       q({ id: 'a', ts: '2026-06-01T10:00:00.000Z', data: { sql: 'select * from users', time_ms: 1 } }),

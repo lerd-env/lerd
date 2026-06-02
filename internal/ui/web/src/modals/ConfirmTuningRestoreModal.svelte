@@ -15,6 +15,7 @@
 
   let busy = $state(false);
   let error = $state('');
+  let rolledBack = $state(false);
 
   function safeClose() {
     if (busy) return;
@@ -26,6 +27,7 @@
     const onSuccess = $modal.onSuccess;
     busy = true;
     error = '';
+    rolledBack = false;
     try {
       // Pass the exact backup name previewed in this diff so a
       // concurrent save landing a newer backup between modal-open and
@@ -33,6 +35,7 @@
       const res = await restoreServiceTuning(target.name, target.backupName);
       if (!res.ok) {
         error = res.error || m.tuningEditor_restoreFailed();
+        rolledBack = res.rolledBack ?? false;
         return;
       }
       closeModal();
@@ -78,6 +81,9 @@
 
       {#if error}
         <p class="text-xs text-red-500">{error}</p>
+      {/if}
+      {#if rolledBack}
+        <p class="text-xs text-emerald-600 dark:text-emerald-400">{m.tuningEditor_rolledBack()}</p>
       {/if}
     {/if}
   </div>
