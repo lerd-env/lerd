@@ -248,10 +248,15 @@ func newLANUnshareCmd() *cobra.Command {
 // notifyDaemon posts an action to the running lerd-ui daemon API. It is a
 // best-effort call; callers should handle errors gracefully.
 func notifyDaemon(domain, action string) error {
-	resp, err := http.Post(
-		fmt.Sprintf("http://127.0.0.1:7073/api/sites/%s/%s", domain, action),
-		"application/json", nil,
-	)
+	url := fmt.Sprintf("http://127.0.0.1:7073/api/sites/%s/%s", domain, action)
+	req, err := http.NewRequest(http.MethodPost, url, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	// Clear the daemon's cross-origin gate for this trusted local POST.
+	req.Header.Set("X-Lerd-CSRF", "1")
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}

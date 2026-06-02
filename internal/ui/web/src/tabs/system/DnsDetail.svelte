@@ -6,6 +6,8 @@
   import LogViewer from '$components/LogViewer.svelte';
   import { status, dnsState } from '$stores/status';
   import { m } from '../../paraglide/messages.js';
+
+  const logsEnabled = $derived($status.dns?.enabled !== false);
 </script>
 
 {#snippet pill()}
@@ -22,7 +24,7 @@
 
 <DetailPanel>
   <DetailHeader title={m.system_dns()} trailing={pill} />
-  <div class="px-3 sm:px-5 py-3 space-y-2 shrink-0">
+  <div class="px-3 py-3 space-y-2 shrink-0">
     <InfoRow label={m.system_tld()} value={'.' + $status.dns.tld} />
     {#if $status.dns?.enabled === false}
       <p class="text-xs text-gray-400">
@@ -39,7 +41,7 @@
       </p>
     {/if}
   </div>
-  {#if $status.dns?.enabled !== false}
+  {#if logsEnabled}
     <LogViewer
       path="/api/logs/lerd-dns"
       emptyLabel={m.system_dns_quietDefault({ option: '`log-queries`', path: '~/.local/share/lerd/dnsmasq/lerd.conf' })}

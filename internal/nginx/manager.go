@@ -2,16 +2,19 @@ package nginx
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
@@ -63,7 +66,7 @@ type VhostData struct {
 	CustomPort      int    // port the app listens on inside the custom container
 	BackendSSL      bool   // proxy to the container via HTTPS (app serves TLS on its own port)
 	// LerdSite / LerdBranch surface the parent site name and (for worktrees)
-	// the branch to PHP via fastcgi_param so the dump bridge can tag events
+	// the branch to PHP via fastcgi_param so the debug bridge can tag events
 	// with stable identifiers instead of guessing from DOCUMENT_ROOT.
 	LerdSite   string
 	LerdBranch string
@@ -610,6 +613,32 @@ func Reload() error {
 	return err
 }
 
+// Test runs `nginx -t` inside the lerd-nginx container and returns the
+// combined stdout+stderr output along with the exit error. nginx writes its
+// per-directive validation diagnostics to stderr, so the output is the
+// useful payload regardless of success or failure, and callers should
+// surface it as-is.
+//
+// The exec is bounded by a 10 second context so a paused/stuck container
+// cannot wedge the calling HTTP handler indefinitely; nginx -t against a
+// healthy container completes in well under a second. On timeout the
+// returned error wraps context.DeadlineExceeded and the buffer carries
+// whatever podman managed to emit before the deadline fired.
+func Test() (string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, podman.PodmanBin(), "exec", "lerd-nginx", "nginx", "-t")
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	err := cmd.Run()
+	out := strings.TrimSpace(buf.String())
+	if ctx.Err() == context.DeadlineExceeded {
+		return out, fmt.Errorf("nginx -t timed out after 10s: %w", ctx.Err())
+	}
+	return out, err
+}
+
 // VhostRepair describes a single vhost that was repaired during pre-flight.
 type VhostRepair struct {
 	Domain string
@@ -755,10 +784,10 @@ func EnsureDefaultVhost() error {
 
 	onDisk, readErr := os.ReadFile(path)
 	if errors.Is(readErr, os.ErrNotExist) {
-		if err := writeFileAtomic(path, canonical, 0644); err != nil {
+		if err := WriteFileAtomic(path, canonical, 0644); err != nil {
 			return err
 		}
-		return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
+		return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 	}
 	if readErr != nil {
 		return readErr
@@ -771,7 +800,7 @@ func EnsureDefaultVhost() error {
 		// pre-sentinel binary upgrade, or hand edit. The last two are
 		// indistinguishable, so preserve and tell the user how to opt back in.
 		if onDiskHash == canonicalHash {
-			return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
+			return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 		}
 		fmt.Printf("  [INFO] %s has no lerd sentinel; preserving on-disk content. If this is from a lerd upgrade and you haven't edited it, run: rm %s\n", path, path)
 		return nil
@@ -784,10 +813,10 @@ func EnsureDefaultVhost() error {
 		return nil
 	}
 	// On-disk matches what lerd last wrote, but the template moved on.
-	if err := writeFileAtomic(path, canonical, 0644); err != nil {
+	if err := WriteFileAtomic(path, canonical, 0644); err != nil {
 		return err
 	}
-	return writeFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
+	return WriteFileAtomic(sentinelPath, []byte(canonicalHash), 0644)
 }
 
 // readFileOrEmpty returns the file's contents as a string, or "" on any
@@ -801,12 +830,12 @@ func readFileOrEmpty(path string) string {
 	return string(b)
 }
 
-// writeFileAtomic writes data to path via a sibling .tmp file followed by
+// WriteFileAtomic writes data to path via a sibling .tmp file followed by
 // a rename, so a crash mid-write can never leave nginx pointing at a
 // half-written conf. Preserves the destination file's mode if it already
 // existed so an out-of-band chmod survives the rewrite; uses the caller's
 // mode only when creating from scratch. Temp file is removed on any error.
-func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 	effective := mode
 	if info, err := os.Stat(path); err == nil {
 		effective = info.Mode().Perm()
@@ -1114,6 +1143,9 @@ func EnsureNginxConfig() error {
 	if err := EnsureCustomD(); err != nil {
 		return err
 	}
+	if err := EnsureHttpD(); err != nil {
+		return err
+	}
 	if err := EnsureForwardedConf(); err != nil {
 		return err
 	}
@@ -1225,4 +1257,27 @@ func EnsureProfilerVhost() error {
 // after creation, so user snippets survive `lerd update`.
 func EnsureCustomD() error {
 	return os.MkdirAll(config.NginxCustomD(), 0755)
+}
+
+// EnsureHttpD creates the http.d directory for user http-level overrides so the
+// nginx.conf `include /etc/nginx/http.d/*.conf;` always resolves, even before
+// the user has added any override.
+func EnsureHttpD() error {
+	return os.MkdirAll(config.NginxHttpD(), 0755)
+}
+
+// RewriteNginxQuadlet rewrites lerd-nginx.container from the bundled template
+// and reports whether the on-disk quadlet actually changed. Callers use this
+// to bring installs that pre-date a template change (e.g. the new http.d
+// mount) up to current shape on demand, instead of waiting for the next
+// `lerd start` / `lerd update`. The http config editor calls it before
+// writing the user override so the freshly written file is actually mounted
+// into the running nginx container — without this heal, the file would be
+// orphaned on disk and silently ignored.
+func RewriteNginxQuadlet() (changed bool, err error) {
+	content, err := podman.GetQuadletTemplate("lerd-nginx.container")
+	if err != nil {
+		return false, fmt.Errorf("reading bundled nginx quadlet template: %w", err)
+	}
+	return podman.WriteQuadletDiff("lerd-nginx", content)
 }

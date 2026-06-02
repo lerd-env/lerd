@@ -16,7 +16,8 @@
   } from '$stores/sites';
   import { openDomainModal, openWorktreeAddModal, openWorktreeRemoveModal } from '$stores/modals';
   import { accessMode } from '$stores/accessMode';
-  import { status } from '$stores/status';
+  import { status, loadStatus } from '$stores/status';
+  import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
   import { apiBase } from '$lib/api';
   import ServiceBadgeRow from './ServiceBadgeRow.svelte';
   import DomainMorePill from './DomainMorePill.svelte';
@@ -30,16 +31,47 @@
     tabs?: Snippet;
     activeWorktreeBranch?: string;
     onWorktreeChange?: (branch: string) => void;
+    onOpenNginx?: () => void;
   }
-  let { site, tabs, activeWorktreeBranch = '', onWorktreeChange = () => {} }: Props = $props();
+  let {
+    site,
+    tabs,
+    activeWorktreeBranch = '',
+    onWorktreeChange = () => {},
+    onOpenNginx = () => {}
+  }: Props = $props();
 
   let pauseBusy = $state(false);
   let unlinkBusy = $state(false);
   let restartBusy = $state(false);
   let tlsBusy = $state(false);
   let lanBusy = $state(false);
+  let xdebugBusy = $state(false);
   let overflowOpen = $state(false);
   let overflowEl: HTMLDivElement | null = $state(null);
+
+  // Xdebug toggles the shared FPM image for this site's PHP version. Only PHP
+  // sites on the shared FPM runtime have it (not FrankenPHP or containers).
+  const showXdebug = $derived(
+    Boolean(site.uses_php) && !site.custom_container && site.runtime !== 'frankenphp'
+  );
+  const xdebugFpm = $derived(
+    site.php_version ? $status.php_fpms.find((f) => f.version === site.php_version) : undefined
+  );
+  const xdebugEnabled = $derived(Boolean(xdebugFpm?.xdebug_enabled));
+  const xdebugMode = $derived((xdebugFpm?.xdebug_mode || 'debug') as XdebugMode);
+
+  async function toggleXdebug() {
+    if (!site.php_version || xdebugBusy) return;
+    xdebugBusy = true;
+    try {
+      if (xdebugEnabled) await xdebugOff(site.php_version);
+      else await xdebugOn(site.php_version, xdebugMode);
+      await loadStatus();
+    } finally {
+      xdebugBusy = false;
+    }
+  }
 
   const activeDomain = $derived(activeWorktreeDomain(site, activeWorktreeBranch));
   const activeWorktree = $derived.by(() => {
@@ -156,7 +188,7 @@
 <div class="border-b border-gray-100 dark:border-lerd-border shrink-0 @container flex flex-col">
   {#if showWorktreeTabs}
     <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02]">
-      <div class="flex items-end gap-0.5 px-2 pt-2 overflow-x-auto flex-1 min-w-0">
+      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
         <div
@@ -168,7 +200,7 @@
             type="button"
             onclick={() => pickWorktree(e)}
             title={e.domain}
-            class="flex items-center gap-1.5 pl-3 {e.isMain ? 'pr-3' : 'pr-1.5'} py-1.5 text-xs min-w-0 {isActive
+            class="flex items-center gap-1.5 pl-3 pr-3 py-2.5 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
           >
@@ -240,34 +272,7 @@
     </div>
   {/if}
 
-  <div class="px-2 pt-2 pb-2 flex items-center gap-2">
-    {#if !site.paused}
-      <button
-        type="button"
-        onclick={restart}
-        disabled={restartBusy}
-        title={m.sites_restartContainer()}
-        aria-label={m.sites_restartContainer()}
-        class="w-8 h-8 shrink-0 flex items-center justify-center rounded-full text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
-      >
-        {#if restartBusy}
-          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        {:else}
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-        {/if}
-      </button>
-    {/if}
-
+  <div class="p-3 flex items-center gap-3">
     <div
       class="group flex-1 min-w-0 flex items-center gap-2 h-8 pl-3 pr-2 rounded-full border bg-gray-50 dark:bg-white/[0.03] transition-colors {site.paused
         ? 'border-gray-200 dark:border-lerd-border opacity-70'
@@ -400,59 +405,26 @@
           <span class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" title={m.common_stopped()} aria-label={m.common_stopped()}></span>
         {/if}
       </span>
+
+      {#if !site.paused}
+        <button
+          type="button"
+          onclick={onOpenNginx}
+          title={m.sites_nginx_editTitle()}
+          aria-label={m.sites_nginx_editTitle()}
+          class="shrink-0 -mr-1 p-1 rounded-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+            <line x1="3" y1="8" x2="21" y2="8" />
+            <line x1="3" y1="16" x2="21" y2="16" />
+            <line x1="9" y1="6" x2="9" y2="10" />
+            <line x1="15" y1="14" x2="15" y2="18" />
+          </svg>
+        </button>
+      {/if}
     </div>
 
-    <div class="flex items-center gap-0.5 shrink-0">
-      {#if !activeWorktreeBranch}
-      <button
-        type="button"
-        onclick={togglePause}
-        disabled={pauseBusy}
-        title={site.paused ? m.sites_resume() : m.sites_pause()}
-        aria-label={site.paused ? m.sites_resume() : m.sites_pause()}
-        class="w-8 h-8 flex items-center justify-center rounded-md transition-colors disabled:opacity-50 {site.paused
-          ? 'text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
-          : 'text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-900/20'}"
-      >
-        {#if pauseBusy}
-          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        {:else if site.paused}
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4.5v15l13-7.5z" /></svg>
-        {:else}
-          <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" /></svg>
-        {/if}
-      </button>
-
-
-      <button
-              type="button"
-              onclick={unlink}
-              disabled={unlinkBusy}
-              title={m.sites_unlink()}
-              aria-label={m.sites_unlink()}
-              class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md text-red-500 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
-      >
-        {#if unlinkBusy}
-          <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        {:else}
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    stroke-width="2"
-                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-            />
-          </svg>
-        {/if}
-      </button>
-      {/if}
-
+    <div class="flex items-center shrink-0">
       <button
         type="button"
         onclick={() => openSiteInBrowser(site, activeWorktreeBranch)}
@@ -494,6 +466,33 @@
         </button>
       {/if}
 
+      {#if showXdebug && !site.paused}
+        <button
+          type="button"
+          onclick={toggleXdebug}
+          disabled={xdebugBusy}
+          title={(xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()) + ' · ' + m.system_php_xdebugHint()}
+          aria-label={m.sites_badges_xdebug()}
+          aria-pressed={xdebugEnabled}
+          class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md transition-colors disabled:opacity-50 {xdebugEnabled
+            ? 'text-emerald-500 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
+            : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+        >
+          {#if xdebugBusy}
+            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          {:else}
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+              <path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" />
+              <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6zM12 20v-9" />
+              <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+            </svg>
+          {/if}
+        </button>
+      {/if}
+
       {#if $accessMode.loopback}
         <button
           type="button"
@@ -513,7 +512,7 @@
         </button>
       {/if}
 
-      <div class="relative @md:hidden" bind:this={overflowEl}>
+      <div class="relative" bind:this={overflowEl}>
         <button
           type="button"
           onclick={() => (overflowOpen = !overflowOpen)}
@@ -531,6 +530,49 @@
             role="menu"
             class="absolute right-0 top-full mt-1 min-w-[12rem] rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg shadow-lg z-30 py-1"
           >
+            {#if !site.paused && (site.uses_php || site.custom_container)}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  restart();
+                }}
+                disabled={restartBusy}
+                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                {restartBusy ? '...' : m.sites_restartContainer()}
+              </button>
+            {/if}
+            {#if !activeWorktreeBranch}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  togglePause();
+                }}
+                disabled={pauseBusy}
+                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {site.paused
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-amber-600 dark:text-amber-400'}"
+              >
+                {#if site.paused}
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M6 4.5v15l13-7.5z" /></svg>
+                {:else}
+                  <svg class="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 24 24"><path d="M6.5 4.5h4v15h-4zM13.5 4.5h4v15h-4z" /></svg>
+                {/if}
+                {pauseBusy ? '...' : site.paused ? m.sites_resume() : m.sites_pause()}
+              </button>
+            {/if}
             {#if $accessMode.loopback}
               <button
                 type="button"
@@ -539,7 +581,7 @@
                   overflowOpen = false;
                   openTerminal(site.domain, activeWorktreeBranch);
                 }}
-                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -560,7 +602,7 @@
                   overflowOpen = false;
                   openDomainModal(site);
                 }}
-                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path
@@ -582,7 +624,7 @@
                   flipLAN();
                 }}
                 disabled={lanBusy}
-                class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
+                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {lanOn ? 'text-teal-600 dark:text-teal-400' : 'text-gray-700 dark:text-gray-200'}"
               >
                 <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
                   <path d="M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01" />
@@ -590,7 +632,9 @@
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
               </button>
             {/if}
-            <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
+            {#if !site.paused || !activeWorktreeBranch}
+              <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
+            {/if}
             <button
               type="button"
               role="menuitem"
@@ -623,12 +667,12 @@
     </div>
   {/if}
 
-  <div class="px-2 flex flex-col @xl:flex-row justify-between gap-2">
-    <div class="pb-2">
+  <div class="px-3 flex flex-col @xl:flex-row justify-between gap-2">
+    <div class="pb-3">
       <ServiceBadgeRow {site} />
     </div>
     {#if tabs}
-      <div class="flex items-end gap-5 -mb-px pt-2">{@render tabs()}</div>
+      <div class="flex items-end gap-4 -mb-px pt-2">{@render tabs()}</div>
     {/if}
   </div>
 </div>

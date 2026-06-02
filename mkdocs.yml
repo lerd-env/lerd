@@ -96,6 +96,7 @@ nav:
       - Framework Commands: features/commands.md
       - Tinker tab: features/tinker.md
       - Dump viewer: features/dumps.md
+      - Query viewer: features/queries.md
       - System Tray: features/system-tray.md
       - HTTPS / TLS: features/https.md
       - DNS: features/dns.md

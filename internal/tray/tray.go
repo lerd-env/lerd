@@ -292,7 +292,7 @@ func fetchSnapshot() *Snapshot {
 
 	snap.AutostartEnabled = lerdSystemd.IsAutostartEnabled()
 
-	// LAN, dump bridge, and notifications all read straight from config —
+	// LAN, debug bridge, and notifications all read straight from config —
 	// the tray cares about persisted intent and avoids a new API surface
 	// for each toggle.
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {

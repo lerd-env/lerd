@@ -31,7 +31,7 @@ Stop Lerd            ← toggles between Start / Stop Lerd
 ─────────────────
 Autostart at login: ✔ On   ← click to toggle (enables/disables every lerd unit)
 Expose to LAN: Off         ← click to toggle (Linux only)
-Dump bridge: Off           ← click to toggle `lerd dump on/off`
+Debug bridge: Off           ← click to toggle `lerd dump on/off`
 Notifications: ✔ On        ← click to toggle `lerd notify on/off`
 ⬆ Update to v0.8.3         ← shown when an update is cached; click to open terminal
 Stop Lerd & Quit     ← runs lerd stop then exits the tray
@@ -39,7 +39,7 @@ Stop Lerd & Quit     ← runs lerd stop then exits the tray
 
 The menu refreshes every 5 seconds. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Stop Lerd & Quit" stops the entire environment before closing.
 
-The **Dump bridge** item shells out to `lerd dump on` / `lerd dump off` — see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off` — see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
+The **Debug bridge** item shells out to `lerd dump on` / `lerd dump off` — see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off` — see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
 
 The **Services** section shows only core services (MySQL, Redis, PostgreSQL, etc.). Per-site workers (queue, schedule, Stripe, Reverb) are managed from the web UI or via their respective CLI commands and are not listed in the tray.
 

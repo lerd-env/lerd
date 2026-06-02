@@ -74,6 +74,21 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		fmt.Fprintf(&b, "Volume=%s:%s:%s\n", hostPath, f.Target, flags)
 	}
 
+	// User tuning override, mounted read-only after the bundled preset config so
+	// the user's values win. Materialised by MaterializeServiceTuning, which runs
+	// before generation, so the host path is guaranteed present for tunable
+	// families.
+	if target, ok := config.ServiceTuningMount(svc); ok {
+		fmt.Fprintf(&b, "Volume=%s:%s:ro,z\n", config.ServiceTuningFile(svc.Name), target)
+	}
+
+	// Lerd-managed tuning helper (e.g. postgres config_file wrapper). Mounted
+	// read-only; materialised by MaterializeServiceTuning before generation so
+	// the host path is guaranteed present.
+	if auxTarget, _, ok := config.ServiceTuningAux(svc); ok {
+		fmt.Fprintf(&b, "Volume=%s:%s:ro,z\n", config.ServiceTuningAuxFile(svc.Name), auxTarget)
+	}
+
 	envKeys := make([]string, 0, len(svc.Environment))
 	for k := range svc.Environment {
 		envKeys = append(envKeys, k)
@@ -87,8 +102,17 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		fmt.Fprintf(&b, "Environment=\"%s=%s\"\n", k, escaped)
 	}
 
-	if svc.Exec != "" {
-		fmt.Fprintf(&b, "Exec=%s\n", svc.Exec)
+	// Prefer the service's own Exec; otherwise, if its family needs a command to
+	// read the tuning override (redis/postgres), use that. The mount itself was
+	// emitted above; mysql/mariadb auto-include their conf dir and need no command.
+	exec := svc.Exec
+	if exec == "" {
+		if cmd, ok := config.ServiceTuningCommand(svc); ok {
+			exec = cmd
+		}
+	}
+	if exec != "" {
+		fmt.Fprintf(&b, "Exec=%s\n", exec)
 	}
 
 	b.WriteString("\n[Service]\n")

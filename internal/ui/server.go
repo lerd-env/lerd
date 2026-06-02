@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -16,7 +17,10 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"slices"
+	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	_ "embed"
@@ -25,6 +29,7 @@ import (
 
 	"github.com/geodro/lerd/internal/applog"
 	"github.com/geodro/lerd/internal/certs"
+	"github.com/geodro/lerd/internal/cfgedit"
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
@@ -148,7 +153,7 @@ func Start(currentVersion string) error {
 	// the freshly rebuilt bytes to every connected browser.
 	go runSnapshotInvalidator()
 
-	// Loopback receiver for the PHP dump bridge. Bound unconditionally
+	// Loopback receiver for the PHP debug bridge. Bound unconditionally
 	// because the listener is essentially free and lets the dashboard
 	// pick up dumps the moment `lerd dump on` runs without a UI restart.
 	startDumpsServer()
@@ -197,7 +202,10 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
+	mux.HandleFunc("/api/nginx/", withCORS(handleNginxRoutes))
 	mux.HandleFunc("/api/php-versions", withCORS(handlePHPVersions))
+	mux.HandleFunc("/api/php-installable", withCORS(handlePHPInstallable))
+	mux.HandleFunc("/api/php-versions/install", withCORS(publishAfter(handlePHPInstall, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/php-versions/", withCORS(publishAfter(handlePHPVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node-versions", withCORS(handleNodeVersions))
 	mux.HandleFunc("/api/node-versions/install", withCORS(publishAfter(handleInstallNodeVersion, eventbus.KindStatus)))
@@ -209,12 +217,16 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/sites/", withCORS(publishAfter(handleSiteAction, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
+	mux.HandleFunc("/api/queries/analyze", withCORS(handleQueriesAnalyze))
 	mux.HandleFunc("/api/dumps/stream", withCORS(handleDumpsStream))
 	mux.HandleFunc("/api/dumps/status", withCORS(handleDumpsStatus))
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))
 	mux.HandleFunc("/api/dumps/toggle", withCORS(publishAfter(handleDumpsToggle, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/passthrough", withCORS(publishAfter(handleDumpsPassthrough, eventbus.KindDumpsStatus)))
 	mux.HandleFunc("/api/dumps/notify-changed", withCORS(handleDumpsNotifyChanged))
+	mux.HandleFunc("/api/devtools/status", withCORS(handleDevtoolsStatus))
+	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
+	mux.HandleFunc("/api/open-editor", withCORS(handleOpenEditor))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
@@ -349,8 +361,8 @@ func withCORS(h http.HandlerFunc) http.HandlerFunc {
 		origin := r.Header.Get("Origin")
 		if allowedCORSOrigins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, "+csrfHeader)
 		}
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -656,6 +668,7 @@ type SiteResponse struct {
 	ConflictingDomains []ConflictingDomain `json:"conflicting_domains,omitempty"`
 	Path               string              `json:"path"`
 	PHPVersion         string              `json:"php_version"`
+	UsesPHP            bool                `json:"uses_php"`
 	NodeVersion        string              `json:"node_version"`
 	TLS                bool                `json:"tls"`
 	Framework          string              `json:"framework"`
@@ -776,6 +789,7 @@ func buildSites() []SiteResponse {
 			ConflictingDomains: conflicting,
 			Path:               e.Path,
 			PHPVersion:         e.PHPVersion,
+			UsesPHP:            e.UsesPHP,
 			NodeVersion:        e.NodeVersion,
 			TLS:                e.Secured,
 			Framework:          e.FrameworkName,
@@ -819,28 +833,31 @@ func buildSites() []SiteResponse {
 
 // ServiceResponse is the response for GET /api/services.
 type ServiceResponse struct {
-	Name               string            `json:"name"`
-	Status             string            `json:"status"`
-	Version            string            `json:"version,omitempty"`
-	EnvVars            map[string]string `json:"env_vars"`
-	Dashboard          string            `json:"dashboard,omitempty"`
-	DashboardExternal  bool              `json:"dashboard_external,omitempty"`
-	ConnectionURL      string            `json:"connection_url,omitempty"`
-	Custom             bool              `json:"custom,omitempty"`
-	IsDefault          bool              `json:"is_default,omitempty"`
-	SiteCount          int               `json:"site_count"`
-	SiteDomains        []string          `json:"site_domains,omitempty"`
-	Pinned             bool              `json:"pinned"`
-	Paused             bool              `json:"paused,omitempty"`
-	DependsOn          []string          `json:"depends_on,omitempty"`
-	QueueSite          string            `json:"queue_site,omitempty"`
-	StripeListenerSite string            `json:"stripe_listener_site,omitempty"`
-	ScheduleWorkerSite string            `json:"schedule_worker_site,omitempty"`
-	ReverbSite         string            `json:"reverb_site,omitempty"`
-	HorizonSite        string            `json:"horizon_site,omitempty"`
-	WorkerSite         string            `json:"worker_site,omitempty"`
-	WorkerName         string            `json:"worker_name,omitempty"`
-	WorkerLabel        string            `json:"worker_label,omitempty"`
+	Name              string            `json:"name"`
+	Status            string            `json:"status"`
+	Version           string            `json:"version,omitempty"`
+	EnvVars           map[string]string `json:"env_vars"`
+	Dashboard         string            `json:"dashboard,omitempty"`
+	DashboardExternal bool              `json:"dashboard_external,omitempty"`
+	ConnectionURL     string            `json:"connection_url,omitempty"`
+	Custom            bool              `json:"custom,omitempty"`
+	IsDefault         bool              `json:"is_default,omitempty"`
+	// Tunable is true when the service exposes a user-editable runtime config
+	// override (see config.ServiceTuningMount), so the UI can show a Tuning tab.
+	Tunable            bool     `json:"tunable,omitempty"`
+	SiteCount          int      `json:"site_count"`
+	SiteDomains        []string `json:"site_domains,omitempty"`
+	Pinned             bool     `json:"pinned"`
+	Paused             bool     `json:"paused,omitempty"`
+	DependsOn          []string `json:"depends_on,omitempty"`
+	QueueSite          string   `json:"queue_site,omitempty"`
+	StripeListenerSite string   `json:"stripe_listener_site,omitempty"`
+	ScheduleWorkerSite string   `json:"schedule_worker_site,omitempty"`
+	ReverbSite         string   `json:"reverb_site,omitempty"`
+	HorizonSite        string   `json:"horizon_site,omitempty"`
+	WorkerSite         string   `json:"worker_site,omitempty"`
+	WorkerName         string   `json:"worker_name,omitempty"`
+	WorkerLabel        string   `json:"worker_label,omitempty"`
 	// Set when this worker entry is for a per-worktree unit
 	// (lerd-<wname>-<site>-<wt>); empty for parent-site workers.
 	WorkerWorktree       string `json:"worker_worktree,omitempty"`
@@ -917,6 +934,21 @@ func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 		Pinned:        config.ServiceIsPinned(name),
 		Paused:        config.ServiceIsPaused(name),
 		IsDefault:     config.IsDefaultPreset(name),
+	}
+	// Only advertise Tunable when the service is actually installed.
+	// ResolveServiceForTuning resolves built-in default presets even when
+	// the user has explicitly `lerd service remove`d them, so without the
+	// ServiceInstalled gate the UI would render a Tuning tab on a removed
+	// service — and clicking through would silently reinstall via the
+	// materialise + quadlet regen + restart path (closed at the handler
+	// level by the same guard, but the tab shouldn't appear in the first
+	// place).
+	if serviceops.ServiceInstalled(name) {
+		if svc, err := config.ResolveServiceForTuning(name); err == nil {
+			if _, ok := config.ServiceTuningMount(svc); ok {
+				resp.Tunable = true
+			}
+		}
 	}
 	// Default-preset services advertise update availability so the dashboard
 	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
@@ -1006,6 +1038,7 @@ func buildServicesList() []ServiceResponse {
 		if status != "active" {
 			conflicts = portConflictsFor(unit, ssOutput)
 		}
+		_, tunable := config.ServiceTuningMount(svc)
 		services = append(services, ServiceResponse{
 			Name:              svc.Name,
 			Status:            status,
@@ -1015,6 +1048,7 @@ func buildServicesList() []ServiceResponse {
 			DashboardExternal: svc.DashboardExternal,
 			ConnectionURL:     svc.ConnectionURL,
 			Custom:            true,
+			Tunable:           tunable,
 			SiteCount:         countSitesUsingService(svc.Name),
 			SiteDomains:       sitesUsingService(svc.Name),
 			Pinned:            config.ServiceIsPinned(svc.Name),
@@ -1201,12 +1235,12 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 		installed := false
 		var installedTags []string
 		if len(p.Versions) == 0 {
-			if _, err := config.LoadCustomService(p.Name); err == nil {
+			if serviceops.ServiceInstalled(p.Name) {
 				installed = true
 			}
 		} else {
 			for _, v := range p.Versions {
-				if _, err := config.LoadCustomService(config.PresetVersionServiceName(p.Name, v)); err == nil {
+				if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 					installed = true
 					installedTags = append(installedTags, v.Tag)
 				}
@@ -1313,9 +1347,336 @@ type ServiceActionResponse struct {
 	Logs  string `json:"logs,omitempty"`
 }
 
+// ServiceTuningReadResponse is the JSON returned by GET /api/services/{name}/config.
+// Exists distinguishes a real saved override from the seeded template the
+// handler hands back when the file is missing — the frontend uses this
+// to hide the "back up the current file first" checkbox on first save
+// since there's nothing on disk yet to protect.
+type ServiceTuningReadResponse struct {
+	Supported bool   `json:"supported"`
+	Target    string `json:"target"`
+	Content   string `json:"content"`
+	Exists    bool   `json:"exists"`
+}
+
+// ServiceTuningWriteRequest is the JSON body for POST /api/services/{name}/config.
+type ServiceTuningWriteRequest struct {
+	Content string `json:"content"`
+	Backup  bool   `json:"backup"`
+}
+
+// ServiceTuningWriteResponse mirrors SiteNginxWriteResponse so the
+// frontend can share refresh logic between the two editors. Content +
+// Exists round-trip the canonical post-write state (whether or not
+// the restart succeeded) so the client can refresh its baseline even
+// on the auto-rollback path.
+type ServiceTuningWriteResponse struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+	BackupName string `json:"backup_name,omitempty"`
+	Content    string `json:"content,omitempty"`
+	Exists     bool   `json:"exists,omitempty"`
+	// RolledBack is true when the restart failed and the handler
+	// successfully restored the previous bytes; the editor uses this
+	// to refresh `original` back to the rolled-back state instead of
+	// staying perpetually-dirty against bytes that never landed.
+	RolledBack bool `json:"rolled_back,omitempty"`
+}
+
+// ServiceTuningRestoreRequest carries the exact backup name the frontend
+// previewed in the diff modal. Empty means "newest" for tooling that has
+// no preview UI.
+type ServiceTuningRestoreRequest struct {
+	Name string `json:"name"`
+}
+
+// ServiceTuningRestoreResponse is the JSON response for POST /api/services/{name}/config/restore.
+// RolledBack is true when the restored bytes themselves crashed the
+// service and the handler auto-reverted to the pre-restore content;
+// the modal uses this to distinguish "restore succeeded" from
+// "restore reverted, service is back on its prior config".
+type ServiceTuningRestoreResponse struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+	Restored   string `json:"restored,omitempty"`
+	Content    string `json:"content,omitempty"`
+	RolledBack bool   `json:"rolled_back,omitempty"`
+}
+
+// ServiceTuningResetResponse is the JSON returned by POST /api/services/{name}/config/reset.
+// AutoBackupName surfaces the implicit recovery snapshot Reset always
+// stages of the pre-reset content (separate from the user-opted-in
+// backup flag on Save); the modal can show "your previous config is
+// kept as <name>, restore it any time" so users don't fear the action.
+type ServiceTuningResetResponse struct {
+	OK             bool   `json:"ok"`
+	Error          string `json:"error,omitempty"`
+	RolledBack     bool   `json:"rolled_back,omitempty"`
+	AutoBackupName string `json:"auto_backup_name,omitempty"`
+	Content        string `json:"content,omitempty"`
+	Exists         bool   `json:"exists,omitempty"`
+}
+
+// handleServiceTuning reads (GET) or saves (POST) a service's user
+// tuning override. The save path optionally stages a timestamped
+// backup, writes the new bytes, regenerates the quadlet so the mount
+// is present, restarts the unit, and waits for the service to come
+// ready — if it doesn't, the previous bytes are restored and the
+// service is restarted again so the user only loses their unsaved
+// edits, not the running service.
+func handleServiceTuning(w http.ResponseWriter, r *http.Request, name string) {
+	if !serviceops.ServiceInstalled(name) {
+		http.Error(w, "service is not installed", http.StatusNotFound)
+		return
+	}
+	svc, err := config.ResolveServiceForTuning(name)
+	if err != nil {
+		http.Error(w, "service not installed", http.StatusNotFound)
+		return
+	}
+	target, ok := config.ServiceTuningMount(svc)
+	if !ok {
+		http.Error(w, "service does not support tuning", http.StatusBadRequest)
+		return
+	}
+	if err := config.MaterializeServiceTuning(svc); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	path := config.ServiceTuningFile(name)
+	if r.Method == http.MethodGet {
+		body, err := os.ReadFile(path)
+		exists := err == nil
+		if err != nil && !os.IsNotExist(err) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, ServiceTuningReadResponse{Supported: true, Target: target, Content: string(body), Exists: exists})
+		return
+	}
+	var req ServiceTuningWriteRequest
+	// Cap the POST body so a multi-gigabyte payload can't be streamed
+	// straight to disk via os.WriteFile. 64 KiB matches the tinker /
+	// php.ini / nginx endpoints in this file.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		writeJSON(w, ServiceTuningWriteResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	saveRes, err := serviceops.SaveTuningOverride(name, req.Content, req.Backup)
+	if err != nil {
+		// Auto-rollback path: the file is back to its pre-save bytes
+		// and the service was restarted against those bytes. We still
+		// return ok:false so the modal stays open with the error, but
+		// the response carries the rolled-back content/exists so the
+		// editor can update its baseline.
+		switch {
+		case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
+			http.Error(w, err.Error(), http.StatusNotFound)
+			return
+		case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		writeJSON(w, ServiceTuningWriteResponse{
+			OK:         false,
+			Error:      err.Error(),
+			BackupName: saveRes.BackupName,
+			Content:    saveRes.ContentOnDisk,
+			Exists:     saveRes.Exists,
+			RolledBack: saveRes.RolledBack,
+		})
+		return
+	}
+	writeJSON(w, ServiceTuningWriteResponse{
+		OK:         true,
+		BackupName: saveRes.BackupName,
+		Content:    saveRes.ContentOnDisk,
+		Exists:     saveRes.Exists,
+	})
+}
+
+func handleServiceTuningBackups(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := serviceops.ListTuningBackups(name)
+	if err != nil {
+		http.Error(w, "listing backups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []serviceops.TuningBackup{}
+	}
+	writeJSON(w, list)
+}
+
+func handleServiceTuningBackupContent(w http.ResponseWriter, r *http.Request, name, backupName string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := serviceops.ReadTuningBackupContent(name, backupName)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "reading backup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func handleServiceTuningRestore(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if !serviceops.ServiceInstalled(name) {
+		http.NotFound(w, r)
+		return
+	}
+	var req ServiceTuningRestoreRequest
+	// Always attempt decode regardless of ContentLength. Chunked
+	// Transfer-Encoding sets ContentLength to -1, so the previous
+	// `> 0` guard silently dropped the backup name and served the
+	// newest backup instead of the one the user previewed. An empty
+	// body still parses as the zero value via io.EOF, which we
+	// accept as "no name, restore newest".
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10))
+	if err := dec.Decode(&req); err != nil && err != io.EOF {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	list, err := serviceops.ListTuningBackups(name)
+	if err != nil {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	if len(list) == 0 {
+		writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "no backup available"})
+		return
+	}
+	backupName := req.Name
+	if backupName == "" {
+		backupName = list[0].Name
+	} else {
+		found := false
+		for _, b := range list {
+			if b.Name == backupName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			writeJSON(w, ServiceTuningRestoreResponse{OK: false, Error: "backup not found: " + backupName})
+			return
+		}
+	}
+	res, err := serviceops.RestoreTuningFromBackup(name, backupName)
+	if err != nil {
+		// On failure RestoreTuningFromBackup may have auto-rolled
+		// back to the pre-restore bytes; the response surfaces both
+		// the canonical on-disk content (so the editor refreshes its
+		// baseline) and the RolledBack flag so the modal can render
+		// a recovery-aware message.
+		writeJSON(w, ServiceTuningRestoreResponse{
+			OK:         false,
+			Error:      err.Error(),
+			Restored:   backupName,
+			Content:    res.ContentOnDisk,
+			RolledBack: res.RolledBack,
+		})
+		return
+	}
+	writeJSON(w, ServiceTuningRestoreResponse{
+		OK:       true,
+		Restored: backupName,
+		Content:  res.Content,
+	})
+}
+
+func handleServiceTuningReset(w http.ResponseWriter, r *http.Request, name string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	res, err := serviceops.ResetTuningOverride(name)
+	if err != nil {
+		switch {
+		case errors.Is(err, serviceops.ErrTuningServiceNotInstalled):
+			http.Error(w, err.Error(), http.StatusNotFound)
+		case errors.Is(err, serviceops.ErrTuningFamilyUnsupported):
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		default:
+			writeJSON(w, ServiceTuningResetResponse{
+				OK:             false,
+				Error:          err.Error(),
+				RolledBack:     res.RolledBack,
+				AutoBackupName: res.AutoBackupName,
+				Content:        res.ContentOnDisk,
+				Exists:         res.Exists,
+			})
+		}
+		return
+	}
+	writeJSON(w, ServiceTuningResetResponse{
+		OK:             true,
+		AutoBackupName: res.AutoBackupName,
+		Content:        res.ContentOnDisk,
+		Exists:         res.Exists,
+	})
+}
+
 func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	// path: /api/services/{name}/start or /api/services/{name}/stop
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/services/"), "/")
+	if len(parts) < 2 {
+		http.NotFound(w, r)
+		return
+	}
+
+	// /config subroutes (backups, restore, reset) sit alongside the
+	// existing GET/POST on /config. Domain validation inside each
+	// handler keeps the {name} segment from leaking path traversal.
+	if len(parts) >= 3 && parts[1] == "config" {
+		name := parts[0]
+		switch parts[2] {
+		case "backups":
+			if len(parts) == 3 {
+				handleServiceTuningBackups(w, r, name)
+				return
+			}
+			if len(parts) == 4 {
+				handleServiceTuningBackupContent(w, r, name, parts[3])
+				return
+			}
+		case "restore":
+			if len(parts) == 3 {
+				handleServiceTuningRestore(w, r, name)
+				return
+			}
+		case "reset":
+			if len(parts) == 3 {
+				handleServiceTuningReset(w, r, name)
+				return
+			}
+		}
+		http.NotFound(w, r)
+		return
+	}
+
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
@@ -1422,6 +1783,13 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 			writeLine(map[string]any{"phase": "error", "error": err.Error()})
 		}
 		dispatchNotification(notificationForServiceOp("update", name, start, err))
+		return
+	}
+
+	// Tuning override: GET reads the user-editable config file (seeding it on
+	// first access), POST saves it and restarts the service so it re-reads.
+	if action == "config" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		handleServiceTuning(w, r, name)
 		return
 	}
 
@@ -1866,23 +2234,37 @@ func handleSiteFavicon(w http.ResponseWriter, r *http.Request) {
 	http.ServeFile(w, r, path)
 }
 
-// handleSiteEnv serves the raw contents of the site's (or worktree's) .env
-// file as text/plain. A missing file is reported as 200 with an empty body so
-// the UI can render an empty-state placeholder without a noisy 404.
+// handleSiteEnv dispatches the per-site .env endpoint. GET returns the raw
+// contents (or empty body for missing files), PUT replaces them with an
+// optional pre-overwrite backup. POST and other methods are rejected so
+// future shared dispatch does not accidentally widen the contract.
 //
 //	GET /api/sites/{domain}/env[?branch=<sanitized>]
+//	PUT /api/sites/{domain}/env[?branch=<sanitized>]
 func handleSiteEnv(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
+		handleSiteEnvRead(w, r)
+	case http.MethodPut:
+		handleSiteEnvWrite(w, r)
+	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
 	}
+}
 
+func handleSiteEnvRead(w http.ResponseWriter, r *http.Request) {
 	domain := strings.TrimPrefix(r.URL.Path, "/api/sites/")
 	domain = strings.TrimSuffix(domain, "/env")
 
 	site, err := config.FindSiteByDomain(domain)
 	if err != nil {
 		http.NotFound(w, r)
+		return
+	}
+
+	envFile, ok := envFileFromQuery(r)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
 		return
 	}
 
@@ -1897,15 +2279,262 @@ func handleSiteEnv(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 
-	data, err := os.ReadFile(filepath.Join(dir, ".env"))
+	data, err := os.ReadFile(filepath.Join(dir, envFile))
 	if err != nil {
 		if os.IsNotExist(err) {
 			return
 		}
-		http.Error(w, "reading .env: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "reading "+envFile+": "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 	_, _ = w.Write(data)
+}
+
+// SiteEnvWriteRequest is the JSON body for PUT /api/sites/{domain}/env.
+type SiteEnvWriteRequest struct {
+	Content string `json:"content"`
+	Backup  bool   `json:"backup"`
+}
+
+// SiteEnvWriteResponse is the JSON response for PUT /api/sites/{domain}/env.
+type SiteEnvWriteResponse struct {
+	OK         bool   `json:"ok"`
+	Error      string `json:"error,omitempty"`
+	BackupPath string `json:"backup_path,omitempty"`
+}
+
+func handleSiteEnvWrite(w http.ResponseWriter, r *http.Request) {
+	domain := strings.TrimPrefix(r.URL.Path, "/api/sites/")
+	domain = strings.TrimSuffix(domain, "/env")
+
+	site, err := config.FindSiteByDomain(domain)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	envFile, ok := envFileFromQuery(r)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return
+	}
+
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	var body SiteEnvWriteRequest
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 256<<10)).Decode(&body); err != nil {
+		writeJSON(w, SiteEnvWriteResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+
+	res, err := envCfgFile(dir, envFile).Save(body.Content, cfgedit.SaveOpts{Backup: body.Backup})
+	if err != nil {
+		writeJSON(w, SiteEnvWriteResponse{OK: false, Error: err.Error()})
+		return
+	}
+	if !res.OK {
+		writeJSON(w, SiteEnvWriteResponse{OK: false, Error: res.Error})
+		return
+	}
+	writeJSON(w, SiteEnvWriteResponse{OK: true, BackupPath: res.BackupName})
+}
+
+// envCfgFile builds the cfgedit.File for one of a site's env files. Env files
+// are not behind any include glob, so backups and write-staging share the
+// project dir; backups are named "{envFile}.bkp.{ts}".
+func envCfgFile(dir, envFile string) cfgedit.File {
+	return cfgedit.File{
+		Path:    filepath.Join(dir, envFile),
+		BkpDir:  dir,
+		BkpName: envFile,
+	}
+}
+
+// envFileRe matches the names of env files the UI is willing to expose for
+// editing. The user-facing dropdown also runs filenames through this regex.
+// Backup files like ".env.20260528-103045" never match because the suffix
+// must start with a letter, and lerd's own ".env.before_lerd" is explicitly
+// excluded so it stays out of the editor.
+var envFileRe = regexp.MustCompile(`^\.env(\.[A-Za-z][A-Za-z0-9_-]*)?$`)
+
+var envExcludedFiles = map[string]bool{
+	".env.before_lerd": true,
+}
+
+// envFileFromQuery extracts the ?file= parameter and validates it against
+// envFileRe and envExcludedFiles. An empty ?file= defaults to ".env" so
+// callers that pre-date the multi-file UI keep working.
+func envFileFromQuery(r *http.Request) (string, bool) {
+	f := r.URL.Query().Get("file")
+	if f == "" {
+		return ".env", true
+	}
+	if !envFileRe.MatchString(f) {
+		return "", false
+	}
+	if envExcludedFiles[f] {
+		return "", false
+	}
+	return f, true
+}
+
+// listEnvFiles enumerates the project's editable env files in dir.
+// .env always appears first; the rest are alphabetical.
+func listEnvFiles(dir string) ([]string, error) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	out := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if envExcludedFiles[name] {
+			continue
+		}
+		if !envFileRe.MatchString(name) {
+			continue
+		}
+		out = append(out, name)
+	}
+	sort.Strings(out)
+	for i, n := range out {
+		if n == ".env" && i != 0 {
+			out[0], out[i] = out[i], out[0]
+			break
+		}
+	}
+	return out, nil
+}
+
+// SiteEnvBackup is one row in the GET /api/sites/{domain}/env/backups list.
+// It aliases cfgedit.Backup so the env editor shares the edit service's shape.
+type SiteEnvBackup = cfgedit.Backup
+
+func handleSiteEnvBackupContent(w http.ResponseWriter, r *http.Request, site *config.Site, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	envFile, ok := envFileFromQuery(r)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return
+	}
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := envCfgFile(dir, envFile).ReadBackup(name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "reading backup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func handleSiteEnvBackups(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	envFile, ok := envFileFromQuery(r)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return
+	}
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := envCfgFile(dir, envFile).ListBackups()
+	if err != nil {
+		http.Error(w, "listing backups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []cfgedit.Backup{}
+	}
+	writeJSON(w, list)
+}
+
+func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	files, err := listEnvFiles(dir)
+	if err != nil {
+		http.Error(w, "listing env files: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if files == nil {
+		files = []string{}
+	}
+	writeJSON(w, files)
+}
+
+// SiteEnvRestoreResponse is the JSON body returned by POST /env/restore.
+type SiteEnvRestoreResponse struct {
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Restored string `json:"restored,omitempty"`
+	Content  string `json:"content,omitempty"`
+}
+
+func handleSiteEnvRestore(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	envFile, ok := envFileFromQuery(r)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return
+	}
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+	res, err := envCfgFile(dir, envFile).Restore("", nil)
+	if err != nil {
+		writeJSON(w, SiteEnvRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, SiteEnvRestoreResponse(res))
 }
 
 // handleLANQR serves a QR code PNG for the LAN share URL of a site or one
@@ -1946,6 +2575,222 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
 }
 
+// SiteNginxBackup is the backup metadata the frontend's restore dropdown
+// consumes. It aliases cfgedit.Backup so the site, global-nginx, and php.ini
+// editors all surface the same shape from the shared edit service.
+type SiteNginxBackup = cfgedit.Backup
+
+// SiteNginxReadResponse is the JSON returned by GET /api/sites/{domain}/nginx.
+// Exists distinguishes a real saved override from the seeded template the
+// handler hands back when the file is missing; the frontend uses this to
+// hide the "back up the current file first" checkbox on first save since
+// there's nothing on disk yet to protect.
+type SiteNginxReadResponse struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+	Exists  bool   `json:"exists"`
+}
+
+// SiteNginxWriteRequest is the JSON body for POST /api/sites/{domain}/nginx.
+type SiteNginxWriteRequest struct {
+	Content string `json:"content"`
+	Backup  bool   `json:"backup"`
+}
+
+// SiteNginxWriteResponse is the JSON response for POST /api/sites/{domain}/nginx.
+// ValidationOutput carries the captured `nginx -t` stdout+stderr when the
+// pre-flight validation step ran (whether it passed or failed) so the modal
+// can show the user exactly which directive / line nginx complained about.
+// Content/Exists round-trip the canonical post-write state so the client
+// can refresh its `original` baseline even on the reload-failure path
+// (file already landed on disk, just the runtime reload step failed).
+type SiteNginxWriteResponse struct {
+	OK               bool   `json:"ok"`
+	Error            string `json:"error,omitempty"`
+	BackupName       string `json:"backup_name,omitempty"`
+	ValidationOutput string `json:"validation_output,omitempty"`
+	Content          string `json:"content,omitempty"`
+	Exists           bool   `json:"exists,omitempty"`
+}
+
+// SiteNginxRestoreRequest is the JSON body for POST /api/sites/{d}/nginx/restore.
+// The frontend always loads a specific backup and previews its diff before
+// the user accepts, so we require the caller to name the backup it
+// rendered; otherwise a concurrent save creating a NEWER backup between
+// modal-open and accept would silently swap the live file with bytes the
+// user never saw and consume the wrong file. Empty name means "newest"
+// for tooling that doesn't have a preview UI.
+type SiteNginxRestoreRequest struct {
+	Name string `json:"name"`
+}
+
+// SiteNginxRestoreResponse is the JSON response for POST /api/sites/{domain}/nginx/restore.
+type SiteNginxRestoreResponse struct {
+	OK       bool   `json:"ok"`
+	Error    string `json:"error,omitempty"`
+	Restored string `json:"restored,omitempty"`
+	Content  string `json:"content,omitempty"`
+}
+
+// handleSiteNginx reads (GET) or saves (POST) a site's custom.d nginx override.
+// The override is bind-mounted into lerd-nginx and included at the end of the
+// site's server block; saving reloads nginx so the change takes effect. The
+// domain is validated against the registered sites, which also blocks any path
+// traversal via the {domain} segment.
+func handleSiteNginx(w http.ResponseWriter, r *http.Request, domain string) {
+	if _, err := siteops.SiteForDomain(domain); err != nil {
+		http.Error(w, "site not found", http.StatusNotFound)
+		return
+	}
+	if r.Method == http.MethodGet {
+		got, err := siteops.ReadCustomNginx(domain)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		writeJSON(w, SiteNginxReadResponse{Path: got.Path, Content: got.Body, Exists: got.Exists})
+		return
+	}
+	var req SiteNginxWriteRequest
+	// Cap the POST body so a multi-gigabyte payload can't stream straight to
+	// disk. 64 KiB matches the tinker / php.ini / global nginx endpoints.
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10)).Decode(&req); err != nil {
+		writeJSON(w, SiteNginxWriteResponse{OK: false, Error: "invalid body: " + err.Error()})
+		return
+	}
+	res, err := siteops.SaveCustomNginx(domain, req.Content, req.Backup)
+	if err != nil {
+		writeJSON(w, SiteNginxWriteResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, SiteNginxWriteResponse(res))
+}
+
+// handleSiteNginxBackups lists the per-site nginx override backups for the
+// domain, newest first. Mirrors handleSiteEnvBackups.
+func handleSiteNginxBackups(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := siteops.SiteForDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	list, err := siteops.ListCustomNginxBackups(domain)
+	if err != nil {
+		http.Error(w, "listing backups: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if list == nil {
+		list = []SiteNginxBackup{}
+	}
+	writeJSON(w, list)
+}
+
+// handleSiteNginxBackupContent serves the raw bytes of a single backup so the
+// restore modal can show a diff before the user accepts. Mirrors the env
+// backup-content handler.
+func handleSiteNginxBackupContent(w http.ResponseWriter, r *http.Request, domain, name string) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := siteops.SiteForDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := siteops.ReadCustomNginxBackup(domain, name)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+			return
+		}
+		http.Error(w, "reading backup: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+// SiteNginxResetResponse is the JSON returned by POST /api/sites/{d}/nginx/reset.
+type SiteNginxResetResponse struct {
+	OK    bool   `json:"ok"`
+	Error string `json:"error,omitempty"`
+}
+
+// handleSiteNginxReset deletes the per-site nginx override file so the
+// generated vhost falls back to the bundled defaults (the include glob
+// silently expands to nothing when no file matches). Backups are
+// intentionally preserved in custom.d.bkp/ so a Restore can recover from
+// an accidental reset. Skips the nginx reload when the file was already
+// missing because there is genuinely nothing for nginx to re-read in
+// that case and the round-trip via podman exec is wasted.
+func handleSiteNginxReset(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := siteops.SiteForDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	if err := siteops.ResetCustomNginx(domain); err != nil {
+		writeJSON(w, SiteNginxResetResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, SiteNginxResetResponse{OK: true})
+}
+
+// handleSiteNginxRestore restores a specific backup over the current
+// override, reloads nginx, and only then removes the backup. Taking the
+// backup name from the request body (rather than picking newest server-
+// side) eliminates the preview-vs-action race: the frontend always
+// loaded a specific backup's bytes and showed a diff for THAT one, so
+// the server must restore the same file the user just inspected.
+// Deferring the backup deletion until AFTER the reload succeeds means a
+// failed reload leaves the recovery copy intact for the user to retry.
+func handleSiteNginxRestore(w http.ResponseWriter, r *http.Request, domain string) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if _, err := siteops.SiteForDomain(domain); err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	var req SiteNginxRestoreRequest
+	// Body is optional (empty name means newest); only a malformed envelope
+	// is refused.
+	if r.ContentLength > 0 {
+		if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 4<<10)).Decode(&req); err != nil {
+			writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: "invalid body: " + err.Error()})
+			return
+		}
+	}
+	res, err := siteops.RestoreCustomNginx(domain, req.Name)
+	if err != nil {
+		writeJSON(w, SiteNginxRestoreResponse{OK: false, Error: err.Error()})
+		return
+	}
+	writeJSON(w, SiteNginxRestoreResponse(res))
+}
+
+// nginxHttpTemplate seeds the global http-level override editor when no file
+// exists yet. Loaded inside http{} after lerd's defaults, so user values win.
+const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
+#
+# Loaded inside the http { } block, after lerd's defaults, so your values win.
+# Lerd never overwrites this file; saving reloads nginx.
+
+# client_max_body_size 100m;
+# gzip on;
+# gzip_types text/plain application/json application/javascript text/css;
+# proxy_buffers 8 16k;
+# proxy_buffer_size 32k;
+`
+
 // SiteActionResponse is returned by POST /api/sites/{domain}/secure|unsecure.
 type SiteActionResponse struct {
 	OK    bool   `json:"ok"`
@@ -1965,6 +2810,65 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	if commandRoute(w, r, domain, parts[1:]) {
 		return
 	}
+	// /nginx subroutes (backups, restore) sit alongside the GET/POST on
+	// /nginx. The domain validation inside each handler closes the path
+	// traversal vector that the {domain} segment would otherwise open.
+	if len(parts) >= 3 && parts[1] == "nginx" {
+		switch parts[2] {
+		case "backups":
+			if len(parts) == 3 {
+				handleSiteNginxBackups(w, r, domain)
+				return
+			}
+			if len(parts) == 4 {
+				handleSiteNginxBackupContent(w, r, domain, parts[3])
+				return
+			}
+		case "restore":
+			if len(parts) == 3 {
+				handleSiteNginxRestore(w, r, domain)
+				return
+			}
+		case "reset":
+			if len(parts) == 3 {
+				handleSiteNginxReset(w, r, domain)
+				return
+			}
+		}
+		http.NotFound(w, r)
+		return
+	}
+	// /env subroutes (backups, restore) sit alongside the GET/PUT on /env.
+	if len(parts) >= 3 && parts[1] == "env" {
+		site, err := config.FindSiteByDomain(domain)
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		switch parts[2] {
+		case "files":
+			if len(parts) == 3 {
+				handleSiteEnvFiles(w, r, site)
+				return
+			}
+		case "backups":
+			if len(parts) == 3 {
+				handleSiteEnvBackups(w, r, site)
+				return
+			}
+			if len(parts) == 4 {
+				handleSiteEnvBackupContent(w, r, site, parts[3])
+				return
+			}
+		case "restore":
+			if len(parts) == 3 {
+				handleSiteEnvRestore(w, r, site)
+				return
+			}
+		}
+		http.NotFound(w, r)
+		return
+	}
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
@@ -1980,6 +2884,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	// .env file viewer is a GET endpoint served separately.
 	if action == "env" {
 		handleSiteEnv(w, r)
+		return
+	}
+
+	// Per-site nginx override editor (GET reads, POST saves + reloads).
+	if action == "nginx" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
+		handleSiteNginx(w, r, domain)
 		return
 	}
 
@@ -2323,6 +3233,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "domain:edit":
@@ -2370,6 +3283,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "domain:remove":
@@ -2442,6 +3358,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		_ = podman.WriteContainerHosts()
 		_ = nginx.Reload()
+		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
+			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
+		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "tinker:symbols":
@@ -2602,14 +3521,48 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 }
 
 func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
-	// path: /api/php-versions/{version}/{remove|set-default}
+	// path: /api/php-versions/{version}/{remove|set-default|config|...}
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/php-versions/"), "/")
-	if len(parts) != 2 || r.Method != http.MethodPost {
+	if len(parts) < 2 {
 		http.NotFound(w, r)
 		return
 	}
 	version, action := parts[0], parts[1]
 	if !validVersion.MatchString(version) {
+		http.NotFound(w, r)
+		return
+	}
+
+	// User php.ini override + backup/restore/reset subroutes. The save flow
+	// snapshots and rolls back on FPM restart failure; mirrors the per-site
+	// nginx editor's mechanic so the frontend can share the modal pattern.
+	if action == "config" {
+		switch {
+		case len(parts) == 2:
+			handlePhpIniConfig(w, r, version)
+			return
+		case len(parts) == 3 && parts[2] == "backups":
+			handlePhpIniBackups(w, r, version)
+			return
+		case len(parts) == 4 && parts[2] == "backups":
+			handlePhpIniBackupContent(w, r, version, parts[3])
+			return
+		case len(parts) == 3 && parts[2] == "reset":
+			handlePhpIniReset(w, r, version)
+			return
+		case len(parts) == 3 && parts[2] == "restore":
+			handlePhpIniRestore(w, r, version)
+			return
+		}
+		http.NotFound(w, r)
+		return
+	}
+
+	if len(parts) != 2 {
+		http.NotFound(w, r)
+		return
+	}
+	if r.Method != http.MethodPost {
 		http.NotFound(w, r)
 		return
 	}
@@ -2643,18 +3596,141 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true})
 	case "remove":
-		short := strings.ReplaceAll(version, ".", "")
-		unit := "lerd-php" + short + "-fpm"
-		_ = podman.StopUnit(unit)
-		if err := podman.RemoveQuadlet(unit); err != nil {
+		if err := teardownPHPFPM(version); err != nil {
 			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
-		_ = podman.DaemonReloadFn()
 		writeJSON(w, map[string]any{"ok": true})
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+// handlePHPInstallable answers GET /api/php-installable with the supported PHP
+// versions (7.4 .. 8.5) minus the ones already installed, so the UI can offer
+// them in a dropdown.
+func handlePHPInstallable(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, installablePHPVersions(cli.SupportedPHPVersions, fullyInstalledPHPVersions()))
+}
+
+// fullyInstalledPHPVersions returns the versions that are both registered (a
+// quadlet or container exists) and have their FPM image built. A version left
+// half-registered by an interrupted build (quadlet written, image missing) is
+// excluded so it stays installable for repair; orphaned :local images for
+// versions with no quadlet are ignored so they don't hide installable versions.
+func fullyInstalledPHPVersions() []string {
+	installed, _ := phpPkg.ListInstalled()
+	out := []string{}
+	for _, v := range installed {
+		if podman.ImageExists(podman.FPMImageName(v)) {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// teardownPHPFPM stops and removes a PHP-FPM version's unit, quadlet and
+// container, then refreshes the cache so the version list reflects the removal
+// immediately. Used by the remove action and to roll back a failed install.
+func teardownPHPFPM(version string) error {
+	short := strings.ReplaceAll(version, ".", "")
+	unit := "lerd-php" + short + "-fpm"
+	_ = podman.StopUnit(unit)
+	if err := podman.RemoveQuadlet(unit); err != nil {
+		return err
+	}
+	_ = podman.DaemonReloadFn()
+	// Force-remove any lingering (stopped) container and refresh the cache so the
+	// follow-up version list no longer reports this version. ListInstalled reads
+	// podman ps -a, so a stale snapshot would keep the tab around.
+	podman.RemoveContainer(unit)
+	podman.Cache.PollNow()
+	return nil
+}
+
+// phpInstallInFlight guards against concurrent installs of the same version
+// racing on the same image build and quadlet file.
+var phpInstallInFlight sync.Map
+
+// installablePHPVersions returns the supported versions that are not present in
+// installed, preserving the supported order. Always a non-nil slice.
+func installablePHPVersions(supported, installed []string) []string {
+	have := make(map[string]bool, len(installed))
+	for _, v := range installed {
+		have[v] = true
+	}
+	out := []string{}
+	for _, v := range supported {
+		if !have[v] {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// handlePHPInstall answers POST /api/php-versions/install?version=8.3 by
+// building the FPM image for that version, streaming the build log as SSE and
+// finishing with an `event: done` payload. Mirrors handleSiteWorktreeAdd.
+func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+
+	done := func(payload map[string]any) {
+		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(payload))
+		flusher.Flush()
+	}
+
+	version := strings.TrimSpace(r.URL.Query().Get("version"))
+	if !cli.IsSupportedPHPVersion(version) {
+		done(map[string]any{"ok": false, "error": "unsupported PHP version"})
+		return
+	}
+	// Reject a second concurrent install of the same version so two clients can't
+	// race on the same image build and quadlet file.
+	if _, busy := phpInstallInFlight.LoadOrStore(version, struct{}{}); busy {
+		done(map[string]any{"ok": false, "error": "PHP " + version + " is already installing"})
+		return
+	}
+	defer phpInstallInFlight.Delete(version)
+	// Block only when fully installed (registered with a built image); a version
+	// left half-registered by an interrupted build must stay re-installable.
+	if slices.Contains(fullyInstalledPHPVersions(), version) {
+		done(map[string]any{"ok": false, "error": "PHP " + version + " is already installed"})
+		return
+	}
+
+	start := time.Now()
+	sw := &sseLineWriter{w: w, f: flusher}
+	err := cli.InstallPHPVersion(version, sw)
+	sw.flushTail()
+	// Notify regardless of whether the client is still connected, so a user who
+	// closed the modal still learns the build finished or failed.
+	dispatchNotification(notificationForPHPInstall(version, start, err))
+	if err != nil {
+		// Roll back a half-registered version (quadlet written before the build
+		// failed) so it doesn't linger as a broken, stopped tab in the UI.
+		if !podman.ImageExists(podman.FPMImageName(version)) {
+			_ = teardownPHPFPM(version)
+		}
+		done(map[string]any{"ok": false, "error": err.Error(), "version": version})
+		return
+	}
+	// Refresh the container cache before signalling done so the client's
+	// follow-up status load (and the publishAfter broadcast) report the
+	// freshly-started FPM as running instead of a stale not-running snapshot.
+	podman.Cache.PollNow()
+	done(map[string]any{"ok": true, "version": version})
 }
 
 func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
@@ -3660,8 +4736,9 @@ func (s *sseLineWriter) Write(p []byte) (int, error) {
 }
 
 func (s *sseLineWriter) emit(line string) {
-	line = strings.TrimRight(line, "\r")
-	fmt.Fprintf(s.w, "data: %s\n\n", strings.ReplaceAll(line, "\\", "\\\\"))
+	// SSE data lines are delimited by newlines only, so backslashes need no
+	// escaping; the frontend consumers pass the payload through verbatim.
+	fmt.Fprintf(s.w, "data: %s\n\n", strings.TrimRight(line, "\r"))
 	s.f.Flush()
 }
 

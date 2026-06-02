@@ -144,6 +144,58 @@ func TestRemoveService_WithData_RenamesAside(t *testing.T) {
 	}
 }
 
+func TestRemoveService_WithData_DeletesTuningOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	stubPodmanRemove(t)
+
+	mkTestDataDir(t, "mariadb", "user-data")
+	// Seed a tuning override the way MaterializeServiceTuning would.
+	tuningPath := config.ServiceTuningFile("mariadb")
+	if err := os.MkdirAll(filepath.Dir(tuningPath), 0o755); err != nil {
+		t.Fatalf("mkdir tuning dir: %v", err)
+	}
+	if err := os.WriteFile(tuningPath, []byte("max_allowed_packet = 1G\n"), 0o644); err != nil {
+		t.Fatalf("seed tuning file: %v", err)
+	}
+
+	if err := RemoveService("mariadb", RemoveOptions{RemoveData: true}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService: %v", err)
+	}
+
+	if _, err := os.Stat(tuningPath); !os.IsNotExist(err) {
+		t.Errorf("tuning override must be removed when RemoveData=true, stat err = %v", err)
+	}
+}
+
+func TestRemoveService_WithoutData_KeepsTuningOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	stubPodmanRemove(t)
+
+	mkTestDataDir(t, "mariadb", "user-data")
+	tuningPath := config.ServiceTuningFile("mariadb")
+	if err := os.MkdirAll(filepath.Dir(tuningPath), 0o755); err != nil {
+		t.Fatalf("mkdir tuning dir: %v", err)
+	}
+	if err := os.WriteFile(tuningPath, []byte("max_allowed_packet = 1G\n"), 0o644); err != nil {
+		t.Fatalf("seed tuning file: %v", err)
+	}
+
+	if err := RemoveService("mariadb", RemoveOptions{RemoveData: false}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService: %v", err)
+	}
+
+	// `service remove` without --purge keeps user state so a subsequent
+	// install picks up where you left off; the tuning override is part of
+	// that state.
+	if _, err := os.Stat(tuningPath); err != nil {
+		t.Errorf("tuning override must survive RemoveData=false, stat err = %v", err)
+	}
+}
+
 func TestRemoveService_StopFailureAborts_DataUntouched(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -187,6 +239,40 @@ func TestRemoveService_DefaultPresetSucceeds(t *testing.T) {
 	}
 	if got := rec.removedQuadlets; len(got) != 1 || got[0] != "lerd-postgres" {
 		t.Errorf("expected RemoveQuadlet(\"lerd-postgres\"), got %v", got)
+	}
+}
+
+// TestRemoveService_OrphanQuadlet_NoYAML_Succeeds covers the recovery path for
+// the orphan-quadlet bug: a service whose YAML config is missing but whose
+// .container quadlet still exists must be removable so users can fully clean
+// up the drift that motivated unifying installed-detection on the quadlet.
+func TestRemoveService_OrphanQuadlet_NoYAML_Succeeds(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	rec := stubPodmanRemove(t)
+
+	qdir := config.QuadletDir()
+	if err := os.MkdirAll(qdir, 0o755); err != nil {
+		t.Fatalf("mkdir quadlet dir: %v", err)
+	}
+	quadletPath := filepath.Join(qdir, "lerd-mysql.container")
+	if err := os.WriteFile(quadletPath, []byte("[Container]\nImage=docker.io/library/mysql:8.4\n"), 0o644); err != nil {
+		t.Fatalf("write quadlet: %v", err)
+	}
+	if !ServiceInstalled("mysql") {
+		t.Fatalf("precondition: ServiceInstalled should report true with quadlet on disk")
+	}
+	if _, err := config.LoadCustomService("mysql"); err == nil {
+		t.Fatalf("precondition: no YAML expected for mysql in this temp tree")
+	}
+
+	if err := RemoveService("mysql", RemoveOptions{RemoveData: false}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService for orphan quadlet should not error: %v", err)
+	}
+	if got := rec.removedQuadlets; len(got) != 1 || got[0] != "lerd-mysql" {
+		t.Errorf("expected RemoveQuadlet(\"lerd-mysql\"), got %v", got)
 	}
 }
 

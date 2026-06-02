@@ -30,12 +30,15 @@ var loopbackOnlyRoutes = []string{
 	"/api/push/test",            // fires notifications onto subscribed devices
 }
 
-// loopbackOnlySiteSubactions are the per-site action suffixes (under
-// /api/sites/{domain}/) that are also restricted to loopback. The exact
-// path includes a domain segment in the middle, so we check the suffix.
+// loopbackOnlySiteSubactions are the per-site actions (under
+// /api/sites/{domain}/) whose entire subtree is restricted to loopback.
+// A subaction "/env" gates /api/sites/{d}/env and every nested route
+// under it (e.g. /env/files, /env/backups, /env/backups/<name>,
+// /env/restore), so adding a new subresource cannot accidentally escape
+// the LAN gate by failing to be re-listed here.
 var loopbackOnlySiteSubactions = []string{
 	"/terminal", // opens an interactive shell on the host
-	"/env",      // returns raw .env (APP_KEY, DB creds, third-party tokens)
+	"/env",      // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
 }
 
 // fromHost reports whether r's source IP belongs to one of the host's
@@ -81,21 +84,92 @@ func fromHost(r *http.Request) bool {
 }
 
 // isLoopbackOnlyPath reports whether the given URL path is in either
-// the exact-match list or matches the per-site subaction suffix list.
+// the exact-match list or matches a per-site action whose entire subtree
+// is loopback-only. A subaction "/env" matches /api/sites/{d}/env exactly
+// and any subroute under it (/env/files, /env/backups, /env/restore,
+// /env/backups/<name>), so adding a new subresource never silently
+// escapes the gate.
 func isLoopbackOnlyPath(path string) bool {
 	for _, p := range loopbackOnlyRoutes {
 		if path == p {
 			return true
 		}
 	}
-	if strings.HasPrefix(path, "/api/sites/") {
-		for _, suffix := range loopbackOnlySiteSubactions {
-			if strings.HasSuffix(path, suffix) {
-				return true
-			}
+	if !strings.HasPrefix(path, "/api/sites/") {
+		return false
+	}
+	rest := strings.TrimPrefix(path, "/api/sites/")
+	slash := strings.Index(rest, "/")
+	if slash < 0 {
+		return false
+	}
+	after := rest[slash:]
+	for _, action := range loopbackOnlySiteSubactions {
+		if after == action || strings.HasPrefix(after, action+"/") {
+			return true
 		}
 	}
 	return false
+}
+
+// unsafeMethod reports whether m can mutate server state and therefore must
+// pass the cross-origin gate. Read-only methods (GET, HEAD, OPTIONS) can't,
+// so a forged one does no harm.
+func unsafeMethod(m string) bool {
+	switch m {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	}
+	return false
+}
+
+// csrfHeader is the request header lerd's own clients set to clear the
+// cross-origin gate. Its presence is the proof; the value is ignored. The
+// gate reads it here and withCORS advertises it in Access-Control-Allow-Headers
+// so the split-origin dashboard's preflight succeeds.
+const csrfHeader = "X-Lerd-CSRF"
+
+// csrfExemptPath reports whether path skips the cross-origin gate. These
+// endpoints are reached by non-browser clients (or cross-origin pages we
+// can't control) that can't carry the header, and each already has its own
+// source protection: /api/remote-setup has a token + RFC1918 + lockout gate,
+// the mailpit webhook is restricted to host-NAT'd source IPs, the internal
+// notify bridge (POSTed over loopback by out-of-process CLI/MCP commands) has
+// its own loopback gate and only triggers a dashboard refresh, and the
+// per-site unpause is POSTed from the paused-site holding page on the site's
+// own domain and is non-destructive.
+func csrfExemptPath(path string) bool {
+	switch path {
+	case "/api/remote-setup", "/api/webhooks/mailpit", "/api/internal/notify":
+		return true
+	}
+	return strings.HasPrefix(path, "/api/sites/") && strings.HasSuffix(path, "/unpause")
+}
+
+// passesCSRF reports whether an unsafe-method request carries proof it was
+// initiated by lerd's own dashboard or a trusted local client.
+//
+// Browsers attach Sec-Fetch-Site automatically and scripts cannot forge it:
+// same-origin / same-site / none are first-party and pass; cross-site only
+// passes when the Origin is one of lerd's own dashboard origins, because the
+// lerd.localhost-to-localhost:7073 apiBase rewrite is itself labelled
+// cross-site. A real attacker's Origin is never in the allowlist.
+//
+// Older browsers and non-browser callers omit Sec-Fetch; for those we require
+// the X-Lerd-CSRF header. A cross-origin CORS-simple request (the RCE vector)
+// can't set a custom header without a preflight, and lerd only answers
+// preflight for its own origins, so the header's presence is proof enough.
+func passesCSRF(r *http.Request) bool {
+	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
+		return true
+	}
+	switch r.Header.Get("Sec-Fetch-Site") {
+	case "same-origin", "same-site", "none":
+		return true
+	case "cross-site":
+		return allowedCORSOrigins[r.Header.Get("Origin")]
+	}
+	return r.Header.Get(csrfHeader) != ""
 }
 
 // withRemoteControlGate wraps the dashboard mux with the LAN-access gate.
@@ -128,6 +202,18 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		// break every cross-origin request from a configured client.
 		if r.Method == http.MethodOptions {
 			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 1b. Cross-origin (CSRF) gate. A state-changing request must prove it
+		// came from lerd's own dashboard rather than a malicious page open in
+		// the developer's browser. This is the one check that also applies to
+		// loopback, because the RCE vector is exactly a local browser POSTing
+		// to 127.0.0.1:7073/api/sites/<d>/tinker. Exempt endpoints are reached
+		// by non-browser clients that have their own source protection.
+		if unsafeMethod(r.Method) && !csrfExemptPath(r.URL.Path) && !passesCSRF(r) {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Error(w, "Forbidden — cross-origin request blocked. Use the lerd dashboard on this machine.", http.StatusForbidden)
 			return
 		}
 

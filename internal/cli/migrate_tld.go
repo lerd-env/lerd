@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 // sitesWithTLD returns the names of registered sites that have at least one
@@ -90,6 +91,13 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 
 		removeStaleVhosts(oldPrimary)
 		newPrimary := s.PrimaryDomain()
+		// The hand-authored override is keyed by primary domain, so a TLD
+		// rewrite would orphan it just like a UI domain rename does.
+		if oldPrimary != newPrimary {
+			if err := siteops.MoveCustomNginxConfig(oldPrimary, newPrimary); err != nil {
+				fmt.Printf("    WARN: %s: migrate custom nginx override: %v\n", s.Name, err)
+			}
+		}
 		migrateWorktreeVhosts(worktrees, newPrimary, s.PHPVersion, s.Name, s.Secured)
 
 		// Reissue the parent cert under the NEW primary so wildcard SANs

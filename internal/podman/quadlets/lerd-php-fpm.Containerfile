@@ -93,6 +93,20 @@ RUN PHPVER="$(php -r 'echo PHP_MAJOR_VERSION,".",PHP_MINOR_VERSION;')" \
     && yes '' | pecl install "$XDEBUG_PKG" && docker-php-ext-enable xdebug \
     && rm -rf /tmp/pear /var/cache/apk/*
 
+# lerd_devtools: lerd's engine-level Debug-window capture (queries, mail, views,
+# events, jobs, http). Compiled in the builder so its .so and the
+# docker-php-ext-enable conf.d travel into the runtime stage via the
+# COPY --from=builder below, like every other extension, so users pull it
+# ready-built instead of compiling C on their own machine. The marker line
+# hashes the extension source so any change to it drifts the image hash and
+# rebuilds the base; TestDevtoolsSourceMarkerInSync keeps the marker honest.
+# No-op at runtime on PHP < 8.0 (no zend_observer); the || true degrades a
+# compile failure to "Debug window unavailable" rather than bricking the image.
+# lerd_devtools-src-sha256: 0afa730e05b7
+COPY internal/podman/devtools /tmp/lerd-devtools
+RUN { cd /tmp/lerd-devtools && phpize && ./configure --enable-lerd-devtools && make -j$(nproc) && make install && docker-php-ext-enable lerd_devtools; } || true; \
+    rm -rf /tmp/lerd-devtools /var/cache/apk/*
+
 # Project-defined custom extensions compile here while the toolchain
 # is available. Their .so files travel through the COPY below.
 {{.CustomExtensions}}

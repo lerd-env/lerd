@@ -852,8 +852,8 @@ func TestEnsureDefaultVhost_removingFileResetsManagement(t *testing.T) {
 func TestWriteFileAtomic_writesContentAndLeavesNoTempBehind(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "managed.conf")
-	if err := writeFileAtomic(path, []byte("server { listen 80; }\n"), 0644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
+	if err := WriteFileAtomic(path, []byte("server { listen 80; }\n"), 0644); err != nil {
+		t.Fatalf("WriteFileAtomic: %v", err)
 	}
 	got, err := os.ReadFile(path)
 	if err != nil || string(got) != "server { listen 80; }\n" {
@@ -873,8 +873,8 @@ func TestWriteFileAtomic_preservesExistingFileMode(t *testing.T) {
 	if err := os.Chmod(path, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := writeFileAtomic(path, []byte("v2\n"), 0644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
+	if err := WriteFileAtomic(path, []byte("v2\n"), 0644); err != nil {
+		t.Fatalf("WriteFileAtomic: %v", err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -888,8 +888,8 @@ func TestWriteFileAtomic_preservesExistingFileMode(t *testing.T) {
 func TestWriteFileAtomic_usesCallerModeForNewFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "fresh.conf")
-	if err := writeFileAtomic(path, []byte("x"), 0644); err != nil {
-		t.Fatalf("writeFileAtomic: %v", err)
+	if err := WriteFileAtomic(path, []byte("x"), 0644); err != nil {
+		t.Fatalf("WriteFileAtomic: %v", err)
 	}
 	info, err := os.Stat(path)
 	if err != nil {
@@ -1088,6 +1088,44 @@ func TestEnsureNginxConfig_writesForwardedAndCustomD(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tmp, "lerd", "nginx", "custom.d")); err != nil {
 		t.Errorf("expected custom.d dir to be created: %v", err)
+	}
+	// http.d dir + http.d include line in the rendered nginx.conf are the
+	// preconditions the http config editor heals on its first POST. Anchor
+	// both here so the heal stays a no-op once it has run (and so a
+	// regression to either side surfaces as a unit failure rather than as
+	// a silent-write-on-stale-install bug).
+	if _, err := os.Stat(filepath.Join(tmp, "lerd", "nginx", "http.d")); err != nil {
+		t.Errorf("expected http.d dir to be created: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(tmp, "lerd", "nginx", "nginx.conf"))
+	if err != nil {
+		t.Fatalf("read rendered nginx.conf: %v", err)
+	}
+	if !strings.Contains(string(body), "include /etc/nginx/http.d/*.conf;") {
+		t.Errorf("rendered nginx.conf missing http.d include directive, got:\n%s", body)
+	}
+}
+
+// TestEnsureNginxConfigServerNamesHashBucket guards against issue #455: a
+// worktree vhost emits a long "<branch>.<site>.test *.<branch>.<site>.test"
+// server_name that overflows nginx's default server_names_hash_bucket_size of
+// 64, crashing nginx for every site. The rendered global nginx.conf must raise
+// the bucket/max sizes so long branch names always fit.
+func TestEnsureNginxConfigServerNamesHashBucket(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(tmp, "lerd", "nginx", "nginx.conf"))
+	if err != nil {
+		t.Fatalf("read rendered nginx.conf: %v", err)
+	}
+	if !strings.Contains(string(body), "server_names_hash_bucket_size 256;") {
+		t.Errorf("rendered nginx.conf missing server_names_hash_bucket_size directive, got:\n%s", body)
+	}
+	if !strings.Contains(string(body), "server_names_hash_max_size 1024;") {
+		t.Errorf("rendered nginx.conf missing server_names_hash_max_size directive, got:\n%s", body)
 	}
 }
 

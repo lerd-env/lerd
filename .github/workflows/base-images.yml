@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - 'internal/podman/quadlets/lerd-php-fpm.Containerfile'
+      - 'internal/podman/devtools/**'
       - '.github/workflows/base-images.yml'
   workflow_dispatch:
     inputs:

@@ -68,6 +68,36 @@ func NginxCustomD() string {
 	return filepath.Join(NginxDir(), "custom.d")
 }
 
+// NginxCustomDBkp holds timestamped backups of per-site custom.d overrides
+// produced by the web UI editor. It deliberately sits next to (not inside)
+// custom.d/ because the generated vhost templates include
+// /etc/nginx/custom.d/{domain}.conf*; a backup file in custom.d/ would be
+// auto-loaded by nginx and produce duplicate directives.
+func NginxCustomDBkp() string {
+	return filepath.Join(NginxDir(), "custom.d.bkp")
+}
+
+// NginxHttpD holds user-authored nginx snippets included at the http{} level
+// (e.g. global gzip, proxy buffers, client_max_body_size). Lerd never writes
+// here, so edits survive nginx.conf regeneration and `lerd update`.
+func NginxHttpD() string {
+	return filepath.Join(NginxDir(), "http.d")
+}
+
+// NginxHttpUserConf is the single global http-level tuning override file. The
+// zz- prefix sorts it after any other http.d snippets so user values win.
+func NginxHttpUserConf() string {
+	return filepath.Join(NginxHttpD(), "zz-lerd-user.conf")
+}
+
+// NginxHttpDBkp holds timestamped backups of the global http-level override
+// produced by the web UI editor. It sits next to (not inside) http.d/ because
+// nginx.conf includes /etc/nginx/http.d/*.conf; a backup inside http.d/ would
+// be loaded too and produce duplicate http{} directives.
+func NginxHttpDBkp() string {
+	return filepath.Join(NginxDir(), "http.d.bkp")
+}
+
 // CertsDir returns the certs directory.
 func CertsDir() string {
 	return filepath.Join(DataDir(), "certs")
@@ -130,6 +160,14 @@ func PHPUserIniFile(version string) string {
 	return filepath.Join(DataDir(), "php", version, "98-user.ini")
 }
 
+// PHPUserIniBkpDir holds timestamped backups of the per-version user ini
+// produced by the web UI editor. It sits next to (not inside) the version
+// directory's ini scan path so the FPM container does not load backup files
+// as live config.
+func PHPUserIniBkpDir(version string) string {
+	return filepath.Join(DataDir(), "php", version, "ini.bkp")
+}
+
 // DumpsAssetsDir returns the host directory holding the version-agnostic dump
 // bridge assets (PHP file + ini). Both files are bind-mounted read-only into
 // every FPM container when `lerd dump on` is active. Single shared copy
@@ -149,6 +187,22 @@ func DumpsIniFile() string {
 	return filepath.Join(DumpsAssetsDir(), "97-lerd-dump.ini")
 }
 
+// DevtoolsCollectorFile is the host path for the framework-neutral collector
+// (agnostic mail and other shared-library capture), loaded lazily by the
+// lerd_devtools extension. Lives in the dumps assets dir (mounted at
+// /usr/local/etc/lerd), where the extension expects it.
+func DevtoolsCollectorFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-collector.php")
+}
+
+// LaravelAdapterFile is the host path for the Laravel devtools adapter, loaded
+// by the lerd_devtools extension at Application::boot. It lives in the dumps
+// assets dir because that directory is bind-mounted into FPM at
+// /usr/local/etc/lerd, where the extension expects it.
+func LaravelAdapterFile() string {
+	return filepath.Join(DumpsAssetsDir(), "laravel-adapter.php")
+}
+
 // DumpsSocketPath is the Unix socket lerd-ui binds for dump payloads. Kept
 // in RunDir so it sits alongside the UI socket and so the existing %h:%h
 // volume in every FPM container surfaces it at the same path inside.
@@ -156,7 +210,7 @@ func DumpsSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-dumps.sock")
 }
 
-// DumpsEnabledFlagFile is the sentinel the dump bridge checks on every
+// DumpsEnabledFlagFile is the sentinel the debug bridge checks on every
 // request. Present file = bridge captures dump()/dd() calls; absent file
 // = bridge is a fast no-op. Toggling is a single touch/rm on this file
 // so the FPM container never restarts.
@@ -220,6 +274,33 @@ func DumpsBridgeTarget() string {
 	return "unix://" + DumpsSocketPath()
 }
 
+// DevtoolsAssetsDir holds the devtools collector conf.d ini. Bind-mounted
+// read-only into every FPM container; version-agnostic like the debug bridge.
+func DevtoolsAssetsDir() string {
+	return filepath.Join(DataDir(), "php", "devtools")
+}
+
+// DevtoolsIniFile is the host path for the conf.d ini that configures the
+// lerd_devtools extension (socket target + enabled kinds + sentinel path).
+func DevtoolsIniFile() string {
+	return filepath.Join(DevtoolsAssetsDir(), "96-lerd-devtools.ini")
+}
+
+// DevtoolsWorkersFlagFile is the sentinel that opts worker (queue/scheduler)
+// queries into capture. Absent (default) = workers skipped. Lives beside the
+// devtools enable flag under the /usr/local/etc/lerd mount; toggling it never
+// restarts FPM.
+func DevtoolsWorkersFlagFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-workers.flag")
+}
+
+// DevtoolsBridgeTarget is the socket the extension ships events to — the same
+// receiver lerd-ui binds for dumps, so captured queries land in the shared
+// ring and fan out through the same SSE stream.
+func DevtoolsBridgeTarget() string {
+	return DumpsBridgeTarget()
+}
+
 // CustomServicesDir returns the directory for custom service YAML files.
 func CustomServicesDir() string {
 	return filepath.Join(ConfigDir(), "services")
@@ -230,6 +311,37 @@ func CustomServicesDir() string {
 // at its declared target path.
 func ServiceFilesDir(name string) string {
 	return filepath.Join(DataDir(), "service-files", name)
+}
+
+// ServiceTuningFile returns the host path for a service's user-editable runtime
+// tuning override. Lerd seeds it once with a commented template and never
+// overwrites it afterwards, so edits survive `lerd service reinstall` and
+// `lerd update` — the same never-clobber contract as NginxCustomD and the
+// per-version PHP 98-user.ini.
+func ServiceTuningFile(name string) string {
+	return filepath.Join(DataDir(), "service-tuning", name+".conf")
+}
+
+// ServiceTuningAuxFile returns the host path for a service's lerd-managed
+// tuning helper file — a static config that the family's tuning Command depends
+// on (e.g. the postgres `config_file` wrapper that `include_dir`s the user
+// override directory, because `-c include_dir` is rejected at runtime). Unlike
+// ServiceTuningFile this is regenerated on every start, never user-edited, and
+// lives alongside the override with a distinct `.aux.conf` suffix so it is never
+// mistaken for it.
+func ServiceTuningAuxFile(name string) string {
+	return filepath.Join(DataDir(), "service-tuning", name+".aux.conf")
+}
+
+// ServiceTuningBkpDir holds timestamped backups of per-service tuning
+// overrides produced when the user ticks "back up the current file first"
+// before saving in the web UI editor. It lives next to (not inside) the
+// service-tuning/ directory so it cannot be picked up by any future
+// include glob and never gets bind-mounted into the service container,
+// keeping backups invisible to the running service even if it tries to
+// scan its config dir.
+func ServiceTuningBkpDir() string {
+	return filepath.Join(DataDir(), "service-tuning.bkp")
 }
 
 // FrameworksDir returns the directory for user-defined framework YAML files.

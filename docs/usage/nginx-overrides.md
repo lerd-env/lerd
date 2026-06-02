@@ -2,7 +2,15 @@
 
 Lerd generates one nginx config per site under `~/.local/share/lerd/nginx/conf.d/{domain}.conf`. These files are fully managed: `lerd link`, `lerd secure`, `lerd site rebuild`, and every `lerd install` (including the one that runs at the end of `lerd update`) regenerate them from the built-in templates. Any edits made directly to those files are overwritten.
 
-To add per-site directives that survive every regeneration, drop a snippet in `~/.local/share/lerd/nginx/custom.d/`.
+To add per-site directives that survive every regeneration, drop a snippet in `~/.local/share/lerd/nginx/custom.d/`, or edit it from the web UI. Because editing nginx is something you reach for rarely, it is no longer a tab: open the site detail page and click the sliders button at the end of the address bar to open the editor in a large modal. The editor is the same surface as the **Env** tab: changes go through a confirmation modal with an optional "back up the current file first" checkbox, and if a backup exists a **Restore** button opens a diff modal before rolling the override back. Backups are written to a sibling `custom.d.bkp/` directory (the live `custom.d/` is auto-included by every site vhost via a `{domain}.conf*` glob, so backups have to live outside of it to avoid being loaded as duplicate directives) and the most recent one is consumed when you restore. Every save runs `nginx -t` inside the lerd-nginx container before the new bytes are committed to the live config: if validation fails, the file is rolled back to its previous contents (or removed if there was no previous file), the staged backup is dropped, and nginx's diagnostic is shown in the save modal so you can fix the line and retry without leaving the live nginx config broken.
+
+## Worktrees
+
+Each worktree is served on its own subdomain (`{branch}.{primary}.test`) with its own generated vhost, so it also has its own override at `custom.d/{branch}.{primary}.test.conf`. When you create a worktree, lerd seeds that file once from the main branch's override, so the worktree starts with the same custom directives the main branch has. After that the two are independent: opening the editor while a worktree tab is selected (the sliders button shows the worktree's domain in the address bar) edits only that worktree's file, and saving reloads nginx for that subdomain alone. Removing a worktree deletes its override and its backups along with the vhost, so deleted branches leave nothing behind. The main branch's override is never touched by any of this.
+
+## From the CLI and MCP
+
+The same override is reachable without the web UI, which is handy for scripting or from an agent. `lerd nginx show [site]` prints the current override (`--path` prints just the file path), `lerd nginx edit [site]` opens it in `$EDITOR` and then validates with `nginx -t` and reloads on save, and `lerd nginx reset [site]` deletes it and falls back to the bundled defaults. Add `--branch <name>` to any of them to target a worktree's override instead of the main branch's. The MCP `site_nginx` tool mirrors this with `action: read | write | reset`, an optional `site`, an optional `branch`, and `content` for writes; writes run the same `nginx -t` validation, backup, and reload as the web editor. All three surfaces go through one shared edit service, so validation, backups, and reload behave identically whichever one you use.
 
 ## How it works
 
@@ -55,7 +63,9 @@ That's it. The snippet is merged into the generated server block for `bigapp.tes
 
 Lines you put in `custom.d/{domain}.conf` land inside the site's `server { ... }` block, so you can use anything nginx allows at server level: `client_max_body_size`, `add_header`, extra `location` blocks, `proxy_pass` overrides, `rewrite`, and so on.
 
-If you need directives at `http {}` level (like a new `map`), add them to `~/.local/share/lerd/nginx/conf.d/` with a filename that starts with an underscore (e.g. `_myorg.conf`). Files in `conf.d/` that lerd does not know about are left alone during regeneration.
+If you need directives at `http {}` level (gzip, proxy buffers, a global `client_max_body_size`, a new `map`), edit the **global override** from the web UI: open **System → Nginx** and pick the **Config** tab. It edits `~/.local/share/lerd/nginx/http.d/zz-lerd-user.conf`, which the generated `nginx.conf` includes last inside its `http {}` block, after lerd's own settings, so your values win. The editor is the same surface as the per-site one: Save runs `nginx -t` before the new bytes are committed, there is an optional backup-first checkbox with a **Restore** button, and **Reset** drops the file back to empty. The `http.d` directory is bind-mounted read-only into the `lerd-nginx` container and lerd never writes into it itself.
+
+Prefer keeping it on disk? Drop a snippet into `~/.local/share/lerd/nginx/conf.d/` with a filename that starts with an underscore (e.g. `_myorg.conf`). Files in `conf.d/` that lerd does not know about are left alone during regeneration.
 
 ## Customising the catch-all (`_default.conf`)
 

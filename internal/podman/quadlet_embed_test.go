@@ -264,6 +264,87 @@ func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 	}
 }
 
+func TestGenerateCustomQuadlet_MountsTuningOverrideForDBFamily(t *testing.T) {
+	svc := &config.CustomService{
+		Name:   "mariadb-10-11",
+		Image:  "docker.io/library/mariadb:10.11",
+		Family: "mariadb",
+	}
+	out := GenerateCustomQuadlet(svc)
+	want := "Volume=" + config.ServiceTuningFile(svc.Name) + ":/etc/mysql/conf.d/zz-lerd-user.cnf:ro,z"
+	if !strings.Contains(out, want) {
+		t.Errorf("expected tuning override volume for db family, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_NoTuningOverrideForUntunedFamily(t *testing.T) {
+	svc := &config.CustomService{
+		Name:   "meilisearch",
+		Image:  "docker.io/getmeili/meilisearch:v1",
+		Family: "meilisearch",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if strings.Contains(out, "lerd-user") {
+		t.Errorf("must not mount a tuning override for an untuned family, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_RedisTuningInjectsCommand(t *testing.T) {
+	// Redis loads no config by default, so the tuning override only takes
+	// effect if redis-server is told to read it via the container command.
+	svc := &config.CustomService{
+		Name:   "redis",
+		Image:  "docker.io/library/redis:7-alpine",
+		Family: "redis",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "Volume="+config.ServiceTuningFile(svc.Name)+":/etc/redis/lerd-user.conf:ro,z") {
+		t.Errorf("expected redis tuning volume, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Exec=redis-server /etc/redis/lerd-user.conf") {
+		t.Errorf("expected redis-server command to load the override, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_PostgresTuningMountsWrapperAndCommand(t *testing.T) {
+	// Postgres can't read an external conf.d via `-c include_dir` (rejected at
+	// runtime), so the quadlet must mount BOTH the user override and the
+	// lerd-managed wrapper config_file, and point postgres at the wrapper.
+	svc := &config.CustomService{
+		Name:   "postgres",
+		Image:  "docker.io/postgis/postgis:16-3.5-alpine",
+		Family: "postgres",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "Volume="+config.ServiceTuningFile(svc.Name)+":/etc/postgresql/conf.d/zz-lerd-user.conf:ro,z") {
+		t.Errorf("expected postgres user override volume, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Volume="+config.ServiceTuningAuxFile(svc.Name)+":/etc/postgresql/lerd.conf:ro,z") {
+		t.Errorf("expected postgres wrapper config_file volume, got:\n%s", out)
+	}
+	if !strings.Contains(out, "Exec=postgres -c config_file=/etc/postgresql/lerd.conf") {
+		t.Errorf("expected postgres to be pointed at the wrapper config_file, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_ExplicitExecWinsOverTuningCommand(t *testing.T) {
+	// A service that declares its own Exec must keep it; the tuning command is
+	// only a fallback for images that otherwise load no config.
+	svc := &config.CustomService{
+		Name:   "redis",
+		Image:  "docker.io/library/redis:7-alpine",
+		Family: "redis",
+		Exec:   "redis-server --appendonly yes",
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, "Exec=redis-server --appendonly yes") {
+		t.Errorf("explicit Exec must be preserved, got:\n%s", out)
+	}
+	if strings.Contains(out, "Exec=redis-server /etc/redis/lerd-user.conf") {
+		t.Errorf("tuning command must not override an explicit Exec, got:\n%s", out)
+	}
+}
+
 // mysql 8.4 runs mysqld as PID 1 and the kernel won't deliver SIGTERM
 // to a PID 1 process that hasn't installed a handler; podman stop times
 // out and systemctl restart wedges. --init wires catatonit in as PID 1
@@ -394,6 +475,22 @@ func TestNginxQuadletMountsCustomD(t *testing.T) {
 	}
 	if !strings.Contains(content, "%h/.local/share/lerd/nginx/custom.d:/etc/nginx/custom.d") {
 		t.Errorf("lerd-nginx.container missing custom.d volume mount:\n%s", content)
+	}
+}
+
+func TestNginxQuadletMountsHttpD(t *testing.T) {
+	// Global http{}-level override files under ~/.local/share/lerd/nginx/http.d
+	// must be bind-mounted into the container so the `include /etc/nginx/http.d/*.conf`
+	// directive in the nginx.conf template resolves. Without this, the http
+	// config editor would write user files that the running nginx never sees —
+	// regression guard for the silent-write-on-stale-quadlet bug surfaced in
+	// the #437 review.
+	content, err := GetQuadletTemplate("lerd-nginx.container")
+	if err != nil {
+		t.Fatalf("GetQuadletTemplate: %v", err)
+	}
+	if !strings.Contains(content, "%h/.local/share/lerd/nginx/http.d:/etc/nginx/http.d") {
+		t.Errorf("lerd-nginx.container missing http.d volume mount:\n%s", content)
 	}
 }
 

@@ -7,7 +7,7 @@ import (
 )
 
 // TestDumpsListenNetwork pins the per-platform transport switch the
-// dump bridge relies on. macOS can't reach a unix socket on the host
+// debug bridge relies on. macOS can't reach a unix socket on the host
 // from inside the podman-machine VM, so the receiver listens on TCP
 // instead; Linux's bind-mounted unix socket is reachable from FPM
 // directly.
@@ -43,7 +43,7 @@ func TestDumpsListenAddr(t *testing.T) {
 }
 
 // TestDumpsBridgeTarget pins the PHP-side connection string the
-// FPM dump bridge reads from its conf.d ini. The scheme must include
+// FPM debug bridge reads from its conf.d ini. The scheme must include
 // the protocol prefix (`tcp://` or `unix://`) so PHP's
 // stream_socket_client routes to the right backend.
 func TestDumpsBridgeTarget(t *testing.T) {

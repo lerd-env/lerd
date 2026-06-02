@@ -375,7 +375,14 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 
 	// Slow path: full local build from the embedded Containerfile template.
+	// The template compiles lerd_devtools in the builder stage via
+	// `COPY internal/podman/devtools`, so stage that source into the build
+	// context (the prebuilt base already carries it, so the fast path above
+	// doesn't need it).
 	{
+		if err := writeDevtoolsSource(tmp); err != nil {
+			return fmt.Errorf("staging devtools source: %w", err)
+		}
 		tmpl, tmplErr := GetQuadletTemplate("lerd-php-fpm.Containerfile")
 		if tmplErr != nil {
 			return tmplErr
@@ -680,6 +687,9 @@ func WriteFPMQuadlet(version string) error {
 	if err := EnsureProfilerAssets(); err != nil {
 		return fmt.Errorf("ensuring profiler assets: %w", err)
 	}
+	if err := EnsureDevtoolsAssets(); err != nil {
+		return fmt.Errorf("ensuring devtools assets: %w", err)
+	}
 
 	if err := ensureFPMHostsFile(); err != nil {
 		return err
@@ -695,6 +705,7 @@ func WriteFPMQuadlet(version string) error {
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
@@ -742,6 +753,7 @@ func RewriteFPMQuadlets() error {
 		content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(v))
 		content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 		content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+		content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 		content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 		content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 		content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
