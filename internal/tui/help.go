@@ -59,7 +59,7 @@ var helpReference = []helpSection{
 			{"2", "toggle the `cli` context-filter chip"},
 			{"enter / space", "toggle full-content expansion of the selected entry"},
 			{"c", "clear the in-memory buffer and run `lerd dump clear`"},
-			{"T", "toggle the dump bridge globally (lerd dump on/off)"},
+			{"T", "toggle the debug bridge globally (lerd dump on/off)"},
 		},
 	},
 	{

@@ -55,7 +55,7 @@ const (
 	initialLineBuf = 64 << 10 // 64 KiB
 )
 
-// Server accepts loopback NDJSON connections from the PHP dump bridge,
+// Server accepts loopback NDJSON connections from the PHP debug bridge,
 // validates each line against ProtocolVersion, appends valid events to the
 // ring, and publishes them to subscribers. Close once via Close().
 type Server struct {

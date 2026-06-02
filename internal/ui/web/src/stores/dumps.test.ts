@@ -38,6 +38,16 @@ describe('dumpGroups', () => {
     expect(groups.map((g) => g.label)).toEqual(['[s] GET /a', '[s] GET /b']);
   });
 
+  it('excludes non-dump kinds (queries share the same ring)', () => {
+    dumps.set([
+      ev({ id: 'd1', ts: '2026-05-10T12:00:00.000Z', ctx: { type: 'fpm', site: 's', request: 'GET /' } }),
+      { ...ev({ id: 'q1', ts: '2026-05-10T12:00:01.000Z', ctx: { type: 'fpm', site: 's', request: 'GET /' } }), kind: 'query' }
+    ]);
+    const groups = get(dumpGroups);
+    const ids = groups.flatMap((g) => g.events.map((e) => e.id));
+    expect(ids).toEqual(['d1']);
+  });
+
   it('orders events within a group newest-first', () => {
     dumps.set([
       ev({ id: 'one',   ts: '2026-05-10T12:00:00.000Z', ctx: { type: 'fpm', site: 's', request: 'GET /' } }),

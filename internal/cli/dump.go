@@ -20,12 +20,12 @@ import (
 )
 
 // NewDumpCmd returns the parent `lerd dump` command. Subcommands toggle the
-// dump bridge, tail received dumps, and inspect state.
+// debug bridge, tail received dumps, and inspect state.
 func NewDumpCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "dump",
 		Short: "Capture PHP dump()/dd() calls into the lerd dashboard",
-		Long: `Toggle the lerd dump bridge so that calls to dump() and dd() in your PHP
+		Long: `Toggle the lerd debug bridge so that calls to dump() and dd() in your PHP
 code ship to the lerd dashboard, TUI, and MCP tools instead of (only) hitting
 the response. Off by default — enable with ` + "`lerd dump on`" + ` and disable
 with ` + "`lerd dump off`" + `.`,
@@ -41,7 +41,7 @@ with ` + "`lerd dump off`" + `.`,
 func newDumpOnCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "on",
-		Short: "Enable the dump bridge for every installed PHP version",
+		Short: "Enable the debug bridge for every installed PHP version",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runDumpToggle(true)
@@ -52,7 +52,7 @@ func newDumpOnCmd() *cobra.Command {
 func newDumpOffCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "off",
-		Short: "Disable the dump bridge",
+		Short: "Disable the debug bridge",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return runDumpToggle(false)
@@ -63,7 +63,7 @@ func newDumpOffCmd() *cobra.Command {
 func newDumpStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
-		Short: "Show whether the dump bridge is enabled and how many dumps are buffered",
+		Short: "Show whether the debug bridge is enabled and how many dumps are buffered",
 		RunE:  runDumpStatus,
 	}
 }
@@ -107,13 +107,13 @@ func runDumpToggle(enable bool) error {
 		state = "enabled"
 	}
 	if res.NoChange {
-		fmt.Printf("Dump bridge already %s.\n", state)
+		fmt.Printf("Debug bridge already %s.\n", state)
 		return nil
 	}
 	if res.Enabled {
-		fmt.Println("Dump bridge enabled. Next dump() / dd() call will land in the dashboard.")
+		fmt.Println("Debug bridge enabled. Next dump() / dd() call will land in the dashboard.")
 	} else {
-		fmt.Println("Dump bridge disabled.")
+		fmt.Println("Debug bridge disabled.")
 	}
 	nudgeUIDumpsChanged()
 	return nil
@@ -138,7 +138,7 @@ func runDumpStatus(_ *cobra.Command, _ []string) error {
 		state = "enabled"
 		colour = "\033[32m"
 	}
-	fmt.Printf("Dump bridge: %s%s\033[0m\n", colour, state)
+	fmt.Printf("Debug bridge: %s%s\033[0m\n", colour, state)
 	fmt.Printf("Listener:    unix:%s\n", config.DumpsSocketPath())
 	fmt.Printf("Bridge file: %s\n", config.DumpsBridgeFile())
 	fmt.Printf("Bridge ini:  %s\n", config.DumpsIniFile())
@@ -179,7 +179,7 @@ func runDumpTail(site, ctxKind string) error {
 		return err
 	}
 	if !cfg.IsDumpsEnabled() {
-		fmt.Fprintln(os.Stderr, "[INFO] dump bridge is disabled. Run `lerd dump on` to enable.")
+		fmt.Fprintln(os.Stderr, "[INFO] debug bridge is disabled. Run `lerd dump on` to enable.")
 	}
 
 	q := []string{}

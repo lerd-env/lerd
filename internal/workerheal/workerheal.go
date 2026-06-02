@@ -58,10 +58,24 @@ var nonWorkerPerSitePrefixes = map[string]bool{
 // Swappable for tests so the detector can be exercised without touching the
 // real systemd unit-state cache or starting real units.
 var (
-	unitStatesFn = siteinfo.AllUnitStates
-	healFn       = podman.StartUnit
-	lastErrorFn  = readLastError
+	unitStatesFn  = siteinfo.AllUnitStates
+	unitEnabledFn = isUnitEnabled
+	healFn        = podman.StartUnit
+	lastErrorFn   = readLastError
 )
+
+// HumanState renders an UnhealthyWorker.State for end-user copy. The machine
+// values ("failed", "expected-but-stopped") read awkwardly in a sentence.
+func HumanState(state string) string {
+	switch state {
+	case "expected-but-stopped":
+		return "stopped"
+	case "":
+		return "failed"
+	default:
+		return state
+	}
+}
 
 // lastErrorMaxLen caps how many characters of an error line are surfaced.
 // Truncated lines keep the dashboard frame small and avoid leaking long
@@ -98,6 +112,11 @@ func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
 		if in[i].LastError != "" {
 			continue
 		}
+		// A cleanly-stopped worker has no error — its last journal line is just
+		// the "Stopped …" / CPU-summary message, which reads as a false error.
+		if in[i].State == "expected-but-stopped" {
+			continue
+		}
 		if time.Now().After(deadline) {
 			break
 		}
@@ -112,11 +131,15 @@ func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
 // sites.yaml. No per-site .lerd.yaml or composer.json reads, no extra
 // subprocess calls. Safe to invoke from a hot endpoint.
 //
-// Heuristic kept narrow on purpose: worker units that hit Restart= rate
-// limits or crash repeatedly land in "failed" and stay there until
-// something resets them. "Inactive" is too broad — users routinely stop
-// individual workers on purpose, and we can't tell intent apart from
-// drift without an explicit per-worker desired-state field.
+// Two health problems are detected. "failed" — units that hit Restart= rate
+// limits or crash repeatedly and stay stuck until reset. "expected-but-stopped"
+// — units that are still enabled (systemd's wants-symlink present) yet inactive:
+// `lerd worker stop` disables the unit, so an enabled-yet-stopped worker was
+// knocked out some other way (an FPM restart cascading through BindsTo, a
+// manual `systemctl stop`, a clean exit) and is drift, not intent. Plain
+// "inactive" alone is NOT enough — that's why the enabled check matters — and
+// timer-driven oneshots (a .timer sibling owns the lifecycle) are normally idle
+// between ticks, so they're left alone to avoid false positives.
 func Detect() ([]UnhealthyWorker, error) {
 	reg, err := config.LoadSites()
 	if err != nil {
@@ -136,15 +159,30 @@ func Detect() ([]UnhealthyWorker, error) {
 	states := unitStatesFn()
 	var out []UnhealthyWorker
 	for unit, state := range states {
-		if state != "failed" {
-			continue
-		}
 		// The unit-state cache aliases each .service unit under both
 		// "lerd-foo" and "lerd-foo.service"; pick one canonical form so
 		// we don't emit duplicates. .timer units (paired oneshot
 		// schedulers) are skipped — their .service sibling, if it ever
 		// fails, will surface here under its own key.
 		if !strings.HasSuffix(unit, ".service") {
+			continue
+		}
+		var detected string
+		switch state {
+		case "failed":
+			detected = "failed"
+		case "inactive":
+			// A timer-driven oneshot is meant to sit idle between ticks; its
+			// .timer sibling owns the lifecycle, so don't flag the service.
+			if _, hasTimer := states[strings.TrimSuffix(unit, ".service")+".timer"]; hasTimer {
+				continue
+			}
+			// Only flag drift, not an intentionally-stopped (disabled) worker.
+			if !unitEnabledFn(unit) {
+				continue
+			}
+			detected = "expected-but-stopped"
+		default:
 			continue
 		}
 		body := strings.TrimPrefix(unit, "lerd-")
@@ -170,7 +208,7 @@ func Detect() ([]UnhealthyWorker, error) {
 			Site:   site,
 			Worker: worker,
 			Unit:   "lerd-" + worker + "-" + site,
-			State:  "failed",
+			State:  detected,
 		})
 	}
 	return out, nil

@@ -81,6 +81,8 @@ type FilterOpts struct {
 	Site string
 	// Ctx exact-matches Ctx.Type ("fpm" or "cli") when non-empty.
 	Ctx string
+	// Kind exact-matches Event.Kind when non-empty (e.g. "query", "dump").
+	Kind string
 	// SinceID drops events whose ID is lexicographically <= SinceID.
 	SinceID string
 	// Limit caps the returned slice to the most recent N entries.
@@ -97,6 +99,9 @@ func (r *Ring) Filter(opts FilterOpts) []Event {
 			continue
 		}
 		if opts.Ctx != "" && e.Ctx.Type != opts.Ctx {
+			continue
+		}
+		if opts.Kind != "" && e.Kind != opts.Kind {
 			continue
 		}
 		if opts.SinceID != "" && e.ID <= opts.SinceID {

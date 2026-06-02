@@ -92,8 +92,8 @@ func (m *Model) systemRows() []systemRow {
 	profOn := cfg != nil && cfg.IsProfilerEnabled()
 	add(systemRow{kind: sysProfiler, label: "SPX profiler", on: profOn})
 
-	// Dump bridge
-	header("Dump bridge")
+	// Debug bridge
+	header("Debug bridge")
 	dumpsOn := cfg != nil && cfg.IsDumpsEnabled()
 	add(systemRow{kind: sysDumpsEnabled, label: "Enabled", on: dumpsOn})
 	add(systemRow{kind: sysDumpsPassthrough, label: "Passthrough", on: cfg != nil && cfg.IsDumpsPassthrough()})
@@ -216,7 +216,7 @@ func (m *Model) systemToggle(rows []systemRow) tea.Cmd {
 		if row.on {
 			verb = "off"
 		}
-		m.setStatus("dump bridge "+verb+"…", 5*time.Second)
+		m.setStatus("debug bridge "+verb+"…", 5*time.Second)
 		return runLerd("", "dump", verb)
 	case sysDumpsPassthrough:
 		// No public CLI verb yet; surface the state but skip toggling.

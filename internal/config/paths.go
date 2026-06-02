@@ -187,6 +187,22 @@ func DumpsIniFile() string {
 	return filepath.Join(DumpsAssetsDir(), "97-lerd-dump.ini")
 }
 
+// DevtoolsCollectorFile is the host path for the framework-neutral collector
+// (agnostic mail and other shared-library capture), loaded lazily by the
+// lerd_devtools extension. Lives in the dumps assets dir (mounted at
+// /usr/local/etc/lerd), where the extension expects it.
+func DevtoolsCollectorFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-collector.php")
+}
+
+// LaravelAdapterFile is the host path for the Laravel devtools adapter, loaded
+// by the lerd_devtools extension at Application::boot. It lives in the dumps
+// assets dir because that directory is bind-mounted into FPM at
+// /usr/local/etc/lerd, where the extension expects it.
+func LaravelAdapterFile() string {
+	return filepath.Join(DumpsAssetsDir(), "laravel-adapter.php")
+}
+
 // DumpsSocketPath is the Unix socket lerd-ui binds for dump payloads. Kept
 // in RunDir so it sits alongside the UI socket and so the existing %h:%h
 // volume in every FPM container surfaces it at the same path inside.
@@ -194,7 +210,7 @@ func DumpsSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-dumps.sock")
 }
 
-// DumpsEnabledFlagFile is the sentinel the dump bridge checks on every
+// DumpsEnabledFlagFile is the sentinel the debug bridge checks on every
 // request. Present file = bridge captures dump()/dd() calls; absent file
 // = bridge is a fast no-op. Toggling is a single touch/rm on this file
 // so the FPM container never restarts.
@@ -256,6 +272,33 @@ func DumpsBridgeTarget() string {
 		return "tcp://host.containers.internal:" + DumpsTCPPort
 	}
 	return "unix://" + DumpsSocketPath()
+}
+
+// DevtoolsAssetsDir holds the devtools collector conf.d ini. Bind-mounted
+// read-only into every FPM container; version-agnostic like the debug bridge.
+func DevtoolsAssetsDir() string {
+	return filepath.Join(DataDir(), "php", "devtools")
+}
+
+// DevtoolsIniFile is the host path for the conf.d ini that configures the
+// lerd_devtools extension (socket target + enabled kinds + sentinel path).
+func DevtoolsIniFile() string {
+	return filepath.Join(DevtoolsAssetsDir(), "96-lerd-devtools.ini")
+}
+
+// DevtoolsWorkersFlagFile is the sentinel that opts worker (queue/scheduler)
+// queries into capture. Absent (default) = workers skipped. Lives beside the
+// devtools enable flag under the /usr/local/etc/lerd mount; toggling it never
+// restarts FPM.
+func DevtoolsWorkersFlagFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-workers.flag")
+}
+
+// DevtoolsBridgeTarget is the socket the extension ships events to — the same
+// receiver lerd-ui binds for dumps, so captured queries land in the shared
+// ring and fan out through the same SSE stream.
+func DevtoolsBridgeTarget() string {
+	return DumpsBridgeTarget()
 }
 
 // CustomServicesDir returns the directory for custom service YAML files.

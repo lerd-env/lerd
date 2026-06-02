@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
 
   // Compact icon-button toggle: a glyph that turns emerald with a slow
-  // pulsing dot while the feature is on. Shared by the dump bridge and
+  // pulsing dot while the feature is on. Shared by the debug bridge and
   // profiler toggles so both read the same way wherever they appear.
 
   interface Props {

@@ -352,6 +352,11 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 	defer os.RemoveAll(tmp)
 
+	// Both build paths COPY the lerd_devtools source from the context.
+	if err := writeDevtoolsSource(tmp); err != nil {
+		return fmt.Errorf("staging devtools source: %w", err)
+	}
+
 	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
 	// can detect drift even when the on-disk cache file is stale (the
 	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
@@ -369,6 +374,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
 				buildCustomExtBlock(customExts, extDeps) +
+				devtoolsBuildBlock() +
 				mkcertCABlock(tmp)
 			goto build
 		}
@@ -384,6 +390,10 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensionsRuntime}}", buildCustomExtRuntimeDeps(customExts, extDeps))
 		containerfile = strings.ReplaceAll(containerfile, "{{.MkcertCA}}", mkcertCABlock(tmp))
+		// Layer lerd_devtools onto the finished runtime stage (kept out of the
+		// base template so the base-image hash and its fast-path pull are
+		// unchanged).
+		containerfile += devtoolsBuildBlock()
 	}
 
 build:
@@ -680,6 +690,9 @@ func WriteFPMQuadlet(version string) error {
 	if err := EnsureProfilerAssets(); err != nil {
 		return fmt.Errorf("ensuring profiler assets: %w", err)
 	}
+	if err := EnsureDevtoolsAssets(); err != nil {
+		return fmt.Errorf("ensuring devtools assets: %w", err)
+	}
 
 	if err := ensureFPMHostsFile(); err != nil {
 		return err
@@ -695,6 +708,7 @@ func WriteFPMQuadlet(version string) error {
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
@@ -742,6 +756,7 @@ func RewriteFPMQuadlets() error {
 		content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(v))
 		content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 		content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
+		content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
 		content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 		content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 		content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())

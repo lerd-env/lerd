@@ -63,7 +63,7 @@ type TinkerResult struct {
 // or "php" for the fallback.
 //
 // siteName + branch are forwarded to the container as LERD_SITE / LERD_BRANCH
-// env vars so the dump bridge tags `dump()` / `dd()` events with the same
+// env vars so the debug bridge tags `dump()` / `dd()` events with the same
 // identifiers FPM requests use (otherwise tinker dumps land under the
 // worktree's directory basename rather than the parent site).
 func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (TinkerResult, error) {
@@ -185,7 +185,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 // ANSI-colored, PSYSH_TRUST_PROJECT so PsySH skips its non-interactive
 // "Restricted Mode" warning (the user is running their own project code in
 // their own container; restricting it adds noise without security gain),
-// and LERD_DUMP_PASSTHROUGH=1 so when the dump bridge is on the auto-
+// and LERD_DUMP_PASSTHROUGH=1 so when the debug bridge is on the auto-
 // wrapped `dump(expr)` still prints to stdout. Without it the bridge
 // silently swallows the value and the REPL shows nothing for bare
 // expressions like `User::count()`.
