@@ -10,6 +10,7 @@
   import NodePage from './system/NodePage.svelte';
   import LerdDetail from './system/LerdDetail.svelte';
   import WorkerModeDetail from './system/WorkerModeDetail.svelte';
+  import HorizonReloadDetail from './system/HorizonReloadDetail.svelte';
 
   const selected = $derived($routeRest || 'lerd');
   const phpVersion = $derived(selected.startsWith('php-') ? selected.slice(4) : '');
@@ -33,6 +34,8 @@
   <NodePage />
 {:else if selected === 'workermode'}
   <WorkerModeDetail />
+{:else if selected === 'horizon-reload'}
+  <HorizonReloadDetail />
 {:else}
   <LerdDetail />
 {/if}

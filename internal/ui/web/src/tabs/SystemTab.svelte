@@ -14,6 +14,7 @@
   import { accessMode } from '$stores/accessMode';
   import { lerdStart, lerdStop, lerdStarting, lerdStopping } from '$stores/lerdLifecycle';
   import { workerExecMode, workerModeApplies, loadWorkerMode } from '$stores/workerMode';
+  import { horizonReload, loadHorizonReload } from '$stores/horizonReload';
   import { status as dumpsStatusValue, refreshStatus as refreshDumpsStatus } from '$stores/dumps';
   import { notifyPrefs, permissionState, autoSubscribeDisabled } from '$lib/notify';
   import { onMount } from 'svelte';
@@ -21,6 +22,7 @@
 
   onMount(() => {
     loadWorkerMode();
+    void loadHorizonReload();
     void refreshDumpsStatus();
   });
 
@@ -107,6 +109,11 @@
         {m.system_workerMode_listLabel()}
       </ListRow>
     {/if}
+
+    {#snippet horizonReloadDot()}<StatusDot color={$horizonReload ? 'green' : 'gray'} />{/snippet}
+    <ListRow active={selected === 'horizon-reload'} onclick={() => select('horizon-reload')} leading={horizonReloadDot}>
+      {m.system_horizonReload_listLabel()}
+    </ListRow>
 
     {#snippet watcherDot()}<StatusDot color={$status.watcher_running ? 'green' : 'gray'} />{/snippet}
     <ListRow active={selected === 'watcher'} onclick={() => select('watcher')} leading={watcherDot}>{m.system_watcher()}</ListRow>

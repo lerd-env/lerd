@@ -243,6 +243,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings", withCORS(handleSettings))
 	mux.HandleFunc("/api/settings/autostart", withCORS(handleSettingsAutostart))
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
+	mux.HandleFunc("/api/settings/horizon-reload", withCORS(handleSettingsHorizonReload))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
 	mux.HandleFunc("/api/stats", withCORS(handleStats))
@@ -3962,19 +3963,45 @@ type SettingsResponse struct {
 	AutostartOnLogin  bool   `json:"autostart_on_login"`
 	WorkerExecMode    string `json:"worker_exec_mode"`
 	WorkerModeApplies bool   `json:"worker_mode_applies"` // true on macOS only
+	HorizonReload     bool   `json:"horizon_reload"`      // run Horizon via horizon:listen
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	cfg, _ := config.LoadGlobal()
 	mode := config.WorkerExecModeExec
+	horizonReload := false
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
+		horizonReload = cfg.HorizonReloadEnabled()
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:  lerdSystemd.IsAutostartEnabled(),
 		WorkerExecMode:    mode,
 		WorkerModeApplies: runtime.GOOS == "darwin",
+		HorizonReload:     horizonReload,
 	})
+}
+
+// handleSettingsHorizonReload toggles the global "run Horizon via
+// horizon:listen" setting and restarts any running Horizon worker so the change
+// applies immediately.
+func handleSettingsHorizonReload(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if err := cli.ApplyHorizonReload(body.Enabled); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "horizon_reload": body.Enabled})
 }
 
 func handleSettingsWorkerMode(w http.ResponseWriter, r *http.Request) {

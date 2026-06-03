@@ -67,8 +67,7 @@ func newHorizonReloadCmd(use string) *cobra.Command {
 				return fmt.Errorf("expected 'on' or 'off', got %q", args[0])
 			}
 
-			cfg.SetHorizonReload(enable)
-			if err := config.SaveGlobal(cfg); err != nil {
+			if err := ApplyHorizonReload(enable); err != nil {
 				return err
 			}
 
@@ -77,55 +76,68 @@ func newHorizonReloadCmd(use string) *cobra.Command {
 			} else {
 				fmt.Println("Horizon auto-reload disabled — Horizon runs in standard mode.")
 			}
-
-			restartRunningHorizon()
 			return nil
 		},
 	}
 }
 
-// restartRunningHorizon restarts the Horizon worker for the current site, but
-// only when one is already running, so toggling auto-reload applies immediately
-// without starting Horizon on a site that wasn't using it. All failures are
-// non-fatal: the new command is already persisted and will apply on next start.
-func restartRunningHorizon() {
-	cwd, err := os.Getwd()
-	if err != nil || !SiteHasHorizon(cwd) {
-		return
-	}
-	siteName, err := queueSiteName(cwd)
+// ApplyHorizonReload persists the global Horizon auto-reload toggle and restarts
+// every Horizon worker that is currently running so the new command takes effect
+// immediately. The setting is global, so all running Horizon workers are
+// reconciled (mirrors how the worker exec-mode change applies machine-wide).
+// Restart failures are non-fatal — the setting is already persisted and applies
+// on the next start; only a load/save failure is returned.
+func ApplyHorizonReload(enabled bool) error {
+	cfg, err := config.LoadGlobal()
 	if err != nil {
-		return
+		return err
 	}
-	site, err := config.FindSite(siteName)
+	cfg.SetHorizonReload(enabled)
+	if err := config.SaveGlobal(cfg); err != nil {
+		return err
+	}
+	restartRunningHorizonWorkers()
+	return nil
+}
+
+// restartRunningHorizonWorkers restarts the Horizon worker of every site that
+// currently has one running, so a toggle applies without manual intervention.
+// Sites without a running Horizon worker are left untouched.
+func restartRunningHorizonWorkers() {
+	reg, err := config.LoadSites()
 	if err != nil {
+		fmt.Printf("[WARN] horizon reload: load sites: %v\n", err)
 		return
 	}
-	running := false
-	for _, n := range CollectRunningWorkerNames(site) {
-		if n == "horizon" {
-			running = true
-			break
+	for i := range reg.Sites {
+		site := reg.Sites[i]
+		if site.Paused || !SiteHasHorizon(site.Path) {
+			continue
+		}
+		running := false
+		for _, n := range CollectRunningWorkerNames(&site) {
+			if n == "horizon" {
+				running = true
+				break
+			}
+		}
+		if !running {
+			continue
+		}
+
+		phpVersion, perr := phpDet.DetectVersion(site.Path)
+		if perr != nil {
+			if cfg, cerr := config.LoadGlobal(); cerr == nil {
+				phpVersion = cfg.PHP.DefaultVersion
+			}
+		}
+		if err := HorizonStopForSite(site.Name); err != nil {
+			fmt.Printf("[WARN] stop horizon (%s): %v\n", site.Name, err)
+		}
+		if err := HorizonStartForSite(site.Name, site.Path, phpVersion); err != nil {
+			fmt.Printf("[WARN] restart horizon (%s): %v\n", site.Name, err)
 		}
 	}
-	if !running {
-		fmt.Println("Start Horizon to apply: lerd horizon start")
-		return
-	}
-
-	phpVersion, err := phpDet.DetectVersion(cwd)
-	if err != nil {
-		cfg, _ := config.LoadGlobal()
-		phpVersion = cfg.PHP.DefaultVersion
-	}
-	if err := HorizonStopForSite(siteName); err != nil {
-		fmt.Printf("[WARN] stop horizon: %v\n", err)
-	}
-	if err := HorizonStartForSite(siteName, cwd, phpVersion); err != nil {
-		fmt.Printf("[WARN] restart horizon: %v\n", err)
-		return
-	}
-	fmt.Println("Restarted Horizon to apply the change.")
 }
 
 func newHorizonStartCmd(use string) *cobra.Command {
