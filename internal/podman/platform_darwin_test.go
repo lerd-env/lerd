@@ -16,7 +16,9 @@ func TestPlatformPodmanArgs_Postgres(t *testing.T) {
 		{"postgres", "docker.io/postgis/postgis:17-3.5-alpine", "--platform=linux/amd64"},
 		{"postgres", "docker.io/library/postgres:16-alpine", ""},
 		{"postgres", "docker.io/imresamu/postgis:16-3.5-alpine", ""},
-		{"mysql", "docker.io/postgis/postgis:16-3.5-alpine", ""},
+		// Keyed off the image, not the name: an amd64-only image gets the pin
+		// whatever the service is called, so pull and run stay in agreement.
+		{"mysql", "docker.io/postgis/postgis:16-3.5-alpine", "--platform=linux/amd64"},
 		{"mysql", "docker.io/library/mysql:5.7", "--platform=linux/amd64"},
 		{"mysql", "docker.io/library/mysql:8.4", ""},
 		{"mysql", "docker.io/library/mysql:9.7", ""},

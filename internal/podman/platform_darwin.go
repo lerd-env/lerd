@@ -19,19 +19,13 @@ func imageLacksArm64(image string) bool {
 
 // PlatformPodmanArgs returns one extra `podman run` arg to splice into a
 // service unit on macOS, or "" when no platform tweak is needed. Hooked from
-// WriteQuadletDiff so cli, UI, MCP, and install all emit identical units. The
-// serviceName gate keeps the tweak scoped to the canonical preset that ships
-// the no-arm64 image; an unrelated service reusing the image string passes.
-func PlatformPodmanArgs(serviceName, currentImage string) string {
-	switch serviceName {
-	case "postgres":
-		if strings.Contains(currentImage, "postgis/postgis") {
-			return "--platform=linux/amd64"
-		}
-	case "mysql":
-		if strings.Contains(currentImage, "mysql:5.7") {
-			return "--platform=linux/amd64"
-		}
+// WriteQuadletDiff so cli, UI, MCP, and install all emit identical units. It
+// keys off the image alone (imageLacksArm64), so the quadlet's --platform
+// matches what PlatformPullArgs pins at pull time and the two never disagree,
+// regardless of the service's name.
+func PlatformPodmanArgs(_, currentImage string) string {
+	if imageLacksArm64(currentImage) {
+		return "--platform=linux/amd64"
 	}
 	return ""
 }

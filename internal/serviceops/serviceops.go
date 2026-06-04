@@ -44,19 +44,13 @@ type PhaseEvent struct {
 // at every step. The image is pulled before the service is registered (config
 // + quadlet) so a failed pull never leaves a registered-but-broken service
 // behind; pulling here also turns the hidden on-demand pull latency into
-// visible progress in the UI.
+// visible progress in the UI. Registration precedes the dependency-start loop
+// so a dependency that fails to start still leaves the service installed on
+// disk; this matters for reinstall, which has already removed the prior copy.
 func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*config.CustomService, error) {
 	svc, err := resolvePresetForInstall(name, version)
 	if err != nil {
 		return nil, err
-	}
-
-	for _, dep := range svc.DependsOn {
-		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "starting"})
-		if err := EnsureServiceRunning(dep); err != nil {
-			return nil, fmt.Errorf("starting dependency %q: %w", dep, err)
-		}
-		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "ready"})
 	}
 
 	if svc.Image != "" && !podman.ImageExists(svc.Image) {
@@ -72,6 +66,14 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 	emit(PhaseEvent{Phase: "installing_config"})
 	if err := registerPreset(svc); err != nil {
 		return nil, err
+	}
+
+	for _, dep := range svc.DependsOn {
+		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "starting"})
+		if err := EnsureServiceRunning(dep); err != nil {
+			return svc, fmt.Errorf("starting dependency %q: %w", dep, err)
+		}
+		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "ready"})
 	}
 
 	unit := "lerd-" + svc.Name
