@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/geodro/lerd/internal/config"
+	lerddumps "github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/eventbus"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteinfo"
@@ -117,21 +118,24 @@ type Model struct {
 	// header so users see it without running lerd status.
 	updateAvailable string
 
-	// Buffer of recent dump events surfaced by the dumps pane (D key).
-	// Capped at dumpsBufferCap; new events arrive via dumpEventMsg from
-	// the goroutine started by Run when the program boots. Independent
-	// of the in-memory ring inside lerd-ui because the TUI runs in its
-	// own process and only sees what the SSE connection delivers.
-	dumps             []DumpEntry
+	// Buffer of recent debug events surfaced by the Debug pane (D key).
+	// Holds every kind (dump, query, job, view, mail, cache, event, http)
+	// raw so each lens can render its own fields; capped at dumpsBufferCap.
+	// New events arrive batched via debugBatchMsg from the goroutine started by Run
+	// when the program boots. Independent of the in-memory ring inside
+	// lerd-ui because the TUI runs in its own process and only sees what
+	// the SSE connection delivers.
+	debug             []lerddumps.Event
+	debugLens         int // index into debugLenses; which kind is shown
 	dumpsCursor       int
 	dumpsScroll       int
 	dumpsFilter       string
 	dumpsFilterActive bool
 	dumpsExpanded     map[string]bool
 
-	// Dumps context-filter chips: when non-empty, only entries whose
+	// Debug context-filter chips: when non-empty, only entries whose
 	// Type matches are shown. Toggled by `1` (fpm) / `2` (cli) in
-	// dumps mode; mutually exclusive — setting one clears the other.
+	// the Debug view; mutually exclusive — setting one clears the other.
 	dumpsCtxFilter string
 
 	// Command palette state: when paletteActive is true, all keystrokes go
@@ -235,7 +239,7 @@ func updateCheckCmd(current string) tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case dumpsClearedMsg:
-		m.dumps = nil
+		m.debug = nil
 		m.dumpsExpanded = nil
 		m.dumpsCursor = 0
 		m.dumpsScroll = 0
@@ -278,8 +282,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.updateAvailable = msg.Latest
 		return m, nil
 
-	case dumpEventMsg:
-		m.appendDump(DumpEntry(msg))
+	case debugBatchMsg:
+		for _, ev := range msg {
+			m.appendDebug(ev)
+		}
 		return m, nil
 
 	case statsMsg:
@@ -398,6 +404,7 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.detailMode = detailSite
 		} else {
 			m.detailMode = detailDumps
+			m.debugLens = 0
 			m.dumpsCursor = 0
 			m.dumpsScroll = 0
 			m.focus = paneDetail
@@ -532,10 +539,28 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "[":
+		// In the Debug view (global D or the per-site Debug tab), [ / ] switch
+		// lens; everywhere else they cycle the log-pane target.
+		if m.inDebugView() {
+			m.cycleDebugLens(-1)
+			m.detailScroll = 0
+			return m, nil
+		}
 		return m, m.cycleLogTarget(-1)
 
 	case "]":
+		if m.inDebugView() {
+			m.cycleDebugLens(1)
+			m.detailScroll = 0
+			return m, nil
+		}
 		return m, m.cycleLogTarget(1)
+
+	case "w":
+		if m.inDebugView() {
+			return m, m.toggleDebugWorkers()
+		}
+		return m, nil
 
 	case "{":
 		if m.showLogs {
@@ -628,7 +653,7 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "3":
 		if m.detailMode == detailSite {
-			m.siteTab = tabSiteDumps
+			m.siteTab = tabSiteDebug
 			m.detailScroll = 0
 			m.focus = paneDetail
 		}
@@ -999,7 +1024,7 @@ func (m *Model) moveCursor(delta int) {
 				m.detailScroll = 0
 			}
 		case detailDumps:
-			visible := len(filteredDumpsWithCtx(m.dumps, m.dumpsFilter, m.dumpsCtxFilter))
+			visible := len(m.debugVisibleEvents(""))
 			m.dumpsCursor = clamp(m.dumpsCursor+delta, 0, max(0, visible-1))
 		default:
 			// Non-Overview site tabs (Env / Dumps / App logs) are read-only

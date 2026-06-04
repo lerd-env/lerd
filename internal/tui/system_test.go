@@ -113,8 +113,8 @@ func TestSystemContentLines_CursorLineLandsOnInteractiveRow(t *testing.T) {
 // from the model so users see the same number the Dumps view shows.
 func TestSystemRows_DumpsInfoShowsBufferedCount(t *testing.T) {
 	m := NewModel("test")
-	m.appendDump(DumpEntry{ID: "a"})
-	m.appendDump(DumpEntry{ID: "b"})
+	m.appendDebug(dumpEv(DumpEntry{ID: "a"}))
+	m.appendDebug(dumpEv(DumpEntry{ID: "b"}))
 
 	rows := m.systemRows()
 	var bufferedRow systemRow
