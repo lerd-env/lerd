@@ -291,13 +291,14 @@ func (m *Model) removeFocusedDomain() (handled bool, cmd tea.Cmd) {
 		return false, nil
 	}
 	short := trimTLD(row.domain)
+	tld := config.ExtractTLD(row.domain)
 	sitePath := s.Path
 	siteName := s.Name
 	full := row.domain
 	m.openConfirm(
 		"Remove domain",
 		"Remove "+full+" from "+siteName+"?\nThis unregisters the alias from nginx and dnsmasq immediately.",
-		runLerd(sitePath, "domain", "remove", short),
+		runLerd(sitePath, "domain", "remove", short, "--tld", tld),
 	)
 	return true, nil
 }

@@ -9,6 +9,44 @@ import (
 	"testing"
 )
 
+// --- multi-TLD resolver renderers ---
+
+func TestRenderResolvedDropin_multiTLD(t *testing.T) {
+	got := renderResolvedDropin([]string{"test", "local"})
+	if !strings.Contains(got, "DNS=127.0.0.1:5300") {
+		t.Errorf("missing DNS server line:\n%s", got)
+	}
+	if !strings.Contains(got, "Domains=~test ~local") {
+		t.Errorf("expected both routing domains, got:\n%s", got)
+	}
+}
+
+func TestRenderNMDnsmasqConf_perTLDServerLine(t *testing.T) {
+	got := renderNMDnsmasqConf([]string{"test", "lab"})
+	for _, want := range []string{"server=/test/127.0.0.1#5300", "server=/lab/127.0.0.1#5300"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderNMDispatcherScript_bakesTLDSet(t *testing.T) {
+	got := renderNMDispatcherScript([]string{"test", "local"})
+	if strings.Contains(got, "__LERD_") {
+		t.Errorf("unresolved template placeholder remains:\n%s", got)
+	}
+	if !strings.Contains(got, "resolvectl domain \"$IFACE\" ~test ~local ~.") {
+		t.Errorf("expected routing domains baked into resolvectl line:\n%s", got)
+	}
+	if !strings.Contains(got, "for ltld in test local; do") {
+		t.Errorf("expected TLD list baked into rewrite loop:\n%s", got)
+	}
+	// The single-TLD config.yaml grep must be gone — the set is baked in now.
+	if strings.Contains(got, "grep 'tld:'") {
+		t.Errorf("dispatcher should no longer grep a single tld from config.yaml:\n%s", got)
+	}
+}
+
 // --- parseNmcliOutput ---
 
 func TestParseNmcliOutput_basic(t *testing.T) {

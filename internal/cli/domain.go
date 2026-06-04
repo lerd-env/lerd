@@ -26,21 +26,26 @@ func NewDomainCmd() *cobra.Command {
 }
 
 func newDomainAddCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "add <name>",
-		Short: "Add a domain to the current site (name without .test)",
+		Short: "Add a domain to the current site (name without the TLD)",
+		Long:  "Add an alias domain to the current site. The TLD defaults to the global one (e.g. 'admin' becomes admin.test); pass --tld to put it on a different ending (e.g. --tld local for admin.local).",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runDomainAdd,
 	}
+	cmd.Flags().String("tld", "", "TLD for the new domain (defaults to the global TLD, e.g. test)")
+	return cmd
 }
 
 func newDomainRemoveCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "remove <name>",
-		Short: "Remove a domain from the current site (name without .test)",
+		Short: "Remove a domain from the current site (name without the TLD)",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runDomainRemove,
 	}
+	cmd.Flags().String("tld", "", "TLD of the domain to remove (defaults to the global TLD, e.g. test)")
+	return cmd
 }
 
 func newDomainListCmd() *cobra.Command {
@@ -64,7 +69,7 @@ func resolveSiteForCwd() (*config.Site, error) {
 	return site, nil
 }
 
-func runDomainAdd(_ *cobra.Command, args []string) error {
+func runDomainAdd(cmd *cobra.Command, args []string) error {
 	site, err := resolveSiteForCwd()
 	if err != nil {
 		return err
@@ -75,8 +80,17 @@ func runDomainAdd(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	tld, err := resolveDomainTLD(cmd, cfg)
+	if err != nil {
+		return err
+	}
+
+	// Whether this TLD is brand new across all sites — decides if the resolver
+	// layer needs re-applying after the add (snapshot before AddSite).
+	tldWasActive := tldInActiveSet(tld)
+
 	domainName := strings.ToLower(args[0])
-	fullDomain := domainName + "." + cfg.DNS.TLD
+	fullDomain := domainName + "." + tld
 
 	if isReservedDomain(fullDomain) {
 		return fmt.Errorf("domain %q is reserved for internal Lerd use", fullDomain)
@@ -129,11 +143,19 @@ func runDomainAdd(_ *cobra.Command, args []string) error {
 		fmt.Printf("[WARN] syncing .env to new primary domain: %v\n", err)
 	}
 
+	// Introducing a brand-new TLD means the resolver layer doesn't answer for
+	// it yet — re-apply dnsmasq + the platform resolver so it resolves.
+	if !tldWasActive {
+		if err := EnsureTLDResolution(cfg); err != nil {
+			fmt.Printf("[WARN] applying DNS for new TLD .%s: %v\n", tld, err)
+		}
+	}
+
 	fmt.Printf("Added domain %s to site %s\n", fullDomain, site.Name)
 	return nil
 }
 
-func runDomainRemove(_ *cobra.Command, args []string) error {
+func runDomainRemove(cmd *cobra.Command, args []string) error {
 	site, err := resolveSiteForCwd()
 	if err != nil {
 		return err
@@ -144,8 +166,13 @@ func runDomainRemove(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	tld, err := resolveDomainTLD(cmd, cfg)
+	if err != nil {
+		return err
+	}
+
 	domainName := strings.ToLower(args[0])
-	fullDomain := domainName + "." + cfg.DNS.TLD
+	fullDomain := domainName + "." + tld
 
 	if !site.HasDomain(fullDomain) {
 		return fmt.Errorf("site %q does not have domain %q", site.Name, fullDomain)

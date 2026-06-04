@@ -73,7 +73,14 @@ func SyncProjectDomains(dir string, fullDomains []string, tld string) error {
 		seen := make(map[string]bool)
 		var names []string
 		for _, d := range fullDomains {
-			name := strings.TrimSuffix(d, suffix)
+			// Strip only the default TLD so ordinary sites stay shareable as
+			// bare labels. A domain on a different TLD (e.g. alice.local while
+			// the default is test) is kept whole, so a relink restores it as-is
+			// instead of re-suffixing it into alice.local.test.
+			name := d
+			if strings.HasSuffix(d, suffix) {
+				name = strings.TrimSuffix(d, suffix)
+			}
 			low := strings.ToLower(name)
 			if !seen[low] {
 				names = append(names, name)

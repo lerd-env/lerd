@@ -29,18 +29,21 @@ func presetVersionSuffix(version string) string {
 
 // NewLinkCmd returns the link command.
 func NewLinkCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "link [domain]",
 		Short: "Link the current directory as a site",
-		Long:  "Register the current directory as a lerd site. The optional argument is the domain name without the TLD (e.g. 'myapp' becomes myapp.test). Defaults to the directory name.",
+		Long:  "Register the current directory as a lerd site. The optional argument is the domain name without the TLD (e.g. 'myapp' becomes myapp.test). Defaults to the directory name.\n\nUse --tld to choose one or more endings: --tld local serves it at myapp.local instead of myapp.test; --tld test,local serves it at both. The first TLD is the primary (used for the APP_URL and certificate).",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runLink(args)
+			tldFlag, _ := cmd.Flags().GetString("tld")
+			return runLink(args, tldFlag)
 		},
 	}
+	cmd.Flags().String("tld", "", "TLD(s) for the site, comma-separated (defaults to the global TLD, e.g. test)")
+	return cmd
 }
 
-func runLink(args []string) error {
+func runLink(args []string, tldFlag string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -94,37 +97,74 @@ func runLink(args []string) error {
 		}
 	}
 
+	// Resolve the TLD set (--tld flag, comma-separated; defaults to the global
+	// TLD). The first TLD is the primary, used for the site name, APP_URL and
+	// certificate CN.
+	tlds, err := parseTLDFlag(tldFlag, cfg)
+	if err != nil {
+		return err
+	}
+	primaryTLD := tlds[0]
+	known := knownTLDs(cfg, tlds...)
+
+	// Snapshot the TLDs the resolver already answers, so after registration we
+	// can tell whether this site introduced a new one that needs wiring up.
+	preActiveTLDs := map[string]bool{}
+	for _, t := range config.ActiveTLDs() {
+		preActiveTLDs[t] = true
+	}
+
 	rawName := filepath.Base(cwd)
 	if len(args) > 0 {
 		rawName = args[0]
 	}
 
-	baseName, _ := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
+	baseName, _ := siteops.SiteNameAndDomain(rawName, primaryTLD)
 	name := freeSiteName(baseName, cwd)
 
-	// Build the domains list.
+	// Build the base labels (without TLD).
 	// 1. Start from .lerd.yaml domains if present, else auto-generate from name.
-	// 2. If an explicit arg is given, ensure it is the primary (first) domain.
-	var domains []string
+	// 2. If an explicit arg is given, ensure it is the primary (first) label.
+	var labels []string
 	if proj != nil && len(proj.Domains) > 0 {
 		for _, d := range proj.Domains {
-			domains = append(domains, strings.ToLower(d)+"."+cfg.DNS.TLD)
+			labels = append(labels, strings.ToLower(d))
 		}
 	} else {
-		domains = []string{name + "." + cfg.DNS.TLD}
+		labels = []string{name}
 	}
-
-	// If the user passed an explicit domain, make it the primary.
 	if len(args) > 0 {
-		explicit := strings.ToLower(args[0]) + "." + cfg.DNS.TLD
-		// Remove it from the list if already present, then prepend.
+		explicit := strings.ToLower(args[0])
 		var filtered []string
-		for _, d := range domains {
-			if d != explicit {
-				filtered = append(filtered, d)
+		for _, l := range labels {
+			if l != explicit {
+				filtered = append(filtered, l)
 			}
 		}
-		domains = append([]string{explicit}, filtered...)
+		labels = append([]string{explicit}, filtered...)
+	}
+
+	// Expand labels across the chosen TLDs. A label that already carries a known
+	// TLD (a full domain persisted in .lerd.yaml, e.g. alice.local) is taken
+	// as-is rather than multiplied — that's what preserves a per-site TLD across
+	// a relink instead of re-suffixing it into alice.local.test.
+	var domains []string
+	domSeen := map[string]bool{}
+	addDomain := func(d string) {
+		d = strings.ToLower(d)
+		if !domSeen[d] {
+			domSeen[d] = true
+			domains = append(domains, d)
+		}
+	}
+	for _, l := range labels {
+		if strings.Contains(l, ".") && known[config.ExtractTLD(l)] {
+			addDomain(l)
+			continue
+		}
+		for _, t := range tlds {
+			addDomain(l + "." + t)
+		}
 	}
 
 	// Filter out domains already owned by another site (and reserved domains).
@@ -133,7 +173,7 @@ func runLink(args []string) error {
 	// list is what gets registered. If everything was conflicted, fall back to
 	// a freshly generated <baseName>.<tld>. Re-linking the same path is not a
 	// conflict.
-	kept, removed := resolveSiteDomains(domains, baseName, cwd, cfg.DNS.TLD)
+	kept, removed := resolveSiteDomains(domains, baseName, cwd, primaryTLD)
 	warnFilteredDomains(removed)
 	domains = kept
 
@@ -222,6 +262,14 @@ func runLink(args []string) error {
 	}
 
 	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
+
+	// If the site introduced a TLD the resolver doesn't answer yet, re-apply
+	// dnsmasq + the platform resolver so the new ending resolves immediately.
+	if newTLDs := introducedTLDs(preActiveTLDs, site.Domains); len(newTLDs) > 0 {
+		if err := EnsureTLDResolution(cfg); err != nil {
+			fmt.Printf("[WARN] applying DNS for new TLD(s) %s: %v\n", strings.Join(newTLDs, ", "), err)
+		}
+	}
 
 	if site.IsFrankenPHP() {
 		if err := siteops.FinishFrankenPHPLink(site); err != nil {

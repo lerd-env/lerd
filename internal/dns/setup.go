@@ -17,26 +17,73 @@ const nmDnsConf = `[main]
 dns=dnsmasq
 `
 
-const nmDnsmasqConf = `server=/test/127.0.0.1#5300
-`
+// linuxResolverTLDs returns the active TLDs the Linux resolver paths route to
+// lerd-dns. "localhost" is dropped (the stub resolver owns it). ".local" is
+// kept: on Linux it can be made to resolve once the user disables Avahi/nss-mdns,
+// and routing it is harmless when they have not (mDNS still wins). Always
+// returns at least "test".
+func linuxResolverTLDs() []string {
+	var out []string
+	for _, t := range config.ActiveTLDs() {
+		if t == "localhost" {
+			continue
+		}
+		out = append(out, t)
+	}
+	if len(out) == 0 {
+		out = []string{"test"}
+	}
+	return out
+}
 
-const resolvedDropin = `[Resolve]
-DNS=127.0.0.1:5300
-Domains=~test
-`
+// routingDomains renders the resolvectl/systemd-resolved routing-domain tokens
+// for the active set: ["test","local"] → "~test ~local".
+func routingDomains(tlds []string) string {
+	parts := make([]string, len(tlds))
+	for i, t := range tlds {
+		parts[i] = "~" + t
+	}
+	return strings.Join(parts, " ")
+}
 
-// nmDispatcherScript is installed at /etc/NetworkManager/dispatcher.d/99-lerd-dns.
+// renderNMDnsmasqConf builds NetworkManager's embedded-dnsmasq forwarding
+// config: one server=/<tld>/127.0.0.1#5300 line per active TLD. This path uses
+// NM's own dnsmasq, which forwards to lerd-dns on 5300, so it never reads
+// lerd's lerd.conf.
+func renderNMDnsmasqConf(tlds []string) string {
+	var sb strings.Builder
+	for _, t := range tlds {
+		fmt.Fprintf(&sb, "server=/%s/127.0.0.1#5300\n", t)
+	}
+	return sb.String()
+}
+
+// renderResolvedDropin builds the systemd-resolved drop-in routing every active
+// TLD to lerd-dns on 127.0.0.1:5300.
+func renderResolvedDropin(tlds []string) string {
+	return "[Resolve]\nDNS=127.0.0.1:5300\nDomains=" + routingDomains(tlds) + "\n"
+}
+
+// nmDispatcherScriptTemplate is installed at /etc/NetworkManager/dispatcher.d/99-lerd-dns.
 // On systems with NetworkManager + systemd-resolved, NM manages resolved via DBus and
 // overrides global resolved.conf drop-ins. Per-interface DNS set via resolvectl is
-// respected. We set two routing domains: ~test routes .test queries to lerd's dnsmasq,
-// and ~. keeps the interface as the default route so all other DNS (internet) still works.
+// respected. We set the active TLDs as routing domains (e.g. ~test ~local) so those
+// queries go to lerd's dnsmasq, plus ~. to keep the interface as the default route so
+// all other DNS (internet) still works.
 // The DHCP-assigned DNS servers are preserved alongside lerd's so internet continues
 // to work even when lerd-dns is not yet running.
 // When the network changes (LAN↔WiFi, switching networks), the script also rewrites
 // the lerd dnsmasq config and restarts lerd-dns so the new upstream DNS is picked up
 // immediately without requiring a manual lerd restart.
-const nmDispatcherScript = `#!/bin/sh
-# Lerd DNS: route .test queries through local dnsmasq on port 5300
+//
+// The active TLD set is baked in by renderNMDispatcherScript at setup time
+// (__LERD_ROUTING_DOMAINS__ and __LERD_TLD_LIST__), so a re-run of the resolver
+// setup after linking a site on a new TLD refreshes the dispatcher. Note: the
+// rewrite still emits v4 loopback only — the LAN-exposed/v6 target produced by
+// the Go writer is reset on a network event (pre-existing drift, tracked
+// separately).
+const nmDispatcherScriptTemplate = `#!/bin/sh
+# Lerd DNS: route lerd TLD queries through local dnsmasq on port 5300
 IFACE="$1"
 ACTION="$2"
 LERD_DNS=""
@@ -44,7 +91,7 @@ LERD_DNS=""
 if [ "$ACTION" = "up" ] || [ "$ACTION" = "dhcp4-change" ] || [ "$ACTION" = "dhcp6-change" ]; then
     LERD_DNS=$(nmcli -g IP4.DNS device show "$IFACE" 2>/dev/null | tr '|' '\n' | grep -v '^$' | tr '\n' ' ')
     resolvectl dns "$IFACE" 127.0.0.1:5300 $LERD_DNS 2>/dev/null || true
-    resolvectl domain "$IFACE" ~test ~. 2>/dev/null || true
+    resolvectl domain "$IFACE" __LERD_ROUTING_DOMAINS__ ~. 2>/dev/null || true
 elif [ "$ACTION" = "down" ]; then
     # Interface went down: switch lerd-dns to the remaining default interface's DNS
     # so upstream resolution keeps working (e.g. closing wired while on WiFi).
@@ -68,17 +115,27 @@ for uid_dir in /run/user/[0-9]*/; do
     home=$(getent passwd "$uid" | cut -d: -f6)
     config_file="$home/.local/share/lerd/dnsmasq/lerd.conf"
     [ -f "$config_file" ] || continue
-    tld=$(grep 'tld:' "$home/.config/lerd/config.yaml" 2>/dev/null | sed 's/.*tld:[[:space:]]*//' | sed 's/[^a-zA-Z0-9._-]//g' | head -1)
-    tld=${tld:-test}
     printf '# Lerd DNS configuration\nport=5300\nno-resolv\n' > "$config_file"
     for dns_ip in $LERD_DNS; do
         printf 'server=%s\n' "$dns_ip" >> "$config_file"
     done
-    printf 'address=/.%s/127.0.0.1\n' "$tld" >> "$config_file"
+    for ltld in __LERD_TLD_LIST__; do
+        printf 'address=/.%s/127.0.0.1\n' "$ltld" >> "$config_file"
+    done
     XDG_RUNTIME_DIR="$uid_dir" DBUS_SESSION_BUS_ADDRESS="unix:path=$bus" \
         systemctl --user restart lerd-dns 2>/dev/null || true
 done
 `
+
+// renderNMDispatcherScript bakes the active TLD set into the dispatcher script:
+// the resolvectl routing domains (~test ~local) and the dnsmasq rewrite loop's
+// TLD list (test local).
+func renderNMDispatcherScript(tlds []string) string {
+	s := nmDispatcherScriptTemplate
+	s = strings.ReplaceAll(s, "__LERD_ROUTING_DOMAINS__", routingDomains(tlds))
+	s = strings.ReplaceAll(s, "__LERD_TLD_LIST__", strings.Join(tlds, " "))
+	return s
+}
 
 // isSystemdResolvedActive returns true if systemd-resolved is the active DNS resolver.
 var isSystemdResolvedActive = func() bool {
@@ -302,12 +359,14 @@ func ConfigureResolver() error {
 // script that applies per-interface DNS via resolvectl on each "up" event, then
 // applies it immediately to the current default interface.
 func setupNMWithResolved() error {
+	tlds := linuxResolverTLDs()
 	dispatcherScript := "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
+	scriptContent := []byte(renderNMDispatcherScript(tlds))
 
-	if !isFileContent(dispatcherScript, []byte(nmDispatcherScript)) {
-		fmt.Println("  [sudo required] Configuring NetworkManager dispatcher for .test DNS resolution")
+	if !isFileContent(dispatcherScript, scriptContent) {
+		fmt.Println("  [sudo required] Configuring NetworkManager dispatcher for ." + tlds[0] + " DNS resolution")
 
-		if err := sudoWriteFile(dispatcherScript, []byte(nmDispatcherScript), 0755); err != nil {
+		if err := sudoWriteFile(dispatcherScript, scriptContent, 0755); err != nil {
 			return fmt.Errorf("writing NM dispatcher script: %w", err)
 		}
 	}
@@ -351,7 +410,12 @@ func setupNMWithResolved() error {
 		return fmt.Errorf("applying DNS to %s: %w", iface, err)
 	}
 
-	domainCmd := exec.Command("sudo", "resolvectl", "domain", iface, "~test", "~.")
+	domainArgs := []string{"sudo", "resolvectl", "domain", iface}
+	for _, t := range tlds {
+		domainArgs = append(domainArgs, "~"+t)
+	}
+	domainArgs = append(domainArgs, "~.")
+	domainCmd := exec.Command(domainArgs[0], domainArgs[1:]...)
 	domainCmd.Stdin = os.Stdin
 	domainCmd.Stdout = os.Stdout
 	domainCmd.Stderr = os.Stderr
@@ -378,17 +442,19 @@ func setupNMWithResolved() error {
 // setupSystemdResolved configures systemd-resolved to forward .test to port 5300.
 // Used only when systemd-resolved is active without NetworkManager managing it.
 func setupSystemdResolved() error {
+	tlds := linuxResolverTLDs()
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
+	dropinContent := []byte(renderResolvedDropin(tlds))
 
-	if isFileContent(dropin, []byte(resolvedDropin)) {
+	if isFileContent(dropin, dropinContent) {
 		if info, err := os.Stat(dropin); err == nil && info.Mode().Perm() == 0644 {
 			return nil
 		}
 	}
 
-	fmt.Println("  [sudo required] Configuring systemd-resolved for .test DNS resolution")
+	fmt.Println("  [sudo required] Configuring systemd-resolved for ." + tlds[0] + " DNS resolution")
 
-	if err := sudoWriteFile(dropin, []byte(resolvedDropin), 0644); err != nil {
+	if err := sudoWriteFile(dropin, dropinContent, 0644); err != nil {
 		return fmt.Errorf("writing resolved drop-in: %w", err)
 	}
 
@@ -404,20 +470,22 @@ func setupSystemdResolved() error {
 
 // setupNetworkManager configures NetworkManager's embedded dnsmasq.
 func setupNetworkManager() error {
+	tlds := linuxResolverTLDs()
 	nmConfFile := "/etc/NetworkManager/conf.d/lerd.conf"
 	nmDnsmasqFile := "/etc/NetworkManager/dnsmasq.d/lerd.conf"
+	nmDnsmasqContent := []byte(renderNMDnsmasqConf(tlds))
 
-	if isFileContent(nmConfFile, []byte(nmDnsConf)) && isFileContent(nmDnsmasqFile, []byte(nmDnsmasqConf)) {
+	if isFileContent(nmConfFile, []byte(nmDnsConf)) && isFileContent(nmDnsmasqFile, nmDnsmasqContent) {
 		return nil
 	}
 
-	fmt.Println("  [sudo required] Configuring NetworkManager for .test DNS resolution")
+	fmt.Println("  [sudo required] Configuring NetworkManager for ." + tlds[0] + " DNS resolution")
 
 	if err := sudoWriteFile(nmConfFile, []byte(nmDnsConf), 0644); err != nil {
 		return fmt.Errorf("writing NetworkManager conf: %w", err)
 	}
 
-	if err := sudoWriteFile(nmDnsmasqFile, []byte(nmDnsmasqConf), 0644); err != nil {
+	if err := sudoWriteFile(nmDnsmasqFile, nmDnsmasqContent, 0644); err != nil {
 		return fmt.Errorf("writing NetworkManager dnsmasq conf: %w", err)
 	}
 

@@ -230,7 +230,9 @@ func WriteDnsmasqConfigFor(dir, target string) error {
 }
 
 // WriteDnsmasqConfigDual is the v4+v6 form of WriteDnsmasqConfigFor. Pass
-// v6Target = "" to skip the AAAA record entirely.
+// v6Target = "" to skip the AAAA record entirely. One address= pair is emitted
+// per active TLD (config.ActiveTLDs), so sites on .test and .local resolve from
+// the same lerd.conf.
 func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -244,6 +246,20 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 		upstreams = defaultUpstreamFallback()
 	}
 
+	tlds := config.ActiveTLDs()
+	if len(tlds) == 0 {
+		tlds = []string{"test"}
+	}
+
+	body := renderDnsmasqConfig(tlds, upstreams, v4Target, v6Target)
+	return os.WriteFile(filepath.Join(dir, "lerd.conf"), []byte(body), 0644)
+}
+
+// renderDnsmasqConfig builds the lerd.conf body: the dnsmasq port and upstream
+// servers, then one address= record per TLD (v4, plus v6 when v6Target is set).
+// Kept as a pure string builder so the multi-TLD output can be asserted in
+// tests without touching disk or the system resolver.
+func renderDnsmasqConfig(tlds, upstreams []string, v4Target, v6Target string) string {
 	var sb strings.Builder
 	sb.WriteString("# Lerd DNS configuration\n")
 	sb.WriteString("port=5300\n")
@@ -253,10 +269,11 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 			fmt.Fprintf(&sb, "server=%s\n", ip)
 		}
 	}
-	fmt.Fprintf(&sb, "address=/.test/%s\n", v4Target)
-	if v6Target != "" {
-		fmt.Fprintf(&sb, "address=/.test/%s\n", v6Target)
+	for _, tld := range tlds {
+		fmt.Fprintf(&sb, "address=/.%s/%s\n", tld, v4Target)
+		if v6Target != "" {
+			fmt.Fprintf(&sb, "address=/.%s/%s\n", tld, v6Target)
+		}
 	}
-
-	return os.WriteFile(filepath.Join(dir, "lerd.conf"), []byte(sb.String()), 0644)
+	return sb.String()
 }

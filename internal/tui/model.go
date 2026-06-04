@@ -750,19 +750,25 @@ func (m *Model) handleDomainInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if s == nil || value == "" {
 			return m, nil
 		}
-		value = strings.ToLower(strings.TrimSuffix(value, "."+currentTLD()))
+		value = strings.ToLower(value)
 		if editing != "" {
+			// Preserve the edited domain's own TLD across the rename so editing
+			// alice.local stays on .local instead of being recreated as
+			// alice.test (the global default).
+			editTLD := config.ExtractTLD(editing)
+			value = strings.TrimSuffix(value, "."+editTLD)
 			// No-op if the user pressed enter without changing anything.
 			if value == trimTLD(editing) {
 				return m, nil
 			}
 			oldShort := trimTLD(editing)
-			m.setStatus("renaming "+editing+" → "+value+"…", 5*time.Second)
+			m.setStatus("renaming "+editing+" → "+value+"."+editTLD+"…", 5*time.Second)
 			return m, tea.Sequence(
-				runLerd(s.Path, "domain", "add", value),
-				runLerd(s.Path, "domain", "remove", oldShort),
+				runLerd(s.Path, "domain", "add", value, "--tld", editTLD),
+				runLerd(s.Path, "domain", "remove", oldShort, "--tld", editTLD),
 			)
 		}
+		value = strings.TrimSuffix(value, "."+currentTLD())
 		m.setStatus("adding domain "+value+"…", 5*time.Second)
 		return m, runLerd(s.Path, "domain", "add", value)
 	case "ctrl+c":

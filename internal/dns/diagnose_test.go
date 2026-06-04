@@ -2,9 +2,51 @@ package dns
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
+
+func TestDefaultDnsmasqConfigOK_requiresEveryServedTLD(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir+"/config")
+	t.Setenv("XDG_DATA_HOME", dir+"/data")
+
+	// Two sites: one on .test + .local, one on .test only → served {test, local}.
+	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{
+		{Name: "alice", Domains: []string{"alice.test", "alice.local"}},
+		{Name: "bob", Domains: []string{"bob.test"}},
+	}}); err != nil {
+		t.Fatalf("SaveSites: %v", err)
+	}
+
+	dnsmasqDir := config.DnsmasqDir()
+	if err := os.MkdirAll(dnsmasqDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	confPath := filepath.Join(dnsmasqDir, "lerd.conf")
+
+	// Only .test present → must fail because .local is missing.
+	if err := os.WriteFile(confPath, []byte("port=5300\naddress=/.test/127.0.0.1\n"), 0o644); err != nil {
+		t.Fatalf("write conf: %v", err)
+	}
+	if ok, detail := defaultDnsmasqConfigOK("test"); ok {
+		t.Errorf("expected failure when .local rule is missing, got ok (detail: %s)", detail)
+	} else if !strings.Contains(detail, "local") {
+		t.Errorf("expected detail to name the missing .local TLD, got: %s", detail)
+	}
+
+	// Both present → passes.
+	if err := os.WriteFile(confPath, []byte("port=5300\naddress=/.test/127.0.0.1\naddress=/.local/127.0.0.1\n"), 0o644); err != nil {
+		t.Fatalf("write conf: %v", err)
+	}
+	if ok, detail := defaultDnsmasqConfigOK("test"); !ok {
+		t.Errorf("expected success when both TLD rules present, got fail (detail: %s)", detail)
+	}
+}
 
 // fakeProbes builds a probeFns where every rung is overridable but defaults
 // to "everything passes". Tests then flip individual rungs to exercise

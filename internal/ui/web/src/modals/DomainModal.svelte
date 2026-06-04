@@ -13,8 +13,8 @@
   }
   let { site }: Props = $props();
 
-  const tld = $derived($status.dns.tld || 'test');
-  const suffix = $derived('.' + tld);
+  // The global default ending, used to pre-fill the add picker.
+  const defaultTld = $derived($status.dns.tld || 'test');
 
   // Reactively track the latest site record. Match by name first so we survive
   // primary-domain renames; fall back to the initial domain.
@@ -24,19 +24,38 @@
       site
   );
 
-  const domains = $derived(
-    (current.domains || [current.domain]).map((d) =>
-      d.endsWith(suffix) ? d.slice(0, -suffix.length) : d
-    )
+  // Split each full domain into { label, tld } so different endings on the same
+  // site (e.g. alice.test and alice.local) each render and edit under their own
+  // ending instead of a single global suffix.
+  interface DomainEntry {
+    full: string;
+    label: string;
+    tld: string;
+  }
+  const entries = $derived<DomainEntry[]>(
+    (current.domains || [current.domain]).map((d) => {
+      const i = d.lastIndexOf('.');
+      return i > 0
+        ? { full: d, label: d.slice(0, i), tld: d.slice(i + 1) }
+        : { full: d, label: d, tld: defaultTld };
+    })
   );
   const conflicting = $derived(current.conflicting_domains || []);
 
+  // Ending suggestions for the add picker: the global default plus endings
+  // already used on this site, default first.
+  const tldSuggestions = $derived(
+    Array.from(new Set([defaultTld, ...entries.map((e) => e.tld)]))
+  );
+
   let newDomain = $state('');
+  let newTLD = $state('');
   let editIndex = $state(-1);
   let editValue = $state('');
   let loading = $state(false);
   let error = $state('');
   let flash = $state('');
+  let notice = $state('');
   let flashTimer: ReturnType<typeof setTimeout> | null = null;
 
   function showFlash(msg: string) {
@@ -45,7 +64,10 @@
     flashTimer = setTimeout(() => (flash = ''), 3000);
   }
 
-  async function runAction(fn: () => Promise<{ ok: boolean; error?: string }>, successMsg: string) {
+  async function runAction(
+    fn: () => Promise<{ ok: boolean; error?: string; warning?: string }>,
+    successMsg: string
+  ) {
     loading = true;
     error = '';
     try {
@@ -55,6 +77,9 @@
         return;
       }
       await loadSites();
+      // A backend warning (e.g. a new ending needs a one-time terminal step to
+      // finish DNS setup) persists until the next action; otherwise flash OK.
+      notice = r.warning || '';
       showFlash(successMsg);
     } finally {
       loading = false;
@@ -63,38 +88,41 @@
 
   function startEdit(i: number) {
     editIndex = i;
-    editValue = domains[i];
+    editValue = entries[i].label;
   }
   function cancelEdit() {
     editIndex = -1;
     editValue = '';
   }
   async function saveEdit(i: number) {
-    const oldName = domains[i];
+    const e = entries[i];
     const newName = editValue.trim().toLowerCase();
-    if (!newName || newName === oldName) {
+    if (!newName || newName === e.label) {
       cancelEdit();
       return;
     }
-    await runAction(() => editDomain(current, oldName, newName), m.domains_flash_updated());
+    await runAction(() => editDomain(current, e.label, newName, e.tld), m.domains_flash_updated());
     if (!error) cancelEdit();
   }
   async function add() {
     const name = newDomain.trim().toLowerCase();
     if (!name) return;
-    await runAction(() => addDomain(current, name), m.domains_flash_added());
+    const tld = (newTLD || defaultTld).trim().toLowerCase().replace(/^\./, '');
+    await runAction(() => addDomain(current, name, tld), m.domains_flash_added());
     if (!error) newDomain = '';
   }
-  async function remove(name: string) {
-    if (domains.length <= 1) {
+  async function remove(e: DomainEntry) {
+    if (entries.length <= 1) {
       error = m.domains_cannotRemoveLast();
       return;
     }
-    await runAction(() => removeDomain(current, name), m.domains_flash_removed());
+    await runAction(() => removeDomain(current, e.label, e.tld), m.domains_flash_removed());
   }
   async function removeConflict(fullDomain: string) {
-    const nameOnly = fullDomain.endsWith(suffix) ? fullDomain.slice(0, -suffix.length) : fullDomain;
-    await runAction(() => removeDomain(current, nameOnly), m.domains_flash_removedYaml());
+    const i = fullDomain.lastIndexOf('.');
+    const label = i > 0 ? fullDomain.slice(0, i) : fullDomain;
+    const tld = i > 0 ? fullDomain.slice(i + 1) : defaultTld;
+    await runAction(() => removeDomain(current, label, tld), m.domains_flash_removedYaml());
   }
 </script>
 
@@ -124,12 +152,12 @@
       </div>
     {/each}
 
-    {#each domains as dom, i (dom + ':' + i)}
+    {#each entries as entry, i (entry.full + ':' + i)}
       <div class="flex items-center gap-2">
         {#if editIndex !== i}
           <div class="flex-1 min-w-0 flex items-center gap-1.5">
-            <span class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{dom}</span>
-            <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0">.{tld}</span>
+            <span class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{entry.label}</span>
+            <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0">.{entry.tld}</span>
             {#if i === 0}
               <span class="text-[10px] font-medium text-lerd-red bg-red-50 dark:bg-red-900/20 px-1.5 py-0.5 rounded-sm shrink-0">{m.domains_primary()}</span>
             {/if}
@@ -143,9 +171,9 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
             </svg>
           </button>
-          {#if domains.length > 1}
+          {#if entries.length > 1}
             <button
-              onclick={() => remove(dom)}
+              onclick={() => remove(entry)}
               disabled={loading}
               class="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
               title={m.common_remove()}
@@ -165,7 +193,7 @@
             class="flex-1 text-sm font-mono bg-transparent border border-lerd-red/50 rounded-sm px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-hidden focus:border-lerd-red"
             disabled={loading}
           />
-          <span class="text-sm text-gray-400 shrink-0">.{tld}</span>
+          <span class="text-sm text-gray-400 shrink-0">.{entry.tld}</span>
           <button onclick={() => saveEdit(i)} disabled={loading} class="text-emerald-500 hover:text-emerald-600 disabled:opacity-50" title={m.common_save()}>
             <Icon name="check" class="w-4 h-4" />
           </button>
@@ -187,11 +215,30 @@
         disabled={loading}
         class="flex-1 text-sm font-mono bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50"
       />
-      <span class="text-sm text-gray-400 shrink-0">.{tld}</span>
+      <span class="text-sm text-gray-400 shrink-0">.</span>
+      <input
+        type="text"
+        list="domain-tld-options"
+        bind:value={newTLD}
+        placeholder={defaultTld}
+        disabled={loading}
+        onkeydown={(e) => e.key === 'Enter' && add()}
+        class="w-24 text-sm font-mono bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50"
+      />
+      <datalist id="domain-tld-options">
+        {#each tldSuggestions as t (t)}
+          <option value={t}></option>
+        {/each}
+      </datalist>
       <DetailButton tone="primary" onclick={add} disabled={loading || !newDomain.trim()}>{m.common_add()}</DetailButton>
     </div>
   </div>
 
+  {#if notice}
+    <div class="px-5 py-2 border-t border-gray-100 dark:border-lerd-border">
+      <p class="text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 rounded-lg px-2 py-1.5">{notice}</p>
+    </div>
+  {/if}
   {#if flash}
     <div class="px-5 py-2 border-t border-gray-100 dark:border-lerd-border">
       <p class="text-xs text-emerald-700 dark:text-emerald-500 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg px-2 py-1.5 text-center">{flash}</p>

@@ -64,7 +64,17 @@ func (m *Model) systemRows() []systemRow {
 		}
 		dnsEnabled = cfg.DNS.Enabled
 	}
-	info("TLD", tld)
+	// Show the full active set so multi-TLD setups (e.g. .test + .local) are
+	// visible; the default/primary is listed first.
+	if active := config.ActiveTLDs(); len(active) > 1 {
+		labels := make([]string, len(active))
+		for i, t := range active {
+			labels[i] = "." + t
+		}
+		info("TLDs", strings.Join(labels, " "))
+	} else {
+		info("TLD", "."+tld)
+	}
 	if dnsEnabled {
 		info("Status", dnsStatusText(dns.CheckStatus(tld)))
 	} else {

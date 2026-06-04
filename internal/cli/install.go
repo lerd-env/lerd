@@ -267,6 +267,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 		fmt.Println("  --> Installing DNS sudoers rule")
 		dns.InstallSudoers() //nolint:errcheck
+
+		// Lay down the root-owned resolver helper (macOS) so the dashboard can
+		// enable a brand-new ending on its own later, without a terminal step.
+		// No-op off macOS. Best-effort: the manual dns:apply path still works
+		// if this fails.
+		dns.InstallResolverHelper() //nolint:errcheck
 	} else {
 		fmt.Println("  --> DNS disabled, skipping mkcert CA, dnsmasq and sudoers")
 	}

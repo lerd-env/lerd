@@ -55,7 +55,7 @@ func runIsolate(_ *cobra.Command, args []string) error {
 	fmt.Printf("PHP version pinned to %s\n", version)
 
 	if _, err := config.FindSiteByPath(cwd); err == nil {
-		if err := runLink([]string{}); err != nil {
+		if err := runLink([]string{}, ""); err != nil {
 			fmt.Printf("[WARN] re-linking site: %v\n", err)
 		}
 	}

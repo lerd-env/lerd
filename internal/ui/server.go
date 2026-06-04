@@ -2808,8 +2808,9 @@ const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 
 // SiteActionResponse is returned by POST /api/sites/{domain}/secure|unsecure.
 type SiteActionResponse struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK      bool   `json:"ok"`
+	Error   string `json:"error,omitempty"`
+	Warning string `json:"warning,omitempty"`
 }
 
 func handleSiteAction(w http.ResponseWriter, r *http.Request) {
@@ -3223,7 +3224,13 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "loading config: " + cfgErr.Error()})
 			return
 		}
-		fullDomain := strings.ToLower(domainName) + "." + cfg.DNS.TLD
+		tld, tldErr := resolveTLDParam(r, cfg)
+		if tldErr != nil {
+			writeJSON(w, SiteActionResponse{Error: tldErr.Error()})
+			return
+		}
+		tldWasActive := tldInActiveSet(tld)
+		fullDomain := strings.ToLower(domainName) + "." + tld
 		if site.HasDomain(fullDomain) {
 			writeJSON(w, SiteActionResponse{Error: "site already has domain " + fullDomain})
 			return
@@ -3251,7 +3258,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if err := siteops.SyncEnvIfPrimaryChanged(site, oldPrimary); err != nil {
 			fmt.Fprintf(os.Stderr, "lerd-ui: syncing .env to new primary domain: %v\n", err)
 		}
-		writeJSON(w, SiteActionResponse{OK: true})
+		// A brand-new TLD needs the resolver layer re-applied so it resolves.
+		var warning string
+		if !tldWasActive {
+			warning = reapplyDNSForNewTLD(cfg, tld)
+		}
+		writeJSON(w, SiteActionResponse{OK: true, Warning: warning})
 		return
 	case "domain:edit":
 		oldName := r.URL.Query().Get("old")
@@ -3265,8 +3277,13 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "loading config: " + cfgErr.Error()})
 			return
 		}
-		oldDomain := strings.ToLower(oldName) + "." + cfg.DNS.TLD
-		newDomain := strings.ToLower(newName) + "." + cfg.DNS.TLD
+		tld, tldErr := resolveTLDParam(r, cfg)
+		if tldErr != nil {
+			writeJSON(w, SiteActionResponse{Error: tldErr.Error()})
+			return
+		}
+		oldDomain := strings.ToLower(oldName) + "." + tld
+		newDomain := strings.ToLower(newName) + "." + tld
 		if !site.HasDomain(oldDomain) {
 			writeJSON(w, SiteActionResponse{Error: "site does not have domain " + oldDomain})
 			return
@@ -3314,13 +3331,18 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "loading config: " + cfgErr.Error()})
 			return
 		}
-		fullDomain := strings.ToLower(domainName) + "." + cfg.DNS.TLD
+		tld, tldErr := resolveTLDParam(r, cfg)
+		if tldErr != nil {
+			writeJSON(w, SiteActionResponse{Error: tldErr.Error()})
+			return
+		}
+		fullDomain := strings.ToLower(domainName) + "." + tld
 
 		// If the domain isn't in the registered list, it might still be in the
 		// project's .lerd.yaml as a conflict-filtered entry. Remove it from
 		// .lerd.yaml only — no registry, vhost, or cert work needed.
 		if !site.HasDomain(fullDomain) {
-			suffix := "." + cfg.DNS.TLD
+			suffix := "." + tld
 			declared := strings.TrimSuffix(fullDomain, suffix)
 			// Check if domain exists in .lerd.yaml before removing.
 			proj, projErr := config.LoadProjectConfig(site.Path)

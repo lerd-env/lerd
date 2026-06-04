@@ -319,14 +319,40 @@ func defaultDnsmasqConfigOK(tld string) (bool, string) {
 	if err != nil {
 		return false, "missing " + path
 	}
-	if !strings.Contains(string(data), "port=5300") {
+	content := string(data)
+	if !strings.Contains(content, "port=5300") {
 		return false, "config missing port=5300 directive"
 	}
-	want := "address=/." + tld + "/"
-	if !strings.Contains(string(data), want) {
-		return false, fmt.Sprintf("config missing %q rule", want)
+	// Verify every served TLD has an address= rule. Checking only the primary
+	// TLD would let a partially-written multi-TLD config pass while a secondary
+	// suffix (e.g. .local on a site that also uses .test) is silently missing.
+	served := servedDnsmasqTLDs(tld)
+	var missing []string
+	for _, t := range served {
+		if !strings.Contains(content, "address=/."+t+"/") {
+			missing = append(missing, t)
+		}
 	}
-	return true, "address=/." + tld + "/127.0.0.1, port=5300"
+	if len(missing) > 0 {
+		return false, fmt.Sprintf("config missing address rule(s) for: %s", strings.Join(missing, ", "))
+	}
+	return true, "address rules for ." + strings.Join(served, ", .") + ", port=5300"
+}
+
+// servedDnsmasqTLDs returns the set of TLDs lerd.conf is expected to answer —
+// config.ActiveTLDs() with the diagnosed primary tld guaranteed present, so the
+// check matches exactly what WriteDnsmasqConfigDual writes.
+func servedDnsmasqTLDs(tld string) []string {
+	if tld == "" {
+		tld = "test"
+	}
+	tlds := config.ActiveTLDs()
+	for _, t := range tlds {
+		if t == tld {
+			return tlds
+		}
+	}
+	return append(tlds, tld)
 }
 
 func defaultPortOpen(host string, port int) bool {

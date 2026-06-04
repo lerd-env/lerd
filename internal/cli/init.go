@@ -902,7 +902,7 @@ func runSetupInit(cwd string, skipWizard bool) error {
 		// (lerd setup) doesn't have to do it itself.
 		linkSkipSetupPrompt = true
 		defer func() { linkSkipSetupPrompt = false }()
-		if err := runLink([]string{}); err != nil {
+		if err := runLink([]string{}, ""); err != nil {
 			return err
 		}
 		if err := runEnv(nil, nil); err != nil {
@@ -952,7 +952,7 @@ func applyProjectConfig(cwd string) error {
 		}
 	}
 
-	if err := runLink([]string{}); err != nil {
+	if err := runLink([]string{}, ""); err != nil {
 		return err
 	}
 

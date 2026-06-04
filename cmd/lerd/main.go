@@ -168,6 +168,7 @@ func main() {
 	root.AddCommand(cli.NewUnpauseCmd())
 	root.AddCommand(cli.NewTrayCmd())
 	root.AddCommand(newDNSCheckCmd())
+	root.AddCommand(cli.NewDNSApplyCmd())
 	root.AddCommand(cli.NewDNSForwarderCmd())
 	root.AddCommand(cli.NewLANCmd())
 	root.AddCommand(cli.NewLANExposeCmd())

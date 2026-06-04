@@ -8,6 +8,27 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+func TestSyncProjectDomains_keepsNonDefaultTLDWhole(t *testing.T) {
+	dir := setupProjectConfig(t, &ProjectConfig{})
+
+	// Default TLD "test" is stripped to a bare label; ".local" is kept whole so
+	// a relink restores alice.local rather than re-suffixing to alice.local.test.
+	if err := SyncProjectDomains(dir, []string{"alice.test", "alice.local"}, "test"); err != nil {
+		t.Fatalf("SyncProjectDomains: %v", err)
+	}
+
+	got := loadConfig(t, dir).Domains
+	want := map[string]bool{"alice": true, "alice.local": true}
+	if len(got) != len(want) {
+		t.Fatalf("Domains = %v, want keys %v", got, want)
+	}
+	for _, d := range got {
+		if !want[d] {
+			t.Errorf("unexpected .lerd.yaml domain %q (TLD not preserved correctly)", d)
+		}
+	}
+}
+
 // helper: create a .lerd.yaml with the given config in a temp dir.
 func setupProjectConfig(t *testing.T, cfg *ProjectConfig) string {
 	t.Helper()

@@ -45,6 +45,30 @@ describe('domains store', () => {
     expect(calls[0]).toBe('/api/sites/a.test/domain:remove?name=foo');
   });
 
+  it('appends tld when a non-default ending is chosen', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown) => {
+      calls.push(String(url));
+      return new Response('{"ok":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { addDomain, removeDomain } = await import('./domains');
+    await addDomain({ domain: 'a.test' } as never, 'alice', 'local');
+    await removeDomain({ domain: 'a.test' } as never, 'alice', 'local');
+    expect(calls[0]).toBe('/api/sites/a.test/domain:add?name=alice&tld=local');
+    expect(calls[1]).toBe('/api/sites/a.test/domain:remove?name=alice&tld=local');
+  });
+
+  it('omits tld when not provided (stays on global default)', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown) => {
+      calls.push(String(url));
+      return new Response('{"ok":true}', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { addDomain } = await import('./domains');
+    await addDomain({ domain: 'a.test' } as never, 'www');
+    expect(calls[0]).toBe('/api/sites/a.test/domain:add?name=www');
+  });
+
   it('returns error on non-ok', async () => {
     globalThis.fetch = vi.fn(async () => new Response('{"ok":false,"error":"taken"}', { status: 200 })) as unknown as typeof fetch;
     const { addDomain } = await import('./domains');

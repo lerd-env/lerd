@@ -6,6 +6,40 @@ import (
 	"testing"
 )
 
+// --- renderDnsmasqConfig ---
+
+func TestRenderDnsmasqConfig_multiTLD(t *testing.T) {
+	got := renderDnsmasqConfig([]string{"test", "local"}, []string{"1.1.1.1"}, "127.0.0.1", "::1")
+
+	for _, want := range []string{
+		"port=5300",
+		"no-resolv",
+		"server=1.1.1.1",
+		"address=/.test/127.0.0.1",
+		"address=/.test/::1",
+		"address=/.local/127.0.0.1",
+		"address=/.local/::1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("renderDnsmasqConfig() missing %q in:\n%s", want, got)
+		}
+	}
+}
+
+func TestRenderDnsmasqConfig_noUpstreamNoV6(t *testing.T) {
+	got := renderDnsmasqConfig([]string{"test"}, nil, "127.0.0.1", "")
+
+	if strings.Contains(got, "no-resolv") {
+		t.Errorf("expected no-resolv omitted when there are no upstreams:\n%s", got)
+	}
+	if strings.Contains(got, "::1") || strings.Contains(got, "address=/.test/::") {
+		t.Errorf("expected no AAAA record when v6Target is empty:\n%s", got)
+	}
+	if !strings.Contains(got, "address=/.test/127.0.0.1") {
+		t.Errorf("expected the v4 record:\n%s", got)
+	}
+}
+
 // --- parseNameservers ---
 
 func TestParseNameservers_realServers(t *testing.T) {
