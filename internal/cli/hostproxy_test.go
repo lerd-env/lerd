@@ -119,3 +119,47 @@ func TestFirstFreePort(t *testing.T) {
 		t.Errorf("firstFreePort(0) = %d, want 1", got)
 	}
 }
+
+func TestHostProxyWorkerForPort_usesGivenPort(t *testing.T) {
+	proxy := &config.ProxyConfig{Command: "npm run start:dev", Port: 3000}
+	w, ok := hostProxyWorkerForPort(proxy, 3101)
+	if !ok {
+		t.Fatal("expected a worker for a non-empty command")
+	}
+	if w.Command != "env PORT=3101 npm run start:dev" {
+		t.Errorf("worker command = %q, want the worktree port 3101 injected", w.Command)
+	}
+	if !w.Host || w.Restart != "always" {
+		t.Errorf("expected host + always-restart worker, got Host=%v Restart=%q", w.Host, w.Restart)
+	}
+	// Proxy-only mode (no command) yields no worker.
+	if _, ok := hostProxyWorkerForPort(&config.ProxyConfig{Port: 3000}, 3101); ok {
+		t.Error("expected no worker in proxy-only mode")
+	}
+}
+
+func TestWorktreeHostPort_readsPersistedEnv(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("PORT=4321\nFOO=bar\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := WorktreeHostPort(3000, dir, "PORT"); got != 4321 {
+		t.Errorf("WorktreeHostPort = %d, want 4321 (persisted value reused)", got)
+	}
+}
+
+func TestWorktreeHostPort_allocatesAndPersists(t *testing.T) {
+	dir := t.TempDir()
+	// .env exists but has no PORT yet → a fresh port is allocated and written.
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("FOO=bar\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := WorktreeHostPort(3000, dir, "PORT")
+	if got <= 3000 {
+		t.Errorf("WorktreeHostPort = %d, want a port above the parent's 3000", got)
+	}
+	// Second call must reuse the now-persisted value.
+	if again := WorktreeHostPort(3000, dir, "PORT"); again != got {
+		t.Errorf("WorktreeHostPort second call = %d, want stable %d", again, got)
+	}
+}

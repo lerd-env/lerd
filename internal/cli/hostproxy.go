@@ -10,6 +10,8 @@ import (
 	"strconv"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/nginx"
 )
 
 // hostProxyWorkerName is the stable worker name for a host-proxy site's
@@ -27,23 +29,27 @@ func hostProxyPortEnvKey(proxy *config.ProxyConfig) string {
 	return "PORT"
 }
 
-// buildHostProxyCommand prefixes the dev command with `env KEY=port` so the app
-// binds the port nginx proxies to. The `env` utility (not a bare `KEY=value`
+// buildHostProxyCommandPort prefixes the dev command with `env KEY=port` so the
+// app binds the port nginx proxies to. The `env` utility (not a bare `KEY=value`
 // assignment) is used because host workers exec the command both through a
 // shell (macOS) and directly via `fnm exec --` (Linux); `env` is a real
 // executable that works in both. Returns "" in proxy-only mode (no command).
-func buildHostProxyCommand(proxy *config.ProxyConfig) string {
+func buildHostProxyCommandPort(proxy *config.ProxyConfig, port int) string {
 	if proxy.Command == "" {
 		return ""
 	}
-	return fmt.Sprintf("env %s=%d %s", hostProxyPortEnvKey(proxy), proxy.Port, proxy.Command)
+	return fmt.Sprintf("env %s=%d %s", hostProxyPortEnvKey(proxy), port, proxy.Command)
 }
 
-// hostProxyWorker builds the supervised dev-server worker for a host-proxy
-// site. ok is false in proxy-only mode (no command), in which case lerd
-// supervises nothing and only wires the proxy.
-func hostProxyWorker(proxy *config.ProxyConfig) (config.FrameworkWorker, bool) {
-	command := buildHostProxyCommand(proxy)
+func buildHostProxyCommand(proxy *config.ProxyConfig) string {
+	return buildHostProxyCommandPort(proxy, proxy.Port)
+}
+
+// hostProxyWorkerForPort builds the supervised dev-server worker on a specific
+// port. Worktrees mirror the parent command on their own port; the parent uses
+// proxy.Port via hostProxyWorker. ok is false in proxy-only mode (no command).
+func hostProxyWorkerForPort(proxy *config.ProxyConfig, port int) (config.FrameworkWorker, bool) {
+	command := buildHostProxyCommandPort(proxy, port)
 	if command == "" {
 		return config.FrameworkWorker{}, false
 	}
@@ -53,6 +59,12 @@ func hostProxyWorker(proxy *config.ProxyConfig) (config.FrameworkWorker, bool) {
 		Restart: "always",
 		Host:    true,
 	}, true
+}
+
+// hostProxyWorker builds the supervised dev-server worker for a host-proxy
+// site on its configured port.
+func hostProxyWorker(proxy *config.ProxyConfig) (config.FrameworkWorker, bool) {
+	return hostProxyWorkerForPort(proxy, proxy.Port)
 }
 
 // hostProxyWorkerUnit returns the worker unit name for a host-proxy site.
@@ -180,6 +192,60 @@ func allocateHostPort(start int, exceptSite string) int {
 	return firstFreePort(start, func(p int) bool {
 		return reserved[p] || portBoundOnHost(p)
 	})
+}
+
+// WorktreeHostPort returns the dev-server port for a host-proxy site's worktree:
+// the value persisted in the worktree's .env if present, otherwise a freshly
+// allocated free port (best-effort persisted so it stays stable). A worktree is
+// reached by its domain, so a floating port until a .env exists is harmless.
+func WorktreeHostPort(parentPort int, wtPath, portEnvKey string) int {
+	envPath := filepath.Join(wtPath, ".env")
+	if v := envfile.ReadKey(envPath, portEnvKey); v != "" {
+		if n, _ := strconv.Atoi(v); n > 0 {
+			return n
+		}
+	}
+	port := allocateHostPort(parentPort+1, "")
+	if _, err := os.Stat(envPath); err == nil {
+		_ = envfile.ApplyUpdates(envPath, map[string]string{portEnvKey: strconv.Itoa(port)})
+	}
+	return port
+}
+
+// parentProxyConfig returns the host-proxy config a worktree should mirror. It
+// prefers the parent's committed .lerd.yaml proxy block, falling back to the
+// fields persisted on the registered Site (proxy config is local config, so a
+// worktree checkout usually can't see it).
+func parentProxyConfig(site config.Site) *config.ProxyConfig {
+	if proj, err := config.LoadProjectConfig(site.Path); err == nil && proj.Proxy != nil {
+		return proj.Proxy
+	}
+	if site.HostCommand == "" && site.HostPort == 0 {
+		return nil
+	}
+	return &config.ProxyConfig{Command: site.HostCommand, Port: site.HostPort, SSL: site.HostSSL}
+}
+
+// SetupHostProxyWorktree wires a host-proxy site's worktree: it mirrors the
+// parent's dev command on a per-worktree port, generates the worktree proxy
+// vhost, and starts the dev server from the worktree checkout. The unit name
+// (lerd-app-<site>-<branch>) and teardown are handled by the shared per-worktree
+// worker machinery.
+func SetupHostProxyWorktree(site config.Site, wtPath, wtDomain string) error {
+	proxy := parentProxyConfig(site)
+	if proxy == nil {
+		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
+	}
+	port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+	if err := nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured); err != nil {
+		return err
+	}
+	if w, ok := hostProxyWorkerForPort(proxy, port); ok {
+		if err := WorkerStartForSite(site.Name, wtPath, "", hostProxyWorkerName, w, false); err != nil {
+			return fmt.Errorf("starting worktree dev server: %w", err)
+		}
+	}
+	return nil
 }
 
 // startHostProxyWorker supervises the dev command for a host-proxy site as a

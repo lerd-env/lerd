@@ -694,9 +694,9 @@ func buildProjectServices(selectedServices []string, defaults *config.ProjectCon
 	return services
 }
 
-// runHostProxyWizard runs the init wizard for a host-proxy project (NestJS,
-// Angular, Vite, …): lerd supervises the dev command on the host and nginx
-// proxies the domain to it. Collects the command, port, HTTPS, and services.
+// runHostProxyWizard runs the init wizard for a host-proxy (Node) project: lerd
+// supervises the dev command on the host and nginx proxies the domain to it.
+// Collects the command, port, HTTPS, and services.
 func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config.GlobalConfig) (*config.ProjectConfig, error) {
 	manifest := readPackageManifest(cwd)
 	devScripts := manifest.devScripts()

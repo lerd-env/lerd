@@ -512,6 +512,44 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
+// GenerateWorktreeHostProxyVhostFor renders a worktree's host-proxy vhost: nginx
+// reverse-proxies the worktree domain to the dev server running on the host at
+// upstreamPort (the worktree's own port). The HTTP/SSL choice mirrors
+// GenerateWorktreeVhostFor, and the SSL variant reuses the parent's wildcard
+// cert (*.parentDomain) just like the PHP worktree path.
+func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstreamPort int, backendSSL, secured bool) error {
+	data := VhostData{
+		Domain:         domain,
+		ServerNames:    domain + " *." + domain,
+		UpstreamHost:   hostProxyUpstream(),
+		UpstreamPort:   upstreamPort,
+		BackendSSL:     backendSSL,
+		RequestTimeout: resolveRequestTimeout(path),
+	}
+	tmplName := "vhost-hostproxy.conf.tmpl"
+	if secured {
+		tmplName = "vhost-hostproxy-ssl.conf.tmpl"
+		data.CertDomain = parentDomain
+	}
+
+	tmplData, err := GetTemplate(tmplName)
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New(tmplName).Parse(string(tmplData))
+	if err != nil {
+		return err
+	}
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(config.NginxConfD(), domain+".conf"), buf.Bytes(), 0644)
+}
+
 // GeneratePausedVhost writes a minimal nginx vhost that serves the static paused
 // landing page for the given site. For secured sites it also adds the HTTPS block
 // so the redirect and TLS still work while the site is paused.

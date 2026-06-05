@@ -226,6 +226,41 @@ func TestGenerateHostProxySSLVhost_createsSSLConfWithCert(t *testing.T) {
 	}
 }
 
+func TestGenerateWorktreeHostProxyVhostFor_http(t *testing.T) {
+	confD := setupConfD(t)
+	if err := GenerateWorktreeHostProxyVhostFor("feat-x.nestapp.test", t.TempDir(), "nestapp.test", 3101, false, false); err != nil {
+		t.Fatalf("GenerateWorktreeHostProxyVhostFor: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "feat-x.nestapp.test.conf"))
+	if !strings.Contains(content, "server_name feat-x.nestapp.test *.feat-x.nestapp.test") {
+		t.Errorf("expected worktree server_name with wildcard, got:\n%s", content)
+	}
+	if !strings.Contains(content, "proxy_pass http://"+hostProxyUpstream()+":3101;") {
+		t.Errorf("expected proxy_pass to the worktree port 3101, got:\n%s", content)
+	}
+	if strings.Contains(content, "ssl_certificate") {
+		t.Errorf("HTTP worktree vhost must not emit ssl_certificate:\n%s", content)
+	}
+}
+
+func TestGenerateWorktreeHostProxyVhostFor_sslUsesParentCert(t *testing.T) {
+	confD := setupConfD(t)
+	if err := GenerateWorktreeHostProxyVhostFor("feat-x.nestapp.test", t.TempDir(), "nestapp.test", 3101, false, true); err != nil {
+		t.Fatalf("GenerateWorktreeHostProxyVhostFor (ssl): %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "feat-x.nestapp.test.conf"))
+	// Worktree SSL must use the parent's wildcard cert, never its own.
+	if !strings.Contains(content, "ssl_certificate /etc/nginx/certs/nestapp.test.crt;") {
+		t.Errorf("expected parent cert, got:\n%s", content)
+	}
+	if strings.Contains(content, "feat-x.nestapp.test.crt") {
+		t.Errorf("worktree vhost must not reference its own cert:\n%s", content)
+	}
+	if !strings.Contains(content, "proxy_pass http://"+hostProxyUpstream()+":3101;") {
+		t.Errorf("expected proxy_pass to the worktree port, got:\n%s", content)
+	}
+}
+
 // ── phpShort ──────────────────────────────────────────────────────────────────
 
 func TestPhpShort(t *testing.T) {
