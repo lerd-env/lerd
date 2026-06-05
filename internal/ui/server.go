@@ -4615,6 +4615,11 @@ type labeledOption struct {
 // build script, and "Skip". The parent path is used as a proxy for the
 // not-yet-created worktree (a fresh worktree is a checkout of the same tree).
 func worktreeBuildOptions(site *config.Site) []labeledOption {
+	// Host-proxy worktrees run a dev server continuously; there is no
+	// build-then-serve step to choose, so the Assets picker is omitted.
+	if site.IsHostProxy() {
+		return nil
+	}
 	opts := []labeledOption{{Value: "auto", Label: "Automatic (recommended)"}}
 	var workers map[string]config.FrameworkWorker
 	if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok {
