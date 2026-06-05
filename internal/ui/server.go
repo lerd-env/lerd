@@ -702,14 +702,15 @@ type SiteResponse struct {
 	// Services lists the service names this site uses, sourced from the
 	// project's .lerd.yaml. Used by the dashboard to render service badges
 	// on the site detail panel.
-	Services        []string `json:"services,omitempty"`
-	LANPort         int      `json:"lan_port,omitempty"`
-	LANShareURL     string   `json:"lan_share_url,omitempty"`
-	CustomContainer bool     `json:"custom_container,omitempty"`
-	ContainerPort   int      `json:"container_port,omitempty"`
-	ContainerImage  string   `json:"container_image,omitempty"`
-	Runtime         string   `json:"runtime,omitempty"`
-	RuntimeWorker   bool     `json:"runtime_worker,omitempty"`
+	Services         []string `json:"services,omitempty"`
+	LANPort          int      `json:"lan_port,omitempty"`
+	LANShareURL      string   `json:"lan_share_url,omitempty"`
+	CustomContainer  bool     `json:"custom_container,omitempty"`
+	ContainerPort    int      `json:"container_port,omitempty"`
+	ContainerImage   string   `json:"container_image,omitempty"`
+	Runtime          string   `json:"runtime,omitempty"`
+	RuntimeWorker    bool     `json:"runtime_worker,omitempty"`
+	HostHasDevServer bool     `json:"host_has_dev_server,omitempty"`
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
@@ -830,6 +831,7 @@ func buildSites() []SiteResponse {
 			ContainerImage:     e.ContainerImage,
 			Runtime:            e.Runtime,
 			RuntimeWorker:      e.RuntimeWorker,
+			HostHasDevServer:   e.HostPort > 0 && e.HostCommand != "",
 		})
 	}
 	return sites

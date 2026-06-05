@@ -424,17 +424,11 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 		}
 	}
 
-	// Host-proxy sites supervise a single "app" dev-server worker that lives in
-	// the proxy: block, not custom_workers. Surface it as a synthetic worker so
-	// the dashboard shows its health and start/stop controls.
-	if !hasFw && e.HostPort > 0 {
-		if proj, err := config.LoadProjectConfig(e.Path); err == nil && proj.Proxy != nil && proj.Proxy.Command != "" {
-			fw = &config.Framework{Workers: map[string]config.FrameworkWorker{
-				config.HostProxyWorkerName: {Label: "Dev Server", Command: proj.Proxy.Command, Restart: "always", Host: true},
-			}}
-			hasFw = true
-		}
-	}
+	// A host-proxy site's dev server is the site's main process, not a togglable
+	// worker: its lifecycle follows the site (start/pause), and its health is
+	// surfaced via FPMRunning in enrichFPM. So it is deliberately NOT listed as
+	// a worker row here, otherwise the dashboard would offer a stop control that
+	// just 502s the site.
 
 	if !hasFw || fw.Workers == nil {
 		return

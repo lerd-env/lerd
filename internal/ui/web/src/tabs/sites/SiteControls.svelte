@@ -247,7 +247,7 @@
         inherited={nodeInherited}
         inheritedSuffix={m.sites_controls_inheritedSuffix()}
         title={nodeInherited ? m.sites_controls_inheritsFromMain() : ''}
-        placeholder={m.sites_controls_nodeDefault()}
+        placeholder={$status.node_default ? m.sites_controls_nodeDefaultVersion({ version: $status.node_default }) : m.sites_controls_nodeDefault()}
         onchange={(v) => onNodeChange({ target: { value: v } } as unknown as Event)}
       />
     {/if}
