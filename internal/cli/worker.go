@@ -720,11 +720,23 @@ func findOrphanedWorkers(siteName string, known map[string]bool) []string {
 	if reg, err := config.LoadSites(); err == nil {
 		sites = reg.Sites
 	}
+	// A host-proxy site's dev server (lerd-app-<site>) is the main process, not
+	// an orphan; handled here so callers don't each special-case it.
+	hostProxySite := false
+	for _, s := range sites {
+		if s.Name == siteName && s.IsHostProxy() {
+			hostProxySite = true
+			break
+		}
+	}
 	var orphans []string
 	for _, unit := range units {
 		workerName := strings.TrimPrefix(unit, prefix)
 		workerName = strings.TrimSuffix(workerName, suffix)
 		if workerName == "" || known[workerName] {
+			continue
+		}
+		if hostProxySite && workerName == config.HostProxyWorkerName {
 			continue
 		}
 		switch workerName {
