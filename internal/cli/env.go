@@ -223,6 +223,17 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		scheme: scheme,
 	}
 
+	// Framework-level static env vars: unconditional defaults the framework
+	// always wants applied (e.g. CodeIgniter's CI_ENVIRONMENT=development for
+	// local dev). Applied first so detected-service values and personal
+	// .env.lerd_override entries still win over them.
+	for _, kv := range fw.Env.Vars {
+		k, v, _ := strings.Cut(kv, "=")
+		val := applySiteHandle(v, tplCtx)
+		updates[k] = val
+		fmt.Printf("  Setting %s=%s\n", k, val)
+	}
+
 	// Load .lerd.yaml service hints so we can apply env vars for services
 	// listed there even when they are not yet referenced in the env file.
 	lerdYAMLServices := map[string]bool{}
