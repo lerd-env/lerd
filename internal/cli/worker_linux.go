@@ -32,7 +32,7 @@ func removeWorkerExecArtifacts(_ string) {}
 // restart-loop every 5s under Restart=always.
 func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, schedule, fpmUnit string, host bool) (bool, error) {
 	if host {
-		return writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart)
+		return writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart, fpmUnit)
 	}
 	container := fpmUnit
 
@@ -99,7 +99,7 @@ const defaultNodeVersion = "22"
 // writeHostWorkerUnitFile writes a systemd service unit for a worker that runs
 // on the host via fnm rather than inside a container. Used for Node.js tools
 // like Vite that need direct host access for HMR.
-func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart string) (bool, error) {
+func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart, fpmUnit string) (bool, error) {
 	fnm := filepath.Join(config.BinDir(), "fnm")
 	nodeVersion, err := nodeDet.DetectVersion(sitePath)
 	if err != nil {
@@ -125,8 +125,13 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 	// `~/.local/bin` stays reachable — issue #375.
 	home, _ := os.UserHomeDir()
 	envPath := config.BinDir() + ":" + filepath.Join(home, ".local", "bin") + ":/usr/local/bin:/usr/bin:/bin"
+	// Order after and pull up the site's FPM container: host tools like Vite
+	// run wayfinder (php artisan) at startup, which fails if FPM isn't up yet
+	// at boot. Wants, not BindsTo, so a transient FPM restart can't kill Vite.
 	unit := fmt.Sprintf(`[Unit]
 Description=Lerd %s (%s)
+After=network.target %s.service
+Wants=%s.service
 
 [Service]
 Type=simple
@@ -139,7 +144,7 @@ ExecStart=/bin/sh -c '%s'
 
 [Install]
 WantedBy=default.target
-`, label, siteName, restart, sitePath, envPath, escaped)
+`, label, siteName, fpmUnit, fpmUnit, restart, sitePath, envPath, escaped)
 
 	_ = services.Mgr.RemoveTimerUnit(unitName)
 	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)
