@@ -63,6 +63,15 @@ func TestWriteHostWorkerUnitFile_useFnmExec(t *testing.T) {
 	if strings.Contains(unit, "BindsTo=") {
 		t.Error("host worker must not bind to FPM container")
 	}
+	// Boot ordering: host tools like Vite run wayfinder (php artisan) at
+	// startup and crash if the FPM container isn't up yet. After+Wants
+	// orders Vite behind FPM and pulls it up, without BindsTo's teardown.
+	if !strings.Contains(unit, "After=network.target lerd-php84-fpm.service") {
+		t.Errorf("host worker must order after the FPM unit; got:\n%s", unit)
+	}
+	if !strings.Contains(unit, "Wants=lerd-php84-fpm.service") {
+		t.Errorf("host worker must pull up the FPM unit at boot; got:\n%s", unit)
+	}
 }
 
 func TestWriteWorkerUnitFile_hostFalse_usesPodman(t *testing.T) {
