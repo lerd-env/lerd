@@ -705,7 +705,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		if kg.Command != "" {
 			if _, statErr := os.Stat(filepath.Join(cwd, "vendor")); statErr == nil {
 				fmt.Printf("  Generating %s...\n", kg.EnvKey)
-				if err := artisanIn(cwd, kg.Command); err != nil {
+				// Use the framework's console binary (e.g. "spark" for
+				// CodeIgniter), not a hardcoded "artisan", so key generation
+				// works for non-Laravel frameworks.
+				if err := consoleIn(cwd, fw.Console, kg.Command); err != nil {
 					fmt.Printf("  [WARN] %s failed: %v\n", kg.Command, err)
 				}
 			} else if kg.FallbackPrefix != "" {
@@ -954,20 +957,29 @@ func generateRandomKey(prefix string) string {
 	return prefix + base64.StdEncoding.EncodeToString(key)
 }
 
-func artisanIn(dir string, args ...string) error {
+// consoleExecArgs builds the podman exec args to run a framework console
+// command (php <console> <args...>) inside the PHP-FPM container for the given
+// PHP version. An empty console defaults to "artisan" for Laravel.
+func consoleExecArgs(dir, version, console string, args ...string) []string {
+	if console == "" {
+		console = "artisan"
+	}
+
+	short := strings.ReplaceAll(version, ".", "")
+	container := "lerd-php" + short + "-fpm"
+
+	cmdArgs := []string{"exec", "-i", "-w", dir, container, "php", console}
+	return append(cmdArgs, args...)
+}
+
+func consoleIn(dir, console string, args ...string) error {
 	version, err := phpDet.DetectVersion(dir)
 	if err != nil {
 		cfg, _ := config.LoadGlobal()
 		version = cfg.PHP.DefaultVersion
 	}
 
-	short := strings.ReplaceAll(version, ".", "")
-	container := "lerd-php" + short + "-fpm"
-
-	cmdArgs := []string{"exec", "-i", "-w", dir, container, "php", "artisan"}
-	cmdArgs = append(cmdArgs, args...)
-
-	cmd := podman.Cmd(cmdArgs...)
+	cmd := podman.Cmd(consoleExecArgs(dir, version, console, args...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
