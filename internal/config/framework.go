@@ -282,7 +282,7 @@ type FrameworkEnvConf struct {
 // EnvKeyGeneration describes how to generate an application encryption key.
 type EnvKeyGeneration struct {
 	EnvKey         string `yaml:"env_key"`                   // env var to check/set (e.g. "APP_KEY")
-	Command        string `yaml:"command,omitempty"`         // artisan command to run if vendor/ exists (e.g. "key:generate")
+	Command        string `yaml:"command,omitempty"`         // console command to run if vendor/ exists, via the framework's console binary (e.g. "key:generate")
 	FallbackPrefix string `yaml:"fallback_prefix,omitempty"` // prefix for random key fallback (e.g. "base64:")
 }
 
