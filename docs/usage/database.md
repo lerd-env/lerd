@@ -141,6 +141,35 @@ You can change the choice at any time by editing the `services:` list in `.lerd.
 
 ---
 
+## Moving sites between services
+
+`lerd service migrate <service> <version>` upgrades one service in place (e.g. `postgres` from 16 to 18): the service keeps its name, so every site on it follows automatically and no `.env` changes. Use that when you want to move everyone off a major version at once. See [Service updates](service-updates.md#migrate-automated-dump-restore).
+
+`lerd db:move` is the other half: when you run two services of the same family **side by side** (e.g. the canonical `postgres` and an installed `postgres-18` alternate), it moves selected sites from one to the other and repoints their `.env`. For each site it dumps the database from the source, creates and restores it on the target, then rewrites the site's `.env` `DB_HOST`/`DB_PORT` (the same code path as `lerd env`, so host-proxy sites get loopback host + published port). The source data is left intact as a safety net.
+
+Run it without flags for an interactive wizard:
+
+```bash
+lerd db:move
+# ? Move databases from which service?  postgres (3 sites)
+# ? Move to which service?              postgres-18
+# ? Which sites?                        [x] shop  [x] blog  [ ] api
+```
+
+Or script it:
+
+```bash
+lerd db:move --from postgres --to postgres-18 --all      # every site on postgres
+lerd db:move --from postgres --to postgres-18 --site shop --site blog
+lerd db:move --from postgres --to postgres-18 --all --force   # skip the confirmation prompt
+```
+
+Both services must already be installed and in the same family (`mysql`→`mysql-5-7`, `postgres`→`postgres-18`, etc.); cross-family moves are rejected. A site's current service is detected from its `.lerd.yaml` `services:`/`db:` entry, falling back to the `lerd-<service>` hostname in `.env`. The target's `_testing` database is recreated empty by the env step; only the primary database is copied. Because the source data is preserved, clean it up by hand once you're happy with the move (drop the old databases via `lerd db:shell --service <source>`, or reinstall/remove the old service).
+
+The repoint reuses `lerd env`, so the site needs a detectable framework (Laravel, Symfony, etc.); if the env step fails the `.lerd.yaml` change is rolled back so the site stays on its original service.
+
+---
+
 ## Non-PHP projects
 
 For projects without a lerd framework definition (NestJS, Next.js, Go, etc.), db commands work without any lerd-specific configuration if the project's `.env` uses a recognised key:

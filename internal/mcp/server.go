@@ -455,6 +455,20 @@ func toolList() []mcpTool {
 			},
 		},
 		{
+			Name:        "db_move",
+			Description: "Move sites' databases between two installed same-family services (e.g. postgres -> postgres-18) and repoint each site's .env. Dumps from source, creates+restores on target; source data left intact. Pass sites (names) or all=true. To upgrade one service in place for all sites, use service_control migrate.",
+			InputSchema: mcpSchema{
+				Type: "object",
+				Properties: map[string]mcpProp{
+					"from":  {Type: "string", Description: "Source service, e.g. postgres."},
+					"to":    {Type: "string", Description: "Target service, same family, e.g. postgres-18."},
+					"sites": {Type: "array", Description: `Site names to move, e.g. ["shop","blog"]. Omit with all=true.`},
+					"all":   {Type: "boolean", Description: "Move every site currently on the source service."},
+				},
+				Required: []string{"from", "to"},
+			},
+		},
+		{
 			Name:        "env_check",
 			Description: "Compare .env against .env.example; flag missing/extra keys.",
 			InputSchema: mcpSchema{
@@ -1352,6 +1366,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		return execEnvSetup(args)
 	case "db_set":
 		return execDbSet(args)
+	case "db_move":
+		return execDbMove(args)
 	case "env_check":
 		return execEnvCheck(args)
 	case "env_override":
@@ -3521,6 +3537,42 @@ func execDbSet(args map[string]any) (any, *rpcError) {
 		summary = fmt.Sprintf("Database changed from %s to %s", previous, choice)
 	}
 	return toolOK(summary + "\n\n" + strings.TrimSpace(out.String())), nil
+}
+
+func execDbMove(args map[string]any) (any, *rpcError) {
+	from := strings.TrimSpace(strArg(args, "from"))
+	to := strings.TrimSpace(strArg(args, "to"))
+	if from == "" || to == "" {
+		return toolErr("from and to are required (e.g. from=postgres, to=postgres-18)"), nil
+	}
+	sites := strSliceArg(args, "sites")
+	all := boolArg(args, "all")
+	if !all && len(sites) == 0 {
+		return toolErr("pass sites (a list of site names) or all=true"), nil
+	}
+
+	// Re-exec the CLI so the move runs through the same code path as
+	// `lerd db:move`. --force skips the prompt; output is captured rather than
+	// written to the MCP stdio channel.
+	self, err := os.Executable()
+	if err != nil {
+		return toolErr("could not resolve lerd executable: " + err.Error()), nil
+	}
+	cmdArgs := []string{"db:move", "--from", from, "--to", to, "--force"}
+	if all {
+		cmdArgs = append(cmdArgs, "--all")
+	}
+	for _, s := range sites {
+		cmdArgs = append(cmdArgs, "--site", s)
+	}
+	var out bytes.Buffer
+	cmd := exec.Command(self, cmdArgs...)
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if err := cmd.Run(); err != nil {
+		return toolErr(fmt.Sprintf("db_move failed (%v):\n%s", err, strings.TrimSpace(out.String()))), nil
+	}
+	return toolOK(strings.TrimSpace(out.String())), nil
 }
 
 func execEnvCheck(args map[string]any) (any, *rpcError) {

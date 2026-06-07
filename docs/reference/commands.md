@@ -190,6 +190,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd db:snapshots [--all]` | List stored database snapshots |
 | `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
 | `lerd db:snapshot:rm <name> [-A]` | Delete a stored database snapshot |
+| `lerd db:move [--from svc] [--to svc] [--all\|--site name]` | Move sites' databases between two installed services in the same family and repoint their `.env`; wizard when run without flags |
 
 ## Import
 

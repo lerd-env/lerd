@@ -189,7 +189,9 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// kind filter on dumps_recent; both descriptions trimmed to the bone first.
 	// Bumped to 31000 for env_override (personal .env.lerd_override file with
 	// LERD_EXTERNAL_SERVICES support); description already trimmed.
-	const ceiling = 31000
+	// Bumped to 32000 for db_move (cross-service same-family DB move); description
+	// already trimmed to the bone first.
+	const ceiling = 32000
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

@@ -147,6 +147,7 @@ func main() {
 	root.AddCommand(cli.NewDbSnapshotsCmd())
 	root.AddCommand(cli.NewDbRestoreCmd())
 	root.AddCommand(cli.NewDbSnapshotRmCmd())
+	root.AddCommand(cli.NewDbMoveCmd())
 	root.AddCommand(cli.NewXdebugCmd())
 	root.AddCommand(cli.NewDumpCmd())
 	root.AddCommand(cli.NewWSLSetupCmd())

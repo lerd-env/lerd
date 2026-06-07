@@ -539,7 +539,8 @@ func TestClaudeSkillContent_underSizeCeiling(t *testing.T) {
 	// (service_config, service_check_updates, workers_health, workers_heal,
 	// framework_search, framework_install, dns_diagnose, analyze_queries,
 	// site_nginx); TestEveryMCPToolIsDocumented now guards against re-drift.
-	const ceiling = 55500
+	// Bumped to 57000 for the db_move section (cross-service same-family DB move).
+	const ceiling = 57000
 	if got := len(claudeSkillContent); got > ceiling {
 		t.Errorf("claudeSkillContent is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

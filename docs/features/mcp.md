@@ -112,6 +112,7 @@ Once the MCP server is connected, your AI assistant has access to:
 | `db_snapshots` | List stored database snapshots (`all` spans every database on the service) |
 | `db_restore` | Restore the project database from a stored snapshot (destructive: drops and recreates the database) |
 | `db_snapshot_delete` | Delete a stored database snapshot |
+| `db_move` | Move sites' databases between two installed same-family services (`from` → `to`) and repoint each site's `.env`; pass `sites` or `all`. Source data is left intact |
 | `queue` | Start or stop the queue worker for a site — `action`: `start` / `stop` (any framework with a `queue` worker) |
 | `horizon` | Start or stop Laravel Horizon for a site — `action`: `start` / `stop` (use instead of `queue` when `laravel/horizon` is installed) |
 | `reverb` | Start or stop the Reverb WebSocket server for a site — `action`: `start` / `stop` |

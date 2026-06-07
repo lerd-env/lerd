@@ -877,6 +877,23 @@ db_set(database: "sqlite")
 
 > Use this **before** ` + bt + `env_setup` + bt + ` on a fresh Laravel project so the database lands in ` + bt + `.env` + bt + ` deliberately. Switching databases later via ` + bt + `db_set` + bt + ` removes the previous database entry from ` + bt + `.lerd.yaml` + bt + ` automatically.
 
+### ` + bt + `db_move` + bt + `
+Move sites' databases between two installed services in the **same family** (e.g. ` + bt + `postgres` + bt + ` → ` + bt + `postgres-18` + bt + `, ` + bt + `mysql-5-7` + bt + ` → ` + bt + `mysql` + bt + `) and repoint each site's ` + bt + `.env` + bt + `. For each site it dumps from the source, creates and restores on the target, then rewrites ` + bt + `DB_HOST` + bt + ` / ` + bt + `DB_PORT` + bt + `. The source data is left intact. Both services must already be installed; cross-family moves are rejected.
+
+Arguments:
+- ` + bt + `from` + bt + ` (required): source service, e.g. ` + bt + `postgres` + bt + `
+- ` + bt + `to` + bt + ` (required): target service, same family, e.g. ` + bt + `postgres-18` + bt + `
+- ` + bt + `sites` + bt + ` (array): site names to move; omit when ` + bt + `all` + bt + ` is true
+- ` + bt + `all` + bt + ` (boolean): move every site currently on the source service
+
+Examples:
+` + "```" + `
+db_move(from: "postgres", to: "postgres-18", all: true)
+db_move(from: "postgres", to: "postgres-18", sites: ["shop", "blog"])
+` + "```" + `
+
+> This is for running two versions **side by side** and moving sites selectively. To upgrade one service in place so every site follows at once (no ` + bt + `.env` + bt + ` changes), use ` + bt + `service_control` + bt + ` with ` + bt + `migrate` + bt + ` instead.
+
 ### ` + bt + `db_snapshot` + bt + ` / ` + bt + `db_snapshots` + bt + ` / ` + bt + `db_restore` + bt + ` / ` + bt + `db_snapshot_delete` + bt + `
 Named, restorable point-in-time copies of the project database — take one before a risky migration or a destructive experiment, then roll back in a single call. SQL engines only (MySQL, MariaDB, PostgreSQL); snapshots are stored under lerd's data dir, keyed by service and database.
 
@@ -1513,6 +1530,7 @@ Read ` + bt + `status()` + bt + ` for ` + bt + `dns.tld` + bt + ` and ` + bt + `
 | ` + bt + `node` + bt + ` | Install or uninstall a Node.js version via fnm — ` + bt + `action` + bt + `: ` + bt + `install` + bt + ` / ` + bt + `uninstall` + bt + ` (e.g. ` + bt + `"20"` + bt + `, ` + bt + `"lts"` + bt + `) |
 | ` + bt + `env_setup` + bt + ` | Configure ` + bt + `.env` + bt + ` for lerd: detects services, starts them, creates DB, generates APP_KEY (leaves ` + bt + `DB_CONNECTION=sqlite` + bt + ` alone — call ` + bt + `db_set` + bt + ` first); ` + bt + `APP_URL` + bt + ` follows ` + bt + `.lerd.yaml app_url` + bt + ` → ` + bt + `sites.yaml app_url` + bt + ` → default chain |
 | ` + bt + `db_set` + bt + ` | Pick the database for a Laravel project: ` + bt + `sqlite` + bt + `, a built-in (` + bt + `mysql` + bt + ` / ` + bt + `postgres` + bt + `), or any installed family alternate (` + bt + `mariadb` + bt + `, ` + bt + `postgres-pgvector` + bt + `, ` + bt + `mysql-5-7` + bt + `, …); persists to ` + bt + `.lerd.yaml` + bt + `, rewrites ` + bt + `DB_` + bt + ` keys in ` + bt + `.env` + bt + `, starts the service, creates the database |
+| ` + bt + `db_move` + bt + ` | Move sites' databases between two installed same-family services (e.g. ` + bt + `from: postgres` + bt + ` ` + bt + `to: postgres-18` + bt + `) and repoint each site's ` + bt + `.env` + bt + `; pass ` + bt + `sites: [..]` + bt + ` or ` + bt + `all: true` + bt + `. Source data is left intact. To upgrade one service in place for every site at once, use ` + bt + `service_control` + bt + ` ` + bt + `migrate` + bt + ` instead |
 | ` + bt + `env_check` + bt + ` | Compare all ` + bt + `.env` + bt + ` files against ` + bt + `.env.example` + bt + ` — returns structured JSON with per-key sync status |
 | ` + bt + `env_override` + bt + ` | Manage the personal, gitignored ` + bt + `.env.lerd_override` + bt + ` (` + bt + `KEY=VALUE` + bt + ` pairs win over lerd's defaults on ` + bt + `env_setup` + bt + `; ` + bt + `LERD_EXTERNAL_SERVICES=<svc,svc>` + bt + ` marks services lerd writes vars for but won't start) |
 | ` + bt + `site_link` + bt + ` | Register a directory as a lerd site — **non-PHP projects** must have a Containerfile (default name ` + bt + `Containerfile.lerd` + bt + `; set ` + bt + `container.containerfile` + bt + ` for a different path, e.g. ` + bt + `Dockerfile` + bt + `) + ` + bt + `.lerd.yaml` + bt + ` with ` + bt + `container: {port: N}` + bt + ` written first, otherwise the site registers as PHP (wrong) |
