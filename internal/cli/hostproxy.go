@@ -2,17 +2,72 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strconv"
+	"syscall"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/siteops"
 )
+
+func init() {
+	// certs.SecureSite/UnsecureSite regenerate worktree vhosts but can't import
+	// cli (which owns host-proxy port allocation), so they call back through this
+	// hook for host-proxy worktrees. Mirrors SetupHostProxyWorktree's vhost step.
+	certs.RegenerateHostProxyWorktreeVhost = func(site config.Site, wtPath, wtDomain string, secured bool) error {
+		proxy := parentProxyConfig(site)
+		if proxy == nil {
+			return nil
+		}
+		port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+		return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, secured)
+	}
+}
+
+// RegenerateHostProxyVhostsOnGatewayChange rewrites every host-proxy site's
+// nginx vhost so the host-gateway IP baked into proxy_pass (Linux only) tracks a
+// network change, then reloads nginx. Wired to the host-gateway watcher from
+// main. No-op on macOS, where the upstream is the gvproxy-resolved
+// host.containers.internal hostname rather than a literal IP.
+func RegenerateHostProxyVhostsOnGatewayChange() {
+	if runtime.GOOS == "darwin" {
+		return
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return
+	}
+	regenerated := false
+	for i := range reg.Sites {
+		s := reg.Sites[i]
+		if !s.IsHostProxy() {
+			continue
+		}
+		if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {
+			fmt.Printf("[WARN] regenerating host-proxy vhost for %s: %v\n", s.Name, err)
+			continue
+		}
+		if wts, wErr := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain()); wErr == nil {
+			for _, wt := range wts {
+				_ = certs.RegenerateHostProxyWorktreeVhost(s, wt.Path, wt.Domain, s.Secured)
+			}
+		}
+		regenerated = true
+	}
+	if regenerated {
+		_ = nginx.Reload()
+	}
+}
 
 // hostProxyWorkerName is the stable worker name for a host-proxy site's
 // supervised dev server. Aliases the shared config constant so the unit name
@@ -168,11 +223,19 @@ func firstFreePort(start int, isTaken func(int) bool) int {
 // Both IPv4 and IPv6 loopback are probed so a service bound only to [::1] (as
 // some lerd quadlets are) is still detected as taken.
 func portBoundOnHost(p int) bool {
-	for _, host := range []string{"127.0.0.1", "::1"} {
-		ln, err := net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(p)))
-		if err != nil {
-			return true
-		}
+	// IPv4 loopback is authoritative: a failure here means the port is taken.
+	if ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); err != nil {
+		return true
+	} else {
+		_ = ln.Close()
+	}
+	// IPv6 loopback catches services bound only to [::1], but on a host with
+	// IPv6 disabled the listen fails with EADDRNOTAVAIL / EAFNOSUPPORT for every
+	// port. Only an in-use error counts as taken, else allocation would report
+	// every port busy and fall back to the start port.
+	if ln, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(p))); err != nil {
+		return errors.Is(err, syscall.EADDRINUSE)
+	} else {
 		_ = ln.Close()
 	}
 	return false
@@ -184,15 +247,69 @@ func portBoundOnHost(p int) bool {
 // skipped so re-running init on a site keeps its own port.
 func reservedHostPorts(exceptSite string) map[int]bool {
 	out := map[int]bool{}
-	reg, err := config.LoadSites()
-	if err != nil {
-		return out
-	}
-	for _, s := range reg.Sites {
-		if s.Name == exceptSite || s.HostPort == 0 {
-			continue
+	exceptPort := 0
+	if reg, err := config.LoadSites(); err == nil {
+		for _, s := range reg.Sites {
+			if s.Name == exceptSite {
+				exceptPort = s.HostPort
+				continue
+			}
+			if s.HostPort == 0 {
+				continue
+			}
+			out[s.HostPort] = true
 		}
-		out[s.HostPort] = true
+	}
+	// Reserve host ports lerd services publish (e.g. gotenberg on 3000) even when
+	// the container is stopped: a stopped service still owns its published port
+	// and would collide the moment it starts, which portBoundOnHost can't foresee.
+	for p := range lerdServiceHostPorts() {
+		out[p] = true
+	}
+	// Honour exceptSite across the whole set: re-running init on a site keeps its
+	// own already-assigned port even when it coincides with a service's port, so
+	// allocation stays idempotent instead of silently bumping the site.
+	if exceptPort > 0 {
+		delete(out, exceptPort)
+	}
+	return out
+}
+
+// lerdServiceHostPorts returns every host port a lerd service may publish:
+// installed/default services (with their resolved ports), all bundled presets
+// (including optional ones like gotenberg that aren't in the default set), and
+// installed custom services. Used so a host-proxy dev server is never assigned a
+// port a service will reclaim.
+func lerdServiceHostPorts() map[int]bool {
+	out := map[int]bool{}
+	add := func(mappings []string) {
+		for _, m := range mappings {
+			if host, _, ok := splitHostContainerPort(m); ok {
+				if n, _ := strconv.Atoi(host); n > 0 {
+					out[n] = true
+				}
+			}
+		}
+	}
+	if cfg, err := config.LoadGlobal(); err == nil {
+		for _, svc := range cfg.Services {
+			if svc.Port > 0 {
+				out[svc.Port] = true
+			}
+			add(svc.ExtraPorts)
+		}
+	}
+	if presets, err := config.ListPresets(); err == nil {
+		for _, p := range presets {
+			if pr, err := config.LoadPreset(p.Name); err == nil {
+				add(pr.Ports)
+			}
+		}
+	}
+	if customs, err := config.ListCustomServices(); err == nil {
+		for _, svc := range customs {
+			add(svc.Ports)
+		}
 	}
 	return out
 }

@@ -346,6 +346,31 @@ func TestApplyHostProxyEnv_rewritesEmbeddedUrlHosts(t *testing.T) {
 	}
 }
 
+func TestApplyHostProxyEnv_leavesNonConnectionKeysAlone(t *testing.T) {
+	// A value carrying a "lerd-" token in a key that is NOT a connection target
+	// must survive untouched — only host/port/url/dsn/endpoint keys get rewritten.
+	updates := map[string]string{
+		"APP_NAME":     "lerd-demo",                    // not a conn key: keep
+		"CACHE_PREFIX": "lerd-cache",                   // not a conn key: keep
+		"DB_HOST":      "lerd-mariadb",                 // conn key: rewrite to loopback
+		"MONGO_DSN":    "mongodb://lerd-mongo:27017/x", // conn key: rewrite host
+	}
+	applyHostProxyEnv(updates, map[string]string{"27017": "27017"})
+
+	if updates["APP_NAME"] != "lerd-demo" {
+		t.Errorf("APP_NAME mangled: %q", updates["APP_NAME"])
+	}
+	if updates["CACHE_PREFIX"] != "lerd-cache" {
+		t.Errorf("CACHE_PREFIX mangled: %q", updates["CACHE_PREFIX"])
+	}
+	if updates["DB_HOST"] != "127.0.0.1" {
+		t.Errorf("DB_HOST = %q, want 127.0.0.1", updates["DB_HOST"])
+	}
+	if updates["MONGO_DSN"] != "mongodb://127.0.0.1:27017/x" {
+		t.Errorf("MONGO_DSN = %q", updates["MONGO_DSN"])
+	}
+}
+
 func TestRewriteEnvForHostProxy_usesPresetPorts(t *testing.T) {
 	// postgres + redis are default presets resolvable from the embedded YAML,
 	// so the full path (preset lookup -> port map -> rewrite) works offline.

@@ -177,3 +177,48 @@ func TestTickHostGateway(t *testing.T) {
 		})
 	}
 }
+
+// onUpdate must fire only after the hosts file is actually rewritten, so
+// host-proxy vhosts are regenerated on a real gateway change and not on the
+// fast-path skip or a reachable-current no-op.
+func TestTickHostGateway_onUpdateFiresOnlyOnRewrite(t *testing.T) {
+	base := func(onUpdate func()) hostGatewayDeps {
+		return hostGatewayDeps{
+			primaryLANIP: func() string { return "10.0.0.50" },
+			readCurrent:  func() string { return "192.168.1.10" },
+			reachable:    func(string) bool { return false },
+			detectFresh:  func() string { return "10.0.0.50" },
+			writeHosts:   func() error { return nil },
+			onUpdate:     onUpdate,
+			log:          func(string, string, ...any) {},
+		}
+	}
+
+	t.Run("fires on rewrite", func(t *testing.T) {
+		called := false
+		deps := base(func() { called = true })
+		tickHostGateway(deps, &hostGatewayState{lastLAN: "192.168.1.10"})
+		if !called {
+			t.Error("onUpdate should fire after a successful hosts rewrite")
+		}
+	})
+
+	t.Run("skips when LAN unchanged", func(t *testing.T) {
+		called := false
+		deps := base(func() { called = true })
+		tickHostGateway(deps, &hostGatewayState{lastLAN: "10.0.0.50"})
+		if called {
+			t.Error("onUpdate must not fire on the fast-path skip")
+		}
+	})
+
+	t.Run("skips when write fails", func(t *testing.T) {
+		called := false
+		deps := base(func() { called = true })
+		deps.writeHosts = func() error { return errors.New("disk full") }
+		tickHostGateway(deps, &hostGatewayState{lastLAN: "192.168.1.10"})
+		if called {
+			t.Error("onUpdate must not fire when the hosts rewrite fails")
+		}
+	})
+}

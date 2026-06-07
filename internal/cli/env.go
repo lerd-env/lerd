@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -34,15 +35,35 @@ const hostProxyLoopback = "127.0.0.1"
 // map from the container port to the service's published host port (e.g. mariadb
 // 3306 -> 3411). Containerised sites keep the container DNS names untouched.
 func rewriteEnvForHostProxy(updates map[string]string, serviceNames []string) {
+	// Sort so a container port shared by two services (e.g. mysql and mariadb
+	// both on 3306) resolves to a stable host port rather than whichever map
+	// iteration happened to land last.
+	names := append([]string(nil), serviceNames...)
+	sort.Strings(names)
 	containerToHost := map[string]string{}
-	for _, name := range serviceNames {
+	for _, name := range names {
 		for _, mapping := range servicePortMappings(name) {
 			if host, container, ok := splitHostContainerPort(mapping); ok {
-				containerToHost[container] = host
+				if _, seen := containerToHost[container]; !seen {
+					containerToHost[container] = host
+				}
 			}
 		}
 	}
 	applyHostProxyEnv(updates, containerToHost)
+}
+
+// hostProxyConnKey reports whether an env key names a service connection target
+// (a host, port, URL, DSN, or endpoint). The host-proxy rewrite only touches
+// these so an unrelated value that happens to contain a "lerd-" token (e.g.
+// APP_NAME=lerd-demo) is never mangled into 127.0.0.1.
+func hostProxyConnKey(k string) bool {
+	for _, suf := range []string{"_HOST", "_PORT", "_URL", "_DSN", "_ENDPOINT", "_SERVER"} {
+		if strings.HasSuffix(k, suf) {
+			return true
+		}
+	}
+	return false
 }
 
 // lerdContainerHostRe matches a lerd container hostname with an optional
@@ -56,6 +77,9 @@ var lerdContainerHostRe = regexp.MustCompile(`lerd-[a-z0-9-]+(?::\d+)?`)
 // Split from rewriteEnvForHostProxy so the logic is testable without services.
 func applyHostProxyEnv(updates, containerToHost map[string]string) {
 	for k, v := range updates {
+		if !hostProxyConnKey(k) {
+			continue
+		}
 		nv := lerdContainerHostRe.ReplaceAllStringFunc(v, func(m string) string {
 			_, port, found := strings.Cut(m, ":")
 			if !found {

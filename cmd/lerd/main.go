@@ -452,7 +452,10 @@ func newWatchCmd() *cobra.Command {
 			// LAN IP for host.containers.internal in the shared /etc/hosts,
 			// and Xdebug silently times out until the next lerd start. The
 			// watcher verifies the current entry every tick and reprobes
-			// only when it stops responding.
+			// only when it stops responding. On a change, host-proxy vhosts
+			// (which bake the gateway IP into proxy_pass on Linux) are
+			// regenerated so they don't point at the old, now-dead address.
+			watcher.OnGatewayIPChange = cli.RegenerateHostProxyVhostsOnGatewayChange
 			go watcher.WatchHostGateway(30 * time.Second)
 
 			// Self-heal exec-mode framework workers on macOS. Container mode

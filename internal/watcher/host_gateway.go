@@ -15,8 +15,15 @@ type hostGatewayDeps struct {
 	reachable    func(ip string) bool
 	detectFresh  func() string
 	writeHosts   func() error
+	onUpdate     func()
 	log          func(level, msg string, kv ...any)
 }
+
+// OnGatewayIPChange, if set, runs after the shared hosts file is rewritten with
+// a fresh host-gateway IP. The cli package wires this (via main) to regenerate
+// host-proxy vhosts, which bake the gateway IP into proxy_pass on Linux and
+// would otherwise point at a dead address until the next manual regen.
+var OnGatewayIPChange func()
 
 // hostGatewayState is the cross-tick memory for WatchHostGateway. We only
 // keep the last-seen LAN IP so the fast path (compare and skip) is one
@@ -52,6 +59,7 @@ func WatchHostGateway(interval time.Duration) {
 		reachable:    podman.HostReachable,
 		detectFresh:  podman.DetectHostGatewayIPProbeOnly,
 		writeHosts:   podman.WriteContainerHosts,
+		onUpdate:     OnGatewayIPChange,
 		log: func(level, msg string, kv ...any) {
 			switch level {
 			case "info":
@@ -94,6 +102,9 @@ func tickHostGateway(d hostGatewayDeps, s *hostGatewayState) {
 		return
 	}
 	d.log("info", "host gateway IP updated", "old", current, "new", fresh)
+	if d.onUpdate != nil {
+		d.onUpdate()
+	}
 }
 
 // primaryLANIP returns the local IPv4 address the kernel would use to reach

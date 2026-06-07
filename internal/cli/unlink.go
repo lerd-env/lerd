@@ -3,8 +3,10 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
@@ -24,6 +26,15 @@ func init() {
 		// would otherwise orphan its .service file. stopWorkerUnit is idempotent.
 		if site.IsHostProxy() {
 			WorkerStopForSite(site.Name, site.Path, hostProxyWorkerName) //nolint:errcheck
+		}
+		// Worktrees run their own per-worktree units (lerd-<worker>-<site>-<slug>)
+		// that collectRunningWorkers (parent-only) misses. On unlink the site is
+		// going away, so stop every worktree's workers too — a host-proxy
+		// Restart=always dev server would otherwise loop against a removed dir.
+		if wts, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
+			for _, wt := range wts {
+				StopAllWorkersForWorktree(site.Name, filepath.Base(wt.Path)) //nolint:errcheck
+			}
 		}
 	}
 }

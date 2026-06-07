@@ -618,6 +618,11 @@ func workerUnitName(siteName, sitePath, workerName string) string {
 func resolveWorkerFPMUnit(siteName, phpVersion string) string {
 	if site, _ := config.FindSite(siteName); site != nil {
 		switch {
+		case site.IsHostProxy():
+			// Host-proxy sites run their dev server on the host and have no FPM
+			// container, so there is nothing to depend on or exec into. Returning
+			// "" lets writeHostWorkerUnitFile skip the FPM ordering block.
+			return ""
 		case site.IsCustomContainer():
 			return podman.CustomContainerName(siteName)
 		case site.IsFrankenPHP():

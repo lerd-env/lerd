@@ -16,6 +16,13 @@ import (
 // `lerd secure` command and the dashboard HTTPS toggle.
 var ErrDNSDisabled = fmt.Errorf("HTTPS requires lerd-managed DNS, set dns.enabled: true and re-run lerd install")
 
+// RegenerateHostProxyWorktreeVhost regenerates the proxy vhost for a single
+// worktree of a host-proxy site, switching it between HTTP and HTTPS. It is
+// populated by the cli package (which owns host-proxy port allocation) so certs
+// can do this without importing cli. nil in builds that don't link cli, in
+// which case host-proxy worktree vhosts are left untouched.
+var RegenerateHostProxyWorktreeVhost func(site config.Site, wtPath, wtDomain string, secured bool) error
+
 // SecureSite issues a TLS certificate for the site and switches its nginx vhost to HTTPS.
 func SecureSite(site config.Site) error {
 	if cfg, _ := config.LoadGlobal(); cfg != nil && !cfg.DNS.Enabled {
@@ -53,6 +60,15 @@ func SecureSite(site config.Site) error {
 	// Regenerate SSL vhosts and sync APP_URL + VITE_REVERB_* for worktrees.
 	if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
 		for _, wt := range worktrees {
+			if site.IsHostProxy() {
+				// Host-proxy worktrees have no PHP/FPM; render the proxy vhost
+				// pointing at the worktree's dev-server port instead of fastcgi.
+				if RegenerateHostProxyWorktreeVhost != nil {
+					_ = RegenerateHostProxyWorktreeVhost(site, wt.Path, wt.Domain, true)
+				}
+				envfile.SyncPrimaryDomain(wt.Path, wt.Domain, true) //nolint:errcheck
+				continue
+			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 			_ = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
 			envfile.SyncPrimaryDomain(wt.Path, wt.Domain, true) //nolint:errcheck
@@ -126,6 +142,13 @@ func UnsecureSite(site config.Site) error {
 	// Switch any worktree SSL vhosts back to plain HTTP and sync env.
 	if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
 		for _, wt := range worktrees {
+			if site.IsHostProxy() {
+				if RegenerateHostProxyWorktreeVhost != nil {
+					_ = RegenerateHostProxyWorktreeVhost(site, wt.Path, wt.Domain, false)
+				}
+				envfile.SyncPrimaryDomain(wt.Path, wt.Domain, false) //nolint:errcheck
+				continue
+			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 			_ = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
 			envfile.SyncPrimaryDomain(wt.Path, wt.Domain, false) //nolint:errcheck
