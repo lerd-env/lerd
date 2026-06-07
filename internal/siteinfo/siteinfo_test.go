@@ -713,6 +713,18 @@ func TestEnrichStripe(t *testing.T) {
 			t.Error("expected StripeRunning = true")
 		}
 	})
+
+	t.Run("non-Laravel STRIPE_SECRET_KEY in .env sets flag", func(t *testing.T) {
+		// A NestJS/Node project names the secret differently; detection must
+		// still fire so the UI surfaces the listener toggle.
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".env"), []byte("STRIPE_SECRET_KEY=sk_test_node\n"), 0644)
+		e := &EnrichedSite{Path: dir, Name: "nestapp"}
+		e.enrichStripe()
+		if !e.StripeSecretSet {
+			t.Error("expected StripeSecretSet = true for STRIPE_SECRET_KEY")
+		}
+	})
 }
 
 // ── Worker enrichment ───────────────────────────────────────────────────────

@@ -70,6 +70,7 @@ export interface Site {
   horizon_reload_ready?: boolean;
   stripe_running?: boolean;
   stripe_secret_set?: boolean;
+  stripe_webhook_path?: string;
   schedule_running?: boolean;
   schedule_failing?: boolean;
   reverb_running?: boolean;
@@ -461,6 +462,8 @@ export const toggleReverb = (s: Site) =>
   postAction(site(s.domain, s.reverb_running ? 'reverb:stop' : 'reverb:start'));
 export const toggleStripe = (s: Site) =>
   postAction(site(s.domain, s.stripe_running ? 'stripe:stop' : 'stripe:start'));
+export const setStripeConfig = (s: Site, path: string) =>
+  postAction(site(s.domain, 'stripe:config') + '?path=' + encodeURIComponent(path));
 export const toggleWorker = (s: Site, w: FrameworkWorker, branch: string = '') =>
   postAction(
     site(s.domain, 'worker:' + w.name + (w.running ? ':stop' : ':start')) +

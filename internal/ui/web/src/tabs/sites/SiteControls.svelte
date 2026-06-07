@@ -9,6 +9,7 @@
     toggleSchedule,
     toggleReverb,
     toggleStripe,
+    setStripeConfig,
     toggleWorker,
     setWorktreeDBIsolated,
     loadSites
@@ -20,6 +21,7 @@
   import WorktreeDBIsolateModal from './WorktreeDBIsolateModal.svelte';
   import HorizonControl from './HorizonControl.svelte';
   import HorizonReloadWatcherModal from './HorizonReloadWatcherModal.svelte';
+  import StripeControl from './StripeControl.svelte';
   import CommandsDropdown from '$components/CommandsDropdown.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import ToggleButton from '$components/ToggleButton.svelte';
@@ -338,13 +340,12 @@
       {/if}
 
       {#if site.stripe_secret_set}
-        <ToggleButton
-          label={m.sites_controls_stripe()}
-          on={Boolean(site.stripe_running)}
+        <StripeControl
+          running={Boolean(site.stripe_running)}
           loading={isPending('stripe')}
-          disabled={isPending('stripe')}
-          onclick={() => transition('stripe', !site.stripe_running, () => toggleStripe(site))}
-          title={site.stripe_running ? m.sites_controls_stripeToggle_on() : m.sites_controls_stripeToggle_off()}
+          webhookPath={site.stripe_webhook_path}
+          onToggle={() => transition('stripe', !site.stripe_running, () => toggleStripe(site))}
+          onSaveConfig={(path) => setStripeConfig(site, path)}
         />
       {/if}
 

@@ -116,5 +116,5 @@ func restartStripeIfActive(site *config.Site) {
 		fmt.Printf("[WARN] restarting stripe listener: %v\n", err)
 		return
 	}
-	fmt.Printf("  Restarted stripe listener → %s/stripe/webhook\n", baseURL)
+	fmt.Printf("  Restarted stripe listener → %s%s\n", baseURL, config.StripeWebhookPath(site.Path))
 }

@@ -36,6 +36,35 @@ func SetProjectPHPVersion(dir string, version string) error {
 	})
 }
 
+// SetProjectStripe writes the project's Stripe listener settings (webhook path
+// and/or secret env key) to .lerd.yaml, creating the file if needed. An empty
+// argument leaves the corresponding field untouched; when both are empty this
+// is a no-op so we never materialise an empty "stripe: {}" block or create a
+// .lerd.yaml the project didn't have.
+func SetProjectStripe(dir, path, secretEnvKey string) error {
+	if path == "" && secretEnvKey == "" {
+		return nil
+	}
+	normPath, err := ValidateStripeWebhookPath(path)
+	if err != nil {
+		return err
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		return err
+	}
+	if cfg.Stripe == nil {
+		cfg.Stripe = &StripeConfig{}
+	}
+	if normPath != "" {
+		cfg.Stripe.Path = normPath
+	}
+	if secretEnvKey != "" {
+		cfg.Stripe.SecretEnvKey = secretEnvKey
+	}
+	return SaveProjectConfig(dir, cfg)
+}
+
 // SetProjectWorkers replaces the workers list. No-op if .lerd.yaml does not exist.
 func SetProjectWorkers(dir string, workers []string) error {
 	return updateProjectConfig(dir, func(cfg *ProjectConfig) {

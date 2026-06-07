@@ -421,10 +421,16 @@ func siteNeedsStorageLink(cwd string) bool {
 	return true // FILESYSTEM_DISK unset → defaults to local
 }
 
-// siteHasStripeSecret returns true if STRIPE_SECRET is present in .env or .env.example.
+// siteHasStripeSecret returns true if a Stripe secret is present for the
+// project. The live .env is resolved through config.StripeSecretSet so a pinned
+// secret_env_key is honoured (matching what StripeStartForSite will read);
+// .env.example is probed against the candidate keys as a scaffold fallback.
 func siteHasStripeSecret(cwd string) bool {
-	for _, name := range []string{".env", ".env.example"} {
-		if envfile.ReadKey(filepath.Join(cwd, name), "STRIPE_SECRET") != "" {
+	if config.StripeSecretSet(cwd) {
+		return true
+	}
+	for _, key := range config.StripeSecretEnvCandidates {
+		if envfile.ReadKey(filepath.Join(cwd, ".env.example"), key) != "" {
 			return true
 		}
 	}

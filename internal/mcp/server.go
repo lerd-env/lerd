@@ -803,14 +803,15 @@ func toolList() []mcpTool {
 			},
 			mcpTool{
 				Name:        "stripe",
-				Description: "Start or stop a Stripe webhook listener. Reads STRIPE_SECRET from .env.",
+				Description: "Start, stop, or configure a Stripe webhook listener. The secret is read from .env under STRIPE_SECRET, STRIPE_SECRET_KEY or STRIPE_API_KEY (works for any framework). Use action=config to set webhook_path/secret_env_key in .lerd.yaml without starting; passing config with no fields reports the current settings.",
 				InputSchema: mcpSchema{
 					Type: "object",
 					Properties: map[string]mcpProp{
-						"action":       {Type: "string", Enum: []string{"start", "stop"}},
-						"site":         {Type: "string"},
-						"api_key":      {Type: "string", Description: "Defaults to STRIPE_SECRET."},
-						"webhook_path": {Type: "string", Description: "Default /stripe/webhook."},
+						"action":         {Type: "string", Enum: []string{"start", "stop", "config"}},
+						"site":           {Type: "string"},
+						"api_key":        {Type: "string", Description: "Defaults to the secret in .env."},
+						"webhook_path":   {Type: "string", Description: "Route events forward to. Persisted to .lerd.yaml. Default /stripe/webhook."},
+						"secret_env_key": {Type: "string", Description: "Which .env key holds the secret. Persisted to .lerd.yaml. Empty auto-detects."},
 					},
 					Required: []string{"action", "site"},
 				},
@@ -1285,6 +1286,8 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 			return execStripeListen(args)
 		case "stop":
 			return execStripeListenStop(args)
+		case "config":
+			return execStripeConfig(args)
 		default:
 			return unknownAction("stripe")
 		}
@@ -2122,14 +2125,15 @@ func execStripeListen(args map[string]any) (any, *rpcError) {
 	}
 	apiKey := strArg(args, "api_key")
 	if apiKey == "" {
-		apiKey = envfile.ReadKey(filepath.Join(site.Path, ".env"), "STRIPE_SECRET")
+		_, apiKey = config.ResolveStripeSecret(site.Path)
 	}
 	if apiKey == "" {
-		return toolErr("Stripe API key required: pass api_key or set STRIPE_SECRET in the site's .env"), nil
+		return toolErr("Stripe API key required: pass api_key or set one of " +
+			strings.Join(config.StripeSecretEnvCandidates, ", ") + " in the site's .env"), nil
 	}
 	webhookPath := strArg(args, "webhook_path")
 	if webhookPath == "" {
-		webhookPath = "/stripe/webhook"
+		webhookPath = config.StripeWebhookPath(site.Path)
 	}
 	scheme := "http"
 	if site.Secured {
@@ -2180,6 +2184,40 @@ func execStripeListenStop(args map[string]any) (any, *rpcError) {
 	}
 	_ = podman.DaemonReloadFn()
 	return toolOK("Stripe listener stopped for " + siteName), nil
+}
+
+func execStripeConfig(args map[string]any) (any, *rpcError) {
+	siteName := strArg(args, "site")
+	if siteName == "" {
+		return toolErr("site is required"), nil
+	}
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return toolErr("site not found: " + siteName), nil
+	}
+	webhookPath := strArg(args, "webhook_path")
+	secretEnvKey := strArg(args, "secret_env_key")
+
+	// No fields: report current settings instead of writing.
+	if webhookPath == "" && secretEnvKey == "" {
+		key, _ := config.ResolveStripeSecret(site.Path)
+		if key == "" {
+			key = "(none found; looked for " + strings.Join(config.StripeSecretEnvCandidates, ", ") + ")"
+		}
+		return toolOK(fmt.Sprintf("Stripe config for %s\nWebhook path: %s\nSecret env key: %s",
+			siteName, config.StripeWebhookPath(site.Path), key)), nil
+	}
+
+	if err := config.SetProjectStripe(site.Path, webhookPath, secretEnvKey); err != nil {
+		return toolErr("saving stripe config: " + err.Error()), nil
+	}
+	// Re-forward a running listener to the new route by rewriting + restarting
+	// its unit; the start path reads the freshly saved path from .lerd.yaml.
+	if lerdSystemd.IsServiceActive("lerd-stripe-" + siteName) {
+		return execStripeListen(args)
+	}
+	return toolOK(fmt.Sprintf("Updated Stripe config for %s\nWebhook path: %s",
+		siteName, config.StripeWebhookPath(site.Path))), nil
 }
 
 func execLogs(args map[string]any) (any, *rpcError) {

@@ -120,6 +120,7 @@ type EnrichedSite struct {
 	HorizonFailing    bool
 	StripeSecretSet   bool
 	StripeRunning     bool
+	StripeWebhookPath string
 
 	// Custom framework workers
 	FrameworkWorkers []WorkerInfo
@@ -415,8 +416,9 @@ func (e *EnrichedSite) enrichFPM() {
 }
 
 func (e *EnrichedSite) enrichStripe() {
-	if envfile.ReadKey(filepath.Join(e.Path, ".env"), "STRIPE_SECRET") != "" {
+	if config.StripeSecretSet(e.Path) {
 		e.StripeSecretSet = true
+		e.StripeWebhookPath = config.StripeWebhookPath(e.Path)
 		status, _ := unitStatusFn("lerd-stripe-" + e.Name)
 		e.StripeRunning = status == "active"
 	}
