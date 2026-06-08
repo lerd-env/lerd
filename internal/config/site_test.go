@@ -34,6 +34,24 @@ func TestAddSite_Basic(t *testing.T) {
 	}
 }
 
+func TestAddSite_RejectsUnitInjectionNames(t *testing.T) {
+	setDataDir(t)
+	for _, name := range []string{
+		"app\nExecStartPre=/bin/sh -c evil",
+		"app\rfoo",
+		"a/b",
+		"app\x00",
+	} {
+		if err := AddSite(Site{Name: name, Domains: []string{"x.test"}, Path: "/srv/x"}); err == nil {
+			t.Errorf("AddSite(%q) should have been rejected", name)
+		}
+	}
+	// A clean name still works.
+	if err := AddSite(Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: "/srv/myapp"}); err != nil {
+		t.Errorf("AddSite with clean name should succeed: %v", err)
+	}
+}
+
 func TestAddSite_UpdateExisting(t *testing.T) {
 	setDataDir(t)
 

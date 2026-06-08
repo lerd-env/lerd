@@ -454,16 +454,48 @@ func LoadCustomServiceFromFile(path string) (*CustomService, error) {
 	return &svc, nil
 }
 
+// ContainsUnitInjectionChars reports whether s contains a newline, carriage
+// return, or NUL: characters that would let a value break out of its line in a
+// generated systemd unit or podman quadlet and inject an extra directive.
+func ContainsUnitInjectionChars(s string) bool {
+	return strings.ContainsAny(s, "\n\r\x00")
+}
+
 // SaveCustomService validates and writes a custom service config to disk.
 func SaveCustomService(svc *CustomService) error {
 	if !validServiceName.MatchString(svc.Name) {
 		return fmt.Errorf("invalid service name %q: must match [a-z0-9][a-z0-9-]*", svc.Name)
 	}
-	// Refuse env values with newlines/NUL so a malicious value can't inject
-	// extra systemd directives (e.g. Exec=) into the generated .container.
+	// Refuse newline/NUL in any field that reaches the generated .container
+	// quadlet, so a malicious value (e.g. from a cloned repo's inline service
+	// in .lerd.yaml) can't inject extra systemd directives such as
+	// Exec=/PodmanArgs=--privileged/Volume=/:/host onto their own line.
+	scalars := map[string]string{
+		"image": svc.Image, "exec": svc.Exec, "userns": svc.Userns,
+		"data_dir": svc.DataDir, "description": svc.Description,
+		"dashboard": svc.Dashboard, "connection_url": svc.ConnectionURL,
+	}
+	if svc.SiteInit != nil {
+		scalars["site_init.exec"] = svc.SiteInit.Exec
+	}
+	for label, v := range scalars {
+		if ContainsUnitInjectionChars(v) {
+			return fmt.Errorf("invalid %s for service %q: must not contain newline or NUL", label, svc.Name)
+		}
+	}
+	for _, p := range svc.Ports {
+		if ContainsUnitInjectionChars(p) {
+			return fmt.Errorf("invalid port %q for service %q: must not contain newline or NUL", p, svc.Name)
+		}
+	}
+	for _, f := range svc.Files {
+		if ContainsUnitInjectionChars(f.Target) || ContainsUnitInjectionChars(f.Mode) {
+			return fmt.Errorf("invalid file mount for service %q: must not contain newline or NUL", svc.Name)
+		}
+	}
 	for k, v := range svc.Environment {
-		if strings.ContainsAny(v, "\n\r\x00") {
-			return fmt.Errorf("invalid environment value for %q: must not contain newline or NUL", k)
+		if ContainsUnitInjectionChars(k) || ContainsUnitInjectionChars(v) {
+			return fmt.Errorf("invalid environment entry %q for service %q: must not contain newline or NUL", k, svc.Name)
 		}
 	}
 	dir := CustomServicesDir()

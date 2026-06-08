@@ -37,11 +37,18 @@ func SiteNameAndDomain(dirName, tld string) (string, string) {
 		name = name[:m[0]]
 	}
 	name = strings.ReplaceAll(name, ".", "-")
+	// Strip characters that would be unsafe in a systemd unit name/body derived
+	// from this handle (newline/NUL inject a directive, slash escapes the path).
+	name = unsafeNameChars.ReplaceAllString(name, "")
 	if name == "" {
 		name = "site"
 	}
 	return name, name + "." + tld
 }
+
+// unsafeNameChars matches characters that must never reach a site handle used
+// in systemd unit names and bodies.
+var unsafeNameChars = regexp.MustCompile(`[\n\r\x00/]`)
 
 func stripGTLD(name string) (string, bool) {
 	for _, ext := range gTLDs {

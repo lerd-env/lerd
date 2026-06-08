@@ -56,6 +56,32 @@ func TestSaveCustomService_RejectsNewlineInEnv(t *testing.T) {
 	}
 }
 
+func TestSaveCustomService_RejectsNewlineInQuadletFields(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	// Each of these fields is written into the generated .container quadlet, so
+	// a newline must be rejected to stop directive injection (e.g. a repo's
+	// inline service smuggling PodmanArgs=--privileged / Volume=/:/host).
+	cases := []func(*CustomService){
+		func(s *CustomService) { s.Exec = "redis-server\nPodmanArgs=--privileged" },
+		func(s *CustomService) { s.Image = "alpine\nVolume=/:/host:rw" },
+		func(s *CustomService) { s.Userns = "keep-id\nPodmanArgs=--pid=host" },
+		func(s *CustomService) { s.DataDir = "/data\nExec=/bin/sh -c pwned" },
+		func(s *CustomService) { s.Description = "x\nExecStartPost=/bin/sh -c pwned" },
+		func(s *CustomService) { s.Ports = []string{"8080:80\nVolume=/:/host"} },
+	}
+	for i, mutate := range cases {
+		svc := &CustomService{Name: "evil", Image: "alpine"}
+		mutate(svc)
+		if err := SaveCustomService(svc); err == nil {
+			t.Errorf("case %d: expected rejection of a newline-bearing quadlet field", i)
+		}
+	}
+	// A clean service still saves.
+	if err := SaveCustomService(&CustomService{Name: "good", Image: "alpine", Exec: "redis-server"}); err != nil {
+		t.Errorf("clean service should save: %v", err)
+	}
+}
+
 func TestLoadCustomServiceFromFile_StripsLegacyFilesField(t *testing.T) {
 	tmp := t.TempDir()
 	path := filepath.Join(tmp, "phpmyadmin.yaml")
