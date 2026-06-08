@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/geodro/lerd/internal/certs"
@@ -173,6 +174,19 @@ func (m *packageManifest) devScripts() []string {
 // package.json, in preference order, each rendered as "npm run <name>".
 func AvailableDevScripts(cwd string) []string {
 	return readPackageManifest(cwd).devScripts()
+}
+
+// runsVite reports whether the wizard's chosen dev command launches Vite,
+// resolving "npm run <script>" against package.json so the allowedHosts note
+// only prints for Vite projects. A custom command naming vite counts too.
+func (m *packageManifest) runsVite(command string) bool {
+	if strings.Contains(command, "vite") {
+		return true
+	}
+	if name, ok := strings.CutPrefix(command, "npm run "); ok && m != nil {
+		return strings.Contains(m.Scripts[name], "vite")
+	}
+	return false
 }
 
 var portFlagRe = regexp.MustCompile(`(?:--port[ =]|PORT=)(\d+)`)

@@ -52,6 +52,28 @@ func TestAvailableDevScripts_noPackageJSON(t *testing.T) {
 	}
 }
 
+func TestRunsVite(t *testing.T) {
+	m := &packageManifest{Scripts: map[string]string{"dev": "vite", "start:dev": "nest start --watch"}}
+	cases := []struct {
+		manifest *packageManifest
+		command  string
+		want     bool
+	}{
+		{m, "npm run dev", true},        // resolves script to vite
+		{m, "npm run start:dev", false}, // nest, not vite
+		{m, "vite --port 5173", true},   // custom command names vite
+		{m, "npm run build", false},     // script not present
+		{nil, "npm run dev", false},     // no manifest, not a vite command
+		{nil, "vite", true},             // no manifest but command is vite
+		{m, "", false},                  // proxy-only mode
+	}
+	for _, c := range cases {
+		if got := c.manifest.runsVite(c.command); got != c.want {
+			t.Errorf("runsVite(%q) = %v, want %v", c.command, got, c.want)
+		}
+	}
+}
+
 func TestPortFromCommand(t *testing.T) {
 	cases := map[string]int{
 		"vite --port 4000":       4000,

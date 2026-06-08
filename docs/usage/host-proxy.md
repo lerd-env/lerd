@@ -56,6 +56,10 @@ For Node projects the port is auto-assigned: `lerd init` starts from a default a
 
 Lerd sets both sides of the contract: it injects the chosen port via `PORT` (or `port_env_key`) so a server that honours it binds there, and points nginx at the same port. It does not probe the live socket, so a server that ignores the env var and hardcodes a different port will not be reached. For those, name the port directly in the command (for example `vite --port 5173 --strictPort`, or `runserver 0.0.0.0:8000`) so both sides agree.
 
+## Vite
+
+Vite checks the request's `Host` header against its `allowedHosts` list and answers anything else with `403 Blocked request`. Because nginx proxies with the site domain as the `Host`, a default Vite project returns 403 through the lerd proxy until you allow the domain. Add it to `server.allowedHosts` in `vite.config` (or set `allowedHosts: true`). `lerd init` prints this reminder when it detects a Vite dev command.
+
 ## Lifecycle
 
 The dev server is the site's main process, not a togglable worker. Its health drives the site's running indicator, and its lifecycle follows the site:
