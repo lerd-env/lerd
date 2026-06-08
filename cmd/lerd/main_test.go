@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 func isolateConfig(t *testing.T) {
@@ -25,6 +26,36 @@ func isolateConfig(t *testing.T) {
 		if err := os.MkdirAll(d, 0755); err != nil {
 			t.Fatalf("mkdir %s: %v", d, err)
 		}
+	}
+}
+
+// A deleted host-proxy site must have its dev-server worker torn down, not just
+// its registry entry removed, or the always-restart unit leaks. removeStale
+// routes through siteops.UnlinkSiteCore, which calls the StopSiteWorkers hook.
+func TestRemoveStale_tearsDownStaleHostProxyWorkers(t *testing.T) {
+	isolateConfig(t)
+
+	prev := siteops.StopSiteWorkers
+	var stopped []string
+	siteops.StopSiteWorkers = func(s *config.Site) { stopped = append(stopped, s.Name) }
+	t.Cleanup(func() { siteops.StopSiteWorkers = prev })
+
+	deletedDir := filepath.Join(t.TempDir(), "ghost")
+	reg := &config.SiteRegistry{Sites: []config.Site{
+		{Name: "ghost", Domains: []string{"ghost.test"}, Path: deletedDir, HostPort: 5197, HostCommand: "sleep 600"},
+	}}
+	if err := config.SaveSites(reg); err != nil {
+		t.Fatal(err)
+	}
+
+	if !removeStale(&config.GlobalConfig{}) {
+		t.Fatal("expected removeStale to report a removal")
+	}
+	if len(stopped) != 1 || stopped[0] != "ghost" {
+		t.Errorf("removeStale must stop a stale host-proxy site's workers; stopped=%v", stopped)
+	}
+	if after, _ := config.LoadSites(); len(after.Sites) != 0 {
+		t.Errorf("stale site should be removed from the registry; got %d sites", len(after.Sites))
 	}
 }
 

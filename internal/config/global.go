@@ -169,6 +169,16 @@ type GlobalConfig struct {
 		// installs on. Toggled via `lerd notify on/off` and the tray.
 		Disabled bool `yaml:"disabled,omitempty" mapstructure:"disabled"`
 	} `yaml:"notifications,omitempty" mapstructure:"notifications"`
+	HostProxy struct {
+		// Disabled refuses to set up or start any host-proxy dev-server unit,
+		// for users who never want lerd supervising a process on the host.
+		// Inverted so the zero value keeps the feature available.
+		Disabled bool `yaml:"disabled,omitempty" mapstructure:"disabled"`
+		// SkipConfirmation runs a newly-linked host-proxy command without the
+		// interactive "start this on your host?" prompt. Off by default so a
+		// command from a cloned repo never runs unconfirmed.
+		SkipConfirmation bool `yaml:"skip_confirmation,omitempty" mapstructure:"skip_confirmation"`
+	} `yaml:"host_proxy,omitempty" mapstructure:"host_proxy"`
 	ParkedDirectories []string                 `yaml:"parked_directories" mapstructure:"parked_directories"`
 	Services          map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
 }

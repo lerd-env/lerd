@@ -52,7 +52,13 @@ func ResolveStripeSecret(sitePath string) (envKey, value string) {
 // like "https://site.teststripe/webhook".
 func StripeWebhookPath(sitePath string) string {
 	if proj, err := LoadProjectConfig(sitePath); err == nil && proj.Stripe != nil && proj.Stripe.Path != "" {
-		return ensureLeadingSlash(proj.Stripe.Path)
+		// Validate on read, not just on write: a hand-edited or hostile
+		// .lerd.yaml can otherwise carry whitespace/newlines straight into the
+		// listener unit's ExecStart line, so reject those and fall back to the
+		// default rather than trusting the stored value.
+		if validated, err := ValidateStripeWebhookPath(proj.Stripe.Path); err == nil {
+			return validated
+		}
 	}
 	return DefaultStripeWebhookPath
 }
@@ -73,8 +79,8 @@ func ValidateStripeWebhookPath(path string) (string, error) {
 	if path == "" {
 		return "", nil
 	}
-	if strings.ContainsAny(path, " \t\r\n") {
-		return "", fmt.Errorf("invalid Stripe webhook path %q: must not contain whitespace", path)
+	if strings.ContainsAny(path, " \t\r\n\x00") {
+		return "", fmt.Errorf("invalid Stripe webhook path %q: must not contain whitespace or NUL", path)
 	}
 	return ensureLeadingSlash(path), nil
 }

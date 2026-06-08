@@ -74,6 +74,42 @@ func TestRunsVite(t *testing.T) {
 	}
 }
 
+func TestHostProxyGate(t *testing.T) {
+	cases := []struct {
+		name                                 string
+		command                              string
+		disabled, skipConfirm, approved, tty bool
+		wantProceed, wantPrompt              bool
+	}{
+		{"disabled blocks even when approved", "npm run dev", true, false, true, true, false, false},
+		{"proxy-only empty command proceeds", "", false, false, false, false, true, false},
+		{"disabled still allows proxy-only", "", true, false, false, false, true, false},
+		{"already approved proceeds", "npm run dev", false, false, true, false, true, false},
+		{"skip_confirmation proceeds", "npm run dev", false, true, false, false, true, false},
+		{"interactive unapproved needs prompt", "npm run dev", false, false, false, true, false, true},
+		{"non-interactive unapproved is refused", "npm run dev", false, false, false, false, false, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			proceed, prompt, reason := hostProxyGate(c.command, c.disabled, c.skipConfirm, c.approved, c.tty)
+			if proceed != c.wantProceed || prompt != c.wantPrompt {
+				t.Errorf("hostProxyGate = (proceed %v, prompt %v), want (%v, %v)", proceed, prompt, c.wantProceed, c.wantPrompt)
+			}
+			if !proceed && !prompt && reason == "" {
+				t.Errorf("a refusal must carry a reason")
+			}
+		})
+	}
+}
+
+func TestHostProxyGate_PreApprovedOverridesPrompt(t *testing.T) {
+	hostProxyPreApproved = true
+	defer func() { hostProxyPreApproved = false }()
+	if proceed, prompt, _ := hostProxyGate("npm run dev", false, false, false, true); !proceed || prompt {
+		t.Errorf("wizard pre-approval should proceed without prompting; got proceed=%v prompt=%v", proceed, prompt)
+	}
+}
+
 func TestPortFromCommand(t *testing.T) {
 	cases := map[string]int{
 		"vite --port 4000":       4000,

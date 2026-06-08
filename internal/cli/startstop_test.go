@@ -4,7 +4,39 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
+
+// A host-proxy site whose .lerd.yaml dev command has drifted from the approved
+// one must still be enumerated, because this list also drives lerd stop/quit:
+// excluding the unit would leave a running dev server unstoppable.
+func TestRegisteredFrameworkWorkerUnits_EnumeratesDriftedHostProxy(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+	if err := config.SaveProjectConfig(dir, &config.ProjectConfig{
+		Proxy: &config.ProxyConfig{Command: "npm run drifted", Port: 5173},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "site", Domains: []string{"site.test"}, Path: dir,
+		HostPort: 5173, HostCommand: "npm run approved",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := config.HostProxyWorkerUnit("site")
+	found := false
+	for _, u := range registeredFrameworkWorkerUnits() {
+		if u == want {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("drifted host-proxy unit %q must stay enumerated so stop/quit can stop it", want)
+	}
+}
 
 func TestQuadletImage_found(t *testing.T) {
 	tmp := t.TempDir()

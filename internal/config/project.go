@@ -355,6 +355,15 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 		cfg.Proxy = nil
 	}
 
+	// Neutralise a hostile webhook path at the source so it can never reach the
+	// Stripe listener unit's ExecStart line; readers fall back to the default.
+	if cfg.Stripe != nil && cfg.Stripe.Path != "" {
+		if _, err := ValidateStripeWebhookPath(cfg.Stripe.Path); err != nil {
+			fmt.Printf("[WARN] %s: %v, ignoring stripe path\n", path, err)
+			cfg.Stripe.Path = ""
+		}
+	}
+
 	projectConfigCacheMu.Lock()
 	projectConfigCache[path] = projectConfigCacheEntry{
 		cfg: &cfg, mtime: info.ModTime(), size: info.Size(),

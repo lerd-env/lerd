@@ -404,3 +404,50 @@ func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
 		fmt.Printf("[WARN] starting dev server: %v\n", err)
 	}
 }
+
+// hostProxyPreApproved lets the init wizard mark the command the user just chose
+// as approved, so the link it triggers doesn't prompt again for the same command.
+var hostProxyPreApproved bool
+
+// hostProxyGate is the pure decision for whether lerd may install and start a
+// host-proxy dev-server command. It is split out so the policy is unit-testable
+// without a TTY or global-config file. proceed reports whether to run without
+// asking; prompt reports that an interactive confirmation is still owed; reason
+// explains a refusal. A site can only run a command the user has consented to.
+func hostProxyGate(command string, disabled, skipConfirm, approved, interactive bool) (proceed, prompt bool, reason string) {
+	if command == "" {
+		// Proxy-only: lerd supervises nothing, so neither the disable switch
+		// nor the confirmation applies.
+		return true, false, ""
+	}
+	if disabled {
+		return false, false, "host-proxy dev servers are disabled (set host_proxy.disabled: false to enable)"
+	}
+	if approved || hostProxyPreApproved || skipConfirm {
+		return true, false, ""
+	}
+	if !interactive {
+		return false, false, "command not approved; re-run `lerd link` interactively, pass --yes, or set host_proxy.skip_confirmation: true"
+	}
+	return false, true, ""
+}
+
+// approveHostProxyCommand enforces the consent gates before lerd supervises a
+// dev-server command on the host: the global disable switch and an interactive
+// confirmation of the exact command. approved short-circuits the prompt when the
+// command already matches the registry-approved one or the caller passed --yes.
+func approveHostProxyCommand(siteName, command string, approved bool) error {
+	gcfg, _ := config.LoadGlobal()
+	proceed, prompt, reason := hostProxyGate(command, gcfg.HostProxy.Disabled, gcfg.HostProxy.SkipConfirmation, approved, isInteractive())
+	if proceed {
+		return nil
+	}
+	if !prompt {
+		return fmt.Errorf("host-proxy %s: %s", siteName, reason)
+	}
+	fmt.Printf("\nlerd supervises this dev-server command on your host, outside any container:\n\n  %s\n", command)
+	if !promptConfirm(fmt.Sprintf("Start and auto-restart it for %s?", siteName)) {
+		return fmt.Errorf("host-proxy setup declined for %s", siteName)
+	}
+	return nil
+}

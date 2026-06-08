@@ -1868,6 +1868,12 @@ func execQueueStart(args map[string]any) (any, *rpcError) {
 	if queue == "" {
 		queue = "default"
 	}
+	// The queue name is interpolated into the worker unit's ExecStart line;
+	// whitespace would add stray artisan arguments and a newline would inject a
+	// systemd directive, so reject both.
+	if strings.ContainsAny(queue, " \t\r\n") {
+		return toolErr("invalid queue name: must not contain whitespace"), nil
+	}
 	tries := intArg(args, "tries", 3)
 	timeout := intArg(args, "timeout", 60)
 
@@ -2124,6 +2130,12 @@ func execStripeListen(args map[string]any) (any, *rpcError) {
 		return toolErr("site not found: " + siteName), nil
 	}
 	apiKey := strArg(args, "api_key")
+	if apiKey != "" && strings.ContainsAny(apiKey, " \t\r\n") {
+		// Interpolated into the listener unit's ExecStart line alongside
+		// --forward-to; whitespace/newline would inject a stripe-cli argument
+		// or a systemd directive, the same vector the webhook path guards.
+		return toolErr("invalid api_key: must not contain whitespace"), nil
+	}
 	if apiKey == "" {
 		_, apiKey = config.ResolveStripeSecret(site.Path)
 	}
@@ -2134,6 +2146,15 @@ func execStripeListen(args map[string]any) (any, *rpcError) {
 	webhookPath := strArg(args, "webhook_path")
 	if webhookPath == "" {
 		webhookPath = config.StripeWebhookPath(site.Path)
+	} else {
+		// Validate as the CLI does: an unchecked path interpolates straight
+		// into the unit's ExecStart, where a space adds a stripe-cli argument
+		// and a newline ends the systemd directive.
+		validated, vErr := config.ValidateStripeWebhookPath(webhookPath)
+		if vErr != nil {
+			return toolErr(vErr.Error()), nil
+		}
+		webhookPath = validated
 	}
 	scheme := "http"
 	if site.Secured {

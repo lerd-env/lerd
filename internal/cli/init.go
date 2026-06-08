@@ -61,6 +61,10 @@ func runInit(fresh bool) error {
 			return fmt.Errorf("saving .lerd.yaml: %w", err)
 		}
 		fmt.Println("Saved .lerd.yaml")
+		// The wizard already had the user choose the dev command, so the link
+		// it triggers below shouldn't prompt to confirm that same command again.
+		hostProxyPreApproved = true
+		defer func() { hostProxyPreApproved = false }()
 	}
 
 	if err := applyProjectConfig(cwd); err != nil {

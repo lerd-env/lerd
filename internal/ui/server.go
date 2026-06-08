@@ -4726,7 +4726,9 @@ func handleSiteLink(w http.ResponseWriter, r *http.Request) {
 	// Run lerd link.
 	fmt.Fprintf(w, "data: → Linking site...\n\n")
 	flusher.Flush()
-	out, failed := streamCmd(self, "link")
+	// --yes: clicking Link in the UI is the explicit consent the host-proxy
+	// confirmation prompt would otherwise ask for at the (non-interactive) CLI.
+	out, failed := streamCmd(self, "link", "--yes")
 	if failed {
 		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(map[string]any{"ok": false, "error": "link failed: " + out}))
 		flusher.Flush()

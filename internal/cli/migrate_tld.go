@@ -98,7 +98,14 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 				fmt.Printf("    WARN: %s: migrate custom nginx override: %v\n", s.Name, err)
 			}
 		}
-		migrateWorktreeVhosts(worktrees, newPrimary, s.PHPVersion, s.Name, s.Secured, s.IsHostProxy())
+		// Only mirror a proxy config for sites the registry records as
+		// host-proxy; a PHP site with a stray proxy block in .lerd.yaml must
+		// still get PHP worktree vhosts, not reverse-proxy ones.
+		var wtProxy *config.ProxyConfig
+		if s.IsHostProxy() {
+			wtProxy = parentProxyConfig(s)
+		}
+		migrateWorktreeVhosts(worktrees, newPrimary, s.PHPVersion, s.Name, s.Secured, wtProxy)
 
 		// Reissue the parent cert under the NEW primary so wildcard SANs
 		// cover the renamed worktree subdomains. Without this, SSL
@@ -138,18 +145,18 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 // <branch>.<newPrimary> domain, and rewrites the worktree's .env APP_URL.
 // Worktree errors are warnings, not fatal; the parent site rename has already
 // landed and partial worktree state is preferable to abandoning the migration.
-func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, siteName string, secured, hostProxy bool) {
+func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, siteName string, secured bool, proxy *config.ProxyConfig) {
 	for _, wt := range worktrees {
 		removeStaleVhosts(wt.Domain)
 		newWTDomain := wt.Branch + "." + newPrimary
 		// Host-proxy worktrees keep their dev server (the unit is keyed by site
-		// and branch, not domain); only the proxy vhost domain changes.
-		if hostProxy {
-			if proj, err := config.LoadProjectConfig(wt.Path); err == nil && proj.Proxy != nil {
-				port := WorktreeHostPort(proj.Proxy.Port, wt.Path, hostProxyPortEnvKey(proj.Proxy))
-				if err := nginx.GenerateWorktreeHostProxyVhostFor(newWTDomain, wt.Path, newPrimary, port, proj.Proxy.SSL, secured); err != nil {
-					fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
-				}
+		// and branch, not domain); only the proxy vhost domain changes. Mirror
+		// the parent's proxy config rather than the worktree's .lerd.yaml, which
+		// the worktree checkout often doesn't have.
+		if proxy != nil {
+			port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
+			if err := nginx.GenerateWorktreeHostProxyVhostFor(newWTDomain, wt.Path, newPrimary, port, proxy.SSL, secured); err != nil {
+				fmt.Printf("    WARN: worktree %s: regenerate vhost: %v\n", wt.Branch, err)
 			}
 			scheme := "http"
 			if secured {

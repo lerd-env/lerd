@@ -63,6 +63,25 @@ func TestStripeWebhookPath_DefaultAndConfigured(t *testing.T) {
 	}
 }
 
+func TestStripeWebhookPath_RejectsInjectableStoredPath(t *testing.T) {
+	dir := t.TempDir()
+	// A hostile .lerd.yaml embeds a newline in the stored path to inject a
+	// systemd directive into the listener unit's ExecStart line. The read must
+	// reject it (fall back to default) and the load must neutralise it.
+	writeFile(t, filepath.Join(dir, ".lerd.yaml"),
+		"stripe:\n  path: \"/webhook\\nExecStartPre=/bin/sh -c evil\"\n")
+	if got := StripeWebhookPath(dir); got != DefaultStripeWebhookPath {
+		t.Errorf("StripeWebhookPath with injectable stored path = %q, want default %q", got, DefaultStripeWebhookPath)
+	}
+	proj, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+	if proj.Stripe != nil && proj.Stripe.Path != "" {
+		t.Errorf("LoadProjectConfig left hostile stripe path in place: %q", proj.Stripe.Path)
+	}
+}
+
 func TestSetProjectStripe_PersistsAndRoundTrips(t *testing.T) {
 	dir := t.TempDir()
 	if err := SetProjectStripe(dir, "/webhooks/stripe", "STRIPE_SECRET_KEY"); err != nil {

@@ -260,9 +260,10 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	if err := config.ReplaceProjectDBService(sitePath, to); err != nil {
 		return fmt.Errorf("saving .lerd.yaml: %w", err)
 	}
-	if err := runLerdEnv(sitePath); err != nil {
-		// Roll both files back so a failed repoint leaves the site exactly as it
-		// was on the source service.
+	// Once the site is repointed at the target, any later failure has to undo
+	// .lerd.yaml and .env so the live site keeps pointing at the source (whose
+	// data is still intact) rather than an empty or half-restored target DB.
+	rollback := func(cause error) error {
 		rbErr := config.ReplaceProjectDBService(sitePath, from)
 		if prevEnv != nil {
 			if wErr := os.WriteFile(envPath, prevEnv, 0o644); wErr != nil && rbErr == nil {
@@ -270,9 +271,12 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 			}
 		}
 		if rbErr != nil {
-			return fmt.Errorf("applying env for target: %w (rollback also failed: %v)", err, rbErr)
+			return fmt.Errorf("%w (rollback also failed: %v)", cause, rbErr)
 		}
-		return fmt.Errorf("applying env for target: %w", err)
+		return cause
+	}
+	if err := runLerdEnv(sitePath); err != nil {
+		return rollback(fmt.Errorf("applying env for target: %w", err))
 	}
 
 	// The target database name is whatever env setup landed on. env starts the
@@ -280,32 +284,32 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	// before restoring rather than letting a warned-over failure surface here.
 	tgt, err := resolveDB(sitePath, "", "")
 	if err != nil {
-		return fmt.Errorf("cannot resolve target database: %w", err)
+		return rollback(fmt.Errorf("cannot resolve target database: %w", err))
 	}
 	if err := ensureServiceRunning(to); err != nil {
-		return fmt.Errorf("could not start target %s: %w", to, err)
+		return rollback(fmt.Errorf("could not start target %s: %w", to, err))
 	}
 	if _, err := createDatabase(to, tgt.database); err != nil {
-		return fmt.Errorf("creating database %q on %s: %w", tgt.database, to, err)
+		return rollback(fmt.Errorf("creating database %q on %s: %w", tgt.database, to, err))
 	}
 	tgtEnv := serviceToDBEnv(to)
 	tgtEnv.database = tgt.database
 
 	f, err := os.Open(tmp.Name())
 	if err != nil {
-		return fmt.Errorf("reopening dump: %w", err)
+		return rollback(fmt.Errorf("reopening dump: %w", err))
 	}
 	defer f.Close()
 	restore, err := dbImportCmd(tgtEnv)
 	if err != nil {
-		return err
+		return rollback(err)
 	}
 	restore.Stdin = f
 	restore.Stdout = os.Stdout
 	restore.Stderr = os.Stderr
 	fmt.Printf("Restoring %s into %s...\n", tgtEnv.database, to)
 	if err := restore.Run(); err != nil {
-		return fmt.Errorf("restore failed: %w", err)
+		return rollback(fmt.Errorf("restore failed: %w", err))
 	}
 	return nil
 }

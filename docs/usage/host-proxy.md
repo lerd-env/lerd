@@ -77,6 +77,24 @@ The dashboard shows a **Proxy** badge with the port (mirroring the container bad
 journalctl --user -u lerd-app-<site> -f
 ```
 
+## Trust and consent
+
+A host-proxy dev server runs your project's command directly on the host (as a systemd `--user` unit on Linux, launchd on macOS), outside any container. Because the command can come from a project's committed `.lerd.yaml`, lerd will not silently supervise a command you have not agreed to run. Three gates enforce this:
+
+- **Explicit setup only.** A dev-server unit is only ever created by an explicit action: `lerd init`, `lerd link`, or clicking Link in the dashboard. Nothing is installed just because a folder appears in a parked directory.
+- **Command confirmation.** When you `lerd link` a project whose `.lerd.yaml` already carries a `proxy:` block you did not author through the wizard, lerd prints the exact command and asks before installing and starting it. Re-linking with the same approved command, choosing it in the `lerd init` wizard, clicking Link in the dashboard, or passing `lerd link --yes` all count as consent and skip the prompt. A non-interactive `lerd link` with an unapproved command is refused rather than run blindly.
+- **Drift protection.** lerd records the approved command in its site registry. If `.lerd.yaml`'s dev command later changes (for example after a `git pull`), `lerd start` and boot restore will not auto-run the new command; they warn and wait for you to `lerd link` again to review and approve it.
+
+Two global settings in `config.yaml` tune this (both default to the safe value, so existing installs are unaffected):
+
+```yaml
+host_proxy:
+  disabled: false           # set true to refuse all host-proxy dev servers
+  skip_confirmation: false  # set true to link without the confirmation prompt
+```
+
+Note that this gate is about consent, not sandboxing: a dev server you approve runs with your full user privileges, exactly as if you had run it in a terminal. Only link projects you trust, the same way you would before running `npm run dev` or `npm install` on them.
+
 ## Env
 
 A host-proxy app runs on the host, off the podman bridge, so it can't resolve container DNS names like `lerd-postgres`. `lerd env` rewrites service connections accordingly: any `lerd-<name>` host, whether bare (`DB_HOST=lerd-postgres`) or embedded in a URL (`MONGO_DSN=...@lerd-mongo:27017/db`), becomes `127.0.0.1`, and the port is remapped from the container port to the service's published host port (so mariadb's `3306` becomes `3411` while redis stays `6379`).

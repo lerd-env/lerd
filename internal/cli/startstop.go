@@ -814,8 +814,13 @@ func restoreSiteInfrastructure() {
 
 		// Restore the host-proxy dev-server worker unit. Phase 2 of runStart
 		// launches it (it is enumerated by registeredFrameworkWorkerUnits).
+		// Bind to the command the user approved at link time: if .lerd.yaml's
+		// dev command drifted since (e.g. a git pull), don't silently run the
+		// new one, warn and wait for a re-link to re-approve it.
 		if s.IsHostProxy() && proj.Proxy != nil {
-			if w, ok := hostProxyWorker(proj.Proxy); ok && !services.Mgr.IsEnabled(hostProxyWorkerUnit(s.Name)) {
+			if s.HostCommand != "" && proj.Proxy.Command != s.HostCommand {
+				fmt.Printf("[WARN] %s: dev command in .lerd.yaml changed since link; not auto-starting. Run `lerd link` to review and approve.\n", s.Name)
+			} else if w, ok := hostProxyWorker(proj.Proxy); ok && !services.Mgr.IsEnabled(hostProxyWorkerUnit(s.Name)) {
 				restoreWorker(s.Name, s.Path, "", hostProxyWorkerName, w)
 			}
 		}
@@ -986,6 +991,10 @@ func registeredFrameworkWorkerUnits() []string {
 			}
 			out = append(out, "lerd-"+w+"-"+s.Name)
 		}
+		// Enumerate the dev-server unit unconditionally: this list also drives
+		// stop/quit, so a drifted unit must stay visible to be stoppable. The
+		// drift guard lives in restoreSiteInfrastructure, which won't write the
+		// drifted command, so start can only ever launch the approved one.
 		if s.IsHostProxy() && proj.Proxy != nil && proj.Proxy.Command != "" {
 			out = append(out, hostProxyWorkerUnit(s.Name))
 		}

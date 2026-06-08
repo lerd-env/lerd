@@ -924,8 +924,26 @@ func removeStale(_ *config.GlobalConfig) bool {
 		}
 		if _, statErr := os.Stat(site.Path); os.IsNotExist(statErr) {
 			fmt.Printf("Removing stale site: %s (%s)\n", site.Name, site.Path)
-			_ = nginx.RemoveVhost(site.PrimaryDomain())
-			_ = config.RemoveSite(site.Name)
+			s := site
+			// Tear down the site's workers and any per-site container before
+			// dropping the vhost and registry entry. Without this a host-proxy
+			// site's always-restart dev server (and a custom-container/FrankenPHP
+			// container) keeps running after the project directory is gone. The
+			// nginx reload is batched by the caller.
+			if siteops.StopSiteWorkers != nil {
+				siteops.StopSiteWorkers(&s)
+			}
+			if s.IsCustomContainer() {
+				_ = podman.StopUnit(podman.CustomContainerName(s.Name))
+				podman.RemoveCustomContainer(s.Name)
+				_ = podman.RemoveCustomContainerQuadlet(s.Name)
+			}
+			if s.IsFrankenPHP() {
+				_ = podman.StopUnit(podman.FrankenPHPContainerName(s.Name))
+				_ = podman.RemoveFrankenPHPQuadlet(s.Name)
+			}
+			_ = nginx.RemoveVhost(s.PrimaryDomain())
+			_ = config.RemoveSite(s.Name)
 			removed = true
 		}
 	}

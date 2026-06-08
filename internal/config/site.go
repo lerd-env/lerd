@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -330,6 +331,13 @@ func SaveSites(reg *SiteRegistry) error {
 
 // AddSite appends or updates a site in the registry.
 func AddSite(site Site) error {
+	// A site name flows into systemd unit file names and bodies (Description=,
+	// --env=LERD_SITE=, lerd-stripe-<name>, ...). Refuse newline/NUL (which
+	// would inject a unit directive) and slash (which would escape the unit
+	// path), closing the injection even for callers that bypass SiteNameAndDomain.
+	if ContainsUnitInjectionChars(site.Name) || strings.ContainsRune(site.Name, '/') {
+		return fmt.Errorf("invalid site name %q: must not contain newline, NUL, or slash", site.Name)
+	}
 	reg, err := LoadSites()
 	if err != nil {
 		return err

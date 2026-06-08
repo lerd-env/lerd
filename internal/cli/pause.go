@@ -158,6 +158,10 @@ func UnpauseSite(name string) error {
 				return fmt.Errorf("generating host-proxy vhost: %w", err)
 			}
 		}
+		// pauseWorktrees swapped each worktree to the paused page; the PHP
+		// unpauseWorktrees below never runs for host-proxy sites, so restore
+		// their host-proxy vhosts and dev servers here.
+		unpauseHostProxyWorktrees(site)
 	case site.IsFrankenPHP():
 		_ = podman.StartUnit(podman.FrankenPHPContainerName(site.Name))
 		if site.Secured {
@@ -522,12 +526,35 @@ func pauseWorktrees(site *config.Site) {
 		return
 	}
 	for _, wt := range worktrees {
+		// Host-proxy worktrees run their own supervised dev server; stop it so
+		// it doesn't keep holding its host port while the site is paused.
+		if site.IsHostProxy() {
+			if err := StopAllWorkersForWorktree(site.Name, wt.Branch); err != nil {
+				fmt.Printf("  [WARN] stopping worktree dev server %s: %v\n", wt.Domain, err)
+			}
+		}
 		if err := writePausedWorktreeHTML(wt, site); err != nil {
 			fmt.Printf("  [WARN] paused page for worktree %s: %v\n", wt.Domain, err)
 			continue
 		}
 		if err := nginx.GeneratePausedWorktreeVhost(wt.Domain, site.PrimaryDomain(), config.PausedDir(), site.Secured); err != nil {
 			fmt.Printf("  [WARN] paused vhost for worktree %s: %v\n", wt.Domain, err)
+		}
+	}
+}
+
+// unpauseHostProxyWorktrees restores the host-proxy vhost and dev server for
+// every worktree of a site that has just been unpaused. SetupHostProxyWorktree
+// mirrors the parent's proxy config (registry fallback), so it works even when
+// the worktree checkout has no .lerd.yaml of its own.
+func unpauseHostProxyWorktrees(site *config.Site) {
+	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	if err != nil || len(worktrees) == 0 {
+		return
+	}
+	for _, wt := range worktrees {
+		if err := SetupHostProxyWorktree(*site, wt.Path, wt.Domain); err != nil {
+			fmt.Printf("  [WARN] restoring worktree %s: %v\n", wt.Domain, err)
 		}
 	}
 }

@@ -25,6 +25,13 @@ import (
 // watcher's per-unit cooldown then prevents thrashing on a permanent
 // failure.
 func workerStartPreflight(sitePath, workerName string, w config.FrameworkWorker) error {
+	// A worker's command (from .lerd.yaml custom_workers or a framework def)
+	// is interpolated into the unit's ExecStart line. Refuse newline/NUL so a
+	// command from a cloned repo can't inject an extra systemd directive such
+	// as ExecStartPost=/bin/sh -c '...' onto its own line.
+	if config.ContainsUnitInjectionChars(w.Command) || config.ContainsUnitInjectionChars(w.ReloadCommand) {
+		return fmt.Errorf("worker %q has an invalid command: must not contain newline or NUL", workerName)
+	}
 	if w.Check != nil && !config.MatchesRule(sitePath, *w.Check) {
 		return fmt.Errorf(
 			"worker %q skipped: required dependency not satisfied (rule: %s)",

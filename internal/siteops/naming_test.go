@@ -33,6 +33,12 @@ func TestSiteNameAndDomain(t *testing.T) {
 
 		// Unknown longer suffix is left alone.
 		{"backup.old", "test", "backup-old", "backup-old.test"},
+
+		// Characters that would inject a systemd directive or escape the unit
+		// path are stripped so the handle is safe to use in unit names/bodies.
+		{"app\nExecStartPre=evil", "test", "appexecstartpre=evil", "appexecstartpre=evil.test"},
+		{"a/b", "test", "ab", "ab.test"},
+		{"x\x00y", "test", "xy", "xy.test"},
 	}
 
 	for _, c := range cases {

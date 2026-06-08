@@ -134,7 +134,7 @@ func TestMigrateWorktreeVhosts_RewritesConfsAndEnv(t *testing.T) {
 	worktrees := []gitpkg.Worktree{
 		{Name: "wt", Branch: "feat-x", Path: wtPath, Domain: "feat-x.alpha.test"},
 	}
-	migrateWorktreeVhosts(worktrees, "alpha.localhost", "8.4", "alpha", false, false)
+	migrateWorktreeVhosts(worktrees, "alpha.localhost", "8.4", "alpha", false, nil)
 
 	if _, err := os.Stat(staleConf); !os.IsNotExist(err) {
 		t.Errorf("stale worktree conf should be gone; stat err = %v", err)
@@ -145,6 +145,41 @@ func TestMigrateWorktreeVhosts_RewritesConfsAndEnv(t *testing.T) {
 	}
 
 	envBytes, _ := os.ReadFile(envPath)
+	if !contains(envBytes, "APP_URL=http://feat-x.alpha.localhost") {
+		t.Errorf(".env not updated; got %q", envBytes)
+	}
+}
+
+// A host-proxy worktree checkout usually has no .lerd.yaml of its own, so the
+// migration must mirror the parent's proxy config (passed in) rather than
+// loading config from the worktree path, or the new vhost never gets written.
+func TestMigrateWorktreeVhosts_HostProxyUsesParentProxy(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatalf("mkdir confD: %v", err)
+	}
+	wtPath := filepath.Join(tmp, "alpha-wt")
+	if err := os.MkdirAll(wtPath, 0755); err != nil {
+		t.Fatalf("mkdir wt: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wtPath, ".env"), []byte("APP_URL=http://feat-x.alpha.test\n"), 0644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	worktrees := []gitpkg.Worktree{
+		{Name: "wt", Branch: "feat-x", Path: wtPath, Domain: "feat-x.alpha.test"},
+	}
+	proxy := &config.ProxyConfig{Command: "npm run dev", Port: 5173}
+	migrateWorktreeVhosts(worktrees, "alpha.localhost", "", "alpha", false, proxy)
+
+	freshConf := filepath.Join(config.NginxConfD(), "feat-x.alpha.localhost.conf")
+	if _, err := os.Stat(freshConf); err != nil {
+		t.Errorf("host-proxy worktree vhost missing without a worktree .lerd.yaml: %v", err)
+	}
+	envBytes, _ := os.ReadFile(filepath.Join(wtPath, ".env"))
 	if !contains(envBytes, "APP_URL=http://feat-x.alpha.localhost") {
 		t.Errorf(".env not updated; got %q", envBytes)
 	}
