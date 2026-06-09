@@ -29,3 +29,22 @@ func TestWorkerNameForSiteUnit(t *testing.T) {
 		}
 	}
 }
+
+// TestSiteOwnsWorkerUnit_declinesAmbiguous guards against tearing down another
+// site's unit: unlinking a site named "feat" must NOT claim site "web"'s
+// "lerd-horizon-web-feat" worktree unit, because "web" is also a registered site.
+func TestSiteOwnsWorkerUnit_declinesAmbiguous(t *testing.T) {
+	// "feat" parses lerd-horizon-web-feat as its own (worker "horizon-web"), but
+	// "web" is a registered site that also parses it, so ownership is declined.
+	if _, ok := siteOwnsWorkerUnit("lerd-horizon-web-feat", "feat", []string{"web"}); ok {
+		t.Error("site \"feat\" must not claim web's worktree unit lerd-horizon-web-feat")
+	}
+	// With no colliding site registered, "feat" legitimately owns its own units.
+	if _, ok := siteOwnsWorkerUnit("lerd-queue-feat", "feat", []string{"web"}); !ok {
+		t.Error("site \"feat\" should own its own parent unit lerd-queue-feat")
+	}
+	// A site cleanly owns its worktree unit when no other site collides.
+	if _, ok := siteOwnsWorkerUnit("lerd-vite-app-feat", "app", []string{"web"}); !ok {
+		t.Error("site \"app\" should own its worktree unit lerd-vite-app-feat")
+	}
+}

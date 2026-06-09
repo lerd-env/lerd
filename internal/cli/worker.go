@@ -735,11 +735,33 @@ func workerNameForSiteUnit(unit, siteName string) (string, bool) {
 	return "", false
 }
 
+// siteOwnsWorkerUnit reports whether unit unambiguously belongs to siteName: the
+// name must parse as siteName's worker unit AND no other registered site parse
+// it too. Worker-unit names are ambiguous (lerd-horizon-web-feat is both web's
+// "feat" worktree horizon unit and a "feat" site's "horizon-web" worker), so
+// when another registered site also matches we decline rather than risk tearing
+// down the wrong site's unit; the cost is at most leaving one unit behind.
+func siteOwnsWorkerUnit(unit, siteName string, others []string) (string, bool) {
+	worker, ok := workerNameForSiteUnit(unit, siteName)
+	if !ok {
+		return "", false
+	}
+	for _, o := range others {
+		if o == siteName {
+			continue
+		}
+		if _, also := workerNameForSiteUnit(unit, o); also {
+			return "", false
+		}
+	}
+	return worker, true
+}
+
 // stopAllSiteWorkerUnits stops and removes every worker unit for a site, parent
 // and per-worktree, by listing units rather than walking git, so it works even
 // after the site path is deleted (watcher prune) when worktree detection can't
-// run. A unit an equal-or-longer-named registered site also matches is skipped,
-// so site "app" never tears down site "app-x"'s units.
+// run. Only units siteOwnsWorkerUnit confirms are unambiguously this site's are
+// torn down.
 func stopAllSiteWorkerUnits(site *config.Site) {
 	var others []string
 	if reg, err := config.LoadSites(); err == nil {
@@ -755,18 +777,8 @@ func stopAllSiteWorkerUnits(site *config.Site) {
 			if seen[unit] {
 				continue
 			}
-			worker, ok := workerNameForSiteUnit(unit, site.Name)
+			worker, ok := siteOwnsWorkerUnit(unit, site.Name, others)
 			if !ok {
-				continue
-			}
-			claimed := false
-			for _, o := range others {
-				if _, ok := workerNameForSiteUnit(unit, o); ok && len(o) >= len(site.Name) {
-					claimed = true
-					break
-				}
-			}
-			if claimed {
 				continue
 			}
 			seen[unit] = true

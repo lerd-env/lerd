@@ -460,6 +460,20 @@ func TestReplaceProjectDBService_SyncsExplicitDBServiceBlock(t *testing.T) {
 	}
 }
 
+func TestReplaceProjectDBService_ClearsDBServiceForSqlite(t *testing.T) {
+	dir := setupProjectConfig(t, &ProjectConfig{
+		Services: []ProjectService{{Name: "mysql"}},
+		DB:       ProjectDB{Service: "mysql"},
+	})
+	if err := ReplaceProjectDBService(dir, "sqlite"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadConfig(t, dir)
+	if cfg.DB.Service != "" {
+		t.Errorf("db.service = %q, want empty (sqlite has no container service; a stale value resolves to a bogus host)", cfg.DB.Service)
+	}
+}
+
 func TestReplaceProjectDBService_LeavesDBServiceEmptyWhenUnset(t *testing.T) {
 	dir := setupProjectConfig(t, &ProjectConfig{
 		Services: []ProjectService{{Name: "mysql"}},

@@ -330,10 +330,16 @@ func ReplaceProjectDBService(dir string, choice string) error {
 	}
 	cfg.Services = append(filtered, ProjectService{Name: choice})
 	// Keep an explicit db.service block in sync: resolveDB reads it before the
-	// services list and .env, so a stale value after db:move would point later
-	// `lerd db` commands at the old service. Only rewrite when already set.
+	// services list and .env, so a stale value would point later `lerd db`
+	// commands at the old service. Only touch a block the user already had, and
+	// clear it for sqlite (which has no container service to target) so
+	// resolution falls through to the .env sqlite connection.
 	if cfg.DB.Service != "" {
-		cfg.DB.Service = choice
+		if choice == "sqlite" {
+			cfg.DB.Service = ""
+		} else {
+			cfg.DB.Service = choice
+		}
 	}
 	return SaveProjectConfig(dir, cfg)
 }
