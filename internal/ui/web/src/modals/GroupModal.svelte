@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../paraglide/messages.js';
   import Modal from '$components/Modal.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import Dropdown from '$components/Dropdown.svelte';
@@ -119,7 +120,7 @@
     try {
       const r = await fn();
       if (!r.ok) {
-        error = r.error || 'Failed';
+        error = r.error || m.common_failed();
         return;
       }
       await loadSites();
@@ -132,7 +133,7 @@
   async function addSecondary() {
     const label = sanitizeLabel(pickLabel);
     if (!pickDomain || !label) return;
-    await runAction(() => assignGroup(current, pickDomain, label, pickShareDB), 'Added to group');
+    await runAction(() => assignGroup(current, pickDomain, label, pickShareDB), m.group_toastAdded());
     if (!error) {
       pickDomain = '';
       pickLabel = '';
@@ -143,7 +144,7 @@
     const label = sanitizeLabel(pickLabel);
     const mainSite = $sites.find((x) => x.domain === pickMain);
     if (!mainSite || !label) return;
-    await runAction(() => assignGroup(mainSite, current.domain, label, pickShareDB), 'Grouped');
+    await runAction(() => assignGroup(mainSite, current.domain, label, pickShareDB), m.group_toastGrouped());
     if (!error) {
       pickMain = '';
       pickLabel = '';
@@ -151,7 +152,7 @@
     }
   }
   async function toggleSharedDB(sec: Site) {
-    await runAction(() => setGroupSharedDB(sec, !sec.group_shared_db), 'Database updated');
+    await runAction(() => setGroupSharedDB(sec, !sec.group_shared_db), m.group_toastDbUpdated());
   }
 
   function startEdit(sec: Site) {
@@ -168,31 +169,31 @@
       cancelEdit();
       return;
     }
-    await runAction(() => setGroupLabel(sec, label), 'Subdomain updated');
+    await runAction(() => setGroupLabel(sec, label), m.group_toastSubdomainUpdated());
     if (!error) cancelEdit();
   }
   async function saveSelfLabel() {
     const label = sanitizeLabel(selfLabel);
     if (!label || label === current.group_subdomain) return;
-    await runAction(() => setGroupLabel(current, label), 'Subdomain updated');
+    await runAction(() => setGroupLabel(current, label), m.group_toastSubdomainUpdated());
   }
   async function remove(sec: Site) {
-    await runAction(() => unassignGroup(sec), 'Removed from group');
+    await runAction(() => unassignGroup(sec), m.group_toastRemoved());
   }
   async function unassignSelf() {
-    await runAction(() => unassignGroup(current), 'Removed from group');
+    await runAction(() => unassignGroup(current), m.group_toastRemoved());
     if (!error) closeModal();
   }
   async function dissolve() {
-    await runAction(() => dissolveGroup(current), 'Group dissolved');
+    await runAction(() => dissolveGroup(current), m.group_toastDissolved());
   }
 </script>
 
-<Modal open title="Group" onclose={closeModal}>
+<Modal open title={m.group_title()} onclose={closeModal}>
   {#if asSecondary}
     <div class="px-5 py-4 space-y-3">
       <p class="text-sm text-gray-600 dark:text-gray-300">
-        This site is a secondary of
+        {m.group_secondaryOfLabel()}
         <span class="font-mono font-semibold text-gray-800 dark:text-gray-100">{current.group_main_domain}</span>.
       </p>
       <div class="flex items-center gap-2">
@@ -207,26 +208,26 @@
         <DetailButton
           tone="primary"
           onclick={saveSelfLabel}
-          disabled={loading || !selfLabel.trim()}>Save</DetailButton>
+          disabled={loading || !selfLabel.trim()}>{m.common_save()}</DetailButton>
       </div>
       <div class="flex items-center justify-between gap-2 pt-1">
-        <span class="text-sm text-gray-600 dark:text-gray-300">Share the main's database</span>
+        <span class="text-sm text-gray-600 dark:text-gray-300">{m.group_shareMainDb()}</span>
         <Toggle
           on={Boolean(current.group_shared_db)}
           tone="violet"
           {loading}
           disabled={loading}
-          title="Share the group main's database"
+          title={m.group_shareMainDbTitle()}
           onclick={() => toggleSharedDB(current)} />
       </div>
     </div>
     <div class="px-5 py-3 border-t border-gray-100 dark:border-lerd-border flex justify-end">
-      <DetailButton tone="danger" onclick={unassignSelf} disabled={loading}>Ungroup this site</DetailButton>
+      <DetailButton tone="danger" onclick={unassignSelf} disabled={loading}>{m.group_ungroupSite()}</DetailButton>
     </div>
   {:else}
     {#if ungrouped}
       <div class="px-5 pt-4 flex gap-1.5">
-        {#each [{ id: 'main', label: 'This is the main' }, { id: 'secondary', label: 'Secondary of…' }] as opt (opt.id)}
+        {#each [{ id: 'main', label: m.group_modeMain() }, { id: 'secondary', label: m.group_modeSecondary() }] as opt (opt.id)}
           <button
             onclick={() => (mode = opt.id as 'main' | 'secondary')}
             class="flex-1 text-xs font-medium px-3 py-1.5 rounded-sm border transition-colors {mode === opt.id
@@ -244,13 +245,13 @@
       {#if current.multi_tenant}
         <div class="flex items-start gap-2 text-xs text-amber-700 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-sm px-2 py-1.5">
           <Icon name="warn" class="w-4 h-4 shrink-0 mt-px" />
-          <span>This site uses wildcard tenant subdomains. A grouped subdomain is carved out of that space and routed to the secondary instead.</span>
+          <span>{m.group_tenantWarning()}</span>
         </div>
       {/if}
 
       {#if secondaries.length === 0}
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          No secondaries yet. Add a site below to put it on a subdomain of
+          {m.group_noSecondariesLabel()}
           <span class="font-mono">{current.domain}</span>.
         </p>
       {/if}
@@ -268,23 +269,23 @@
               class="text-[10px] font-medium px-1.5 py-0.5 rounded-sm shrink-0 transition-colors disabled:opacity-50 {sec.group_shared_db
                 ? 'text-violet-700 dark:text-violet-300 bg-violet-50 dark:bg-violet-900/20'
                 : 'text-gray-400 dark:text-gray-500 hover:text-violet-500'}"
-              title={sec.group_shared_db ? 'Sharing the main database (click for separate)' : 'Separate database (click to share the main)'}
+              title={sec.group_shared_db ? m.group_sharedDbTitleOn() : m.group_sharedDbTitleOff()}
             >
-              {sec.group_shared_db ? 'shared db' : 'own db'}
+              {sec.group_shared_db ? m.group_sharedDbBadge() : m.group_ownDbBadge()}
             </button>
             <button
               onclick={() => startEdit(sec)}
               class="text-gray-400 hover:text-lerd-red transition-colors"
-              title="Edit subdomain"
-              aria-label="Edit subdomain">
+              title={m.group_editSubdomain()}
+              aria-label={m.group_editSubdomain()}>
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
             </button>
             <button
               onclick={() => remove(sec)}
               disabled={loading}
               class="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-              title="Remove from group"
-              aria-label="Remove from group">
+              title={m.group_removeFromGroup()}
+              aria-label={m.group_removeFromGroup()}>
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
             </button>
           {:else}
@@ -297,8 +298,8 @@
               class="flex-1 text-sm font-mono bg-transparent border border-lerd-red/50 rounded-sm px-2 py-1 text-gray-700 dark:text-gray-300 focus:outline-hidden focus:border-lerd-red"
               disabled={loading} />
             <span class="text-sm text-gray-400 shrink-0">.{current.domain}</span>
-            <button onclick={() => saveEdit(sec)} disabled={loading} class="text-emerald-500 hover:text-emerald-600 disabled:opacity-50" title="Save" aria-label="Save"><Icon name="check" class="w-4 h-4" /></button>
-            <button onclick={cancelEdit} class="text-gray-400 hover:text-gray-600" title="Cancel" aria-label="Cancel"><Icon name="close" class="w-4 h-4" /></button>
+            <button onclick={() => saveEdit(sec)} disabled={loading} class="text-emerald-500 hover:text-emerald-600 disabled:opacity-50" title={m.common_save()} aria-label={m.common_save()}><Icon name="check" class="w-4 h-4" /></button>
+            <button onclick={cancelEdit} class="text-gray-400 hover:text-gray-600" title={m.common_cancel()} aria-label={m.common_cancel()}><Icon name="close" class="w-4 h-4" /></button>
           {/if}
         </div>
       {/each}
@@ -310,7 +311,7 @@
           value={pickDomain}
           options={candidates}
           onchange={onPick}
-          placeholder="Pick a site…"
+          placeholder={m.group_pickSite()}
           width="full"
           disabled={loading || candidates.length === 0} />
       </div>
@@ -318,50 +319,50 @@
         <div class="flex items-center gap-2">
           <input
             bind:value={pickLabel}
-            placeholder="subdomain"
+            placeholder={m.group_subdomainPlaceholder()}
             onkeydown={(e) => e.key === 'Enter' && addSecondary()}
             disabled={loading}
             class="flex-1 text-sm font-mono bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50" />
           <span class="text-sm text-gray-400 shrink-0">.{current.domain}</span>
-          <DetailButton tone="primary" onclick={addSecondary} disabled={loading || !pickLabel.trim()}>Add</DetailButton>
+          <DetailButton tone="primary" onclick={addSecondary} disabled={loading || !pickLabel.trim()}>{m.common_add()}</DetailButton>
         </div>
         <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
           <input type="checkbox" bind:checked={pickShareDB} disabled={loading} class="accent-lerd-red" />
-          Share {current.name || 'main'}'s database instead of a separate one
+          {m.group_shareDbCheckbox({ name: current.name || 'main' })}
         </label>
       {/if}
       {#if secondaries.length > 0}
         <div class="flex justify-end pt-1">
-          <DetailButton tone="danger" onclick={dissolve} disabled={loading}>Dissolve group</DetailButton>
+          <DetailButton tone="danger" onclick={dissolve} disabled={loading}>{m.group_dissolve()}</DetailButton>
         </div>
       {/if}
     </div>
     {:else}
       <div class="px-5 py-4 space-y-2">
         <p class="text-sm text-gray-500 dark:text-gray-400">
-          Put <span class="font-mono">{current.domain}</span> on a subdomain of another site.
+          {m.group_putOnSubdomain({ domain: current.domain })}
         </p>
         <Dropdown
           value={pickMain}
           options={mainCandidates}
           onchange={onPickMain}
-          placeholder="Pick the main site…"
+          placeholder={m.group_pickMain()}
           width="full"
           disabled={loading || mainCandidates.length === 0} />
         {#if pickMainSite}
           <div class="flex items-center gap-2">
             <input
               bind:value={pickLabel}
-              placeholder="subdomain"
+              placeholder={m.group_subdomainPlaceholder()}
               onkeydown={(e) => e.key === 'Enter' && groupUnderMain()}
               disabled={loading}
               class="flex-1 text-sm font-mono bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50" />
             <span class="text-sm text-gray-400 shrink-0">.{pickMainSite.domain}</span>
-            <DetailButton tone="primary" onclick={groupUnderMain} disabled={loading || !pickLabel.trim()}>Group</DetailButton>
+            <DetailButton tone="primary" onclick={groupUnderMain} disabled={loading || !pickLabel.trim()}>{m.group_groupAction()}</DetailButton>
           </div>
           <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 cursor-pointer select-none">
             <input type="checkbox" bind:checked={pickShareDB} disabled={loading} class="accent-lerd-red" />
-            Share {pickMainSite.name || 'main'}'s database instead of a separate one
+            {m.group_shareDbCheckbox({ name: pickMainSite.name || 'main' })}
           </label>
         {/if}
       </div>

@@ -85,7 +85,7 @@
         const on = Boolean(s.tls);
         list.push({
           id: 'tgl:' + d + ':tls',
-          label: (on ? 'Disable' : 'Enable') + ' HTTPS',
+          label: m.palette_toggle({ action: on ? m.common_disable() : m.common_enable(), feature: 'HTTPS' }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleTLS(s); await refresh(); }
@@ -97,7 +97,7 @@
         const on = Boolean(s.lan_port);
         list.push({
           id: 'tgl:' + d + ':lan',
-          label: (on ? 'Stop' : 'Start') + ' LAN share',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: m.palette_featLanShare() }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleLANShare(s, ''); await refresh(); }
@@ -108,7 +108,7 @@
         const on = Boolean(s.queue_running);
         list.push({
           id: 'tgl:' + d + ':queue',
-          label: (on ? 'Stop' : 'Start') + ' queue worker',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: m.palette_featQueueWorker() }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleQueue(s); await refresh(); }
@@ -118,7 +118,7 @@
         const on = Boolean(s.horizon_running);
         list.push({
           id: 'tgl:' + d + ':horizon',
-          label: (on ? 'Stop' : 'Start') + ' Horizon',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: 'Horizon' }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleHorizon(s); await refresh(); }
@@ -128,7 +128,7 @@
         const on = Boolean(s.schedule_running);
         list.push({
           id: 'tgl:' + d + ':schedule',
-          label: (on ? 'Stop' : 'Start') + ' scheduler',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: m.palette_featScheduler() }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleSchedule(s); await refresh(); }
@@ -138,7 +138,7 @@
         const on = Boolean(s.reverb_running);
         list.push({
           id: 'tgl:' + d + ':reverb',
-          label: (on ? 'Stop' : 'Start') + ' Reverb',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: 'Reverb' }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleReverb(s); await refresh(); }
@@ -148,7 +148,7 @@
         const on = Boolean(s.stripe_running);
         list.push({
           id: 'tgl:' + d + ':stripe',
-          label: (on ? 'Stop' : 'Start') + ' Stripe listener',
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: 'Stripe listener' }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleStripe(s); await refresh(); }
@@ -159,7 +159,7 @@
         const lbl = w.label || w.name;
         list.push({
           id: 'tgl:' + d + ':fw:' + w.name,
-          label: (on ? 'Stop' : 'Start') + ' ' + lbl,
+          label: m.palette_toggle({ action: on ? m.common_stop() : m.common_start(), feature: lbl }),
           hint: d,
           group: 'toggles',
           action: async () => { await toggleWorker(s, w); await refresh(); }
@@ -175,7 +175,7 @@
       for (const c of list2) {
         list.push({
           id: 'cmd:' + s.domain + ':' + c.name,
-          label: 'Run ' + (c.label || c.name),
+          label: m.palette_run({ label: c.label || c.name }),
           hint: s.domain + ' · ' + c.name,
           group: 'commands',
           action: () => launchCommand(s.domain, c)
@@ -233,8 +233,8 @@
     pages: () => m.palette_group_pages(),
     sites: () => m.palette_group_sites(),
     services: () => m.palette_group_services(),
-    toggles: () => 'Toggles',
-    commands: () => 'Commands',
+    toggles: () => m.palette_groupToggles(),
+    commands: () => m.cmd_commands(),
     actions: () => m.palette_group_actions()
   };
 

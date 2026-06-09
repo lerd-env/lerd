@@ -56,7 +56,7 @@
           <span
             class="shrink-0 text-amber-500 dark:text-amber-400"
             title={'Port ' + svc.port_conflicts.map((c) => c.port).join(', ') + ' already in use on the host. Start may fail until you stop the conflicting process.'}
-            aria-label="port conflict"
+            aria-label={m.services_ariaPortConflict()}
           >
             <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>

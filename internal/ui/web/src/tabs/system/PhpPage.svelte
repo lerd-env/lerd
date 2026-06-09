@@ -79,7 +79,7 @@
               class="w-3 h-3 shrink-0 {isActive ? 'text-lerd-red' : 'text-amber-400 dark:text-amber-500'}"
               fill="currentColor"
               viewBox="0 0 20 20"
-              aria-label="default"
+              aria-label={m.common_default()}
             >
               <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78L1.58 7.62l5.82-.85L10 1.5z" />
             </svg>
