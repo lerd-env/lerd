@@ -219,7 +219,7 @@
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 viewBox="0 0 24 24"
-                aria-label="main"
+                aria-label={m.sites_ariaMain()}
               >
                 <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-4v-6h-8v6H4a1 1 0 01-1-1v-9.5z" />
               </svg>
@@ -391,7 +391,7 @@
           type="button"
           onclick={() => openGroupModal(site)}
           title={site.group ? 'Manage group' : 'Group with another site'}
-          aria-label="Manage group"
+          aria-label={m.group_manage()}
           class="inline-flex items-center gap-1 shrink-0 text-xs transition-colors {site.group
             ? 'text-lerd-red'
             : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red'}"

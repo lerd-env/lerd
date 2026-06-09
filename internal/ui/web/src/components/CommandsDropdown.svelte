@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { m } from '../paraglide/messages.js';
   import { loadCommands, launchCommand, runningName, type Command } from '$stores/commands';
 
   interface Props {
@@ -137,12 +138,12 @@
         <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
         <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
       </svg>
-      <span>Running...</span>
+      <span>{m.cmd_running()}</span>
     {:else}
       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
       </svg>
-      <span>Commands</span>
+      <span>{m.cmd_commands()}</span>
       <svg class="w-3 h-3 ml-0.5 transition-transform {menuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
       </svg>
@@ -171,7 +172,7 @@
             <span class="flex items-center gap-1.5">
               <span class="text-xs font-medium text-gray-900 dark:text-gray-100">{c.label || c.name}</span>
               {#if c.confirm}
-                <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title="Asks before running"></span>
+                <span class="shrink-0 w-1.5 h-1.5 rounded-full bg-amber-500" title={m.cmd_asksBeforeRunning()}></span>
               {/if}
             </span>
             <span class="block text-[10px] text-gray-500 dark:text-gray-400 font-mono truncate">{c.command}</span>
