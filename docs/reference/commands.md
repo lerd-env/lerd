@@ -275,7 +275,7 @@ Requires [Laravel Broadcasting](https://laravel.com/docs/13.x/broadcasting) with
 
 | Command | Description |
 |---|---|
-| `lerd mcp:enable-global` | Register lerd MCP at user scope across every supported assistant (Claude Code, Cursor, Junie, Codex, Gemini, Copilot, Windsurf), available in every session regardless of directory |
+| `lerd mcp:enable-global` | Register lerd MCP at user scope across every supported assistant (Claude Code, Cursor, Junie, Codex, Gemini, Copilot, Antigravity, Windsurf), available in every session regardless of directory |
 | `lerd mcp:inject` | Inject the lerd MCP config and AI skill files into the current project |
 | `lerd mcp:inject --path <dir>` | Inject into a specific project directory |
 

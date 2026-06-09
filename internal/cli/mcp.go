@@ -180,6 +180,7 @@ This command updates:
   ~/.gemini/settings.json          Gemini CLI global MCP config
   ~/.codex/config.toml             Codex CLI global MCP config
   ~/.config/Code/User/mcp.json     GitHub Copilot (VS Code) global MCP config
+  ~/.gemini/config/mcp_config.json Google Antigravity global MCP config
   ~/.claude/skills/lerd/SKILL.md   Claude Code user-scope skill
   ~/.cursor/rules/lerd.mdc         Cursor user-scope rules
   ~/.junie/guidelines.md           JetBrains Junie user-scope guidelines
@@ -226,8 +227,8 @@ func writeGlobalMCPConfigs(home string, verbose bool) error {
 	for _, c := range aiClients {
 		if c.GlobalViaCLI {
 			// Try remove first for idempotent re-registration, then add.
-			_ = exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run()
-			out, err := exec.Command("claude", "mcp", "add", "--scope", "user", "lerd", "--", "lerd", "mcp").CombinedOutput()
+			_, _ = claudeMCP("remove", "--scope", "user", "lerd")
+			out, err := claudeMCP("add", "--scope", "user", "lerd", "--", "lerd", "mcp")
 			if err != nil {
 				fmt.Printf("  warning: could not register with Claude Code (%v): %s\n", err, strings.TrimSpace(string(out)))
 				fmt.Println("  Run manually: claude mcp add --scope user lerd -- lerd mcp")
@@ -284,15 +285,30 @@ func writeGlobalContexts(home string, verbose, createMissing bool) error {
 	return nil
 }
 
+// claudeAvailable and claudeMCP are the single seam for the Claude Code CLI.
+// Claude global MCP registration goes through its own CLI (we never edit
+// ~/.claude.json directly), and these vars let tests stub it so the suite never
+// mutates the developer's real `claude mcp` registration.
+var (
+	claudeAvailable = func() bool {
+		_, err := exec.LookPath("claude")
+		return err == nil
+	}
+	claudeMCP = func(args ...string) ([]byte, error) {
+		return exec.Command("claude", append([]string{"mcp"}, args...)...).CombinedOutput()
+	}
+)
+
 // IsMCPGloballyRegistered reports whether lerd is registered with Claude Code.
 // Uses `claude mcp get lerd` which returns exit 0 when the server is known and
 // exit 1 otherwise. The older `claude mcp list --scope user` flag form breaks
 // on newer Claude CLI releases.
 func IsMCPGloballyRegistered() bool {
-	if _, err := exec.LookPath("claude"); err != nil {
+	if !claudeAvailable() {
 		return false
 	}
-	return exec.Command("claude", "mcp", "get", "lerd").Run() == nil
+	_, err := claudeMCP("get", "lerd")
+	return err == nil
 }
 
 // ensureClaudeMCPRegistered adds lerd to Claude Code at user scope only when
@@ -300,13 +316,13 @@ func IsMCPGloballyRegistered() bool {
 // a failing add can't leave the user unregistered. No-op when claude isn't
 // installed or lerd is already registered.
 func ensureClaudeMCPRegistered() {
-	if _, err := exec.LookPath("claude"); err != nil {
+	if !claudeAvailable() {
 		return
 	}
-	if exec.Command("claude", "mcp", "get", "lerd").Run() == nil {
+	if _, err := claudeMCP("get", "lerd"); err == nil {
 		return
 	}
-	if err := exec.Command("claude", "mcp", "add", "-s", "user", "lerd", "--", "lerd", "mcp").Run(); err != nil {
+	if _, err := claudeMCP("add", "-s", "user", "lerd", "--", "lerd", "mcp"); err != nil {
 		fmt.Printf("  [WARN] could not register lerd with Claude Code: %v\n", err)
 		fmt.Println("  Run manually: claude mcp add -s user lerd -- lerd mcp")
 	}
@@ -399,7 +415,7 @@ func RemoveGlobalAISkills(home string, verbose bool) error {
 
 	for _, c := range aiClients {
 		if c.GlobalViaCLI {
-			if err := exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run(); err == nil {
+			if _, err := claudeMCP("remove", "--scope", "user", "lerd"); err == nil {
 				log("  removed Claude Code user-scope MCP registration")
 			}
 		}

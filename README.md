@@ -40,13 +40,13 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - ⚒️ **Worker self-heal**, failed queue, schedule, horizon, reverb, and stripe workers are surfaced everywhere (CLI, dashboard banner, TUI, MCP) and recovered with one click or `lerd worker heal`
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
-- 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Windsurf) manage your environment directly
+- 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly
 - 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic with versioned auto-detection
 - ⚡ **Framework-agnostic** workers, env setup, and nginx proxy — driven by YAML definitions, not hardcoded
 
 ## AI Integration (MCP)
 
-Lerd ships a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server. Connect it to Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Windsurf, or any MCP-compatible AI assistant and manage your dev environment without leaving the chat.
+Lerd ships a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server. Connect it to Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf, or any MCP-compatible AI assistant and manage your dev environment without leaving the chat.
 
 ```bash
 lerd mcp:enable-global   # register once, works in every project
@@ -56,14 +56,14 @@ Then just ask:
 
 ```
 You: set up the project I just cloned
-AI:  → site_link()
-     → composer install
-     → env_setup()    # detects MySQL + Redis, starts them, creates DB, generates APP_KEY
-     → setup()        # storage:link + migrate for Laravel, doctrine:migrations:migrate for Symfony
+AI:  → site(action: "link")
+     → exec(action: "composer", args: ["install"])
+     → env(action: "setup")        # detects MySQL + Redis, starts them, creates DB, generates APP_KEY
+     → framework(action: "setup")  # storage:link + migrate for Laravel, doctrine:migrations:migrate for Symfony
      ✓  myapp → https://myapp.test ready
 ```
 
-~50 tools available: scaffold new projects, run migrations, manage services, toggle workers, tail logs, enable Xdebug, manage databases, manage PHP extensions, park directories, switch runtimes between PHP-FPM and FrankenPHP, and more, all from your AI assistant.
+Ten grouped tools, each driven by an `action`: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, and `worktree`. Scaffold projects, run migrations, manage services, toggle workers, tail logs, enable Xdebug, manage databases and PHP extensions, park directories, switch runtimes between PHP-FPM and FrankenPHP, and more, all from your AI assistant.
 
 📖 [MCP documentation](https://geodro.github.io/lerd/features/mcp/)
 

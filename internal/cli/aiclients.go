@@ -141,6 +141,15 @@ var aiClients = []aiClient{
 			Content: func() string { return lerdReference },
 		}},
 	},
+	{
+		Name: "antigravity",
+		// Antigravity reads only the HOME-level MCP config; its project scope is
+		// a known no-op, so register globally only. No Contexts: it auto-loads
+		// GEMINI.md and AGENTS.md, which the gemini and codex entries already write.
+		GlobalMCP: filepath.Join(".gemini", "config", "mcp_config.json"),
+		MCPFormat: fmtJSONMcpServers,
+		ServerKey: "mcpServers",
+	},
 }
 
 // lerdJSONEntry builds the JSON MCP server entry. sitePath, when non-empty, is

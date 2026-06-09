@@ -2,7 +2,7 @@
 
 Lerd ships a [Model Context Protocol](https://modelcontextprotocol.io/) server, letting AI assistants manage your dev environment directly: run migrations, start services, toggle queue workers, and inspect logs without leaving the chat.
 
-Supported assistants: **Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot (VS Code), Windsurf**, and any other MCP-compatible tool.
+Supported assistants: **Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot (VS Code), Google Antigravity, Windsurf**, and any other MCP-compatible tool.
 
 ---
 
@@ -31,6 +31,7 @@ MCP server registration:
 | Gemini CLI | `~/.gemini/settings.json` |
 | Codex CLI | `~/.codex/config.toml` |
 | GitHub Copilot (VS Code) | `~/.config/Code/User/mcp.json` |
+| Google Antigravity | `~/.gemini/config/mcp_config.json` |
 
 Context / instructions files:
 
@@ -47,6 +48,8 @@ All clients share a single canonical tool reference, so the guidance never drift
 > **Claude Code** is registered via its own `claude mcp add` CLI rather than by editing `~/.claude.json` directly, since that file holds all of Claude's user state.
 
 > **GitHub Copilot** uses VS Code's `servers` key (each entry typed `stdio`), which differs from the `mcpServers` key the other clients use. Its instructions file (`.github/copilot-instructions.md`) is project-scoped only.
+
+> **Google Antigravity** registers at `~/.gemini/config/mcp_config.json` (its project-scoped MCP config is not honoured, so it is global only). It auto-loads `GEMINI.md` and `AGENTS.md`, which the Gemini and Codex entries already write, so no separate Antigravity context file is needed.
 
 > **During `lerd install`:** If Claude Code is detected, you'll be prompted to run this automatically.
 

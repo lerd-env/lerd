@@ -7,7 +7,7 @@ You've already run `lerd install` once on this machine. If not, see [Installatio
 :::
 
 ::: tip Drive it from your AI assistant
-Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Cursor, Junie, Codex, Gemini, Copilot, Windsurf) can call every command below through the grouped MCP tools: `framework` `action: "project_new"`, `site` `action: "link"`, `env` `action: "setup"`, `framework` `action: "setup"`, `db` `action: "create"`, `site` `action: "tls_enable"`, `worker`, etc. See [AI Integration](../features/mcp.md).
+Run `lerd mcp:enable-global` once and your AI assistant (Claude Code, Cursor, Junie, Codex, Gemini, Copilot, Antigravity, Windsurf) can call every command below through the grouped MCP tools: `framework` `action: "project_new"`, `site` `action: "link"`, `env` `action: "setup"`, `framework` `action: "setup"`, `db` `action: "create"`, `site` `action: "tls_enable"`, `worker`, etc. See [AI Integration](../features/mcp.md).
 :::
 
 ---

@@ -10,6 +10,15 @@ import (
 	toml "github.com/pelletier/go-toml/v2"
 )
 
+// TestMain stubs the Claude Code CLI seam so the cli test suite never mutates the
+// developer's real `claude mcp` registration (RemoveGlobalAISkills and the
+// enable-global path otherwise shell out to the live binary).
+func TestMain(m *testing.M) {
+	claudeAvailable = func() bool { return false }
+	claudeMCP = func(args ...string) ([]byte, error) { return nil, nil }
+	os.Exit(m.Run())
+}
+
 // TestCopilotUsesServersKey verifies the VS Code config quirk: the top-level key
 // is "servers" (not "mcpServers") and each entry carries "type":"stdio".
 func TestCopilotUsesServersKey(t *testing.T) {
@@ -58,6 +67,44 @@ func TestGeminiUsesMcpServersKey(t *testing.T) {
 	}
 	if !strings.Contains(string(data), `"mcpServers"`) {
 		t.Errorf("gemini settings.json should use mcpServers key: %s", data)
+	}
+}
+
+// TestAntigravityGlobalConfig confirms Antigravity registers at its HOME-level
+// path with the mcpServers key and no stdio type field, and that it has no
+// project-scoped MCP config (its project scope is a no-op).
+func TestAntigravityGlobalConfig(t *testing.T) {
+	home := t.TempDir()
+	var ag aiClient
+	for _, c := range aiClients {
+		if c.Name == "antigravity" {
+			ag = c
+		}
+	}
+	if ag.Name == "" {
+		t.Fatal("antigravity client not registered")
+	}
+	if ag.ProjectMCP != "" {
+		t.Errorf("antigravity should be global-only, got ProjectMCP=%q", ag.ProjectMCP)
+	}
+	if err := writeClientMCP(filepath.Join(home, ag.GlobalMCP), ag, ""); err != nil {
+		t.Fatalf("writeClientMCP: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(home, ".gemini", "config", "mcp_config.json"))
+	if err != nil {
+		t.Fatalf("read antigravity config: %v", err)
+	}
+	var cfg map[string]any
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	servers, _ := cfg["mcpServers"].(map[string]any)
+	lerd, ok := servers["lerd"].(map[string]any)
+	if !ok {
+		t.Fatalf("mcpServers.lerd missing: %s", data)
+	}
+	if _, hasType := lerd["type"]; hasType {
+		t.Errorf("antigravity entry should not carry a type field: %s", data)
 	}
 }
 
@@ -194,6 +241,7 @@ func TestWriteGlobalMCPConfigs_writesFileBackedClients(t *testing.T) {
 		filepath.Join(".gemini", "settings.json"),
 		filepath.Join(".codex", "config.toml"),
 		filepath.Join(".config", "Code", "User", "mcp.json"),
+		filepath.Join(".gemini", "config", "mcp_config.json"),
 	} {
 		if _, err := os.Stat(filepath.Join(home, rel)); err != nil {
 			t.Errorf("global MCP config %s missing: %v", rel, err)
