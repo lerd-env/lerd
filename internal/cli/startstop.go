@@ -460,6 +460,10 @@ func lerdDNSAnswering() bool {
 }
 
 func runStart(_ *cobra.Command, _ []string) error {
+	// Clear the intentional-stop marker up front: we're bringing lerd up, so the
+	// worker health watcher should resume reporting real drift once units are back.
+	_ = config.ClearStopped()
+
 	// Pre-ensure LastUp lets healMachineRestartIfNeeded distinguish an
 	// external podman-machine restart (which orphans gvproxy port forwards)
 	// from a stop+start the ensure itself performs. No-op on Linux.
@@ -1058,6 +1062,11 @@ func runStop(_ *cobra.Command, _ []string) error {
 	units = append(units, registeredTimerUnits()...)
 
 	fmt.Println("Stopping Lerd...")
+
+	// Mark the intentional shutdown before tearing anything down, so the worker
+	// health watcher (which keeps running) suppresses heal/notification noise for
+	// the workers we're about to stop. They stay enabled and come back on start.
+	_ = config.MarkStopped()
 
 	// On macOS: stop all containers in one podman call before the parallel
 	// per-unit jobs run. This avoids serialising N individual podman stop

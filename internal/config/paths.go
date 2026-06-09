@@ -398,6 +398,36 @@ func UISocketPath() string {
 	return filepath.Join(RunDir(), "lerd-ui.sock")
 }
 
+// stoppedMarkerPath is the sentinel `lerd stop` writes and `lerd start` clears.
+// It lets long-running loops (the worker health watcher, heal notifications)
+// tell an intentional shutdown from worker drift.
+func stoppedMarkerPath() string {
+	return filepath.Join(RunDir(), "stopped")
+}
+
+// MarkStopped records that lerd was intentionally stopped, so background
+// watchers suppress worker heal/notification noise until the next start.
+func MarkStopped() error {
+	if err := os.MkdirAll(RunDir(), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(stoppedMarkerPath(), []byte("stopped\n"), 0644)
+}
+
+// ClearStopped clears the intentional-stop marker (lerd is starting or running).
+func ClearStopped() error {
+	if err := os.Remove(stoppedMarkerPath()); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// IsStopped reports whether lerd was intentionally stopped via `lerd stop`.
+func IsStopped() bool {
+	_, err := os.Stat(stoppedMarkerPath())
+	return err == nil
+}
+
 // ContainerHostsFile returns the path to the shared hosts file mounted into PHP containers.
 func ContainerHostsFile() string {
 	return filepath.Join(DataDir(), "hosts")

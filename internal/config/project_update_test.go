@@ -446,6 +446,47 @@ func TestReplaceProjectDBService_AddsWhenNoDB(t *testing.T) {
 	}
 }
 
+func TestReplaceProjectDBService_SyncsExplicitDBServiceBlock(t *testing.T) {
+	dir := setupProjectConfig(t, &ProjectConfig{
+		Services: []ProjectService{{Name: "postgres"}},
+		DB:       ProjectDB{Service: "postgres"},
+	})
+	if err := ReplaceProjectDBService(dir, "postgres-18"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadConfig(t, dir)
+	if cfg.DB.Service != "postgres-18" {
+		t.Errorf("db.service = %q, want postgres-18 (stale block would point later db commands at the old service)", cfg.DB.Service)
+	}
+}
+
+func TestReplaceProjectDBService_ClearsDBServiceForSqlite(t *testing.T) {
+	dir := setupProjectConfig(t, &ProjectConfig{
+		Services: []ProjectService{{Name: "mysql"}},
+		DB:       ProjectDB{Service: "mysql"},
+	})
+	if err := ReplaceProjectDBService(dir, "sqlite"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadConfig(t, dir)
+	if cfg.DB.Service != "" {
+		t.Errorf("db.service = %q, want empty (sqlite has no container service; a stale value resolves to a bogus host)", cfg.DB.Service)
+	}
+}
+
+func TestReplaceProjectDBService_LeavesDBServiceEmptyWhenUnset(t *testing.T) {
+	dir := setupProjectConfig(t, &ProjectConfig{
+		Services: []ProjectService{{Name: "mysql"}},
+	})
+	if err := ReplaceProjectDBService(dir, "postgres"); err != nil {
+		t.Fatal(err)
+	}
+	cfg := loadConfig(t, dir)
+	if cfg.DB.Service != "" {
+		t.Errorf("db.service = %q, want empty (must not introduce a block the user didn't have)", cfg.DB.Service)
+	}
+}
+
 func TestReplaceProjectDBService_CreatesFileIfMissing(t *testing.T) {
 	dir := t.TempDir()
 	if err := ReplaceProjectDBService(dir, "mysql"); err != nil {

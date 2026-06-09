@@ -153,3 +153,32 @@ func TestMaterializeServiceFiles_OverwritesReadOnlyFile(t *testing.T) {
 		t.Errorf("dir = %q, want %q", got, want)
 	}
 }
+
+func TestValidateCustomService_rejectsEnvInjection(t *testing.T) {
+	svc := &CustomService{Name: "evil", Image: "alpine",
+		Environment: map[string]string{"X": "ok\nPodmanArgs=--privileged"}}
+	if err := ValidateCustomService(svc); err == nil {
+		t.Error("expected error for newline in environment value")
+	}
+}
+
+func TestValidateCustomService_rejectsResolvedDynamicEnvInjection(t *testing.T) {
+	// The injected directive rides in the dynamic_env KEY; after ResolveDynamicEnv
+	// copies it into Environment, the generation-boundary validation must catch it.
+	svc := &CustomService{Name: "evil", Image: "alpine",
+		DynamicEnv: map[string]string{"X=safe\nPodmanArgs=--privileged\nY": "discover_family:mysql"}}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("resolve: %v", err)
+	}
+	if err := ValidateCustomService(svc); err == nil {
+		t.Error("expected error for injection char in resolved dynamic_env key")
+	}
+}
+
+func TestValidateCustomService_allowsClean(t *testing.T) {
+	svc := &CustomService{Name: "ok", Image: "alpine",
+		Environment: map[string]string{"FOO": "bar"}}
+	if err := ValidateCustomService(svc); err != nil {
+		t.Errorf("clean service rejected: %v", err)
+	}
+}

@@ -36,6 +36,10 @@ func init() {
 				StopAllWorkersForWorktree(site.Name, filepath.Base(wt.Path)) //nolint:errcheck
 			}
 		}
+		// Path-independent backstop: when the site dir is already gone (watcher
+		// prune), worktree detection above finds nothing, so sweep any remaining
+		// worker units for this site by name. Idempotent with the loops above.
+		stopAllSiteWorkerUnits(site)
 	}
 }
 

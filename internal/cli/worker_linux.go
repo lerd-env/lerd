@@ -31,6 +31,12 @@ func removeWorkerExecArtifacts(_ string) {}
 // `php artisan schedule:run`, which exit immediately and would otherwise
 // restart-loop every 5s under Restart=always.
 func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, schedule, fpmUnit string, host bool) (bool, error) {
+	// Generation-boundary guard so every caller is covered (incl. the boot
+	// restore path): a newline in the command would inject a second systemd
+	// directive from a cloned repo's .lerd.yaml custom_workers entry.
+	if config.ContainsUnitInjectionChars(command) {
+		return false, fmt.Errorf("worker unit %q: command must not contain newline or NUL", unitName)
+	}
 	if host {
 		return writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart, fpmUnit)
 	}

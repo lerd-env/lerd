@@ -128,8 +128,10 @@
     persistOrder(e.detail.items.map((i) => i.site));
   }
 
-  function persistOrder(newMains: Site[]) {
-    const all = get(sites);
+  async function persistOrder(newMains: Site[]) {
+    const prevSites = get(sites);
+    const prevSort = get(sitesSort);
+    const all = prevSites;
     const byDomain = new Map(all.map((s) => [s.domain, s]));
     const next: Site[] = [];
     const used = new Set<string>();
@@ -149,7 +151,14 @@
 
     sitesSort.set('manual'); // dragging is what enables manual ordering
     sites.set(next); // optimistic; the KindSites WS push reconciles to server truth
-    reorderSites(next.map((s) => s.name).filter((n): n is string => Boolean(n)));
+    // Revert the optimistic order if the server rejected it, instead of leaving
+    // an order on screen that was never saved.
+    const res = await reorderSites(next.map((s) => s.name).filter((n): n is string => Boolean(n)));
+    if (!res.ok) {
+      sites.set(prevSites);
+      sitesSort.set(prevSort);
+      console.error('reorder failed:', res.error);
+    }
   }
 
   function select(s: Site) {

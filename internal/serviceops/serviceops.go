@@ -394,6 +394,11 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	if err := config.ResolveDynamicEnv(svc); err != nil {
 		return err
 	}
+	// Re-validate post dynamic_env and for inline services that skip
+	// SaveCustomService: this is the choke point every quadlet passes through.
+	if err := config.ValidateCustomService(svc); err != nil {
+		return err
+	}
 	content := podman.GenerateCustomQuadlet(svc)
 	quadletName := "lerd-" + svc.Name
 	changed, err := podman.WriteQuadletDiff(quadletName, content)

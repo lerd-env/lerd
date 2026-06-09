@@ -461,15 +461,13 @@ func ContainsUnitInjectionChars(s string) bool {
 	return strings.ContainsAny(s, "\n\r\x00")
 }
 
-// SaveCustomService validates and writes a custom service config to disk.
-func SaveCustomService(svc *CustomService) error {
+// ValidateCustomService refuses newline/NUL in any field that reaches the
+// generated quadlet, so a cloned repo's inline service can't inject systemd
+// directives. Run on save and again at the quadlet boundary (post dynamic_env).
+func ValidateCustomService(svc *CustomService) error {
 	if !validServiceName.MatchString(svc.Name) {
 		return fmt.Errorf("invalid service name %q: must match [a-z0-9][a-z0-9-]*", svc.Name)
 	}
-	// Refuse newline/NUL in any field that reaches the generated .container
-	// quadlet, so a malicious value (e.g. from a cloned repo's inline service
-	// in .lerd.yaml) can't inject extra systemd directives such as
-	// Exec=/PodmanArgs=--privileged/Volume=/:/host onto their own line.
 	scalars := map[string]string{
 		"image": svc.Image, "exec": svc.Exec, "userns": svc.Userns,
 		"data_dir": svc.DataDir, "description": svc.Description,
@@ -497,6 +495,14 @@ func SaveCustomService(svc *CustomService) error {
 		if ContainsUnitInjectionChars(k) || ContainsUnitInjectionChars(v) {
 			return fmt.Errorf("invalid environment entry %q for service %q: must not contain newline or NUL", k, svc.Name)
 		}
+	}
+	return nil
+}
+
+// SaveCustomService validates and writes a custom service config to disk.
+func SaveCustomService(svc *CustomService) error {
+	if err := ValidateCustomService(svc); err != nil {
+		return err
 	}
 	dir := CustomServicesDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {

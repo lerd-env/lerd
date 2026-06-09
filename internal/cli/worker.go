@@ -712,6 +712,81 @@ func StopAllWorkersForWorktree(siteName, wtBase string) error {
 	return firstErr
 }
 
+// workerNameForSiteUnit parses a worker unit name shaped lerd-<worker>-<site> or
+// lerd-<worker>-<site>-<slug> and returns <worker>. ok is false when the unit
+// is not a worker unit for siteName.
+func workerNameForSiteUnit(unit, siteName string) (string, bool) {
+	rem, ok := strings.CutPrefix(unit, "lerd-")
+	if !ok {
+		return "", false
+	}
+	marker := "-" + siteName
+	for idx := strings.Index(rem, marker); idx > 0; {
+		after := rem[idx+len(marker):]
+		if after == "" || strings.HasPrefix(after, "-") {
+			return rem[:idx], true
+		}
+		next := strings.Index(rem[idx+1:], marker)
+		if next < 0 {
+			break
+		}
+		idx += 1 + next
+	}
+	return "", false
+}
+
+// siteOwnsWorkerUnit reports whether unit unambiguously belongs to siteName: the
+// name must parse as siteName's worker unit AND no other registered site parse
+// it too. Worker-unit names are ambiguous (lerd-horizon-web-feat is both web's
+// "feat" worktree horizon unit and a "feat" site's "horizon-web" worker), so
+// when another registered site also matches we decline rather than risk tearing
+// down the wrong site's unit; the cost is at most leaving one unit behind.
+func siteOwnsWorkerUnit(unit, siteName string, others []string) (string, bool) {
+	worker, ok := workerNameForSiteUnit(unit, siteName)
+	if !ok {
+		return "", false
+	}
+	for _, o := range others {
+		if o == siteName {
+			continue
+		}
+		if _, also := workerNameForSiteUnit(unit, o); also {
+			return "", false
+		}
+	}
+	return worker, true
+}
+
+// stopAllSiteWorkerUnits stops and removes every worker unit for a site, parent
+// and per-worktree, by listing units rather than walking git, so it works even
+// after the site path is deleted (watcher prune) when worktree detection can't
+// run. Only units siteOwnsWorkerUnit confirms are unambiguously this site's are
+// torn down.
+func stopAllSiteWorkerUnits(site *config.Site) {
+	var others []string
+	if reg, err := config.LoadSites(); err == nil {
+		for _, s := range reg.Sites {
+			if s.Name != "" && s.Name != site.Name {
+				others = append(others, s.Name)
+			}
+		}
+	}
+	seen := map[string]bool{}
+	for _, glob := range []string{"lerd-*-" + site.Name, "lerd-*-" + site.Name + "-*"} {
+		for _, unit := range services.Mgr.ListServiceUnits(glob) {
+			if seen[unit] {
+				continue
+			}
+			worker, ok := siteOwnsWorkerUnit(unit, site.Name, others)
+			if !ok {
+				continue
+			}
+			seen[unit] = true
+			_ = stopWorkerUnit(unit, worker, site.Name)
+		}
+	}
+}
+
 // isServiceActiveOrRestarting returns true if the unit is active or activating.
 func isServiceActiveOrRestarting(name string) bool {
 	status, _ := podman.UnitStatus(name)

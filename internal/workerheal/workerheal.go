@@ -62,6 +62,7 @@ var (
 	unitEnabledFn = isUnitEnabled
 	healFn        = podman.StartUnit
 	lastErrorFn   = readLastError
+	isStoppedFn   = config.IsStopped
 )
 
 // HumanState renders an UnhealthyWorker.State for end-user copy. The machine
@@ -141,6 +142,13 @@ func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
 // timer-driven oneshots (a .timer sibling owns the lifecycle) are normally idle
 // between ticks, so they're left alone to avoid false positives.
 func Detect() ([]UnhealthyWorker, error) {
+	// When lerd was intentionally stopped, its workers are meant to be down, so
+	// reporting them as failing/expected-but-stopped is noise: the fix is `lerd
+	// start`, not a heal. Suppress detection (and the notifications, banners, and
+	// heals that read it) until the next start clears the marker.
+	if isStoppedFn() {
+		return nil, nil
+	}
 	reg, err := config.LoadSites()
 	if err != nil {
 		return nil, err

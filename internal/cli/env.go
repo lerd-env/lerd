@@ -339,12 +339,14 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		scheme: scheme,
 	}
 
-	// Framework-level static env vars: unconditional defaults the framework
-	// always wants applied (e.g. CodeIgniter's CI_ENVIRONMENT=development for
-	// local dev). Applied first so detected-service values and personal
-	// .env.lerd_override entries still win over them.
+	// Framework default env vars: seeded only when the key is absent, so a value
+	// the user set directly survives re-runs (link/secure/domain/db:move). The
+	// detected-service values and .env.lerd_override still win and can force one.
 	for _, kv := range fw.Env.Vars {
 		k, v, _ := strings.Cut(kv, "=")
+		if _, present := envMap[k]; present {
+			continue
+		}
 		val := applySiteHandle(v, tplCtx)
 		updates[k] = val
 		fmt.Printf("  Setting %s=%s\n", k, val)

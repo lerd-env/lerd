@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Modal from '$components/Modal.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -15,8 +16,10 @@
 
   let value = $state('');
 
+  // Seed only on the open transition (path read untracked), so a live sites
+  // push that updates path mid-edit doesn't overwrite what the user is typing.
   $effect(() => {
-    if (open) value = path || '/stripe/webhook';
+    if (open) value = untrack(() => path) || '/stripe/webhook';
   });
 
   function save() {

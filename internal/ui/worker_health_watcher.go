@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/eventbus"
 	"github.com/geodro/lerd/internal/workerheal"
 )
@@ -48,6 +49,12 @@ var healthWatcherInitialized atomic.Bool
 //
 // The watcher does NOT run the heal itself; it only surfaces drift.
 func runWorkerHealthWatcher() {
+	// A fresh lerd-ui process means a running session (boot/autostart, update, or
+	// a manual restart) — `lerd stop` never restarts lerd-ui. Clear any stale
+	// stop marker so a stop-then-reboot-autostart doesn't leave detection
+	// suppressed forever; an actual `lerd stop` re-sets it while this process
+	// keeps running.
+	_ = config.ClearStopped()
 	seedHealthState()
 	ticker := time.NewTicker(healthWatchInterval)
 	defer ticker.Stop()

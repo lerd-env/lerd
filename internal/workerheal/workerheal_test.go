@@ -83,6 +83,28 @@ func TestDetect_FailedWorkerReturned(t *testing.T) {
 	}
 }
 
+func TestDetect_SuppressedWhenStopped(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{
+			"lerd-queue-myapp.service": "failed",
+			"lerd-php85-fpm.service":   "inactive",
+		},
+		nil,
+	)
+	prev := isStoppedFn
+	isStoppedFn = func() bool { return true }
+	t.Cleanup(func() { isStoppedFn = prev })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("expected no unhealthy workers while lerd is stopped, got %v", unitNames(got))
+	}
+}
+
 func TestDetect_PausedSiteExcluded(t *testing.T) {
 	stubEnv(t,
 		[]string{"alpha", "beta"},
