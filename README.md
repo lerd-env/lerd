@@ -39,13 +39,13 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - ⚒️ **Worker self-heal**, failed queue, schedule, horizon, reverb, and stripe workers are surfaced everywhere (CLI, dashboard banner, TUI, MCP) and recovered with one click or `lerd worker heal`
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
-- 🤖 **MCP server** - let AI assistants (Claude Code, Windsurf, Junie) manage your environment directly
+- 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Windsurf) manage your environment directly
 - 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic with versioned auto-detection
 - ⚡ **Framework-agnostic** workers, env setup, and nginx proxy — driven by YAML definitions, not hardcoded
 
 ## AI Integration (MCP)
 
-Lerd ships a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server. Connect it to Claude Code, Windsurf, JetBrains Junie, or any MCP-compatible AI assistant and manage your dev environment without leaving the chat.
+Lerd ships a built-in [Model Context Protocol](https://modelcontextprotocol.io/) server. Connect it to Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Windsurf, or any MCP-compatible AI assistant and manage your dev environment without leaving the chat.
 
 ```bash
 lerd mcp:enable-global   # register once, works in every project

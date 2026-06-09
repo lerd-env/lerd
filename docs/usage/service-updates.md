@@ -117,16 +117,16 @@ lerd service rollback <name>                 # toggle back to previous image
 
 ## MCP
 
-The `service_control` tool covers everything except the read-only update check, which is its own tool:
+The `service` tool covers every service operation through its `action` argument:
 
 ```jsonc
-{"tool": "service_check_updates"}                   // scan all active defaults
-{"tool": "service_check_updates", "args": {"name": "mysql"}}
+{"tool": "service", "args": {"action": "check_updates"}}                 // scan all active defaults
+{"tool": "service", "args": {"action": "check_updates", "name": "mysql"}}
 
-{"tool": "service_control", "args": {"action": "update",   "name": "mysql"}}
-{"tool": "service_control", "args": {"action": "update",   "name": "mysql", "tag": "8.4.9"}}
-{"tool": "service_control", "args": {"action": "migrate",  "name": "mysql", "tag": "9.0"}}
-{"tool": "service_control", "args": {"action": "rollback", "name": "mysql"}}
+{"tool": "service", "args": {"action": "update",   "name": "mysql"}}
+{"tool": "service", "args": {"action": "update",   "name": "mysql", "tag": "8.4.9"}}
+{"tool": "service", "args": {"action": "migrate",  "name": "mysql", "tag": "9.0"}}
+{"tool": "service", "args": {"action": "rollback", "name": "mysql"}}
 ```
 
 ## Backups directory

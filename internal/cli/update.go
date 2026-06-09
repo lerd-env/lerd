@@ -248,7 +248,7 @@ func refreshGlobalMCPSkills() {
 		return
 	}
 	fmt.Println("\n==> Refreshing global MCP skills and guidelines")
-	if err := WriteGlobalAISkills(home, true); err != nil {
+	if err := RefreshGlobalAISkills(home, true); err != nil {
 		fmt.Fprintf(os.Stderr, "  warn: could not refresh global AI skills: %v\n", err)
 	}
 	if !IsMCPGloballyRegistered() {
@@ -278,7 +278,7 @@ func refreshProjectMCPSkills() {
 
 	fmt.Printf("\n==> Refreshing project MCP skills (%d project%s)\n", len(opted), pluralS(len(opted)))
 	for _, p := range opted {
-		if err := WriteProjectAISkills(p, false); err != nil {
+		if err := RefreshProjectAISkills(p, false); err != nil {
 			fmt.Fprintf(os.Stderr, "  warn: %s: %v\n", p, err)
 			continue
 		}

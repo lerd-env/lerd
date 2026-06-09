@@ -1,7 +1,7 @@
 package cli
 
 import (
-	"encoding/json"
+	_ "embed"
 	"fmt"
 	"os"
 	"os/exec"
@@ -36,13 +36,21 @@ func NewMCPInjectCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mcp:inject",
 		Short: "Inject lerd MCP config and AI skill files into a project",
-		Long: `Writes the following files into the target project directory:
+		Long: `Writes MCP server config and context files for every supported AI
+assistant into the target project directory:
 
-  .mcp.json                     MCP server config for Claude Code
-  .claude/skills/lerd/SKILL.md  Claude Code skill (lerd tools reference)
-  .cursor/mcp.json              MCP server config for Cursor
-  .cursor/rules/lerd.mdc        Cursor rules file (lerd tools reference)
-  .junie/mcp/mcp.json           MCP server config for JetBrains Junie
+  .mcp.json                        Claude Code MCP config
+  .claude/skills/lerd/SKILL.md     Claude Code skill (lerd tools reference)
+  .cursor/mcp.json                 Cursor MCP config
+  .cursor/rules/lerd.mdc           Cursor rules file
+  .junie/mcp/mcp.json              JetBrains Junie MCP config
+  .junie/guidelines.md             JetBrains Junie guidelines
+  .ai/mcp/mcp.json                 Windsurf MCP config
+  .gemini/settings.json            Gemini CLI MCP config
+  GEMINI.md                        Gemini CLI context
+  .vscode/mcp.json                 GitHub Copilot (VS Code) MCP config
+  .github/copilot-instructions.md  GitHub Copilot instructions
+  AGENTS.md                        Codex CLI context (Codex MCP is global-only)
 
 Run this from a Laravel project root, or use --path to specify a directory.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
@@ -74,77 +82,52 @@ func runMCPInject(targetPath string) error {
 	return nil
 }
 
-// WriteProjectAISkills writes the per-project AI artefacts for abs. MCP config
-// JSONs and .junie/guidelines.md preserve non-lerd entries; SKILL.md and
-// lerd.mdc are overwritten. verbose=true prints each written path.
+// WriteProjectAISkills writes the per-project AI artefacts for abs by iterating
+// the aiClients registry, creating every client's files. MCP config files and
+// sentinel context docs preserve non-lerd entries; overwrite docs (SKILL.md,
+// lerd.mdc) are replaced only when their content changed. verbose=true prints
+// each written path. This is the opt-in path (mcp:inject).
 func WriteProjectAISkills(abs string, verbose bool) error {
-	lerdEntry := map[string]any{
-		"command": "lerd",
-		"args":    []string{"mcp"},
-		"env":     map[string]string{"LERD_SITE_PATH": abs},
-	}
+	return writeProjectArtefacts(abs, verbose, true)
+}
 
+// RefreshProjectAISkills re-writes only the per-project artefacts a client was
+// already set up with, so `lerd update` keeps existing files current without
+// expanding a project's footprint with files for clients it never opted into.
+func RefreshProjectAISkills(abs string, verbose bool) error {
+	return writeProjectArtefacts(abs, verbose, false)
+}
+
+func writeProjectArtefacts(abs string, verbose, createMissing bool) error {
 	log := func(msg string) {
 		if verbose {
 			fmt.Println(msg)
 		}
 	}
 
-	if err := mergeMCPServersJSON(filepath.Join(abs, ".mcp.json"), lerdEntry); err != nil {
-		return err
+	for _, c := range aiClients {
+		if c.ProjectMCP != "" {
+			full := filepath.Join(abs, c.ProjectMCP)
+			if createMissing || mcpConfigHasLerd(full, c) {
+				if err := writeClientMCP(full, c, abs); err != nil {
+					return err
+				}
+				log("  updated " + c.ProjectMCP)
+			}
+		}
+		for _, cx := range c.Contexts {
+			if cx.Project == "" {
+				continue
+			}
+			full := filepath.Join(abs, cx.Project)
+			if createMissing || contextAlreadyPresent(full, cx) {
+				if err := writeClientContext(full, cx); err != nil {
+					return fmt.Errorf("writing %s: %w", cx.Project, err)
+				}
+				log("  wrote   " + cx.Project)
+			}
+		}
 	}
-	log("  updated .mcp.json")
-
-	cursorPath := filepath.Join(abs, ".cursor", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(cursorPath), 0755); err != nil {
-		return fmt.Errorf("creating .cursor: %w", err)
-	}
-	if err := mergeMCPServersJSON(cursorPath, lerdEntry); err != nil {
-		return err
-	}
-	log("  updated .cursor/mcp.json")
-
-	aiPath := filepath.Join(abs, ".ai", "mcp", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(aiPath), 0755); err != nil {
-		return fmt.Errorf("creating .ai/mcp: %w", err)
-	}
-	if err := mergeMCPServersJSON(aiPath, lerdEntry); err != nil {
-		return err
-	}
-	log("  updated .ai/mcp/mcp.json")
-
-	juniePath := filepath.Join(abs, ".junie", "mcp", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(juniePath), 0755); err != nil {
-		return fmt.Errorf("creating .junie/mcp: %w", err)
-	}
-	if err := mergeMCPServersJSON(juniePath, lerdEntry); err != nil {
-		return err
-	}
-	log("  updated .junie/mcp/mcp.json")
-
-	skillPath := filepath.Join(abs, ".claude", "skills", "lerd", "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(skillPath), 0755); err != nil {
-		return fmt.Errorf("creating .claude/skills/lerd: %w", err)
-	}
-	if err := writeIfChanged(skillPath, []byte(claudeSkillContent)); err != nil {
-		return fmt.Errorf("writing SKILL.md: %w", err)
-	}
-	log("  wrote   .claude/skills/lerd/SKILL.md")
-
-	cursorRulesPath := filepath.Join(abs, ".cursor", "rules", "lerd.mdc")
-	if err := os.MkdirAll(filepath.Dir(cursorRulesPath), 0755); err != nil {
-		return fmt.Errorf("creating .cursor/rules: %w", err)
-	}
-	if err := writeIfChanged(cursorRulesPath, []byte(cursorRulesContent)); err != nil {
-		return fmt.Errorf("writing lerd.mdc: %w", err)
-	}
-	log("  wrote   .cursor/rules/lerd.mdc")
-
-	guidelinesPath := filepath.Join(abs, ".junie", "guidelines.md")
-	if err := mergeJunieGuidelines(guidelinesPath, junieGuidelinesSection); err != nil {
-		return fmt.Errorf("writing .junie/guidelines.md: %w", err)
-	}
-	log("  updated .junie/guidelines.md")
 
 	return nil
 }
@@ -194,9 +177,14 @@ This command updates:
   ~/.cursor/mcp.json               Cursor global MCP config
   ~/.ai/mcp/mcp.json               Windsurf global MCP config
   ~/.junie/mcp/mcp.json            JetBrains Junie global MCP config
+  ~/.gemini/settings.json          Gemini CLI global MCP config
+  ~/.codex/config.toml             Codex CLI global MCP config
+  ~/.config/Code/User/mcp.json     GitHub Copilot (VS Code) global MCP config
   ~/.claude/skills/lerd/SKILL.md   Claude Code user-scope skill
   ~/.cursor/rules/lerd.mdc         Cursor user-scope rules
-  ~/.junie/guidelines.md           JetBrains Junie user-scope guidelines`,
+  ~/.junie/guidelines.md           JetBrains Junie user-scope guidelines
+  ~/.gemini/GEMINI.md              Gemini CLI user-scope context
+  ~/.codex/AGENTS.md               Codex CLI user-scope context`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			return RunMCPEnableGlobal()
 		},
@@ -206,60 +194,16 @@ This command updates:
 // RunMCPEnableGlobal registers lerd MCP at user scope for all supported AI tools.
 // It is exported so the install command can call it directly.
 func RunMCPEnableGlobal() error {
-	// Entry without LERD_SITE_PATH — server falls back to cwd at runtime.
-	lerdEntry := map[string]any{
-		"command": "lerd",
-		"args":    []string{"mcp"},
-	}
-
 	fmt.Println("Registering lerd MCP globally...")
-
-	// Claude Code — user scope via CLI.
-	// Try remove first (idempotent re-registration), then add.
-	_ = exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run()
-	out, err := exec.Command("claude", "mcp", "add", "--scope", "user", "lerd", "--", "lerd", "mcp").CombinedOutput()
-	if err != nil {
-		fmt.Printf("  warning: could not register with Claude Code (%v): %s\n", err, strings.TrimSpace(string(out)))
-		fmt.Printf("  Run manually: claude mcp add --scope user lerd -- lerd mcp\n")
-	} else {
-		fmt.Println("  registered in Claude Code (user scope)")
-	}
 
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return err
 	}
 
-	// Cursor global.
-	cursorPath := filepath.Join(home, ".cursor", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(cursorPath), 0755); err != nil {
-		return fmt.Errorf("creating ~/.cursor: %w", err)
-	}
-	if err := mergeMCPServersJSON(cursorPath, lerdEntry); err != nil {
+	if err := writeGlobalMCPConfigs(home, true); err != nil {
 		return err
 	}
-	fmt.Println("  updated ~/.cursor/mcp.json")
-
-	// Windsurf global.
-	aiPath := filepath.Join(home, ".ai", "mcp", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(aiPath), 0755); err != nil {
-		return fmt.Errorf("creating ~/.ai/mcp: %w", err)
-	}
-	if err := mergeMCPServersJSON(aiPath, lerdEntry); err != nil {
-		return err
-	}
-	fmt.Println("  updated ~/.ai/mcp/mcp.json")
-
-	// JetBrains Junie global.
-	juniePath := filepath.Join(home, ".junie", "mcp", "mcp.json")
-	if err := os.MkdirAll(filepath.Dir(juniePath), 0755); err != nil {
-		return fmt.Errorf("creating ~/.junie/mcp: %w", err)
-	}
-	if err := mergeMCPServersJSON(juniePath, lerdEntry); err != nil {
-		return err
-	}
-	fmt.Println("  updated ~/.junie/mcp/mcp.json")
-
 	if err := WriteGlobalAISkills(home, true); err != nil {
 		return err
 	}
@@ -269,40 +213,73 @@ func RunMCPEnableGlobal() error {
 	return nil
 }
 
-// WriteGlobalAISkills writes the user-scope skill, rules, and guidelines files
-// used by Claude Code, Cursor, and JetBrains Junie. It is called both from
-// mcp:enable-global and from lerd update so the docs the AI reads stay aligned
-// with the currently installed binary's tool set. When verbose is true each
-// written path is printed to stdout.
+// writeGlobalMCPConfigs registers the user-scope MCP server for every client in
+// the registry: file-backed clients via their global config, Claude via the
+// idempotent `claude mcp add` CLI. Global entries omit LERD_SITE_PATH so the
+// server uses the directory the assistant is opened in.
+func writeGlobalMCPConfigs(home string, verbose bool) error {
+	log := func(msg string) {
+		if verbose {
+			fmt.Println(msg)
+		}
+	}
+	for _, c := range aiClients {
+		if c.GlobalViaCLI {
+			// Try remove first for idempotent re-registration, then add.
+			_ = exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run()
+			out, err := exec.Command("claude", "mcp", "add", "--scope", "user", "lerd", "--", "lerd", "mcp").CombinedOutput()
+			if err != nil {
+				fmt.Printf("  warning: could not register with Claude Code (%v): %s\n", err, strings.TrimSpace(string(out)))
+				fmt.Println("  Run manually: claude mcp add --scope user lerd -- lerd mcp")
+			} else {
+				log("  registered in Claude Code (user scope)")
+			}
+			continue
+		}
+		if c.GlobalMCP == "" {
+			continue
+		}
+		if err := writeClientMCP(filepath.Join(home, c.GlobalMCP), c, ""); err != nil {
+			return err
+		}
+		log("  updated ~/" + c.GlobalMCP)
+	}
+	return nil
+}
+
+// WriteGlobalAISkills writes the user-scope context/instructions docs for every
+// client in the registry (SKILL.md, lerd.mdc, guidelines.md, GEMINI.md,
+// AGENTS.md), creating any that are missing. Called from mcp:enable-global.
+// MCP registration itself is handled separately by writeGlobalMCPConfigs.
 func WriteGlobalAISkills(home string, verbose bool) error {
-	skillPath := filepath.Join(home, ".claude", "skills", "lerd", "SKILL.md")
-	if err := os.MkdirAll(filepath.Dir(skillPath), 0755); err != nil {
-		return fmt.Errorf("creating ~/.claude/skills/lerd: %w", err)
-	}
-	if err := os.WriteFile(skillPath, []byte(claudeSkillContent), 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", skillPath, err)
-	}
-	if verbose {
-		fmt.Println("  wrote   ~/.claude/skills/lerd/SKILL.md")
-	}
+	return writeGlobalContexts(home, verbose, true)
+}
 
-	cursorRulesPath := filepath.Join(home, ".cursor", "rules", "lerd.mdc")
-	if err := os.MkdirAll(filepath.Dir(cursorRulesPath), 0755); err != nil {
-		return fmt.Errorf("creating ~/.cursor/rules: %w", err)
-	}
-	if err := os.WriteFile(cursorRulesPath, []byte(cursorRulesContent), 0644); err != nil {
-		return fmt.Errorf("writing %s: %w", cursorRulesPath, err)
-	}
-	if verbose {
-		fmt.Println("  wrote   ~/.cursor/rules/lerd.mdc")
-	}
+// RefreshGlobalAISkills re-writes only the user-scope context docs that already
+// exist, so `lerd update` keeps them aligned with the installed binary's tool
+// set without creating files (~/.codex/AGENTS.md, ~/.gemini/GEMINI.md) for
+// clients the user never enabled.
+func RefreshGlobalAISkills(home string, verbose bool) error {
+	return writeGlobalContexts(home, verbose, false)
+}
 
-	guidelinesPath := filepath.Join(home, ".junie", "guidelines.md")
-	if err := mergeJunieGuidelines(guidelinesPath, junieGuidelinesSection); err != nil {
-		return fmt.Errorf("writing %s: %w", guidelinesPath, err)
-	}
-	if verbose {
-		fmt.Println("  updated ~/.junie/guidelines.md")
+func writeGlobalContexts(home string, verbose, createMissing bool) error {
+	for _, c := range aiClients {
+		for _, cx := range c.Contexts {
+			if cx.Global == "" {
+				continue
+			}
+			full := filepath.Join(home, cx.Global)
+			if !createMissing && !contextAlreadyPresent(full, cx) {
+				continue
+			}
+			if err := writeClientContext(full, cx); err != nil {
+				return fmt.Errorf("writing %s: %w", cx.Global, err)
+			}
+			if verbose {
+				fmt.Println("  wrote   ~/" + cx.Global)
+			}
+		}
 	}
 	return nil
 }
@@ -335,11 +312,11 @@ func ensureClaudeMCPRegistered() {
 	}
 }
 
-// mergeJunieGuidelines upserts the lerd section inside .junie/guidelines.md.
-// If the file does not exist it is created. If a lerd section already exists
-// (delimited by the sentinel comments) it is replaced; otherwise the section
-// is appended.
-func mergeJunieGuidelines(path, section string) error {
+// mergeSentinelSection upserts the lerd section inside a shared markdown doc
+// (Junie guidelines, GEMINI.md, AGENTS.md, copilot-instructions.md). If the
+// file does not exist it is created. If a lerd section already exists (delimited
+// by the sentinel comments) it is replaced; otherwise the section is appended.
+func mergeSentinelSection(path, section string) error {
 	const begin = "<!-- lerd:begin -->"
 	const end = "<!-- lerd:end -->"
 
@@ -376,77 +353,10 @@ func mergeJunieGuidelines(path, section string) error {
 	return os.WriteFile(path, []byte(existing), 0644)
 }
 
-// mergeMCPServersJSON reads an existing JSON file (if present), adds or updates
-// the "lerd" key inside "mcpServers", and writes it back with indentation.
-func mergeMCPServersJSON(path string, lerdEntry map[string]any) error {
-	// Start with an empty config or read what's there.
-	cfg := map[string]any{}
-	if data, err := os.ReadFile(path); err == nil && len(data) > 0 {
-		// Unmarshal preserving all existing keys.
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			return fmt.Errorf("parsing %s: %w", path, err)
-		}
-	}
-
-	// Ensure mcpServers map exists.
-	servers, _ := cfg["mcpServers"].(map[string]any)
-	if servers == nil {
-		servers = map[string]any{}
-	}
-	servers["lerd"] = lerdEntry
-	cfg["mcpServers"] = servers
-
-	data, err := json.MarshalIndent(cfg, "", "    ")
-	if err != nil {
-		return fmt.Errorf("marshalling %s: %w", path, err)
-	}
-	return os.WriteFile(path, append(data, '\n'), 0644)
-}
-
-// removeMCPServerEntry drops the named server from a shared mcp.json file.
-// Returns (changed, err). Missing file or missing entry is a no-op. When the
-// resulting config is empty the file is removed entirely.
-func removeMCPServerEntry(path, name string) (bool, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return false, nil
-		}
-		return false, err
-	}
-	cfg := map[string]any{}
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &cfg); err != nil {
-			return false, fmt.Errorf("parsing %s: %w", path, err)
-		}
-	}
-	servers, _ := cfg["mcpServers"].(map[string]any)
-	if _, exists := servers[name]; !exists {
-		return false, nil
-	}
-	delete(servers, name)
-	if len(servers) == 0 {
-		delete(cfg, "mcpServers")
-	} else {
-		cfg["mcpServers"] = servers
-	}
-	if len(cfg) == 0 {
-		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return true, err
-		}
-		return true, nil
-	}
-	out, err := json.MarshalIndent(cfg, "", "    ")
-	if err != nil {
-		return false, err
-	}
-	return true, os.WriteFile(path, append(out, '\n'), 0644)
-}
-
-// stripJunieLerdSection removes the lerd-delimited block from a guidelines.md
-// file. Returns (changed, err). When the file is empty after the block is
+// stripSentinelSection removes the lerd-delimited block from a shared markdown
+// doc. Returns (changed, err). When the file is empty after the block is
 // stripped it is removed.
-func stripJunieLerdSection(path string) (bool, error) {
+func stripSentinelSection(path string) (bool, error) {
 	const begin = "<!-- lerd:begin -->"
 	const end = "<!-- lerd:end -->"
 	data, err := os.ReadFile(path)
@@ -478,8 +388,8 @@ func stripJunieLerdSection(path string) (bool, error) {
 }
 
 // RemoveGlobalAISkills tears down every user-scope artefact written by the
-// Write/RunMCPEnableGlobal path: skill + rules files, shared mcp.json entries,
-// Claude Code user-scope MCP registration, and the Junie guidelines block.
+// Write/RunMCPEnableGlobal path across the whole client registry: context docs,
+// global MCP config entries, and the Claude Code user-scope registration.
 func RemoveGlobalAISkills(home string, verbose bool) error {
 	log := func(msg string) {
 		if verbose {
@@ -487,51 +397,38 @@ func RemoveGlobalAISkills(home string, verbose bool) error {
 		}
 	}
 
-	if err := exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run(); err == nil {
-		log("  removed Claude Code user-scope MCP registration")
-	}
-
-	for _, rel := range []string{
-		filepath.Join(".claude", "skills", "lerd", "SKILL.md"),
-		filepath.Join(".cursor", "rules", "lerd.mdc"),
-	} {
-		full := filepath.Join(home, rel)
-		if err := os.Remove(full); err == nil {
-			log("  removed " + full)
-			_ = os.Remove(filepath.Dir(full))
-		} else if !os.IsNotExist(err) {
-			return err
+	for _, c := range aiClients {
+		if c.GlobalViaCLI {
+			if err := exec.Command("claude", "mcp", "remove", "--scope", "user", "lerd").Run(); err == nil {
+				log("  removed Claude Code user-scope MCP registration")
+			}
 		}
-	}
-
-	for _, rel := range []string{
-		filepath.Join(".cursor", "mcp.json"),
-		filepath.Join(".ai", "mcp", "mcp.json"),
-		filepath.Join(".junie", "mcp", "mcp.json"),
-	} {
-		full := filepath.Join(home, rel)
-		changed, err := removeMCPServerEntry(full, "lerd")
-		if err != nil {
-			fmt.Printf("  warn: %s: %v\n", full, err)
-			continue
+		if c.GlobalMCP != "" {
+			full := filepath.Join(home, c.GlobalMCP)
+			if changed, err := removeClientMCP(full, c); err != nil {
+				fmt.Printf("  warn: %s: %v\n", full, err)
+			} else if changed {
+				log("  cleaned " + full)
+			}
 		}
-		if changed {
-			log("  cleaned " + full)
+		for _, cx := range c.Contexts {
+			if cx.Global == "" {
+				continue
+			}
+			full := filepath.Join(home, cx.Global)
+			if changed, err := removeClientContext(full, cx); err != nil {
+				return err
+			} else if changed {
+				log("  removed " + full)
+			}
 		}
-	}
-
-	guidelinesPath := filepath.Join(home, ".junie", "guidelines.md")
-	if changed, err := stripJunieLerdSection(guidelinesPath); err != nil {
-		return err
-	} else if changed {
-		log("  cleaned " + guidelinesPath)
 	}
 	return nil
 }
 
-// RemoveProjectAISkills removes every lerd-owned artefact under abs: skill +
-// rules files, MCP entries in the project's shared mcp.json files, and the
-// lerd section of .junie/guidelines.md. Opt-out counterpart of Write.
+// RemoveProjectAISkills removes every lerd-owned artefact under abs across the
+// client registry: project MCP config entries and context docs. Opt-out
+// counterpart of WriteProjectAISkills.
 func RemoveProjectAISkills(abs string, verbose bool) error {
 	log := func(msg string) {
 		if verbose {
@@ -539,1101 +436,48 @@ func RemoveProjectAISkills(abs string, verbose bool) error {
 		}
 	}
 
-	for _, rel := range []string{
-		filepath.Join(".claude", "skills", "lerd", "SKILL.md"),
-		filepath.Join(".cursor", "rules", "lerd.mdc"),
-	} {
-		full := filepath.Join(abs, rel)
-		if err := os.Remove(full); err == nil {
-			log("  removed " + full)
-			_ = os.Remove(filepath.Dir(full))
-		} else if !os.IsNotExist(err) {
-			return err
+	for _, c := range aiClients {
+		if c.ProjectMCP != "" {
+			full := filepath.Join(abs, c.ProjectMCP)
+			if changed, err := removeClientMCP(full, c); err != nil {
+				fmt.Printf("  warn: %s: %v\n", full, err)
+			} else if changed {
+				log("  cleaned " + full)
+			}
 		}
-	}
-
-	for _, rel := range []string{
-		".mcp.json",
-		filepath.Join(".cursor", "mcp.json"),
-		filepath.Join(".ai", "mcp", "mcp.json"),
-		filepath.Join(".junie", "mcp", "mcp.json"),
-	} {
-		full := filepath.Join(abs, rel)
-		changed, err := removeMCPServerEntry(full, "lerd")
-		if err != nil {
-			fmt.Printf("  warn: %s: %v\n", full, err)
-			continue
+		for _, cx := range c.Contexts {
+			if cx.Project == "" {
+				continue
+			}
+			full := filepath.Join(abs, cx.Project)
+			if changed, err := removeClientContext(full, cx); err != nil {
+				return err
+			} else if changed {
+				log("  removed " + full)
+			}
 		}
-		if changed {
-			log("  cleaned " + full)
-		}
-	}
-
-	guidelinesPath := filepath.Join(abs, ".junie", "guidelines.md")
-	if changed, err := stripJunieLerdSection(guidelinesPath); err != nil {
-		return err
-	} else if changed {
-		log("  cleaned " + guidelinesPath)
 	}
 	return nil
 }
 
-// bt is a backtick character for use inside raw string literals.
-const bt = "`"
-
-const claudeSkillContent = `---
-name: lerd
-description: Manage the lerd local PHP development environment — run framework console commands (artisan, bin/console, etc.), manage services, start/stop queue workers, run composer, manage Node.js versions, and inspect site status via MCP tools.
----
-# Lerd — Laravel Local Dev Environment
-
-This project runs on **lerd**, a Podman-based Laravel development environment for Linux (similar to Laravel Herd). The ` + bt + `lerd` + bt + ` MCP server exposes tools to manage it directly from your AI assistant.
-
-## Path resolution
-
-Tools that accept a ` + bt + `path` + bt + ` argument (` + bt + `artisan` + bt + `, ` + bt + `composer` + bt + `, ` + bt + `env_setup` + bt + `, ` + bt + `env_check` + bt + `, ` + bt + `env_override` + bt + `, ` + bt + `db_set` + bt + `, ` + bt + `site_link` + bt + `, ` + bt + `site_unlink` + bt + `, ` + bt + `site_domain` + bt + `, ` + bt + `db_export` + bt + `, ` + bt + `db_import` + bt + `, ` + bt + `db_create` + bt + `, etc.) resolve it in this order:
-1. Explicit ` + bt + `path` + bt + ` argument
-2. ` + bt + `LERD_SITE_PATH` + bt + ` env var (set when using project-scoped ` + bt + `mcp:inject` + bt + `)
-3. **Current working directory** — the directory Claude was opened in
-
-In practice, you can almost always omit ` + bt + `path` + bt + ` — just open Claude in the project directory.
-
-## Architecture
-
-- PHP runs inside Podman containers named ` + bt + `lerd-php<version>-fpm` + bt + ` (e.g. ` + bt + `lerd-php84-fpm` + bt + `)
-- Each PHP-FPM container includes **composer** and **node/npm** so you can run all tooling without leaving the container
-- Nginx routes ` + bt + `*.test` + bt + ` domains to the appropriate FPM container
-- Services (MySQL, Redis, PostgreSQL, etc.) run as Podman containers via systemd quadlets
-- Custom services (MongoDB, RabbitMQ, …) can be added with ` + bt + `service_add` + bt + ` and managed identically to built-in ones
-- Node.js versions are managed by **fnm** (Fast Node Manager); pin per-project with a ` + bt + `.node-version` + bt + ` file
-- Framework workers (queue, schedule, reverb, messenger, vite, etc.) run as systemd user services named ` + bt + `lerd-<worker>-<sitename>` + bt + ` (e.g. ` + bt + `lerd-queue-myapp` + bt + `, ` + bt + `lerd-messenger-myapp` + bt + `). Workers with ` + bt + `per_worktree: true` + bt + ` get an extra ` + bt + `-<branch>` + bt + ` suffix when started on a worktree (e.g. ` + bt + `lerd-vite-myapp-feat-x` + bt + `) so each branch runs its own instance with its own auto-incremented ports
-- Worker commands are defined per-framework in YAML; Laravel ships queue/schedule/reverb/horizon and a ` + bt + `vite` + bt + ` host worker (` + bt + `npm run dev` + bt + ` on the host via fnm for HMR); custom frameworks add their own. Workers/setup commands support a ` + bt + `check` + bt + ` field (` + bt + `file` + bt + `/` + bt + `composer` + bt + `) to show conditionally. Per-worker flags: ` + bt + `host: true` + bt + ` runs on the host via fnm instead of inside FPM; ` + bt + `per_worktree: true` + bt + ` runs independently per worktree; ` + bt + `replaces_build: true` + bt + ` declares the worker provides the asset manifest, so ` + bt + `lerd worktree add` + bt + ` skips ` + bt + `npm run build` + bt + `
-- Framework definitions can include ` + bt + `setup` + bt + ` commands (one-off bootstrap steps like migrations, storage links) shown in ` + bt + `lerd setup` + bt + `; Laravel has built-in storage:link/migrate/db:seed
-- **Custom containers**: non-PHP sites (Node.js, Python, Go, etc.) define a ` + bt + `Containerfile.lerd` + bt + ` and a ` + bt + `container:` + bt + ` section with a port in ` + bt + `.lerd.yaml` + bt + `. Lerd builds a per-project image (` + bt + `lerd-custom-<sitename>:local` + bt + `), runs it as ` + bt + `lerd-custom-<sitename>` + bt + `, nginx reverse-proxies to it. Workers exec into it. Services are reachable by name (` + bt + `lerd-mysql` + bt + `, ` + bt + `lerd-redis` + bt + `) on the shared ` + bt + `lerd` + bt + ` network.
-- Git worktrees automatically get a ` + bt + `<branch>.<site>.test` + bt + ` subdomain (deep ` + bt + `*.<branch>.<site>.test` + bt + ` wildcard cert + nginx ` + bt + `server_name` + bt + ` on secured sites); ` + bt + `vendor/` + bt + `, ` + bt + `node_modules/` + bt + `, ` + bt + `.env` + bt + ` are seeded from the main checkout. ` + bt + `.lerd.yaml` + bt + ` ` + bt + `env_overrides` + bt + ` declares templated env vars (` + bt + `{{domain}}` + bt + `, ` + bt + `{{scheme}}` + bt + `, ` + bt + `{{site}}` + bt + `) layered on the default ` + bt + `APP_URL` + bt + ` rewrite — for multi-tenant apps (per-branch cookies, signed-URL hosts, tenant routing)
-- DNS resolves ` + bt + `*.test` + bt + ` to ` + bt + `127.0.0.1` + bt + ` via the lerd-dns dnsmasq container
-
-## DNS modes
-
-Lerd supports two DNS modes set at install time and recorded in ` + bt + `~/.config/lerd/config.yaml` + bt + ` under the ` + bt + `dns` + bt + ` key:
-
-- **Managed (default)**: ` + bt + `dns.enabled: true` + bt + `, ` + bt + `dns.tld: test` + bt + `. The lerd-dns container runs, mkcert installs a trusted CA, sites use ` + bt + `*.test` + bt + ` and HTTPS via ` + bt + `site_tls` + bt + ` is available.
-- **Disabled**: ` + bt + `dns.enabled: false` + bt + `, ` + bt + `dns.tld: localhost` + bt + `. No dnsmasq, no mkcert CA, no system resolver tweak. Sites use ` + bt + `*.localhost` + bt + ` (RFC 6761 hardwired to ` + bt + `127.0.0.1` + bt + `). HTTPS is unavailable, ` + bt + `site_tls` + bt + ` returns an error.
-
-Always read ` + bt + `status()` + bt + ` before assuming a TLD. The response carries ` + bt + `dns.tld` + bt + ` (the active TLD) and ` + bt + `dns.enabled` + bt + ` (false in disabled mode). Construct site URLs from ` + bt + `dns.tld` + bt + ` rather than hardcoding ` + bt + `.test` + bt + `, and skip suggesting ` + bt + `site_tls` + bt + ` when ` + bt + `dns.enabled` + bt + ` is false.
-
-## Available MCP Tools
-
-### ` + bt + `sites` + bt + `
-List all registered lerd sites with domains, paths, PHP versions, Node versions, and queue status. **Call this first** to find site names and paths needed by other tools.
-
-### ` + bt + `runtime_versions` + bt + `
-List all installed PHP and Node.js versions and the configured defaults. Call this to check what runtimes are available before running commands.
-
-### ` + bt + `php_list` + bt + `
-List all PHP versions installed by lerd as JSON, with each version's ` + bt + `default` + bt + ` flag. Use this to confirm which versions are available before calling ` + bt + `site_php` + bt + `, ` + bt + `php_ext` + bt + `, or ` + bt + `xdebug` + bt + `.
-
-### ` + bt + `php_ext` + bt + `
-Manage custom PHP extensions for a PHP version. Extensions are added on top of the bundled lerd FPM image. Adding or removing an extension rebuilds the image and restarts the FPM container (may take a minute).
-
-` + bt + `add` + bt + ` verifies the extension loaded (` + bt + `php -m` + bt + `); a failed PECL build is reported as an error and the config entry removed. Pass ` + bt + `apk_deps` + bt + ` for extensions that need extra Alpine build packages (lerd already knows ` + bt + `imap` + bt + `'s).
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"list"` + bt + `, ` + bt + `"add"` + bt + `, or ` + bt + `"remove"` + bt + `
-- ` + bt + `version` + bt + ` (optional): defaults to the project or global PHP version
-- ` + bt + `extension` + bt + ` (required for ` + bt + `add` + bt + ` and ` + bt + `remove` + bt + `)
-- ` + bt + `apk_deps` + bt + ` (optional, ` + bt + `add` + bt + ` only): space-separated extra Alpine packages
-
-Examples:
-` + "```" + `
-php_ext(action: "list")
-php_ext(action: "add", extension: "imagick")
-php_ext(action: "add", extension: "redis", version: "8.3")
-php_ext(action: "add", extension: "ssh2", apk_deps: "libssh2-dev")
-php_ext(action: "remove", extension: "imagick")
-` + "```" + `
-
-### ` + bt + `artisan` + bt + ` (Laravel only)
-Run ` + bt + `php artisan` + bt + ` inside the PHP-FPM container for the project. Only available when the site is detected as Laravel. Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the Laravel project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-- ` + bt + `args` + bt + ` (required): artisan arguments as an array
-
-Examples:
-` + "```" + `
-artisan(args: ["migrate"])
-artisan(args: ["make:model", "Post", "-m"])
-artisan(args: ["db:seed", "--class=UserSeeder"])
-artisan(args: ["cache:clear"])
-artisan(args: ["tinker", "--execute=echo App\\Models\\User::count();"])
-` + "```" + `
-
-> **Note:** ` + bt + `tinker` + bt + ` requires ` + bt + `--execute=<code>` + bt + ` for non-interactive use.
-
-### ` + bt + `console` + bt + ` (non-Laravel frameworks)
-Run the framework's console command (e.g. ` + bt + `php bin/console` + bt + ` for Symfony) inside the PHP-FPM container. Only available for non-Laravel frameworks that define a ` + bt + `console` + bt + ` field in their YAML definition. Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-- ` + bt + `args` + bt + ` (required): console arguments as an array
-
-Example — Symfony:
-` + "```" + `
-console(args: ["cache:clear"])
-console(args: ["doctrine:migrations:migrate"])
-console(args: ["messenger:consume", "async", "--time-limit=60"])
-` + "```" + `
-
-### ` + bt + `composer` + bt + `
-Run ` + bt + `composer` + bt + ` inside the PHP-FPM container for the project. Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the Laravel project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-- ` + bt + `args` + bt + ` (required): composer arguments as an array
-
-Examples:
-` + "```" + `
-composer(args: ["install"])
-composer(args: ["require", "laravel/sanctum"])
-composer(args: ["dump-autoload"])
-composer(args: ["update", "laravel/framework"])
-` + "```" + `
-
-### ` + bt + `vendor_bins` + bt + ` / ` + bt + `vendor_run` + bt + `
-Discover and execute composer-installed binaries from the project's ` + bt + `vendor/bin` + bt + ` directory inside the PHP-FPM container. Use ` + bt + `vendor_bins` + bt + ` first to see what tooling is available (pest, phpunit, pint, phpstan, rector, paratest, psalm, etc.), then ` + bt + `vendor_run` + bt + ` to invoke one. Both accept an optional ` + bt + `path` + bt + ` argument that defaults to the current site.
-
-Arguments:
-- ` + bt + `vendor_bins(path?)` + bt + ` — returns the sorted list of executables in ` + bt + `vendor/bin` + bt + `
-- ` + bt + `vendor_run(path?, bin, args?)` + bt + ` — runs ` + bt + `php vendor/bin/<bin> [args]` + bt + ` inside the FPM container; ` + bt + `bin` + bt + ` must be a plain filename, not a path
-
-Examples:
-` + "```" + `
-vendor_bins()                                      // list available tools
-vendor_run(bin: "pest")                            // run the full pest suite
-vendor_run(bin: "pest", args: ["--filter", "UserTest"])
-vendor_run(bin: "phpunit", args: ["--testsuite", "Feature"])
-vendor_run(bin: "pint", args: ["--test"])          // dry-run pint
-vendor_run(bin: "phpstan", args: ["analyse", "--memory-limit=2G"])
-vendor_run(bin: "rector", args: ["process", "--dry-run"])
-` + "```" + `
-
-Prefer ` + bt + `vendor_run` + bt + ` over ` + bt + `composer(args: ["exec", ...])` + bt + ` — it's faster, doesn't go through composer's plugin pipeline, and the same shortcut is available on the CLI as ` + bt + `lerd <bin>` + bt + ` (e.g. ` + bt + `lerd pest` + bt + `, ` + bt + `lerd pint` + bt + `).
-
-### ` + bt + `node` + bt + `
-Install or uninstall a Node.js version via fnm. Accepts a version number or alias.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"install"` + bt + ` or ` + bt + `"uninstall"` + bt + `
-- ` + bt + `version` + bt + ` (required)
-
-` + "```" + `
-node(action: "install", version: "20")
-node(action: "install", version: "20.11.0")
-node(action: "install", version: "lts")
-node(action: "uninstall", version: "18.20.0")
-` + "```" + `
-
-After installing a version you can pin it to a project by writing a ` + bt + `.node-version` + bt + ` file in the project root (or run ` + bt + `lerd isolate:node <version>` + bt + ` from a terminal).
-
-### ` + bt + `service_control` + bt + `
-Start, stop, pin, or unpin any service — built-in or custom.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + `, ` + bt + `"stop"` + bt + `, ` + bt + `"pin"` + bt + `, or ` + bt + `"unpin"` + bt + `
-- ` + bt + `name` + bt + ` (required): service name
-
-` + bt + `service_control(action: "stop", ...)` + bt + ` marks the service as **paused** — ` + bt + `lerd start` + bt + ` and autostart on login will skip it until you explicitly start it again.
-
-` + bt + `service_control(action: "pin", ...)` + bt + ` marks a service so it is **never auto-stopped**, even when no active sites reference it in their ` + bt + `.env` + bt + `. Starts the service if it isn't already running. Use this for services you want always available regardless of which site is active (e.g. a shared Redis or MySQL). ` + bt + `service_control(action: "unpin", ...)` + bt + ` removes the pin so the service can be auto-stopped when no sites use it.
-
-**Dependency cascade:** if a custom service has ` + bt + `depends_on` + bt + ` set, starting its dependency also starts it; stopping the dependency stops it first. Starting the custom service directly ensures its dependencies start first.
-
-Built-in names: ` + bt + `mysql` + bt + `, ` + bt + `redis` + bt + `, ` + bt + `postgres` + bt + `, ` + bt + `meilisearch` + bt + `, ` + bt + `rustfs` + bt + `, ` + bt + `mailpit` + bt + `. Custom service names (registered with ` + bt + `service_add` + bt + `) are also accepted — just pass the same name used in ` + bt + `service_add` + bt + `.
-
-**.env values for built-in lerd services:**
-
-| Service | Host | Key vars |
-|---------|------|----------|
-| mysql | ` + bt + `lerd-mysql` + bt + ` | ` + bt + `DB_CONNECTION=mysql` + bt + `, ` + bt + `DB_PASSWORD=lerd` + bt + ` |
-| postgres | ` + bt + `lerd-postgres` + bt + ` | ` + bt + `DB_CONNECTION=pgsql` + bt + `, ` + bt + `DB_PASSWORD=lerd` + bt + ` |
-| redis | ` + bt + `lerd-redis` + bt + ` | ` + bt + `REDIS_PASSWORD=null` + bt + ` |
-| mailpit | ` + bt + `lerd-mailpit:1025` + bt + ` | web UI: http://localhost:8025 |
-| meilisearch | ` + bt + `lerd-meilisearch:7700` + bt + ` | |
-| rustfs | ` + bt + `lerd-rustfs:9000` + bt + ` | ` + bt + `AWS_USE_PATH_STYLE_ENDPOINT=true` + bt + ` |
-
-### ` + bt + `service_expose` + bt + `
-Add or remove an extra published port on a built-in service. The mapping is persisted in ` + bt + `~/.config/lerd/config.yaml` + bt + ` and applied on every start. The service is restarted automatically if running.
-
-Arguments:
-- ` + bt + `name` + bt + ` (required): built-in service name (` + bt + `mysql` + bt + `, ` + bt + `redis` + bt + `, ` + bt + `postgres` + bt + `, ` + bt + `meilisearch` + bt + `, ` + bt + `rustfs` + bt + `, ` + bt + `mailpit` + bt + `)
-- ` + bt + `port` + bt + ` (required): mapping as ` + bt + `"host:container"` + bt + `, e.g. ` + bt + `"13306:3306"` + bt + `
-- ` + bt + `remove` + bt + ` (optional): set to ` + bt + `true` + bt + ` to remove the mapping instead of adding it
-
-Examples:
-` + "```" + `
-service_expose(name: "mysql", port: "13306:3306")
-service_expose(name: "mysql", port: "13306:3306", remove: true)
-` + "```" + `
-
-### ` + bt + `service_add` + bt + ` / ` + bt + `service_remove` + bt + `
-Register or remove a custom OCI-based service. Arguments for ` + bt + `service_add` + bt + `:
-- ` + bt + `name` + bt + ` (required): slug, e.g. ` + bt + `"mongodb"` + bt + `
-- ` + bt + `image` + bt + ` (required): OCI image, e.g. ` + bt + `"docker.io/library/mongo:7"` + bt + `
-- ` + bt + `ports` + bt + ` (optional): array of ` + bt + `"host:container"` + bt + ` mappings
-- ` + bt + `environment` + bt + ` (optional): array of ` + bt + `"KEY=VALUE"` + bt + ` strings for the container
-- ` + bt + `env_vars` + bt + ` (optional): array of ` + bt + `"KEY=VALUE"` + bt + ` strings shown in ` + bt + `lerd env` + bt + ` suggestions
-- ` + bt + `data_dir` + bt + ` (optional): mount path inside container for persistent data
-- ` + bt + `description` + bt + ` (optional): human-readable description
-- ` + bt + `dashboard` + bt + ` (optional): URL for the service's web UI
-- ` + bt + `depends_on` + bt + ` (optional): array of service names that must be running before this service starts, e.g. ` + bt + `["mysql"]` + bt + `
-
-When ` + bt + `depends_on` + bt + ` is set:
-- Starting this service automatically starts its dependencies first
-- Starting a dependency automatically starts this service afterwards
-- Stopping a dependency automatically stops this service first (cascade stop)
-
-Example — add MongoDB:
-` + "```" + `
-service_add(
-  name: "mongodb",
-  image: "docker.io/library/mongo:7",
-  ports: ["27017:27017"],
-  data_dir: "/data/db",
-  env_vars: ["MONGODB_URL=mongodb://lerd-mongodb:27017"]
-)
-service_control(action: "start", name: "mongodb")
-` + "```" + `
-
-Example — add phpMyAdmin depending on MySQL:
-` + "```" + `
-service_add(
-  name: "phpmyadmin",
-  image: "docker.io/phpmyadmin:latest",
-  ports: ["8080:80"],
-  depends_on: ["mysql"],
-  dashboard: "http://localhost:8080"
-)
-service_control(action: "start", name: "phpmyadmin")   // starts mysql first, then phpmyadmin
-` + "```" + `
-
-` + bt + `service_remove` + bt + ` stops and deregisters a custom service. Persistent data is NOT deleted.
-
-### ` + bt + `service_preset_list` + bt + ` / ` + bt + `service_preset_install` + bt + `
-Lerd ships a small catalogue of opt-in **service presets** — bundled YAML definitions for common dev services that become normal custom services once installed. Use ` + bt + `service_preset_list` + bt + ` to see what's available and ` + bt + `service_preset_install` + bt + ` to install one. Prefer this over hand-rolling ` + bt + `service_add` + bt + ` for anything in the catalogue: presets ship sane defaults, dependency wiring, dashboard URLs, and (where relevant) rendered config files.
-
-Current catalogue: ` + bt + `phpmyadmin` + bt + ` (depends on built-in mysql), ` + bt + `pgadmin` + bt + ` (depends on built-in postgres, ships a pre-loaded servers.json + pgpass), ` + bt + `mongo` + bt + `, ` + bt + `mongo-express` + bt + ` (depends on the ` + bt + `mongo` + bt + ` preset), ` + bt + `selenium` + bt + ` (Chromium for browser testing — Dusk, Panther, etc.), ` + bt + `stripe-mock` + bt + `. Some presets (e.g. ` + bt + `mysql` + bt + `, ` + bt + `mariadb` + bt + `) declare multiple versions in a single family — pass ` + bt + `version` + bt + ` to pick one, otherwise lerd installs the family default.
-
-Arguments:
-- ` + bt + `service_preset_list()` + bt + ` — returns each preset with its image, declared versions, dependencies, dashboard URL, and an ` + bt + `installed` + bt + ` flag
-- ` + bt + `service_preset_install(name, version?)` + bt + ` — installs a preset by name; ` + bt + `version` + bt + ` is required only for multi-version families when you want a specific tag
-
-Examples:
-` + "```" + `
-service_preset_list()
-service_preset_install(name: "phpmyadmin")           // adds phpmyadmin, mysql is built-in
-service_preset_install(name: "mongo")                // install mongo first…
-service_preset_install(name: "mongo-express")        // …then mongo-express (gated otherwise)
-service_preset_install(name: "mysql", version: "8.4")
-service_control(action: "start", name: "phpmyadmin") // mysql is started automatically
-` + "```" + `
-
-**Dependency gating:** installing a preset whose dependency is another *custom* service (e.g. ` + bt + `mongo-express` + bt + ` on ` + bt + `mongo` + bt + `) is rejected with a clear error until the dependency is installed first. Built-in deps (mysql, postgres) are auto-satisfied.
-
-Once installed, presets are normal custom services — manage them with ` + bt + `service_control` + bt + `, ` + bt + `service_remove` + bt + `, and ` + bt + `service_expose` + bt + `.
-
-### ` + bt + `service_env` + bt + `
-Return the recommended Laravel ` + bt + `.env` + bt + ` connection variables for a service — built-in or custom — as a key/value map. Use this when you need to inspect or manually apply connection settings without running ` + bt + `env_setup` + bt + `.
-
-### ` + bt + `service_config` + bt + `
-Read, write, restore, reset, or list backups of a service's runtime tuning override (e.g. ` + bt + `my.cnf` + bt + ` / ` + bt + `redis.conf` + bt + ` fragments). Built-in ` + bt + `mysql` + bt + ` / ` + bt + `mariadb` + bt + ` / ` + bt + `redis` + bt + ` ship a tunable file; custom services opt in with a ` + bt + `tuning:` + bt + ` block in their YAML. ` + bt + `action` + bt + `: ` + bt + `read` + bt + ` (default) / ` + bt + `write` + bt + ` / ` + bt + `restore` + bt + ` / ` + bt + `reset` + bt + ` / ` + bt + `list_backups` + bt + `; ` + bt + `write` + bt + ` takes ` + bt + `content` + bt + ` and optional ` + bt + `backup: true` + bt + `.
-
-### ` + bt + `service_check_updates` + bt + `
-Check the registry for newer service images. Reports a ` + bt + `latest_tag` + bt + ` (safe in-strategy update) and an ` + bt + `upgrade_tag` + bt + ` (cross-strategy upgrade that may need data migration). Omit ` + bt + `name` + bt + ` to scan every active service.
-
-### ` + bt + `env_setup` + bt + `
-Configure the project's ` + bt + `.env` + bt + ` for lerd in one call:
-- Creates ` + bt + `.env` + bt + ` from ` + bt + `.env.example` + bt + ` if it doesn't exist
-- Detects which services (MySQL, Redis, …) the project uses and sets lerd connection values
-- Starts any referenced services that aren't running
-- Creates the project database (and ` + bt + `<name>_testing` + bt + ` database)
-- Generates ` + bt + `APP_KEY` + bt + ` if missing
-- Sets ` + bt + `APP_URL` + bt + ` (or the framework's URL key) using the precedence chain: ` + bt + `.lerd.yaml` + bt + ` ` + bt + `app_url` + bt + ` → ` + bt + `sites.yaml` + bt + ` ` + bt + `app_url` + bt + ` → default ` + bt + `<scheme>://<primary-domain>` + bt + ` — see "Custom APP_URL" below
-
-Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the Laravel project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-
-> Run this right after ` + bt + `site_link` + bt + ` when setting up a fresh project.
->
-> **Database default:** on a fresh Laravel clone where ` + bt + `.env` + bt + ` still says ` + bt + `DB_CONNECTION=sqlite` + bt + `, ` + bt + `env_setup` + bt + ` leaves the database choice alone. Call ` + bt + `db_set` + bt + ` first to pick ` + bt + `sqlite` + bt + `, a built-in (` + bt + `mysql` + bt + ` / ` + bt + `postgres` + bt + `), or an installed family alternate (` + bt + `mariadb` + bt + `, ` + bt + `postgres-pgvector` + bt + `, …) deliberately, then ` + bt + `env_setup` + bt + ` (or just ` + bt + `db_set` + bt + ` alone — it already runs the env step).
-
-### ` + bt + `db_set` + bt + `
-Pick the database for a Laravel project. Persists the choice to ` + bt + `.lerd.yaml` + bt + ` (replacing any prior DB entry), rewrites ` + bt + `DB_` + bt + ` keys in ` + bt + `.env` + bt + `, and provisions storage. Accepts ` + bt + `sqlite` + bt + `, the built-in ` + bt + `mysql` + bt + ` / ` + bt + `postgres` + bt + `, or any installed family alternate (` + bt + `mariadb` + bt + `, ` + bt + `mysql-5-7` + bt + `, ` + bt + `postgres-pgvector` + bt + `, ` + bt + `postgres-17` + bt + `, …). Alternates must be installed first with ` + bt + `lerd service preset <name>` + bt + `.
-
-Arguments:
-- ` + bt + `path` + bt + ` (optional): project root, defaults to ` + bt + `LERD_SITE_PATH` + bt + ` / cwd
-- ` + bt + `database` + bt + ` (required): see above
-
-Examples:
-` + "```" + `
-db_set(database: "mysql")
-db_set(database: "postgres-pgvector")
-db_set(database: "sqlite")
-` + "```" + `
-
-> Use this **before** ` + bt + `env_setup` + bt + ` on a fresh Laravel project so the database lands in ` + bt + `.env` + bt + ` deliberately. Switching databases later via ` + bt + `db_set` + bt + ` removes the previous database entry from ` + bt + `.lerd.yaml` + bt + ` automatically.
-
-### ` + bt + `db_move` + bt + `
-Move sites' databases between two installed services in the **same family** (e.g. ` + bt + `postgres` + bt + ` → ` + bt + `postgres-18` + bt + `, ` + bt + `mysql-5-7` + bt + ` → ` + bt + `mysql` + bt + `) and repoint each site's ` + bt + `.env` + bt + `. For each site it dumps from the source, creates and restores on the target, then rewrites ` + bt + `DB_HOST` + bt + ` / ` + bt + `DB_PORT` + bt + `. The source data is left intact. Both services must already be installed; cross-family moves are rejected.
-
-Arguments:
-- ` + bt + `from` + bt + ` (required): source service, e.g. ` + bt + `postgres` + bt + `
-- ` + bt + `to` + bt + ` (required): target service, same family, e.g. ` + bt + `postgres-18` + bt + `
-- ` + bt + `sites` + bt + ` (array): site names to move; omit when ` + bt + `all` + bt + ` is true
-- ` + bt + `all` + bt + ` (boolean): move every site currently on the source service
-
-Examples:
-` + "```" + `
-db_move(from: "postgres", to: "postgres-18", all: true)
-db_move(from: "postgres", to: "postgres-18", sites: ["shop", "blog"])
-` + "```" + `
-
-> This is for running two versions **side by side** and moving sites selectively. To upgrade one service in place so every site follows at once (no ` + bt + `.env` + bt + ` changes), use ` + bt + `service_control` + bt + ` with ` + bt + `migrate` + bt + ` instead.
-
-### ` + bt + `db_snapshot` + bt + ` / ` + bt + `db_snapshots` + bt + ` / ` + bt + `db_restore` + bt + ` / ` + bt + `db_snapshot_delete` + bt + `
-Named, restorable point-in-time copies of the project database — take one before a risky migration or a destructive experiment, then roll back in a single call. SQL engines only (MySQL, MariaDB, PostgreSQL); snapshots are stored under lerd's data dir, keyed by service and database.
-
-- ` + bt + `db_snapshot` + bt + ` — create a snapshot. ` + bt + `name` + bt + ` is optional (auto-timestamped); ` + bt + `all_databases` + bt + ` snapshots every database in the service.
-- ` + bt + `db_snapshots` + bt + ` — list snapshots as JSON. ` + bt + `all` + bt + ` spans every database on the service.
-- ` + bt + `db_restore` + bt + ` — restore a snapshot by ` + bt + `name` + bt + `. Destructive: a per-database restore drops and recreates the database.
-- ` + bt + `db_snapshot_delete` + bt + ` — delete a stored snapshot.
-
-All four resolve the database from the project ` + bt + `.env` + bt + `; pass ` + bt + `service` + bt + ` and ` + bt + `database` + bt + ` to override.
-
-Example:
-` + "```" + `
-db_snapshot(name: "pre-migration")
-db_restore(name: "pre-migration")
-` + "```" + `
-
-### Custom ` + bt + `APP_URL` + bt + `
-By default ` + bt + `env_setup` + bt + ` writes ` + bt + `APP_URL=<scheme>://<primary-domain>` + bt + ` (e.g. ` + bt + `http://myapp.test` + bt + `) on every run. Three-tier override chain when you need a different value:
-
-1. ` + bt + `.lerd.yaml` + bt + ` ` + bt + `app_url` + bt + ` field — committed to the repo, applies to every machine. Use for path prefixes, ports, or unrelated hostnames the whole team should share.
-2. ` + bt + `~/.local/share/lerd/sites.yaml` + bt + ` ` + bt + `app_url` + bt + ` field on the site entry — per-machine override, not committed.
-3. The default ` + bt + `<scheme>://<primary-domain>` + bt + ` generator — used when neither override is set.
-
-There is no MCP tool to set ` + bt + `app_url` + bt + ` programmatically; the user (or you) edit ` + bt + `.lerd.yaml` + bt + ` directly and re-run ` + bt + `env_setup` + bt + ` (or any command that runs ` + bt + `lerd env` + bt + ` internally) to apply it.
-
-Example ` + bt + `.lerd.yaml` + bt + `:
-` + "```" + `yaml
-domains:
-  - myapp
-app_url: http://myapp.test/api
-` + "```" + `
-
-If the configured ` + bt + `app_url` + bt + ` happens to point at a domain that the conflict filter dropped, lerd silently falls through to the next precedence level so ` + bt + `.env` + bt + ` doesn't end up writing a hostname owned by another site.
-
-### ` + bt + `env_check` + bt + `
-Compare all ` + bt + `.env` + bt + ` files (` + bt + `.env` + bt + `, ` + bt + `.env.testing` + bt + `, ` + bt + `.env.local` + bt + `, …) against ` + bt + `.env.example` + bt + ` and return structured JSON with missing or extra keys. Useful for catching "works on my machine" bugs caused by env drift after pulling new code.
-
-Returns: ` + bt + `{"in_sync": bool, "keys": [{key, in_example, files: {filename: bool}}], "out_of_sync_count": N}` + bt + `
-
-Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-
-### ` + bt + `env_override` + bt + `
-Manage the personal, gitignored ` + bt + `.env.lerd_override` + bt + `. Every ` + bt + `KEY=VALUE` + bt + ` is layered on **last** by ` + bt + `env_setup` + bt + `, beating lerd's defaults and computed values (` + bt + `DB_DATABASE` + bt + `, ` + bt + `APP_URL` + bt + `, …) — handy for per-developer credentials without hand-editing ` + bt + `.env` + bt + `. Distinct from ` + bt + `.lerd.yaml` + bt + ` ` + bt + `env_overrides` + bt + ` (committed, templated, worktree-only); this file is personal, never committed. Reserved ` + bt + `LERD_EXTERNAL_SERVICES=<svc,svc>` + bt + ` marks services lerd writes vars for but won't start. Pass ` + bt + `set` + bt + ` (array of ` + bt + `KEY=VALUE` + bt + `) to write; no ` + bt + `set` + bt + ` scaffolds and reads it back. Run ` + bt + `env_setup` + bt + ` after. Example: ` + bt + `env_override(set: ["DB_USERNAME=postgres", "LERD_EXTERNAL_SERVICES=postgres"])` + bt + `.
-
-### ` + bt + `site_link` + bt + ` / ` + bt + `site_unlink` + bt + `
-Register or unregister a directory as a lerd site. Arguments for ` + bt + `site_link` + bt + `:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project directory — defaults to ` + bt + `LERD_SITE_PATH` + bt + ` set by ` + bt + `mcp:inject` + bt + `
-- ` + bt + `name` + bt + ` (optional): domain name without TLD (e.g. ` + bt + `"myapp"` + bt + ` becomes ` + bt + `myapp.test` + bt + `; defaults to directory name, cleaned up)
-
-> **Non-PHP projects (Node.js, Python, Go, etc.):** a Containerfile and ` + bt + `.lerd.yaml` + bt + ` with ` + bt + `container: {port: <N>}` + bt + ` must exist **before** ` + bt + `site_link` + bt + `. The Containerfile defaults to ` + bt + `Containerfile.lerd` + bt + ` (set ` + bt + `container.containerfile` + bt + ` for another name like ` + bt + `Dockerfile` + bt + `). Write ` + bt + `.lerd.yaml` + bt + ` directly (no MCP tool — see the custom container workflow below) or have the user run ` + bt + `lerd init` + bt + `. Without this config ` + bt + `site_link` + bt + ` registers a PHP-FPM site (wrong); if so, ` + bt + `site_unlink` + bt + `, write the files, link again.
-
-` + bt + `site_unlink` + bt + ` takes ` + bt + `path` + bt + ` (optional, same resolution as ` + bt + `site_link` + bt + `). Removes the site and all its domains. Project files are NOT deleted.
-
-### ` + bt + `site_domain` + bt + `
-Add or remove additional domains for a site. Each site can have multiple domains (all served by the same nginx vhost).
-- ` + bt + `action` + bt + ` (required): ` + bt + `"add"` + bt + ` or ` + bt + `"remove"` + bt + `
-- ` + bt + `path` + bt + ` (optional): project directory
-- ` + bt + `domain` + bt + ` (required): domain name without TLD (e.g. ` + bt + `"api"` + bt + ` becomes ` + bt + `api.test` + bt + `)
-
-Cannot remove the last domain. When a site is secured, the TLS certificate is automatically reissued to cover all domains.
-
-### ` + bt + `site_group` + bt + `
-Group sites so one **main** owns a base domain and **secondaries** occupy its subdomains, e.g. ` + bt + `astrolov.test` + bt + ` + ` + bt + `admin.astrolov.test` + bt + `. A secondary stays independent (own path, PHP, workers, cert); only its domain changes (exact-match nginx, like worktrees). ` + bt + `path` + bt + ` is the secondary.
-- ` + bt + `action` + bt + `: ` + bt + `assign` + bt + ` (needs ` + bt + `main` + bt + ` + ` + bt + `label` + bt + `, optional ` + bt + `share_db` + bt + `), ` + bt + `label` + bt + ` (new subdomain), ` + bt + `db` + bt + ` (` + bt + `share` + bt + `/` + bt + `separate` + bt + `), ` + bt + `unassign` + bt + `, ` + bt + `list` + bt + `
-- ` + bt + `label` + bt + ` is a subdomain without dots (` + bt + `admin` + bt + ` → ` + bt + `admin.<main-domain>` + bt + `); ` + bt + `assign` + bt + ` replaces the standalone domain. One level deep; renaming the main cascades. Shared DB needs the same DB service.
-
-### ` + bt + `park` + bt + ` / ` + bt + `unpark` + bt + `
-` + bt + `park` + bt + ` registers a parent directory: it scans every immediate subdirectory and auto-registers any PHP projects found as lerd sites. Use this when you keep many projects under one folder.
-
-` + bt + `unpark` + bt + ` removes the registration and unlinks all sites whose paths are under that directory. Project files are NOT deleted.
-
-Both take ` + bt + `path` + bt + ` (optional, defaults to LERD_SITE_PATH or cwd).
-
-### ` + bt + `site_tls` + bt + `
-Enable or disable HTTPS for a site using a locally-trusted mkcert certificate. ` + bt + `APP_URL` + bt + ` in ` + bt + `.env` + bt + ` is updated automatically.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"enable"` + bt + ` or ` + bt + `"disable"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name
-
-### ` + bt + `xdebug` + bt + `
-Toggle Xdebug for a PHP version (restarts the FPM container) or report its state. Xdebug listens on port ` + bt + `9003` + bt + ` at ` + bt + `host.containers.internal` + bt + `.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"on"` + bt + `, ` + bt + `"off"` + bt + `, or ` + bt + `"status"` + bt + `
-- ` + bt + `version` + bt + ` (optional): defaults to the project or global PHP version
-- ` + bt + `mode` + bt + ` (optional, only for ` + bt + `on` + bt + `): default ` + bt + `debug` + bt + `. Valid values: ` + bt + `debug` + bt + `, ` + bt + `coverage` + bt + `, ` + bt + `develop` + bt + `, ` + bt + `profile` + bt + `, ` + bt + `trace` + bt + `, ` + bt + `gcstats` + bt + `, or a comma-separated combo such as ` + bt + `debug,coverage` + bt + `
-
-Use ` + bt + `coverage` + bt + ` for ` + bt + `phpunit --coverage` + bt + ` / ` + bt + `pest --coverage` + bt + ` when PCOV isn't available or is disabled. Calling ` + bt + `xdebug(action: "on", ...)` + bt + ` with a different mode on an already-enabled version swaps modes without needing ` + bt + `action: "off"` + bt + ` first.
-
-` + bt + `xdebug(action: "status")` + bt + ` returns the enabled/disabled state and the active ` + bt + `mode` + bt + ` for all installed PHP versions.
-
-### ` + bt + `dumps_recent` + bt + ` / ` + bt + `dumps_status` + bt + ` / ` + bt + `dumps_clear` + bt + ` / ` + bt + `dumps_toggle` + bt + `
-Capture and inspect ` + bt + `dump()` + bt + ` / ` + bt + `dd()` + bt + ` output via the lerd debug bridge. Off by default — enable globally with ` + bt + `dumps_toggle(enable: true)` + bt + `, then call ` + bt + `dumps_recent` + bt + ` to read what your last request produced.
-
-- ` + bt + `dumps_recent({ site?, branch?, ctx?, since?, limit? })` + bt + ` returns the buffered events as JSON (most-recent at the tail). Use ` + bt + `site` + bt + ` to scope to one site (matches ` + bt + `ctx.site` + bt + `), ` + bt + `branch` + bt + ` to isolate one worktree (events share the parent site name), ` + bt + `ctx` + bt + ` (` + bt + `"fpm"` + bt + ` or ` + bt + `"cli"` + bt + `) to filter by source, ` + bt + `since` + bt + ` (event id) to skip events you've already seen, and ` + bt + `limit` + bt + ` to cap the result.
-- ` + bt + `dumps_status()` + bt + ` reports whether the bridge is enabled, whether the receiver is listening, the listener address, the buffered event count, and the timestamp of the most recent event.
-- ` + bt + `dumps_clear()` + bt + ` wipes the in-memory ring without disabling the bridge — handy before triggering a focused repro.
-- ` + bt + `dumps_toggle({ enable: true | false })` + bt + ` flips the global on/off via a sentinel file inside the always-mounted bridge directory. ` + bt + `enable: true` + bt + ` touches the sentinel, ` + bt + `enable: false` + bt + ` removes it. No FPM container is restarted by either path.
-
-Events ship as JSON with ` + bt + `ts` + bt + ` (RFC3339Nano), ` + bt + `ctx` + bt + ` (type, site, request, pid), ` + bt + `src` + bt + ` (file:line of the dump call), ` + bt + `label` + bt + ` (the keyword arg name when present), and ` + bt + `text` + bt + ` (Symfony VarDumper's CliDumper output). Capacity is 500 events; older entries roll off.
-
-### ` + bt + `analyze_queries` + bt + `
-N+1 and slow-query report over captured queries, grouped per request with the ` + bt + `file:line` + bt + ` to fix. Workflow: ` + bt + `dumps_toggle({enable: true})` + bt + `, ` + bt + `dumps_clear` + bt + `, hit the page, then ` + bt + `analyze_queries` + bt + `. Options: ` + bt + `site` + bt + `, ` + bt + `min_repeat` + bt + `, ` + bt + `slow_ms` + bt + `.
-
-### ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + ` / ` + bt + `profiler_clear` + bt + `
-Turn the SPX profiler on or off globally. While on, every HTTP request to every PHP-FPM site is profiled into a flame graph.
-
-- ` + bt + `profiler_toggle({ enable })` + bt + ` turns profiling on (` + bt + `enable: true` + bt + `) or off. It rewrites every FPM site's nginx vhost to inject an SPX cookie and reloads nginx, with no FPM restart.
-- ` + bt + `profiler_status()` + bt + ` reports whether profiling is on and the SPX web UI URL where the flame graphs are viewable.
-- ` + bt + `profiler_clear()` + bt + ` deletes every captured SPX report and returns how many were removed.
-
-After turning it on, reload a site in the browser, then open the dashboard Profiler view or the SPX web UI to read the flame graphs.
-
-### ` + bt + `queue` + bt + `
-Start or stop a queue worker for a site. Available for any framework that defines a ` + bt + `queue` + bt + ` worker (Laravel has it built-in). Runs the framework-defined command in the FPM container as a systemd service.
-
-> **Redis queues:** if the project's ` + bt + `.env` + bt + ` has ` + bt + `QUEUE_CONNECTION=redis` + bt + `, lerd will refuse to start the worker unless ` + bt + `lerd-redis` + bt + ` is running. Call ` + bt + `service_control(action: "start", name: "redis")` + bt + ` first.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + ` or ` + bt + `"stop"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `queue` + bt + ` (optional, ` + bt + `start` + bt + ` only): queue name, default ` + bt + `"default"` + bt + `
-- ` + bt + `tries` + bt + ` (optional, ` + bt + `start` + bt + ` only): max job attempts, default ` + bt + `3` + bt + `
-- ` + bt + `timeout` + bt + ` (optional, ` + bt + `start` + bt + ` only): job timeout in seconds, default ` + bt + `60` + bt + `
-
-### ` + bt + `horizon` + bt + `
-Start or stop Laravel Horizon for a site. Horizon is a queue manager that replaces ` + bt + `queue:work` + bt + ` — use ` + bt + `horizon` + bt + ` instead of ` + bt + `queue` + bt + ` for projects that have ` + bt + `laravel/horizon` + bt + ` in ` + bt + `composer.json` + bt + `. Returns an error on ` + bt + `action: "start"` + bt + ` if ` + bt + `laravel/horizon` + bt + ` is not installed.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + ` or ` + bt + `"stop"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-
-> **Horizon vs queue worker:** The ` + bt + `sites` + bt + ` tool returns ` + bt + `has_horizon: true` + bt + ` when a site has Horizon installed. In that case prefer ` + bt + `horizon` + bt + ` over ` + bt + `queue` + bt + `.
-
-### ` + bt + `reverb` + bt + `
-Start or stop the Reverb WebSocket server for a site. Available for any framework that defines a ` + bt + `reverb` + bt + ` worker.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + ` or ` + bt + `"stop"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-
-### ` + bt + `schedule` + bt + `
-Start or stop the task scheduler for a site. Available for any framework that defines a ` + bt + `schedule` + bt + ` worker.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + ` or ` + bt + `"stop"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-
-### ` + bt + `worker` + bt + `
-Start or stop any named framework worker for a site. Use this for workers that don't have a dedicated shortcut (e.g. ` + bt + `messenger` + bt + ` for Symfony, ` + bt + `pulse` + bt + ` for Laravel, ` + bt + `vite` + bt + ` for Laravel HMR). The worker command is taken from the framework definition.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + ` or ` + bt + `"stop"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `worker` + bt + ` (required): worker name as defined in the framework (e.g. ` + bt + `"messenger"` + bt + `, ` + bt + `"horizon"` + bt + `, ` + bt + `"vite"` + bt + `)
-- ` + bt + `branch` + bt + ` (optional): worktree branch name. Required to start a ` + bt + `per_worktree: true` + bt + ` worker on a specific worktree (targets ` + bt + `lerd-<worker>-<site>-<branch>` + bt + `). Without ` + bt + `branch` + bt + `, the parent-site unit is targeted (` + bt + `lerd-<worker>-<site>` + bt + `)
-
-Examples:
-` + "```" + `
-worker(action: "start", site: "myapp", worker: "vite")                       // parent site Vite
-worker(action: "start", site: "myapp", worker: "vite", branch: "feat-x")     // per-worktree Vite
-worker(action: "stop",  site: "myapp", worker: "vite", branch: "feat-x")     // stop just the worktree's instance
-` + "```" + `
-
-### ` + bt + `worker_list` + bt + `
-List all workers defined for a site's framework, with their running status, command, unit name, restart policy, and per-worker flags (` + bt + `host` + bt + `, ` + bt + `per_worktree` + bt + `, ` + bt + `replaces_build` + bt + `). Use this to discover available workers before calling ` + bt + `worker` + bt + `.
-
-Arguments:
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `branch` + bt + ` (optional): worktree branch name. With ` + bt + `branch` + bt + `, status is reported for ` + bt + `lerd-<worker>-<site>-<branch>` + bt + ` units instead of the parent-site units
-
-### ` + bt + `commands_list` + bt + ` / ` + bt + `commands_run` + bt + ` / ` + bt + `command_add` + bt + ` / ` + bt + `command_remove` + bt + `
-One-shot framework commands (` + bt + `optimize:clear` + bt + `, ` + bt + `migrate` + bt + `, ` + bt + `drush uli` + bt + `, ` + bt + `cache:flush` + bt + `, etc). Set = framework yaml + project ` + bt + `.lerd.yaml` + bt + ` ` + bt + `commands:` + bt + `. Prefer over invoking ` + bt + `php artisan` + bt + ` / ` + bt + `drush` + bt + ` / ` + bt + `wp` + bt + ` directly because per-project overrides are honored. ` + bt + `command_add` + bt + ` writes to ` + bt + `.lerd.yaml` + bt + `; use ` + bt + `disabled: true` + bt + ` to suppress a framework default without replacement.
-
-Arguments:
-- ` + bt + `site` + bt + ` (required): site name
-- ` + bt + `name` + bt + ` (commands_run / command_add / command_remove): name from ` + bt + `commands_list` + bt + ` or a new identifier
-- ` + bt + `command` + bt + ` (command_add): shell command (required unless ` + bt + `disabled: true` + bt + `)
-- ` + bt + `label` + bt + `, ` + bt + `description` + bt + `, ` + bt + `icon` + bt + ` (command_add, optional)
-- ` + bt + `output` + bt + ` (command_add): ` + bt + `silent | text | url | terminal` + bt + ` (default silent)
-- ` + bt + `confirm` + bt + ` (command_add): gate behind a safety modal
-- ` + bt + `check_file` + bt + ` / ` + bt + `check_composer` + bt + ` (command_add): hide unless the rule passes
-- ` + bt + `disabled` + bt + ` (command_add): suppress a framework default of the same name
-- ` + bt + `force` + bt + ` (commands_run): required for confirm-gated commands
-
-### ` + bt + `worker_add` + bt + `
-Add or update a custom worker for a project. Saves to ` + bt + `.lerd.yaml` + bt + ` ` + bt + `custom_workers` + bt + ` by default, or to the global framework overlay (` + bt + `~/.config/lerd/frameworks/` + bt + `) with ` + bt + `global: true` + bt + `. Does not auto-start — use ` + bt + `worker(action: "start", ...)` + bt + ` afterwards.
-
-Arguments:
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `name` + bt + ` (required): worker name (slug, e.g. ` + bt + `"pdf-generator"` + bt + `)
-- ` + bt + `command` + bt + ` (required): command to run inside the PHP-FPM container
-- ` + bt + `label` + bt + `: human-readable label
-- ` + bt + `restart` + bt + `: ` + bt + `"always"` + bt + ` or ` + bt + `"on-failure"` + bt + ` (default: always)
-- ` + bt + `check_file` + bt + `: only show worker when this file exists
-- ` + bt + `check_composer` + bt + `: only show worker when this Composer package is installed
-- ` + bt + `conflicts_with` + bt + `: array of workers to stop before starting this one
-- ` + bt + `global` + bt + `: save to global framework overlay instead of ` + bt + `.lerd.yaml` + bt + `
-
-### ` + bt + `worker_remove` + bt + `
-Remove a custom worker from a project's ` + bt + `.lerd.yaml` + bt + ` or global framework overlay. Stops the worker if running.
-
-Arguments:
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `name` + bt + ` (required): worker name to remove
-- ` + bt + `global` + bt + `: remove from global framework overlay instead of ` + bt + `.lerd.yaml` + bt + `
-
-### ` + bt + `workers_health` + bt + `
-List failed worker units grouped per site. Read-only — quick triage of which workers have crashed.
-
-### ` + bt + `workers_heal` + bt + `
-Reset the failed state and restart every failed worker unit. Pass ` + bt + `unit` + bt + ` (full ` + bt + `lerd-<worker>-<site>` + bt + ` name) to heal just one; omit to heal all. Never writes ` + bt + `.lerd.yaml` + bt + ` or unit files.
-
-### ` + bt + `worktree` + bt + `
-Manage git worktrees for a site. Watcher auto-installs deps on add and presents a unified asset-worker / npm-build prompt (workers with ` + bt + `replaces_build` + bt + ` + ` + bt + `per_worktree` + bt + ` appear alongside npm scripts; picked workers start ad-hoc with ` + bt + `persist=false` + bt + `, leaving ` + bt + `.lerd.yaml workers:` + bt + ` as the source of truth). Worktrees on secured sites get ` + bt + `*.<branch>.<site>.test` + bt + ` wildcard cert SANs and nginx ` + bt + `server_name` + bt + ` automatically.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"list"` + bt + ` / ` + bt + `"add"` + bt + ` / ` + bt + `"remove"` + bt + ` / ` + bt + `"db_isolate"` + bt + ` / ` + bt + `"db_share"` + bt + `
-- ` + bt + `site` + bt + ` (optional): defaults to the site at cwd (or its parent for worktree paths)
-- ` + bt + `branch` + bt + ` (required for add / remove / db_isolate): branch name
-- ` + bt + `git_args` + bt + ` (array, optional): forwarded to ` + bt + `git worktree` + bt + `; use this to pass ` + bt + `-b new-branch` + bt + ` etc.
-- ` + bt + `force` + bt + ` (optional, remove): ` + bt + `--force` + bt + ` flag for ` + bt + `git worktree remove` + bt + `
-- ` + bt + `keep_db` + bt + ` (optional, remove): preserve isolated DB on removal (default ` + bt + `true` + bt + `)
-- ` + bt + `source` + bt + ` (optional, db_isolate): seed for the isolated DB (` + bt + `empty` + bt + ` / ` + bt + `main` + bt + ` / ` + bt + `<branch>` + bt + `)
-
-To toggle a per-worktree worker (e.g. Vite on branch ` + bt + `feat-x` + bt + `), call ` + bt + `worker(action: "start", site: "myapp", worker: "vite", branch: "feat-x")` + bt + `; this targets ` + bt + `lerd-vite-myapp-feat-x` + bt + ` rather than the parent unit.
-
-Multi-tenant ` + bt + `.env` + bt + ` per worktree: declare ` + bt + `env_overrides` + bt + ` in ` + bt + `.lerd.yaml` + bt + ` with ` + bt + `{{domain}}` + bt + ` / ` + bt + `{{scheme}}` + bt + ` / ` + bt + `{{site}}` + bt + ` placeholders, e.g. ` + bt + `SESSION_DOMAIN: ".{{domain}}"` + bt + ` so cookies scope per branch.
-
-### ` + bt + `project_new` + bt + `
-Scaffold a new PHP project using a framework's create command. For Laravel, runs ` + bt + `composer create-project --no-install --no-plugins --no-scripts laravel/laravel <path>` + bt + `. Other frameworks must have a ` + bt + `create` + bt + ` field in their YAML definition.
-
-Arguments:
-- ` + bt + `path` + bt + ` (required): absolute path for the new project directory (e.g. ` + bt + `/home/user/code/myapp` + bt + `)
-- ` + bt + `framework` + bt + ` (optional): framework name (default: ` + bt + `"laravel"` + bt + `)
-- ` + bt + `args` + bt + ` (optional): extra arguments passed to the scaffold command
-
-After creation, register and configure the project:
-` + "```" + `
-project_new(path: "/home/user/code/myapp")
-site_link(path: "/home/user/code/myapp")
-env_setup(path: "/home/user/code/myapp")
-` + "```" + `
-
-From the terminal you can also run:
-` + "```" + `
-lerd new myapp
-cd myapp && lerd link && lerd setup
-` + "```" + `
-
-### ` + bt + `framework_list` + bt + `
-List all available framework definitions (Laravel built-in plus any user-defined YAMLs at ` + bt + `~/.config/lerd/frameworks/` + bt + `), including their defined workers and setup commands. Call this before ` + bt + `framework_add` + bt + ` to see what already exists.
-
-### ` + bt + `framework_add` + bt + `
-Create or update a framework definition. For ` + bt + `laravel` + bt + `, only the ` + bt + `workers` + bt + ` and ` + bt + `setup` + bt + ` fields are accepted (built-in settings are always preserved). For other frameworks, creates a full definition.
-
-Arguments:
-- ` + bt + `name` + bt + ` (required): framework slug (e.g. ` + bt + `"symfony"` + bt + `). Use ` + bt + `"laravel"` + bt + ` to add custom workers to the built-in Laravel definition (e.g. ` + bt + `horizon` + bt + `, ` + bt + `pulse` + bt + `)
-- ` + bt + `label` + bt + ` (optional): display name, e.g. ` + bt + `"Symfony"` + bt + `
-- ` + bt + `public_dir` + bt + ` (optional): document root relative to project (default: ` + bt + `"public"` + bt + `)
-- ` + bt + `detect_files` + bt + ` (optional): array of filenames that signal this framework
-- ` + bt + `detect_packages` + bt + ` (optional): array of Composer packages that signal this framework
-- ` + bt + `env_file` + bt + ` (optional): primary env file path (default: ` + bt + `".env"` + bt + `)
-- ` + bt + `env_format` + bt + ` (optional): ` + bt + `"dotenv"` + bt + ` or ` + bt + `"php-const"` + bt + `
-- ` + bt + `workers` + bt + ` (optional): map of worker name → ` + bt + `{label, command, restart, check}` + bt + ` — ` + bt + `check` + bt + ` is optional (` + bt + `{file}` + bt + ` or ` + bt + `{composer}` + bt + `), worker only shown when check passes
-- ` + bt + `setup` + bt + ` (optional): array of one-off setup commands shown in ` + bt + `lerd setup` + bt + ` wizard, each with ` + bt + `{label, command, default, check}` + bt + ` — ` + bt + `check` + bt + ` is optional, same format as workers
-
-Example — add Horizon to Laravel:
-` + "```" + `
-framework_add(name: "laravel", workers: {
-  "horizon": {"label": "Horizon", "command": "php artisan horizon", "restart": "always"}
-})
-` + "```" + `
-
-Example — define a new framework:
-` + "```" + `
-framework_add(
-  name: "wordpress",
-  label: "WordPress",
-  public_dir: ".",
-  detect_files: ["wp-login.php"],
-  workers: {
-    "cron": {"label": "WP Cron", "command": "wp cron event run --due-now --allow-root", "restart": "always"}
-  }
-)
-` + "```" + `
-
-### ` + bt + `framework_remove` + bt + `
-Delete a user-defined framework YAML. For ` + bt + `laravel` + bt + `, removes only custom worker and setup command additions (built-in queue/schedule/reverb workers and storage:link/migrate/db:seed setup remain). Takes ` + bt + `name` + bt + ` (required).
-
-### ` + bt + `framework_search` + bt + `
-Search the community framework store by name or label (case-insensitive).
-
-### ` + bt + `framework_install` + bt + `
-Install a framework definition from the community store. Pass ` + bt + `name` + bt + ` (e.g. ` + bt + `symfony` + bt + `, ` + bt + `wordpress` + bt + `) and optional ` + bt + `version` + bt + ` (auto-detected from ` + bt + `composer.lock` + bt + ` when omitted).
-
-### ` + bt + `site_php` + bt + ` / ` + bt + `site_node` + bt + `
-Change the PHP or Node.js version for a registered site. Both take ` + bt + `site` + bt + ` (required), ` + bt + `version` + bt + ` (required), and an optional ` + bt + `branch` + bt + ` (worktree).
-
-` + bt + `site_php` + bt + ` writes a ` + bt + `.php-version` + bt + ` pin file to the project root, updates the site registry, and regenerates the nginx vhost. The FPM container for the target PHP version must be running — start it with ` + bt + `service_control(action: "start", name: "php<version>")` + bt + ` if needed.
-
-` + bt + `site_node` + bt + ` writes a ` + bt + `.node-version` + bt + ` pin file and installs the version via fnm if it isn't already installed. Run ` + bt + `npm install` + bt + ` inside the project if dependencies need rebuilding against the new version.
-
-Pass ` + bt + `branch` + bt + ` to pin the version on a specific worktree instead of the parent site. The pin file is written inside the worktree's checkout, ` + bt + `php_version` + bt + ` / ` + bt + `node_version` + bt + ` is persisted to that worktree's ` + bt + `.lerd.yaml` + bt + ` (so the override travels with the branch in git), and only that worktree's nginx vhost is regenerated. The parent site's version stays unchanged.
-
-### ` + bt + `workers_mode` + bt + `
-Show or set the macOS worker runtime mode.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"get"` + bt + ` or ` + bt + `"set"` + bt + `
-- ` + bt + `mode` + bt + ` (required for set): ` + bt + `"exec"` + bt + ` (default; one ` + bt + `podman exec` + bt + ` per worker, supervised by launchd, lower memory) or ` + bt + `"container"` + bt + ` (one detached container per worker, 1:1 supervisor boundary, higher memory)
-
-Linux always uses exec under systemd — this setting is a no-op there. Setting on macOS stops each active worker in its old shape, cleans up the stale on-disk artifacts, and restarts it in the new shape.
-
-### ` + bt + `bug_report` + bt + `
-Generate a plain-text diagnostic report for a GitHub issue. Collects ` + bt + `lerd doctor` + bt + ` output, config files, systemd / podman state, recent service logs and a curated set of environment variables.
-
-Arguments:
-- ` + bt + `output` + bt + ` (optional): file path. Defaults to ` + bt + `./lerd-bug-report-<timestamp>.txt` + bt + `
-- ` + bt + `log_lines` + bt + ` (optional): lines per service / container log. Default 200.
-- ` + bt + `show_real_names` + bt + ` (optional): keep real site names, domains and parked-directory paths instead of replacing them with ` + bt + `site-1` + bt + ` / ` + bt + `$PARK_1` + bt + ` / etc. Use only for local debugging — anonymisation is on by default for issue posting.
-
-Returns the file path so the user can attach it to the issue.
-
-### ` + bt + `site_control` + bt + `
-Pause, unpause, restart, or rebuild a site.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"pause"` + bt + `, ` + bt + `"unpause"` + bt + `, ` + bt + `"restart"` + bt + `, or ` + bt + `"rebuild"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-
-- ` + bt + `pause` + bt + `: stops all running workers for the site, stops the custom container (for custom container sites), and replaces its nginx vhost with a landing page that includes a **Resume** button. Services no longer needed by any active site are auto-stopped. The paused state is persisted.
-- ` + bt + `unpause` + bt + `: starts the custom container (if applicable), restores the nginx vhost, ensures required services are running, and restarts any workers that were running when the site was paused.
-- ` + bt + `restart` + bt + `: restarts the container for a site without rebuilding the image. For custom container sites this restarts the dedicated container; for PHP sites it restarts the shared FPM container.
-- ` + bt + `rebuild` + bt + `: rebuilds the custom container image from the Containerfile and restarts the container. Use after changing the Containerfile. ` + bt + `site_link` + bt + ` reuses the cached image; ` + bt + `rebuild` + bt + ` forces a fresh build. Only works for custom container sites.
-
-Use ` + bt + `pause` + bt + ` / ` + bt + `unpause` + bt + ` to free up resources for sites you're not actively working on without fully unlinking them.
-
-### ` + bt + `site_runtime` + bt + `
-Switch the PHP runtime for a site between the shared PHP-FPM container (` + bt + `fpm` + bt + `, default) and a per-site FrankenPHP container (` + bt + `frankenphp` + bt + `). Arguments:
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `runtime` + bt + ` (required): ` + bt + `fpm` + bt + ` or ` + bt + `frankenphp` + bt + `
-- ` + bt + `worker` + bt + ` (optional, default false): when runtime=frankenphp, enable worker mode (keeps PHP resident for ~10-50x faster requests)
-
-FrankenPHP is framework-aware: Laravel uses ` + bt + `octane:start --server=frankenphp --workers=auto` + bt + ` (needs pcntl, installed at container start); Symfony uses ` + bt + `frankenphp php-server --worker=public/index.php --watch` + bt + ` for live reload; unknown frameworks fall back to ` + bt + `frankenphp php-server` + bt + ` rooted at the framework's public dir. Switching to ` + bt + `fpm` + bt + ` removes the runtime fields from ` + bt + `.lerd.yaml` + bt + ` and regenerates the FPM vhost. Not supported on custom-container sites (their runtime comes from their Containerfile). Xdebug is not wired up for FrankenPHP; switch back to ` + bt + `fpm` + bt + ` to debug.
-
-### ` + bt + `site_nginx` + bt + `
-Read, write, or reset a site's custom nginx override block. Saving runs ` + bt + `nginx -t` + bt + `, backs up the prior file, and reloads nginx. ` + bt + `branch=<name>` + bt + ` targets a worktree (new worktrees inherit main's override); ` + bt + `content` + bt + ` is the full file on write.
-
-### ` + bt + `stripe` + bt + `
-Start, stop, or configure a Stripe webhook listener for a site using the Stripe CLI container. Works for any framework, not just Laravel. On ` + bt + `start` + bt + ` the secret is auto-detected from the site's ` + bt + `.env` + bt + ` (probing ` + bt + `STRIPE_SECRET` + bt + `, ` + bt + `STRIPE_SECRET_KEY` + bt + `, then ` + bt + `STRIPE_API_KEY` + bt + `) and events are forwarded to ` + bt + `/stripe/webhook` + bt + ` by default.
-
-Arguments:
-- ` + bt + `action` + bt + ` (required): ` + bt + `"start"` + bt + `, ` + bt + `"stop"` + bt + `, or ` + bt + `"config"` + bt + `
-- ` + bt + `site` + bt + ` (required): site name from ` + bt + `sites` + bt + ` tool
-- ` + bt + `api_key` + bt + ` (optional, ` + bt + `start` + bt + ` only): Stripe secret key (defaults to the secret auto-detected in the site's ` + bt + `.env` + bt + `)
-- ` + bt + `webhook_path` + bt + ` (optional): forward route path, persisted to ` + bt + `.lerd.yaml` + bt + ` (default: ` + bt + `"/stripe/webhook"` + bt + `)
-- ` + bt + `secret_env_key` + bt + ` (optional): which ` + bt + `.env` + bt + ` key holds the secret, persisted to ` + bt + `.lerd.yaml` + bt + ` (empty auto-detects)
-
-Use ` + bt + `action="config"` + bt + ` to set ` + bt + `webhook_path` + bt + `/` + bt + `secret_env_key` + bt + ` without starting the listener; passing ` + bt + `config` + bt + ` with no fields reports the current settings.
-
-### ` + bt + `db_export` + bt + `
-Export a database to a SQL dump file. Works with any project type — service and database are auto-detected. Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-- ` + bt + `service` + bt + ` (optional): lerd service name to target (e.g. ` + bt + `mysql` + bt + `, ` + bt + `postgres` + bt + `) — overrides auto-detection
-- ` + bt + `database` + bt + ` (optional): database name to export — overrides auto-detection
-- ` + bt + `output` + bt + ` (optional): output file path (defaults to ` + bt + `<database>.sql` + bt + ` in the project root)
-
-### ` + bt + `db_import` + bt + `
-Import a SQL dump file into the project database. Service and database are auto-detected; the service is started if not already running. Arguments:
-- ` + bt + `file` + bt + ` (required): absolute path to the SQL file to import
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root — defaults to the current working directory
-- ` + bt + `service` + bt + ` (optional): lerd service name to target — overrides auto-detection
-- ` + bt + `database` + bt + ` (optional): database name to import into — overrides auto-detection
-
-### ` + bt + `db_create` + bt + `
-Create a database and a ` + bt + `<name>_testing` + bt + ` variant for the project. Service and database name are auto-detected; the service is started if not already running. Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root
-- ` + bt + `service` + bt + ` (optional): lerd service name to target — overrides auto-detection
-- ` + bt + `name` + bt + ` (optional): database name — overrides auto-detection
-
-### ` + bt + `logs` + bt + `
-Fetch recent container logs. ` + bt + `target` + bt + ` is optional — when omitted, returns logs for the current site's PHP-FPM container (resolved from ` + bt + `LERD_SITE_PATH` + bt + `). Specify ` + bt + `target` + bt + ` only when you want a different container:
-- ` + bt + `"nginx"` + bt + ` — nginx proxy logs
-- Service name: ` + bt + `"mysql"` + bt + `, ` + bt + `"redis"` + bt + `, or any custom service name
-- PHP version: ` + bt + `"8.4"` + bt + ` — logs for that PHP-FPM container
-- Site name — logs for a different site's PHP-FPM container
-
-Optional ` + bt + `lines` + bt + ` parameter (default: 50).
-
-### ` + bt + `status` + bt + `
-Return the health status of core lerd services as structured JSON: DNS resolution (ok + tld), nginx (running), PHP-FPM containers (running per version), and the file watcher (running). **Call this first when a site isn't loading** — it pinpoints which service is down before suggesting fixes.
-
-### ` + bt + `dns_diagnose` + bt + `
-Walk the whole DNS chain — container, config, port 5300, ` + bt + `dig` + bt + `, resolver hookup, interface routing, system lookup — and report which rung is broken. Use when ` + bt + `.test` + bt + ` sites don't resolve.
-
-### ` + bt + `which` + bt + `
-Show the resolved PHP version, Node version, document root, and nginx config path for the current site. Call this to confirm which runtime versions a project will use before running commands.
-
-Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-
-### ` + bt + `check` + bt + `
-Validate a project's ` + bt + `.lerd.yaml` + bt + ` file. Returns structured JSON with per-field status (ok/warn/fail). Checks PHP version format and installation, service definitions (built-in, custom, inline), framework references, and worker configuration.
-
-Returns: ` + bt + `{"valid": bool, "errors": N, "warnings": N, "items": [{name, status, detail}]}` + bt + `
-
-Arguments:
-- ` + bt + `path` + bt + ` (optional): absolute path to the project root containing ` + bt + `.lerd.yaml` + bt + ` — defaults to the current working directory (or ` + bt + `LERD_SITE_PATH` + bt + ` if set by ` + bt + `mcp:inject` + bt + `)
-
-> **Use this before** ` + bt + `env_setup` + bt + ` or ` + bt + `site_link` + bt + ` to catch configuration errors early.
-
-### ` + bt + `doctor` + bt + `
-Run a full environment diagnostic. Returns structured JSON with per-check status (ok/warn/fail): podman, systemd, linger, dir writability, config validity, DNS resolution, nginx, PHP images, and update availability.
-
-Returns: ` + bt + `{"version": "...", "checks": [{name, status, detail}], "failures": N, "warnings": N, "php_installed": [...], "php_default": "...", "node_default": "..."}` + bt + `
-
-**Use this when the user reports setup issues or unexpected behaviour.**
-
-## Common Workflows
-
-Single-tool tasks are covered by the tool definitions above (e.g. ` + bt + `site_tls` + bt + ` enables HTTPS, ` + bt + `doctor` + bt + ` runs a full diagnostic, ` + bt + `logs` + bt + ` tails FPM/nginx). These flows only cover multi-step compositions where ordering or non-obvious glue matters.
-
-**Bootstrap a new project from scratch, end-to-end** — works for any lerd-known framework (laravel, symfony, etc.). **Run every step, in order. Do not stop until ` + bt + `setup` + bt + ` returns.**
-` + "```" + `
-project_new(path: "/abs/path/myapp", framework: "laravel")
-// project_new scaffolds AND runs composer install — vendor/ is populated on return
-site_link(path: "/abs/path/myapp")
-env_setup(path: "/abs/path/myapp")    // .env, services, DB (sqlite auto-created), APP_KEY
-setup(path: "/abs/path/myapp")        // framework Default:true steps — migrations, storage:link, etc.
-// Optional:
-site_tls(action: "enable", site: "myapp")   // HTTPS via mkcert
-` + "```" + `
-
-**Set up a cloned project, end-to-end** — framework-agnostic. **Run every step, in order.**
-` + "```" + `
-site_link()                           // registers cwd as a lerd site
-composer(args: ["install"])           // BEFORE env_setup — APP_KEY generation needs vendor/
-env_setup()                           // .env, services, DB (sqlite auto-created), APP_KEY
-setup()                               // framework migrations + other Default:true setup steps
-// Optional:
-// vendor_run(bin: "pest")            // run tests to confirm everything works
-` + "```" + `
-
-**Debugging a 500 on a lerd site** (ordered, stop at the first signal):
-` + "```" + `
-logs()                                 // current site's FPM + recent errors
-logs(target: "nginx")                  // if FPM logs are clean
-env_check()                            // missing .env keys vs .env.example
-which()                                // confirm PHP version, docroot, vhost
-// If the error mentions vendor/, autoload, or class-not-found:
-composer(args: ["install"])
-// If the error mentions APP_KEY:
-artisan(args: ["key:generate"])        // or framework's equivalent
-// If the error mentions the database file / connection:
-//   sqlite: env_setup() auto-creates database/database.sqlite
-//   mysql/postgres: service_control(action: "start", name: "<service>")
-setup()                                // re-runs pending migrations + setup steps
-status()                               // DNS / nginx / FPM container health at a glance
-doctor()                               // full diagnostic if nothing above explains it
-` + "```" + `
-
-**Install a package that needs publish + migration:**
-` + "```" + `
-composer(args: ["require", "spatie/laravel-permission"])
-artisan(args: ["vendor:publish", "--provider=Spatie\\Permission\\PermissionServiceProvider"])
-artisan(args: ["migrate"])
-` + "```" + `
-
-**Xdebug coverage for phpunit/pest (mode swap, no action: "off" needed between modes):**
-` + "```" + `
-xdebug(action: "on", version: "8.4", mode: "coverage")
-vendor_run(name: "pest", args: ["--coverage"])
-xdebug(action: "off", version: "8.4")
-` + "```" + `
-
-**Back up before a risky migration:**
-` + "```" + `
-db_export(output: "/tmp/myapp-backup.sql")
-artisan(args: ["migrate"])
-// on failure: db_import(file: "/tmp/myapp-backup.sql")
-` + "```" + `
-
-**Add a Laravel Horizon worker (custom framework worker):**
-` + "```" + `
-framework_add(name: "laravel", workers: {
-  "horizon": {"label": "Horizon", "command": "php artisan horizon", "restart": "always"}
-})
-worker(action: "start", site: "myapp", worker: "horizon")
-` + "```" + `
-
-**Set up a custom container site (Node.js, Python, Go, etc.):**
-
-1. Create a ` + bt + `Containerfile.lerd` + bt + ` in the project root (do NOT add WORKDIR or COPY — lerd volume-mounts the project directory at its host path and sets --workdir automatically):
-` + "```dockerfile" + `
-FROM node:20-alpine
-RUN npm install -g nodemon
-CMD ["npm", "run", "start:dev"]
-` + "```" + `
-
-   > **Hot-reload on macOS**: inotify events do not fire across Podman Machine's virtiofs mount. Use polling: nodemon needs ` + bt + `--legacy-watch` + bt + `, Vite needs ` + bt + `server.watch.usePolling: true` + bt + `, webpack needs ` + bt + `watchOptions: { poll: 1000 }` + bt + `.
-
-2. Write ` + bt + `.lerd.yaml` + bt + ` with the container section (no MCP tool for this — write the file directly or run ` + bt + `lerd init` + bt + `):
-` + "```yaml" + `
-domains:
-  - myapp
-container:
-  port: 3000
-services:
-  - mysql
-  - redis
-` + "```" + `
-
-3. **Configure env BEFORE linking.** The container starts immediately on ` + bt + `site_link` + bt + `. Lerd services are reachable by container name on the ` + bt + `lerd` + bt + ` network:
-` + "```" + `
-DB_HOST=lerd-mysql     # or lerd-postgres (port 5432)
-DB_PORT=3306
-DB_USERNAME=root       # postgres for postgres
-DB_PASSWORD=lerd
-REDIS_HOST=lerd-redis
-REDIS_PORT=6379
-` + "```" + `
-
-4. Link:
-` + "```" + `
-site_link()            // builds image, creates container, generates nginx vhost
-` + "```" + `
-
-The ` + bt + `container.port` + bt + ` field is required. ` + bt + `container.containerfile` + bt + ` defaults to ` + bt + `Containerfile.lerd` + bt + `. Workers defined in ` + bt + `custom_workers` + bt + ` exec into the custom container.
-
-## .lerd.yaml Reference
-
-` + bt + `.lerd.yaml` + bt + ` is the per-project config file, committed to the repo. ` + bt + `lerd link` + bt + ` and ` + bt + `lerd init` + bt + ` apply it automatically.
-
-### PHP site fields
-
-| Field | Description |
-|-------|-------------|
-| ` + bt + `domains` + bt + ` | Site hostnames without TLD (e.g. ` + bt + `[myapp, api]` + bt + `). First is primary. |
-| ` + bt + `php_version` + bt + ` | PHP version for this project (e.g. ` + bt + `"8.4"` + bt + `) |
-| ` + bt + `node_version` + bt + ` | Node version (e.g. ` + bt + `"22"` + bt + `) |
-| ` + bt + `framework` + bt + ` | Framework name (e.g. ` + bt + `laravel` + bt + `, ` + bt + `symfony` + bt + `, ` + bt + `wordpress` + bt + `) |
-| ` + bt + `secured` + bt + ` | ` + bt + `true` + bt + ` to enable HTTPS |
-| ` + bt + `request_timeout` + bt + ` | nginx request timeout in seconds (default 60). Raises ` + bt + `fastcgi_read/send_timeout` + bt + ` for FPM sites or ` + bt + `proxy_read/send_timeout` + bt + ` for proxy/container sites — for deliberately long-running requests. Overrides the global ` + bt + `nginx.request_timeout` + bt + ` |
-| ` + bt + `services` + bt + ` | Services to start (e.g. ` + bt + `[mysql, redis]` + bt + `) |
-| ` + bt + `workers` + bt + ` | Active worker names (e.g. ` + bt + `[queue, schedule]` + bt + `) — auto-synced by start/stop |
-| ` + bt + `app_url` + bt + ` | Override for APP_URL in ` + bt + `.env` + bt + ` |
-| ` + bt + `env_overrides` + bt + ` | Map of env var names → templated values written into per-worktree ` + bt + `.env` + bt + ` (not the parent's; not applied on ` + bt + `lerd setup` + bt + `). Placeholders: ` + bt + `{{domain}}` + bt + `/` + bt + `{{scheme}}` + bt + `/` + bt + `{{site}}` + bt + `/` + bt + `{{branch}}` + bt + `/` + bt + `{{parent}}` + bt + `, or plain strings. ` + bt + `APP_URL` + bt + ` here beats the default rewrite. ` + bt + `DB_DATABASE` + bt + ` is owned by isolation when on |
-
-### Custom container fields
-
-| Field | Required | Default | Description |
-|-------|----------|---------|-------------|
-| ` + bt + `container.port` + bt + ` | yes | | Port the app listens on inside the container |
-| ` + bt + `container.containerfile` + bt + ` | no | ` + bt + `Containerfile.lerd` + bt + ` | Path to the Containerfile (relative to project root) |
-| ` + bt + `container.build_context` + bt + ` | no | ` + bt + `.` + bt + ` | Build context directory |
-| ` + bt + `container.target` + bt + ` | no | (last stage) | Stage to build in a multi-stage Containerfile, passed as ` + bt + `podman build --target` + bt + ` |
-| ` + bt + `custom_workers` + bt + ` | no | | Worker definitions — see below |
-| ` + bt + `domains` + bt + ` | no | | Same as PHP sites |
-| ` + bt + `secured` + bt + ` | no | | Same as PHP sites |
-| ` + bt + `request_timeout` + bt + ` | no | 60 | Same as PHP sites — sets ` + bt + `proxy_read/send_timeout` + bt + ` for the container |
-| ` + bt + `services` + bt + ` | no | | Same as PHP sites |
-
-When ` + bt + `container` + bt + ` is present, ` + bt + `php_version` + bt + `, ` + bt + `framework` + bt + `, and ` + bt + `node_version` + bt + ` are ignored — the container defines its own runtime.
-
-### custom_workers fields
-
-Each entry under ` + bt + `custom_workers` + bt + ` is a name-to-config map. Works for both PHP and custom container sites.
-
-` + "```yaml" + `
-custom_workers:
-  queue:
-    label: Queue Worker
-    command: node dist/queue.js
-    restart: always
-  cron:
-    label: Cron
-    command: node dist/cron.js
-    restart: on-failure
-` + "```" + `
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| ` + bt + `label` + bt + ` | no | Display name in the UI |
-| ` + bt + `command` + bt + ` | yes | Shell command to run inside the container |
-| ` + bt + `restart` + bt + ` | no | ` + bt + `always` + bt + ` (default) or ` + bt + `on-failure` + bt + ` |
-| ` + bt + `schedule` + bt + ` | no | systemd OnCalendar expression for cron-style workers (e.g. ` + bt + `minutely` + bt + `) |
-| ` + bt + `conflicts_with` + bt + ` | no | List of worker names to stop before starting this one |
-| ` + bt + `host` + bt + ` | no | ` + bt + `true` + bt + ` runs on the host via fnm instead of in the FPM container. For Node tools that need direct filesystem access for HMR (Vite, Tailwind watcher, etc.) |
-| ` + bt + `per_worktree` + bt + ` | no | ` + bt + `true` + bt + ` lets the worker run independently per git worktree under ` + bt + `lerd-<wname>-<site>-<wt>` + bt + `. Required for worktree auto-start |
-| ` + bt + `replaces_build` + bt + ` | no | ` + bt + `true` + bt + ` declares that, while running, the worker provides the asset manifest. ` + bt + `lerd worktree add` + bt + ` skips the static ` + bt + `npm run build` + bt + ` step when this worker is opted into |
-`
-
-// junieGuidelinesSection is the lerd block written into .junie/guidelines.md.
-// It is wrapped in sentinel comments by mergeJunieGuidelines so it can be
-// cleanly updated on subsequent mcp:inject runs.
-const junieGuidelinesSection = `## Lerd — Laravel Local Dev Environment
-
-This project runs on **lerd**, a Podman-based Laravel development environment. The ` + bt + `lerd` + bt + ` MCP server is available — use it to manage the environment without leaving the chat.
-
-### Architecture
-
-- PHP runs in Podman containers named ` + bt + `lerd-php<version>-fpm` + bt + ` (e.g. ` + bt + `lerd-php84-fpm` + bt + `); each container includes composer and node/npm; the PHP version is resolved from ` + bt + `.lerd.yaml` + bt + ` → ` + bt + `.php-version` + bt + ` → ` + bt + `composer.json` + bt + ` ` + bt + `require.php` + bt + ` constraint (matched against installed versions) → global default
-- Nginx routes ` + bt + `*.test` + bt + ` domains to the correct PHP-FPM container
-- Services (MySQL, Redis, PostgreSQL, etc.) and custom services run as Podman containers via systemd quadlets
-- Node.js versions are managed by fnm; per-project version is set via a ` + bt + `.node-version` + bt + ` file
-- Framework workers (queue, schedule, reverb, horizon, messenger, vite, etc.) run as systemd user services named ` + bt + `lerd-<worker>-<sitename>` + bt + `; commands are defined per-framework in YAML; Laravel Horizon is auto-detected from ` + bt + `composer.json` + bt + ` and replaces the queue toggle when installed; Laravel ships with a ` + bt + `vite` + bt + ` host worker that runs ` + bt + `npm run dev` + bt + ` on the host via fnm for HMR; workers and setup commands support optional ` + bt + `check` + bt + ` (` + bt + `file` + bt + ` or ` + bt + `composer` + bt + `) for conditional visibility; workers with ` + bt + `conflicts_with` + bt + ` auto-stop conflicting workers on start. Per-worker flags: ` + bt + `host: true` + bt + ` (run on host via fnm instead of in FPM container — HMR-sensitive Node tools), ` + bt + `per_worktree: true` + bt + ` (worker runs independently per worktree under ` + bt + `lerd-<worker>-<site>-<branch>` + bt + `), ` + bt + `replaces_build: true` + bt + ` (worker provides asset manifest while running, so ` + bt + `lerd worktree add` + bt + ` skips the static ` + bt + `npm run build` + bt + ` step when this worker is opted in)
-- Custom workers can be added per-project (` + bt + `.lerd.yaml` + bt + ` ` + bt + `custom_workers` + bt + `) or globally (` + bt + `~/.config/lerd/frameworks/<name>.yaml` + bt + `); use ` + bt + `worker_add` + bt + ` / ` + bt + `worker_remove` + bt + ` — both survive framework store updates
-- Framework setup commands (one-off bootstrap steps like migrations, storage links) are defined in the framework YAML and shown in ` + bt + `lerd setup` + bt + `; Laravel has built-in storage:link/migrate/db:seed; custom frameworks can define their own
-- Service version placeholders (` + bt + `{{mysql_version}}` + bt + `, ` + bt + `{{postgres_version}}` + bt + `, ` + bt + `{{redis_version}}` + bt + `, ` + bt + `{{meilisearch_version}}` + bt + `) are available in framework env vars and are resolved from the service image tag at ` + bt + `lerd env` + bt + ` time
-- **Custom containers**: non-PHP sites (Node.js, Python, Go, etc.) can define a ` + bt + `Containerfile.lerd` + bt + ` and a ` + bt + `container:` + bt + ` section in ` + bt + `.lerd.yaml` + bt + ` with a port; lerd builds a per-project image, runs it as ` + bt + `lerd-custom-<sitename>` + bt + `, and nginx reverse-proxies to it; the project directory is volume-mounted at its host path with ` + bt + `--workdir` + bt + ` set automatically — do NOT add ` + bt + `WORKDIR` + bt + ` or ` + bt + `COPY` + bt + ` to the Containerfile; workers exec into the custom container; services are accessible by name on the shared ` + bt + `lerd` + bt + ` Podman network; **hot-reload file watchers must use polling on macOS** (inotify does not fire across Podman Machine's virtiofs mount) — nodemon: ` + bt + `--legacy-watch` + bt + `, Vite: ` + bt + `server.watch.usePolling: true` + bt + `, webpack: ` + bt + `watchOptions: { poll: 1000 }` + bt + `
-- Git worktrees automatically get a ` + bt + `<branch>.<site>.test` + bt + ` subdomain (deep ` + bt + `*.<branch>.<site>.test` + bt + ` wildcard cert + nginx ` + bt + `server_name` + bt + ` on secured sites); ` + bt + `vendor/` + bt + `, ` + bt + `node_modules/` + bt + `, ` + bt + `.env` + bt + ` are seeded from the main checkout. ` + bt + `.lerd.yaml` + bt + ` ` + bt + `env_overrides` + bt + ` declares templated env vars (` + bt + `{{domain}}` + bt + `, ` + bt + `{{scheme}}` + bt + `, ` + bt + `{{site}}` + bt + `) layered on the default ` + bt + `APP_URL` + bt + ` rewrite — for multi-tenant apps (per-branch cookies, signed-URL hosts, tenant routing)
-
-### DNS modes
-
-Lerd has two install-time DNS modes recorded in ` + bt + `~/.config/lerd/config.yaml` + bt + `:
-- **Managed (default)**: ` + bt + `dns.enabled: true` + bt + `, ` + bt + `dns.tld: test` + bt + `. Sites at ` + bt + `*.test` + bt + ` via lerd-dns + mkcert; ` + bt + `site_tls` + bt + ` works.
-- **Disabled**: ` + bt + `dns.enabled: false` + bt + `, ` + bt + `dns.tld: localhost` + bt + `. Sites at ` + bt + `*.localhost` + bt + ` via RFC 6761; no mkcert CA, ` + bt + `site_tls` + bt + ` is unavailable.
-
-Read ` + bt + `status()` + bt + ` for ` + bt + `dns.tld` + bt + ` and ` + bt + `dns.enabled` + bt + ` instead of assuming ` + bt + `.test` + bt + `; do not propose ` + bt + `site_tls` + bt + ` when ` + bt + `dns.enabled` + bt + ` is false.
-
-### Available MCP tools
-
-| Tool | What it does |
-|------|-------------|
-| ` + bt + `sites` + bt + ` | List all registered sites with framework and worker status — call this first |
-| ` + bt + `runtime_versions` + bt + ` | List installed PHP and Node.js versions with defaults |
-| ` + bt + `php_list` + bt + ` | List installed PHP versions, marking the global default |
-| ` + bt + `php_ext` + bt + ` | Manage custom PHP extensions — ` + bt + `action` + bt + `: ` + bt + `list` + bt + ` / ` + bt + `add` + bt + ` / ` + bt + `remove` + bt + `; ` + bt + `add` + bt + ` and ` + bt + `remove` + bt + ` rebuild FPM image and restart container; ` + bt + `add` + bt + ` verifies the extension loaded and accepts ` + bt + `apk_deps` + bt + ` for extra Alpine build packages |
-| ` + bt + `artisan` + bt + ` | Run ` + bt + `php artisan` + bt + ` inside the PHP-FPM container (Laravel only) |
-| ` + bt + `console` + bt + ` | Run the framework's console command (e.g. ` + bt + `php bin/console` + bt + ` for Symfony) — non-Laravel frameworks with a ` + bt + `console` + bt + ` field |
-| ` + bt + `composer` + bt + ` | Run ` + bt + `composer` + bt + ` inside the PHP-FPM container |
-| ` + bt + `vendor_bins` + bt + ` | List composer-installed binaries available in the project's ` + bt + `vendor/bin` + bt + ` directory |
-| ` + bt + `vendor_run` + bt + ` | Run a binary from ` + bt + `vendor/bin` + bt + ` (pest, phpunit, pint, phpstan, rector, …) inside the PHP-FPM container |
-| ` + bt + `node` + bt + ` | Install or uninstall a Node.js version via fnm — ` + bt + `action` + bt + `: ` + bt + `install` + bt + ` / ` + bt + `uninstall` + bt + ` (e.g. ` + bt + `"20"` + bt + `, ` + bt + `"lts"` + bt + `) |
-| ` + bt + `env_setup` + bt + ` | Configure ` + bt + `.env` + bt + ` for lerd: detects services, starts them, creates DB, generates APP_KEY (leaves ` + bt + `DB_CONNECTION=sqlite` + bt + ` alone — call ` + bt + `db_set` + bt + ` first); ` + bt + `APP_URL` + bt + ` follows ` + bt + `.lerd.yaml app_url` + bt + ` → ` + bt + `sites.yaml app_url` + bt + ` → default chain |
-| ` + bt + `db_set` + bt + ` | Pick the database for a Laravel project: ` + bt + `sqlite` + bt + `, a built-in (` + bt + `mysql` + bt + ` / ` + bt + `postgres` + bt + `), or any installed family alternate (` + bt + `mariadb` + bt + `, ` + bt + `postgres-pgvector` + bt + `, ` + bt + `mysql-5-7` + bt + `, …); persists to ` + bt + `.lerd.yaml` + bt + `, rewrites ` + bt + `DB_` + bt + ` keys in ` + bt + `.env` + bt + `, starts the service, creates the database |
-| ` + bt + `db_move` + bt + ` | Move sites' databases between two installed same-family services (e.g. ` + bt + `from: postgres` + bt + ` ` + bt + `to: postgres-18` + bt + `) and repoint each site's ` + bt + `.env` + bt + `; pass ` + bt + `sites: [..]` + bt + ` or ` + bt + `all: true` + bt + `. Source data is left intact. To upgrade one service in place for every site at once, use ` + bt + `service_control` + bt + ` ` + bt + `migrate` + bt + ` instead |
-| ` + bt + `env_check` + bt + ` | Compare all ` + bt + `.env` + bt + ` files against ` + bt + `.env.example` + bt + ` — returns structured JSON with per-key sync status |
-| ` + bt + `env_override` + bt + ` | Manage the personal, gitignored ` + bt + `.env.lerd_override` + bt + ` (` + bt + `KEY=VALUE` + bt + ` pairs win over lerd's defaults on ` + bt + `env_setup` + bt + `; ` + bt + `LERD_EXTERNAL_SERVICES=<svc,svc>` + bt + ` marks services lerd writes vars for but won't start) |
-| ` + bt + `site_link` + bt + ` | Register a directory as a lerd site — **non-PHP projects** must have a Containerfile (default name ` + bt + `Containerfile.lerd` + bt + `; set ` + bt + `container.containerfile` + bt + ` for a different path, e.g. ` + bt + `Dockerfile` + bt + `) + ` + bt + `.lerd.yaml` + bt + ` with ` + bt + `container: {port: N}` + bt + ` written first, otherwise the site registers as PHP (wrong) |
-| ` + bt + `site_unlink` + bt + ` | Unregister a site and remove its nginx vhost (all domains) |
-| ` + bt + `site_domain` + bt + ` | Add or remove a site domain (without TLD) — ` + bt + `action` + bt + `: ` + bt + `add` + bt + ` / ` + bt + `remove` + bt + `; cannot remove last |
-| ` + bt + `site_group` + bt + ` | Group sites so a main owns a base domain and secondaries occupy subdomains — ` + bt + `action` + bt + `: ` + bt + `assign` + bt + ` / ` + bt + `unassign` + bt + ` / ` + bt + `label` + bt + ` / ` + bt + `db` + bt + ` / ` + bt + `list` + bt + `; ` + bt + `path` + bt + ` is the secondary, ` + bt + `main` + bt + ` + ` + bt + `label` + bt + ` set its ` + bt + `<label>.<main-domain>` + bt + ` subdomain |
-| ` + bt + `park` + bt + ` | Register a parent directory — auto-registers all PHP projects as sites |
-| ` + bt + `unpark` + bt + ` | Remove a parked directory and unlink all its sites |
-| ` + bt + `site_tls` + bt + ` | Enable or disable HTTPS for a site (mkcert) — ` + bt + `action` + bt + `: ` + bt + `enable` + bt + ` / ` + bt + `disable` + bt + `; updates APP_URL automatically |
-| ` + bt + `xdebug` + bt + ` | Manage Xdebug for a PHP version (port 9003) — ` + bt + `action` + bt + `: ` + bt + `on` + bt + ` / ` + bt + `off` + bt + ` / ` + bt + `status` + bt + `; optional ` + bt + `mode` + bt + ` on ` + bt + `on` + bt + ` (default ` + bt + `debug` + bt + `; also ` + bt + `coverage` + bt + `, ` + bt + `develop` + bt + `, ` + bt + `profile` + bt + `, ` + bt + `trace` + bt + `, ` + bt + `gcstats` + bt + `, or comma combos) |
-| ` + bt + `dumps_recent` + bt + ` / ` + bt + `dumps_status` + bt + ` / ` + bt + `dumps_clear` + bt + ` / ` + bt + `dumps_toggle` + bt + ` | Inspect / clear / toggle the lerd debug bridge that captures ` + bt + `dump()` + bt + ` / ` + bt + `dd()` + bt + ` calls. Off by default; enable with ` + bt + `dumps_toggle({enable: true})` + bt + ` |
-| ` + bt + `analyze_queries` + bt + ` | N+1 and slow-query report over captured queries, grouped per request with the ` + bt + `file:line` + bt + ` to fix (loop: ` + bt + `dumps_toggle` + bt + ` enable → ` + bt + `dumps_clear` + bt + ` → hit the page → ` + bt + `analyze_queries` + bt + `) |
-| ` + bt + `profiler_toggle` + bt + ` / ` + bt + `profiler_status` + bt + ` / ` + bt + `profiler_clear` + bt + ` | Turn the SPX profiler on/off globally so every PHP-FPM site's HTTP requests are profiled into flame graphs, or clear captured reports |
-| ` + bt + `service_control` + bt + ` | Start, stop, pin, or unpin a built-in or custom service — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` / ` + bt + `pin` + bt + ` / ` + bt + `unpin` + bt + ` |
-| ` + bt + `service_add` + bt + ` | Register a new custom OCI service (MongoDB, RabbitMQ, …); supports ` + bt + `depends_on` + bt + ` for service dependencies |
-| ` + bt + `service_preset_list` + bt + ` | List bundled service presets (phpmyadmin, pgadmin, mongo, mongo-express, selenium, stripe-mock, …) with versions and install state |
-| ` + bt + `service_preset_install` + bt + ` | Install a bundled preset by name (` + bt + `version` + bt + ` for multi-version families); becomes a normal custom service |
-| ` + bt + `service_remove` + bt + ` | Stop and deregister a custom service |
-| ` + bt + `service_expose` + bt + ` | Add or remove an extra published port on a built-in service (persisted) |
-| ` + bt + `service_env` + bt + ` | Return the recommended ` + bt + `.env` + bt + ` connection variables for a service |
-| ` + bt + `service_config` + bt + ` | Read/write/restore/reset/list_backups a service's runtime tuning override (built-in mysql/mariadb/redis; custom services opt in via ` + bt + `tuning:` + bt + ` in YAML) |
-| ` + bt + `service_check_updates` + bt + ` | Check the registry for newer service images (safe in-strategy update vs cross-strategy upgrade); omit ` + bt + `name` + bt + ` to scan all active |
-| ` + bt + `db_export` + bt + ` | Export a database to a SQL dump file — auto-detects service and database; accepts optional ` + bt + `service` + bt + ` override |
-| ` + bt + `db_import` + bt + ` | Import a SQL dump file into the project database — auto-detects service and database; starts the service if needed |
-| ` + bt + `db_create` + bt + ` | Create a database and ` + bt + `_testing` + bt + ` variant — auto-detects service and name; starts the service if needed |
-| ` + bt + `db_snapshot` + bt + ` / ` + bt + `db_snapshots` + bt + ` / ` + bt + `db_restore` + bt + ` / ` + bt + `db_snapshot_delete` + bt + ` | Named, restorable database snapshots — create, list, restore (destructive), delete; ` + bt + `all_databases` + bt + ` covers the whole service |
-| ` + bt + `queue` + bt + ` | Start or stop the queue worker for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` (any framework with a queue worker) |
-| ` + bt + `horizon` + bt + ` | Start or stop Laravel Horizon for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` (use instead of ` + bt + `queue` + bt + ` when laravel/horizon is installed) |
-| ` + bt + `reverb` + bt + ` | Start or stop the Reverb WebSocket server for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` |
-| ` + bt + `schedule` + bt + ` | Start or stop the task scheduler for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` |
-| ` + bt + `worker` + bt + ` | Start or stop any named framework worker (e.g. messenger, pulse, vite) — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + `; pass ` + bt + `branch` + bt + ` to target a per-worktree unit |
-| ` + bt + `worker_list` + bt + ` | List all workers for a site's framework with running status, host/per_worktree/replaces_build flags; pass ` + bt + `branch` + bt + ` for per-worktree unit state |
-| ` + bt + `worker_add` + bt + ` | Add a custom worker to a project or global framework overlay |
-| ` + bt + `worker_remove` + bt + ` | Remove a custom worker; stops it if running |
-| ` + bt + `workers_health` + bt + ` | List failed worker units grouped per site (read-only) |
-| ` + bt + `workers_heal` + bt + ` | Reset and restart failed worker units; pass ` + bt + `unit` + bt + ` for one, omit to heal all (never edits config) |
-| ` + bt + `commands_list` + bt + ` | List on-demand framework commands for a site (framework defaults merged with the project's ` + bt + `.lerd.yaml` + bt + ` ` + bt + `commands:` + bt + ` block) |
-| ` + bt + `commands_run` + bt + ` | Run a framework command on a site by name; ` + bt + `force: true` + bt + ` is required for confirm-gated commands |
-| ` + bt + `command_add` + bt + ` | Add or update a project command in ` + bt + `.lerd.yaml` + bt + `'s ` + bt + `commands:` + bt + ` block (same name as a framework default replaces it) |
-| ` + bt + `command_remove` + bt + ` | Remove a project command from ` + bt + `.lerd.yaml` + bt + ` by name (use ` + bt + `command_add` + bt + ` with ` + bt + `disabled: true` + bt + ` to hide a framework default) |
-| ` + bt + `worktree` + bt + ` | Manage git worktrees — ` + bt + `action` + bt + `: ` + bt + `list` + bt + ` / ` + bt + `add` + bt + ` / ` + bt + `remove` + bt + ` / ` + bt + `db_isolate` + bt + ` / ` + bt + `db_share` + bt + `; secured sites get auto wildcard cert + ` + bt + `server_name` + bt + ` for ` + bt + `*.<branch>.<site>.test` + bt + ` |
-| ` + bt + `project_new` + bt + ` | Scaffold a new PHP project (runs the framework's create command); follow with ` + bt + `site_link` + bt + ` + ` + bt + `env_setup` + bt + ` |
-| ` + bt + `framework_list` + bt + ` | List all framework definitions with their workers and setup commands |
-| ` + bt + `framework_add` + bt + ` | Add or update a framework definition; use ` + bt + `name: "laravel"` + bt + ` to add custom workers or setup commands to Laravel |
-| ` + bt + `framework_remove` + bt + ` | Remove a user-defined framework; for laravel removes only custom worker and setup additions |
-| ` + bt + `framework_search` + bt + ` | Search the community framework store by name or label |
-| ` + bt + `framework_install` + bt + ` | Install a framework from the community store (auto-detects version from ` + bt + `composer.lock` + bt + ` if omitted) |
-| ` + bt + `site_php` + bt + ` | Change PHP version for a site — writes ` + bt + `.php-version` + bt + `, updates registry, regenerates nginx vhost; pass ` + bt + `branch` + bt + ` to pin per-worktree (writes inside the worktree, persists to its ` + bt + `.lerd.yaml` + bt + `) |
-| ` + bt + `site_node` + bt + ` | Change Node.js version for a site — writes ` + bt + `.node-version` + bt + `, installs via fnm if needed; pass ` + bt + `branch` + bt + ` to pin per-worktree |
-| ` + bt + `workers_mode` + bt + ` | Show or set the macOS worker runtime mode (exec / container); no-op on Linux |
-| ` + bt + `bug_report` + bt + ` | Generate a diagnostic report for GitHub issues — anonymises site names / domains / parked paths by default; returns the file path |
-| ` + bt + `site_control` + bt + ` | Pause, unpause, restart, or rebuild a site — ` + bt + `action` + bt + `: ` + bt + `pause` + bt + ` / ` + bt + `unpause` + bt + ` / ` + bt + `restart` + bt + ` / ` + bt + `rebuild` + bt + ` (pause replaces vhost with landing page; rebuild only for custom containers) |
-| ` + bt + `site_runtime` + bt + ` | Switch between shared PHP-FPM and per-site FrankenPHP runtime (supports worker mode) |
-| ` + bt + `site_nginx` + bt + ` | Read/write/reset a site's custom nginx override (saving runs ` + bt + `nginx -t` + bt + `, backs up the prior file, reloads); ` + bt + `branch` + bt + ` targets a worktree |
-| ` + bt + `stripe` + bt + ` | Start, stop, or configure a Stripe webhook listener for a site — ` + bt + `action` + bt + `: ` + bt + `start` + bt + ` / ` + bt + `stop` + bt + ` / ` + bt + `config` + bt + ` (secret auto-detected; ` + bt + `config` + bt + ` sets ` + bt + `webhook_path` + bt + `/` + bt + `secret_env_key` + bt + ` in ` + bt + `.lerd.yaml` + bt + `) |
-| ` + bt + `logs` + bt + ` | Fetch container logs — defaults to current site's FPM; optionally specify nginx, service name, PHP version, or site name |
-| ` + bt + `status` + bt + ` | Health snapshot of DNS, nginx, PHP-FPM containers, and the file watcher |
-| ` + bt + `doctor` + bt + ` | Full diagnostic as structured JSON: podman, systemd, DNS, ports, PHP images, config, updates |
-| ` + bt + `dns_diagnose` + bt + ` | Walk the DNS chain (container, config, port 5300, dig, resolver, interface routing, system lookup) and report which rung is broken |
-| ` + bt + `which` + bt + ` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
-| ` + bt + `check` + bt + ` | Validate ` + bt + `.lerd.yaml` + bt + ` as structured JSON — PHP version, services, framework references with per-field ok/warn/fail |
-
-### Key conventions
-
-- ` + bt + `path` + bt + ` argument is optional on most tools — defaults to the directory the AI assistant was opened in (cwd), then ` + bt + `LERD_SITE_PATH` + bt + ` if set; you can almost always omit it
-- ` + bt + `artisan` + bt + ` is Laravel-only; ` + bt + `console` + bt + ` is the equivalent for non-Laravel frameworks — both take ` + bt + `path` + bt + ` (absolute project root) and ` + bt + `args` + bt + ` (array)
-- ` + bt + `vendor_run` + bt + ` is the right way to invoke project tooling like pest, phpunit, pint, phpstan, rector — call ` + bt + `vendor_bins` + bt + ` first to discover what's installed, then ` + bt + `vendor_run(bin: "<name>", args: [...])` + bt + `; prefer it over ` + bt + `composer(args: ["exec", ...])` + bt + `
-- On a **fresh Laravel clone** (DB_CONNECTION=sqlite in ` + bt + `.env` + bt + `), call ` + bt + `db_set` + bt + ` before ` + bt + `env_setup` + bt + ` to pick a database deliberately — ` + bt + `sqlite` + bt + `, a built-in (` + bt + `mysql` + bt + ` / ` + bt + `postgres` + bt + `), or any installed family alternate (` + bt + `mariadb` + bt + `, ` + bt + `postgres-pgvector` + bt + `, ` + bt + `mysql-5-7` + bt + `, …). ` + bt + `env_setup` + bt + ` on its own won't switch the database away from sqlite.
-- **Domain conflicts on link**: when ` + bt + `lerd link` + bt + ` (or the parked-directory watcher) tries to register a ` + bt + `.lerd.yaml` + bt + ` domain that another site already owns, the conflicting domain is filtered out and a ` + bt + `[WARN] domain "X" already used by site "Y" — skipped` + bt + ` line is printed. The site still gets registered with surviving domains, falling back to ` + bt + `<dirname>.<tld>` + bt + ` if everything was filtered. ` + bt + `.lerd.yaml` + bt + ` is not modified on disk so the conflict is visible in the UI and self-heals on the next link if the owning site is removed. The ` + bt + `site_link` + bt + ` and ` + bt + `site_domain(action: "add", ...)` + bt + ` MCP tools, by contrast, hard-error on conflicts so you can react explicitly — read the error message for the owning site name.
-- **Custom APP_URL**: ` + bt + `env_setup` + bt + ` writes ` + bt + `<scheme>://<primary-domain>` + bt + ` by default. Override by setting ` + bt + `app_url` + bt + ` in ` + bt + `.lerd.yaml` + bt + ` (committed) or in the per-machine ` + bt + `sites.yaml` + bt + ` site entry. No MCP tool sets it — edit the YAML and re-run ` + bt + `env_setup` + bt + `.
-- ` + bt + `tinker` + bt + ` must use ` + bt + `--execute=<code>` + bt + ` for non-interactive use
-- Built-in service hosts follow the pattern ` + bt + `lerd-<name>` + bt + ` (e.g. ` + bt + `lerd-mysql` + bt + `, ` + bt + `lerd-redis` + bt + `)
-- Default DB credentials: username ` + bt + `root` + bt + `, password ` + bt + `lerd` + bt + `
-- ` + bt + `service_control(action: "stop", ...)` + bt + ` marks the service paused — ` + bt + `lerd start` + bt + ` skips it until explicitly started again
-- ` + bt + `queue(action: "start", ...)` + bt + ` requires Redis to be running when ` + bt + `QUEUE_CONNECTION=redis` + bt + `; call ` + bt + `service_control(action: "start", name: "redis")` + bt + ` first
-- If ` + bt + `sites` + bt + ` returns ` + bt + `has_horizon: true` + bt + ` for a site, use ` + bt + `horizon` + bt + ` instead of ` + bt + `queue` + bt + ` — Horizon manages queues and they are mutually exclusive
-- Use ` + bt + `worker_list` + bt + ` first to discover what workers are available for a site before calling ` + bt + `worker(action: "start", ...)` + bt + `
-- ` + bt + `worker_add` + bt + ` saves custom workers to ` + bt + `.lerd.yaml` + bt + ` by default (project-level, committed to git); use ` + bt + `global: true` + bt + ` to save to the user framework overlay (` + bt + `~/.config/lerd/frameworks/` + bt + `) for all projects of that framework; does not auto-start — call ` + bt + `worker(action: "start", ...)` + bt + ` afterwards
-- ` + bt + `worker_remove` + bt + ` stops a running worker before removing it from config; use ` + bt + `global: true` + bt + ` to target the framework overlay
-- Workers with ` + bt + `conflicts_with` + bt + ` automatically stop conflicting workers when started (e.g. a custom queue processor that conflicts with the default queue worker); conflicted workers are hidden from the UI while the conflicting worker runs
-- Worker unit names follow the pattern ` + bt + `lerd-<worker>-<site>` + bt + ` (e.g. ` + bt + `lerd-messenger-myapp` + bt + `, ` + bt + `lerd-horizon-myapp` + bt + `)
-- ` + bt + `site_php` + bt + ` / ` + bt + `site_node` + bt + ` change the PHP/Node version for a site; the FPM container for the new PHP version must be running after calling ` + bt + `site_php` + bt + `
-- ` + bt + `site_control(action: "pause")` + bt + ` / ` + bt + `site_control(action: "unpause")` + bt + ` free up resources for sites not in active use without unlinking them; paused state persists across restarts
-- **Custom container sites** (Node.js, Python, Go, etc.) — mandatory sequence: **(1)** write a Containerfile in the project root (default name ` + bt + `Containerfile.lerd` + bt + `; any name works if you set ` + bt + `container.containerfile` + bt + `); **(2)** write ` + bt + `.lerd.yaml` + bt + ` with ` + bt + `container: {port: <N>}` + bt + ` (plus optional ` + bt + `domains` + bt + `, ` + bt + `services` + bt + `, ` + bt + `secured` + bt + `) — there is no MCP tool for this; write the file directly or ask the user to run ` + bt + `lerd init` + bt + `; **(3)** configure the project's ` + bt + `.env` + bt + ` (or equivalent config) with service connection strings BEFORE linking — use ` + bt + `lerd-mysql` + bt + `, ` + bt + `lerd-redis` + bt + `, ` + bt + `lerd-postgres` + bt + ` as hostnames and start needed services with ` + bt + `service_control(action: "start", ...)` + bt + `; **(4)** call ` + bt + `site_link` + bt + ` — the container starts immediately, so the env must already be correct. **Never call ` + bt + `site_link` + bt + ` before steps 1–3**: without ` + bt + `container:` + bt + ` config the site registers as PHP-FPM (wrong); if that happened, ` + bt + `site_unlink` + bt + ` first, write the files, then link again. Workers in ` + bt + `custom_workers` + bt + ` exec into the container. ` + bt + `site_control(action: "restart", ...)` + bt + ` restarts without rebuilding. When ` + bt + `container` + bt + ` is set, ` + bt + `php_version` + bt + ` and ` + bt + `framework` + bt + ` are ignored.
-- ` + bt + `service_control(action: "pin", ...)` + bt + ` keeps a service always running regardless of which sites are active; use for shared services like MySQL or Redis
-- ` + bt + `service_add` + bt + ` supports ` + bt + `depends_on` + bt + ` (array of service names): starting a dependency auto-starts the dependent service; stopping a dependency cascade-stops the dependent first; starting the dependent ensures dependencies start first
-- Prefer ` + bt + `service_preset_install` + bt + ` over hand-rolling ` + bt + `service_add` + bt + ` for anything in the bundled catalogue (` + bt + `phpmyadmin` + bt + `, ` + bt + `pgadmin` + bt + `, ` + bt + `mongo` + bt + `, ` + bt + `mongo-express` + bt + `, ` + bt + `selenium` + bt + `, ` + bt + `stripe-mock` + bt + `, ` + bt + `mysql` + bt + `, ` + bt + `mariadb` + bt + `, …) — presets ship sane defaults, dependency wiring, dashboards, and rendered config files; call ` + bt + `service_preset_list` + bt + ` first to see what's available; multi-version families take a ` + bt + `version` + bt + ` argument; presets whose dependency is another custom service (e.g. ` + bt + `mongo-express` + bt + ` on ` + bt + `mongo` + bt + `) require the dep installed first
-- ` + bt + `project_new` + bt + ` requires an absolute ` + bt + `path` + bt + ` and runs the framework's ` + bt + `create` + bt + ` command; follow it with ` + bt + `site_link` + bt + ` + ` + bt + `env_setup` + bt + ` to register and configure the new project
-- ` + bt + `framework_add` + bt + ` accepts ` + bt + `workers` + bt + ` (map) and ` + bt + `setup` + bt + ` (array) — both support an optional ` + bt + `check` + bt + ` field (` + bt + `{file}` + bt + ` or ` + bt + `{composer}` + bt + `) to conditionally show based on project deps; for Laravel, custom setup commands replace built-in storage:link/migrate/db:seed
-- Framework env vars support service version placeholders: ` + bt + `{{mysql_version}}` + bt + `, ` + bt + `{{postgres_version}}` + bt + `, ` + bt + `{{redis_version}}` + bt + `, ` + bt + `{{meilisearch_version}}` + bt + ` — resolved from the running service image tag
-- ` + bt + `php_ext(action: "add", ...)` + bt + ` / ` + bt + `php_ext(action: "remove", ...)` + bt + ` rebuild the FPM image and restart the container — may take a minute; ` + bt + `version` + bt + ` defaults to the project or global PHP version
-- ` + bt + `db_import` + bt + ` / ` + bt + `db_export` + bt + ` / ` + bt + `db_create` + bt + ` auto-detect service and database via: ` + bt + `service` + bt + ` arg → framework definition detect rules → ` + bt + `DB_CONNECTION` + bt + ` / ` + bt + `DB_TYPE` + bt + ` / ` + bt + `TYPEORM_CONNECTION` + bt + ` / ` + bt + `DATABASE_URL` + bt + ` / ` + bt + `DB_PORT` + bt + `; pass ` + bt + `service` + bt + ` explicitly for projects with no env config
-- ` + bt + `db_create` + bt + ` always creates both ` + bt + `<name>` + bt + ` and ` + bt + `<name>_testing` + bt + ` databases; safe to call if they already exist; starts the service automatically if not running
-- ` + bt + `park` + bt + ` auto-registers all PHP subdirectories as sites in one call; ` + bt + `unpark` + bt + ` removes them all — project files are NOT deleted
-`
-
-// cursorRulesContent is the Cursor rules file written to .cursor/rules/lerd.mdc.
-const cursorRulesContent = `---
-description: Lerd local PHP development environment — use the lerd MCP tools to manage sites, services, workers, and PHP/Node runtimes.
-globs:
-alwaysApply: true
----
-` + junieGuidelinesSection
+// lerdReference is the single canonical lerd tool reference shared by every AI
+// assistant. Each client wraps it with its own thin frontmatter (Claude SKILL,
+// Cursor .mdc) or embeds it sentinel-wrapped (Junie, Codex, Gemini, Copilot),
+// so the docs an assistant reads never drift between clients.
+//
+//go:embed aidocs/lerd-reference.md
+var lerdReference string
+
+const skillDescription = "Manage the lerd local PHP development environment — run framework console commands (artisan, bin/console, etc.), manage services, start/stop queue workers, run composer, manage Node.js versions, and inspect site status via MCP tools."
+
+const cursorDescription = "Lerd local PHP development environment — use the lerd MCP tools to manage sites, services, workers, and PHP/Node runtimes."
+
+// renderClaudeSkill wraps the reference with Claude Code skill frontmatter.
+func renderClaudeSkill() string {
+	return "---\nname: lerd\ndescription: " + skillDescription + "\n---\n" + lerdReference
+}
+
+// renderCursorRules wraps the reference with Cursor .mdc frontmatter.
+func renderCursorRules() string {
+	return "---\ndescription: " + cursorDescription + "\nglobs:\nalwaysApply: true\n---\n" + lerdReference
+}

@@ -253,6 +253,6 @@ Commit `.lerd.yaml` to the repository. On a fresh machine, `lerd link` is suffic
 
 The Lerd watcher also monitors `.lerd.yaml` for changes. When you switch branches with a different config the PHP and Node versions are re-detected and applied automatically, no manual `lerd link` or `lerd init` needed. See [Automatic version switching](./features/project-setup.md#automatic-version-switching) for details.
 
-`lerd isolate`, the UI PHP version selector, and the MCP `site_php` tool all keep `php_version` in sync when this file exists.
+`lerd isolate`, the UI PHP version selector, and the MCP `site` tool's `php` action all keep `php_version` in sync when this file exists.
 
 `lerd secure`, `lerd unsecure`, the UI HTTPS toggle, and the MCP `secure`/`unsecure` tools keep `secured` in sync when this file exists.

@@ -15,62 +15,6 @@ import (
 	"github.com/geodro/lerd/internal/dumpsops"
 )
 
-// dumpToolDefs returns the debug-capture tool definitions (recent events,
-// query analysis, status, clear, toggle). Plugged into toolList() in server.go
-// alongside the existing entries.
-func dumpToolDefs() []mcpTool {
-	return []mcpTool{
-		{
-			Name:        "dumps_recent",
-			Description: "Recent lerd debug events: dumps, queries (bindings+timing), mail, views, jobs/cache/events/http. Filter site/branch/ctx/kind/since/limit.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site":   {Type: "string"},
-					"branch": {Type: "string"},
-					"ctx":    {Type: "string", Enum: []string{"fpm", "cli"}},
-					"kind":   {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http"}},
-					"since":  {Type: "string"},
-					"limit":  {Type: "integer"},
-				},
-			},
-		},
-		{
-			Name:        "analyze_queries",
-			Description: "N+1 + slow-query report over captured queries, grouped per request with the file:line to fix. Loop: dumps_toggle enable, dumps_clear, hit the page, analyze_queries. Opts: site, min_repeat, slow_ms.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"site":       {Type: "string"},
-					"min_repeat": {Type: "integer"},
-					"slow_ms":    {Type: "number"},
-				},
-			},
-		},
-		{
-			Name:        "dumps_status",
-			Description: "Whether the debug bridge is enabled plus buffered count and last-event ts.",
-			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
-		},
-		{
-			Name:        "dumps_clear",
-			Description: "Clear the in-memory dump ring without disabling the bridge.",
-			InputSchema: mcpSchema{Type: "object", Properties: map[string]mcpProp{}},
-		},
-		{
-			Name:        "dumps_toggle",
-			Description: "Enable/disable the debug bridge. enable=true creates the sentinel that activates the always-mounted bridge; enable=false removes it. No FPM restart.",
-			InputSchema: mcpSchema{
-				Type: "object",
-				Properties: map[string]mcpProp{
-					"enable": {Type: "boolean"},
-				},
-				Required: []string{"enable"},
-			},
-		},
-	}
-}
-
 // execDumpsRecent calls lerd-ui's /api/dumps endpoint over the local Unix
 // socket and returns the JSON response verbatim. We don't reach into the
 // in-process ring directly because the MCP server may run in a different

@@ -1,6 +1,8 @@
 # AI Integration (MCP)
 
-Lerd ships a [Model Context Protocol](https://modelcontextprotocol.io/) server, letting AI assistants (Claude Code, Cursor, JetBrains Junie, and any other MCP-compatible tool) manage your dev environment directly: run migrations, start services, toggle queue workers, and inspect logs without leaving the chat.
+Lerd ships a [Model Context Protocol](https://modelcontextprotocol.io/) server, letting AI assistants manage your dev environment directly: run migrations, start services, toggle queue workers, and inspect logs without leaving the chat.
+
+Supported assistants: **Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot (VS Code), Windsurf**, and any other MCP-compatible tool.
 
 ---
 
@@ -16,19 +18,39 @@ Run once after installing lerd:
 lerd mcp:enable-global
 ```
 
-This registers the lerd MCP server at **user scope**, available in every Claude Code session, regardless of which directory you open. It also updates Cursor, Windsurf, and JetBrains Junie global configs, and writes user-scope skill, rules, and guidelines files so the assistant knows what lerd tools are available and how to use them:
+This registers the lerd MCP server at **user scope**, available in every session regardless of which directory you open, and writes user-scope context files so the assistant knows what lerd tools are available and how to use them.
+
+MCP server registration:
+
+| Client | Registration |
+|---|---|
+| Claude Code | `claude mcp add --scope user` (CLI) |
+| Cursor | `~/.cursor/mcp.json` |
+| Windsurf | `~/.ai/mcp/mcp.json` |
+| JetBrains Junie | `~/.junie/mcp/mcp.json` |
+| Gemini CLI | `~/.gemini/settings.json` |
+| Codex CLI | `~/.codex/config.toml` |
+| GitHub Copilot (VS Code) | `~/.config/Code/User/mcp.json` |
+
+Context / instructions files:
 
 | File | Purpose |
 |---|---|
 | `~/.claude/skills/lerd/SKILL.md` | Claude Code user-scope skill |
 | `~/.cursor/rules/lerd.mdc` | Cursor user-scope rules |
 | `~/.junie/guidelines.md` | JetBrains Junie user-scope guidelines (merged, not overwritten) |
+| `~/.gemini/GEMINI.md` | Gemini CLI user-scope context (merged) |
+| `~/.codex/AGENTS.md` | Codex CLI user-scope context (merged) |
 
-When running globally, the server uses the **directory Claude is opened in** as the site context. No further configuration is needed: just open your AI assistant in a project directory and lerd tools work immediately.
+All clients share a single canonical tool reference, so the guidance never drifts between assistants. When running globally, the server uses the **directory the assistant is opened in** as the site context: no further configuration is needed.
+
+> **Claude Code** is registered via its own `claude mcp add` CLI rather than by editing `~/.claude.json` directly, since that file holds all of Claude's user state.
+
+> **GitHub Copilot** uses VS Code's `servers` key (each entry typed `stdio`), which differs from the `mcpServers` key the other clients use. Its instructions file (`.github/copilot-instructions.md`) is project-scoped only.
 
 > **During `lerd install`:** If Claude Code is detected, you'll be prompted to run this automatically.
 
-> **During `lerd update`:** When MCP is globally registered, the skill, rules, and guidelines files are automatically rewritten from the newly installed binary so they stay in sync with any added or renamed tools.
+> **During `lerd update`:** When MCP is globally registered, the context files that already exist are rewritten from the newly installed binary so they stay in sync with any added or renamed tools. Update never creates files for a client you haven't set up — to pick up a newly supported assistant, re-run `lerd mcp:enable-global`.
 
 ### Project-scoped registration
 
@@ -39,21 +61,28 @@ cd ~/Lerd/my-app
 lerd mcp:inject
 ```
 
-This writes seven files into the project directory:
+This writes MCP config and context files for every supported client into the project directory:
 
-| File | Purpose |
+| File | Client |
 |---|---|
-| `.mcp.json` | MCP server entry for Claude Code |
-| `.claude/skills/lerd/SKILL.md` | Skill file that teaches Claude about lerd tools |
-| `.cursor/mcp.json` | MCP server entry for Cursor |
-| `.cursor/rules/lerd.mdc` | Cursor rules file that teaches Cursor about lerd tools |
-| `.ai/mcp/mcp.json` | MCP server entry for Windsurf and other MCP-compatible tools |
-| `.junie/mcp/mcp.json` | MCP server entry for JetBrains Junie |
-| `.junie/guidelines.md` | Lerd context section for JetBrains Junie (merged, not overwritten) |
+| `.mcp.json` | Claude Code MCP config |
+| `.claude/skills/lerd/SKILL.md` | Claude Code skill |
+| `.cursor/mcp.json` | Cursor MCP config |
+| `.cursor/rules/lerd.mdc` | Cursor rules |
+| `.ai/mcp/mcp.json` | Windsurf MCP config |
+| `.junie/mcp/mcp.json` | JetBrains Junie MCP config |
+| `.junie/guidelines.md` | JetBrains Junie guidelines (merged) |
+| `.gemini/settings.json` | Gemini CLI MCP config |
+| `GEMINI.md` | Gemini CLI context (merged) |
+| `.vscode/mcp.json` | GitHub Copilot (VS Code) MCP config |
+| `.github/copilot-instructions.md` | GitHub Copilot instructions (merged) |
+| `AGENTS.md` | Codex CLI context (merged) |
 
-The config includes a `LERD_SITE_PATH` environment variable pointing to the project root, which takes precedence over the cwd fallback.
+The MCP config includes a `LERD_SITE_PATH` environment variable pointing to the project root, which takes precedence over the cwd fallback.
 
-The command **merges** into existing configs; other MCP servers (e.g. `laravel-boost`, `herd`) are left untouched. Re-running it is safe.
+> **Codex** has no project-scoped MCP config (it reads only `~/.codex/config.toml`), so `mcp:inject` writes its `AGENTS.md` context but not a per-project server entry. Register Codex once with `lerd mcp:enable-global`.
+
+The command **merges** into existing configs; other MCP servers (e.g. `laravel-boost`, `herd`) and any existing instructions content are left untouched. Re-running it is safe.
 
 To target a different directory:
 
@@ -61,155 +90,103 @@ To target a different directory:
 lerd mcp:inject --path ~/Lerd/another-app
 ```
 
-> **During `lerd update`:** Projects that previously ran `mcp:inject` are detected automatically (by the presence of `.claude/skills/lerd/SKILL.md`, `.cursor/rules/lerd.mdc`, or the lerd marker in `.junie/guidelines.md`) and their per-project artefacts are refreshed in place. Directories whose content already matches the new binary stay untouched, so git status stays clean. Projects that never opted in are skipped.
+> **During `lerd update`:** Projects that previously ran `mcp:inject` are detected automatically (by the presence of `.claude/skills/lerd/SKILL.md`, `.cursor/rules/lerd.mdc`, or the lerd marker in `.junie/guidelines.md`) and refreshed in place. Only files that already exist for a client are rewritten, so update never drops new client files into your repo; re-run `mcp:inject` to add a newly supported assistant. Directories whose content already matches the new binary stay untouched, so git status stays clean. Projects that never opted in are skipped.
 
 ### Path resolution
 
-Tools like `artisan`, `composer`, `env_setup`, `env_check`, `env_override`, `db_export`, `db_import`, and `db_create` accept an optional `path` argument. When omitted, the server resolves the path in this order:
+Most actions accept an optional `path` argument. When omitted, the server resolves it in this order:
 
 1. Explicit `path` argument (highest priority)
 2. `LERD_SITE_PATH` env var (set by `mcp:inject`)
-3. Current working directory, the directory Claude was opened in (global sessions)
+3. Current working directory, the directory the assistant was opened in (global sessions)
 
 ---
 
 ## Available MCP tools
 
-Once the MCP server is connected, your AI assistant has access to:
+The MCP surface is **ten grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
 
-| Tool | Description |
+| Tool | Actions |
 |---|---|
-| `sites` | List all registered lerd sites (name, domain, path, PHP/Node version, framework, worker status) |
-| `runtime_versions` | List installed PHP and Node.js versions with configured defaults |
-| `php_list` | List all PHP versions installed by lerd, marking the global default |
-| `php_ext` | Manage custom PHP extensions for a PHP version — `action`: `list` / `add` / `remove` (`add` and `remove` rebuild the FPM image and restart the container); `add` verifies the extension loaded and accepts `apk_deps` for extra Alpine build packages |
-| `artisan` | Run `php artisan` in the PHP-FPM container: migrations, generators, seeders, cache, tinker (Laravel only) |
-| `console` | Run the framework's console command (e.g. `php bin/console` for Symfony); shown for non-Laravel frameworks that define a `console` field |
-| `composer` | Run `composer` in the PHP-FPM container: install, require, dump-autoload, etc. |
-| `node` | Install or uninstall a Node.js version via fnm — `action`: `install` / `uninstall` (e.g. `"20"`, `"lts"`) |
-| `env_setup` | Configure `.env` for lerd: detects services, starts them, creates DB (sqlite auto-created when `DB_CONNECTION=sqlite`), sets APP_KEY and APP_URL. Always follow with `setup` to run migrations. |
-| `setup` | Run the framework's post-install bootstrap steps (Laravel: `storage:link` + `migrate`; Symfony: `doctrine:migrations:migrate` when `doctrine-migrations-bundle` is installed). Mandatory after `env_setup` on new or cloned projects; idempotent. |
-| `env_check` | Compare all `.env` files against `.env.example` and flag missing or extra keys (returns structured JSON) |
-| `env_override` | Manage the personal, gitignored `.env.lerd_override`; its `KEY=VALUE` pairs win over lerd's defaults on `env_setup`, and `LERD_EXTERNAL_SERVICES=<svc,svc>` marks services lerd writes vars for but won't start/provision. Pass `set` to write entries, or call with no args to scaffold and read it back. |
-| `project_new` | Scaffold a new project via `composer create-project` in the PHP-FPM container and run `composer install` so the returned directory has a populated `vendor/`. Followed by `site_link` → `env_setup` → `setup`. |
-| `site_link` | Register a directory as a lerd site; generates nginx vhost and `.test` domain |
-| `site_unlink` | Unregister a site and remove its nginx vhost (all domains) |
-| `site_domain` | Add or remove a site domain (without TLD) — `action`: `add` / `remove`; cannot remove last |
-| `park` | Register a parent directory; scans subdirectories and auto-registers any PHP projects as sites |
-| `unpark` | Remove a parked directory from lerd and unlink all its sites |
-| `site_tls` | Enable or disable HTTPS for a site using a locally-trusted mkcert certificate — `action`: `enable` / `disable` |
-| `xdebug` | Manage Xdebug for a PHP version — `action`: `on` / `off` / `status`. `on` accepts optional `mode` (default `debug`; accepts `coverage`, `develop`, `profile`, `trace`, `gcstats`, or comma combos like `debug,coverage`); `status` reports state and active mode for all PHP versions |
-| `service_control` | Service lifecycle: `action` is `start` / `stop` / `restart` / `pin` / `unpin` / `update` / `rollback` / `migrate` / `remove`. `update` accepts an optional `tag` for an explicit upgrade target. `migrate` requires `tag` and runs the SQL dump+restore flow (mysql / postgres only). `rollback` swaps to the previously-running image (toggles). Starting/stopping respects `depends_on` cascades. |
-| `service_check_updates` | Check the registry for newer images. `latest_tag` is the safe in-strategy update; `upgrade_tag` is the cross-strategy (cross-minor) target. Omit `name` to scan every active default service in one call. |
-| `service_add` | Register a new custom OCI-based service (MongoDB, RabbitMQ, etc.); supports `depends_on` for service dependencies |
-| `service_expose` | Add or remove an extra published port on a built-in service (persisted, auto-restarts if running) |
-| `service_env` | Return the recommended `.env` connection variables for a built-in or custom service |
-| `service_config` | Read / write / restore / reset / list_backups for a service's runtime tuning override. `action` defaults to `read`. `write` takes `content` and optional `backup`. `restore` takes optional `backup_name` (newest by default). `reset` writes the bundled template and stages an implicit recovery backup. Works for built-in mysql/mariadb/redis and any custom service that declares a `tuning:` block in its YAML. |
-| `db_export` | Export a database to a SQL dump file (defaults to site DB from `.env`) |
-| `db_import` | Import a SQL dump file into the project database (reads connection from `.env`) |
-| `db_create` | Create a database and `_testing` variant for the project (infers name from `.env` or project dir) |
-| `db_snapshot` | Create a named, restorable snapshot of the project database (`all_databases` covers the whole service) |
-| `db_snapshots` | List stored database snapshots (`all` spans every database on the service) |
-| `db_restore` | Restore the project database from a stored snapshot (destructive: drops and recreates the database) |
-| `db_snapshot_delete` | Delete a stored database snapshot |
-| `db_move` | Move sites' databases between two installed same-family services (`from` → `to`) and repoint each site's `.env`; pass `sites` or `all`. Source data is left intact |
-| `queue` | Start or stop the queue worker for a site — `action`: `start` / `stop` (any framework with a `queue` worker) |
-| `horizon` | Start or stop Laravel Horizon for a site — `action`: `start` / `stop` (use instead of `queue` when `laravel/horizon` is installed) |
-| `reverb` | Start or stop the Reverb WebSocket server for a site — `action`: `start` / `stop` |
-| `schedule` | Start or stop the task scheduler for a site — `action`: `start` / `stop` |
-| `worker` | Start or stop any named framework worker (e.g. `messenger`, `pulse`) — `action`: `start` / `stop`. Accepts an optional `branch` to target a per-worktree unit (e.g. `vite` on `feat-a`) instead of the parent site's worker |
-| `worker_list` | List all workers defined for a site's framework with running status. Accepts an optional `branch` so worktree-scoped runtime can be inspected separately from the parent |
-| `commands_list` | List one-shot framework commands available for a site (resolved from framework yaml + `.lerd.yaml`). Same set the dashboard dropdown and `lerd run` see |
-| `commands_run` | Execute a named command on a site (e.g. `optimize:clear`, `drush uli`, `cache:flush`). Returns combined stdout/stderr + exit code. Destructive commands (`confirm: true`) require `force: true` |
-| `command_add` | Add or update a project command in `.lerd.yaml`'s `commands:` block. Same name as a framework default replaces it. Use `disabled: true` to suppress a framework default |
-| `command_remove` | Remove a project command from `.lerd.yaml` by name. Does not affect framework defaults |
-| `workers_mode` | Get or set the worker exec mode for a site — `action`: `get` / `set`, `mode`: `exec` (default; one container shared by all workers) or `container` (one container per worker). Used when an Octane-style runtime needs process isolation per worker |
-| `workers_heal` | Restart every worker reported as failing in one pass. Mirrors the dashboard's heal-all button and the TUI `H` keybind |
-| `workers_health` | Snapshot of every framework worker across every site with its running / failing state and the last error captured from journalctl, useful before deciding to heal |
-| `framework_list` | List all framework definitions including their workers |
-| `framework_add` | Add or update a framework definition; use `name: "laravel"` to add custom workers to Laravel |
-| `framework_remove` | Remove a user-defined framework; for `laravel` removes only custom worker additions |
-| `site_php` | Change the PHP version for a registered site: writes `.php-version`, updates registry, regenerates nginx vhost. Accepts an optional `branch` to override the worktree's PHP version without touching the parent |
-| `site_node` | Change the Node.js version for a registered site: writes `.node-version`, installs via fnm if needed. Accepts an optional `branch` to set the version per worktree |
-| `site_control` | Pause, unpause, restart, or rebuild a site — `action`: `pause` / `unpause` / `restart` / `rebuild` (pause replaces vhost with landing page; rebuild only for custom containers) |
-| `site_runtime` | Switch between shared PHP-FPM and per-site FrankenPHP runtime; supports framework-aware worker mode (Laravel Octane, Symfony runtime) |
-| `stripe` | Start, stop, or configure a Stripe webhook listener for a site — `action`: `start` / `stop` / `config` (secret auto-detected from `STRIPE_SECRET`, `STRIPE_SECRET_KEY`, or `STRIPE_API_KEY`; `config` sets `webhook_path` / `secret_env_key` in `.lerd.yaml`) |
-| `logs` | Fetch container logs; defaults to current site's FPM; optionally specify nginx, service name, PHP version, or site name |
-| `status` | Health snapshot of DNS, nginx, PHP-FPM containers, and the watcher; use when a site isn't loading |
-| `doctor` | Full diagnostic as structured JSON: podman, systemd, DNS, ports, PHP images, config, updates; use when the user reports setup issues |
-| `dns_diagnose` | Layered DNS chain walk (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup); each rung returns `status` + `hint` with a `first_failure` index pointing at the broken layer |
-| `which` | Show the resolved PHP version, Node version, document root, and nginx config for the current site |
-| `check` | Validate `.lerd.yaml` as structured JSON (PHP version, services, framework); returns valid/errors/warnings with per-field status |
-| `dumps_status` | Report whether debug capture is enabled, with the socket path and queue depth |
-| `dumps_recent` | Fetch recent debug events from the in-memory ring: `dump()`/`dd()` output, SQL queries (with bindings and timing), outgoing mail, rendered views, and Laravel jobs/cache/events/http. Filter by `site`, `branch` (isolate one git worktree), `ctx` (`fpm` / `cli`), `kind` (e.g. `query`), `since`, and `limit` |
-| `analyze_queries` | N+1 and slow-query report over the captured queries, grouped per request, each finding tagged with the originating `file:line` so the assistant can fix it (e.g. add a `with()` eager-load). Debug loop: `dumps_toggle` enable → `dumps_clear` → hit the page/job → `analyze_queries`. Optional `site`, `min_repeat` (N+1 threshold, default 3), `slow_ms` (default 100) |
-| `dumps_clear` | Drop every event from the ring so the dashboard, TUI, and CLI viewers start fresh |
-| `dumps_toggle` | Enable or disable debug capture — `enable`: `true` / `false`. One switch arms both the debug bridge and the `lerd_devtools` collector (queries, mail, views, events, jobs, http); restart-free (touches a shared sentinel the bridge and extension read per request) |
-| `bug_report` | Generate a structured bug report bundle (system info, lerd version, podman state, recent logs) so the assistant can paste a single block into a GitHub issue |
+| `site` | `list` (discover sites — call first), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark` |
+| `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_install`, `check_updates` |
+| `db` | `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete` |
+| `env` | `setup`, `check`, `override` |
+| `runtime` | `versions`, `node_install`, `node_uninstall`, `php_list`, `ext_list`, `ext_add`, `ext_remove` |
+| `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
+| `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
+| `framework` | `list`, `add`, `remove`, `search`, `install`, `project_new`, `setup` |
+| `diag` | `status`, `doctor`, `logs`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
+| `worktree` | `list`, `add`, `remove`, `db_isolate`, `db_share` |
+
+The injected context files document each action's arguments and the key conventions in full.
+
+> **Grouped surface:** earlier lerd versions exposed ~80 individual MCP tools (`sites`, `artisan`, `db_set`, …). These were consolidated into the ten grouped tools above to cut the per-session token cost and sharpen the model's tool selection. Old flat tool names no longer exist; call the group with the matching `action` instead (e.g. `artisan` → `exec` with `action: "artisan"`, `db_set` → `db` with `action: "set"`).
 
 ---
 
 ## Example interactions
 
-The `path` argument is omitted from most calls; the server resolves it from the directory Claude was opened in (global sessions) or from `LERD_SITE_PATH` (project-scoped sessions).
+The `path` argument is omitted from most calls; the server resolves it from the directory the assistant was opened in (global sessions) or from `LERD_SITE_PATH` (project-scoped sessions).
 
 ```
 You: create a new Laravel project and get it running
-AI:  → project_new(path: "/home/me/Code/myapp", framework: "laravel")
+AI:  → framework(action: "project_new", path: "/home/me/Code/myapp", framework: "laravel")
        # scaffolds + runs composer install, returns with vendor/ populated
-     → site_link(path: "/home/me/Code/myapp")
-     → env_setup(path: "/home/me/Code/myapp")
-       # detects MySQL + Redis (or keeps sqlite), starts services, creates/touches DB, generates APP_KEY
-     → setup(path: "/home/me/Code/myapp")
+     → site(action: "link", path: "/home/me/Code/myapp")
+     → env(action: "setup", path: "/home/me/Code/myapp")
+       # detects MySQL + Redis (or keeps sqlite), starts services, creates DB, generates APP_KEY
+     → framework(action: "setup", path: "/home/me/Code/myapp")
        # runs storage:link + migrate
      ✓  myapp -> myapp.test ready
 
 You: run migrations
-AI:  → artisan(args: ["migrate"])
+AI:  → exec(action: "artisan", args: ["migrate"])
      ✓  Ran 3 migrations in 42ms
 
 You: install sanctum and run its migrations
-AI:  → composer(args: ["require", "laravel/sanctum"])
-     → artisan(args: ["vendor:publish", "--provider=Laravel\\Sanctum\\SanctumServiceProvider"])
-     → artisan(args: ["migrate"])
+AI:  → exec(action: "composer", args: ["require", "laravel/sanctum"])
+     → exec(action: "artisan", args: ["vendor:publish", "--provider=Laravel\\Sanctum\\SanctumServiceProvider"])
+     → exec(action: "artisan", args: ["migrate"])
 
 You: add a MongoDB service
-AI:  → service_add(name: "mongodb", image: "docker.io/library/mongo:7", ports: ["27017:27017"], data_dir: "/data/db")
-     → service_control(action: "start", name: "mongodb")
+AI:  → service(action: "add", name: "mongodb", image: "docker.io/library/mongo:7", ports: ["27017:27017"], data_dir: "/data/db")
+     → service(action: "start", name: "mongodb")
      ✓  mongodb started
 
 You: add phpMyAdmin, it needs MySQL to be running
-AI:  → service_add(name: "phpmyadmin", image: "docker.io/phpmyadmin:latest", ports: ["8080:80"], depends_on: ["mysql"], dashboard: "http://localhost:8080")
-     → service_control(action: "start", name: "phpmyadmin")
+AI:  → service(action: "preset_install", name: "phpmyadmin")
+     → service(action: "start", name: "phpmyadmin")
        # starts mysql first (dependency), then phpmyadmin
      ✓  mysql started
      ✓  phpmyadmin started
 
 You: what PHP and Node versions are installed?
-AI:  → runtime_versions()
+AI:  → runtime(action: "versions")
      { "php": { "installed": ["8.4", "8.5"], "default_version": "8.5" },
        "node": { "installed": ["v20.11.0", "v18.20.4"], "default_version": "20" } }
 
 You: set up the project I just cloned
-AI:  → site_link()
-     → composer(args: ["install"])
-       # runs BEFORE env_setup so APP_KEY generation has vendor/
-     → env_setup()
+AI:  → site(action: "link")
+     → exec(action: "composer", args: ["install"])
+       # runs BEFORE env setup so APP_KEY generation has vendor/
+     → env(action: "setup")
        # detects MySQL + Redis, starts them, creates database, generates APP_KEY
-     → setup()
+     → framework(action: "setup")
        # framework migrations + storage:link (or doctrine:migrations:migrate for Symfony)
      ✓  whitewaters -> whitewaters.test ready
 
 You: enable xdebug so I can step through a failing job
-AI:  → xdebug(action: "status")
-     → xdebug(action: "on", version: "8.5")
+AI:  → diag(action: "xdebug_status")
+     → diag(action: "xdebug_on", version: "8.5")
      ✓  Xdebug enabled for PHP 8.5 (mode=debug, port 9003)
 
-You: turn on xdebug coverage so I can run phpunit --coverage
-AI:  → xdebug(action: "on", version: "8.5", mode: "coverage")
-     ✓  Xdebug enabled for PHP 8.5 (mode=coverage, port 9003)
+You: start the queue worker
+AI:  → worker(action: "list", site: "myapp")
+     → worker(action: "queue_start", site: "myapp")
+     ✓  queue worker started for myapp
 
 You: the app is throwing 500s, check the logs
-AI:  → logs(target: "8.5", lines: 50)
+AI:  → diag(action: "logs", target: "8.5", lines: 50)
      PHP Fatal error: Class "App\Jobs\ProcessOrder" not found ...
 ```

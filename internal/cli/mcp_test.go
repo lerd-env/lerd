@@ -10,21 +10,17 @@ import (
 	"github.com/geodro/lerd/internal/mcp"
 )
 
-// TestEveryMCPToolIsDocumented guards against doc drift: the injected skill and
-// guidelines files are hand-maintained const strings, not generated from the
-// tool list, so a newly registered MCP tool must be added to each by hand. This
-// fails until that happens. Names are matched backtick-wrapped to avoid
-// substring false positives (e.g. "node" inside "site_node").
+// TestEveryMCPToolIsDocumented guards against doc drift: the single canonical
+// reference (aidocs/lerd-reference.md, embedded as lerdReference and shared by
+// every client) is hand-maintained, not generated from the tool list, so a
+// newly registered MCP tool must be added by hand. This fails until that
+// happens. Names are matched backtick-wrapped to avoid substring false
+// positives (e.g. "node" inside "site_node").
 func TestEveryMCPToolIsDocumented(t *testing.T) {
 	for _, name := range mcp.ToolNames() {
 		token := "`" + name + "`"
-		if !strings.Contains(claudeSkillContent, token) {
-			t.Errorf("tool %q is missing from claudeSkillContent (.claude/skills/lerd/SKILL.md)", name)
-		}
-		// junieGuidelinesSection is also embedded verbatim in cursorRulesContent,
-		// so this one assertion covers both .junie/guidelines.md and .cursor rules.
-		if !strings.Contains(junieGuidelinesSection, token) {
-			t.Errorf("tool %q is missing from junieGuidelinesSection (.junie/guidelines.md + .cursor/rules/lerd.mdc)", name)
+		if !strings.Contains(lerdReference, token) {
+			t.Errorf("tool %q is missing from aidocs/lerd-reference.md", name)
 		}
 	}
 }
@@ -55,16 +51,16 @@ func TestWriteGlobalAISkills_writesAllThreeFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read SKILL.md: %v", err)
 	}
-	if string(skill) != claudeSkillContent {
-		t.Errorf("SKILL.md content does not match embedded claudeSkillContent")
+	if string(skill) != renderClaudeSkill() {
+		t.Errorf("SKILL.md content does not match renderClaudeSkill()")
 	}
 
 	rules, err := os.ReadFile(filepath.Join(home, ".cursor", "rules", "lerd.mdc"))
 	if err != nil {
 		t.Fatalf("read lerd.mdc: %v", err)
 	}
-	if string(rules) != cursorRulesContent {
-		t.Errorf("lerd.mdc content does not match embedded cursorRulesContent")
+	if string(rules) != renderCursorRules() {
+		t.Errorf("lerd.mdc content does not match renderCursorRules()")
 	}
 
 	guidelines, err := os.ReadFile(filepath.Join(home, ".junie", "guidelines.md"))
@@ -240,9 +236,14 @@ func TestWriteProjectAISkills_writesAllArtefacts(t *testing.T) {
 		".cursor/mcp.json",
 		".ai/mcp/mcp.json",
 		".junie/mcp/mcp.json",
+		".gemini/settings.json",
+		".vscode/mcp.json",
 		".claude/skills/lerd/SKILL.md",
 		".cursor/rules/lerd.mdc",
 		".junie/guidelines.md",
+		"GEMINI.md",
+		"AGENTS.md",
+		".github/copilot-instructions.md",
 	}
 	for _, rel := range want {
 		info, err := os.Stat(filepath.Join(dir, rel))
@@ -253,6 +254,10 @@ func TestWriteProjectAISkills_writesAllArtefacts(t *testing.T) {
 		if info.Size() == 0 {
 			t.Errorf("%s is empty", rel)
 		}
+	}
+	// Codex MCP is global-only: no project config file should be written.
+	if _, err := os.Stat(filepath.Join(dir, ".codex", "config.toml")); !os.IsNotExist(err) {
+		t.Errorf("expected no project .codex/config.toml (Codex is global-only), err=%v", err)
 	}
 	if !ProjectHasLerdSkills(dir) {
 		t.Errorf("ProjectHasLerdSkills should return true after WriteProjectAISkills")
@@ -303,7 +308,7 @@ func TestWriteProjectAISkills_rewritesWhenContentChanges(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read: %v", err)
 	}
-	if string(got) != claudeSkillContent {
+	if string(got) != renderClaudeSkill() {
 		t.Errorf("stale SKILL.md was not refreshed")
 	}
 }
@@ -319,7 +324,7 @@ func mtimeOrFail(t *testing.T, path string) time.Time {
 
 func TestRemoveMCPServerEntry_missingFileIsNoop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "missing.json")
-	changed, err := removeMCPServerEntry(path, "lerd")
+	changed, err := removeServerJSON(path, "mcpServers", "lerd")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -332,7 +337,7 @@ func TestRemoveMCPServerEntry_missingEntryIsNoop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp.json")
 	_ = os.WriteFile(path, []byte(`{"mcpServers":{"other":{"command":"x"}}}`), 0644)
 
-	changed, err := removeMCPServerEntry(path, "lerd")
+	changed, err := removeServerJSON(path, "mcpServers", "lerd")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -349,7 +354,7 @@ func TestRemoveMCPServerEntry_preservesOtherEntries(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp.json")
 	_ = os.WriteFile(path, []byte(`{"mcpServers":{"lerd":{"command":"lerd"},"other":{"command":"x"}}}`), 0644)
 
-	changed, err := removeMCPServerEntry(path, "lerd")
+	changed, err := removeServerJSON(path, "mcpServers", "lerd")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -369,7 +374,7 @@ func TestRemoveMCPServerEntry_deletesFileWhenEmpty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "mcp.json")
 	_ = os.WriteFile(path, []byte(`{"mcpServers":{"lerd":{"command":"lerd"}}}`), 0644)
 
-	changed, err := removeMCPServerEntry(path, "lerd")
+	changed, err := removeServerJSON(path, "mcpServers", "lerd")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -386,7 +391,7 @@ func TestStripJunieLerdSection_removesDelimitedBlock(t *testing.T) {
 	content := "# Project guidelines\n\nsomething custom\n\n<!-- lerd:begin -->\nlerd stuff\n<!-- lerd:end -->\n"
 	_ = os.WriteFile(path, []byte(content), 0644)
 
-	changed, err := stripJunieLerdSection(path)
+	changed, err := stripSentinelSection(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -407,7 +412,7 @@ func TestStripJunieLerdSection_deletesFileWhenOnlyLerdBlock(t *testing.T) {
 	content := "<!-- lerd:begin -->\nlerd stuff\n<!-- lerd:end -->\n"
 	_ = os.WriteFile(path, []byte(content), 0644)
 
-	changed, err := stripJunieLerdSection(path)
+	changed, err := stripSentinelSection(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -421,7 +426,7 @@ func TestStripJunieLerdSection_deletesFileWhenOnlyLerdBlock(t *testing.T) {
 
 func TestStripJunieLerdSection_missingFileIsNoop(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "guidelines.md")
-	changed, err := stripJunieLerdSection(path)
+	changed, err := stripSentinelSection(path)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -471,6 +476,11 @@ func TestRemoveProjectAISkills_roundTripWithWrite(t *testing.T) {
 		".ai/mcp/mcp.json",
 		".junie/mcp/mcp.json",
 		".junie/guidelines.md",
+		".gemini/settings.json",
+		".vscode/mcp.json",
+		"GEMINI.md",
+		"AGENTS.md",
+		".github/copilot-instructions.md",
 	} {
 		if _, err := os.Stat(filepath.Join(abs, rel)); !os.IsNotExist(err) {
 			t.Errorf("%s should be removed, err=%v", rel, err)
@@ -522,26 +532,15 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 	}
 }
 
-// TestClaudeSkillContent_underSizeCeiling guards against accidental re-bloat
-// of the injected SKILL.md. The skill ships into every registered project
-// and globally; drift upward gets expensive fast. Raise the ceiling only
-// when adding content that justifies the bytes.
-func TestClaudeSkillContent_underSizeCeiling(t *testing.T) {
-	// Bumped to 51000 for commands_list / commands_run tools (framework
-	// command runner) plus their quick-reference table entries.
-	// Bumped to 52000 for profiler_toggle / profiler_status (SPX profiler)
-	// plus their quick-reference table entry.
-	// Bumped to 53000 for the db_snapshot / db_snapshots / db_restore /
-	// db_snapshot_delete section (database snapshots).
-	// Bumped to 53500 for the env_override section (personal .env.lerd_override
-	// with LERD_EXTERNAL_SERVICES); section already condensed to one paragraph.
-	// Bumped to 55500 to document nine tools the skill had silently dropped
-	// (service_config, service_check_updates, workers_health, workers_heal,
-	// framework_search, framework_install, dns_diagnose, analyze_queries,
-	// site_nginx); TestEveryMCPToolIsDocumented now guards against re-drift.
-	// Bumped to 57000 for the db_move section (cross-service same-family DB move).
-	const ceiling = 57000
-	if got := len(claudeSkillContent); got > ceiling {
-		t.Errorf("claudeSkillContent is %d bytes, ceiling is %d — trim before raising", got, ceiling)
+// TestLerdReference_underSizeCeiling guards against accidental re-bloat of the
+// single canonical reference. It ships into every registered project and
+// globally for every client, so drift upward gets expensive fast. Raise the
+// ceiling only when adding content that justifies the bytes. Unifying the three
+// former per-client constants onto this one leaner reference dropped the prior
+// 57000-byte SKILL.md ceiling to this.
+func TestLerdReference_underSizeCeiling(t *testing.T) {
+	const ceiling = 26000
+	if got := len(lerdReference); got > ceiling {
+		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}
 }

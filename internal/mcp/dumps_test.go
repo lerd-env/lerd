@@ -6,30 +6,15 @@ import (
 	"testing"
 )
 
-var dumpToolNames = []string{"dumps_recent", "analyze_queries", "dumps_status", "dumps_clear", "dumps_toggle"}
+var dumpActionNames = []string{"dumps_recent", "analyze_queries", "dumps_status", "dumps_clear", "dumps_toggle"}
 
-func TestDumpToolDefs_ListsAll(t *testing.T) {
-	got := dumpToolDefs()
-	names := map[string]bool{}
-	for _, d := range got {
-		names[d.Name] = true
-	}
-	for _, want := range dumpToolNames {
-		if !names[want] {
-			t.Errorf("missing tool %q (got %v)", want, names)
-		}
-	}
-}
-
-func TestDumpToolDefs_AppearInToolList(t *testing.T) {
-	tools := toolList()
-	names := map[string]bool{}
-	for _, d := range tools {
-		names[d.Name] = true
-	}
-	for _, want := range dumpToolNames {
-		if !names[want] {
-			t.Errorf("toolList missing %q", want)
+// TestDumpActions_RoutableUnderDiag confirms the dump/query actions are reachable
+// as actions on the consolidated diag tool.
+func TestDumpActions_RoutableUnderDiag(t *testing.T) {
+	diag := groupDispatch["diag"]
+	for _, want := range dumpActionNames {
+		if _, ok := diag[want]; !ok {
+			t.Errorf("diag tool missing action %q", want)
 		}
 	}
 }

@@ -30,7 +30,7 @@ php artisan migrate
 composer install
 ```
 
-Because the `php` shim runs inside the PHP-FPM container, `php artisan`, `lerd artisan`, and the MCP `artisan` tool are all equivalent; they all execute inside the same container with the same PHP version and extensions. Use whichever form you prefer.
+Because the `php` shim runs inside the PHP-FPM container, `php artisan`, `lerd artisan`, and the MCP `exec` tool's `artisan` action are all equivalent; they all execute inside the same container with the same PHP version and extensions. Use whichever form you prefer.
 
 ### Shortcuts and `vendor/bin` fallback
 
@@ -74,7 +74,7 @@ lerd isolate 8.5
 
 This writes `.php-version: 8.5` (so CLI `php`, asdf, and other tools see the right version) and, when `.lerd.yaml` already exists in the project, also updates its `php_version` field to keep lerd's priority-1 override in sync. The site is re-linked automatically so nginx picks up the new version immediately.
 
-The UI PHP version selector and the MCP `site_php` tool follow the same rules; they always write both files when applicable.
+The UI PHP version selector and the MCP `site` tool's `php` action follow the same rules; they always write both files when applicable.
 
 The composer constraint is matched against all installed PHP versions using full semver rules (`^`, `~`, `>=`, `<`, `||`, `*`). The highest installed version that satisfies the constraint wins. If no installed version matches, the literal minimum from the constraint is used (and the FPM will be built on first use).
 

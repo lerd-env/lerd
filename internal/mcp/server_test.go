@@ -170,28 +170,10 @@ func TestExecEnvCheck_missingKeys(t *testing.T) {
 // context for the whole session; raise the ceiling only with a justified
 // content addition, not by accreting description verbosity.
 func TestToolList_underSizeCeiling(t *testing.T) {
-	// Bumped to 23000 for the four new dumps_* tools (recent/status/clear/toggle).
-	// Descriptions trimmed in dumpToolDefs to keep the delta as small as possible.
-	// Bumped to 23200 for the php_ext `apk_deps` parameter (new content, not verbosity).
-	// Bumped to 24200 for commands_list / commands_run tools.
-	// Bumped to 26000 for command_add / command_remove tools (let agents
-	// author .lerd.yaml commands blocks alongside the read/run path).
-	// Bumped to 27000 for profiler_toggle / profiler_status (SPX profiler);
-	// descriptions trimmed to keep the delta small.
-	// Bumped to 29000 for db_snapshot / db_snapshots / db_restore /
-	// db_snapshot_delete (database snapshots); descriptions kept terse.
-	// Bumped to 29500 for service_config (five actions in one tool:
-	// read / write / restore / reset / list_backups); descriptions
-	// already trimmed to single-line shape.
-	// Bumped to 30200 for site_nginx (read / write / reset the per-site nginx
-	// override, with --branch worktree support); description already terse.
-	// Bumped to 30700 for analyze_queries (N+1 / slow-query report) plus the
-	// kind filter on dumps_recent; both descriptions trimmed to the bone first.
-	// Bumped to 31000 for env_override (personal .env.lerd_override file with
-	// LERD_EXTERNAL_SERVICES support); description already trimmed.
-	// Bumped to 32000 for db_move (cross-service same-family DB move); description
-	// already trimmed to the bone first.
-	const ceiling = 32000
+	// Consolidating ~80 flat tools into ten resource groups (site, service, db,
+	// env, runtime, worker, exec, framework, diag, worktree) roughly halved the
+	// manifest from the prior 32000-byte ceiling to this.
+	const ceiling = 18000
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

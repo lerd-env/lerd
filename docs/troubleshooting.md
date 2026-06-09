@@ -68,10 +68,10 @@ The chain in order:
 | `interface routes .test to 5300` | `resolvectl status` shows `127.0.0.1:5300` and `~<tld>` on the active interface. | `sudo systemctl restart NetworkManager`, or set the routing manually with `sudo resolvectl domain <iface> ~test ~.`. |
 | `system DNS lookup` | `host lerd-probe.test` (the system resolver) returns 127.0.0.1. | The drop-in is installed but resolved isn't honouring it. Check whether cloud-init or another tool wrote a higher-priority resolver config. Common on EC2 / cloud images. With a VPN connected this rung is reported as a warning rather than a failure, see the VPN section below. |
 
-You can also call this programmatically over MCP via the `dns_diagnose` tool, useful for AI-driven troubleshooting:
+You can also call this programmatically over MCP via the `diag` tool's `dns_diagnose` action, useful for AI-driven troubleshooting:
 
 ```bash
-echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"dns_diagnose","arguments":{}}}' | lerd mcp
+echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"diag","arguments":{"action":"dns_diagnose"}}}' | lerd mcp
 ```
 
 The response includes a `steps` array with a `status` (`ok` / `fail` / `warn` / `skip`) and `hint` per rung, plus a `first_failure` index so an LLM can jump straight to the broken layer.
