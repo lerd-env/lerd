@@ -236,6 +236,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
+	mux.HandleFunc("/_svc/", handleDashProxy)
 	mux.HandleFunc("/api/queue/", withCORS(handleQueueLogs))
 	mux.HandleFunc("/api/horizon/", withCORS(handleHorizonLogs))
 	mux.HandleFunc("/api/stripe/", withCORS(handleStripeLogs))
@@ -1099,13 +1100,20 @@ func buildServicesList() []ServiceResponse {
 			conflicts = portConflictsFor(unit, ssOutput)
 		}
 		_, tunable := config.ServiceTuningMount(svc)
+		// Bundled dashboards that asked to open externally (cross-origin cookie
+		// trouble) are instead proxied same-origin under /_svc/<name>/ so they
+		// embed in the iframe overlay; user custom services keep the new tab.
+		dashboard, dashboardExternal := svc.Dashboard, svc.DashboardExternal
+		if dashProxyEligible(svc) {
+			dashboard, dashboardExternal = dashProxyPath(svc.Name), false
+		}
 		services = append(services, ServiceResponse{
 			Name:              svc.Name,
 			Status:            status,
 			Version:           podman.ServiceVersionLabel(svc.Image),
 			EnvVars:           envMap,
-			Dashboard:         svc.Dashboard,
-			DashboardExternal: svc.DashboardExternal,
+			Dashboard:         dashboard,
+			DashboardExternal: dashboardExternal,
 			ConnectionURL:     svc.ConnectionURL,
 			Custom:            true,
 			Tunable:           tunable,

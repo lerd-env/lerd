@@ -1077,6 +1077,13 @@ func TestEnsureLerdVhost_linuxProxiesUnixSocket(t *testing.T) {
 	if !strings.Contains(content, "return 444") {
 		t.Errorf("expected catch-all 'return 444' in:\n%s", content)
 	}
+
+	// The bundled dashboard proxy (/_svc/) must be allow-listed like /_spx/, or
+	// the same-origin iframe to lerd.localhost/_svc/<name>/ hits the 444 catch-all
+	// and the dashboard fails to load.
+	if !strings.Contains(content, "location ^~ /_svc/") {
+		t.Errorf("expected /_svc/ location in vhost so proxied dashboards load over lerd.localhost:\n%s", content)
+	}
 }
 
 // ── Forwarded headers & custom.d include hook ────────────────────────────────

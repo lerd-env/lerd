@@ -131,8 +131,8 @@ dashboard: http://localhost:8081       # URL shown as an "Open" button in the we
 dashboard_external: false              # open the dashboard in a new browser tab instead of
                                        # the embedded iframe. Use for admin UIs whose login
                                        # cookie is dropped on cross-origin iframe POSTs and
-                                       # has no SameSite override (e.g. RabbitMQ Cowboy).
-                                       # External dashboards also skip the sidebar shortcut.
+                                       # has no SameSite override. External dashboards on a
+                                       # user-defined service also skip the sidebar shortcut.
 
 connection_url: mongodb://root:secret@127.0.0.1:27017/?authSource=admin
                                        # host-side scheme URL (mysql://, postgresql://, mongodb://, etc.)
@@ -192,6 +192,10 @@ site_init:
     "db.getSiblingDB('{{site}}').createCollection('_init');
      db.getSiblingDB('{{site_testing}}').createCollection('_init')"
 ```
+
+::: tip Bundled admin dashboards embed in place
+The bundled RabbitMQ and RedisInsight presets carry `dashboard_external`, but lerd does not send you to a new tab for them. lerd-ui proxies their UI same-origin under `/_svc/<service>/`, so their session and consent cookies stay first-party and the dashboard embeds in the in-app overlay with a sidebar shortcut like every other service. The new-tab behavior above applies only to your own custom services.
+:::
 
 ## Site handle placeholders
 

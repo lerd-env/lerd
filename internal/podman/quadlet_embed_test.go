@@ -253,6 +253,29 @@ func TestGenerateCustomQuadlet_ShareHosts(t *testing.T) {
 	}
 }
 
+func TestGenerateCustomQuadlet_InjectsRedisInsightProxyPath(t *testing.T) {
+	svc := &config.CustomService{
+		Name:              "redisinsight",
+		Image:             "docker.io/redis/redisinsight:latest",
+		Preset:            "redisinsight",
+		Ports:             []string{"8085:5540"},
+		Dashboard:         "http://localhost:8085",
+		DashboardExternal: true,
+	}
+	out := GenerateCustomQuadlet(svc)
+	if !strings.Contains(out, `Environment="RI_PROXY_PATH=/_svc/redisinsight"`) {
+		t.Errorf("redisinsight quadlet must inject RI_PROXY_PATH so it serves under the proxy mount, got:\n%s", out)
+	}
+}
+
+func TestGenerateCustomQuadlet_NoProxyPathForUserService(t *testing.T) {
+	svc := &config.CustomService{Name: "myadmin", Image: "alpine"}
+	out := GenerateCustomQuadlet(svc)
+	if strings.Contains(out, "RI_PROXY_PATH") {
+		t.Errorf("user service must not get proxy env, got:\n%s", out)
+	}
+}
+
 func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 	svc := &config.CustomService{
 		Name:  "mongo",

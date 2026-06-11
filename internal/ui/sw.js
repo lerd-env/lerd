@@ -91,6 +91,11 @@ self.addEventListener('fetch', (event) => {
   // /_spx/ is the profiler UI: dynamic (the report list grows as profiles are
   // captured), so it must hit the network, never the cache-first path below.
   if (url.pathname.startsWith('/_spx/')) return;
+  // /_svc/ proxies live admin dashboards (rabbitmq, redisinsight) same-origin.
+  // They must always reach the network: caching their assets would serve stale
+  // cross-service content, and the navigate fallback would replace the embedded
+  // dashboard with lerd's offline page.
+  if (url.pathname.startsWith('/_svc/')) return;
 
   if (req.mode === 'navigate') {
     event.respondWith((async () => {

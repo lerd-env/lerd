@@ -89,8 +89,18 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		fmt.Fprintf(&b, "Volume=%s:%s:ro,z\n", config.ServiceTuningAuxFile(svc.Name), auxTarget)
 	}
 
-	envKeys := make([]string, 0, len(svc.Environment))
-	for k := range svc.Environment {
+	env := make(map[string]string, len(svc.Environment)+1)
+	for k, v := range svc.Environment {
+		env[k] = v
+	}
+	// Preset-sourced proxy env (e.g. redisinsight RI_PROXY_PATH) so the upstream
+	// serves under the lerd-ui proxy mount. Overlaid here rather than stored in
+	// the service YAML, so existing installs pick it up on the next start.
+	if k, v, ok := config.PresetProxyEnv(svc); ok {
+		env[k] = v
+	}
+	envKeys := make([]string, 0, len(env))
+	for k := range env {
 		envKeys = append(envKeys, k)
 	}
 	sort.Strings(envKeys)
@@ -98,7 +108,7 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		// systemd splits Environment= on whitespace and strips unescaped
 		// double quotes, so JSON / quoted-wildcard values get mangled.
 		// Wrap the whole pair and escape inner quotes to preserve them.
-		escaped := strings.ReplaceAll(svc.Environment[k], `"`, `\"`)
+		escaped := strings.ReplaceAll(env[k], `"`, `\"`)
 		fmt.Fprintf(&b, "Environment=\"%s=%s\"\n", k, escaped)
 	}
 

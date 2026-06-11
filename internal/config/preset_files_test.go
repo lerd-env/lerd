@@ -80,6 +80,60 @@ func TestPgadminPreset_consumesPostgresFamily(t *testing.T) {
 	}
 }
 
+func TestRabbitMQPresetMountsPathPrefix(t *testing.T) {
+	files := PresetFiles("rabbitmq")
+	if len(files) == 0 {
+		t.Fatal("rabbitmq preset has no file mounts")
+	}
+	f := files[0]
+	if f.Target != "/etc/rabbitmq/conf.d/10-lerd-path-prefix.conf" {
+		t.Errorf("rabbitmq conf mounted at %q, want /etc/rabbitmq/conf.d/10-lerd-path-prefix.conf", f.Target)
+	}
+	// The management UI must serve under the same prefix the lerd-ui proxy
+	// mounts it at, or the iframe loads a blank shell (absolute asset paths).
+	if !strings.Contains(f.Content, "management.path_prefix = /_svc/rabbitmq") {
+		t.Errorf("rabbitmq conf missing management.path_prefix = /_svc/rabbitmq\n%s", f.Content)
+	}
+}
+
+func TestRedisInsightProxyEnvInjectedByPreset(t *testing.T) {
+	// RI_PROXY_PATH is injected at quadlet generation from the preset, not
+	// stored in the service YAML, so existing installs serve under the proxy
+	// mount after a restart without a reinstall.
+	svc := &CustomService{Name: "redisinsight", Preset: "redisinsight", Dashboard: "http://localhost:8085", DashboardExternal: true}
+	k, v, ok := PresetProxyEnv(svc)
+	if !ok || k != "RI_PROXY_PATH" || v != "/_svc/redisinsight" {
+		t.Errorf("PresetProxyEnv = (%q,%q,%v), want (RI_PROXY_PATH, /_svc/redisinsight, true)", k, v, ok)
+	}
+	// A user custom service (no bundled preset) gets no proxy env.
+	if _, _, ok := PresetProxyEnv(&CustomService{Name: "x"}); ok {
+		t.Error("non-bundled service must not receive proxy env")
+	}
+}
+
+func TestRabbitMQDashboardBootstrap_seedsBasicAuth(t *testing.T) {
+	svc := &CustomService{
+		Name:      "rabbitmq",
+		Preset:    "rabbitmq",
+		Dashboard: "http://localhost:15672",
+		Environment: map[string]string{
+			"RABBITMQ_DEFAULT_USER": "root",
+			"RABBITMQ_DEFAULT_PASS": "lerd",
+		},
+	}
+	s := PresetDashboardBootstrap(svc)
+	// base64("root:lerd") == "cm9vdDpsZXJk"
+	for _, want := range []string{"<script>", "rabbitmq.credentials", "cm9vdDpsZXJk", "rabbitmq.auth-scheme", "loggedIn"} {
+		if !strings.Contains(s, want) {
+			t.Errorf("rabbitmq bootstrap missing %q:\n%s", want, s)
+		}
+	}
+	// A user custom service (no bundled preset) gets no bootstrap.
+	if PresetDashboardBootstrap(&CustomService{Name: "x"}) != "" {
+		t.Error("non-bundled service must not get a dashboard bootstrap")
+	}
+}
+
 func TestMySQLPresetContainsCompatDirectives(t *testing.T) {
 	files := PresetFiles("mysql")
 	if len(files) == 0 {

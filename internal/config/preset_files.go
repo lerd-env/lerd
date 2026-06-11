@@ -1,6 +1,7 @@
 package config
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"strconv"
 	"strings"
@@ -15,6 +16,15 @@ import (
 // below are the only ones that need runtime-generated config. A custom
 // service author cannot declare their own file mounts.
 var presetFiles = map[string][]FileMount{
+	"rabbitmq": {
+		{
+			// lerd-ui proxies the management UI same-origin under /_svc/rabbitmq/
+			// so its Cowboy session cookie stays first-party in the iframe. Mount
+			// the UI at that same prefix so its asset/API links resolve there.
+			Target:  "/etc/rabbitmq/conf.d/10-lerd-path-prefix.conf",
+			Content: "management.path_prefix = /_svc/rabbitmq\n",
+		},
+	},
 	"mysql": {
 		{
 			Target: "/etc/mysql/conf.d/lerd.cnf",
@@ -94,6 +104,72 @@ $cfg['AllowThirdPartyFraming'] = true;
 `,
 		},
 	},
+}
+
+// DashboardProxyPrefix is the lerd-ui mount under which bundled admin
+// dashboards (rabbitmq, redisinsight) are served same-origin so their cookies
+// stay first-party in the iframe overlay. Shared by the lerd-ui proxy and the
+// quadlet generator, which configures each upstream to serve its UI there.
+const DashboardProxyPrefix = "/_svc/"
+
+// DashboardProxyPath is the same-origin mount path for a proxied dashboard.
+func DashboardProxyPath(name string) string {
+	return DashboardProxyPrefix + name + "/"
+}
+
+// PresetProxyEnv returns the container env that makes a bundled upstream serve
+// its UI under the same /_svc/<name> path the lerd-ui proxy mounts it at, so
+// the dashboard embeds same-origin. It is injected at quadlet generation (not
+// stored in the service YAML) so existing installs pick it up on the next
+// start without a reinstall, mirroring how PresetFiles are re-sourced. Returns
+// ok=false for presets that configure the prefix another way: rabbitmq uses a
+// management.path_prefix conf mount (see presetFiles).
+func PresetProxyEnv(svc *CustomService) (key, value string, ok bool) {
+	if svc == nil {
+		return "", "", false
+	}
+	switch svc.Preset {
+	case "redisinsight":
+		return "RI_PROXY_PATH", strings.TrimSuffix(DashboardProxyPath(svc.Name), "/"), true
+	}
+	return "", "", false
+}
+
+// PresetDashboardBootstrap returns an inline <script> to inject into the
+// proxied dashboard's HTML so it opens already authenticated, mirroring how
+// pgadmin/phpmyadmin auto-log-in via config. Returns "" when the dashboard
+// needs no client-side priming.
+//
+// RabbitMQ's management UI (3.13) keeps no server session: the login form just
+// stores HTTP Basic credentials in localStorage plus a `loggedIn` marker packed
+// into its `m` cookie under a runtime-hashed key. We seed the same state before
+// its scripts run. The cookie key is derived with the app's own hashCode/
+// short_key algorithm at runtime (replicated inline) so it stays correct across
+// versions; the page's CSP already allows unsafe-inline scripts.
+func PresetDashboardBootstrap(svc *CustomService) string {
+	if svc == nil {
+		return ""
+	}
+	switch svc.Preset {
+	case "rabbitmq":
+		user := svc.Environment["RABBITMQ_DEFAULT_USER"]
+		if user == "" {
+			user = "root"
+		}
+		pass := svc.Environment["RABBITMQ_DEFAULT_PASS"]
+		if pass == "" {
+			pass = "lerd"
+		}
+		creds := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
+		return "<script>(function(){try{" +
+			"if(localStorage.getItem('rabbitmq.credentials'))return;" +
+			"function hc(s){var h=0;for(var i=0;i<s.length;i++){h=(31*h+s.charCodeAt(i))|0;}return h;}" +
+			"localStorage.setItem('rabbitmq.credentials','" + creds + "');" +
+			"localStorage.setItem('rabbitmq.auth-scheme','Basic');" +
+			"document.cookie='m='+(Math.abs((hc('loggedIn')<<16)>>16).toString(16))+':true; path=/';" +
+			"}catch(e){}})();</script>"
+	}
+	return ""
 }
 
 // PresetFiles returns the hardcoded file mounts for the named preset, or nil

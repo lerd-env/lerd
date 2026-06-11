@@ -13,5 +13,5 @@ depends_on:
   - redis
 dashboard: http://localhost:8085
 # RedisInsight sets first-run consent cookies the iframe can't carry across
-# origins, so open the dashboard in a new tab like the rabbitmq mgmt UI.
+# origins, so lerd-ui proxies it same-origin (see dashboard_external handling).
 dashboard_external: true
