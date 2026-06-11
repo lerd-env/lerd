@@ -4648,6 +4648,21 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// POST /api/app-logs/{domain}/clear deletes the matched log files to reclaim
+	// disk. Loopback-only since it mutates files on the host.
+	if len(parts) == 2 && parts[1] == "clear" {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			http.Error(w, "forbidden", http.StatusForbidden)
+			return
+		}
+		handleAppLogsClear(w, basePath, fw.Logs)
+		return
+	}
+
 	if len(parts) == 1 {
 		files, _ := applog.DiscoverLogFiles(basePath, fw.Logs)
 		if files == nil {

@@ -112,7 +112,7 @@ Selecting a site opens the detail panel with:
 
   ![Live PHP-FPM log tab](/assets/screenshots/site-detail-phpfpm.png)
 
-- **App logs tab**: parses every `*.log` file the framework declares (Laravel: `storage/logs/*.log`) into level-coloured entries with click-to-expand stack traces and a live-search box. The dropdown switches between log files; the Latest / All toggle controls how many entries to fetch.
+- **App logs tab**: parses every `*.log` file the framework declares (Laravel: `storage/logs/*.log`) into level-coloured entries with click-to-expand stack traces and a live-search box. The dropdown switches between log files; the Latest / All toggle controls how many entries to fetch. A **Clear logs** button (showing the total log size) reclaims disk by deleting those files; clicking it opens a confirmation modal, and on confirm the active log is recreated by the app on its next write.
 
   ![App Logs tab on the site detail](/assets/screenshots/site-detail-applogs.png)
 - **Env tab**: edit the project's `.env` (and any `.env.*` variant) right in the browser. Saving goes through a confirmation modal with an optional back-up-first checkbox and an atomic write that preserves the file mode; when a backup exists a **Restore** button opens a diff before rolling back. See [Environment Setup](./env-setup.md).
