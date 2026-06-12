@@ -13,9 +13,25 @@ import (
 // Alpine 3.16, but pinned (older xdebug, no mongodb ext) and not security-updated.
 var SupportedPHPVersions = []string{"7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"}
 
+// LegacyPHPVersions is the frozen legacy tier built from Alpine 3.16 with an old
+// bundled Node. Kept here next to SupportedPHPVersions so the single definition
+// of "legacy" is reused (e.g. pest:browser, which needs a modern Node) instead
+// of being duplicated as literals elsewhere.
+var LegacyPHPVersions = []string{"7.4", "8.0"}
+
 // IsSupportedPHPVersion reports whether v is a version lerd can install.
 func IsSupportedPHPVersion(v string) bool {
 	for _, s := range SupportedPHPVersions {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
+// IsLegacyPHPVersion reports whether v belongs to the frozen legacy tier.
+func IsLegacyPHPVersion(v string) bool {
+	for _, s := range LegacyPHPVersions {
 		if s == v {
 			return true
 		}
