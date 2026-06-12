@@ -11,6 +11,7 @@
 | `lerd node:manage` | Opt into lerd-managed Node: install the fnm shims and a default version |
 | `lerd node:unmanage` | Stop managing Node: remove lerd's shims and fnm-installed versions for a clean system |
 | `lerd php:bun install [version]` | Install a musl bun inside the PHP-FPM container |
+| `lerd php:bun remove` | Remove the in-container bun and clear its shared persistent volume |
 | `lerd php:bun update [version]` | Update the container's bun in place (`bun upgrade`) |
 | `lerd php:bun version` | Show the bun version installed in the PHP-FPM container |
 
@@ -141,6 +142,7 @@ The host bun can't run inside the container (it's built for your host's libc, th
 ```bash
 lerd php:bun install        # installs a musl bun into the container, via the bundled npm
 lerd php:bun version        # shows what's installed
+lerd php:bun remove         # deletes it and clears the volume
 ```
 
-bun is installed into a persistent volume (`~/.local/share/lerd/bun` mounted at `/root/.bun`), shared across sites on that PHP version and **kept across image rebuilds and pulls** (it lives in the volume, not the image, so a new base image never reinstalls it). `lerd shell` puts it on `PATH`. Update it in place with `lerd php:bun update` (or `bun upgrade` from inside `lerd shell`). When bun is installed on the host, `lerd link` / `lerd setup` also installs it into the container automatically.
+bun is installed into a persistent volume (`~/.local/share/lerd/bun` mounted at `/root/.bun`), shared across every PHP version and **kept across image rebuilds and pulls** (it lives in the volume, not the image, so a new base image never reinstalls it). `lerd shell` puts it on `PATH`. Update it in place with `lerd php:bun update` (or `bun upgrade` from inside `lerd shell`). When bun is installed on the host, `lerd link` / `lerd setup` also installs it into the container automatically. `lerd php:bun remove` clears the volume so the next install starts clean; because the volume is shared it removes bun for every PHP version at once, and the container need not be running.
