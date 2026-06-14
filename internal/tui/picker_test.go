@@ -5,6 +5,29 @@ import (
 	"testing"
 )
 
+func TestNodePickerArgs(t *testing.T) {
+	cases := []struct {
+		name           string
+		ver            string
+		currentRuntime string
+		want           [][]string
+	}{
+		{"bun pins the runtime", "bun", "node", [][]string{{"js:runtime", "bun"}}},
+		{"node version from bun clears the pin first", "20", "bun",
+			[][]string{{"js:runtime", "node"}, {"isolate:node", "20"}}},
+		{"node version when not on bun just pins the version", "22", "",
+			[][]string{{"isolate:node", "22"}}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := nodePickerArgs(tc.ver, tc.currentRuntime)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("nodePickerArgs(%q, %q) = %v, want %v", tc.ver, tc.currentRuntime, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestFrankenPHPRunnable_FiltersUnpublishableVersions(t *testing.T) {
 	installed := []string{"8.1", "8.2", "8.3", "8.4"}
 

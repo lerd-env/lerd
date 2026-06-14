@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/geodro/lerd/internal/config"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -31,13 +32,24 @@ func (m *Model) openPHPPicker(s *siteinfo.EnrichedSite) {
 // A no-op when fnm reports nothing.
 func (m *Model) openNodePicker(s *siteinfo.EnrichedSite) {
 	versions := listNodeMajors()
-	if len(versions) == 0 {
+	bunAvailable := nodeDet.BunPath() != ""
+	if len(versions) == 0 && !bunAvailable {
 		m.setStatus("no Node versions installed (run 'lerd node install 20')", 3*time.Second)
 		return
 	}
+	// bun is a JS-runtime toggle rather than a Node version, so it joins the
+	// list as a project-level pin (main site only, never per-worktree) when a
+	// host bun exists, mirroring the web Node dropdown.
+	if bunAvailable {
+		versions = append(versions, "bun")
+	}
 	m.pickerKind = kindNode
 	m.pickerOptions = versions
-	m.pickerCursor = indexOf(versions, s.NodeVersion)
+	if nodeDet.JSRuntime(s.Path) == "bun" {
+		m.pickerCursor = indexOf(versions, "bun")
+	} else {
+		m.pickerCursor = indexOf(versions, s.NodeVersion)
+	}
 }
 
 // openWorktreePHPPicker mirrors openPHPPicker but scopes the apply to the
@@ -112,8 +124,16 @@ func (m *Model) applyPicker() tea.Cmd {
 		m.setStatus("switching "+s.Name+" to PHP "+ver+"…", 5*time.Second)
 		return runLerd(s.Path, "isolate", ver)
 	case kindNode:
-		m.setStatus("switching "+s.Name+" to Node "+ver+"…", 5*time.Second)
-		return runLerd(s.Path, "isolate:node", ver)
+		if ver == "bun" {
+			m.setStatus("switching "+s.Name+" to bun…", 5*time.Second)
+		} else {
+			m.setStatus("switching "+s.Name+" to Node "+ver+"…", 5*time.Second)
+		}
+		var cmds []tea.Cmd
+		for _, a := range nodePickerArgs(ver, nodeDet.JSRuntime(s.Path)) {
+			cmds = append(cmds, runLerd(s.Path, a...))
+		}
+		return tea.Sequence(cmds...)
 	case kindWorktreePHP:
 		path, branch := m.pickerWorktreePath, m.pickerWorktreeName
 		m.pickerWorktreePath, m.pickerWorktreeName = "", ""
@@ -158,6 +178,21 @@ func listNodeMajors() []string {
 	}
 	sort.Strings(versions)
 	return versions
+}
+
+// nodePickerArgs maps a Node-picker choice to the lerd command(s) to run.
+// "bun" pins the JS runtime; a real Node version pins the version, first
+// clearing any bun pin so the dev/Vite worker actually switches off bun rather
+// than ignoring the chosen version. currentRuntime is the site's pinned
+// js_runtime ("bun"/"node"/"").
+func nodePickerArgs(ver, currentRuntime string) [][]string {
+	if ver == "bun" {
+		return [][]string{{"js:runtime", "bun"}}
+	}
+	if currentRuntime == "bun" {
+		return [][]string{{"js:runtime", "node"}, {"isolate:node", ver}}
+	}
+	return [][]string{{"isolate:node", ver}}
 }
 
 // frankenPHPRunnable narrows the installed PHP versions to the set
