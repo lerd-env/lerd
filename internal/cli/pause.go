@@ -78,6 +78,14 @@ func PauseSite(name string) error {
 		_ = podman.StopUnit(podman.CustomFPMContainerName(site.Name))
 	}
 
+	// Strip the container's quadlet [Install] so a paused runtime site's
+	// container doesn't come back at the next login via the podman generator.
+	// StopUnit above only stops the running instance; the generator re-wires an
+	// [Install]-bearing quadlet into default.target.wants on every boot.
+	if setSiteContainerAutostart(site, false) {
+		_ = podman.DaemonReloadFn()
+	}
+
 	// Release the LAN share port while paused. The site's stored LANPort is
 	// preserved so unpause restores the same address.
 	LANShareStopServer(site.Name)
@@ -110,6 +118,48 @@ func PauseSite(name string) error {
 	return nil
 }
 
+// siteContainerUnit returns the per-site container unit name for a
+// runtime-backed site (FrankenPHP, custom container, custom FPM), or "" for a
+// plain FPM site that runs in the shared container and has no dedicated unit.
+func siteContainerUnit(site *config.Site) string {
+	switch {
+	case site.IsCustomContainer():
+		return podman.CustomContainerName(site.Name)
+	case site.IsFrankenPHP():
+		return podman.FrankenPHPContainerName(site.Name)
+	case site.IsCustomFPM():
+		return podman.CustomFPMContainerName(site.Name)
+	}
+	return ""
+}
+
+// setSiteContainerAutostart strips (on=false) or restores (on=true) the
+// [Install] section of a site container's quadlet, the same lever `lerd
+// autostart` uses globally, so a paused runtime site's container stops
+// autostarting at boot. Restoring is gated on the global autostart flag so
+// unpause never re-arms a container the user disabled globally. Returns whether
+// the file changed. No-op when the site has no container quadlet (plain FPM, or
+// the macOS plist path). Caller daemon-reloads when it returns true.
+func setSiteContainerAutostart(site *config.Site, on bool) bool {
+	unit := siteContainerUnit(site)
+	if unit == "" {
+		return false
+	}
+	path := filepath.Join(config.QuadletDir(), unit+".container")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return false
+	}
+	out := podman.StripInstallSection(string(raw), true)
+	if on && lerdSystemd.IsAutostartEnabled() {
+		out = strings.TrimRight(out, "\n") + "\n\n" + quadletInstallBlock
+	}
+	if out == string(raw) {
+		return false
+	}
+	return os.WriteFile(path, []byte(out), 0644) == nil
+}
+
 // UnpauseSite restores the site's nginx vhost, restarts any workers that were
 // running when the site was paused, and clears the paused state.
 func UnpauseSite(name string) error {
@@ -123,6 +173,13 @@ func UnpauseSite(name string) error {
 	}
 
 	phpVersion := site.PHPVersion
+
+	// Re-arm the container's quadlet [Install] that PauseSite stripped, before
+	// starting it, so it autostarts at login again. Gated on the global autostart
+	// flag inside the helper, so unpause never re-arms a globally-disabled site.
+	if setSiteContainerAutostart(site, true) {
+		_ = podman.DaemonReloadFn()
+	}
 
 	switch {
 	case site.IsCustomContainer():
