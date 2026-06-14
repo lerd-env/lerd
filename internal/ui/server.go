@@ -33,7 +33,6 @@ import (
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/eventbus"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
@@ -4723,22 +4722,11 @@ func ensureWorktreeEnvIfBranch(site *config.Site, branch string) {
 	}
 }
 
-// laravelAppName reads APP_NAME from a Laravel project's .env so the sites
-// dashboard can label a tile by its application name instead of just the URL.
-// Returns "" for non-Laravel projects, when the .env is missing or has no
-// APP_NAME, or when APP_NAME is still the stock "Laravel" default, in which
-// case the dashboard falls back to the domain. Gating on the default keeps the
-// label purely additive: uncustomised sites stay titled by their scannable
-// domain instead of a wall of identical "Laravel" tiles.
+// laravelAppName labels a sites-dashboard tile by its Laravel APP_NAME instead
+// of just the URL. Thin wrapper over siteinfo.LaravelAppName so the web and the
+// TUI share one implementation; see there for the gating rules.
 func laravelAppName(frameworkName, sitePath string) string {
-	if frameworkName != "laravel" || sitePath == "" {
-		return ""
-	}
-	name := envfile.ReadKey(filepath.Join(sitePath, ".env"), "APP_NAME")
-	if strings.EqualFold(name, "Laravel") {
-		return ""
-	}
-	return name
+	return siteinfo.LaravelAppName(frameworkName, sitePath)
 }
 
 // siteHasEnv reports whether the site root contains a .env file. Cheap,

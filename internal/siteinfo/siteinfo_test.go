@@ -109,6 +109,47 @@ func TestEnrich_CarriesIdleSuspendedWorkers(t *testing.T) {
 	}
 }
 
+func TestLaravelAppName(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_NAME=My Shop\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LaravelAppName("laravel", dir); got != "My Shop" {
+		t.Errorf("LaravelAppName = %q, want \"My Shop\"", got)
+	}
+	if got := LaravelAppName("nextjs", dir); got != "" {
+		t.Errorf("non-Laravel framework should yield no app name, got %q", got)
+	}
+
+	stock := t.TempDir()
+	if err := os.WriteFile(filepath.Join(stock, ".env"), []byte("APP_NAME=Laravel\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LaravelAppName("laravel", stock); got != "" {
+		t.Errorf("stock default APP_NAME should be treated as uncustomised, got %q", got)
+	}
+	if got := LaravelAppName("laravel", t.TempDir()); got != "" {
+		t.Errorf("missing .env should yield no app name, got %q", got)
+	}
+}
+
+func TestEnrich_SetsAppNameUnderFramework(t *testing.T) {
+	setDataDir(t)
+	stubPodman(t)
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_NAME=Acme\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if e := Enrich(config.Site{Name: "acme", Path: dir, Framework: "laravel"}, EnrichFramework); e.AppName != "Acme" {
+		t.Errorf("Enrich AppName = %q, want \"Acme\"", e.AppName)
+	}
+	// Without the framework flag the cheap .env read is skipped.
+	if e := Enrich(config.Site{Name: "acme", Path: dir, Framework: "laravel"}, 0); e.AppName != "" {
+		t.Errorf("AppName should be empty without EnrichFramework, got %q", e.AppName)
+	}
+}
+
 func TestEnrich_UsesPHP(t *testing.T) {
 	setDataDir(t)
 	stubPodman(t)

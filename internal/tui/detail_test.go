@@ -87,6 +87,20 @@ func TestWorktreeWorkerStateText_Suspended(t *testing.T) {
 	}
 }
 
+func TestDetailContent_ShowsAppName(t *testing.T) {
+	m := &Model{}
+	s := &siteinfo.EnrichedSite{
+		Name:    "shop",
+		Domains: []string{"shop.test"},
+		AppName: "My Shop",
+	}
+	lines, _ := detailContentLines(m, s, true, 80)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "My Shop") {
+		t.Errorf("detail header should surface the app name, got:\n%s", joined)
+	}
+}
+
 func TestNavigableRows_SkipsInfo(t *testing.T) {
 	rows := []detailRow{
 		{kind: kindInfo},

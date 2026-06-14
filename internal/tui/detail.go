@@ -545,6 +545,9 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 		header = site.Name
 	}
 	addPlain(sectionStyle.Render(header))
+	if site.AppName != "" {
+		addPlain(dimStyle.Render("  app: ") + site.AppName)
+	}
 	if site.Name != header {
 		addPlain(dimStyle.Render("  name: ") + site.Name)
 	}

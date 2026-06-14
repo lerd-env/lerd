@@ -175,6 +175,10 @@ type EnrichedSite struct {
 	HasAppLogs    bool
 	LatestLogTime string
 	HasFavicon    bool
+	// AppName is the Laravel APP_NAME from .env, or "" for non-Laravel sites and
+	// for the stock "Laravel" default, so a surface can title a site by its
+	// application name without burying customised ones under identical defaults.
+	AppName string
 
 	// Version change tracking (for write-back by caller)
 	PHPVersionChanged   bool
@@ -300,6 +304,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 
 	if flags&EnrichFramework != 0 {
 		e.FrameworkLabel = frameworkLabel(s.Framework, s.Path, fw, hasFw)
+		e.AppName = LaravelAppName(s.Framework, s.Path)
 	}
 
 	if flags&EnrichVersions != 0 {
@@ -701,6 +706,22 @@ func frameworkLabel(name, path string, fw *config.Framework, hasFw bool) string 
 			return fw.Label + " " + fw.Version
 		}
 		return fw.Label
+	}
+	return name
+}
+
+// LaravelAppName reads APP_NAME from a Laravel project's .env so a surface can
+// label a site by its application name instead of just the URL. Returns "" for
+// non-Laravel projects, a missing .env or APP_NAME, and the stock "Laravel"
+// default, which keeps the label purely additive: uncustomised sites stay
+// titled by their scannable domain rather than a wall of identical names.
+func LaravelAppName(frameworkName, sitePath string) string {
+	if frameworkName != "laravel" || sitePath == "" {
+		return ""
+	}
+	name := envfile.ReadKey(filepath.Join(sitePath, ".env"), "APP_NAME")
+	if strings.EqualFold(name, "Laravel") {
+		return ""
 	}
 	return name
 }
