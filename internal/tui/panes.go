@@ -476,16 +476,8 @@ func workerGlyphs(s siteinfo.EnrichedSite) string {
 		if !has {
 			return
 		}
-		switch {
-		case failing:
-			out = append(out, failingStyle.Render(label))
-		case running:
-			out = append(out, runningStyle.Render(label))
-		case suspended:
-			out = append(out, suspendedStyle.Render(label))
-		default:
-			out = append(out, stoppedStyle.Render(label))
-		}
+		st, _, _ := workerVisual(failing, running, suspended)
+		out = append(out, st.Render(label))
 	}
 	add(s.HasQueueWorker, s.QueueRunning, s.QueueFailing, workerSuspended(&s, "queue"), "q")
 	add(s.HasScheduleWorker, s.ScheduleRunning, s.ScheduleFailing, workerSuspended(&s, "schedule"), "s")

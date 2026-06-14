@@ -499,9 +499,15 @@ func DefaultPresetEnvVars(name string) []string {
 }
 
 // DefaultPresetDashboard returns the dashboard URL for a default preset, or
-// empty for non-defaults / presets that don't expose a dashboard.
+// empty for non-defaults / presets that don't expose a dashboard. It reads the
+// cached meta directly rather than through DefaultPresetMeta, which deep-copies
+// the struct and clones its slices — wasteful here since callers (the services
+// snapshot, rebuilt for every service every refresh) only want one string.
 func DefaultPresetDashboard(name string) string {
-	svc, err := DefaultPresetMeta(name)
+	if !IsDefaultPreset(name) {
+		return ""
+	}
+	svc, err := cachedDefaultPresetMeta(name)
 	if err != nil {
 		return ""
 	}

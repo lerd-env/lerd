@@ -3,6 +3,7 @@ package tui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,8 +12,9 @@ import (
 )
 
 func TestSiteTabsHeader_HighlightsActive(t *testing.T) {
-	for _, tab := range []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug, tabSiteAppLogs} {
-		got := stripANSI(siteTabsHeader(tab, false))
+	base := []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug, tabSiteAppLogs}
+	for _, tab := range base {
+		got := stripANSI(siteTabsHeader(tab, base))
 		want := siteTabLabel(tab)
 		if !strings.Contains(got, want) {
 			t.Errorf("active=%v: expected label %q in %q", tab, want, got)
@@ -20,11 +22,17 @@ func TestSiteTabsHeader_HighlightsActive(t *testing.T) {
 	}
 }
 
-func TestSiteTabsHeader_DoctorOnlyForLaravel(t *testing.T) {
-	if got := stripANSI(siteTabsHeader(tabSiteOverview, false)); strings.Contains(got, "Doctor") {
-		t.Errorf("non-Laravel strip should omit Doctor, got %q", got)
+func TestAvailableSiteTabs_DoctorOnlyForLaravel(t *testing.T) {
+	plain := availableSiteTabs(&siteinfo.EnrichedSite{Name: "static"})
+	if slices.Contains(plain, tabSiteDoctor) {
+		t.Errorf("non-Laravel site should not offer the Doctor tab, got %v", plain)
 	}
-	if got := stripANSI(siteTabsHeader(tabSiteOverview, true)); !strings.Contains(got, "[5] Doctor") {
+	laravel := availableSiteTabs(&siteinfo.EnrichedSite{Name: "app", FrameworkName: "laravel"})
+	if !slices.Contains(laravel, tabSiteDoctor) {
+		t.Errorf("Laravel site should offer the Doctor tab, got %v", laravel)
+	}
+	// Doctor is the fifth tab, so the strip numbers it [5].
+	if got := stripANSI(siteTabsHeader(tabSiteOverview, laravel)); !strings.Contains(got, "[5] Doctor") {
 		t.Errorf("Laravel strip should carry [5] Doctor, got %q", got)
 	}
 }

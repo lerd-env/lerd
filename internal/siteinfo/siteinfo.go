@@ -710,11 +710,14 @@ func frameworkLabel(name, path string, fw *config.Framework, hasFw bool) string 
 	return name
 }
 
-// appNameCacheEntry caches a site's resolved APP_NAME against its .env mod time,
-// so the dashboard poll (which runs LaravelAppName for every Laravel site every
-// few seconds) only opens and parses the file when it actually changes.
+// appNameCacheEntry caches a site's resolved APP_NAME against its .env mod time
+// and size, so the dashboard poll (which runs LaravelAppName for every Laravel
+// site every few seconds) only opens and parses the file when it actually
+// changes. Pairing size with mod time matches the config caches and catches a
+// same-second edit that leaves the mod time unchanged.
 type appNameCacheEntry struct {
 	mod  time.Time
+	size int64
 	name string
 }
 
@@ -741,9 +744,9 @@ func LaravelAppName(frameworkName, sitePath string) string {
 		appNameCache.Delete(sitePath)
 		return ""
 	}
-	mod := fi.ModTime()
+	mod, size := fi.ModTime(), fi.Size()
 	if v, ok := appNameCache.Load(sitePath); ok {
-		if e := v.(appNameCacheEntry); e.mod.Equal(mod) {
+		if e := v.(appNameCacheEntry); e.mod.Equal(mod) && e.size == size {
 			return e.name
 		}
 	}
@@ -751,7 +754,7 @@ func LaravelAppName(frameworkName, sitePath string) string {
 	if strings.EqualFold(name, "Laravel") {
 		name = ""
 	}
-	appNameCache.Store(sitePath, appNameCacheEntry{mod: mod, name: name})
+	appNameCache.Store(sitePath, appNameCacheEntry{mod: mod, size: size, name: name})
 	return name
 }
 

@@ -164,6 +164,18 @@ func TestLaravelAppName_CachesByModTime(t *testing.T) {
 	if got := LaravelAppName("laravel", dir); got != "Two" {
 		t.Errorf("new mod time should refresh the cache, got %q", got)
 	}
+
+	// A same-mod-time edit that changes the file size must still invalidate, so a
+	// same-second rewrite isn't served stale.
+	t2 := time.Unix(3_000_000, 0)
+	pin("APP_NAME=Three\n", t2)
+	if got := LaravelAppName("laravel", dir); got != "Three" {
+		t.Fatalf("setup read = %q, want Three", got)
+	}
+	pin("APP_NAME=A different and clearly longer app name\n", t2)
+	if got := LaravelAppName("laravel", dir); got != "A different and clearly longer app name" {
+		t.Errorf("a same-mod-time size change should refresh the cache, got %q", got)
+	}
 }
 
 func TestEnrich_SetsAppNameUnderFramework(t *testing.T) {

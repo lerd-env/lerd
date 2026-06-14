@@ -130,7 +130,7 @@ func (m *Model) applyPicker() tea.Cmd {
 			m.setStatus("switching "+s.Name+" to Node "+ver+"…", 5*time.Second)
 		}
 		var cmds []tea.Cmd
-		for _, a := range nodePickerArgs(ver, nodeDet.JSRuntime(s.Path)) {
+		for _, a := range nodePickerArgs(ver, nodeDet.UsesBun(s.Path)) {
 			cmds = append(cmds, runLerd(s.Path, a...))
 		}
 		return tea.Sequence(cmds...)
@@ -181,15 +181,19 @@ func listNodeMajors() []string {
 }
 
 // nodePickerArgs maps a Node-picker choice to the lerd command(s) to run.
-// "bun" pins the JS runtime; a real Node version pins the version, first
-// clearing any bun pin so the dev/Vite worker actually switches off bun rather
-// than ignoring the chosen version. currentRuntime is the site's pinned
-// js_runtime ("bun"/"node"/"").
-func nodePickerArgs(ver, currentRuntime string) [][]string {
+// "bun" pins the JS runtime; a real Node version pins the version, first forcing
+// Node when the site currently resolves to bun so the dev/Vite worker actually
+// switches off bun rather than ignoring the chosen version. currentlyBun is the
+// effective runtime (node.UsesBun), so it covers an explicit pin and a
+// lockfile auto-detect alike.
+func nodePickerArgs(ver string, currentlyBun bool) [][]string {
 	if ver == "bun" {
 		return [][]string{{"js:runtime", "bun"}}
 	}
-	if currentRuntime == "bun" {
+	if currentlyBun {
+		// The site currently resolves to bun — whether from an explicit pin or
+		// a lockfile auto-detect — so pin Node before isolate:node, or the
+		// dev/Vite worker keeps running bun and ignores the chosen version.
 		return [][]string{{"js:runtime", "node"}, {"isolate:node", ver}}
 	}
 	return [][]string{{"isolate:node", ver}}

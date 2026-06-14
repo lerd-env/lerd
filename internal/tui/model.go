@@ -645,15 +645,7 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.dumpsScroll = 0
 			return m, nil
 		}
-		if m.detailMode == detailSite {
-			m.siteTab = tabSiteOverview
-			m.detailScroll = 0
-			// Symmetric with cases 2/3/4: switching to a tab focuses the
-			// detail pane so subsequent arrow keys navigate the tab
-			// content rather than the list pane the user came from.
-			m.focus = paneDetail
-		}
-		return m, nil
+		return m, m.selectSiteTab(1)
 
 	case "2":
 		if m.detailMode == detailDumps {
@@ -662,38 +654,44 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.dumpsScroll = 0
 			return m, nil
 		}
-		if m.detailMode == detailSite {
-			m.siteTab = tabSiteEnv
-			m.detailScroll = 0
-			m.focus = paneDetail
-		}
-		return m, nil
+		return m, m.selectSiteTab(2)
 
 	case "3":
-		if m.detailMode == detailSite {
-			m.siteTab = tabSiteDebug
-			m.detailScroll = 0
-			m.focus = paneDetail
-		}
-		return m, nil
+		return m, m.selectSiteTab(3)
 
 	case "4":
-		if m.detailMode == detailSite {
-			m.siteTab = tabSiteAppLogs
-			m.detailScroll = 0
-			m.focus = paneDetail
-		}
-		return m, nil
+		return m, m.selectSiteTab(4)
 
 	case "5":
-		// Doctor is the Laravel-only fifth tab; openDoctorTab no-ops for other
-		// sites and kicks off the (async) checks when needed.
-		if m.detailMode == detailSite {
-			return m, m.openDoctorTab()
-		}
-		return m, nil
+		return m, m.selectSiteTab(5)
 	}
 	return m, nil
+}
+
+// selectSiteTab switches to the n-th site tab (1-based) drawn from the focused
+// site's available tabs — the single mapping the number-key shortcuts and the
+// tab strip both derive from, so the displayed number and the working key can't
+// diverge. Out-of-range numbers (e.g. 5 on a non-Laravel site that offers only
+// four tabs) are no-ops, and the Doctor tab routes through openDoctorTab so its
+// on-demand run still fires.
+func (m *Model) selectSiteTab(n int) tea.Cmd {
+	if m.detailMode != detailSite {
+		return nil
+	}
+	tabs := availableSiteTabs(m.currentSite())
+	if n < 1 || n > len(tabs) {
+		return nil
+	}
+	tab := tabs[n-1]
+	if tab == tabSiteDoctor {
+		return m.openDoctorTab()
+	}
+	m.siteTab = tab
+	m.detailScroll = 0
+	// Switching to a tab focuses the detail pane so arrow keys navigate the tab
+	// content rather than the list pane the user came from.
+	m.focus = paneDetail
+	return nil
 }
 
 // actionServiceUpdate runs `lerd service update <name>` for the focused

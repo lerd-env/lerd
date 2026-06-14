@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -54,32 +55,20 @@ func (m *Model) openDoctorTab() tea.Cmd {
 	return nil
 }
 
-// doctorStatusGlyph maps a check status to the shared state glyph + style so the
-// Doctor panel reads like the rest of the TUI: green pass, amber warn, red fail,
-// grey unknown (a check that couldn't run, e.g. the app is down).
-func doctorStatusGlyph(status string) string {
+// doctorStatusVisual maps a check status to its style, dot glyph, and label in
+// one switch so the Doctor panel's glyph and word can't disagree, reading like
+// the rest of the TUI: green pass, amber warn, red fail, grey unknown (a check
+// that couldn't run, e.g. the app is down).
+func doctorStatusVisual(status string) (style lipgloss.Style, glyph, label string) {
 	switch status {
 	case sitedoctor.StatusOK:
-		return runningStyle.Render(glyphRunning)
+		return runningStyle, glyphRunning, "ok"
 	case sitedoctor.StatusWarn:
-		return suspendedStyle.Render(glyphPaused)
+		return suspendedStyle, glyphSuspended, "warn"
 	case sitedoctor.StatusFail:
-		return failingStyle.Render(glyphFailing)
+		return failingStyle, glyphFailing, "fail"
 	default:
-		return stoppedStyle.Render(glyphStopped)
-	}
-}
-
-func doctorStatusText(status string) string {
-	switch status {
-	case sitedoctor.StatusOK:
-		return runningStyle.Render("ok")
-	case sitedoctor.StatusWarn:
-		return suspendedStyle.Render("warn")
-	case sitedoctor.StatusFail:
-		return failingStyle.Render("fail")
-	default:
-		return dimStyle.Render("unknown")
+		return stoppedStyle, glyphStopped, "unknown"
 	}
 }
 
@@ -90,7 +79,7 @@ func doctorStatusText(status string) string {
 // keypress can't migrate a database from a status view.
 func siteDoctorContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []string {
 	out := make([]string, 0, 32)
-	out = append(out, renderSiteTabHeader(tabSiteDoctor, innerW, siteIsLaravel(site))...)
+	out = append(out, renderSiteTabHeader(tabSiteDoctor, innerW, availableSiteTabs(site))...)
 	add := func(s string) { out = append(out, padToWidth(clipLine(s, innerW), innerW)) }
 
 	if site == nil {
@@ -133,7 +122,8 @@ func siteDoctorContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) [
 
 	for _, c := range m.doctorChecks {
 		name := strings.ReplaceAll(c.Name, "_", " ")
-		add(fmt.Sprintf("  %s %s  %s", doctorStatusGlyph(c.Status), padRight(name, 14), doctorStatusText(c.Status)))
+		st, glyph, label := doctorStatusVisual(c.Status)
+		add(fmt.Sprintf("  %s %s  %s", st.Render(glyph), padRight(name, 14), st.Render(label)))
 		if c.Detail != "" {
 			add(dimStyle.Render("      " + c.Detail))
 		}
