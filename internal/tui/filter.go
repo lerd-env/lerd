@@ -150,33 +150,36 @@ func filteredSortedServices(list []ServiceRow, filter string, mode svcSortMode) 
 		}
 		out = append(out, s)
 	}
+	sort.SliceStable(out, func(i, j int) bool { return lessService(out[i], out[j], mode) })
+	return out
+}
+
+// lessService orders the services pane: group first (Core → Custom → Workers),
+// then a within-group key. Workers always order by owning site then kind so the
+// pane can sub-group them under a per-site header and a site's workers stay
+// contiguous regardless of the secondary sort mode; the mode only steers Core
+// and Custom rows.
+func lessService(a, b ServiceRow, mode svcSortMode) bool {
+	if ga, gb := classifyService(a), classifyService(b); ga != gb {
+		return ga < gb
+	}
+	if classifyService(a) == groupWorkers {
+		if a.WorkerSite != b.WorkerSite {
+			return a.WorkerSite < b.WorkerSite
+		}
+		return a.WorkerKind < b.WorkerKind
+	}
 	switch mode {
 	case svcSortStatus:
-		sort.SliceStable(out, func(i, j int) bool {
-			if gi, gj := classifyService(out[i]), classifyService(out[j]); gi != gj {
-				return gi < gj
-			}
-			return svcStatusRank(out[i]) < svcStatusRank(out[j])
-		})
+		return svcStatusRank(a) < svcStatusRank(b)
 	case svcSortUsage:
-		sort.SliceStable(out, func(i, j int) bool {
-			if gi, gj := classifyService(out[i]), classifyService(out[j]); gi != gj {
-				return gi < gj
-			}
-			if out[i].SiteCount != out[j].SiteCount {
-				return out[i].SiteCount > out[j].SiteCount
-			}
-			return out[i].Name < out[j].Name
-		})
+		if a.SiteCount != b.SiteCount {
+			return a.SiteCount > b.SiteCount
+		}
+		return a.Name < b.Name
 	default:
-		sort.SliceStable(out, func(i, j int) bool {
-			if gi, gj := classifyService(out[i]), classifyService(out[j]); gi != gj {
-				return gi < gj
-			}
-			return out[i].Name < out[j].Name
-		})
+		return a.Name < b.Name
 	}
-	return out
 }
 
 func svcStatusRank(s ServiceRow) int {

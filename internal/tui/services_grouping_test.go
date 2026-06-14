@@ -90,6 +90,34 @@ func TestRenderGroupedServiceRows_InsertsHeadersAndTracksCursor(t *testing.T) {
 	}
 }
 
+func TestRenderGroupedServiceRows_WorkersSubGroupBySite(t *testing.T) {
+	// Pre-sorted the way filteredSortedServices delivers them: workers by site
+	// then kind.
+	services := []ServiceRow{
+		{Name: "queue-acme", WorkerKind: "queue", WorkerSite: "acme", State: stateSuspended},
+		{Name: "vite-acme", WorkerKind: "vite", WorkerSite: "acme", State: stateRunning},
+		{Name: "queue-blog", WorkerKind: "queue", WorkerSite: "blog", State: stateRunning},
+	}
+	rows, _ := renderGroupedServiceRows(services, -1, false, 80)
+	joined := stripANSI(strings.Join(rows, "\n"))
+
+	// Each site appears once as a sub-header; the worker rows drop the -site
+	// suffix and carry a state word.
+	if strings.Count(joined, "acme") != 1 {
+		t.Errorf("site acme should appear once as a sub-header, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "queue") || !strings.Contains(joined, "suspended") {
+		t.Errorf("expected bare kind + state in worker rows:\n%s", joined)
+	}
+	if strings.Contains(joined, "queue-acme") {
+		t.Errorf("worker rows should not repeat the site suffix:\n%s", joined)
+	}
+	// acme's sub-header must precede blog's (site-ordered).
+	if strings.Index(joined, "acme") > strings.Index(joined, "blog") {
+		t.Errorf("sites should be ordered, acme before blog:\n%s", joined)
+	}
+}
+
 func TestSiteHasFailingWorker(t *testing.T) {
 	cases := []struct {
 		s    siteinfo.EnrichedSite
