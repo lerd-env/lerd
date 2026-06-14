@@ -51,7 +51,7 @@ Dots follow the same convention everywhere: green `●` running, grey `○` stop
 | `r` | Restart the focused site / service / worker |
 | `p` | Pause / unpause toggle for a site |
 | `t` | Open an interactive shell inside the focused container (FPM or custom for sites, the service container for services, the owning site's FPM for worker rows) |
-| `O` | Open the focused site's primary domain in the default browser (uses `xdg-open` on Linux, `open` on macOS) |
+| `O` | Open in the default browser (uses `xdg-open` on Linux, `open` on macOS): the focused site's primary domain, or — when the Services pane is focused — the focused service's dashboard URL (phpMyAdmin, Mailpit, RabbitMQ, RedisInsight, …). A service with no dashboard says so in the status bar |
 | `u` | Run `lerd service update <name>` for the focused service so a presets bump or version pin lands without leaving the TUI. The action is in-strategy and reversible. |
 | `b` | Run `lerd service rollback <name>` to swap the focused service back to its previous version; pairs with `u` as the symmetric undo |
 | `H` | Run `lerd worker heal` to restart every failing framework worker in one pass. The header pill shows the count and the keybind is most relevant when it's lit |
@@ -109,7 +109,7 @@ The pane title shows which source is active and the index, e.g. `Logs · astrolo
 
 When focus is on the Services pane, the right column swaps to a service-focused detail mirroring the web UI's `ServiceDetail`. Sections, top to bottom:
 
-- **Header** — service name, version, state, systemd unit, pinned flag, and the dashboard URL (when the preset declares one).
+- **Header** — service name, version, state, systemd unit, pinned flag, and the dashboard URL (when the preset declares one); press `O` to open that URL in the browser.
 - **Depends on** — services in `depends_on`, each with its live state so you can confirm a stack is fully up before debugging.
 - **Sites using** — every active site (excluding paused/ignored) whose `.lerd.yaml` references this service.
 - **Env vars** — the preset's `env_vars` template list for default presets, or the merged `env_vars` + `environment` map for custom services. Read-only.

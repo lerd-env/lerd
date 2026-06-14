@@ -54,6 +54,40 @@ func TestServiceDetail_ShowsActionsHint(t *testing.T) {
 	}
 }
 
+func TestServiceDetail_ShowsOpenDashboardHint(t *testing.T) {
+	m := NewModel("test")
+	svc := &ServiceRow{Name: "rabbitmq", State: stateRunning, Dashboard: "http://localhost:15672"}
+	joined := stripANSI(strings.Join(serviceDetailContentLines(m, svc, 120), "\n"))
+	if !strings.Contains(joined, "http://localhost:15672") {
+		t.Errorf("expected the dashboard URL:\n%s", joined)
+	}
+	if !strings.Contains(joined, "to open") || !strings.Contains(joined, "O dashboard") {
+		t.Errorf("expected open hints next to the URL and in the actions line:\n%s", joined)
+	}
+
+	noDash := stripANSI(strings.Join(serviceDetailContentLines(m, &ServiceRow{Name: "redis", State: stateRunning}, 120), "\n"))
+	if strings.Contains(noDash, "O dashboard") {
+		t.Errorf("a service without a dashboard should not advertise the open action:\n%s", noDash)
+	}
+}
+
+func TestOpenInBrowser_ServiceDashboard(t *testing.T) {
+	m := NewModel("test")
+	m.focus = paneServices
+	m.snap.Services = []ServiceRow{{Name: "rabbitmq", State: stateRunning, Dashboard: "http://localhost:15672"}}
+	m.svcCursor = 0
+	// browserOpener exists on this platform, so a real dashboard yields a cmd
+	// (the test never runs it, so no browser actually launches).
+	if browserOpener() != "" && m.openInBrowserCmd() == nil {
+		t.Error("expected a command to open the service dashboard")
+	}
+
+	m.snap.Services = []ServiceRow{{Name: "redis", State: stateRunning}}
+	if m.openInBrowserCmd() != nil {
+		t.Error("a service with no dashboard should not open anything")
+	}
+}
+
 func TestServiceDetail_WorkerRowRendersWorkerVariant(t *testing.T) {
 	m := NewModel("test")
 	svc := &ServiceRow{

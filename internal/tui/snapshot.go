@@ -174,6 +174,10 @@ func buildServiceRow(name string, custom bool) ServiceRow {
 		Custom:    custom,
 		Pinned:    config.ServiceIsPinned(name),
 		SiteCount: config.CountSitesUsingService(name),
+		// Default presets (mailpit, …) carry a dashboard URL too; custom
+		// services have theirs set by the caller. Populating it here lets the
+		// detail pane offer "open dashboard" for built-ins, not just customs.
+		Dashboard: config.DefaultPresetDashboard(name),
 	}
 }
 

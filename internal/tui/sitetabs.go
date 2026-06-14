@@ -299,11 +299,14 @@ func humanSize(n int64) string {
 	}
 }
 
-// openInBrowserCmd shells out to xdg-open / open with the primary domain
-// of the focused site. Falls back to a status-bar message when no domain
-// is set or the platform lacks a known opener. Returns nil when the focus
-// isn't on a site so other key handlers can carry on.
+// openInBrowserCmd opens the focused row in the browser: a service's dashboard
+// URL when the Services pane is focused, otherwise the focused site's primary
+// domain. Falls back to a status-bar message when there's nothing to open or
+// the platform lacks a known opener.
 func (m *Model) openInBrowserCmd() tea.Cmd {
+	if m.focus == paneServices {
+		return m.openServiceDashboardCmd()
+	}
 	site := m.currentSite()
 	if site == nil {
 		return nil
@@ -317,7 +320,28 @@ func (m *Model) openInBrowserCmd() tea.Cmd {
 	if site.Secured {
 		scheme = "https"
 	}
-	url := scheme + "://" + domain
+	return m.openURL(scheme + "://" + domain)
+}
+
+// openServiceDashboardCmd opens the focused service's dashboard URL. Worker
+// rows and services without a dashboard get a status-bar note rather than a
+// silent no-op, so the user knows the key was heard.
+func (m *Model) openServiceDashboardCmd() tea.Cmd {
+	svc := m.currentService()
+	if svc == nil {
+		return nil
+	}
+	if svc.Dashboard == "" {
+		m.setStatus(svc.Name+" has no dashboard to open", 3*time.Second)
+		return nil
+	}
+	return m.openURL(svc.Dashboard)
+}
+
+// openURL launches the default browser on url via the platform opener, or
+// surfaces a status message when no opener exists. The browser detaches, so the
+// command returns as soon as the opener is spawned.
+func (m *Model) openURL(url string) tea.Cmd {
 	opener := browserOpener()
 	if opener == "" {
 		m.setStatus("no browser opener available on "+runtime.GOOS, 3*time.Second)
@@ -327,11 +351,7 @@ func (m *Model) openInBrowserCmd() tea.Cmd {
 	return func() tea.Msg {
 		cmd := exec.Command(opener, url)
 		runErr := cmd.Start()
-		// Don't wait — xdg-open returns quickly, the browser detaches.
-		return ActionResult{
-			Summary: "open " + url,
-			Err:     runErr,
-		}
+		return ActionResult{Summary: "open " + url, Err: runErr}
 	}
 }
 
