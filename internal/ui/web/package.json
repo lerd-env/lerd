@@ -38,5 +38,8 @@
     "@inlang/paraglide-js": "^2.16.1",
     "codemirror": "^6.0.2",
     "svelte-dnd-action": "^0.9.69"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
   }
 }
