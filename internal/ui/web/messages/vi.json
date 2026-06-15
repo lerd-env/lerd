@@ -293,6 +293,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "Tắt HTTPS",
   "sites_controls_httpsToggle_off": "Bật HTTPS",
+  "sites_controls_httpsUnavailable": "HTTPS không khả dụng, lerd không quản lý DNS",
   "sites_controls_lanToggle_on": "Dừng chia sẻ LAN",
   "sites_controls_lanToggle_off": "Chia sẻ trên LAN",
   "sites_controls_queueToggle_on": "Dừng queue worker",

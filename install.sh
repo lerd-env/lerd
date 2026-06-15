@@ -70,6 +70,32 @@ distro_family() {
 # ── Prerequisite checks ──────────────────────────────────────────────────────
 MISSING_PKGS=()
 
+# DNS mode chosen by the user before prerequisites are checked. "managed" runs
+# lerd's dnsmasq + mkcert so sites resolve at https://<name>.test with trusted
+# certs; "localhost" skips all of that and serves http://<name>.localhost over
+# plain HTTP. The choice is passed straight to `lerd install --dns` so the
+# prompt isn't shown twice, and it lets us skip the HTTPS-only packages
+# (certutil / nss-tools) when the user only wants .localhost.
+DNS_MODE="managed"
+
+ask_dns_mode() {
+  local _ans=""
+  header "DNS mode"
+  echo "  lerd can manage local DNS so sites resolve at https://<name>.test with"
+  echo "  trusted certificates, or stay out of the way and serve them at"
+  echo "  http://<name>.localhost over plain HTTP. The .localhost mode needs no"
+  echo "  dnsmasq, no mkcert, and no extra packages."
+  echo ""
+  echo -en "  ${BOLD}?${RESET}  Let lerd manage DNS for .test sites with HTTPS? [Y/n] "
+  read -r _ans </dev/tty 2>/dev/null || true
+  if [[ "$_ans" =~ ^[Nn]$ ]]; then
+    DNS_MODE="localhost"
+    info "Using *.localhost over HTTP, mkcert and nss-tools are not required"
+  else
+    DNS_MODE="managed"
+  fi
+}
+
 check_cmd() {
   local cmd="$1" pkg="${2:-$1}" desc="${3:-}"
   if command -v "$cmd" &>/dev/null; then
@@ -139,7 +165,9 @@ check_prerequisites() {
   check_dns_resolver
   check_systemd_user
   check_podman_rootless
-  check_certutil
+  if [ "$DNS_MODE" = "managed" ]; then
+    check_certutil
+  fi
 
   if [ ${#MISSING_PKGS[@]} -eq 0 ]; then
     success "All prerequisites met"
@@ -345,6 +373,7 @@ cmd_install() {
     [ -f "$local_binary" ] || die "File not found: $local_binary"
   fi
 
+  ask_dns_mode
   check_prerequisites
 
   if ! command -v podman &>/dev/null; then
@@ -390,9 +419,9 @@ cmd_install() {
   # and lerd's prompts would silently hit EOF. Hand it /dev/tty when one is
   # available so [Y/n] questions reach the user.
   if [ -r /dev/tty ]; then
-    "${INSTALL_DIR}/${BINARY}" install </dev/tty
+    "${INSTALL_DIR}/${BINARY}" install --dns "$DNS_MODE" </dev/tty
   else
-    "${INSTALL_DIR}/${BINARY}" install
+    "${INSTALL_DIR}/${BINARY}" install --dns "$DNS_MODE"
   fi
   star_note
 }
@@ -495,6 +524,9 @@ main() {
     --update|-u|update)     cmd_update ;;
     --uninstall|uninstall)  cmd_uninstall ;;
     --check|check)
+      # Non-interactive: report the full requirement set (managed DNS), so the
+      # check never blocks on a prompt. Picking .localhost at real install time
+      # is what skips the HTTPS-only packages.
       MISSING_PKGS=()
       check_prerequisites
       ;;

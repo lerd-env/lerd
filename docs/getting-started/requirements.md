@@ -47,7 +47,7 @@ sudo dnf install crun
 :::
 
 - **`unzip`**: used during install to extract fnm
-- **`certutil` / `nss-tools`**: for mkcert to install the CA into Chrome/Firefox
+- **`certutil` / `nss-tools`**: for mkcert to install the CA into Chrome/Firefox. Only needed when lerd manages DNS for `.test` sites with HTTPS. If you pick the `.localhost` mode at install time the installer skips this package, so immutable hosts like Fedora Silverblue don't need to layer it.
     - Arch: `nss`
     - Debian/Ubuntu: `libnss3-tools`
     - Fedora: `nss-tools`

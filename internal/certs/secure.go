@@ -25,7 +25,7 @@ var RegenerateHostProxyWorktreeVhost func(site config.Site, wtPath, wtDomain str
 
 // SecureSite issues a TLS certificate for the site and switches its nginx vhost to HTTPS.
 func SecureSite(site config.Site) error {
-	if cfg, _ := config.LoadGlobal(); cfg != nil && !cfg.DNS.Enabled {
+	if cfg, _ := config.LoadGlobal(); !cfg.DNSManaged() {
 		return ErrDNSDisabled
 	}
 	if err := issueCertWithWorktrees(site); err != nil {

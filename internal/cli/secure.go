@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
@@ -69,6 +70,11 @@ func toggleSecureCmd(args []string, secured bool) error {
 	site, err := config.FindSite(name)
 	if err != nil {
 		return fmt.Errorf("site %q not found — run 'lerd link' first", name)
+	}
+	if secured {
+		if gcfg, _ := config.LoadGlobal(); !gcfg.DNSManaged() {
+			return certs.ErrDNSDisabled
+		}
 	}
 	verb := "Issuing certificate"
 	if !secured {

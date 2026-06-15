@@ -251,6 +251,15 @@ func (c *GlobalConfig) WorkerExecMode() string {
 	return WorkerExecModeExec
 }
 
+// DNSManaged reports whether lerd is managing local DNS, which is the
+// prerequisite for HTTPS (mkcert CA, *.test resolution). A nil receiver counts
+// as managed, matching how the rest of the codebase treats an absent config
+// (an unconfigured install behaves as if DNS is enabled). It is the single
+// predicate the install wizard, `lerd secure`, and the cert layer all share.
+func (c *GlobalConfig) DNSManaged() bool {
+	return c == nil || c.DNS.Enabled
+}
+
 func defaultConfig() *GlobalConfig {
 	cfg := &GlobalConfig{}
 	cfg.PHP.DefaultVersion = "8.5"

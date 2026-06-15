@@ -620,3 +620,29 @@ func TestPromptSource_PipedStdinFallsBackToTTY(t *testing.T) {
 		t.Fatal("promptSource reported no source but returned non-nil reader")
 	}
 }
+
+func TestParseDNSMode(t *testing.T) {
+	cases := []struct {
+		in          string
+		wantEnabled bool
+		wantOK      bool
+	}{
+		{"managed", true, true},
+		{"enabled", true, true},
+		{"test", true, true},
+		{"  TEST  ", true, true},
+		{"localhost", false, true},
+		{"disabled", false, true},
+		{"off", false, true},
+		{"LocalHost", false, true},
+		{"", false, false},
+		{"bogus", false, false},
+	}
+	for _, c := range cases {
+		gotEnabled, gotOK := parseDNSMode(c.in)
+		if gotEnabled != c.wantEnabled || gotOK != c.wantOK {
+			t.Errorf("parseDNSMode(%q) = (%v, %v), want (%v, %v)",
+				c.in, gotEnabled, gotOK, c.wantEnabled, c.wantOK)
+		}
+	}
+}

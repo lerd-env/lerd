@@ -293,6 +293,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "禁用 HTTPS",
   "sites_controls_httpsToggle_off": "启用 HTTPS",
+  "sites_controls_httpsUnavailable": "HTTPS 不可用，lerd 未管理 DNS",
   "sites_controls_lanToggle_on": "停止 LAN 共享",
   "sites_controls_lanToggle_off": "在 LAN 上共享",
   "sites_controls_queueToggle_on": "停止队列 worker",

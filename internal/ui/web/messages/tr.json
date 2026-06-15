@@ -308,6 +308,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "HTTPS'i devre dışı bırak",
   "sites_controls_httpsToggle_off": "HTTPS'i etkinleştir",
+  "sites_controls_httpsUnavailable": "HTTPS kullanılamıyor, lerd DNS yönetmiyor",
   "sites_controls_lanToggle_on": "LAN paylaşımını durdur",
   "sites_controls_lanToggle_off": "LAN'da paylaş",
   "sites_controls_queueToggle_on": "Kuyruk worker'ını durdur",

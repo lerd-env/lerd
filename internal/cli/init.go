@@ -236,7 +236,8 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 
 	phpVersion := phpDefault
 	nodeVersion := defaults.NodeVersion
-	secured := defaults.Secured
+	httpsAvailable := gcfg.DNSManaged()
+	secured := defaults.Secured && httpsAvailable
 
 	// FrankenPHP detection. If the project has signals we offer it as a
 	// choice in the wizard; default to whatever the existing config says.
@@ -281,10 +282,8 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 				Value(&nodeVersion),
 		)
 	}
+	firstGroupFields = appendHTTPSField(firstGroupFields, httpsAvailable, &secured)
 	firstGroupFields = append(firstGroupFields,
-		huh.NewConfirm().
-			Title("Enable HTTPS?").
-			Value(&secured),
 		huh.NewSelect[string]().
 			Title("Database").
 			Options(dbOptions...).
@@ -520,7 +519,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *config.GlobalConfig) (*config.ProjectConfig, error) {
 	portStr := "3000"
 	containerfile := "Containerfile.lerd"
-	secured := defaults.Secured
+	secured, httpsAvailable := resolveSecuredDefault(cwd, defaults.Secured, gcfg)
 
 	if defaults.Container != nil {
 		if defaults.Container.Port > 0 {
@@ -531,14 +530,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 		}
 	}
 
-	// Seed secured from site registry if available.
-	if !defaults.Secured {
-		if site, err := config.FindSiteByPath(cwd); err == nil && site.Secured {
-			secured = true
-		}
-	}
-
-	if err := huh.NewForm(huh.NewGroup(
+	containerFields := []huh.Field{
 		huh.NewInput().
 			Title("Container port").
 			Description("Port the app listens on inside the container").
@@ -558,10 +550,9 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 			Title("Containerfile").
 			Description("Path relative to project root").
 			Value(&containerfile),
-		huh.NewConfirm().
-			Title("Enable HTTPS?").
-			Value(&secured),
-	)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	}
+	containerFields = appendHTTPSField(containerFields, httpsAvailable, &secured)
+	if err := huh.NewForm(huh.NewGroup(containerFields...)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
 		return nil, err
 	}
 
@@ -762,14 +753,9 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 		}
 	}
 	portStr := strconv.Itoa(port)
-	secured := defaults.Secured
-	if !secured {
-		if site, err := config.FindSiteByPath(cwd); err == nil && site.Secured {
-			secured = true
-		}
-	}
+	secured, httpsAvailable := resolveSecuredDefault(cwd, defaults.Secured, gcfg)
 
-	if err := huh.NewForm(huh.NewGroup(
+	proxyFields := []huh.Field{
 		huh.NewInput().
 			Title("Port").
 			Description("The port the dev server listens on (lerd injects PORT and proxies here)").
@@ -785,10 +771,9 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 				}
 				return nil
 			}),
-		huh.NewConfirm().
-			Title("Enable HTTPS?").
-			Value(&secured),
-	)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	}
+	proxyFields = appendHTTPSField(proxyFields, httpsAvailable, &secured)
+	if err := huh.NewForm(huh.NewGroup(proxyFields...)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
 		return nil, err
 	}
 	port = 0
@@ -965,6 +950,32 @@ func envExampleFallback(path string) string {
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// resolveSecuredDefault computes a wizard's initial "secured" value and whether
+// the HTTPS prompt should be offered at all. HTTPS is only available when lerd
+// manages DNS; otherwise secured is forced off and the prompt is hidden so the
+// wizard never offers a choice that `lerd secure` would later refuse. When
+// available, an already-secured linked site seeds the default to on.
+func resolveSecuredDefault(cwd string, defaultsSecured bool, gcfg *config.GlobalConfig) (secured, httpsAvailable bool) {
+	httpsAvailable = gcfg.DNSManaged()
+	secured = defaultsSecured && httpsAvailable
+	if httpsAvailable && !secured {
+		if site, err := config.FindSiteByPath(cwd); err == nil && site.Secured {
+			secured = true
+		}
+	}
+	return secured, httpsAvailable
+}
+
+// appendHTTPSField adds the "Enable HTTPS?" confirm to a wizard's field list
+// only when HTTPS is available; in localhost mode the prompt is omitted. Shared
+// by all three wizards so the gating rule lives in one place.
+func appendHTTPSField(fields []huh.Field, httpsAvailable bool, secured *bool) []huh.Field {
+	if !httpsAvailable {
+		return fields
+	}
+	return append(fields, huh.NewConfirm().Title("Enable HTTPS?").Value(secured))
 }
 
 // validatePHPVersion checks that the input looks like a valid PHP version

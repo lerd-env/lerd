@@ -308,6 +308,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "HTTPS deaktivieren",
   "sites_controls_httpsToggle_off": "HTTPS aktivieren",
+  "sites_controls_httpsUnavailable": "HTTPS nicht verfügbar, lerd verwaltet kein DNS",
   "sites_controls_lanToggle_on": "LAN-Freigabe stoppen",
   "sites_controls_lanToggle_off": "Im LAN freigeben",
   "sites_controls_queueToggle_on": "Queue-Worker stoppen",

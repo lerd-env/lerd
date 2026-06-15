@@ -302,3 +302,42 @@ teardown() {
   run bash "$INSTALLER" --check
   [ "$status" -eq 0 ]
 }
+
+# ── DNS mode gating of the HTTPS-only prerequisites ───────────────────────────
+
+@test "check_prerequisites skips certutil in localhost DNS mode" {
+  function command() {
+    case "$2" in
+      podman|unzip) return 0 ;;
+      certutil) return 1 ;;
+      *) builtin command "$@" ;;
+    esac
+  }
+  function systemctl() { return 0; }
+  function podman() { if [[ "$1" == "info" ]]; then echo "true"; fi; }
+  export -f command systemctl podman
+
+  MISSING_PKGS=()
+  DNS_MODE="localhost"
+  run check_prerequisites
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"certutil not found"* ]]
+}
+
+@test "check_prerequisites flags certutil in managed DNS mode" {
+  function command() {
+    case "$2" in
+      podman|unzip) return 0 ;;
+      certutil) return 1 ;;
+      *) builtin command "$@" ;;
+    esac
+  }
+  function systemctl() { return 0; }
+  function podman() { if [[ "$1" == "info" ]]; then echo "true"; fi; }
+  export -f command systemctl podman
+
+  MISSING_PKGS=()
+  DNS_MODE="managed"
+  run check_prerequisites
+  [[ "$output" == *"certutil not found"* ]]
+}

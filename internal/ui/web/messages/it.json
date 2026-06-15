@@ -293,6 +293,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "Disabilita HTTPS",
   "sites_controls_httpsToggle_off": "Abilita HTTPS",
+  "sites_controls_httpsUnavailable": "HTTPS non disponibile, lerd non gestisce il DNS",
   "sites_controls_lanToggle_on": "Interrompi condivisione LAN",
   "sites_controls_lanToggle_off": "Condividi sulla LAN",
   "sites_controls_queueToggle_on": "Ferma worker della coda",

@@ -34,6 +34,8 @@ func NewInstallCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("no-ipv6", false,
 		"Force the lerd network to v4-only even if the host supports IPv6 (also: LERD_DISABLE_IPV6=1)")
+	cmd.Flags().String("dns", "",
+		"Preselect the DNS mode and skip the prompt: 'managed' (.test + HTTPS) or 'localhost' (.localhost, plain HTTP)")
 	cmd.Flags().Bool("from-update", false, "")
 	_ = cmd.Flags().MarkHidden("from-update")
 	return cmd
@@ -64,6 +66,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		noIPv6 = true
 	}
 	fromUpdate, _ := cmd.Flags().GetBool("from-update")
+	dnsFlag, _ := cmd.Flags().GetString("dns")
 	if noIPv6 {
 		podman.MarkIPv6Disabled("lerd")
 		fmt.Println("  IPv6 disabled by user; lerd network will be v4-only.")
@@ -200,6 +203,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 		if fromUpdate {
 			wantDNS = prevEnabled
+		} else if flagDNS, ok := parseDNSMode(dnsFlag); ok {
+			wantDNS = flagDNS
 		} else {
 			wantDNS = confirmInstallPromptDefault(
 				"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
@@ -1212,6 +1217,22 @@ func detectSystemNode() string {
 // RunParallel invocation, which leaves a goroutine reading from os.Stdin.
 func confirmInstallPrompt(question string) bool {
 	return confirmInstallPromptDefault(question, true)
+}
+
+// parseDNSMode maps the --dns flag to a wantDNS bool. It lets the installer
+// script ask the .test/.localhost question up front (so it can skip the
+// HTTPS-only prerequisites for localhost mode) and hand the answer to
+// `lerd install` instead of prompting twice. An empty or unrecognised value
+// returns ok=false so the caller falls back to the interactive prompt.
+func parseDNSMode(flag string) (enabled bool, ok bool) {
+	switch strings.ToLower(strings.TrimSpace(flag)) {
+	case "managed", "enabled", "test", "on", "yes", "true":
+		return true, true
+	case "localhost", "disabled", "off", "no", "false":
+		return false, true
+	default:
+		return false, false
+	}
 }
 
 // confirmInstallPromptDefault is like confirmInstallPrompt but lets the caller

@@ -293,6 +293,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "Dezactivează HTTPS",
   "sites_controls_httpsToggle_off": "Activează HTTPS",
+  "sites_controls_httpsUnavailable": "HTTPS indisponibil, lerd nu gestionează DNS",
   "sites_controls_lanToggle_on": "Oprește partajarea LAN",
   "sites_controls_lanToggle_off": "Partajează pe LAN",
   "sites_controls_queueToggle_on": "Oprește workerul de coadă",

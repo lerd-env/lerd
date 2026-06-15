@@ -580,3 +580,20 @@ func TestNotifications_RoundTripsThroughYAML(t *testing.T) {
 		t.Error("notifications should remain disabled after YAML round trip")
 	}
 }
+
+func TestDNSManaged(t *testing.T) {
+	var nilCfg *GlobalConfig
+	if !nilCfg.DNSManaged() {
+		t.Error("nil config should count as DNS-managed, matching the rest of the codebase")
+	}
+	enabled := &GlobalConfig{}
+	enabled.DNS.Enabled = true
+	if !enabled.DNSManaged() {
+		t.Error("DNSManaged() = false with DNS.Enabled true, want true")
+	}
+	disabled := &GlobalConfig{}
+	disabled.DNS.Enabled = false
+	if disabled.DNSManaged() {
+		t.Error("DNSManaged() = true with DNS.Enabled false, want false")
+	}
+}

@@ -293,6 +293,7 @@
   "sites_controls_reverb": "Reverb",
   "sites_controls_httpsToggle_on": "HTTPS を無効化",
   "sites_controls_httpsToggle_off": "HTTPS を有効化",
+  "sites_controls_httpsUnavailable": "HTTPS は利用できません。lerd が DNS を管理していません",
   "sites_controls_lanToggle_on": "LAN 共有を停止",
   "sites_controls_lanToggle_off": "LAN で共有",
   "sites_controls_queueToggle_on": "キューワーカーを停止",
