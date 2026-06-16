@@ -67,3 +67,94 @@ func TestNotifyReadyAndStoppingAreSafeWithoutSocket(t *testing.T) {
 	NotifyReady()
 	NotifyStopping()
 }
+
+// runUnitOpWithRetry is the stop-reliability fix for `lerd stop` leaving a
+// container running with "stop … failed: canceled" (a parallel "replace" stop
+// of an interdependent unit). It must re-issue only on "canceled", stop as
+// soon as the job is "done", give up after maxAttempts, and never swallow a
+// transport error. A nil settle (and the production settle being skipped here)
+// keeps the test instant.
+func TestRunUnitOpWithRetry(t *testing.T) {
+	t.Run("canceled then done", func(t *testing.T) {
+		results := []string{"canceled", "canceled", "done"}
+		var calls int
+		got, err := runUnitOpWithRetry(stopRetryAttempts, nil, func() (string, error) {
+			r := results[calls]
+			calls++
+			return r, nil
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "done" {
+			t.Fatalf("result = %q, want done", got)
+		}
+		if calls != 3 {
+			t.Fatalf("calls = %d, want 3 (retried until done)", calls)
+		}
+	})
+
+	t.Run("gives up after maxAttempts and returns last result", func(t *testing.T) {
+		var calls int
+		got, err := runUnitOpWithRetry(3, nil, func() (string, error) {
+			calls++
+			return "canceled", nil
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "canceled" {
+			t.Fatalf("result = %q, want canceled (final result surfaced)", got)
+		}
+		if calls != 3 {
+			t.Fatalf("calls = %d, want 3 (bounded by maxAttempts)", calls)
+		}
+	})
+
+	t.Run("non-canceled non-done result is not retried", func(t *testing.T) {
+		var calls int
+		got, err := runUnitOpWithRetry(stopRetryAttempts, nil, func() (string, error) {
+			calls++
+			return "failed", nil
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "failed" || calls != 1 {
+			t.Fatalf("result=%q calls=%d, want failed/1 (no retry on hard failure)", got, calls)
+		}
+	})
+
+	t.Run("done on first attempt", func(t *testing.T) {
+		var calls int
+		got, _ := runUnitOpWithRetry(stopRetryAttempts, nil, func() (string, error) {
+			calls++
+			return "done", nil
+		})
+		if got != "done" || calls != 1 {
+			t.Fatalf("result=%q calls=%d, want done/1", got, calls)
+		}
+	})
+
+	t.Run("transport error is surfaced immediately", func(t *testing.T) {
+		var calls int
+		_, err := runUnitOpWithRetry(stopRetryAttempts, nil, func() (string, error) {
+			calls++
+			return "", errUnitOpTimedOut
+		})
+		if err == nil || calls != 1 {
+			t.Fatalf("err=%v calls=%d, want non-nil/1 (no retry on transport error)", err, calls)
+		}
+	})
+
+	t.Run("maxAttempts below one is clamped to a single attempt", func(t *testing.T) {
+		var calls int
+		runUnitOpWithRetry(0, nil, func() (string, error) { //nolint:errcheck
+			calls++
+			return "canceled", nil
+		})
+		if calls != 1 {
+			t.Fatalf("calls = %d, want 1 (clamped)", calls)
+		}
+	})
+}

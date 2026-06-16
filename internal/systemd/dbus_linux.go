@@ -4,6 +4,7 @@ package systemd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -12,6 +13,22 @@ import (
 	"github.com/coreos/go-systemd/v22/daemon"
 	"github.com/coreos/go-systemd/v22/dbus"
 )
+
+// errUnitOpTimedOut is the sentinel a single unit-op attempt returns when the
+// job channel does not report a result within the per-attempt deadline. It is
+// mapped back to the historic "timed out after 30s" message by dbusUnitOp.
+var errUnitOpTimedOut = errors.New("unit op timed out")
+
+// stopRetryAttempts bounds how many times a "stop" job is re-issued when
+// systemd reports the result "canceled". `lerd stop` deactivates many units
+// in parallel with mode "replace"; stopping a unit that other units BindsTo
+// (e.g. the PHP-FPM unit, which the per-site worker units bind to) enqueues a
+// dependency-driven stop that a competing explicit StopUnit replaces, so one
+// of the two jobs comes back "canceled" and its container is left running. A
+// fresh stop issued once the competing transaction has settled completes
+// cleanly; only "stop" is retried (start/restart keep their single-attempt
+// behaviour).
+const stopRetryAttempts = 4
 
 // userBus holds the lazily-initialised systemd user bus connection. Long-lived:
 // the library handles reconnection internally and the process lifetime is the
@@ -41,35 +58,85 @@ func dbusUnitOp(op, verb, name string) error {
 	if err != nil {
 		return fmt.Errorf("%s %s: dbus connect: %w", verb, name, err)
 	}
-	ch := make(chan string, 1)
 	unit := withServiceSuffix(name)
-	var jobID int
-	var opErr error
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	switch op {
-	case "start":
-		jobID, opErr = conn.StartUnitContext(ctx, unit, "replace", ch)
-	case "stop":
-		jobID, opErr = conn.StopUnitContext(ctx, unit, "replace", ch)
-	case "restart":
-		jobID, opErr = conn.RestartUnitContext(ctx, unit, "replace", ch)
-	default:
-		return fmt.Errorf("unknown unit op %q", op)
-	}
-	_ = jobID
-	if opErr != nil {
-		return fmt.Errorf("%s %s failed: %w", verb, name, opErr)
-	}
-	select {
-	case result := <-ch:
-		if result != "done" {
-			return fmt.Errorf("%s %s failed: %s", verb, name, result)
+
+	// attempt enqueues one job and waits for systemd to report its result,
+	// returning the result string ("done", "canceled", "failed", …) or a
+	// transport/timeout error.
+	attempt := func() (string, error) {
+		ch := make(chan string, 1)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		var opErr error
+		switch op {
+		case "start":
+			_, opErr = conn.StartUnitContext(ctx, unit, "replace", ch)
+		case "stop":
+			_, opErr = conn.StopUnitContext(ctx, unit, "replace", ch)
+		case "restart":
+			_, opErr = conn.RestartUnitContext(ctx, unit, "replace", ch)
+		default:
+			return "", fmt.Errorf("unknown unit op %q", op)
 		}
-	case <-ctx.Done():
-		return fmt.Errorf("%s %s timed out after 30s", verb, name)
+		if opErr != nil {
+			return "", opErr
+		}
+		select {
+		case result := <-ch:
+			return result, nil
+		case <-ctx.Done():
+			return "", errUnitOpTimedOut
+		}
+	}
+
+	maxAttempts := 1
+	if op == "stop" {
+		maxAttempts = stopRetryAttempts
+	}
+	result, err := runUnitOpWithRetry(maxAttempts, settleBetweenStops, attempt)
+	if err != nil {
+		if errors.Is(err, errUnitOpTimedOut) {
+			return fmt.Errorf("%s %s timed out after 30s", verb, name)
+		}
+		return fmt.Errorf("%s %s failed: %w", verb, name, err)
+	}
+	if result != "done" {
+		return fmt.Errorf("%s %s failed: %s", verb, name, result)
 	}
 	return nil
+}
+
+// runUnitOpWithRetry runs do() up to maxAttempts times, re-issuing the job
+// only while systemd reports the retryable result "canceled" (see
+// stopRetryAttempts). It returns the last result string and any transport
+// error from do. settle, when non-nil, is called between attempts to let a
+// competing transaction settle before retrying. Pure of any DBus dependency
+// so the retry policy is unit-testable.
+func runUnitOpWithRetry(maxAttempts int, settle func(attempt int), do func() (string, error)) (string, error) {
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+	var result string
+	for attempt := 1; ; attempt++ {
+		var err error
+		result, err = do()
+		if err != nil {
+			return result, err
+		}
+		if result == "done" || result != "canceled" || attempt >= maxAttempts {
+			return result, nil
+		}
+		if settle != nil {
+			settle(attempt)
+		}
+	}
+}
+
+// settleBetweenStops backs off briefly (and proportionally to the attempt)
+// before re-issuing a canceled stop, giving systemd time to drain the
+// competing job that caused the cancellation.
+func settleBetweenStops(attempt int) {
+	time.Sleep(time.Duration(attempt) * 150 * time.Millisecond)
 }
 
 // DBusDaemonReload runs systemctl --user daemon-reload over DBus.
