@@ -21,6 +21,8 @@ func TestWatchSourceFiles_savesFireActivity(t *testing.T) {
 	}
 
 	activity := make(chan string, 8)
+	stop := make(chan struct{})
+	defer close(stop)
 	go func() {
 		_ = WatchSourceFiles(
 			func() []SourceTarget {
@@ -28,6 +30,7 @@ func TestWatchSourceFiles_savesFireActivity(t *testing.T) {
 			},
 			40*time.Millisecond,
 			func(key string) { activity <- key },
+			stop,
 		)
 	}()
 	// Let the initial scan register the directory watches.

@@ -25,8 +25,9 @@ type SourceTarget struct {
 // generated subtrees (node_modules, vendor, hidden dirs, ...) are never
 // descended, so the watch set stays small, which also keeps macOS kqueue
 // descriptor use bounded. Targets are re-scanned periodically so new
-// sites/worktrees and newly-created subdirectories are picked up.
-func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, onActivity func(key string)) error {
+// sites/worktrees and newly-created subdirectories are picked up. It runs until
+// stop is closed (idle-suspend disabled), then releases all fsnotify watches.
+func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, onActivity func(key string), stop <-chan struct{}) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -78,6 +79,9 @@ func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, 
 
 	for {
 		select {
+		case <-stop:
+			return nil
+
 		case <-ticker.C:
 			scan()
 

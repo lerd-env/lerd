@@ -1,6 +1,7 @@
-package ui
+package watcher
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -9,7 +10,6 @@ import (
 
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/eventbus"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/idle"
 )
@@ -28,12 +28,37 @@ func splitWtKey(key string) (site, wtBase string, isWt bool) {
 	return key, "", false
 }
 
-// publishSitesChanged pushes a sites update to connected dashboards over the
-// websocket (invalidate the cached snapshot, then broadcast), so an idle
-// suspend/resume shows up live instead of waiting for the next poll.
+// idleNotifyUI crosses the process boundary to refresh lerd-ui's sites snapshot
+// after a suspend/resume (the watcher's in-process eventbus never reaches the
+// UI). Wired by the watch command; a no-op in tests and when lerd-ui is down.
+var idleNotifyUI = func() {}
+
+// notifyDirty wakes the coalescing notifier. Buffered to 1 so a burst of
+// suspend/resume/activity events collapses to one pending refresh rather than
+// one synchronous loopback POST (and goroutine) per event.
+var notifyDirty = make(chan struct{}, 1)
+
+// notifyDebounce is the quiet period after a refresh POST, bounding the UI poke
+// rate so an activity-ping burst can't flood lerd-ui.
+const notifyDebounce = 250 * time.Millisecond
+
+// publishSitesChanged requests a debounced dashboard refresh. Non-blocking: a
+// pending request already covers this one, so it never stalls the datagram read
+// loop or the engine tick.
 func publishSitesChanged() {
-	snapshots.Invalidate(eventbus.KindSites)
-	eventbus.Default.Publish(eventbus.KindSites)
+	select {
+	case notifyDirty <- struct{}{}:
+	default:
+	}
+}
+
+// runNotifier collapses refresh requests into at most one idleNotifyUI POST per
+// notifyDebounce, so bursts can't fan out into many concurrent loopback POSTs.
+func runNotifier() {
+	for range notifyDirty {
+		idleNotifyUI()
+		time.Sleep(notifyDebounce)
+	}
 }
 
 // idleTickInterval is how often the engine re-evaluates every site for
@@ -42,7 +67,7 @@ func publishSitesChanged() {
 // suspending — not how fast it wakes.
 const idleTickInterval = 30 * time.Second
 
-// idleEng is the running engine, created by startAccessFeed. nil until then.
+// idleEng is the suspend engine, created once by StartIdle. nil until then.
 var idleEng *idleEngine
 
 // detectWorktrees is the worktree detector the engine uses, a var so tests can
@@ -114,15 +139,20 @@ func newIdleEngine(t *idle.Tracker) *idleEngine {
 }
 
 // run drives the periodic suspend evaluation until the process exits.
-func (e *idleEngine) run() {
+func (e *idleEngine) run(ctx context.Context) {
 	defer recoverEngine("ticker")
 	t := time.NewTicker(idleTickInterval)
 	defer t.Stop()
-	for range t.C {
-		e.tick()
-		// Persist last-active so a restart/deploy restores the countdowns
-		// instead of re-seeding to now.
-		_ = e.tracker.Save(config.IdleActivityFile())
+	for {
+		select {
+		case <-ctx.Done(): // idle-suspend disabled: stop ticking
+			return
+		case <-t.C:
+			e.tick()
+			// Persist last-active so a restart/deploy restores the countdowns
+			// instead of re-seeding to now.
+			_ = e.tracker.Save(config.IdleActivityFile())
+		}
 	}
 }
 
@@ -417,23 +447,6 @@ func (e *idleEngine) worktreePathForBase(s *config.Site, wtBase string) (string,
 		}
 	}
 	return "", nil
-}
-
-// IsSuspended reports whether the site's workers are currently idle-suspended.
-// nil-safe so the sites snapshot can call it before the engine starts.
-func (e *idleEngine) IsSuspended(siteName string) bool {
-	if e == nil {
-		return false
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.suspended[siteName]
-}
-
-// siteIsIdleSuspended is the package-level accessor the sites snapshot uses to
-// flag suspended sites for the dashboard's sleep indicator.
-func siteIsIdleSuspended(siteName string) bool {
-	return idleEng.IsSuspended(siteName)
 }
 
 // suspend stops a site's workers in the background (a vite site may run a

@@ -1,42 +1,45 @@
-// Package activityping notifies a running lerd-ui that a site is being worked
-// on, so out-of-process tools (the CLI shims, the MCP server) keep a site awake
-// under idle-suspend the same way an HTTP request would, and wake it if it was
-// asleep. Best-effort and fast: it pings lerd-ui's loopback unix socket with a
-// tight timeout and ignores every failure (lerd-ui not running, etc.).
+// Package activityping is the host-side client for the lerd-watcher's idle
+// control socket: it keeps a worked-on site awake under idle-suspend and asks
+// the watcher to resume all suspended workers when the feature is switched off.
 package activityping
 
 import (
-	"context"
 	"net"
-	"net/http"
-	"net/url"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
 
-// client talks to lerd-ui over its unix socket with a short timeout so a caller
-// is never held up by the ping (a missing lerd-ui fails the dial almost
-// instantly).
-var client = &http.Client{
-	Timeout: 300 * time.Millisecond,
-	Transport: &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-			return (&net.Dialer{Timeout: 200 * time.Millisecond}).DialContext(ctx, "unix", config.UISocketPath())
-		},
-	},
-}
-
-// Site records activity for the named site. No-op on an empty name.
+// Site records activity for the named site so a terminal php/composer/npm run
+// keeps it awake (and wakes it if asleep). No-op on an empty name.
 func Site(name string) {
 	if name == "" {
 		return
 	}
-	req, err := http.NewRequest(http.MethodPost, "http://lerd/api/internal/activity?site="+url.QueryEscape(name), nil)
+	send("activity " + name)
+}
+
+// Enable tells the watcher idle-suspend was turned on, so it spins up the engine,
+// access feed, and source watcher at once rather than on the next boot.
+func Enable() {
+	send("enable")
+}
+
+// Disable tells the watcher idle-suspend was turned off, so it resumes every
+// suspended worker and tears the session down immediately.
+func Disable() {
+	send("disable")
+}
+
+// send writes one best-effort datagram to the control socket and ignores every
+// failure. A missing socket fails the dial almost instantly; the write deadline
+// caps a hung send so a caller is never held up.
+func send(msg string) {
+	conn, err := net.Dial("unixgram", config.ControlSocketPath())
 	if err != nil {
 		return
 	}
-	if resp, err := client.Do(req); err == nil {
-		_ = resp.Body.Close()
-	}
+	defer conn.Close()
+	_ = conn.SetWriteDeadline(time.Now().Add(200 * time.Millisecond))
+	_, _ = conn.Write([]byte(msg))
 }

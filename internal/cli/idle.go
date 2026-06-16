@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
 )
 
@@ -98,6 +99,13 @@ func setIdleEnabled(enabled bool) error {
 	cfg.IdleSuspend.Enabled = enabled
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
+	}
+	// Persisted flag is the source of truth on boot; this signal makes the
+	// running watcher start or tear down the session now instead of next boot.
+	if enabled {
+		activityping.Enable()
+	} else {
+		activityping.Disable()
 	}
 	fmt.Printf("Idle-suspend %s.\n", onOff(enabled))
 	return nil

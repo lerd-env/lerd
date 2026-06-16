@@ -27,6 +27,7 @@ import (
 
 	qrcode "github.com/skip2/go-qrcode"
 
+	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/applog"
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/cfgedit"
@@ -197,22 +198,6 @@ func Start(currentVersion string) error {
 		w.WriteHeader(http.StatusNoContent)
 	})
 
-	// Activity feed for idle-suspend from the CLI/shims: a php/composer/npm/
-	// artisan/tinker run in a project dir pings here so working on a site via
-	// the terminal (no page loads) keeps it awake and wakes it if it was asleep.
-	mux.HandleFunc("/api/internal/activity", func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackRequest(r) {
-			http.Error(w, "forbidden", http.StatusForbidden)
-			return
-		}
-		if site := r.URL.Query().Get("site"); site != "" && activityTracker != nil {
-			activityTracker.TouchSite(site, time.Now())
-			idleEng.OnActivity(site)
-			publishSitesChanged() // push the wake/active state to dashboards live
-		}
-		w.WriteHeader(http.StatusNoContent)
-	})
-
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/presets/", withCORS(publishAfter(handleServicePresetInstall, eventbus.KindServices, eventbus.KindStatus)))
 	mux.HandleFunc("/api/services/", withCORS(publishAfter(handleServiceAction, eventbus.KindServices, eventbus.KindStatus, eventbus.KindSites)))
@@ -324,10 +309,6 @@ func Start(currentVersion string) error {
 	mux.Handle("/", serveSvelte())
 
 	handler := withRemoteControlGate(mux)
-
-	// Start the idle-suspend activity feed: bind the nginx access socket and
-	// seed per-site last-active times. Best-effort; never blocks serving.
-	startAccessFeed()
 
 	// Unix socket listener for the lerd.localhost nginx vhost. Linux only:
 	// on macOS, lerd-nginx runs inside the podman-machine VM and unix
@@ -820,6 +801,9 @@ func buildSites() []SiteResponse {
 		idleTimeout = idleCfg.IdleSuspendTimeout()
 	}
 	idleNow := time.Now()
+	// Last-active times live in the lerd-watcher process and are persisted to a
+	// file we read once per snapshot; suspended state comes from the site config.
+	idleActivity := loadIdleActivity()
 
 	// Per-site list of workers the engine suspended, so the dashboard can keep
 	// showing their dots dimmed instead of dropping them.
@@ -904,8 +888,8 @@ func buildSites() []SiteResponse {
 				LANPort:              lanPort,
 				LANShareURL:          lanURL,
 				FrameworkWorkers:     wtWorkers,
-				LastActive:           siteLastActiveUnix(wtKeyStr),
-				Idle:                 siteIsIdle(wtKeyStr, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
+				LastActive:           idleActivity[wtKeyStr],
+				Idle:                 idleSiteIsIdle(idleActivity, wtKeyStr, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
 				IdleSuspendedWorkers: wtSuspendedWorkers[wtKeyStr],
 			})
 		}
@@ -954,9 +938,9 @@ func buildSites() []SiteResponse {
 			HasFavicon:           e.HasFavicon,
 			HasEnv:               siteHasEnv(e.Path),
 			Paused:               e.Paused,
-			LastActive:           siteLastActiveUnix(e.Name),
-			IdleSuspended:        siteIsIdleSuspended(e.Name),
-			Idle:                 siteIsIdle(e.Name, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
+			LastActive:           idleActivity[e.Name],
+			IdleSuspended:        len(suspendedWorkers[e.Name]) > 0,
+			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
 			IdleSuspendedWorkers: suspendedWorkers[e.Name],
 			Pinned:               pinnedSites[e.Name],
 			Branch:               e.Branch,
@@ -4363,10 +4347,12 @@ func handleSettingsIdleSuspend(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	if !body.Enabled {
-		// Turning the feature off brings every suspended site's workers back
-		// immediately rather than on the next tick.
-		idleEng.ResumeAllSuspended()
+	// Persisted flag is the boot source of truth; this signal makes the running
+	// watcher start the session, or resume all workers and tear it down, now.
+	if body.Enabled {
+		activityping.Enable()
+	} else {
+		activityping.Disable()
 	}
 	writeJSON(w, map[string]any{"ok": true})
 }

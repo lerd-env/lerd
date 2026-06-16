@@ -411,21 +411,27 @@ func UISocketPath() string {
 	return filepath.Join(RunDir(), "lerd-ui.sock")
 }
 
-// IdleActivityFile is where lerd-ui persists the per-site last-active times so a
-// restart (deploy, `lerd start`) restores the idle countdowns instead of
-// re-seeding everything to now. Lives in RunDir alongside the other runtime
-// state.
+// IdleActivityFile is where the lerd-watcher persists per-site last-active times
+// so a restart restores the idle countdowns instead of re-seeding to now; lerd-ui
+// and the CLI read it to render each site's idle state. Lives in RunDir.
 func IdleActivityFile() string {
 	return filepath.Join(RunDir(), "idle-activity.json")
 }
 
-// AccessSocketPath is the unix datagram socket lerd-ui binds to receive the
-// nginx access feed (one "$host" line per request) that drives idle-suspend's
+// AccessSocketPath is the unix datagram socket the lerd-watcher binds to receive
+// the nginx access feed (one "$host" line per request) that drives idle-suspend's
 // per-site last-active tracking. It lives in RunDir, which is bind-mounted into
 // the lerd-nginx container at the same path, so nginx's syslog access_log can
 // reach it without container→host TCP routing.
 func AccessSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-access.sock")
+}
+
+// ControlSocketPath is the unix datagram socket the lerd-watcher binds for
+// idle-suspend control messages: "enable"/"disable" from the CLI and dashboard
+// toggle, and "activity <site>" from the CLI shims and MCP.
+func ControlSocketPath() string {
+	return filepath.Join(RunDir(), "lerd-idle-control.sock")
 }
 
 // stoppedMarkerPath is the sentinel `lerd stop` writes and `lerd start` clears.

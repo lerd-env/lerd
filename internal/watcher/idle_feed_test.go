@@ -1,4 +1,4 @@
-package ui
+package watcher
 
 import (
 	"net"
@@ -37,7 +37,7 @@ func TestReadAccessFeed_recordsTouch(t *testing.T) {
 	})
 
 	conn, sock := listenAccessSock(t)
-	go readAccessFeed(conn)
+	go readDatagrams(conn, handleAccessDatagram)
 
 	sender, err := net.Dial("unixgram", sock)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestReadAccessFeed_ignoresUnmatched(t *testing.T) {
 	activityTracker = idle.NewTracker(func(string) (string, bool) { return "", false })
 
 	conn, sock := listenAccessSock(t)
-	go readAccessFeed(conn)
+	go readDatagrams(conn, handleAccessDatagram)
 
 	sender, err := net.Dial("unixgram", sock)
 	if err != nil {

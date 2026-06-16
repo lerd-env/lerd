@@ -475,6 +475,44 @@ func newWatchCmd() *cobra.Command {
 			// migration or sleep/wake bridge churn. No-op on Linux.
 			go watcher.WatchExecWorkers(60 * time.Second)
 
+			// Idle-suspend: suspends/resumes workers by activity. The whole session,
+			// including the source-file watcher passed here, only runs while the
+			// feature is enabled; off, the watcher only binds the control socket.
+			watcher.StartIdle(
+				func() { notifyLerdUI("idle") },
+				func(stop <-chan struct{}) error {
+					return watcher.WatchSourceFiles(
+						func() []watcher.SourceTarget {
+							reg, err := config.LoadSites()
+							if err != nil {
+								return nil
+							}
+							var targets []watcher.SourceTarget
+							for _, s := range reg.Sites {
+								if s.Ignored || s.Paused {
+									continue
+								}
+								fw, _ := config.GetFrameworkForDir(s.Framework, s.Path)
+								if dirs := config.SourceWatchRoots(fw, s.Path); len(dirs) > 0 {
+									targets = append(targets, watcher.SourceTarget{Key: s.Name, Dirs: dirs})
+								}
+								wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+								for _, wt := range wts {
+									key := s.Name + "/" + config.WorktreeUnitSlug(filepath.Base(wt.Path))
+									if dirs := config.SourceWatchRoots(fw, wt.Path); len(dirs) > 0 {
+										targets = append(targets, watcher.SourceTarget{Key: key, Dirs: dirs})
+									}
+								}
+							}
+							return targets
+						},
+						5*time.Second,
+						activityping.Site,
+						stop,
+					)
+				},
+			)
+
 			// Watch key site config files and signal queue:restart on change.
 			go func() {
 				err := watcher.WatchSiteFiles(
@@ -548,45 +586,6 @@ func newWatchCmd() *cobra.Command {
 				)
 				if err != nil {
 					fmt.Printf("[WARN] site file watcher: %v\n", err)
-				}
-			}()
-
-			// Watch each site's (and worktree's) source tree and report a save as
-			// activity, so editing keeps a site awake under idle-suspend even when
-			// no HTTP request hits nginx (e.g. a Vite HMR session, where the browser
-			// talks to the dev server directly). This is the primary idle signal on
-			// macOS, where the nginx access feed isn't reachable from the host.
-			go func() {
-				err := watcher.WatchSourceFiles(
-					func() []watcher.SourceTarget {
-						reg, err := config.LoadSites()
-						if err != nil {
-							return nil
-						}
-						var targets []watcher.SourceTarget
-						for _, s := range reg.Sites {
-							if s.Ignored || s.Paused {
-								continue
-							}
-							fw, _ := config.GetFrameworkForDir(s.Framework, s.Path)
-							if dirs := config.SourceWatchRoots(fw, s.Path); len(dirs) > 0 {
-								targets = append(targets, watcher.SourceTarget{Key: s.Name, Dirs: dirs})
-							}
-							wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
-							for _, wt := range wts {
-								key := s.Name + "/" + config.WorktreeUnitSlug(filepath.Base(wt.Path))
-								if dirs := config.SourceWatchRoots(fw, wt.Path); len(dirs) > 0 {
-									targets = append(targets, watcher.SourceTarget{Key: key, Dirs: dirs})
-								}
-							}
-						}
-						return targets
-					},
-					5*time.Second,
-					activityping.Site,
-				)
-				if err != nil {
-					fmt.Printf("[WARN] source file watcher: %v\n", err)
 				}
 			}()
 
