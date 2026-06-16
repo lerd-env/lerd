@@ -257,6 +257,15 @@ func runLink(args []string) error {
 	if proj != nil && proj.Runtime != "" {
 		site.Runtime = proj.Runtime
 		site.RuntimeWorker = proj.RuntimeWorker
+		// FrankenPHP only publishes images for PHP >= 8.2; without this guard the
+		// build normalizes the version up (e.g. 8.1 -> 8.5) and silently runs a
+		// different PHP than the site reports. Mirror the `lerd runtime` guard and
+		// fall back to FPM rather than upgrading PHP behind the user's back.
+		if site.IsFrankenPHP() && !config.IsFrankenPHPVersion(site.PHPVersion) {
+			fmt.Printf("  FrankenPHP has no PHP %s image; linking as FPM instead\n", site.PHPVersion)
+			site.Runtime = ""
+			site.RuntimeWorker = false
+		}
 	}
 	// A container: config with no port on a PHP project means the site is served
 	// by fastcgi from its own image, built from the project's Containerfile.
