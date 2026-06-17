@@ -9,6 +9,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
@@ -159,6 +160,9 @@ func runLink(args []string) error {
 		if err := config.AddSite(site); err != nil {
 			return fmt.Errorf("registering site: %w", err)
 		}
+		// A site that used to be FrankenPHP or custom-FPM and now reverse-proxies a
+		// container leaves its old per-site PHP quadlet auto-starting; clear it.
+		reconcileStaleRuntimeQuadlets(site)
 		_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
 		if err := siteops.FinishCustomLink(site, proj.Container); err != nil {
 			return err
@@ -193,6 +197,9 @@ func runLink(args []string) error {
 		if err := config.AddSite(site); err != nil {
 			return fmt.Errorf("registering site: %w", err)
 		}
+		// A site that used to be FrankenPHP or custom-FPM and now proxies a host
+		// dev server leaves its old per-site PHP quadlet auto-starting; clear it.
+		reconcileStaleRuntimeQuadlets(site)
 		_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
 		if err := siteops.FinishHostProxyLink(site); err != nil {
 			return err
@@ -271,15 +278,22 @@ func runLink(args []string) error {
 	// by fastcgi from its own image, built from the project's Containerfile.
 	if proj != nil && proj.Container != nil && proj.Container.Port == 0 {
 		site.Runtime = "fpm-custom"
+		// The PHP version is fixed by the Containerfile's FROM lerd-php<ver>-fpm line,
+		// not project detection; honour it so the reported version and the per-version
+		// ini mounts match the image the container actually runs.
+		if v := podman.CustomFPMBaseVersion(cwd, proj.Container); v != "" {
+			site.PHPVersion = v
+			phpVersion = v
+		}
 	}
 
 	if err := config.AddSite(site); err != nil {
 		return fmt.Errorf("registering site: %w", err)
 	}
 
-	// A re-link of a site that dropped its frankenphp runtime leaves the old
-	// per-site FrankenPHP quadlet behind; reconcile it to the site's real type.
-	reconcileStaleFrankenPHP(site)
+	// A re-link of a site that dropped its frankenphp or custom-FPM runtime
+	// leaves the old per-site quadlet behind; reconcile it to the site's real type.
+	reconcileStaleRuntimeQuadlets(site)
 
 	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
 

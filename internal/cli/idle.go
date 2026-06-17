@@ -56,14 +56,12 @@ func newIdlePinCmd(verb string, pinned bool) *cobra.Command {
 	}
 }
 
-// SetSitePinned toggles whether a site is excluded from idle-suspend.
+// SetSitePinned toggles whether a site is excluded from idle-suspend. It delegates
+// to the locked, single-field config mutator so a pin/unpin can't clobber a
+// concurrent idle-engine write (the old FindSite -> mutate -> AddSite replaced the
+// whole record and would lose a SetSiteIdleSuspendedWorkers write that raced it).
 func SetSitePinned(name string, pinned bool) error {
-	site, err := config.FindSite(name)
-	if err != nil {
-		return err
-	}
-	site.Pinned = pinned
-	return config.AddSite(*site)
+	return config.SetSitePinned(name, pinned)
 }
 
 func newIdleToggleCmd(verb string, enabled bool) *cobra.Command {

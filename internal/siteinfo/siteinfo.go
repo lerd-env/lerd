@@ -388,14 +388,20 @@ func (e *EnrichedSite) enrichVersions(s config.Site, fw *config.Framework, hasFw
 		return
 	}
 
-	phpMin, phpMax := "", ""
-	if hasFw {
-		phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
-	}
-	detected := phpPkg.DetectVersionClamped(s.Path, phpMin, phpMax, s.PHPVersion)
-	if detected != s.PHPVersion {
-		e.PHPVersion = detected
-		e.PHPVersionChanged = true
+	// A custom-FPM site's PHP version is fixed by its Containerfile FROM line, so
+	// don't let detection override it — otherwise this enrichment (run by lerd-ui
+	// and the TUI, then persisted) drifts the stored version away from the image the
+	// container actually runs, undoing what link pinned. Node tooling still applies.
+	if !s.IsCustomFPM() {
+		phpMin, phpMax := "", ""
+		if hasFw {
+			phpMin, phpMax = fw.PHP.Min, fw.PHP.Max
+		}
+		detected := phpPkg.DetectVersionClamped(s.Path, phpMin, phpMax, s.PHPVersion)
+		if detected != s.PHPVersion {
+			e.PHPVersion = detected
+			e.PHPVersionChanged = true
+		}
 	}
 
 	if nodeDetected, err := nodePkg.DetectVersion(s.Path); err == nil && nodeDetected != "" {

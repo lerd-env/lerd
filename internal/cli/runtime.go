@@ -112,6 +112,35 @@ func reconcileStaleFrankenPHP(site config.Site) {
 	removeFrankenPHPContainer(site.Name)
 }
 
+// removeCustomFPMContainer stops a site's per-site custom-FPM container, removes
+// its quadlet, and reloads systemd so the generated unit disappears. Mirrors
+// removeFrankenPHPContainer for the fpm-custom runtime.
+func removeCustomFPMContainer(siteName string) {
+	_ = podman.StopUnit(podman.CustomFPMContainerName(siteName))
+	_ = podman.RemoveCustomFPMQuadlet(siteName)
+	_ = podman.DaemonReloadFn()
+}
+
+// reconcileStaleCustomFPM removes a leftover per-site custom-FPM quadlet when a
+// (re)linked site is no longer fpm-custom (e.g. the Containerfile was removed, or
+// a port was added so it became a reverse-proxied custom container). Like the
+// FrankenPHP one, that quadlet is WantedBy=default.target with Restart=always, so
+// podman's generator keeps auto-starting an orphan that lerd start/stop miss.
+func reconcileStaleCustomFPM(site config.Site) {
+	if site.IsCustomFPM() || !podman.QuadletInstalled(podman.CustomFPMContainerName(site.Name)) {
+		return
+	}
+	removeCustomFPMContainer(site.Name)
+}
+
+// reconcileStaleRuntimeQuadlets clears any per-site FrankenPHP or custom-FPM
+// quadlet a site no longer uses, so changing a project's runtime (or dropping its
+// Containerfile) on re-link never strands an auto-starting orphan container.
+func reconcileStaleRuntimeQuadlets(site config.Site) {
+	reconcileStaleFrankenPHP(site)
+	reconcileStaleCustomFPM(site)
+}
+
 func runtimeLabel(site *config.Site) string {
 	if site.IsFrankenPHP() {
 		if site.RuntimeWorker {

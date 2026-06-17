@@ -112,6 +112,12 @@ func TestRenderFrankenPHPContainerfile(t *testing.T) {
 	if !strings.Contains(cf, "jq") {
 		t.Errorf("custom package not rendered:\n%s", cf)
 	}
+	// Custom packages (which carry a custom extension's apk build deps) must be
+	// installed BEFORE the extension loop, or a custom extension that needs them
+	// can't compile and silently degrades to "missing".
+	if pkgIdx, extIdx := strings.Index(cf, "apk add --no-cache jq"), strings.Index(cf, "install-php-extensions"); pkgIdx < 0 || extIdx < 0 || pkgIdx > extIdx {
+		t.Errorf("custom packages must be installed before the extension loop (pkg at %d, ext at %d):\n%s", pkgIdx, extIdx, cf)
+	}
 }
 
 // TestNeedsFrankenPHPRebuild exercises the label-vs-hash comparison through the

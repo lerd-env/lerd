@@ -81,6 +81,36 @@ func TestSetSiteIdleSuspendedWorkers_preservesOtherFields(t *testing.T) {
 	}
 }
 
+// TestSetSitePinned_preservesOtherFields pins that toggling the pin flag through
+// the atomic setter rewrites only Pinned, so `lerd idle pin/unpin` can't lose a
+// concurrent idle-engine SetSiteIdleSuspendedWorkers write for the same site.
+func TestSetSitePinned_preservesOtherFields(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dir)
+
+	seed := Site{Name: "a", Path: "/x", PHPVersion: "8.4", Paused: true, IdleSuspendedWorkers: []string{"queue"}}
+	if err := SaveSites(&SiteRegistry{Sites: []Site{seed}}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if err := SetSitePinned("a", true); err != nil {
+		t.Fatalf("set: %v", err)
+	}
+	reg, err := LoadSites()
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	s := reg.Sites[0]
+	if !s.Pinned {
+		t.Errorf("Pinned=%v, want true", s.Pinned)
+	}
+	if !s.Paused || len(s.IdleSuspendedWorkers) != 1 || s.IdleSuspendedWorkers[0] != "queue" {
+		t.Errorf("Paused=%v IdleSuspendedWorkers=%v, want both preserved", s.Paused, s.IdleSuspendedWorkers)
+	}
+	if err := SetSitePinned("missing", true); err == nil {
+		t.Errorf("want error for unknown site")
+	}
+}
+
 // TestConcurrentAddSite_noLostUpdate guards the write-mutex fix: many goroutines
 // each adding a distinct site must all land, with no interleaved read-modify-write
 // silently dropping one (the race that let one site's worker list bleed onto

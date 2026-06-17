@@ -7,6 +7,30 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+func TestWorktreeWorkerIdleSuspended(t *testing.T) {
+	site := &config.Site{
+		Name: "shop",
+		WorktreeIdleSuspended: map[string][]string{
+			"feature-x": {"vite", "queue"},
+		},
+	}
+	cases := []struct {
+		name   string
+		wtPath string
+		worker string
+		want   bool
+	}{
+		{"suspended worker in worktree", "/home/u/shop-worktrees/feature-x", "vite", true},
+		{"other worker in same worktree", "/home/u/shop-worktrees/feature-x", "reverb", false},
+		{"worker in a worktree with no suspensions", "/home/u/shop-worktrees/main", "vite", false},
+	}
+	for _, c := range cases {
+		if got := worktreeWorkerIdleSuspended(site, c.wtPath, c.worker); got != c.want {
+			t.Errorf("%s: got %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
 func TestIdleTimingStatus(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
 	timeout := time.Hour

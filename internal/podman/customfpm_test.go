@@ -1,11 +1,36 @@
 package podman
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
 )
+
+func TestCustomFPMBaseVersion(t *testing.T) {
+	cases := []struct {
+		name string
+		from string
+		want string
+	}{
+		{"short-form lerd fpm base", "FROM lerd-php84-fpm:local\n", "8.4"},
+		{"older version", "FROM lerd-php82-fpm:local\nWORKDIR /app\n", "8.2"},
+		{"no tag", "FROM lerd-php83-fpm\n", "8.3"},
+		{"non-lerd base returns empty", "FROM php:8.4-fpm-alpine\n", ""},
+		{"unknown version returns empty", "FROM lerd-php99-fpm:local\n", ""},
+	}
+	for _, c := range cases {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "Containerfile.lerd"), []byte(c.from), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if got := CustomFPMBaseVersion(dir, nil); got != c.want {
+			t.Errorf("%s: CustomFPMBaseVersion = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
 
 func TestCustomFPMContainerName(t *testing.T) {
 	if got := CustomFPMContainerName("myapp"); got != "lerd-cfpm-myapp" {

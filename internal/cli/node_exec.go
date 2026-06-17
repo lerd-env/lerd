@@ -84,10 +84,13 @@ func runNpmCaptured(dir string, args ...string) (string, error) {
 }
 
 // bunRunnerFor returns the host bun binary to use for dir, or "" to fall back
-// to npm/fnm. When the project is configured for bun but no bun is installed it
-// prints a one-line install hint and returns "" so the caller uses npm instead
-// of failing. lerd never installs or version-manages the host bun itself.
-func bunRunnerFor(dir string) string {
+// to npm/fnm. When the project is configured for bun but no bun is installed and
+// warn is set it prints a one-line install hint and returns "" so the caller uses
+// npm instead of failing. warn is true only for interactive CLI runs; the worker
+// unit-generation path (which also runs on the daemon-side idle resume) passes
+// false so the hint doesn't spam the daemon's stderr on every reconcile. lerd
+// never installs or version-manages the host bun itself.
+func bunRunnerFor(dir string, warn bool) string {
 	// An explicit `js_runtime: node` pins the project to Node and opts out of
 	// both bun detection and the no-Node fallback — for apps bun can't run, e.g.
 	// NestJS with native addons. (JSRuntime normalizes node/nodejs/npm.)
@@ -96,7 +99,7 @@ func bunRunnerFor(dir string) string {
 	}
 	bun := nodeDet.BunPath()
 	if nodeDet.UsesBun(dir) {
-		if bun == "" {
+		if bun == "" && warn {
 			fmt.Fprintln(os.Stderr, "lerd: this project uses bun but bun isn't installed — falling back to npm.")
 			fmt.Fprintln(os.Stderr, "      install it with: curl -fsSL https://bun.sh/install | bash")
 		}
@@ -140,7 +143,7 @@ func runBun(dir, bun string, args []string) error {
 // uses bun (frozen adds --frozen-lockfile), otherwise `npm ci`/`npm install`
 // via fnm.
 func runJSInstall(dir string, frozen bool) error {
-	if bun := bunRunnerFor(dir); bun != "" {
+	if bun := bunRunnerFor(dir, true); bun != "" {
 		args := []string{"install"}
 		// --frozen-lockfile only makes sense when a bun lockfile exists; npm's
 		// package-lock (the `frozen` arg) doesn't apply to bun.
@@ -161,7 +164,7 @@ func runJSInstall(dir string, frozen bool) error {
 // runJSScript runs a package.json script in dir via `bun run <script>` when the
 // project uses bun, otherwise `npm run <script>` via fnm.
 func runJSScript(dir, script string) error {
-	if bun := bunRunnerFor(dir); bun != "" {
+	if bun := bunRunnerFor(dir, true); bun != "" {
 		return runBun(dir, bun, []string{"run", script})
 	}
 	return runWithFnm("npm", []string{"run", script})

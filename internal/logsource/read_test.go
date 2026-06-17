@@ -100,6 +100,21 @@ func TestRead_File_LinesCap(t *testing.T) {
 	}
 }
 
+// TestRead_LinesClampedToMax guards the MCP-exposed lines arg: a huge value must
+// be clamped before it reaches make([]Entry, 0, n), which would otherwise OOM the
+// process on an unrecoverable fatal error rather than just return fewer lines.
+func TestRead_LinesClampedToMax(t *testing.T) {
+	res, err := Read(monologSource(t, monologFixture), Opts{Lines: 1 << 40})
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	// The fixture has only a handful of entries; the point is that the absurd Lines
+	// value was clamped (no OOM) and we still got the available window back.
+	if len(res.Entries) == 0 {
+		t.Fatalf("want the available entries back, got none")
+	}
+}
+
 func TestRead_File_TimeWindow(t *testing.T) {
 	res, err := Read(monologSource(t, monologFixture), Opts{Lines: 10, Since: "2026-06-11 10:07:00"})
 	if err != nil {

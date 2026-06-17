@@ -89,7 +89,17 @@ func noHostProcesses(t *testing.T) {
 	t.Cleanup(SetHostReader(func() ([]ContainerStat, error) { return nil, nil }))
 }
 
+// pinNumCPU pins the host core count Read uses to normalize the CPU total, so the
+// per-core-sum assertions below stay deterministic regardless of the test machine.
+func pinNumCPU(t *testing.T, n int) {
+	t.Helper()
+	prev := numCPU
+	numCPU = func() int { return n }
+	t.Cleanup(func() { numCPU = prev })
+}
+
 func TestRead_SortsByCombinedLoad(t *testing.T) {
+	pinNumCPU(t, 1)
 	noHostProcesses(t)
 	restore := SetReader(func() ([]ContainerStat, error) {
 		return []ContainerStat{
@@ -186,6 +196,7 @@ func TestRead_HandlesNoContainers(t *testing.T) {
 // one set of totals, dropping any host unit that is really a container quadlet so
 // it isn't double-counted.
 func TestRead_MergesHostProcesses(t *testing.T) {
+	pinNumCPU(t, 1)
 	t.Cleanup(SetReader(func() ([]ContainerStat, error) {
 		return []ContainerStat{
 			{Name: "lerd-mysql", CPUPercent: 0.1, MemBytes: 400_000_000, MemLimit: 33_000_000_000},
@@ -219,6 +230,30 @@ func TestRead_MergesHostProcesses(t *testing.T) {
 	wantCPU := 0.1 + 0.2 + 3.0
 	if resp.TotalCPUPercent < wantCPU-0.001 || resp.TotalCPUPercent > wantCPU+0.001 {
 		t.Errorf("total cpu = %v, want ~%v", resp.TotalCPUPercent, wantCPU)
+	}
+}
+
+// The per-row CPU% is per-core, so the raw sum can exceed 100% on a multi-core
+// box. The headline total must be normalized to a host fraction (sum / cores) so
+// it reads as "% of the whole host", never an unexplained 300%.
+func TestRead_TotalCPUNormalizedToHostCores(t *testing.T) {
+	pinNumCPU(t, 4)
+	noHostProcesses(t)
+	t.Cleanup(SetReader(func() ([]ContainerStat, error) {
+		return []ContainerStat{
+			{Name: "lerd-a", CPUPercent: 100, MemBytes: 1, MemLimit: 8_000_000_000},
+			{Name: "lerd-b", CPUPercent: 100, MemBytes: 1, MemLimit: 8_000_000_000},
+		}, nil
+	}))
+
+	resp := Read()
+	// Raw per-core sum is 200%; on 4 cores that's 50% of the host.
+	if resp.TotalCPUPercent < 49.99 || resp.TotalCPUPercent > 50.01 {
+		t.Errorf("total cpu = %v, want ~50 (200%% per-core / 4 cores)", resp.TotalCPUPercent)
+	}
+	// Per-row CPU% stays per-core (unnormalized).
+	if resp.Containers[0].CPUPercent != 100 {
+		t.Errorf("per-row cpu = %v, want 100 (per-core, unchanged)", resp.Containers[0].CPUPercent)
 	}
 }
 

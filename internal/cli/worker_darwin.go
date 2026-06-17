@@ -88,7 +88,7 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, err
 	// host-proxy sites in any other language run the command directly.
 	nodeVersion := ""
 	bunDir := ""
-	if bun := bunRunnerFor(sitePath); bun != "" {
+	if bun := bunRunnerFor(sitePath, false); bun != "" {
 		command = nodeDet.Bunify(command)
 		bunDir = filepath.Dir(bun)
 	} else if isNodeProject(sitePath) && lerdManagesNode() {

@@ -8,6 +8,7 @@ import (
 	"bufio"
 	"context"
 	"os/exec"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -44,6 +45,11 @@ type Snapshot struct {
 // need a live podman or systemd.
 var readerFn = readPodmanStats
 var hostReaderFn = readHostProcesses
+
+// numCPU reports the host core count used to normalize the per-core CPU sum into a
+// host fraction. A function var so tests can pin it and assert deterministically
+// regardless of the machine they run on.
+var numCPU = runtime.NumCPU
 
 const readTimeout = 6 * time.Second
 
@@ -112,6 +118,15 @@ func Read() Snapshot {
 		}
 		return out.Containers[i].MemBytes > out.Containers[j].MemBytes
 	})
+	// Each row's CPU% is normalized to a single core (podman stats and the host
+	// systemd-accounting reader both report per-core), so the raw sum is per-core
+	// and on a multi-core box can far exceed 100%. The headline frames it as a
+	// share of the whole host (like the memory total), so divide by the core count
+	// to turn the per-core sum into a true host fraction. Per-row CPU% stays
+	// per-core, the intuitive "this process is pegging one core" reading.
+	if cores := numCPU(); cores > 1 {
+		out.TotalCPUPercent /= float64(cores)
+	}
 	return out
 }
 

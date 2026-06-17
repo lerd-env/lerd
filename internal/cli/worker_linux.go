@@ -122,7 +122,7 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 	envPath := config.BinDir() + ":" + filepath.Join(home, ".local", "bin") + ":/usr/local/bin:/usr/bin:/bin"
 
 	shellCommand := command
-	if bun := bunRunnerFor(sitePath); bun != "" {
+	if bun := bunRunnerFor(sitePath, false); bun != "" {
 		// bun is self-contained: rewrite npm/npx/node to bun/bunx and run it
 		// directly, no fnm wrap. Put ~/.bun/bin on PATH so a bare `bun` resolves.
 		shellCommand = nodeDet.Bunify(command)

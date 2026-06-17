@@ -87,6 +87,28 @@ func TestEnrichVersions_CustomContainerSkipped(t *testing.T) {
 			t.Error("PHPVersion should not be empty for a non-container site")
 		}
 	})
+
+	// A custom-FPM site's PHP version is fixed by its Containerfile FROM line. The
+	// detection-and-persist enrichment path must not override it, or it drifts the
+	// stored version away from the image the container runs (it did, clobbering the
+	// link-pinned value, until enrichVersions learned to skip custom-FPM).
+	t.Run("custom-FPM site keeps its pinned PHP version", func(t *testing.T) {
+		dir := t.TempDir()
+		// .php-version says 8.4, but the site is pinned to 8.3 by its FROM line.
+		if err := os.WriteFile(filepath.Join(dir, ".php-version"), []byte("8.4\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		e := &EnrichedSite{Name: "cfpm", Path: dir, PHPVersion: "8.3"}
+		s := config.Site{Name: "cfpm", Path: dir, PHPVersion: "8.3", Runtime: "fpm-custom"}
+		e.enrichVersions(s, nil, false)
+
+		if e.PHPVersion != "8.3" {
+			t.Errorf("PHPVersion = %q, want 8.3 (pinned by FROM, not re-detected)", e.PHPVersion)
+		}
+		if e.PHPVersionChanged {
+			t.Error("PHPVersionChanged should be false for a custom-FPM site")
+		}
+	})
 }
 
 // ── Enrich: UsesPHP detection ──────────────────────────────────────────────

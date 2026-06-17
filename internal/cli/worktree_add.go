@@ -589,6 +589,15 @@ func AutoStartOptedInWorktreeWorkers(site *config.Site, worktreePath, phpVersion
 	}
 }
 
+// worktreeWorkerIdleSuspended reports whether the idle engine has suspended the
+// named worker for the worktree at wtPath (keyed by its unit-slug base), so the
+// restore/autostart paths can leave it down rather than re-enabling a unit a
+// later boot's default.target would then resurrect.
+func worktreeWorkerIdleSuspended(site *config.Site, wtPath, worker string) bool {
+	wtBase := config.WorktreeUnitSlug(filepath.Base(wtPath))
+	return containsString(site.WorktreeIdleSuspended[wtBase], worker)
+}
+
 // worktreeWorkersToStart drops any worker the idle engine has suspended for the
 // worktree (keyed by its unit-slug base) from names, so an autostart pass never
 // resurrects a deliberately-sleeping worker. Returns names unchanged when the

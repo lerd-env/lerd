@@ -496,6 +496,26 @@ func SetSiteIdleSuspendedWorkers(name string, workers []string) error {
 	return fmt.Errorf("site %q not found", name)
 }
 
+// SetSitePinned atomically updates just a site's idle-suspend pin flag. Like
+// SetSiteIdleSuspendedWorkers it rewrites only that field under the write lock, so
+// `lerd idle pin/unpin` can't clobber a concurrent SetSiteIdleSuspendedWorkers
+// write the idle engine makes for the same site.
+func SetSitePinned(name string, pinned bool) error {
+	siteWriteMu.Lock()
+	defer siteWriteMu.Unlock()
+	reg, err := LoadSites()
+	if err != nil {
+		return err
+	}
+	for i := range reg.Sites {
+		if reg.Sites[i].Name == name {
+			reg.Sites[i].Pinned = pinned
+			return SaveSites(reg)
+		}
+	}
+	return fmt.Errorf("site %q not found", name)
+}
+
 // SetWorktreeIdleSuspendedWorkers atomically updates a single worktree's
 // idle-suspended worker list (keyed by the worktree's unit-slug base). Passing an
 // empty list clears that worktree's entry, and clearing the last entry drops the

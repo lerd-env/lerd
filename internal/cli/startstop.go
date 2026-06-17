@@ -954,6 +954,13 @@ func restoreSiteInfrastructure() {
 				continue
 			}
 			for _, wt := range worktrees {
+				// Leave a worktree worker the idle engine suspended fully down, the
+				// same as the main-site guard above: restoreWorker re-enables it (so a
+				// later boot's default.target pulls it in, past dropIdleSuspendedUnits)
+				// and the engine, not install, owns resuming it on real activity.
+				if worktreeWorkerIdleSuspended(&s, wt.Path, w) {
+					continue
+				}
 				if services.Mgr.IsEnabled(workerUnitName(s.Name, wt.Path, w)) {
 					continue
 				}
