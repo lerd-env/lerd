@@ -38,6 +38,38 @@ func TestLoadGlobal_Defaults(t *testing.T) {
 	}
 }
 
+// A config returned by LoadGlobal must not share its PHP.Packages map with the
+// cache: php:pkg's AddPackage/RemovePackage mutate the loaded copy in place
+// before SaveGlobal, and that must not corrupt what later LoadGlobal calls see.
+func TestLoadGlobal_PackagesNotAliasedWithCache(t *testing.T) {
+	setConfigDir(t)
+
+	seed, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	seed.AddPackage("8.4", "vim")
+	if err := SaveGlobal(seed); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	loaded, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	// Mutate the loaded copy without saving — must not reach the cache.
+	loaded.AddPackage("8.4", "htop")
+
+	again, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	got := again.GetPackages("8.4")
+	if len(got) != 1 || got[0] != "vim" {
+		t.Errorf("cache corrupted by an unsaved mutation: GetPackages = %v, want [vim]", got)
+	}
+}
+
 func TestSaveLoadGlobal_RoundTrip(t *testing.T) {
 	setConfigDir(t)
 

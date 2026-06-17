@@ -14,6 +14,33 @@ const monologFixture = `[2026-06-11 10:00:00] local.INFO: started up
 [2026-06-11 10:15:00] local.ERROR: SQLSTATE[42S02] table missing
 `
 
+func TestParseSince_NegativeDurationIsLookBack(t *testing.T) {
+	pos, ok := parseSince("15m")
+	if !ok {
+		t.Fatal("parseSince(15m) failed")
+	}
+	neg, ok := parseSince("-15m")
+	if !ok {
+		t.Fatal("parseSince(-15m) failed")
+	}
+	// Both must resolve to ~15 minutes in the past, never the future.
+	if neg.After(time.Now()) {
+		t.Errorf("parseSince(-15m) = %v is in the future; a negative duration must be treated as a look-back", neg)
+	}
+	if d := pos.Sub(neg); d < -time.Second || d > time.Second {
+		t.Errorf("parseSince(15m)=%v and parseSince(-15m)=%v should match; delta=%v", pos, neg, d)
+	}
+}
+
+func TestPodmanTime_NegativeDurationIsLookBack(t *testing.T) {
+	if got := podmanTime("15m"); got != "15m" {
+		t.Errorf("podmanTime(15m) = %q, want 15m", got)
+	}
+	if got := podmanTime("-15m"); got != "15m" {
+		t.Errorf("podmanTime(-15m) = %q, want 15m (positive look-back magnitude)", got)
+	}
+}
+
 func writeFixture(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()

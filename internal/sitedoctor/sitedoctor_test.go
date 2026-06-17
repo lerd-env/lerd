@@ -138,6 +138,29 @@ func TestCheckEnvDrift_ignoresCompiledPublicBundle(t *testing.T) {
 	}
 }
 
+// TestCheckEnvDrift_ViteKeyReadByPhpNoDefault: a VITE_ key that isn't referenced
+// in JS but is read by PHP via env('VITE_…') without a default must still be
+// classified required, not optional.
+func TestCheckEnvDrift_ViteKeyReadByPhpNoDefault(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+
+	writeEnv(t, dir, ".env.example", "VITE_SSR=\n")
+	writeEnv(t, dir, ".env", "") // missing
+
+	mustMkdir(t, filepath.Join(dir, "config"))
+	writeEnv(t, dir, filepath.Join("config", "app.php"),
+		"<?php return ['ssr' => env('VITE_SSR')];\n")
+
+	c, ok := checkEnvDrift(dir, envPath)
+	if !ok || c.Status != StatusWarn {
+		t.Fatalf("got ok=%v status=%q, want true/warn", ok, c.Status)
+	}
+	if !strings.Contains(c.Detail, "VITE_SSR") {
+		t.Errorf("a VITE_ key read by PHP without a default must be required, got %q", c.Detail)
+	}
+}
+
 // TestCheckEnvDrift_allOptionalStaysGreen: when every missing key is read with a
 // default, the check passes quietly with an informational note instead of
 // warning.

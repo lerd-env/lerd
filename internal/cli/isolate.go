@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -23,6 +24,9 @@ func NewIsolateCmd() *cobra.Command {
 
 func runIsolate(_ *cobra.Command, args []string) error {
 	version := args[0]
+	if !config.IsSupportedPHPVersion(version) {
+		return fmt.Errorf("unsupported PHP version %q (supported: %s)", version, strings.Join(config.SupportedPHPVersions, ", "))
+	}
 
 	cwd, err := os.Getwd()
 	if err != nil {

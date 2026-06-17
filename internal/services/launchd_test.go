@@ -187,6 +187,8 @@ func TestSplitSystemdExec(t *testing.T) {
 			[]string{"sh", "-c", "install-php-extensions pcntl >/dev/null && exec php artisan octane:start --workers=auto --watch --poll"}},
 		{"escaped inner quote", `echo "say \"hi\" now"`,
 			[]string{"echo", `say "hi" now`}},
+		{"escaped backslash decoded", `cmd "a\\b"`, []string{"cmd", `a\b`}},
+		{"trailing backslash before closing quote", `cmd "path\\"`, []string{"cmd", `path\`}},
 		{"empty quoted arg preserved", `cmd ""`, []string{"cmd", ""}},
 		{"collapses runs of whitespace", "a   b\tc", []string{"a", "b", "c"}},
 	}

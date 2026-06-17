@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "Limpar arquivos de log?",
   "sites_appLogs_clearModalBody": "Isto exclui permanentemente todos os arquivos de log em storage/logs deste site para liberar {size}. O log ativo é recriado automaticamente na próxima gravação da aplicação.",
   "sites_appLogs_clearModalConfirm": "Limpar logs",
+  "sites_appLogs_clearFailed": "Falha ao limpar os logs: {error}",
   "sites_appLogs_latest": "Últimos",
   "sites_appLogs_all": "Todos",
   "services_title": "Serviços",

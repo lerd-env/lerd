@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "Wyczyścić pliki logów?",
   "sites_appLogs_clearModalBody": "Spowoduje to trwałe usunięcie wszystkich plików logów w storage/logs tej witryny, aby zwolnić {size}. Aktywny log zostanie automatycznie utworzony ponownie przy następnym zapisie aplikacji.",
   "sites_appLogs_clearModalConfirm": "Wyczyść logi",
+  "sites_appLogs_clearFailed": "Czyszczenie logów nie powiodło się: {error}",
   "sites_appLogs_latest": "Najnowsze",
   "sites_appLogs_all": "Wszystkie",
   "services_title": "Usługi",

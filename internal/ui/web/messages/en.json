@@ -368,6 +368,7 @@
   "sites_appLogs_clearModalTitle": "Clear log files?",
   "sites_appLogs_clearModalBody": "This permanently deletes every log file in this site's storage/logs to reclaim {size}. The active log is recreated automatically on the app's next write.",
   "sites_appLogs_clearModalConfirm": "Clear logs",
+  "sites_appLogs_clearFailed": "Clearing logs failed: {error}",
   "sites_appLogs_latest": "Latest",
   "sites_appLogs_all": "All",
   "services_title": "Services",

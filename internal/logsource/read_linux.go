@@ -16,9 +16,63 @@ import (
 // filters push down to journalctl; the cursor is the journal's own opaque
 // __CURSOR so the next poll resumes exactly with --after-cursor.
 func readJournal(src Source, opts Opts) (Result, error) {
+	args, fallback := journalArgs(src, opts)
+	tailCap := journalTailCap(opts)
+
+	var buf bytes.Buffer
+	cmd := exec.Command("journalctl", args...)
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	_ = cmd.Run() // missing unit / no journal access — return what we have
+
+	var out []Entry
+	var cursor string
+	raw := 0
+	dec := json.NewDecoder(bytes.NewReader(buf.Bytes()))
+	for {
+		var je journalEntry
+		if err := dec.Decode(&je); err != nil {
+			break
+		}
+		raw++
+		// Advance the cursor past every decoded entry, including ones the literal
+		// fallback drops, so the next poll resumes after them rather than re-scanning.
+		if je.Cursor != "" {
+			cursor = je.Cursor
+		}
+		text := je.message()
+		if fallback != nil && !fallback(text) {
+			continue
+		}
+		out = append(out, Entry{Time: je.timeString(), Text: text})
+	}
+	// journalctl -n tails the newest cap entries; if it returned a full cap's
+	// worth, older lines were dropped, so report it truncated like the file and
+	// podman paths rather than letting the loss pass silently.
+	truncated := tailCap > 0 && raw >= tailCap
+	return Result{Entries: out, Cursor: cursor, Truncated: truncated}, nil
+}
+
+// journalTailCap is the -n value journalArgs applies: the per-call tail on a
+// fresh read, or maxLines when resuming from a cursor.
+func journalTailCap(opts Opts) int {
+	if opts.Since != "" && isJournalCursor(opts.Since) {
+		return maxLines
+	}
+	return opts.Lines
+}
+
+// journalArgs builds the journalctl argv for a unit read and returns an
+// in-process grep fallback when the pattern can't be pushed down. The -n tail
+// (journalTailCap) is the per-call opts.Lines on a fresh read, raised to maxLines
+// on a cursor resume so a busy unit's recent lines aren't clipped to the small
+// per-call tail while memory stays bounded; readJournal flags Truncated when the
+// cap is hit so the dropped older lines aren't a silent loss.
+func journalArgs(src Source, opts Opts) ([]string, func(string) bool) {
 	args := []string{"--user", "-u", src.Locator + ".service", "--no-pager", "--output=json"}
+	resuming := opts.Since != "" && isJournalCursor(opts.Since)
 	if opts.Since != "" {
-		if isJournalCursor(opts.Since) {
+		if resuming {
 			args = append(args, "--after-cursor="+opts.Since)
 		} else {
 			args = append(args, "--since", journalTime(opts.Since))
@@ -39,34 +93,10 @@ func readJournal(src Source, opts Opts) (Result, error) {
 			fallback = compileGrep(opts.Grep)
 		}
 	}
-	args = append(args, "-n", strconv.Itoa(opts.Lines))
-
-	var buf bytes.Buffer
-	cmd := exec.Command("journalctl", args...)
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
-	_ = cmd.Run() // missing unit / no journal access — return what we have
-
-	var out []Entry
-	var cursor string
-	dec := json.NewDecoder(bytes.NewReader(buf.Bytes()))
-	for {
-		var je journalEntry
-		if err := dec.Decode(&je); err != nil {
-			break
-		}
-		// Advance the cursor past every decoded entry, including ones the literal
-		// fallback drops, so the next poll resumes after them rather than re-scanning.
-		if je.Cursor != "" {
-			cursor = je.Cursor
-		}
-		text := je.message()
-		if fallback != nil && !fallback(text) {
-			continue
-		}
-		out = append(out, Entry{Time: je.timeString(), Text: text})
+	if tailCap := journalTailCap(opts); tailCap > 0 {
+		args = append(args, "-n", strconv.Itoa(tailCap))
 	}
-	return Result{Entries: out, Cursor: cursor}, nil
+	return args, fallback
 }
 
 func isJournalCursor(s string) bool {
@@ -78,7 +108,9 @@ func isJournalCursor(s string) bool {
 func journalTime(s string) string {
 	s = strings.TrimSpace(s)
 	if _, err := time.ParseDuration(s); err == nil {
-		return "-" + s
+		// "-" makes it a look-back; strip any sign the user already typed so a
+		// "-15m" typo becomes "-15m" not the invalid "--15m".
+		return "-" + strings.TrimLeft(s, "+-")
 	}
 	if t, ok := parseAbs(s); ok {
 		// journalctl reads a zone-less time in the system's local zone, so emit

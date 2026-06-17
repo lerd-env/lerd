@@ -17,13 +17,15 @@ func recordToolActivity(args map[string]any) {
 }
 
 // siteForToolArgs resolves the site a tool call targets, from the explicit
-// `site` (by name) or `path` (by directory) argument. Returns "" when the call
-// names no site.
+// `site` (by name) or `path` (by directory) argument, falling back to the
+// injected/cwd default site so a tool call in an mcp:inject context (no explicit
+// site/path) still keeps the site the agent is working on awake under
+// idle-suspend. Returns "" when no site can be resolved.
 func siteForToolArgs(args map[string]any) string {
 	if name := strArg(args, "site"); name != "" {
 		return name
 	}
-	if path := strArg(args, "path"); path != "" {
+	if path := resolvedPath(args); path != "" {
 		if s, err := config.FindSiteByPath(path); err == nil && s != nil {
 			return s.Name
 		}

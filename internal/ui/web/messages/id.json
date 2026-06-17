@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "Bersihkan file log?",
   "sites_appLogs_clearModalBody": "Ini menghapus permanen setiap file log di storage/logs situs ini untuk mengosongkan {size}. Log aktif dibuat ulang otomatis saat aplikasi menulis berikutnya.",
   "sites_appLogs_clearModalConfirm": "Bersihkan log",
+  "sites_appLogs_clearFailed": "Gagal menghapus log: {error}",
   "sites_appLogs_latest": "Terbaru",
   "sites_appLogs_all": "Semua",
   "services_title": "Layanan",

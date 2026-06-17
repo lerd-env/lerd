@@ -74,3 +74,13 @@ func TestShellJoinQuotesWhitespace(t *testing.T) {
 		t.Fatalf("shellJoin:\n  want %s\n  got  %s", want, got)
 	}
 }
+
+func TestShellJoinEscapesBackslash(t *testing.T) {
+	// An arg ending in a backslash must escape it so the closing quote isn't
+	// swallowed by the parser on the other side.
+	got := shellJoin([]string{"cmd", `path\`})
+	want := `cmd "path\\"`
+	if got != want {
+		t.Fatalf("shellJoin backslash:\n  want %s\n  got  %s", want, got)
+	}
+}

@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "Günlük dosyaları temizlensin mi?",
   "sites_appLogs_clearModalBody": "Bu işlem, {size} boşaltmak için bu sitenin storage/logs klasöründeki tüm günlük dosyalarını kalıcı olarak siler. Etkin günlük, uygulamanın bir sonraki yazışında otomatik olarak yeniden oluşturulur.",
   "sites_appLogs_clearModalConfirm": "Günlükleri temizle",
+  "sites_appLogs_clearFailed": "Günlükler temizlenemedi: {error}",
   "sites_appLogs_latest": "En son",
   "sites_appLogs_all": "Tümü",
   "services_title": "Servisler",

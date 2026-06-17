@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "Xóa các tệp nhật ký?",
   "sites_appLogs_clearModalBody": "Thao tác này xóa vĩnh viễn mọi tệp nhật ký trong storage/logs của trang này để giải phóng {size}. Nhật ký đang hoạt động sẽ được tạo lại tự động ở lần ghi tiếp theo của ứng dụng.",
   "sites_appLogs_clearModalConfirm": "Xóa nhật ký",
+  "sites_appLogs_clearFailed": "Xóa nhật ký thất bại: {error}",
   "sites_appLogs_latest": "Mới nhất",
   "sites_appLogs_all": "Tất cả",
   "services_title": "Dịch vụ",

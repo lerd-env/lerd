@@ -232,6 +232,12 @@ func parseSince(s string) (time.Time, bool) {
 		return time.Time{}, false
 	}
 	if d, err := time.ParseDuration(s); err == nil {
+		// "since" is always a look-back, so a negative duration (a natural typo,
+		// "-15m") means the same as its positive form rather than a future time
+		// that would silently match nothing.
+		if d < 0 {
+			d = -d
+		}
 		return time.Now().Add(-d), true
 	}
 	return parseAbs(s)
@@ -267,7 +273,9 @@ func parseEntryTime(s string) (time.Time, bool) {
 func podmanTime(s string) string {
 	s = strings.TrimSpace(s)
 	if _, err := time.ParseDuration(s); err == nil {
-		return s
+		// podman --since reads a bare duration as a look-back; normalize a "-15m"
+		// typo to its positive magnitude so it isn't rejected or misread.
+		return strings.TrimLeft(s, "+-")
 	}
 	if t, ok := parseAbs(s); ok {
 		return t.Format(time.RFC3339)

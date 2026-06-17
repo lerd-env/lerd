@@ -433,6 +433,14 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			out.PHP.ExtApkDeps[k] = cp
 		}
 	}
+	if in.PHP.Packages != nil {
+		out.PHP.Packages = make(map[string][]string, len(in.PHP.Packages))
+		for k, v := range in.PHP.Packages {
+			cp := make([]string, len(v))
+			copy(cp, v)
+			out.PHP.Packages[k] = cp
+		}
+	}
 	if in.ParkedDirectories != nil {
 		out.ParkedDirectories = append([]string(nil), in.ParkedDirectories...)
 	}

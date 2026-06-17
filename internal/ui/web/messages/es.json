@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "¿Borrar archivos de registro?",
   "sites_appLogs_clearModalBody": "Esto elimina permanentemente todos los archivos de registro en storage/logs de este sitio para liberar {size}. El registro activo se recrea automáticamente en la siguiente escritura de la app.",
   "sites_appLogs_clearModalConfirm": "Borrar registros",
+  "sites_appLogs_clearFailed": "No se pudieron borrar los registros: {error}",
   "sites_appLogs_latest": "Últimas",
   "sites_appLogs_all": "Todas",
   "services_title": "Servicios",

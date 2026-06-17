@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "清除日志文件？",
   "sites_appLogs_clearModalBody": "这将永久删除此站点 storage/logs 中的所有日志文件以释放 {size}。活动日志会在应用下次写入时自动重新创建。",
   "sites_appLogs_clearModalConfirm": "清除日志",
+  "sites_appLogs_clearFailed": "清除日志失败：{error}",
   "sites_appLogs_latest": "最新",
   "sites_appLogs_all": "全部",
   "services_title": "服务",

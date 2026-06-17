@@ -81,7 +81,10 @@ func TestRewriteLocation(t *testing.T) {
 		"/login":                       "/_svc/rabbitmq/login",
 		"/_svc/rabbitmq/already":       "/_svc/rabbitmq/already",
 		"http://localhost:15672/login": "/_svc/rabbitmq/login",
-		"https://elsewhere.test/x":     "https://elsewhere.test/x",
+		// Off-origin redirects are neutralized to the mount root so the upstream
+		// can't bounce the iframe off-site (foreign absolute URL or scheme-relative).
+		"https://elsewhere.test/x": "/_svc/rabbitmq/",
+		"//evil.com/path":          "/_svc/rabbitmq/",
 		// A redirect to the upstream's bare origin must land at the mount root,
 		// not become an empty Location (no-op reload).
 		"http://localhost:15672":          "/_svc/rabbitmq/",
@@ -183,6 +186,44 @@ func TestHandleDashProxy_RejectsCrossOrigin(t *testing.T) {
 		if rec.Code != http.StatusForbidden {
 			t.Errorf("Sec-Fetch-Site=%s: status = %d, want 403", site, rec.Code)
 		}
+	}
+}
+
+func TestIsLoopbackTarget(t *testing.T) {
+	cases := map[string]bool{
+		"localhost":       true,
+		"LocalHost":       true,
+		"127.0.0.1":       true,
+		"127.5.6.7":       true,
+		"::1":             true,
+		"169.254.169.254": false,
+		"10.0.0.5":        false,
+		"evil.com":        false,
+		"":                false,
+	}
+	for host, want := range cases {
+		if got := isLoopbackTarget(host); got != want {
+			t.Errorf("isLoopbackTarget(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
+func TestDashProxyDirector_RecomputesInjectedForwardedProto(t *testing.T) {
+	target, _ := url.Parse("http://localhost:15672")
+	p := newDashProxy("rabbitmq", target, "")
+	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/rabbitmq/", nil)
+	req.Header.Set("X-Forwarded-Proto", "https\nX-Injected: 1")
+	p.Director(req)
+	if got := req.Header.Get("X-Forwarded-Proto"); got != "http" {
+		t.Errorf("X-Forwarded-Proto = %q, want it recomputed to http (no TLS) when the inbound value is not http/https", got)
+	}
+
+	// A legitimate nginx-set https value is preserved.
+	req2 := httptest.NewRequest("GET", "http://lerd.localhost/_svc/rabbitmq/", nil)
+	req2.Header.Set("X-Forwarded-Proto", "https")
+	p.Director(req2)
+	if got := req2.Header.Get("X-Forwarded-Proto"); got != "https" {
+		t.Errorf("X-Forwarded-Proto = %q, want the nginx-set https preserved", got)
 	}
 }
 

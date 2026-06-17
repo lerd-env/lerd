@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "Svuotare i file di log?",
   "sites_appLogs_clearModalBody": "Questa operazione elimina definitivamente ogni file di log in storage/logs di questo sito per liberare {size}. Il log attivo viene ricreato automaticamente alla successiva scrittura dell'app.",
   "sites_appLogs_clearModalConfirm": "Svuota i log",
+  "sites_appLogs_clearFailed": "Cancellazione dei log non riuscita: {error}",
   "sites_appLogs_latest": "Più recente",
   "sites_appLogs_all": "Tutti",
   "services_title": "Servizi",

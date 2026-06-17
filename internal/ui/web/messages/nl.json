@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "Logbestanden wissen?",
   "sites_appLogs_clearModalBody": "Dit verwijdert permanent elk logbestand in storage/logs van deze site om {size} vrij te maken. Het actieve log wordt automatisch opnieuw aangemaakt bij de volgende schrijfactie van de app.",
   "sites_appLogs_clearModalConfirm": "Logs wissen",
+  "sites_appLogs_clearFailed": "Logs wissen mislukt: {error}",
   "sites_appLogs_latest": "Nieuwste",
   "sites_appLogs_all": "Alle",
   "services_title": "Services",

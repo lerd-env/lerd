@@ -245,8 +245,8 @@ func splitSystemdExec(s string) []string {
 		c := s[i]
 		switch {
 		case inQuote:
-			if c == '\\' && i+1 < len(s) && s[i+1] == '"' {
-				cur.WriteByte('"')
+			if c == '\\' && i+1 < len(s) && (s[i+1] == '"' || s[i+1] == '\\') {
+				cur.WriteByte(s[i+1])
 				i++
 			} else if c == '"' {
 				inQuote = false

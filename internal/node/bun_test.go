@@ -101,6 +101,19 @@ func TestBunify(t *testing.T) {
 		{"env FOO=a BAR=b npx tsx watch", "env FOO=a BAR=b bunx tsx watch"},
 		{"env", "env"},
 		{"PORT=3000 python app.py", "PORT=3000 python app.py"},
+		// Compound commands: every segment's verb is rewritten, not just the first.
+		{"npm run build && npm run preview", "bun run build && bun run preview"},
+		{"npm install && npm run dev", "bun install && bun run dev"},
+		{"npm ci; node server.js", "bun ci; bun server.js"},
+		{"npm run build | tee out.log", "bun run build | tee out.log"},
+		{"composer install && npm run dev", "composer install && bun run dev"},
+		{"npm run build 2>&1", "bun run build 2>&1"},
+		// An operator inside quotes must not split the command.
+		{`node -e "console.log(1 && 2)"`, `bun -e "console.log(1 && 2)"`},
+		// An escaped quote inside double quotes must not desync the quote state and
+		// let an operator split the string (which would rewrite an npm/node arg).
+		{`node -e "x\" ; npm install"`, `bun -e "x\" ; npm install"`},
+		{`node -e 'a && npm b'`, `bun -e 'a && npm b'`},
 	}
 	for _, tc := range cases {
 		if got := Bunify(tc.in); got != tc.want {

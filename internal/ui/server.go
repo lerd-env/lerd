@@ -3085,6 +3085,10 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "version parameter required"})
 			return
 		}
+		if !config.IsSupportedPHPVersion(version) {
+			writeJSON(w, SiteActionResponse{Error: "unsupported PHP version: " + version})
+			return
+		}
 		if branch := r.URL.Query().Get("branch"); branch != "" {
 			if err := setWorktreePHPVersion(site, branch, version); err != nil {
 				writeJSON(w, SiteActionResponse{Error: err.Error()})
@@ -4589,14 +4593,21 @@ func handleXdebugAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	applyMode := ""
+	applyStart := "yes"
 	if action == "on" {
 		applyMode = r.URL.Query().Get("mode")
 		if applyMode == "" {
 			applyMode = "debug"
 		}
+		// The dashboard doesn't expose on-demand (start_with_request=trigger), so
+		// preserve whatever the CLI last set instead of silently resetting a user's
+		// on-demand choice back to connect-on-every-request.
+		if cfg, err := config.LoadGlobal(); err == nil {
+			applyStart = cfg.GetXdebugStart(version)
+		}
 	}
 
-	res, err := xdebugops.Apply(version, applyMode)
+	res, err := xdebugops.ApplyWithStart(version, applyMode, applyStart)
 	if err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return

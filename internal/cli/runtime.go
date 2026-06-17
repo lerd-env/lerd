@@ -11,6 +11,22 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Wire the siteops demote helper to the cli worker lifecycle so the UI, MCP,
+// and install-refresh paths recreate workers when a FrankenPHP site falls back
+// to FPM, the same way switchToFPM does for `lerd runtime fpm`.
+func init() {
+	siteops.StopRuntimeWorkers = func(site *config.Site) []string {
+		running := collectRunningWorkers(site)
+		for _, w := range running {
+			WorkerStopForSite(site.Name, site.Path, w) //nolint:errcheck
+		}
+		return running
+	}
+	siteops.RecreateFPMWorkers = func(site *config.Site, workers []string) {
+		startWorkersForSite(site, workers, site.PHPVersion)
+	}
+}
+
 // NewRuntimeCmd returns the `lerd runtime` parent command.
 func NewRuntimeCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -96,9 +112,7 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 // removes its quadlet, and reloads systemd so the generated unit disappears.
 // Shared by switchToFPM and link's stale-quadlet reconcile.
 func removeFrankenPHPContainer(siteName string) {
-	_ = podman.StopUnit(podman.FrankenPHPContainerName(siteName))
-	_ = podman.RemoveFrankenPHPQuadlet(siteName)
-	_ = podman.DaemonReloadFn()
+	podman.RemoveFrankenPHPContainer(siteName)
 }
 
 // reconcileStaleFrankenPHP removes a leftover per-site FrankenPHP quadlet when a

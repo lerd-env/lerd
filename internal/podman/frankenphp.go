@@ -103,9 +103,13 @@ func RestartSiteContainersForVersion(version string) {
 		}
 		switch {
 		case s.IsCustomFPM():
-			_ = RestartUnit(CustomFPMContainerName(s.Name))
+			if err := RestartUnit(CustomFPMContainerName(s.Name)); err != nil {
+				fmt.Printf("[WARN] restarting %s for xdebug: %v\n", CustomFPMContainerName(s.Name), err)
+			}
 		case s.IsFrankenPHP():
-			_ = RestartUnit(FrankenPHPContainerName(s.Name))
+			if err := RestartUnit(FrankenPHPContainerName(s.Name)); err != nil {
+				fmt.Printf("[WARN] restarting %s for xdebug: %v\n", FrankenPHPContainerName(s.Name), err)
+			}
 		}
 	}
 }
@@ -147,6 +151,17 @@ func RemoveFrankenPHPQuadlet(siteName string) error {
 	return RemoveQuadlet(FrankenPHPContainerName(siteName))
 }
 
+// RemoveFrankenPHPContainer fully tears down a site's per-site FrankenPHP
+// container: stop the unit (the container is Restart=always, so removing only
+// the quadlet leaves it running and orphaned), drop the quadlet, and reload the
+// daemon. Shared by the CLI runtime switch and siteops' demote-to-FPM so the
+// teardown sequence lives in one place. Best-effort: each step is independent.
+func RemoveFrankenPHPContainer(siteName string) {
+	_ = StopUnit(FrankenPHPContainerName(siteName))
+	_ = RemoveFrankenPHPQuadlet(siteName)
+	_ = DaemonReloadFn()
+}
+
 // shellJoin quotes each argument for embedding in a quadlet Exec= line.
 // Quadlet Exec values are passed through podman's argv parser which already
 // handles single-word args; anything with whitespace needs quoting.
@@ -154,7 +169,12 @@ func shellJoin(args []string) string {
 	out := make([]string, len(args))
 	for i, a := range args {
 		if strings.ContainsAny(a, " \t\"'\\") {
-			out[i] = `"` + strings.ReplaceAll(a, `"`, `\"`) + `"`
+			// Escape backslashes before quotes so an arg ending in a backslash
+			// can't turn the closing quote into an escaped one; splitSystemdExec
+			// (and systemd's own Exec parser) decode \\ and \" symmetrically.
+			esc := strings.ReplaceAll(a, `\`, `\\`)
+			esc = strings.ReplaceAll(esc, `"`, `\"`)
+			out[i] = `"` + esc + `"`
 		} else {
 			out[i] = a
 		}

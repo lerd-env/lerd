@@ -45,7 +45,11 @@
     if (clearing) return;
     clearing = true;
     try {
-      await clearAppLogs(site.domain, branch);
+      const r = await clearAppLogs(site.domain, branch);
+      if (!r.ok) {
+        alert(m.sites_appLogs_clearFailed({ error: r.error || '' }));
+        return;
+      }
       await loadFiles();
       confirmOpen = false;
     } finally {

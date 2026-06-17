@@ -3852,6 +3852,9 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 	if version == "" {
 		return toolErr("version is required"), nil
 	}
+	if !config.IsSupportedPHPVersion(version) {
+		return toolErr(fmt.Sprintf("unsupported PHP version %q — supported: %s", version, strings.Join(config.SupportedPHPVersions, ", "))), nil
+	}
 
 	site, err := config.FindSite(siteName)
 	if err != nil {

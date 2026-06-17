@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -87,7 +88,11 @@ func newDashProxy(name string, target *url.URL, bootstrap string) *httputil.Reve
 		// lerd.localhost is served over https) so an upstream that builds absolute
 		// URLs from X-Forwarded-Proto doesn't downgrade them to http. Default to
 		// http only when nothing upstream told us otherwise.
-		if req.Header.Get("X-Forwarded-Proto") == "" {
+		if proto := req.Header.Get("X-Forwarded-Proto"); proto != "http" && proto != "https" {
+			// nginx (lerd.localhost) sets this from $scheme, overwriting any client
+			// value; only an unexpected/injected value or a direct-to-socket client
+			// reaches here, so recompute it from the connection rather than forward
+			// whatever the client supplied.
 			if req.TLS != nil {
 				req.Header.Set("X-Forwarded-Proto", "https")
 			} else {
@@ -123,6 +128,19 @@ func newDashProxy(name string, target *url.URL, bootstrap string) *httputil.Reve
 		http.Error(w, "dashboard upstream unavailable", http.StatusBadGateway)
 	}
 	return proxy
+}
+
+// isLoopbackTarget reports whether host is a loopback destination: the literal
+// "localhost" or a loopback IP (127.0.0.0/8, ::1). A non-literal hostname is
+// rejected rather than resolved, so DNS can't be used to slip past the gate.
+func isLoopbackTarget(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	return false
 }
 
 // stripFrameAncestors removes the frame-ancestors directive from a CSP value so
@@ -178,7 +196,11 @@ func rewriteCookiePath(cookie, mountPath string) string {
 func rewriteLocation(loc, targetHost, prefix string) string {
 	if u, err := url.Parse(loc); err == nil && u.Host != "" {
 		if u.Host != targetHost {
-			return loc // points somewhere else entirely, leave it
+			// Off-origin redirect (a foreign absolute URL, or a scheme-relative
+			// //host that the browser would follow away from the iframe). These
+			// local admin dashboards never legitimately redirect off-host, so
+			// neutralize the escape by keeping the browser inside the mount.
+			return prefix + "/"
 		}
 		loc = u.EscapedPath()
 		if loc == "" {
@@ -259,6 +281,14 @@ func handleDashProxy(w http.ResponseWriter, r *http.Request) {
 	target, err := url.Parse(svc.Dashboard)
 	if err != nil || target.Host == "" {
 		http.Error(w, fmt.Sprintf("invalid dashboard URL for %s", name), http.StatusBadGateway)
+		return
+	}
+	// The dashboard URL comes from a user-writable service file; every bundled
+	// preset points at a loopback admin UI. Refuse anything else so the proxy
+	// can't be coerced into reaching an arbitrary host (cloud metadata, internal
+	// services) with the dashboard's injected credentials attached.
+	if !isLoopbackTarget(target.Hostname()) {
+		http.Error(w, fmt.Sprintf("dashboard for %s must be loopback", name), http.StatusBadGateway)
 		return
 	}
 	dashProxyFor(name, target, config.PresetDashboardBootstrap(svc)).ServeHTTP(w, r)

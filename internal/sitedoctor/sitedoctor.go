@@ -208,8 +208,9 @@ func scanEnvUsage(path string) (map[string]envKeyUsage, int) {
 // classifyMissingEnvKeys splits missing keys into required (read with no
 // default, or a VITE_ key the frontend actually references) and optional (read
 // only with defaults, unreferenced, or a VITE_ key nothing in the JS uses). A
-// VITE_ key is judged by the frontend scan, not PHP env() usage, since Vite reads
-// it via import.meta.env; non-VITE keys fall back to "all required" when no
+// VITE_ key is primarily judged by the frontend scan (Vite reads it via
+// import.meta.env), but a VITE_ key also read by PHP env() without a default
+// still counts as required; non-VITE keys fall back to "all required" when no
 // env() call is found at all.
 func classifyMissingEnvKeys(path string, missing []string) (required, optional []string) {
 	usage, total := scanEnvUsage(path)
@@ -220,7 +221,11 @@ func classifyMissingEnvKeys(path string, missing []string) (required, optional [
 			if viteRefs == nil {
 				viteRefs = scanViteEnvRefs(path)
 			}
-			if viteRefs[k] {
+			// A VITE_ key is usually consumed by the JS bundler (import.meta.env),
+			// but it can also be read by PHP via env('VITE_…'); treat a JS source
+			// reference or a no-default PHP read as required, otherwise optional
+			// (e.g. only present in a compiled public/ bundle).
+			if viteRefs[k] || usage[k].noDefault {
 				required = append(required, k)
 			} else {
 				optional = append(optional, k)

@@ -388,6 +388,7 @@
   "sites_appLogs_clearModalTitle": "Vider les fichiers journaux ?",
   "sites_appLogs_clearModalBody": "Cela supprime définitivement tous les fichiers journaux dans storage/logs de ce site pour libérer {size}. Le journal actif est recréé automatiquement à la prochaine écriture de l'application.",
   "sites_appLogs_clearModalConfirm": "Vider les journaux",
+  "sites_appLogs_clearFailed": "Échec de l'effacement des journaux : {error}",
   "sites_appLogs_latest": "Récents",
   "sites_appLogs_all": "Tous",
   "services_title": "Services",

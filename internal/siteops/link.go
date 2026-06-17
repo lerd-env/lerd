@@ -226,15 +226,32 @@ func FinishFrankenPHPLink(site config.Site) error {
 	return nil
 }
 
+// StopRuntimeWorkers and RecreateFPMWorkers let the cli package (which owns
+// worker lifecycle) tear down a FrankenPHP site's workers before its per-site
+// container is removed and rebuild them against the shared FPM container once
+// the registry has been flipped to FPM. They mirror switchToFPM, wired at init
+// the same way as StopSiteWorkers. Without them a demote leaves the workers'
+// units still pointed at (and BindsTo) the removed FrankenPHP container, where
+// heal can't recover them. StopRuntimeWorkers returns the names it stopped.
+var (
+	StopRuntimeWorkers func(site *config.Site) []string
+	RecreateFPMWorkers func(site *config.Site, workers []string)
+)
+
 // DemoteFrankenPHPToFPM drops a FrankenPHP site back to the FPM runtime: it
-// tears down the per-site FrankenPHP quadlet, clears the runtime in the registry
-// and the project's .lerd.yaml, and regenerates the normal fastcgi vhost. It is
-// the fallback the CLI takes (via runLink) when a site's PHP version is changed
-// below the FrankenPHP minimum, mirrored here so the UI and MCP never silently
-// upgrade PHP behind the user's back. The passed site is mutated to FPM.
+// stops and tears down the per-site FrankenPHP container, clears the runtime in
+// the registry and the project's .lerd.yaml, regenerates the normal fastcgi
+// vhost, and recreates any running workers against the shared FPM container. It
+// is the fallback the CLI takes (via runLink) when a site's PHP version is
+// changed below the FrankenPHP minimum, mirrored here so the UI and MCP never
+// silently upgrade PHP behind the user's back. The passed site is mutated to FPM.
 func DemoteFrankenPHPToFPM(site *config.Site) error {
-	_ = podman.RemoveFrankenPHPQuadlet(site.Name)
-	_ = podman.DaemonReloadFn()
+	var workers []string
+	if StopRuntimeWorkers != nil {
+		workers = StopRuntimeWorkers(site)
+	}
+
+	podman.RemoveFrankenPHPContainer(site.Name)
 
 	site.Runtime = ""
 	site.RuntimeWorker = false
@@ -253,6 +270,10 @@ func DemoteFrankenPHPToFPM(site *config.Site) error {
 
 	if err := nginx.Reload(); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
+	}
+
+	if RecreateFPMWorkers != nil {
+		RecreateFPMWorkers(site, workers)
 	}
 	return nil
 }

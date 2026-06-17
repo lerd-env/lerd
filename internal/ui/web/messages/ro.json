@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "Ștergi fișierele de jurnal?",
   "sites_appLogs_clearModalBody": "Aceasta șterge definitiv fiecare fișier de jurnal din storage/logs al acestui site pentru a elibera {size}. Jurnalul activ este recreat automat la următoarea scriere a aplicației.",
   "sites_appLogs_clearModalConfirm": "Șterge jurnalele",
+  "sites_appLogs_clearFailed": "Ștergerea jurnalelor a eșuat: {error}",
   "sites_appLogs_latest": "Cel mai recent",
   "sites_appLogs_all": "Toate",
   "services_title": "Servicii",

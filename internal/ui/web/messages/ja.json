@@ -373,6 +373,7 @@
   "sites_appLogs_clearModalTitle": "ログファイルを削除しますか？",
   "sites_appLogs_clearModalBody": "このサイトの storage/logs にあるすべてのログファイルを完全に削除して {size} を解放します。アクティブなログはアプリの次回書き込み時に自動的に再作成されます。",
   "sites_appLogs_clearModalConfirm": "ログを削除",
+  "sites_appLogs_clearFailed": "ログの消去に失敗しました: {error}",
   "sites_appLogs_latest": "最新",
   "sites_appLogs_all": "すべて",
   "services_title": "サービス",
