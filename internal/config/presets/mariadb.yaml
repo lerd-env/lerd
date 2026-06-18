@@ -1,13 +1,25 @@
 name: mariadb
 description: MariaDB (MySQL-compatible) versions
 family: mariadb
-default_version: "11"
+default_version: "11.8"
 init: true
 versions:
-  - tag: "11"
-    label: "11 (latest)"
-    image: docker.io/library/mariadb:11
+  - tag: "12"
+    label: "12 (latest)"
+    image: docker.io/library/mariadb:12
+    host_port: 3412
+  - tag: "12.3"
+    label: "12.3 LTS"
+    image: docker.io/library/mariadb:12.3
+    host_port: 34123
+  - tag: "11.8"
+    label: "11.8 LTS"
+    image: docker.io/library/mariadb:11.8
     host_port: 3411
+  - tag: "11.4"
+    label: "11.4 LTS"
+    image: docker.io/library/mariadb:11.4
+    host_port: 34114
   - tag: "10.11"
     label: "10.11 LTS"
     image: docker.io/library/mariadb:10.11
