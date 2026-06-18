@@ -200,6 +200,17 @@ func toolErr(text string) map[string]any {
 	}
 }
 
+// toolJSON renders a structured value as indented JSON inside a text content
+// block. Tool results must carry a "content" array for the host to display
+// anything; returning a bare map produces a silent "no output" response.
+func toolJSON(v any) map[string]any {
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		return toolErr("marshal result: " + err.Error())
+	}
+	return toolOK(string(data))
+}
+
 func stripANSI(s string) string {
 	return logsource.StripANSI(s)
 }
