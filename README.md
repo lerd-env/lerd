@@ -82,7 +82,6 @@ Eleven grouped tools, each driven by an `action`: `site`, `service`, `db`, `env`
 | macOS              | ✅   | ✅   | ✅    | ✅           |
 | Windows (WSL2)     | 🧪   | ✅   | ✅    | ✅           |
 | MCP server         | ✅   | ❌   | ❌    | ✅           |
-| Free & open source | ✅   | ✅   | ✅    | ❌           |
 
 🟡 DDEV runs on Docker by default and can also use Podman as an alternative runtime; Lerd is built exclusively for rootless Podman.
 
