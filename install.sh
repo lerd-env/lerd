@@ -365,7 +365,15 @@ detect_shell_rc() {
   case "$shell" in
     fish) echo "$HOME/.config/fish/conf.d/lerd.fish" ;;
     zsh)  echo "$HOME/.zshrc" ;;
-    *)    echo "$HOME/.bashrc" ;;
+    *)
+      # macOS Terminal launches bash as a login shell, which reads
+      # .bash_profile, not .bashrc; Linux interactive bash reads .bashrc.
+      if [ "$(detect_os)" = "darwin" ]; then
+        echo "$HOME/.bash_profile"
+      else
+        echo "$HOME/.bashrc"
+      fi
+      ;;
   esac
 }
 
