@@ -52,6 +52,15 @@ func ExtraVolumePaths() []string {
 		if p == "" || p == home || strings.HasPrefix(p, homePrefix) {
 			return
 		}
+		// System-managed, ephemeral trees (/tmp, /run, /proc, …) must never be
+		// bind-mounted into the shared FPM/nginx containers. The host MySQL
+		// socket dir under /run is mounted into FPM only, separately — see
+		// hostDBSocketDirs.
+		for _, prefix := range ephemeralPathPrefixes {
+			if strings.HasPrefix(p, prefix) {
+				return
+			}
+		}
 		seen[p] = true
 	}
 
@@ -95,6 +104,38 @@ func ExtraVolumePaths() []string {
 		}
 	}
 	return result
+}
+
+// hostDBSocketDirs returns the host database unix-socket directories that must
+// be bind-mounted into the PHP-FPM container so containerized PHP can reach a
+// host (system) database for sites using db.external. Unlike ExtraVolumePaths,
+// these are injected into the FPM quadlets ONLY — never nginx — to keep the
+// MySQL socket off nginx's mounts. A dir is included only when it exists on the
+// host, so a configured-but-not-running host server can never make FPM fail to
+// start (podman statfs on a missing bind source).
+func hostDBSocketDirs() []string {
+	reg, err := config.LoadSites()
+	if err != nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var dirs []string
+	for _, site := range reg.Sites {
+		pc, perr := config.LoadProjectConfig(site.Path)
+		if perr != nil || pc == nil || !pc.DB.External {
+			continue
+		}
+		dir := filepath.Dir(pc.DB.HostSocketPath())
+		if dir == "" || dir == "/" || dir == "." || seen[dir] {
+			continue
+		}
+		if st, serr := os.Stat(dir); serr != nil || !st.IsDir() {
+			continue
+		}
+		seen[dir] = true
+		dirs = append(dirs, dir)
+	}
+	return dirs
 }
 
 // sortPaths sorts paths by length then lexicographically.
@@ -788,6 +829,8 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
+	// FPM-only: host DB socket dir for db.external sites (kept off nginx).
+	content = InjectExtraVolumes(content, hostDBSocketDirs())
 	return content, nil
 }
 
@@ -796,6 +839,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 // paths change so that extra volume mounts stay in sync.
 func RewriteFPMQuadlets() error {
 	extraPaths := ExtraVolumePaths()
+	hostSockets := hostDBSocketDirs()
 	versions, _ := listInstalledPHPVersions()
 
 	var changedUnits []string
@@ -820,6 +864,8 @@ func RewriteFPMQuadlets() error {
 		content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
 		content = applyShellMounts(content, short)
 		content = InjectExtraVolumes(content, extraPaths)
+		// FPM-only: host DB socket dir for db.external sites (kept off nginx).
+		content = InjectExtraVolumes(content, hostSockets)
 
 		changed, writeErr := WriteQuadletDiff(unitName, content)
 		if writeErr != nil {

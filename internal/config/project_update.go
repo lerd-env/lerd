@@ -361,6 +361,29 @@ func ReplaceProjectDBService(dir string, choice string) error {
 	return SaveProjectConfig(dir, cfg)
 }
 
+// SetProjectDBExternal flips the project at dir between lerd's containerized
+// database and a host-installed (system) one by writing db.external to
+// .lerd.yaml. When external is true an optional socket path overrides the
+// default host MySQL socket; when false both fields are cleared. `lerd env`
+// then emits DB_HOST=localhost + DB_SOCKET (external) or the normal container
+// connection (not external). Creates .lerd.yaml if it does not exist yet.
+func SetProjectDBExternal(dir string, external bool, socket string) error {
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		cfg = &ProjectConfig{}
+	}
+	cfg.DB.External = external
+	if external {
+		cfg.DB.Socket = socket // empty => HostSocketPath falls back to the default
+	} else {
+		cfg.DB.Socket = ""
+	}
+	return SaveProjectConfig(dir, cfg)
+}
+
 // IsDBServiceName reports whether name refers to a database service: sqlite,
 // or any service whose family is mysql, mariadb, postgres, or mongo. Used by
 // the DB-picker logic in `lerd env` and `db_set` to decide what counts as

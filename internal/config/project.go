@@ -10,12 +10,36 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// DefaultHostMySQLSocket is the unix socket a host-installed (system)
+// MySQL/MariaDB server listens on by default on Debian/Ubuntu. Used when
+// db.external is set but db.socket is not specified.
+const DefaultHostMySQLSocket = "/run/mysqld/mysqld.sock"
+
 // ProjectDB holds optional database targeting info for the project.
 // Setting these in .lerd.yaml lets db commands work without a .env file,
 // which is useful for non-PHP projects (NestJS, Go, etc.).
 type ProjectDB struct {
 	Service  string `yaml:"service,omitempty"`
 	Database string `yaml:"database,omitempty"`
+	// External, when true, points the project at a host-installed (system)
+	// database instead of lerd's containerized one. For MySQL/MariaDB the
+	// containerized PHP reaches the host server over its unix socket (bind-
+	// mounted into the FPM container), so `lerd env` emits DB_HOST=localhost +
+	// DB_SOCKET and lerd does not start the lerd-mysql container. Opt-in,
+	// per-project, committed to .lerd.yaml. See Socket.
+	External bool `yaml:"external,omitempty"`
+	// Socket overrides the host database unix socket path used when External
+	// is set. Empty defaults to DefaultHostMySQLSocket.
+	Socket string `yaml:"socket,omitempty"`
+}
+
+// HostSocketPath returns the host database unix socket to use in external
+// mode: the configured Socket, or DefaultHostMySQLSocket when unset.
+func (d ProjectDB) HostSocketPath() string {
+	if d.Socket != "" {
+		return d.Socket
+	}
+	return DefaultHostMySQLSocket
 }
 
 // ContainerConfig holds per-project custom container settings. When present
@@ -123,6 +147,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		c.PublicDir == "" && len(c.Services) == 0 &&
 		len(c.Workers) == 0 && len(c.CustomWorkers) == 0 && len(c.ReloadWorkers) == 0 && len(c.Commands) == 0 && !c.Secured &&
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
+		!c.DB.External && c.DB.Socket == "" &&
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && c.RequestTimeout == 0 && c.Stripe == nil
 }

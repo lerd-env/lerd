@@ -308,6 +308,24 @@ var serviceDetectors = map[string]func(map[string]string) bool{
 	},
 }
 
+// projectDBIsMySQLFamily reports whether the project's database is MySQL or
+// MariaDB — the families that support host access over a unix socket. Gates
+// the db.external host-database mode, which is MySQL/MariaDB-only for now.
+func projectDBIsMySQLFamily(proj *config.ProjectConfig) bool {
+	if proj.DB.Service != "" {
+		fam := config.FamilyOfName(proj.DB.Service)
+		return fam == "mysql" || fam == "mariadb"
+	}
+	for _, s := range proj.Services {
+		if config.IsDBServiceName(s.Name) {
+			fam := config.FamilyOfName(s.Name)
+			return fam == "mysql" || fam == "mariadb"
+		}
+	}
+	// Unspecified DB → assume MySQL, since db.external is the host-MySQL feature.
+	return true
+}
+
 func runEnv(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -440,6 +458,40 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	envOverrides, extServices := readEnvOverride(cwd)
 	if _, statErr := os.Stat(filepath.Join(cwd, envOverrideFile)); statErr == nil {
 		ensureOverrideGitignored(cwd)
+	}
+
+	// First-class committed host-database mode: .lerd.yaml `db.external: true`
+	// is the shareable equivalent of LERD_EXTERNAL_SERVICES + a DB_HOST/DB_SOCKET
+	// override. For a MySQL/MariaDB project it marks the DB service externally
+	// managed (so the loops below skip ensureServiceRunning/createDatabase — no
+	// lerd-mysql container) and layers the host unix-socket connection vars into
+	// envOverrides so they win over the framework's DB_HOST=lerd-mysql default.
+	if proj, _ := config.LoadProjectConfig(cwd); proj != nil && proj.DB.External && projectDBIsMySQLFamily(proj) {
+		extServices["mysql"] = true
+		extServices["mariadb"] = true
+		if proj.DB.Service != "" {
+			extServices[strings.ToLower(proj.DB.Service)] = true
+		}
+		for _, s := range proj.Services {
+			if config.IsDBServiceName(s.Name) {
+				extServices[strings.ToLower(s.Name)] = true
+			}
+		}
+		envOverrides["DB_HOST"] = "localhost"
+		envOverrides["DB_SOCKET"] = proj.DB.HostSocketPath()
+		// Clear DB_PORT: the connection is over the unix socket, so a container
+		// port lingering from the framework's default DB vars is misleading and
+		// could push non-socket tooling onto TCP against a wrong port.
+		envOverrides["DB_PORT"] = ""
+		// Don't let the container's default root/lerd creds clobber the host
+		// credentials: preserve whatever the .env already has for these keys.
+		if v, ok := envMap["DB_USERNAME"]; ok {
+			envOverrides["DB_USERNAME"] = v
+		}
+		if v, ok := envMap["DB_PASSWORD"]; ok {
+			envOverrides["DB_PASSWORD"] = v
+		}
+		fmt.Printf("  Host MySQL (db.external) — connecting via socket %s; not starting lerd-mysql\n", proj.DB.HostSocketPath())
 	}
 
 	// Laravel ships .env / .env.example with DB_CONNECTION=sqlite. If the user
