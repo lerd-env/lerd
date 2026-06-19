@@ -948,5 +948,7 @@
   "services_cat_storage": "Stocare",
   "services_cat_testing": "Testare",
   "services_cat_other": "Altele",
-  "services_cat_messaging": "Mesagerie"
+  "services_cat_messaging": "Mesagerie",
+  "tinker_lspConnecting": "Serverul de limbaj pornește…",
+  "tinker_lspUnavailable": "Server de limbaj indisponibil"
 }

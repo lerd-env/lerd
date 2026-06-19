@@ -948,5 +948,7 @@
   "services_cat_storage": "ストレージ",
   "services_cat_testing": "テスト",
   "services_cat_other": "その他",
-  "services_cat_messaging": "メッセージング"
+  "services_cat_messaging": "メッセージング",
+  "tinker_lspConnecting": "言語サーバーを起動中…",
+  "tinker_lspUnavailable": "言語サーバーを利用できません"
 }

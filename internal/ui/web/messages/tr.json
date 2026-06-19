@@ -948,5 +948,7 @@
   "services_cat_storage": "Depolama",
   "services_cat_testing": "Test",
   "services_cat_other": "Diğer",
-  "services_cat_messaging": "Mesajlaşma"
+  "services_cat_messaging": "Mesajlaşma",
+  "tinker_lspConnecting": "Dil sunucusu başlatılıyor…",
+  "tinker_lspUnavailable": "Dil sunucusu kullanılamıyor"
 }

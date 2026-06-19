@@ -948,5 +948,7 @@
   "services_cat_storage": "Lưu trữ",
   "services_cat_testing": "Kiểm thử",
   "services_cat_other": "Khác",
-  "services_cat_messaging": "Nhắn tin"
+  "services_cat_messaging": "Nhắn tin",
+  "tinker_lspConnecting": "Đang khởi động máy chủ ngôn ngữ…",
+  "tinker_lspUnavailable": "Máy chủ ngôn ngữ không khả dụng"
 }

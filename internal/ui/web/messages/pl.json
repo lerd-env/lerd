@@ -948,5 +948,7 @@
   "services_cat_storage": "Pamięć masowa",
   "services_cat_testing": "Testowanie",
   "services_cat_other": "Inne",
-  "services_cat_messaging": "Komunikaty"
+  "services_cat_messaging": "Komunikaty",
+  "tinker_lspConnecting": "Uruchamianie serwera języka…",
+  "tinker_lspUnavailable": "Serwer języka niedostępny"
 }

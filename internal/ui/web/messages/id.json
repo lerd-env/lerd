@@ -948,5 +948,7 @@
   "services_cat_storage": "Penyimpanan",
   "services_cat_testing": "Pengujian",
   "services_cat_other": "Lainnya",
-  "services_cat_messaging": "Perpesanan"
+  "services_cat_messaging": "Perpesanan",
+  "tinker_lspConnecting": "Memulai server bahasa…",
+  "tinker_lspUnavailable": "Server bahasa tidak tersedia"
 }

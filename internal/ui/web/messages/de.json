@@ -948,5 +948,7 @@
   "services_cat_storage": "Speicher",
   "services_cat_testing": "Tests",
   "services_cat_other": "Sonstige",
-  "services_cat_messaging": "Messaging"
+  "services_cat_messaging": "Messaging",
+  "tinker_lspConnecting": "Sprachserver startet…",
+  "tinker_lspUnavailable": "Sprachserver nicht verfügbar"
 }

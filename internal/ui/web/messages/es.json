@@ -948,5 +948,7 @@
   "services_cat_storage": "Almacenamiento",
   "services_cat_testing": "Pruebas",
   "services_cat_other": "Otros",
-  "services_cat_messaging": "Mensajería"
+  "services_cat_messaging": "Mensajería",
+  "tinker_lspConnecting": "Iniciando servidor de lenguaje…",
+  "tinker_lspUnavailable": "Servidor de lenguaje no disponible"
 }

@@ -948,5 +948,7 @@
   "services_cat_storage": "Opslag",
   "services_cat_testing": "Testen",
   "services_cat_other": "Overige",
-  "services_cat_messaging": "Berichten"
+  "services_cat_messaging": "Berichten",
+  "tinker_lspConnecting": "Taalserver wordt gestart…",
+  "tinker_lspUnavailable": "Taalserver niet beschikbaar"
 }
