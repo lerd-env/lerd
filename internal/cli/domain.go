@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/geodro/lerd/internal/certs"
@@ -54,15 +53,7 @@ func newDomainListCmd() *cobra.Command {
 
 // resolveSiteForCwd finds the site registered for the current working directory.
 func resolveSiteForCwd() (*config.Site, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	site, err := config.FindSiteByPath(cwd)
-	if err != nil {
-		return nil, fmt.Errorf("no site registered for %s — link it first with lerd link", cwd)
-	}
-	return site, nil
+	return ensureSiteForCwd()
 }
 
 func runDomainAdd(_ *cobra.Command, args []string) error {

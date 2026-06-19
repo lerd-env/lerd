@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 
@@ -112,15 +111,7 @@ func resolvePauseSite(args []string) (*config.Site, error) {
 	if len(args) == 1 {
 		return config.FindSite(args[0])
 	}
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-	site, err := config.FindSiteByPath(cwd)
-	if err != nil {
-		return nil, fmt.Errorf("no lerd site here — run inside a project or pass a site name")
-	}
-	return site, nil
+	return ensureSiteForCwd()
 }
 
 func pauseSiteVersion(site *config.Site) string {
