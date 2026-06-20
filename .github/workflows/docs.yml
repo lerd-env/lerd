@@ -35,6 +35,14 @@ jobs:
           mkdir -p docs/public/assets/screenshots
           cp screenshots/app-*.png docs/public/assets/screenshots/
           cp install.sh docs/public/install.sh
+          mkdir -p docs/public/icons
+          cp docs/public/assets/logo.svg docs/public/icons/icon.svg
+
+      - name: Build the embedded UI demo
+        working-directory: internal/ui/web
+        run: |
+          npm ci
+          npm run build:demo
 
       - name: Install dependencies
         working-directory: docs

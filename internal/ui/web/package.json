@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm run i18n && vite",
     "build": "npm run i18n && vite build",
+    "build:demo": "npm run i18n && vite build --config vite.demo.config.ts",
     "preview": "vite preview",
     "check": "npm run i18n && svelte-check --tsconfig ./tsconfig.json",
     "test": "npm run i18n && vitest run",
