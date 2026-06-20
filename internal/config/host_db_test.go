@@ -29,6 +29,52 @@ func TestIsEmpty_HostDBExternal(t *testing.T) {
 	}
 }
 
+func TestGlobalConfig_DefaultDBBackend(t *testing.T) {
+	// Nil receiver and the zero value both mean container (lerd's own MySQL).
+	if got := (*GlobalConfig)(nil).DefaultDBBackend(); got != DBBackendContainer {
+		t.Errorf("nil receiver = %q, want %q", got, DBBackendContainer)
+	}
+	if got := (&GlobalConfig{}).DefaultDBBackend(); got != DBBackendContainer {
+		t.Errorf("zero value = %q, want %q", got, DBBackendContainer)
+	}
+	host := &GlobalConfig{}
+	host.Database.DefaultBackend = DBBackendHost
+	if got := host.DefaultDBBackend(); got != DBBackendHost {
+		t.Errorf("host configured = %q, want %q", got, DBBackendHost)
+	}
+	// An unrecognised value normalises back to container rather than leaking out.
+	junk := &GlobalConfig{}
+	junk.Database.DefaultBackend = "nonsense"
+	if got := junk.DefaultDBBackend(); got != DBBackendContainer {
+		t.Errorf("junk value = %q, want %q", got, DBBackendContainer)
+	}
+}
+
+func TestProjectConfig_IsMySQLFamilyDB(t *testing.T) {
+	// Nil and unspecified DB both assume MySQL family (db.external is the
+	// host-MySQL feature; an unset DB shouldn't block enabling it).
+	if !(*ProjectConfig)(nil).IsMySQLFamilyDB() {
+		t.Error("nil receiver should be MySQL family (assumed)")
+	}
+	if !(&ProjectConfig{}).IsMySQLFamilyDB() {
+		t.Error("empty config should be MySQL family (assumed)")
+	}
+	// db.service wins over the services list.
+	if !(&ProjectConfig{DB: ProjectDB{Service: "mariadb"}}).IsMySQLFamilyDB() {
+		t.Error("db.service=mariadb should be MySQL family")
+	}
+	if (&ProjectConfig{DB: ProjectDB{Service: "postgres"}}).IsMySQLFamilyDB() {
+		t.Error("db.service=postgres should NOT be MySQL family")
+	}
+	// Falls back to the services list when db.service is unset.
+	if !(&ProjectConfig{Services: []ProjectService{{Name: "mysql"}}}).IsMySQLFamilyDB() {
+		t.Error("services=[mysql] should be MySQL family")
+	}
+	if (&ProjectConfig{Services: []ProjectService{{Name: "postgres"}}}).IsMySQLFamilyDB() {
+		t.Error("services=[postgres] should NOT be MySQL family")
+	}
+}
+
 func TestSetProjectDBExternal_RoundTrip(t *testing.T) {
 	dir := t.TempDir()
 

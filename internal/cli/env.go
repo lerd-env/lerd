@@ -311,19 +311,10 @@ var serviceDetectors = map[string]func(map[string]string) bool{
 // projectDBIsMySQLFamily reports whether the project's database is MySQL or
 // MariaDB — the families that support host access over a unix socket. Gates
 // the db.external host-database mode, which is MySQL/MariaDB-only for now.
+// Delegates to config.ProjectConfig.IsMySQLFamilyDB so the CLI and the
+// dashboard's backend switch share one predicate.
 func projectDBIsMySQLFamily(proj *config.ProjectConfig) bool {
-	if proj.DB.Service != "" {
-		fam := config.FamilyOfName(proj.DB.Service)
-		return fam == "mysql" || fam == "mariadb"
-	}
-	for _, s := range proj.Services {
-		if config.IsDBServiceName(s.Name) {
-			fam := config.FamilyOfName(s.Name)
-			return fam == "mysql" || fam == "mariadb"
-		}
-	}
-	// Unspecified DB → assume MySQL, since db.external is the host-MySQL feature.
-	return true
+	return proj.IsMySQLFamilyDB()
 }
 
 // applyHostDBExternalEnv translates a project's committed db.external host-database

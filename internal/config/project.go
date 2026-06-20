@@ -15,6 +15,15 @@ import (
 // db.external is set but db.socket is not specified.
 const DefaultHostMySQLSocket = "/run/mysqld/mysqld.sock"
 
+// DB backend identifiers, shared by the per-site switch and the global
+// default. "container" is lerd's own MySQL/MariaDB container (db.external
+// unset); "host" is the system MySQL reached over its unix socket
+// (db.external set). The empty/zero value normalises to container.
+const (
+	DBBackendContainer = "container"
+	DBBackendHost      = "host"
+)
+
 // ProjectDB holds optional database targeting info for the project.
 // Setting these in .lerd.yaml lets db commands work without a .env file,
 // which is useful for non-PHP projects (NestJS, Go, etc.).

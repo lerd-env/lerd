@@ -156,6 +156,11 @@ type EnrichedSite struct {
 	// Services
 	Services []string
 
+	// DBExternal reports whether the site is pointed at a host (system) database
+	// instead of lerd's containerized one (.lerd.yaml db.external). Surfaced so the
+	// dashboard can render and toggle the per-site MySQL backend.
+	DBExternal bool
+
 	// Custom container
 	ContainerPort  int
 	ContainerSSL   bool
@@ -654,6 +659,7 @@ func (e *EnrichedSite) enrichServices() {
 	svcSet := make(map[string]bool)
 
 	if projErr == nil && proj != nil {
+		e.DBExternal = proj.DB.External
 		for _, ps := range proj.Services {
 			if ps.Name != "" && !svcSet[ps.Name] {
 				e.Services = append(e.Services, ps.Name)

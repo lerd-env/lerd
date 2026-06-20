@@ -253,6 +253,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
+	mux.HandleFunc("/api/settings/default-backend", withCORS(publishAfter(handleSettingsDefaultBackend, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
 	mux.HandleFunc("/api/stats", withCORS(handleStats))
@@ -786,6 +787,10 @@ type SiteResponse struct {
 	GroupMainDomain string `json:"group_main_domain,omitempty"`
 	GroupSharedDB   bool   `json:"group_shared_db,omitempty"`
 	MultiTenant     bool   `json:"multi_tenant,omitempty"`
+	// DBExternal reports the site uses a host (system) MySQL instead of lerd's
+	// containerized one (.lerd.yaml db.external), so the service page can show and
+	// toggle the per-site backend.
+	DBExternal bool `json:"db_external,omitempty"`
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
@@ -975,6 +980,7 @@ func buildSites() []SiteResponse {
 			GroupMainDomain:      groupMainDomain[e.Group],
 			GroupSharedDB:        e.GroupSharedDB,
 			MultiTenant:          e.Group != "" && e.GroupSubdomain == "" && siteHasEnvOverrides(e.Path),
+			DBExternal:           e.DBExternal,
 		})
 	}
 	return sites
@@ -3492,7 +3498,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		// Flip the site between lerd's containerized MySQL and the host (system)
 		// MySQL. backend=host|container; migrate=point (default; copy not yet wired).
 		backend := r.URL.Query().Get("backend")
-		if backend != "host" && backend != "container" {
+		if backend != config.DBBackendHost && backend != config.DBBackendContainer {
 			writeJSON(w, SiteActionResponse{Error: `backend must be "host" or "container"`})
 			return
 		}
@@ -3500,11 +3506,11 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "data copy is not implemented yet — choose Point only"})
 			return
 		}
-		if backend == "host" && !isLoopbackRequest(r) {
+		if backend == config.DBBackendHost && !isLoopbackRequest(r) {
 			writeJSON(w, SiteActionResponse{Error: "host MySQL can only be selected from the local machine"})
 			return
 		}
-		if err := config.SetProjectDBExternal(site.Path, backend == "host", ""); err != nil {
+		if err := config.SetProjectDBExternal(site.Path, backend == config.DBBackendHost, ""); err != nil {
 			writeJSON(w, SiteActionResponse{Error: "updating .lerd.yaml: " + err.Error()})
 			return
 		}
@@ -4352,6 +4358,7 @@ type SettingsResponse struct {
 	DNSEnabled                bool     `json:"dns_enabled"`
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
+	DefaultDBBackend          string   `json:"default_db_backend"`    // "container" | "host"
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -4361,12 +4368,14 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	idleMinutes := int(config.DefaultIdleSuspendTimeout / time.Minute)
 	dnsEnabled := true
 	var dnsUpstream []string
+	defaultBackend := config.DBBackendContainer
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
 		idleEnabled = cfg.IdleSuspend.Enabled
 		idleMinutes = int(cfg.IdleSuspendTimeout() / time.Minute)
 		dnsEnabled = cfg.DNSManaged()
 		dnsUpstream = cfg.DNS.Upstream
+		defaultBackend = cfg.DefaultDBBackend()
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
@@ -4377,6 +4386,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		DNSEnabled:                dnsEnabled,
 		DNSUpstream:               dnsUpstream,
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
+		DefaultDBBackend:          defaultBackend,
 	})
 }
 
@@ -4470,6 +4480,86 @@ func handleSettingsDNSUpstream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	writeJSON(w, map[string]any{"ok": true, "upstream": cleaned})
+}
+
+// handleSettingsDefaultBackend sets the global default DB backend that new sites
+// adopt ("container" = lerd's own MySQL, "host" = the system MySQL over its unix
+// socket). With apply_all it also re-points every existing MySQL/MariaDB site to
+// the chosen backend in one pass. The host backend is loopback-only because it
+// depends on a host-local unix socket that LAN clients can't reach.
+func handleSettingsDefaultBackend(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Backend  string `json:"backend"`
+		ApplyAll bool   `json:"apply_all"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if body.Backend != config.DBBackendHost && body.Backend != config.DBBackendContainer {
+		writeJSON(w, map[string]any{"ok": false, "error": `backend must be "host" or "container"`})
+		return
+	}
+	if body.Backend == config.DBBackendHost && !isLoopbackRequest(r) {
+		writeJSON(w, map[string]any{"ok": false, "error": "host MySQL can only be selected from the local machine"})
+		return
+	}
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	cfg.Database.DefaultBackend = body.Backend
+	if err := config.SaveGlobal(cfg); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+
+	applied := 0
+	if body.ApplyAll {
+		external := body.Backend == config.DBBackendHost
+		reg, err := config.LoadSites()
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": "listing sites: " + err.Error(), "default_db_backend": body.Backend})
+			return
+		}
+		var failed []string
+		for _, s := range reg.Sites {
+			// Only MySQL/MariaDB sites can use the host-socket backend; switching a
+			// Postgres/Mongo site to "host" would be meaningless, so skip it when
+			// enabling. Disabling (→ container) is always safe and idempotent.
+			if external {
+				if proj, perr := config.LoadProjectConfig(s.Path); perr == nil && !proj.IsMySQLFamilyDB() {
+					continue
+				}
+			}
+			if err := config.SetProjectDBExternal(s.Path, external, ""); err != nil {
+				failed = append(failed, s.Name+": "+err.Error())
+				continue
+			}
+			if err := reexecLerdEnvDir(s.Path); err != nil {
+				failed = append(failed, s.Name+": "+err.Error())
+				continue
+			}
+			applied++
+		}
+		// Re-render FPM quadlets ONCE after every .env was regenerated, so each
+		// site's host-socket mount is added or removed in a single restart pass.
+		if err := podman.RewriteFPMQuadlets(); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": "updating php-fpm: " + err.Error(), "applied": applied})
+			return
+		}
+		if len(failed) > 0 {
+			writeJSON(w, map[string]any{"ok": false, "error": "some sites failed: " + strings.Join(failed, "; "), "applied": applied})
+			return
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "default_db_backend": body.Backend, "applied": applied})
 }
 
 func handleSettingsWorkerMode(w http.ResponseWriter, r *http.Request) {

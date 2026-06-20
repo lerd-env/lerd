@@ -206,8 +206,26 @@ type GlobalConfig struct {
 		// DefaultIdleSuspendTimeout; read it via IdleSuspendTimeout.
 		Timeout string `yaml:"timeout,omitempty" mapstructure:"timeout"`
 	} `yaml:"idle_suspend,omitempty" mapstructure:"idle_suspend"`
+	Database struct {
+		// DefaultBackend is the DB backend new sites adopt and the target of the
+		// dashboard's "switch all sites" control: "container" (lerd's own MySQL,
+		// the historical default) or "host" (the system MySQL reached over its
+		// unix socket). Empty/unknown normalises to container via
+		// DefaultDBBackend(), so existing installs keep using lerd-mysql.
+		DefaultBackend string `yaml:"default_backend,omitempty" mapstructure:"default_backend"`
+	} `yaml:"database,omitempty" mapstructure:"database"`
 	ParkedDirectories []string                 `yaml:"parked_directories" mapstructure:"parked_directories"`
 	Services          map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
+}
+
+// DefaultDBBackend returns the effective global default DB backend, normalising
+// an empty or unrecognised value to DBBackendContainer (lerd's own MySQL). A nil
+// receiver counts as container, matching how an unconfigured install behaves.
+func (c *GlobalConfig) DefaultDBBackend() string {
+	if c != nil && c.Database.DefaultBackend == DBBackendHost {
+		return DBBackendHost
+	}
+	return DBBackendContainer
 }
 
 // DefaultIdleSuspendTimeout is how long a site stays idle before its
