@@ -85,6 +85,27 @@ wsMessage.subscribe((msg) => {
   if (msg?.services) applyServices(msg.services);
 });
 
+// HostMySQLStatus mirrors serviceops.HostMySQLStatus: whether a host-installed
+// (system) MySQL is present and reachable, for the "system MySQL" backend option.
+export interface HostMySQLStatus {
+  socket_present: boolean;
+  socket_path: string;
+  live: boolean;
+  tcp3306_listening: boolean;
+  tcp3306_owner: 'host' | 'lerd' | 'none' | 'unknown';
+}
+
+// hostMysqlProbe reports whether the host MySQL is available so the UI can guide
+// the user before switching a site to it. Loopback-only server-side; returns
+// null on any error (treat as "unknown / not reachable").
+export async function hostMysqlProbe(): Promise<HostMySQLStatus | null> {
+  try {
+    return await apiJson<HostMySQLStatus>('/api/services/host-mysql-probe');
+  } catch {
+    return null;
+  }
+}
+
 function isWorker(s: Service): boolean {
   return Boolean(
     s.queue_site ||
@@ -654,4 +675,12 @@ export function detailLabel(s: Service): string {
 
 export function isServiceWorker(s: Service): boolean {
   return isWorker(s);
+}
+
+// isMySQLService reports whether a service is the MySQL/MariaDB family — the
+// only one the host (system) DB backend applies to. Matches the canonical
+// 'mysql'/'mariadb' and version-suffixed presets (mysql-5-7, mariadb-11, …).
+export function isMySQLService(s: Service): boolean {
+  const n = s.name;
+  return n === 'mysql' || n === 'mariadb' || n.startsWith('mysql-') || n.startsWith('mariadb-');
 }

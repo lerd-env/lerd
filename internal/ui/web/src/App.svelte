@@ -13,6 +13,7 @@
   import { loadNodeVersions } from '$stores/nodeVersions';
   import { loadAutostart } from '$stores/autostart';
   import { loadIdle } from '$stores/idle';
+  import { loadDefaultBackend } from '$stores/dbBackend';
   import { loadSites } from '$stores/sites';
   import { loadServices } from '$stores/services';
   import { loadWorkerHealth } from '$stores/workerHealth';
@@ -49,6 +50,7 @@
     loadNodeVersions();
     loadAutostart();
     loadIdle();
+    loadDefaultBackend();
     loadSites();
     loadServices();
     loadWorkerHealth();

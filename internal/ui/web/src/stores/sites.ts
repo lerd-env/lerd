@@ -48,6 +48,10 @@ export interface Site {
   group_main_domain?: string;
   group_shared_db?: boolean;
   multi_tenant?: boolean;
+  // db_external: the site points at the host (system) MySQL over its unix socket
+  // instead of lerd's containerized one (.lerd.yaml db.external). Drives the
+  // per-site backend toggle on the MySQL service page.
+  db_external?: boolean;
   worktrees?: Array<{
     branch?: string;
     domain?: string;
@@ -507,6 +511,18 @@ export function setWorktreeDBIsolated(
   const params = new URLSearchParams({ branch, isolated: String(isolated) });
   if (isolated && source) params.set('source', source);
   return postAction(site(d, 'db:isolate') + '?' + params.toString());
+}
+
+// setSiteDBBackend flips a site between lerd's containerized MySQL ('container')
+// and the host (system) MySQL ('host'). migrate is 'point' for now (re-point
+// only; 'copy' is rejected server-side until data migration is wired).
+export function setSiteDBBackend(
+  d: string,
+  backend: 'host' | 'container',
+  migrate: 'point' | 'copy' = 'point'
+) {
+  const params = new URLSearchParams({ backend, migrate });
+  return postAction(site(d, 'db:backend') + '?' + params.toString());
 }
 
 export const toggleTLS = (s: Site) => postAction(site(s.domain, s.tls ? 'unsecure' : 'secure'));
