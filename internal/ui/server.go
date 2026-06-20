@@ -4550,12 +4550,14 @@ func handleSettingsDefaultBackend(w http.ResponseWriter, r *http.Request) {
 		}
 		// Re-render FPM quadlets ONCE after every .env was regenerated, so each
 		// site's host-socket mount is added or removed in a single restart pass.
+		// Every response echoes default_db_backend (already persisted above) so the
+		// client can reconcile its toggle to the saved value even on partial failure.
 		if err := podman.RewriteFPMQuadlets(); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": "updating php-fpm: " + err.Error(), "applied": applied})
+			writeJSON(w, map[string]any{"ok": false, "error": "updating php-fpm: " + err.Error(), "applied": applied, "default_db_backend": body.Backend})
 			return
 		}
 		if len(failed) > 0 {
-			writeJSON(w, map[string]any{"ok": false, "error": "some sites failed: " + strings.Join(failed, "; "), "applied": applied})
+			writeJSON(w, map[string]any{"ok": false, "error": "some sites failed: " + strings.Join(failed, "; "), "applied": applied, "default_db_backend": body.Backend})
 			return
 		}
 	}
