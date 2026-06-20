@@ -201,6 +201,7 @@ func Start(currentVersion string) error {
 
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/presets/", withCORS(publishAfter(handleServicePresetInstall, eventbus.KindServices, eventbus.KindStatus)))
+	mux.HandleFunc("/api/services/host-mysql-probe", withCORS(handleHostMysqlProbe))
 	mux.HandleFunc("/api/services/", withCORS(publishAfter(handleServiceAction, eventbus.KindServices, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
@@ -2967,6 +2968,34 @@ type SiteActionResponse struct {
 	Error string `json:"error,omitempty"`
 }
 
+// reexecLerdEnvDir runs `lerd env` in dir as a subprocess to regenerate the
+// project's .env after a config change (e.g. flipping db.external). runEnv is a
+// cobra command rather than a library function, so the dashboard re-execs the
+// lerd binary — the established pattern for env regeneration from the UI.
+func reexecLerdEnvDir(dir string) error {
+	self, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("resolving executable: %w", err)
+	}
+	cmd := exec.Command(self, "env")
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("lerd env failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// handleHostMysqlProbe reports whether a host-installed (system) MySQL is
+// present and reachable, feeding the dashboard's "system MySQL" backend badge.
+// Loopback-only because it inspects host-local sockets and ports.
+func handleHostMysqlProbe(w http.ResponseWriter, r *http.Request) {
+	if !isLoopbackRequest(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+	writeJSON(w, serviceops.ProbeHostMySQL(""))
+}
+
 func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	// path: /api/sites/{domain}/secure or /api/sites/{domain}/unsecure
 	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/sites/"), "/")
@@ -3455,6 +3484,40 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		source := r.URL.Query().Get("source")
 		if err := setWorktreeDBIsolated(site, branch, on, source); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "db:backend":
+		// Flip the site between lerd's containerized MySQL and the host (system)
+		// MySQL. backend=host|container; migrate=point (default; copy not yet wired).
+		backend := r.URL.Query().Get("backend")
+		if backend != "host" && backend != "container" {
+			writeJSON(w, SiteActionResponse{Error: `backend must be "host" or "container"`})
+			return
+		}
+		if r.URL.Query().Get("migrate") == "copy" {
+			writeJSON(w, SiteActionResponse{Error: "data copy is not implemented yet — choose Point only"})
+			return
+		}
+		if backend == "host" && !isLoopbackRequest(r) {
+			writeJSON(w, SiteActionResponse{Error: "host MySQL can only be selected from the local machine"})
+			return
+		}
+		if err := config.SetProjectDBExternal(site.Path, backend == "host", ""); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "updating .lerd.yaml: " + err.Error()})
+			return
+		}
+		// Regenerate .env: host => DB_HOST=localhost + DB_SOCKET and lerd-mysql is
+		// left unstarted; container => the normal lerd-mysql connection.
+		if err := reexecLerdEnvDir(site.Path); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		// Re-render FPM quadlets so the host socket mount is added/removed; this
+		// restarts only the php-fpm units that actually changed.
+		if err := podman.RewriteFPMQuadlets(); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "updating php-fpm: " + err.Error()})
 			return
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
