@@ -2,7 +2,6 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
@@ -48,13 +47,9 @@ choice is committed with the project.
 }
 
 func runRuntime(cmd *cobra.Command, args []string) error {
-	cwd, err := os.Getwd()
+	site, err := ensureSiteForCwd()
 	if err != nil {
 		return err
-	}
-	site, err := config.FindSiteByPath(cwd)
-	if err != nil {
-		return fmt.Errorf("not a registered site — run 'lerd link' first")
 	}
 	if site.IsCustomContainer() {
 		return fmt.Errorf("site uses a custom Containerfile; the runtime is defined by your Containerfile.lerd")

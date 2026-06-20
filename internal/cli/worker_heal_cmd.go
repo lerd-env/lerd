@@ -2,9 +2,7 @@ package cli
 
 import (
 	"fmt"
-	"os"
 
-	"github.com/geodro/lerd/internal/config"
 	"github.com/spf13/cobra"
 )
 
@@ -64,13 +62,9 @@ func runHealAll() error {
 }
 
 func runHealOne(workerName string) error {
-	cwd, err := os.Getwd()
+	site, err := ensureSiteForCwd()
 	if err != nil {
 		return err
-	}
-	site, err := config.FindSiteByPath(cwd)
-	if err != nil {
-		return fmt.Errorf("not a registered site — run 'lerd link' first")
 	}
 	unit := "lerd-" + workerName + "-" + site.Name
 	fmt.Printf("  ➜  %s ", unit)
