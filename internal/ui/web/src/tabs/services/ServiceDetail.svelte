@@ -7,13 +7,23 @@
   import ServiceEnvTab from './ServiceEnvTab.svelte';
   import ServiceTuningTab from './ServiceTuningTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
-  import type { Service } from '$stores/services';
+  import HostSetupCallout from './HostSetupCallout.svelte';
+  import { isMySQLService, type Service } from '$stores/services';
+  import { refreshHostMysql } from '$stores/dbBackend';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
     svc: Service;
   }
   let { svc }: Props = $props();
+
+  // Only the MySQL/MariaDB service offers the host backend; probe the host
+  // server when its detail page is open so the toggle and callout know whether
+  // the system MySQL is reachable.
+  const isMysql = $derived(isMySQLService(svc));
+  $effect(() => {
+    if (isMysql) refreshHostMysql();
+  });
 
   type TabId = 'logs' | 'env' | 'config';
   let active = $state<TabId>('logs');
@@ -56,6 +66,9 @@
   {#key svc.name}
     <ServiceHeader {svc} />
     <ServiceSiteBadges {svc} />
+    {#if isMysql}
+      <HostSetupCallout />
+    {/if}
   {/key}
   <PresetSuggestionBanner {svc} />
   <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />

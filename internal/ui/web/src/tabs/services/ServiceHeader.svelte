@@ -5,18 +5,23 @@
   import ServiceDependencies from './ServiceDependencies.svelte';
   import ServiceDeleteModal from './ServiceDeleteModal.svelte';
   import ServiceReinstallModal from './ServiceReinstallModal.svelte';
+  import ToggleButton from '$components/ToggleButton.svelte';
   import {
     type Service,
     services as allServices,
     serviceLabel,
     detailLabel,
     isServiceWorker,
+    isMySQLService,
     serviceAction,
     streamServiceAction,
     checkServiceUpdates,
     updateProgress,
     loadServices
   } from '$stores/services';
+  import { loadSites } from '$stores/sites';
+  import { defaultDBBackend, saveDefaultBackend } from '$stores/dbBackend';
+  import { accessMode } from '$stores/accessMode';
   import { adminServiceFor } from '$stores/presetSuggestions';
   import { openDashboard } from '$stores/dashboard';
   import { m } from '../../paraglide/messages.js';
@@ -50,6 +55,50 @@
   }
 
   const isWorker = $derived(isServiceWorker(svc));
+  // MySQL/MariaDB-only host backend. hostMode = the global default is the host
+  // (system) MySQL, so lerd's container is the non-default DB: its config
+  // actions (pin/reinstall/remove) grey out, while start/stop stay enabled so
+  // the user can still free or claim the 3306 port.
+  const isMysql = $derived(isMySQLService(svc));
+  const hostMode = $derived(isMysql && $defaultDBBackend === 'host');
+  // On a confirmed non-loopback (LAN-exposed) dashboard the host backend is
+  // genuinely unavailable — it depends on a host-local unix socket and the server
+  // rejects it — so the host option is disabled there rather than letting the user
+  // reach a doomed confirm/reject round-trip.
+  const hostLocked = $derived($accessMode.checked && !$accessMode.loopback);
+  let backendBusy = $state(false);
+
+  async function setDefaultBackend(target: 'host' | 'container') {
+    if (backendBusy || target === $defaultDBBackend) return;
+    const label = target === 'host' ? m.services_backend_host() : m.services_backend_lerd();
+    // The global toggle re-points every existing MySQL site to the chosen backend
+    // AND makes it the default for new ones, so Cancel aborts the whole thing (like
+    // disableIsolation). The store reconciles from the server's echoed value, so the
+    // toggle stays honest even if some sites fail after the default was persisted.
+    if (!confirm(m.services_defaultBackend_applyAllConfirm({ backend: label }))) return;
+    backendBusy = true;
+    try {
+      const res = await saveDefaultBackend(target, true);
+      const applied = res.applied ?? 0;
+      if (res.ok) {
+        setCheckMessage(m.services_defaultBackend_applied({ count: applied, backend: label }), 'ok');
+      } else if (applied > 0) {
+        // Partial: some sites switched (and the default was saved) before an error.
+        setCheckMessage(
+          m.services_defaultBackend_appliedPartial({ count: applied, error: res.error || '' }),
+          'error'
+        );
+      } else {
+        setCheckMessage(m.services_defaultBackend_changeFailed({ error: res.error || '' }), 'error');
+      }
+      // WS push already refreshes both stores; this just makes the refresh immediate.
+      await loadServices();
+      await loadSites();
+    } finally {
+      backendBusy = false;
+    }
+  }
+
   const active = $derived(svc.status === 'active');
   const portConflicts = $derived(
     !active && svc.port_conflicts && svc.port_conflicts.length > 0 ? svc.port_conflicts : []
@@ -251,7 +300,12 @@
         tone: svc.pinned ? 'warn' : 'secondary',
         icon: icons.pin,
         label: svc.pinned ? m.services_pinned() : m.services_pin(),
-        title: svc.pinned ? m.services_unpinTitle() : m.services_pinTitle(),
+        title: hostMode
+          ? m.services_hostMode_disabled()
+          : svc.pinned
+            ? m.services_unpinTitle()
+            : m.services_pinTitle(),
+        disabled: hostMode,
         onclick: () => run(svc.pinned ? 'unpin' : 'pin')
       });
     }
@@ -273,7 +327,8 @@
         tone: 'secondary',
         icon: icons.restart,
         label: m.services_reinstall_action(),
-        title: m.services_reinstall_menuTitle(),
+        title: hostMode ? m.services_hostMode_disabled() : m.services_reinstall_menuTitle(),
+        disabled: hostMode,
         onclick: () => (reinstallOpen = true)
       });
     }
@@ -297,7 +352,8 @@
         tone: 'danger',
         icon: icons.trash,
         label: removeLabel,
-        title: removeLabel,
+        title: hostMode ? m.services_hostMode_disabled() : removeLabel,
+        disabled: hostMode,
         onclick: () => (deleteOpen = true)
       });
     }
@@ -419,6 +475,35 @@
   {/snippet}
 
   <div class="flex flex-col items-end gap-1.5">
+    {#if isMysql}
+      <div class="flex items-center gap-2">
+        <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400"
+          >{m.services_defaultBackend_label()}</span
+        >
+        <span class="inline-flex items-center">
+          <ToggleButton
+            label={m.services_backend_lerd()}
+            on={$defaultDBBackend === 'container'}
+            loading={backendBusy && $defaultDBBackend !== 'container'}
+            disabled={backendBusy}
+            rounding="rounded-l-md border-r-0"
+            title={m.services_defaultBackend_lerdTitle()}
+            onclick={() => setDefaultBackend('container')}
+          />
+          <ToggleButton
+            label={m.services_backend_host()}
+            on={$defaultDBBackend === 'host'}
+            loading={backendBusy && $defaultDBBackend !== 'host'}
+            disabled={backendBusy || (hostLocked && $defaultDBBackend !== 'host')}
+            rounding="rounded-r-md"
+            title={hostLocked && $defaultDBBackend !== 'host'
+              ? m.services_hostMysql_loopbackOnly()
+              : m.services_defaultBackend_hostTitle()}
+            onclick={() => setDefaultBackend('host')}
+          />
+        </span>
+      </div>
+    {/if}
     <ButtonMenu
       actions={buildActions({
         external: externalIcon,
