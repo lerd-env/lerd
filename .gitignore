@@ -8,3 +8,5 @@ docs/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
 docs/public/install.sh
+docs/public/demo/
+docs/public/icons/icon.svg

@@ -1,0 +1,1 @@
+{"autostart_on_login": true, "worker_exec_mode": "exec", "worker_mode_applies": false, "idle_suspend_enabled": true, "idle_suspend_timeout_minutes": 30}

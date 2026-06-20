@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex" />
+    <title>Demo preview</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(60% 50% at 50% 0%, rgba(255, 45, 32, 0.12), transparent 60%),
+          #0d0d0d;
+        color: #f4f4f5;
+        font-family: 'Instrument Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+      }
+      .card {
+        width: min(560px, 92vw);
+        background: #161616;
+        border: 1px solid #262626;
+        border-radius: 16px;
+        overflow: hidden;
+        box-shadow: 0 30px 80px -20px rgba(0, 0, 0, 0.8);
+      }
+      .bar {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 12px 16px;
+        background: #111;
+        border-bottom: 1px solid #262626;
+      }
+      .dots { display: flex; gap: 7px; }
+      .dots i { width: 11px; height: 11px; border-radius: 50%; display: block; }
+      .dots i:nth-child(1) { background: #ff5f57; }
+      .dots i:nth-child(2) { background: #febc2e; }
+      .dots i:nth-child(3) { background: #28c840; }
+      .url {
+        flex: 1;
+        font-family: 'JetBrains Mono', ui-monospace, monospace;
+        font-size: 12.5px;
+        color: #8b8b95;
+        background: #0d0d0d;
+        border: 1px solid #262626;
+        border-radius: 999px;
+        padding: 5px 12px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .body { padding: 40px 32px 36px; text-align: center; }
+      .glyph {
+        width: 56px;
+        height: 56px;
+        margin: 0 auto 18px;
+        border-radius: 14px;
+        display: grid;
+        place-items: center;
+        background: rgba(255, 45, 32, 0.12);
+        color: #ff5b50;
+      }
+      .glyph svg { width: 28px; height: 28px; }
+      h1 { margin: 0 0 8px; font-size: 22px; font-weight: 700; letter-spacing: -0.01em; }
+      p { margin: 0 auto; max-width: 40ch; color: #8b8b95; font-size: 14.5px; line-height: 1.6; }
+      .host { color: #38bdf8; font-family: 'JetBrains Mono', ui-monospace, monospace; }
+      .note {
+        margin-top: 22px;
+        font-size: 12px;
+        color: #5d5d66;
+      }
+      .note a { color: #ff5b50; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <div class="bar">
+        <span class="dots"><i></i><i></i><i></i></span>
+        <span class="url" id="url">about:demo</span>
+      </div>
+      <div class="body">
+        <div class="glyph">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3 12h18M12 3a14 14 0 010 18M12 3a14 14 0 000 18" />
+          </svg>
+        </div>
+        <h1 id="title">Your app would open here</h1>
+        <p>
+          In a real Lerd setup, <span class="host" id="host">project.test</span> opens your live
+          application with HTTPS. This is an interactive demo, so there's no server behind it.
+        </p>
+        <div class="note">Run it for real → <a href="https://lerd.sh" target="_blank" rel="noopener">lerd.sh</a></div>
+      </div>
+    </div>
+    <script>
+      const q = new URLSearchParams(location.search);
+      const host = q.get('host') || 'project.test';
+      const url = q.get('url') || '';
+      document.getElementById('host').textContent = host;
+      document.getElementById('url').textContent = url || host;
+      const isService = /:\d{2,5}$/.test(host) || /localhost/.test(host);
+      document.getElementById('title').textContent = isService
+        ? 'This service dashboard would open here'
+        : host + ' would open here';
+      document.title = host + ' — demo preview';
+    </script>
+  </body>
+</html>

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "npm run i18n && vite",
     "build": "npm run i18n && vite build",
+    "build:demo": "npm run i18n && vite build --config vite.demo.config.ts",
     "preview": "vite preview",
     "check": "npm run i18n && svelte-check --tsconfig ./tsconfig.json",
     "test": "npm run i18n && vitest run",
@@ -34,6 +35,7 @@
     "svelte-dnd-action": "^0.9.69"
   },
   "overrides": {
-    "esbuild": "^0.28.1"
+    "esbuild": "^0.28.1",
+    "dompurify": "^3.4.9"
   }
 }

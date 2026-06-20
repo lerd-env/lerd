@@ -1,0 +1,1 @@
+{"enabled": true, "passthrough": false, "listening": true, "addr": "unix:/home/dev/.local/share/lerd/run/lerd-dumps.sock", "count": 500, "subscribers": 1, "last_ts": "2026-06-20T14:38:00.308Z"}
