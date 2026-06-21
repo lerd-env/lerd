@@ -8,6 +8,7 @@
   import ServiceTuningTab from './ServiceTuningTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import HostSetupCallout from './HostSetupCallout.svelte';
+  import MysqlPortCallout from './MysqlPortCallout.svelte';
   import { isMySQLService, type Service } from '$stores/services';
   import { refreshHostMysql } from '$stores/dbBackend';
   import { m } from '../../paraglide/messages.js';
@@ -68,6 +69,7 @@
     <ServiceSiteBadges {svc} />
     {#if isMysql}
       <HostSetupCallout />
+      <MysqlPortCallout />
     {/if}
   {/key}
   <PresetSuggestionBanner {svc} />

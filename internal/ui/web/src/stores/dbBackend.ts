@@ -1,6 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
-import { hostMysqlProbe, type HostMySQLStatus } from './services';
+import { hostMysqlProbe, loadServices, type HostMySQLStatus } from './services';
 
 export type DBBackend = 'container' | 'host';
 
@@ -12,6 +12,28 @@ export const hostMysql = writable<HostMySQLStatus | null>(null);
 
 export async function refreshHostMysql() {
   hostMysql.set(await hostMysqlProbe());
+}
+
+// setMysqlPublishedPort moves lerd-mysql's published host port so a host system
+// MySQL can keep 127.0.0.1:3306. port=0 resets to the default. On success it
+// refreshes the probe + service list so the coexistence UI reflects reality.
+// Loopback-only server-side (it rebinds a host port).
+export async function setMysqlPublishedPort(
+  port: number
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch(
+      `/api/services/mysql/port?port=${encodeURIComponent(String(port))}`,
+      { method: 'POST' }
+    );
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (res.ok && data.ok) {
+      await Promise.all([refreshHostMysql(), loadServices()]);
+    }
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+  }
 }
 
 // Global default DB backend: the one new sites adopt and the target of the

@@ -93,6 +93,11 @@ export interface HostMySQLStatus {
   live: boolean;
   tcp3306_listening: boolean;
   tcp3306_owner: 'host' | 'lerd' | 'none' | 'unknown';
+  // lerd_port is the host port lerd-mysql publishes (3306 by default, or the
+  // configured override). When it differs from 3306 the host system MySQL can
+  // own 3306 and the two coexist. lerd_port_listening: something answers there.
+  lerd_port: number;
+  lerd_port_listening: boolean;
 }
 
 // hostMysqlProbe reports whether the host MySQL is available so the UI can guide

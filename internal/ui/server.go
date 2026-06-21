@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -2231,6 +2232,62 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true})
 		return
+	case "port":
+		// Move the service's published host port (port=0/empty resets to the
+		// preset default). Loopback-only: it rebinds a host port. The
+		// container-internal port is untouched, so bridge clients are unaffected.
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !isLoopbackRequest(r) {
+			writeJSON(w, map[string]any{"ok": false, "error": "the published port can only be changed from the local machine"})
+			return
+		}
+		if !isBuiltin {
+			writeJSON(w, map[string]any{"ok": false, "error": "only built-in services support a configurable published port"})
+			return
+		}
+		newPort := 0
+		if ps := r.URL.Query().Get("port"); ps != "" {
+			p, perr := strconv.Atoi(ps)
+			if perr != nil || p < 0 || p > 65535 {
+				writeJSON(w, map[string]any{"ok": false, "error": "port must be 0-65535"})
+				return
+			}
+			newPort = p
+		}
+		cfg, cerr := config.LoadGlobal()
+		if cerr != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": cerr.Error()})
+			return
+		}
+		svcCfg := cfg.Services[name]
+		if newPort != svcCfg.PublishedPort {
+			if newPort > 0 && cli.TCPPortBusy(newPort) {
+				writeJSON(w, map[string]any{"ok": false, "error": fmt.Sprintf("port %d is already in use", newPort)})
+				return
+			}
+			svcCfg.PublishedPort = newPort
+			cfg.Services[name] = svcCfg
+			if err := config.SaveGlobal(cfg); err != nil {
+				writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			if err := ensureServiceQuadlet(name); err != nil {
+				writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+				return
+			}
+			if status, _ := podman.UnitStatus(unit); status == "active" {
+				if err := podman.RestartUnit(unit); err != nil {
+					writeJSON(w, map[string]any{"ok": false, "error": "restarting: " + err.Error()})
+					return
+				}
+				_ = podman.WaitReady(name, 30*time.Second)
+			}
+		}
+		writeJSON(w, map[string]any{"ok": true, "published_port": newPort})
+		return
 	case "pin":
 		if opErr = config.SetServicePinned(name, true); opErr == nil {
 			status, _ := podman.UnitStatus(unit)
@@ -3526,6 +3583,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "updating php-fpm: " + err.Error()})
 			return
 		}
+		// Stop lerd-mysql if this was the last container-mode site, or start it
+		// if the site just switched back to the container backend.
+		cli.ReconcileDBServiceLifecycle()
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "terminal":
@@ -4556,6 +4616,10 @@ func handleSettingsDefaultBackend(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, map[string]any{"ok": false, "error": "updating php-fpm: " + err.Error(), "applied": applied, "default_db_backend": body.Backend})
 			return
 		}
+		// Reconcile lerd-mysql once after the batch settled: stop it if every
+		// MySQL site is now on the host backend, or (re)start it if some site
+		// switched back to the container backend.
+		cli.ReconcileDBServiceLifecycle()
 		if len(failed) > 0 {
 			writeJSON(w, map[string]any{"ok": false, "error": "some sites failed: " + strings.Join(failed, "; "), "applied": applied, "default_db_backend": body.Backend})
 			return
