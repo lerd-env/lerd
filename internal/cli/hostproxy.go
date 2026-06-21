@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
@@ -55,7 +56,7 @@ func RegenerateHostProxyVhostsOnGatewayChange() {
 			continue
 		}
 		if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {
-			fmt.Printf("[WARN] regenerating host-proxy vhost for %s: %v\n", s.Name, err)
+			feedback.Warn("regenerating host-proxy vhost for %s: %v", s.Name, err)
 			continue
 		}
 		if wts, wErr := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain()); wErr == nil {
@@ -420,11 +421,11 @@ func startHostProxyWorker(site config.Site, proxy *config.ProxyConfig) {
 		return
 	}
 	if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
-		fmt.Printf("[WARN] dev server not started: %v\n", err)
+		feedback.Warn("dev server not started: %v", err)
 		return
 	}
 	if err := WorkerStartForSite(site.Name, site.Path, "", hostProxyWorkerName, w, false); err != nil {
-		fmt.Printf("[WARN] starting dev server: %v\n", err)
+		feedback.Warn("starting dev server: %v", err)
 	}
 }
 

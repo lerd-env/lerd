@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -62,6 +63,7 @@ func runUnlink(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("no site registered for %s — link it first with lerd link", cwd)
 	}
+	feedback.Begin()
 	return UnlinkSite(site.Name)
 }
 
@@ -84,23 +86,19 @@ func UnlinkSite(name string) error {
 		parkedDirs = cfg.ParkedDirectories
 	}
 
+	step := feedback.Start("unlinking " + name)
 	if err := siteops.UnlinkSiteCore(site, parkedDirs); err != nil {
+		step.Fail(err)
 		return err
 	}
-
-	fmt.Printf("Unlinked: %s (%s)\n", name, site.PrimaryDomain())
+	step.OK(feedback.Val(site.PrimaryDomain()))
 
 	// Offer to remove the cached custom container image.
 	if site.IsCustomContainer() && podman.CustomImageExists(site.Name) {
-		if isInteractive() {
-			fmt.Print("Remove the container image? [y/N] ")
-			var answer string
-			fmt.Scanln(&answer) //nolint:errcheck
-			if answer != "" && (answer[0] == 'y' || answer[0] == 'Y') {
-				_ = podman.RemoveCustomImage(site.Name)
-				podman.RemoveContainerfileHash(site.Name)
-				fmt.Println("Image removed.")
-			}
+		if isInteractive() && feedback.Confirm("Remove the container image?", false) {
+			_ = podman.RemoveCustomImage(site.Name)
+			podman.RemoveContainerfileHash(site.Name)
+			feedback.Line("image removed")
 		}
 	}
 

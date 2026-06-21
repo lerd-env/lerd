@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
@@ -58,7 +59,7 @@ func runFrameworkList(check bool) error {
 		client := store.NewClient()
 		idx, err := client.FetchIndex()
 		if err != nil {
-			fmt.Printf("[WARN] could not fetch store index: %v\n", err)
+			feedback.Warn("could not fetch store index: %v", err)
 		} else {
 			storeIndex = idx
 		}
@@ -254,7 +255,8 @@ YAML file format:
 				return fmt.Errorf("saving framework: %w", err)
 			}
 
-			fmt.Printf("Framework %q saved (%s).\n", fw.Name, config.FrameworksDir()+"/"+fw.Name+".yaml")
+			feedback.Begin()
+			feedback.Done(fmt.Sprintf("framework %q saved (%s)", fw.Name, config.FrameworksDir()+"/"+fw.Name+".yaml"))
 			if fw.Name == "laravel" {
 				fmt.Println("Custom workers merged with built-in Laravel definition.")
 			} else {
@@ -305,7 +307,7 @@ Examples:
 					}
 					return err
 				}
-				fmt.Printf("Custom laravel overlay removed (built-in definition remains).\n")
+				feedback.Done("custom laravel overlay removed (built-in definition remains)")
 				return nil
 			}
 
@@ -321,7 +323,7 @@ Examples:
 						if err := config.RemoveFrameworkFile(f.Path); err != nil {
 							return err
 						}
-						fmt.Printf("Removed %s@%s.\n", name, version)
+						feedback.Done(fmt.Sprintf("removed %s@%s", name, version))
 						return nil
 					}
 				}
@@ -333,7 +335,7 @@ Examples:
 				if err := config.RemoveFramework(name); err != nil {
 					return err
 				}
-				fmt.Printf("Framework %q removed.\n", name)
+				feedback.Done(fmt.Sprintf("framework %q removed", name))
 				return nil
 			}
 
@@ -361,7 +363,7 @@ Examples:
 				if err := config.RemoveFramework(name); err != nil {
 					return err
 				}
-				fmt.Printf("Framework %q removed (all versions).\n", name)
+				feedback.Done(fmt.Sprintf("framework %q removed (all versions)", name))
 				return nil
 			}
 
@@ -377,7 +379,7 @@ Examples:
 			if v == "" {
 				v = "unversioned"
 			}
-			fmt.Printf("Removed %s (%s).\n", name, v)
+			feedback.Done(fmt.Sprintf("removed %s (%s)", name, v))
 			return nil
 		},
 	}
@@ -480,8 +482,8 @@ Examples:
 			if fw.Version != "" {
 				filename = fw.Name + "@" + fw.Version + ".yaml"
 			}
-			fmt.Printf("Installed %s@%s (%s).\n", fw.Name, versionStr, fw.Label)
-			fmt.Printf("Saved to %s/%s\n", config.StoreFrameworksDir(), filename)
+			feedback.Done(fmt.Sprintf("installed %s@%s (%s)", fw.Name, versionStr, fw.Label))
+			feedback.Note("saved to " + config.StoreFrameworksDir() + "/" + filename)
 			return nil
 		},
 	}
@@ -547,7 +549,7 @@ func updateSingleFramework(client *store.Client, name, version string, showDiff 
 	}
 	// Remove old user-defined file if it exists — the store version should take effect.
 	config.RemoveUserFramework(name)
-	fmt.Printf("Updated %s@%s (%s).\n", remote.Name, versionOrLatest(remote), remote.Label)
+	feedback.Done(fmt.Sprintf("updated %s@%s (%s)", remote.Name, versionOrLatest(remote), remote.Label))
 	return nil
 }
 
@@ -579,14 +581,14 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 		}
 		remote, fetchErr := client.FetchFramework(info.Name, info.Version)
 		if fetchErr != nil {
-			fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, fetchErr)
+			feedback.Warn("%s@%s: %v", info.Name, info.Version, fetchErr)
 			continue
 		}
 
 		if showDiff {
 			changed, diffErr := showFrameworkDiff(info.Name, info.Framework, remote)
 			if diffErr != nil {
-				fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, diffErr)
+				feedback.Warn("%s@%s: %v", info.Name, info.Version, diffErr)
 				continue
 			}
 			if !changed {
@@ -596,17 +598,17 @@ func updateAllFrameworks(client *store.Client, showDiff bool) error {
 		}
 
 		if saveErr := config.SaveStoreFramework(remote); saveErr != nil {
-			fmt.Printf("  [WARN] %s@%s: %v\n", info.Name, info.Version, saveErr)
+			feedback.Warn("%s@%s: %v", info.Name, info.Version, saveErr)
 			continue
 		}
 		config.RemoveUserFramework(info.Name)
-		fmt.Printf("  Updated %s@%s\n", remote.Name, versionOrLatest(remote))
+		feedback.Note(fmt.Sprintf("updated %s@%s", remote.Name, versionOrLatest(remote)))
 		updated++
 	}
 	if updated == 0 {
-		fmt.Println("No frameworks to update.")
+		feedback.Line("no frameworks to update")
 	} else {
-		fmt.Printf("Updated %d framework(s).\n", updated)
+		feedback.Done(fmt.Sprintf("updated %d framework(s)", updated))
 	}
 	return nil
 }
@@ -647,12 +649,12 @@ func showFrameworkDiff(name string, local, remote *config.Framework) (bool, erro
 	fmt.Printf("\n%s:\n", name)
 	for _, line := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
 		switch {
-		case strings.HasPrefix(line, "+"):
-			fmt.Printf("\033[32m%s\033[0m\n", line)
-		case strings.HasPrefix(line, "-"):
-			fmt.Printf("\033[31m%s\033[0m\n", line)
 		case strings.HasPrefix(line, "@@") || strings.HasPrefix(line, "---") || strings.HasPrefix(line, "+++"):
-			fmt.Printf("\033[34m%s\033[0m\n", line)
+			fmt.Println(feedback.Dim(line))
+		case strings.HasPrefix(line, "+"):
+			fmt.Println(feedback.Green(line))
+		case strings.HasPrefix(line, "-"):
+			fmt.Println(feedback.Red(line))
 		default:
 			fmt.Println(line)
 		}

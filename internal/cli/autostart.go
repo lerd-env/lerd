@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
@@ -60,7 +61,8 @@ func newAutostartEnableCmd() *cobra.Command {
 			if err := ApplyAutostart(false); err != nil {
 				return fmt.Errorf("enabling autostart: %w", err)
 			}
-			fmt.Println("Autostart enabled — lerd will start automatically on login.")
+			feedback.Begin()
+			feedback.Done("autostart enabled — lerd will start automatically on login")
 			return nil
 		},
 	}
@@ -74,7 +76,8 @@ func newAutostartDisableCmd() *cobra.Command {
 			if err := ApplyAutostart(true); err != nil {
 				return fmt.Errorf("disabling autostart: %w", err)
 			}
-			fmt.Println("Autostart disabled — lerd will not start automatically on login.")
+			feedback.Begin()
+			feedback.Done("autostart disabled — lerd will not start automatically on login")
 			return nil
 		},
 	}

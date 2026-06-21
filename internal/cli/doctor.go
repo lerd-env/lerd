@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -30,7 +31,7 @@ func NewDoctorCmd() *cobra.Command {
 }
 
 func runDoctor(_ *cobra.Command, _ []string) error {
-	_, _, err := RunDoctorTo(os.Stdout, true)
+	_, _, err := RunDoctorTo(os.Stdout, feedback.Animated())
 	return err
 }
 
@@ -45,15 +46,15 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 	}
 
 	ok := func(label string) {
-		fmt.Fprintf(w, "  %s%-34s%s OK\n", cG, label, cReset)
+		fmt.Fprintf(w, "  %s✓%s %s\n", cG, cReset, label)
 	}
 	fail := func(label, msg, hint string) {
 		fails++
-		fmt.Fprintf(w, "  %s%-34s%s FAIL  %s\n    hint: %s\n", cR, label, cReset, msg, hint)
+		fmt.Fprintf(w, "  %s✗%s %s  %s\n    hint: %s\n", cR, cReset, label, msg, hint)
 	}
 	warn := func(label, msg string) {
 		warns++
-		fmt.Fprintf(w, "  %s%-34s%s WARN  %s\n", cY, label, cReset, msg)
+		fmt.Fprintf(w, "  %s⚠%s %s  %s\n", cY, cReset, label, msg)
 	}
 	info := func(label, val string) {
 		fmt.Fprintf(w, "  %-34s %s\n", label, val)

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -86,7 +87,8 @@ func runPark(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("Parking directory: %s\n", absDir)
+	feedback.Begin()
+	feedback.Line("parking " + feedback.Val(absDir))
 
 	// Add to parked directories in global config
 	found := false
@@ -116,17 +118,18 @@ func runPark(_ *cobra.Command, args []string) error {
 		}
 		projectDir := filepath.Join(absDir, entry.Name())
 		if registered, err := RegisterProject(projectDir, cfg); err != nil {
-			fmt.Printf("  [WARN] could not register %s: %v\n", entry.Name(), err)
+			feedback.Warn("could not register %s: %v", entry.Name(), err)
 		} else if registered {
 			count++
 		}
 	}
 
 	if count > 0 {
-		fmt.Printf("Reloading nginx (%d sites registered)...\n", count)
+		reload := feedback.Start("reloading nginx")
 		nginx.ReloadOrWarn("  ")
+		reload.OK(fmt.Sprintf("%d site(s) registered", count))
 	} else {
-		fmt.Println("No PHP projects found in directory.")
+		feedback.Line("no PHP projects found in directory")
 	}
 
 	// Rewrite FPM quadlets so volume mounts cover the new parked directory.
@@ -176,7 +179,7 @@ func RegisterProject(projectDir string, cfg *config.GlobalConfig) (bool, error) 
 	// This prevents Laravel subdirs (app/, vendor/, public/, etc.) from being
 	// registered as sites when a project root is accidentally used as a park dir.
 	if _, ok := config.DetectFramework(filepath.Dir(projectDir)); ok {
-		fmt.Printf("  [WARN] skipping %s — looks like a subdirectory of a framework project.\n         Run 'lerd link' from %s instead.\n", projectDir, filepath.Dir(projectDir))
+		feedback.Warn("skipping %s — looks like a subdirectory of a framework project.\n         Run 'lerd link' from %s instead.", projectDir, filepath.Dir(projectDir))
 		return false, nil
 	}
 
@@ -258,7 +261,7 @@ func RegisterProject(projectDir string, cfg *config.GlobalConfig) (bool, error) 
 	if frameworkLabel == "" {
 		frameworkLabel = "unknown (public: " + detectedPublicDir + ")"
 	}
-	fmt.Printf("  + %s -> %s (PHP %s, Node %s, Framework: %s)\n", name, strings.Join(domains, ", "), phpVersion, nodeVersion, frameworkLabel)
+	feedback.Start("linking " + name).OK(feedback.Val(strings.Join(domains, ", ")) + " · php " + feedback.Val(phpVersion) + " · " + frameworkLabel)
 	return true, nil
 }
 

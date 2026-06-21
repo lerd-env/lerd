@@ -9,6 +9,7 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
@@ -134,7 +135,7 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 		_ = config.SetProjectSecured(s.Path, s.Secured)
 		_ = config.SyncProjectDomains(s.Path, s.Domains, newTLD)
 
-		fmt.Printf("    --> %s: %s -> %s://%s\n", s.Name, oldPrimary, scheme, newPrimary)
+		feedback.Note(fmt.Sprintf("%s: %s → %s://%s", s.Name, oldPrimary, scheme, newPrimary))
 		changed = append(changed, s.Name)
 	}
 	return changed

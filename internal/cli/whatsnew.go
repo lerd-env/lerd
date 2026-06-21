@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/geodro/lerd/internal/feedback"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/spf13/cobra"
@@ -28,7 +29,8 @@ func runWhatsnew(_ *cobra.Command, _ []string) error {
 	latestStripped := lerdUpdate.StripV(latest)
 
 	if !lerdUpdate.VersionGreaterThan(latestStripped, current) {
-		fmt.Printf("You are on the latest version (%s).\n", version.Version)
+		feedback.Begin()
+		feedback.Done("you are on the latest version (" + version.Version + ")")
 		return nil
 	}
 

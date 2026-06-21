@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -163,7 +164,8 @@ Re-run this command to generate a new code if it expires or is consumed.`,
 				if err := ClearRemoteSetupToken(); err != nil {
 					return fmt.Errorf("revoking token: %w", err)
 				}
-				fmt.Println("Remote setup token revoked.")
+				feedback.Begin()
+				feedback.Done("remote setup token revoked")
 				return nil
 			}
 
@@ -177,15 +179,18 @@ Re-run this command to generate a new code if it expires or is consumed.`,
 			// dnsmasq config / lerd-ui bind. The whole point of generating
 			// a setup code is to provision a remote device, which can't
 			// work unless lerd is reachable from the LAN.
-			fmt.Println("Ensuring lerd is exposed on the LAN...")
+			feedback.Begin()
+			expose := feedback.Start("exposing lerd on the LAN")
 			lanIP, err := EnableLANExposure(func(step string) {
-				fmt.Printf("  • %s\n", step)
+				feedback.Note(step)
 			})
 			if err != nil {
+				expose.Fail(err)
 				return fmt.Errorf("enabling lan:expose: %w", err)
 			}
-			fmt.Printf("  lerd-dns-forwarder running on %s:5300 (UDP+TCP), answering *.test → %s\n", lanIP, lanIP)
-			fmt.Println("  Make sure your firewall allows port 5300 from the devices you want to grant access.")
+			expose.OK(feedback.Val(lanIP))
+			feedback.Note("lerd-dns-forwarder on " + lanIP + ":5300 (UDP+TCP), answering *.test → " + lanIP)
+			feedback.Note("allow port 5300 through your firewall from the devices you want to grant access")
 
 			code, err := GenerateRemoteSetupToken(ttl)
 			if err != nil {
@@ -194,8 +199,7 @@ Re-run this command to generate a new code if it expires or is consumed.`,
 
 			lanIP, ipErr := detectPrimaryLANIP()
 			fmt.Println()
-			fmt.Printf("  Code: %s\n", code)
-			fmt.Printf("  Expires in: %s\n", ttl)
+			feedback.Done("code: " + feedback.Val(code) + " (expires in " + ttl.String() + ")")
 			fmt.Println()
 			fmt.Println("On the laptop, run:")
 			fmt.Println()
@@ -203,7 +207,7 @@ Re-run this command to generate a new code if it expires or is consumed.`,
 				fmt.Printf("  curl -sSL 'http://%s:7073/api/remote-setup?code=%s' | bash\n", lanIP, code)
 			} else {
 				fmt.Printf("  curl -sSL 'http://<server-ip>:7073/api/remote-setup?code=%s' | bash\n", code)
-				fmt.Fprintln(os.Stderr, "warning: could not auto-detect a LAN IP — substitute the server's address yourself")
+				feedback.Warn("could not auto-detect a LAN IP — substitute the server's address yourself")
 			}
 			fmt.Println()
 			fmt.Println("The endpoint is restricted to RFC 1918 private source IPs and the code")

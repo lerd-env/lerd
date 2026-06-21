@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
@@ -76,10 +77,12 @@ func newOctaneReloadCmd(use string) *cobra.Command {
 				return err
 			}
 
+			feedback.Begin()
 			if enable {
-				fmt.Println("Octane auto-reload enabled, Octane will restart workers on file changes.")
+				feedback.Done("Octane auto-reload enabled")
+				feedback.Note("Octane restarts workers on file changes")
 			} else {
-				fmt.Println("Octane auto-reload disabled, Octane runs in standard mode.")
+				feedback.Done("Octane auto-reload disabled")
 			}
 			return nil
 		},

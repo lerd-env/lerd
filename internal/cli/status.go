@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -25,12 +26,14 @@ const (
 	colorReset  = "\033[0m"
 )
 
-func ok2(label string) { fmt.Printf("  %s%-30s%s OK\n", colorGreen, label, colorReset) }
+func ok2(label string) {
+	fmt.Printf("  %s %s\n", feedback.Green(feedback.GlyphOK), label)
+}
 
 // paused2 reports an idle-suspended worker: stopped on purpose, resumes on the
 // next request, so it's shown green (healthy) as paused rather than missing.
 func paused2(label string) {
-	fmt.Printf("  %s%-30s%s paused (idle)\n", colorGreen, label, colorReset)
+	fmt.Printf("  %s %s %s\n", feedback.Green(feedback.GlyphOK), label, feedback.Dim("(paused, idle)"))
 }
 
 // siteWorkerIdleSuspended reports whether the named worker is currently
@@ -45,10 +48,10 @@ func siteWorkerIdleSuspended(s config.Site, worker string) bool {
 }
 
 func fail2(label, msg, hint string) {
-	fmt.Printf("  %s%-30s%s FAIL (%s)\n    hint: %s\n", colorRed, label, colorReset, msg, hint)
+	fmt.Printf("  %s %s %s\n    %s %s\n", feedback.Red(feedback.GlyphFail), label, feedback.Dim("("+msg+")"), feedback.Dim("hint:"), hint)
 }
 func warn2(label, msg string) {
-	fmt.Printf("  %s%-30s%s WARN (%s)\n", colorYellow, label, colorReset, msg)
+	fmt.Printf("  %s %s %s\n", feedback.Amber(feedback.GlyphWarn), label, feedback.Dim("("+msg+")"))
 }
 
 // NewStatusCmd returns the status command.

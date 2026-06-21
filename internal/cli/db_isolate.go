@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -38,7 +39,8 @@ The --source flag controls how the new schema is seeded:
 			if err := SetWorktreeDBIsolated(site, branch, true, source); err != nil {
 				return err
 			}
-			fmt.Printf("Worktree %s of %s now uses an isolated database.\n", branch, site.Name)
+			feedback.Begin()
+			feedback.Done(fmt.Sprintf("worktree %s of %s now uses an isolated database", branch, site.Name))
 			return nil
 		},
 	}
@@ -63,7 +65,8 @@ func NewDBShareCmd() *cobra.Command {
 			if err := SetWorktreeDBIsolated(site, branch, false, ""); err != nil {
 				return err
 			}
-			fmt.Printf("Worktree %s of %s now shares the parent's database.\n", branch, site.Name)
+			feedback.Begin()
+			feedback.Done(fmt.Sprintf("worktree %s of %s now shares the parent's database", branch, site.Name))
 			return nil
 		},
 	}

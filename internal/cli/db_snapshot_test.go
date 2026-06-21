@@ -93,7 +93,7 @@ func TestRunDbSnapshotsEmpty(t *testing.T) {
 			t.Fatalf("runDbSnapshots: %v", err)
 		}
 	})
-	if !strings.Contains(out, "No snapshots") {
+	if !strings.Contains(out, "no snapshots") {
 		t.Errorf("expected empty-state message, got:\n%s", out)
 	}
 }

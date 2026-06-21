@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -77,7 +78,7 @@ func migrateWorkersOnModeChangeStreaming(fromMode, toMode string, emit func(Work
 		// quadlets and plain service units — it boots out of launchd
 		// and stops the container if any.
 		if err := podman.StopUnit(step.Unit); err != nil {
-			fmt.Printf("[WARN] stopping %s: %v\n", step.Unit, err)
+			feedback.Warn("stopping %s: %v", step.Unit, err)
 		}
 
 		emit(WorkerModePhaseEvent{Phase: "migrating_worker", Unit: step.Unit, Step: "cleaning"})
@@ -98,7 +99,7 @@ func migrateWorkersOnModeChangeStreaming(fromMode, toMode string, emit func(Work
 	for _, step := range steps {
 		emit(WorkerModePhaseEvent{Phase: "migrating_worker", Unit: step.Unit, Step: "starting"})
 		if err := restartWorkerByUnitName(step.Unit); err != nil {
-			fmt.Printf("[WARN] restart %s in %s mode: %v\n", step.Unit, step.To, err)
+			feedback.Warn("restart %s in %s mode: %v", step.Unit, step.To, err)
 		}
 	}
 

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
@@ -90,8 +91,9 @@ func newServiceConfigCmd() *cobra.Command {
 				return err
 			}
 			if !launched {
-				fmt.Printf("Tuning file: %s\n", path)
-				fmt.Println("Set $EDITOR to open it automatically.")
+				feedback.Begin()
+				feedback.Line("tuning file: " + feedback.Val(path))
+				feedback.Note("set $EDITOR to open it automatically")
 				return nil
 			}
 
@@ -105,15 +107,19 @@ func newServiceConfigCmd() *cobra.Command {
 				return err
 			}
 			if noRestart {
-				fmt.Printf("Saved %s. Run `lerd service restart %s` to apply.\n", path, name)
+				feedback.Begin()
+				feedback.Done("saved " + path)
+				feedback.Note("run `lerd service restart " + name + "` to apply")
 				return nil
 			}
 			unit := "lerd-" + name
-			fmt.Printf("Saved. Restarting %s...\n", unit)
+			feedback.Begin()
+			step := feedback.Start("restarting " + unit)
 			if err := podman.RestartUnit(unit); err != nil {
+				step.Fail(err)
 				return fmt.Errorf("restarting %s: %w", unit, err)
 			}
-			fmt.Println("Done.")
+			step.OK("")
 			return nil
 		},
 	}

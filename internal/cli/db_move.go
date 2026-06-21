@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
 )
@@ -181,32 +182,33 @@ func runDbMove(from, to string, siteNames []string, all, force bool) error {
 	}
 
 	if !force && interactive {
-		fmt.Printf("About to move %d site(s) from %s to %s:\n", len(targets), from, to)
+		feedback.Begin()
+		feedback.Line(fmt.Sprintf("about to move %d site(s) from %s to %s:", len(targets), from, to))
 		for _, s := range targets {
-			fmt.Printf("  %s (%s)\n", s.Name, s.Path)
+			feedback.Note(s.Name + " (" + s.Path + ")")
 		}
-		fmt.Print("Source data is left intact. Continue? [y/N] ")
-		var ans string
-		fmt.Scanln(&ans) //nolint:errcheck
-		if ans == "" || (ans[0] != 'y' && ans[0] != 'Y') {
+		if !feedback.Confirm("Source data is left intact. Continue?", false) {
 			return fmt.Errorf("aborted")
 		}
 	}
 
 	failed := 0
 	for _, s := range targets {
-		fmt.Printf("\n== %s: %s -> %s ==\n", s.Name, from, to)
+		feedback.Line(fmt.Sprintf("moving %s: %s → %s", s.Name, from, to))
 		if err := runDbMoveOne(s.Path, s.Name, from, to); err != nil {
+			// Per-site failure detail goes to stderr so scripts that parse the
+			// error stream still see which sites failed (the command also
+			// returns a non-nil aggregate error below).
+			fmt.Fprintf(os.Stderr, "  %s %s: %v\n", feedback.Red(feedback.GlyphFail), s.Name, err)
 			failed++
-			fmt.Fprintf(os.Stderr, "[FAIL] %s: %v\n", s.Name, err)
 			continue
 		}
-		fmt.Printf("[OK] %s moved to %s, .env updated\n", s.Name, to)
+		feedback.Note(s.Name + " moved · .env updated")
 	}
 	if failed > 0 {
 		return fmt.Errorf("%d of %d site(s) failed to move", failed, len(targets))
 	}
-	fmt.Printf("\nDone. %d site(s) moved %s -> %s. Source data left intact.\n", len(targets), from, to)
+	feedback.Done(fmt.Sprintf("moved %d site(s) %s → %s · source data left intact", len(targets), from, to))
 	return nil
 }
 
@@ -241,7 +243,7 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	}
 	dump.Stdout = tmp
 	dump.Stderr = os.Stderr
-	fmt.Printf("Dumping %s from %s...\n", base.database, from)
+	feedback.Note("dumping " + base.database + " from " + from)
 	if err := dump.Run(); err != nil {
 		tmp.Close() //nolint:errcheck
 		return fmt.Errorf("dump failed: %w", err)
@@ -254,7 +256,7 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	// the DB_ keys in .env (host-proxy aware), starts the target, and creates
 	// the database, so the dump has somewhere to land. Snapshot .lerd.yaml's
 	// source and the .env bytes first so a failed repoint can be fully undone.
-	fmt.Printf("Repointing %s at %s...\n", siteName, to)
+	feedback.Note("repointing " + siteName + " at " + to)
 	envPath := filepath.Join(sitePath, ".env")
 	prevEnv, _ := os.ReadFile(envPath)
 	if err := config.ReplaceProjectDBService(sitePath, to); err != nil {
@@ -307,7 +309,7 @@ func runDbMoveOne(sitePath, siteName, from, to string) error {
 	restore.Stdin = f
 	restore.Stdout = os.Stdout
 	restore.Stderr = os.Stderr
-	fmt.Printf("Restoring %s into %s...\n", tgtEnv.database, to)
+	feedback.Note("restoring " + tgtEnv.database + " into " + to)
 	if err := restore.Run(); err != nil {
 		return rollback(fmt.Errorf("restore failed: %w", err))
 	}

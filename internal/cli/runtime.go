@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -67,10 +68,11 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 	worker, _ := cmd.Flags().GetBool("worker")
 	noWorker, _ := cmd.Flags().GetBool("no-worker")
 
+	feedback.Begin()
 	switch target {
 	case "fpm":
 		if !site.IsFrankenPHP() {
-			fmt.Println("Already on FPM runtime.")
+			feedback.Line("already on FPM runtime")
 			return nil
 		}
 		return switchToFPM(site)
@@ -88,7 +90,7 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("site has no framework assigned — FrankenPHP needs a framework entrypoint or the generic public/ fallback")
 		}
 		if fw.FrankenPHP == nil && fw.PublicDir == "" {
-			fmt.Println("[INFO] framework has no FrankenPHP adapter, falling back to the generic `frankenphp php-server` entrypoint")
+			feedback.Note("framework has no FrankenPHP adapter, using the generic `frankenphp php-server` entrypoint")
 		}
 		wantWorker := site.RuntimeWorker
 		if worker {
@@ -193,7 +195,7 @@ func switchToFPM(site *config.Site) error {
 	// instead of the per-site FrankenPHP one that no longer exists.
 	startWorkersForSite(site, running, site.PHPVersion)
 
-	fmt.Printf("Runtime: fpm (switched from FrankenPHP)\n")
+	feedback.Done("runtime switched to " + feedback.Val("fpm"))
 	return nil
 }
 
@@ -223,6 +225,6 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 	if worker {
 		label = "frankenphp (worker mode)"
 	}
-	fmt.Printf("Runtime: %s\n", label)
+	feedback.Done("runtime switched to " + feedback.Val(label))
 	return nil
 }

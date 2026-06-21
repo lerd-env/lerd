@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/profiler"
 	"github.com/spf13/cobra"
 )
@@ -107,11 +108,11 @@ func runProfileStatus(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	state, colour := "off", colorYellow
+	state := feedback.Amber("off")
 	if cfg.IsProfilerEnabled() {
-		state, colour = "on", colorGreen
+		state = feedback.Green("on")
 	}
-	fmt.Printf("Profiler:   %s%s%s\n", colour, state, colorReset)
+	fmt.Printf("Profiler:   %s\n", state)
 	fmt.Printf("SPX web UI: %s\n", profiler.SpxUIURL)
 	return nil
 }

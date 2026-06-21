@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -81,8 +82,8 @@ func runFetch(cmd *cobra.Command, args []string) error {
 	}
 
 	if err := RunParallel(jobs); err != nil {
-		fmt.Printf("[WARN] some images failed to build: %v\n", err)
+		feedback.Warn("some images failed to build: %v", err)
 	}
-	fmt.Println("\nAll requested PHP images ready.")
+	feedback.Done("all requested PHP images ready")
 	return nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/dumpsops"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -108,14 +109,16 @@ func runDumpToggle(enable bool) error {
 	if res.Enabled {
 		state = "enabled"
 	}
+	feedback.Begin()
 	if res.NoChange {
-		fmt.Printf("Debug bridge already %s.\n", state)
+		feedback.Line("debug bridge already " + state)
 		return nil
 	}
 	if res.Enabled {
-		fmt.Println("Debug bridge enabled. Next dump() / dd() call will land in the dashboard.")
+		feedback.Done("debug bridge enabled")
+		feedback.Note("next dump() / dd() call lands in the dashboard")
 	} else {
-		fmt.Println("Debug bridge disabled.")
+		feedback.Done("debug bridge disabled")
 	}
 	nudgeUIDumpsChanged()
 	return nil
@@ -134,13 +137,11 @@ func runDumpStatus(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return err
 	}
-	state := "disabled"
-	colour := "\033[33m"
+	state := feedback.Amber("disabled")
 	if cfg.IsDumpsEnabled() {
-		state = "enabled"
-		colour = "\033[32m"
+		state = feedback.Green("enabled")
 	}
-	fmt.Printf("Debug bridge: %s%s\033[0m\n", colour, state)
+	fmt.Printf("Debug bridge: %s\n", state)
 	fmt.Printf("Listener:    unix:%s\n", config.DumpsSocketPath())
 	fmt.Printf("Bridge file: %s\n", config.DumpsBridgeFile())
 	fmt.Printf("Bridge ini:  %s\n", config.DumpsIniFile())

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -38,13 +39,14 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 	// file is created if missing; for parents we only touch an existing file.
 	if _, _, ok := FindParentSiteForWorktree(cwd); ok {
 		if err := config.SetWorktreeNodeVersion(cwd, version); err != nil {
-			fmt.Printf("[WARN] updating .lerd.yaml: %v\n", err)
+			feedback.Warn("updating .lerd.yaml: %v", err)
 		}
 	} else {
 		_ = updateProjectNodeVersionIfExists(cwd, version)
 	}
 
-	fmt.Printf("Node.js version pinned to %s in %s\n", version, cwd)
+	feedback.Begin()
+	feedback.Done("Node pinned to " + feedback.Val(version))
 
 	// Run fnm install for this version
 	fnmPath := filepath.Join(config.BinDir(), "fnm")
@@ -53,10 +55,10 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		if err := cmd.Run(); err != nil {
-			fmt.Printf("[WARN] fnm install %s: %v\n", version, err)
+			feedback.Warn("fnm install %s: %v", version, err)
 		}
 	} else {
-		fmt.Println("[WARN] fnm not found — run 'lerd install' to set up Node.js management")
+		feedback.Warn("fnm not found — run 'lerd install' to set up Node.js management")
 	}
 
 	return nil

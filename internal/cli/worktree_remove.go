@@ -9,6 +9,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -65,21 +66,21 @@ func newWorktreeRemoveCmd() *cobra.Command {
 			// failure here is a warning, not a hard error.
 			if wtBase != "" {
 				if err := StopAllWorkersForWorktree(site.Name, wtBase); err != nil {
-					fmt.Printf("[WARN] stopping worktree workers: %v\n", err)
+					feedback.Warn("stopping worktree workers: %v", err)
 				}
 			}
 
 			if branch != "" {
 				if err := promptDeleteIsolatedDB(site, branch); err != nil {
-					fmt.Printf("[WARN] DB cleanup skipped: %v\n", err)
+					feedback.Warn("DB cleanup skipped: %v", err)
 				}
 			}
 
 			if branch != "" {
 				if err := waitForWorktreeCleanup(site.Name, branch, 30*time.Second); err != nil {
-					fmt.Printf("[WARN] %v\n", err)
+					feedback.Warn("%v", err)
 				} else {
-					fmt.Println("Worktree removed and lerd state cleaned up.")
+					feedback.Done("worktree removed and lerd state cleaned up")
 				}
 			}
 			return nil
@@ -122,7 +123,7 @@ func promptDeleteIsolatedDB(site *config.Site, branch string) error {
 	if _, _, err := config.RemoveWorktreeDB(site.Name, branch); err != nil {
 		return fmt.Errorf("removing registry entry: %w", err)
 	}
-	fmt.Printf("Dropped database %q.\n", entry.DBName)
+	feedback.Note("dropped database " + entry.DBName)
 	return nil
 }
 
@@ -137,7 +138,7 @@ func runGitWorktreeRemove(args []string) error {
 	}
 
 	gitArgs := append([]string{"worktree", "remove"}, args...)
-	fmt.Printf("Running: git %s\n", strings.Join(gitArgs, " "))
+	feedback.Line("git " + strings.Join(gitArgs, " "))
 	stderr, err := gitpkg.RunCaptureStderr("", gitArgs...)
 	if err == nil {
 		return nil
@@ -191,7 +192,7 @@ func hasForceFlag(args []string) bool {
 // user sees git's progress live). The silent branch is kept for future
 // callers; nothing uses it today.
 func runGit(args []string, mirrorOutput bool) error {
-	fmt.Printf("Running: git %s\n", strings.Join(args, " "))
+	feedback.Line("git " + strings.Join(args, " "))
 	if !mirrorOutput {
 		return gitpkg.Run("", nil, args...)
 	}

@@ -13,6 +13,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -58,38 +59,40 @@ func newWorktreeAddCmd() *cobra.Command {
 			}
 
 			gitArgs := append([]string{"worktree", "add"}, args...)
-			fmt.Printf("Running: git %s\n", strings.Join(gitArgs, " "))
+			feedback.Begin()
+			feedback.Line("git " + strings.Join(gitArgs, " "))
 			if err := gitpkg.RunTTY("", gitArgs...); err != nil {
 				return fmt.Errorf("git worktree add: %w", err)
 			}
 
 			worktreePath, branch, err := newestWorktree(cwd)
 			if err != nil {
-				fmt.Printf("[WARN] could not locate the new worktree on disk: %v\n", err)
+				feedback.Warn("could not locate the new worktree on disk: %v", err)
 				return nil
 			}
 
-			fmt.Println("Waiting for lerd to install dependencies (composer + JS)...")
+			deps := feedback.Start("installing dependencies (composer + JS)")
 			if err := WaitForWorktreeReady(worktreePath, 5*time.Minute); err != nil {
-				fmt.Printf("[WARN] %v, you can rerun setup later by editing the worktree.\n", err)
+				deps.Fail(err)
+				feedback.Note("you can rerun setup later by editing the worktree")
 			} else {
-				fmt.Println("Dependencies installed.")
+				deps.OK("")
 			}
 
 			if optedIn := OptedInHostWorkers(site, worktreePath); len(optedIn) > 0 {
-				fmt.Printf("Auto-starting opted-in workers: %s\n", strings.Join(optedIn, ", "))
+				feedback.Note("auto-starting opted-in workers: " + strings.Join(optedIn, ", "))
 			}
 			ApplyWorktreeBuildChoice(site, worktreePath, promptWorktreeBuild(site, worktreePath), os.Stdout)
 
 			if err := promptDBIsolation(site, branch); err != nil {
-				fmt.Printf("[WARN] DB setup skipped: %v\n", err)
+				feedback.Warn("DB setup skipped: %v", err)
 			}
 
 			scheme := "http"
 			if site.Secured {
 				scheme = "https"
 			}
-			fmt.Printf("\nWorktree ready: %s://%s.%s\n", scheme, branch, site.PrimaryDomain())
+			feedback.Done("worktree ready: " + feedback.Val(scheme+"://"+branch+"."+site.PrimaryDomain()))
 			return nil
 		},
 	}
@@ -584,7 +587,7 @@ func AutoStartOptedInWorktreeWorkers(site *config.Site, worktreePath, phpVersion
 			continue
 		}
 		if err := WorkerStartForSite(site.Name, worktreePath, phpVersion, name, w, false); err != nil {
-			fmt.Printf("[WARN] auto-start %s for worktree %s: %v\n", name, filepath.Base(worktreePath), err)
+			feedback.Warn("auto-start %s for worktree %s: %v", name, filepath.Base(worktreePath), err)
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/spf13/cobra"
@@ -198,7 +199,7 @@ WantedBy=default.target
 			return fmt.Errorf("daemon-reload: %w", err)
 		}
 		if err := services.Mgr.Enable(unitName); err != nil {
-			fmt.Printf("[WARN] enable: %v\n", err)
+			feedback.Warn("enable: %v", err)
 		}
 	}
 	return nil
@@ -215,9 +216,9 @@ func stripeStartExplicit(siteName, apiKey, forwardTo string) error {
 		return fmt.Errorf("starting stripe listener: %w", err)
 	}
 
-	fmt.Printf("Stripe listener started for %s\n", siteName)
-	fmt.Printf("  Forwarding to: %s\n", forwardTo)
-	fmt.Printf("  Logs: %s\n", unitLogHint(unitName))
+	feedback.Start("starting stripe listener").OK("")
+	feedback.Note("forwarding to: " + forwardTo)
+	feedback.Note("logs: " + unitLogHint(unitName))
 	return nil
 }
 
@@ -269,10 +270,10 @@ func StripeStopForSite(siteName string) error {
 	}
 
 	if err := podman.DaemonReloadFn(); err != nil {
-		fmt.Printf("[WARN] daemon-reload: %v\n", err)
+		feedback.Warn("daemon-reload: %v", err)
 	}
 
-	fmt.Printf("Stripe listener stopped for %s\n", siteName)
+	feedback.Start("stopping stripe listener").OK("")
 	return nil
 }
 

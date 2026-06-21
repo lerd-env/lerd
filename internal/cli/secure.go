@@ -7,6 +7,7 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
@@ -76,23 +77,21 @@ func toggleSecureCmd(args []string, secured bool) error {
 			return certs.ErrDNSDisabled
 		}
 	}
-	verb := "Issuing certificate"
+	verb := "enabling HTTPS"
 	if !secured {
-		verb = "Removing certificate"
+		verb = "disabling HTTPS"
 	}
-	fmt.Printf("%s for %s...\n", verb, site.PrimaryDomain())
-
+	feedback.Begin()
+	step := feedback.Start(verb)
 	if err := siteops.SetSecured(site, secured); err != nil {
+		step.Fail(err)
 		return err
 	}
 	scheme := "http"
-	state := "Unsecured"
 	if secured {
 		scheme = "https"
-		state = "Secured"
 	}
-	fmt.Printf("  Updated APP_URL=%s://%s and VITE_REVERB_* in .env\n", scheme, site.PrimaryDomain())
-	fmt.Printf("%s: %s://%s\n", state, scheme, site.PrimaryDomain())
+	step.OK(feedback.Val(scheme + "://" + site.PrimaryDomain()))
 	return nil
 }
 
@@ -115,11 +114,11 @@ func restartStripeIfActive(site *config.Site) {
 	}
 	baseURL := scheme + "://" + site.PrimaryDomain()
 	if err := StripeStartForSite(site.Name, site.Path, baseURL); err != nil {
-		fmt.Printf("[WARN] updating stripe listener unit: %v\n", err)
+		feedback.Warn("updating stripe listener unit: %v", err)
 		return
 	}
 	if err := lerdSystemd.RestartService(unitName); err != nil {
-		fmt.Printf("[WARN] restarting stripe listener: %v\n", err)
+		feedback.Warn("restarting stripe listener: %v", err)
 		return
 	}
 	fmt.Printf("  Restarted stripe listener → %s%s\n", baseURL, config.StripeWebhookPath(site.Path))

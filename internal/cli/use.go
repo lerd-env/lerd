@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -30,11 +31,12 @@ func runUse(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("saving config: %w", err)
 	}
 
-	fmt.Printf("Default PHP version set to %s\n", version)
+	feedback.Begin()
+	feedback.Done("default PHP set to " + feedback.Val(version))
 
 	// Ensure FPM quadlet exists for this version
 	if err := ensureFPMQuadlet(version); err != nil {
-		fmt.Printf("[WARN] FPM quadlet for PHP %s: %v\n", version, err)
+		feedback.Warn("FPM quadlet for PHP %s: %v", version, err)
 	}
 
 	return nil

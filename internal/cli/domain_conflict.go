@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 // filterConflictingDomains splits desired into the domains that ownPath is
@@ -92,9 +93,9 @@ func warnFilteredDomains(removed []string) {
 	}
 	for _, d := range removed {
 		if existing, err := config.IsDomainUsed(d); err == nil && existing != nil {
-			fmt.Printf("  [WARN] domain %q already used by site %q — skipped\n", d, existing.Name)
+			feedback.Warn("domain %q already used by site %q — skipped", d, existing.Name)
 			continue
 		}
-		fmt.Printf("  [WARN] domain %q is reserved — skipped\n", d)
+		feedback.Warn("domain %q is reserved — skipped", d)
 	}
 }

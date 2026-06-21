@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -79,13 +80,11 @@ func runNotifyStatus() error {
 	if err != nil {
 		return err
 	}
-	state := "disabled"
-	colour := "\033[33m"
+	state := feedback.Amber("disabled")
 	if cfg.IsNotificationsEnabled() {
-		state = "enabled"
-		colour = "\033[32m"
+		state = feedback.Green("enabled")
 	}
-	fmt.Printf("Notifications: %s%s\033[0m\n", colour, state)
+	fmt.Printf("Notifications: %s\n", state)
 	return nil
 }
 

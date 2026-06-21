@@ -8,6 +8,7 @@ import (
 	"regexp"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
@@ -29,22 +30,27 @@ func NewNodeManageCmd() *cobra.Command {
 
 func runNodeManage(_ *cobra.Command, _ []string) error {
 	if lerdManagesNode() {
-		fmt.Println("lerd is already managing Node.js.")
+		feedback.Begin()
+		feedback.Line("lerd is already managing Node.js")
 		return nil
 	}
 	fnmPath := filepath.Join(config.BinDir(), "fnm")
 	if _, err := os.Stat(fnmPath); err != nil {
 		return fmt.Errorf("fnm not found at %s — run 'lerd install' first", fnmPath)
 	}
-	fmt.Println("Installing fnm-managed node/npm/npx shims into", config.BinDir())
+	feedback.Begin()
+	step := feedback.Start("installing fnm-managed node/npm/npx shims")
 	if err := addShellShims(true); err != nil {
+		step.Fail(err)
 		return fmt.Errorf("writing shims: %w", err)
 	}
+	step.OK("")
 	ensureDefaultNode()
 	// Host workers (Vite etc.) were generated to run directly or via bun while
 	// Node was unmanaged; rewrite them so they route through fnm again.
 	regenerateHostWorkers()
-	fmt.Println("lerd is now managing Node.js. Pin a version per project with `lerd isolate:node <v>`.")
+	feedback.Done("lerd is now managing Node.js")
+	feedback.Note("pin a version per project with `lerd isolate:node <v>`")
 	return nil
 }
 
@@ -76,9 +82,9 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 				}
 				seen[v] = true
 				if uo, uerr := exec.Command(fnmPath, "uninstall", v).CombinedOutput(); uerr != nil {
-					fmt.Printf("  [WARN] fnm uninstall %s: %s\n", v, string(uo))
+					feedback.Warn("fnm uninstall %s: %s", v, string(uo))
 				} else {
-					fmt.Printf("  removed Node %s\n", v)
+					feedback.Note("removed Node " + v)
 				}
 			}
 		}
@@ -93,16 +99,18 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 	// Existing host worker units still reference `fnm exec --using=… -- npm …`,
 	// which now has no Node to run; rewrite them so they use bun (when present)
 	// or the user's system Node directly.
-	fmt.Println("Regenerating host worker units...")
+	feedback.Begin()
+	regen := feedback.Start("regenerating host worker units")
 	regenerateHostWorkers()
+	regen.OK("")
 
-	fmt.Println("lerd is no longer managing Node.js.")
+	feedback.Done("lerd is no longer managing Node.js")
 	if nodeDet.BunPath() != "" {
-		fmt.Println("bun is installed, so JS host workers (e.g. Vite) now run through bun.")
+		feedback.Note("bun is installed, so JS host workers (e.g. Vite) now run through bun")
 	} else {
-		fmt.Println("JS host workers (e.g. Vite) now use your system Node. Install bun or a system Node if you have neither.")
+		feedback.Note("JS host workers (e.g. Vite) now use your system Node; install bun or a system Node if you have neither")
 	}
-	fmt.Println("Re-enable lerd-managed Node with `lerd node:manage`.")
+	feedback.Note("re-enable lerd-managed Node with `lerd node:manage`")
 	return nil
 }
 
@@ -216,7 +224,7 @@ func regenerateWorkerUnit(siteName, sitePath, phpVersion, workerName string, wDe
 	unitPath := filepath.Join(config.SystemdUserDir(), unitName+".service")
 	before, _ := os.ReadFile(unitPath)
 	if err := WorkerStartForSite(siteName, sitePath, phpVersion, workerName, wDef, false); err != nil {
-		fmt.Printf("  [WARN] regenerating %s: %v\n", unitName, err)
+		feedback.Warn("regenerating %s: %v", unitName, err)
 		return
 	}
 	after, _ := os.ReadFile(unitPath)
@@ -233,8 +241,8 @@ func regenerateWorkerUnit(siteName, sitePath, phpVersion, workerName string, wDe
 	// would not heal it.
 	podman.ResetFailedUnit(unitName)
 	if err := podman.RestartUnit(unitName); err != nil {
-		fmt.Printf("  [WARN] restarting %s: %v\n", unitName, err)
+		feedback.Warn("restarting %s: %v", unitName, err)
 	} else {
-		fmt.Printf("  regenerated %s\n", unitName)
+		feedback.Note("regenerated " + unitName)
 	}
 }

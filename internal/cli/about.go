@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/spf13/cobra"
 )
@@ -17,14 +18,16 @@ func NewAboutCmd() *cobra.Command {
 }
 
 func runAbout(_ *cobra.Command, _ []string) error {
-	fmt.Println("Lerd — Podman-powered local PHP development environment for Linux and macOS")
-	fmt.Println()
-	fmt.Printf("  Version  %s\n", version.Version)
-	fmt.Printf("  Commit   %s\n", version.Commit)
-	fmt.Printf("  Built    %s\n", version.Date)
-	fmt.Println()
-	fmt.Println("  https://github.com/geodro/lerd")
-	fmt.Println()
-	fmt.Println("  (c) George Dumitrescu")
+	feedback.Begin()
+	fmt.Println("  " + feedback.Title("lerd"))
+	fmt.Println("  " + feedback.Dim("Podman-powered local PHP development for Linux & macOS"))
+	feedback.NewSummary().
+		Row("Version", feedback.Val(version.Version)).
+		Row("Commit", version.Commit).
+		Row("Built", version.Date).
+		Row("Repo", feedback.Val("https://github.com/geodro/lerd")).
+		Print()
+	feedback.Begin()
+	fmt.Println("  " + feedback.Dim("© George Dumitrescu"))
 	return nil
 }

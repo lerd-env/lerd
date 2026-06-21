@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -214,7 +215,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 
 	changed, err := writeWorkerUnitFile(unitName, label, displaySite, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit, w.Host)
 	if err != nil {
-		fmt.Printf("[WARN] writing worker unit %s: %v\n", unitName, err)
+		feedback.Warn("writing worker unit %s: %v", unitName, err)
 		return
 	}
 	if changed {
@@ -223,7 +224,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			enableTarget = unitName + ".timer"
 		}
 		if err := services.Mgr.Enable(enableTarget); err != nil {
-			fmt.Printf("[WARN] enable %s: %v\n", enableTarget, err)
+			feedback.Warn("enable %s: %v", enableTarget, err)
 		}
 	}
 }

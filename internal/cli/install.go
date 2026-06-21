@@ -15,6 +15,7 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -872,9 +873,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	refreshGlobalMCPSkills()
 	refreshProjectMCPSkills()
 
-	fmt.Println("\nLerd installation complete!")
-	fmt.Println("\n  Dashboard: \033[96mhttp://lerd.localhost\033[0m")
-	fmt.Println("  Terminal:  \033[96mlerd tui\033[0m")
+	feedback.Done("lerd installation complete")
+	feedback.Note("Dashboard: " + feedback.Val("http://lerd.localhost"))
+	feedback.Note("Terminal:  " + feedback.Val("lerd tui"))
 	return nil
 }
 

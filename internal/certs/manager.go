@@ -1,11 +1,13 @@
 package certs
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -99,13 +101,16 @@ func issueCertAtomic(primaryDomain string, allDomains []string, certsDir string)
 	args := []string{"-cert-file", tmpCert, "-key-file", tmpKey}
 	args = append(args, sans...)
 
+	// Capture mkcert's chatty success banner instead of letting it spill into
+	// the CLI's clean step output; surface it only when the command fails.
 	cmd := exec.Command(MkcertPath(), args...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	var mkOut bytes.Buffer
+	cmd.Stdout = &mkOut
+	cmd.Stderr = &mkOut
 	if err := cmd.Run(); err != nil {
 		os.Remove(tmpCert) //nolint:errcheck
 		os.Remove(tmpKey)  //nolint:errcheck
-		return fmt.Errorf("mkcert for %s: %w", primaryDomain, err)
+		return fmt.Errorf("mkcert for %s: %w\n%s", primaryDomain, err, strings.TrimSpace(mkOut.String()))
 	}
 
 	// Two-phase rename: back up the previous cert (if any), swap in the

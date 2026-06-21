@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +47,8 @@ func RebuildSite(name string) error {
 	// Remove old image so build starts fresh.
 	_ = podman.RemoveCustomImage(name)
 
-	fmt.Printf("Building %s...\n", podman.CustomImageName(name))
+	feedback.Begin()
+	feedback.Line("building " + podman.CustomImageName(name))
 	if err := podman.BuildCustomImage(name, site.Path, proj.Container); err != nil {
 		return err
 	}
@@ -64,6 +66,6 @@ func RebuildSite(name string) error {
 		}
 	}
 
-	fmt.Printf("Rebuilt and restarted: %s\n", name)
+	feedback.Done("rebuilt and restarted " + feedback.Val(name))
 	return nil
 }

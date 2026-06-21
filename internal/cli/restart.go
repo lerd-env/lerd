@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -21,6 +22,7 @@ func NewRestartCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			feedback.Begin()
 			return RestartSite(name)
 		},
 	}
@@ -39,7 +41,7 @@ func RestartSite(name string) error {
 		if err := podman.RestartUnit(unit); err != nil {
 			return fmt.Errorf("restarting container: %w", err)
 		}
-		fmt.Printf("Restarted: %s (%s)\n", name, unit)
+		feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
 		return nil
 	}
 
@@ -48,7 +50,7 @@ func RestartSite(name string) error {
 		if err := podman.RestartUnit(unit); err != nil {
 			return fmt.Errorf("restarting FrankenPHP container: %w", err)
 		}
-		fmt.Printf("Restarted: %s (%s)\n", name, unit)
+		feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
 		return nil
 	}
 
@@ -57,7 +59,7 @@ func RestartSite(name string) error {
 		if err := podman.RestartUnit(unit); err != nil {
 			return fmt.Errorf("restarting custom FPM container: %w", err)
 		}
-		fmt.Printf("Restarted: %s (%s)\n", name, unit)
+		feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
 		return nil
 	}
 
@@ -69,7 +71,7 @@ func RestartSite(name string) error {
 		if err := podman.RestartUnit(unit); err != nil {
 			return fmt.Errorf("restarting dev server: %w", err)
 		}
-		fmt.Printf("Restarted: %s (%s)\n", name, unit)
+		feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
 		return nil
 	}
 
@@ -87,6 +89,6 @@ func RestartSite(name string) error {
 	if err := podman.RestartUnit(unit); err != nil {
 		return fmt.Errorf("restarting %s: %w", unit, err)
 	}
-	fmt.Printf("Restarted: %s (%s)\n", name, unit)
+	feedback.Done("restarted " + feedback.Val(name) + " · " + unit)
 	return nil
 }
