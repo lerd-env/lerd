@@ -7,6 +7,46 @@ import (
 	"testing"
 )
 
+func TestSitesUsingService_HostBackendExcluded(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	mk := func(svc []string, external bool) string {
+		dir := t.TempDir()
+		var services []ProjectService
+		for _, s := range svc {
+			services = append(services, ProjectService{Name: s})
+		}
+		if err := SaveProjectConfig(dir, &ProjectConfig{Services: services, DB: ProjectDB{External: external}}); err != nil {
+			t.Fatal(err)
+		}
+		return dir
+	}
+
+	containerMysql := mk([]string{"mysql"}, false) // counts for mysql
+	hostMysql := mk([]string{"mysql"}, true)       // host backend → not counted
+	hostMysqlContainerPg := mk([]string{"mysql", "postgres"}, true)
+	pausedMysql := mk([]string{"mysql"}, false)
+
+	reg := &SiteRegistry{Sites: []Site{
+		{Name: "c", Path: containerMysql},
+		{Name: "h", Path: hostMysql},
+		{Name: "hp", Path: hostMysqlContainerPg},
+		{Name: "p", Path: pausedMysql, Paused: true},
+	}}
+	if err := SaveSites(reg); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only the container-mode site counts for mysql; host-backend and paused are excluded.
+	if got := SitesUsingService("mysql"); len(got) != 1 || got[0].Path != containerMysql {
+		t.Errorf("SitesUsingService(mysql) = %v, want exactly the container-mode site %q", got, containerMysql)
+	}
+	// A host-MySQL site that also runs a container Postgres still counts for postgres.
+	if got := SitesUsingService("postgres"); len(got) != 1 || got[0].Path != hostMysqlContainerPg {
+		t.Errorf("SitesUsingService(postgres) = %v, want exactly %q", got, hostMysqlContainerPg)
+	}
+}
+
 func TestProjectDB_HostSocketPath(t *testing.T) {
 	if got := (ProjectDB{}).HostSocketPath(); got != DefaultHostMySQLSocket {
 		t.Fatalf("default HostSocketPath = %q, want %q", got, DefaultHostMySQLSocket)

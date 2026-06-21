@@ -65,12 +65,24 @@ func SitesUsingService(name string) []Site {
 		return nil
 	}
 	needle := "lerd-" + name
+	// Whether name is the containerized MySQL/MariaDB service. Such a service is
+	// "not used" by a site that has switched to the host (system) database over
+	// its socket, even though the site's .lerd.yaml may still list it and its
+	// .env may still mention lerd-<name>.
+	nameFam := FamilyOfName(name)
+	nameIsMySQLContainer := nameFam == "mysql" || nameFam == "mariadb"
 	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
 			continue
 		}
-		if proj, pErr := LoadProjectConfig(s.Path); pErr == nil {
+		proj, pErr := LoadProjectConfig(s.Path)
+		// Don't count a host-backend MySQL site against the container DB service,
+		// so it can auto-stop once every MySQL site has moved to the host.
+		if pErr == nil && proj != nil && nameIsMySQLContainer && proj.DB.External && proj.IsMySQLFamilyDB() {
+			continue
+		}
+		if pErr == nil && proj != nil {
 			matched := false
 			for _, svc := range proj.Services {
 				if svc.Name == name {
