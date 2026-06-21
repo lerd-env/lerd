@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 // NewIdleCmd returns the parent `lerd idle` command: a global on/off toggle, a
@@ -50,7 +51,8 @@ func newIdlePinCmd(verb string, pinned bool) *cobra.Command {
 			if !pinned {
 				verbed = "unpinned"
 			}
-			fmt.Printf("%s %s (idle-suspend %s).\n", verbed, args[0], map[bool]string{true: "off", false: "on"}[pinned])
+			feedback.Begin()
+			feedback.Done(fmt.Sprintf("%s %s (idle-suspend %s)", verbed, args[0], map[bool]string{true: "off", false: "on"}[pinned]))
 			return nil
 		},
 	}
@@ -105,7 +107,8 @@ func setIdleEnabled(enabled bool) error {
 	} else {
 		activityping.Disable()
 	}
-	fmt.Printf("Idle-suspend %s.\n", onOff(enabled))
+	feedback.Begin()
+	feedback.Done("idle-suspend " + onOff(enabled))
 	return nil
 }
 
@@ -122,7 +125,8 @@ func setIdleTimeout(dur string) error {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
 	}
-	fmt.Printf("Idle timeout set to %s.\n", compactDuration(d))
+	feedback.Begin()
+	feedback.Done("idle timeout set to " + compactDuration(d))
 	return nil
 }
 

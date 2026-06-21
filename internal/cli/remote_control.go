@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/term"
@@ -116,11 +117,11 @@ Re-running this command rotates the password.`,
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Println("Remote dashboard access enabled.")
-			fmt.Printf("  Username: %s\n", username)
-			fmt.Println("  LAN clients can now reach http://<server-ip>:7073 with HTTP Basic auth.")
-			fmt.Println("  Loopback (127.0.0.1) bypasses authentication as always.")
-			fmt.Println("  Run `lerd remote-control off` to lock LAN access back down.")
+			feedback.Begin()
+			feedback.Done("remote dashboard access enabled (user: " + feedback.Val(username) + ")")
+			feedback.Note("LAN clients can now reach http://<server-ip>:7073 with HTTP Basic auth")
+			feedback.Note("loopback (127.0.0.1) bypasses authentication as always")
+			feedback.Note("run `lerd remote-control off` to lock LAN access back down")
 			return nil
 		},
 	}
@@ -147,7 +148,8 @@ the password — you cannot lock yourself out of your own machine.`,
 			if err := config.SaveGlobal(cfg); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
-			fmt.Println("Remote dashboard access disabled. LAN clients now get 403 Forbidden.")
+			feedback.Begin()
+			feedback.Done("remote dashboard access disabled — LAN clients now get 403 Forbidden")
 			return nil
 		},
 	}
@@ -162,17 +164,16 @@ func newRemoteControlStatusCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("loading config: %w", err)
 			}
+			feedback.Begin()
 			if cfg.UI.PasswordHash == "" {
-				fmt.Println("Remote dashboard access: DISABLED")
-				fmt.Println("  LAN clients get 403 Forbidden. Loopback (127.0.0.1) is always allowed.")
-				fmt.Println("  Enable with: lerd remote-control on")
+				feedback.Line("remote dashboard access: " + feedback.Amber("disabled"))
+				feedback.Note("LAN clients get 403 Forbidden; loopback (127.0.0.1) is always allowed")
+				feedback.Note("enable with: lerd remote-control on")
 				return nil
 			}
-			fmt.Println("Remote dashboard access: ENABLED")
-			fmt.Printf("  Username: %s\n", cfg.UI.Username)
-			fmt.Println("  LAN clients must present HTTP Basic auth.")
-			fmt.Println("  Loopback (127.0.0.1) bypasses authentication.")
-			fmt.Println("  Disable with: lerd remote-control off")
+			feedback.Line("remote dashboard access: " + feedback.Green("enabled") + " (user: " + cfg.UI.Username + ")")
+			feedback.Note("LAN clients must present HTTP Basic auth; loopback bypasses it")
+			feedback.Note("disable with: lerd remote-control off")
 			return nil
 		},
 	}
@@ -214,7 +215,7 @@ func promptAndPersistRemoteControl() error {
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
-	fmt.Printf("  Saved dashboard credentials for %s.\n", username)
+	feedback.Note("saved dashboard credentials for " + username)
 	return nil
 }
 

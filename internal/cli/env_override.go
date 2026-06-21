@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -85,7 +86,7 @@ func readEnvOverride(cwd string) (overrides map[string]string, external map[stri
 // `continue` past start/provision after writing the connection vars.
 func externalManaged(name string, external map[string]bool) bool {
 	if external[name] {
-		fmt.Printf("  %-12s externally managed (%s) — not starting it\n", name, envOverrideFile)
+		feedback.Note(name + " externally managed (" + envOverrideFile + ") — not starting it")
 		return true
 	}
 	return false
@@ -153,15 +154,16 @@ func runEnvOverride(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	feedback.Begin()
 	if created {
-		fmt.Printf("Created %s (gitignored).\n", envOverrideFile)
+		feedback.Done("created " + envOverrideFile + " (gitignored)")
 	} else {
-		fmt.Printf("Updated %s.\n", envOverrideFile)
+		feedback.Done("updated " + envOverrideFile)
 	}
 	for _, kv := range args {
-		fmt.Printf("  %s\n", kv)
+		feedback.Note(kv)
 	}
-	fmt.Println("Run 'lerd env' to apply these overrides to your .env.")
+	feedback.Note("run `lerd env` to apply these overrides to your .env")
 	return nil
 }
 

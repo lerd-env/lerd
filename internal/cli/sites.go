@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -128,7 +129,7 @@ func printEnrichedSite(s siteinfo.EnrichedSite, width int, grouped bool) {
 	}
 }
 
-func pausedTag() string { return "\033[33mpaused\033[0m" }
+func pausedTag() string { return feedback.Amber("paused") }
 
 // Wide layout: Name Domain PHP Node TLS Framework Status Path  (≥120 cols)
 func printSiteWide(s config.Site, fwLabel string) {
@@ -243,7 +244,7 @@ func printSiteCompact(s config.Site, fwLabel string) {
 	fmt.Printf("%s%s%s\n", s.PrimaryDomain(), tls, status)
 	fmt.Printf("  %s\n", truncate(s.Path, 76))
 	if meta != "" {
-		fmt.Printf("  \033[2m%s\033[0m\n", meta)
+		fmt.Printf("  %s\n", feedback.Dim(meta))
 	}
 }
 
@@ -272,7 +273,7 @@ func printGroupSecondaryCompact(s config.Site, fwLabel string) {
 	fmt.Printf("  ↳ grp %s%s%s\n", s.PrimaryDomain(), tls, status)
 	fmt.Printf("    %s\n", truncate(s.Path, 74))
 	if meta != "" {
-		fmt.Printf("    \033[2m%s\033[0m\n", meta)
+		fmt.Printf("    %s\n", feedback.Dim(meta))
 	}
 }
 

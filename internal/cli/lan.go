@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -114,34 +115,36 @@ generates a one-shot bootstrap code for a remote machine.`,
 			// remote-control credential prompt into this single command if
 			// it has not already been set.
 			if !dnsOn && cfg != nil && cfg.UI.PasswordHash == "" {
-				fmt.Println("DNS is disabled, the dashboard is the only thing reachable on the LAN, set HTTP Basic credentials so it is gated:")
+				feedback.Line("DNS is disabled — the dashboard is the only thing reachable on the LAN, set HTTP Basic credentials so it is gated")
 				if err := promptAndPersistRemoteControl(); err != nil {
 					return err
 				}
 				cfg, _ = config.LoadGlobal()
 			}
+			feedback.Begin()
+			expose := feedback.Start("exposing lerd on the LAN")
 			lanIP, err := EnableLANExposure(func(step string) {
-				fmt.Printf("  • %s\n", step)
+				feedback.Note(step)
 			})
 			if err != nil {
+				expose.Fail(err)
 				return err
 			}
-			fmt.Printf("Lerd is now reachable on the LAN at %s.\n", lanIP)
+			expose.OK(feedback.Val(lanIP))
 			if dnsOn {
-				fmt.Printf("  - sites: http://*.test (resolved via dnsmasq on %s:5300)\n", lanIP)
+				feedback.Note("sites: http://*.test (resolved via dnsmasq on " + lanIP + ":5300)")
 			} else {
-				fmt.Println("  - sites: only reachable via per-site `lerd lan:share` (no dnsmasq, *.localhost cannot resolve to a remote host)")
+				feedback.Note("sites: only reachable via per-site `lerd lan:share` (no dnsmasq, *.localhost cannot resolve to a remote host)")
 			}
 			if cfg != nil && cfg.UI.PasswordHash != "" {
-				fmt.Printf("  - dashboard: http://%s:7073 (HTTP Basic auth required)\n", lanIP)
+				feedback.Note(fmt.Sprintf("dashboard: http://%s:7073 (HTTP Basic auth required)", lanIP))
 			} else {
-				fmt.Printf("  - dashboard: http://%s:7073 (LAN clients get 403 — run `lerd remote-control on` to grant LAN access)\n", lanIP)
+				feedback.Note(fmt.Sprintf("dashboard: http://%s:7073 (LAN clients get 403 — run `lerd remote-control on` to grant LAN access)", lanIP))
 			}
 			if dnsOn {
-				fmt.Println("Make sure your firewall allows ports 80, 443, 5300, 7073 from the devices you want to grant access.")
-				fmt.Println("Run `lerd remote-setup` to generate a one-time bootstrap code for a remote machine.")
+				feedback.Note("allow ports 80, 443, 5300, 7073 through your firewall; `lerd remote-setup` generates a one-time bootstrap code")
 			} else {
-				fmt.Println("Make sure your firewall allows ports 80, 443, 7073 plus any `lerd lan:share` ports from the devices you want to grant access.")
+				feedback.Note("allow ports 80, 443, 7073 plus any `lerd lan:share` ports through your firewall")
 			}
 			return nil
 		},
@@ -153,14 +156,17 @@ func newLANUnexposeCmd() *cobra.Command {
 		Use:   "unexpose",
 		Short: "Restrict lerd to loopback only — safe for untrusted wifi",
 		RunE: func(_ *cobra.Command, _ []string) error {
+			feedback.Begin()
+			restrict := feedback.Start("restricting lerd to loopback")
 			if err := DisableLANExposure(func(step string) {
-				fmt.Printf("  • %s\n", step)
+				feedback.Note(step)
 			}); err != nil {
+				restrict.Fail(err)
 				return err
 			}
-			fmt.Println("Lerd is now restricted to loopback (127.0.0.1).")
-			fmt.Println("LAN devices can no longer reach sites, services, or the dashboard.")
-			fmt.Println("Any active remote-setup code has been revoked.")
+			restrict.OK(feedback.Val("127.0.0.1"))
+			feedback.Note("LAN devices can no longer reach sites, services, or the dashboard")
+			feedback.Note("any active remote-setup code has been revoked")
 			return nil
 		},
 	}
@@ -204,12 +210,13 @@ Run 'lerd lan:unshare' to stop sharing and release the port.`,
 				ip = "<your-LAN-IP>"
 			}
 			shareURL := fmt.Sprintf("http://%s:%d", ip, port)
-			fmt.Printf("Sharing %s at %s\n", siteName, shareURL)
-			fmt.Println("Other devices on the network can use that URL directly — no DNS setup needed.")
+			feedback.Begin()
+			feedback.Done("sharing " + siteName + " at " + feedback.Val(shareURL))
+			feedback.Note("other devices on the network can use that URL directly — no DNS setup needed")
 			fmt.Println()
 			PrintLANShareQR(shareURL)
 			fmt.Println()
-			fmt.Println("Run 'lerd lan:unshare' to stop.")
+			feedback.Note("run `lerd lan:unshare` to stop")
 			return nil
 		},
 	}
@@ -239,7 +246,8 @@ func newLANUnshareCmd() *cobra.Command {
 				site.LANPort = 0
 				_ = config.AddSite(*site)
 			}
-			fmt.Printf("LAN sharing stopped for %s.\n", siteName)
+			feedback.Begin()
+			feedback.Done("LAN sharing stopped for " + siteName)
 			return nil
 		},
 	}
@@ -278,9 +286,11 @@ func newLANStatusCmd() *cobra.Command {
 				if lanIP == "" {
 					lanIP = "(unknown)"
 				}
-				fmt.Printf("Lerd is exposed to the LAN at %s.\n", lanIP)
+				feedback.Begin()
+				feedback.Done("exposed to the LAN at " + feedback.Val(lanIP))
 			} else {
-				fmt.Println("Lerd is loopback-only (127.0.0.1). LAN devices cannot reach it.")
+				feedback.Begin()
+				feedback.Line("loopback-only (127.0.0.1) — LAN devices cannot reach it")
 			}
 			return nil
 		},

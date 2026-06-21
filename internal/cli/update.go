@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/geodro/lerd/internal/systemd"
@@ -48,7 +48,8 @@ func NewUpdateCmd(currentVersion string) *cobra.Command {
 }
 
 func runUpdate(currentVersion string, beta bool) error {
-	fmt.Println("==> Checking for updates")
+	feedback.Begin()
+	feedback.Line("checking for updates")
 
 	var latest string
 	var err error
@@ -71,15 +72,14 @@ func runUpdate(currentVersion string, beta bool) error {
 	lat := lerdUpdate.StripV(latest)
 
 	if !lerdUpdate.VersionGreaterThan(lat, cur) {
-		fmt.Printf("  Already on latest: v%s\n", cur)
+		feedback.Done("already on latest v" + cur)
 		return nil
 	}
 
-	fmt.Printf("  Current: v%s\n", cur)
-	fmt.Printf("  Latest:  v%s\n", lat)
+	feedback.Note("current v" + cur + " · latest " + feedback.Val("v"+lat))
 
 	// Show what's new between the current and latest version.
-	fmt.Println("\n==> What's new")
+	feedback.Line("what's new")
 	changelog, _ := lerdUpdate.FetchChangelog(cur, lat)
 	if changelog != "" {
 		for _, line := range strings.Split(changelog, "\n") {
@@ -97,12 +97,8 @@ func runUpdate(currentVersion string, beta bool) error {
 	}
 
 	// Ask for confirmation.
-	fmt.Printf("\nUpdate to v%s? [Y/n] ", lat)
-	reader := bufio.NewReader(os.Stdin)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
-	if answer == "n" || answer == "no" {
-		fmt.Println("Update cancelled.")
+	if !feedback.Confirm("Update to v"+lat+"?", true) {
+		feedback.Line("update cancelled")
 		return nil
 	}
 
@@ -114,13 +110,14 @@ func runUpdate(currentVersion string, beta bool) error {
 	// Back up current binary for rollback.
 	backupBinary(self, currentVersion)
 
-	fmt.Printf("  --> Downloading lerd v%s ... ", lat)
+	dl := feedback.Start("downloading lerd v" + lat)
 	extracted, cleanup, err := downloadReleaseBinary(latest)
 	if err != nil {
+		dl.Fail(err)
 		return err
 	}
 	defer cleanup()
-	fmt.Println("OK")
+	dl.OK("")
 
 	// Atomically replace lerd.
 	tmp := self + ".tmp"
@@ -145,7 +142,9 @@ func runUpdate(currentVersion string, beta bool) error {
 	// Update the cache so lerd status / doctor stop showing a stale notice.
 	lerdUpdate.WriteUpdateCache(lat)
 
-	fmt.Printf("\nLerd updated to v%s — applying infrastructure changes...\n\n", lat)
+	feedback.Done("lerd updated to v" + lat)
+	feedback.Line("applying infrastructure changes")
+	fmt.Println()
 
 	// Re-exec the new binary with `install` to reapply quadlet files,
 	// DNS config, sysctl, etc. lerd install is idempotent. Pass
@@ -166,13 +165,9 @@ func runUpdate(currentVersion string, beta bool) error {
 	// minio container is still running (skip if already migrated to RustFS).
 	minioRunning, _ := podman.ContainerRunning("lerd-minio")
 	if _, err := os.Stat(config.DataSubDir("minio")); err == nil && minioRunning {
-		fmt.Print("\n==> MinIO detected — migrate to RustFS? [y/N] ")
-		migrateReader := bufio.NewReader(os.Stdin)
-		migrateAnswer, _ := migrateReader.ReadString('\n')
-		migrateAnswer = strings.TrimSpace(strings.ToLower(migrateAnswer))
-		if migrateAnswer == "y" || migrateAnswer == "yes" {
+		if feedback.Confirm("MinIO detected — migrate to RustFS?", false) {
 			if err := runMinioMigrate(nil, nil); err != nil {
-				fmt.Fprintf(os.Stderr, "  warn: migration failed: %v\n", err)
+				feedback.Warn("migration failed: %v", err)
 			}
 		}
 	}
@@ -212,24 +207,24 @@ func refreshStoreFrameworks() {
 	if len(targets) == 0 {
 		return
 	}
-	fmt.Printf("\n==> Refreshing %d framework definition%s\n", len(targets), pluralS(len(targets)))
+	feedback.Line(fmt.Sprintf("refreshing %d framework definition%s", len(targets), pluralS(len(targets))))
 	client := store.NewClient()
 	for _, t := range targets {
 		label := t.name
 		if t.version != "" {
 			label = t.name + "@" + t.version
 		}
-		fmt.Printf("  --> %s ... ", label)
+		step := feedback.Start(label)
 		fw, err := client.FetchFramework(t.name, t.version)
 		if err != nil {
-			fmt.Printf("WARN (%v)\n", err)
+			step.Fail(err)
 			continue
 		}
 		if err := config.SaveStoreFramework(fw); err != nil {
-			fmt.Printf("WARN (%v)\n", err)
+			step.Fail(err)
 			continue
 		}
-		fmt.Println("OK")
+		step.OK("")
 	}
 }
 
@@ -247,7 +242,7 @@ func refreshGlobalMCPSkills() {
 	if !mcpEnabledGlobally(home) {
 		return
 	}
-	fmt.Println("\n==> Refreshing global MCP skills and guidelines")
+	feedback.Line("refreshing global MCP skills and guidelines")
 	if err := RefreshGlobalAISkills(home, true); err != nil {
 		fmt.Fprintf(os.Stderr, "  warn: could not refresh global AI skills: %v\n", err)
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +47,8 @@ func newPhpBunUpdateCmd() *cobra.Command {
 			if !bunInstalledInContainer(version) {
 				return fmt.Errorf("bun is not installed in the PHP %s container — run: lerd php:bun install", version)
 			}
-			fmt.Printf("Updating bun in the PHP %s container...\n", version)
+			feedback.Begin()
+			feedback.Line("updating bun in the PHP " + version + " container")
 			up := podman.Cmd("exec", container, "/root/.bun/bin/bun", "upgrade")
 			up.Stdout = os.Stdout
 			up.Stderr = os.Stderr
@@ -54,7 +56,7 @@ func newPhpBunUpdateCmd() *cobra.Command {
 				return fmt.Errorf("bun upgrade: %w", err)
 			}
 			out, _ := podman.Cmd("exec", container, "/root/.bun/bin/bun", "--version").CombinedOutput()
-			fmt.Printf("bun is now %s in the PHP %s container.\n", strings.TrimSpace(string(out)), version)
+			feedback.Done("bun is now " + feedback.Val(strings.TrimSpace(string(out))) + " in the PHP " + version + " container")
 			return nil
 		},
 	}
@@ -257,11 +259,12 @@ func newPhpBunVersionCmd() *cobra.Command {
 				return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
 			}
 			out, err := podman.Cmd("exec", container, "/root/.bun/bin/bun", "--version").CombinedOutput()
+			feedback.Begin()
 			if err != nil {
-				fmt.Printf("bun is not installed in the PHP %s container — run: lerd php:bun install\n", version)
+				feedback.Line("bun is not installed in the PHP " + version + " container — run: lerd php:bun install")
 				return nil
 			}
-			fmt.Printf("bun %s (PHP %s container)\n", strings.TrimSpace(string(out)), version)
+			feedback.Line("bun " + feedback.Val(strings.TrimSpace(string(out))) + " (PHP " + version + " container)")
 			return nil
 		},
 	}

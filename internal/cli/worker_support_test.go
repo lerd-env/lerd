@@ -55,7 +55,7 @@ func TestWorkerStartForSite_unsupportedReasonPrinted(t *testing.T) {
 	if !strings.Contains(out, "fake-platform-reason") {
 		t.Errorf("expected reason in WARN output, got %q", out)
 	}
-	if !strings.Contains(out, "[WARN]") {
-		t.Errorf("expected [WARN] marker in output, got %q", out)
+	if !strings.Contains(out, "⚠") {
+		t.Errorf("expected warning marker in output, got %q", out)
 	}
 }

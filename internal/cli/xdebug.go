@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/xdebugops"
@@ -104,21 +105,22 @@ func runXdebugToggle(args []string, enable bool, mode, start string) error {
 		return err
 	}
 
+	feedback.Begin()
 	if res.NoChange {
 		state := "disabled"
 		if res.Enabled {
 			state = fmt.Sprintf("enabled (mode=%s)", res.Mode)
 		}
-		fmt.Printf("Xdebug is already %s for PHP %s\n", state, version)
+		feedback.Line("Xdebug is already " + state + " for PHP " + version)
 		return nil
 	}
 
 	if res.RestartErr != nil {
 		unit := xdebugops.FPMUnit(version)
-		fmt.Printf("[WARN] restart %s: %v\n", unit, res.RestartErr)
+		feedback.Warn("restart %s: %v", unit, res.RestartErr)
 		fmt.Printf("Run: systemctl --user restart %s\n", unit)
 	} else if res.Restarted {
-		fmt.Printf("FPM container restarted.\n")
+		feedback.Note("restarted " + xdebugops.FPMUnit(version))
 	}
 
 	// Per-site containers (custom-FPM and FrankenPHP) on this version mount the
@@ -126,12 +128,12 @@ func runXdebugToggle(args []string, enable bool, mode, start string) error {
 	podman.RestartSiteContainersForVersion(version)
 
 	if res.Enabled {
-		fmt.Printf("Xdebug enabled for PHP %s (mode=%s, start_with_request=%s, port 9003, host.containers.internal)\n", version, res.Mode, start)
+		feedback.Done("Xdebug enabled for PHP " + version + " " + feedback.Val(fmt.Sprintf("mode=%s · start=%s · port 9003", res.Mode, start)))
 		if start == "trigger" {
-			fmt.Println("On-demand mode: requests and workers won't auto-connect. Attach with `lerd xdebug pause` or a trigger cookie.")
+			feedback.Note("on-demand: requests and workers won't auto-connect; attach with `lerd xdebug pause` or a trigger cookie")
 		}
 	} else {
-		fmt.Printf("Xdebug disabled for PHP %s\n", version)
+		feedback.Done("Xdebug disabled for PHP " + version)
 	}
 	return nil
 }
@@ -155,14 +157,12 @@ func runXdebugStatus(_ *cobra.Command, _ []string) error {
 	fmt.Printf("%-10s %-10s %s\n", "Version", "Xdebug", "Mode")
 	fmt.Printf("%-10s %-10s %s\n", "─────────", "──────────", "────")
 	for _, v := range versions {
-		state := "disabled"
-		color := "\033[33m"
 		mode := cfg.GetXdebugMode(v)
+		state := feedback.Amber(fmt.Sprintf("%-10s", "disabled"))
 		if mode != "" {
-			state = "enabled"
-			color = "\033[32m"
+			state = feedback.Green(fmt.Sprintf("%-10s", "enabled"))
 		}
-		fmt.Printf("%-10s %s%-10s\033[0m %s\n", v, color, state, mode)
+		fmt.Printf("%-10s %s %s\n", v, state, mode)
 	}
 	return nil
 }

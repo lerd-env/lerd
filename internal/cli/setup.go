@@ -8,10 +8,12 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -93,10 +95,15 @@ func runSetup(allSteps, skipOpen bool) error {
 	}
 
 	// Run init wizard (or apply saved .lerd.yaml) before any other step so
-	// PHP version, HTTPS, and services are configured first.
-	fmt.Println("→ Configuring site...")
+	// PHP version, HTTPS, and services are configured first. When a link already
+	// ran in this process (the "Run lerd setup?" prompt), the configure phase is
+	// a no-op, so skip the header and go straight to the steps.
+	feedback.Begin()
+	if !linkApplied {
+		feedback.Line("configuring site")
+	}
 	if err := runSetupInit(cwd, allSteps); err != nil {
-		fmt.Printf("  [WARN] %v\n", err)
+		feedback.Warn("%v", err)
 	}
 
 	site, _ := config.FindSiteByPath(cwd)
@@ -233,7 +240,7 @@ func runSetup(allSteps, skipOpen bool) error {
 					return nil
 				}
 				if err := installContainerBun(bunPHPVersion, "", os.Stdout); err != nil {
-					fmt.Printf("  [WARN] could not install bun in the container: %v\n", err)
+					feedback.Warn("could not install bun in the container: %v", err)
 				}
 				return nil
 			},
@@ -259,7 +266,7 @@ func runSetup(allSteps, skipOpen bool) error {
 				enabled: false,
 				run: func() error {
 					if err := installPestBrowser(bunPHPVersion, os.Stdout); err != nil {
-						fmt.Printf("  [WARN] could not set up Pest browser testing: %v\n", err)
+						feedback.Warn("could not set up Pest browser testing: %v", err)
 					}
 					return nil
 				},
@@ -406,6 +413,7 @@ func runSetup(allSteps, skipOpen bool) error {
 	// Determine which steps to run.
 	var selected []string
 	if allSteps {
+		feedback.Begin()
 		for _, s := range steps {
 			selected = append(selected, s.label)
 		}
@@ -420,6 +428,7 @@ func runSetup(allSteps, skipOpen bool) error {
 		}
 
 		selected = defaults // pre-select enabled steps
+		feedback.Begin()
 		if err := huh.NewForm(
 			huh.NewGroup(
 				huh.NewMultiSelect[string]().
@@ -443,21 +452,33 @@ func runSetup(allSteps, skipOpen bool) error {
 		selectedSet[s] = true
 	}
 
-	// Execute steps in order.
+	// Execute steps in order. Each step's own output is captured behind a single
+	// feedback line and only surfaced when the step fails, matching the link
+	// flow's "action … ✓" styling. The separating blank line was already printed
+	// before the step selector (or the --all branch below).
+	start := time.Now()
 	for _, s := range steps {
 		if !selectedSet[s.label] {
 			continue
 		}
-		fmt.Printf("\n→ Running: %s\n", s.label)
-		if err := s.run(); err != nil {
-			fmt.Printf("✗ %s failed: %v\n", s.label, err)
+		// Capture first, then render the step: starting an animated step before
+		// runCapturingStdout swaps os.Stdout would race the spinner goroutine
+		// against the swap and leak spinner frames into the captured buffer.
+		out, err := runCapturingStdout(s.run)
+		step := feedback.Start(s.label)
+		if err != nil {
+			step.Fail(err)
+			_, _ = os.Stdout.Write(out)
 			if !promptContinue() {
 				return fmt.Errorf("setup aborted after %q failed", s.label)
 			}
+			continue
 		}
+		step.OK("")
 	}
 
-	fmt.Println("\nSetup complete.")
+	feedback.Success("setup complete", time.Since(start))
+	feedback.Begin()
 	return nil
 }
 

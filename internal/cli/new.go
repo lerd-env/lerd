@@ -6,8 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -77,8 +79,10 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 	parts = append(parts, target)
 	parts = append(parts, extraArgs...)
 
-	fmt.Printf("Creating new %s project at %s\n", fw.Label, target)
-	fmt.Printf("Running: %s\n\n", strings.Join(parts, " "))
+	start := time.Now()
+	feedback.Begin()
+	feedback.Line("scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(parts, " "))
+	fmt.Println()
 
 	cmd := exec.Command(parts[0], parts[1:]...)
 	cmd.Stdout = os.Stdout
@@ -89,10 +93,10 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
 
-	fmt.Printf("\nProject created at %s\n", target)
-	fmt.Printf("\nNext steps:\n")
-	fmt.Printf("  cd %s\n", target)
-	fmt.Printf("  lerd link\n")
-	fmt.Printf("  lerd setup\n")
+	feedback.Success("created "+filepath.Base(target), time.Since(start))
+	feedback.NewSummary().
+		Row("Path", target).
+		Row("Next", "cd "+filepath.Base(target)+" && lerd link && lerd setup").
+		Print()
 	return nil
 }

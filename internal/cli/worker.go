@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -242,7 +243,7 @@ func resolveWorkerCommand(sitePath, workerName string, w config.FrameworkWorker)
 		return w.Command
 	}
 	if !projectHasChokidar(sitePath) {
-		fmt.Printf("[WARN] %s auto-reload is on but chokidar is not installed in %s, running the standard command. Install it with: npm install -D chokidar\n", workerName, sitePath)
+		feedback.Warn("%s auto-reload is on but chokidar is not installed in %s, running the standard command. Install it with: npm install -D chokidar", workerName, sitePath)
 		return w.Command
 	}
 	command := w.ReloadCommand
@@ -305,7 +306,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// unit that was never written, surfacing a confusing podman error
 	// behind the original WARN.
 	if ok, reason := workerSupportedOnPlatform(w); !ok {
-		fmt.Printf("[WARN] worker %s skipped: %s\n", workerName, reason)
+		feedback.Warn("worker %s skipped: %s", workerName, reason)
 		return nil
 	}
 
@@ -365,10 +366,10 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		// different container) only takes effect once systemd re-reads it;
 		// without this, Enable/Start act on the stale cached unit.
 		if err := podman.DaemonReloadFn(); err != nil {
-			fmt.Printf("[WARN] daemon-reload: %v\n", err)
+			feedback.Warn("daemon-reload: %v", err)
 		}
 		if err := services.Mgr.Enable(lifecycleTarget); err != nil {
-			fmt.Printf("[WARN] enable: %v\n", err)
+			feedback.Warn("enable: %v", err)
 		}
 	}
 
@@ -377,12 +378,13 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	// Linux the systemd DBus subscription catches direct services.Mgr
 	// calls as a fallback; macOS has no equivalent, so a direct call
 	// leaves the UI stale until the next 15s cache poll.
+	startStep := feedback.Start("starting " + label)
 	if err := podman.StartUnit(lifecycleTarget); err != nil {
+		startStep.Fail(err)
 		return fmt.Errorf("starting %s worker: %w", workerName, err)
 	}
-
-	fmt.Printf("%s started for %s\n", label, siteName)
-	fmt.Printf("  Logs: %s\n", workerLogHint(unitName, w.Host))
+	startStep.OK("")
+	feedback.Note("logs: " + workerLogHint(unitName, w.Host))
 
 	// A running worker can't be idle-suspended: clear any stale entry so the idle
 	// engine doesn't boot believing this site (or worktree) is still asleep.
@@ -655,16 +657,22 @@ func WorkerStopForSite(siteName, sitePath, workerName string) error {
 // the call works regardless of whether the worker was scheduled (.timer +
 // oneshot .service) or a long-running daemon (.service alone). Missing
 // units are no-ops at this layer.
-func stopWorkerUnit(unitName, label, displaySite string) error {
+func stopWorkerUnit(unitName, label, _ string) error {
+	if label == "" {
+		label = unitName
+	}
+	step := feedback.Start("stopping " + label)
 	_ = services.Mgr.Disable(unitName + ".timer")
 	podman.StopUnit(unitName + ".timer") //nolint:errcheck
 	_ = services.Mgr.Disable(unitName)
 	podman.StopUnit(unitName) //nolint:errcheck
 
 	if err := services.Mgr.RemoveTimerUnit(unitName); err != nil {
+		step.Fail(err)
 		return fmt.Errorf("removing timer unit file: %w", err)
 	}
 	if err := services.Mgr.RemoveServiceUnit(unitName); err != nil {
+		step.Fail(err)
 		return fmt.Errorf("removing unit file: %w", err)
 	}
 	// Drop the macOS exec-mode guard script + pid file (no-op on Linux).
@@ -672,16 +680,9 @@ func stopWorkerUnit(unitName, label, displaySite string) error {
 	// a normal stop and confuse later mode-migration discovery.
 	removeWorkerExecArtifacts(unitName)
 	if err := podman.DaemonReloadFn(); err != nil {
-		fmt.Printf("[WARN] daemon-reload: %v\n", err)
+		feedback.Warn("daemon-reload: %v", err)
 	}
-
-	if label == "" {
-		label = unitName
-	}
-	if displaySite == "" {
-		displaySite = unitName
-	}
-	fmt.Printf("%s stopped for %s\n", label, displaySite)
+	step.OK("")
 	return nil
 }
 

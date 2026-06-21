@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/logsource"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -100,9 +101,10 @@ func runXdebugPause(args []string, pid int, list bool) error {
 	if err != nil {
 		return fmt.Errorf("xdebugctl pause: %w", err)
 	}
-	fmt.Printf("Sent pause to PID %d in %s — your IDE (listening on :9003) should break in.\n", pid, container)
+	feedback.Begin()
+	feedback.Done(fmt.Sprintf("sent pause to PID %d in %s — your IDE (listening on :9003) should break in", pid, container))
 	if cfg, err := config.LoadGlobal(); err == nil && cfg.GetXdebugStart(version) == "yes" {
-		fmt.Println("Tip: `lerd xdebug on --on-demand` stops every other request/worker from also connecting to your IDE.")
+		feedback.Note("`lerd xdebug on --on-demand` stops every other request/worker from also connecting to your IDE")
 	}
 	return nil
 }

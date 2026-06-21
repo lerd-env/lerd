@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/spf13/cobra"
 )
@@ -91,9 +92,10 @@ func runGroupAdd(_ *cobra.Command, args []string) error {
 	if err := grouping.AssignSecondary(main, secondary, label, groupShareDB); err != nil {
 		return err
 	}
-	fmt.Printf("Grouped %s under %s at %s\n", secondary.Name, main.Name, secondary.PrimaryDomain())
+	feedback.Begin()
+	feedback.Done("grouped " + secondary.Name + " under " + main.Name + " at " + feedback.Val(secondary.PrimaryDomain()))
 	if groupShareDB {
-		fmt.Printf("Sharing the %s database\n", main.Name)
+		feedback.Note("sharing the " + main.Name + " database")
 	}
 	return nil
 }
@@ -115,10 +117,11 @@ func runGroupDB(_ *cobra.Command, args []string) error {
 	if err := grouping.SetSecondarySharedDB(secondary, share); err != nil {
 		return err
 	}
+	feedback.Begin()
 	if share {
-		fmt.Println("Now sharing the main site's database")
+		feedback.Done("now sharing the main site's database")
 	} else {
-		fmt.Println("Now using a separate database")
+		feedback.Done("now using a separate database")
 	}
 	return nil
 }
@@ -131,7 +134,8 @@ func runGroupRemove(_ *cobra.Command, _ []string) error {
 	if err := grouping.UnassignSecondary(secondary); err != nil {
 		return err
 	}
-	fmt.Printf("Ungrouped %s -> %s\n", secondary.Name, secondary.PrimaryDomain())
+	feedback.Begin()
+	feedback.Done("ungrouped " + secondary.Name + " → " + feedback.Val(secondary.PrimaryDomain()))
 	return nil
 }
 
@@ -144,7 +148,8 @@ func runGroupLabel(_ *cobra.Command, args []string) error {
 	if err := grouping.SetSecondaryLabel(secondary, label); err != nil {
 		return err
 	}
-	fmt.Printf("Changed subdomain to %s\n", secondary.PrimaryDomain())
+	feedback.Begin()
+	feedback.Done("changed subdomain to " + feedback.Val(secondary.PrimaryDomain()))
 	return nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -297,11 +298,12 @@ func runDbImport(file, service, database string) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	fmt.Printf("Importing %s into %s (%s)...\n", file, env.database, env.connection)
+	feedback.Begin()
+	feedback.Line("importing " + file + " into " + feedback.Val(env.database) + " (" + env.connection + ")")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-	fmt.Println("Import complete.")
+	feedback.Done("import complete")
 	return nil
 }
 
@@ -355,12 +357,13 @@ func runDbExport(output, service, database string) error {
 	cmd.Stdout = f
 	cmd.Stderr = os.Stderr
 
-	fmt.Printf("Exporting %s (%s) to %s...\n", env.database, env.connection, output)
+	feedback.Begin()
+	feedback.Line("exporting " + feedback.Val(env.database) + " (" + env.connection + ") to " + output)
 	if err := cmd.Run(); err != nil {
 		_ = os.Remove(output)
 		return fmt.Errorf("export failed: %w", err)
 	}
-	fmt.Printf("Export complete: %s\n", output)
+	feedback.Done("export complete · " + output)
 	return nil
 }
 
@@ -421,15 +424,16 @@ func runDbCreate(flagService string, args []string) error {
 		return fmt.Errorf("could not start %s: %w", env.service, err)
 	}
 
+	feedback.Begin()
 	for _, name := range []string{dbName, dbName + "_testing"} {
 		created, err := createDatabase(env.service, name)
 		if err != nil {
 			return fmt.Errorf("creating %q: %w", name, err)
 		}
 		if created {
-			fmt.Printf("Created database %q\n", name)
+			feedback.Done("created database " + feedback.Val(name))
 		} else {
-			fmt.Printf("Database %q already exists\n", name)
+			feedback.Line("database " + feedback.Val(name) + " already exists")
 		}
 	}
 	return nil
@@ -473,16 +477,13 @@ func runDbShell(flagService, flagDatabase string) error {
 			if !isInteractive() {
 				return fmt.Errorf("database %q does not exist in %s — run 'lerd db:create %s'", env.database, env.service, env.database)
 			}
-			fmt.Printf("Database %q does not exist in %s. Create it? [Y/n] ", env.database, env.service)
-			var answer string
-			fmt.Scanln(&answer) //nolint:errcheck
-			if answer != "" && answer[0] != 'Y' && answer[0] != 'y' {
+			if !feedback.Confirm(fmt.Sprintf("Database %q does not exist in %s. Create it?", env.database, env.service), true) {
 				return fmt.Errorf("database %q does not exist", env.database)
 			}
 			if _, err := createDatabase(env.service, env.database); err != nil {
 				return fmt.Errorf("creating database %q: %w", env.database, err)
 			}
-			fmt.Printf("Created database %q\n", env.database)
+			feedback.Done("created database " + feedback.Val(env.database))
 		}
 	}
 

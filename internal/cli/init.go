@@ -8,10 +8,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -47,6 +49,8 @@ func runInit(fresh bool) error {
 	_, statErr := os.Stat(lerdYAMLPath)
 	hasExisting := statErr == nil
 
+	feedback.Begin()
+
 	if !hasExisting || fresh {
 		existing, err := config.LoadProjectConfig(cwd)
 		if err != nil {
@@ -57,10 +61,12 @@ func runInit(fresh bool) error {
 		if err != nil {
 			return err
 		}
+		write := feedback.Start("writing .lerd.yaml")
 		if err := config.SaveProjectConfig(cwd, cfg); err != nil {
+			write.Fail(err)
 			return fmt.Errorf("saving .lerd.yaml: %w", err)
 		}
-		fmt.Println("Saved .lerd.yaml")
+		write.OK("")
 		// The wizard already had the user choose the dev command, so the link
 		// it triggers below shouldn't prompt to confirm that same command again.
 		hostProxyPreApproved = true
@@ -72,12 +78,9 @@ func runInit(fresh bool) error {
 	}
 
 	if isInteractive() {
-		fmt.Print("\nRun lerd setup? [Y/n] ")
-		var answer string
-		fmt.Scanln(&answer) //nolint:errcheck
-		if answer == "" || answer[0] == 'Y' || answer[0] == 'y' {
+		if feedback.Confirm("Run lerd setup?", true) {
 			if err := runSetup(false, false); err != nil {
-				fmt.Printf("[WARN] setup: %v\n", err)
+				feedback.Warn("setup: %v", err)
 			}
 		}
 	}
@@ -1068,12 +1071,12 @@ func maybeCreateContainerfile(cwd, containerfile string, port int) {
 		_ = os.MkdirAll(dir, 0755)
 	}
 	if err := os.WriteFile(path, []byte(starterContainerfile(cwd, port)), 0644); err != nil {
-		fmt.Printf("[WARN] could not create %s: %v\n", containerfile, err)
+		feedback.Warn("could not create %s: %v", containerfile, err)
 		return
 	}
 	fmt.Printf("Created %s\n", containerfile)
 	if launched, err := launchEditor(path); err != nil {
-		fmt.Printf("[WARN] %v\n", err)
+		feedback.Warn("%v", err)
 	} else if !launched {
 		fmt.Printf("Set $EDITOR to edit it automatically; the starter file is at %s\n", containerfile)
 	}
@@ -1228,7 +1231,7 @@ func runSetupInit(cwd string, skipWizard bool) error {
 			return err
 		}
 		if err := runEnv(nil, nil); err != nil {
-			fmt.Printf("[WARN] lerd env: %v\n", err)
+			feedback.Warn("lerd env: %v", err)
 		}
 		return nil
 	}
@@ -1240,50 +1243,110 @@ func runSetupInit(cwd string, skipWizard bool) error {
 		if err != nil {
 			return err
 		}
+		write := feedback.Start("writing .lerd.yaml")
 		if err := config.SaveProjectConfig(cwd, cfg); err != nil {
+			write.Fail(err)
 			return fmt.Errorf("saving .lerd.yaml: %w", err)
 		}
-		fmt.Println("Saved .lerd.yaml")
+		write.OK("")
 	}
 
 	return applyProjectConfig(cwd)
 }
 
 func applyProjectConfig(cwd string) error {
-	// Suppress the "Run lerd setup?" prompt inside runLink — we're already
-	// in init/setup and the caller handles worker steps separately.
+	// Suppress the "Run lerd setup?" prompt and the link summary inside runLink —
+	// we're already in init/setup, the caller handles worker steps, and the
+	// summary is printed here after the .env step so it lands last.
 	linkSkipSetupPrompt = true
-	defer func() { linkSkipSetupPrompt = false }()
+	linkSkipSummary = true
+	defer func() { linkSkipSetupPrompt = false; linkSkipSummary = false }()
+
+	start := time.Now()
 	proj, err := config.LoadProjectConfig(cwd)
 	if err != nil {
 		return err
 	}
 
-	// Install PHP FPM with a progress loader if the version is not yet installed.
-	// runLink handles everything else (framework restore, node-version, secure, services).
-	if proj.PHPVersion != "" && !phpPkg.IsInstalled(proj.PHPVersion) {
-		phpVersion := proj.PHPVersion
-		jobs := []BuildJob{{
-			Label: "PHP " + phpVersion + " FPM",
-			Run: func(w io.Writer) error {
-				return ensureFPMQuadletTo(phpVersion, w)
-			},
-		}}
-		if err := RunParallel(jobs); err != nil {
-			fmt.Printf("[WARN] PHP %s FPM: %v\n", phpVersion, err)
+	// Skip work that already ran earlier in this process. When a `lerd link`
+	// flows into `lerd setup` via the prompt, the link (and often .env) is
+	// already done, so re-running it would just repeat the same output.
+	ranLink := false
+	if !linkApplied {
+		// Install PHP FPM with a progress loader if the version is not yet installed.
+		// runLink handles everything else (framework restore, node-version, secure, services).
+		if proj.PHPVersion != "" && !phpPkg.IsInstalled(proj.PHPVersion) {
+			phpVersion := proj.PHPVersion
+			jobs := []BuildJob{{
+				Label: "PHP " + phpVersion + " FPM",
+				Run: func(w io.Writer) error {
+					return ensureFPMQuadletTo(phpVersion, w)
+				},
+			}}
+			if err := RunParallel(jobs); err != nil {
+				feedback.Warn("PHP %s FPM: %v", phpVersion, err)
+			}
 		}
-	}
 
-	if err := runLink([]string{}); err != nil {
-		return err
+		if err := runLink([]string{}); err != nil {
+			return err
+		}
+		ranLink = true
 	}
 
 	// Apply the wizard's service choices (database, etc.) to .env so the user
 	// sees DB_CONNECTION/DB_HOST/etc. updated immediately after the wizard.
-	// Best-effort — failures are warned, not fatal, since the link itself
-	// succeeded and the user can re-run `lerd env` manually.
-	if err := runEnv(nil, nil); err != nil {
-		fmt.Printf("[WARN] lerd env: %v\n", err)
+	if !envApplied {
+		applyEnvStep(cwd)
+	}
+
+	// Print the deferred link summary now, so it reads as the final word after
+	// every provisioning step (including .env) has reported. Skip it when we
+	// didn't link this pass — the summary was already shown.
+	linkSkipSummary = false
+	if ranLink {
+		if site, err := config.FindSiteByPath(cwd); err == nil {
+			printLinkSummary(*site, start)
+		}
 	}
 	return nil
+}
+
+// applyEnvStep runs `lerd env` quietly under a single condensed feedback step,
+// listing the services it configured (from envSummary) rather than its full
+// per-service output.
+func applyEnvStep(cwd string) {
+	envApplied = true
+	if !feedback.Animated() {
+		if err := runEnv(nil, nil); err != nil {
+			feedback.Warn("lerd env: %v", err)
+		}
+		return
+	}
+	if err := runEnvLive(nil, nil); err != nil {
+		feedback.Warn("lerd env: %v", err)
+	}
+}
+
+// runCapturingStdout redirects os.Stdout to a pipe for the duration of fn and
+// returns everything it wrote. A reader goroutine drains continuously so even
+// large output (composer/npm) never blocks on the pipe buffer. Used to fold a
+// setup step's verbose output behind a single feedback line, surfacing it only
+// when the step fails.
+func runCapturingStdout(fn func() error) ([]byte, error) {
+	prev := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		return nil, fn()
+	}
+	os.Stdout = w
+	captured := make(chan []byte, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		captured <- b
+	}()
+	runErr := fn()
+	os.Stdout = prev
+	_ = w.Close()
+	return <-captured, runErr
 }

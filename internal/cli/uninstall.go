@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/spf13/cobra"
@@ -31,12 +32,12 @@ func NewUninstallCmd() *cobra.Command {
 }
 
 func runUninstall(force bool) error {
-	fmt.Println("==> Uninstalling Lerd")
+	feedback.Begin()
+	feedback.Line("uninstalling lerd")
 
 	if !force {
-		fmt.Print("  This will stop all containers and remove Lerd. Continue? [y/N] ")
-		if !readYes() {
-			fmt.Println("  Aborted.")
+		if !feedback.Confirm("This will stop all containers and remove lerd. Continue?", false) {
+			feedback.Line("aborted")
 			return nil
 		}
 	}
@@ -159,11 +160,11 @@ func runUninstall(force bool) error {
 		os.RemoveAll(config.DataDir())
 		fmt.Println("OK")
 	} else {
-		fmt.Printf("  Config kept at %s\n", config.ConfigDir())
-		fmt.Printf("  Data kept at   %s\n", config.DataDir())
+		feedback.Note("config kept at " + config.ConfigDir())
+		feedback.Note("data kept at " + config.DataDir())
 	}
 
-	fmt.Println("\nLerd uninstalled.")
+	feedback.Done("lerd uninstalled")
 	return nil
 }
 

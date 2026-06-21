@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -144,7 +145,7 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 	// Warn (non-fatal) if vendor/laravel/sail is absent.
 	if _, sailErr := os.Stat(filepath.Join(cwd, "vendor", "laravel", "sail")); os.IsNotExist(sailErr) {
 		if _, sailErr2 := os.Stat(filepath.Join(cwd, "sail")); os.IsNotExist(sailErr2) {
-			fmt.Println("Warning: vendor/laravel/sail not found — proceeding anyway.")
+			feedback.Warn("vendor/laravel/sail not found — proceeding anyway")
 		}
 	}
 
@@ -173,8 +174,8 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 		sailEnv.database = lerdEnv.database
 		// Warn when DB_DATABASE looks like lerd already overwrote it.
 		if lerdEnv.database == "lerd" {
-			fmt.Println("Warning: DB_DATABASE is 'lerd' — lerd may have already overwritten your .env.")
-			fmt.Println("  If your Sail database had a different name, pass --sail-db-name <name>.")
+			feedback.Warn("DB_DATABASE is 'lerd' — lerd may have already overwritten your .env")
+			feedback.Note("if your Sail database had a different name, pass --sail-db-name <name>")
 		}
 	}
 
@@ -195,13 +196,14 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 	// etc.) even though we're passing a path to a temp file.
 	composeArgs := []string{"compose", "--project-directory", cwd, "-f", tempComposePath}
 
+	feedback.Begin()
 	if len(strippedSvcs) > 0 {
-		fmt.Printf("Stripping ports from app services: %s\n", strings.Join(strippedSvcs, ", "))
+		feedback.Line("stripping ports from app services: " + strings.Join(strippedSvcs, ", "))
 	}
 	if len(portRemap) > 0 {
-		fmt.Println("Remapping conflicting ports for Sail:")
+		feedback.Line("remapping conflicting ports for Sail")
 		for orig, remapped := range portRemap {
-			fmt.Printf("  %-5d → %d\n", orig, remapped)
+			feedback.Note(fmt.Sprintf("%d → %d", orig, remapped))
 		}
 	}
 
@@ -248,7 +250,7 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 
 	// --force-recreate guarantees a clean container even if a previous run
 	// left one behind. Volumes are preserved.
-	fmt.Printf("Starting Sail services: %s\n", strings.Join(servicesToStart, ", "))
+	feedback.Line("starting Sail services: " + strings.Join(servicesToStart, ", "))
 	upArgs := append(composeArgs, "up", "-d", "--no-deps", "--force-recreate")
 	upArgs = append(upArgs, servicesToStart...)
 	upCmd := exec.Command(composeBin, upArgs...)
@@ -261,7 +263,7 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 	// Tear Sail down when we're done (deferred so it runs even on error).
 	if !noStop {
 		defer func() {
-			fmt.Println("Stopping Sail...")
+			feedback.Line("stopping Sail")
 			downArgs := append(composeArgs, "down")
 			downCmd := exec.Command(composeBin, downArgs...)
 			downCmd.Stdout = os.Stdout
@@ -271,7 +273,7 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 	}
 
 	// --- Wait for DB readiness ---
-	fmt.Printf("Waiting for Sail %s to be ready...\n", dbService)
+	feedback.Line("waiting for Sail " + dbService + " to be ready")
 	if err := sailWaitDB(composeArgs, dbService, sailEnv, composeBin); err != nil {
 		return fmt.Errorf("Sail DB not ready: %w", err)
 	}
@@ -291,32 +293,33 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 		return fmt.Errorf("inspecting Sail database %q: %w", sailEnv.database, err)
 	}
 	if tableCount == 0 {
-		fmt.Printf("Sail database %q has no tables — refusing to overwrite lerd DB with empty data.\n", sailEnv.database)
-		fmt.Println("Skipping database import.")
+		feedback.Warn("Sail database %q has no tables — refusing to overwrite lerd DB with empty data", sailEnv.database)
+	} else if !feedback.Confirm(fmt.Sprintf("Found database %q with %d tables. Import into lerd (will overwrite %q)?", sailEnv.database, tableCount, lerdEnv.database), false) {
+		feedback.Line("database import skipped")
 	} else {
-		fmt.Printf("Found database %q with %d tables. ", sailEnv.database, tableCount)
-		if !promptConfirm(fmt.Sprintf("Import into lerd (will overwrite %q)?", lerdEnv.database)) {
-			fmt.Println("Database import skipped.")
-		} else {
-			fmt.Printf("Dumping database %q from Sail...\n", sailEnv.database)
-			dumpFile, err := sailDumpDB(composeArgs, dbService, sailEnv, composeBin)
-			if err != nil {
-				return fmt.Errorf("dumping Sail DB: %w", err)
-			}
-			defer os.Remove(dumpFile)
-
-			fmt.Printf("Importing into lerd (%s / %s)...\n", lerdEnv.connection, lerdEnv.database)
-			if err := ensureServiceRunning(connToService(lerdEnv.connection)); err != nil {
-				return fmt.Errorf("starting lerd DB service: %w", err)
-			}
-			if err := sailRecreateDB(lerdEnv); err != nil {
-				return fmt.Errorf("recreating database: %w", err)
-			}
-			if err := sailImportDump(dumpFile, lerdEnv); err != nil {
-				return fmt.Errorf("importing dump: %w", err)
-			}
-			fmt.Println("Database imported.")
+		dump := feedback.Start("dumping database " + sailEnv.database + " from Sail")
+		dumpFile, err := sailDumpDB(composeArgs, dbService, sailEnv, composeBin)
+		if err != nil {
+			dump.Fail(err)
+			return fmt.Errorf("dumping Sail DB: %w", err)
 		}
+		dump.OK("")
+		defer os.Remove(dumpFile)
+
+		imp := feedback.Start("importing into lerd (" + lerdEnv.connection + " / " + lerdEnv.database + ")")
+		if err := ensureServiceRunning(connToService(lerdEnv.connection)); err != nil {
+			imp.Fail(err)
+			return fmt.Errorf("starting lerd DB service: %w", err)
+		}
+		if err := sailRecreateDB(lerdEnv); err != nil {
+			imp.Fail(err)
+			return fmt.Errorf("recreating database: %w", err)
+		}
+		if err := sailImportDump(dumpFile, lerdEnv); err != nil {
+			imp.Fail(err)
+			return fmt.Errorf("importing dump: %w", err)
+		}
+		imp.OK("")
 	}
 
 	// --- S3 import ---
@@ -327,19 +330,19 @@ func runImportSail(noStop, skipS3 bool, sailDBUser, sailDBPassword, sailDBName s
 			// / AWS_SECRET_ACCESS_KEY — lerd setup may have overwritten those.
 			s3.accessKey = minioUser
 			s3.secretKey = minioPass
-			fmt.Println("Importing S3/MinIO files into lerd RustFS...")
+			s3step := feedback.Start("importing S3/MinIO files into lerd RustFS")
 			if err := sailImportS3(s3, minioPort, lerdEnv.database); err != nil {
-				fmt.Printf("  Warning: S3 import failed: %v\n", err)
-				fmt.Println("  Re-run with --skip-s3 to skip this step.")
+				s3step.Fail(err)
+				feedback.Note("re-run with --skip-s3 to skip this step")
 			} else {
-				fmt.Println("S3 import complete.")
+				s3step.OK("")
 			}
 		} else {
-			fmt.Println("No MinIO service found in docker-compose — skipping S3 import.")
+			feedback.Line("no MinIO service found in docker-compose — skipping S3 import")
 		}
 	}
 
-	fmt.Println("\nImport complete.")
+	feedback.Done("import complete")
 	return nil
 }
 

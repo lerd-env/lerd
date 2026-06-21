@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/spf13/cobra"
@@ -47,16 +48,17 @@ func runWhich(_ *cobra.Command, _ []string) error {
 	docRoot := filepath.Join(site.Path, publicDir)
 	nginxConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 
-	fmt.Printf("  Site         %s\n", strings.Join(site.Domains, ", "))
-	fmt.Printf("  PHP          %s\n", phpVersion)
-	fmt.Printf("  Node         %s\n", nodeVersion)
-	fmt.Printf("  Document root  %s\n", docRoot)
-	fmt.Printf("  Nginx config   %s\n", nginxConf)
-
+	sum := feedback.NewSummary().
+		Row("Site", feedback.Val(strings.Join(site.Domains, ", "))).
+		Row("PHP", phpVersion).
+		Row("Node", nodeVersion).
+		Row("Document root", docRoot).
+		Row("Nginx config", nginxConf)
 	if site.Secured {
 		sslConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
-		fmt.Printf("  Nginx SSL      %s\n", sslConf)
+		sum.Row("Nginx SSL", sslConf)
 	}
+	sum.Print()
 
 	return nil
 }

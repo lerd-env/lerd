@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"golang.org/x/term"
 )
 
@@ -39,7 +40,7 @@ func runSequential(jobs []BuildJob) error {
 	for _, job := range jobs {
 		fmt.Printf("==> %s\n", job.Label)
 		if err := job.Run(os.Stdout); err != nil {
-			fmt.Printf("  [WARN] %s: %v\n", job.Label, err)
+			feedback.Warn("%s: %v", job.Label, err)
 			if firstErr == nil {
 				firstErr = err
 			}

@@ -1,17 +1,22 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+	"github.com/geodro/lerd/internal/feedback"
+)
 
+// Palette is shared with the CLI feedback package so the TUI and the
+// command-line progress output stay in lockstep.
 var (
-	colTitle    = lipgloss.Color("#FF2D20") // lerd red
-	colDim      = lipgloss.Color("#6b7280") // gray-500
-	colDivider  = lipgloss.Color("#374151") // gray-700
-	colRunning  = lipgloss.Color("#10b981") // emerald-500
-	colStopped  = lipgloss.Color("#6b7280") // gray-500
-	colFailing  = lipgloss.Color("#ef4444") // red-500
-	colPaused   = lipgloss.Color("#f59e0b") // amber-400
-	colAccent   = lipgloss.Color("#a78bfa") // violet-400
-	colSelected = lipgloss.Color("#FF2D20") // lerd red
+	colTitle    = feedback.ColTitle
+	colDim      = feedback.ColDim
+	colDivider  = feedback.ColDivider
+	colRunning  = feedback.ColRunning
+	colStopped  = feedback.ColStopped
+	colFailing  = feedback.ColFailing
+	colPaused   = feedback.ColPaused
+	colAccent   = feedback.ColAccent
+	colSelected = feedback.ColTitle
 )
 
 var (

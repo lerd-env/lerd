@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -108,17 +109,20 @@ func newServiceStartCmd() *cobra.Command {
 				}
 			}
 
-			fmt.Printf("Starting %s...\n", unit)
+			feedback.Begin()
+			svcStep := feedback.Start("starting " + unit)
 			if err := podman.StartUnit(unit); err != nil {
+				svcStep.Fail(err)
 				return err
 			}
+			svcStep.OK("")
 			_ = config.SetServicePaused(name, false)
 			_ = config.SetServiceManuallyStarted(name, true)
 
 			// Start any custom services that depend on this one.
 			for _, dep := range config.CustomServicesDependingOn(name) {
 				if err := ensureServiceRunning(dep); err != nil {
-					fmt.Printf("  [WARN] could not start dependent service %s: %v\n", dep, err)
+					feedback.Warn("could not start dependent service %s: %v", dep, err)
 				}
 			}
 
@@ -141,7 +145,10 @@ func newServiceStopCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
+			feedback.Begin()
+			step := feedback.Start("stopping " + name)
 			StopServiceAndDependents(name)
+			step.OK("")
 			_ = config.SetServicePaused(name, true)
 			_ = config.SetServiceManuallyStarted(name, false)
 			if fam := serviceops.ServiceFamily(name); fam != "" {
@@ -171,10 +178,10 @@ func serviceUpdateHint(name, status string) string {
 	}
 	parts := []string{}
 	if avail.Available && avail.LatestTag != "" {
-		parts = append(parts, "\033[32m→ "+avail.LatestTag+"\033[0m")
+		parts = append(parts, feedback.Green("→ "+avail.LatestTag))
 	}
 	if avail.UpgradeTag != "" {
-		parts = append(parts, "\033[33m⇧ "+avail.UpgradeTag+"\033[0m")
+		parts = append(parts, feedback.Amber("⇧ "+avail.UpgradeTag))
 	}
 	return strings.Join(parts, " ")
 }
@@ -209,25 +216,26 @@ v1.7.6 → v1.42.1) — this may require manual data migration; you've been warn
 			emit := func(ev serviceops.PhaseEvent) {
 				switch ev.Phase {
 				case "checking_registry":
-					fmt.Println("Checking registry...")
+					feedback.Line("checking registry")
 				case "pulling_image":
 					if ev.Message != "" {
-						fmt.Println("  " + strings.TrimSpace(ev.Message))
+						feedback.Note(strings.TrimSpace(ev.Message))
 					} else if ev.Image != "" {
-						fmt.Println("Pulling " + ev.Image)
+						feedback.Line("pulling " + ev.Image)
 					}
 				case "writing_quadlet":
-					fmt.Println("Writing quadlet for " + ev.Image)
+					feedback.Line("writing quadlet for " + ev.Image)
 				case "restarting_unit":
-					fmt.Println("Restarting " + ev.Unit)
+					feedback.Line("restarting " + ev.Unit)
 				case "done":
 					if ev.Message != "" {
-						fmt.Println(ev.Message)
+						feedback.Done(ev.Message)
 					} else {
-						fmt.Println("Done. Now on " + ev.Image)
+						feedback.Done("now on " + feedback.Val(ev.Image))
 					}
 				}
 			}
+			feedback.Begin()
 			return serviceops.UpdateServiceStreaming(name, targetImage, emit)
 		},
 	}
@@ -265,35 +273,36 @@ Supported families: mysql, mariadb, postgres.`,
 			if err != nil {
 				return err
 			}
-			fmt.Printf("Migrating %s: %s → %s\n", name, avail.CurrentImage, targetImage)
-			fmt.Println("Dumps and the previous data dir will be preserved under ~/.local/share/lerd/backups.")
+			feedback.Begin()
+			feedback.Line("migrating " + name + ": " + avail.CurrentImage + " → " + feedback.Val(targetImage))
+			feedback.Note("dumps and the previous data dir are kept under ~/.local/share/lerd/backups")
 			emit := func(ev serviceops.PhaseEvent) {
 				switch ev.Phase {
 				case "dumping_data":
-					fmt.Println("Dumping: " + ev.Message)
+					feedback.Line("dumping: " + ev.Message)
 				case "stopping_unit":
-					fmt.Println("Stopping " + ev.Unit)
+					feedback.Line("stopping " + ev.Unit)
 				case "swapping_data_dir":
-					fmt.Println("Moving data dir aside")
+					feedback.Line("moving data dir aside")
 				case "pulling_image":
 					if ev.Message != "" {
-						fmt.Println("  " + strings.TrimSpace(ev.Message))
+						feedback.Note(strings.TrimSpace(ev.Message))
 					} else if ev.Image != "" {
-						fmt.Println("Pulling " + ev.Image)
+						feedback.Line("pulling " + ev.Image)
 					}
 				case "writing_quadlet":
-					fmt.Println("Writing quadlet for " + ev.Image)
+					feedback.Line("writing quadlet for " + ev.Image)
 				case "restarting_unit":
-					fmt.Println("Restarting " + ev.Unit)
+					feedback.Line("restarting " + ev.Unit)
 				case "waiting_ready":
-					fmt.Println("Waiting for new container to be ready")
+					feedback.Line("waiting for the new container to be ready")
 				case "restoring_data":
-					fmt.Println("Restoring " + ev.Message)
+					feedback.Line("restoring " + ev.Message)
 				case "done":
 					if ev.Message != "" {
-						fmt.Println(ev.Message)
+						feedback.Note(ev.Message)
 					}
-					fmt.Println("Migration complete.")
+					feedback.Done("migration complete")
 				}
 			}
 			return serviceops.MigrateService(name, targetImage, emit)
@@ -315,18 +324,19 @@ Errors when no previous image is recorded — i.e. the service was never updated
 				switch ev.Phase {
 				case "pulling_image":
 					if ev.Message != "" {
-						fmt.Println("  " + strings.TrimSpace(ev.Message))
+						feedback.Note(strings.TrimSpace(ev.Message))
 					} else if ev.Image != "" {
-						fmt.Println("Pulling " + ev.Image)
+						feedback.Line("pulling " + ev.Image)
 					}
 				case "writing_quadlet":
-					fmt.Println("Writing quadlet for " + ev.Image)
+					feedback.Line("writing quadlet for " + ev.Image)
 				case "restarting_unit":
-					fmt.Println("Restarting " + ev.Unit)
+					feedback.Line("restarting " + ev.Unit)
 				case "done":
-					fmt.Println("Rolled back to " + ev.Image)
+					feedback.Done("rolled back to " + feedback.Val(ev.Image))
 				}
 			}
+			feedback.Begin()
 			return serviceops.RollbackService(name, emit)
 		},
 	}
@@ -353,10 +363,13 @@ func newServiceRestartCmd() *cobra.Command {
 					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
 				}
 			}
-			fmt.Printf("Restarting %s...\n", unit)
+			feedback.Begin()
+			svcStep := feedback.Start("restarting " + unit)
 			if err := podman.RestartUnit(unit); err != nil {
+				svcStep.Fail(err)
 				return err
 			}
+			svcStep.OK("")
 			printEnvVars(name)
 			return nil
 		},
@@ -711,19 +724,19 @@ func newServiceRemoveCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 
+			feedback.Begin()
 			if purge {
-				dataPath := config.DataSubDir(name)
-				fmt.Printf("Removing service %q and ALL its data at %s.\n", name, dataPath)
+				feedback.Note("removing service " + name + " and ALL its data at " + config.DataSubDir(name))
 			}
 
 			emit := func(e serviceops.PhaseEvent) {
 				switch e.Phase {
 				case "stopping_unit":
-					fmt.Printf("Stopping %s...\n", e.Unit)
+					feedback.Line("stopping " + e.Unit)
 				case "removing_data":
-					fmt.Printf("Renaming data dir aside: %s\n", e.Message)
+					feedback.Line("renaming data dir aside: " + e.Message)
 				case "done":
-					fmt.Printf("Removed service %q.\n", name)
+					feedback.Done("removed service " + feedback.Val(name))
 				}
 			}
 
@@ -753,28 +766,29 @@ func newServiceReinstallCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
+			feedback.Begin()
 			emit := func(e serviceops.PhaseEvent) {
 				switch e.Phase {
 				case "reinstall_starting":
-					fmt.Printf("Reinstalling %s...\n", name)
+					feedback.Line("reinstalling " + name)
 				case "stopping_unit":
-					fmt.Printf("  stopping %s\n", e.Unit)
+					feedback.Note("stopping " + e.Unit)
 				case "removing_data":
-					fmt.Printf("  renaming data dir aside: %s\n", e.Message)
+					feedback.Note("renaming data dir aside: " + e.Message)
 				case "pulling_image":
 					if e.Message == "" && e.Image != "" {
-						fmt.Printf("  pulling %s\n", e.Image)
+						feedback.Note("pulling " + e.Image)
 					}
 				case "starting_unit":
-					fmt.Printf("  starting %s\n", e.Unit)
+					feedback.Note("starting " + e.Unit)
 				case "waiting_ready":
-					fmt.Printf("  waiting for %s to be ready\n", e.Unit)
+					feedback.Note("waiting for " + e.Unit + " to be ready")
 				case "reprovisioning_sites":
-					fmt.Printf("  reprovisioning linked sites: %s\n", e.Message)
+					feedback.Note("reprovisioning linked sites: " + e.Message)
 				case "reprovisioning_site":
-					fmt.Printf("    %s\n", e.Message)
+					feedback.Note(e.Message)
 				case "reprovisioning_skipped":
-					fmt.Printf("  reprovisioning skipped: %s\n", e.Message)
+					feedback.Note("reprovisioning skipped: " + e.Message)
 				}
 			}
 			if err := serviceops.ReinstallService(name, resetData, emit); err != nil {
@@ -920,7 +934,7 @@ func newServicePinCmd() *cobra.Command {
 			}
 			fmt.Printf("Pinned %s — it will not be auto-stopped when no sites use it.\n", name)
 			if err := ensureServiceRunning(name); err != nil {
-				fmt.Printf("  [WARN] could not start %s: %v\n", name, err)
+				feedback.Warn("could not start %s: %v", name, err)
 			}
 			return nil
 		},
@@ -1048,7 +1062,7 @@ func autoStopUnusedFPMs() {
 		status, _ := podman.UnitStatus(unit)
 		if status == "active" || status == "activating" {
 			if err := podman.StopUnit(unit); err != nil {
-				fmt.Printf("[WARN] stopping %s: %v\n", unit, err)
+				feedback.Warn("stopping %s: %v", unit, err)
 			}
 		}
 	}
@@ -1067,11 +1081,11 @@ func serviceInactiveReason(name string) string {
 func colorStatus(status string) string {
 	switch status {
 	case "active":
-		return "\033[32m" + status + "\033[0m"
+		return feedback.Green(status)
 	case "inactive":
-		return "\033[33m" + status + "\033[0m"
+		return feedback.Amber(status)
 	case "failed":
-		return "\033[31m" + status + "\033[0m"
+		return feedback.Red(status)
 	default:
 		return status
 	}

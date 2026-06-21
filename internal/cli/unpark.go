@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -68,23 +69,24 @@ func runUnpark(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	feedback.Begin()
 	removed := 0
 	for _, site := range reg.Sites {
 		if !strings.HasPrefix(site.Path, absDir+string(filepath.Separator)) {
 			continue
 		}
 		if err := nginx.RemoveVhost(site.PrimaryDomain()); err != nil {
-			fmt.Printf("  [WARN] removing vhost for %s: %v\n", site.Name, err)
+			feedback.Warn("removing vhost for %s: %v", site.Name, err)
 		}
 		if err := config.RemoveSite(site.Name); err != nil {
-			fmt.Printf("  [WARN] removing site %s: %v\n", site.Name, err)
+			feedback.Warn("removing site %s: %v", site.Name, err)
 			continue
 		}
-		fmt.Printf("  - %s (%s)\n", site.Name, site.PrimaryDomain())
+		feedback.Start("unlinking " + site.Name).OK(feedback.Val(site.PrimaryDomain()))
 		removed++
 	}
 
-	fmt.Printf("Unparked: %s (%d site(s) removed)\n", absDir, removed)
+	feedback.Done(fmt.Sprintf("unparked %s · %d site(s) removed", filepath.Base(absDir), removed))
 
 	if removed > 0 {
 		nginx.ReloadOrWarn("  ")

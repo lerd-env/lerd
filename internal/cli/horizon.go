@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -83,10 +84,12 @@ func newHorizonReloadCmd(use string) *cobra.Command {
 				return err
 			}
 
+			feedback.Begin()
 			if enable {
-				fmt.Println("Horizon auto-reload enabled, Horizon will restart workers on file changes.")
+				feedback.Done("Horizon auto-reload enabled")
+				feedback.Note("Horizon restarts workers on file changes")
 			} else {
-				fmt.Println("Horizon auto-reload disabled, Horizon runs in standard mode.")
+				feedback.Done("Horizon auto-reload disabled")
 			}
 			return nil
 		},

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -27,6 +28,7 @@ func NewPauseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			feedback.Begin()
 			return PauseSite(name)
 		},
 	}
@@ -44,6 +46,7 @@ func NewUnpauseCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			feedback.Begin()
 			return UnpauseSite(name)
 		},
 	}
@@ -57,7 +60,7 @@ func PauseSite(name string) error {
 		return fmt.Errorf("site %q not found", name)
 	}
 	if site.Paused {
-		fmt.Printf("%s is already paused.\n", name)
+		feedback.Line(name + " is already paused")
 		return nil
 	}
 
@@ -108,10 +111,7 @@ func PauseSite(name string) error {
 
 	nginx.ReloadOrWarn("")
 
-	fmt.Printf("Paused: %s (%s)\n", name, site.PrimaryDomain())
-	if len(running) > 0 {
-		fmt.Printf("  Workers stopped: %s\n", strings.Join(running, ", "))
-	}
+	feedback.Start("pausing " + name).OK(feedback.Val(site.PrimaryDomain()))
 
 	autoStopUnusedServices()
 
@@ -168,7 +168,7 @@ func UnpauseSite(name string) error {
 		return fmt.Errorf("site %q not found", name)
 	}
 	if !site.Paused {
-		fmt.Printf("%s is not paused.\n", name)
+		feedback.Line(name + " is not paused")
 		return nil
 	}
 
@@ -249,7 +249,7 @@ func UnpauseSite(name string) error {
 			_ = podman.StartUnit(podman.CustomFPMContainerName(site.Name))
 		} else if phpVersion != "" {
 			if err := ensureFPMQuadlet(phpVersion); err != nil {
-				fmt.Printf("[WARN] ensuring FPM for PHP %s: %v\n", phpVersion, err)
+				feedback.Warn("ensuring FPM for PHP %s: %v", phpVersion, err)
 			}
 		}
 
@@ -294,16 +294,13 @@ func UnpauseSite(name string) error {
 
 	if site.LANPort != 0 {
 		if _, err := LANShareStart(site.Name); err != nil {
-			fmt.Printf("[WARN] restoring LAN share: %v\n", err)
+			feedback.Warn("restoring LAN share: %v", err)
 		}
 	}
 
 	// The shared paused.html is left in place for other paused sites.
 
-	fmt.Printf("Resumed: %s (%s)\n", name, site.PrimaryDomain())
-	if len(resumed) > 0 {
-		fmt.Printf("  Workers restarted: %s\n", strings.Join(resumed, ", "))
-	}
+	feedback.Start("resuming " + name).OK(feedback.Val(site.PrimaryDomain()))
 	return nil
 }
 
@@ -355,7 +352,7 @@ func startServicesForSiteNoticed(sitePath, siteName string) {
 			headerPrinted = true
 		}
 		if err := ensureServiceRunning(name); err != nil {
-			fmt.Printf("  [WARN] could not start %s: %v\n", name, err)
+			feedback.Warn("could not start %s: %v", name, err)
 		}
 	}
 }
@@ -640,14 +637,14 @@ func pauseWorktrees(site *config.Site) {
 		// host-proxy worktree's dev server (which also frees its host port). The
 		// unit suffix is the slugged checkout basename, so pass that.
 		if err := StopAllWorkersForWorktree(site.Name, filepath.Base(wt.Path)); err != nil {
-			fmt.Printf("  [WARN] stopping worktree workers %s: %v\n", wt.Domain, err)
+			feedback.Warn("stopping worktree workers %s: %v", wt.Domain, err)
 		}
 		if err := writePausedWorktreeHTML(wt, site); err != nil {
-			fmt.Printf("  [WARN] paused page for worktree %s: %v\n", wt.Domain, err)
+			feedback.Warn("paused page for worktree %s: %v", wt.Domain, err)
 			continue
 		}
 		if err := nginx.GeneratePausedWorktreeVhost(wt.Domain, site.PrimaryDomain(), config.PausedDir(), site.Secured); err != nil {
-			fmt.Printf("  [WARN] paused vhost for worktree %s: %v\n", wt.Domain, err)
+			feedback.Warn("paused vhost for worktree %s: %v", wt.Domain, err)
 		}
 	}
 }
@@ -663,7 +660,7 @@ func unpauseHostProxyWorktrees(site *config.Site) {
 	}
 	for _, wt := range worktrees {
 		if err := SetupHostProxyWorktree(*site, wt.Path, wt.Domain); err != nil {
-			fmt.Printf("  [WARN] restoring worktree %s: %v\n", wt.Domain, err)
+			feedback.Warn("restoring worktree %s: %v", wt.Domain, err)
 		}
 	}
 }
@@ -684,7 +681,7 @@ func unpauseWorktrees(site *config.Site, phpVersion string) {
 			vhostErr = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
 		}
 		if vhostErr != nil {
-			fmt.Printf("  [WARN] restoring worktree vhost %s: %v\n", wt.Domain, vhostErr)
+			feedback.Warn("restoring worktree vhost %s: %v", wt.Domain, vhostErr)
 		}
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
@@ -65,9 +66,9 @@ func rebuildFrankenPHPForVersion(version string) {
 		return
 	}
 	for _, v := range versions {
-		fmt.Printf("Rebuilding FrankenPHP %s image so the change reaches Octane sites...\n", v)
+		feedback.Note("rebuilding FrankenPHP " + v + " image for Octane sites")
 		if err := podman.BuildFrankenPHPImage(v, false, os.Stdout); err != nil {
-			fmt.Printf("[WARN] rebuild FrankenPHP %s image: %v\n", v, err)
+			feedback.Warn("rebuild FrankenPHP %s image: %v", v, err)
 			fmt.Printf("       the change is live under FPM; run 'lerd php:rebuild %s' to retry the Octane image\n", v)
 			return
 		}
@@ -91,13 +92,13 @@ func applyPHPImageChange(version string) {
 func restartFrankenPHPUnits(units []frankenRestart) {
 	for _, u := range units {
 		if podman.RunSilent("image", "exists", podman.FrankenPHPImageName(u.version)) != nil {
-			fmt.Printf("  [WARN] %s: image not built, leaving container as-is\n", u.unit)
+			feedback.Warn("%s: image not built, leaving container as-is", u.unit)
 			continue
 		}
 		if err := podman.RestartUnit(u.unit); err != nil {
-			fmt.Printf("  [WARN] restart %s: %v\n", u.unit, err)
+			feedback.Warn("restart %s: %v", u.unit, err)
 		} else {
-			fmt.Printf("  restarted %s\n", u.unit)
+			feedback.Note("restarted " + u.unit)
 		}
 	}
 }
@@ -130,10 +131,11 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	}
 
 	if len(versions) == 0 {
-		fmt.Println("No PHP versions installed.")
+		feedback.Line("no PHP versions installed")
 		return nil
 	}
 
+	feedback.Begin()
 	jobs := make([]BuildJob, 0, len(versions))
 	for _, v := range versions {
 		ver := v
@@ -159,20 +161,20 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 
 	// Store the new Containerfile hash so future updates know images are current.
 	if err := podman.StoreFPMHash(); err != nil {
-		fmt.Printf("  [WARN] could not store image hash: %v\n", err)
+		feedback.Warn("could not store image hash: %v", err)
 	}
 
 	label := "PHP-FPM images"
 	if len(versions) == 1 {
 		label = "PHP " + versions[0] + " image"
 	}
-	fmt.Printf("\n%s rebuilt. Restarting containers...\n", label)
+	feedback.Line("restarting containers")
 	for _, v := range versions {
 		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
 		if err := podman.RestartUnit(unit); err != nil {
-			fmt.Printf("  [WARN] restart %s: %v\n", unit, err)
+			feedback.Warn("restart %s: %v", unit, err)
 		} else {
-			fmt.Printf("  restarted %s\n", unit)
+			feedback.Note("restarted " + unit)
 		}
 	}
 
@@ -182,12 +184,13 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	for _, unit := range append(append(registeredReverbUnits(), registeredQueueUnits()...), registeredScheduleUnits()...) {
 		if lerdSystemd.IsServiceActive(unit) || lerdSystemd.IsServiceEnabled(unit) {
 			if err := lerdSystemd.RestartService(unit); err != nil {
-				fmt.Printf("  [WARN] restart %s: %v\n", unit, err)
+				feedback.Warn("restart %s: %v", unit, err)
 			} else {
-				fmt.Printf("  restarted %s\n", unit)
+				feedback.Note("restarted " + unit)
 			}
 		}
 	}
 
+	feedback.Done(label + " rebuilt")
 	return nil
 }

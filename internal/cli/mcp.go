@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/mcp"
 	"github.com/spf13/cobra"
 )
@@ -74,11 +75,12 @@ func runMCPInject(targetPath string) error {
 		return err
 	}
 
-	fmt.Printf("Injecting lerd MCP config into: %s\n\n", abs)
+	feedback.Begin()
+	feedback.Line("injecting lerd MCP config into " + feedback.Val(abs))
 	if err := WriteProjectAISkills(abs, true); err != nil {
 		return err
 	}
-	fmt.Println("\nDone! Restart your AI assistant to load the lerd MCP server.")
+	feedback.Done("done — restart your AI assistant to load the lerd MCP server")
 	return nil
 }
 
@@ -195,7 +197,8 @@ This command updates:
 // RunMCPEnableGlobal registers lerd MCP at user scope for all supported AI tools.
 // It is exported so the install command can call it directly.
 func RunMCPEnableGlobal() error {
-	fmt.Println("Registering lerd MCP globally...")
+	feedback.Begin()
+	feedback.Line("registering lerd MCP globally")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -209,8 +212,8 @@ func RunMCPEnableGlobal() error {
 		return err
 	}
 
-	fmt.Println("\nDone! Restart your AI assistant for changes to take effect.")
-	fmt.Println("lerd will use the directory you open Claude in as the site context.")
+	feedback.Done("done — restart your AI assistant for changes to take effect")
+	feedback.Note("lerd uses the directory you open Claude in as the site context")
 	return nil
 }
 
@@ -323,7 +326,7 @@ func ensureClaudeMCPRegistered() {
 		return
 	}
 	if _, err := claudeMCP("add", "-s", "user", "lerd", "--", "lerd", "mcp"); err != nil {
-		fmt.Printf("  [WARN] could not register lerd with Claude Code: %v\n", err)
+		feedback.Warn("could not register lerd with Claude Code: %v", err)
 		fmt.Println("  Run manually: claude mcp add -s user lerd -- lerd mcp")
 	}
 }

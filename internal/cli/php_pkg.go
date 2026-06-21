@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -71,7 +72,8 @@ func newPhpPkgAddCmd() *cobra.Command {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Printf("Adding packages to PHP %s image: %s\n", version, strings.Join(pkgs, " "))
+			feedback.Begin()
+			feedback.Line("adding packages to PHP " + version + ": " + feedback.Val(strings.Join(pkgs, " ")))
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				// A bad package name fails the build; revert so a broken entry
 				// doesn't linger in config and poison future rebuilds.
@@ -79,13 +81,13 @@ func newPhpPkgAddCmd() *cobra.Command {
 					cfg.RemovePackage(version, p)
 				}
 				if saveErr := config.SaveGlobal(cfg); saveErr != nil {
-					fmt.Printf("[WARN] reverting config: %v\n", saveErr)
+					feedback.Warn("reverting config: %v", saveErr)
 				}
 				return fmt.Errorf("rebuild failed (config reverted): %w", err)
 			}
 
 			applyPHPImageChange(version)
-			fmt.Printf("Packages installed for PHP %s.\n", version)
+			feedback.Done("packages installed for PHP " + version)
 			return nil
 		},
 	}
@@ -115,12 +117,13 @@ func newPhpPkgRemoveCmd() *cobra.Command {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Printf("Removing packages from PHP %s image: %s\n", version, strings.Join(args, " "))
+			feedback.Begin()
+			feedback.Line("removing packages from PHP " + version + ": " + feedback.Val(strings.Join(args, " ")))
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				return err
 			}
 			applyPHPImageChange(version)
-			fmt.Printf("Packages removed for PHP %s.\n", version)
+			feedback.Done("packages removed for PHP " + version)
 			return nil
 		},
 	}
@@ -164,9 +167,9 @@ func newPhpPkgListCmd() *cobra.Command {
 func restartFPMUnit(version string) {
 	unit := "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
 	if err := podman.RestartUnit(unit); err != nil {
-		fmt.Printf("[WARN] restart %s: %v\n", unit, err)
+		feedback.Warn("restart %s: %v", unit, err)
 		fmt.Printf("Run: systemctl --user restart %s\n", unit)
 	} else {
-		fmt.Printf("FPM container restarted.\n")
+		feedback.Note("restarted " + unit)
 	}
 }

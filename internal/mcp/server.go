@@ -2130,7 +2130,7 @@ func execEnvSetup(args map[string]any) (any, *rpcError) {
 	}
 
 	var out bytes.Buffer
-	cmd := exec.Command(self, "env")
+	cmd := exec.Command(self, "env", "--verbose")
 	cmd.Dir = projectPath
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -2211,7 +2211,7 @@ func execDbSet(args map[string]any) (any, *rpcError) {
 		return toolErr("could not resolve lerd executable: " + err.Error()), nil
 	}
 	var out bytes.Buffer
-	cmd := exec.Command(self, "env")
+	cmd := exec.Command(self, "env", "--verbose")
 	cmd.Dir = projectPath
 	cmd.Stdout = &out
 	cmd.Stderr = &out

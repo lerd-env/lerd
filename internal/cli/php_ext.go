@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -59,9 +60,10 @@ func newPhpExtAddCmd() *cobra.Command {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Printf("Adding extension %q to PHP %s image...\n", ext, version)
+			feedback.Begin()
+			feedback.Line("adding extension " + feedback.Val(ext) + " to PHP " + version)
 			if len(deps) > 0 {
-				fmt.Printf("  with Alpine packages: %s\n", strings.Join(deps, " "))
+				feedback.Note("alpine packages: " + strings.Join(deps, " "))
 			}
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				return err
@@ -70,14 +72,14 @@ func newPhpExtAddCmd() *cobra.Command {
 			if err := podman.VerifyExtensionLoaded(version, ext); err != nil {
 				cfg.RemoveExtension(version, ext)
 				if saveErr := config.SaveGlobal(cfg); saveErr != nil {
-					fmt.Printf("[WARN] reverting config: %v\n", saveErr)
+					feedback.Warn("reverting config: %v", saveErr)
 				}
 				return fmt.Errorf("extension %q was not installed (config reverted): %w", ext, err)
 			}
 
 			applyPHPImageChange(version)
 
-			fmt.Printf("Extension %q installed for PHP %s.\n", ext, version)
+			feedback.Done("extension " + feedback.Val(ext) + " installed for PHP " + version)
 			return nil
 		},
 	}
@@ -110,14 +112,15 @@ func newPhpExtRemoveCmd() *cobra.Command {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
-			fmt.Printf("Removing extension %q from PHP %s image...\n", ext, version)
+			feedback.Begin()
+			feedback.Line("removing extension " + feedback.Val(ext) + " from PHP " + version)
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				return err
 			}
 
 			applyPHPImageChange(version)
 
-			fmt.Printf("Extension %q removed for PHP %s.\n", ext, version)
+			feedback.Done("extension " + feedback.Val(ext) + " removed for PHP " + version)
 			return nil
 		},
 	}

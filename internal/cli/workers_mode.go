@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -70,15 +71,16 @@ No manual 'lerd stop && lerd start' needed.`,
 			if err := applyWorkersMode(mode, nil); err != nil {
 				return err
 			}
+			feedback.Begin()
 			if prev == mode {
-				fmt.Printf("Worker mode already %s.\n", mode)
+				feedback.Line("worker mode already " + mode)
 				return nil
 			}
-			fmt.Printf("Worker mode set to %s (was %s).\n", mode, prev)
+			feedback.Done("worker mode set to " + feedback.Val(mode) + " (was " + prev + ")")
 			if runtime.GOOS == "darwin" {
-				fmt.Println("Active workers have been restarted in the new shape.")
+				feedback.Note("active workers have been restarted in the new shape")
 			} else {
-				fmt.Println("Note: Linux always uses the exec runtime. This setting only applies on macOS.")
+				feedback.Note("Linux always uses the exec runtime; this setting only applies on macOS")
 			}
 			return nil
 		},

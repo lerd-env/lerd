@@ -1,14 +1,13 @@
 package cli
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -94,8 +93,9 @@ func resolveCommandsForCwd(cwd string) []config.FrameworkCommand {
 
 func listCommands(cmds []config.FrameworkCommand) error {
 	if len(cmds) == 0 {
-		fmt.Println("No commands available for this project.")
-		fmt.Println("Add a commands: block to .lerd.yaml or install the framework store.")
+		feedback.Begin()
+		feedback.Line("no commands available for this project")
+		feedback.Note("add a commands: block to .lerd.yaml or install the framework store")
 		return nil
 	}
 	maxName := 0
@@ -136,12 +136,7 @@ func runNamedCommand(cwd string, cmds []config.FrameworkCommand, name string, as
 	}
 
 	if target.Confirm && !assumeYes {
-		fmt.Printf("This will run: %s\n", target.Command)
-		fmt.Printf("Continue? [y/N] ")
-		reader := bufio.NewReader(os.Stdin)
-		line, _ := reader.ReadString('\n')
-		ans := strings.ToLower(strings.TrimSpace(line))
-		if ans != "y" && ans != "yes" {
+		if !feedback.Confirm("This will run: "+target.Command+"\nContinue?", false) {
 			return fmt.Errorf("aborted")
 		}
 	}

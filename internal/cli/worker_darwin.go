@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -46,7 +47,7 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 		return false, fmt.Errorf("worker unit %q: command must not contain newline or NUL", unitName)
 	}
 	if schedule != "" {
-		fmt.Printf("[WARN] worker %s has schedule=%q which is not yet supported on macOS — skipping\n", unitName, schedule)
+		feedback.Warn("worker %s has schedule=%q which is not yet supported on macOS — skipping", unitName, schedule)
 		return false, nil
 	}
 	if host {

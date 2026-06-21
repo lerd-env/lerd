@@ -62,7 +62,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			lanIP:   "192.168.1.42",
 			wantSubstr: []string{
 				"LAN exposure (192.168.1.42)",
-				"OK",
+				"✓",
 				"Dashboard remote access",
 				"LAN clients get 403",
 			},

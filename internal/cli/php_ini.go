@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -35,8 +36,9 @@ func runPhpIni(_ *cobra.Command, args []string) error {
 		return err
 	}
 	if !launched {
-		fmt.Printf("User ini file: %s\n", path)
-		fmt.Println("Set $EDITOR to open it automatically.")
+		feedback.Begin()
+		feedback.Line("user ini file: " + feedback.Val(path))
+		feedback.Note("set $EDITOR to open it automatically")
 		return nil
 	}
 
@@ -48,13 +50,15 @@ func runPhpIni(_ *cobra.Command, args []string) error {
 
 	short := strings.ReplaceAll(version, ".", "")
 	unit := "lerd-php" + short + "-fpm"
-	fmt.Printf("Saved. Restarting %s...\n", unit)
+	feedback.Begin()
+	step := feedback.Start("restarting " + unit)
 	if err := podman.RestartUnit(unit); err != nil {
+		step.Fail(err)
 		return fmt.Errorf("restarting %s: %w", unit, err)
 	}
 	// Per-site containers (FrankenPHP, custom-FPM) on this version mount the same
 	// user ini; restart them so the edit applies there too.
 	podman.RestartSiteContainersForVersion(version)
-	fmt.Println("Done.")
+	step.OK("")
 	return nil
 }

@@ -6,6 +6,7 @@ import (
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -36,39 +37,43 @@ func runMinioMigrate(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no MinIO data found at %s\nNothing to migrate", minioDataDir)
 	}
 
-	fmt.Println("Migrating MinIO data to RustFS...")
+	feedback.Begin()
+	feedback.Line("migrating MinIO data to RustFS")
 
 	// Stop minio if running.
 	status, _ := podman.UnitStatus("lerd-minio")
 	if status == "active" || status == "activating" {
-		fmt.Print("  Stopping lerd-minio...          ")
+		st := feedback.Start("stopping lerd-minio")
 		if err := podman.StopUnit("lerd-minio"); err != nil {
+			st.Fail(err)
 			return fmt.Errorf("could not stop lerd-minio: %w", err)
 		}
-		fmt.Println("done")
+		st.OK("")
 	}
 
 	// Remove minio quadlet so it no longer auto-starts.
-	fmt.Print("  Removing MinIO quadlet...       ")
+	rm := feedback.Start("removing MinIO quadlet")
 	if err := podman.RemoveQuadlet("lerd-minio"); err != nil && !os.IsNotExist(err) {
-		fmt.Printf("warn (%v)\n", err)
+		rm.Fail(err)
 	} else {
-		fmt.Println("done")
+		rm.OK("")
 	}
 	if err := podman.DaemonReloadFn(); err != nil {
 		fmt.Printf("  warn: daemon-reload failed: %v\n", err)
 	}
 
 	// Copy minio data to rustfs data dir.
-	fmt.Print("  Copying data directory...       ")
+	cpStep := feedback.Start("copying data directory")
 	if err := os.MkdirAll(rustfsDataDir, 0755); err != nil {
+		cpStep.Fail(err)
 		return fmt.Errorf("creating rustfs data dir: %w", err)
 	}
 	cp := exec.Command("cp", "-a", minioDataDir+"/.", rustfsDataDir+"/")
 	if out, err := cp.CombinedOutput(); err != nil {
+		cpStep.Fail(fmt.Errorf("%s", out))
 		return fmt.Errorf("copying data: %s", out)
 	}
-	fmt.Println("done")
+	cpStep.OK("")
 
 	// Update global config: disable minio entry if present, ensure rustfs exists.
 	cfg, err := config.LoadGlobal()
@@ -92,25 +97,23 @@ func runMinioMigrate(_ *cobra.Command, _ []string) error {
 	}
 
 	// Install and start RustFS.
-	fmt.Print("  Installing RustFS...            ")
+	inst := feedback.Start("installing RustFS")
 	if err := ensureServiceQuadlet("rustfs"); err != nil {
+		inst.Fail(err)
 		return fmt.Errorf("installing rustfs quadlet: %w", err)
 	}
-	fmt.Println("done")
+	inst.OK("")
 
-	fmt.Print("  Starting lerd-rustfs...         ")
+	startStep := feedback.Start("starting lerd-rustfs")
 	if err := podman.StartUnit("lerd-rustfs"); err != nil {
+		startStep.Fail(err)
 		return fmt.Errorf("starting lerd-rustfs: %w", err)
 	}
 	_ = config.SetServiceManuallyStarted("rustfs", true)
-	fmt.Println("done")
+	startStep.OK("")
 
-	fmt.Println()
-	fmt.Println("Migration complete.")
-	fmt.Println("  RustFS console: http://localhost:9001")
-	fmt.Println("  Credentials:    lerd / lerdpassword")
-	fmt.Println()
-	fmt.Printf("MinIO data directory at %s was not removed.\n", minioDataDir)
-	fmt.Println("Delete it manually once you have verified the migration: rm -rf " + minioDataDir)
+	feedback.Done("migration complete")
+	feedback.Note("RustFS console: http://localhost:9001 · credentials lerd / lerdpassword")
+	feedback.Note("MinIO data left at " + minioDataDir + " — delete once verified: rm -rf " + minioDataDir)
 	return nil
 }

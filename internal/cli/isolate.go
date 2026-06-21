@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/spf13/cobra"
@@ -45,22 +46,24 @@ func runIsolate(_ *cobra.Command, args []string) error {
 			return fmt.Errorf("updating .lerd.yaml: %w", err)
 		}
 		if err := regenerateWorktreeVhost(site, branch, version); err != nil {
-			fmt.Printf("[WARN] regenerating worktree vhost: %v\n", err)
+			feedback.Warn("regenerating worktree vhost: %v", err)
 		} else {
 			nginx.ReloadOrWarn("")
 		}
-		fmt.Printf("PHP version pinned to %s for worktree %s of %s\n", version, branch, site.Name)
+		feedback.Begin()
+		feedback.Done("PHP pinned to " + feedback.Val(version) + " · worktree " + branch + " of " + site.Name)
 		return nil
 	}
 
 	// Parent-site path: keep the legacy behaviour — write .lerd.yaml when it
 	// exists, then re-link so the registry and nginx pick up the change.
 	_ = config.SetProjectPHPVersion(cwd, version)
-	fmt.Printf("PHP version pinned to %s\n", version)
+	feedback.Begin()
+	feedback.Done("PHP pinned to " + feedback.Val(version))
 
 	if _, err := config.FindSiteByPath(cwd); err == nil {
 		if err := runLink([]string{}); err != nil {
-			fmt.Printf("[WARN] re-linking site: %v\n", err)
+			feedback.Warn("re-linking site: %v", err)
 		} else if site, err := config.FindSiteByPath(cwd); err == nil && site.PHPVersion != "" && site.PHPVersion != version {
 			// The framework caps the usable PHP (e.g. Laravel 11 → 8.4), so the
 			// re-link clamped the pin. Sync the committed files to the version
@@ -68,7 +71,7 @@ func runIsolate(_ *cobra.Command, args []string) error {
 			// advertise a version lerd silently overrides on every link.
 			_ = config.SetProjectPHPVersion(cwd, site.PHPVersion)
 			_ = os.WriteFile(filepath.Join(cwd, ".php-version"), []byte(site.PHPVersion+"\n"), 0644)
-			fmt.Printf("Note: %s isn't usable here; clamped to %s and updated .lerd.yaml / .php-version to match.\n", version, site.PHPVersion)
+			feedback.Note(version + " isn't usable here; clamped to " + site.PHPVersion + " and updated .lerd.yaml / .php-version")
 		}
 	}
 

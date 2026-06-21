@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -41,6 +42,7 @@ func runNodeUse(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	fmt.Printf("Default Node.js version set to %s\n", major)
+	feedback.Begin()
+	feedback.Done("default Node set to " + feedback.Val(major))
 	return nil
 }
