@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -1155,7 +1156,10 @@ func RunStop() error { return runStop(nil, nil) }
 // RunQuit stops all lerd processes and containers (exported for use by the UI server).
 func RunQuit() error { return runQuit(nil, nil) }
 
-func runStop(_ *cobra.Command, _ []string) error {
+// stopUnitSet returns every unit `lerd stop` tears down. lerd-dns is
+// deliberately excluded: the resolver points .test at it until uninstall, so
+// it stays up as install-level DNS plumbing (the watcher would restart it).
+func stopUnitSet() []string {
 	units := append(coreUnits(), allInstalledServiceUnits()...)
 	units = append(units, installedCustomContainerUnits()...)
 	units = append(units, registeredQueueUnits()...)
@@ -1167,6 +1171,11 @@ func runStop(_ *cobra.Command, _ []string) error {
 	// oneshot .service is a no-op (it isn't running between firings),
 	// so without this the timer keeps dispatching after `lerd stop`.
 	units = append(units, registeredTimerUnits()...)
+	return slices.DeleteFunc(units, func(u string) bool { return u == "lerd-dns" })
+}
+
+func runStop(_ *cobra.Command, _ []string) error {
+	units := stopUnitSet()
 
 	fmt.Println("Stopping Lerd...")
 
