@@ -6,8 +6,11 @@ package serviceops
 
 import (
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -257,12 +260,14 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	}
 	canonicalPin := ""
 	pinnedUserImage := ""
+	publishedPort := 0
 	var extraPorts []string
 	if cfg, loadErr := config.LoadGlobal(); loadErr == nil {
 		if svcCfg, ok := cfg.Services[name]; ok {
 			canonicalPin = svcCfg.CanonicalVersion
 			pinnedUserImage = svcCfg.Image
 			extraPorts = svcCfg.ExtraPorts
+			publishedPort = svcCfg.PublishedPort
 		}
 	}
 	hasUserPin := pinnedUserImage != ""
@@ -294,6 +299,16 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	}
 	if len(extraPorts) > 0 {
 		svc.Ports = append(svc.Ports, extraPorts...)
+	}
+	// User-chosen published port: move the primary mapping's host side (e.g.
+	// 3306 → 3307) so a host server can keep the default port, while leaving the
+	// container-internal port — and every bridge/env reference to it — untouched.
+	// The connection URL is rewritten to match so the dashboard shows the real
+	// host port. 0 means "use the preset/version default", so this is a no-op
+	// for everyone who hasn't overridden it.
+	if publishedPort > 0 {
+		svc.Ports = podman.SetPrimaryHostPort(svc.Ports, publishedPort)
+		svc.ConnectionURL = withURLPort(svc.ConnectionURL, publishedPort)
 	}
 	// First-install / backfill pin: persist the canonical tag so future YAML
 	// canonical flips don't silently major-jump this install.
@@ -383,6 +398,22 @@ func matchVersionByImageTag(image string, versions []config.PresetVersion) strin
 		}
 	}
 	return best
+}
+
+// withURLPort returns rawURL with its host port set to port, preserving scheme,
+// userinfo, host, and path. Used to keep a service's developer-facing
+// connection URL in sync after its published port is overridden. Returns the
+// input unchanged when it is empty, unparseable, or has no host.
+func withURLPort(rawURL string, port int) string {
+	if rawURL == "" || port <= 0 {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return rawURL
+	}
+	u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(port))
+	return u.String()
 }
 
 // EnsureCustomServiceQuadlet writes the quadlet for a custom service and

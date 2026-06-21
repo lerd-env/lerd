@@ -8,22 +8,29 @@ import (
 	"time"
 )
 
-func TestAttributeTCP3306Owner(t *testing.T) {
+func TestAttribute3306Owner(t *testing.T) {
 	cases := []struct {
-		listening, socketPresent, lerdRunning bool
-		want                                  string
+		listening, socketPresent, lerdRunning, lerdOn3306 bool
+		want                                              string
 	}{
-		{false, false, false, "none"},
-		{false, true, true, "none"}, // not listening dominates
-		{true, false, true, "lerd"},
-		{true, true, true, "lerd"}, // a running lerd container wins attribution
-		{true, true, false, "host"},
-		{true, false, false, "unknown"},
+		// lerdOn3306=true: identical to the previous three-signal behaviour.
+		{false, false, false, true, "none"},
+		{false, true, true, true, "none"}, // not listening dominates
+		{true, false, true, true, "lerd"},
+		{true, true, true, true, "lerd"}, // a running lerd on 3306 wins attribution
+		{true, true, false, true, "host"},
+		{true, false, false, true, "unknown"},
+		// lerdOn3306=false: lerd moved off 3306, so a 3306 listener is the host.
+		{false, true, true, false, "none"},     // nothing on 3306
+		{true, true, true, false, "host"},      // lerd on e.g. 3307, host socket on 3306
+		{true, false, true, false, "host"},     // lerd elsewhere, 3306 listening ⇒ host
+		{true, true, false, false, "host"},     // host socket present, lerd down
+		{true, false, false, false, "unknown"}, // 3306 listening, no socket, lerd down
 	}
 	for _, c := range cases {
-		if got := attributeTCP3306Owner(c.listening, c.socketPresent, c.lerdRunning); got != c.want {
-			t.Errorf("attributeTCP3306Owner(listening=%v,socket=%v,lerd=%v) = %q, want %q",
-				c.listening, c.socketPresent, c.lerdRunning, got, c.want)
+		if got := attribute3306Owner(c.listening, c.socketPresent, c.lerdRunning, c.lerdOn3306); got != c.want {
+			t.Errorf("attribute3306Owner(listening=%v,socket=%v,lerd=%v,lerdOn3306=%v) = %q, want %q",
+				c.listening, c.socketPresent, c.lerdRunning, c.lerdOn3306, got, c.want)
 		}
 	}
 }

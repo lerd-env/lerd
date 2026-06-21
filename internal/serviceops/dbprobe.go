@@ -3,6 +3,7 @@ package serviceops
 import (
 	"net"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -26,6 +27,12 @@ type HostMySQLStatus struct {
 	Live             bool   `json:"live"`              // a server is accepting on the socket
 	TCP3306Listening bool   `json:"tcp3306_listening"` // something answers on 127.0.0.1:3306
 	TCP3306Owner     string `json:"tcp3306_owner"`     // host | lerd | none | unknown
+	// LerdPort is the host port lerd-mysql publishes (3306 by default, or the
+	// configured PublishedPort override). When it differs from 3306 the host
+	// system MySQL can own 3306 and the two coexist. LerdPortListening reports
+	// whether something answers on 127.0.0.1:<LerdPort>.
+	LerdPort          int  `json:"lerd_port"`
+	LerdPortListening bool `json:"lerd_port_listening"`
 }
 
 // ProbeHostMySQL inspects the host MySQL unix socket at socketPath (empty =>
@@ -45,13 +52,32 @@ func ProbeHostMySQL(socketPath string) HostMySQLStatus {
 		}
 	}
 	listening := tcpListening("127.0.0.1:3306", probeTimeout)
-	return HostMySQLStatus{
-		SocketPresent:    present,
-		SocketPath:       path,
-		Live:             live,
-		TCP3306Listening: listening,
-		TCP3306Owner:     attributeTCP3306Owner(listening, present, podman.ContainerRunningQuiet("lerd-mysql")),
+	lerdPort := lerdMySQLPort()
+	lerdListening := listening // when lerd is on 3306, its listener is the 3306 one
+	if lerdPort != 3306 {
+		lerdListening = tcpListening(net.JoinHostPort("127.0.0.1", strconv.Itoa(lerdPort)), probeTimeout)
 	}
+	lerdRunning := podman.ContainerRunningQuiet("lerd-mysql")
+	return HostMySQLStatus{
+		SocketPresent:     present,
+		SocketPath:        path,
+		Live:              live,
+		TCP3306Listening:  listening,
+		TCP3306Owner:      attribute3306Owner(listening, present, lerdRunning, lerdPort == 3306),
+		LerdPort:          lerdPort,
+		LerdPortListening: lerdListening,
+	}
+}
+
+// lerdMySQLPort returns the host port lerd-mysql publishes: the configured
+// PublishedPort override when set, otherwise the canonical default 3306.
+func lerdMySQLPort() int {
+	if cfg, err := config.LoadGlobal(); err == nil {
+		if sc, ok := cfg.Services["mysql"]; ok && sc.PublishedPort > 0 {
+			return sc.PublishedPort
+		}
+	}
+	return 3306
 }
 
 // socketLive reports whether path is a unix socket (present) and whether a
@@ -80,17 +106,23 @@ func tcpListening(addr string, timeout time.Duration) bool {
 	return true
 }
 
-// attributeTCP3306Owner decides who owns 127.0.0.1:3306 from three signals.
-// A running lerd-mysql container publishes the port, so it wins attribution;
-// otherwise a present host socket means the host server owns it. The user runs
-// one or the other on 3306 (they conflict), so this matches reality.
-func attributeTCP3306Owner(listening, socketPresent, lerdRunning bool) string {
+// attribute3306Owner decides who owns 127.0.0.1:3306. lerdOn3306 says whether
+// lerd-mysql publishes 3306 (true unless it was moved off via PublishedPort).
+// A running lerd-mysql that still publishes 3306 wins attribution (they would
+// conflict with a host server there); once lerd is moved off 3306, a 3306
+// listener is the host server, so a present socket — or just the listener
+// itself — attributes to the host. With lerdOn3306=true the result is identical
+// to the previous three-signal behaviour, so existing callers are unaffected.
+func attribute3306Owner(listening, socketPresent, lerdRunning, lerdOn3306 bool) string {
 	switch {
 	case !listening:
 		return "none"
-	case lerdRunning:
+	case lerdRunning && lerdOn3306:
 		return "lerd"
 	case socketPresent:
+		return "host"
+	case lerdRunning && !lerdOn3306:
+		// lerd is running elsewhere, yet 3306 has a listener: it must be the host.
 		return "host"
 	default:
 		return "unknown"
