@@ -3,8 +3,11 @@ package cli
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
@@ -61,6 +64,7 @@ func NewServiceCmd() *cobra.Command {
 	cmd.AddCommand(newServiceReinstallCmd())
 	cmd.AddCommand(newServiceConfigCmd())
 	cmd.AddCommand(newServiceExposeCmd())
+	cmd.AddCommand(newServicePortCmd())
 	cmd.AddCommand(newServicePinCmd())
 	cmd.AddCommand(newServiceUnpinCmd())
 
@@ -877,6 +881,100 @@ func newServiceExposeCmd() *cobra.Command {
 	return cmd
 }
 
+// newServicePortCmd returns the `service port` command, which moves a built-in
+// service's published host port (e.g. lerd-mysql 3306 → 3307) so a host server
+// can keep the default port. The container-internal port is untouched.
+func newServicePortCmd() *cobra.Command {
+	var reset bool
+	cmd := &cobra.Command{
+		Use:   "port <service> [port]",
+		Short: "Set or reset a built-in service's published host port",
+		Long: `Move a built-in service's published host port without touching its
+container-internal port. For example:
+
+    lerd service port mysql 3307
+
+frees 127.0.0.1:3306 for a host-installed MySQL while lerd-mysql stays reachable
+on 3307. Containerized apps reach the service over the lerd network by name, so
+they are unaffected. Use --reset (or "port mysql 0") to return to the default.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			if !isKnownService(name) {
+				return fmt.Errorf("%q is not a built-in service", name)
+			}
+			newPort := 0
+			if !reset {
+				if len(args) < 2 {
+					return fmt.Errorf("provide a port, or pass --reset to use the default")
+				}
+				p, err := strconv.Atoi(args[1])
+				if err != nil || p < 0 || p > 65535 {
+					return fmt.Errorf("invalid port %q: must be 0-65535", args[1])
+				}
+				newPort = p
+			}
+
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				return err
+			}
+			svcCfg := cfg.Services[name]
+			if newPort == svcCfg.PublishedPort {
+				if newPort == 0 {
+					fmt.Printf("%s already uses its default published port.\n", name)
+				} else {
+					fmt.Printf("%s is already published on port %d.\n", name, newPort)
+				}
+				return nil
+			}
+			// Pre-flight: refuse a port another process already holds, so the
+			// restart can't fail to bind and leave the service down.
+			if newPort > 0 && TCPPortBusy(newPort) {
+				return fmt.Errorf("port %d is already in use; pick another (check: %s)",
+					newPort, FindListenerCmd(strconv.Itoa(newPort)))
+			}
+			svcCfg.PublishedPort = newPort
+			cfg.Services[name] = svcCfg
+			if err := config.SaveGlobal(cfg); err != nil {
+				return err
+			}
+			if err := ensureServiceQuadlet(name); err != nil {
+				return err
+			}
+			status, _ := podman.UnitStatus("lerd-" + name)
+			if status == "active" {
+				fmt.Printf("Restarting lerd-%s to apply the port change...\n", name)
+				if err := podman.RestartUnit("lerd-" + name); err != nil {
+					return fmt.Errorf("restarting lerd-%s: %w", name, err)
+				}
+				_ = podman.WaitReady(name, 30*time.Second)
+			}
+			if newPort == 0 {
+				fmt.Printf("Reset %s to its default published port.\n", name)
+			} else {
+				fmt.Printf("lerd-%s now publishes 127.0.0.1:%d (container-internal port unchanged).\n", name, newPort)
+				fmt.Printf("Update host clients pointed at lerd's %s to port %d; containerized apps are unaffected.\n", name, newPort)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&reset, "reset", false, "Reset to the preset default published port")
+	return cmd
+}
+
+// TCPPortBusy reports whether something is already accepting TCP connections on
+// 127.0.0.1:port. Used as a pre-flight before moving a service's published port,
+// by both the CLI and the dashboard handler.
+func TCPPortBusy(port int) bool {
+	conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)), 500*time.Millisecond)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
 func containsPort(ports []string, port string) bool {
 	for _, p := range ports {
 		if p == port {
@@ -965,6 +1063,32 @@ func StopServiceAndDependents(name string) {
 
 // autoStopUnusedServices stops any running service that has no active sites
 // referencing it and was not manually started by the user.
+// ReconcileDBServiceLifecycle brings the containerized MySQL/MariaDB service in
+// line with how many sites still use it after a db.external backend switch: it
+// starts the service when a container-mode site needs it but it's down, and
+// stops it once no container-mode site references it any more (honouring pin and
+// manual-start). Call after a per-site or bulk backend change. With lerd-mysql
+// on a moved port it no longer has to stop to free 3306, so this is tidiness —
+// not leaving an idle container running when every site is on the host backend.
+func ReconcileDBServiceLifecycle() {
+	for _, name := range []string{"mysql", "mariadb"} {
+		if !serviceops.ServiceInstalled(name) {
+			continue
+		}
+		used := config.CountSitesUsingService(name) > 0
+		status, _ := podman.UnitStatus("lerd-" + name)
+		running := status == "active" || status == "activating"
+		switch {
+		case used && !running:
+			_ = serviceops.EnsureServiceRunning(name)
+		case !used && running:
+			if !config.ServiceIsManuallyStarted(name) && !config.ServiceIsPinned(name) {
+				StopServiceAndDependents(name)
+			}
+		}
+	}
+}
+
 func autoStopUnusedServices() {
 	candidates := knownServices()
 	if customs, err := config.ListCustomServices(); err == nil {

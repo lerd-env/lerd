@@ -358,10 +358,16 @@ func CollectPortChecks(units []string) []PortCheck {
 		}
 		container := "lerd-" + svc
 		if cfg != nil {
-			if sc, ok := cfg.Services[svc]; ok && sc.Port > 0 {
-				checks = append(checks, PortCheck{strconv.Itoa(sc.Port), svc, container})
-			}
 			if sc, ok := cfg.Services[svc]; ok {
+				// A PublishedPort override moves the primary published port, so
+				// check the real bound port rather than the preset default.
+				port := sc.Port
+				if sc.PublishedPort > 0 {
+					port = sc.PublishedPort
+				}
+				if port > 0 {
+					checks = append(checks, PortCheck{strconv.Itoa(port), svc, container})
+				}
 				for _, ep := range sc.ExtraPorts {
 					checks = append(checks, PortCheck{hostPort(ep), svc, container})
 				}
