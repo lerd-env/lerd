@@ -8,7 +8,7 @@
 [![Release](https://img.shields.io/github/v/release/geodro/lerd)](https://github.com/geodro/lerd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WSL2%20(beta)-lightgrey)]()
-[![Docs](https://img.shields.io/badge/docs-geodro.github.io%2Flerd-blue)](https://geodro.github.io/lerd/)
+[![Docs](https://img.shields.io/badge/docs-lerd.sh-blue)](https://lerd.sh/)
 [![Reddit](https://img.shields.io/badge/Reddit-r%2Flerd-ff2d20?logo=reddit)](https://reddit.com/r/lerd)
 [![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/ej33c5N9s)
 
@@ -25,7 +25,7 @@ If you're a PHP developer on Linux and want frictionless local development — a
 
 ## Features
 
-- 🌐 **Automatic `.test` domains** with one-command TLS, or [opt out of lerd-managed DNS](https://geodro.github.io/lerd/features/dns/) and use `*.localhost` (no dnsmasq, no system resolver tweak, no sudo for the DNS bits)
+- 🌐 **Automatic `.test` domains** with one-command TLS, or [opt out of lerd-managed DNS](https://lerd.sh/features/dns/) and use `*.localhost` (no dnsmasq, no system resolver tweak, no sudo for the DNS bits)
 - 🐘 **Per-project PHP version** (8.1–8.5, plus a frozen 7.4 / 8.0 legacy tier for hosted-on-the-old-stack projects), switch with one click
 - ⚡ **FrankenPHP runtime** per site as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode
 - 📦 **Node.js isolation** per project (Node 22, 24), or **bun** as the JS runtime on the host and, opt-in, inside the container
@@ -68,7 +68,7 @@ AI:  → site(action: "link")
 
 Eleven grouped tools, each driven by an `action`: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, and `worktree`. Scaffold projects, run migrations, manage services, toggle workers, tail and search logs, enable Xdebug, manage databases and PHP extensions, park directories, switch runtimes between PHP-FPM and FrankenPHP, and more, all from your AI assistant.
 
-📖 [MCP documentation](https://geodro.github.io/lerd/features/mcp/)
+📖 [MCP documentation](https://lerd.sh/features/mcp/)
 
 ## Why Lerd?
 
@@ -86,7 +86,7 @@ Eleven grouped tools, each driven by an `action`: `site`, `service`, `db`, `env`
 
 🟡 DDEV runs on Docker by default and can also use Podman as an alternative runtime; Lerd is built exclusively for rootless Podman.
 
-🧪 Lerd's Windows support runs inside WSL2 and is currently **beta**, see the [Windows (WSL2) guide](https://geodro.github.io/lerd/getting-started/wsl2/).
+🧪 Lerd's Windows support runs inside WSL2 and is currently **beta**, see the [Windows (WSL2) guide](https://lerd.sh/getting-started/wsl2/).
 
 ## Install
 
@@ -119,7 +119,7 @@ lerd install
 ```
 
 > [!NOTE]
-> See the [installation docs](https://geodro.github.io/lerd/getting-started/installation/) for details.
+> See the [installation docs](https://lerd.sh/getting-started/installation/) for details.
 
 ## Quick Start
 
@@ -139,7 +139,7 @@ lerd autostart enable   # boot lerd on every login
 lerd status         # health snapshot
 ```
 
-See [Start, Stop & Autostart](https://geodro.github.io/lerd/usage/lifecycle/) for the full lifecycle reference.
+See [Start, Stop & Autostart](https://lerd.sh/usage/lifecycle/) for the full lifecycle reference.
 
 ## Framework Store
 
@@ -156,15 +156,15 @@ Frameworks auto-detect when you `lerd link` a project. Workers, env setup, nginx
 
 ## Documentation
 
-📖 **[geodro.github.io/lerd](https://geodro.github.io/lerd/)**
+📖 **[lerd.sh](https://lerd.sh/)**
 
-- [Requirements](https://geodro.github.io/lerd/getting-started/requirements/)
-- [Installation](https://geodro.github.io/lerd/getting-started/installation/)
-- [Quick Start](https://geodro.github.io/lerd/getting-started/quick-start/)
-- [Start, Stop & Autostart](https://geodro.github.io/lerd/usage/lifecycle/)
-- [Frameworks](https://geodro.github.io/lerd/usage/frameworks/)
-- [Services](https://geodro.github.io/lerd/usage/services/)
-- [Command Reference](https://geodro.github.io/lerd/reference/commands/)
+- [Requirements](https://lerd.sh/getting-started/requirements/)
+- [Installation](https://lerd.sh/getting-started/installation/)
+- [Quick Start](https://lerd.sh/getting-started/quick-start/)
+- [Start, Stop & Autostart](https://lerd.sh/usage/lifecycle/)
+- [Frameworks](https://lerd.sh/usage/frameworks/)
+- [Services](https://lerd.sh/usage/services/)
+- [Command Reference](https://lerd.sh/reference/commands/)
 
 ## License
 
