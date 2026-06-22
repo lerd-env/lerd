@@ -197,7 +197,7 @@ func TestTickDNS(t *testing.T) {
 				},
 			}
 			state := &dnsWatchState{lastOK: c.lastOK, tickCount: c.tickCount}
-			tickDNS(deps, state, "test")
+			tickDNS(deps, state, "test", false)
 
 			if got.checks != c.wantChecks {
 				t.Errorf("check() calls=%d, want %d", got.checks, c.wantChecks)
@@ -254,7 +254,7 @@ func TestTickDNS_repairUnavailable_logsOnceAndSkipsResolverWrite(t *testing.T) {
 
 	// Three consecutive ticks with DNS down; only the first should log.
 	for i := 0; i < 3; i++ {
-		tickDNS(deps, state, "test")
+		tickDNS(deps, state, "test", false)
 	}
 
 	if checks != 3 {
@@ -291,7 +291,7 @@ func TestTickDNS_repairAvailableAfterUnavailable_relogsOnNextOutage(t *testing.T
 	state := &dnsWatchState{}
 
 	// Tick with gate closed: one warn.
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if len(logs) != 1 {
 		t.Fatalf("expected 1 log, got %d (%v)", len(logs), logs)
 	}
@@ -302,7 +302,7 @@ func TestTickDNS_repairAvailableAfterUnavailable_relogsOnNextOutage(t *testing.T
 	// repairUnavailable flag must be cleared so a future close-of-gate
 	// re-emits the once warn.
 	gate = true
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if len(logs) < 1 {
 		t.Fatalf("expected repair pipeline logs after gate reopened, got %v", logs)
 	}
@@ -313,7 +313,7 @@ func TestTickDNS_repairAvailableAfterUnavailable_relogsOnNextOutage(t *testing.T
 	// Close gate again — should re-log the once-warn.
 	logs = nil
 	gate = false
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if len(logs) != 1 {
 		t.Errorf("expected re-log after gate re-closes, got %v", logs)
 	}
@@ -337,23 +337,23 @@ func TestTickDNS_containerDNSResync(t *testing.T) {
 	state := &dnsWatchState{}
 
 	// First tick only records the baseline.
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if resyncs != 0 {
 		t.Fatalf("first tick re-synced; want baseline only, got %d", resyncs)
 	}
 	// Unchanged environment: still quiet.
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if resyncs != 0 {
 		t.Fatalf("unchanged env re-synced=%d, want 0", resyncs)
 	}
 	// VPN connects: the fingerprint changes, re-sync fires once.
 	fp = "1.1.1.1,10.0.0.1|1"
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if resyncs != 1 {
 		t.Fatalf("changed env re-syncs=%d, want 1", resyncs)
 	}
 	// Stable at the new value: no further re-sync.
-	tickDNS(deps, state, "test")
+	tickDNS(deps, state, "test", false)
 	if resyncs != 1 {
 		t.Fatalf("re-syncs after settle=%d, want 1", resyncs)
 	}
@@ -383,7 +383,7 @@ func TestTickDNS_exposeMappingRepair(t *testing.T) {
 			log:                 func(level, _ string, _ ...any) { logs = append(logs, level) },
 		}
 		state := &dnsWatchState{lastOK: ptrBool(true)}
-		tickDNS(deps, state, "test")
+		tickDNS(deps, state, "test", false)
 
 		if exposeCalls != 1 {
 			t.Errorf("expose repair calls=%d, want 1", exposeCalls)
@@ -419,7 +419,7 @@ func TestTickDNS_exposeMappingRepair(t *testing.T) {
 			log:                 func(string, string, ...any) {},
 		}
 		state := &dnsWatchState{lastOK: ptrBool(false)}
-		tickDNS(deps, state, "test")
+		tickDNS(deps, state, "test", false)
 
 		if exposeCalls != 1 {
 			t.Errorf("expose repair calls=%d, want 1", exposeCalls)
@@ -442,7 +442,7 @@ func TestTickDNS_exposeMappingRepair(t *testing.T) {
 			log:                 func(level, _ string, _ ...any) { logs = append(logs, level) },
 		}
 		state := &dnsWatchState{lastOK: ptrBool(false)}
-		tickDNS(deps, state, "test")
+		tickDNS(deps, state, "test", false)
 
 		if resolverCalls != 1 {
 			t.Errorf("resolver repair must still run after a re-render error, got %d", resolverCalls)
@@ -490,6 +490,46 @@ func TestRunDNSLoop_linkChangeKicksTick(t *testing.T) {
 	case <-ticks:
 	case <-time.After(500 * time.Millisecond):
 		t.Fatal("ticker fire did not trigger a tick")
+	}
+}
+
+// TestRunDNSLoop_linkChangeKicksTickWhileIdle pins the whole point of the link
+// watcher: a host network change must re-probe immediately even on an idle or
+// locked session. The polling backoff (idleSkipEveryN) exists to save battery
+// on the timer path, but a VPN connect/disconnect or wifi switch frequently
+// happens while the laptop is asleep or on the lock screen, so routing the
+// link-change tick through the same idle skip would drop ~9 of every 10 events
+// and leave containers on the stale resolver until the next Nth poll.
+func TestRunDNSLoop_linkChangeKicksTickWhileIdle(t *testing.T) {
+	ticks := make(chan struct{}, 16)
+	deps := dnsWatchDeps{
+		check:         func(string) (bool, error) { ticks <- struct{}{}; return true, nil },
+		idleOrLocked:  func() bool { return true },
+		publishStatus: func() {},
+		log:           func(string, string, ...any) {},
+	}
+	state := &dnsWatchState{}
+	tickerC := make(chan time.Time, 4)
+	linkC := make(chan struct{}, 4)
+	done := make(chan struct{})
+	stopped := make(chan struct{})
+	go func() { runDNSLoop(deps, state, "test", tickerC, linkC, done); close(stopped) }()
+	defer func() { close(done); <-stopped }()
+
+	// The initial poll is skipped while idle (tickCount 1, not the Nth), so it
+	// must not probe — confirm the loop is genuinely in the backoff state.
+	select {
+	case <-ticks:
+		t.Fatal("idle initial poll probed; backoff should have skipped it")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	// The link change must probe right away despite being idle.
+	linkC <- struct{}{}
+	select {
+	case <-ticks:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("link change did not kick a tick while idle")
 	}
 }
 

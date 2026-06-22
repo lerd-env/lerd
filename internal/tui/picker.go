@@ -102,6 +102,31 @@ func (m *Model) pickerIsDisabled(i int) bool {
 	return i >= 0 && i < len(m.pickerDisabled) && m.pickerDisabled[i]
 }
 
+// movePickerCursor moves the picker cursor by delta, skipping disabled
+// (out-of-range) entries in the direction of travel so navigation never parks
+// on a version that applyPicker would silently reject. The cursor stays put
+// when every step that way is disabled. Both the modal key handler and the
+// (dead) detail-pane moveCursor branch funnel through here so the skip is
+// applied however the cursor moves.
+func (m *Model) movePickerCursor(delta int) {
+	n := len(m.pickerOptions)
+	if n == 0 {
+		return
+	}
+	step := 1
+	if delta < 0 {
+		step = -1
+	}
+	next := clamp(m.pickerCursor+delta, 0, n-1)
+	for next >= 0 && next < n && m.pickerIsDisabled(next) {
+		next += step
+	}
+	if next < 0 || next >= n || m.pickerIsDisabled(next) {
+		return
+	}
+	m.pickerCursor = next
+}
+
 // closePicker exits picker mode without applying a choice.
 func (m *Model) closePicker() {
 	m.pickerKind = kindInfo
