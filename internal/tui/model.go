@@ -1395,24 +1395,7 @@ func (m *Model) moveCursor(delta int) {
 		m.svcCursor = clamp(m.svcCursor+delta, 0, max(0, len(m.visibleServices())-1))
 	case paneDetail:
 		if m.pickerKind != kindInfo {
-			n := len(m.pickerOptions)
-			if n == 0 {
-				return
-			}
-			next := clamp(m.pickerCursor+delta, 0, n-1)
-			// Skip over disabled (out-of-range) entries in the direction of
-			// travel; fall back to the original cursor if every step is disabled.
-			step := 1
-			if delta < 0 {
-				step = -1
-			}
-			for next >= 0 && next < n && m.pickerIsDisabled(next) {
-				next += step
-			}
-			if next < 0 || next >= n || m.pickerIsDisabled(next) {
-				return
-			}
-			m.pickerCursor = next
+			m.movePickerCursor(delta)
 			return
 		}
 		switch m.detailMode {

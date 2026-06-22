@@ -1,6 +1,10 @@
 package tui
 
-import "testing"
+import (
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+)
 
 func TestPhpDisabledMask(t *testing.T) {
 	versions := []string{"7.4", "8.1", "8.3", "8.4", "8.5"}
@@ -73,5 +77,35 @@ func TestPickerNavSkipsDisabled(t *testing.T) {
 	m.moveCursor(-1)
 	if m.pickerCursor != 0 {
 		t.Errorf("after up from 3, cursor = %d, want 0", m.pickerCursor)
+	}
+}
+
+// While the picker modal is open, every key is routed through handlePickerKey,
+// not moveCursor, so the skip-disabled logic has to live there too. Without it
+// the arrows park on a dimmed out-of-range version and enter silently no-ops.
+func TestPickerKeyNavSkipsDisabled(t *testing.T) {
+	m := &Model{
+		activeTab:      tabSites,
+		focus:          paneDetail,
+		pickerKind:     kindPHP,
+		pickerOptions:  []string{"7.4", "8.1", "8.3", "8.4"},
+		pickerDisabled: []bool{false, true, true, false},
+		pickerCursor:   0,
+	}
+	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyDown})
+	if m.pickerCursor != 3 {
+		t.Errorf("after down from 0, cursor = %d, want 3 (8.1 and 8.3 disabled)", m.pickerCursor)
+	}
+	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyUp})
+	if m.pickerCursor != 0 {
+		t.Errorf("after up from 3, cursor = %d, want 0", m.pickerCursor)
+	}
+	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyEnd})
+	if m.pickerCursor != 3 {
+		t.Errorf("end cursor = %d, want 3 (last enabled)", m.pickerCursor)
+	}
+	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyHome})
+	if m.pickerCursor != 0 {
+		t.Errorf("home cursor = %d, want 0 (first enabled)", m.pickerCursor)
 	}
 }

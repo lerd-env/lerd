@@ -196,25 +196,29 @@ func WatchDNS(interval time.Duration, tld string) {
 func runDNSLoop(d dnsWatchDeps, state *dnsWatchState, tld string,
 	tickerC <-chan time.Time, linkC <-chan struct{}, done <-chan struct{}) {
 
-	tickDNS(d, state, tld)
+	tickDNS(d, state, tld, false)
 	for {
 		select {
 		case <-done:
 			return
 		case <-tickerC:
-			tickDNS(d, state, tld)
+			tickDNS(d, state, tld, false)
 		case <-linkC:
-			tickDNS(d, state, tld)
+			// A real host network change must re-probe immediately, even on
+			// an idle/locked session, so it bypasses the polling backoff.
+			tickDNS(d, state, tld, true)
 		}
 	}
 }
 
-// tickDNS runs one iteration of the DNS health loop. It returns early
-// during idle backoff. On every tick that probes, the previous
-// observation is compared and a transition publishes KindStatus.
-func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string) {
+// tickDNS runs one iteration of the DNS health loop. A poll tick returns
+// early during idle backoff; a linkTriggered tick (a host network change)
+// always probes since that is the event the watcher exists to react to. On
+// every tick that probes, the previous observation is compared and a
+// transition publishes KindStatus.
+func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 	s.tickCount++
-	if d.idleOrLocked() && s.tickCount%idleSkipEveryN != 0 {
+	if !linkTriggered && d.idleOrLocked() && s.tickCount%idleSkipEveryN != 0 {
 		return
 	}
 
