@@ -1205,14 +1205,25 @@ func runStop(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
+// quitProcessUnits is the ordered set of host process units `lerd quit` tears
+// down after runStop. Unlike `lerd stop`, quit is a full teardown, so it
+// includes lerd-dns. lerd-watcher precedes lerd-dns because the watcher is the
+// only thing that restarts lerd-dns; stopping it first keeps dns down.
+func quitProcessUnits() []string {
+	return []string{"lerd-ui", "lerd-watcher", "lerd-tray", "lerd-dns"}
+}
+
 func runQuit(_ *cobra.Command, _ []string) error {
-	// Stop containers and services (same as stop).
+	// Stop containers and services (same as stop). `lerd stop` leaves lerd-dns
+	// up as install-level plumbing; `lerd quit` is a full teardown, so it also
+	// stops lerd-dns below.
 	if err := runStop(nil, nil); err != nil {
 		return err
 	}
 
-	// Stop process units.
-	for _, unit := range []string{"lerd-ui", "lerd-watcher", "lerd-tray"} {
+	// Stop process units. lerd-watcher comes before lerd-dns: the watcher is the
+	// only thing that restarts lerd-dns, so stopping it first keeps dns down.
+	for _, unit := range quitProcessUnits() {
 		s := feedback.Start("stopping " + unit)
 		if err := podman.StopUnit(unit); err != nil {
 			s.Fail(err)

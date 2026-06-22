@@ -205,3 +205,21 @@ func TestStopUnitSet_KeepsDNSRunning(t *testing.T) {
 		t.Error("stopUnitSet must exclude lerd-dns so it stays running across `lerd stop`")
 	}
 }
+
+// TestQuitProcessUnits_FullTeardown pins that `lerd quit` is a full teardown: it
+// stops lerd-dns (unlike `lerd stop`), and stops lerd-watcher before lerd-dns so
+// the watcher can't restart dns after it goes down.
+func TestQuitProcessUnits_FullTeardown(t *testing.T) {
+	units := quitProcessUnits()
+	dns := slices.Index(units, "lerd-dns")
+	watcher := slices.Index(units, "lerd-watcher")
+	if dns < 0 {
+		t.Fatal("quit must stop lerd-dns for a full teardown")
+	}
+	if watcher < 0 {
+		t.Fatal("quit must stop lerd-watcher")
+	}
+	if watcher > dns {
+		t.Errorf("lerd-watcher (%d) must be stopped before lerd-dns (%d) so the watcher can't restart dns", watcher, dns)
+	}
+}

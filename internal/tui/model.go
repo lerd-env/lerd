@@ -454,6 +454,12 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if m.detailMode == detailDumps {
 				return m, m.toggleDumpExpand()
 			}
+			// Row toggling only applies to a site's detail; the Dashboard parks
+			// focus on the detail pane with no list selection, so don't mutate
+			// the carried-over site there.
+			if m.activeTab != tabSites {
+				return m, nil
+			}
 			return m, m.detailToggleSelected(m.currentSite(), detailRows(m.currentSite()), navigableRows(detailRows(m.currentSite())))
 		}
 		return m, nil
@@ -1079,12 +1085,15 @@ func (m *Model) switchTab(t topTab) {
 	}
 	m.activeTab = t
 	m.closePicker()
+	// Settings / System / Debug are Sites-only detail surfaces; leaving the mode
+	// set when moving to another tab would render that stale surface there (and
+	// the S/Y/D toggles are gated to Sites, so it couldn't be cleared).
+	m.detailMode = detailSite
 	switch t {
 	case tabServices:
 		m.focus = paneServices
 	case tabSites:
 		m.focus = paneSites
-		m.detailMode = detailSite
 	case tabDashboard:
 		m.focus = paneDetail
 		m.detailScroll = 0
@@ -1512,14 +1521,14 @@ func (m *Model) cycleLogTarget(delta int) tea.Cmd {
 // per running-or-defined worker (each worker is a systemd user unit tailed
 // via journalctl --user). Services have just the one container.
 func (m *Model) currentLogTargets() []LogTarget {
-	switch m.focus {
-	case paneSites, paneDetail:
+	switch m.activeTab {
+	case tabSites:
 		s := m.currentSite()
 		if s == nil {
 			return nil
 		}
 		return logTargetsForSite(s)
-	case paneServices:
+	case tabServices:
 		svc := m.currentService()
 		if svc == nil {
 			return nil
@@ -1651,13 +1660,13 @@ func (m *Model) currentService() *ServiceRow {
 }
 
 func (m *Model) actionStart() tea.Cmd {
-	switch m.focus {
-	case paneSites, paneDetail:
+	switch m.activeTab {
+	case tabSites:
 		if s := m.currentSite(); s != nil {
 			m.setStatus("starting "+s.Name+"…", 5*time.Second)
 			return runLerd(s.Path, "unpause", s.Name)
 		}
-	case paneServices:
+	case tabServices:
 		if svc := m.currentService(); svc != nil {
 			if cmd := m.workerActionCmd(svc, "start"); cmd != nil {
 				return cmd
@@ -1702,13 +1711,13 @@ func (m *Model) workerActionCmd(svc *ServiceRow, verb string) tea.Cmd {
 }
 
 func (m *Model) actionStop() tea.Cmd {
-	switch m.focus {
-	case paneSites, paneDetail:
+	switch m.activeTab {
+	case tabSites:
 		if s := m.currentSite(); s != nil {
 			m.setStatus("pausing "+s.Name+"…", 5*time.Second)
 			return runLerd(s.Path, "pause", s.Name)
 		}
-	case paneServices:
+	case tabServices:
 		if svc := m.currentService(); svc != nil {
 			if cmd := m.workerActionCmd(svc, "stop"); cmd != nil {
 				return cmd
@@ -1721,13 +1730,13 @@ func (m *Model) actionStop() tea.Cmd {
 }
 
 func (m *Model) actionRestart() tea.Cmd {
-	switch m.focus {
-	case paneSites, paneDetail:
+	switch m.activeTab {
+	case tabSites:
 		if s := m.currentSite(); s != nil {
 			m.setStatus("restarting "+s.Name+"…", 5*time.Second)
 			return runLerd(s.Path, "restart", s.Name)
 		}
-	case paneServices:
+	case tabServices:
 		if svc := m.currentService(); svc != nil {
 			if cmd := m.workerActionCmd(svc, "restart"); cmd != nil {
 				return cmd
@@ -1745,8 +1754,8 @@ func (m *Model) actionRestart() tea.Cmd {
 // site's project path means PHP tools (composer, artisan) run as if the
 // user had cd'd into the project first.
 func (m *Model) actionShell() tea.Cmd {
-	switch m.focus {
-	case paneSites, paneDetail:
+	switch m.activeTab {
+	case tabSites:
 		s := m.currentSite()
 		if s == nil {
 			return nil
@@ -1761,7 +1770,7 @@ func (m *Model) actionShell() tea.Cmd {
 			return nil
 		}
 		return runShellIn(container, s.Path)
-	case paneServices:
+	case tabServices:
 		svc := m.currentService()
 		if svc == nil {
 			return nil
@@ -1810,7 +1819,7 @@ func (m *Model) siteByName(name string) *siteinfo.EnrichedSite {
 }
 
 func (m *Model) actionPauseToggle() tea.Cmd {
-	if m.focus != paneSites && m.focus != paneDetail {
+	if m.activeTab != tabSites {
 		return nil
 	}
 	s := m.currentSite()

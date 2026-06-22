@@ -73,6 +73,7 @@ func TestServiceDetail_ShowsOpenDashboardHint(t *testing.T) {
 
 func TestOpenInBrowser_ServiceDashboard(t *testing.T) {
 	m := NewModel("test")
+	m.activeTab = tabServices
 	m.focus = paneServices
 	m.snap.Services = []ServiceRow{{Name: "rabbitmq", State: stateRunning, Dashboard: "http://localhost:15672"}}
 	m.svcCursor = 0

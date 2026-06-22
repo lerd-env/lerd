@@ -197,3 +197,56 @@ func TestLiveInterrupt_PlainModeJustRunsFn(t *testing.T) {
 		t.Fatal("Interrupt did not run fn in plain mode")
 	}
 }
+
+// TestWarn_PausesActiveLine verifies that a Warn emitted while a live spinner is
+// animating is routed through Interrupt: the spinner doesn't clobber it and the
+// warning text reaches the writer. This is the env.go clobber regression.
+func TestWarn_PausesActiveLine(t *testing.T) {
+	var buf bytes.Buffer
+	withAnimatedBuffer(t, &buf)
+
+	l := &Live{msg: "configuring .env"}
+	prev := liveActive.Swap(l)
+	t.Cleanup(func() { liveActive.Store(prev) })
+
+	buf.Reset()
+	Warn("could not start %s: boom", "mysql")
+
+	got := buf.String()
+	if !strings.Contains(got, "could not start mysql") {
+		t.Fatalf("warning text missing: %q", got)
+	}
+	// The line must have been cleared (Interrupt's \r\033[2K) so the spinner
+	// redraw doesn't overwrite the warning.
+	if !strings.Contains(got, "\r\033[2K") {
+		t.Fatalf("warn did not pause/clear the live line: %q", got)
+	}
+}
+
+// TestStartLive_TracksActiveAcrossNesting verifies StartLive registers the active
+// line and Done/Fail restore the previous one, so a nested configure step doesn't
+// leave the outer line unregistered (which would re-expose the clobber).
+func TestStartLive_TracksActiveAcrossNesting(t *testing.T) {
+	var buf bytes.Buffer
+	withAnimatedBuffer(t, &buf)
+
+	baseline := liveActive.Load()
+	t.Cleanup(func() { liveActive.Store(baseline) })
+
+	outer := StartLive("outer")
+	if liveActive.Load() != outer {
+		t.Fatal("StartLive did not register the outer line")
+	}
+	inner := StartLive("inner")
+	if liveActive.Load() != inner {
+		t.Fatal("nested StartLive did not register the inner line")
+	}
+	inner.Done()
+	if liveActive.Load() != outer {
+		t.Fatal("inner Done did not restore the outer line")
+	}
+	outer.Fail(nil)
+	if liveActive.Load() != baseline {
+		t.Fatal("outer Fail did not restore the baseline active line")
+	}
+}

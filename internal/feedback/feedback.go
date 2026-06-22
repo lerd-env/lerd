@@ -225,17 +225,37 @@ func Line(msg string) {
 // Note prints a dim, indented sub-detail under a step (e.g. a log hint). It has
 // no glyph so it reads as secondary to the step lines above it.
 func Note(msg string) {
-	mu.Lock()
-	defer mu.Unlock()
-	fmt.Fprintf(target(), "%s  %s\n", pad, paint(dimStyle, msg))
+	emit(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(target(), "%s  %s\n", pad, paint(dimStyle, msg))
+	})
 }
 
 // Warn prints a warning line: an amber warning glyph and amber message. Use in
 // place of a plain "[WARN] …" print.
 func Warn(format string, a ...any) {
-	mu.Lock()
-	defer mu.Unlock()
-	fmt.Fprintf(target(), "%s%s %s\n", pad, paint(warnStyle, "⚠"), paint(warnStyle, fmt.Sprintf(format, a...)))
+	emit(func() {
+		mu.Lock()
+		defer mu.Unlock()
+		fmt.Fprintf(target(), "%s%s %s\n", pad, paint(warnStyle, "⚠"), paint(warnStyle, fmt.Sprintf(format, a...)))
+	})
+}
+
+// liveActive holds the spinner currently animating, if any, so standalone
+// prints (Warn / Note) can pause it and print cleanly above the live line
+// instead of being clobbered by its in-place redraw.
+var liveActive atomic.Pointer[Live]
+
+// emit runs a standalone print, routing it through the active live line's
+// Interrupt when one is animating so the spinner doesn't overwrite it. With no
+// live line it just runs fn.
+func emit(fn func()) {
+	if l := liveActive.Load(); l != nil {
+		l.Interrupt(fn)
+		return
+	}
+	fn()
 }
 
 // Done prints a green-check completion line with no timing, for operations
@@ -285,7 +305,8 @@ type Live struct {
 	msg    string
 	imu    sync.Mutex
 	items  []string
-	paused bool // guarded by the package mu; set by Interrupt
+	paused bool  // guarded by the package mu; set by Interrupt
+	prev   *Live // the live line this one suspends, restored on Done/Fail
 	stop   chan struct{}
 	wg     sync.WaitGroup
 }
@@ -295,6 +316,11 @@ type Live struct {
 func StartLive(msg string) *Live {
 	l := &Live{msg: msg}
 	if Animated() {
+		// Register as the active line (saving any line we nest inside) so
+		// Warn/Note route through Interrupt while this spinner animates. Only
+		// the animated spinner clobbers standalone prints, so plain mode skips
+		// this and prints warnings on their own line as before.
+		l.prev = liveActive.Swap(l)
 		l.stop = make(chan struct{})
 		l.wg.Add(1)
 		go l.spin()
@@ -358,12 +384,18 @@ func (l *Live) Interrupt(fn func()) {
 		return
 	}
 	mu.Lock()
+	// Save and restore the prior paused state so nested Interrupts (e.g. a
+	// child step that itself emits a Warn) keep the line paused until the
+	// outermost call returns, rather than resuming the spinner early.
+	wasPaused := l.paused
 	l.paused = true
-	fmt.Fprint(target(), "\r\033[2K")
+	if !wasPaused {
+		fmt.Fprint(target(), "\r\033[2K")
+	}
 	mu.Unlock()
 	fn()
 	mu.Lock()
-	l.paused = false
+	l.paused = wasPaused
 	mu.Unlock()
 }
 
@@ -382,6 +414,7 @@ func (l *Live) Add(item string) {
 
 // Done stops the spinner, leaving the ✓ line (checkbox replaces the loader).
 func (l *Live) Done() {
+	liveActive.Store(l.prev)
 	if !Animated() {
 		mu.Lock()
 		fmt.Fprintf(target(), "%s%s %s\n", pad, paint(okStyle, "✓"), l.msg)
@@ -398,6 +431,7 @@ func (l *Live) Done() {
 
 // Fail stops the spinner and finalises the line with a red cross.
 func (l *Live) Fail(err error) {
+	liveActive.Store(l.prev)
 	if Animated() {
 		close(l.stop)
 		l.wg.Wait()

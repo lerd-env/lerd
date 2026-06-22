@@ -407,23 +407,26 @@ func readBoundedFile(path string, max int64) ([]byte, error) {
 // domain. Falls back to a status-bar message when there's nothing to open or
 // the platform lacks a known opener.
 func (m *Model) openInBrowserCmd() tea.Cmd {
-	if m.focus == paneServices {
+	switch m.activeTab {
+	case tabServices:
 		return m.openServiceDashboardCmd()
+	case tabSites:
+		site := m.currentSite()
+		if site == nil {
+			return nil
+		}
+		domain := site.PrimaryDomain()
+		if domain == "" {
+			m.setStatus("no domain to open for "+site.Name, 3*time.Second)
+			return nil
+		}
+		scheme := "http"
+		if site.Secured {
+			scheme = "https"
+		}
+		return m.openURL(scheme + "://" + domain)
 	}
-	site := m.currentSite()
-	if site == nil {
-		return nil
-	}
-	domain := site.PrimaryDomain()
-	if domain == "" {
-		m.setStatus("no domain to open for "+site.Name, 3*time.Second)
-		return nil
-	}
-	scheme := "http"
-	if site.Secured {
-		scheme = "https"
-	}
-	return m.openURL(scheme + "://" + domain)
+	return nil
 }
 
 // openServiceDashboardCmd opens the focused service's dashboard URL. Worker
