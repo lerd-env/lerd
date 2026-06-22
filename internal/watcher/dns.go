@@ -1,6 +1,9 @@
 package watcher
 
 import (
+	"bytes"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strings"
@@ -99,8 +102,18 @@ func defaultRepairExposeMapping(tld string) (bool, error) {
 	if answer, err := dns.DnsmasqAnswer(tld); err == nil && answer == target {
 		return false, nil
 	}
+	// Gate the restart on the rendered config actually changing, not on the live
+	// answer: a freshly restarted lerd-dns lags a tick or two before it serves
+	// the new IP, and keying off DnsmasqAnswer alone would re-render and restart
+	// it again every failed tick until it settled. Comparing the on-disk config
+	// makes the repair idempotent so it restarts exactly once per real drift.
+	confPath := filepath.Join(config.DnsmasqDir(), "lerd.conf")
+	before, _ := os.ReadFile(confPath)
 	if err := dns.WriteDnsmasqConfig(config.DnsmasqDir()); err != nil {
 		return false, err
+	}
+	if after, _ := os.ReadFile(confPath); bytes.Equal(before, after) {
+		return false, nil
 	}
 	return true, podman.RestartUnit("lerd-dns")
 }

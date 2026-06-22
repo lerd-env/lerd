@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -456,6 +457,14 @@ func provisionAndSecure(label, result string, site config.Site, finish func(conf
 	if site.Secured {
 		cert := feedback.Start("generating certificate")
 		if err := certs.SecureSite(site); err != nil {
+			cert.Fail(err)
+			return err
+		}
+		// SecureSite swaps the vhost to HTTPS on disk but doesn't reload nginx;
+		// the finisher above only reloaded it for the plain-HTTP config, so
+		// without this the site keeps serving the now-deleted HTTP vhost from
+		// nginx's memory and HTTPS never comes up until an unrelated reload.
+		if err := nginx.Reload(); err != nil {
 			cert.Fail(err)
 			return err
 		}

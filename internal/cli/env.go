@@ -208,6 +208,18 @@ func envInfo(format string, a ...any) {
 	}
 }
 
+// envInterrupt runs fn, pausing the live line first (when active) so fn's raw
+// stdout — a service-start notice, a child process's output — prints cleanly
+// above the spinner instead of fighting its in-place redraw. With no live line
+// it just runs fn, so callers reached outside runEnvLive are unaffected.
+func envInterrupt(fn func()) {
+	if envLive != nil {
+		envLive.Interrupt(fn)
+		return
+	}
+	fn()
+}
+
 // envApplyLine reports a service as its connection values are applied: it feeds
 // the live line when active, otherwise prints the detailed "applying" line.
 func envApplyLine(svc string, detectedFromEnv bool) {
@@ -708,7 +720,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 		}
 		if svc.SiteInit != nil && svc.SiteInit.Exec != "" {
-			runSiteInit(svc, tplCtx)
+			envInterrupt(func() { runSiteInit(svc, tplCtx) })
 		}
 	}
 
@@ -792,8 +804,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				// Use the framework's console binary (e.g. "spark" for
 				// CodeIgniter), not a hardcoded "artisan", so key generation
 				// works for non-Laravel frameworks.
-				if err := consoleIn(cwd, fw.Console, kg.Command); err != nil {
-					feedback.Warn("%s failed: %v", kg.Command, err)
+				var keyErr error
+				envInterrupt(func() { keyErr = consoleIn(cwd, fw.Console, kg.Command) })
+				if keyErr != nil {
+					feedback.Warn("%s failed: %v", kg.Command, keyErr)
 				}
 			} else if kg.FallbackPrefix != "" {
 				envInfo("  Generating %s (vendor not installed yet)...\n", kg.EnvKey)
@@ -898,7 +912,7 @@ func ensureServiceRunning(name string) error {
 		return nil
 	}
 	if isKnownService(name) {
-		fmt.Printf("  Starting %s...\n", name)
+		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
 		if err := ensureServiceQuadlet(name); err != nil {
 			return err
 		}
@@ -912,7 +926,7 @@ func ensureServiceRunning(name string) error {
 				return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
 			}
 		}
-		fmt.Printf("  Starting %s...\n", name)
+		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
 		if err := ensureCustomServiceQuadlet(svc); err != nil {
 			return err
 		}

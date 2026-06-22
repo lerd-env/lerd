@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
@@ -69,10 +70,15 @@ var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "�
 const pad = " "
 
 var (
-	mu      sync.Mutex
-	out     io.Writer // nil → write to the current os.Stdout (so redirects are honoured)
-	colorOn = detectColor()
+	mu  sync.Mutex
+	out io.Writer // nil → write to the current os.Stdout (so redirects are honoured)
+	// colorOn is read on every paint() (including from the Live spinner
+	// goroutine) and flipped by SetTestWriter, so it's atomic rather than a
+	// plain bool guarded only on the write side.
+	colorOn atomic.Bool
 )
+
+func init() { colorOn.Store(detectColor()) }
 
 // target returns the writer to render to: an explicit test writer when set,
 // otherwise the live os.Stdout (looked up per call so os.Stdout redirection,
@@ -94,7 +100,7 @@ func detectColor() bool {
 // paint applies a style only when colour is enabled, so plain-mode output (and
 // tests) stay free of escape codes.
 func paint(st lipgloss.Style, s string) string {
-	if !colorOn {
+	if !colorOn.Load() {
 		return s
 	}
 	return st.Render(s)
@@ -253,17 +259,18 @@ func Confirm(question string, defaultYes bool) bool {
 
 // Animated reports whether output supports in-place animation (a colour TTY).
 // When false, Live degrades to a header line plus one plain line per item.
-func Animated() bool { return colorOn }
+func Animated() bool { return colorOn.Load() }
 
 // Live is a single in-place progress line with a trailing spinner that
 // accumulates completed items, e.g. "→ configuring .env… ✓ a · b · c ⠙". When
 // it finishes the spinner is dropped and the ✓ line stays put.
 type Live struct {
-	msg   string
-	imu   sync.Mutex
-	items []string
-	stop  chan struct{}
-	wg    sync.WaitGroup
+	msg    string
+	imu    sync.Mutex
+	items  []string
+	paused bool // guarded by the package mu; set by Interrupt
+	stop   chan struct{}
+	wg     sync.WaitGroup
 }
 
 // StartLive begins a live line with the given label. On a non-animated output
@@ -309,6 +316,9 @@ func (l *Live) draw(frame string) {
 	items := l.snapshot()
 	mu.Lock()
 	defer mu.Unlock()
+	if l.paused {
+		return
+	}
 	line := pad + paint(dimStyle, "→") + " " + paint(dimStyle, l.msg+"…")
 	if len(items) > 0 {
 		line += " " + paint(okStyle, "✓") + " " + strings.Join(items, " · ")
@@ -317,6 +327,27 @@ func (l *Live) draw(frame string) {
 		line += " " + paint(spinStyle, frame)
 	}
 	fmt.Fprintf(target(), "\r\033[2K%s", line)
+}
+
+// Interrupt suspends the spinner and clears its line so fn can print standalone
+// output (a booting service, a child process's stdout) above the live line
+// without the spinner's \r redraw clobbering it, then lets the spinner resume
+// and redraw beneath. On non-animated output it just runs fn. paused is read
+// and written under the package mu, the same lock draw holds while writing, so
+// no redraw can slip between the clear and fn's output.
+func (l *Live) Interrupt(fn func()) {
+	if !Animated() {
+		fn()
+		return
+	}
+	mu.Lock()
+	l.paused = true
+	fmt.Fprint(target(), "\r\033[2K")
+	mu.Unlock()
+	fn()
+	mu.Lock()
+	l.paused = false
+	mu.Unlock()
 }
 
 // Add records a completed item; the spinning line redraws to include it.
@@ -403,12 +434,14 @@ func (s *Summary) Print() {
 // restore func. Intended for tests in this and other packages.
 func SetTestWriter(w io.Writer) func() {
 	mu.Lock()
-	prevOut, prevColor := out, colorOn
-	out, colorOn = w, false
+	prevOut, prevColor := out, colorOn.Load()
+	out = w
+	colorOn.Store(false)
 	mu.Unlock()
 	return func() {
 		mu.Lock()
-		out, colorOn = prevOut, prevColor
+		out = prevOut
+		colorOn.Store(prevColor)
 		mu.Unlock()
 	}
 }

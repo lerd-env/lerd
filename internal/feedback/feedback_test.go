@@ -3,6 +3,7 @@ package feedback
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -117,5 +118,65 @@ func TestHumanDur(t *testing.T) {
 		if got := humanDur(d); got != want {
 			t.Errorf("humanDur(%v) = %q, want %q", d, got, want)
 		}
+	}
+}
+
+// withAnimatedBuffer forces animated mode against buf so the Live spinner path
+// runs. SetTestWriter forces plain mode (which short-circuits Interrupt), so we
+// set the package globals directly and restore them on cleanup.
+func withAnimatedBuffer(t *testing.T, buf *bytes.Buffer) {
+	t.Helper()
+	mu.Lock()
+	prevOut, prevColor := out, colorOn.Load()
+	out = buf
+	colorOn.Store(true)
+	mu.Unlock()
+	t.Cleanup(func() {
+		mu.Lock()
+		out = prevOut
+		colorOn.Store(prevColor)
+		mu.Unlock()
+	})
+}
+
+func TestLiveInterrupt_SuppressesSpinnerWhilePaused(t *testing.T) {
+	var buf bytes.Buffer
+	withAnimatedBuffer(t, &buf)
+
+	l := &Live{msg: "configuring .env"}
+	buf.Reset()
+
+	// A spinner tick that fires during the interrupt must not redraw, and the
+	// callback's own output must reach the writer.
+	l.Interrupt(func() {
+		l.draw("⠙") // simulate the spinner goroutine racing the pause
+		fmt.Fprint(&buf, "  Starting mysql...\n")
+	})
+
+	got := buf.String()
+	if strings.Contains(got, "configuring .env") {
+		t.Fatalf("spinner redrew while paused: %q", got)
+	}
+	if !strings.Contains(got, "Starting mysql...") {
+		t.Fatalf("interrupt callback output missing: %q", got)
+	}
+
+	// After the interrupt the spinner resumes and draws normally again.
+	buf.Reset()
+	l.draw("⠹")
+	if !strings.Contains(buf.String(), "configuring .env") {
+		t.Fatalf("spinner did not resume after interrupt: %q", buf.String())
+	}
+}
+
+func TestLiveInterrupt_PlainModeJustRunsFn(t *testing.T) {
+	var buf bytes.Buffer
+	defer SetTestWriter(&buf)()
+
+	l := StartLive("configuring .env")
+	ran := false
+	l.Interrupt(func() { ran = true })
+	if !ran {
+		t.Fatal("Interrupt did not run fn in plain mode")
 	}
 }

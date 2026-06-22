@@ -36,7 +36,9 @@ func ensureSiteForCwd() (*config.Site, error) {
 		return nil, errNotLinked()
 	}
 
-	if err := runLink(nil); err != nil {
+	// runLinkOrInit, not runLink, so a fresh non-PHP/empty project gets the same
+	// init wizard `lerd link` now offers instead of a bare PHP link.
+	if err := runLinkOrInit(nil); err != nil {
 		return nil, err
 	}
 	site, err := config.FindSiteByPath(cwd)

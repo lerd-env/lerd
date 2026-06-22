@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -35,10 +36,22 @@ func BinPath() string {
 	return filepath.Join(config.BinDir(), binName)
 }
 
-// Installed reports whether the managed binary is present.
+// stampPath is the sidecar that records which Version the on-disk binary is, so
+// bumping Version re-fetches instead of silently reusing the stale binary.
+func stampPath() string {
+	return BinPath() + ".version"
+}
+
+// Installed reports whether the managed binary is present and matches the
+// pinned Version. A bare binary with no (or a mismatched) stamp counts as not
+// installed so EnsureBinary upgrades it.
 func Installed() bool {
 	info, err := os.Stat(BinPath())
-	return err == nil && !info.IsDir()
+	if err != nil || info.IsDir() {
+		return false
+	}
+	stamp, err := os.ReadFile(stampPath())
+	return err == nil && strings.TrimSpace(string(stamp)) == Version
 }
 
 // assetName returns the release tarball name for the host platform.
@@ -95,7 +108,13 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("phpantom_lsp download: HTTP %d for %s", resp.StatusCode, url)
 	}
-	return extractBinary(resp.Body, BinPath())
+	if err := extractBinary(resp.Body, BinPath()); err != nil {
+		return err
+	}
+	// Stamp the version last, so a binary is only ever considered up to date
+	// once it is fully in place. A failed stamp write leaves Installed() false
+	// and the next call re-fetches rather than running an unstamped binary.
+	return os.WriteFile(stampPath(), []byte(Version+"\n"), 0o644)
 }
 
 // extractBinary pulls the phpantom_lsp executable out of the gzipped tar
