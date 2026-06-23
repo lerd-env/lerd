@@ -129,11 +129,11 @@ bash install.sh --check
 ::: code-group
 
 ```bash [curl]
-curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+curl -fsSL https://lerd.sh/install.sh | bash
 ```
 
 ```bash [wget]
-wget -qO- https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+wget -qO- https://lerd.sh/install.sh | bash
 ```
 
 :::
@@ -176,7 +176,7 @@ If you're running a local development build (a `git describe` version like `1.25
 
 ```bash
 lerd uninstall                                    # tears down launchd agents, DNS resolver, containers
-curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash -s -- --uninstall
+curl -fsSL https://lerd.sh/install.sh | bash -s -- --uninstall
 ```
 
 Run `lerd uninstall` first (while the binary is still present) so the DNS resolver and Podman state are cleaned up, then the installer's `--uninstall` removes the launchd agents and the binary. If you installed via Homebrew, finish with `brew uninstall lerd` instead of the second command. On macOS the installer detects when the binary is still present and pauses to remind you to run `lerd uninstall` first, since the DNS resolver (`/etc/resolver/test`, removed with sudo) and the Podman machine are unreachable once the binary is gone; if it can't reach a terminal it prints the manual removal commands at the end instead.

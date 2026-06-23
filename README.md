@@ -104,7 +104,7 @@ lerd update
 ### macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+curl -fsSL https://lerd.sh/install.sh | bash
 ```
 
 Update later with:
