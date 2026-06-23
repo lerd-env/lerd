@@ -442,11 +442,10 @@ remove_from_path() {
   local rc; rc="$(detect_shell_rc)"
   if [ ! -f "$rc" ]; then return; fi
 
-  # Remove the block: marker line + the next line
+  # Remove the block: marker line + the next line. {N;d;} is POSIX and works on
+  # both GNU and BSD/macOS sed, unlike the GNU-only `,+1` relative address.
   if grep -q "$SHELL_MARKER" "$rc" 2>/dev/null; then
-    # portable: works on both GNU and BSD sed
-    sed -i.bak "/^${SHELL_MARKER}/,+1d" "$rc" && rm -f "${rc}.bak"
-    # also remove blank line before marker if present
+    sed -i.bak -e "/^${SHELL_MARKER}/{N;d;}" "$rc" && rm -f "${rc}.bak"
     info "Removed PATH entry from $rc"
   fi
 }
@@ -572,14 +571,15 @@ cmd_uninstall_macos() {
   local domain="gui/$(id -u)"
   local agents_dir="$HOME/Library/LaunchAgents"
 
-  # lerd's launch agents are named lerd-*.plist on disk, but their launchctl
-  # label is the `Label` key inside the plist (com.lerd.<name>), not the
-  # filename — read it back before booting the service out.
+  # lerd's launch agents are named lerd-*.plist on disk and their launchctl
+  # label is com.lerd.<filename-without-.plist> (see plistLabel in
+  # launchd_darwin.go), so derive it from the name rather than `defaults read`,
+  # which mis-resolves a .plist-suffixed path and would skip the bootout.
   if [ -d "$agents_dir" ]; then
     for f in "$agents_dir"/lerd-*.plist; do
       [ -f "$f" ] || continue
-      local label; label="$(defaults read "$f" Label 2>/dev/null || true)"
-      [ -n "$label" ] && launchctl bootout "$domain/$label" 2>/dev/null || true
+      local label; label="com.lerd.$(basename "$f" .plist)"
+      launchctl bootout "$domain/$label" 2>/dev/null || true
       rm -f "$f"
     done
     info "Removed launchd agents from $agents_dir"
