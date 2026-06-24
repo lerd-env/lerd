@@ -50,7 +50,7 @@ Actions: `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migr
 
 #### `db` — databases
 Actions: `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete`.
-- `set` picks the project DB (`database`: sqlite, mysql, postgres, or a family alternate like mariadb / postgres-pgvector / mysql-5-7); persists to `.lerd.yaml`, rewrites `DB_` keys, starts the service, creates the DB + `_testing`
+- `set` picks the project DB (`database`: sqlite, mysql, postgres, or a family alternate like mariadb / postgres-pgvector / postgres-timescaledb / mysql-5-7); persists to `.lerd.yaml`, rewrites `DB_` keys, starts the service, creates the DB + `_testing`
 - `move` migrates sites between two installed same-family services (`from`/`to`, `sites: [...]` or `all: true`) and repoints each `.env`; source data is left intact
 - `create`/`export`/`import` auto-detect service and database; pass `service` to override
 - `snapshot`/`snapshots`/`restore`/`snapshot_delete` are named, restorable snapshots (MySQL/MariaDB/PostgreSQL); `restore` is destructive; `all_databases` covers the whole service

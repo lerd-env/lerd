@@ -14,6 +14,7 @@ export default defineConfig({
     hostname: SITE_URL,
     transformItems(items) {
       // Static digest pages live in public/ and aren't page-derived, so add them by hand.
+      items.push({ url: 'digest/v1.26.0.html' })
       items.push({ url: 'digest/v1.25.0.html' })
       items.push({ url: 'digest/v1.24.0.html' })
       return items

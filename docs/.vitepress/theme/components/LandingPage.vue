@@ -402,7 +402,7 @@ onBeforeUnmount(() => {
             <div class="feat col-3 reveal d1" data-tilt>
               <div class="feat-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M8 9h8M8 13h5"/><path d="M21 12a9 9 0 1 1-3.5-7.1L21 4v5h-5"/></svg></div>
               <h3>In-browser Tinker REPL</h3>
-              <p>A PHP REPL per site with autocomplete for your models, composer helpers &amp; built-ins. Live syntax checking and a collapsible tree for <code class="kbd">dump()</code> output. Works on Laravel, Symfony &amp; any composer project.</p>
+              <p>A PHP REPL per site on the Monaco editor, backed by phpantom_lsp, a real language server that resolves your actual models, relationships &amp; vendor classes, with quick-fix imports, per-line results and inlined SQL.</p>
               <span class="feat-tag">// artisan tinker, in the UI</span>
             </div>
           </div>
@@ -410,7 +410,7 @@ onBeforeUnmount(() => {
           <div class="feat-more">
             <span class="feat-more-label">Also includes</span>
             <span class="feat-chip">FrankenPHP &amp; Octane</span>
-            <span class="feat-chip">btop-style TUI &amp; system tray</span>
+            <span class="feat-chip">Tabbed mouse-driven TUI &amp; system tray</span>
             <span class="feat-chip">Polyglot sites · Node, Python, Go &amp; Ruby</span>
           </div>
         </div>
@@ -521,11 +521,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.25.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.26.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.25.0 dev digest</span>
-            <span class="digest-sub">Idle-suspend, bun runtime, custom PHP images, FrankenPHP parity, and a broader dashboard.</span>
+            <span class="digest-title">v1.26.0 dev digest</span>
+            <span class="digest-sub">macOS installer, Monaco editors with a PHP language server behind Tinker, a tabbed TUI, a styled CLI, and a security pass.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>

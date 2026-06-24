@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lerd v1.26.0 — dev digest</title>
+<meta name="description" content="Engineering digest for lerd v1.26.0: macOS one-line installer, Monaco editors with a PHP language server behind Tinker, a tabbed mouse-driven TUI, a styled CLI feedback layer, and a security pass.">
+<meta name="theme-color" content="#ff4538">
+<link rel="canonical" href="https://lerd.sh/digest/v1.26.0.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Lerd">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="lerd v1.26.0 — dev digest">
+<meta property="og:description" content="Engineering digest for lerd v1.26.0: macOS one-line installer, Monaco editors with a PHP language server behind Tinker, a tabbed mouse-driven TUI, a styled CLI feedback layer, and a security pass.">
+<meta property="og:url" content="https://lerd.sh/digest/v1.26.0.html">
+<meta property="og:image" content="https://lerd.sh/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Lerd v1.26.0 dev digest">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lerd v1.26.0 — dev digest">
+<meta name="twitter:description" content="macOS installer, Monaco + phpantom Tinker, a tabbed TUI, a styled CLI, and a security pass.">
+<meta name="twitter:image" content="https://lerd.sh/assets/social-preview.png">
+<meta name="twitter:image:alt" content="Lerd v1.26.0 dev digest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #0f0f11;
+    --panel: #131316;
+    --panel-2: #18181c;
+    --line: #232329;
+    --line-2: #2e2e36;
+    --text: #ece9e2;
+    --muted: #9b978e;
+    --dim: #67645c;
+    --red: #ff4538;
+    --red-soft: rgba(255,69,56,0.12);
+    --amber: #eda33b;
+    --amber-soft: rgba(237,163,59,0.12);
+    --green: #3dd68c;
+    --green-soft: rgba(61,214,140,0.11);
+    --blue: #6cb2ff;
+    --blue-soft: rgba(108,178,255,0.11);
+    --violet: #b394ff;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Archivo", system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--red); color: #0a0a0b; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 999;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+
+  code, .mono { font-family: var(--mono); }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 48px); }
+
+  /* ---------- brand bar ---------- */
+  .brandbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px clamp(20px, 4vw, 48px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    background: var(--red); border-radius: 7px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 800; font-size: 17px; color: #fff;
+    box-shadow: 0 0 22px rgba(255,69,56,0.35);
+  }
+  .brand-name { font-weight: 700; font-size: 16px; }
+  .brand-path { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .brand-path b { color: var(--red); font-weight: 400; }
+  .gh-link {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 13px; transition: 0.2s;
+  }
+  .gh-link:hover { border-color: var(--red); color: var(--text); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: clamp(48px, 7vw, 88px) 0 clamp(36px, 5vw, 56px);
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 55% 60% at 12% 0%, rgba(255,69,56,0.09), transparent 60%),
+      radial-gradient(ellipse 40% 40% at 95% 90%, rgba(237,163,59,0.04), transparent 60%);
+  }
+  .hero-kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .hero-kicker .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 12px var(--red); animation: blink 1.6s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .hero-kicker em { color: var(--amber); font-style: normal; }
+
+  .hero h1 {
+    font-stretch: 125%; font-weight: 900;
+    font-size: clamp(56px, 10vw, 118px);
+    line-height: 0.95; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero h1 em { font-style: normal; color: var(--red); text-shadow: 0 0 38px rgba(255,69,56,0.45); }
+  .hero .sub {
+    font-stretch: 115%; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; font-size: clamp(14px, 1.8vw, 19px);
+    color: var(--dim); margin-top: 8px;
+  }
+  .hero .sub b { color: var(--text); }
+  .hero .lede {
+    margin-top: 24px; max-width: 700px;
+    color: var(--muted); font-size: 16px; line-height: 1.7;
+  }
+  .hero .lede b { color: var(--text); font-weight: 600; }
+
+  .stats {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; background: var(--bg-2);
+  }
+  .stat { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat .n { font-stretch: 120%; font-weight: 900; font-size: clamp(20px, 2.4vw, 28px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 2px; }
+  .stat.red .n { color: var(--red); }
+  .stat.green .n { color: var(--green); }
+  .stat.amber .n { color: var(--amber); }
+
+  .diffbar { margin-top: 18px; }
+  .diffbar .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .diffbar .bar i { display: block; height: 100%; }
+  .diffbar .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .diffbar .legend s { text-decoration: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---------- pill nav ---------- */
+  .pillnav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,11,0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px clamp(20px, 4vw, 48px);
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pillnav::-webkit-scrollbar { display: none; }
+  .pillnav a {
+    font-family: var(--mono); font-size: 12px; white-space: nowrap;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 6px 15px; transition: 0.2s;
+  }
+  .pillnav a i { font-style: normal; color: var(--dim); margin-right: 6px; }
+  .pillnav a:hover { color: var(--text); border-color: var(--line-2); }
+  .pillnav a.active { color: var(--red); border-color: rgba(255,69,56,0.5); background: var(--red-soft); }
+  .pillnav a.active i { color: var(--red); }
+
+  /* ---------- breaking ---------- */
+  .breaking {
+    margin: 36px 0 0;
+    border: 1px solid rgba(255,69,56,0.35); border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,69,56,0.06), rgba(255,69,56,0.01) 60%);
+  }
+  .breaking-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px; border-bottom: 1px solid rgba(255,69,56,0.25);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; font-weight: 700; color: var(--red);
+  }
+  .breaking-head .sig { animation: blink 1.4s steps(1) infinite; }
+  .breaking-body { padding: 18px 20px 20px; color: var(--muted); font-size: 14px; }
+  .breaking-body b { color: var(--text); }
+  .breaking-body code { font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; color: var(--amber); }
+
+  /* ---------- sections ---------- */
+  section.chapter { padding: clamp(48px, 6vw, 76px) 0 0; }
+  .ch-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .ch-num {
+    font-family: var(--mono); font-size: 13px; color: var(--red);
+    border: 1px solid rgba(255,69,56,0.4); border-radius: 6px; padding: 3px 9px;
+  }
+  .ch-head h2 {
+    font-stretch: 122%; font-weight: 900; text-transform: uppercase;
+    letter-spacing: -0.015em; font-size: clamp(26px, 4vw, 40px); line-height: 1.05;
+  }
+  .ch-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .pill.feat { color: var(--green); background: var(--green-soft); border: 1px solid rgba(61,214,140,0.35); }
+  .pill.fix { color: var(--blue); background: var(--blue-soft); border: 1px solid rgba(108,178,255,0.35); }
+  .pill.brk { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.sec { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.ref { color: var(--amber); background: var(--amber-soft); border: 1px solid rgba(237,163,59,0.35); }
+  .pill.ui { color: var(--violet); background: rgba(179,148,255,0.1); border: 1px solid rgba(179,148,255,0.3); }
+
+  .ch-intro { margin-top: 18px; max-width: 760px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .ch-intro b { color: var(--text); font-weight: 600; }
+  .ch-intro code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: var(--amber); }
+
+  /* ---------- flow diagrams ---------- */
+  .flow-wrap { margin-top: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); overflow: hidden; }
+  .flow-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); padding: 12px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .flow { display: flex; align-items: stretch; padding: 24px 18px; overflow-x: auto; }
+  .fnode {
+    flex: 0 0 auto;
+    border: 1px solid var(--line-2); border-radius: 10px;
+    background: var(--panel); padding: 12px 16px;
+    min-width: 132px; max-width: 200px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .fnode .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .fnode .v { font-weight: 700; font-size: 13.5px; line-height: 1.35; }
+  .fnode .d { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .fnode.hot { border-color: rgba(255,69,56,0.55); box-shadow: 0 0 22px rgba(255,69,56,0.12); }
+  .fnode.hot .t { color: var(--red); }
+  .fnode.ok { border-color: rgba(61,214,140,0.45); }
+  .fnode.ok .t { color: var(--green); }
+  .fnode.warn { border-color: rgba(237,163,59,0.45); }
+  .fnode.warn .t { color: var(--amber); }
+  .farr {
+    flex: 0 0 auto; display: flex; align-items: center;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 0 10px; white-space: nowrap;
+  }
+  .flow-note {
+    padding: 12px 18px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7;
+  }
+  .flow-note em { color: var(--amber); font-style: normal; }
+  .flow-note b { color: var(--green); font-weight: 600; }
+  .flow-note s { color: var(--red); text-decoration: none; }
+
+  /* vertical pipeline */
+  .pipe { padding: 20px 18px; }
+  .pipe-step { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 0 16px; position: relative; padding-bottom: 18px; }
+  .pipe-step:last-child { padding-bottom: 4px; }
+  .pipe-step::before { content: ""; position: absolute; left: 16px; top: 30px; bottom: 0; width: 1px; background: var(--line-2); }
+  .pipe-step:last-child::before { display: none; }
+  .pipe-n {
+    width: 33px; height: 33px; border-radius: 50%;
+    border: 1px solid var(--line-2); background: var(--panel);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted);
+    position: relative; z-index: 1;
+  }
+  .pipe-step.hot .pipe-n { border-color: var(--red); color: var(--red); }
+  .pipe-b { padding-top: 4px; }
+  .pipe-b h5 { font-size: 14px; font-weight: 700; }
+  .pipe-b p { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+  .pipe-b p code { color: var(--amber); }
+
+  /* ---------- cards ---------- */
+  .cards { margin-top: 26px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .cards.three { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); padding: 20px;
+    transition: border-color 0.25s, transform 0.25s;
+    min-width: 0;
+  }
+  .card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .card .card-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card h4 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; }
+  .card h4 .pr {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--dim);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 2px; transition: 0.2s;
+  }
+  .card h4 .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
+  .card p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-top: 7px; }
+  .card p code, .card li code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 0.5px 5px; border-radius: 4px; color: var(--amber); }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card ul { margin-top: 8px; padding-left: 0; list-style: none; }
+  .card li { color: var(--muted); font-size: 12.5px; line-height: 1.6; padding-left: 16px; position: relative; margin-top: 4px; }
+  .card li::before { content: "▸"; position: absolute; left: 0; color: var(--red); font-size: 10px; top: 3px; }
+  .card .file { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .file::before { content: "◇ "; color: var(--line-2); }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin-top: 16px;
+    background: #0c0c0e; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    background: var(--panel);
+  }
+  .code-bar .lang { color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 7px; font-size: 10px; }
+  .code pre {
+    padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+    color: #c9c5bd;
+  }
+  .code pre .k { color: var(--red); }
+  .code pre .s { color: var(--green); }
+  .code pre .c { color: var(--dim); font-style: italic; }
+  .code pre .f { color: var(--amber); }
+  .code pre .t { color: var(--blue); }
+  .code pre .del { color: #e2766c; background: rgba(255,69,56,0.08); display: inline-block; width: 100%; }
+  .code pre .add { color: #6fdca6; background: rgba(61,214,140,0.08); display: inline-block; width: 100%; }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  thead th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--dim); text-align: left; padding: 11px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--muted); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,0.015); }
+  tbody td b { color: var(--text); font-weight: 600; }
+  tbody td code { font-family: var(--mono); font-size: 11.5px; color: var(--amber); }
+  td .mini { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+
+  /* group chips for MCP */
+  .groups { margin-top: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .group-chip {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 13px 14px; transition: border-color 0.2s;
+  }
+  .group-chip:hover { border-color: rgba(255,69,56,0.45); }
+  .group-chip .g { font-family: var(--mono); font-weight: 700; font-size: 13.5px; color: var(--red); }
+  .group-chip .a { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 5px; line-height: 1.6; word-break: break-word; }
+
+  /* before/after MCP visual */
+  .ba { display: grid; grid-template-columns: 1fr auto 1.2fr; gap: 0; align-items: center; padding: 26px 18px; }
+  .ba-col { min-width: 0; }
+  .ba-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+  .ba-flat { position: relative; display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow: hidden; }
+  .ba-flat i {
+    font-family: var(--mono); font-size: 9px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-style: normal;
+  }
+  .ba-flat::after {
+    content: "× ~80 flat tools · manifest ~32 KB · reshapes mid-session";
+    position: absolute; inset: auto 0 0 0;
+    padding: 38px 0 2px;
+    background: linear-gradient(transparent, var(--bg-2) 70%);
+    font-family: var(--mono); font-size: 10.5px; color: var(--red);
+  }
+  .ba-arrow { font-family: var(--mono); color: var(--dim); padding: 0 22px; font-size: 14px; white-space: nowrap; }
+  .ba-after { display: flex; flex-direction: column; gap: 8px; }
+  .ba-after .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ba-after .gten {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text);
+    border: 1px solid rgba(255,69,56,0.4); background: var(--red-soft);
+    border-radius: 5px; padding: 2px 8px;
+  }
+  .ba-after .dis {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    border: 1px dashed rgba(237,163,59,0.5); border-radius: 8px; padding: 8px 14px;
+  }
+  .ba-after .han { font-family: var(--mono); font-size: 11px; color: var(--green); }
+
+  .footnote { margin-top: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7; }
+  .footnote em { color: var(--amber); font-style: normal; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: clamp(56px, 8vw, 96px);
+    border-top: 1px solid var(--line);
+    padding: clamp(44px, 6vw, 72px) clamp(20px, 4vw, 48px);
+    background: radial-gradient(ellipse 50% 60% at 88% 100%, rgba(255,69,56,0.07), transparent 60%);
+  }
+  .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1180px; margin: 0 auto; align-items: start; }
+  footer h2 { font-stretch: 125%; font-weight: 900; font-size: clamp(26px, 3.4vw, 40px); text-transform: uppercase; line-height: 1; letter-spacing: -0.02em; }
+  footer h2 span { color: var(--red); }
+  footer .fn { margin-top: 14px; color: var(--muted); font-size: 14px; max-width: 430px; }
+  footer .fn code { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .term { background: #0c0c0e; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+  .term-bar i:first-child { background: var(--red); }
+  .term-bar span { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .term-body { padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 2.05; overflow-x: auto; }
+  .term-body div { white-space: pre; }
+  .term-body .c { color: var(--dim); }
+  .term-body .p { color: var(--red); }
+  .term-body .out { color: var(--green); }
+  .foot-end { max-width: 1180px; margin: 48px auto 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .foot-end a { color: var(--muted); text-decoration: none; }
+  .foot-end a:hover { color: var(--red); }
+
+  /* reveal */
+  .fx { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1); }
+  .fx.in { opacity: 1; transform: none; }
+  .rise { opacity: 0; transform: translateY(14px); animation: rise 0.8s cubic-bezier(0.2,0.7,0.2,1) forwards; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.16s; } .d3 { animation-delay: 0.28s; } .d4 { animation-delay: 0.4s; } .d5 { animation-delay: 0.52s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  @media (max-width: 880px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .stat:nth-child(3) { border-right: 0; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
+    .cards, .cards.three { grid-template-columns: 1fr; }
+    .groups { grid-template-columns: repeat(2, 1fr); }
+    .ba { grid-template-columns: 1fr; gap: 18px; }
+    .ba-arrow { padding: 0; transform: rotate(90deg); width: fit-content; }
+    .foot-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    .fx, .rise { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="brandbar">
+  <a class="brand" href="https://github.com/geodro/lerd">
+    <span class="brand-mark">L</span>
+    <span><span class="brand-name">lerd</span> <span class="brand-path">geodro/<b>lerd</b></span></span>
+  </a>
+  <a class="gh-link" href="https://github.com/geodro/lerd/compare/v1.25.0...v1.26.0">v1.25.0…v1.26.0 ↗</a>
+</header>
+
+<nav class="pillnav">
+  <a href="#macos"><i>01</i> macOS Install</a>
+  <a href="#monaco"><i>02</i> Monaco &amp; Tinker</a>
+  <a href="#tui"><i>03</i> Tabbed TUI</a>
+  <a href="#cli"><i>04</i> CLI Feedback</a>
+  <a href="#linking"><i>05</i> Linking &amp; DNS</a>
+  <a href="#security"><i>06</i> Security</a>
+</nav>
+
+<section class="hero"><div class="wrap">
+  <div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-06-17 → 2026-06-24</em></div>
+  <h1 class="rise d2">v1.<em>26</em>.0</h1>
+  <div class="sub rise d2">MACOS INSTALLER · MONACO + PHPANTOM TINKER · TABBED TUI · <b>STYLED CLI</b></div>
+  <p class="lede rise d3">The same <code>install.sh</code> one-liner that installs on Linux now installs on
+  <b>macOS</b>, and <code>lerd update</code> self-updates there too. Every dashboard editor moves to
+  <b>Monaco</b>, and Tinker's intelligence now comes from <b>phpantom_lsp</b> reading the real project, with
+  inline SQL and per-line results. <code>lerd tui</code> becomes a <b>mouse-driven tabbed</b> dashboard, the
+  CLI gains a styled <b>feedback layer</b> with responsive tables, and the website moves to its lerd.sh home.
+  Underneath, a focused <b>security pass</b> closes name-injection, root-write and websocket-rebinding holes.</p>
+
+  <div class="stats rise d4">
+    <div class="stat"><div class="n">65</div><div class="l">commits</div></div>
+    <div class="stat"><div class="n">42</div><div class="l">merged PRs</div></div>
+    <div class="stat"><div class="n">343</div><div class="l">files</div></div>
+    <div class="stat green"><div class="n">+17.2k</div><div class="l">insertions</div></div>
+    <div class="stat red"><div class="n">−4.8k</div><div class="l">deletions</div></div>
+    <div class="stat amber"><div class="n">4</div><div class="l">contributors</div></div>
+  </div>
+
+  <div class="diffbar rise d5">
+    <div class="bar">
+      <i style="width:30%;background:var(--red)"></i>
+      <i style="width:22%;background:var(--amber)"></i>
+      <i style="width:14%;background:var(--green)"></i>
+      <i style="width:11%;background:var(--blue)"></i>
+      <i style="width:8%;background:var(--violet)"></i>
+      <i style="width:15%;background:var(--line-2)"></i>
+    </div>
+    <div class="legend">
+      <span><s style="background:var(--red)"></s>ui/web · Monaco + landing 30%</span>
+      <span><s style="background:var(--amber)"></s>cli · feedback + tables 22%</span>
+      <span><s style="background:var(--green)"></s>tui rewrite 14%</span>
+      <span><s style="background:var(--blue)"></s>installer · macOS 11%</span>
+      <span><s style="background:var(--violet)"></s>dns · lsp bridge 8%</span>
+      <span><s style="background:var(--line-2)"></s>docs · services · rest 15%</span>
+    </div>
+  </div>
+</div></section>
+
+<!-- 01 MACOS -->
+<section id="macos" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">01</span>
+    <h2>macOS in the one-line installer</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Recent Homebrew releases block third-party taps until you <code>brew trust</code> them, so the
+  tap stopped being a frictionless path. lerd's own <code>install.sh</code> is now <b>cross-platform</b>: the
+  same <code>curl … | bash</code> one-liner installs on macOS the way it already does on Linux. All the heavy
+  lifting, Podman Machine, mkcert, the <code>/etc/resolver</code> entry and the launchd plists, already lives
+  in the cross-platform <code>lerd install</code>, so the script just delivers the right binary and hands off.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>ONE-LINER → BINARY → HAND-OFF</span><span>linux + darwin</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">detect_os</div><div class="v">linux · darwin</div><div class="d">+ arm64 arch map</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">download</div><div class="v">darwin_&lt;arch&gt; asset</div><div class="d">release binary</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode warn"><div class="t">prereqs</div><div class="v">podman via brew</div><div class="d">no sudo</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode hot"><div class="t">lerd install</div><div class="v">machine · mkcert · resolver</div><div class="d">launchd plists</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">lerd update</div><div class="v">self-update</div><div class="d">reload agents</div></div>
+    </div>
+    <div class="flow-note"><b>PATH</b> is written to <code>.bash_profile</code> on macOS (login shell), <code>.bashrc</code> on Linux.
+    <em>brew</em> stays an alternative, with a <code>brew trust</code> note.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>install lerd on macOS</span><span class="lang">bash</span></div>
+    <pre><span class="c"># the Linux one-liner, now on macOS too</span>
+<span class="k">curl -fsSL</span> https://lerd.sh/install.sh | bash
+
+<span class="c"># or Homebrew, with a trust step on recent brew</span>
+<span class="k">brew trust</span> geodro/lerd &amp;&amp; <span class="k">brew install</span> geodro/lerd/lerd &amp;&amp; lerd install</pre>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Cross-platform install.sh <a class="pr" href="https://github.com/geodro/lerd/pull/549">#549</a></h4><p>darwin + arm64 detection, the <code>darwin_&lt;arch&gt;</code> asset, brew-installed prereqs without sudo.</p><span class="file">install.sh</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Self-update on macOS <a class="pr" href="https://github.com/geodro/lerd/pull/549">#549</a></h4><p><code>lerd update</code> pulls the darwin archive and reloads launchd agents, deferring to <code>brew upgrade</code> for a Cellar binary.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Clean uninstall <a class="pr" href="https://github.com/geodro/lerd/pull/549">#549</a></h4><p>Boots out the launchd agents by their real <code>com.lerd.*</code> Label and removes detached <code>lerd-*</code> containers, BSD-sed safe.</p></div>
+  </div>
+</div></section>
+
+<!-- 02 MONACO -->
+<section id="monaco" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">02</span>
+    <h2>Monaco editors &amp; a real Tinker</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro">Every in-browser editor moves from CodeMirror to <b>Monaco</b>, the Tinker REPL, the nginx
+  overrides, php.ini and service tuning, and the site <code>.env</code> editor, lazy-loaded so the always-on
+  bundle actually shrinks. Tinker's autocomplete, diagnostics, hover, quick fixes and formatting now come from
+  <b>phpantom_lsp</b>, a self-contained Rust PHP language server that analyses the <b>real project</b> instead
+  of static lists, so completions resolve actual models, relationships, scopes and vendor classes.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>BROWSER ↔ phpantom_lsp</span><span>/api/lsp/php · per connection</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">Monaco</div><div class="v">headerless PHP buffer</div><div class="d">one msg / frame</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">/api/lsp/php</div><div class="v">websocket bridge</div><div class="d">synthetic &lt;?php</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode hot"><div class="t">phpantom_lsp</div><div class="v">rooted at site / worktree</div><div class="d">stdio Content-Length</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">intelligence</div><div class="v">complete · diagnose · quick-fix</div><div class="d">real models &amp; vendor</div></div>
+    </div>
+    <div class="flow-note"><b>graceful fallback</b> — if the server can't be reached the editor still works and code still runs; only the live intelligence is unavailable.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>tinker, now REPL-grade</span><span class="lang">php</span></div>
+    <pre><span class="c">// "Class not found" → quick fix inserts the use, grouped at the top</span>
+User::query()<span class="k">-&gt;</span>where(<span class="s">'active'</span>, <span class="k">true</span>)<span class="k">-&gt;</span>count();
+<span class="c">// ↳ Line 2  · the executed SQL renders as its own card, bindings inlined</span></pre>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Editors → Monaco <a class="pr" href="https://github.com/geodro/lerd/pull/552">#552</a></h4><p>One lazy-loaded Monaco wrapper across every editor, Monarch grammars for nginx, ini and dotenv. CodeMirror dropped entirely.</p><span class="file">ui · MonacoEditor</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>phpantom_lsp <a class="pr" href="https://github.com/geodro/lerd/pull/552">#552</a></h4><p>A Rust PHP language server lerd manages on the host beside fnm and mkcert, bridged per connection over a websocket.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Quick fixes &amp; inline SQL <a class="pr" href="https://github.com/geodro/lerd/pull/554">#554</a></h4><p>Code-action imports, format on paste, per-line result badges, and every Laravel query as a full-width card.</p></div>
+  </div>
+</div></section>
+
+<!-- 03 TUI -->
+<section id="tui" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">03</span>
+    <h2>A clickable tabbed TUI</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro"><code>lerd tui</code> is reshaped around a top tab bar with <b>Dashboard, Sites and Services</b>
+  screens, switchable by click or <code>ctrl+left/right</code>. Mouse support runs throughout, clicking a tab,
+  a row, or a dashboard item jumps to its tab with that item selected, and the wheel scrolls whichever pane it
+  is over without moving the selection. The Dashboard is a <b>six-card</b> overview mirroring the web UI, with
+  app, service and worker logs surfaced in context.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>SIX-CARD DASHBOARD</span><span>mirrors the web UI · scrolls per card</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">Sites</div><div class="v">running · paused</div></div>
+      <div class="fnode ok"><div class="t">Services</div><div class="v">by category</div></div>
+      <div class="fnode ok"><div class="t">Workers</div><div class="v">by site</div></div>
+      <div class="fnode ok"><div class="t">Health</div><div class="v">dns · certs</div></div>
+      <div class="fnode ok"><div class="t">Resources</div><div class="v">cpu · mem</div></div>
+      <div class="fnode hot"><div class="t">Lerd</div><div class="v">live activity feed</div></div>
+    </div>
+    <div class="flow-note"><b>hot path stays cheap</b> — app-log tail read once per render behind an mtime cache; autostart and LAN state fold into the periodic snapshot, so no fs / systemd work on render.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>navigate the tabbed TUI</span><span class="lang">text</span></div>
+    <pre><span class="k">lerd tui</span>
+  <span class="c"># click a tab, or ctrl+←/→ to switch  ·  Dashboard | Sites | Services</span>
+  <span class="c"># click a site/service/worker on the Dashboard → jumps to its tab, selected</span>
+  <span class="c"># wheel scrolls the pane under the cursor; keys keep the selection on screen</span></pre>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Tabbed screens <a class="pr" href="https://github.com/geodro/lerd/pull/574">#574</a></h4><p>Three clickable top tabs replace the old combined layout, with the version on the far right of the tab row.</p><span class="file">internal/tui</span></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Mouse throughout <a class="pr" href="https://github.com/geodro/lerd/pull/574">#574</a></h4><p>Clickable rows, tab strips and Debug lenses; wheel scrolls the hovered pane; keyboard selection follows once per move.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Brand-red accent <a class="pr" href="https://github.com/geodro/lerd/pull/574">#574</a></h4><p>The interactive accent becomes the lerd/Laravel red across both the TUI and the new CLI feedback layer.</p></div>
+  </div>
+</div></section>
+
+<!-- 04 CLI -->
+<section id="cli" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">04</span>
+    <h2>A styled CLI feedback layer</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro">A new <code>internal/feedback</code> package is the single source of the lerd colour palette
+  (shared with the TUI) and a set of progress primitives, so every command gives consistent terminal feedback,
+  a spinner that a check or cross replaces <b>in place</b>, a live accumulating line, aligned key/value
+  summaries, styled prompts and an amber warning glyph. All of it <b>degrades to plain text</b> when stdout is
+  piped, redirected, or <code>NO_COLOR</code> is set, so the MCP server and scripts keep parsing stable output.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>ONE PALETTE, MANY SURFACES</span><span>tty → styled · pipe → plain</span></div>
+    <div class="flow">
+      <div class="fnode hot"><div class="t">internal/feedback</div><div class="v">palette + primitives</div><div class="d">shared with TUI</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">step</div><div class="v">spinner → ✓ / ✗</div><div class="d">in place</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">tables</div><div class="v">responsive list views</div><div class="d">unified errors</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">NO_COLOR / pipe</div><div class="v">plain text</div><div class="d">stable for MCP</div></div>
+    </div>
+    <div class="flow-note"><code>lerd env</code> keeps a <code>--verbose</code> mode with full per-service detail (what the MCP server invokes); the <em>install</em>/<em>start</em> build TUIs keep their own rendering.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>consistent feedback, list views as tables</span><span class="lang">bash</span></div>
+    <pre><span class="k">lerd env</span>                  <span class="c"># each service ticks off on its own line as configured</span>
+<span class="k">lerd sites</span>                <span class="c"># renders as a responsive table</span>
+<span class="k">lerd doctor</span> | cat         <span class="c"># no leaked ANSI when piped</span></pre>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Feedback package <a class="pr" href="https://github.com/geodro/lerd/pull/568">#568</a></h4><p>The shared palette and progress primitives, with plain-text degradation and several piped-ANSI leaks fixed.</p><span class="file">internal/feedback</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Responsive tables <a class="pr" href="https://github.com/geodro/lerd/pull/610">#610</a></h4><p>List views render as tables, and error output is unified across commands.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>install · start <a class="pr" href="https://github.com/geodro/lerd/pull/604">#604</a></h4><p>The install and start flows speak the same feedback vocabulary.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>service-stop · uninstall <a class="pr" href="https://github.com/geodro/lerd/pull/608">#608</a> <a class="pr" href="https://github.com/geodro/lerd/pull/612">#612</a></h4><p>Stopping services and the uninstall path come onto the layer too.</p></div>
+  </div>
+</div></section>
+
+<!-- 05 LINKING & DNS -->
+<section id="linking" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">05</span>
+    <h2>Linking, DNS &amp; services</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">Linking gets friendlier, running a command in an <b>unlinked project</b> offers to link it
+  through the init wizard rather than dead-ending, and <code>lerd link</code> routes through that same wizard
+  and handles <b>non-PHP projects</b>. DNS gains <b>pinnable upstream servers</b> and heals a stale
+  <code>lan:expose</code> mapping when the host LAN IP changes, <b>postgres-timescaledb</b> joins the presets,
+  and the website moves to its lerd.sh home with a rebuilt landing page.</p>
+
+  <div class="code">
+    <div class="code-bar"><span>linking · dns · services</span><span class="lang">bash</span></div>
+    <pre><span class="k">cd</span> ~/Code/some-app &amp;&amp; <span class="k">lerd artisan</span> migrate   <span class="c"># unlinked? offers the wizard</span>
+<span class="k">lerd link</span>                       <span class="c"># routes through init; non-PHP handled</span>
+<span class="k">lerd dns</span> upstream 1.1.1.1        <span class="c"># pin the upstream resolver</span>
+<span class="k">lerd db:set</span> postgres-timescaledb <span class="c"># new same-family preset</span></pre>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Offer to link <a class="pr" href="https://github.com/geodro/lerd/pull/558">#558</a></h4><p>An unlinked project is offered the wizard instead of dead-ending; <code>ensureSiteForCwd</code> resolves and links the same directory.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>link → init wizard <a class="pr" href="https://github.com/geodro/lerd/pull/562">#562</a></h4><p><code>lerd link</code> runs the init wizard and handles non-PHP projects.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Pin upstream DNS <a class="pr" href="https://github.com/geodro/lerd/pull/583">#583</a></h4><p>Choose the upstream servers lerd-dns forwards to rather than only the detected resolvers.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Heal on LAN change <a class="pr" href="https://github.com/geodro/lerd/pull/553">#553</a></h4><p>A stale <code>lan:expose</code> mapping is repaired when the host LAN IP changes, with a macOS PF_ROUTE watcher.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>timescaledb &amp; mariadb <a class="pr" href="https://github.com/geodro/lerd/pull/572">#572</a> <a class="pr" href="https://github.com/geodro/lerd/pull/551">#551</a></h4><p>postgres-timescaledb joins the presets; the MariaDB image list is refreshed, keeping the bare <code>11</code> tag.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ref">docs</span></div><h4>The site lives at lerd.sh <a class="pr" href="https://github.com/geodro/lerd/pull/564">#564</a></h4><p>A rebuilt landing page with a live demo on the custom domain, refreshed social and SEO. <a class="pr" href="https://github.com/geodro/lerd/pull/559">#559</a> <a class="pr" href="https://github.com/geodro/lerd/pull/587">#587</a></p></div>
+  </div>
+</div></section>
+
+<!-- 06 SECURITY -->
+<section id="security" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">06</span>
+    <h2>Security &amp; hardening</h2>
+    <div class="ch-pills"><span class="pill sec">SEC</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">A focused <b>security pass</b> closes three issues a hostile linked project, a local user,
+  or a malicious site open in the browser could each exploit, alongside a round of reliability fixes to certs,
+  podman startup, DNS and the MCP surface.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>SECURITY PASS</span><span>#613 · three vectors</span></div>
+    <div class="pipe">
+      <div class="pipe-step hot"><div class="pipe-n">1</div><div class="pipe-b"><h5>Name injection</h5><p>Site and worktree-branch names flowed into <code>site_init</code> shell commands and <code>CREATE DATABASE</code> identifiers. <code>SiteSlug</code> now maps every character outside <code>[a-z0-9_]</code> to an underscore, and database create/drop escape the identifiers as a second layer. <a class="pr" href="https://github.com/geodro/lerd/pull/613">#613</a></p></div></div>
+      <div class="pipe-step hot"><div class="pipe-n">2</div><div class="pipe-b"><h5>Root-write via symlink</h5><p>The NetworkManager dispatcher rewrote each user's <code>lerd.conf</code> as root, so a symlink could redirect that write onto a root-owned file. The rewrite now runs through <code>runuser</code> as the owning user, with the upstream list filtered to IP/port tokens first. <a class="pr" href="https://github.com/geodro/lerd/pull/613">#613</a></p></div></div>
+      <div class="pipe-step hot"><div class="pipe-n">3</div><div class="pipe-b"><h5>Websocket DNS-rebinding</h5><p>The dashboard handshake accepted any Origin whose host matched Host, which a rebinding page controls. The same-origin fallback now also requires an IP literal or a reserved local TLD, so a public domain rebound to loopback is rejected; loopback, LAN, and <code>.test</code> are unchanged. <a class="pr" href="https://github.com/geodro/lerd/pull/613">#613</a></p></div></div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Atomic cert swap <a class="pr" href="https://github.com/geodro/lerd/pull/607">#607</a></h4><p>TLS certs are swapped atomically so an nginx reload never sees a missing cert; worktree DBs are provisioned and realigned on link and env. <a class="pr" href="https://github.com/geodro/lerd/pull/608">#608</a></p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Podman start retry <a class="pr" href="https://github.com/geodro/lerd/pull/606">#606</a></h4><p>The machine start is retried once before failing the install, and versioned DB alternates no longer leak the bare canonical service. <a class="pr" href="https://github.com/geodro/lerd/pull/605">#605</a></p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>MCP output visible <a class="pr" href="https://github.com/geodro/lerd/pull/550">#550</a></h4><p>Worktree, diagnose, service env and check-updates results route through content blocks so the host actually sees them.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Agent env &amp; tray <a class="pr" href="https://github.com/geodro/lerd/pull/555">#555</a> <a class="pr" href="https://github.com/geodro/lerd/pull/585">#585</a></h4><p>AI agent detection is forwarded into the container, and the tray uses a dark icon on light desktop panels.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Legacy frameworks <a class="pr" href="https://github.com/geodro/lerd/pull/582">#582</a></h4><p>Legacy framework versions resolve to the lowest available definition instead of failing.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>Dependency advisories <a class="pr" href="https://github.com/geodro/lerd/pull/566">#566</a></h4><p>vite and dompurify bumped to clear open Dependabot alerts.</p></div>
+  </div>
+</div></section>
+
+<footer>
+  <div class="foot-grid">
+    <div>
+      <h2>SHIP <span>IT</span></h2>
+      <p class="fn">Install on Linux or macOS with the same one-liner, or <code>lerd update</code> if you're
+      already on board. The full story lives in the <a href="https://lerd.sh/changelog" style="color:var(--amber)">changelog</a>.</p>
+    </div>
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>bash</span></div>
+      <div class="term-body">
+        <div class="c"># Linux or macOS</div>
+        <div><span class="p">$</span> curl -fsSL https://lerd.sh/install.sh | bash</div>
+        <div class="c"># macOS via Homebrew</div>
+        <div><span class="p">$</span> brew trust geodro/lerd &amp;&amp; brew install geodro/lerd/lerd</div>
+        <div class="c"># already installed</div>
+        <div><span class="p">$</span> lerd update <span class="out"># → v1.26.0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-end">
+    <span>lerd v1.26.0 · 2026-06-24 · <a href="/digest/v1.25.0.html">← v1.25.0 digest</a></span>
+    <span><a href="https://github.com/geodro/lerd/compare/v1.25.0...v1.26.0">v1.25.0…v1.26.0</a> · <a href="https://lerd.sh/">docs</a> · <a href="https://github.com/geodro/lerd">github</a></span>
+  </div>
+</footer>
+
+<script>
+  const reveal = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); reveal.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fx').forEach(el => reveal.observe(el));
+  addEventListener('load', () => document.querySelectorAll('.fx').forEach(el => el.classList.add('in')));
+
+  const links = [...document.querySelectorAll('.pillnav a')];
+  const spy = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id)); });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  document.querySelectorAll('section.chapter').forEach(s => spy.observe(s));
+</script>
+</body>
+</html>
