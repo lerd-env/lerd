@@ -482,7 +482,10 @@ func provisionAndSecure(label, result string, site config.Site, finish func(conf
 		// the finisher above only reloaded it for the plain-HTTP config, so
 		// without this the site keeps serving the now-deleted HTTP vhost from
 		// nginx's memory and HTTPS never comes up until an unrelated reload.
-		if err := nginx.Reload(); err != nil {
+		// Retry the reload: a concurrent cert reissue (the watcher or UI
+		// reacting to the same new site) can briefly race the cert swap and
+		// make a single reload fail with "cannot load certificate".
+		if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 			cert.Fail(err)
 			return err
 		}

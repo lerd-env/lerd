@@ -731,6 +731,31 @@ func Reload() error {
 	return err
 }
 
+// ReloadWithRetry reloads nginx, retrying on failure for up to timeout. The cert
+// file is now swapped in atomically, but the cert and key are still two separate
+// renames, so a concurrent reissue (the watcher or UI reacting to the same site
+// change) can momentarily pair a new cert with the old key. A reload that lands
+// in that window crashes with "cannot load certificate"; retrying a beat later,
+// once the swap has settled, succeeds. nginx keeps serving its previous config
+// across a rejected reload, so retrying is safe.
+func ReloadWithRetry(timeout time.Duration) error {
+	return reloadWithRetry(Reload, timeout)
+}
+
+func reloadWithRetry(reload func() error, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		err := reload()
+		if err == nil {
+			return nil
+		}
+		if !time.Now().Before(deadline) {
+			return err
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 // Test runs `nginx -t` inside the lerd-nginx container and returns the
 // combined stdout+stderr output along with the exit error. nginx writes its
 // per-directive validation diagnostics to stderr, so the output is the

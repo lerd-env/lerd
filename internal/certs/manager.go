@@ -3,6 +3,7 @@ package certs
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -113,16 +114,19 @@ func issueCertAtomic(primaryDomain string, allDomains []string, certsDir string)
 		return fmt.Errorf("mkcert for %s: %w\n%s", primaryDomain, err, strings.TrimSpace(mkOut.String()))
 	}
 
-	// Two-phase rename: back up the previous cert (if any), swap in the
-	// new cert, then swap in the new key. If the key rename fails the
-	// cert is rolled back so we don't leave a cert/key mismatch on disk
-	// — nginx with mismatched cert and key refuses to start the site,
-	// which is worse than the transient mkcert failure we're guarding
-	// against in the first place.
+	// Swap the new cert and key in with os.Rename, which atomically replaces
+	// the target in place. Crucially the previous cert is COPIED aside, not
+	// moved: moving it would unlink certFile for the instant between the two
+	// renames, and a concurrent `nginx -s reload` (the watcher or UI reissuing
+	// the same site while the CLI reloads) that lands in that window crashes
+	// with "cannot load certificate ... No such file". Copying keeps a complete
+	// cert at certFile at every moment while still letting us roll back to the
+	// previous cert if the key rename fails (a cert/key mismatch is worse than a
+	// transient issue failure: nginx refuses to start the site).
 	bakCert := certFile + ".bak." + strconv.Itoa(os.Getpid())
 	hadPrevCert := false
 	if _, err := os.Stat(certFile); err == nil {
-		if err := os.Rename(certFile, bakCert); err != nil {
+		if err := copyFile(certFile, bakCert); err != nil {
 			os.Remove(tmpCert) //nolint:errcheck
 			os.Remove(tmpKey)  //nolint:errcheck
 			return fmt.Errorf("backing up cert for %s: %w", primaryDomain, err)
@@ -133,15 +137,16 @@ func issueCertAtomic(primaryDomain string, allDomains []string, certsDir string)
 		os.Remove(tmpCert) //nolint:errcheck
 		os.Remove(tmpKey)  //nolint:errcheck
 		if hadPrevCert {
-			os.Rename(bakCert, certFile) //nolint:errcheck
+			os.Remove(bakCert) //nolint:errcheck
 		}
 		return fmt.Errorf("renaming cert for %s: %w", primaryDomain, err)
 	}
 	if err := os.Rename(tmpKey, keyFile); err != nil {
-		os.Remove(tmpKey)   //nolint:errcheck
-		os.Remove(certFile) //nolint:errcheck
+		os.Remove(tmpKey) //nolint:errcheck
 		if hadPrevCert {
-			os.Rename(bakCert, certFile) //nolint:errcheck
+			os.Rename(bakCert, certFile) //nolint:errcheck — atomic restore of prev cert
+		} else {
+			os.Remove(certFile) //nolint:errcheck
 		}
 		return fmt.Errorf("renaming key for %s: %w", primaryDomain, err)
 	}
@@ -149,6 +154,25 @@ func issueCertAtomic(primaryDomain string, allDomains []string, certsDir string)
 		os.Remove(bakCert) //nolint:errcheck
 	}
 	return nil
+}
+
+// copyFile copies src to dst, creating or truncating dst. Used to back up the
+// previous cert without unlinking it, so the live cert path is never absent.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close() //nolint:errcheck
+	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close() //nolint:errcheck
+		return err
+	}
+	return out.Close()
 }
 
 // CertExists returns true if the certificate for the domain already exists.
