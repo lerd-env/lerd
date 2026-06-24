@@ -171,10 +171,11 @@ func NewEnvCmd() *cobra.Command {
   - Sets APP_URL to the registered .test domain`,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// --verbose (and any non-animated output, e.g. the MCP server or a
+			// --verbose (and any non-interactive output, e.g. the MCP server or a
 			// pipe) prints the full per-step detail. An interactive terminal gets
-			// the single live "configuring .env" line instead.
-			if verbose || !feedback.Animated() {
+			// the single live "configuring .env" line instead, even under NO_COLOR
+			// where it degrades to a plain condensed line rather than verbose.
+			if verbose || !feedback.Interactive() {
 				return runEnv(cmd, args)
 			}
 			feedback.Begin()
@@ -869,9 +870,10 @@ func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, en
 	if err != nil || len(worktrees) == 0 {
 		return
 	}
+	mainVals := envfile.ReadValues(mainEnvPath)
 	coords := map[string]string{}
 	for _, k := range worktreeDBConnectionKeys {
-		if v := envfile.ReadKey(mainEnvPath, k); v != "" {
+		if v := mainVals[k]; v != "" {
 			coords[k] = v
 		}
 	}
@@ -884,10 +886,12 @@ func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, en
 			continue
 		}
 		// Only touch worktrees whose coordinates actually drifted, so a steady
-		// state stays silent and the file's mtime is left alone.
+		// state stays silent and the file's mtime is left alone. One read of the
+		// worktree env covers every key compared.
+		wtVals := envfile.ReadValues(wtEnv)
 		drifted := false
 		for k, v := range coords {
-			if envfile.ReadKey(wtEnv, k) != v {
+			if wtVals[k] != v {
 				drifted = true
 				break
 			}

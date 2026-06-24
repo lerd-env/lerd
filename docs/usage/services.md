@@ -24,14 +24,16 @@ Default services are defined as YAML presets with `default: true` in the lerd bi
 `lerd service list` shows the version (derived from the image tag) and an Update column with green / amber / violet badges:
 
 ```
-Service              Version    Status     Update
-────────────────────────────────────────────────────────────
-mailpit              latest     active
-meilisearch          v1.42.1    active
-mysql                v8.4.9     active
-postgres             v16        active
-redis                v7.4.8     active
-rustfs               latest     active
+╭─────────────┬─────────┬────────┬────────╮
+│ Service     │ Version │ Status │ Update │
+├─────────────┼─────────┼────────┼────────┤
+│ mailpit     │ latest  │ active │        │
+│ meilisearch │ v1.42.1 │ active │        │
+│ mysql       │ v8.4.9  │ active │        │
+│ postgres    │ v16     │ active │        │
+│ redis       │ v7.4.8  │ active │        │
+│ rustfs      │ latest  │ active │        │
+╰─────────────┴─────────┴────────┴────────╯
 ```
 
 The Web UI, the TUI, and `lerd status` display the same labels. Services pinned to rolling tags (`latest`, `main`) show the tag verbatim. Services where an update is available show `→ <new-tag>`; cross-strategy upgrades show `⇧ <new-tag>` in amber.

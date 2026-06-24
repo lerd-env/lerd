@@ -159,6 +159,38 @@ func ReadKey(path, key string) string {
 	return ""
 }
 
+// ReadValues reads path once and returns all non-comment key/value pairs, with
+// each value unquoted the same way ReadKey unquotes a single key. On a duplicate
+// key the first occurrence wins, matching ReadKey, which returns its first
+// match. Returns an empty (non-nil) map when the file is missing, so callers can
+// range freely. Prefer this over repeated ReadKey calls when checking several
+// keys from one file: ReadKey re-opens and rescans the whole file on every call.
+func ReadValues(path string) map[string]string {
+	out := map[string]string{}
+	f, err := os.Open(path)
+	if err != nil {
+		return out
+	}
+	defer f.Close()
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		if k = strings.TrimSpace(k); k != "" {
+			if _, seen := out[k]; !seen {
+				out[k] = strings.Trim(strings.TrimSpace(v), `"'`)
+			}
+		}
+	}
+	return out
+}
+
 // ReferencesContainer reports whether content references the lerd container
 // hostname "lerd-<serviceName>" as a whole token, so bare "postgres" is not
 // matched by a "lerd-postgres-18" reference (and vice versa).

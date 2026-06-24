@@ -545,6 +545,7 @@ func InstallSudoers() error {
 		return nil
 	}
 
+	feedback.Sudo("Installing DNS sudoers rule")
 	if err := sudoWriteFile(sudoersPath, []byte(content), 0440); err != nil {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}

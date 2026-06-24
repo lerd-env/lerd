@@ -402,8 +402,16 @@ func newServiceListCmd() *cobra.Command {
 		Use:   "list",
 		Short: "List all services and their status",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			fmt.Printf("%-20s %-10s %-10s %s\n", "Service", "Version", "Status", "Update")
-			fmt.Printf("%s\n", strings.Repeat("─", 60))
+			var rows [][]string
+			statusCell := func(name, status string) string {
+				cell := colorStatus(status)
+				if status == "inactive" {
+					if reason := serviceInactiveReason(name); reason != "" {
+						cell += feedback.Dim(reason)
+					}
+				}
+				return cell
+			}
 			for _, svc := range knownServices() {
 				unit := "lerd-" + svc
 				status, err := podman.UnitStatus(unit)
@@ -411,12 +419,7 @@ func newServiceListCmd() *cobra.Command {
 					status = "unknown"
 				}
 				ver := podman.ServiceVersionLabel(podman.InstalledImage(unit))
-				fmt.Printf("%-20s %-10s %-10s %s\n", svc, ver, colorStatus(status), serviceUpdateHint(svc, status))
-				if status == "inactive" {
-					if reason := serviceInactiveReason(svc); reason != "" {
-						fmt.Printf("  %s\n", strings.TrimSpace(reason))
-					}
-				}
+				rows = append(rows, []string{svc, ver, statusCell(svc, status), serviceUpdateHint(svc, status)})
 			}
 			customs, _ := config.ListCustomServices()
 			for _, svc := range customs {
@@ -426,16 +429,13 @@ func newServiceListCmd() *cobra.Command {
 					status = "unknown"
 				}
 				ver := podman.ServiceVersionLabel(svc.Image)
-				fmt.Printf("%-20s %-10s %-10s %s  [custom]\n", svc.Name, ver, colorStatus(status), serviceUpdateHint(svc.Name, status))
-				if status == "inactive" {
-					if reason := serviceInactiveReason(svc.Name); reason != "" {
-						fmt.Printf("  %s\n", strings.TrimSpace(reason))
-					}
-				}
+				name := svc.Name + " " + feedback.Dim("[custom]")
+				rows = append(rows, []string{name, ver, statusCell(svc.Name, status), serviceUpdateHint(svc.Name, status)})
 				if len(svc.DependsOn) > 0 {
-					fmt.Printf("  depends on: %s\n", strings.Join(svc.DependsOn, ", "))
+					rows = append(rows, []string{feedback.Dim("↳ depends on: " + strings.Join(svc.DependsOn, ", ")), "", "", ""})
 				}
 			}
+			feedback.Table([]string{"Service", "Version", "Status", "Update"}, rows)
 			return nil
 		},
 	}
@@ -655,8 +655,7 @@ func printPresetList() error {
 		fmt.Println("No presets bundled with this build.")
 		return nil
 	}
-	fmt.Printf("%-14s %-10s %s\n", "Preset", "Status", "Description")
-	fmt.Printf("%s\n", strings.Repeat("─", 60))
+	var rows [][]string
 	for _, p := range presets {
 		status := "available"
 		if len(p.Versions) == 0 {
@@ -664,23 +663,19 @@ func printPresetList() error {
 				status = "installed"
 			}
 		} else {
-			anyInstalled := false
 			for _, v := range p.Versions {
 				if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
-					anyInstalled = true
+					status = "installed"
 					break
 				}
 			}
-			if anyInstalled {
-				status = "installed"
-			}
 		}
-		fmt.Printf("%-14s %-10s %s\n", p.Name, status, p.Description)
+		rows = append(rows, []string{p.Name, status, p.Description})
 		if len(p.DependsOn) > 0 {
-			fmt.Printf("%-14s %-10s depends on: %s\n", "", "", strings.Join(p.DependsOn, ", "))
+			rows = append(rows, []string{"", "", feedback.Dim("depends on: " + strings.Join(p.DependsOn, ", "))})
 		}
 		if p.Dashboard != "" {
-			fmt.Printf("%-14s %-10s dashboard:  %s\n", "", "", p.Dashboard)
+			rows = append(rows, []string{"", "", feedback.Dim("dashboard: " + p.Dashboard)})
 		}
 		for _, v := range p.Versions {
 			versionStatus := "available"
@@ -691,13 +686,14 @@ func printPresetList() error {
 			if serviceops.ServiceInstalled(config.PresetVersionServiceName(p.Name, v)) {
 				versionStatus = "installed"
 			}
-			marker := " "
+			name := "↳ " + v.Tag
 			if v.Tag == p.DefaultVersion {
-				marker = "*"
+				name = "↳ * " + v.Tag
 			}
-			fmt.Printf("%-14s %-10s %s %-9s %-13s %s\n", "", "", marker, versionStatus, v.Tag, label)
+			rows = append(rows, []string{name, versionStatus, label})
 		}
 	}
+	feedback.Table([]string{"Preset", "Status", "Description"}, rows)
 	fmt.Println("\n* = default version")
 	fmt.Println("Install with: lerd service preset <name> [--version <tag>]")
 	return nil

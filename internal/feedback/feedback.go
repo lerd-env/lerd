@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
+	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 )
 
@@ -321,6 +323,28 @@ func (s *Step) Fail(err error) {
 	s.finish(paint(failStyle, "✗"), paint(failStyle, msg))
 }
 
+// Fail prints a standalone red ✗ line for err to stderr in the same style (and
+// blank-line spacing) as a Live/Step failure. It is for the top-level command
+// handler to render an error a command returned without surfacing it itself, so
+// every failure reads the same whether it came up through a spinner or bubbled
+// out raw. Errors go to stderr so stdout stays clean for piped data. It records
+// err as shown so nothing reprints it.
+func Fail(err error) { FailOn(os.Stderr, err) }
+
+// FailOn is Fail targeted at an explicit writer, colouring only when that writer
+// is a terminal. Lets the top-level handler send errors to stderr and tests
+// capture them in a buffer.
+func FailOn(w io.Writer, err error) {
+	if err == nil {
+		return
+	}
+	markReported(err)
+	on := colorEnabledFor(w)
+	mu.Lock()
+	defer mu.Unlock()
+	fmt.Fprintf(w, "\n%s%s %s\n\n", pad, paintIf(on, failStyle, GlyphFail), paintIf(on, failStyle, err.Error()))
+}
+
 // Line prints a standalone step (arrow prefix, no trailing ellipsis) for an
 // already-known fact, e.g. "php 8.4 · node 22 · nginx vhost written".
 func Line(msg string) {
@@ -393,6 +417,156 @@ func WarnOn(w io.Writer, format string, a ...any) {
 	mu.Lock()
 	defer mu.Unlock()
 	fmt.Fprintf(w, "%s%s %s\n", pad, paintIf(on, warnStyle, "⚠"), paintIf(on, warnStyle, msg))
+}
+
+// Table prints headers + rows as a single aligned table in the lerd palette so
+// every `lerd … list`/`search` view shares one look instead of hand-rolled
+// printf columns. See RenderTable for the styling and plain-mode fallback.
+func Table(headers []string, rows [][]string) {
+	mu.Lock()
+	defer mu.Unlock()
+	fmt.Fprintln(target(), RenderTable(headers, rows))
+}
+
+// tableWidth reports the column budget a rendered table must fit within: the
+// terminal width, or 0 when it can't be determined (piped/redirected) so the
+// table renders at its natural width. A package var so tests can pin a width.
+var tableWidth = func() int {
+	if w, _, err := term.GetSize(int(os.Stdout.Fd())); err == nil && w > 0 {
+		return w
+	}
+	return 0
+}
+
+// RenderTable returns the table as a string without printing it, for callers
+// that compose it into other output. On a colour TTY it draws a rounded grid
+// with a bold brand-red header and dim borders; with colour off (NO_COLOR or a
+// pipe) it falls back to plain space-aligned columns so scripted output stays
+// parseable. When the natural grid is wider than the terminal the widest
+// columns are truncated with an ellipsis so every row stays on one line and the
+// grid fits the screen whenever the column count leaves room for it.
+func RenderTable(headers []string, rows [][]string) string {
+	if !colorOn.Load() {
+		return plainTable(headers, rows)
+	}
+	if w := tableWidth(); w > 0 {
+		headers, rows = fitColumns(headers, rows, w)
+	}
+	header := lipgloss.NewStyle().Bold(true).Foreground(ColTitle).Padding(0, 1)
+	cell := lipgloss.NewStyle().Padding(0, 1)
+	t := table.New().
+		Border(lipgloss.RoundedBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(ColDivider)).
+		Headers(headers...).
+		Rows(rows...).
+		StyleFunc(func(row, _ int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return header
+			}
+			return cell
+		})
+	return t.String()
+}
+
+// fitColumns shrinks a table to fit budget columns wide by repeatedly trimming
+// the widest column and ellipsis-truncating its cells, so rows stay single-line.
+// Rounded borders cost one cell per separator (N+1) plus two padding cells per
+// column, so the content budget is budget-(3N+1). Truncation is ANSI-aware so
+// pre-coloured cells keep their styling.
+func fitColumns(headers []string, rows [][]string, budget int) ([]string, [][]string) {
+	n := len(headers)
+	if n == 0 {
+		return headers, rows
+	}
+	widths := make([]int, n)
+	for i, h := range headers {
+		widths[i] = ansi.StringWidth(h)
+	}
+	for _, r := range rows {
+		for i := 0; i < n && i < len(r); i++ {
+			if w := ansi.StringWidth(r[i]); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+
+	total := 0
+	for _, w := range widths {
+		total += w
+	}
+	avail := budget - (3*n + 1)
+	if total <= avail {
+		return headers, rows // already fits
+	}
+	// On a terminal too narrow even for the per-column floor, shrink everything
+	// to the floor anyway: the grid may still exceed the screen, but clamped to
+	// the minimum it can be rather than spilling at full natural width.
+	const minCol = 6
+
+	for total > avail {
+		maxI, maxW := -1, minCol
+		for i, w := range widths {
+			if w > maxW {
+				maxI, maxW = i, w
+			}
+		}
+		if maxI < 0 {
+			break // every column already at the floor
+		}
+		widths[maxI]--
+		total--
+	}
+
+	outHeaders := make([]string, n)
+	for i, h := range headers {
+		outHeaders[i] = ansi.Truncate(h, widths[i], "…")
+	}
+	outRows := make([][]string, len(rows))
+	for ri, r := range rows {
+		nr := make([]string, len(r))
+		copy(nr, r)
+		for i := 0; i < n && i < len(nr); i++ {
+			nr[i] = ansi.Truncate(nr[i], widths[i], "…")
+		}
+		outRows[ri] = nr
+	}
+	return outHeaders, outRows
+}
+
+// plainTable lays the same data out as space-aligned columns with a two-space
+// gutter and no borders or colour, for piped/NO_COLOR output. Widths are
+// measured with lipgloss.Width so any pre-styled cells still align.
+func plainTable(headers []string, rows [][]string) string {
+	widths := make([]int, len(headers))
+	for i, h := range headers {
+		widths[i] = lipgloss.Width(h)
+	}
+	for _, r := range rows {
+		for i := 0; i < len(widths) && i < len(r); i++ {
+			if w := lipgloss.Width(r[i]); w > widths[i] {
+				widths[i] = w
+			}
+		}
+	}
+	var b strings.Builder
+	writeRow := func(cells []string) {
+		for i := range widths {
+			val := ""
+			if i < len(cells) {
+				val = cells[i]
+			}
+			b.WriteString(val)
+			if i < len(widths)-1 {
+				b.WriteString(strings.Repeat(" ", widths[i]-lipgloss.Width(val)+2))
+			}
+		}
+		b.WriteString("\n")
+	}
+	writeRow(headers)
+	for _, r := range rows {
+		writeRow(r)
+	}
+	return strings.TrimRight(b.String(), "\n")
 }
 
 // interruptible is anything that animates a spinner line and can pause it so a
@@ -479,6 +653,24 @@ func Prompt(question string, defaultYes bool) {
 // Animated reports whether output supports in-place animation (a colour TTY).
 // When false, Live degrades to a header line plus one plain line per item.
 func Animated() bool { return colorOn.Load() }
+
+// interactiveFn is the swappable backing for Interactive so tests can pin it
+// via SetInteractive without exposing a mutable public symbol.
+var interactiveFn = func() bool { return term.IsTerminal(int(os.Stdout.Fd())) }
+
+// Interactive reports whether stdout is a terminal, independent of colour. Use
+// it to choose a condensed single-line view over full verbose output: a user
+// who only disabled colour (NO_COLOR) still gets the interactive view rather
+// than the pipe/MCP verbose path. Animated() is the wrong gate for that, since
+// NO_COLOR forces it false even on a real terminal.
+func Interactive() bool { return interactiveFn() }
+
+// SetInteractive overrides Interactive for a test and returns a restore func.
+func SetInteractive(on bool) func() {
+	prev := interactiveFn
+	interactiveFn = func() bool { return on }
+	return func() { interactiveFn = prev }
+}
 
 // Live is a single in-place progress line with a trailing spinner that
 // accumulates completed items, e.g. "→ configuring .env… ✓ a · b · c ⠙". When

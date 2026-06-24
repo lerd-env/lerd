@@ -60,8 +60,7 @@ func runManPlain(args []string) error {
 				return nil
 			}
 		}
-		fmt.Fprintf(os.Stderr, "No documentation page found for %q\n", query)
-		os.Exit(1)
+		return fmt.Errorf("no documentation page found for %q", query)
 	}
 
 	// Print table of contents

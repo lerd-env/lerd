@@ -154,15 +154,15 @@ func runXdebugStatus(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Printf("%-10s %-10s %s\n", "Version", "Xdebug", "Mode")
-	fmt.Printf("%-10s %-10s %s\n", "─────────", "──────────", "────")
+	rows := make([][]string, 0, len(versions))
 	for _, v := range versions {
 		mode := cfg.GetXdebugMode(v)
-		state := feedback.Amber(fmt.Sprintf("%-10s", "disabled"))
+		state := feedback.Amber("disabled")
 		if mode != "" {
-			state = feedback.Green(fmt.Sprintf("%-10s", "enabled"))
+			state = feedback.Green("enabled")
 		}
-		fmt.Printf("%-10s %s %s\n", v, state, mode)
+		rows = append(rows, []string{v, state, mode})
 	}
+	feedback.Table([]string{"Version", "Xdebug", "Mode"}, rows)
 	return nil
 }

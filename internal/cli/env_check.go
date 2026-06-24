@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
 
@@ -163,60 +164,22 @@ func runEnvCheck(_ *cobra.Command, _ []string) error {
 	}
 	sort.Strings(sortedKeys)
 
-	// Compute column widths.
-	keyWidth := len("KEY")
+	// Build the matrix: one column per env source, a ✓/✗ cell per key.
+	headers := make([]string, 0, len(files)+2)
+	headers = append(headers, "KEY", ".env.example")
+	for _, f := range files {
+		headers = append(headers, f.name)
+	}
+	rows := make([][]string, 0, len(sortedKeys))
 	for _, k := range sortedKeys {
-		if len(k) > keyWidth {
-			keyWidth = len(k)
+		row := make([]string, 0, len(files)+2)
+		row = append(row, k, envMark(exampleSet[k]))
+		for _, f := range files {
+			row = append(row, envMark(f.keySet[k]))
 		}
+		rows = append(rows, row)
 	}
-
-	colWidths := make([]int, len(files)+1)
-	colWidths[0] = len(".env.example")
-	for i, f := range files {
-		colWidths[i+1] = len(f.name)
-		if colWidths[i+1] < 4 {
-			colWidths[i+1] = 4
-		}
-	}
-
-	// Print header.
-	fmt.Printf("  %-*s", keyWidth, "KEY")
-	fmt.Printf("  %-*s", colWidths[0], ".env.example")
-	for i, f := range files {
-		fmt.Printf("  %-*s", colWidths[i+1], f.name)
-	}
-	fmt.Println()
-
-	// Print separator.
-	fmt.Printf("  %s", dashes(keyWidth))
-	fmt.Printf("  %s", dashes(colWidths[0]))
-	for i := range files {
-		fmt.Printf("  %s", dashes(colWidths[i+1]))
-	}
-	fmt.Println()
-
-	// Print rows.
-	totalMissing := 0
-	for _, k := range sortedKeys {
-		fmt.Printf("  %-*s", keyWidth, k)
-		if exampleSet[k] {
-			fmt.Printf("  %s", center("✓", colWidths[0]))
-		} else {
-			fmt.Printf("  %s", center("✗", colWidths[0]))
-		}
-		for i, f := range files {
-			if f.keySet[k] {
-				fmt.Printf("  %s", center("✓", colWidths[i+1]))
-			} else {
-				fmt.Printf("  %s", center("✗", colWidths[i+1]))
-				if exampleSet[k] {
-					totalMissing++
-				}
-			}
-		}
-		fmt.Println()
-	}
+	feedback.Table(headers, rows)
 
 	fmt.Println()
 	fmt.Printf("  %d key(s) out of sync\n", len(sortedKeys))
@@ -224,17 +187,9 @@ func runEnvCheck(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func dashes(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = '-'
+func envMark(present bool) string {
+	if present {
+		return feedback.Green("✓")
 	}
-	return string(b)
-}
-
-func center(s string, width int) string {
-	pad := width - 1
-	left := pad / 2
-	right := pad - left
-	return fmt.Sprintf("%*s%s%*s", left, "", s, right, "")
+	return feedback.Red("✗")
 }

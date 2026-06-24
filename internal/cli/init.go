@@ -1342,7 +1342,7 @@ func applyProjectConfig(cwd string) error {
 // per-service output.
 func applyEnvStep(cwd string) {
 	envApplied = true
-	if !feedback.Animated() {
+	if !feedback.Interactive() {
 		if err := runEnv(nil, nil); err != nil {
 			feedback.Warn("lerd env: %v", err)
 		}

@@ -66,6 +66,16 @@ func main() {
 		// failure through the feedback UI (a red ✗ line) is suppressed here so
 		// cobra doesn't reprint the same message as a second "Error: …" line.
 		SilenceErrors: true,
+		// Cobra validates flags and args before PersistentPreRunE runs, so by the
+		// time we get here the invocation is well-formed and any failure is a
+		// runtime error, not misuse. Silencing usage now keeps the clean ✗ line
+		// for runtime errors while still printing the usage block for a wrong
+		// flag or arg count. No subcommand defines its own persistent hook, so
+		// this runs for every command.
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			cmd.SilenceUsage = true
+			return nil
+		},
 	}
 
 	// Register all subcommands
@@ -209,7 +219,7 @@ func main() {
 		// Only print errors the command didn't already show the user via a
 		// feedback Fail line, so the same failure never appears twice.
 		if !feedback.AlreadyShown(err) {
-			fmt.Fprintf(os.Stderr, "\nError: %s\n\n", err.Error())
+			feedback.Fail(err)
 		}
 		os.Exit(1)
 	}

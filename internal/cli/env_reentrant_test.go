@@ -43,6 +43,7 @@ func TestEnvCmd_AnimatedFailureIsMarkedAlreadyShown(t *testing.T) {
 	var buf bytes.Buffer
 	defer feedback.SetTestWriter(&buf)()
 	defer feedback.SetAnimated(true)()
+	defer feedback.SetInteractive(true)()
 
 	cmd := NewEnvCmd()
 	err := cmd.RunE(cmd, nil)

@@ -3,8 +3,6 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
-	"os"
-	"text/tabwriter"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -179,20 +177,23 @@ func runIdleStatus() error {
 
 	timeout := cfg.IdleSuspendTimeout()
 	now := time.Now()
-	tw := tabwriter.NewWriter(os.Stdout, 0, 2, 3, ' ', 0)
+	var rows [][]string
 	for _, s := range reg.Sites {
 		if s.Ignored {
 			continue
 		}
-		fmt.Fprintf(tw, "  %s\t%s\n", s.Name, idleSiteStatus(s, lastActive, uiErr, timeout, now))
+		rows = append(rows, []string{s.Name, idleSiteStatus(s, lastActive, uiErr, timeout, now)})
 		// A worktree idles independently, so list each under its site. The site's
 		// pause/pin still applies (the engine skips a paused or pinned site whole).
 		for _, wt := range worktrees[s.Name] {
-			label := "  " + s.Name + "/" + wt.Branch
-			fmt.Fprintf(tw, "  %s\t%s\n", label, idleWorktreeStatus(s, wt, uiErr, timeout, now))
+			label := "↳ " + s.Name + "/" + wt.Branch
+			rows = append(rows, []string{label, idleWorktreeStatus(s, wt, uiErr, timeout, now)})
 		}
 	}
-	return tw.Flush()
+	if len(rows) > 0 {
+		feedback.Table([]string{"Site", "Status"}, rows)
+	}
+	return nil
 }
 
 // idleSiteStatus renders a single unambiguous state for a site: paused sites are

@@ -34,14 +34,16 @@ lerd framework search
 ```
 
 ```
-Name            Label           Latest       Versions
-───────────────────────────────────────────────────────
-laravel         Laravel         13           13, 12, 11, 10
-symfony         Symfony         8            8, 7
-wordpress       WordPress       6            6, 5
-drupal          Drupal          11           11, 10
-cakephp         CakePHP         5            5, 4
-statamic        Statamic        6            6, 5
+╭───────────┬───────────┬────────┬────────────────╮
+│ Name      │ Label     │ Latest │ Versions       │
+├───────────┼───────────┼────────┼────────────────┤
+│ laravel   │ Laravel   │ 13     │ 13, 12, 11, 10 │
+│ symfony   │ Symfony   │ 8      │ 8, 7           │
+│ wordpress │ WordPress │ 6      │ 6, 5           │
+│ drupal    │ Drupal    │ 11     │ 11, 10         │
+│ cakephp   │ CakePHP   │ 5      │ 5, 4           │
+│ statamic  │ Statamic  │ 6      │ 6, 5           │
+╰───────────┴───────────┴────────┴────────────────╯
 ```
 
 ### Installing from the store

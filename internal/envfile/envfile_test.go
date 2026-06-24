@@ -387,3 +387,39 @@ func TestReferencesContainer(t *testing.T) {
 		})
 	}
 }
+
+// ── ReadValues ───────────────────────────────────────────────────────────────
+
+func TestReadValues_parsesUnquotesSkipsComments(t *testing.T) {
+	f := writeEnv(t, "# comment\nDB_HOST=lerd-postgres\nDB_PORT=\"5432\"\nEMPTY=\nbroken line\n")
+	got := ReadValues(f)
+	if got["DB_HOST"] != "lerd-postgres" {
+		t.Errorf("DB_HOST = %q, want lerd-postgres", got["DB_HOST"])
+	}
+	if got["DB_PORT"] != "5432" {
+		t.Errorf("DB_PORT = %q, want 5432 (quotes stripped)", got["DB_PORT"])
+	}
+	if v, ok := got["EMPTY"]; !ok || v != "" {
+		t.Errorf("EMPTY should be present and empty, got %q present=%v", v, ok)
+	}
+	if _, ok := got["# comment"]; ok {
+		t.Error("comment line must not become a key")
+	}
+}
+
+func TestReadValues_missingFileReturnsEmptyMap(t *testing.T) {
+	got := ReadValues(filepath.Join(t.TempDir(), "nope.env"))
+	if got == nil || len(got) != 0 {
+		t.Errorf("missing file should yield empty non-nil map, got %v", got)
+	}
+}
+
+func TestReadValues_firstOccurrenceWinsLikeReadKey(t *testing.T) {
+	f := writeEnv(t, "DB_HOST=first\nDB_HOST=second\n")
+	if got := ReadValues(f)["DB_HOST"]; got != "first" {
+		t.Errorf("ReadValues DB_HOST = %q, want first (parity with ReadKey)", got)
+	}
+	if got := ReadKey(f, "DB_HOST"); got != "first" {
+		t.Errorf("ReadKey DB_HOST = %q, want first", got)
+	}
+}

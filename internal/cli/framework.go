@@ -65,16 +65,14 @@ func runFrameworkList(check bool) error {
 		}
 	}
 
+	var headers []string
 	if check {
-		fmt.Printf("%-15s %-8s %-10s %-10s %s\n", "Name", "Version", "Source", "Latest", "Status")
-		fmt.Printf("%-15s %-8s %-10s %-10s %s\n",
-			"───────────────", "────────", "──────────", "──────────", "──────────────────────")
+		headers = []string{"Name", "Version", "Source", "Latest", "Status"}
 	} else {
-		fmt.Printf("%-15s %-8s %-10s %-10s %s\n", "Name", "Version", "Source", "PublicDir", "Workers")
-		fmt.Printf("%-15s %-8s %-10s %-10s %s\n",
-			"───────────────", "────────", "──────────", "──────────", "──────────────────────")
+		headers = []string{"Name", "Version", "Source", "PublicDir", "Workers"}
 	}
 
+	rows := make([][]string, 0, len(frameworks))
 	for _, info := range frameworks {
 		version := info.Version
 		if version == "" && cwd != "" {
@@ -86,8 +84,7 @@ func runFrameworkList(check bool) error {
 
 		if check {
 			latest, status := storeStatus(info, storeIndex)
-			fmt.Printf("%-15s %-8s %-10s %-10s %s\n",
-				info.Name, version, info.Source, latest, status)
+			rows = append(rows, []string{info.Name, version, string(info.Source), latest, status})
 		} else {
 			var workerNames []string
 			for name := range info.Workers {
@@ -98,10 +95,10 @@ func runFrameworkList(check bool) error {
 			if workers == "" {
 				workers = "—"
 			}
-			fmt.Printf("%-15s %-8s %-10s %-10s %s\n",
-				info.Name, version, info.Source, info.PublicDir, workers)
+			rows = append(rows, []string{info.Name, version, string(info.Source), info.PublicDir, workers})
 		}
 	}
+	feedback.Table(headers, rows)
 	return nil
 }
 
@@ -412,13 +409,13 @@ Examples:
 				return nil
 			}
 
-			fmt.Printf("%-15s %-15s %-12s %s\n", "Name", "Label", "Latest", "Versions")
-			fmt.Printf("%-15s %-15s %-12s %s\n",
-				"───────────────", "───────────────", "────────────", "──────────────────────")
+			rows := make([][]string, 0, len(results))
 			for _, entry := range results {
-				fmt.Printf("%-15s %-15s %-12s %s\n",
-					entry.Name, entry.Label, entry.Latest, strings.Join(entry.Versions, ", "))
+				rows = append(rows, []string{
+					entry.Name, entry.Label, entry.Latest, strings.Join(entry.Versions, ", "),
+				})
 			}
+			feedback.Table([]string{"Name", "Label", "Latest", "Versions"}, rows)
 			return nil
 		},
 	}

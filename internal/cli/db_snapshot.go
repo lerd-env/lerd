@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"text/tabwriter"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -269,8 +268,7 @@ func snapshotGitBranch(cwd string) string {
 }
 
 func printSnapshotTable(snaps []serviceops.Snapshot) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "NAME\tCREATED\tDATABASE\tSIZE\tBRANCH")
+	rows := make([][]string, 0, len(snaps))
 	for _, s := range snaps {
 		db := s.Database
 		if s.AllDatabases {
@@ -280,10 +278,11 @@ func printSnapshotTable(snaps []serviceops.Snapshot) {
 		if branch == "" {
 			branch = "-"
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\n",
-			s.Name, s.Created.Local().Format("2006-01-02 15:04"), db, humanSize(s.SizeBytes), branch)
+		rows = append(rows, []string{
+			s.Name, s.Created.Local().Format("2006-01-02 15:04"), db, humanSize(s.SizeBytes), branch,
+		})
 	}
-	_ = w.Flush()
+	feedback.Table([]string{"NAME", "CREATED", "DATABASE", "SIZE", "BRANCH"}, rows)
 }
 
 // humanSize renders a byte count in binary units.
