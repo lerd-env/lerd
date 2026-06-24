@@ -455,6 +455,6 @@ func friendlyNetworkCreateError(err error) error {
 	const prose = "podman is too old: `podman network create` does not support --dns " +
 		"(added in podman 4.5). Upgrade podman to 4.5 or newer; several distro " +
 		"releases (Ubuntu 22.04, Zorin 17, Debian 11/12) still ship older builds, see " +
-		"https://geodro.github.io/lerd/getting-started/requirements for options"
+		"https://lerd.sh/getting-started/requirements for options"
 	return fmt.Errorf("%s: %w", prose, err)
 }

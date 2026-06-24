@@ -61,9 +61,9 @@ func TestFetchLatestVersion_success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	got, err := lerdUpdate.FetchLatestVersion()
 	if err != nil {
@@ -80,9 +80,9 @@ func TestFetchLatestVersion_withoutVPrefix(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	got, err := lerdUpdate.FetchLatestVersion()
 	if err != nil {
@@ -99,9 +99,9 @@ func TestFetchLatestVersion_notFound(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	_, err := lerdUpdate.FetchLatestVersion()
 	if err == nil {
@@ -115,9 +115,9 @@ func TestFetchLatestVersion_emptyTag(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	_, err := lerdUpdate.FetchLatestVersion()
 	if err == nil {
@@ -131,9 +131,9 @@ func TestFetchLatestVersion_serverError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	_, err := lerdUpdate.FetchLatestVersion()
 	if err == nil {
@@ -181,9 +181,9 @@ func TestDownloadReleaseBinary_success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := githubDownloadBase
-	githubDownloadBase = srv.URL
-	defer func() { githubDownloadBase = orig }()
+	orig := githubDownloadBases
+	githubDownloadBases = func() []string { return []string{srv.URL} }
+	defer func() { githubDownloadBases = orig }()
 
 	binary, cleanup, err := downloadReleaseBinary("v0.1.0")
 	if err != nil {
@@ -202,9 +202,9 @@ func TestDownloadReleaseBinary_serverError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := githubDownloadBase
-	githubDownloadBase = srv.URL
-	defer func() { githubDownloadBase = orig }()
+	orig := githubDownloadBases
+	githubDownloadBases = func() []string { return []string{srv.URL} }
+	defer func() { githubDownloadBases = orig }()
 
 	_, cleanup, err := downloadReleaseBinary("v0.1.0")
 	cleanup()
@@ -258,9 +258,9 @@ func TestRunUpdate_alreadyLatest(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.ReleasesBaseURL
-	lerdUpdate.ReleasesBaseURL = srv.URL
-	defer func() { lerdUpdate.ReleasesBaseURL = orig }()
+	orig := lerdUpdate.ReleaseBaseURLs
+	lerdUpdate.ReleaseBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.ReleaseBaseURLs = orig }()
 
 	// Should return nil without downloading anything
 	err := runUpdate("1.0.0", false)
@@ -335,9 +335,9 @@ func TestFetchLatestPrerelease_success(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.APIBaseURL
-	lerdUpdate.APIBaseURL = srv.URL
-	defer func() { lerdUpdate.APIBaseURL = orig }()
+	orig := lerdUpdate.APIBaseURLs
+	lerdUpdate.APIBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.APIBaseURLs = orig }()
 
 	got, err := lerdUpdate.FetchLatestPrerelease()
 	if err != nil {
@@ -360,9 +360,9 @@ func TestFetchLatestPrerelease_noPrerelease(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.APIBaseURL
-	lerdUpdate.APIBaseURL = srv.URL
-	defer func() { lerdUpdate.APIBaseURL = orig }()
+	orig := lerdUpdate.APIBaseURLs
+	lerdUpdate.APIBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.APIBaseURLs = orig }()
 
 	_, err := lerdUpdate.FetchLatestPrerelease()
 	if err == nil {
@@ -376,9 +376,9 @@ func TestFetchLatestPrerelease_serverError(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	orig := lerdUpdate.APIBaseURL
-	lerdUpdate.APIBaseURL = srv.URL
-	defer func() { lerdUpdate.APIBaseURL = orig }()
+	orig := lerdUpdate.APIBaseURLs
+	lerdUpdate.APIBaseURLs = func() []string { return []string{srv.URL} }
+	defer func() { lerdUpdate.APIBaseURLs = orig }()
 
 	_, err := lerdUpdate.FetchLatestPrerelease()
 	if err == nil {

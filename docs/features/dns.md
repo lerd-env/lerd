@@ -67,3 +67,13 @@ dns:
 ```
 
 Entries are plain IPs; an optional `#port` suffix is supported (e.g. `192.168.100.129#5353`). When `upstream` is set it takes precedence over auto-detection everywhere, both when lerd writes the dnsmasq config and when the NetworkManager dispatcher rewrites it after a network change. Re-run `lerd install` (or restart lerd-dns) to apply it, then confirm with `cat ~/.local/share/lerd/dnsmasq/lerd.conf`.
+
+## Reacting to network changes
+
+lerd reacts to host network changes on its own, so the resolver and any LAN exposure keep working when you switch Wi-Fi, dock, or get a new DHCP lease without you re-running anything.
+
+- **Upstream re-detection (Linux).** A NetworkManager dispatcher hook re-resolves the upstream DNS servers and rewrites the dnsmasq config after a connection comes up. A pinned `dns.upstream` always wins over what it detects.
+- **LAN-IP healing.** When you expose a site to the LAN (see [LAN sharing](../usage/lan-sharing.md)) and the host's LAN IP later changes, `lerd-watcher` notices the drift, re-renders the `lan:expose` mapping to the current IP, and restarts `lerd-dns` so the exposed hostnames keep pointing at the right address. This runs even while lerd is otherwise idle.
+- **macOS network watcher.** On macOS the watcher subscribes to the kernel's `PF_ROUTE` socket and triggers the same healing the moment an interface or route changes, rather than waiting for the next poll.
+
+This is why a manual `lerd remote-setup` re-run after an IP change is usually no longer necessary.

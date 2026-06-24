@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Lerd installer — https://github.com/geodro/lerd
+# Lerd installer — https://lerd.sh
 # Usage:
-#   Install:   curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
-#      or:     wget -qO- https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+#   Install:   curl -fsSL https://lerd.sh/install.sh | bash
+#      or:     wget -qO- https://lerd.sh/install.sh | bash
 #   Update:    lerd-installer --update
 #   Uninstall: lerd-installer --uninstall
 
 set -euo pipefail
 
 # ── Constants ────────────────────────────────────────────────────────────────
-REPO="geodro/lerd"
+# REPO is the GitHub owner/name release assets are fetched from; override with
+# LERD_REPO so a future org move needs no installer change.
+REPO="${LERD_REPO:-geodro/lerd}"
 BINARY="lerd"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
@@ -691,7 +693,7 @@ main() {
   echo "  ╚══════╝╚══════╝╚═╝  ╚═╝╚═════╝ "
   echo -e "${RESET}"
   echo "  Lerd — Podman-powered local PHP dev environment for Linux and macOS"
-  echo "  https://github.com/${REPO}"
+  echo "  https://lerd.sh"
   echo ""
 
   case "${1:-install}" in

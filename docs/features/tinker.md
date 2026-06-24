@@ -56,6 +56,8 @@ tinker:
 The output panel is styled like a read-only editor: bordered box, monospace, line-number gutter rendered as CSS pseudo-elements so dragging across results never selects or copies the line numbers.
 
 - **One block per top-level statement.** Backend injects an ASCII `0x1E` separator after each statement, frontend splits on it. Multi-line scripts produce a numbered list of outputs, not one concatenated blob.
+- **Each block is framed with its source line and a `Line N` badge.** Every result shows the editor line that produced it, so in a multi-statement script you can see at a glance which line emitted which value. The output gutter collapses on rows without a marker, so results sit flush against the left edge.
+- **Laravel runs capture executed SQL.** A DB query listener inlines the bindings and renders every query that ran during a statement as its own full-width card, ordered just ahead of the result that triggered it, so you see exactly what hit the database (Tinkerwell-style). Laravel REPL mode only.
 - **Bare expressions auto-dump.** Type `User::count()` (no `dump`, no `echo`) and you see the value. The transformer wraps single-statement bare expressions in `dump(...)` (or `var_dump(...)` if Symfony VarDumper isn't installed). Statements that already produce side effects (`echo`, `return`, `throw`, control flow) are left alone.
 - **Collapsible tree view for objects/arrays.** Symfony VarDumper output is parsed client-side into a tree: classes, arrays, scalars, with click-to-expand/collapse, color-coded scalars, and visibility prefixes (`+public`, `#protected`, `-private`).
 - **Per-block Copy button** appears on hover.
@@ -71,6 +73,8 @@ Autocomplete, diagnostics, hover, and signature help are powered by [phpantom_ls
 
 Because it analyzes the real project, completions are genuinely project-aware: your Eloquent models, relationships, scopes, casts and Builder chains resolve end-to-end, alongside framework facades, vendor classes, and the PHP standard library. Hover a symbol for its docblock; type `(` inside a call for signature help.
 
+Quick fixes and imports are wired in too: the "Class not found" diagnostic offers an **Import `App\Models\X`** action, and accepting a class from the completion list brings its `use` statement along. Imports land at the top of the buffer with a blank line separating them from your code. Document formatting runs through phpantom on `Shift+Alt+F` and automatically on paste.
+
 The browser connects to the server over a WebSocket (`/api/lsp/php`). `lerd-ui` spawns one `phpantom_lsp` process per connection, rooted at the site (or worktree) path, and bridges its stdio LSP traffic to Monaco. Tinker buffers are headerless PHP, so the bridge presents the document to the server with a synthetic leading `<?php` line (and offsets positions accordingly) — you keep typing bare snippets while the server still parses valid PHP.
 
 A small status hint sits in the toolbar while the server is starting, and switches to "Language server unavailable" if it can't be reached. When that happens (offline first-run download, unsupported platform) the editor still works and code still runs — only the live intelligence is missing.
@@ -83,6 +87,7 @@ The server binary is fetched at `lerd install` time, and lazily on first connect
 |---|---|
 | `Ctrl+Enter` / `Cmd+Enter` | Run the editor contents |
 | `Ctrl+Space` | Trigger autocomplete |
+| `Shift+Alt+F` | Format the document via phpantom (also runs on paste) |
 | `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
 
 ### Drafts

@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/origin"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/store"
@@ -18,12 +19,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const githubRepo = "geodro/lerd"
-
-// These vars are overridden in tests to point at an httptest server.
-var (
-	githubDownloadBase = "https://github.com/" + githubRepo + "/releases/download"
-)
+// githubDownloadBases returns release-asset download bases in priority order,
+// read live. Overridden in tests to point at an httptest server.
+var githubDownloadBases = origin.ReleaseDownloadBases
 
 // NewUpdateCmd returns the update command.
 func NewUpdateCmd(currentVersion string) *cobra.Command {
@@ -86,7 +84,7 @@ func runUpdate(currentVersion string, beta bool) error {
 			fmt.Println("  " + line)
 		}
 	} else {
-		fmt.Printf("  https://github.com/%s/releases/tag/v%s\n", githubRepo, lat)
+		fmt.Printf("  %s/tag/v%s\n", origin.ReleaseBaseURLs()[0], lat)
 	}
 
 	// A Homebrew-managed binary lives under a Cellar prefix; self-replacing it
@@ -401,7 +399,6 @@ func downloadReleaseBinary(version string) (string, func(), error) {
 	ver := stripV(version)
 
 	filename := fmt.Sprintf("lerd_%s_%s_%s.tar.gz", ver, runtime.GOOS, arch)
-	url := fmt.Sprintf("%s/v%s/%s", githubDownloadBase, ver, filename)
 
 	tmp, err := os.MkdirTemp("", "lerd-update-*")
 	if err != nil {
@@ -410,9 +407,9 @@ func downloadReleaseBinary(version string) (string, func(), error) {
 	cleanup := func() { os.RemoveAll(tmp) }
 
 	archive := filepath.Join(tmp, filename)
-	if err := downloadFile(url, archive, 0644, io.Discard); err != nil {
+	if err := downloadArchive(ver, filename, archive); err != nil {
 		cleanup()
-		return "", func() {}, fmt.Errorf("download failed (%s): %w", url, err)
+		return "", func() {}, err
 	}
 
 	cmd := exec.Command("tar", "--no-same-owner", "-xzf", archive, "-C", tmp)
@@ -426,6 +423,22 @@ func downloadReleaseBinary(version string) (string, func(), error) {
 		return "", func() {}, fmt.Errorf("binary not found in archive")
 	}
 	return tmp, cleanup, nil
+}
+
+// downloadArchive fetches the release archive, trying each download base in
+// order until one succeeds, and returns an aggregated error if none do.
+func downloadArchive(ver, filename, archive string) error {
+	var errs []string
+	for _, base := range githubDownloadBases() {
+		url := fmt.Sprintf("%s/v%s/%s", base, ver, filename)
+		if err := downloadFile(url, archive, 0644, io.Discard); err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", url, err))
+			continue
+		}
+		origin.NoteFetched(base)
+		return nil
+	}
+	return fmt.Errorf("download failed: %s", strings.Join(errs, "; "))
 }
 
 // isHomebrewManaged reports whether the resolved binary path lives inside a

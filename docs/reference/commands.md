@@ -6,8 +6,8 @@
 |---|---|
 | `lerd install` | One-time setup: directories, network, binaries, DNS, nginx, watcher |
 | `lerd start` | Start DNS, nginx, PHP-FPM containers, and all installed services; warns about port conflicts and builds or pulls any missing images first |
-| `lerd stop` | Stop DNS, nginx, PHP-FPM containers, and all running services |
-| `lerd quit` | Stop all Lerd processes and containers including the UI, watcher, and tray; on macOS also stops the Podman Machine VM |
+| `lerd stop` | Stop nginx, PHP-FPM containers, and all running services; leaves the `lerd-dns` forwarder running as install-level plumbing so `.test` keeps resolving |
+| `lerd quit` | Stop all Lerd processes and containers including the UI, watcher, tray, and the `lerd-dns` forwarder; on macOS also stops the Podman Machine VM |
 | `lerd update` | Check for updates and update after confirmation |
 | `lerd update --beta` | Update to the latest pre-release build |
 | `lerd update --rollback` | Revert to the previously installed version |
@@ -54,7 +54,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 |---|---|
 | `lerd park [dir]` | Register all Laravel projects inside `dir` (defaults to cwd) |
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
-| `lerd link [name]` | Register the current directory as a site; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
+| `lerd link [name]` | Register the current directory as a site. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
 | `lerd unlink [name]` | Stop serving the site |
 | `lerd sites` | Table view of all registered sites |

@@ -139,7 +139,7 @@ brews:
       owner: geodro
       name: homebrew-lerd
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
-    homepage: "https://github.com/geodro/lerd"
+    homepage: "https://lerd.sh"
     description: "Local Laravel development environment for Linux and macOS"
     license: "MIT"
     skip_upload: auto
@@ -199,7 +199,7 @@ release:
     ### Install on Linux
 
     ```bash
-    curl -fsSL https://raw.githubusercontent.com/geodro/lerd/main/install.sh | bash
+    curl -fsSL https://lerd.sh/install.sh | bash
     ```
 
     Or if already installed:

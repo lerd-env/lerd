@@ -32,6 +32,14 @@ const (
 	wsOpPong  = 0xA
 )
 
+// maxWSFrameBytes caps a single inbound frame payload: the client declares the
+// length before any data arrives, so without a ceiling a forged length forces a
+// multi-gigabyte allocation. 64 MiB matches the LSP message ceiling.
+const maxWSFrameBytes = 64 << 20
+
+// errFrameTooLarge is returned when a client declares a payload over the cap.
+var errFrameTooLarge = errors.New("ui: websocket frame exceeds size limit")
+
 // wsConn wraps a hijacked net.Conn with the buffered reader from the
 // handshake so WriteText and ReadFrame can share the same underlying stream.
 type wsConn struct {
@@ -185,6 +193,10 @@ func (c *wsConn) ReadFrame() (op byte, payload []byte, err error) {
 			return
 		}
 		plen = int(binary.BigEndian.Uint64(ext[:]))
+	}
+	if plen < 0 || plen > maxWSFrameBytes {
+		err = errFrameTooLarge
+		return
 	}
 	var mask [4]byte
 	if masked {

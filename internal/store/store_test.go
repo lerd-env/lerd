@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -80,6 +81,53 @@ func testClient(t *testing.T, srv *httptest.Server) *Client {
 	t.Helper()
 	return &Client{
 		BaseURL: srv.URL,
+	}
+}
+
+// When the primary base returns a non-200, the client must transparently fetch
+// from the fallback base. This is the geodro->lerd-env transition path.
+func TestFetchIndex_FallsBackWhenPrimaryFails(t *testing.T) {
+	good := testServer(t)
+	defer good.Close()
+
+	c := &Client{
+		BaseURL:   good.URL + "/missing", // /missing/index.json -> 404
+		Fallbacks: []string{good.URL},
+	}
+	idx, err := c.FetchIndex()
+	if err != nil {
+		t.Fatalf("FetchIndex should succeed via fallback: %v", err)
+	}
+	if len(idx.Frameworks) == 0 || idx.Frameworks[0].Name != "laravel" {
+		t.Fatalf("unexpected index from fallback: %+v", idx)
+	}
+}
+
+// When every base fails (e.g. an internet outage), the client returns an error
+// rather than silently changing anything.
+func TestFetchIndex_AllBasesFail(t *testing.T) {
+	good := testServer(t)
+	dead := good.URL
+	good.Close() // now refuses connections
+
+	c := &Client{
+		BaseURL:   dead,
+		Fallbacks: []string{dead + "/also-dead"},
+	}
+	if _, err := c.FetchIndex(); err == nil {
+		t.Fatal("expected an error when all bases are unreachable")
+	}
+}
+
+// NewClient wires the ordered store URLs from origin: the old org first, the new
+// org as the fallback.
+func TestNewClient_OldOrgFirstNewFallback(t *testing.T) {
+	c := NewClient()
+	if !strings.Contains(c.BaseURL, "geodro") {
+		t.Errorf("primary store URL = %q, want geodro first", c.BaseURL)
+	}
+	if len(c.Fallbacks) == 0 || !strings.Contains(c.Fallbacks[0], "lerd-env") {
+		t.Errorf("fallback store URLs = %v, want lerd-env present", c.Fallbacks)
 	}
 }
 

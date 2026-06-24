@@ -16,7 +16,7 @@ export const dashboardOpen = writable<DashboardRef | null>(null);
 const DOCS_REF: DashboardRef = {
   name: 'docs',
   label: 'Documentation',
-  dashboard: 'https://geodro.github.io/lerd/'
+  dashboard: 'https://lerd.sh/'
 };
 
 // PROFILER_REF is the synthetic entry for the SPX profiler. The UI is proxied

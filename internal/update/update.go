@@ -6,17 +6,34 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/geodro/lerd/internal/origin"
 )
 
-// ReleasesBaseURL is the base GitHub releases URL. Overridable in tests.
-var ReleasesBaseURL = "https://github.com/geodro/lerd/releases"
+// ReleaseBaseURLs returns the GitHub releases bases in priority order, read live
+// so a NoteFetched flip reorders them. Overridable in tests.
+var ReleaseBaseURLs = origin.ReleaseBaseURLs
 
-// APIBaseURL is the GitHub API base URL for the repo. Overridable in tests.
-var APIBaseURL = "https://api.github.com/repos/geodro/lerd"
+// APIBaseURLs returns the GitHub API bases in priority order. Overridable in tests.
+var APIBaseURLs = origin.ReleaseAPIBaseURLs
 
-// FetchLatestVersion returns the latest published release tag from GitHub.
+// FetchLatestVersion returns the latest published release tag, trying each
+// release base in order until one answers.
 func FetchLatestVersion() (string, error) {
-	url := ReleasesBaseURL + "/latest"
+	var errs []string
+	for _, base := range ReleaseBaseURLs() {
+		v, err := fetchLatestFrom(base)
+		if err == nil {
+			origin.NoteFetched(base)
+			return v, nil
+		}
+		errs = append(errs, err.Error())
+	}
+	return "", fmt.Errorf("fetching latest version: %s", strings.Join(errs, "; "))
+}
+
+func fetchLatestFrom(base string) (string, error) {
+	url := base + "/latest"
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -63,7 +80,20 @@ type githubRelease struct {
 // Unlike FetchLatestVersion, this calls the GitHub API because the
 // /releases/latest redirect only returns stable releases.
 func FetchLatestPrerelease() (string, error) {
-	url := APIBaseURL + "/releases"
+	var errs []string
+	for _, base := range APIBaseURLs() {
+		v, err := fetchPrereleaseFrom(base)
+		if err == nil {
+			origin.NoteFetched(base)
+			return v, nil
+		}
+		errs = append(errs, err.Error())
+	}
+	return "", fmt.Errorf("fetching latest pre-release: %s", strings.Join(errs, "; "))
+}
+
+func fetchPrereleaseFrom(base string) (string, error) {
+	url := base + "/releases"
 	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 	if err != nil {
 		return "", err
@@ -96,7 +126,7 @@ func FetchLatestPrerelease() (string, error) {
 			return r.TagName, nil
 		}
 	}
-	return "", fmt.Errorf("no pre-release found")
+	return "", fmt.Errorf("no pre-release found from %s", url)
 }
 
 // StripV removes a leading "v" from a version string.

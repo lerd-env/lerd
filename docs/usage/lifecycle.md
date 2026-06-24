@@ -13,8 +13,8 @@ Day-to-day lifecycle commands for the entire lerd stack: DNS, nginx, PHP-FPM con
 | Command | Stops | Starts |
 |---|---|---|
 | `lerd start` | nothing | DNS, nginx, watcher, tray, all PHP-FPM containers in use, services that were running before stop, queue / schedule / reverb / messenger workers, stripe listeners, Web UI |
-| `lerd stop` | All containers and workers above. Leaves the watcher and Web UI alone. | nothing |
-| `lerd quit` | Everything `lerd stop` does, **plus** the Web UI, watcher, and tray. macOS: also stops the Podman Machine VM. | nothing |
+| `lerd stop` | All containers and workers above **except** `lerd-dns`. Leaves the watcher, Web UI, and the DNS forwarder alone. | nothing |
+| `lerd quit` | Everything `lerd stop` does, **plus** the DNS forwarder, Web UI, watcher, and tray. macOS: also stops the Podman Machine VM. | nothing |
 
 `lerd stop` is the everyday "give my laptop back its CPU" command. `lerd quit` is a full shutdown: use it before a reinstall, a system reboot without autostart, or when you really want lerd out of the way.
 
@@ -59,10 +59,11 @@ Both paths skip `Ignored: true` sites — those are explicitly parked by the use
 lerd stop
 ```
 
-Stops everything `lerd start` started **except** the Web UI, watcher, and tray; those keep running so the dashboard stays reachable to bring lerd back up.
+Stops everything `lerd start` started **except** the Web UI, watcher, tray, and the `lerd-dns` forwarder; those keep running so the dashboard stays reachable to bring lerd back up.
 
 A few important details:
 
+- **The DNS forwarder stays up.** `lerd-dns` is treated as install-level plumbing: the system resolver keeps pointing `.test` at it until `lerd uninstall`, so stopping it would leave the resolver aimed at a dead port and make `.test` lookups stall. It is only torn down by `lerd quit` or `lerd uninstall`.
 - **Manually paused services are remembered.** If you stopped Mailpit earlier with `lerd service stop mailpit`, then `lerd stop` + `lerd start` will not bring Mailpit back. The pause flag survives the cycle.
 - **Pinned services start anyway.** A `lerd service pin <name>` overrides auto-stop logic; pinned services are always started by `lerd start` regardless of which sites are active.
 - **Worker state is preserved.** Workers running before `lerd stop` are restarted by the next `lerd start`; workers you manually stopped stay stopped.
@@ -81,7 +82,8 @@ The full off-switch:
 2. Stops `lerd-ui` (Web UI).
 3. Stops `lerd-watcher`.
 4. Kills the system tray process.
-5. **macOS only:** stops the Podman Machine VM.
+5. Stops the `lerd-dns` forwarder. Unlike `lerd stop`, quit is a full teardown, so it takes DNS down too. The watcher is stopped first (step 3) because it is the only thing that would restart `lerd-dns`.
+6. **macOS only:** stops the Podman Machine VM.
 
 After `lerd quit` there are no lerd processes left running. On macOS the Podman Machine VM is also shut down, so `lerd start` will bring it back up on the next run. This is the right command before a reinstall, a system reboot, or before pulling a major update.
 

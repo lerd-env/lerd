@@ -9,17 +9,18 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/origin"
 	"gopkg.in/yaml.v3"
 )
 
-const (
-	defaultBaseURL = "https://raw.githubusercontent.com/geodro/lerd-frameworks/main/frameworks"
-	httpTimeout    = 10 * time.Second
-)
+const httpTimeout = 10 * time.Second
 
-// Client fetches framework definitions from the remote store.
+// Client fetches framework definitions from the remote store. BaseURL is tried
+// first; Fallbacks are tried in order if it fails, so a binary can reach the new
+// store location after an org move and fall back to the old one before it.
 type Client struct {
-	BaseURL string
+	BaseURL   string
+	Fallbacks []string
 }
 
 // Index is the top-level store index listing all available frameworks.
@@ -57,8 +58,10 @@ func autoFetchFramework(name, version string) (*config.Framework, error) {
 
 // NewClient returns a store client with default settings.
 func NewClient() *Client {
+	urls := origin.StoreBaseURLs()
 	return &Client{
-		BaseURL: defaultBaseURL,
+		BaseURL:   urls[0],
+		Fallbacks: urls[1:],
 	}
 }
 
@@ -189,8 +192,20 @@ func (c *Client) findEntry(idx *Index, name string) (*IndexEntry, bool) {
 }
 
 func (c *Client) fetch(path string) ([]byte, error) {
-	url := c.BaseURL + "/" + path
 	client := &http.Client{Timeout: httpTimeout}
+	var errs []string
+	for _, base := range append([]string{c.BaseURL}, c.Fallbacks...) {
+		body, err := fetchOne(client, base+"/"+path)
+		if err == nil {
+			origin.NoteFetched(base)
+			return body, nil
+		}
+		errs = append(errs, err.Error())
+	}
+	return nil, fmt.Errorf("fetching %s: %s", path, strings.Join(errs, "; "))
+}
+
+func fetchOne(client *http.Client, url string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 	if err != nil {
 		return nil, err

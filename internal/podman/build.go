@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/origin"
 )
 
 // WriteContainerUnitFn writes a container unit file for the given name and content.
@@ -306,7 +307,6 @@ func tryPullBaseImage(version string, w io.Writer) string {
 		return ""
 	}
 	short := strings.ReplaceAll(version, ".", "")
-	ref := fmt.Sprintf("ghcr.io/geodro/lerd-php%s-fpm-base:%s", short, hash)
 	fmt.Fprintf(w, "  Pulling pre-built PHP %s base image...\n", version)
 
 	// Use an empty auth file so the pull is always anonymous, regardless of
@@ -320,21 +320,26 @@ func tryPullBaseImage(version string, w io.Writer) string {
 		defer os.Remove(tmpAuth.Name())
 	}
 
-	args := []string{"pull", "--policy=always"}
-	args = append(args, PlatformPullArgs(ref)...)
-	if tmpAuth != nil {
-		args = append(args, "--authfile="+tmpAuth.Name())
-	}
-	args = append(args, ref)
+	// Try each registry in order (old org first, new org fallback) so a binary
+	// keeps pulling across the org move without a rebuild.
+	for _, ref := range origin.BaseImageRefs(short, hash) {
+		args := []string{"pull", "--policy=always"}
+		args = append(args, PlatformPullArgs(ref)...)
+		if tmpAuth != nil {
+			args = append(args, "--authfile="+tmpAuth.Name())
+		}
+		args = append(args, ref)
 
-	cmd := exec.Command(PodmanBin(), args...)
-	cmd.Stdout = w
-	cmd.Stderr = io.Discard
-	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(w, "  Pre-built image unavailable, falling back to local build (may take a few minutes)...\n")
-		return ""
+		cmd := exec.Command(PodmanBin(), args...)
+		cmd.Stdout = w
+		cmd.Stderr = io.Discard
+		if err := cmd.Run(); err == nil {
+			origin.NoteFetched(ref)
+			return ref
+		}
 	}
-	return ref
+	fmt.Fprintf(w, "  Pre-built image unavailable, falling back to local build (may take a few minutes)...\n")
+	return ""
 }
 
 func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) error {

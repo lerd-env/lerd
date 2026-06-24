@@ -12,9 +12,11 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/origin"
 )
 
-const changelogRawURL = "https://raw.githubusercontent.com/geodro/lerd/main/CHANGELOG.md"
+// changelogURLs returns raw changelog URLs in priority order, read live.
+var changelogURLs = origin.ChangelogURLs
 
 // UpdateInfo holds the result of a successful update check when a newer version exists.
 type UpdateInfo struct {
@@ -102,7 +104,21 @@ func WriteUpdateCache(version string) {
 // Returns an empty string and a non-nil error when the fetch fails.
 func FetchChangelog(currentVersion, latestVersion string) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, changelogRawURL, nil) //nolint:noctx
+	var errs []string
+	for _, url := range changelogURLs() {
+		body, err := fetchChangelogFrom(client, url)
+		if err != nil {
+			errs = append(errs, err.Error())
+			continue
+		}
+		origin.NoteFetched(url)
+		return extractChangelogSections(body, currentVersion, latestVersion), nil
+	}
+	return "", fmt.Errorf("fetching changelog: %s", strings.Join(errs, "; "))
+}
+
+func fetchChangelogFrom(client *http.Client, url string) (string, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 	if err != nil {
 		return "", err
 	}
@@ -113,13 +129,13 @@ func FetchChangelog(currentVersion, latestVersion string) (string, error) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("HTTP %d fetching changelog", resp.StatusCode)
+		return "", fmt.Errorf("HTTP %d fetching changelog from %s", resp.StatusCode, url)
 	}
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return "", err
 	}
-	return extractChangelogSections(string(body), currentVersion, latestVersion), nil
+	return string(body), nil
 }
 
 // extractChangelogSections parses changelog markdown and returns sections where
