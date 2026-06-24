@@ -3,6 +3,7 @@ package siteops
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -159,7 +160,7 @@ func FinishLink(site config.Site, phpVersion string) error {
 	_ = podman.RewriteFPMQuadlets()
 	_ = podman.WriteContainerHosts()
 
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 
@@ -225,7 +226,7 @@ func FinishFrankenPHPLink(site config.Site) error {
 
 	_ = podman.WriteContainerHosts()
 
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 
@@ -278,7 +279,7 @@ func DemoteFrankenPHPToFPM(site *config.Site) error {
 		return fmt.Errorf("regenerating vhost: %w", err)
 	}
 
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 
@@ -325,7 +326,7 @@ func FinishCustomFPMLink(site config.Site, containerCfg *config.ContainerConfig)
 	}
 
 	_ = podman.WriteContainerHosts()
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 	if podman.AfterUnitChange != nil {
@@ -352,7 +353,7 @@ func FinishHostProxyLink(site config.Site) error {
 		}
 	}
 
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 
@@ -404,7 +405,7 @@ func FinishCustomLink(site config.Site, containerCfg *config.ContainerConfig) er
 
 	_ = podman.WriteContainerHosts()
 
-	if err := nginx.Reload(); err != nil {
+	if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
 		return fmt.Errorf("nginx reload: %w", err)
 	}
 
