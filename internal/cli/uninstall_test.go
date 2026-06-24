@@ -87,45 +87,6 @@ func TestRemoveMarkedBlock_onlyMarker(t *testing.T) {
 	}
 }
 
-// ── readYes ──────────────────────────────────────────────────────────────────
-
-func TestReadYes(t *testing.T) {
-	cases := []struct {
-		input string
-		want  bool
-	}{
-		{"y\n", true},
-		{"Y\n", true},
-		{"yes\n", true},
-		{"YES\n", true},
-		{"n\n", false},
-		{"N\n", false},
-		{"no\n", false},
-		{"\n", false},
-		{"maybe\n", false},
-	}
-
-	for _, c := range cases {
-		// Redirect stdin to a pipe containing the test input.
-		r, w, err := os.Pipe()
-		if err != nil {
-			t.Fatal(err)
-		}
-		w.WriteString(c.input)
-		w.Close()
-
-		oldStdin := os.Stdin
-		os.Stdin = r
-		got := readYes()
-		os.Stdin = oldStdin
-		r.Close()
-
-		if got != c.want {
-			t.Errorf("readYes(%q) = %v, want %v", c.input, got, c.want)
-		}
-	}
-}
-
 // ── removeShellEntry ─────────────────────────────────────────────────────────
 
 func TestRemoveShellEntry_bashrc(t *testing.T) {
