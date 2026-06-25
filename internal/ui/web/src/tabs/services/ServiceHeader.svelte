@@ -12,7 +12,8 @@
     serviceLabel,
     detailLabel,
     isServiceWorker,
-    isMySQLService,
+    supportsHostBackend,
+    dbEngineDisplay,
     serviceAction,
     streamServiceAction,
     checkServiceUpdates,
@@ -55,12 +56,14 @@
   }
 
   const isWorker = $derived(isServiceWorker(svc));
-  // MySQL/MariaDB-only host backend. hostMode = the global default is the host
-  // (system) MySQL, so lerd's container is the non-default DB: its config
-  // actions (pin/reinstall/remove) grey out, while start/stop stay enabled so
-  // the user can still free or claim the 3306 port.
-  const isMysql = $derived(isMySQLService(svc));
-  const hostMode = $derived(isMysql && $defaultDBBackend === 'host');
+  // Host-capable DB service (MySQL/MariaDB/Postgres). hostMode = the global default
+  // backend is the host (system) server, so lerd's container is the non-default DB:
+  // its config actions (pin/reinstall/remove) grey out, while start/stop stay enabled
+  // so the user can still free or claim the engine's default port.
+  const isHostCapable = $derived(supportsHostBackend(svc));
+  const hostMode = $derived(isHostCapable && $defaultDBBackend === 'host');
+  // Engine name for the host-mode "disabled" tooltips (MySQL/MariaDB/PostgreSQL).
+  const engineDisplay = $derived(dbEngineDisplay(svc.name));
   // On a confirmed non-loopback (LAN-exposed) dashboard the host backend is
   // genuinely unavailable — it depends on a host-local unix socket and the server
   // rejects it — so the host option is disabled there rather than letting the user
@@ -75,7 +78,7 @@
     // AND makes it the default for new ones, so Cancel aborts the whole thing (like
     // disableIsolation). The store reconciles from the server's echoed value, so the
     // toggle stays honest even if some sites fail after the default was persisted.
-    if (!confirm(m.services_defaultBackend_applyAllConfirm({ backend: label }))) return;
+    if (!confirm(m.services_defaultBackend_applyAllConfirm({ backend: label, engine: dbEngineDisplay(svc.name) }))) return;
     backendBusy = true;
     try {
       const res = await saveDefaultBackend(target, true);
@@ -301,7 +304,7 @@
         icon: icons.pin,
         label: svc.pinned ? m.services_pinned() : m.services_pin(),
         title: hostMode
-          ? m.services_hostMode_disabled()
+          ? m.services_hostMode_disabled({ engine: engineDisplay })
           : svc.pinned
             ? m.services_unpinTitle()
             : m.services_pinTitle(),
@@ -327,7 +330,7 @@
         tone: 'secondary',
         icon: icons.restart,
         label: m.services_reinstall_action(),
-        title: hostMode ? m.services_hostMode_disabled() : m.services_reinstall_menuTitle(),
+        title: hostMode ? m.services_hostMode_disabled({ engine: engineDisplay }) : m.services_reinstall_menuTitle(),
         disabled: hostMode,
         onclick: () => (reinstallOpen = true)
       });
@@ -352,7 +355,7 @@
         tone: 'danger',
         icon: icons.trash,
         label: removeLabel,
-        title: hostMode ? m.services_hostMode_disabled() : removeLabel,
+        title: hostMode ? m.services_hostMode_disabled({ engine: engineDisplay }) : removeLabel,
         disabled: hostMode,
         onclick: () => (deleteOpen = true)
       });
@@ -475,7 +478,7 @@
   {/snippet}
 
   <div class="flex flex-col items-end gap-1.5">
-    {#if isMysql}
+    {#if isHostCapable}
       <div class="flex items-center gap-2">
         <span class="text-[11px] font-medium text-gray-500 dark:text-gray-400"
           >{m.services_defaultBackend_label()}</span
@@ -487,7 +490,7 @@
             loading={backendBusy && $defaultDBBackend !== 'container'}
             disabled={backendBusy}
             rounding="rounded-l-md border-r-0"
-            title={m.services_defaultBackend_lerdTitle()}
+            title={m.services_defaultBackend_lerdTitle({ engine: dbEngineDisplay(svc.name) })}
             onclick={() => setDefaultBackend('container')}
           />
           <ToggleButton
@@ -497,8 +500,8 @@
             disabled={backendBusy || (hostLocked && $defaultDBBackend !== 'host')}
             rounding="rounded-r-md"
             title={hostLocked && $defaultDBBackend !== 'host'
-              ? m.services_hostMysql_loopbackOnly()
-              : m.services_defaultBackend_hostTitle()}
+              ? m.services_hostDB_loopbackOnly({ engine: dbEngineDisplay(svc.name) })
+              : m.services_defaultBackend_hostTitle({ engine: dbEngineDisplay(svc.name) })}
             onclick={() => setDefaultBackend('host')}
           />
         </span>

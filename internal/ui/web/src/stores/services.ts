@@ -85,30 +85,56 @@ wsMessage.subscribe((msg) => {
   if (msg?.services) applyServices(msg.services);
 });
 
-// HostMySQLStatus mirrors serviceops.HostMySQLStatus: whether a host-installed
-// (system) MySQL is present and reachable, for the "system MySQL" backend option.
-export interface HostMySQLStatus {
+// HostDBStatus mirrors serviceops.HostDBStatus: whether a host-installed (system)
+// database server (MySQL/MariaDB/Postgres) is present and reachable, for the
+// "system database" backend option.
+export interface HostDBStatus {
+  service_name: string; // lerd service probed (mysql/postgres)
+  port: number; // the engine's canonical TCP port (3306/5432)
   socket_present: boolean;
   socket_path: string;
   live: boolean;
-  tcp3306_listening: boolean;
-  tcp3306_owner: 'host' | 'lerd' | 'none' | 'unknown';
-  // lerd_port is the host port lerd-mysql publishes (3306 by default, or the
-  // configured override). When it differs from 3306 the host system MySQL can
-  // own 3306 and the two coexist. lerd_port_listening: something answers there.
+  port_listening: boolean;
+  port_owner: 'host' | 'lerd' | 'none' | 'unknown';
+  // lerd_port is the host port lerd's own container publishes (the engine default,
+  // or the configured override). When it differs from `port` the host server can
+  // own the default port and the two coexist. lerd_port_listening: something there.
   lerd_port: number;
   lerd_port_listening: boolean;
 }
 
-// hostMysqlProbe reports whether the host MySQL is available so the UI can guide
-// the user before switching a site to it. Loopback-only server-side; returns
-// null on any error (treat as "unknown / not reachable").
-export async function hostMysqlProbe(): Promise<HostMySQLStatus | null> {
+// hostDBProbe reports whether the host database server for the given service is
+// available so the UI can guide the user before switching a site to it.
+// Loopback-only server-side; returns null on any error (treat as "unknown / not
+// reachable").
+export async function hostDBProbe(service = 'mysql'): Promise<HostDBStatus | null> {
   try {
-    return await apiJson<HostMySQLStatus>('/api/services/host-mysql-probe');
+    return await apiJson<HostDBStatus>(
+      `/api/services/host-mysql-probe?service=${encodeURIComponent(service)}`
+    );
   } catch {
     return null;
   }
+}
+
+// dbEngineDisplay maps a database service/family name to its human-readable
+// engine name for UI copy (e.g. "MySQL", "PostgreSQL"). Unknown names fall back
+// to a generic label.
+export function dbEngineDisplay(service: string): string {
+  const n = service.toLowerCase();
+  if (n === 'mysql' || n.startsWith('mysql-')) return 'MySQL';
+  if (n === 'mariadb' || n.startsWith('mariadb-')) return 'MariaDB';
+  if (n === 'postgres' || n.startsWith('postgres-')) return 'PostgreSQL';
+  return 'database';
+}
+
+// dbServiceUnit maps a database service/family name to the conventional systemd
+// unit name for the host server, used in setup hints (sudo systemctl start <unit>).
+export function dbServiceUnit(service: string): string {
+  const n = service.toLowerCase();
+  if (n === 'mariadb' || n.startsWith('mariadb-')) return 'mariadb';
+  if (n === 'postgres' || n.startsWith('postgres-')) return 'postgresql';
+  return 'mysql';
 }
 
 function isWorker(s: Service): boolean {
@@ -682,10 +708,18 @@ export function isServiceWorker(s: Service): boolean {
   return isWorker(s);
 }
 
-// isMySQLService reports whether a service is the MySQL/MariaDB family — the
-// only one the host (system) DB backend applies to. Matches the canonical
-// 'mysql'/'mariadb' and version-suffixed presets (mysql-5-7, mariadb-11, …).
-export function isMySQLService(s: Service): boolean {
+// supportsHostBackend reports whether a service is a host-backend-capable
+// database family — MySQL, MariaDB, or Postgres, the engines lerd can point at a
+// host-installed (system) server. Matches the canonical names and version- or
+// flavour-suffixed presets (mysql-5-7, mariadb-11, postgres-pgvector, …).
+export function supportsHostBackend(s: Service): boolean {
   const n = s.name;
-  return n === 'mysql' || n === 'mariadb' || n.startsWith('mysql-') || n.startsWith('mariadb-');
+  return (
+    n === 'mysql' ||
+    n === 'mariadb' ||
+    n === 'postgres' ||
+    n.startsWith('mysql-') ||
+    n.startsWith('mariadb-') ||
+    n.startsWith('postgres-')
+  );
 }

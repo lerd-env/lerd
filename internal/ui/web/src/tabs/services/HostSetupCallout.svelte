@@ -1,11 +1,15 @@
 <script lang="ts">
-  import { hostMysql } from '$stores/dbBackend';
+  import { hostDB } from '$stores/dbBackend';
+  import { dbEngineDisplay, dbServiceUnit } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
   let dismissed = $state(false);
-  // Show once probed and the host MySQL is not live (absent, or a stale socket
-  // with nothing accepting). null = not probed yet → stay hidden.
-  const visible = $derived(!dismissed && $hostMysql !== null && !$hostMysql.live);
+  // Show once probed and the host database server is not live (absent, or a stale
+  // socket with nothing accepting). null = not probed yet → stay hidden.
+  const visible = $derived(!dismissed && $hostDB !== null && !$hostDB.live);
+  // Engine name + systemd unit for the setup copy, from the probed service.
+  const engine = $derived(dbEngineDisplay($hostDB?.service_name ?? 'mysql'));
+  const unit = $derived(dbServiceUnit($hostDB?.service_name ?? 'mysql'));
 </script>
 
 {#if visible}
@@ -29,10 +33,10 @@
       </svg>
       <div class="flex-1 min-w-0">
         <p class="text-xs font-semibold text-amber-900 dark:text-amber-200">
-          {m.services_hostSetup_title()}
+          {m.services_hostSetup_title({ engine })}
         </p>
         <p class="text-[11px] text-amber-700 dark:text-amber-300/80 mt-0.5">
-          {m.services_hostSetup_subtitle()}
+          {m.services_hostSetup_subtitle({ engine, unit })}
         </p>
       </div>
       <button

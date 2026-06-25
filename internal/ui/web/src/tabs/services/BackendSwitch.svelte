@@ -2,7 +2,8 @@
   import ToggleButton from '$components/ToggleButton.svelte';
   import DivergenceConfirmModal from './DivergenceConfirmModal.svelte';
   import { sites, setSiteDBBackend, loadSites } from '$stores/sites';
-  import { hostMysql } from '$stores/dbBackend';
+  import { hostDB } from '$stores/dbBackend';
+  import { dbEngineDisplay, dbServiceUnit } from '$stores/services';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
@@ -15,7 +16,11 @@
   const current = $derived<'host' | 'container'>(site?.db_external ? 'host' : 'container');
   // Reachable unless a probe explicitly says the host server isn't live. null
   // (not probed) is treated as reachable — the server still validates.
-  const hostReachable = $derived($hostMysql ? $hostMysql.live : true);
+  const hostReachable = $derived($hostDB ? $hostDB.live : true);
+  // Human-readable engine name + systemd unit for the host-backend tooltips, from
+  // the probe (so a Postgres site says "PostgreSQL"/"postgresql", not "MySQL").
+  const hostEngine = $derived(dbEngineDisplay($hostDB?.service_name ?? 'mysql'));
+  const hostUnit = $derived(dbServiceUnit($hostDB?.service_name ?? 'mysql'));
   // Host backend is loopback-only; on a confirmed LAN dashboard the server rejects
   // it, so don't offer it there (matches the global toggle in ServiceHeader).
   const hostLocked = $derived($accessMode.checked && !$accessMode.loopback);
@@ -50,7 +55,7 @@
     loading={busy && confirmTarget === 'container'}
     disabled={busy}
     rounding="rounded-l-md border-r-0"
-    title={m.services_backend_lerdTitle({ domain })}
+    title={m.services_backend_lerdTitle({ domain, engine: hostEngine })}
     onclick={() => request('container')}
   />
   <ToggleButton
@@ -60,10 +65,10 @@
     disabled={busy || hostBlocked}
     rounding="rounded-r-md"
     title={hostLocked && current !== 'host'
-      ? m.services_hostMysql_loopbackOnly()
+      ? m.services_hostDB_loopbackOnly({ engine: hostEngine })
       : hostReachable || current === 'host'
-        ? m.services_backend_hostTitle({ domain })
-        : m.services_hostSetup_subtitle()}
+        ? m.services_backend_hostTitle({ domain, engine: hostEngine })
+        : m.services_hostSetup_subtitle({ engine: hostEngine, unit: hostUnit })}
     onclick={() => request('host')}
   />
 </span>
@@ -72,6 +77,7 @@
   open={confirmTarget !== null}
   {domain}
   target={confirmTarget ?? 'host'}
+  engine={hostEngine}
   onclose={() => (confirmTarget = null)}
   onconfirm={doSwitch}
 />

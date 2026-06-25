@@ -7,18 +7,19 @@
     open: boolean;
     domain: string;
     target: 'host' | 'container';
+    engine: string;
     onclose: () => void;
     onconfirm: () => Promise<{ ok: boolean; error?: string }>;
   }
-  let { open, domain, target, onclose, onconfirm }: Props = $props();
+  let { open, domain, target, engine, onclose, onconfirm }: Props = $props();
 
   let busy = $state(false);
   let error = $state('');
 
   const targetLabel = $derived(
     target === 'host'
-      ? m.services_divergence_targetHost()
-      : m.services_divergence_targetContainer()
+      ? m.services_divergence_targetHost({ engine })
+      : m.services_divergence_targetContainer({ engine })
   );
 
   function safeClose() {
@@ -46,7 +47,7 @@
 <Modal {open} title={m.services_divergence_title()} onclose={safeClose} size="md">
   <div class="px-5 py-4 space-y-3">
     <p class="text-sm text-gray-700 dark:text-gray-300">
-      {m.services_divergence_body({ domain, target: targetLabel })}
+      {m.services_divergence_body({ domain, target: targetLabel, engine })}
     </p>
     {#if error}
       <p class="text-xs text-red-500">{error}</p>

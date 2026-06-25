@@ -2,7 +2,7 @@
   import ParentSiteBadge from './ParentSiteBadge.svelte';
   import BackendSwitch from './BackendSwitch.svelte';
   import { goToTab } from '$stores/route';
-  import { type Service, isServiceWorker, isMySQLService, parentSiteDomain } from '$stores/services';
+  import { type Service, isServiceWorker, supportsHostBackend, parentSiteDomain } from '$stores/services';
 
   interface Props {
     svc: Service;
@@ -13,8 +13,9 @@
   const parent = $derived(parentSiteDomain(svc));
   const siteDomains = $derived(!isWorker && svc.site_domains ? svc.site_domains : []);
   const hasBadges = $derived(Boolean(parent) || siteDomains.length > 0);
-  // Per-site host/container toggle only applies to the MySQL/MariaDB service.
-  const showBackend = $derived(isMySQLService(svc));
+  // Per-site host/container toggle only applies to host-capable DB services
+  // (MySQL/MariaDB/Postgres).
+  const showBackend = $derived(supportsHostBackend(svc));
 </script>
 
 {#if hasBadges}

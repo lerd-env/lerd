@@ -8,9 +8,9 @@
   import ServiceTuningTab from './ServiceTuningTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import HostSetupCallout from './HostSetupCallout.svelte';
-  import MysqlPortCallout from './MysqlPortCallout.svelte';
-  import { isMySQLService, type Service } from '$stores/services';
-  import { refreshHostMysql } from '$stores/dbBackend';
+  import DBPortCallout from './DBPortCallout.svelte';
+  import { supportsHostBackend, type Service } from '$stores/services';
+  import { refreshHostDB } from '$stores/dbBackend';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -18,12 +18,12 @@
   }
   let { svc }: Props = $props();
 
-  // Only the MySQL/MariaDB service offers the host backend; probe the host
-  // server when its detail page is open so the toggle and callout know whether
-  // the system MySQL is reachable.
-  const isMysql = $derived(isMySQLService(svc));
+  // Host-capable DB services (MySQL/MariaDB/Postgres) offer the host backend;
+  // probe the matching host server when the detail page is open so the toggle and
+  // callout know whether that system database is reachable.
+  const isHostCapable = $derived(supportsHostBackend(svc));
   $effect(() => {
-    if (isMysql) refreshHostMysql();
+    if (isHostCapable) refreshHostDB(svc.name);
   });
 
   type TabId = 'logs' | 'env' | 'config';
@@ -67,9 +67,9 @@
   {#key svc.name}
     <ServiceHeader {svc} />
     <ServiceSiteBadges {svc} />
-    {#if isMysql}
+    {#if isHostCapable}
       <HostSetupCallout />
-      <MysqlPortCallout />
+      <DBPortCallout {svc} />
     {/if}
   {/key}
   <PresetSuggestionBanner {svc} />

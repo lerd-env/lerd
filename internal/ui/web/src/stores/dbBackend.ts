@@ -1,34 +1,35 @@
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
-import { hostMysqlProbe, loadServices, type HostMySQLStatus } from './services';
+import { hostDBProbe, loadServices, type HostDBStatus } from './services';
 
 export type DBBackend = 'container' | 'host';
 
-// Shared host-MySQL probe result, so the per-site BackendSwitch and the
-// HostSetupCallout read one probe instead of each firing their own. null means
-// "not probed yet / unknown" — callers treat that as reachable and let the
-// server be the source of truth.
-export const hostMysql = writable<HostMySQLStatus | null>(null);
+// Shared host-database probe result for the currently-viewed DB service, so the
+// per-site BackendSwitch, the HostSetupCallout, and the DBPortCallout read one
+// probe instead of each firing their own. null means "not probed yet / unknown" —
+// callers treat that as reachable and let the server be the source of truth.
+export const hostDB = writable<HostDBStatus | null>(null);
 
-export async function refreshHostMysql() {
-  hostMysql.set(await hostMysqlProbe());
+export async function refreshHostDB(service = 'mysql') {
+  hostDB.set(await hostDBProbe(service));
 }
 
-// setMysqlPublishedPort moves lerd-mysql's published host port so a host system
-// MySQL can keep 127.0.0.1:3306. port=0 resets to the default. On success it
-// refreshes the probe + service list so the coexistence UI reflects reality.
-// Loopback-only server-side (it rebinds a host port).
-export async function setMysqlPublishedPort(
+// setPublishedPort moves a DB service's published host port so a host system
+// server can keep the engine's default port. port=0 resets to the default. On
+// success it refreshes the probe + service list so the coexistence UI reflects
+// reality. Loopback-only server-side (it rebinds a host port).
+export async function setPublishedPort(
+  service: string,
   port: number
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await apiFetch(
-      `/api/services/mysql/port?port=${encodeURIComponent(String(port))}`,
+      `/api/services/${encodeURIComponent(service)}/port?port=${encodeURIComponent(String(port))}`,
       { method: 'POST' }
     );
     const data = (await res.json()) as { ok?: boolean; error?: string };
     if (res.ok && data.ok) {
-      await Promise.all([refreshHostMysql(), loadServices()]);
+      await Promise.all([refreshHostDB(service), loadServices()]);
     }
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
@@ -36,9 +37,9 @@ export async function setMysqlPublishedPort(
   }
 }
 
-// Global default DB backend: the one new sites adopt and the target of the
-// MySQL service page's "switch all sites" control. 'container' is lerd's own
-// MySQL; 'host' is the system MySQL reached over its unix socket.
+// Global default DB backend: the one new sites adopt and the target of the DB
+// service page's "switch all sites" control. 'container' is lerd's own database
+// container; 'host' is the system database reached over its unix socket.
 export const defaultDBBackend = writable<DBBackend>('container');
 
 interface SettingsResponse {
@@ -55,8 +56,9 @@ export async function loadDefaultBackend() {
 }
 
 // saveDefaultBackend persists the global default. With applyAll the server also
-// re-points every MySQL/MariaDB site to the chosen backend in one pass and
-// reports how many were applied. Only updates the store on success.
+// re-points every host-capable (MySQL/MariaDB/Postgres) site to the chosen
+// backend in one pass and reports how many were applied. Only updates the store
+// on success.
 export async function saveDefaultBackend(
   backend: DBBackend,
   applyAll = false
