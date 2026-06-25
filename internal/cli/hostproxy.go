@@ -96,6 +96,14 @@ func hostProxyHostEnvKey(proxy *config.ProxyConfig) string {
 	return "HOST"
 }
 
+// hostProxyShouldBind reports whether lerd injects the bind-address env
+// (e.g. HOST=0.0.0.0). Defaults to true; a project sets `bind: false` to opt
+// out entirely, for a dev server that reads HOST for something else or manages
+// its own bind. The port injection is unaffected.
+func hostProxyShouldBind(proxy *config.ProxyConfig) bool {
+	return proxy.Bind == nil || *proxy.Bind
+}
+
 // hostProxyBindAddr is the address the dev server must bind so the in-container
 // nginx can reach it. nginx proxies to the host over the gateway IP, so a dev
 // server that binds loopback (the common default) is unreachable: it surfaces
@@ -110,11 +118,16 @@ const hostProxyBindAddr = "0.0.0.0"
 // assignment) is used because host workers exec the command both through a
 // shell (macOS) and directly via `fnm exec --` (Linux); `env` is a real
 // executable that works in both. A HOST the user sets later in their own
-// command still wins (env evaluates left to right). Returns "" in proxy-only
-// mode (no command).
+// command still wins (env evaluates left to right). The bind injection is
+// suppressed when `bind: false`, leaving only the port. Returns "" in
+// proxy-only mode (no command).
 func buildHostProxyCommandPort(proxy *config.ProxyConfig, port int) string {
 	if proxy.Command == "" {
 		return ""
+	}
+	if !hostProxyShouldBind(proxy) {
+		return fmt.Sprintf("env %s=%d %s",
+			hostProxyPortEnvKey(proxy), port, proxy.Command)
 	}
 	return fmt.Sprintf("env %s=%d %s=%s %s",
 		hostProxyPortEnvKey(proxy), port,

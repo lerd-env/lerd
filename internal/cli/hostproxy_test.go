@@ -155,6 +155,26 @@ func TestBuildHostProxyCommand_customEnvKeys(t *testing.T) {
 	}
 }
 
+func TestBuildHostProxyCommand_bindFalseOptsOut(t *testing.T) {
+	// bind: false suppresses the HOST injection but keeps the port.
+	bind := false
+	got := buildHostProxyCommand(&config.ProxyConfig{Command: "npm run dev", Port: 3000, Bind: &bind})
+	want := "env PORT=3000 npm run dev"
+	if got != want {
+		t.Errorf("buildHostProxyCommand = %q, want %q", got, want)
+	}
+}
+
+func TestBuildHostProxyCommand_bindTrueExplicitInjects(t *testing.T) {
+	// bind: true is the same as the default: HOST is injected.
+	bind := true
+	got := buildHostProxyCommand(&config.ProxyConfig{Command: "npm run dev", Port: 3000, Bind: &bind})
+	want := "env PORT=3000 HOST=0.0.0.0 npm run dev"
+	if got != want {
+		t.Errorf("buildHostProxyCommand = %q, want %q", got, want)
+	}
+}
+
 func TestBuildHostProxyCommand_proxyOnlyMode(t *testing.T) {
 	// No command means proxy-only: lerd supervises nothing.
 	if got := buildHostProxyCommand(&config.ProxyConfig{Port: 3000}); got != "" {
