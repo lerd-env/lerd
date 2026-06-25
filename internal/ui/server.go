@@ -1091,6 +1091,15 @@ func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 		Paused:        config.ServiceIsPaused(name),
 		IsDefault:     config.IsDefaultPreset(name),
 	}
+	// If this service's published port was shifted — by `lerd service port` or by
+	// the port-ownership guard moving lerd's DB off a host-owned default — point
+	// the developer-facing connection URL at the real published port. Otherwise it
+	// would advertise the engine default, which in the guard's scenario is exactly
+	// the port a coexisting HOST server is sitting on (e.g. host PG on :5432 while
+	// lerd-postgres listens on :5434).
+	if pp := config.ServicePublishedPort(name); pp > 0 {
+		resp.ConnectionURL = serviceops.WithURLPort(resp.ConnectionURL, pp)
+	}
 	// Only advertise Tunable when the service is actually installed.
 	// ResolveServiceForTuning resolves built-in default presets even when
 	// the user has explicitly `lerd service remove`d them, so without the
@@ -3048,15 +3057,21 @@ func reexecLerdEnvDir(dir string) error {
 	return nil
 }
 
-// handleHostMysqlProbe reports whether a host-installed (system) MySQL is
-// present and reachable, feeding the dashboard's "system MySQL" backend badge.
-// Loopback-only because it inspects host-local sockets and ports.
+// handleHostMysqlProbe reports whether a host-installed (system) database server
+// is present and reachable, feeding the dashboard's "system database" backend
+// badge. The service to probe comes from ?service= (default "mysql"), so the same
+// endpoint serves MySQL, MariaDB, and Postgres. Loopback-only because it inspects
+// host-local sockets and ports.
 func handleHostMysqlProbe(w http.ResponseWriter, r *http.Request) {
 	if !isLoopbackRequest(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
-	writeJSON(w, serviceops.ProbeHostMySQL(""))
+	service := r.URL.Query().Get("service")
+	if service == "" {
+		service = "mysql"
+	}
+	writeJSON(w, serviceops.ProbeHostDB(service, ""))
 }
 
 func handleSiteAction(w http.ResponseWriter, r *http.Request) {
@@ -4590,11 +4605,11 @@ func handleSettingsDefaultBackend(w http.ResponseWriter, r *http.Request) {
 		}
 		var failed []string
 		for _, s := range reg.Sites {
-			// Only MySQL/MariaDB sites can use the host-socket backend; switching a
-			// Postgres/Mongo site to "host" would be meaningless, so skip it when
-			// enabling. Disabling (→ container) is always safe and idempotent.
+			// Only host-capable DB families (MySQL/MariaDB/Postgres) can use the host
+			// backend; switching a Redis/Mongo site to "host" would be meaningless, so
+			// skip it when enabling. Disabling (→ container) is always safe and idempotent.
 			if external {
-				if proj, perr := config.LoadProjectConfig(s.Path); perr == nil && !proj.IsMySQLFamilyDB() {
+				if proj, perr := config.LoadProjectConfig(s.Path); perr == nil && !proj.IsHostBackendCapableDB() {
 					continue
 				}
 			}
