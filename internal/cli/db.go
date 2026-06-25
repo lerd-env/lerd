@@ -510,6 +510,18 @@ func runDbShell(flagService, flagDatabase string) error {
 	return cmd.Run()
 }
 
+// dbExistsQueryMySQL / dbExistsQueryPostgres build the existence-check SQL with the
+// database name escaped as a single-quoted string literal (serviceops.EscapeSQLLiteral),
+// so a name containing a quote (e.g. a branch like "it's-a-test") can't break out of the
+// literal or inject into a root-level query inside the container.
+func dbExistsQueryMySQL(name string) string {
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", serviceops.EscapeSQLLiteral(name))
+}
+
+func dbExistsQueryPostgres(name string) string {
+	return fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname='%s';", serviceops.EscapeSQLLiteral(name))
+}
+
 // databaseExists returns whether the named database exists in the given lerd
 // DB service's container. Uses the same admin credentials createDatabase uses.
 func databaseExists(svc, name string) (bool, error) {
@@ -527,7 +539,7 @@ func databaseExists(svc, name string) (bool, error) {
 		var lastErr error
 		for _, bin := range binaries {
 			check := serviceops.MySQLAdminCmd(container, bin,
-				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", name))
+				"-sNe", dbExistsQueryMySQL(name))
 			out, err := check.Output()
 			if err != nil {
 				lastErr = err
@@ -538,7 +550,7 @@ func databaseExists(svc, name string) (bool, error) {
 		return false, lastErr
 	case "postgres":
 		cmd := podman.Cmd("exec", container, "psql", "-U", "postgres", "-tAc",
-			fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname='%s';", name))
+			dbExistsQueryPostgres(name))
 		out, err := cmd.Output()
 		if err != nil {
 			return false, err

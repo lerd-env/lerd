@@ -5,6 +5,18 @@ import (
 	"testing"
 )
 
+func TestDBExistsQueriesEscapeName(t *testing.T) {
+	// A database name with a single quote must be doubled inside the string literal so
+	// it can't break out of the WHERE ...='...' clause or inject a root-level query in
+	// the container.
+	if my := dbExistsQueryMySQL("it's-a-test"); !strings.Contains(my, "schema_name='it''s-a-test'") {
+		t.Errorf("MySQL existence query did not escape the name: %s", my)
+	}
+	if pg := dbExistsQueryPostgres("a'b"); !strings.Contains(pg, "datname='a''b'") {
+		t.Errorf("Postgres existence query did not escape the name: %s", pg)
+	}
+}
+
 func TestDbImportCmdMySQLPasswordNotInArgs(t *testing.T) {
 	env := &dbEnv{
 		connection: "mysql",

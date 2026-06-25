@@ -33,6 +33,16 @@ func MySQLAdminCmd(container, bin string, args ...string) *exec.Cmd {
 	return podman.Cmd(append([]string{"exec", container, bin, "-h127.0.0.1", "-uroot", "-plerd"}, args...)...)
 }
 
+// EscapeSQLLiteral escapes a value for safe interpolation inside a single-quoted SQL
+// string literal by doubling any embedded single quote. Both MySQL and
+// Postgres accept a doubled quote inside a '...' literal, so this is the portable escape
+// for the existence checks (WHERE schema_name='...' / datname='...'). It is exported so
+// the cli package can reuse the same escaping the provisioning queries use. NOTE:
+// identifiers (CREATE/DROP DATABASE <name>) need backtick / double-quote quoting, not this.
+func EscapeSQLLiteral(v string) string {
+	return strings.ReplaceAll(v, "'", "''")
+}
+
 // CreateDatabase creates dbName inside the named service container if it does
 // not already exist. svc is the service name (e.g. "mysql", "mysql-5-6",
 // "mariadb-11", "postgres-14"); the container is always "lerd-<svc>". The
