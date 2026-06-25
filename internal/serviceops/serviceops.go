@@ -112,6 +112,25 @@ func lerdReservedPorts() map[int]bool {
 	return reserved
 }
 
+// persistPublishedPort records port as service name's published port in global
+// config, returning an error on any load/save failure. The port-ownership guard
+// calls this BEFORE writing the quadlet so it can fail closed: if the choice can't
+// be persisted, erroring is safer than writing a quadlet on the host-owned default
+// port, which systemd's boot autostart would then bind and take the host server down.
+func persistPublishedPort(name string, port int) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("loading global config: %w", err)
+	}
+	entry := cfg.Services[name]
+	entry.PublishedPort = port
+	cfg.Services[name] = entry
+	if err := config.SaveGlobal(cfg); err != nil {
+		return fmt.Errorf("saving published port %d for %s: %w", port, name, err)
+	}
+	return nil
+}
+
 // hostServerInstalled reports whether a host-installed server for this engine appears
 // present on the box, INDEPENDENT of whether it is currently running. It checks the socket
 // DIRECTORY the server uses: that directory is created at install/boot by the distro
@@ -416,23 +435,19 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	if publishedPort == 0 {
 		if spec, hostOwns, ok := hostOwnsDBPort(name); ok && hostOwns {
 			if free := firstFreeHostPort(spec.DefaultPort+1, lerdReservedPorts()); free > 0 {
-				// Persist the choice FIRST, then commit it in-memory only if the save
-				// stuck — otherwise the quadlet would publish a port the config doesn't
-				// record, leaving the two to diverge on the next regeneration.
-				saved := false
-				if cfg, _ := config.LoadGlobal(); cfg != nil {
-					entry := cfg.Services[name]
-					entry.PublishedPort = free
-					cfg.Services[name] = entry
-					saved = config.SaveGlobal(cfg) == nil
+				// Persist the choice FIRST, then commit it in-memory — otherwise the
+				// quadlet would publish a port the config doesn't record, diverging on the
+				// next regeneration. Fail CLOSED if the save fails: returning an error is
+				// safer than writing a quadlet on the host-owned default port, which boot
+				// autostart would bind and take the host server down.
+				if err := persistPublishedPort(name, free); err != nil {
+					return fmt.Errorf("shifting lerd-%s off host-owned port %d: %w", name, spec.DefaultPort, err)
 				}
-				if saved {
-					publishedPort = free
-					fmt.Printf("Note: host %s is present — publishing lerd-%s on 127.0.0.1:%d instead of the default %d to avoid a clash.\n",
-						spec.Display, name, free, spec.DefaultPort)
-					fmt.Printf("      Update host clients pointed at lerd's %s to port %d (the default is now the host server); containerized apps are unaffected.\n", name, free)
-					fmt.Printf("      (override with: lerd service port %s <port>)\n", name)
-				}
+				publishedPort = free
+				fmt.Printf("Note: host %s is present — publishing lerd-%s on 127.0.0.1:%d instead of the default %d to avoid a clash.\n",
+					spec.Display, name, free, spec.DefaultPort)
+				fmt.Printf("      Update host clients pointed at lerd's %s to port %d (the default is now the host server); containerized apps are unaffected.\n", name, free)
+				fmt.Printf("      (override with: lerd service port %s <port>)\n", name)
 			}
 		}
 	}

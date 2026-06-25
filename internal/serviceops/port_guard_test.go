@@ -64,6 +64,42 @@ func TestLerdReservedPorts_includesPresetPort(t *testing.T) {
 	}
 }
 
+func TestPersistPublishedPort_persists(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := persistPublishedPort("postgres", 5433); err != nil {
+		t.Fatalf("persistPublishedPort: %v", err)
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if got := cfg.Services["postgres"].PublishedPort; got != 5433 {
+		t.Errorf("PublishedPort = %d, want 5433 (persisted)", got)
+	}
+}
+
+func TestPersistPublishedPort_surfacesSaveFailure(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("a read-only config dir is not enforced for root")
+	}
+	ro := t.TempDir()
+	if err := os.Chmod(ro, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(ro, 0o755) })
+	t.Setenv("XDG_CONFIG_HOME", ro)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	// SaveGlobal can't write under a read-only config dir. The guard must surface
+	// that failure (fail closed) rather than silently leave the port on the default
+	// and write a colliding quadlet.
+	if err := persistPublishedPort("postgres", 5433); err == nil {
+		t.Error("persistPublishedPort must return an error when the config can't be saved")
+	}
+}
+
 func TestHostServerInstalled(t *testing.T) {
 	defer config.SetHostDBGOOSForTest("linux")() // socket/marker detection is the Linux path
 	root := t.TempDir()
