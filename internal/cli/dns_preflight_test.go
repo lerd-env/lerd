@@ -1,10 +1,37 @@
 package cli
 
 import (
+	"errors"
 	"net"
+	"os"
 	"strings"
 	"testing"
 )
+
+// forwarderRemoveRecorder records the teardown calls ensureLANForwarderRemoved
+// makes and lets a test inject a RemoveServiceUnit error.
+type forwarderRemoveRecorder struct {
+	fakeServiceMgr
+	calls     []string
+	removeErr error
+}
+
+func (r *forwarderRemoveRecorder) Stop(name string) error {
+	r.calls = append(r.calls, "stop:"+name)
+	return nil
+}
+func (r *forwarderRemoveRecorder) Disable(name string) error {
+	r.calls = append(r.calls, "disable:"+name)
+	return nil
+}
+func (r *forwarderRemoveRecorder) RemoveServiceUnit(name string) error {
+	r.calls = append(r.calls, "remove:"+name)
+	return r.removeErr
+}
+func (r *forwarderRemoveRecorder) DaemonReload() error {
+	r.calls = append(r.calls, "reload")
+	return nil
+}
 
 func TestPreflightForwarderPort_OwnUnitActiveSkipsCheck(t *testing.T) {
 	prevStatus := forwarderUnitStatusFn
@@ -155,6 +182,57 @@ func TestEnsureLANForwarder_NonDarwinInstallsForwarder(t *testing.T) {
 	}
 	if !called {
 		t.Error("expected the forwarder to be installed on the Linux model")
+	}
+}
+
+func TestEnsureLANForwarderRemoved_TearsDownUnit(t *testing.T) {
+	// Teardown stops, disables, removes, then daemon-reloads, naming the
+	// forwarder unit at each step, and emits a progress line.
+	rec := &forwarderRemoveRecorder{}
+	swapMgr(t, rec)
+
+	var events []string
+	if err := ensureLANForwarderRemoved(func(s string) { events = append(events, s) }); err != nil {
+		t.Fatalf("ensureLANForwarderRemoved: unexpected error %v", err)
+	}
+
+	want := []string{
+		"stop:lerd-dns-forwarder",
+		"disable:lerd-dns-forwarder",
+		"remove:lerd-dns-forwarder",
+		"reload",
+	}
+	if !equalStrings(rec.calls, want) {
+		t.Errorf("teardown calls: got %v want %v", rec.calls, want)
+	}
+	if len(events) == 0 || !strings.Contains(events[0], "lerd-dns-forwarder") {
+		t.Errorf("expected a progress line naming the forwarder, got %v", events)
+	}
+}
+
+func TestEnsureLANForwarderRemoved_MissingUnitIgnored(t *testing.T) {
+	// A Mac that never had a forwarder (or any already-clean host) hits a
+	// not-exist on removal; that is the no-op case and must not error.
+	rec := &forwarderRemoveRecorder{removeErr: os.ErrNotExist}
+	swapMgr(t, rec)
+
+	if err := ensureLANForwarderRemoved(nil); err != nil {
+		t.Errorf("a missing forwarder unit must be ignored, got %v", err)
+	}
+}
+
+func TestEnsureLANForwarderRemoved_RealRemoveErrorSurfaces(t *testing.T) {
+	// Any removal error that isn't not-exist is a genuine failure and must
+	// abort the unexpose so the caller doesn't report a clean teardown.
+	rec := &forwarderRemoveRecorder{removeErr: errors.New("permission denied")}
+	swapMgr(t, rec)
+
+	err := ensureLANForwarderRemoved(nil)
+	if err == nil {
+		t.Fatal("expected a real RemoveServiceUnit error to surface")
+	}
+	if !strings.Contains(err.Error(), "removing forwarder unit") {
+		t.Errorf("error should wrap the forwarder removal, got %v", err)
 	}
 }
 
