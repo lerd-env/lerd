@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // TestHasNonZeroExitCode covers the failure-detection helper for both
@@ -571,6 +573,56 @@ func TestStripPrivilegedIPBind_v6(t *testing.T) {
 	for in, want := range cases {
 		if got := stripPrivilegedIPBind(in); got != want {
 			t.Errorf("stripPrivilegedIPBind(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestStripIPv6PublishPorts(t *testing.T) {
+	cases := map[string]string{
+		// Loopback IPv6 dup is dropped; its IPv4 partner survives.
+		"PublishPort=127.0.0.1:80:80\nPublishPort=[::1]:80:80": "PublishPort=127.0.0.1:80:80",
+		// Bind-all IPv6 has no IPv4 partner: rewrite to 0.0.0.0 rather than drop.
+		"PublishPort=[::]:80:80":   "PublishPort=0.0.0.0:80:80",
+		"PublishPort=[::]:443:443": "PublishPort=0.0.0.0:443:443",
+		// Plain IPv4 lines and non-PublishPort lines pass through untouched.
+		"PublishPort=80:80": "PublishPort=80:80",
+		"Network=lerd":      "Network=lerd",
+		"[Container]":       "[Container]",
+	}
+	for in, want := range cases {
+		if got := stripIPv6PublishPorts(in); got != want {
+			t.Errorf("stripIPv6PublishPorts(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestLANExposedPublishPortsSurvive guards the full macOS transform chain for a
+// LAN-exposed container (lan.exposed: true). The regression: BindForLAN +
+// PairIPv6Binds collapse "PublishPort=80:80" into the "[::]:" bind-all form, and
+// stripIPv6PublishPorts used to drop every bracketed line — leaving lerd-nginx
+// with no -p flags, so nothing reached the host. The published ports must survive
+// as -p entries in the final podman run args.
+func TestLANExposedPublishPortsSurvive(t *testing.T) {
+	content := "[Container]\n" +
+		"Image=docker.io/library/nginx:alpine\n" +
+		"Network=lerd\n" +
+		"PublishPort=80:80\n" +
+		"PublishPort=443:443\n"
+
+	content = podman.BindForLAN(content, true) // lanExposed
+	content = podman.PairIPv6Binds(content)
+	content = stripIPv6PublishPorts(content)
+
+	c := parseSection(content, "Container")
+	args, err := containerToPodmanArgs(c)
+	if err != nil {
+		t.Fatalf("containerToPodmanArgs: %v", err)
+	}
+
+	joined := strings.Join(args, " ")
+	for _, want := range []string{"-p 80:80", "-p 443:443"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected %q in podman args, got: %s", want, joined)
 		}
 	}
 }

@@ -351,18 +351,31 @@ func stripPrivilegedIPBind(port string) string {
 	return port
 }
 
-// stripIPv6PublishPorts removes PublishPort= lines that start with a bracketed
-// IPv6 address (e.g. "[::1]:3306:3306"). gvproxy cannot bind both an IPv4 and
-// an IPv6 loopback address on the same port simultaneously.
+// stripIPv6PublishPorts normalises bracketed IPv6 PublishPort= lines for gvproxy,
+// which cannot bind both an IPv4 and an IPv6 address on the same port at once.
+//
+// Loopback IPv6 lines ("[::1]:3306:3306") are dropped: PairIPv6Binds always pairs
+// them with an IPv4 "127.0.0.1:" line that survives, so the published port lives on.
+//
+// Bind-all IPv6 lines ("[::]:80:80") have no IPv4 partner — PairIPv6Binds collapses a
+// bare/0.0.0.0 bind into the "[::]:" form only — so they are rewritten to "0.0.0.0:"
+// rather than dropped. Dropping them left LAN-exposed containers (lan.exposed: true,
+// where every publish ends up as "[::]:") with no published ports at all.
 func stripIPv6PublishPorts(content string) string {
 	lines := strings.Split(content, "\n")
 	out := lines[:0]
 	for _, l := range lines {
-		val := strings.TrimPrefix(strings.TrimSpace(l), "PublishPort=")
-		if val != strings.TrimSpace(l) && strings.HasPrefix(val, "[") {
+		trimmed := strings.TrimSpace(l)
+		val := strings.TrimPrefix(trimmed, "PublishPort=")
+		if val == trimmed || !strings.HasPrefix(val, "[") {
+			out = append(out, l)
 			continue
 		}
-		out = append(out, l)
+		if rest, ok := strings.CutPrefix(val, "[::]:"); ok {
+			out = append(out, "PublishPort=0.0.0.0:"+rest)
+			continue
+		}
+		// Loopback (or any other bracketed) IPv6 line: drop it; its IPv4 partner stays.
 	}
 	return strings.Join(out, "\n")
 }
