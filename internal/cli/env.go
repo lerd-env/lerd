@@ -399,6 +399,56 @@ func applyHostDBExternalEnv(proj *config.ProjectConfig, envMap map[string]string
 	return true
 }
 
+// hostDBSetupNotes returns the lines `lerd env` prints for a host-mode (db.external)
+// connection: the transport line plus engine/platform-specific auth guidance for the
+// gotchas that leave a reachable server still refusing the containerized app. Pure (no
+// I/O) so it's unit-testable; runEnv prints each line.
+//
+// The container is never a local peer of the host server. On Linux it connects over
+// the bind-mounted socket, where Postgres' default 'peer' auth can't map the
+// namespaced UID to a role. On macOS it connects over TCP via gvproxy, so the host
+// sees a NON-loopback source and a loopback-only grant/bind makes the server visibly
+// up yet unreachable. MySQL/MariaDB authenticate by user+password (not OS UID), so the
+// socket path needs no note; only the macOS TCP path does.
+func hostDBSetupNotes(spec config.HostBackendSpec, usesTCP bool, socketPath, user string) []string {
+	if user == "" {
+		user = "<db-user>"
+	}
+	if !usesTCP {
+		notes := []string{
+			fmt.Sprintf("  Host %s (db.external) — connecting via socket %s; not starting %s", spec.Display, socketPath, spec.ContainerName),
+		}
+		if spec.Family == "postgres" {
+			notes = append(notes,
+				"    note: a containerized client can't use Postgres 'peer' auth over the socket — add a line like",
+				fmt.Sprintf("          'local all %s scram-sha-256' to pg_hba.conf and reload, or the app's DB connection will fail.", user),
+				"          Edit it preserving postgres:postgres ownership (e.g. as the postgres user); a root 'sed -i'",
+				"          leaves the file root-owned and the cluster won't restart.",
+			)
+		}
+		return notes
+	}
+	// macOS: the container reaches the host server through gvproxy, so the host sees a
+	// NON-loopback source. A loopback-only grant/bind leaves the server visibly up yet
+	// unreachable from the app — flag the engine-specific fix.
+	notes := []string{
+		fmt.Sprintf("  Host %s (db.external) — connecting via TCP %s:%d; not starting %s", spec.Display, config.HostDBTCPHost, spec.DefaultPort, spec.ContainerName),
+		"    note: the container connects over TCP via gvproxy, so the host sees a non-loopback source —",
+	}
+	if spec.Family == "postgres" {
+		notes = append(notes,
+			fmt.Sprintf("          set listen_addresses beyond 'localhost' and add 'host all %s <gvproxy-subnet> scram-sha-256' to", user),
+			"          pg_hba.conf, then reload, or the app's TCP connection will be refused.",
+		)
+	} else {
+		notes = append(notes,
+			fmt.Sprintf("          bind the server beyond 127.0.0.1 and grant %s on '%%' (or the gvproxy gateway),", user),
+			"          or the app's TCP connection will be refused.",
+		)
+	}
+	return notes
+}
+
 // hostDBPort returns the DB_PORT to emit for a TCP (macOS) or socket-directory
 // (Postgres) host connection: an explicit override the user committed via
 // .env.lerd_override (already layered into envOverrides) wins over the engine
@@ -576,25 +626,8 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	proj, _ := config.LoadProjectConfig(cwd)
 	if applyHostDBExternalEnv(proj, envMap, extServices, envOverrides) {
 		spec, _ := config.HostBackendForProject(proj)
-		if config.HostDBUsesTCP() {
-			fmt.Printf("  Host %s (db.external) — connecting via TCP %s:%d; not starting %s\n", spec.Display, config.HostDBTCPHost, spec.DefaultPort, spec.ContainerName)
-		} else {
-			fmt.Printf("  Host %s (db.external) — connecting via socket %s; not starting %s\n", spec.Display, proj.HostDBSocketPath(), spec.ContainerName)
-			if spec.Family == "postgres" {
-				// Postgres' default 'peer' auth maps the connecting OS UID to a role, which a
-				// containerized client (a namespaced/mapped UID) can't satisfy — so the app's
-				// socket connection fails with "Peer authentication failed" unless the host
-				// allows password auth on the local line. MySQL is unaffected (it authenticates
-				// by username/password, not OS UID), so only flag Postgres.
-				user := envOverrides["DB_USERNAME"]
-				if user == "" {
-					user = "<db-user>"
-				}
-				fmt.Printf("    note: a containerized client can't use Postgres 'peer' auth over the socket — add a line like\n")
-				fmt.Printf("          'local all %s scram-sha-256' to pg_hba.conf and reload, or the app's DB connection will fail.\n", user)
-				fmt.Printf("          Edit it preserving postgres:postgres ownership (e.g. as the postgres user); a root 'sed -i'\n")
-				fmt.Printf("          leaves the file root-owned and the cluster won't restart.\n")
-			}
+		for _, line := range hostDBSetupNotes(spec, config.HostDBUsesTCP(), proj.HostDBSocketPath(), envOverrides["DB_USERNAME"]) {
+			fmt.Println(line)
 		}
 	} else if clearStaleHostDBSocket(proj, envMap, envOverrides) {
 		fmt.Println("  db.external is off — cleared the stale host DB_SOCKET so the lerd container is used")

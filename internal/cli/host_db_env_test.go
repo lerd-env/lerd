@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -233,6 +234,75 @@ func TestApplyHostDBExternalEnv_nilProject(t *testing.T) {
 	if applyHostDBExternalEnv(nil, map[string]string{}, map[string]bool{}, map[string]string{}) {
 		t.Fatal("expected applied=false for a nil project (no panic)")
 	}
+}
+
+func TestHostDBSetupNotes(t *testing.T) {
+	mysql, ok := config.HostBackendFor("mysql")
+	if !ok {
+		t.Fatal("no mysql host-backend spec")
+	}
+	postgres, ok := config.HostBackendFor("postgres")
+	if !ok {
+		t.Fatal("no postgres host-backend spec")
+	}
+	join := func(lines []string) string { return strings.Join(lines, "\n") }
+
+	t.Run("linux mysql: socket line, no auth note", func(t *testing.T) {
+		out := join(hostDBSetupNotes(mysql, false, "/run/mysqld/mysqld.sock", "lerd"))
+		if !strings.Contains(out, "connecting via socket /run/mysqld/mysqld.sock") {
+			t.Errorf("missing socket transport line:\n%s", out)
+		}
+		// MySQL over the socket authenticates by user+password, so no auth caveat.
+		if strings.Contains(out, "pg_hba") || strings.Contains(out, "gvproxy") {
+			t.Errorf("mysql socket path should carry no pg_hba/gvproxy note:\n%s", out)
+		}
+	})
+
+	t.Run("linux postgres: pg_hba peer-auth note", func(t *testing.T) {
+		out := join(hostDBSetupNotes(postgres, false, "/var/run/postgresql", "appuser"))
+		if !strings.Contains(out, "connecting via socket /var/run/postgresql") {
+			t.Errorf("missing socket transport line:\n%s", out)
+		}
+		if !strings.Contains(out, "local all appuser scram-sha-256") {
+			t.Errorf("missing pg_hba peer-auth note carrying the user:\n%s", out)
+		}
+	})
+
+	t.Run("darwin mysql: TCP grant/bind note", func(t *testing.T) {
+		out := join(hostDBSetupNotes(mysql, true, "", "appuser"))
+		if !strings.Contains(out, "connecting via TCP "+config.HostDBTCPHost) {
+			t.Errorf("missing TCP transport line:\n%s", out)
+		}
+		if !strings.Contains(out, "non-loopback source") {
+			t.Errorf("missing gvproxy non-loopback explanation:\n%s", out)
+		}
+		if !strings.Contains(out, "grant appuser on '%'") {
+			t.Errorf("missing mysql grant-on-%% note:\n%s", out)
+		}
+		if strings.Contains(out, "listen_addresses") {
+			t.Errorf("mysql note must not mention postgres listen_addresses:\n%s", out)
+		}
+	})
+
+	t.Run("darwin postgres: TCP listen_addresses + host-line note", func(t *testing.T) {
+		out := join(hostDBSetupNotes(postgres, true, "", "appuser"))
+		if !strings.Contains(out, "connecting via TCP "+config.HostDBTCPHost) {
+			t.Errorf("missing TCP transport line:\n%s", out)
+		}
+		if !strings.Contains(out, "listen_addresses") {
+			t.Errorf("missing listen_addresses note:\n%s", out)
+		}
+		if !strings.Contains(out, "host all appuser") {
+			t.Errorf("missing pg_hba host-line note carrying the user:\n%s", out)
+		}
+	})
+
+	t.Run("empty user falls back to a placeholder", func(t *testing.T) {
+		out := join(hostDBSetupNotes(postgres, false, "/var/run/postgresql", ""))
+		if !strings.Contains(out, "local all <db-user> scram-sha-256") {
+			t.Errorf("empty user should fall back to <db-user>:\n%s", out)
+		}
+	})
 }
 
 func TestClearStaleHostDBSocket_clearsOnToggleOff(t *testing.T) {
