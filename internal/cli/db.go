@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
 )
 
@@ -525,7 +526,7 @@ func databaseExists(svc, name string) (bool, error) {
 		}
 		var lastErr error
 		for _, bin := range binaries {
-			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			check := serviceops.MySQLAdminCmd(container, bin,
 				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", name))
 			out, err := check.Output()
 			if err != nil {

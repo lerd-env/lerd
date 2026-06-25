@@ -24,6 +24,9 @@ func TestApplyHostDBExternalEnv_emitsSocketAndMarksExternal(t *testing.T) {
 		t.Error(`extServices["mysql"] should be true so lerd-mysql is not started`)
 	}
 	// Connection vars layered into envOverrides (which win over def.Vars).
+	if got := envOverrides["DB_CONNECTION"]; got != "mysql" {
+		t.Errorf("DB_CONNECTION = %q, want mysql", got)
+	}
 	if got := envOverrides["DB_HOST"]; got != "localhost" {
 		t.Errorf("DB_HOST = %q, want localhost", got)
 	}
@@ -72,10 +75,68 @@ func TestApplyHostDBExternalEnv_macOSEmitsTCP(t *testing.T) {
 	if got := envOverrides["DB_HOST"]; got != config.HostDBTCPHost {
 		t.Errorf("DB_HOST = %q, want %q (gvproxy host alias)", got, config.HostDBTCPHost)
 	}
-	if got := envOverrides["DB_PORT"]; got != config.HostDBTCPPort {
-		t.Errorf("DB_PORT = %q, want %q", got, config.HostDBTCPPort)
+	if got := envOverrides["DB_PORT"]; got != "3306" {
+		t.Errorf("DB_PORT = %q, want 3306 (MySQL canonical port)", got)
 	}
 	// DB_SOCKET must be present-and-empty (cleared) so a stale socket can't win.
+	if v, ok := envOverrides["DB_SOCKET"]; !ok || v != "" {
+		t.Errorf("DB_SOCKET override = %q present=%v, want present and empty", v, ok)
+	}
+}
+
+func TestApplyHostDBExternalEnv_postgresSocketDirContract(t *testing.T) {
+	defer config.SetHostDBGOOSForTest("linux")() // socket transport is the Linux path
+	proj := &config.ProjectConfig{
+		DB:       config.ProjectDB{External: true, Service: "postgres"},
+		Services: []config.ProjectService{{Name: "postgres"}},
+	}
+	extServices := map[string]bool{}
+	envOverrides := map[string]string{}
+
+	if !applyHostDBExternalEnv(proj, map[string]string{}, extServices, envOverrides) {
+		t.Fatal("expected applied=true for a db.external postgres project")
+	}
+	if !extServices["postgres"] {
+		t.Error(`extServices["postgres"] should be true so lerd-postgres is not started`)
+	}
+	// Postgres keeps the pgsql driver.
+	if got := envOverrides["DB_CONNECTION"]; got != "pgsql" {
+		t.Errorf("DB_CONNECTION = %q, want pgsql", got)
+	}
+	// Postgres connects over its socket DIRECTORY via DB_HOST (libpq), NOT DB_SOCKET.
+	if got := envOverrides["DB_HOST"]; got != "/var/run/postgresql" {
+		t.Errorf("DB_HOST = %q, want /var/run/postgresql (socket directory)", got)
+	}
+	// DB_PORT is retained so libpq forms <dir>/.s.PGSQL.<port>.
+	if got := envOverrides["DB_PORT"]; got != "5432" {
+		t.Errorf("DB_PORT = %q, want 5432 (retained for the socket filename)", got)
+	}
+	// DB_SOCKET must be present-and-empty (cleared): pgsql has no unix_socket option.
+	if v, ok := envOverrides["DB_SOCKET"]; !ok || v != "" {
+		t.Errorf("DB_SOCKET override = %q present=%v, want present and empty", v, ok)
+	}
+}
+
+func TestApplyHostDBExternalEnv_postgresMacOSEmitsTCP(t *testing.T) {
+	defer config.SetHostDBGOOSForTest("darwin")()
+	proj := &config.ProjectConfig{
+		DB:       config.ProjectDB{External: true, Service: "postgres"},
+		Services: []config.ProjectService{{Name: "postgres"}},
+	}
+	envOverrides := map[string]string{}
+	if !applyHostDBExternalEnv(proj, map[string]string{}, map[string]bool{}, envOverrides) {
+		t.Fatal("expected applied=true for a db.external postgres project")
+	}
+	if got := envOverrides["DB_HOST"]; got != config.HostDBTCPHost {
+		t.Errorf("DB_HOST = %q, want %q (gvproxy host alias)", got, config.HostDBTCPHost)
+	}
+	// macOS uses the engine's canonical port — 5432 for Postgres, not 3306.
+	if got := envOverrides["DB_PORT"]; got != "5432" {
+		t.Errorf("DB_PORT = %q, want 5432 (Postgres canonical port over TCP)", got)
+	}
+	if got := envOverrides["DB_CONNECTION"]; got != "pgsql" {
+		t.Errorf("DB_CONNECTION = %q, want pgsql", got)
+	}
 	if v, ok := envOverrides["DB_SOCKET"]; !ok || v != "" {
 		t.Errorf("DB_SOCKET override = %q present=%v, want present and empty", v, ok)
 	}
@@ -93,13 +154,64 @@ func TestApplyHostDBExternalEnv_noopWhenNotExternal(t *testing.T) {
 	}
 }
 
-func TestApplyHostDBExternalEnv_skipsNonMySQLFamily(t *testing.T) {
+func TestApplyHostDBExternalEnv_marksOnlyOwnFamily(t *testing.T) {
+	defer config.SetHostDBGOOSForTest("linux")()
+	// A MySQL host site must NOT mark postgres external. postgres is a default preset
+	// that sorts after mysql in the service loop, so marking it would overwrite the
+	// site's MySQL connection vars with the postgres preset's (e.g. DB_USERNAME=postgres).
+	mysqlProj := &config.ProjectConfig{
+		DB:       config.ProjectDB{External: true, Service: "mysql"},
+		Services: []config.ProjectService{{Name: "mysql"}},
+	}
+	ext := map[string]bool{}
+	applyHostDBExternalEnv(mysqlProj, map[string]string{}, ext, map[string]string{})
+	if ext["postgres"] {
+		t.Error("MySQL host site must NOT mark postgres external (would leak pgsql preset env)")
+	}
+	if !ext["mysql"] || !ext["mariadb"] {
+		t.Error("MySQL host site should mark mysql+mariadb external")
+	}
+
+	// A Postgres host site must NOT mark mysql/mariadb external.
+	pgProj := &config.ProjectConfig{
+		DB:       config.ProjectDB{External: true, Service: "postgres"},
+		Services: []config.ProjectService{{Name: "postgres"}},
+	}
+	ext = map[string]bool{}
+	applyHostDBExternalEnv(pgProj, map[string]string{}, ext, map[string]string{})
+	if ext["mysql"] || ext["mariadb"] {
+		t.Error("Postgres host site must NOT mark mysql/mariadb external")
+	}
+	if !ext["postgres"] {
+		t.Error("Postgres host site should mark postgres external")
+	}
+}
+
+func TestApplyHostDBExternalEnv_postgresHonoursPortOverride(t *testing.T) {
+	defer config.SetHostDBGOOSForTest("linux")()
 	proj := &config.ProjectConfig{
 		DB:       config.ProjectDB{External: true, Service: "postgres"},
 		Services: []config.ProjectService{{Name: "postgres"}},
 	}
+	// A user committed DB_PORT=5433 via .env.lerd_override (already layered into
+	// envOverrides). For Postgres the port forms the socket filename (.s.PGSQL.5433),
+	// so it must be preserved, not clobbered back to the 5432 default.
+	envOverrides := map[string]string{"DB_PORT": "5433"}
+	applyHostDBExternalEnv(proj, map[string]string{}, map[string]bool{}, envOverrides)
+	if got := envOverrides["DB_PORT"]; got != "5433" {
+		t.Errorf("DB_PORT = %q, want 5433 (user override preserved for the socket filename)", got)
+	}
+}
+
+func TestApplyHostDBExternalEnv_skipsNonHostCapableFamily(t *testing.T) {
+	// Redis has no host backend, so db.external is a no-op for it (unlike MySQL,
+	// MariaDB, and Postgres, which are all host-capable).
+	proj := &config.ProjectConfig{
+		DB:       config.ProjectDB{External: true, Service: "redis"},
+		Services: []config.ProjectService{{Name: "redis"}},
+	}
 	if applyHostDBExternalEnv(proj, map[string]string{}, map[string]bool{}, map[string]string{}) {
-		t.Fatal("expected applied=false for postgres — host-socket mode is MySQL/MariaDB-only in milestone 1")
+		t.Fatal("expected applied=false for redis — it has no host backend")
 	}
 }
 
@@ -120,5 +232,66 @@ func TestApplyHostDBExternalEnv_doesNotInventAbsentCreds(t *testing.T) {
 func TestApplyHostDBExternalEnv_nilProject(t *testing.T) {
 	if applyHostDBExternalEnv(nil, map[string]string{}, map[string]bool{}, map[string]string{}) {
 		t.Fatal("expected applied=false for a nil project (no panic)")
+	}
+}
+
+func TestClearStaleHostDBSocket_clearsOnToggleOff(t *testing.T) {
+	// A project that was in host MySQL mode (.env still carries the host socket) is
+	// switched back to container mode (db.external removed). The stale DB_SOCKET must be
+	// cleared via envOverrides so the container is used, not a now-dead host socket.
+	proj := &config.ProjectConfig{DB: config.ProjectDB{Service: "mysql"}} // External is false
+	envMap := map[string]string{"DB_SOCKET": config.DefaultHostMySQLSocket}
+	envOverrides := map[string]string{}
+	if !clearStaleHostDBSocket(proj, envMap, envOverrides) {
+		t.Fatal("expected cleared=true for a host-capable container-mode project carrying a stale socket")
+	}
+	if v, ok := envOverrides["DB_SOCKET"]; !ok || v != "" {
+		t.Errorf("DB_SOCKET override = %q present=%v, want present and empty", v, ok)
+	}
+}
+
+func TestClearStaleHostDBSocket_noopWhenStillExternal(t *testing.T) {
+	// While db.external is on, host mode owns DB_SOCKET — the clear must not fire.
+	proj := &config.ProjectConfig{DB: config.ProjectDB{External: true, Service: "mysql"}}
+	envOverrides := map[string]string{}
+	if clearStaleHostDBSocket(proj, map[string]string{"DB_SOCKET": config.DefaultHostMySQLSocket}, envOverrides) {
+		t.Fatal("expected noop while still external")
+	}
+	if _, ok := envOverrides["DB_SOCKET"]; ok {
+		t.Error("must not touch DB_SOCKET while external")
+	}
+}
+
+func TestClearStaleHostDBSocket_respectsUserOverride(t *testing.T) {
+	// A user who intentionally set DB_SOCKET via .env.lerd_override (already layered into
+	// envOverrides) keeps it — lerd only clears the socket it wrote itself.
+	proj := &config.ProjectConfig{DB: config.ProjectDB{Service: "mysql"}}
+	envOverrides := map[string]string{"DB_SOCKET": "/tmp/custom.sock"}
+	if clearStaleHostDBSocket(proj, map[string]string{"DB_SOCKET": config.DefaultHostMySQLSocket}, envOverrides) {
+		t.Fatal("expected noop when the user re-asserted a socket via .env.lerd_override")
+	}
+	if envOverrides["DB_SOCKET"] != "/tmp/custom.sock" {
+		t.Errorf("user socket override must be preserved, got %q", envOverrides["DB_SOCKET"])
+	}
+}
+
+func TestClearStaleHostDBSocket_noopWhenNoStaleSocket(t *testing.T) {
+	// Nothing to clear → don't add a noisy empty DB_SOCKET to a fresh container project.
+	proj := &config.ProjectConfig{DB: config.ProjectDB{Service: "mysql"}}
+	envOverrides := map[string]string{}
+	if clearStaleHostDBSocket(proj, map[string]string{}, envOverrides) {
+		t.Fatal("expected noop when .env has no DB_SOCKET to clear")
+	}
+	if _, ok := envOverrides["DB_SOCKET"]; ok {
+		t.Error("must not add an empty DB_SOCKET when there was nothing to clear")
+	}
+}
+
+func TestClearStaleHostDBSocket_noopForNonHostCapable(t *testing.T) {
+	// Redis is not a host-capable DB family, so the socket-clear logic never applies.
+	proj := &config.ProjectConfig{DB: config.ProjectDB{Service: "redis"}}
+	envOverrides := map[string]string{}
+	if clearStaleHostDBSocket(proj, map[string]string{"DB_SOCKET": "/x"}, envOverrides) {
+		t.Fatal("expected noop for a non-host-capable family")
 	}
 }

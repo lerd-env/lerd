@@ -861,6 +861,17 @@ func newServiceExposeCmd() *cobra.Command {
 			if err := config.SaveGlobal(cfg); err != nil {
 				return err
 			}
+			// Only (re)write the quadlet for an INSTALLED service — `expose` on a removed
+			// service would otherwise resurrect it (recreating the .container). The
+			// extra-port preference is saved above for the next install.
+			if !serviceops.ServiceInstalled(name) {
+				if remove {
+					fmt.Printf("%s is not installed; removed the saved extra port %s.\n", name, port)
+				} else {
+					fmt.Printf("%s is not installed; saved extra port %s for the next install.\n", name, port)
+				}
+				return nil
+			}
 			if err := ensureServiceQuadlet(name); err != nil {
 				return err
 			}
@@ -939,8 +950,29 @@ they are unaffected. Use --reset (or "port mysql 0") to return to the default.`,
 			if err := config.SaveGlobal(cfg); err != nil {
 				return err
 			}
+			// Only (re)write the quadlet for an INSTALLED service. Without this guard,
+			// `service port` on a removed service silently resurrects it (recreates the
+			// .container, which then auto-starts on boot and can grab a port a host
+			// server needs). The override is saved above either way, so a later
+			// `lerd service start` picks it up.
+			if !serviceops.ServiceInstalled(name) {
+				if newPort == 0 {
+					fmt.Printf("%s is not installed; cleared its saved published-port override.\n", name)
+				} else {
+					fmt.Printf("%s is not installed; saved published port %d for the next install.\n", name, newPort)
+				}
+				return nil
+			}
 			if err := ensureServiceQuadlet(name); err != nil {
 				return err
+			}
+			// The port-ownership guard inside the quadlet write may have overridden the
+			// request — e.g. on --reset when a host server owns the engine default port it
+			// keeps lerd off that port — so report the ACTUAL resulting published port, not
+			// the requested one, to avoid a false "reset to default" message.
+			actual := newPort
+			if cfg2, lerr := config.LoadGlobal(); lerr == nil && cfg2 != nil {
+				actual = cfg2.Services[name].PublishedPort
 			}
 			status, _ := podman.UnitStatus("lerd-" + name)
 			if status == "active" {
@@ -950,11 +982,14 @@ they are unaffected. Use --reset (or "port mysql 0") to return to the default.`,
 				}
 				_ = podman.WaitReady(name, 30*time.Second)
 			}
-			if newPort == 0 {
+			switch {
+			case actual == 0:
 				fmt.Printf("Reset %s to its default published port.\n", name)
-			} else {
-				fmt.Printf("lerd-%s now publishes 127.0.0.1:%d (container-internal port unchanged).\n", name, newPort)
-				fmt.Printf("Update host clients pointed at lerd's %s to port %d; containerized apps are unaffected.\n", name, newPort)
+			case newPort == 0:
+				fmt.Printf("%s stays published on 127.0.0.1:%d — a host server owns its default port.\n", name, actual)
+			default:
+				fmt.Printf("lerd-%s now publishes 127.0.0.1:%d (container-internal port unchanged).\n", name, actual)
+				fmt.Printf("Update host clients pointed at lerd's %s to port %d; containerized apps are unaffected.\n", name, actual)
 			}
 			return nil
 		},

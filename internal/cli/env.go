@@ -308,34 +308,49 @@ var serviceDetectors = map[string]func(map[string]string) bool{
 	},
 }
 
-// projectDBIsMySQLFamily reports whether the project's database is MySQL or
-// MariaDB — the families that support host access over a unix socket. Gates
-// the db.external host-database mode, which is MySQL/MariaDB-only for now.
-// Delegates to config.ProjectConfig.IsMySQLFamilyDB so the CLI and the
-// dashboard's backend switch share one predicate.
-func projectDBIsMySQLFamily(proj *config.ProjectConfig) bool {
-	return proj.IsMySQLFamilyDB()
-}
-
 // applyHostDBExternalEnv translates a project's committed db.external host-database
-// choice into the same effect as LERD_EXTERNAL_SERVICES + a DB_HOST/DB_SOCKET
-// override. For a MySQL/MariaDB project it marks the DB service(s) externally
-// managed in extServices (so runEnv skips ensureServiceRunning/createDatabase — no
-// lerd-mysql container) and layers the host unix-socket connection vars into
-// envOverrides (which are applied last, so they win over the framework's default
-// DB_HOST=lerd-mysql). envMap is the parsed .env, read only to preserve any host
+// choice into the same effect as LERD_EXTERNAL_SERVICES + DB connection overrides.
+// For a host-capable project (MySQL/MariaDB/Postgres) it marks the DB service(s)
+// externally managed in extServices (so runEnv skips ensureServiceRunning/
+// createDatabase — no lerd DB container) and layers the host connection vars into
+// envOverrides (applied last, so they win over the framework's default
+// DB_HOST=lerd-<svc>). envMap is the parsed .env, read only to preserve any host
 // DB credentials the user already set. Returns true when it applied (so the caller
 // can print the notice); a no-op (returns false) unless the project sets
-// db.external on a MySQL/MariaDB database.
+// db.external on a host-capable database.
+//
+// The connection contract is per-engine, driven by the HostBackendSpec, because
+// the drivers differ:
+//   - MySQL/MariaDB connect over a socket FILE: DB_HOST=localhost, DB_SOCKET=<file>,
+//     DB_PORT cleared (mysqlnd reads unix_socket and ignores host).
+//   - Postgres connects over a socket DIRECTORY: DB_HOST=<dir>, DB_PORT kept (libpq
+//     forms <dir>/.s.PGSQL.<port>), DB_SOCKET cleared (Laravel's pgsql connection
+//     has no unix_socket option — it reads the directory from the host field).
+//   - macOS (either engine) connects over TCP via gvproxy's host alias:
+//     DB_HOST=host.containers.internal, DB_PORT=<engine port>, DB_SOCKET cleared.
 func applyHostDBExternalEnv(proj *config.ProjectConfig, envMap map[string]string, extServices map[string]bool, envOverrides map[string]string) bool {
-	if proj == nil || !proj.DB.External || !projectDBIsMySQLFamily(proj) {
+	if proj == nil || !proj.DB.External || !proj.IsHostBackendCapableDB() {
 		return false
 	}
-	// Mark the DB service externally managed. "mysql"/"mariadb" cover the keys the
-	// framework service loops consult; the project's own DB service names cover the
-	// custom-services branch and family alternates (e.g. mariadb-11).
-	extServices["mysql"] = true
-	extServices["mariadb"] = true
+	spec, ok := config.HostBackendForProject(proj)
+	if !ok {
+		return false
+	}
+	// Mark this project's OWN DB family externally managed so runEnv skips
+	// ensureServiceRunning/createDatabase for it. mysql and mariadb share the MySQL
+	// family (same socket/port), so both framework keys are marked for either;
+	// postgres is its own family. We must NOT mark a different family external — that
+	// would pull the other engine's preset env (e.g. postgres' DB_USERNAME=postgres,
+	// which sorts after mysql in the service loop) onto a site that doesn't use it.
+	// The project's own DB service names cover the custom-services branch and family
+	// alternates (e.g. mariadb-11, postgres-pgvector).
+	switch spec.Family {
+	case "mysql", "mariadb":
+		extServices["mysql"] = true
+		extServices["mariadb"] = true
+	default:
+		extServices[spec.Family] = true
+	}
 	if proj.DB.Service != "" {
 		extServices[strings.ToLower(proj.DB.Service)] = true
 	}
@@ -344,20 +359,33 @@ func applyHostDBExternalEnv(proj *config.ProjectConfig, envMap map[string]string
 			extServices[strings.ToLower(s.Name)] = true
 		}
 	}
-	if config.HostDBUsesTCP() {
-		// macOS: the host unix socket can't be reached from inside the
-		// podman-machine VM, so connect over TCP via gvproxy's host alias
-		// instead. Clear DB_SOCKET so a socket left by the framework/.env
-		// can't override the TCP target.
+	// DB_CONNECTION reflects the engine (mysql vs pgsql) so a Postgres host site
+	// keeps the right driver after the host overrides are layered on.
+	envOverrides["DB_CONNECTION"] = spec.ConnEnvKey
+	switch {
+	case config.HostDBUsesTCP():
+		// macOS: the host unix socket can't be reached from inside the podman-machine
+		// VM, so connect over TCP via gvproxy's host alias. Clear DB_SOCKET so a socket
+		// left by the framework/.env can't override the TCP target.
 		envOverrides["DB_HOST"] = config.HostDBTCPHost
-		envOverrides["DB_PORT"] = config.HostDBTCPPort
+		envOverrides["DB_PORT"] = hostDBPort(spec, envOverrides)
 		envOverrides["DB_SOCKET"] = ""
-	} else {
+	case spec.SocketIsDir:
+		// Postgres: libpq connects over a unix socket when the host is the socket
+		// DIRECTORY, with DB_PORT retained so it forms <dir>/.s.PGSQL.<port>. Laravel's
+		// pgsql connection has no unix_socket option, so the directory goes in DB_HOST.
+		// DB_PORT is load-bearing here (it names the socket file), so an explicit
+		// override — e.g. a host cluster on 5433 — wins over the engine default.
+		envOverrides["DB_HOST"] = proj.HostDBSocketPath()
+		envOverrides["DB_PORT"] = hostDBPort(spec, envOverrides)
+		envOverrides["DB_SOCKET"] = ""
+	default:
+		// MySQL/MariaDB: connect over the socket FILE. Clear DB_PORT — the connection
+		// is over the unix socket, so a container port lingering from the framework's
+		// default DB vars is misleading and could push non-socket tooling onto TCP
+		// against a wrong port.
 		envOverrides["DB_HOST"] = "localhost"
-		envOverrides["DB_SOCKET"] = proj.DB.HostSocketPath()
-		// Clear DB_PORT: the connection is over the unix socket, so a container
-		// port lingering from the framework's default DB vars is misleading and
-		// could push non-socket tooling onto TCP against a wrong port.
+		envOverrides["DB_SOCKET"] = proj.HostDBSocketPath()
 		envOverrides["DB_PORT"] = ""
 	}
 	// Don't let the container's default root/lerd creds clobber the host
@@ -368,6 +396,43 @@ func applyHostDBExternalEnv(proj *config.ProjectConfig, envMap map[string]string
 	if v, ok := envMap["DB_PASSWORD"]; ok {
 		envOverrides["DB_PASSWORD"] = v
 	}
+	return true
+}
+
+// hostDBPort returns the DB_PORT to emit for a TCP (macOS) or socket-directory
+// (Postgres) host connection: an explicit override the user committed via
+// .env.lerd_override (already layered into envOverrides) wins over the engine
+// default. For Postgres the port forms the socket filename (.s.PGSQL.<port>), so
+// honouring a non-default host port (e.g. a 5433 cluster) is load-bearing — the
+// engine default is only the fallback when the user set nothing.
+func hostDBPort(spec config.HostBackendSpec, envOverrides map[string]string) string {
+	if v := envOverrides["DB_PORT"]; v != "" {
+		return v
+	}
+	return strconv.Itoa(spec.DefaultPort)
+}
+
+// clearStaleHostDBSocket is the symmetric counterpart to applyHostDBExternalEnv: it
+// undoes the socket that host-mode wrote once db.external is turned back off. On the
+// next `lerd env` the container service preset resets DB_HOST/DB_PORT, but a non-empty
+// DB_SOCKET left in .env from the prior host-mode run would otherwise linger
+// (envfile.ApplyUpdates never deletes keys), and Laravel's mysqlnd reads unix_socket
+// first — so it would keep dialing a now-dead /run/mysqld/mysqld.sock instead of the
+// lerd container. For a host-capable, non-external project carrying a stale DB_SOCKET it
+// clears the key via envOverrides (applied last, so the clear wins over the preset),
+// unless the user re-asserted a socket through .env.lerd_override (already layered into
+// envOverrides). Returns true when it cleared a stale socket (so the caller can notice).
+func clearStaleHostDBSocket(proj *config.ProjectConfig, envMap map[string]string, envOverrides map[string]string) bool {
+	if proj == nil || proj.DB.External || !proj.IsHostBackendCapableDB() {
+		return false
+	}
+	if envMap["DB_SOCKET"] == "" {
+		return false
+	}
+	if _, userSet := envOverrides["DB_SOCKET"]; userSet {
+		return false
+	}
+	envOverrides["DB_SOCKET"] = ""
 	return true
 }
 
@@ -508,12 +573,31 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// First-class committed host-database mode: .lerd.yaml `db.external: true`
 	// is the shareable equivalent of LERD_EXTERNAL_SERVICES + a DB_HOST/DB_SOCKET
 	// override (see applyHostDBExternalEnv).
-	if proj, _ := config.LoadProjectConfig(cwd); applyHostDBExternalEnv(proj, envMap, extServices, envOverrides) {
+	proj, _ := config.LoadProjectConfig(cwd)
+	if applyHostDBExternalEnv(proj, envMap, extServices, envOverrides) {
+		spec, _ := config.HostBackendForProject(proj)
 		if config.HostDBUsesTCP() {
-			fmt.Printf("  Host MySQL (db.external) — connecting via TCP %s:%s; not starting lerd-mysql\n", config.HostDBTCPHost, config.HostDBTCPPort)
+			fmt.Printf("  Host %s (db.external) — connecting via TCP %s:%d; not starting %s\n", spec.Display, config.HostDBTCPHost, spec.DefaultPort, spec.ContainerName)
 		} else {
-			fmt.Printf("  Host MySQL (db.external) — connecting via socket %s; not starting lerd-mysql\n", proj.DB.HostSocketPath())
+			fmt.Printf("  Host %s (db.external) — connecting via socket %s; not starting %s\n", spec.Display, proj.HostDBSocketPath(), spec.ContainerName)
+			if spec.Family == "postgres" {
+				// Postgres' default 'peer' auth maps the connecting OS UID to a role, which a
+				// containerized client (a namespaced/mapped UID) can't satisfy — so the app's
+				// socket connection fails with "Peer authentication failed" unless the host
+				// allows password auth on the local line. MySQL is unaffected (it authenticates
+				// by username/password, not OS UID), so only flag Postgres.
+				user := envOverrides["DB_USERNAME"]
+				if user == "" {
+					user = "<db-user>"
+				}
+				fmt.Printf("    note: a containerized client can't use Postgres 'peer' auth over the socket — add a line like\n")
+				fmt.Printf("          'local all %s scram-sha-256' to pg_hba.conf and reload, or the app's DB connection will fail.\n", user)
+				fmt.Printf("          Edit it preserving postgres:postgres ownership (e.g. as the postgres user); a root 'sed -i'\n")
+				fmt.Printf("          leaves the file root-owned and the cluster won't restart.\n")
+			}
 		}
+	} else if clearStaleHostDBSocket(proj, envMap, envOverrides) {
+		fmt.Println("  db.external is off — cleared the stale host DB_SOCKET so the lerd container is used")
 	}
 
 	// Laravel ships .env / .env.example with DB_CONNECTION=sqlite. If the user

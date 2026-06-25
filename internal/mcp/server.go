@@ -4395,13 +4395,13 @@ func execDBCreate(args map[string]any) (any, *rpcError) {
 func mcpCreateDatabase(svc, name string) (bool, error) {
 	switch svc {
 	case "mysql":
-		check := podman.Cmd("exec", "lerd-mysql", "mysql", "-uroot", "-plerd",
+		check := serviceops.MySQLAdminCmd("lerd-mysql", "mysql",
 			"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", name))
 		out, err := check.Output()
 		if err == nil && strings.TrimSpace(string(out)) != "0" {
 			return false, nil
 		}
-		cmd := podman.Cmd("exec", "lerd-mysql", "mysql", "-uroot", "-plerd",
+		cmd := serviceops.MySQLAdminCmd("lerd-mysql", "mysql",
 			"-e", fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`;", name))
 		var stderr bytes.Buffer
 		cmd.Stderr = &stderr
