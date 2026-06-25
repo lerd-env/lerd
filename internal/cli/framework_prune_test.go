@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -43,7 +44,7 @@ func TestFrameworkPrune_RemovesUnusedKeepsUsed(t *testing.T) {
 
 	cmd := newFrameworkPruneCmd()
 	cmd.SetArgs([]string{"--force"})
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -69,7 +70,7 @@ func TestFrameworkPrune_NothingToPrune(t *testing.T) {
 
 	cmd := newFrameworkPruneCmd()
 	cmd.SetArgs([]string{})
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("prune: %v", err)
 	}
@@ -92,7 +93,7 @@ func TestFrameworkRemove_ForceSkipsInUseConfirm(t *testing.T) {
 
 	cmd := newFrameworkRemoveCmd()
 	cmd.SetArgs([]string{"wordpress", "--force"})
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("remove --force: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestFrameworkRemove_VersionSpecificNotBlockedByInUse(t *testing.T) {
 
 	cmd := newFrameworkRemoveCmd()
 	cmd.SetArgs([]string{"drupal@5"})
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("remove drupal@5: %v", err)
 	}
