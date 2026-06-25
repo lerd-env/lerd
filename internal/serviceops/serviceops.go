@@ -81,8 +81,11 @@ func firstFreeHostPort(start int, reserved map[int]bool) int {
 }
 
 // lerdReservedPorts collects the host ports already claimed by lerd's own services in
-// global config (each service's published port plus any extra published ports), so the
-// port-ownership guard never auto-picks a port another lerd service will bind.
+// global config — each service's published port, its preset-default port, and any extra
+// published ports — so the port-ownership guard never auto-picks a port another lerd
+// service will bind. The preset-default Port matters even for a STOPPED service: nothing
+// is listening, so portBindable() would report it free, and handing it out would collide
+// when both units start at boot (the failure this guard exists to prevent).
 func lerdReservedPorts() map[int]bool {
 	reserved := map[int]bool{}
 	cfg, err := config.LoadGlobal()
@@ -92,6 +95,9 @@ func lerdReservedPorts() map[int]bool {
 	for _, svc := range cfg.Services {
 		if svc.PublishedPort > 0 {
 			reserved[svc.PublishedPort] = true
+		}
+		if svc.Port > 0 {
+			reserved[svc.Port] = true
 		}
 		for _, ep := range svc.ExtraPorts {
 			host := ep // ExtraPorts are "host:container" (or a bare number); take the host side.

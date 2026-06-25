@@ -41,6 +41,29 @@ func TestFirstFreeHostPort_skipsBusyAndReserved(t *testing.T) {
 	}
 }
 
+func TestLerdReservedPorts_includesPresetPort(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	// A stopped service pinned to its preset default port, with NO PublishedPort
+	// override. Nothing is listening, so portBindable() would call it free — only the
+	// reserved set keeps the auto-picker off it and prevents a boot-time collision.
+	cfg.Services["mariadb-11"] = config.ServiceConfig{Enabled: true, Port: 13399}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	reserved := lerdReservedPorts()
+	if !reserved[13399] {
+		t.Errorf("lerdReservedPorts must reserve a service's preset default port 13399; got %v", reserved)
+	}
+}
+
 func TestHostServerInstalled(t *testing.T) {
 	defer config.SetHostDBGOOSForTest("linux")() // socket/marker detection is the Linux path
 	root := t.TempDir()
