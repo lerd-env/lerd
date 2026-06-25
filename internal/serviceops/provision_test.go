@@ -1,6 +1,9 @@
 package serviceops
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // These guard the DB identifier/literal quoting used by CreateDatabase and
 // DropDatabase. A worktree DB name derives from a git branch, and git allows
@@ -42,6 +45,22 @@ func TestEscapeSQLLiteral(t *testing.T) {
 	for _, tc := range cases {
 		if got := escapeSQLLiteral(tc.in); got != tc.want {
 			t.Errorf("escapeSQLLiteral(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// In-container DB administration must connect over TCP loopback, not the implicit unix
+// socket: the container's classic-protocol socket path is not guaranteed to match the
+// client my.cnf, so a socket connect can fail ("Can't connect through socket"). mysqld
+// always listens on TCP, so -h127.0.0.1 is the socket-path-independent transport.
+func TestMysqlClientUsesTCPLoopback(t *testing.T) {
+	joined := strings.Join(MySQLAdminCmd("lerd-mysql", "mysql", "-e", "SELECT 1;").Args, " ")
+	if !strings.Contains(joined, "-h127.0.0.1") {
+		t.Fatalf("MySQLAdminCmd must force TCP loopback; got: %s", joined)
+	}
+	for _, want := range []string{"exec lerd-mysql mysql", "-uroot", "-plerd", "SELECT 1;"} {
+		if !strings.Contains(joined, want) {
+			t.Errorf("expected %q in args: %s", want, joined)
 		}
 	}
 }

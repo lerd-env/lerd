@@ -132,7 +132,13 @@ func hostDBSocketDirs() []string {
 		if perr != nil || pc == nil || !pc.DB.External {
 			continue
 		}
-		dir := filepath.Dir(pc.DB.HostSocketPath())
+		// The directory to bind-mount: for MySQL the socket is a FILE, so mount its
+		// parent directory; for Postgres the socket path is already the DIRECTORY
+		// that holds .s.PGSQL.<port>, so mount it directly.
+		dir := pc.HostDBSocketPath()
+		if spec, ok := config.HostBackendForProject(pc); !ok || !spec.SocketIsDir {
+			dir = filepath.Dir(dir)
+		}
 		if dir == "" || dir == "/" || dir == "." || seen[dir] {
 			continue
 		}

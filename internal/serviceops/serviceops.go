@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
@@ -32,6 +33,135 @@ func IsBuiltin(name string) bool { return config.IsDefaultPreset(name) }
 // you only care about install presence.
 func ServiceInstalled(name string) bool {
 	return podman.QuadletInstalled("lerd-" + name)
+}
+
+// portBindable reports whether a TCP port can be bound on both loopback stacks
+// (127.0.0.1 and [::1]) — the two addresses lerd's published quadlet binds (PublishPort
+// is paired across v4/v6). A bind test is stricter and more accurate than a dial test for
+// "can the container publish here": it catches a port reserved on either stack, not just
+// a port with a live listener. A host with no IPv6 loopback at all is tolerated — the v6
+// check is skipped rather than treated as busy.
+func portBindable(port int) bool {
+	ln4, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	_ = ln4.Close()
+	ln6, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(port)))
+	if err != nil {
+		// Distinguish "port already taken on ::1" from "this host has no IPv6 loopback".
+		probe, perr := net.Listen("tcp", "[::1]:0")
+		if perr != nil {
+			return true // no IPv6 loopback here; the v4 bind is sufficient
+		}
+		_ = probe.Close()
+		return false // IPv6 works but this port is taken on ::1
+	}
+	_ = ln6.Close()
+	return true
+}
+
+// firstFreeHostPort returns the first TCP port in [start, 65535] that is bindable on both
+// loopback stacks and not already claimed by another lerd service (reserved), or 0 if
+// none is free. Excluding reserved ports avoids handing out a port another (possibly
+// stopped) lerd quadlet already publishes, which would collide when both start at boot.
+func firstFreeHostPort(start int, reserved map[int]bool) int {
+	if start < 1 {
+		start = 1
+	}
+	for p := start; p <= 65535; p++ {
+		if reserved[p] {
+			continue
+		}
+		if portBindable(p) {
+			return p
+		}
+	}
+	return 0
+}
+
+// lerdReservedPorts collects the host ports already claimed by lerd's own services in
+// global config (each service's published port plus any extra published ports), so the
+// port-ownership guard never auto-picks a port another lerd service will bind.
+func lerdReservedPorts() map[int]bool {
+	reserved := map[int]bool{}
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return reserved
+	}
+	for _, svc := range cfg.Services {
+		if svc.PublishedPort > 0 {
+			reserved[svc.PublishedPort] = true
+		}
+		for _, ep := range svc.ExtraPorts {
+			host := ep // ExtraPorts are "host:container" (or a bare number); take the host side.
+			if i := strings.IndexByte(ep, ':'); i >= 0 {
+				host = ep[:i]
+			}
+			if n, perr := strconv.Atoi(strings.TrimSpace(host)); perr == nil && n > 0 {
+				reserved[n] = true
+			}
+		}
+	}
+	return reserved
+}
+
+// hostServerInstalled reports whether a host-installed server for this engine appears
+// present on the box, INDEPENDENT of whether it is currently running. It checks the socket
+// DIRECTORY the server uses: that directory is created at install/boot by the distro
+// package and persists across a service stop (only the socket FILE inside is removed when
+// the server stops). This is the liveness-independent signal the port-ownership guard
+// needs — a cleanly-stopped host DB has no socket file and no listener, yet it will
+// reclaim the engine default port on its next start, so lerd must avoid that port at
+// quadlet-write time regardless of the host DB's current run state.
+func hostServerInstalled(spec config.HostBackendSpec) bool {
+	if config.HostDBUsesTCP() {
+		return false // macOS reaches the host DB over TCP; socket dirs don't apply
+	}
+	// A server currently RUNNING has its unix socket FILE present — cheap and definitive.
+	// The shared socket DIRECTORY is deliberately NOT the signal: distro postgresql-common
+	// ships /var/run/postgresql even on server-less installs (pgbouncer, *-server-dev,
+	// exporters), so directory presence alone would false-positive.
+	for _, p := range append([]string{spec.LinuxSocket}, spec.LinuxSocketFallbacks...) {
+		sock := p
+		if spec.SocketIsDir {
+			sock = filepath.Join(p, fmt.Sprintf(".s.PGSQL.%d", spec.DefaultPort))
+		}
+		if st, err := os.Stat(sock); err == nil && st.Mode()&os.ModeSocket != 0 {
+			return true
+		}
+	}
+	// A server INSTALLED but currently stopped: look for a NON-EMPTY server marker dir. The
+	// marker must be non-empty because the bare parent (e.g. /etc/postgresql) is shipped by
+	// postgresql-common even server-less; only a real cluster adds a versioned subdir inside
+	// (mysql's /var/lib/mysql likewise only holds data once a server is initialised). A
+	// populated marker means a real server cluster exists, so lerd must avoid its port even
+	// while it is stopped.
+	for _, marker := range spec.LinuxInstallMarkers {
+		if entries, err := os.ReadDir(marker); err == nil && len(entries) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// hostOwnsDBPort reports the host-backend spec for a DB-family service and whether a HOST
+// server for that engine is in the way of its default published port — either because one
+// is INSTALLED (its socket directory exists, so it will reclaim the port on its next
+// start) or because one is LIVE right now and owns the port. The installed check is
+// liveness-independent so the boot-ordering race can't recur when the host DB happens to
+// be stopped at quadlet-write time. ok is false for services without a host backend
+// (redis, meilisearch, …), which the guard skips entirely.
+func hostOwnsDBPort(name string) (spec config.HostBackendSpec, hostOwns, ok bool) {
+	spec, ok = config.HostBackendFor(config.FamilyOfName(name))
+	if !ok {
+		return spec, false, false
+	}
+	if hostServerInstalled(spec) {
+		return spec, true, true
+	}
+	st := ProbeHostDB(name, "")
+	return spec, st.PortOwner == "host" && st.PortListening, true
 }
 
 // PhaseEvent is one step of the streaming preset-install flow.
@@ -270,6 +400,35 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 			publishedPort = svcCfg.PublishedPort
 		}
 	}
+	// Port-ownership guard: if this DB engine would use its DEFAULT published port
+	// (the user set no override) but a HOST-installed server already owns that port,
+	// auto-shift the lerd container to the next free port and persist the choice. This
+	// runs at quadlet-WRITE time, so the port baked into the .container file — and thus
+	// systemd's boot autostart, which reads that file without lerd running — never
+	// collides with the host server (the failure mode that takes a host DB down when its
+	// port is grabbed first). A user-chosen override (publishedPort>0) is left untouched.
+	if publishedPort == 0 {
+		if spec, hostOwns, ok := hostOwnsDBPort(name); ok && hostOwns {
+			if free := firstFreeHostPort(spec.DefaultPort+1, lerdReservedPorts()); free > 0 {
+				// Persist the choice FIRST, then commit it in-memory only if the save
+				// stuck — otherwise the quadlet would publish a port the config doesn't
+				// record, leaving the two to diverge on the next regeneration.
+				saved := false
+				if cfg, _ := config.LoadGlobal(); cfg != nil {
+					entry := cfg.Services[name]
+					entry.PublishedPort = free
+					cfg.Services[name] = entry
+					saved = config.SaveGlobal(cfg) == nil
+				}
+				if saved {
+					publishedPort = free
+					fmt.Printf("Note: host %s is present — publishing lerd-%s on 127.0.0.1:%d instead of the default %d to avoid a clash.\n",
+						spec.Display, name, free, spec.DefaultPort)
+					fmt.Printf("      (override with: lerd service port %s <port>)\n", name)
+				}
+			}
+		}
+	}
 	hasUserPin := pinnedUserImage != ""
 	// Backfill for pre-existing installs that pre-date this feature: if no
 	// pin is recorded but a container is running, derive the major from the
@@ -308,7 +467,7 @@ func EnsureDefaultPresetQuadletPinned(name, pinnedImage string) error {
 	// for everyone who hasn't overridden it.
 	if publishedPort > 0 {
 		svc.Ports = podman.SetPrimaryHostPort(svc.Ports, publishedPort)
-		svc.ConnectionURL = withURLPort(svc.ConnectionURL, publishedPort)
+		svc.ConnectionURL = WithURLPort(svc.ConnectionURL, publishedPort)
 	}
 	// First-install / backfill pin: persist the canonical tag so future YAML
 	// canonical flips don't silently major-jump this install.
@@ -400,11 +559,11 @@ func matchVersionByImageTag(image string, versions []config.PresetVersion) strin
 	return best
 }
 
-// withURLPort returns rawURL with its host port set to port, preserving scheme,
+// WithURLPort returns rawURL with its host port set to port, preserving scheme,
 // userinfo, host, and path. Used to keep a service's developer-facing
 // connection URL in sync after its published port is overridden. Returns the
 // input unchanged when it is empty, unparseable, or has no host.
-func withURLPort(rawURL string, port int) string {
+func WithURLPort(rawURL string, port int) string {
 	if rawURL == "" || port <= 0 {
 		return rawURL
 	}

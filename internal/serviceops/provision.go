@@ -3,6 +3,7 @@ package serviceops
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"time"
 
@@ -18,6 +19,19 @@ import (
 func escapeIdentBacktick(name string) string { return strings.ReplaceAll(name, "`", "``") }
 func escapeIdentDQuote(name string) string   { return strings.ReplaceAll(name, `"`, `""`) }
 func escapeSQLLiteral(v string) string       { return strings.ReplaceAll(v, "'", "''") }
+
+// MySQLAdminCmd builds an in-container mysql/mariadb client command that connects over
+// TCP loopback (-h127.0.0.1) rather than the implicit unix socket. The container's
+// classic-protocol socket path is not guaranteed to match the client config — some images
+// run the server at /var/lib/mysql/mysql.sock while the client my.cnf points at
+// /var/run/mysqld/mysqld.sock — so a socket connect can fail ("Can't connect to local
+// MySQL server through socket"). mysqld always listens on TCP (it is how the app reaches
+// it, DB_HOST=lerd-<svc>), so loopback is the socket-path-independent transport. It is the
+// single source for in-container mysql/mariadb DB administration so the CLI, the MCP
+// tools, and provisioning all use the same robust transport.
+func MySQLAdminCmd(container, bin string, args ...string) *exec.Cmd {
+	return podman.Cmd(append([]string{"exec", container, bin, "-h127.0.0.1", "-uroot", "-plerd"}, args...)...)
+}
 
 // CreateDatabase creates dbName inside the named service container if it does
 // not already exist. svc is the service name (e.g. "mysql", "mysql-5-6",
@@ -39,7 +53,7 @@ func CreateDatabase(svc, name string) (bool, error) {
 		}
 		var lastErr error
 		for _, bin := range binaries {
-			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			check := MySQLAdminCmd(container, bin,
 				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeSQLLiteral(name)))
 			out, err := check.Output()
 			if err != nil {
@@ -49,7 +63,7 @@ func CreateDatabase(svc, name string) (bool, error) {
 			if strings.TrimSpace(string(out)) != "0" {
 				return false, nil
 			}
-			cmd := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			cmd := MySQLAdminCmd(container, bin,
 				"-e", fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`;", escapeIdentBacktick(name)))
 			// Capture stderr rather than inheriting it: mysql prints a noisy
 			// "[Warning] Using a password on the command line interface" that would
@@ -94,7 +108,7 @@ func DropDatabase(svc, name string) (bool, error) {
 		}
 		var lastErr error
 		for _, bin := range binaries {
-			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			check := MySQLAdminCmd(container, bin,
 				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeSQLLiteral(name)))
 			out, err := check.Output()
 			if err != nil {
@@ -104,7 +118,7 @@ func DropDatabase(svc, name string) (bool, error) {
 			if strings.TrimSpace(string(out)) == "0" {
 				return false, nil
 			}
-			cmd := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
+			cmd := MySQLAdminCmd(container, bin,
 				"-e", fmt.Sprintf("DROP DATABASE IF EXISTS `%s`;", escapeIdentBacktick(name)))
 			cmd.Stderr = os.Stderr
 			return true, cmd.Run()

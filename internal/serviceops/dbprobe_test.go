@@ -8,30 +8,57 @@ import (
 	"time"
 )
 
-func TestAttribute3306Owner(t *testing.T) {
+func TestAttributePortOwner(t *testing.T) {
 	cases := []struct {
-		listening, socketPresent, lerdRunning, lerdOn3306 bool
-		want                                              string
+		listening, socketPresent, lerdRunning, lerdOnDefault bool
+		want                                                 string
 	}{
-		// lerdOn3306=true: identical to the previous three-signal behaviour.
+		// lerdOnDefault=true: identical to the previous three-signal behaviour.
 		{false, false, false, true, "none"},
 		{false, true, true, true, "none"}, // not listening dominates
 		{true, false, true, true, "lerd"},
-		{true, true, true, true, "lerd"}, // a running lerd on 3306 wins attribution
+		{true, true, true, true, "lerd"}, // a running lerd on its default port wins attribution
 		{true, true, false, true, "host"},
 		{true, false, false, true, "unknown"},
-		// lerdOn3306=false: lerd moved off 3306, so a 3306 listener is the host.
-		{false, true, true, false, "none"},     // nothing on 3306
+		// lerdOnDefault=false: lerd moved off the default port, so a listener there is the host.
+		{false, true, true, false, "none"},     // nothing on the default port
 		{true, true, true, false, "host"},      // lerd on e.g. 3307, host socket on 3306
-		{true, false, true, false, "host"},     // lerd elsewhere, 3306 listening ⇒ host
+		{true, false, true, false, "host"},     // lerd elsewhere, default port listening ⇒ host
 		{true, true, false, false, "host"},     // host socket present, lerd down
-		{true, false, false, false, "unknown"}, // 3306 listening, no socket, lerd down
+		{true, false, false, false, "unknown"}, // default port listening, no socket, lerd down
 	}
 	for _, c := range cases {
-		if got := attribute3306Owner(c.listening, c.socketPresent, c.lerdRunning, c.lerdOn3306); got != c.want {
-			t.Errorf("attribute3306Owner(listening=%v,socket=%v,lerd=%v,lerdOn3306=%v) = %q, want %q",
-				c.listening, c.socketPresent, c.lerdRunning, c.lerdOn3306, got, c.want)
+		if got := attributePortOwner(c.listening, c.socketPresent, c.lerdRunning, c.lerdOnDefault); got != c.want {
+			t.Errorf("attributePortOwner(listening=%v,socket=%v,lerd=%v,lerdOnDefault=%v) = %q, want %q",
+				c.listening, c.socketPresent, c.lerdRunning, c.lerdOnDefault, got, c.want)
 		}
+	}
+}
+
+// TestProbeHostDB_FamilyWiring checks the deterministic, environment-independent
+// fields of the probe: the service name echoes back and the probed port is the
+// engine's canonical port (3306 for MySQL, 5432 for Postgres), proving the probe
+// is driven by the per-family spec rather than a hardcoded 3306.
+func TestProbeHostDB_FamilyWiring(t *testing.T) {
+	if got := ProbeHostDB("mysql", ""); got.ServiceName != "mysql" || got.Port != 3306 {
+		t.Errorf("ProbeHostDB(mysql): ServiceName=%q Port=%d, want mysql/3306", got.ServiceName, got.Port)
+	}
+	if got := ProbeHostDB("postgres", ""); got.ServiceName != "postgres" || got.Port != 5432 {
+		t.Errorf("ProbeHostDB(postgres): ServiceName=%q Port=%d, want postgres/5432", got.ServiceName, got.Port)
+	}
+	// An empty service name defaults to mysql (back-compat with ProbeHostMySQL).
+	if got := ProbeHostDB("", ""); got.ServiceName != "mysql" || got.Port != 3306 {
+		t.Errorf("ProbeHostDB(\"\"): ServiceName=%q Port=%d, want mysql/3306", got.ServiceName, got.Port)
+	}
+	// A family alternate (mariadb-11) resolves to its family's spec (mariadb → 3306)
+	// and echoes the full service name — the container queried is lerd-mariadb-11,
+	// not the canonical lerd-mariadb.
+	if got := ProbeHostDB("mariadb-11", ""); got.ServiceName != "mariadb-11" || got.Port != 3306 {
+		t.Errorf("ProbeHostDB(mariadb-11): ServiceName=%q Port=%d, want mariadb-11/3306", got.ServiceName, got.Port)
+	}
+	// A non-host-capable service yields an empty (zero-port) status.
+	if got := ProbeHostDB("redis", ""); got.Port != 0 {
+		t.Errorf("ProbeHostDB(redis): Port=%d, want 0 (no host backend)", got.Port)
 	}
 }
 

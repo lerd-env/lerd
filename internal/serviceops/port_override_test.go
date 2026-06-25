@@ -19,8 +19,8 @@ func TestWithURLPort(t *testing.T) {
 		{"mysql://root:lerd@127.0.0.1:3306/lerd", 0, "mysql://root:lerd@127.0.0.1:3306/lerd"},
 	}
 	for _, c := range cases {
-		if got := withURLPort(c.in, c.port); got != c.want {
-			t.Errorf("withURLPort(%q, %d) = %q, want %q", c.in, c.port, got, c.want)
+		if got := WithURLPort(c.in, c.port); got != c.want {
+			t.Errorf("WithURLPort(%q, %d) = %q, want %q", c.in, c.port, got, c.want)
 		}
 	}
 }
@@ -45,7 +45,7 @@ func TestMysqlPresetPortOverride(t *testing.T) {
 	if moved[0] != "3307:3306" {
 		t.Errorf("moved primary port = %q, want 3307:3306 (container-internal port unchanged)", moved[0])
 	}
-	if url := withURLPort(svc.ConnectionURL, 3307); !strings.Contains(url, ":3307/") {
+	if url := WithURLPort(svc.ConnectionURL, 3307); !strings.Contains(url, ":3307/") {
 		t.Errorf("connection URL after move = %q, want host port 3307", url)
 	}
 }
