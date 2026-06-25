@@ -20,7 +20,7 @@ func NewNodeCmd() *cobra.Command {
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("node", args)
+			return runWithFnm("node", args, true)
 		},
 	}
 }
@@ -33,7 +33,7 @@ func NewNpmCmd() *cobra.Command {
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("npm", args)
+			return runWithFnm("npm", args, true)
 		},
 	}
 }
@@ -46,7 +46,7 @@ func NewNpxCmd() *cobra.Command {
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("npx", args)
+			return runWithFnm("npx", args, true)
 		},
 	}
 }
@@ -120,10 +120,12 @@ func systemNodeAvailable() bool {
 	return nodeDet.SystemNodeAvailable()
 }
 
-// runBun execs the host bun binary in dir, streaming to the terminal and
-// os.Exit'ing on failure to mirror runWithFnm's CLI behaviour. bun is
-// self-contained, so unlike node it needs no fnm wrapper or version pin.
-func runBun(dir, bun string, args []string) error {
+// runBun execs the host bun binary in dir, streaming to the terminal. bun is
+// self-contained, so unlike node it needs no fnm wrapper or version pin. When
+// exitOnFail is set it os.Exit's with the child's code to mirror runWithFnm's
+// CLI behaviour; callers that fold the run behind a feedback step (setup) pass
+// false so the non-zero exit is returned and the step loop can report it.
+func runBun(dir, bun string, args []string, exitOnFail bool) error {
 	cmd := exec.Command(bun, args...)
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
@@ -131,7 +133,7 @@ func runBun(dir, bun string, args []string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Env = shimLeadingEnv(os.Environ())
 	if err := cmd.Run(); err != nil {
-		if exit, ok := err.(*exec.ExitError); ok {
+		if exit, ok := err.(*exec.ExitError); ok && exitOnFail {
 			os.Exit(exit.ExitCode())
 		}
 		return err
@@ -153,21 +155,21 @@ func runJSInstall(dir string, frozen bool) error {
 				break
 			}
 		}
-		return runBun(dir, bun, args)
+		return runBun(dir, bun, args, false)
 	}
 	if frozen {
-		return runWithFnm("npm", []string{"ci"})
+		return runWithFnm("npm", []string{"ci"}, false)
 	}
-	return runWithFnm("npm", []string{"install"})
+	return runWithFnm("npm", []string{"install"}, false)
 }
 
 // runJSScript runs a package.json script in dir via `bun run <script>` when the
 // project uses bun, otherwise `npm run <script>` via fnm.
 func runJSScript(dir, script string) error {
 	if bun := bunRunnerFor(dir, true); bun != "" {
-		return runBun(dir, bun, []string{"run", script})
+		return runBun(dir, bun, []string{"run", script}, false)
 	}
-	return runWithFnm("npm", []string{"run", script})
+	return runWithFnm("npm", []string{"run", script}, false)
 }
 
 // shimLeadingEnv prepends lerd's bin dir (home of the `php` shim) to PATH so
@@ -191,7 +193,7 @@ func shimLeadingEnv(env []string) []string {
 	return out
 }
 
-func runWithFnm(bin string, args []string) error {
+func runWithFnm(bin string, args []string, exitOnFail bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -240,7 +242,7 @@ func runWithFnm(bin string, args []string) error {
 		}
 	}
 	if runErr != nil {
-		if exit, ok := runErr.(*exec.ExitError); ok {
+		if exit, ok := runErr.(*exec.ExitError); ok && exitOnFail {
 			os.Exit(exit.ExitCode())
 		}
 		return runErr

@@ -218,3 +218,23 @@ func TestSyncNodeGlobalBins_MissingSourceIsNoOp(t *testing.T) {
 		t.Errorf("expected orphan removed when source missing, err=%v", err)
 	}
 }
+
+// TestRunBun_FailureReturnsErrorWhenNotExiting guards the lerd link/setup
+// regression where a failed `npm run production` / `bun run build` killed the
+// whole process via os.Exit, bypassing the step loop's failure feedback. With
+// exitOnFail false the non-zero child exit must come back as an error so the
+// caller can report it, not terminate lerd.
+func TestRunBun_FailureReturnsErrorWhenNotExiting(t *testing.T) {
+	// /bin/sh stands in for the bun binary; the script exits non-zero.
+	err := runBun(t.TempDir(), "/bin/sh", []string{"-c", "exit 3"}, false)
+	if err == nil {
+		t.Fatal("expected an error from a non-zero child exit, got nil")
+	}
+}
+
+// TestRunBun_SuccessReturnsNil confirms the happy path still returns nil.
+func TestRunBun_SuccessReturnsNil(t *testing.T) {
+	if err := runBun(t.TempDir(), "/bin/sh", []string{"-c", "exit 0"}, false); err != nil {
+		t.Fatalf("expected nil on success, got %v", err)
+	}
+}
