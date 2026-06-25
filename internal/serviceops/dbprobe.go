@@ -34,6 +34,11 @@ type HostDBStatus struct {
 	// whether something answers on 127.0.0.1:<LerdPort>.
 	LerdPort          int  `json:"lerd_port"`
 	LerdPortListening bool `json:"lerd_port_listening"`
+	// UsesTCP reports whether host mode reaches the server over TCP (macOS, via
+	// gvproxy) rather than a unix socket (Linux). The dashboard uses it to surface the
+	// macOS grant/bind setup note, since a loopback-only server is reachable on the
+	// host yet refuses the gvproxy-sourced container connection.
+	UsesTCP bool `json:"uses_tcp"`
 }
 
 // ProbeHostMySQL is a thin back-compat wrapper around ProbeHostDB for the mysql
@@ -104,6 +109,7 @@ func ProbeHostDB(serviceName, socketPath string) HostDBStatus {
 		PortOwner:         attributePortOwner(listening, present, lerdRunning, lerdPort == spec.DefaultPort),
 		LerdPort:          lerdPort,
 		LerdPortListening: lerdListening,
+		UsesTCP:           config.HostDBUsesTCP(),
 	}
 }
 

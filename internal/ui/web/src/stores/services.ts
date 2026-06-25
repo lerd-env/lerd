@@ -101,6 +101,10 @@ export interface HostDBStatus {
   // own the default port and the two coexist. lerd_port_listening: something there.
   lerd_port: number;
   lerd_port_listening: boolean;
+  // uses_tcp: host mode reaches the server over TCP (macOS, via gvproxy) rather than a
+  // unix socket (Linux). Drives the macOS grant/bind setup note — a loopback-only server
+  // is reachable on the host yet refuses the gvproxy-sourced container connection.
+  uses_tcp: boolean;
 }
 
 // hostDBProbe reports whether the host database server for the given service is
