@@ -150,6 +150,26 @@ func installAndStartForwarder(lanIP string, emit func(string)) error {
 	return nil
 }
 
+// ensureLANForwarderRemoved tears down the LAN DNS forwarder, the mirror of
+// ensureLANForwarder. Unlike the install side it intentionally runs on every
+// platform: macOS no longer installs a forwarder, but a Mac upgrading from an
+// older build (which did) still needs unexpose to clear that stale unit, or it
+// keeps holding lanIP:5300 and breaks .test resolution. Removing a missing unit
+// is ignored, so this is a safe no-op when no forwarder is present.
+func ensureLANForwarderRemoved(emit func(string)) error {
+	if emit != nil {
+		emit("Stopping lerd-dns-forwarder")
+	}
+	_ = services.Mgr.Stop("lerd-dns-forwarder")
+	_ = services.Mgr.Disable("lerd-dns-forwarder")
+	if err := services.Mgr.RemoveServiceUnit("lerd-dns-forwarder"); err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("removing forwarder unit: %w", err)
+	}
+	_ = services.Mgr.DaemonReload()
+
+	return nil
+}
+
 // DisableLANExposure flips lerd back to the safe loopback default. Inverts
 // EnableLANExposure: rewrites every container PublishPort to bind 127.0.0.1,
 // stops the dns-forwarder, reverts dnsmasq to answer with 127.0.0.1, and
@@ -186,13 +206,9 @@ func DisableLANExposure(progress LANProgressFunc) error {
 	}
 
 	if cfg.DNS.Enabled {
-		emit("Stopping lerd-dns-forwarder")
-		_ = services.Mgr.Stop("lerd-dns-forwarder")
-		_ = services.Mgr.Disable("lerd-dns-forwarder")
-		if err := services.Mgr.RemoveServiceUnit("lerd-dns-forwarder"); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("removing forwarder unit: %w", err)
+		if err := ensureLANForwarderRemoved(emit); err != nil {
+			return err
 		}
-		_ = services.Mgr.DaemonReload()
 
 		emit("Reverting dnsmasq to 127.0.0.1")
 		if err := dns.WriteDnsmasqConfigFor(config.DnsmasqDir(), "127.0.0.1"); err != nil {
