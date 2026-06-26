@@ -2427,6 +2427,27 @@ func execSiteLink(args map[string]any) (any, *rpcError) {
 		return toolOK(fmt.Sprintf("Linked %s -> %s (custom container, port %d)", name, strings.Join(domains, ", "), proj.Container.Port)), nil
 	}
 
+	// Host-proxy path: .lerd.yaml has a proxy section, so the site runs a dev
+	// server on the host that nginx reverse-proxies to. Supervising that command
+	// needs the consent gating and worker-start logic that live in the cli
+	// package, so delegate to `lerd link` (the same shell-out pattern as worker
+	// start) instead of falling through to the PHP path, which would downgrade
+	// the site to plain FPM and drop the proxy vhost. The consent gate still
+	// applies: an already-approved command (or host_proxy.skip_confirmation)
+	// proceeds, while an unapproved command in this non-interactive context is
+	// refused with guidance rather than run blindly.
+	if proj != nil && proj.Proxy != nil && proj.Proxy.Port > 0 {
+		out, err := runIn(projectPath, "lerd", "link", name)
+		if err != nil {
+			msg := strings.TrimSpace(out)
+			if msg == "" {
+				msg = err.Error()
+			}
+			return toolErr(msg), nil
+		}
+		return toolOK(strings.TrimSpace(out)), nil
+	}
+
 	// PHP / framework path.
 	framework := ""
 	if fname, ok := config.DetectFrameworkForDir(projectPath); ok {
