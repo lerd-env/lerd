@@ -7,6 +7,14 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.26.2] - 2026-06-26
+
+A follow-up to 1.26.1 that completes the prebuilt-base pull fix for every podman version.
+
+### Fixed
+
+- **Prebuilt PHP base images are pulled on all podman versions** (#638). 1.26.1 gated the base pull's `--policy=always` flag behind podman 5.0, but `podman pull --policy` actually landed later (it is absent on 5.4 and every 4.x), so podman 5.0 through 5.4 still rejected the flag and fell back to a full local build. The flag is dropped entirely, `podman pull` already defaults to the `always` policy so it was redundant, and the real pull error line is surfaced when a pull genuinely fails.
+
 ## [1.26.1] - 2026-06-26
 
 A patch release fixing a silent fallback that made most Linux hosts rebuild every PHP image from source, alongside cherry-picked fixes for macOS LAN exposure, setup feedback, and host-worker reporting.
