@@ -48,8 +48,9 @@ func runConsole(_ *cobra.Command, args []string) error {
 
 	container := fpmContainerForDir(cwd, version)
 
-	if running, _ := podman.ContainerRunning(container); !running {
-		return fmt.Errorf("PHP %s FPM container is not running — start it with: systemctl --user start %s", version, container)
+	version, container, err = ensureFPMRunning(cwd, version, container)
+	if err != nil {
+		return err
 	}
 
 	podman.EnsurePathMounted(cwd, version)

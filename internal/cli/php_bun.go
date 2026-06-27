@@ -41,8 +41,8 @@ func newPhpBunUpdateCmd() *cobra.Command {
 				return err
 			}
 			container := bunFPMContainer(version)
-			if running, _ := podman.ContainerRunning(container); !running {
-				return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
+			if err := ensureFPMStarted(version, container); err != nil {
+				return err
 			}
 			if !bunInstalledInContainer(version) {
 				return fmt.Errorf("bun is not installed in the PHP %s container — run: lerd php:bun install", version)
@@ -214,8 +214,8 @@ func installContainerBun(version, pin string, w io.Writer) error {
 	} else if err := podman.WriteFPMQuadlet(version); err != nil {
 		return fmt.Errorf("updating FPM quadlet: %w", err)
 	}
-	if running, _ := podman.ContainerRunning(container); !running {
-		return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
+	if err := ensureFPMStarted(version, container); err != nil {
+		return err
 	}
 	if !bunVolumeMounted(container) {
 		fmt.Fprintf(w, "Preparing PHP %s container for bun...\n", version)
@@ -255,8 +255,8 @@ func newPhpBunVersionCmd() *cobra.Command {
 				return err
 			}
 			container := bunFPMContainer(version)
-			if running, _ := podman.ContainerRunning(container); !running {
-				return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
+			if err := ensureFPMStarted(version, container); err != nil {
+				return err
 			}
 			out, err := podman.Cmd("exec", container, "/root/.bun/bin/bun", "--version").CombinedOutput()
 			feedback.Begin()

@@ -90,6 +90,11 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 
 	container := fpmContainerForDir(cwd, version)
 
+	version, container, err = ensureFPMRunning(cwd, version, container)
+	if err != nil {
+		return 0, err
+	}
+
 	home := os.Getenv("HOME")
 	composerHome := os.Getenv("COMPOSER_HOME")
 	if composerHome == "" {
@@ -102,10 +107,6 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 	}
 	composerBin := filepath.Join(composerHome, "vendor", "bin")
 	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
-
-	if running, _ := podman.ContainerRunning(container); !running {
-		return 0, fmt.Errorf("PHP %s FPM container is not running — start it with: systemctl --user start %s", version, container)
-	}
 
 	podman.EnsurePathMounted(cwd, version)
 	ensureServicesForCwd(cwd)

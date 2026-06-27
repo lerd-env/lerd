@@ -86,8 +86,8 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	}
 	container := fpmContainerForDir(sitePath, version)
 
-	if running, _ := podman.ContainerRunning(container); !running {
-		return res, fmt.Errorf("PHP %s FPM container is not running", version)
+	if err := ensureFPMStarted(version, container); err != nil {
+		return res, err
 	}
 
 	podman.EnsurePathMounted(sitePath, version)

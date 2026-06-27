@@ -40,8 +40,9 @@ func runPhpShell(_ *cobra.Command, _ []string) error {
 
 	container := fpmContainerForDir(cwd, version)
 
-	if running, _ := podman.ContainerRunning(container); !running {
-		return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
+	version, container, err = ensureFPMRunning(cwd, version, container)
+	if err != nil {
+		return err
 	}
 
 	// Use the registered site root as the working directory if cwd is inside one,

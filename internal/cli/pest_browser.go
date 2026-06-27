@@ -166,8 +166,8 @@ func installPestBrowser(version string, w io.Writer) error {
 		return fmt.Errorf("updating FPM quadlet: %w", err)
 	}
 
-	if running, _ := podman.ContainerRunning(container); !running {
-		return fmt.Errorf("PHP %s FPM container is not running — start it with: %s", version, serviceStartHint(container))
+	if err := ensureFPMStarted(version, container); err != nil {
+		return err
 	}
 
 	// Rebuild when chromium was just opted in, or when an image from an older

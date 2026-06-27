@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -264,6 +265,23 @@ func isKnownService(name string) bool { return config.IsDefaultPreset(name) }
 
 // ---- Tool implementations ----
 
+// ensureFPMStartedMCP auto-starts a stopped FPM container before an exec, the
+// MCP-side equivalent of the CLI's ensureFPMStarted. It shares phpDet.StartFPM
+// with the CLI so both auto-start identically. On a TTY-less MCP connection it
+// never prompts: it starts an installed-but-stopped container, or returns a
+// tool-error body (install hint / start failure) for the caller to hand back to
+// the client. Returns nil when the container is already running or just started.
+func ensureFPMStartedMCP(phpVersion, short, container string) map[string]any {
+	err := phpDet.StartFPM(phpVersion, container)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, phpDet.ErrFPMNotInstalled) {
+		return toolErr(fmt.Sprintf("PHP %s is not installed — install it with `lerd install`, or start it with service_start(name: \"php%s\")", phpVersion, short))
+	}
+	return toolErr(fmt.Sprintf("could not start the PHP %s FPM container: %v", phpVersion, err))
+}
+
 func execArtisan(args map[string]any) (any, *rpcError) {
 	projectPath := resolvedPath(args)
 	if projectPath == "" {
@@ -285,6 +303,9 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := "lerd-php" + short + "-fpm"
+	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
+		return errBody, nil
+	}
 
 	consoleCmd, err := config.GetConsoleCommand(projectPath)
 	if err != nil {
@@ -937,6 +958,9 @@ func execComposer(args map[string]any) (any, *rpcError) {
 
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := "lerd-php" + short + "-fpm"
+	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
+		return errBody, nil
+	}
 
 	cmdArgs := []string{"exec", "-w", projectPath, "--env", composer.ProcessTimeoutEnv()}
 	for _, e := range agentenv.MCPInject(os.Environ()) {
@@ -1013,6 +1037,9 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 
 	short := strings.ReplaceAll(phpVersion, ".", "")
 	container := "lerd-php" + short + "-fpm"
+	if errBody := ensureFPMStartedMCP(phpVersion, short, container); errBody != nil {
+		return errBody, nil
+	}
 
 	cmdArgs := []string{"exec", "-w", projectPath}
 	for _, e := range agentenv.MCPInject(os.Environ()) {
@@ -3889,6 +3916,9 @@ func execSetup(args map[string]any) (any, *rpcError) {
 		phpVersion = cfg.PHP.DefaultVersion
 	}
 	container := "lerd-php" + strings.ReplaceAll(phpVersion, ".", "") + "-fpm"
+	if errBody := ensureFPMStartedMCP(phpVersion, strings.ReplaceAll(phpVersion, ".", ""), container); errBody != nil {
+		return errBody, nil
+	}
 
 	var out bytes.Buffer
 	ran, skipped, failed := 0, 0, 0
