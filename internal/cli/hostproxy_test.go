@@ -182,21 +182,9 @@ func TestBuildHostProxyCommand_proxyOnlyMode(t *testing.T) {
 	}
 }
 
-func TestFirstFreePort(t *testing.T) {
-	// 3000 and 3001 taken → first free is 3002.
-	taken := map[int]bool{3000: true, 3001: true}
-	if got := firstFreePort(3000, func(p int) bool { return taken[p] }); got != 3002 {
-		t.Errorf("firstFreePort = %d, want 3002", got)
-	}
-	// Nothing taken → start is returned unchanged.
-	if got := firstFreePort(5173, func(int) bool { return false }); got != 5173 {
-		t.Errorf("firstFreePort = %d, want 5173 (start, none taken)", got)
-	}
-	// Below-range start is clamped to 1.
-	if got := firstFreePort(0, func(int) bool { return false }); got != 1 {
-		t.Errorf("firstFreePort(0) = %d, want 1", got)
-	}
-}
+// The first-free / bindability search that allocateHostPort builds on now lives
+// in internal/freeport (TestFirstFree, TestBindable_*); allocateHostPort itself
+// is a thin reserved-set + fall-back-to-start wrapper over it.
 
 func TestHostProxyWorkerForPort_usesGivenPort(t *testing.T) {
 	proxy := &config.ProxyConfig{Command: "npm run start:dev", Port: 3000}

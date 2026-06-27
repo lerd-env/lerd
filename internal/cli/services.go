@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/geodro/lerd/internal/config"
@@ -63,6 +65,7 @@ func NewServiceCmd() *cobra.Command {
 	cmd.AddCommand(newServiceExposeCmd())
 	cmd.AddCommand(newServicePinCmd())
 	cmd.AddCommand(newServiceUnpinCmd())
+	cmd.AddCommand(newServicePortCmd())
 
 	return cmd
 }
@@ -950,6 +953,188 @@ func newServiceUnpinCmd() *cobra.Command {
 			fmt.Printf("Unpinned %s — it will be auto-stopped when no sites use it.\n", name)
 			return nil
 		},
+	}
+}
+
+// newServicePortCmd returns the `service port` command, which moves a service's
+// published host port (e.g. lerd-mysql 3306 → 3307) so a host server can keep the
+// default port. The container-internal port is untouched. Works for any built-in
+// or installed custom service.
+func newServicePortCmd() *cobra.Command {
+	var reset bool
+	cmd := &cobra.Command{
+		Use:   "port <service> [port]",
+		Short: "Set or reset a service's published host port",
+		Long: `Move a service's published host port without touching its
+container-internal port. For example:
+
+    lerd service port mysql 3307
+
+frees 127.0.0.1:3306 for a host-installed MySQL while lerd-mysql stays reachable
+on 3307. Containerized apps reach the service over the lerd network by name, so
+they are unaffected. Works for any built-in or installed service. Use --reset
+(or "port mysql 0") to return to the default.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			if !isKnownService(name) && !serviceops.ServiceInstalled(name) {
+				return fmt.Errorf("%q is not a built-in or installed service", name)
+			}
+			// This command does its own host-proxy refresh at the end, based on the
+			// ACTUAL resulting port, so silence the guard's refresh hook during its
+			// quadlet write — otherwise a --reset that the guard re-shifts would
+			// regenerate the same sites twice.
+			savedHook := serviceops.OnPublishedPortShift
+			serviceops.OnPublishedPortShift = nil
+			defer func() { serviceops.OnPublishedPortShift = savedHook }()
+			newPort := 0
+			if !reset {
+				if len(args) < 2 {
+					return fmt.Errorf("provide a port, or pass --reset to use the default")
+				}
+				p, err := strconv.Atoi(args[1])
+				if err != nil || p < 0 || p > 65535 {
+					return fmt.Errorf("invalid port %q: must be 0-65535", args[1])
+				}
+				newPort = p
+			}
+
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				return err
+			}
+			svcCfg := cfg.Services[name]
+			if newPort == svcCfg.PublishedPort {
+				if newPort == 0 {
+					fmt.Printf("%s already uses its default published port.\n", name)
+				} else {
+					fmt.Printf("%s is already published on port %d.\n", name, newPort)
+				}
+				return nil
+			}
+			// Pre-flight: refuse a port that isn't bindable on both loopback stacks,
+			// so the restart can't fail to bind and leave the service down. This uses
+			// the guard's own dual-stack bindability test (not a plain dial) so the
+			// CLI and the guard agree on what "free" means — a dial would miss a port
+			// reserved only on ::1.
+			if newPort > 0 && !serviceops.PortAvailable(newPort) {
+				return fmt.Errorf("port %d is already in use; pick another (check: %s)",
+					newPort, FindListenerCmd(strconv.Itoa(newPort)))
+			}
+			svcCfg.PublishedPort = newPort
+			cfg.Services[name] = svcCfg
+			if err := config.SaveGlobal(cfg); err != nil {
+				return err
+			}
+			// Only (re)write the quadlet for an INSTALLED service. Without this guard,
+			// `service port` on a removed service silently resurrects it (recreates the
+			// .container, which then auto-starts on boot and can grab a port a host
+			// server needs). The override is saved above either way, so a later
+			// `lerd service start` picks it up.
+			if !serviceops.ServiceInstalled(name) {
+				if newPort == 0 {
+					fmt.Printf("%s is not installed; cleared its saved published-port override.\n", name)
+				} else {
+					fmt.Printf("%s is not installed; saved published port %d for the next install.\n", name, newPort)
+				}
+				return nil
+			}
+			// Re-render the quadlet so the new port lands in the .container file. The
+			// generic guard inside the write decides the final port from real
+			// bindability, so STOP a running unit first: a live unit's own listener
+			// would otherwise look like a foreign owner and suppress a needed shift
+			// (e.g. --reset onto a default a host server owns), leaving it unable to
+			// bind on restart. Stopped, the write/guard then start sees the true state.
+			status, _ := podman.UnitStatus("lerd-" + name)
+			wasActive := status == "active" || status == "activating"
+			if wasActive {
+				fmt.Printf("Restarting lerd-%s to apply the port change...\n", name)
+				if err := podman.StopUnit("lerd-" + name); err != nil {
+					return fmt.Errorf("stopping lerd-%s: %w", name, err)
+				}
+			}
+			// Built-in presets and installed custom services resolve differently, so
+			// dispatch on which kind this is (ensureServiceQuadlet handles presets only).
+			if isKnownService(name) {
+				if err := ensureServiceQuadlet(name); err != nil {
+					return err
+				}
+			} else {
+				svc, err := config.LoadCustomService(name)
+				if err != nil {
+					return fmt.Errorf("loading custom service %q: %w", name, err)
+				}
+				if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
+					return err
+				}
+			}
+			// The guard inside the quadlet write may have overridden the request — e.g.
+			// on --reset when a host server owns the engine default port it shifts lerd
+			// off that port — so report the ACTUAL resulting published port, not the
+			// requested one, to avoid a false "reset to default" message.
+			actual := newPort
+			if cfg2, lerr := config.LoadGlobal(); lerr == nil && cfg2 != nil {
+				if svc, ok := cfg2.Services[name]; ok {
+					actual = svc.PublishedPort
+				}
+			}
+			if wasActive {
+				if err := podman.StartUnit("lerd-" + name); err != nil {
+					return fmt.Errorf("starting lerd-%s: %w", name, err)
+				}
+				_ = podman.WaitReady(name, 30*time.Second)
+			}
+			// Host-proxy sites reach the service over the published loopback port, so
+			// regenerate their .env to follow the change (no-op when none use it).
+			// Container sites are untouched — they connect by name over the lerd network.
+			refreshHostProxySitesForService(name)
+			switch {
+			case actual == 0:
+				fmt.Printf("Reset %s to its default published port.\n", name)
+			case newPort == 0:
+				fmt.Printf("%s stays published on 127.0.0.1:%d — a host server owns its default port.\n", name, actual)
+			default:
+				fmt.Printf("lerd-%s now publishes 127.0.0.1:%d (container-internal port unchanged).\n", name, actual)
+				fmt.Printf("Update host clients pointed at lerd's %s to port %d; containerized apps are unaffected.\n", name, actual)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&reset, "reset", false, "Reset to the preset default published port")
+	return cmd
+}
+
+// refreshHostProxySitesForService regenerates the .env of every host-proxy site
+// that uses service, so a published-port change — set manually via `lerd service
+// port` or by the auto port-ownership guard — is reflected in the loopback
+// host:port those sites connect through. Container sites are left untouched: they
+// reach the service by name over the lerd network on its unchanged
+// container-internal port, which a published-port move never alters. Per site it
+// warns rather than failing, so one unwritable site can't block the rest.
+func refreshHostProxySitesForService(service string) {
+	refreshed := 0
+	for _, s := range config.SitesUsingService(service) {
+		if !s.IsHostProxy() {
+			continue
+		}
+		if err := runLerdEnv(s.Path); err != nil {
+			fmt.Printf("Warning: could not refresh host-proxy site %q for the new %s port: %v\n", s.Name, service, err)
+			continue
+		}
+		refreshed++
+	}
+	if refreshed > 0 {
+		fmt.Printf("Refreshed %d host-proxy site(s) to follow %s's published port.\n", refreshed, service)
+	}
+}
+
+// Wire the port-ownership guard's shift callback to the host-proxy refresh so any
+// quadlet-write path that auto-shifts a DB port (install, start, reinstall) keeps
+// host-proxy sites pointed at the right loopback port. `lerd service port` silences
+// this hook and refreshes once itself (see newServicePortCmd).
+func init() {
+	serviceops.OnPublishedPortShift = func(service string, _ int) {
+		refreshHostProxySitesForService(service)
 	}
 }
 
