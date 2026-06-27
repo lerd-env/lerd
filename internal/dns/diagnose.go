@@ -13,6 +13,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // StepStatus is the outcome of a single rung in the layered DNS check.
@@ -304,13 +305,20 @@ func defaultProbes() probeFns {
 	}
 }
 
+// serviceActive reports whether the lerd-dns service unit is active. It is a
+// var so tests can stub it; production resolves to the platform service
+// manager, which uses launchd on macOS and systemd on linux.
+var serviceActive = func(name string) bool { return services.Mgr.IsActive(name) }
+
 func defaultContainerRunning() bool {
-	out, err := exec.Command("systemctl", "--user", "is-active", "lerd-dns").Output()
-	if err == nil && strings.TrimSpace(string(out)) == "active" {
+	// Consult the service manager first so a launchd-managed host dnsmasq on
+	// macOS (no container, no systemctl) isn't misreported as a foreign
+	// resolver. Falls back to a direct container probe for the podman case.
+	if serviceActive("lerd-dns") {
 		return true
 	}
 	cmd := podman.Cmd("ps", "--filter", "name=^lerd-dns$", "--format", "{{.Names}}")
-	out, err = cmd.Output()
+	out, err := cmd.Output()
 	return err == nil && strings.TrimSpace(string(out)) == "lerd-dns"
 }
 
