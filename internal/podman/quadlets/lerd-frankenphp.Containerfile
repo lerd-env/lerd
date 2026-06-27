@@ -31,8 +31,10 @@ RUN install-php-extensions {{.CoreExtensions}} \
     && rm -rf /tmp/* /var/cache/apk/*
 
 # nodejs+npm so the Octane file-watcher (lerd octane:reload on) and JS tooling
-# work without an apk add at container start, matching the FPM image.
-RUN apk add --no-cache nodejs npm && rm -rf /var/cache/apk/*
+# work without an apk add at container start; git + openssh-client so git over
+# SSH (private composer packages, source installs run inside this container)
+# works without auth failures. All matching the FPM image.
+RUN apk add --no-cache nodejs npm git openssh-client && rm -rf /var/cache/apk/*
 
 # lerd_devtools: lerd's engine-level Debug-window capture (queries, mail, views,
 # events, jobs, http), compiled here for the ZTS base since install-php-extensions

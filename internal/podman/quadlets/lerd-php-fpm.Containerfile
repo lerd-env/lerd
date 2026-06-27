@@ -122,6 +122,7 @@ RUN apk update && apk add --no-cache \
         libgomp \
         ffmpeg \
         git \
+        openssh-client \
         mysql-client \
         nodejs \
         npm \
