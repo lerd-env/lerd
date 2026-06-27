@@ -491,11 +491,21 @@ func runStart(_ *cobra.Command, _ []string) error {
 	migrateExecWorkerPlists()
 	healMachineRestartIfNeeded(preEnsureLastUp)
 
+	// Self-heal a podman upgrade before touching the network or starting
+	// containers. A major-version or backend change since the last run
+	// reshuffles rootless storage/networking and otherwise surfaces as the
+	// cryptic "rootless netns" container start failure (#635). No-op unless
+	// drift is detected. The heal force-removes the lerd containers; the start
+	// sequence below brings them back up, so the returned list is not needed
+	// here.
+	containerDNS := dns.ReadContainerDNS()
+	_ = healPodmanUpgrade(containerDNS)
+
 	// Ensure the lerd bridge network exists. On macOS the network is stored
 	// inside the Podman Machine VM; it may be absent after a fresh machine
 	// init or if it was pruned. All service containers use --network lerd so
 	// this must succeed before any container is started.
-	if err := podman.EnsureNetwork("lerd", dns.ReadContainerDNS()); err != nil {
+	if err := podman.EnsureNetwork("lerd", containerDNS); err != nil {
 		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
 			fmt.Println("  WARN: lerd network schema doesn't match host IPv6 support; run 'lerd install' to recreate")
 		} else {

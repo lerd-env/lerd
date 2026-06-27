@@ -137,6 +137,43 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 		} else {
 			ok("fuse-overlayfs")
 		}
+
+		// Rootless network helpers. lerd's containers run on a custom bridge
+		// network, which on rootless podman requires netavark + aardvark-dns
+		// plus a rootless network tool (pasta or slirp4netns). Missing any of
+		// these is the "failed to mount runtime directory for rootless netns"
+		// container start failure from #635 — a fresh, minimal host can lack
+		// them entirely. They need sudo to install, so flag with the command.
+		//
+		// netavark/aardvark-dns live in libexec, not on $PATH, so ask podman
+		// for the paths it actually resolved rather than LookPath (which would
+		// false-fail on a healthy host). Skip the check when podman can't report
+		// them (older podman without the field).
+		if netavark, aardvark, probed := podman.NetworkHelpers(); probed {
+			if netavark == "" {
+				fail("rootless network (netavark)", "podman cannot find netavark — containers on the lerd bridge cannot start",
+					"sudo apt install netavark  (or dnf/pacman); then: lerd install")
+			} else {
+				ok("rootless network (netavark)")
+			}
+			if aardvark == "" {
+				fail("rootless network (aardvark-dns)", "podman cannot find aardvark-dns — container DNS will not resolve",
+					"sudo apt install aardvark-dns  (or dnf/pacman); then: lerd install")
+			} else {
+				ok("rootless network (aardvark-dns)")
+			}
+		}
+		// pasta/slirp4netns are user-PATH tools, so LookPath is reliable here.
+		if _, p := exec.LookPath("pasta"); p != nil {
+			if _, s := exec.LookPath("slirp4netns"); s != nil {
+				fail("rootless network (pasta/slirp4netns)", "neither pasta nor slirp4netns found — rootless containers have no network",
+					"sudo apt install passt  (provides pasta), or: sudo apt install slirp4netns; then: lerd install")
+			} else {
+				ok("rootless network (slirp4netns)")
+			}
+		} else {
+			ok("rootless network (pasta)")
+		}
 	}
 
 	quadletDir := config.QuadletDir()
