@@ -302,9 +302,18 @@ func fetchStatus() (*statusResponse, error) {
 // dialUnixHTTP opens a TCP-style net.Conn over the lerd-ui Unix socket. Used
 // for the SSE tail; we keep a raw connection so we can stream the response
 // body without a transport layer that buffers internally.
+// uiClientDial reports the transport the CLI uses to reach the lerd-ui daemon:
+// the unix socket on Linux, the TCP loopback on macOS (where the socket isn't
+// created). It's a var so tests can point it at a fake listener regardless of
+// the production per-OS default.
+var uiClientDial = func() (network, addr string) {
+	return config.UIClientNetwork(), config.UIClientAddr()
+}
+
 func dialUnixHTTP(ctx context.Context) (net.Conn, error) {
 	d := net.Dialer{Timeout: 2 * time.Second}
-	return d.DialContext(ctx, config.UIClientNetwork(), config.UIClientAddr())
+	network, addr := uiClientDial()
+	return d.DialContext(ctx, network, addr)
 }
 
 func unixHTTPClient() *http.Client {
@@ -312,7 +321,8 @@ func unixHTTPClient() *http.Client {
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, config.UIClientNetwork(), config.UIClientAddr())
+				network, addr := uiClientDial()
+				return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, network, addr)
 			},
 		},
 	}
