@@ -3,6 +3,7 @@ package podman
 import (
 	"embed"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -44,6 +45,67 @@ func CurrentImage(content string) string {
 		}
 	}
 	return ""
+}
+
+// SetPrimaryHostPort rewrites the host (published) side of the first port spec
+// in ports to hostPort, preserving the container port and any /proto suffix.
+// The primary mapping is index 0 (the preset's own port; extra ports follow),
+// so this moves where the service is reachable on the host without touching the
+// container-internal port. A spec may be "host:container" or "ip:host:container".
+// Returns ports unchanged when empty, hostPort is non-positive, or the first
+// spec is unrecognised. Pure; operates on the pre-render svc.Ports form (before
+// BindForLAN/PairIPv6Binds add the loopback/IPv6 prefixes).
+func SetPrimaryHostPort(ports []string, hostPort int) []string {
+	if len(ports) == 0 || hostPort <= 0 {
+		return ports
+	}
+	spec := ports[0]
+	proto := ""
+	if slash := strings.IndexByte(spec, '/'); slash >= 0 {
+		proto, spec = spec[slash:], spec[:slash]
+	}
+	segs := strings.Split(spec, ":")
+	switch len(segs) {
+	case 2: // host:container
+		segs[0] = strconv.Itoa(hostPort)
+	case 3: // ip:host:container
+		segs[1] = strconv.Itoa(hostPort)
+	default:
+		return ports
+	}
+	out := append([]string(nil), ports...)
+	out[0] = strings.Join(segs, ":") + proto
+	return out
+}
+
+// PrimaryHostPort returns the host (published) port of the first port spec in
+// ports — the read side of SetPrimaryHostPort. A spec may be "host:container"
+// or "ip:host:container", optionally with a /proto suffix. Returns 0 when ports
+// is empty or the first spec has no parseable host port (e.g. a bare container
+// port or an empty host segment for podman auto-assignment).
+func PrimaryHostPort(ports []string) int {
+	if len(ports) == 0 {
+		return 0
+	}
+	spec := ports[0]
+	if slash := strings.IndexByte(spec, '/'); slash >= 0 {
+		spec = spec[:slash]
+	}
+	segs := strings.Split(spec, ":")
+	var host string
+	switch len(segs) {
+	case 2: // host:container
+		host = segs[0]
+	case 3: // ip:host:container
+		host = segs[1]
+	default:
+		return 0
+	}
+	n, err := strconv.Atoi(host)
+	if err != nil {
+		return 0
+	}
+	return n
 }
 
 // ApplyExtraPorts appends extra PublishPort lines to quadlet content.
