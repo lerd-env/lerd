@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/cleanup"
@@ -70,6 +71,18 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 		ok("podman")
 	}
 
+	// podman 4.5 is lerd's minimum on every platform: older clients reject the
+	// quadlet units lerd emits and hit build regressions (#636). Probes the
+	// binary directly, so it reports even when the daemon/machine is down.
+	if meetsMin, ver, verErr := podman.VersionAtLeast(4, 5); verErr == nil {
+		if meetsMin {
+			ok(fmt.Sprintf("podman version (%s)", ver))
+		} else {
+			fail("podman version", "podman "+ver+" is older than the 4.5 minimum",
+				"upgrade podman to 4.5 or newer: https://podman.io/docs/installation")
+		}
+	}
+
 	if runtime.GOOS == "linux" {
 		if _, lookErr := exec.LookPath("crun"); lookErr != nil {
 			warn("OCI runtime", "crun not found — recommended for rootless podman (install: sudo pacman -S crun / sudo apt install crun / sudo dnf install crun)")
@@ -99,6 +112,30 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 			} else {
 				ok("linger enabled")
 			}
+		}
+
+		// Rootless podman build preflight: a missing subuid/subgid range or a
+		// missing fuse-overlayfs surface as the same opaque tar "Operation not
+		// permitted" failure during image builds (#636). Both are Linux-host
+		// concerns; on macOS the uid mapping and storage live inside the podman
+		// machine VM. Diagnose each so the user gets a real pointer.
+		if currentUser != "" {
+			uid := strconv.Itoa(os.Getuid())
+			for _, path := range []string{"/etc/subuid", "/etc/subgid"} {
+				b, readErr := os.ReadFile(path)
+				if readErr != nil || !hasSubIDRange(string(b), currentUser, uid) {
+					fail(path+" range", "no sub-id range for "+currentUser+" (rootless podman builds will fail)",
+						"add one: echo "+currentUser+":100000:65536 | sudo tee -a "+path+" && podman system migrate")
+				} else {
+					ok(path + " range")
+				}
+			}
+		}
+
+		if _, lookErr := exec.LookPath("fuse-overlayfs"); lookErr != nil {
+			warn("fuse-overlayfs", "not found — recommended for rootless overlay storage (install: sudo apt install fuse-overlayfs / sudo dnf install fuse-overlayfs / sudo pacman -S fuse-overlayfs)")
+		} else {
+			ok("fuse-overlayfs")
 		}
 	}
 

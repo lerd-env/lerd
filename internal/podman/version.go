@@ -42,12 +42,34 @@ func splitMajorMinor(v string) (int, int, error) {
 	return major, minor, nil
 }
 
+// versionAtLeast reports whether major.minor >= wantMajor.wantMinor.
+func versionAtLeast(major, minor, wantMajor, wantMinor int) bool {
+	if major != wantMajor {
+		return major > wantMajor
+	}
+	return minor >= wantMinor
+}
+
 // podmanVersionSupportsStopTimeout reports whether the StopTimeout= key in
 // quadlet [Container] sections is recognised. Added in Podman 5.0; Ubuntu
 // 24.04 ships 4.9.3 which rejects the unit and emits no service files.
 func podmanVersionSupportsStopTimeout(major, minor int) bool {
-	_ = minor
-	return major >= 5
+	return versionAtLeast(major, minor, 5, 0)
+}
+
+// VersionAtLeast probes the local podman and reports whether its version meets
+// the given minimum. It returns the parsed "major.minor" for messaging. An
+// error means the binary could not be run or its version could not be parsed.
+func VersionAtLeast(wantMajor, wantMinor int) (ok bool, version string, err error) {
+	out, err := execCommand(PodmanBin(), "--version").Output()
+	if err != nil {
+		return false, "", err
+	}
+	major, minor, err := parsePodmanVersion(string(out))
+	if err != nil {
+		return false, "", err
+	}
+	return versionAtLeast(major, minor, wantMajor, wantMinor), fmt.Sprintf("%d.%d", major, minor), nil
 }
 
 // supportsContainerStopTimeoutKey is the runtime test seam used by the
