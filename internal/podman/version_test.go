@@ -37,6 +37,28 @@ func TestParsePodmanVersion(t *testing.T) {
 	}
 }
 
+func TestVersionAtLeast(t *testing.T) {
+	tests := []struct {
+		major, minor       int
+		wantMajor, wantMin int
+		want               bool
+	}{
+		{4, 5, 4, 5, true},   // exact match
+		{4, 4, 4, 5, false},  // one minor short
+		{4, 9, 4, 5, true},   // newer minor
+		{5, 0, 4, 5, true},   // newer major beats lower minor
+		{3, 99, 4, 5, false}, // older major
+		{4, 10, 4, 5, true},  // double-digit minor
+	}
+	for _, tt := range tests {
+		got := versionAtLeast(tt.major, tt.minor, tt.wantMajor, tt.wantMin)
+		if got != tt.want {
+			t.Errorf("versionAtLeast(%d.%d >= %d.%d): got %v, want %v",
+				tt.major, tt.minor, tt.wantMajor, tt.wantMin, got, tt.want)
+		}
+	}
+}
+
 func TestSupportsContainerStopTimeoutBoundary(t *testing.T) {
 	// StopTimeout= in [Container] was added in Podman 5.0. Anything below
 	// must fall back to PodmanArgs=--stop-timeout=5.
