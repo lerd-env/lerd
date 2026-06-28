@@ -112,13 +112,25 @@ func applyHostProxyEnv(updates, containerToHost map[string]string) {
 // non-canonical version reports its real published port; the default preset is
 // the fallback for services not separately registered.
 func servicePortMappings(name string) []string {
+	var ports []string
 	if svc, err := config.LoadCustomService(name); err == nil && len(svc.Ports) > 0 {
-		return svc.Ports
+		ports = svc.Ports
+	} else if svc, err := config.DefaultPresetMeta(name); err == nil && len(svc.Ports) > 0 {
+		ports = svc.Ports
 	}
-	if svc, err := config.DefaultPresetMeta(name); err == nil && len(svc.Ports) > 0 {
-		return svc.Ports
+	if len(ports) == 0 {
+		return nil
 	}
-	return nil
+	// Apply a published-port override so a host-proxy app's loopback target
+	// follows the moved port (e.g. lerd-mysql 3306 → 3307 when a host MySQL owns
+	// 3306, set manually via `lerd service port` or by the port-ownership guard).
+	// The override lives in global config, not the preset/quadlet meta the lookups
+	// above read, so without this the host-proxy .env would keep pointing at the
+	// vacated default — and connect to the host server instead of lerd's container.
+	if pp := config.ServicePublishedPort(name); pp > 0 {
+		ports = podman.SetPrimaryHostPort(ports, pp)
+	}
+	return ports
 }
 
 // splitHostContainerPort parses a podman port mapping ("3411:3306", or

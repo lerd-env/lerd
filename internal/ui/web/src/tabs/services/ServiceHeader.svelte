@@ -51,6 +51,32 @@
 
   const isWorker = $derived(isServiceWorker(svc));
   const active = $derived(svc.status === 'active');
+  // When active and a host port is exposed, the status pill shows the port (a
+  // moved port reads at a glance) and copies 127.0.0.1:<port> on click; otherwise
+  // it falls back to the status word.
+  const exposedPort = $derived(active && svc.port ? svc.port : 0);
+  const exposedAddr = $derived(exposedPort ? `127.0.0.1:${exposedPort}` : '');
+  let portCopied = $state(false);
+  let portCopyTimer: ReturnType<typeof setTimeout> | null = null;
+  async function copyExposedAddr() {
+    if (!exposedAddr) return;
+    try {
+      await navigator.clipboard.writeText(exposedAddr);
+      portCopied = true;
+      if (portCopyTimer) clearTimeout(portCopyTimer);
+      portCopyTimer = setTimeout(() => (portCopied = false), 1500);
+    } catch {
+      /* clipboard unavailable; nothing to recover */
+    }
+  }
+  const pillLabel = $derived(exposedPort ? String(exposedPort) : svc.status);
+  const pillTitle = $derived(
+    exposedPort
+      ? portCopied
+        ? m.common_copied()
+        : m.services_portPillTitle({ addr: exposedAddr })
+      : ''
+  );
   const portConflicts = $derived(
     !active && svc.port_conflicts && svc.port_conflicts.length > 0 ? svc.port_conflicts : []
   );
@@ -316,7 +342,12 @@
         {#if svc.version && !isWorker}
           <span class="text-xs font-normal tabular-nums text-gray-500 dark:text-gray-400">{svc.version}</span>
         {/if}
-        <StatusPill tone={active ? 'ok' : 'muted'} label={svc.status} />
+        <StatusPill
+          tone={active ? 'ok' : 'muted'}
+          label={pillLabel}
+          title={pillTitle}
+          onclick={exposedPort ? copyExposedAddr : undefined}
+        />
         {#if portConflicts.length > 0}
           <span
             class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"

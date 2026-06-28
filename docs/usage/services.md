@@ -16,6 +16,8 @@
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service expose <name> <host:container>` | Publish an extra port on a built-in service |
 | `lerd service expose <name> <host:container> --remove` | Remove a previously exposed port |
+| `lerd service port <name> <port>` | Move a service's published host port (e.g. free 3306 for a host server) |
+| `lerd service port <name> --reset` | Reset a service to its preset default published port |
 
 Available services: `mysql` (8.4 LTS canonical, 9.7 LTS / 5.7 alternates), `redis` (7-alpine), `postgres` (16 canonical with PostGIS, 17 / 18 alternates), `meilisearch` (v1.42), `rustfs` (S3-compatible), `mailpit` (SMTP catcher).
 
@@ -62,6 +64,28 @@ services:
 ```
 
 Then apply with `lerd service restart mysql`.
+
+### Moving a service's published host port
+
+Each service publishes on a default host port (MySQL `3306`, PostgreSQL `5432`, Redis `6379`, and so on). When lerd writes a service's quadlet and that default port can't be bound, it shifts the service to the next free port and records it, so the container comes up cleanly instead of failing to bind. The decision is made purely from port availability: lerd never inspects host files, sockets, or installed packages. It applies to every service, not just databases.
+
+Move a port yourself, or undo an automatic shift, with `lerd service port`:
+
+```bash
+# Publish lerd-mysql on 3307 so a host-installed MySQL can keep 3306
+lerd service port mysql 3307
+
+# Go back to the preset default
+lerd service port mysql --reset   # or: lerd service port mysql 0
+```
+
+The container-internal port never changes, so containerized apps (which reach the service by name over the `lerd` network) are unaffected. Only host clients pointed at the old published port need to follow. [Host-proxy sites](host-proxy.md) that connect over the published loopback port have their `.env` regenerated automatically when the port moves. A host-proxy site that is paused when the port moves is skipped at that moment and picks up the new port when it is next unpaused.
+
+The chosen port is persisted under `services.<name>.published_port` in `~/.config/lerd/config.yaml` and reapplied on every start. Once a port is set, automatically or with `lerd service port`, it sticks: lerd never moves it again on its own, not even back to the default when that frees up later. Change it only with `lerd service port`.
+
+::: warning Known limitation
+The shift is decided at quadlet-write time, from whether the port can be bound right then. A host server that is installed but stopped at that moment leaves its port looking free, so lerd may take it and clash when that server next starts (for example at boot). This is the deliberate trade for not inspecting the host: a host database is usually running, and the failure is loud. Recover by moving lerd onto a free port with `lerd service port <name> <port>`.
+:::
 
 ---
 

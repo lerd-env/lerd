@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/agentenv"
@@ -4223,6 +4224,25 @@ func execServiceUnpin(args map[string]any) (any, *rpcError) {
 		return toolErr("name is required"), nil
 	}
 	return runLerdCmd("service", "unpin", name)
+}
+
+// execServicePort shells out to `lerd service port`, reusing the CLI's gate,
+// pre-flight, fail-closed persistence, host-proxy refresh and actual-port
+// reporting. published_port sets the port (0 resets); reset:true is shorthand
+// for the default.
+func execServicePort(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	if name == "" {
+		return toolErr("name is required"), nil
+	}
+	if boolArg(args, "reset") {
+		return runLerdCmd("service", "port", name, "--reset")
+	}
+	port := intArg(args, "published_port", -1)
+	if port < 0 {
+		return toolErr("provide published_port (0 to reset), or set reset: true"), nil
+	}
+	return runLerdCmd("service", "port", name, strconv.Itoa(port))
 }
 
 // runLerdCmd runs the lerd binary with the given arguments and returns its

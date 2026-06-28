@@ -785,6 +785,7 @@
   "tuningEditor_rolledBack": "The service didn't restart cleanly, so your previous config was restored and is running again.",
   "tuningEditor_resetRolledBack": "The service didn't restart cleanly, so your previous config was restored (kept as {name}) and is running again.",
   "services_portConflictTitle": "Port {ports} ist auf dem Host bereits belegt. Beende den kollidierenden Prozess oder ändere den lerd-Port. Führe `lerd doctor` aus für den passenden Suchbefehl auf deinem System.",
+  "services_portPillTitle": "Aktiv · erreichbar unter {addr} (zum Kopieren klicken)",
   "services_reinstall_action": "Neu installieren",
   "services_reinstall_withReset": "Neu installieren + Daten zurücksetzen",
   "services_reinstall_submitting": "Wird neu installiert…",

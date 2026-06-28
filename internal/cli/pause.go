@@ -161,6 +161,25 @@ func setSiteContainerAutostart(site *config.Site, on bool) bool {
 	return os.WriteFile(path, []byte(out), 0644) == nil
 }
 
+// hostProxyEnvRefresh regenerates a site's .env by re-running `lerd env`. A
+// package var so tests can stub the re-exec; production points it at runLerdEnv.
+var hostProxyEnvRefresh = runLerdEnv
+
+// refreshHostProxyEnvOnResume regenerates a host-proxy site's .env as it unpauses,
+// so a published port that moved while it was paused (and was skipped by the
+// move-time follow) is picked up before its dev server comes back. Container sites
+// reach services by name on the unchanged internal port, so this no-ops for them.
+// Reports whether a refresh ran.
+func refreshHostProxyEnvOnResume(site *config.Site) bool {
+	if site == nil || !site.IsHostProxy() {
+		return false
+	}
+	if err := hostProxyEnvRefresh(site.Path); err != nil {
+		feedback.Warn("refreshing host-proxy env on resume: %v", err)
+	}
+	return true
+}
+
 // UnpauseSite restores the site's nginx vhost, restarts any workers that were
 // running when the site was paused, and clears the paused state.
 func UnpauseSite(name string) error {
@@ -281,6 +300,11 @@ func UnpauseSite(name string) error {
 	nginx.ReloadOrWarn("")
 
 	startServicesForSite(site.Path)
+
+	// A port move that landed while this site was paused skipped it (the follow
+	// excludes paused sites), so a host-proxy site's .env can still point at a
+	// vacated published port. Regenerate before the dev server resumes below.
+	refreshHostProxyEnvOnResume(site)
 
 	resumed := site.PausedWorkers
 	for _, w := range resumed {

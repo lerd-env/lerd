@@ -118,7 +118,7 @@ The MCP surface is **eleven grouped tools**, each driven by an `action` argument
 | Tool | Actions |
 |---|---|
 | `site` | `list` (discover sites — call first), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark` |
-| `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_install`, `check_updates` |
+| `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_install`, `check_updates` |
 | `db` | `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete` |
 | `env` | `setup`, `check`, `override` |
 | `runtime` | `versions`, `node_install`, `node_uninstall`, `php_list`, `ext_list`, `ext_add`, `ext_remove` |

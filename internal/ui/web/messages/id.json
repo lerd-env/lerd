@@ -785,6 +785,7 @@
   "tuningEditor_rolledBack": "The service didn't restart cleanly, so your previous config was restored and is running again.",
   "tuningEditor_resetRolledBack": "The service didn't restart cleanly, so your previous config was restored (kept as {name}) and is running again.",
   "services_portConflictTitle": "Port {ports} sudah dipakai di host. Hentikan proses yang bentrok atau ubah port lerd. Jalankan `lerd doctor` untuk perintah pencarian di sistem Anda.",
+  "services_portPillTitle": "Aktif · dapat diakses di {addr} (klik untuk menyalin)",
   "services_reinstall_action": "Pasang ulang",
   "services_reinstall_withReset": "Pasang ulang + setel ulang data",
   "services_reinstall_submitting": "Memasang ulang…",

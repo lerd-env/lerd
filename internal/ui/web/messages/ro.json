@@ -827,6 +827,7 @@
   "tuningEditor_rolledBack": "Serviciul nu a repornit curat, așa că configurația ta anterioară a fost restaurată și rulează din nou.",
   "tuningEditor_resetRolledBack": "Serviciul nu a repornit curat, așa că configurația ta anterioară a fost restaurată (păstrată ca {name}) și rulează din nou.",
   "services_portConflictTitle": "Portul {ports} este deja folosit pe host. Oprește procesul care intră în conflict sau schimbă portul lerd. Execută `lerd doctor` pentru comanda de căutare specifică sistemului tău de operare.",
+  "services_portPillTitle": "Activ · accesibil la {addr} (clic pentru a copia)",
   "services_reinstall_action": "Reinstalează",
   "services_reinstall_withReset": "Reinstalează + resetează datele",
   "services_reinstall_submitting": "Se reinstalează…",
