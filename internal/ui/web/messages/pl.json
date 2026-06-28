@@ -827,6 +827,7 @@
   "tuningEditor_rolledBack": "Usługa nie uruchomiła się ponownie poprawnie, więc Twoja poprzednia konfiguracja została odtworzona i znów działa.",
   "tuningEditor_resetRolledBack": "Usługa nie uruchomiła się ponownie poprawnie, więc Twoja poprzednia konfiguracja została odtworzona (zachowana jako {name}) i znów działa.",
   "services_portConflictTitle": "Port {ports} jest już używany na hoście. Zatrzymaj kolidujący proces lub zmień port lerd. Uruchom `lerd doctor`, aby uzyskać polecenie wyszukiwania dla Twojego systemu.",
+  "services_portPillTitle": "Aktywny · dostępny pod {addr} (kliknij, aby skopiować)",
   "services_reinstall_action": "Zainstaluj ponownie",
   "services_reinstall_withReset": "Zainstaluj ponownie + zresetuj dane",
   "services_reinstall_submitting": "Ponowne instalowanie…",

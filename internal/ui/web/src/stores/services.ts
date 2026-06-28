@@ -11,6 +11,8 @@ export interface Service {
   dashboard?: string;
   dashboard_external?: boolean;
   connection_url?: string;
+  // Host (published) port the service is exposed on; reflects a moved port.
+  port?: number;
   custom?: boolean;
   is_default?: boolean;
   tunable?: boolean;

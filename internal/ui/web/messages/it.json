@@ -827,6 +827,7 @@
   "tuningEditor_rolledBack": "Il servizio non si è riavviato correttamente, quindi la tua config precedente è stata ripristinata ed è di nuovo in esecuzione.",
   "tuningEditor_resetRolledBack": "Il servizio non si è riavviato correttamente, quindi la tua config precedente è stata ripristinata (conservata come {name}) ed è di nuovo in esecuzione.",
   "services_portConflictTitle": "Porta {ports} già in uso sull'host. Ferma il processo in conflitto o cambia la porta di lerd. Esegui `lerd doctor` per il comando di ricerca adatto al tuo SO.",
+  "services_portPillTitle": "Attivo · raggiungibile su {addr} (clic per copiare)",
   "services_reinstall_action": "Reinstalla",
   "services_reinstall_withReset": "Reinstalla + azzera dati",
   "services_reinstall_submitting": "Reinstallazione…",

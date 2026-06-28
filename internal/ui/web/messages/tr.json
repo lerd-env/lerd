@@ -785,6 +785,7 @@
   "tuningEditor_rolledBack": "The service didn't restart cleanly, so your previous config was restored and is running again.",
   "tuningEditor_resetRolledBack": "The service didn't restart cleanly, so your previous config was restored (kept as {name}) and is running again.",
   "services_portConflictTitle": "{ports} portu host'ta zaten kullanımda. Çakışan süreci durdurun veya lerd portunu değiştirin. İşletim sisteminize göre find komutu için `lerd doctor` çalıştırın.",
+  "services_portPillTitle": "Etkin · {addr} üzerinden erişilebilir (kopyalamak için tıklayın)",
   "services_reinstall_action": "Yeniden kur",
   "services_reinstall_withReset": "Yeniden kur + veri sıfırla",
   "services_reinstall_submitting": "Yeniden kuruluyor…",
