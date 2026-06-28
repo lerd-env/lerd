@@ -20,13 +20,19 @@ func parsePodmanVersion(out string) (int, int, error) {
 	return 0, 0, fmt.Errorf("podman version: no version token in %q", out)
 }
 
-func splitMajorMinor(v string) (int, int, error) {
-	// Strip distro/build suffixes like "+ds1" or "-rc1".
+// cleanVersionToken strips distro/build suffixes like "+ds1", "-rc1", or "~"
+// from a bare version string, leaving "major.minor.patch".
+func cleanVersionToken(v string) string {
 	for _, sep := range []string{"+", "-", "~"} {
 		if idx := strings.Index(v, sep); idx > 0 {
 			v = v[:idx]
 		}
 	}
+	return v
+}
+
+func splitMajorMinor(v string) (int, int, error) {
+	v = cleanVersionToken(v)
 	parts := strings.Split(v, ".")
 	if len(parts) < 2 {
 		return 0, 0, fmt.Errorf("podman version %q: not enough components", v)
