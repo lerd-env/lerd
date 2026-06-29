@@ -2,14 +2,19 @@ package cli
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteinfo"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 // unitStatesOKFn snapshots every lerd-* unit's state plus a trust flag; a var so
@@ -57,7 +62,11 @@ func SuspendWorkersForIdle(site *config.Site) []string {
 		stopWorkerByName(site, w)
 		suspended = append(suspended, w)
 	}
-	return appendLostSuspended(site, suspended)
+	final := appendLostSuspended(site, suspended)
+	// A host-proxy site's dev server is its only request-serving process, so once
+	// idle-suspend stops it the proxy vhost 502s. Swap to the waking page instead.
+	swapHostProxyVhostToWaking(site, final)
+	return final
 }
 
 // appendLostSuspended adds any of the site's declared workers (.lerd.yaml) whose
@@ -127,6 +136,75 @@ func ResumeWorkersForIdle(site *config.Site, workers []string) {
 	}
 	for _, w := range workers {
 		resumeWorkerByName(site, w, phpVersion)
+	}
+	// Restore the host-proxy proxy vhost the suspend swapped to the waking page,
+	// once the dev server is listening again.
+	restoreHostProxyVhostAfterIdle(site, workers)
+}
+
+// hostProxyVhostSwapApplies reports whether idle suspend/resume should swap a
+// site's vhost: only for a host-proxy site whose suspended (or resumed) worker
+// set includes the app dev server. Every other site or worker set leaves the
+// vhost untouched.
+func hostProxyVhostSwapApplies(isHostProxy bool, workers []string) bool {
+	return isHostProxy && containsString(workers, hostProxyWorkerName)
+}
+
+// swapHostProxyVhostToWaking swaps a host-proxy site's proxy vhost to the
+// auto-refreshing waking page when idle-suspend stops its dev server, so a
+// request to the sleeping site serves a "starting back up" page (the access hit
+// drives the resume) instead of a 502 from nginx proxying to the dead port.
+// No-op unless the site is host-proxy and its app worker is among the suspended
+// set.
+func swapHostProxyVhostToWaking(site *config.Site, suspended []string) {
+	if !hostProxyVhostSwapApplies(site.IsHostProxy(), suspended) {
+		return
+	}
+	if err := writeWakingHTML(site); err != nil {
+		fmt.Printf("[WARN] idle-suspend waking page %s: %v\n", site.Name, err)
+		return
+	}
+	if err := nginx.GenerateWakingVhost(*site); err != nil {
+		fmt.Printf("[WARN] idle-suspend waking vhost %s: %v\n", site.Name, err)
+		return
+	}
+	nginx.ReloadOrWarn("")
+}
+
+// restoreHostProxyVhostAfterIdle restores a host-proxy site's proxy vhost after
+// idle-resume restarts its dev server. It waits for the dev server to be
+// listening again first so the waking page's auto-refresh keeps serving until the
+// app can answer, rather than flashing nginx's own 502 (which carries no refresh
+// and would break the reload loop) during the dev server's warmup.
+func restoreHostProxyVhostAfterIdle(site *config.Site, workers []string) {
+	if !hostProxyVhostSwapApplies(site.IsHostProxy(), workers) {
+		return
+	}
+	// Poll the dev-server port, bounded to 60s. Vite/Nuxt can take many seconds
+	// to bind after launch; with no fixed proxy port we skip the wait and restore
+	// immediately (the worst case is a brief 502 flash on warmup).
+	if proxy := parentProxyConfig(*site); proxy != nil && proxy.Port > 0 {
+		waitForHostPort(proxy.Port, 60*time.Second)
+	}
+	if err := siteops.RegenerateSiteVhost(site, site.PrimaryDomain()); err != nil {
+		fmt.Printf("[WARN] idle-resume host-proxy vhost %s: %v\n", site.Name, err)
+		return
+	}
+	nginx.ReloadOrWarn("")
+}
+
+// waitForHostPort blocks until a TCP connection to the host port succeeds or the
+// timeout elapses, polling cheaply. Gates the host-proxy proxy-vhost restore on
+// the dev server actually accepting connections again.
+func waitForHostPort(port int, timeout time.Duration) {
+	addr := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if conn, err := net.DialTimeout("tcp", addr, time.Second); err == nil {
+			_ = conn.Close()
+			return
+		}
+		time.Sleep(250 * time.Millisecond)
 	}
 }
 

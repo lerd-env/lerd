@@ -648,6 +648,82 @@ func writePausedHTML(_ *config.Site) error {
 	return os.WriteFile(filepath.Join(dir, "paused.html"), []byte(pausedPageHTML), 0644)
 }
 
+// wakingPageHTML is the static landing page served while an idle-suspended
+// host-proxy site's dev server is starting back up. Unlike the paused page it
+// has no Resume button: the request that loaded it already drove idle-resume, so
+// it just auto-refreshes (native meta refresh) until the proxy vhost is restored
+// and the reload lands on the live app.
+const wakingPageHTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta http-equiv="refresh" content="3">
+  <title>Waking up</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    body {
+      background: #0f1117;
+      color: #e5e7eb;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      margin: 0;
+    }
+    .card {
+      background: #1a1d27;
+      border: 1px solid #2d3142;
+      border-radius: 14px;
+      padding: 2.5rem 3rem;
+      max-width: 420px;
+      width: calc(100% - 2rem);
+      text-align: center;
+    }
+    .spinner {
+      width: 40px;
+      height: 40px;
+      margin: 0 auto 1.25rem;
+      border: 3px solid #2d3142;
+      border-top-color: #FF2D20;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    h1 { font-size: 1.2rem; font-weight: 600; margin: 0 0 0.5rem; }
+    .host {
+      font-size: 0.85rem;
+      color: #FF2D20;
+      font-family: ui-monospace, 'Cascadia Code', monospace;
+      margin: 0 0 1rem;
+      word-break: break-all;
+    }
+    p { font-size: 0.85rem; color: #9ca3af; margin: 0; line-height: 1.5; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="spinner"></div>
+    <h1>Waking the dev server</h1>
+    <p class="host" id="host"></p>
+    <p>This site was idle and is starting back up. This page refreshes automatically.</p>
+  </div>
+  <script>document.getElementById('host').textContent = location.hostname;</script>
+</body>
+</html>
+`
+
+// writeWakingHTML ensures the shared idle-waking landing page exists in the same
+// directory as the paused page.
+func writeWakingHTML(_ *config.Site) error {
+	dir := config.PausedDir()
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, "waking.html"), []byte(wakingPageHTML), 0644)
+}
+
 // pauseWorktrees generates paused HTML and nginx vhosts for every worktree of
 // a site that is being paused. The resume button on each worktree page unpauses
 // the parent site (which restores all worktree vhosts as well).
