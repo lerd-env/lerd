@@ -681,3 +681,161 @@ func TestExposeConfigChanged_IgnoresAAAAOnlyDrift(t *testing.T) {
 		t.Fatal("an upstream change must warrant a restart")
 	}
 }
+
+// fakeClock returns controllable times so resume detection (a wall-clock gap
+// between ticks) can be exercised deterministically.
+type fakeClock struct{ t time.Time }
+
+func (c *fakeClock) now() time.Time          { return c.t }
+func (c *fakeClock) advance(d time.Duration) { c.t = c.t.Add(d) }
+
+// nginxHarness builds a healNginxOnResume test harness with healthy defaults so
+// each test overrides only the behaviour it pins.
+type nginxHarness struct {
+	deps    dnsWatchDeps
+	repairs int
+	healthy bool
+	stopped bool
+}
+
+func newNginxHarness() *nginxHarness {
+	h := &nginxHarness{healthy: true}
+	h.deps = dnsWatchDeps{
+		nginxHealthy: func() bool { return h.healthy },
+		repairNginx:  func() error { h.repairs++; return nil },
+		isStopped:    func() bool { return h.stopped },
+		log:          func(string, string, ...any) {},
+	}
+	return h
+}
+
+// TestResumed pins the suspend detector: a wall-clock gap far larger than the
+// poll interval reads as a resume, normal cadence does not, and the very first
+// tick (no previous timestamp) never does.
+func TestResumed(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1_000_000, 0)}
+	s := &dnsWatchState{}
+	if s.resumed(c.now()) {
+		t.Fatal("first tick must not read as a resume")
+	}
+	c.advance(30 * time.Second)
+	if s.resumed(c.now()) {
+		t.Fatal("a normal poll-interval gap is not a resume")
+	}
+	c.advance(2 * time.Hour)
+	if !s.resumed(c.now()) {
+		t.Fatal("a multi-hour gap must read as a resume")
+	}
+	c.advance(30 * time.Second)
+	if s.resumed(c.now()) {
+		t.Fatal("back to normal cadence must not read as a resume")
+	}
+}
+
+// TestHealNginxOnResume: a down nginx is restarted, a healthy one is left alone, a
+// deliberately stopped stack is never touched, and an unset probe is a no-op.
+func TestHealNginxOnResume(t *testing.T) {
+	h := newNginxHarness()
+	h.healthy = false
+	healNginxOnResume(h.deps)
+	if h.repairs != 1 {
+		t.Fatalf("down nginx must restart on resume, repairs=%d", h.repairs)
+	}
+
+	h = newNginxHarness() // healthy
+	healNginxOnResume(h.deps)
+	if h.repairs != 0 {
+		t.Fatalf("healthy nginx must not restart, repairs=%d", h.repairs)
+	}
+
+	h = newNginxHarness()
+	h.healthy = false
+	h.stopped = true
+	healNginxOnResume(h.deps)
+	if h.repairs != 0 {
+		t.Fatalf("stopped stack must not be resurrected, repairs=%d", h.repairs)
+	}
+
+	healNginxOnResume(dnsWatchDeps{log: func(string, string, ...any) {}}) // nil probe: no panic, no-op
+}
+
+// TestTickDNS_resumeTriggersNginxHeal: nginx is probed and restarted only on the
+// tick that detects a resume — never on the first tick or a normal-cadence tick,
+// so a `lerd start` (which a fresh watcher never reads as a resume) can't trip it.
+func TestTickDNS_resumeTriggersNginxHeal(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1_000_000, 0)}
+	probes, restarts := 0, 0
+	deps := dnsWatchDeps{
+		check:         func(string) (bool, error) { return true, nil },
+		idleOrLocked:  func() bool { return false },
+		publishStatus: func() {},
+		now:           c.now,
+		nginxHealthy:  func() bool { probes++; return false },
+		repairNginx:   func() error { restarts++; return nil },
+		log:           func(string, string, ...any) {},
+	}
+	s := &dnsWatchState{}
+
+	tickDNS(deps, s, "test", false) // first tick: no prior time, not a resume
+	c.advance(30 * time.Second)
+	tickDNS(deps, s, "test", false) // normal gap: not a resume
+	if probes != 0 {
+		t.Fatalf("non-resume ticks must not probe nginx, got %d", probes)
+	}
+
+	c.advance(2 * time.Hour)
+	tickDNS(deps, s, "test", false) // big gap: resume -> heal
+	if probes != 1 || restarts != 1 {
+		t.Fatalf("resume must probe and restart a down nginx: probes=%d restarts=%d", probes, restarts)
+	}
+}
+
+// TestTickDNS_resumeHealsEvenWhenIdle: an idle/locked poll tick backs off the DNS
+// probe, but a detected resume must still heal nginx.
+func TestTickDNS_resumeHealsEvenWhenIdle(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1_000_000, 0)}
+	restarts := 0
+	deps := dnsWatchDeps{
+		check:         func(string) (bool, error) { return true, nil },
+		idleOrLocked:  func() bool { return true },
+		publishStatus: func() {},
+		now:           c.now,
+		nginxHealthy:  func() bool { return false },
+		repairNginx:   func() error { restarts++; return nil },
+		log:           func(string, string, ...any) {},
+	}
+	s := &dnsWatchState{tickCount: 3} // idle, non-Nth tick -> DNS would back off
+	tickDNS(deps, s, "test", false)
+	c.advance(2 * time.Hour)
+	tickDNS(deps, s, "test", false)
+	if restarts != 1 {
+		t.Fatalf("a resume must heal nginx even on an idle tick, restarts=%d", restarts)
+	}
+}
+
+// TestTickDNS_stoppedTickDoesNothing: after `lerd stop` the watcher must act on
+// nothing — not the DNS repair, not even a resume-triggered nginx restart.
+func TestTickDNS_stoppedTickDoesNothing(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1_000_000, 0)}
+	waits, restarts := 0, 0
+	deps := dnsWatchDeps{
+		check:             func(string) (bool, error) { return false, nil },
+		idleOrLocked:      func() bool { return false },
+		publishStatus:     func() {},
+		repairPossible:    func() bool { return true },
+		waitReady:         func(time.Duration) error { waits++; return nil },
+		configureResolver: func() error { return nil },
+		now:               c.now,
+		nginxHealthy:      func() bool { return false },
+		repairNginx:       func() error { restarts++; return nil },
+		isStopped:         func() bool { return true },
+		log:               func(string, string, ...any) {},
+	}
+	s := &dnsWatchState{}
+	tickDNS(deps, s, "test", false)
+	c.advance(2 * time.Hour) // even a resume-sized gap
+	tickDNS(deps, s, "test", false)
+	if waits != 0 || restarts != 0 {
+		t.Fatalf("stopped stack must do nothing: waits=%d restarts=%d", waits, restarts)
+	}
+}

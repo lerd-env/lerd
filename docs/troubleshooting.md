@@ -91,6 +91,14 @@ hosts: mymachines mdns_minimal [NOTFOUND=return] files myhostname dns resolve
 This makes glibc consult the plain `dns` module before systemd-resolved's `nss-resolve`, which the VPN client no longer shadows.
 :::
 
+::: details "Secure Connection Failed" after the host wakes from suspend or hibernate
+After a long suspend or hibernate, rootless podman networking can come back in a bad state: the lerd-nginx container loses its host port forward (or stops), so nothing listens on 443 and the browser shows a generic "Secure Connection Failed" for your `.test` sites, or the lerd-dns container stops and names no longer resolve.
+
+On Linux the watcher now restarts nginx automatically. It notices the host has resumed from a real wall-clock gap in its tick loop (the timer is frozen while the machine is suspended), and on that one tick it checks whether lerd-nginx is accepting on its HTTPS port and restarts it if the listener died. Keying off the resume event rather than a continuous poll means it acts exactly once and can never fight a `lerd start` you ran yourself, since a start does not suspend the machine. DNS resolution is repaired by the same watcher's existing path, so `.test` names come back on their own too.
+
+Two cases it leaves for `lerd start` rather than acting from a background timer: a host whose IPv6 support changed across the wake (the lerd network must be recreated, which rebuilds every container), and a lerd-dns container that a wake stopped outright. In either case run `lerd start` and it brings the stack back safely. The same applies in the rare case the watcher itself was not running at the moment of resume.
+:::
+
 ::: details Nginx not serving a site
 Check that nginx and the PHP-FPM container are running, then inspect the generated vhost:
 
