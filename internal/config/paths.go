@@ -448,6 +448,27 @@ func AccessSocketPath() string {
 	return filepath.Join(RunDir(), "lerd-access.sock")
 }
 
+// AccessFeedUDPPort is the UDP port the watcher binds on darwin for the nginx
+// access feed: nginx runs in the podman-machine VM where the host unix socket
+// isn't reachable, so the feed travels over gvproxy UDP (like DumpsTCPPort).
+const AccessFeedUDPPort = "9914"
+
+// AccessFeedListenAddr is the host address the watcher binds for the darwin UDP
+// access feed. Loopback matches the gvproxy host.containers.internal forward.
+func AccessFeedListenAddr() string {
+	return "127.0.0.1:" + AccessFeedUDPPort
+}
+
+// AccessLogTarget is the nginx syslog `server=` for the access feed: the
+// bind-mounted unix socket on Linux, or host.containers.internal over gvproxy
+// UDP on macOS where nginx lives in the VM and the host socket isn't reachable.
+func AccessLogTarget() string {
+	if runtime.GOOS == "darwin" {
+		return "host.containers.internal:" + AccessFeedUDPPort
+	}
+	return "unix:" + AccessSocketPath()
+}
+
 // ControlSocketPath is the unix datagram socket the lerd-watcher binds for
 // idle-suspend control messages: "enable"/"disable" from the CLI and dashboard
 // toggle, and "activity <site>" from the CLI shims and MCP.

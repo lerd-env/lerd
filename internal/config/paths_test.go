@@ -29,6 +29,26 @@ func TestUIClientTransport_matchesOS(t *testing.T) {
 	}
 }
 
+// AccessLogTarget must give nginx a syslog server it can reach: macOS ships the
+// feed to host.containers.internal over gvproxy UDP (nginx is in the VM), Linux
+// stays on the bind-mounted unix socket. The watcher's listen addr must pair.
+func TestAccessLogTarget_matchesOS(t *testing.T) {
+	target := AccessLogTarget()
+	if runtime.GOOS == "darwin" {
+		want := "host.containers.internal:" + AccessFeedUDPPort
+		if target != want {
+			t.Errorf("AccessLogTarget() = %q on darwin, want %q", target, want)
+		}
+		if addr := AccessFeedListenAddr(); addr != "127.0.0.1:"+AccessFeedUDPPort {
+			t.Errorf("AccessFeedListenAddr() = %q on darwin, want 127.0.0.1:%s", addr, AccessFeedUDPPort)
+		}
+		return
+	}
+	if want := "unix:" + AccessSocketPath(); target != want {
+		t.Errorf("AccessLogTarget() = %q on %s, want %q", target, runtime.GOOS, want)
+	}
+}
+
 // ── XDG overrides ─────────────────────────────────────────────────────────────
 
 func TestConfigDir_UsesXDGConfigHome(t *testing.T) {

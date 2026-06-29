@@ -58,6 +58,45 @@ func TestReadAccessFeed_recordsTouch(t *testing.T) {
 	t.Fatal("access datagram was not recorded as a site touch within 2s")
 }
 
+// TestReadAccessFeed_overUDP drives the macOS transport: nginx in the VM ships
+// the feed as UDP syslog, so the watcher must read the same "$host" datagrams
+// off a UDP socket. Ephemeral port so it never collides with a live daemon's.
+func TestReadAccessFeed_overUDP(t *testing.T) {
+	prev := activityTracker
+	t.Cleanup(func() { activityTracker = prev })
+	activityTracker = idle.NewTracker(func(h string) (string, bool) {
+		if h == "myapp.test" {
+			return "myapp", true
+		}
+		return "", false
+	})
+
+	conn, ok := listenUDP("127.0.0.1:0")
+	if !ok {
+		t.Fatal("listenUDP failed")
+	}
+	t.Cleanup(func() { conn.Close() })
+	go readDatagrams(conn, handleAccessDatagram)
+
+	sender, err := net.Dial("udp", conn.LocalAddr().String())
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer sender.Close()
+	if _, err := sender.Write([]byte("<190>Jun 12 10:00:00 lerdaccess: myapp.test")); err != nil {
+		t.Fatalf("send: %v", err)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, ok := activityTracker.LastActive("myapp"); ok {
+			return // recorded as expected
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("UDP access datagram was not recorded as a site touch within 2s")
+}
+
 // TestReadAccessFeed_ignoresUnmatched confirms a datagram for an unknown host
 // never creates a phantom record.
 func TestReadAccessFeed_ignoresUnmatched(t *testing.T) {

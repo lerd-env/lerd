@@ -71,13 +71,12 @@ func enableIdle() {
 
 	go idleEng.run(ctx)
 
-	// macOS skips the access feed: lerd-nginx runs in the podman-machine VM where
-	// a host unix socket isn't reachable. Source-file saves are the macOS signal.
-	if runtime.GOOS != "darwin" {
-		if conn, ok := listenDatagram(config.AccessSocketPath()); ok {
-			go func() { <-ctx.Done(); conn.Close() }()
-			go readDatagrams(conn, handleAccessDatagram)
-		}
+	// The nginx access feed turns a plain web request into activity, so browsing
+	// a quiet site wakes it. Best-effort: on a bind failure the source-file
+	// watcher and control-socket pings still feed activity.
+	if conn, ok := accessFeedConn(); ok {
+		go func() { <-ctx.Done(); conn.Close() }()
+		go readDatagrams(conn, handleAccessDatagram)
 	}
 	if idleStartSrc != nil {
 		go func() { _ = idleStartSrc(ctx.Done()) }()
@@ -106,6 +105,26 @@ func handleAccessDatagram(b []byte) {
 			idleEng.OnActivity(site)
 		}
 	}
+}
+
+// accessFeedConn binds the nginx access feed listener per platform: a unix
+// datagram socket on Linux (bind-mounted into the rootless nginx container), or
+// UDP on macOS where nginx is in the VM and the host socket isn't reachable.
+func accessFeedConn() (net.PacketConn, bool) {
+	if runtime.GOOS == "darwin" {
+		return listenUDP(config.AccessFeedListenAddr())
+	}
+	return listenDatagram(config.AccessSocketPath())
+}
+
+// listenUDP binds a UDP socket at addr for the macOS access feed. ok=false on
+// failure, matching listenDatagram so callers skip the feed the same way.
+func listenUDP(addr string) (net.PacketConn, bool) {
+	conn, err := net.ListenPacket("udp", addr)
+	if err != nil {
+		return nil, false
+	}
+	return conn, true
 }
 
 // listenDatagram binds a unix datagram socket at path under RunDir, replacing any
