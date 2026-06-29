@@ -243,8 +243,9 @@ func TestExecDNSDiagnose_returnsContent(t *testing.T) {
 func TestToolList_underSizeCeiling(t *testing.T) {
 	// Consolidating ~80 flat tools into ten resource groups (site, service, db,
 	// env, runtime, worker, exec, framework, diag, worktree) roughly halved the
-	// manifest from the prior 32000-byte ceiling to this.
-	const ceiling = 18000
+	// manifest from the prior 32000-byte ceiling. Bumped 18000 → 18500 for the
+	// `service port` action (a justified content addition, kept terse).
+	const ceiling = 18500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

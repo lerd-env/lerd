@@ -2,21 +2,19 @@ package cli
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/siteops"
@@ -254,45 +252,6 @@ func isNodeProject(dir string) bool {
 	return false
 }
 
-// firstFreePort returns the first port at or above start for which isTaken is
-// false. Pure (isTaken is injected) so the search logic is unit-testable
-// without binding real sockets. Falls back to start if nothing is free.
-func firstFreePort(start int, isTaken func(int) bool) int {
-	if start < 1 {
-		start = 1
-	}
-	for p := start; p <= 65535; p++ {
-		if !isTaken(p) {
-			return p
-		}
-	}
-	return start
-}
-
-// portBoundOnHost reports whether something is already listening on the host's
-// loopback at port p. Used as the live half of host-port allocation so a dev
-// server isn't assigned a port a lerd service (or any process) already holds.
-// Both IPv4 and IPv6 loopback are probed so a service bound only to [::1] (as
-// some lerd quadlets are) is still detected as taken.
-func portBoundOnHost(p int) bool {
-	// IPv4 loopback is authoritative: a failure here means the port is taken.
-	if ln, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(p))); err != nil {
-		return true
-	} else {
-		_ = ln.Close()
-	}
-	// IPv6 loopback catches services bound only to [::1], but on a host with
-	// IPv6 disabled the listen fails with EADDRNOTAVAIL / EAFNOSUPPORT for every
-	// port. Only an in-use error counts as taken, else allocation would report
-	// every port busy and fall back to the start port.
-	if ln, err := net.Listen("tcp", net.JoinHostPort("::1", strconv.Itoa(p))); err != nil {
-		return errors.Is(err, syscall.EADDRINUSE)
-	} else {
-		_ = ln.Close()
-	}
-	return false
-}
-
 // reservedHostPorts returns host ports already claimed by other host-proxy
 // sites in the registry, so two sites never get assigned the same port even
 // when the other site's dev server isn't currently running. exceptSite is
@@ -330,7 +289,7 @@ func reservedHostPorts(exceptSite string) map[int]bool {
 	}
 	// Reserve host ports lerd services publish (e.g. gotenberg on 3000) even when
 	// the container is stopped: a stopped service still owns its published port
-	// and would collide the moment it starts, which portBoundOnHost can't foresee.
+	// and would collide the moment it starts, which a bind probe can't foresee.
 	for p := range lerdServiceHostPorts() {
 		out[p] = true
 	}
@@ -360,11 +319,13 @@ func lerdServiceHostPorts() map[int]bool {
 		}
 	}
 	if cfg, err := config.LoadGlobal(); err == nil {
+		// config.ServiceConfig.HostPorts is the shared source of the host ports a
+		// service entry claims (Port, the PublishedPort override, and ExtraPorts),
+		// so this allocator and the serviceops guard can't drift on it.
 		for _, svc := range cfg.Services {
-			if svc.Port > 0 {
-				out[svc.Port] = true
+			for _, p := range svc.HostPorts() {
+				out[p] = true
 			}
-			add(svc.ExtraPorts)
 		}
 	}
 	if presets, err := config.ListPresets(); err == nil {
@@ -387,9 +348,14 @@ func lerdServiceHostPorts() map[int]bool {
 // site reserves or any process currently binds (e.g. lerd-gotenberg on 3000).
 func allocateHostPort(start int, exceptSite string) int {
 	reserved := reservedHostPorts(exceptSite)
-	return firstFreePort(start, func(p int) bool {
-		return reserved[p] || portBoundOnHost(p)
-	})
+	// freeport.FirstFree returns 0 when nothing in range is free; preserve this
+	// allocator's long-standing fall-back-to-start behaviour in that case.
+	if p := freeport.FirstFree(start, func(p int) bool {
+		return reserved[p] || !freeport.Bindable(p)
+	}); p > 0 {
+		return p
+	}
+	return start
 }
 
 // WorktreeHostPort returns the dev-server port for a host-proxy site's worktree:

@@ -13,11 +13,19 @@ import (
 
 // ServiceConfig holds configuration for an optional service.
 type ServiceConfig struct {
-	Enabled       bool     `yaml:"enabled"        mapstructure:"enabled"`
-	Image         string   `yaml:"image"          mapstructure:"image"`
-	Port          int      `yaml:"port"           mapstructure:"port"`
-	ExtraPorts    []string `yaml:"extra_ports"    mapstructure:"extra_ports"`
-	PreviousImage string   `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
+	Enabled    bool     `yaml:"enabled"        mapstructure:"enabled"`
+	Image      string   `yaml:"image"          mapstructure:"image"`
+	Port       int      `yaml:"port"           mapstructure:"port"`
+	ExtraPorts []string `yaml:"extra_ports"    mapstructure:"extra_ports"`
+	// PublishedPort overrides the host (published) port of this service's
+	// primary mapping. 0 = use the preset/version default (e.g. 3306 for MySQL
+	// 8.4). Set it to free the default port for a second server — e.g. move
+	// lerd-mysql to 3307 so the host system MySQL can keep 127.0.0.1:3306. The
+	// container-internal port is unchanged, so bridge clients still use 3306.
+	// Unlike Port (auto-seeded from the preset), this stays 0 until the user
+	// explicitly overrides, so it is an unambiguous "use default" sentinel.
+	PublishedPort int    `yaml:"published_port,omitempty" mapstructure:"published_port"`
+	PreviousImage string `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
 	// LastOp records the most recent mutation kind ("update" or "migrate") so
 	// the rollback flow can refuse a swap that would race the new image
 	// against the post-migrate (fresh) data dir. Empty means no recent op or a
@@ -311,6 +319,41 @@ func defaultConfig() *GlobalConfig {
 		cfg.Services[name] = entry
 	}
 	return cfg
+}
+
+// HostPorts returns every host port this service entry claims: its preset-default
+// Port, its PublishedPort override, and the host side of each ExtraPorts mapping.
+// Single source for the serviceops port-ownership guard and the host-proxy dev
+// server allocator, which previously parsed these out separately and drifted (the
+// guard even mis-read the host side of an "ip:host:container" extra mapping).
+func (s ServiceConfig) HostPorts() []int {
+	var ports []int
+	if s.Port > 0 {
+		ports = append(ports, s.Port)
+	}
+	if s.PublishedPort > 0 {
+		ports = append(ports, s.PublishedPort)
+	}
+	for _, ep := range s.ExtraPorts {
+		if n := mappingHostPort(ep); n > 0 {
+			ports = append(ports, n)
+		}
+	}
+	return ports
+}
+
+// mappingHostPort extracts the host port from a podman port mapping: a bare host
+// port "3411", "3411:3306", or "127.0.0.1:3411:3306", with an optional "/tcp"
+// suffix. Returns 0 when no valid host port is present.
+func mappingHostPort(mapping string) int {
+	parts := strings.Split(mapping, ":")
+	host := parts[0]
+	if len(parts) > 1 {
+		host = parts[len(parts)-2]
+	}
+	host = strings.SplitN(host, "/", 2)[0]
+	n, _ := strconv.Atoi(strings.TrimSpace(host))
+	return n
 }
 
 // firstHostPort returns the host-side port number from the first ports entry,

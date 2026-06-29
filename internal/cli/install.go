@@ -28,6 +28,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// healPodmanUpgrade runs the podman-upgrade self-heal, renders its progress,
+// and returns the containers it tore down so the caller can restart them. Both
+// install and start enter the heal through here so the wording and error
+// handling stay identical regardless of entry point.
+func healPodmanUpgrade(containerDNS []string) []string {
+	healed, restart, err := podman.HealPodmanUpgrade(containerDNS, func(msg string) { feedback.Note(msg) })
+	if err != nil {
+		feedback.Warn("podman upgrade heal: %v", err)
+	} else if healed {
+		feedback.Note("podman upgrade detected — migrated storage and rebuilt the lerd network")
+	}
+	return restart
+}
+
 // NewInstallCmd returns the install command.
 func NewInstallCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -171,8 +185,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// Containers removed by recreate are restarted AFTER the quadlet refresh
 	// phase below so they come up on the freshly written quadlets.
 	var migrated []string
-	step("Creating lerd podman network")
 	desiredDNS := dns.ReadContainerDNS()
+
+	// 2a. Self-heal a podman upgrade. A major-version or backend change since
+	// the last install reshuffles rootless storage and networking, which
+	// otherwise surfaces as the cryptic "rootless netns" container start
+	// failure (#635). Runs before the network step since it recreates it; any
+	// containers it tears down join the unconditional restart loop below.
+	migrated = append(migrated, healPodmanUpgrade(desiredDNS)...)
+
+	step("Creating lerd podman network")
 	if err := podman.EnsureNetwork("lerd", desiredDNS); err != nil {
 		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
 			fmt.Println()
@@ -186,7 +208,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 				feedback.Note("recreated lerd network as v4-only (IPv6 not available for containers)")
 			}
 			feedback.Note("existing containers on this network were recreated")
-			migrated = restored
+			// Union, don't overwrite: `migrated` already holds the containers the
+			// upgrade heal tore down (line above). Replacing it with `restored`
+			// here dropped those from the restart loop, leaving services stopped
+			// after a run that triggered both heal and a network migration.
+			migrated = mergeMigrationRestarts(migrated, restored)
 			step("Creating lerd podman network")
 		} else {
 			return err

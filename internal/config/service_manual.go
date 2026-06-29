@@ -97,3 +97,21 @@ func SitesUsingService(name string) []Site {
 func CountSitesUsingService(name string) int {
 	return len(SitesUsingService(name))
 }
+
+// ServicePublishedPort returns the published host port a service was pinned to
+// (0 = preset/version default). It is non-zero when the user ran
+// `lerd service port`, or when the port-ownership guard auto-shifted lerd's DB
+// off the engine default because a host server owns it. Readers that surface a
+// host-facing endpoint (a host-proxy app's .env, a connection URL) use it so the
+// port reflects where lerd's container actually listens, not the default a
+// coexisting host server may be sitting on.
+func ServicePublishedPort(name string) int {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return 0
+	}
+	if sc, ok := cfg.Services[name]; ok {
+		return sc.PublishedPort
+	}
+	return 0
+}

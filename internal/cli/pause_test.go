@@ -47,6 +47,36 @@ func TestSetSiteContainerAutostart_stripAndRestore(t *testing.T) {
 	}
 }
 
+// TestRefreshHostProxyEnvOnResume covers the unpause env-follow: a host-proxy
+// site's .env must be regenerated on resume (a port move that landed while it was
+// paused was skipped by the move-time follow), while a container site is left
+// alone — it reaches services by name on the unchanged internal port.
+func TestRefreshHostProxyEnvOnResume(t *testing.T) {
+	saved := hostProxyEnvRefresh
+	t.Cleanup(func() { hostProxyEnvRefresh = saved })
+
+	var refreshed []string
+	hostProxyEnvRefresh = func(dir string) error {
+		refreshed = append(refreshed, dir)
+		return nil
+	}
+
+	// Container site (no HostPort): no refresh.
+	container := &config.Site{Name: "shop", Path: "/p/shop"}
+	if refreshHostProxyEnvOnResume(container) {
+		t.Error("container site should not trigger an env refresh on resume")
+	}
+
+	// Host-proxy site (HostPort > 0): refresh its path.
+	proxy := &config.Site{Name: "api", Path: "/p/api", HostPort: 3100}
+	if !refreshHostProxyEnvOnResume(proxy) {
+		t.Error("host-proxy site should trigger an env refresh on resume")
+	}
+	if len(refreshed) != 1 || refreshed[0] != "/p/api" {
+		t.Errorf("refreshed = %v, want exactly [/p/api]", refreshed)
+	}
+}
+
 // TestSetSiteContainerAutostart_plainFPMNoop confirms a plain FPM site (no
 // dedicated container quadlet) is a no-op, so pause/unpause never touch the
 // shared FPM container's autostart.

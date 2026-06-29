@@ -785,6 +785,7 @@
   "tuningEditor_rolledBack": "The service didn't restart cleanly, so your previous config was restored and is running again.",
   "tuningEditor_resetRolledBack": "The service didn't restart cleanly, so your previous config was restored (kept as {name}) and is running again.",
   "services_portConflictTitle": "A porta {ports} já está em uso no host. Pare o processo em conflito ou altere a porta do lerd. Execute `lerd doctor` para o comando de busca no seu sistema.",
+  "services_portPillTitle": "Ativo · acessível em {addr} (clique para copiar)",
   "services_reinstall_action": "Reinstalar",
   "services_reinstall_withReset": "Reinstalar + redefinir dados",
   "services_reinstall_submitting": "Reinstalando…",

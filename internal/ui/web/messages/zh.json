@@ -827,6 +827,7 @@
   "tuningEditor_rolledBack": "服务未能干净地重启，因此你之前的配置已恢复并重新运行。",
   "tuningEditor_resetRolledBack": "服务未能干净地重启，因此你之前的配置已恢复（保存为 {name}）并重新运行。",
   "services_portConflictTitle": "端口 {ports} 已在主机上被占用。请停止冲突的进程或更改 lerd 端口。运行 `lerd doctor` 获取适用于你操作系统的查找命令。",
+  "services_portPillTitle": "运行中 · 可通过 {addr} 访问（点击复制）",
   "services_reinstall_action": "重新安装",
   "services_reinstall_withReset": "重新安装 + 重置数据",
   "services_reinstall_submitting": "重新安装中…",

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/agentenv"
@@ -115,7 +116,14 @@ type mcpProp struct {
 // Serve runs the MCP server, reading JSON-RPC messages from stdin and writing responses to stdout.
 // All diagnostic output goes to stderr so it never corrupts the JSON-RPC stream on stdout.
 func Serve() error {
-	enc := json.NewEncoder(os.Stdout)
+	// The JSON-RPC encoder owns the real stdout. Repoint os.Stdout at stderr for
+	// the session so any in-process handler that still prints to stdout — a service
+	// port-shift notice, the host-proxy .env refresh, a shelled-out `lerd env` that
+	// inherits os.Stdout — lands on stderr instead of corrupting a protocol frame.
+	stdout, restore := guardStdout()
+	defer restore()
+
+	enc := json.NewEncoder(stdout)
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1 MB — handle large artisan output
 
@@ -149,6 +157,16 @@ func Serve() error {
 		_ = enc.Encode(resp)
 	}
 	return scanner.Err()
+}
+
+// guardStdout repoints os.Stdout at os.Stderr and returns the prior stdout (for
+// the JSON-RPC encoder) plus a restore func. Any in-process diagnostic that still
+// prints to stdout — or a child process that inherits it — then writes to stderr
+// instead of corrupting the protocol stream the server keeps on the real stdout.
+func guardStdout() (real *os.File, restore func()) {
+	real = os.Stdout
+	os.Stdout = os.Stderr
+	return real, func() { os.Stdout = real }
 }
 
 func dispatch(req *rpcRequest) (any, *rpcError) {
@@ -4223,6 +4241,25 @@ func execServiceUnpin(args map[string]any) (any, *rpcError) {
 		return toolErr("name is required"), nil
 	}
 	return runLerdCmd("service", "unpin", name)
+}
+
+// execServicePort shells out to `lerd service port`, reusing the CLI's gate,
+// pre-flight, fail-closed persistence, host-proxy refresh and actual-port
+// reporting. published_port sets the port (0 resets); reset:true is shorthand
+// for the default.
+func execServicePort(args map[string]any) (any, *rpcError) {
+	name := strArg(args, "name")
+	if name == "" {
+		return toolErr("name is required"), nil
+	}
+	if boolArg(args, "reset") {
+		return runLerdCmd("service", "port", name, "--reset")
+	}
+	port := intArg(args, "published_port", -1)
+	if port < 0 {
+		return toolErr("provide published_port (0 to reset), or set reset: true"), nil
+	}
+	return runLerdCmd("service", "port", name, strconv.Itoa(port))
 }
 
 // runLerdCmd runs the lerd binary with the given arguments and returns its

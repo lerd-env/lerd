@@ -48,6 +48,32 @@ func TestReservedHostPorts_includesServicePorts(t *testing.T) {
 	}
 }
 
+// A service moved off its default port (guard auto-shift or `lerd service port`)
+// publishes on PublishedPort, not Port; reservedHostPorts must reserve that too so
+// a dev server isn't handed the shifted port and then collide when the service starts.
+func TestReservedHostPorts_includesPublishedPortOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if cfg.Services == nil {
+		cfg.Services = map[string]config.ServiceConfig{}
+	}
+	// mysql moved off 3306 onto 3307 (and currently stopped — nothing listening).
+	cfg.Services["mysql"] = config.ServiceConfig{Enabled: true, Port: 3306, PublishedPort: 3307}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	if !reservedHostPorts("")[3307] {
+		t.Error("a service's shifted published port 3307 must be reserved against dev-server allocation")
+	}
+}
+
 // Reserving service ports must not break the exceptSite contract: re-running
 // init on a host-proxy site already sitting on a service-coinciding port (e.g.
 // 3000) keeps that port instead of silently bumping it.

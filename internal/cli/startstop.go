@@ -358,10 +358,16 @@ func CollectPortChecks(units []string) []PortCheck {
 		}
 		container := "lerd-" + svc
 		if cfg != nil {
-			if sc, ok := cfg.Services[svc]; ok && sc.Port > 0 {
-				checks = append(checks, PortCheck{strconv.Itoa(sc.Port), svc, container})
-			}
 			if sc, ok := cfg.Services[svc]; ok {
+				// A PublishedPort override moves the primary published port, so
+				// check the real bound port rather than the preset default.
+				port := sc.Port
+				if sc.PublishedPort > 0 {
+					port = sc.PublishedPort
+				}
+				if port > 0 {
+					checks = append(checks, PortCheck{strconv.Itoa(port), svc, container})
+				}
 				for _, ep := range sc.ExtraPorts {
 					checks = append(checks, PortCheck{hostPort(ep), svc, container})
 				}
@@ -491,11 +497,21 @@ func runStart(_ *cobra.Command, _ []string) error {
 	migrateExecWorkerPlists()
 	healMachineRestartIfNeeded(preEnsureLastUp)
 
+	// Self-heal a podman upgrade before touching the network or starting
+	// containers. A major-version or backend change since the last run
+	// reshuffles rootless storage/networking and otherwise surfaces as the
+	// cryptic "rootless netns" container start failure (#635). No-op unless
+	// drift is detected. The heal force-removes the lerd containers; the start
+	// sequence below brings them back up, so the returned list is not needed
+	// here.
+	containerDNS := dns.ReadContainerDNS()
+	_ = healPodmanUpgrade(containerDNS)
+
 	// Ensure the lerd bridge network exists. On macOS the network is stored
 	// inside the Podman Machine VM; it may be absent after a fresh machine
 	// init or if it was pruned. All service containers use --network lerd so
 	// this must succeed before any container is started.
-	if err := podman.EnsureNetwork("lerd", dns.ReadContainerDNS()); err != nil {
+	if err := podman.EnsureNetwork("lerd", containerDNS); err != nil {
 		if errors.Is(err, podman.ErrNetworkNeedsMigration) {
 			fmt.Println("  WARN: lerd network schema doesn't match host IPv6 support; run 'lerd install' to recreate")
 		} else {
@@ -1138,6 +1154,15 @@ func collapseTimerSiblings(in []string) []string {
 		out = append(out, u)
 	}
 	return out
+}
+
+// mergeMigrationRestarts unions the containers torn down by the podman-upgrade
+// heal with those recreated by a network migration, de-duplicated and order
+// preserved, so a run that triggers BOTH restarts every affected container
+// exactly once. Overwriting one list with the other left heal-torn-down services
+// stopped after install.
+func mergeMigrationRestarts(healed, recreated []string) []string {
+	return dedupeStrings(append(append([]string(nil), healed...), recreated...))
 }
 
 func dedupeStrings(in []string) []string {

@@ -988,8 +988,13 @@ type ServiceResponse struct {
 	Dashboard         string            `json:"dashboard,omitempty"`
 	DashboardExternal bool              `json:"dashboard_external,omitempty"`
 	ConnectionURL     string            `json:"connection_url,omitempty"`
-	Custom            bool              `json:"custom,omitempty"`
-	IsDefault         bool              `json:"is_default,omitempty"`
+	// Port is the host (published) port the service is exposed on: the
+	// published-port override when set, else the preset/version default. 0 when
+	// the service publishes no host port (e.g. a worker). The UI shows it in the
+	// status pill so a moved port reads at a glance.
+	Port      int  `json:"port,omitempty"`
+	Custom    bool `json:"custom,omitempty"`
+	IsDefault bool `json:"is_default,omitempty"`
 	// Tunable is true when the service exposes a user-editable runtime config
 	// override (see config.ServiceTuningMount), so the UI can show a Tuning tab.
 	Tunable            bool     `json:"tunable,omitempty"`
@@ -1051,11 +1056,40 @@ func portConflictsFor(unit, ssOutput string) []PortConflict {
 	return out
 }
 
-func buildServiceResponse(name string) ServiceResponse {
-	return buildServiceResponseWithPortList(name, "")
+// effectiveHostPort returns the host port a service is exposed on, mirroring the
+// precedence CollectPortChecks uses so the pill, the boot-time check and the
+// connection URL all agree: the published-port override, else the configured
+// port (which a non-canonical preset version seeds to its own host port, e.g.
+// postgres 18 → 5418), else the primary host port from the default mappings.
+// 0 when none applies (no host port published, e.g. a worker). services is the
+// caller's already-loaded cfg.Services map so a full services-list rebuild loads
+// (and deep-clones) the global config once rather than once per service.
+func effectiveHostPort(services map[string]config.ServiceConfig, name string, defaultPorts []string) int {
+	if sc, ok := services[name]; ok {
+		if sc.PublishedPort > 0 {
+			return sc.PublishedPort
+		}
+		if sc.Port > 0 {
+			return sc.Port
+		}
+	}
+	return podman.PrimaryHostPort(defaultPorts)
 }
 
-func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
+// loadServicesMap returns cfg.Services, or nil when the global config can't be
+// loaded — the single load behind a one-off buildServiceResponse.
+func loadServicesMap() map[string]config.ServiceConfig {
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		return cfg.Services
+	}
+	return nil
+}
+
+func buildServiceResponse(name string) ServiceResponse {
+	return buildServiceResponseWithPortList(loadServicesMap(), name, "")
+}
+
+func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status == "" {
@@ -1070,13 +1104,16 @@ func buildServiceResponseWithPortList(name, ssOutput string) ServiceResponse {
 		}
 	}
 
+	presetPorts := config.DefaultPresetPorts(name)
+	hostPort := effectiveHostPort(services, name, presetPorts)
 	resp := ServiceResponse{
 		Name:          name,
 		Status:        status,
 		Version:       podman.ServiceVersionLabel(podman.InstalledImage(unit)),
 		EnvVars:       envMap,
 		Dashboard:     config.DefaultPresetDashboard(name),
-		ConnectionURL: config.DefaultPresetConnectionURL(name),
+		ConnectionURL: serviceops.WithURLPort(config.DefaultPresetConnectionURL(name), hostPort),
+		Port:          hostPort,
 		SiteCount:     countSitesUsingService(name),
 		SiteDomains:   sitesUsingService(name),
 		Pinned:        config.ServiceIsPinned(name),
@@ -1160,10 +1197,14 @@ func buildServicesList() []ServiceResponse {
 	// this rebuild; portConflictsFor is a no-op when ssOutput is empty.
 	ssOutput := cli.PortListOutput()
 
+	// Load the global config once for the whole rebuild; effectiveHostPort reads
+	// the shared Services map instead of re-loading (and deep-cloning) it per service.
+	svcCfg := loadServicesMap()
+
 	defaultNames := siteinfo.KnownServices()
 	services := make([]ServiceResponse, 0, len(defaultNames))
 	for _, name := range defaultNames {
-		services = append(services, buildServiceResponseWithPortList(name, ssOutput))
+		services = append(services, buildServiceResponseWithPortList(svcCfg, name, ssOutput))
 	}
 	customs, _ := config.ListCustomServices()
 	for _, svc := range customs {
@@ -1194,6 +1235,7 @@ func buildServicesList() []ServiceResponse {
 		if dashProxyEligible(svc) {
 			dashboard, dashboardExternal = dashProxyPath(svc.Name), false
 		}
+		hostPort := effectiveHostPort(svcCfg, svc.Name, svc.Ports)
 		services = append(services, ServiceResponse{
 			Name:              svc.Name,
 			Status:            status,
@@ -1201,7 +1243,8 @@ func buildServicesList() []ServiceResponse {
 			EnvVars:           envMap,
 			Dashboard:         dashboard,
 			DashboardExternal: dashboardExternal,
-			ConnectionURL:     svc.ConnectionURL,
+			ConnectionURL:     serviceops.WithURLPort(svc.ConnectionURL, hostPort),
+			Port:              hostPort,
 			Custom:            true,
 			Tunable:           tunable,
 			SiteCount:         countSitesUsingService(svc.Name),

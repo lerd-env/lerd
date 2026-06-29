@@ -827,6 +827,7 @@
   "tuningEditor_rolledBack": "Dịch vụ không khởi động lại sạch sẽ, nên cấu hình trước đó của bạn đã được khôi phục và đang chạy lại.",
   "tuningEditor_resetRolledBack": "Dịch vụ không khởi động lại sạch sẽ, nên cấu hình trước đó của bạn đã được khôi phục (giữ dưới dạng {name}) và đang chạy lại.",
   "services_portConflictTitle": "Cổng {ports} đã được dùng trên host. Dừng tiến trình xung đột hoặc đổi cổng lerd. Chạy `lerd doctor` để biết lệnh tìm trên hệ điều hành của bạn.",
+  "services_portPillTitle": "Đang hoạt động · truy cập tại {addr} (nhấp để sao chép)",
   "services_reinstall_action": "Cài lại",
   "services_reinstall_withReset": "Cài lại + đặt lại dữ liệu",
   "services_reinstall_submitting": "Đang cài lại…",
