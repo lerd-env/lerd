@@ -567,20 +567,14 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 	return os.WriteFile(filepath.Join(config.NginxConfD(), domain+".conf"), buf.Bytes(), 0644)
 }
 
-// GeneratePausedVhost writes a minimal nginx vhost that serves the static paused
-// landing page for the given site. For secured sites it also adds the HTTPS block
-// so the redirect and TLS still work while the site is paused.
-func GeneratePausedVhost(site config.Site) error {
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-
-	pausedDir := config.PausedDir()
+// landingVhostConf renders a minimal vhost for site that serves htmlFile (read
+// from pausedDir) for every path. Shared by the paused and the idle-waking
+// landing pages. Secured sites get an 80->443 redirect plus a TLS server block;
+// plain sites a single 80 server.
+func landingVhostConf(site config.Site, pausedDir, htmlFile string) string {
 	serverNames := serverNamesWithWildcards(site.Domains)
-
-	var conf string
 	if site.Secured {
-		conf = fmt.Sprintf(`server {
+		return fmt.Sprintf(`server {
     listen 80;
     listen [::]:80;
     server_name %s;
@@ -595,35 +589,56 @@ server {
     ssl_certificate_key /etc/nginx/certs/%s.key;
     root %s;
     location / {
-        try_files /paused.html =503;
+        try_files /%s =503;
         default_type text/html;
     }
 }
-`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), pausedDir)
-	} else {
-		conf = fmt.Sprintf(`server {
+`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), pausedDir, htmlFile)
+	}
+	return fmt.Sprintf(`server {
     listen 80;
     listen [::]:80;
     server_name %s;
     root %s;
     location / {
-        try_files /paused.html =503;
+        try_files /%s =503;
         default_type text/html;
     }
 }
-`, serverNames, pausedDir)
-	}
+`, serverNames, pausedDir, htmlFile)
+}
 
+// writeLandingVhost writes site's static-page vhost (serving htmlFile) to
+// conf.d/<domain>.conf and, for secured sites, removes the separate -ssl.conf so
+// nginx stops routing HTTPS to the real backend while the page is up.
+func writeLandingVhost(site config.Site, htmlFile string) error {
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		return err
+	}
+	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
 	if err := os.WriteFile(confPath, []byte(conf), 0644); err != nil {
 		return err
 	}
-	// For secured sites the SSL vhost lives in a separate file; remove it so
-	// nginx doesn't still route HTTPS requests to PHP-FPM while the site is paused.
 	if site.Secured {
 		_ = os.Remove(filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf"))
 	}
 	return nil
+}
+
+// GeneratePausedVhost writes a minimal nginx vhost that serves the static paused
+// landing page for the given site. For secured sites it also adds the HTTPS block
+// so the redirect and TLS still work while the site is paused.
+func GeneratePausedVhost(site config.Site) error {
+	return writeLandingVhost(site, "paused.html")
+}
+
+// GenerateWakingVhost swaps an idle-suspended host-proxy site's vhost to the
+// auto-refreshing "waking up" page. A request to a sleeping site then wakes its
+// dev server (the access hit drives idle-resume) and the page reloads onto the
+// live app, instead of nginx returning 502 from proxying to the stopped server.
+func GenerateWakingVhost(site config.Site) error {
+	return writeLandingVhost(site, "waking.html")
 }
 
 // GeneratePausedWorktreeVhost writes a paused nginx vhost for a worktree domain.
