@@ -142,6 +142,14 @@ func ResumeWorkersForIdle(site *config.Site, workers []string) {
 	restoreHostProxyVhostAfterIdle(site, workers)
 }
 
+// hostProxyVhostSwapApplies reports whether idle suspend/resume should swap a
+// site's vhost: only for a host-proxy site whose suspended (or resumed) worker
+// set includes the app dev server. Every other site or worker set leaves the
+// vhost untouched.
+func hostProxyVhostSwapApplies(isHostProxy bool, workers []string) bool {
+	return isHostProxy && containsString(workers, hostProxyWorkerName)
+}
+
 // swapHostProxyVhostToWaking swaps a host-proxy site's proxy vhost to the
 // auto-refreshing waking page when idle-suspend stops its dev server, so a
 // request to the sleeping site serves a "starting back up" page (the access hit
@@ -149,7 +157,7 @@ func ResumeWorkersForIdle(site *config.Site, workers []string) {
 // No-op unless the site is host-proxy and its app worker is among the suspended
 // set.
 func swapHostProxyVhostToWaking(site *config.Site, suspended []string) {
-	if !site.IsHostProxy() || !containsString(suspended, hostProxyWorkerName) {
+	if !hostProxyVhostSwapApplies(site.IsHostProxy(), suspended) {
 		return
 	}
 	if err := writeWakingHTML(site); err != nil {
@@ -169,12 +177,12 @@ func swapHostProxyVhostToWaking(site *config.Site, suspended []string) {
 // app can answer, rather than flashing nginx's own 502 (which carries no refresh
 // and would break the reload loop) during the dev server's warmup.
 func restoreHostProxyVhostAfterIdle(site *config.Site, workers []string) {
-	if !site.IsHostProxy() || !containsString(workers, hostProxyWorkerName) {
+	if !hostProxyVhostSwapApplies(site.IsHostProxy(), workers) {
 		return
 	}
-	// ponytail: poll the dev-server port, bounded to 60s. Vite/Nuxt can take many
-	// seconds to bind after launch; with no fixed proxy port we skip the wait and
-	// restore immediately (the worst case is a brief 502 flash on warmup).
+	// Poll the dev-server port, bounded to 60s. Vite/Nuxt can take many seconds
+	// to bind after launch; with no fixed proxy port we skip the wait and restore
+	// immediately (the worst case is a brief 502 flash on warmup).
 	if proxy := parentProxyConfig(*site); proxy != nil && proxy.Port > 0 {
 		waitForHostPort(proxy.Port, 60*time.Second)
 	}
