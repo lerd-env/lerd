@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"context"
+	"os/exec"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -90,5 +93,64 @@ func TestNewPestBrowserCmd_HasSubcommands(t *testing.T) {
 		if !found {
 			t.Errorf("pest:browser missing %q subcommand", name)
 		}
+	}
+}
+
+// The boot probe must invoke run-server in launchServer mode, exactly the way
+// pest-plugin-browser does, or it would test a different code path than the one
+// that fails for users (#677).
+func TestPlaywrightServerBootCmd_LaunchServerMode(t *testing.T) {
+	for _, want := range []string{"./node_modules/.bin/playwright", "run-server", "--mode launchServer"} {
+		if !strings.Contains(playwrightServerBootCmd, want) {
+			t.Errorf("boot command missing %q: %s", want, playwrightServerBootCmd)
+		}
+	}
+}
+
+// Boot succeeds the moment the ready marker is printed, even though the server
+// then keeps running; the watcher must detect it and stop the process.
+func TestWatchPlaywrightBoot_DetectsReadyMarker(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", "echo 'Listening on ws://127.0.0.1:1/'; sleep 30")
+	ok, out := watchPlaywrightBoot(ctx, cmd)
+	if !ok {
+		t.Fatalf("expected boot success, got false with output %q", out)
+	}
+}
+
+// The whole point of #677: when the server dies before listening, the doctor
+// must surface the process's real output, not a bare failure.
+func TestWatchPlaywrightBoot_SurfacesOutputOnFailure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", "echo 'boom: the real reason' >&2; exit 1")
+	ok, out := watchPlaywrightBoot(ctx, cmd)
+	if ok {
+		t.Fatal("expected boot failure")
+	}
+	if !strings.Contains(out, "boom: the real reason") {
+		t.Errorf("expected the real output surfaced, got %q", out)
+	}
+}
+
+func TestWatchPlaywrightBoot_TimesOut(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "sh", "-c", "sleep 30")
+	ok, out := watchPlaywrightBoot(ctx, cmd)
+	if ok {
+		t.Fatal("expected boot failure on timeout")
+	}
+	if !strings.Contains(out, "timed out") {
+		t.Errorf("expected a timeout message, got %q", out)
+	}
+}
+
+func TestIndentBlock_PrefixesEveryLine(t *testing.T) {
+	got := indentBlock("first\nsecond", "  | ")
+	want := "  | first\n  | second"
+	if got != want {
+		t.Errorf("indentBlock = %q, want %q", got, want)
 	}
 }

@@ -1,12 +1,17 @@
 package cli
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -327,5 +332,115 @@ func doctorPestBrowser(version string, w io.Writer) error {
 		`fs=$(find "${PLAYWRIGHT_BROWSERS_PATH:-`+pestBrowserCachePath+`}" -type f \( -name chrome-headless-shell -o -name chrome \) 2>/dev/null); [ -n "$fs" ] || exit 1; for b in $fs; do head -1 "$b" | grep -q '#!/bin/sh' || exit 1; done`).Run() == nil
 	check(shimOK, "Playwright browser shimmed to musl chromium", "lerd pest:browser install")
 
+	// The checks above can pass while `lerd test` still fails: pest-plugin-browser
+	// boots the server (run-server --mode launchServer) and that boot can fail for
+	// a reason presence checks miss. Boot it too and surface the real error (#677).
+	if playwrightOK {
+		ctx, cancel := context.WithTimeout(context.Background(), pestServerBootTimeout)
+		bootOK, bootOut := bootPlaywrightServer(ctx, container, cwd)
+		cancel()
+		check(bootOK, "Playwright server boots (run-server, launchServer mode)",
+			"the server failed to start; its output is below")
+		if !bootOK && bootOut != "" {
+			fmt.Fprintf(w, "%s\n", indentBlock(bootOut, "        | "))
+		}
+	}
+
 	return nil
+}
+
+// pestServerBootTimeout caps how long the doctor waits for the Playwright server
+// to print its ready marker before treating the boot as failed.
+const pestServerBootTimeout = 25 * time.Second
+
+// playwrightServerReadyMarker is what Playwright's run-server prints once it is
+// listening; pest-plugin-browser waits for the same line before driving it.
+const playwrightServerReadyMarker = "Listening on"
+
+// playwrightServerBootCmd mirrors how pest-plugin-browser launches the server:
+// run-server in launchServer mode. Port 0 takes an ephemeral port so the probe
+// never collides with a real run, and the process is killed as soon as it is up.
+const playwrightServerBootCmd = "./node_modules/.bin/playwright run-server --host 127.0.0.1 --port 0 --mode launchServer"
+
+// bootPlaywrightServer boots the Playwright server inside the FPM container the
+// way pest-plugin-browser does and reports whether it came up; on failure it
+// returns the captured output so the doctor can show the real error.
+func bootPlaywrightServer(ctx context.Context, container, cwd string) (bool, string) {
+	browsersEnv := "PLAYWRIGHT_BROWSERS_PATH=" + pestBrowserCachePath
+	cmd := podman.CmdContext(ctx, "exec", "-w", cwd, "--env", browsersEnv, container,
+		"sh", "-c", playwrightServerBootCmd)
+	return watchPlaywrightBoot(ctx, cmd)
+}
+
+// watchPlaywrightBoot starts cmd and waits for the ready marker, returning true
+// once listening (then killing it) or false with the captured output if it exits
+// first or the context expires. Exec-agnostic so it is testable.
+func watchPlaywrightBoot(ctx context.Context, cmd *exec.Cmd) (bool, string) {
+	w := &readyWatcher{found: make(chan struct{})}
+	cmd.Stdout = w
+	cmd.Stderr = w
+
+	if err := cmd.Start(); err != nil {
+		return false, err.Error()
+	}
+
+	exited := make(chan error, 1)
+	go func() { exited <- cmd.Wait() }()
+
+	select {
+	case <-w.found:
+		_ = cmd.Process.Kill()
+		<-exited
+		return true, ""
+	case <-exited:
+		out := w.output()
+		if ctx.Err() == context.DeadlineExceeded {
+			msg := fmt.Sprintf("timed out after %s waiting for the server to start", pestServerBootTimeout)
+			if out != "" {
+				msg += "\n" + out
+			}
+			return false, msg
+		}
+		if out == "" {
+			out = "the server exited without output"
+		}
+		return false, out
+	}
+}
+
+// readyWatcher accumulates a process's combined output and closes found the
+// moment the ready marker appears, so a booting server is detected without
+// waiting for it to exit.
+type readyWatcher struct {
+	mu    sync.Mutex
+	buf   bytes.Buffer
+	found chan struct{}
+	once  sync.Once
+}
+
+func (rw *readyWatcher) Write(p []byte) (int, error) {
+	rw.mu.Lock()
+	rw.buf.Write(p)
+	seen := strings.Contains(rw.buf.String(), playwrightServerReadyMarker)
+	rw.mu.Unlock()
+	if seen {
+		rw.once.Do(func() { close(rw.found) })
+	}
+	return len(p), nil
+}
+
+func (rw *readyWatcher) output() string {
+	rw.mu.Lock()
+	defer rw.mu.Unlock()
+	return strings.TrimSpace(rw.buf.String())
+}
+
+// indentBlock prefixes every line of s with prefix, so multi-line process output
+// reads as one indented block under a doctor check.
+func indentBlock(s, prefix string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		lines[i] = prefix + line
+	}
+	return strings.Join(lines, "\n")
 }
