@@ -106,11 +106,13 @@ func LocalImageDigest(image string) []string {
 	return digests
 }
 
-// pullArgs builds the `podman pull` argv for image, splicing in any
-// host-specific flags (e.g. --platform=linux/amd64 for postgis on Apple
-// Silicon, where the image ships no arm64 manifest). Keeping every pull path
-// on this helper means pull and run never disagree on platform.
+// pullArgs builds the `podman pull` argv for image, first applying the
+// host-specific image rewrite (postgis/postgis -> imresamu/postgis on Apple
+// Silicon) and then splicing in any platform flags (e.g. --platform=linux/amd64
+// for mysql:5.7). Keeping every pull path on this helper means pull and run
+// never disagree on the image or its platform.
 func pullArgs(image string) []string {
+	image = PlatformImage(image)
 	args := append([]string{"pull"}, PlatformPullArgs(image)...)
 	return append(args, image)
 }

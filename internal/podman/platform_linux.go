@@ -13,3 +13,10 @@ func PlatformPodmanArgs(_, _ string) string {
 func PlatformPullArgs(_ string) []string {
 	return nil
 }
+
+// PlatformImage is a no-op on Linux. linux/amd64 runs postgis natively;
+// linux/arm64 would hit the same gap as Apple Silicon, so add the
+// rewriteArm64Image swap behind a runtime.GOARCH guard then.
+func PlatformImage(image string) string {
+	return image
+}

@@ -2,7 +2,20 @@
 
 package podman
 
-import "strings"
+import (
+	"runtime"
+	"strings"
+)
+
+// PlatformImage returns the image to actually pull and run on this host. On
+// Apple Silicon it swaps postgis/postgis (no arm64 manifest) for the multi-arch
+// imresamu/postgis so postgres runs native instead of under Rosetta; every
+// other image is returned unchanged. Applied at the quadlet Image= and every
+// pull path so pull and run never disagree. Intel macs (amd64) keep the upstream
+// image and its linux/amd64 pin, which is native there.
+func PlatformImage(image string) string {
+	return rewriteArm64Image(image, runtime.GOARCH)
+}
 
 // imageLacksArm64 reports whether image is a known upstream tag that ships no
 // arm64 manifest, so Apple Silicon must pull and run it as linux/amd64 under

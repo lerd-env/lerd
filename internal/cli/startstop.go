@@ -125,7 +125,7 @@ func ensureImages() {
 			})
 
 		default:
-			label := img
+			label := podman.PlatformImage(img)
 			jobs = append(jobs, BuildJob{
 				Label: "Pulling " + label,
 				Run: func(w io.Writer) error {
@@ -722,7 +722,9 @@ func startRestoredServices() {
 	var pullJobs []BuildJob
 	seen := map[string]bool{}
 	for _, unit := range units {
-		image := quadletImage(unit)
+		// PlatformImage covers a quadlet still on the upstream image from before
+		// the rewrite landed (idempotent once the unit is rewritten on start).
+		image := podman.PlatformImage(quadletImage(unit))
 		if image == "" || seen[image] {
 			continue
 		}

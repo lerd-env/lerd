@@ -68,10 +68,16 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 	content = BindForLAN(content, lanExposed)
 	content = PairIPv6Binds(content)
 	content = StripInstallSection(content, autostartDisabled)
-	// Centralised platform podman-run flags (e.g. --platform=linux/amd64 for
-	// postgis on darwin) so every quadlet writer emits identical units.
+	// Centralised platform image rewrite + podman-run flags so every quadlet
+	// writer emits identical units. On Apple Silicon PlatformImage swaps
+	// postgis/postgis for the multi-arch imresamu/postgis (runs native, no
+	// Rosetta); mysql:5.7 keeps the --platform=linux/amd64 pin.
 	if svc := strings.TrimPrefix(name, "lerd-"); svc != name {
 		if img := CurrentImage(content); img != "" {
+			if rewritten := PlatformImage(img); rewritten != img {
+				content = ApplyImage(content, rewritten)
+				img = rewritten
+			}
 			if arg := PlatformPodmanArgs(svc, img); arg != "" {
 				content = InjectPodmanArgs(content, arg)
 			}
