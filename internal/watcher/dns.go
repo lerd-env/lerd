@@ -2,6 +2,8 @@ package watcher
 
 import (
 	"bytes"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -33,7 +35,19 @@ type dnsWatchDeps struct {
 	dnsEnvFingerprint   func() string
 	resyncContainerDNS  func() error
 	repairExposeMapping func() (changed bool, err error)
-	log                 func(level, msg string, kv ...any)
+	// nginxHealthy reports whether lerd-nginx is up and accepting on 443;
+	// repairNginx re-establishes it. A host resume can stop lerd-nginx or break
+	// its rootless port-forward, so .test sites return "Secure Connection Failed"
+	// until a manual lerd restart. Both nil off the Linux rootless-podman path.
+	nginxHealthy func() bool
+	repairNginx  func() error
+	// isStopped reports an intentional `lerd stop`, after which the watcher must
+	// not restart anything the user stopped on purpose. now is the clock (a seam
+	// for tests) used to detect a resume from the wall-clock gap between ticks.
+	// All nil off Linux / in tests that don't exercise them.
+	isStopped func() bool
+	now       func() time.Time
+	log       func(level, msg string, kv ...any)
 }
 
 // dnsWatchState is the cross-tick memory for WatchDNS. lastOK starts nil
@@ -45,6 +59,31 @@ type dnsWatchState struct {
 	repairUnavailable bool
 	dnsEnv            string
 	dnsEnvSeen        bool
+	lastTick          time.Time
+}
+
+// resumeGapThreshold: a wall-clock gap larger than this between two consecutive
+// watcher ticks means the host was suspended. The monotonic ticker is frozen
+// during suspend while the wall clock keeps advancing, so a large wall gap with
+// no intervening ticks is an unambiguous "just resumed" signal — unlike a `lerd
+// start`, which a fresh watcher never mistakes for a resume (its first tick has
+// no previous timestamp to compare against).
+const resumeGapThreshold = 90 * time.Second
+
+// nginxHealthyDialTimeout bounds the 443 connectivity probe.
+const nginxHealthyDialTimeout = time.Second
+
+// resumed records this tick's time and reports whether the host just woke from
+// suspend, measured as the wall-clock gap since the previous tick. Comparing the
+// monotonic-stripped times (Round(0)) is what reveals the suspend, since the
+// monotonic delta the ticker runs on does not advance while suspended.
+func (s *dnsWatchState) resumed(now time.Time) bool {
+	prev := s.lastTick
+	s.lastTick = now
+	if prev.IsZero() {
+		return false
+	}
+	return now.Round(0).Sub(prev.Round(0)) > resumeGapThreshold
 }
 
 // defaultDNSEnvFingerprint summarises the host DNS environment: the sorted
@@ -70,6 +109,78 @@ func defaultResyncContainerDNS() error {
 		return err
 	}
 	return podman.ReloadNetworks()
+}
+
+// defaultNginxHealthy reports whether lerd-nginx is serving on its configured
+// HTTPS port by a single loopback dial. A failed connect is the signal — a resume
+// drops the listener entirely (stopped container or dead forward). It does not
+// also inspect the container, since ContainerRunning swallows a transient `podman
+// inspect` error (common right after a resume) as "not running" and would bounce
+// a healthy nginx.
+func defaultNginxHealthy() bool {
+	port := 443
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.Nginx.HTTPSPort > 0 {
+		port = cfg.Nginx.HTTPSPort
+	}
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), nginxHealthyDialTimeout)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+// defaultRepairNginx restarts nginx so it rebinds its host ports on the live
+// network. It deliberately stays this minimal: the network itself is the watcher's
+// DNS re-sync path's job or, for a dual-stack migration, `lerd start`'s (recreating
+// the network tears down every container, far too destructive for a background
+// timer), and it does NOT touch the vhost registry, since downgrading a Secured
+// site to HTTP over a cert mount that hasn't returned yet would silently drop its
+// HTTPS. If nginx can't rebind (e.g. that pending migration), the restart is a
+// no-op the next probe still sees as down, surfacing it for `lerd start`.
+func defaultRepairNginx() error {
+	return podman.RestartUnit("lerd-nginx")
+}
+
+// publishOnTransition sets *cur to next and fires pub when the value changed (or
+// on the first observation, when *cur is nil). The shared transition-and-publish
+// step for the nginx and DNS health states.
+func publishOnTransition(cur **bool, next bool, pub func()) {
+	if *cur == nil || **cur != next {
+		v := next
+		*cur = &v
+		pub()
+	}
+}
+
+// healNginxOnResume restarts nginx if it isn't serving, but only on the tick that
+// just detected a resume. A resume is a discrete, unambiguous trigger, so there is
+// no polling, debounce, or seen-healthy guard, and no way to race a concurrent
+// `lerd start` (a start doesn't suspend the machine). systemd's Restart=always
+// already covers an nginx crash; this covers the resume case it can't see, where
+// the container stays "running" but its rootless 443 forward is dead. It honors an
+// intentional `lerd stop` and is a no-op when nginxHealthy is unset (non-Linux).
+//
+// If the watcher isn't running at the moment of resume (e.g. it restarted during
+// the outage), that resume is missed and the user falls back to `lerd start`; a
+// rare edge, far better than a continuous poll that fights every bring-up.
+func healNginxOnResume(d dnsWatchDeps) {
+	if d.nginxHealthy == nil {
+		return
+	}
+	if d.isStopped != nil && d.isStopped() {
+		return
+	}
+	if d.nginxHealthy() {
+		return // the resume didn't break it
+	}
+	d.log("warn", "nginx not serving after resume, restarting")
+	if d.repairNginx == nil {
+		return
+	}
+	if err := d.repairNginx(); err != nil {
+		d.log("error", "nginx restart after resume failed", "err", err)
+	}
 }
 
 // defaultRepairExposeMapping re-renders the host dnsmasq .tld answer to the
@@ -170,6 +281,7 @@ func WatchDNS(interval time.Duration, tld string) {
 		repairPossible:    dns.RepairPossible,
 		idleOrLocked:      systemd.SessionIsIdleOrLocked,
 		publishStatus:     func() { eventbus.Default.Publish(eventbus.KindStatus) },
+		now:               time.Now,
 		log: func(level, msg string, kv ...any) {
 			switch level {
 			case "info":
@@ -189,6 +301,12 @@ func WatchDNS(interval time.Duration, tld string) {
 	if runtime.GOOS == "linux" {
 		deps.dnsEnvFingerprint = defaultDNSEnvFingerprint
 		deps.resyncContainerDNS = defaultResyncContainerDNS
+		// Restart nginx after a host resume leaves rootless networking in a bad
+		// state so .test sites return "Secure Connection Failed" until a manual
+		// lerd restart (issue #665). DNS resolution is already repaired below.
+		deps.nginxHealthy = defaultNginxHealthy
+		deps.repairNginx = defaultRepairNginx
+		deps.isStopped = config.IsStopped
 	}
 
 	// Cross-platform: heal a stale lan:expose .tld mapping after the host LAN
@@ -295,7 +413,21 @@ func runDNSLoop(d dnsWatchDeps, state *dnsWatchState, tld string,
 // transition publishes KindStatus.
 func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 	s.tickCount++
-	if !linkTriggered && d.idleOrLocked() && s.tickCount%idleSkipEveryN != 0 {
+
+	// Detect a resume from the wall-clock gap since the previous tick (lastTick is
+	// recorded even on the stopped/idle early returns below, so the gap stays
+	// accurate). A deliberately stopped stack is left entirely alone.
+	resumed := false
+	if d.now != nil {
+		resumed = s.resumed(d.now())
+	}
+	if d.isStopped != nil && d.isStopped() {
+		return
+	}
+
+	// An idle/locked poll tick backs off — but never skips a detected resume,
+	// since that is the moment the nginx heal exists to react to.
+	if !linkTriggered && !resumed && d.idleOrLocked() && s.tickCount%idleSkipEveryN != 0 {
 		return
 	}
 
@@ -319,15 +451,14 @@ func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 		s.dnsEnvSeen = true
 	}
 
-	ok, _ := d.check(tld)
-	transitioned := s.lastOK == nil || *s.lastOK != ok
-	prev := ok
-	s.lastOK = &prev
-
-	if transitioned {
-		d.publishStatus()
+	// Recover nginx after a resume, once the container DNS above has re-synced the
+	// network it will rebind onto.
+	if resumed {
+		healNginxOnResume(d)
 	}
 
+	ok, _ := d.check(tld)
+	publishOnTransition(&s.lastOK, ok, d.publishStatus)
 	if ok {
 		return
 	}
@@ -379,8 +510,8 @@ func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 	}
 
 	d.log("info", "DNS resolution restored", "tld", tld)
-	// Repair flipped DNS from down to up; publish now so the dashboard
-	// doesn't wait up to 30s for the next tick to notice.
+	// Repair flipped DNS from down to up; publish now so the dashboard doesn't
+	// wait up to 30s for the next tick to notice.
 	up := true
 	s.lastOK = &up
 	d.publishStatus()
