@@ -101,6 +101,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	}
 	// The env drift and app-key checks parse the file as dotenv, so skip them for
 	// frameworks that store config another way (WordPress's wp-config.php, etc.).
+	dbBroken := false
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
 			resp.add(c)
@@ -108,9 +109,19 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		if c, ok := checkEnvDrift(path, envPath, filepath.Join(path, exampleFile)); ok {
 			resp.add(c)
 		}
+		if c, ok := checkSQLiteDatabase(path, envPath, fw); ok {
+			resp.add(c)
+			dbBroken = c.Status == StatusFail
+		}
 	}
 
 	for _, spec := range frameworkChecks(fw) {
+		// A known-broken database turns a migration check into "couldn't run" noise
+		// that just repeats the database finding's remedy, so skip a command check
+		// whose fix is the same migrate command; unrelated command checks still run.
+		if dbBroken && spec.Type == "command" && spec.Fix == sqliteFixCommand {
+			continue
+		}
 		if c, ok := runDeclaredCheck(ctx, path, envPath, spec); ok {
 			resp.add(c)
 		}
@@ -185,14 +196,15 @@ func runDeclaredCheck(ctx context.Context, path, envPath string, spec config.Doc
 // universalLabels maps the built-in check names to their display labels. The
 // declared framework checks carry their own labels from the store.
 var universalLabels = map[string]string{
-	"env_present":    "Env File",
-	"app_key":        "App Key",
-	"env_drift":      "Env Drift",
-	"composer_deps":  "Composer Dependencies",
-	"composer_audit": "Composer Audit",
-	"node_deps":      "Node Dependencies",
-	"node_audit":     "Node Audit",
-	"php_version":    "PHP Version",
+	"env_present":     "Env File",
+	"app_key":         "App Key",
+	"env_drift":       "Env Drift",
+	"sqlite_database": "Database",
+	"composer_deps":   "Composer Dependencies",
+	"composer_audit":  "Composer Audit",
+	"node_deps":       "Node Dependencies",
+	"node_audit":      "Node Audit",
+	"php_version":     "PHP Version",
 }
 
 // humanize turns a snake_case check name into a Title Case fallback label.
@@ -244,6 +256,65 @@ func checkAppKey(envPath string, fw *config.Framework) (Check, bool) {
 	kg := fw.Env.KeyGeneration
 	detail := fmt.Sprintf("%s is empty, so encryption, signed URLs, and sessions won't work until it's set.", kg.EnvKey)
 	return checkEnvKeySet(envPath, "app_key", kg.EnvKey, kg.Command, detail), true
+}
+
+// checkSQLiteDatabase fails when the env file selects the sqlite driver but the
+// database file is missing or empty. Without it the app 500s on the first query
+// ("no such table"), which migrate:status can't surface — it errors when the
+// migrations table is absent and the doctor degrades that to "unknown". Skipped
+// unless DB_CONNECTION is sqlite; an in-memory database has no file to check.
+func checkSQLiteDatabase(path, envPath string, fw *config.Framework) (Check, bool) {
+	if !strings.EqualFold(strings.TrimSpace(envfile.ReadKey(envPath, "DB_CONNECTION")), "sqlite") {
+		return Check{}, false
+	}
+	dbFile := strings.TrimSpace(envfile.ReadKey(envPath, "DB_DATABASE"))
+	if dbFile == ":memory:" {
+		return Check{}, false
+	}
+	if dbFile == "" {
+		dbFile = filepath.Join("database", "database.sqlite") // Laravel default
+	}
+	abs := dbFile
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(path, dbFile)
+	}
+	// Only offer the migrate button when the framework actually has that command,
+	// so the CLI/TUI don't print a fix that maps to nothing.
+	fix := ""
+	if frameworkHasCommand(fw, sqliteFixCommand) {
+		fix = sqliteFixCommand
+	}
+	info, err := os.Stat(abs)
+	switch {
+	case err != nil && os.IsNotExist(err):
+		return Check{Name: "sqlite_database", Status: StatusFail, Fix: fix,
+			Detail: fmt.Sprintf("SQLite database file is missing at %s — create it and run migrations.", dbFile)}, true
+	case err != nil:
+		return Check{}, false // can't stat for some other reason; don't guess
+	case info.Size() == 0:
+		return Check{Name: "sqlite_database", Status: StatusFail, Fix: fix,
+			Detail: fmt.Sprintf("SQLite database at %s is empty — run migrations to create the schema.", dbFile)}, true
+	}
+	return Check{Name: "sqlite_database", Status: StatusOK}, true
+}
+
+// sqliteFixCommand names the framework command the doctor offers to populate an
+// empty or missing SQLite database. Laravel's "migrate" creates the schema (and,
+// on current versions, the file); frameworks without a matching command get no fix.
+const sqliteFixCommand = "migrate"
+
+// frameworkHasCommand reports whether fw declares a command of the given name, so
+// a doctor fix only points at something the site can actually run.
+func frameworkHasCommand(fw *config.Framework, name string) bool {
+	if fw == nil {
+		return false
+	}
+	for _, c := range fw.Commands {
+		if c.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // checkEnvKeySet fails when key is empty in the env file.

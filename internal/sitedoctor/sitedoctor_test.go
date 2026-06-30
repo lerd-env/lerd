@@ -237,6 +237,32 @@ func TestCheckSymlink(t *testing.T) {
 
 // TestCheckCommand exercises the generic command check (and runCapture) with
 // harmless shell commands rather than a real console.
+// TestRun_SkipsCommandChecksWhenDatabaseBroken pins that a broken database
+// suppresses the framework command checks (migrate:status etc.) so the report
+// doesn't repeat the same remedy on a second "couldn't run" row.
+func TestRun_SkipsCommandChecksWhenDatabaseBroken(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n") // default db file missing
+	fw := &config.Framework{
+		Name: "laravel",
+		Env:  config.FrameworkEnvConf{File: ".env"},
+		Doctor: &config.FrameworkDoctor{Checks: []config.DoctorCheck{
+			{Name: "migrations", Type: "command", Command: "echo Pending", FailIfOutputContains: "Pending", Fix: "migrate", Label: "Migrations"},
+		}},
+	}
+	resp := Run(context.Background(), dir, fw)
+	names := map[string]string{}
+	for _, c := range resp.Checks {
+		names[c.Name] = c.Status
+	}
+	if names["sqlite_database"] != StatusFail {
+		t.Fatalf("expected sqlite_database to fail, got %q", names["sqlite_database"])
+	}
+	if _, ok := names["migrations"]; ok {
+		t.Error("migration command check must be skipped when the database is broken")
+	}
+}
+
 func TestCheckCommand(t *testing.T) {
 	dir := t.TempDir()
 
@@ -252,10 +278,11 @@ func TestCheckCommand(t *testing.T) {
 		t.Errorf("clean: got %q, want ok", c.Status)
 	}
 
-	// Non-zero exit with UnknownOnError → unknown.
-	unknown := config.DoctorCheck{Name: "migrations", Type: "command", Command: "exit 1", FailIfOutputContains: "Pending", UnknownOnError: true}
-	if c := checkCommand(context.Background(), dir, unknown); c.Status != StatusUnknown {
-		t.Errorf("errored: got %q, want unknown", c.Status)
+	// Non-zero exit with UnknownOnError → unknown with no fix, since a "couldn't
+	// run" failure is ambiguous and the offered remedy may not address it.
+	unknown := config.DoctorCheck{Name: "migrations", Type: "command", Command: "exit 1", FailIfOutputContains: "Pending", UnknownOnError: true, Fix: "migrate"}
+	if c := checkCommand(context.Background(), dir, unknown); c.Status != StatusUnknown || c.Fix != "" {
+		t.Errorf("errored: got status=%q fix=%q, want unknown with no fix", c.Status, c.Fix)
 	}
 }
 
@@ -497,4 +524,74 @@ func TestRun_phpConstFramework(t *testing.T) {
 	if _, ok := names["env_drift"]; ok {
 		t.Error("env_drift must be skipped for a php-const framework")
 	}
+}
+
+func TestCheckSQLiteDatabase(t *testing.T) {
+	migrateFW := &config.Framework{Commands: []config.FrameworkCommand{{Name: "migrate"}}}
+
+	t.Run("missing file fails with migrate fix", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusFail || c.Fix != "migrate" {
+			t.Fatalf("missing default sqlite db should fail with a migrate fix, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("empty file fails with migrate fix", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
+		mustMkdir(t, filepath.Join(dir, "database"))
+		writeEnv(t, filepath.Join(dir, "database"), "database.sqlite", "")
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusFail || c.Fix != "migrate" {
+			t.Fatalf("empty sqlite db should fail with a migrate fix, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("no migrate command means no fix offered", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), &config.Framework{})
+		if !ok || c.Status != StatusFail || c.Fix != "" {
+			t.Fatalf("a framework without a migrate command must not offer a fix, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("populated file passes", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
+		mustMkdir(t, filepath.Join(dir, "database"))
+		writeEnv(t, filepath.Join(dir, "database"), "database.sqlite", "SQLite format 3\x00")
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusOK {
+			t.Fatalf("populated sqlite db should pass, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("non-sqlite connection is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=mysql\n")
+		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+			t.Error("a non-sqlite connection must not produce a database check")
+		}
+	})
+
+	t.Run("in-memory database is skipped", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\nDB_DATABASE=:memory:\n")
+		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+			t.Error("an in-memory sqlite database has no file to check")
+		}
+	})
+
+	t.Run("absolute db path honoured", func(t *testing.T) {
+		dir := t.TempDir()
+		dbPath := filepath.Join(dir, "custom.sqlite")
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\nDB_DATABASE="+dbPath+"\n")
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusFail {
+			t.Fatalf("missing absolute sqlite db should fail, got ok=%v %+v", ok, c)
+		}
+	})
 }
