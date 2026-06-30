@@ -15,6 +15,10 @@ Lerd resolves framework definitions from multiple sources. Higher priority wins:
 
 Workers from the user overlay and project `.lerd.yaml` are merged on top of store or built-in definitions. See [Framework workers](framework-workers.md) for the worker lifecycle and how custom workers are added and managed.
 
+::: warning Untrusted projects
+A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted. When lerd restores it into the store it strips any `command`-type doctor check, because the site doctor would otherwise run that command on your host straight from a cloned repo. Command doctor checks run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. Env, symlink, and combo checks are inert and still work from a project definition.
+:::
+
 ## Version resolution
 
 When loading a framework definition for a project, the version is resolved in order:

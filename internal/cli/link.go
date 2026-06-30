@@ -151,19 +151,23 @@ func runLink(args []string) error {
 	// Compare against whichever definition is currently active (user-defined or store-installed).
 	if proj != nil && proj.Framework != "" && proj.FrameworkDef != nil {
 		proj.FrameworkDef.Name = proj.Framework
+		// The embedded def is untrusted; sanitise the copy we'd install so a
+		// .lerd.yaml can't seed host-executing doctor checks, and so the conflict
+		// prompt compares like-for-like with what is (or would be) in the store.
+		safe := config.SanitizeProjectFrameworkDef(proj.FrameworkDef)
 		existing, exists := config.GetFrameworkForDir(proj.Framework, cwd)
 		if !exists {
 			// No definition anywhere — save the embedded one to the store dir.
-			_ = config.SaveStoreFramework(proj.FrameworkDef)
+			_ = config.SaveStoreFramework(safe)
 		} else {
-			action, err := confirmReplace("framework", proj.Framework, existing, proj.FrameworkDef)
+			action, err := confirmReplace("framework", proj.Framework, existing, safe)
 			if err != nil {
 				return err
 			}
 			switch action {
 			case replaceFromProject:
 				// User chose the .lerd.yaml version — save to store dir.
-				_ = config.SaveStoreFramework(proj.FrameworkDef)
+				_ = config.SaveStoreFramework(safe)
 			case replaceFromDisk:
 				// User chose the local/store version — update .lerd.yaml.
 				_ = config.SetProjectFrameworkDef(cwd, existing)
