@@ -47,6 +47,11 @@ type dnsWatchDeps struct {
 	// All nil off Linux / in tests that don't exercise them.
 	isStopped func() bool
 	now       func() time.Time
+	// monoSince returns monotonic elapsed time since the watcher started; paired
+	// with now (wall clock) it lets resumed() tell a real suspend (monotonic frozen,
+	// wall advanced) from a tick merely delayed by load (both advanced). Nil off the
+	// Linux path, where resumed() falls back to the bare wall gap.
+	monoSince func() time.Duration
 	log       func(level, msg string, kv ...any)
 }
 
@@ -60,30 +65,40 @@ type dnsWatchState struct {
 	dnsEnv            string
 	dnsEnvSeen        bool
 	lastTick          time.Time
+	lastMono          time.Duration
 }
 
-// resumeGapThreshold: a wall-clock gap larger than this between two consecutive
-// watcher ticks means the host was suspended. The monotonic ticker is frozen
-// during suspend while the wall clock keeps advancing, so a large wall gap with
-// no intervening ticks is an unambiguous "just resumed" signal — unlike a `lerd
-// start`, which a fresh watcher never mistakes for a resume (its first tick has
-// no previous timestamp to compare against).
+// resumeGapThreshold: when the wall clock advances more than this beyond the
+// monotonic clock between two consecutive ticks, the host was suspended (the
+// monotonic clock freezes during suspend while the wall clock keeps advancing).
+// Comparing the two gaps — not the bare wall gap — is what distinguishes a real
+// resume from a tick merely delayed past the threshold by CPU pressure or a long
+// pause, where wall and monotonic advance together and the difference stays near
+// zero. A fresh watcher never mistakes its first tick for a resume (no previous
+// timestamp to compare against).
 const resumeGapThreshold = 90 * time.Second
 
 // nginxHealthyDialTimeout bounds the 443 connectivity probe.
 const nginxHealthyDialTimeout = time.Second
 
-// resumed records this tick's time and reports whether the host just woke from
-// suspend, measured as the wall-clock gap since the previous tick. Comparing the
-// monotonic-stripped times (Round(0)) is what reveals the suspend, since the
-// monotonic delta the ticker runs on does not advance while suspended.
-func (s *dnsWatchState) resumed(now time.Time) bool {
-	prev := s.lastTick
-	s.lastTick = now
+// resumed records this tick's wall and monotonic readings and reports whether the
+// host just woke from suspend. now is wall-clock; mono is a monotonic elapsed
+// counter (haveMono=false when no monotonic source is wired, off the Linux path,
+// where it falls back to the bare wall gap). A suspend freezes the monotonic clock
+// while the wall clock keeps advancing, so the wall gap exceeds the monotonic gap
+// by ~the suspend duration; a tick merely delayed by CPU pressure advances both
+// equally, leaving the difference near zero, so it does NOT read as a resume.
+func (s *dnsWatchState) resumed(now time.Time, mono time.Duration, haveMono bool) bool {
+	prev, prevMono := s.lastTick, s.lastMono
+	s.lastTick, s.lastMono = now, mono
 	if prev.IsZero() {
 		return false
 	}
-	return now.Round(0).Sub(prev.Round(0)) > resumeGapThreshold
+	wallGap := now.Round(0).Sub(prev.Round(0))
+	if !haveMono {
+		return wallGap > resumeGapThreshold
+	}
+	return wallGap-(mono-prevMono) > resumeGapThreshold
 }
 
 // defaultDNSEnvFingerprint summarises the host DNS environment: the sorted
@@ -274,6 +289,7 @@ const linkChangeDebounce = 750 * time.Millisecond
 // eventbus.KindStatus so the dashboard reflects the live state via the
 // WebSocket without a manual refresh.
 func WatchDNS(interval time.Duration, tld string) {
+	start := time.Now()
 	deps := dnsWatchDeps{
 		check:             dns.Check,
 		waitReady:         dns.WaitReady,
@@ -282,6 +298,7 @@ func WatchDNS(interval time.Duration, tld string) {
 		idleOrLocked:      systemd.SessionIsIdleOrLocked,
 		publishStatus:     func() { eventbus.Default.Publish(eventbus.KindStatus) },
 		now:               time.Now,
+		monoSince:         func() time.Duration { return time.Since(start) },
 		log: func(level, msg string, kv ...any) {
 			switch level {
 			case "info":
@@ -419,7 +436,12 @@ func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 	// accurate). A deliberately stopped stack is left entirely alone.
 	resumed := false
 	if d.now != nil {
-		resumed = s.resumed(d.now())
+		haveMono := d.monoSince != nil
+		var mono time.Duration
+		if haveMono {
+			mono = d.monoSince()
+		}
+		resumed = s.resumed(d.now(), mono, haveMono)
 	}
 	if d.isStopped != nil && d.isStopped() {
 		return

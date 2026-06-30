@@ -180,17 +180,32 @@ func restoreHostProxyVhostAfterIdle(site *config.Site, workers []string) {
 	if !hostProxyVhostSwapApplies(site.IsHostProxy(), workers) {
 		return
 	}
-	// Poll the dev-server port, bounded to 60s. Vite/Nuxt can take many seconds
-	// to bind after launch; with no fixed proxy port we skip the wait and restore
-	// immediately (the worst case is a brief 502 flash on warmup).
-	if proxy := parentProxyConfig(*site); proxy != nil && proxy.Port > 0 {
-		waitForHostPort(proxy.Port, 60*time.Second)
+	// Poll the dev-server port, bounded to 60s. Vite/Nuxt can take many seconds to
+	// bind after launch. Wait on the site's registered proxied port — always set
+	// for a host-proxy site — rather than only the committed proxy block's port,
+	// which is unset for an auto-allocated dev server and used to skip the wait and
+	// flash a bare 502 on warmup.
+	if port := hostProxyResumeWaitPort(site); port > 0 {
+		waitForHostPort(port, 60*time.Second)
 	}
 	if err := siteops.RegenerateSiteVhost(site, site.PrimaryDomain()); err != nil {
 		fmt.Printf("[WARN] idle-resume host-proxy vhost %s: %v\n", site.Name, err)
 		return
 	}
 	nginx.ReloadOrWarn("")
+}
+
+// hostProxyResumeWaitPort returns the host port idle-resume waits on before
+// restoring a host-proxy site's proxy vhost: the committed proxy block's port when
+// it carries one, else the site's registered proxied port (HostPort, always >0 for
+// a host-proxy site). The fallback is what stops an auto-allocated dev server —
+// whose committed proxy block has no fixed port — from skipping the wait and
+// flashing a bare 502 during warmup.
+func hostProxyResumeWaitPort(site *config.Site) int {
+	if proxy := parentProxyConfig(*site); proxy != nil && proxy.Port > 0 {
+		return proxy.Port
+	}
+	return site.HostPort
 }
 
 // waitForHostPort blocks until a TCP connection to the host port succeeds or the

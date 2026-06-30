@@ -786,6 +786,23 @@ func mergeBuiltinTinker(fw *Framework) *Framework {
 	return fw
 }
 
+// mergeBuiltinDoctor backfills the framework's site-doctor checks from a built-in
+// when a store yaml predates the doctor block (or its on-disk cache does), so a
+// Laravel/Symfony site never silently loses its prod-debug, storage-symlink, and
+// pending-migration checks. Same shape as mergeBuiltinFrankenPHP.
+func mergeBuiltinDoctor(fw *Framework) *Framework {
+	if fw == nil || fw.Doctor != nil {
+		return fw
+	}
+	src := builtinFramework(fw.Name)
+	if src == nil || src.Doctor == nil {
+		return fw
+	}
+	cp := *src.Doctor
+	fw.Doctor = &cp
+	return fw
+}
+
 // mergeUserOverlay checks for a user-defined overlay file in FrameworksDir()
 // and merges its workers and setup commands on top of base.
 // User additions/overrides win. If no overlay exists, base is returned as-is.
@@ -902,6 +919,7 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 		base = mergeUserOverlay(base)
 		base = mergeBuiltinFrankenPHP(base)
 		base = mergeBuiltinTinker(base)
+		base = mergeBuiltinDoctor(base)
 		return mergeProjectWorkers(base, projectDir), true
 	}
 

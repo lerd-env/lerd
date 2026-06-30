@@ -321,18 +321,22 @@ func defaultConfig() *GlobalConfig {
 	return cfg
 }
 
-// HostPorts returns every host port this service entry claims: its preset-default
-// Port, its PublishedPort override, and the host side of each ExtraPorts mapping.
-// Single source for the serviceops port-ownership guard and the host-proxy dev
-// server allocator, which previously parsed these out separately and drifted (the
-// guard even mis-read the host side of an "ip:host:container" extra mapping).
+// HostPorts returns every host port this service entry actually binds: its
+// effective primary (the PublishedPort override when set, else the preset-default
+// Port) plus the host side of each ExtraPorts mapping. Single source for the
+// serviceops port-ownership guard and the host-proxy dev server allocator, which
+// previously parsed these out separately and drifted (the guard even mis-read the
+// host side of an "ip:host:container" extra mapping). The default Port is NOT
+// reported once an override moves the service off it: the quadlet publishes only
+// the override, so the freed default must be reassignable to another service.
 func (s ServiceConfig) HostPorts() []int {
 	var ports []int
-	if s.Port > 0 {
-		ports = append(ports, s.Port)
-	}
+	primary := s.Port
 	if s.PublishedPort > 0 {
-		ports = append(ports, s.PublishedPort)
+		primary = s.PublishedPort
+	}
+	if primary > 0 {
+		ports = append(ports, primary)
 	}
 	for _, ep := range s.ExtraPorts {
 		if n := mappingHostPort(ep); n > 0 {
@@ -354,6 +358,46 @@ func mappingHostPort(mapping string) int {
 	host = strings.SplitN(host, "/", 2)[0]
 	n, _ := strconv.Atoi(strings.TrimSpace(host))
 	return n
+}
+
+// ReservedHostPorts returns every host port a lerd service may bind: each
+// configured service entry's effective ports (HostPorts), every bundled preset's
+// default ports (including optional presets not in the default set), and every
+// installed custom service's ports. It is the single shared definition consumed
+// by both the serviceops port-ownership guard and the host-proxy dev-server
+// allocator so the two can never drift — the divergence that previously let the
+// guard shift a built-in onto a stopped custom service's port and collide at boot,
+// since the guard read only cfg.Services while the allocator also covered presets
+// and customs.
+func ReservedHostPorts() map[int]bool {
+	reserved := map[int]bool{}
+	addMappings := func(mappings []string) {
+		for _, m := range mappings {
+			if n := mappingHostPort(m); n > 0 {
+				reserved[n] = true
+			}
+		}
+	}
+	if cfg, err := LoadGlobal(); err == nil && cfg != nil {
+		for _, svc := range cfg.Services {
+			for _, p := range svc.HostPorts() {
+				reserved[p] = true
+			}
+		}
+	}
+	if presets, err := ListPresets(); err == nil {
+		for _, meta := range presets {
+			if p, err := LoadPreset(meta.Name); err == nil {
+				addMappings(p.Ports)
+			}
+		}
+	}
+	if customs, err := ListCustomServices(); err == nil {
+		for _, svc := range customs {
+			addMappings(svc.Ports)
+		}
+	}
+	return reserved
 }
 
 // firstHostPort returns the host-side port number from the first ports entry,

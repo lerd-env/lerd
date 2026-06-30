@@ -603,7 +603,10 @@ func parseComposerAudit(output string) int {
 	var parsed struct {
 		Advisories json.RawMessage `json:"advisories"`
 	}
-	if err := json.Unmarshal([]byte(output[start:]), &parsed); err != nil {
+	// Decode only the first JSON object: composer can print warning/deprecation
+	// lines after the payload, which json.Unmarshal rejects as trailing data and
+	// would otherwise degrade a real advisory count to "unknown".
+	if err := json.NewDecoder(strings.NewReader(output[start:])).Decode(&parsed); err != nil {
 		return -1
 	}
 	if len(parsed.Advisories) == 0 {
@@ -658,20 +661,29 @@ func checkNodeAudit(ctx context.Context, path string) Check {
 }
 
 // parseNpmAudit returns the total vulnerability count in `npm audit --json`
-// output, or -1 when the JSON can't be read.
+// output, or -1 when the audit couldn't actually run or its JSON can't be read.
 func parseNpmAudit(output string) int {
 	start := strings.IndexByte(output, '{')
 	if start < 0 {
 		return -1
 	}
 	var parsed struct {
+		Error    json.RawMessage `json:"error"`
 		Metadata struct {
 			Vulnerabilities struct {
 				Total int `json:"total"`
 			} `json:"vulnerabilities"`
 		} `json:"metadata"`
 	}
-	if err := json.Unmarshal([]byte(output[start:]), &parsed); err != nil {
+	// Decode only the first JSON object: npm can print warning lines after the
+	// payload, which json.Unmarshal rejects as trailing data.
+	if err := json.NewDecoder(strings.NewReader(output[start:])).Decode(&parsed); err != nil {
+		return -1
+	}
+	// On a pnpm/yarn/bun project (no package-lock.json) npm audit errors with
+	// {"error":{"code":"ENOLOCK",...}} and no metadata block. Total would default
+	// to 0, falsely reporting a clean audit, so report "unknown" instead.
+	if len(parsed.Error) > 0 {
 		return -1
 	}
 	return parsed.Metadata.Vulnerabilities.Total

@@ -305,42 +305,12 @@ func reservedHostPorts(exceptSite string) map[int]bool {
 // lerdServiceHostPorts returns every host port a lerd service may publish:
 // installed/default services (with their resolved ports), all bundled presets
 // (including optional ones like gotenberg that aren't in the default set), and
-// installed custom services. Used so a host-proxy dev server is never assigned a
-// port a service will reclaim.
+// installed custom services. It delegates to config.ReservedHostPorts, the single
+// shared definition the serviceops port-ownership guard consumes too, so a
+// host-proxy dev server is never assigned a port a service will reclaim and the
+// two reserved sets can't drift.
 func lerdServiceHostPorts() map[int]bool {
-	out := map[int]bool{}
-	add := func(mappings []string) {
-		for _, m := range mappings {
-			if host, _, ok := splitHostContainerPort(m); ok {
-				if n, _ := strconv.Atoi(host); n > 0 {
-					out[n] = true
-				}
-			}
-		}
-	}
-	if cfg, err := config.LoadGlobal(); err == nil {
-		// config.ServiceConfig.HostPorts is the shared source of the host ports a
-		// service entry claims (Port, the PublishedPort override, and ExtraPorts),
-		// so this allocator and the serviceops guard can't drift on it.
-		for _, svc := range cfg.Services {
-			for _, p := range svc.HostPorts() {
-				out[p] = true
-			}
-		}
-	}
-	if presets, err := config.ListPresets(); err == nil {
-		for _, p := range presets {
-			if pr, err := config.LoadPreset(p.Name); err == nil {
-				add(pr.Ports)
-			}
-		}
-	}
-	if customs, err := config.ListCustomServices(); err == nil {
-		for _, svc := range customs {
-			add(svc.Ports)
-		}
-	}
-	return out
+	return config.ReservedHostPorts()
 }
 
 // allocateHostPort picks a free host port for a dev server, starting from the

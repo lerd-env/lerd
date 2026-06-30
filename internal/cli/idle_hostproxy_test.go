@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // TestWakingPageHTML_autoRefreshes guards the wake mechanism: the page a sleeping
@@ -12,6 +14,30 @@ import (
 func TestWakingPageHTML_autoRefreshes(t *testing.T) {
 	if !strings.Contains(wakingPageHTML, `http-equiv="refresh"`) {
 		t.Error("waking page must carry a meta refresh so a resumed site reloads on its own")
+	}
+}
+
+// TestHostProxyResumeWaitPort pins finding #8: idle-resume must wait for the dev
+// server to rebind before restoring the proxy vhost, on a non-zero port, so it
+// never skips the wait and flashes a bare 502. The committed proxy block's port is
+// preferred, but when it carries none (an auto-allocated dev server) the wait falls
+// back to the site's registered HostPort instead of 0.
+func TestHostProxyResumeWaitPort(t *testing.T) {
+	dir := t.TempDir()
+	site := &config.Site{Name: "node-app", Domains: []string{"node-app.test"}, Path: dir, HostPort: 3000, HostCommand: "npm run dev"}
+
+	if got := hostProxyResumeWaitPort(site); got != 3000 {
+		t.Fatalf("with no committed proxy block, wait port = %d, want 3000 (HostPort)", got)
+	}
+
+	// Committed proxy block omits the port (auto-allocated dev server).
+	if err := config.SaveProjectConfig(dir, &config.ProjectConfig{
+		Proxy: &config.ProxyConfig{Command: "npm run dev"}, // Port left 0
+	}); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	if got := hostProxyResumeWaitPort(site); got != 3000 {
+		t.Fatalf("with a port-less committed proxy block, wait port = %d, want 3000 (HostPort fallback, never 0)", got)
 	}
 }
 

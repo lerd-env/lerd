@@ -32,6 +32,17 @@ type PortChange struct {
 	NoOp      bool // the requested port already matched the current override
 }
 
+// podman/quadlet seams for SetPublishedPort, swapped in tests so the
+// stop/rewrite/start sequence — and its rollback when the start fails — can be
+// exercised without a live container runtime.
+var (
+	portsUnitStatus = podman.UnitStatus
+	portsStopUnit   = podman.StopUnit
+	portsStartUnit  = podman.StartUnit
+	portsWaitReady  = podman.WaitReady
+	portsRerender   = rerenderServiceQuadlet
+)
+
 // SetPublishedPort moves a service's published host port (port > 0) or resets it
 // to the preset default (port == 0), persisting the override and re-rendering and
 // restarting the unit as needed. It is the single entry point shared by the CLI
@@ -58,6 +69,15 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 		return res, err
 	}
 	svcCfg := cfg.Services[name]
+	prevPublished := svcCfg.PublishedPort
+	// Requesting the preset default is the same as resetting to it: normalise to 0
+	// so we don't store a redundant override and, crucially, skip the bind probe
+	// below — a running service holds its own default port, so probing it would
+	// otherwise reject `lerd service port mysql 3306` while mysql legitimately owns
+	// 3306 (the Web UI already converts the default to null client-side).
+	if port > 0 && port == svcCfg.Port {
+		port = 0
+	}
 	if port == svcCfg.PublishedPort {
 		res.NoOp = true
 		res.Actual = svcCfg.PublishedPort
@@ -97,17 +117,17 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	}
 	res.Installed = true
 	unit := "lerd-" + name
-	status, _ := podman.UnitStatus(unit)
+	status, _ := portsUnitStatus(unit)
 	res.WasActive = status == "active" || status == "activating"
 	// Stop a running unit before the write: its own live listener would look
 	// like a foreign owner to the guard and suppress a needed shift, leaving it
 	// unable to bind on restart. Stopped, the write/guard/start see the true state.
 	if res.WasActive {
-		if err := podman.StopUnit(unit); err != nil {
+		if err := portsStopUnit(unit); err != nil {
 			return res, fmt.Errorf("stopping %s: %w", unit, err)
 		}
 	}
-	if err := rerenderServiceQuadlet(name); err != nil {
+	if err := portsRerender(name); err != nil {
 		return res, err
 	}
 	// The guard inside the write may have overridden the request, so report the
@@ -119,10 +139,22 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 		}
 	}
 	if res.WasActive {
-		if err := podman.StartUnit(unit); err != nil {
-			return res, fmt.Errorf("starting %s: %w", unit, err)
+		if startErr := portsStartUnit(unit); startErr != nil {
+			// The new port wouldn't bind (a TOCTOU grab between the pre-flight and the
+			// start, or the guard landing on a host-owned port). Don't leave the
+			// service down with the config already moved: restore the previous
+			// published port, re-render, and bring it back up on the port it had.
+			res.Actual = prevPublished
+			restored := persistPublishedPort(name, prevPublished) == nil &&
+				portsRerender(name) == nil &&
+				portsStartUnit(unit) == nil
+			if restored {
+				_ = portsWaitReady(name, 30*time.Second)
+				return res, fmt.Errorf("could not start %s on port %d, restored the previous port %d: %w", unit, port, prevPublished, startErr)
+			}
+			return res, fmt.Errorf("could not start %s and could not restore the previous port, run `lerd start`: %w", unit, startErr)
 		}
-		_ = podman.WaitReady(name, 30*time.Second)
+		_ = portsWaitReady(name, 30*time.Second)
 	}
 	// Host-proxy sites reach the service over the published loopback port, so
 	// refresh their .env to follow the change (no-op when none use it).
