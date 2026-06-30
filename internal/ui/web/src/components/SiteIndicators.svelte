@@ -24,9 +24,13 @@
 {#if siteWorkerFailing(site)}
   <span title={m.sites_workerFailing()} class="shrink-0"><StatusDot color="red" size="xs" pulse /></span>
 {/if}
-{#if site.idle && siteHasWorkers(site)}
+{#if site.idle_suspended && siteHasWorkers(site)}
   <!-- Asleep: keep the worker dots (dimmed) and float a moon above them. A site
-       with no workers never sleeps, so it gets no moon at all. -->
+       with no workers never sleeps, so it gets no moon at all. We key off
+       idle_suspended (the engine's actual stopped-workers state, cleared the
+       instant resume publishes) rather than idle (the timeout prediction read
+       from the watcher's activity file, only re-saved every tick) so the moon
+       drops in real time on resume instead of lingering until the next poll. -->
   {#if idleDots.length > 0}
     <span class="relative inline-flex items-center shrink-0" title={m.sites_idleHint()}>
       <span class="absolute -top-2.5 left-1/2 -translate-x-1/2 text-sky-500 dark:text-sky-400">
