@@ -1173,6 +1173,43 @@ func DetectPublicDir(dir string) string {
 	return "."
 }
 
+// stripUntrustedDoctorChecks drops command-type doctor checks from a framework
+// definition. A project's .lerd.yaml is untrusted input and command checks run
+// via `sh -c` on the host when the site doctor runs, so they must not survive
+// import into the store; env, symlink, and combo checks are inert and stay.
+func stripUntrustedDoctorChecks(fw *Framework) {
+	if fw == nil || fw.Doctor == nil {
+		return
+	}
+	kept := fw.Doctor.Checks[:0]
+	for _, c := range fw.Doctor.Checks {
+		if c.Type != "command" {
+			kept = append(kept, c)
+		}
+	}
+	fw.Doctor.Checks = kept
+	if len(fw.Doctor.Checks) == 0 {
+		fw.Doctor = nil
+	}
+}
+
+// SanitizeProjectFrameworkDef returns a copy of an embedded framework_def that is
+// safe to install into the store. A .lerd.yaml is untrusted, so command-type
+// doctor checks (which the site doctor would run on the host) are stripped. The
+// original is left untouched so config diffs and round-trips see the real file.
+func SanitizeProjectFrameworkDef(def *Framework) *Framework {
+	safe := cloneFrameworkMutable(def)
+	// cloneFrameworkMutable shares the Doctor pointer, so copy it before stripping
+	// or we'd mutate the caller's (and the cached project config's) checks.
+	if safe != nil && safe.Doctor != nil {
+		d := *safe.Doctor
+		d.Checks = append([]DoctorCheck(nil), safe.Doctor.Checks...)
+		safe.Doctor = &d
+	}
+	stripUntrustedDoctorChecks(safe)
+	return safe
+}
+
 // DetectFrameworkForDir is the primary entry point for framework detection.
 // It checks .lerd.yaml first (committed source of truth), restoring embedded
 // definitions if needed, then falls back to file/composer-based detection.
@@ -1186,10 +1223,13 @@ func DetectFrameworkForDir(dir string) (string, bool) {
 		if LoadUserFramework(name) != nil {
 			return name, true
 		}
-		// Restore embedded definition from .lerd.yaml to the store dir.
+		// Restore the embedded definition from .lerd.yaml (the committed source of
+		// truth, so inert edits propagate), sanitised so an untrusted .lerd.yaml
+		// can't seed host-executing doctor checks into the store.
 		if proj.FrameworkDef != nil {
-			proj.FrameworkDef.Name = name
-			_ = SaveStoreFramework(proj.FrameworkDef)
+			safe := SanitizeProjectFrameworkDef(proj.FrameworkDef)
+			safe.Name = name
+			_ = SaveStoreFramework(safe)
 		}
 		// Check store-installed (may have just been restored above).
 		if _, ok := GetFrameworkForDir(name, dir); ok {

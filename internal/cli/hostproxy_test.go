@@ -3,11 +3,23 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteops"
 )
+
+// pinHostGatewayBindIP pins the host-gateway resolver (and treats the result as a
+// bindable local interface) so the injected bind address is deterministic,
+// restoring both after the test.
+func pinHostGatewayBindIP(t *testing.T, ip string) {
+	t.Helper()
+	prevIP, prevLocal := hostGatewayBindIP, hostIPIsLocal
+	hostGatewayBindIP = func() string { return ip }
+	hostIPIsLocal = func(string) bool { return true }
+	t.Cleanup(func() { hostGatewayBindIP, hostIPIsLocal = prevIP, prevLocal })
+}
 
 // TestStopSiteWorkersHookRegistered guards the wiring that makes every unlink
 // path (CLI, MCP, parked-watcher) stop a site's workers. Without it the
@@ -140,16 +152,18 @@ func TestBuildProjectServices_builtins(t *testing.T) {
 }
 
 func TestBuildHostProxyCommand_injectsPortAndHost(t *testing.T) {
+	pinHostGatewayBindIP(t, "10.0.0.1")
 	got := buildHostProxyCommand(&config.ProxyConfig{Command: "npm run start:dev", Port: 3000})
-	want := "env PORT=3000 HOST=0.0.0.0 npm run start:dev"
+	want := "env PORT=3000 HOST=" + hostProxyBindAddr() + " npm run start:dev"
 	if got != want {
 		t.Errorf("buildHostProxyCommand = %q, want %q", got, want)
 	}
 }
 
 func TestBuildHostProxyCommand_customEnvKeys(t *testing.T) {
+	pinHostGatewayBindIP(t, "10.0.0.1")
 	got := buildHostProxyCommand(&config.ProxyConfig{Command: "node server.js", Port: 4000, PortEnvKey: "APP_PORT", HostEnvKey: "HOSTNAME"})
-	want := "env APP_PORT=4000 HOSTNAME=0.0.0.0 node server.js"
+	want := "env APP_PORT=4000 HOSTNAME=" + hostProxyBindAddr() + " node server.js"
 	if got != want {
 		t.Errorf("buildHostProxyCommand = %q, want %q", got, want)
 	}
@@ -167,11 +181,49 @@ func TestBuildHostProxyCommand_injectHostFalseOptsOut(t *testing.T) {
 
 func TestBuildHostProxyCommand_injectHostTrueExplicitInjects(t *testing.T) {
 	// inject_host: true is the same as the default: HOST is injected.
+	pinHostGatewayBindIP(t, "10.0.0.1")
 	injectHost := true
 	got := buildHostProxyCommand(&config.ProxyConfig{Command: "npm run dev", Port: 3000, InjectHost: &injectHost})
-	want := "env PORT=3000 HOST=0.0.0.0 npm run dev"
+	want := "env PORT=3000 HOST=" + hostProxyBindAddr() + " npm run dev"
 	if got != want {
 		t.Errorf("buildHostProxyCommand = %q, want %q", got, want)
+	}
+}
+
+// TestHostProxyBindAddr_usesGatewayIPWhenKnown pins finding #691: the dev server
+// binds the routable gateway IP, not all interfaces, so it is not exposed LAN-wide.
+func TestHostProxyBindAddr_usesGatewayIPWhenKnown(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS reaches the host via gvproxy; bind stays all-interfaces")
+	}
+	pinHostGatewayBindIP(t, "10.89.0.1")
+	if got := hostProxyBindAddr(); got != "10.89.0.1" {
+		t.Errorf("hostProxyBindAddr = %q, want gateway IP 10.89.0.1 (not 0.0.0.0)", got)
+	}
+}
+
+// TestHostProxyBindAddr_fallsBackToAllInterfaces keeps the dev server reachable
+// when the gateway IP isn't known yet rather than binding nothing.
+func TestHostProxyBindAddr_fallsBackToAllInterfaces(t *testing.T) {
+	pinHostGatewayBindIP(t, "")
+	if got := hostProxyBindAddr(); got != "0.0.0.0" {
+		t.Errorf("hostProxyBindAddr with unknown gateway = %q, want 0.0.0.0 fallback", got)
+	}
+}
+
+// TestHostProxyBindAddr_fallsBackWhenGatewayNotLocal guards the crash-loop fix: a
+// resolved gateway that isn't a local interface (slirp4netns 10.0.2.2, the
+// 169.254.1.2 fallback) would make bind() fail, so we fall back to 0.0.0.0.
+func TestHostProxyBindAddr_fallsBackWhenGatewayNotLocal(t *testing.T) {
+	if runtime.GOOS == "darwin" {
+		t.Skip("macOS reaches the host via gvproxy; bind stays all-interfaces")
+	}
+	prevIP, prevLocal := hostGatewayBindIP, hostIPIsLocal
+	hostGatewayBindIP = func() string { return "10.0.2.2" }
+	hostIPIsLocal = func(string) bool { return false }
+	t.Cleanup(func() { hostGatewayBindIP, hostIPIsLocal = prevIP, prevLocal })
+	if got := hostProxyBindAddr(); got != "0.0.0.0" {
+		t.Errorf("hostProxyBindAddr with non-local gateway = %q, want 0.0.0.0 (avoid bind failure)", got)
 	}
 }
 
@@ -187,12 +239,13 @@ func TestBuildHostProxyCommand_proxyOnlyMode(t *testing.T) {
 // is a thin reserved-set + fall-back-to-start wrapper over it.
 
 func TestHostProxyWorkerForPort_usesGivenPort(t *testing.T) {
+	pinHostGatewayBindIP(t, "10.0.0.1")
 	proxy := &config.ProxyConfig{Command: "npm run start:dev", Port: 3000}
 	w, ok := hostProxyWorkerForPort(proxy, 3101)
 	if !ok {
 		t.Fatal("expected a worker for a non-empty command")
 	}
-	if w.Command != "env PORT=3101 HOST=0.0.0.0 npm run start:dev" {
+	if w.Command != "env PORT=3101 HOST="+hostProxyBindAddr()+" npm run start:dev" {
 		t.Errorf("worker command = %q, want the worktree port 3101 injected", w.Command)
 	}
 	if !w.Host || w.Restart != "always" {

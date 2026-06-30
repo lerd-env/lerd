@@ -49,7 +49,7 @@ The `proxy` section in `.lerd.yaml` is mutually exclusive with `container:` (a s
 | `port` | yes | | Port the dev server listens on. lerd injects this and proxies to it. |
 | `ssl` | no | `false` | Set to `true` if the dev server serves HTTPS on its port (nginx proxies via `https://` with `proxy_ssl_verify off`). |
 | `port_env_key` | no | `PORT` | Environment variable the port is injected as. Most servers read `PORT`; set this if yours uses a different name. |
-| `host_env_key` | no | `HOST` | Environment variable the bind address (`0.0.0.0`) is injected as. Most servers read `HOST`; set this if yours uses a different name, e.g. `HOSTNAME` for a Next.js standalone server. |
+| `host_env_key` | no | `HOST` | Environment variable the bind address is injected as. Most servers read `HOST`; set this if yours uses a different name, e.g. `HOSTNAME` for a Next.js standalone server. |
 | `inject_host` | no | `true` | Whether lerd injects the bind-address env (see [Binding](#binding)). Set `false` to opt out entirely, for a server that reads `HOST` for something else or manages its own bind. The port injection is unaffected. |
 
 ## Ports
@@ -62,9 +62,9 @@ Lerd sets both sides of the contract: it injects the chosen port via `PORT` (or 
 
 nginx runs inside a container and reaches your dev server over the host gateway, not loopback. A server bound to `127.0.0.1` (the common dev default) is therefore unreachable through the proxy: depending on the framework it surfaces as a connection error, or as a stray all-interfaces HMR socket answering every request with `426 Upgrade Required` (the symptom seen with Nuxt).
 
-To avoid this, lerd injects `HOST=0.0.0.0` (or `host_env_key`) alongside the port, which Nuxt, NestJS, and most Node servers honour to bind all interfaces. A `HOST` you set yourself later in the command still wins. Servers that ignore the env var (notably the raw Vite CLI, which reads a flag) must bind explicitly: name `--host` in the command, for example `vite --host --port 5173 --strictPort`.
+To avoid this, lerd injects `HOST` (or `host_env_key`) alongside the port, which Nuxt, NestJS, and most Node servers honour. On Linux it injects the host-gateway IP nginx proxies to, so when that gateway is a private bridge address the dev server is reachable from the container but stays off your other interfaces. It falls back to `0.0.0.0` when the gateway isn't known yet or isn't a local address lerd can bind (some rootless networking modes), and macOS uses `0.0.0.0` because it reaches the host through gvproxy. Note that on setups where the container only routes back to the host via the host's LAN IP, that is the address bound, so the dev server stays reachable from the LAN. When the host gateway changes (a network switch), lerd rebinds and restarts any running dev server so it tracks the new address. A `HOST` you set yourself later in the command still wins. Servers that ignore the env var (notably the raw Vite CLI, which reads a flag) must bind explicitly: name `--host` in the command, for example `vite --host --port 5173 --strictPort`.
 
-If a server reads `HOST` for something else, or you already set it in your `.env` (dotenv won't override a variable already in the environment, so the injected `0.0.0.0` would win), set `inject_host: false` to suppress the injection and manage binding yourself. The port injection is unaffected.
+If a server reads `HOST` for something else, or you already set it in your `.env` (dotenv won't override a variable already in the environment, so the injected value would win), set `inject_host: false` to suppress the injection and manage binding yourself. The port injection is unaffected.
 
 ## Vite
 

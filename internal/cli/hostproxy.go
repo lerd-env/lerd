@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -17,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 )
 
@@ -57,15 +59,50 @@ func RegenerateHostProxyVhostsOnGatewayChange() {
 			feedback.Warn("regenerating host-proxy vhost for %s: %v", s.Name, err)
 			continue
 		}
+		proxy := parentProxyConfig(s)
+		if proxy != nil {
+			if w, ok := hostProxyWorker(proxy); ok {
+				rebindHostProxyDevServer(proxy, s.Name, s.Path, w)
+			}
+		}
 		if wts, wErr := gitpkg.ServableWorktrees(s.Path, s.PrimaryDomain()); wErr == nil {
 			for _, wt := range wts {
 				_ = certs.RegenerateHostProxyWorktreeVhost(s, wt.Path, wt.Domain, s.Secured)
+				if proxy != nil {
+					port := WorktreeHostPort(proxy.Port, wt.Path, hostProxyPortEnvKey(proxy))
+					if w, ok := hostProxyWorkerForPort(proxy, port); ok {
+						rebindHostProxyDevServer(proxy, s.Name, wt.Path, w)
+					}
+				}
 			}
 		}
 		regenerated = true
 	}
 	if regenerated {
 		_ = nginx.Reload()
+	}
+}
+
+// rebindHostProxyDevServer rewrites a host-proxy dev server's unit with the
+// current host-gateway bind address and restarts it so a network change can't
+// strand it on a stale IP. It only acts on a server that is already running and
+// whose bind lerd actually injects (inject_host:false servers manage their own
+// bind), so lerd never starts a server the user stopped or churns one it doesn't
+// control.
+func rebindHostProxyDevServer(proxy *config.ProxyConfig, siteName, sitePath string, w config.FrameworkWorker) {
+	if !hostProxyShouldBind(proxy) {
+		return
+	}
+	unitName, _ := workerNames(siteName, sitePath, hostProxyWorkerName)
+	if !isServiceActiveOrRestarting(unitName) {
+		return
+	}
+	if err := WorkerStartForSite(siteName, sitePath, "", hostProxyWorkerName, w, false); err != nil {
+		feedback.Warn("rebinding dev server for %s: %v", siteName, err)
+		return
+	}
+	if err := podman.RestartUnit(unitName); err != nil {
+		feedback.Warn("restarting dev server for %s: %v", siteName, err)
 	}
 }
 
@@ -102,17 +139,54 @@ func hostProxyShouldBind(proxy *config.ProxyConfig) bool {
 	return proxy.InjectHost == nil || *proxy.InjectHost
 }
 
+// hostGatewayBindIP resolves the host-gateway IP a host-proxy dev server should
+// bind. It is the same address nginx proxies to, so binding it keeps the dev
+// server reachable from the container while off every other interface. A package
+// var so tests can pin it.
+var hostGatewayBindIP = podman.ReadHostGatewayFromFile
+
+// hostIPIsLocal reports whether an IP is assigned to a local interface (so a dev
+// server can actually bind it). A package var so tests can pin it.
+var hostIPIsLocal = isLocalInterfaceIP
+
 // hostProxyBindAddr is the address the dev server must bind so the in-container
-// nginx can reach it. nginx proxies to the host over the gateway IP, so a dev
-// server that binds loopback (the common default) is unreachable: it surfaces
-// as a connection error, or as a stray all-interfaces HMR socket answering
-// every plain request with 426 Upgrade Required. Binding all interfaces fixes
-// both. Note: env-only; pure Vite reads --host, not this env var.
-const hostProxyBindAddr = "0.0.0.0"
+// nginx can reach it. On Linux that is the routable host-gateway IP, which keeps
+// the dev server off other interfaces; but only when that IP is a local interface
+// we can bind. A gateway that isn't local (slirp4netns 10.0.2.2, the 169.254.1.2
+// fallback), an unknown gateway, or macOS (gvproxy) all fall back to 0.0.0.0,
+// which always binds. Env-only: pure Vite reads --host, not this var.
+func hostProxyBindAddr() string {
+	if runtime.GOOS == "darwin" {
+		return "0.0.0.0"
+	}
+	if ip := hostGatewayBindIP(); ip != "" && hostIPIsLocal(ip) {
+		return ip
+	}
+	return "0.0.0.0"
+}
+
+// isLocalInterfaceIP reports whether ip is assigned to one of the host's network
+// interfaces, so binding it won't fail with "cannot assign requested address".
+func isLocalInterfaceIP(ip string) bool {
+	target := net.ParseIP(ip)
+	if target == nil {
+		return false
+	}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.Equal(target) {
+			return true
+		}
+	}
+	return false
+}
 
 // buildHostProxyCommandPort prefixes the dev command with `env PORT=port
-// HOST=0.0.0.0` so the app binds the port nginx proxies to, on an interface the
-// proxy container can reach. The `env` utility (not a bare `KEY=value`
+// HOST=<bind>` so the app binds the port nginx proxies to, on the interface the
+// proxy container reaches it by. The `env` utility (not a bare `KEY=value`
 // assignment) is used because host workers exec the command both through a
 // shell (macOS) and directly via `fnm exec --` (Linux); `env` is a real
 // executable that works in both. A HOST the user sets later in their own
@@ -129,7 +203,7 @@ func buildHostProxyCommandPort(proxy *config.ProxyConfig, port int) string {
 	}
 	return fmt.Sprintf("env %s=%d %s=%s %s",
 		hostProxyPortEnvKey(proxy), port,
-		hostProxyHostEnvKey(proxy), hostProxyBindAddr,
+		hostProxyHostEnvKey(proxy), hostProxyBindAddr(),
 		proxy.Command)
 }
 

