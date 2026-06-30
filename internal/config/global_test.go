@@ -631,9 +631,10 @@ func TestDNSManaged(t *testing.T) {
 }
 
 // TestServiceConfig_HostPorts is the single source both the serviceops port guard
-// and the host-proxy allocator consume, so it must capture Port, the PublishedPort
-// override, and every ExtraPorts mapping form — including "ip:host:container",
-// whose host side the old guard parser dropped.
+// and the host-proxy allocator consume, so it must capture the effective primary
+// (the PublishedPort override when set, else the preset-default Port) and every
+// ExtraPorts mapping form — including "ip:host:container", whose host side the old
+// guard parser dropped.
 func TestServiceConfig_HostPorts(t *testing.T) {
 	svc := ServiceConfig{
 		Port:          3306,
@@ -644,13 +645,29 @@ func TestServiceConfig_HostPorts(t *testing.T) {
 	for _, p := range svc.HostPorts() {
 		got[p] = true
 	}
-	for _, want := range []int{3306, 3307, 8082, 9090, 7000, 6379} {
+	for _, want := range []int{3307, 8082, 9090, 7000, 6379} {
 		if !got[want] {
 			t.Errorf("HostPorts missing %d; got %v", want, got)
 		}
 	}
+	// Once an override moves the service off its default, the quadlet publishes
+	// only the override, so the freed default must NOT stay reserved — otherwise
+	// it can never be reassigned to another service.
+	if got[3306] {
+		t.Errorf("HostPorts still reserved the freed default 3306 after an override: %v", got)
+	}
 	// The container-side ports must never be reserved as host ports.
 	if got[8081] {
 		t.Errorf("HostPorts wrongly reserved container-side port 8081: %v", got)
+	}
+}
+
+// TestServiceConfig_HostPorts_defaultWhenNoOverride reports the preset-default
+// Port when no PublishedPort override is set.
+func TestServiceConfig_HostPorts_defaultWhenNoOverride(t *testing.T) {
+	svc := ServiceConfig{Port: 5432}
+	got := svc.HostPorts()
+	if len(got) != 1 || got[0] != 5432 {
+		t.Errorf("HostPorts = %v, want [5432]", got)
 	}
 }

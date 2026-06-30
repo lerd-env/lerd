@@ -338,6 +338,11 @@ func TestParseComposerAudit(t *testing.T) {
 	if n := parseComposerAudit("not json"); n != -1 {
 		t.Errorf("garbage: got %d, want -1", n)
 	}
+	// Finding #10: a warning printed AFTER the JSON payload must not degrade a real
+	// count to "unknown" (json.Unmarshal rejects trailing data; the decoder ignores it).
+	if n := parseComposerAudit("{\"advisories\":{\"pkg/a\":[{}]}}\nDeprecation: something\n"); n != 1 {
+		t.Errorf("trailing warning after JSON: got %d, want 1", n)
+	}
 }
 
 func TestParseNpmAudit(t *testing.T) {
@@ -349,6 +354,15 @@ func TestParseNpmAudit(t *testing.T) {
 	}
 	if n := parseNpmAudit("oops"); n != -1 {
 		t.Errorf("garbage: got %d, want -1", n)
+	}
+	// Finding #2: npm audit on a pnpm/yarn/bun project errors with no metadata
+	// block. That must read as "unknown" (-1), never a false clean (0).
+	if n := parseNpmAudit(`{"error":{"code":"ENOLOCK","summary":"This command requires an existing lockfile."}}`); n != -1 {
+		t.Errorf("ENOLOCK error JSON: got %d, want -1 (unknown), a 0 would be a false all-clear", n)
+	}
+	// Finding #10: a warning line after the JSON payload must still parse.
+	if n := parseNpmAudit("{\"metadata\":{\"vulnerabilities\":{\"total\":2}}}\nnpm warn deprecated foo\n"); n != 2 {
+		t.Errorf("trailing warning after JSON: got %d, want 2", n)
 	}
 }
 

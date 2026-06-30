@@ -36,6 +36,26 @@ func TestLerdReservedPorts_includesPresetPort(t *testing.T) {
 	}
 }
 
+// TestLerdReservedPorts_includesInstalledCustomService pins finding #6: an
+// installed custom service's ports live in its own YAML, never in cfg.Services.
+// The guard previously read only cfg.Services and so was blind to them, free to
+// shift a built-in onto a stopped custom service's port and collide at boot. With
+// the unified config.ReservedHostPorts the guard now sees them.
+func TestLerdReservedPorts_includesInstalledCustomService(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	svc := &config.CustomService{Name: "my-thing", Image: "example/my-thing:1", Ports: []string{"34567:80"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+
+	if !lerdReservedPorts()[34567] {
+		t.Errorf("the guard must reserve an installed custom service's host port 34567; got %v", lerdReservedPorts())
+	}
+}
+
 func TestPersistPublishedPort_persists(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

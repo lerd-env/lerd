@@ -54,3 +54,25 @@ doctor:
 		t.Errorf("command not parsed: %+v", cmd)
 	}
 }
+
+// TestMergeBuiltinDoctor pins finding #1: a Laravel/Symfony definition whose store
+// yaml predates the doctor block (or whose on-disk cache does) must inherit the
+// builtin checks, so the prod-debug, storage-symlink, and pending-migration checks
+// aren't silently dropped, while an existing doctor section is left untouched and a
+// framework with no builtin stays doctor-less.
+func TestMergeBuiltinDoctor(t *testing.T) {
+	missing := mergeBuiltinDoctor(&Framework{Name: "laravel"})
+	if missing.Doctor == nil || len(missing.Doctor.Checks) == 0 {
+		t.Fatal("a Laravel definition with no doctor section must inherit the builtin checks")
+	}
+
+	own := &FrameworkDoctor{Checks: []DoctorCheck{{Name: "only_mine"}}}
+	kept := mergeBuiltinDoctor(&Framework{Name: "laravel", Doctor: own})
+	if kept.Doctor != own {
+		t.Error("an existing doctor section must be left untouched")
+	}
+
+	if got := mergeBuiltinDoctor(&Framework{Name: "cakephp"}); got.Doctor != nil {
+		t.Error("a framework with no builtin must stay doctor-less, not gain checks")
+	}
+}

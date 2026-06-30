@@ -87,24 +87,16 @@ func maybeShiftPublishedPort(primary int, active bool) int {
 	})
 }
 
-// lerdReservedPorts collects the host ports already claimed by lerd's own services in
-// global config — each service's published port, its preset-default port, and any extra
-// published ports — so the port-ownership guard never auto-picks a port another lerd
-// service will bind. The preset-default Port matters even for a STOPPED service: nothing
-// is listening, so freeport.Bindable() would report it free, and handing it out would
-// collide when both units start at boot (the failure this guard exists to prevent).
+// lerdReservedPorts collects the host ports already claimed by lerd's own services
+// so the port-ownership guard never auto-picks a port another lerd service will
+// bind. It delegates to config.ReservedHostPorts, the single shared definition the
+// host-proxy dev-server allocator consumes too: configured services' effective
+// ports, every bundled preset's defaults, and installed customs. A preset default
+// matters even for a STOPPED service — nothing is listening, so freeport.Bindable()
+// would report it free, and handing it out would collide when both units start at
+// boot (the failure this guard exists to prevent).
 func lerdReservedPorts() map[int]bool {
-	reserved := map[int]bool{}
-	cfg, err := config.LoadGlobal()
-	if err != nil || cfg == nil {
-		return reserved
-	}
-	for _, svc := range cfg.Services {
-		for _, p := range svc.HostPorts() {
-			reserved[p] = true
-		}
-	}
-	return reserved
+	return config.ReservedHostPorts()
 }
 
 // persistPublishedPort records port as service name's published port in global

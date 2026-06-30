@@ -3,6 +3,7 @@ package serviceops
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -191,6 +192,84 @@ func TestSetExtraPortsRejectsSiblingPort(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", tmp)
 	if err := SetExtraPorts("mysql", []string{"5432:5432"}); !errors.Is(err, ErrPortReserved) {
 		t.Fatalf("SetExtraPorts onto postgres's port err = %v, want ErrPortReserved", err)
+	}
+}
+
+// TestSetPublishedPortDefaultResetsNotCollides pins finding #4: asking for the
+// preset default normalises to a reset (override 0) instead of erroring as
+// "port already in use" — a running service holds its own default port, so the
+// old bind probe rejected `lerd service port mysql 3306` while mysql owned 3306.
+func TestSetPublishedPortDefaultResetsNotCollides(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := SetPublishedPort("mysql", 33071); err != nil {
+		t.Fatalf("move off default: %v", err)
+	}
+	res, err := SetPublishedPort("mysql", 3306) // mysql's preset default
+	if err != nil {
+		t.Fatalf("requesting the preset default must not error, got %v", err)
+	}
+	if got := config.ServicePublishedPort("mysql"); got != 0 {
+		t.Errorf("requesting the default must reset the override to 0, got %d", got)
+	}
+	_ = res
+}
+
+// TestSetPublishedPortDefaultNoOpWhenAlreadyDefault: a service already on its
+// default reports NoOp when asked for that same default port, never an error.
+func TestSetPublishedPortDefaultNoOpWhenAlreadyDefault(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	res, err := SetPublishedPort("mysql", 3306)
+	if err != nil {
+		t.Fatalf("requesting the default on a default service must not error, got %v", err)
+	}
+	if !res.NoOp {
+		t.Error("requesting the current default must be a NoOp")
+	}
+}
+
+// TestSetPublishedPortRollsBackOnStartFailure pins finding #3: when the restart
+// on the new port fails, the service is brought back up on its previous port and
+// the config is rolled back, instead of left down with the override already moved.
+func TestSetPublishedPortRollsBackOnStartFailure(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	fakeQuadletOnDisk(t, "mysql") // ServiceInstalled -> true
+
+	prevStatus, prevStop, prevStart := portsUnitStatus, portsStopUnit, portsStartUnit
+	prevWait, prevRerender := portsWaitReady, portsRerender
+	t.Cleanup(func() {
+		portsUnitStatus, portsStopUnit, portsStartUnit = prevStatus, prevStop, prevStart
+		portsWaitReady, portsRerender = prevWait, prevRerender
+	})
+
+	startCalls := 0
+	portsUnitStatus = func(string) (string, error) { return "active", nil }
+	portsStopUnit = func(string) error { return nil }
+	portsRerender = func(string) error { return nil }
+	portsWaitReady = func(string, time.Duration) error { return nil }
+	portsStartUnit = func(string) error {
+		startCalls++
+		if startCalls == 1 {
+			return errors.New("address already in use")
+		}
+		return nil // the rollback restart on the previous port succeeds
+	}
+
+	if _, err := SetPublishedPort("mysql", 33072); err == nil {
+		t.Fatal("a failed start must surface an error so the caller knows the change didn't take")
+	}
+	if startCalls != 2 {
+		t.Fatalf("expected a rollback restart attempt after the failed start, startCalls=%d", startCalls)
+	}
+	if got := config.ServicePublishedPort("mysql"); got != 0 {
+		t.Errorf("config must roll back to the previous port (0=default), got %d", got)
 	}
 }
 
