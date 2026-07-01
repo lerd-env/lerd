@@ -298,6 +298,14 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | `lerd stripe:listen stop` | Stop the Stripe webhook listener |
 | `lerd stripe:config` | Show or set the webhook path and secret env key in `.lerd.yaml` without starting the listener |
 
+## Authentication
+
+| Command | Description |
+|---|---|
+| `lerd auth ssh [key...]` | Load SSH keys into a shared `lerd-ssh-agent` sidecar so `lerd composer` can reach private git repositories, including passphrase-protected keys. Defaults to `~/.ssh/id_*`. The agent socket lives on a named volume shared into the FPM containers, so it works on macOS where the host agent can't cross the podman-machine boundary. Unlocked keys stay in the agent's memory and clear when it stops |
+| `lerd auth ssh --list` | List the keys currently loaded into the agent |
+| `lerd auth ssh --remove` | Remove all keys and stop the agent |
+
 ## Console & runtime passthrough
 
 | Command | Description |
