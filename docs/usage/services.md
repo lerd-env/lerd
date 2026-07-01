@@ -9,6 +9,7 @@
 | `lerd service restart <name>` | Restart a service container; refreshes the quadlet first so config edits land |
 | `lerd service status <name>` | Show systemd unit status |
 | `lerd service list` | All services with status, version, and an Update column |
+| `lerd service search [query]` | Browse the external service-preset store; install a hit with `lerd service preset <name>` |
 | `lerd service update <name> [tag]` | Pull a newer image and restart; tag selects an explicit upgrade target |
 | `lerd service migrate <name> <version>` | SQL dump + restore for cross-version moves (mysql, mariadb, postgres); `<version>` is a preset version label such as `18` |
 | `lerd service rollback <name>` | Swap back to the previously-running image (toggles) |
@@ -69,7 +70,7 @@ You can also manage extra ports from the dashboard: open a service, click the co
 
 ### Moving a service's published host port
 
-Each service publishes on a default host port (MySQL `3306`, PostgreSQL `5432`, Redis `6379`, and so on). When lerd writes a service's quadlet and that default port can't be bound, it shifts the service to the next free port and records it, so the container comes up cleanly instead of failing to bind. The decision is made purely from port availability: lerd never inspects host files, sockets, or installed packages. It applies to every service, not just databases.
+Each service publishes on a default host port (MySQL `3306`, PostgreSQL `5432`, Redis `6379`, and so on). Every member of a service family shares that one canonical port rather than pre-spacing itself, so a single database of any family lands on the familiar port. When lerd writes a service's quadlet and the port can't be bound, or another installed same-family service already holds it, it shifts the service to the next free port and records it, so the container comes up cleanly instead of failing to bind. The decision is made purely from port availability and what other lerd services already claim: lerd never inspects host files, sockets, or installed packages. It applies to every service, not just databases.
 
 Move a port yourself, or undo an automatic shift, with `lerd service port`:
 

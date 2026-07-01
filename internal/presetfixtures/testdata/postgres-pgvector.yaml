@@ -7,15 +7,15 @@ versions:
     label: "18 (default)"
     image: docker.io/pgvector/pgvector:pg18
     canonical: true
-    host_port: 5518
+    host_port: 5432
   - tag: "17"
     label: "17"
     image: docker.io/pgvector/pgvector:pg17
-    host_port: 5517
+    host_port: 5432
   - tag: "16"
     label: "16"
     image: docker.io/pgvector/pgvector:pg16
-    host_port: 5516
+    host_port: 5432
 ports:
   - "{{host_port}}:5432"
 data_dir: /var/lib/postgresql/data

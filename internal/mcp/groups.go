@@ -113,6 +113,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"config_reset":        execServiceConfigReset,
 		"config_list_backups": execServiceConfigListBackups,
 		"preset_list":         func(a map[string]any) (any, *rpcError) { return execServicePresetList(a) },
+		"preset_search":       execServicePresetSearch,
 		"preset_install":      execServicePresetInstall,
 		"check_updates":       execServiceCheckUpdates,
 	},
@@ -290,11 +291,11 @@ func siteTool() mcpTool {
 func serviceTool() mcpTool {
 	return mcpTool{
 		Name:        "service",
-		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_install, check_updates. update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
+		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_search, preset_install, check_updates. preset_search browses the store (name=filter). update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_install", "check_updates"}},
+				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_search", "preset_install", "check_updates"}},
 				"name":           {Type: "string", Description: "Service name/slug."},
 				"tag":            {Type: "string", Description: "update/migrate: image tag."},
 				"remove_data":    {Type: "boolean", Description: "remove: rename data dir aside."},

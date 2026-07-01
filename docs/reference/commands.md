@@ -196,7 +196,8 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service pin <name>` | Pin a service so it is never auto-stopped when no sites use it |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |
-| `lerd service preset [name]` | List bundled presets, or install one (use `--version` for multi-version presets) |
+| `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
+| `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge]` | Stop and remove a service (custom or default). With `--purge`, also rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`) |
 | `lerd service reinstall <name> [--reset-data]` | Stop, remove, and reinstall at the current version. With `--reset-data`, rename the data dir aside and recreate linked sites' databases or buckets on the fresh service |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |

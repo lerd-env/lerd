@@ -5,6 +5,47 @@ import (
 	"testing"
 )
 
+// Phase 6 parity: an external store preset can ship its own static file mount
+// purely in YAML, no Go change required.
+func TestPresetFiles_ExternalStorePresetShipsFiles(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	writeStorePreset(t, "ext-svc", "name: ext-svc\nimage: example/ext:1\nfiles:\n  - target: /etc/ext.conf\n    content: |\n      hello = world\n")
+	files := PresetFiles("ext-svc")
+	if len(files) != 1 || files[0].Target != "/etc/ext.conf" {
+		t.Fatalf("external preset files = %+v", files)
+	}
+	if !strings.Contains(files[0].Content, "hello = world") {
+		t.Errorf("content = %q, want it to contain the mounted body", files[0].Content)
+	}
+}
+
+// A mount naming an unknown generator (e.g. a store preset built for a newer
+// lerd) is skipped, never mounted empty.
+func TestPresetFiles_UnknownGeneratorSkipped(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	writeStorePreset(t, "gen-svc", "name: gen-svc\nimage: example/gen:1\nfiles:\n  - target: /a\n    content: static\n  - target: /b\n    generator: does-not-exist\n")
+	files := PresetFiles("gen-svc")
+	if len(files) != 1 || files[0].Target != "/a" {
+		t.Errorf("unknown generator must be skipped, got %+v", files)
+	}
+}
+
+// A known generator name resolves to its Go ContentFn.
+func TestPresetFiles_KnownGeneratorResolves(t *testing.T) {
+	found := false
+	for _, f := range PresetFiles("pgadmin") {
+		if f.Target == "/pgadmin4/servers.json" {
+			found = true
+			if f.ContentFn == nil {
+				t.Error("pgadmin_servers generator did not resolve to a ContentFn")
+			}
+		}
+	}
+	if !found {
+		t.Error("pgadmin servers.json mount missing")
+	}
+}
+
 func TestPgadminServersJSON_listsEveryFamilyMember(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

@@ -14,6 +14,7 @@ type org struct {
 	owner          string // GitHub org, also the GHCR namespace
 	mainRepo       string // owner/name for releases, installer, changelog
 	frameworksRepo string // owner/name for the framework store
+	servicesRepo   string // owner/name for the service-preset store
 }
 
 // Links is the centralized handler for lerd's distribution URLs and the
@@ -29,8 +30,8 @@ type Links struct {
 func New() *Links {
 	l := &Links{
 		// geodro is the current (old) org, served first and kept as the fallback.
-		old: org{owner: "geodro", mainRepo: "geodro/lerd", frameworksRepo: "geodro/lerd-frameworks"},
-		new: org{owner: "lerd-env", mainRepo: "lerd-env/lerd", frameworksRepo: "lerd-env/frameworks"},
+		old: org{owner: "geodro", mainRepo: "geodro/lerd", frameworksRepo: "geodro/lerd-frameworks", servicesRepo: "geodro/lerd-services"},
+		new: org{owner: "lerd-env", mainRepo: "lerd-env/lerd", frameworksRepo: "lerd-env/frameworks", servicesRepo: "lerd-env/services"},
 	}
 	switch strings.ToLower(os.Getenv("LERD_DISTRIBUTION_ORG")) {
 	case "lerd-env", "new":
@@ -68,17 +69,30 @@ func (l *Links) ordered(of func(org) string) []string {
 	return []string{of(l.old), of(l.new)}
 }
 
-func rawRepo(o org) string  { return "https://raw.githubusercontent.com/" + o.frameworksRepo }
-func rawMain(o org) string  { return "https://raw.githubusercontent.com/" + o.mainRepo }
-func releases(o org) string { return "https://github.com/" + o.mainRepo + "/releases" }
-func apiBase(o org) string  { return "https://api.github.com/repos/" + o.mainRepo }
+func rawRepo(o org) string     { return "https://raw.githubusercontent.com/" + o.frameworksRepo }
+func rawServices(o org) string { return "https://raw.githubusercontent.com/" + o.servicesRepo }
+func rawMain(o org) string     { return "https://raw.githubusercontent.com/" + o.mainRepo }
+func releases(o org) string    { return "https://github.com/" + o.mainRepo + "/releases" }
+func apiBase(o org) string     { return "https://api.github.com/repos/" + o.mainRepo }
 
-// StoreBaseURLs lists framework-store bases in priority order.
+// StoreBaseURLs returns the framework-store base. The store content lives in the
+// new lerd-env org, so it is served directly without the geodro fallback the
+// binary-distribution endpoints still carry through the org move.
 func (l *Links) StoreBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_STORE_BASE_URL")); len(list) > 0 {
 		return list
 	}
-	return l.ordered(func(o org) string { return rawRepo(o) + "/main/frameworks" })
+	return []string{rawRepo(l.new) + "/main/frameworks"}
+}
+
+// ServiceStoreBaseURLs returns the service-preset-store base. Like the framework
+// store it targets the new lerd-env org directly and nests the definitions under
+// a services/ subdir (index.json + <name>.yaml live there, not at the repo root).
+func (l *Links) ServiceStoreBaseURLs() []string {
+	if list := splitList(os.Getenv("LERD_SERVICES_BASE_URL")); len(list) > 0 {
+		return list
+	}
+	return []string{rawServices(l.new) + "/main/services"}
 }
 
 // ReleaseBaseURLs lists GitHub releases bases in priority order.
@@ -153,6 +167,7 @@ func splitList(v string) []string {
 
 // Package-level helpers delegate to Default.
 func StoreBaseURLs() []string                      { return Default.StoreBaseURLs() }
+func ServiceStoreBaseURLs() []string               { return Default.ServiceStoreBaseURLs() }
 func ReleaseBaseURLs() []string                    { return Default.ReleaseBaseURLs() }
 func ReleaseDownloadBases() []string               { return Default.ReleaseDownloadBases() }
 func ReleaseAPIBaseURLs() []string                 { return Default.ReleaseAPIBaseURLs() }

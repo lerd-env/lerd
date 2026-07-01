@@ -403,3 +403,55 @@ func TestRemoveService_RenameAside_DistinctTimestamps(t *testing.T) {
 		t.Errorf("expected 2 distinct rename-aside dirs, got %d (%v)", count, entries)
 	}
 }
+
+// Removing the last service that uses a store preset prunes its cached
+// definition, so it reverts from "local" to "store" (issue: orphaned cache).
+func TestRemoveService_PrunesUnreferencedStorePreset(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanRemove(t)
+
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "phpmyadmin", Image: "docker.io/library/phpmyadmin:latest", Preset: "phpmyadmin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveStorePreset("phpmyadmin", []byte("name: phpmyadmin\nimage: docker.io/library/phpmyadmin:latest\n")); err != nil {
+		t.Fatal(err)
+	}
+	cachePath := filepath.Join(config.StorePresetsDir(), "phpmyadmin.yaml")
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Fatalf("precondition: cached preset should exist: %v", err)
+	}
+
+	if err := RemoveService("phpmyadmin", RemoveOptions{}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService: %v", err)
+	}
+	if _, err := os.Stat(cachePath); !os.IsNotExist(err) {
+		t.Error("cached store preset should be pruned after removing the last service that used it")
+	}
+}
+
+// A store preset still used by another installed service is not pruned.
+func TestRemoveService_KeepsSharedStorePreset(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubPodmanRemove(t)
+
+	for _, n := range []string{"mariadb-11-8", "mariadb-10-11"} {
+		if err := config.SaveCustomService(&config.CustomService{Name: n, Image: "docker.io/library/mariadb:11.8", Preset: "mariadb"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.SaveStorePreset("mariadb", []byte("name: mariadb\nimage: docker.io/library/mariadb:11.8\n")); err != nil {
+		t.Fatal(err)
+	}
+	cachePath := filepath.Join(config.StorePresetsDir(), "mariadb.yaml")
+
+	if err := RemoveService("mariadb-11-8", RemoveOptions{}, func(PhaseEvent) {}); err != nil {
+		t.Fatalf("RemoveService: %v", err)
+	}
+	if _, err := os.Stat(cachePath); err != nil {
+		t.Error("a store preset still used by another service must not be pruned")
+	}
+}

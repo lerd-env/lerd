@@ -7,27 +7,27 @@ versions:
   - tag: "12"
     label: "12 (latest)"
     image: docker.io/library/mariadb:12
-    host_port: 3412
+    host_port: 3306
   - tag: "12.3"
     label: "12.3 LTS"
     image: docker.io/library/mariadb:12.3
-    host_port: 3423
+    host_port: 3306
   - tag: "11.8"
     label: "11.8 LTS"
     image: docker.io/library/mariadb:11.8
-    host_port: 3418
+    host_port: 3306
   - tag: "11.4"
     label: "11.4 LTS"
     image: docker.io/library/mariadb:11.4
-    host_port: 3414
+    host_port: 3306
   - tag: "11"
     label: "11 (legacy)"
     image: docker.io/library/mariadb:11
-    host_port: 3411
+    host_port: 3306
   - tag: "10.11"
     label: "10.11 LTS"
     image: docker.io/library/mariadb:10.11
-    host_port: 3410
+    host_port: 3306
 ports:
   - "{{host_port}}:3306"
 data_dir: /var/lib/mysql

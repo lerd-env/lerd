@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -51,9 +50,15 @@ type FileMount struct {
 	Content string `yaml:"content"`
 	// ContentFn dynamically generates the file body at materialise time
 	// based on the resolved service (e.g. to inject family-discovered
-	// hosts into pgAdmin's servers.json). Cannot be loaded from YAML, only
-	// the Go-side preset_files map sets it.
+	// hosts into pgAdmin's servers.json). Not loadable from YAML directly;
+	// a preset selects one by name via Generator.
 	ContentFn func(*CustomService) (string, error) `yaml:"-"`
+	// Generator names a built-in content generator (see presetFileGenerators)
+	// for dynamic mounts a preset can't express as static Content, such as
+	// pgAdmin's family-discovered servers.json. Resolved to ContentFn when the
+	// preset's files are read; an unknown name is skipped, not fatal, so a store
+	// preset built for a newer lerd degrades gracefully.
+	Generator string `yaml:"generator,omitempty"`
 	// Mode is the octal permission bits, e.g. "0600". Defaults to "0644".
 	Mode string `yaml:"mode,omitempty"`
 	// Chown adds the :U flag to the volume mount so podman re-chowns the file
@@ -178,15 +183,7 @@ var (
 func loadFamilyIndex() {
 	defaultFamiliesMap = map[string]string{}
 	knownFamiliesSet = map[string]bool{}
-	entries, err := fs.ReadDir(presetFS, "presets")
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".yaml")
+	for _, name := range presetNames() {
 		p, err := LoadPreset(name)
 		if err != nil {
 			continue

@@ -7,12 +7,44 @@ Service presets are the YAML-driven definitions for every service lerd manages. 
 
 Both kinds use the same YAML schema in `internal/config/presets/*.yaml` and the same code path. Adding or replacing a default service is a YAML edit, not a code change. See [Service updates](service-updates.md) for the configuration knobs (`update_strategy`, `track_latest`, `allow_major_upgrade`).
 
+## The external service store
+
+Beyond the presets bundled in the binary, lerd can fetch presets from an external store repo, so new services can be published without shipping a new lerd release. This mirrors the [framework store](framework-definitions.md): the presets live in the `lerd-env/services` repo as a flat `index.json` plus one `<name>.yaml` per preset.
+
+```bash
+lerd service search                # list everything the store offers
+lerd service search search-engine  # filter by name, description, or family
+lerd service preset <name>         # install a store preset (fetched on demand)
+```
+
+`lerd service search` shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. The bundled presets always remain as an offline fallback, so a service installed by an older lerd keeps resolving by name even when the store is unreachable, and a store preset of the same name supersedes the built-in only when it validates.
+
+Point `LERD_SERVICES_BASE_URL` at an alternate base (comma-separated for several) to use a private or local store instead of `lerd-env/services`.
+
+### Config-file mounts
+
+A preset can mount config files into its container via a `files:` block, so a store preset can ship the same admin-dashboard auto-login and tuning files the bundled presets use:
+
+```yaml
+files:
+  - target: /etc/phpmyadmin/config.user.inc.php
+    content: |
+      <?php
+      // static file; may read env injected via dynamic_env at runtime
+  - target: /pgpass
+    mode: "0600"
+    chown: true
+    generator: pgadmin_pgpass   # dynamic content from a built-in generator
+```
+
+Static files are declared inline with `content`. A file whose body must be computed at install time (for example pgAdmin's `servers.json`, built from the discovered Postgres family) names a built-in `generator` instead. Presets can reference the existing generators but can't ship new ones, that needs a lerd release, so most auto-login patterns (a static file reading `dynamic_env` values, as phpMyAdmin does) need no generator at all. Files are re-sourced from the preset on every service start, so updating lerd or the store definition rolls out new contents without a reinstall. Only presets may declare files; a `files:` block in a hand-written custom service is stripped on load.
+
 ## Default service presets
 
 | Preset | Default image | Update strategy | Notes |
 |---|---|---|---|
-| `mysql` | `docker.io/library/mysql:8.4` (LTS) | `minor` (track_latest) | Multi-version: 8.4 canonical + 9.7 LTS, 5.7 alternates on host ports 3397 / 3357. SQL migration supported. |
-| `postgres` | `docker.io/postgis/postgis:16-3.5-alpine` | `minor` (track_latest) | Multi-version: 16 canonical + 17, 18 alternates on host ports 5417 / 5418. SQL migration supported. |
+| `mysql` | `docker.io/library/mysql:8.4` (LTS) | `minor` (track_latest) | Multi-version: 8.4 canonical + 9.7 LTS, 5.7 alternates. Every version defaults to the family port `3306`; the guard shifts a later sibling off it when one is already installed. SQL migration supported. |
+| `postgres` | `docker.io/postgis/postgis:16-3.5-alpine` | `minor` (track_latest) | Multi-version: 16 canonical + 17, 18 alternates. Every version defaults to the family port `5432`; the guard shifts a later sibling off it when one is already installed. SQL migration supported. |
 | `redis` | `docker.io/library/redis:7-alpine` | `minor` (track_latest) | Forward-compat across 7.x patches. |
 | `meilisearch` | `docker.io/getmeili/meilisearch:v1.42` | `patch` (track_latest) | Cross-minor upgrades require manual dump/restore — automated migration is **not** offered for Meilisearch (binary dump format is version-specific). |
 | `rustfs` | `docker.io/rustfs/rustfs:latest` | `rolling` | S3-compatible. |
@@ -24,11 +56,11 @@ Both kinds use the same YAML schema in `internal/config/presets/*.yaml` and the 
 |---|---|---|---|
 | `phpmyadmin` | `docker.io/library/phpmyadmin:latest` | `mysql` (default) | `http://localhost:8080` |
 | `pgadmin` | `docker.io/dpage/pgadmin4:latest` | `postgres` (default) | `http://localhost:8081` |
-| `mysql` alternates | `5.7` / `9.7` LTS (canonical 8.4 lives in the default preset) | - | `127.0.0.1:3357` / `127.0.0.1:3397` |
-| `postgres` alternates | `17` / `18` (canonical 16 lives in the default preset) | - | `127.0.0.1:5417` / `127.0.0.1:5418` |
-| `postgres-pgvector` | `pgvector/pgvector:pg18` (canonical) / `pg17` / `pg16` — pgvector instead of PostGIS | - | `127.0.0.1:5518` / `127.0.0.1:5517` / `127.0.0.1:5516` |
-| `postgres-timescaledb` | `timescale/timescaledb:latest-pg17` (canonical) / `pg16` — TimescaleDB time-series extension, enabled automatically by `lerd env` / `lerd link` via `site_init` | - | `127.0.0.1:5617` / `127.0.0.1:5616` |
-| `mariadb` | `12` / `12.3` LTS / `11.8` LTS (default) / `11.4` LTS / `10.11` LTS / `11` (legacy) | - | host ports `3412` / `3423` / `3418` / `3414` / `3410` / `3411` |
+| `mysql` alternates | `5.7` / `9.7` LTS (canonical 8.4 lives in the default preset) | - | family port `3306` (guard shifts later siblings) |
+| `postgres` alternates | `17` / `18` (canonical 16 lives in the default preset) | - | family port `5432` (guard shifts later siblings) |
+| `postgres-pgvector` | `pgvector/pgvector:pg18` (canonical) / `pg17` / `pg16` — pgvector instead of PostGIS | - | family port `5432` (guard shifts later siblings) |
+| `postgres-timescaledb` | `timescale/timescaledb:latest-pg17` (canonical) / `pg16` — TimescaleDB time-series extension, enabled automatically by `lerd env` / `lerd link` via `site_init` | - | family port `5432` (guard shifts later siblings) |
+| `mariadb` | `12` / `12.3` LTS / `11.8` LTS (default) / `11.4` LTS / `10.11` LTS / `11` (legacy) | - | family port `3306` (guard shifts later siblings) |
 | `mongo` | `docker.io/library/mongo:7` | - | `127.0.0.1:27017` |
 | `mongo-express` | `docker.io/library/mongo-express:latest` | `mongo` (preset) | `http://localhost:8082` |
 | `selenium` | `docker.io/selenium/standalone-chromium:latest` | - | `http://localhost:7900` (noVNC) |
@@ -88,29 +120,34 @@ dismissal persists in `localStorage`.
 
 `mysql`, `postgres` and `mariadb` ship multiple selectable versions. `mysql` and `postgres` mark one version canonical (mysql 8.4 LTS, postgres 16): the canonical version is the default install, recognised as the bare service `mysql` / `postgres` on the canonical host port, and the alternates picker only shows non-canonical versions (it doesn't list 8.4 because that IS the default install). `mariadb` has no canonical version, so there is no bare `mariadb` service: every version, including the default `11.8` LTS, materialises as a distinct custom service named `<family>-<sanitized-tag>` (the default resolves to `mariadb-11-8`). Non-canonical alternates run side-by-side with each other and with the canonical.
 
+Host port shows the family default; the first service to claim it keeps it and a
+later same-family sibling is shifted once to the next free port (see below).
+
 | Picked | Service name | Container | Host port | Data dir |
 |---|---|---|---|---|
 | `mysql 8.4` (canonical) | `mysql` | `lerd-mysql` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mysql/` |
-| `mysql 9.7` LTS | `mysql-9-7` | `lerd-mysql-9-7` | `127.0.0.1:3397` | `~/.local/share/lerd/data/mysql-9-7/` |
-| `mysql 5.7` | `mysql-5-7` | `lerd-mysql-5-7` | `127.0.0.1:3357` | `~/.local/share/lerd/data/mysql-5-7/` |
+| `mysql 9.7` LTS | `mysql-9-7` | `lerd-mysql-9-7` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mysql-9-7/` |
+| `mysql 5.7` | `mysql-5-7` | `lerd-mysql-5-7` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mysql-5-7/` |
 | `postgres 16` (canonical) | `postgres` | `lerd-postgres` | `127.0.0.1:5432` | `~/.local/share/lerd/data/postgres/` |
-| `postgres 17` | `postgres-17` | `lerd-postgres-17` | `127.0.0.1:5417` | `~/.local/share/lerd/data/postgres-17/` |
-| `postgres 18` | `postgres-18` | `lerd-postgres-18` | `127.0.0.1:5418` | `~/.local/share/lerd/data/postgres-18/` |
-| `mariadb 12` | `mariadb-12` | `lerd-mariadb-12` | `127.0.0.1:3412` | `~/.local/share/lerd/data/mariadb-12/` |
-| `mariadb 12.3` LTS | `mariadb-12-3` | `lerd-mariadb-12-3` | `127.0.0.1:3423` | `~/.local/share/lerd/data/mariadb-12-3/` |
-| `mariadb 11.8` LTS (default) | `mariadb-11-8` | `lerd-mariadb-11-8` | `127.0.0.1:3418` | `~/.local/share/lerd/data/mariadb-11-8/` |
-| `mariadb 11.4` LTS | `mariadb-11-4` | `lerd-mariadb-11-4` | `127.0.0.1:3414` | `~/.local/share/lerd/data/mariadb-11-4/` |
-| `mariadb 11` (legacy) | `mariadb-11` | `lerd-mariadb-11` | `127.0.0.1:3411` | `~/.local/share/lerd/data/mariadb-11/` |
-| `mariadb 10.11` LTS | `mariadb-10-11` | `lerd-mariadb-10-11` | `127.0.0.1:3410` | `~/.local/share/lerd/data/mariadb-10-11/` |
+| `postgres 17` | `postgres-17` | `lerd-postgres-17` | `127.0.0.1:5432` | `~/.local/share/lerd/data/postgres-17/` |
+| `postgres 18` | `postgres-18` | `lerd-postgres-18` | `127.0.0.1:5432` | `~/.local/share/lerd/data/postgres-18/` |
+| `mariadb 12` | `mariadb-12` | `lerd-mariadb-12` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-12/` |
+| `mariadb 12.3` LTS | `mariadb-12-3` | `lerd-mariadb-12-3` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-12-3/` |
+| `mariadb 11.8` LTS (default) | `mariadb-11-8` | `lerd-mariadb-11-8` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-11-8/` |
+| `mariadb 11.4` LTS | `mariadb-11-4` | `lerd-mariadb-11-4` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-11-4/` |
+| `mariadb 11` (legacy) | `mariadb-11` | `lerd-mariadb-11` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-11/` |
+| `mariadb 10.11` LTS | `mariadb-10-11` | `lerd-mariadb-10-11` | `127.0.0.1:3306` | `~/.local/share/lerd/data/mariadb-10-11/` |
 
 Alternates inherit the preset's `update_strategy` but with one caveat: they're internally promoted to `patch` strategy so an alternate explicitly installed at v8.0 doesn't get auto-suggested an 8.4.x upgrade (which would cross the LTS line). Cross-line moves stay in the user's hands via the alternates picker or `lerd service migrate`.
 
-Each version has its own data directory so they can run side by side. The
-host port is fixed per version so the same `127.0.0.1:<port>` URL works on any
-machine; note that another process on the host bound to the same port will
-make the alternate fail to start with a `bind: address already in use` error
-in `journalctl --user -u lerd-<service>`. Use `lerd service expose <service>
-<other:3306>` to add a different mapping if you hit a collision.
+Each version has its own data directory so they can run side by side. Every
+member of a family defaults to the family's canonical host port (`3306` for
+mysql/mariadb, `5432` for postgres). The first service to claim the port keeps
+it; when you install a second same-family service, the port-ownership guard
+shifts it once to the next free port and records that choice, so it stays put
+afterwards. A single database of any family therefore lands on the familiar
+canonical port. `lerd service port <service> <port>` overrides the assignment,
+and `lerd service expose <service> <other:3306>` adds an extra mapping.
 
 ### Canonical version pinning
 

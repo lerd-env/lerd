@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"fmt"
 	"net"
 	"os"
 	"testing"
@@ -92,6 +93,88 @@ func TestPersistPublishedPort_surfacesSaveFailure(t *testing.T) {
 	}
 }
 
+// freeLoopbackPort returns a port that was bindable a moment ago (bound to :0
+// then released), for tests that need a port nothing is currently listening on.
+func freeLoopbackPort(t *testing.T) int {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("cannot bind a loopback port: %v", err)
+	}
+	port := ln.Addr().(*net.TCPAddr).Port
+	_ = ln.Close()
+	return port
+}
+
+// Issue #704: an installed sibling that already holds the shared canonical port
+// makes the port "claimed"; a phantom default preset that is only seeded in
+// config but never installed does not.
+func TestPortClaimedByOtherInstalled(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	sib := &config.CustomService{Name: "sib", Image: "example/x:1", Ports: []string{"33061:3306"}}
+	if err := config.SaveCustomService(sib); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	if !portClaimedByOtherInstalled("newsib", 33061) {
+		t.Error("an installed sibling holding 33061 must count as a claim")
+	}
+	if portClaimedByOtherInstalled("sib", 33061) {
+		t.Error("a service must not count as claiming its own port")
+	}
+	if portClaimedByOtherInstalled("newsib", 33062) {
+		t.Error("no service holds 33062; must not be claimed")
+	}
+
+	// A default preset seeded in config but with no installed quadlet is a phantom
+	// and must NOT claim its port, so a single-database install keeps the canonical.
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Services["mysql"] = config.ServiceConfig{Enabled: true, Port: 33070}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if portClaimedByOtherInstalled("mariadb", 33070) {
+		t.Error("a seeded-but-uninstalled default preset must not claim its port (#704)")
+	}
+}
+
+// Issue #704: the guard keeps a bindable canonical port when only a phantom
+// (uninstalled) preset holds it, and shifts when an installed sibling does.
+func TestGenericGuard_704CanonicalSharing(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	canonical := freeLoopbackPort(t)
+
+	// Only a phantom mysql (default preset, not installed) is seeded on the port.
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Services["mysql"] = config.ServiceConfig{Enabled: true, Port: canonical}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if got := maybeShiftPublishedPort("mariadb", canonical, false); got != 0 {
+		t.Errorf("guard shifted off %d though only a phantom preset holds it = %d, want 0 (keep canonical)", canonical, got)
+	}
+
+	// Now an installed sibling genuinely holds the port: the guard must shift.
+	sib := &config.CustomService{Name: "sib", Image: "example/x:1", Ports: []string{fmt.Sprintf("%d:3306", canonical)}}
+	if err := config.SaveCustomService(sib); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	if got := maybeShiftPublishedPort("mariadb", canonical, false); got <= canonical {
+		t.Errorf("guard = %d, want a free port > %d once an installed sibling holds the canonical", got, canonical)
+	}
+}
+
 // TestGenericGuard_shiftsWhenPrimaryBusy: when a service's primary host port is
 // in use and the service itself is NOT up, the guard picks a later free port.
 func TestGenericGuard_shiftsWhenPrimaryBusy(t *testing.T) {
@@ -106,7 +189,7 @@ func TestGenericGuard_shiftsWhenPrimaryBusy(t *testing.T) {
 	defer ln.Close()
 	busy := ln.Addr().(*net.TCPAddr).Port
 
-	got := maybeShiftPublishedPort(busy, false)
+	got := maybeShiftPublishedPort("mysql-9-7", busy, false)
 	if got <= busy {
 		t.Errorf("maybeShiftPublishedPort(%d, active=false) = %d, want a free port > %d", busy, got, busy)
 	}
@@ -129,12 +212,12 @@ func TestGenericGuard_sticksOncePersisted(t *testing.T) {
 	busy := ln.Addr().(*net.TCPAddr).Port
 
 	// Service is up: its own listener holds the port — do NOT shift it.
-	if got := maybeShiftPublishedPort(busy, true); got != 0 {
+	if got := maybeShiftPublishedPort("mysql", busy, true); got != 0 {
 		t.Errorf("maybeShiftPublishedPort(busy, active=true) = %d, want 0 (never move a live service)", got)
 	}
 
 	// A non-positive primary (no host port published) is never shifted.
-	if got := maybeShiftPublishedPort(0, false); got != 0 {
+	if got := maybeShiftPublishedPort("mysql", 0, false); got != 0 {
 		t.Errorf("maybeShiftPublishedPort(0, active=false) = %d, want 0", got)
 	}
 
