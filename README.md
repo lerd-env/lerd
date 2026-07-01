@@ -127,6 +127,16 @@ Recent Homebrew versions block third-party taps until trusted, so you may need t
 
 </details>
 
+### NixOS
+
+NixOS has its own flake, since its declarative model doesn't fit the one-line installer's imperative DNS and self-install steps.
+
+```bash
+nix run github:lerd-env/lerd-nixos -- --help
+```
+
+The [`lerd-nixos`](https://github.com/lerd-env/lerd-nixos) flake packages the binary and ships the `configuration.nix` blocks the stack needs. See the [NixOS guide](https://lerd.sh/getting-started/nixos) for the full runbook.
+
 > [!NOTE]
 > See the [installation docs](https://lerd.sh/getting-started/installation) for details.
 
