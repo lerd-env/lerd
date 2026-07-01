@@ -118,6 +118,7 @@ export default defineConfig({
             { text: 'Requirements', link: '/getting-started/requirements' },
             { text: 'Installation', link: '/getting-started/installation' },
             { text: 'Windows (WSL2, beta)', link: '/getting-started/wsl2' },
+            { text: 'NixOS', link: '/getting-started/nixos' },
             { text: 'Quick Start', link: '/getting-started/quick-start' },
             { text: 'Comparison', link: '/getting-started/comparison' },
           ],

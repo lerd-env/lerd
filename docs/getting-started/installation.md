@@ -189,3 +189,7 @@ Run `lerd uninstall` first (while the binary is still present) so the DNS resolv
 ## Windows (beta)
 
 There is no native Windows build. Lerd runs on Windows through WSL2, where the standard Linux build works unchanged once systemd and rootless Podman are set up. Windows support is **beta**, it works well for daily development but gets less testing than native Linux or macOS. See the [Windows (WSL2) guide](./wsl2) for the full walkthrough, including the `events_logger` Podman tweak and the mkcert root CA export to the Windows trust store.
+
+## NixOS
+
+NixOS's declarative model doesn't fit the one-line installer's imperative DNS and self-install steps, so the community [`lerd-nixos`](https://github.com/lerd-env/lerd-nixos) flake packages the `lerd` binary and provides the `configuration.nix` blocks the stack needs (rootless Podman, `*.test`-only DNS routing, the mkcert CA, and the systemd fixes for `lerd-ui` / `lerd-watcher`). See the [NixOS guide](./nixos) for the complete runbook from a fresh install.
