@@ -288,19 +288,14 @@ func TestLoadPreset_MariaDB_Versions(t *testing.T) {
 	if p.DefaultVersion != "11.8" {
 		t.Errorf("DefaultVersion = %q, want 11.8 (the pinned LTS default)", p.DefaultVersion)
 	}
-	want := map[string]int{"12": 3412, "12.3": 3423, "11.8": 3418, "11.4": 3414, "11": 3411, "10.11": 3410}
-	got := map[string]int{}
-	seenPort := map[int]string{}
+	// Issue #704: every member of a family defaults to the family's canonical
+	// host port (3306 for the MySQL-compatible mariadb) rather than a pre-spaced
+	// unique port. The runtime port-ownership guard shifts a sibling off the
+	// canonical only when another installed service already holds it, so the
+	// common single-database case lands on the familiar port.
 	for _, v := range p.Versions {
-		got[v.Tag] = v.HostPort
-		if prev, dup := seenPort[v.HostPort]; dup {
-			t.Errorf("host_port %d reused by tags %q and %q; each version needs its own host port", v.HostPort, prev, v.Tag)
-		}
-		seenPort[v.HostPort] = v.Tag
-	}
-	for tag, port := range want {
-		if got[tag] != port {
-			t.Errorf("version %q host_port = %d, want %d", tag, got[tag], port)
+		if v.HostPort != 3306 {
+			t.Errorf("version %q host_port = %d, want 3306 (family canonical, #704)", v.Tag, v.HostPort)
 		}
 	}
 	// The bare "11" tag is retained so installs created before the LTS split
@@ -773,16 +768,16 @@ func TestLoadPreset_DefaultsHaveFlag(t *testing.T) {
 }
 
 func TestPresetResolve_AlternatesUseHostPort(t *testing.T) {
-	// Regression: when the canonical version of a multi-version preset is added,
-	// non-canonical alternates must keep their dedicated host_port so they don't
-	// collide with the canonical container on the same port.
+	// Issue #704: non-canonical alternates now resolve to the family's canonical
+	// host port too. Two members no longer pre-space themselves; the runtime
+	// port-ownership guard shifts a later sibling off the shared port at install.
 	p, err := LoadPreset("mysql")
 	if err != nil {
 		t.Fatalf("LoadPreset: %v", err)
 	}
 	cases := map[string]string{
-		"5.7": "3357:3306",
-		"9.7": "3397:3306",
+		"5.7": "3306:3306",
+		"9.7": "3306:3306",
 	}
 	for tag, wantPort := range cases {
 		svc, err := p.Resolve(tag)
@@ -1047,8 +1042,8 @@ func TestPresetResolve_PostgresAlternates(t *testing.T) {
 		wantName string
 		wantPort string
 	}{
-		"18": {"postgres-18", "5418:5432"},
-		"17": {"postgres-17", "5417:5432"},
+		"18": {"postgres-18", "5432:5432"},
+		"17": {"postgres-17", "5432:5432"},
 	}
 	for tag, want := range cases {
 		svc, err := p.Resolve(tag)
@@ -1117,10 +1112,10 @@ func TestPresetResolve_PostgresPgvectorCanonical(t *testing.T) {
 	if svc.Name != "postgres-pgvector" {
 		t.Errorf("canonical postgres-pgvector Name = %q, want bare postgres-pgvector", svc.Name)
 	}
-	if len(svc.Ports) != 1 || svc.Ports[0] != "5518:5432" {
-		t.Errorf("canonical postgres-pgvector Ports = %v, want [5518:5432]", svc.Ports)
+	if len(svc.Ports) != 1 || svc.Ports[0] != "5432:5432" {
+		t.Errorf("canonical postgres-pgvector Ports = %v, want [5432:5432] (family canonical, #704)", svc.Ports)
 	}
-	if svc.ConnectionURL != "postgresql://postgres:lerd@127.0.0.1:5518/lerd" {
+	if svc.ConnectionURL != "postgresql://postgres:lerd@127.0.0.1:5432/lerd" {
 		t.Errorf("canonical postgres-pgvector ConnectionURL = %q", svc.ConnectionURL)
 	}
 	wantHost := "DB_HOST=lerd-postgres-pgvector"
@@ -1145,8 +1140,8 @@ func TestPresetResolve_PostgresPgvectorAlternates(t *testing.T) {
 		wantName string
 		wantPort string
 	}{
-		"17": {"postgres-pgvector-17", "5517:5432"},
-		"16": {"postgres-pgvector-16", "5516:5432"},
+		"17": {"postgres-pgvector-17", "5432:5432"},
+		"16": {"postgres-pgvector-16", "5432:5432"},
 	}
 	for tag, want := range cases {
 		svc, err := p.Resolve(tag)

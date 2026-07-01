@@ -1,0 +1,48 @@
+name: phpmyadmin
+image: docker.io/library/phpmyadmin:latest
+description: phpMyAdmin web UI for every installed lerd MySQL service
+ports:
+  - "8080:80"
+environment:
+  UPLOAD_LIMIT: 256M
+dynamic_env:
+  PMA_HOSTS: discover_family:mysql,mariadb
+  PMA_USERS: repeat_family:mysql,mariadb=root
+  PMA_PASSWORDS: repeat_family:mysql,mariadb=lerd
+depends_on:
+  - mysql
+dashboard: http://localhost:8080
+files:
+  - target: /etc/phpmyadmin/config.user.inc.php
+    content: |
+      <?php
+      // Allow phpmyadmin's session cookie to be sent when it's embedded in
+      // an iframe served from a different origin (the lerd-ui dashboard).
+      // The default SameSite=Strict drops the cookie on form POSTs, which
+      // breaks the server-switch dropdown via CSRF token mismatch.
+      // SameSite=None requires Secure=1, which phpmyadmin only sets when
+      // isHttps() is true, so we force the HTTPS env var — browsers treat
+      // localhost as secure so Secure cookies are accepted over HTTP.
+      $cfg['CookieSameSite'] = 'None';
+      $_SERVER['HTTPS'] = 'on';
+
+      // The official phpmyadmin image only handles PMA_USER/PMA_PASSWORD for
+      // single-host setups; in multi-host (PMA_HOSTS) it writes host/verbose
+      // per server but leaves user/password blank, forcing a login screen.
+      // Rebuild $cfg['Servers'] from our own parallel env arrays so every
+      // discovered mysql/mariadb service auto-logs in with config auth.
+      $hosts = array_values(array_filter(array_map('trim', explode(',', (string) getenv('PMA_HOSTS')))));
+      $users = array_map('trim', explode(',', (string) getenv('PMA_USERS')));
+      $passwords = array_map('trim', explode(',', (string) getenv('PMA_PASSWORDS')));
+      foreach ($hosts as $i => $host) {
+          $idx = $i + 1;
+          $cfg['Servers'][$idx] = [
+              'host'      => $host,
+              'verbose'   => $host,
+              'auth_type' => 'config',
+              'user'      => $users[$i] ?? 'root',
+              'password'  => $passwords[$i] ?? 'lerd',
+              'AllowNoPassword' => false,
+          ];
+      }
+      $cfg['AllowThirdPartyFraming'] = true;

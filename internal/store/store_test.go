@@ -119,15 +119,23 @@ func TestFetchIndex_AllBasesFail(t *testing.T) {
 	}
 }
 
-// NewClient wires the ordered store URLs from origin: the old org first, the new
-// org as the fallback.
-func TestNewClient_OldOrgFirstNewFallback(t *testing.T) {
+// NewClient wires the framework-store URL from origin: the store content lives on
+// lerd-env and is served directly, with no geodro fallback.
+func TestNewClient_UsesNewOrgDirectly(t *testing.T) {
 	c := NewClient()
-	if !strings.Contains(c.BaseURL, "geodro") {
-		t.Errorf("primary store URL = %q, want geodro first", c.BaseURL)
+	if !strings.Contains(c.BaseURL, "lerd-env") {
+		t.Errorf("primary store URL = %q, want lerd-env", c.BaseURL)
 	}
-	if len(c.Fallbacks) == 0 || !strings.Contains(c.Fallbacks[0], "lerd-env") {
-		t.Errorf("fallback store URLs = %v, want lerd-env present", c.Fallbacks)
+	if strings.Contains(c.BaseURL, "geodro") {
+		t.Errorf("store URL must not rely on geodro, got %q", c.BaseURL)
+	}
+}
+
+// NewServiceClient points at the dedicated lerd-env/services store.
+func TestNewServiceClient_UsesServicesRepo(t *testing.T) {
+	c := NewServiceClient()
+	if !strings.Contains(c.BaseURL, "lerd-env/services") {
+		t.Errorf("primary service-store URL = %q, want lerd-env/services", c.BaseURL)
 	}
 }
 

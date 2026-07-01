@@ -21,3 +21,7 @@ dashboard: http://localhost:15672
 # Force the dashboard to open in a new tab to keep auth working.
 dashboard_external: true
 connection_url: amqp://root:lerd@127.0.0.1:5672/
+files:
+  - target: /etc/rabbitmq/conf.d/10-lerd-path-prefix.conf
+    content: |
+      management.path_prefix = /_svc/rabbitmq

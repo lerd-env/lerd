@@ -7,103 +7,15 @@ import (
 	"strings"
 )
 
-// presetFiles holds the file mounts shipped with each bundled preset. This
-// lives in Go rather than the preset YAMLs so that new lerd versions can
-// update the mounted file contents automatically on the next service start
-// without the user having to remove and reinstall the preset.
-//
-// Files are intentionally not a user feature: the three built-in presets
-// below are the only ones that need runtime-generated config. A custom
-// service author cannot declare their own file mounts.
-var presetFiles = map[string][]FileMount{
-	"rabbitmq": {
-		{
-			// lerd-ui proxies the management UI same-origin under /_svc/rabbitmq/
-			// so its Cowboy session cookie stays first-party in the iframe. Mount
-			// the UI at that same prefix so its asset/API links resolve there.
-			Target:  "/etc/rabbitmq/conf.d/10-lerd-path-prefix.conf",
-			Content: "management.path_prefix = /_svc/rabbitmq\n",
-		},
-	},
-	"mysql": {
-		{
-			Target: "/etc/mysql/conf.d/lerd.cnf",
-			// loose- prefix skips directives unknown to a given mysql version;
-			// authentication_policy is omitted because mysql 9.x removed
-			// mysql_native_password, which made the variable refuse to load.
-			Content: `[mysqld]
-character-set-server=utf8mb4
-collation-server=utf8mb4_unicode_ci
-innodb_file_per_table=ON
-innodb_strict_mode=OFF
-loose-innodb_default_row_format=DYNAMIC
-loose-mysql-native-password=ON
-loose-restrict-fk-on-non-standard-key=OFF
-`,
-		},
-	},
-	"pgadmin": {
-		{
-			Target:    "/pgadmin4/servers.json",
-			ContentFn: pgadminServersJSON,
-		},
-		{
-			Target:    "/pgpass",
-			Mode:      "0600",
-			Chown:     true,
-			ContentFn: pgadminPgpass,
-		},
-		{
-			Target: "/pgadmin4/config_local.py",
-			Content: `X_FRAME_OPTIONS = ''
-ENHANCED_COOKIE_PROTECTION = False
-WTF_CSRF_CHECK_DEFAULT = False
-
-# Allow pgadmin's Flask session + CSRF cookies to flow inside a cross-origin
-# iframe (the lerd-ui dashboard). SameSite=None requires Secure=True, which
-# browsers accept over HTTP on localhost.
-SESSION_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_SECURE = True
-`,
-		},
-	},
-	"phpmyadmin": {
-		{
-			Target: "/etc/phpmyadmin/config.user.inc.php",
-			Content: `<?php
-// Allow phpmyadmin's session cookie to be sent when it's embedded in
-// an iframe served from a different origin (the lerd-ui dashboard).
-// The default SameSite=Strict drops the cookie on form POSTs, which
-// breaks the server-switch dropdown via CSRF token mismatch.
-// SameSite=None requires Secure=1, which phpmyadmin only sets when
-// isHttps() is true, so we force the HTTPS env var — browsers treat
-// localhost as secure so Secure cookies are accepted over HTTP.
-$cfg['CookieSameSite'] = 'None';
-$_SERVER['HTTPS'] = 'on';
-
-// The official phpmyadmin image only handles PMA_USER/PMA_PASSWORD for
-// single-host setups; in multi-host (PMA_HOSTS) it writes host/verbose
-// per server but leaves user/password blank, forcing a login screen.
-// Rebuild $cfg['Servers'] from our own parallel env arrays so every
-// discovered mysql/mariadb service auto-logs in with config auth.
-$hosts = array_values(array_filter(array_map('trim', explode(',', (string) getenv('PMA_HOSTS')))));
-$users = array_map('trim', explode(',', (string) getenv('PMA_USERS')));
-$passwords = array_map('trim', explode(',', (string) getenv('PMA_PASSWORDS')));
-foreach ($hosts as $i => $host) {
-    $idx = $i + 1;
-    $cfg['Servers'][$idx] = [
-        'host'      => $host,
-        'verbose'   => $host,
-        'auth_type' => 'config',
-        'user'      => $users[$i] ?? 'root',
-        'password'  => $passwords[$i] ?? 'lerd',
-        'AllowNoPassword' => false,
-    ];
-}
-$cfg['AllowThirdPartyFraming'] = true;
-`,
-		},
-	},
+// presetFileGenerators maps a preset FileMount's `generator:` name to the Go
+// function that renders it at materialise time. This is the one part of a file
+// mount that can't be static YAML: dynamic contents like pgAdmin's family-
+// discovered servers.json. External presets reference these by name; shipping a
+// genuinely new generator still requires a lerd release, the deliberate boundary
+// that keeps store presets from carrying executable discovery logic.
+var presetFileGenerators = map[string]func(*CustomService) (string, error){
+	"pgadmin_servers": pgadminServersJSON,
+	"pgadmin_pgpass":  pgadminPgpass,
 }
 
 // DashboardProxyPrefix is the lerd-ui mount under which bundled admin
@@ -172,16 +84,29 @@ func PresetDashboardBootstrap(svc *CustomService) string {
 	return ""
 }
 
-// PresetFiles returns the hardcoded file mounts for the named preset, or nil
-// when the preset has no files. The returned slice is a copy so callers
-// cannot mutate the shared definition.
+// PresetFiles returns the file mounts declared in the named preset's YAML, with
+// each mount's `generator:` resolved to its ContentFn. It reads the preset fresh
+// (embed bundle or store cache) so updating lerd, or the store definition, rolls
+// out new file contents on the next service start without a reinstall. A mount
+// naming an unknown generator is skipped rather than mounted empty, so a store
+// preset built for a newer lerd degrades gracefully. Only presets carry files;
+// custom services have any files: block stripped on load (see LoadCustomService).
 func PresetFiles(presetName string) []FileMount {
-	src := presetFiles[presetName]
-	if len(src) == 0 {
+	p, err := LoadPreset(presetName)
+	if err != nil || len(p.Files) == 0 {
 		return nil
 	}
-	out := make([]FileMount, len(src))
-	copy(out, src)
+	out := make([]FileMount, 0, len(p.Files))
+	for _, f := range p.Files {
+		if f.Generator != "" {
+			gen, ok := presetFileGenerators[f.Generator]
+			if !ok {
+				continue
+			}
+			f.ContentFn = gen
+		}
+		out = append(out, f)
+	}
 	return out
 }
 

@@ -77,14 +77,65 @@ func unitActive(name string) bool {
 // anything another lerd service already publishes (reserved), even when stopped,
 // so two units don't collide at boot. Returns 0 when the port is fine, the
 // service is up, or no free port exists.
-func maybeShiftPublishedPort(primary int, active bool) int {
-	if primary <= 0 || active || freeport.Bindable(primary) {
+func maybeShiftPublishedPort(name string, primary int, active bool) int {
+	if primary <= 0 || active {
+		return 0
+	}
+	// Keep the port when it is free to bind AND no other installed lerd service
+	// already claims it. Since #704 every family member defaults to the family's
+	// canonical port, so two stopped siblings both bind-test free — the claim
+	// check is what shifts the later one so they can't collide at boot. A phantom
+	// default preset that isn't installed doesn't claim its port, so a single
+	// database of any family still lands on the canonical.
+	if freeport.Bindable(primary) && !portClaimedByOtherInstalled(name, primary) {
 		return 0
 	}
 	reserved := lerdReservedPorts()
 	return freeport.FirstFree(primary+1, func(p int) bool {
 		return reserved[p] || !freeport.Bindable(p)
 	})
+}
+
+// portClaimedByOtherInstalled reports whether host port p is held by an INSTALLED
+// lerd service other than self — the trigger for #704's canonical-port sharing.
+// Install state gates it (via ServiceInstalled) so a seeded-but-never-installed
+// default preset never blocks a single-instance install from the canonical port,
+// while a genuinely installed sibling does force the shift. Effective ports come
+// from cfg.Services (default presets + published-port overrides) and, for customs
+// whose ports live only in their YAML, from ListCustomServices.
+func portClaimedByOtherInstalled(self string, p int) bool {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return false
+	}
+	for name, sc := range cfg.Services {
+		if name == self || !ServiceInstalled(name) {
+			continue
+		}
+		for _, hp := range sc.HostPorts() {
+			if hp == p {
+				return true
+			}
+		}
+	}
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return false
+	}
+	for _, c := range customs {
+		if c.Name == self || !ServiceInstalled(c.Name) {
+			continue
+		}
+		if sc, ok := cfg.Services[c.Name]; ok && len(sc.HostPorts()) > 0 {
+			continue // already counted from cfg.Services above
+		}
+		for _, m := range c.Ports {
+			if extraHostPort(m) == p {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // lerdReservedPorts collects the host ports already claimed by lerd's own services
@@ -224,7 +275,10 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 // lets the streaming install pull the image first and bail before any state is
 // written when the pull fails.
 func resolvePresetForInstall(name, version string) (*config.CustomService, error) {
-	preset, err := config.LoadPreset(name)
+	// EnsurePreset, not LoadPreset: an install is the deliberate entry point that
+	// may fetch a store-only preset (or refresh a stale cached one) before we
+	// materialise it. Built-ins resolve locally with no network touch.
+	preset, err := config.EnsurePreset(name)
 	if err != nil {
 		return nil, err
 	}
@@ -504,7 +558,7 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	pp := config.ServicePublishedPort(svc.Name)
 	if pp == 0 {
 		primary := podman.PrimaryHostPort(svc.Ports)
-		if free := maybeShiftPublishedPort(primary, unitActive(svc.Name)); free > 0 {
+		if free := maybeShiftPublishedPort(svc.Name, primary, unitActive(svc.Name)); free > 0 {
 			if err := persistPublishedPort(svc.Name, free); err != nil {
 				return fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
 			}

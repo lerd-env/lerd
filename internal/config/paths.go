@@ -367,6 +367,16 @@ func StoreFrameworksDir() string {
 	return filepath.Join(DataDir(), "frameworks")
 }
 
+// StorePresetsDir returns the directory for store-installed service-preset YAML
+// files, fetched from the external service store. It sits under the preset-source
+// seam as a layer above the embedded bundle: a valid preset here is served in
+// place of (or in addition to) the built-in of the same name, while the embed
+// bundle stays as the permanent offline fallback. Distinct from ConfigDir()/services
+// (user-defined custom services) so store presets and user services never mix.
+func StorePresetsDir() string {
+	return filepath.Join(DataDir(), "service-presets")
+}
+
 // UpdateCheckFile returns the path to the cached update-check state file.
 func UpdateCheckFile() string {
 	return filepath.Join(DataDir(), "update-check.json")
