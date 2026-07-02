@@ -12,9 +12,13 @@
     installPresetAndOpen,
     loadPresets,
     presetAddLabel,
+    matchesPresetQuery,
     type Preset
   } from '$stores/presets';
   import { m } from '../paraglide/messages.js';
+
+  let query = $state('');
+  const filtered = $derived($installablePresets.filter((p) => matchesPresetQuery(p, query)));
 
   onMount(() => {
     loadPresets();
@@ -33,13 +37,27 @@
   <div class="px-5 py-3 border-b border-gray-100 dark:border-lerd-border">
     <p class="text-xs text-gray-500 dark:text-gray-400">{m.services_preset_subtitle()}</p>
   </div>
+  {#if $presetsLoaded && $installablePresets.length > 0}
+    <div class="px-5 py-2 border-b border-gray-100 dark:border-lerd-border">
+      <input
+        bind:value={query}
+        type="text"
+        placeholder={m.services_preset_searchPlaceholder()}
+        class="w-full bg-transparent text-sm text-gray-800 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500 focus:outline-hidden"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+  {/if}
   <div class="px-5 py-3 max-h-80 overflow-y-auto">
     {#if !$presetsLoaded}
       <div class="py-4 text-center text-xs text-gray-400">{m.common_loading()}</div>
     {:else if $installablePresets.length === 0}
       <div class="py-4 text-center text-xs text-gray-400">{m.services_preset_allInstalled()}</div>
+    {:else if filtered.length === 0}
+      <div class="py-4 text-center text-xs text-gray-400">{m.services_preset_noMatches()}</div>
     {:else}
-      {#each $installablePresets as p (p.name)}
+      {#each filtered as p (p.name)}
         <div class="border border-gray-100 dark:border-lerd-border rounded-lg p-3 mb-2 last:mb-0">
           <div class="flex items-center gap-3">
             <div class="flex-1 min-w-0">

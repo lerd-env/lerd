@@ -84,6 +84,16 @@ export function availableVersions(p: Preset): PresetVersion[] {
   return (p.versions || []).filter((v) => !installed.has(v.tag));
 }
 
+// Text match for a preset against a free-text query (name, description, image).
+// Shared by the preset modal search and the command palette so both filter the
+// same way. Empty query matches everything; terms are ANDed.
+export function matchesPresetQuery(p: Preset, query: string): boolean {
+  const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  if (terms.length === 0) return true;
+  const hay = (p.name + ' ' + (p.description || '') + ' ' + (p.image || '')).toLowerCase();
+  return terms.every((t) => hay.includes(t));
+}
+
 // Localized label for a preset's Add button, reflecting the live install
 // phase. Shared by the modal, the discovery cards, and the suggestion banner.
 export function presetAddLabel(p: Preset): string {

@@ -88,6 +88,18 @@ describe('presets store', () => {
     expect(get(discoverablePresets).map((p) => p.name)).toEqual(['redis']);
   });
 
+  it('matchesPresetQuery matches name, description, and image, ANDing terms', async () => {
+    const { matchesPresetQuery } = await import('./presets');
+    const redis = { name: 'redis', description: 'In-memory cache', image: 'docker.io/redis:7' } as never;
+    expect(matchesPresetQuery(redis, '')).toBe(true);
+    expect(matchesPresetQuery(redis, 'red')).toBe(true);
+    expect(matchesPresetQuery(redis, 'cache')).toBe(true);
+    expect(matchesPresetQuery(redis, 'redis:7')).toBe(true);
+    expect(matchesPresetQuery(redis, 'redis cache')).toBe(true);
+    expect(matchesPresetQuery(redis, 'redis postgres')).toBe(false);
+    expect(matchesPresetQuery(redis, 'postgres')).toBe(false);
+  });
+
   it('presetAddLabel maps installing phases', async () => {
     const { presetAddLabel } = await import('./presets');
     expect(presetAddLabel({ name: 'x' } as never)).toBe('Add');
