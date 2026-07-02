@@ -149,7 +149,7 @@
       <SiteTinkerTab {site} branch={activeWorktreeBranch} />
     {/key}
   {:else if active === 'dumps'}
-    <SiteDebugTab siteName={site.name} framework={site.framework} />
+    <SiteDebugTab siteName={site.name} framework={site.framework} domain={site.domain} branch={activeWorktreeBranch} />
   {/if}
 </DetailPanel>
 

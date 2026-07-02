@@ -11,6 +11,7 @@ Lerd ships notifications **off by default**. The first time you open the dashboa
 | `mail` | Mailpit captures an outgoing email | on | normal |
 | `worker_failed` | A queue / horizon / reverb / schedule / stripe worker needs healing: it entered the `failed` state, or it's still enabled yet found stopped (drift, e.g. an FPM restart knocked it out). The dashboard banner surfaces both and offers a one-click heal | on | high |
 | `nplusone` | A request (or worker invocation) runs the same query shape 3+ times — a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
+| `slow_route` | A route's p95 response time is running well above the site's typical time, from the watcher's request-timing snapshot. Edge-triggered: fires once when a route goes slow and rearms once it drops back within the typical band, so a later slowdown notifies again | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
 | `update_available` | The registry has a newer image tag for an installed service | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |

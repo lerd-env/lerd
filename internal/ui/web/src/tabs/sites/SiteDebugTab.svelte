@@ -5,6 +5,7 @@
   import QueriesLens from '$components/QueriesLens.svelte';
   import KindLens from '$components/KindLens.svelte';
   import DebugDisabled from '$components/DebugDisabled.svelte';
+  import SiteRequestStats from './SiteRequestStats.svelte';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { dumps, refreshStatus } from '$stores/dumps';
   import { refreshDevtoolsStatus, debugCaptureEnabled } from '$stores/queries';
@@ -19,8 +20,10 @@
   interface Props {
     siteName?: string;
     framework?: string;
+    domain?: string;
+    branch?: string;
   }
-  let { siteName = '', framework = '' }: Props = $props();
+  let { siteName = '', framework = '', domain = '', branch = '' }: Props = $props();
 
   // Cache comes solely from the Laravel adapter, so it only applies to Laravel
   // sites; everything else is framework-agnostic (PDO and the Symfony
@@ -48,6 +51,11 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
+  <!-- Request timing reads the nginx access feed, not the debug bridge, so it
+       stays visible whether or not capture is enabled. -->
+  {#if domain}
+    <SiteRequestStats {domain} {branch} />
+  {/if}
   {#if !$debugCaptureEnabled}
     <DebugDisabled />
   {:else}

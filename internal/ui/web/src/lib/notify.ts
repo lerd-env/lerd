@@ -21,6 +21,7 @@ export type NotifyKind =
   | 'op_done'
   | 'update_available'
   | 'nplusone'
+  | 'slow_route'
   | 'dump';
 
 export const ALL_KINDS: NotifyKind[] = [
@@ -29,6 +30,7 @@ export const ALL_KINDS: NotifyKind[] = [
   'op_done',
   'update_available',
   'nplusone',
+  'slow_route',
   'dump'
 ];
 
@@ -48,6 +50,10 @@ const DEFAULTS: NotifyPrefs = {
     // stay low-volume and useful; on by default, matching prior behaviour
     // where the kind had no toggle and always fired.
     nplusone: true,
+    // slow_route is edge-triggered in the watcher (fires once when a route goes
+    // slow, rearms when it recovers), so it stays low-volume; on by default like
+    // the other proactive warnings.
+    slow_route: true,
     // dump is opt-in: many dev sessions emit hundreds of ray() calls and
     // the user almost always wants to silence them by default.
     dump: false

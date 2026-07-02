@@ -135,6 +135,8 @@ func TestParseAccessHost(t *testing.T) {
 		want string
 	}{
 		{"plain host", "myapp.test", "myapp.test"},
+		{"pipe timing record", "<190>Jun 12 10:00:00 lerdaccess: myapp.test|200|0.042|GET|/reports/5", "myapp.test"},
+		{"pipe record dash host", "<190>Jun 12 10:00:00 lerdaccess: -|400|0.001|GET|/", ""},
 		{"syslog framed", "<190>Jun 12 10:00:00 lerdaccess: myapp.test", "myapp.test"},
 		{"trailing newline", "myapp.test\n", "myapp.test"},
 		{"no host header dash", "<190>Jun 12 10:00:00 lerdaccess: -", ""},
