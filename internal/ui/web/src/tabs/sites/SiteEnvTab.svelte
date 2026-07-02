@@ -6,10 +6,12 @@
     loadSiteEnvFiles,
     loadSiteEnvBackups,
     loadSiteEnvBackupContent,
+    proposeSiteEnv,
     type Site,
     type SiteEnvBackup
   } from '$stores/sites';
   import { openEnvSaveModal, openEnvRestoreModal } from '$stores/modals';
+  import { addedLineNumbers } from '$lib/diff';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -28,6 +30,14 @@
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   let backups = $state<SiteEnvBackup[]>([]);
   let restoring = $state(false);
+  // Missing-key proposal state. The proposal is framework-scoped (its own env
+  // file), so it's tracked separately from the file dropdown and only surfaced
+  // when that file is the one selected.
+  let missingCount = $state(0);
+  let optionalCount = $state(0);
+  let proposeFile = $state('.env');
+  let inserting = $state(false);
+  let insertError = $state('');
 
   const envPath = $derived.by(() => {
     if (branch) {
@@ -39,7 +49,53 @@
 
   const dirty = $derived(text !== original);
   const latestBackup = $derived(backups[0]);
-  const canRevert = $derived((dirty || backups.length > 0) && !loading && !error);
+  // Which editor lines are unsaved insertions, recomputed live from the diff
+  // against the on-disk content so the green markers track edits (a line the
+  // user deletes simply stops being reported, no stale/hopping decoration).
+  const highlightLines = $derived(addedLineNumbers(original, text));
+  // Offer the insert banner only for the file the proposal targets, once its
+  // content has loaded and there are no unsaved edits (staging would clobber).
+  const canPropose = $derived(missingCount > 0 && file === proposeFile && !loading && !error && !dirty);
+
+  function refreshProposal() {
+    const domain = site.domain;
+    const b = branch;
+    proposeSiteEnv(domain, b, false)
+      .then((p) => {
+        if (site.domain !== domain || branch !== b) return;
+        missingCount = p.added.length;
+        optionalCount = p.optional.length;
+        proposeFile = p.file;
+      })
+      .catch(() => {
+        if (site.domain !== domain || branch !== b) return;
+        missingCount = 0;
+        optionalCount = 0;
+      });
+  }
+
+  // Stage the proposed merge into the editable buffer: the user then fills in
+  // values, drops keys they don't want, and saves with the normal Save button.
+  // The green bars track their edits, so this is an ordinary unsaved change, not
+  // a separate mode.
+  async function insertProposed(includeOptional: boolean) {
+    const domain = site.domain;
+    const b = branch;
+    inserting = true;
+    insertError = '';
+    try {
+      const p = await proposeSiteEnv(domain, b, includeOptional);
+      if (site.domain !== domain || branch !== b || file !== p.file) return;
+      // Staging the merge makes the buffer differ from disk, so highlightLines
+      // (derived from that diff) lights up the inserted lines on its own.
+      text = p.merged;
+    } catch (e: unknown) {
+      if (site.domain !== domain || branch !== b) return;
+      insertError = e instanceof Error ? e.message : m.envEditor_proposeFailed();
+    } finally {
+      inserting = false;
+    }
+  }
 
   // Refresh the file list whenever the site or branch changes. When the
   // selected file disappears we only snap back to .env if there are no
@@ -55,6 +111,15 @@
     });
   });
 
+  // Rescan for missing example keys when the site or branch changes. The
+  // proposal targets the framework env file, so it's independent of the file
+  // dropdown and doesn't need to re-run when only `file` changes.
+  $effect(() => {
+    void site.domain;
+    void branch;
+    refreshProposal();
+  });
+
   // Reload content + backups whenever the chosen file (or site/branch) changes.
   $effect(() => {
     const domain = site.domain;
@@ -62,6 +127,7 @@
     const f = file;
     loading = true;
     error = '';
+    insertError = '';
     original = '';
     text = '';
     backups = [];
@@ -95,7 +161,14 @@
     }
   }
 
-  async function revert() {
+  // Drop unsaved edits (including a staged Add) back to what's on disk. This is
+  // the plain "undo my changes" the Discard button offers; it never touches
+  // backups, which is what the old single Revert button conflated.
+  function discardChanges() {
+    text = original;
+  }
+
+  async function restoreBackup() {
     if (latestBackup) {
       // The diff modal's "current" baseline is the on-screen text (which
       // includes any unsaved edits), so accepting the restore visibly
@@ -150,9 +223,7 @@
       } finally {
         restoring = false;
       }
-      return;
     }
-    text = original;
   }
 
   function save() {
@@ -181,8 +252,9 @@
         original = t;
         text = t;
         backups = list;
-        // A save does not change the set of env files (we only edit
-        // existing ones from the dropdown), so no need to refetch /files.
+        // The keys we just inserted are now on disk, so rescan to clear the
+        // banner (or surface whatever's still missing).
+        refreshProposal();
       }
     );
   }
@@ -217,13 +289,23 @@
         >
           {copied ? m.common_copied() : m.common_copy()}
         </button>
+        {#if backups.length > 0}
+          <button
+            type="button"
+            onclick={restoreBackup}
+            disabled={loading || !!error || restoring}
+            class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
+          >
+            {m.envEditor_restoreBtn()}
+          </button>
+        {/if}
         <button
           type="button"
-          onclick={revert}
-          disabled={!canRevert || restoring}
+          onclick={discardChanges}
+          disabled={!dirty || loading || restoring}
           class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
         >
-          {m.envEditor_revert()}
+          {m.envEditor_discard()}
         </button>
         <button
           type="button"
@@ -237,19 +319,51 @@
     </div>
   </div>
 
+  {#if canPropose}
+    <div class="flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/15 border-b border-amber-200 dark:border-amber-900/40">
+      <span class="text-xs text-amber-700 dark:text-amber-300">
+        {m.envEditor_proposeBanner({ n: missingCount, file: proposeFile })}
+      </span>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if optionalCount > 0}
+          <button
+            type="button"
+            onclick={() => insertProposed(true)}
+            disabled={inserting}
+            class="text-xs px-2 py-1 rounded-sm text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/25 disabled:opacity-40 whitespace-nowrap"
+          >
+            {m.envEditor_proposeAddOptional({ n: optionalCount })}
+          </button>
+        {/if}
+        <button
+          type="button"
+          onclick={() => insertProposed(false)}
+          disabled={inserting}
+          class="text-xs px-2 py-1 rounded-sm border border-amber-300 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/25 disabled:opacity-40 whitespace-nowrap"
+        >
+          {m.envEditor_proposeAdd({ n: missingCount })}
+        </button>
+      </div>
+    </div>
+  {/if}
+
+  {#if insertError}
+    <p class="text-xs text-red-500 dark:text-red-400 px-3 py-1.5 border-b border-red-200 dark:border-red-900/40">{insertError}</p>
+  {/if}
+
   <div class="flex-1 min-h-0 overflow-hidden bg-gray-50 dark:bg-black/40">
     {#if loading}
       <p class="text-xs text-gray-400 px-3 py-2.5">{m.common_loading()}</p>
     {:else if error}
       <p class="text-xs text-red-500 dark:text-red-400 px-3 py-2.5">{error}</p>
     {:else}
-      {#if !original}
+      {#if !original && highlightLines.length === 0}
         <p class="text-xs text-gray-400 px-3 py-2.5">
           {m.sites_env_missing({ path: envPath })}
         </p>
       {/if}
       <div class="h-full min-h-64">
-        <EnvEditor bind:value={text} />
+        <EnvEditor bind:value={text} {highlightLines} />
       </div>
     {/if}
   </div>

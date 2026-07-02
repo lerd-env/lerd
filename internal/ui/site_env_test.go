@@ -46,6 +46,54 @@ func TestHandleSiteEnv_returnsRawContents(t *testing.T) {
 	}
 }
 
+// /env/propose returns a merge that inserts the example keys the .env lacks,
+// each placed beside its neighbours, with the required/optional split so the UI
+// can offer to also pull in the optional keys.
+func TestHandleSiteEnvPropose_insertsInPlace(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.example"),
+		[]byte("DB_HOST=localhost\nDB_PORT=5432\nDB_DATABASE=app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"),
+		[]byte("DB_HOST=lerd-postgres\nDB_DATABASE=app\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "prop", Path: sitePath, Domains: []string{"prop.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/prop.test/env/propose", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp SiteEnvProposeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Added) != 1 || resp.Added[0] != "DB_PORT" {
+		t.Errorf("Added = %v, want [DB_PORT]", resp.Added)
+	}
+	want := "DB_HOST=lerd-postgres\nDB_PORT=5432\nDB_DATABASE=app\n"
+	if resp.Merged != want {
+		t.Errorf("Merged mismatch\n got: %q\nwant: %q", resp.Merged, want)
+	}
+	// DB_PORT is line 2 in the merged output, and it's the one inserted line.
+	if len(resp.AddedLines) != 1 || resp.AddedLines[0] != 2 {
+		t.Errorf("AddedLines = %v, want [2]", resp.AddedLines)
+	}
+	if resp.File != ".env" {
+		t.Errorf("File = %q, want .env", resp.File)
+	}
+}
+
 // Missing .env returns 200 with an empty body so the UI's gate falls back
 // gracefully instead of producing a noisy 404 in the network panel.
 func TestHandleSiteEnv_missingFileReturnsEmptyBody(t *testing.T) {

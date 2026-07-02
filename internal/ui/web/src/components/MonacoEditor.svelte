@@ -14,6 +14,9 @@
     class?: string;
     /** Monaco editor options merged over the defaults. */
     options?: Monaco.editor.IStandaloneEditorConstructionOptions;
+    /** 1-based line numbers to mark as inserted: a green gutter bar plus a
+        faint line tint, styled like an SCM added-line decoration. */
+    highlightLines?: number[];
     /** Fires once the editor and the monaco module are ready, for callers
         that need to add commands, attach a language client, etc. */
     onReady?: (ctx: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: MonacoModule }) => void;
@@ -25,8 +28,12 @@
     readOnly = false,
     class: extraClass = '',
     options = {},
+    highlightLines = [],
     onReady
   }: Props = $props();
+
+  let monacoRef: MonacoModule | undefined;
+  let decorations: Monaco.editor.IEditorDecorationsCollection | undefined;
 
   let container: HTMLDivElement | undefined = $state();
   // $state so the value-mirroring $effect below re-runs once the async monaco
@@ -42,6 +49,7 @@
     void (async () => {
       const monaco = await loadMonaco();
       if (disposed || !container) return;
+      monacoRef = monaco;
 
       const ed = monaco.editor.create(container, {
         value,
@@ -99,12 +107,48 @@
       } finally {
         internalUpdate = false;
       }
+      // A full setValue drops decorations inside the replaced range, so
+      // re-apply the highlight after a programmatic content swap (user typing
+      // goes through the change listener, not setValue, so its decorations are
+      // tracked and moved by Monaco and don't need this).
+      applyDecorations();
     }
   });
 
   $effect(() => {
     const ro = readOnly;
     editor?.updateOptions({ readOnly: ro });
+  });
+
+  // Paint highlightLines as SCM-style added-line decorations: a green gutter bar
+  // plus a faint line tint. Monaco tracks these across user edits, so a line the
+  // user changes keeps its bar and a line they delete loses it.
+  function applyDecorations() {
+    if (!editor || !monacoRef) return;
+    // Nothing highlighted and nothing to clear: skip, so editors that never
+    // highlight don't allocate an empty collection.
+    if (highlightLines.length === 0 && !decorations) return;
+    const monaco = monacoRef;
+    const decos = highlightLines.map((ln) => ({
+      range: new monaco.Range(ln, 1, ln, 1),
+      options: {
+        isWholeLine: true,
+        className: 'lerd-added-line',
+        linesDecorationsClassName: 'lerd-added-gutter'
+      }
+    }));
+    if (!decorations) {
+      decorations = editor.createDecorationsCollection(decos);
+    } else {
+      decorations.set(decos);
+    }
+  }
+
+  // Re-apply when the set changes (e.g. staging a different proposal) or once the
+  // async editor/monaco assignment lands.
+  $effect(() => {
+    void highlightLines;
+    applyDecorations();
   });
 </script>
 

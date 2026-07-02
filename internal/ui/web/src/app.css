@@ -67,3 +67,14 @@ button {
     display: none;
   }
 }
+/* SCM-style added-line decorations for the env insert preview (see
+   MonacoEditor highlightLines). Monaco renders these class names in its own
+   DOM, so they must be global rather than component-scoped. */
+.lerd-added-line {
+  background: rgba(16, 185, 129, 0.1);
+}
+.lerd-added-gutter {
+  background: #10b981;
+  width: 3px !important;
+  margin-left: 3px;
+}

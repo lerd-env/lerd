@@ -175,3 +175,15 @@ When called via the MCP server (AI assistants), `env_check` returns structured J
   "out_of_sync_count": 3
 }
 ```
+
+## Filling in missing keys
+
+`env:check` tells you *what* is missing; `lerd env:check --fix` fills it in. For each `.env` file that lacks keys from `.env.example`, it shows a unified diff of the exact lines it would add, then inserts them on confirmation:
+
+```bash
+lerd env:check --fix
+```
+
+The keys are not appended at the bottom. Each missing key is placed next to the neighbours it has in `.env.example`, so a missing `DB_PORT` lands inside your `DB_*` block rather than orphaned at the end, and a key's inline comment in the example is carried along with it. Values are copied verbatim from the example (placeholders and all), existing values are never changed, and keys your `.env` has beyond the example are left untouched, so the operation is purely additive and safe to run. When stdin is not a terminal (a script or the CI), it prints the diff and the count without applying anything.
+
+In the dashboard's **Env** tab, the same placement powers the *Insert missing keys* banner: when the framework's `.env` is missing keys the app actually needs, an *Add* button drops them straight into the editor, each placed beside its example neighbours and marked with a green change bar in the gutter. The editor stays editable, so you can fill in the values, delete any key you don't want, then Save as usual (the green bars track your edits and clear once you save). Only the keys the app genuinely requires are offered by default, with a `+N optional` button to also pull in the ones the app reads with a code default, using the same required-versus-optional classification the site doctor uses for its env drift check.

@@ -9,17 +9,23 @@ import (
 
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 )
 
 // NewEnvCheckCmd returns the env:check command.
 func NewEnvCheckCmd() *cobra.Command {
-	return &cobra.Command{
+	var fix bool
+	cmd := &cobra.Command{
 		Use:          "env:check",
 		Short:        "Compare all .env files against .env.example and flag missing keys",
 		SilenceUsage: true,
-		RunE:         runEnvCheck,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runEnvCheck(fix)
+		},
 	}
+	cmd.Flags().BoolVar(&fix, "fix", false, "Insert missing keys into each .env, placed beside the neighbours they have in .env.example")
+	return cmd
 }
 
 // diffEnvKeys compares envFile against exampleFile and returns
@@ -80,7 +86,7 @@ func findEnvFiles(dir string) []string {
 	return files
 }
 
-func runEnvCheck(_ *cobra.Command, _ []string) error {
+func runEnvCheck(fix bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -94,6 +100,10 @@ func runEnvCheck(_ *cobra.Command, _ []string) error {
 	envFiles := findEnvFiles(cwd)
 	if len(envFiles) == 0 {
 		return fmt.Errorf("no .env files found in %s — run lerd env to create one", cwd)
+	}
+
+	if fix {
+		return fixEnvFiles(examplePath, envFiles)
 	}
 
 	exampleKeys, err := envfile.ReadKeys(examplePath)
@@ -192,4 +202,89 @@ func envMark(present bool) string {
 		return feedback.Green("✓")
 	}
 	return feedback.Red("✗")
+}
+
+// mergeEnvFile reads the example and one env file and returns the proposed merge
+// that adds the example's missing keys next to their neighbours. Split out from
+// fixEnvFiles so the placement is testable without the interactive prompt.
+func mergeEnvFile(examplePath, envPath string) (envfile.MergeResult, error) {
+	exampleContent, err := os.ReadFile(examplePath)
+	if err != nil {
+		return envfile.MergeResult{}, fmt.Errorf("reading .env.example: %w", err)
+	}
+	envContent, err := os.ReadFile(envPath)
+	if err != nil {
+		return envfile.MergeResult{}, err
+	}
+	return envfile.MergeMissing(string(exampleContent), string(envContent), nil), nil
+}
+
+// fixEnvFiles offers to insert each env file's missing example keys in place. The
+// insertion is purely additive: existing values are never changed and keys the
+// env has beyond the example (which a merge can't reconcile) are left untouched.
+func fixEnvFiles(examplePath string, envFiles []string) error {
+	proposed := 0
+	for _, f := range envFiles {
+		res, err := mergeEnvFile(examplePath, f)
+		if err != nil || len(res.Added) == 0 {
+			continue
+		}
+		info, err := os.Stat(f)
+		if err != nil {
+			continue
+		}
+		current, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		proposed++
+		name := filepath.Base(f)
+		printEnvDiff(name, string(current), res.Merged, res.Added)
+		if !feedback.Interactive() {
+			fmt.Printf("  %s: %d key(s) would be added (run interactively to apply)\n", name, len(res.Added))
+			continue
+		}
+		if !feedback.Confirm(fmt.Sprintf("Insert %d missing key(s) into %s?", len(res.Added), name), true) {
+			continue
+		}
+		if err := os.WriteFile(f, []byte(res.Merged), info.Mode().Perm()); err != nil {
+			feedback.Warn("could not write %s: %v", name, err)
+			continue
+		}
+		fmt.Printf("  %s Updated %s\n", feedback.Green("✓"), name)
+	}
+	if proposed == 0 {
+		fmt.Println("  nothing to insert — every .env already has the example's keys")
+	}
+	return nil
+}
+
+// printEnvDiff previews a merge as a unified diff of the env file, so the
+// surrounding context lines show where each inserted key lands, not just which
+// keys were added.
+func printEnvDiff(name, current, merged string, added []string) {
+	diff, err := difflib.GetUnifiedDiffString(difflib.UnifiedDiff{
+		A:        difflib.SplitLines(current),
+		B:        difflib.SplitLines(merged),
+		FromFile: name + " (current)",
+		ToFile:   name + " (proposed)",
+		Context:  2,
+	})
+	if err != nil {
+		return
+	}
+	fmt.Printf("\n%s %s — %d key(s) to insert:\n\n", metaStyle.Render("~"), name, len(added))
+	for _, line := range strings.Split(strings.TrimRight(diff, "\n"), "\n") {
+		switch {
+		case strings.HasPrefix(line, "+"):
+			fmt.Println(addStyle.Render(line))
+		case strings.HasPrefix(line, "-"):
+			fmt.Println(delStyle.Render(line))
+		case strings.HasPrefix(line, "@@"), strings.HasPrefix(line, "---"), strings.HasPrefix(line, "+++"):
+			fmt.Println(metaStyle.Render(line))
+		default:
+			fmt.Println(line)
+		}
+	}
+	fmt.Println()
 }

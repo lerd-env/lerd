@@ -271,6 +271,34 @@ export interface SaveEnvResult {
   backupPath?: string;
 }
 
+export interface SiteEnvProposal {
+  file: string;
+  current: string;
+  merged: string;
+  added: string[];
+  addedLines: number[];
+  required: string[];
+  optional: string[];
+}
+
+// proposeSiteEnv asks the server for a proposed env file that inserts the keys
+// the site's env is missing from .env.example, each placed beside its
+// neighbours. includeOptional pulls in the keys the app reads with a code
+// default too; by default only the required ones are proposed.
+export async function proposeSiteEnv(
+  domain: string,
+  branch: string = '',
+  includeOptional: boolean = false
+): Promise<SiteEnvProposal> {
+  const params = new URLSearchParams();
+  if (branch) params.set('branch', branch);
+  if (includeOptional) params.set('optional', '1');
+  const qs = params.toString();
+  const res = await apiFetch(site(domain, 'env') + '/propose' + (qs ? '?' + qs : ''));
+  if (!res.ok) throw new Error(`Failed to load env proposal (${res.status})`);
+  return (await res.json()) as SiteEnvProposal;
+}
+
 export interface SiteEnvBackup {
   name: string;
   mtime_unix: number;
