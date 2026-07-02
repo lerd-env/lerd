@@ -28,6 +28,12 @@ const (
 	slowAbsoluteMillis = 1000.0
 )
 
+// recentWindow bounds the snapshot to recently-seen samples, so a route that was
+// slow but has been fixed (or simply left alone) ages out instead of lingering on
+// stale outliers, which matters most for low-volume routes the count-based buffer
+// would otherwise hold onto until a couple hundred fresh hits overwrite them.
+const recentWindow = 10 * time.Minute
+
 // RouteStat is one flagged route in a site snapshot. The representative time is
 // the route's p95, not its median: a route that is only sometimes slow (a mix of
 // fast redirects and slow renders under one path) hides in the median but shows
@@ -57,6 +63,7 @@ type Aggregator struct {
 	mu      sync.Mutex
 	sites   map[string]*siteAgg
 	resolve SiteResolver
+	now     func() time.Time // injectable clock, for deterministic decay in tests
 }
 
 type siteAgg struct {
@@ -76,7 +83,7 @@ type routeAgg struct {
 // New returns an aggregator that maps hosts to sites via resolve. A nil resolver
 // drops every record.
 func New(resolve SiteResolver) *Aggregator {
-	return &Aggregator{sites: map[string]*siteAgg{}, resolve: resolve}
+	return &Aggregator{sites: map[string]*siteAgg{}, resolve: resolve, now: time.Now}
 }
 
 // Record ingests one access record, resolving its host to a site and appending
@@ -95,12 +102,14 @@ func (a *Aggregator) Record(r AccessRecord) {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	now := a.now()
+	at := now.UnixNano()
 	sa := a.sites[site]
 	if sa == nil {
 		sa = &siteAgg{overall: newRing(defaultWindow), routes: map[string]*routeAgg{}}
 		a.sites[site] = sa
 	}
-	sa.overall.add(ms)
+	sa.overall.add(ms, at)
 	rr := sa.routes[route]
 	if rr == nil {
 		if len(sa.routes) >= defaultMaxRoutes {
@@ -109,9 +118,9 @@ func (a *Aggregator) Record(r AccessRecord) {
 		rr = &routeAgg{times: newRing(defaultWindow), method: strings.ToUpper(strings.TrimSpace(r.Method))}
 		sa.routes[route] = rr
 	}
-	rr.times.add(ms)
+	rr.times.add(ms, at)
 	rr.example = StripQueryFragment(r.URI)
-	sa.updated = time.Now()
+	sa.updated = now
 }
 
 // SiteSnapshot returns the current view for one site, ok=false when the site has
@@ -139,21 +148,26 @@ func (a *Aggregator) Snapshot() []SiteStats {
 }
 
 func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
-	base := median(sa.overall.values())
+	cutoff := a.now().Add(-recentWindow).UnixNano()
+	base := median(sa.overall.values(cutoff))
 	st := SiteStats{
 		Site:         site,
 		MedianMillis: round1(base),
-		Samples:      sa.overall.len(),
+		Samples:      len(sa.overall.values(cutoff)),
 		Slow:         []RouteStat{},
 		UpdatedAt:    sa.updated,
 	}
 	for route, r := range sa.routes {
+		vals := r.times.values(cutoff)
+		if len(vals) == 0 {
+			continue // no recent samples: the route has gone quiet, drop it
+		}
 		// Flag on the route's tail (p95). Relatively slow: p95 >= factor x the site
 		// median, once it has enough samples to trust. Absolutely slow: p95 over a
 		// full second, surfaced even from a single hit so a genuinely broken route a
 		// dev triggers once doesn't hide under the sample floor.
-		tail := percentile(r.times.values(), 95)
-		relSlow := r.times.len() >= defaultMinSample && base > 0 && tail/base >= defaultFactor
+		tail := percentile(vals, 95)
+		relSlow := len(vals) >= defaultMinSample && base > 0 && tail/base >= defaultFactor
 		absSlow := tail >= slowAbsoluteMillis
 		if !relSlow && !absSlow {
 			continue
@@ -168,7 +182,7 @@ func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 			Example:    r.example,
 			P95Millis:  round1(tail),
 			Multiplier: round1(mult),
-			Samples:    r.times.len(),
+			Samples:    len(vals),
 		})
 	}
 	sort.Slice(st.Slow, func(i, j int) bool { return st.Slow[i].Multiplier > st.Slow[j].Multiplier })
