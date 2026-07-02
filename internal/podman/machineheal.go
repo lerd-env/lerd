@@ -7,9 +7,8 @@ import (
 	"time"
 )
 
-// MachineHeal recovers a stalled Podman Machine (e.g. macOS post-sleep, when the
-// VM and its gvproxy networking are suspended and every podman call blocks
-// forever). Wired by the darwin CLI to restartPodmanMachineForHeal; nil on
+// MachineHeal recovers a stalled Podman Machine (macOS post-sleep: VM+gvproxy
+// suspended, so podman calls block forever). Wired by the darwin CLI; nil on
 // Linux and in tests, where there is no machine VM to restart.
 var MachineHeal func()
 
@@ -26,12 +25,9 @@ var (
 	lastHealAt time.Time
 )
 
-// EnsureMachineResponsive verifies the Podman Machine answers a cheap query
-// within a timeout before an MCP handler shells out for real. On a stall it
-// heals the VM once (subject to a cooldown) and re-probes, turning a post-sleep
-// freeze into a self-healed retry or, if the machine is truly dead, a fast
-// surfaced error instead of an unbounded hang. Fast no-op on a healthy machine
-// and on Linux (no machine VM, MachineHeal nil).
+// EnsureMachineResponsive probes the VM before an MCP handler shells out. On a
+// stall it heals once (cooldown-guarded) and re-probes, turning a post-sleep
+// freeze into a self-healed retry or a fast error instead of an unbounded hang.
 func EnsureMachineResponsive() error {
 	if machineResponds() {
 		return nil
