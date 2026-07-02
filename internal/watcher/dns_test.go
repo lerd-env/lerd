@@ -817,6 +817,55 @@ func TestTickDNS_resumeTriggersNginxHeal(t *testing.T) {
 	}
 }
 
+// TestTickDNS_resumeTriggersMachineHeal: the podman machine VM is healed only on
+// the tick that detects a resume, never on the first or a normal-cadence tick.
+func TestTickDNS_resumeTriggersMachineHeal(t *testing.T) {
+	c := &fakeClock{t: time.Unix(1_000_000, 0)}
+	heals := 0
+	deps := dnsWatchDeps{
+		check:         func(string) (bool, error) { return true, nil },
+		idleOrLocked:  func() bool { return false },
+		publishStatus: func() {},
+		now:           c.now,
+		monoSince:     c.since,
+		healMachine:   func() { heals++ },
+		log:           func(string, string, ...any) {},
+	}
+	s := &dnsWatchState{}
+
+	tickDNS(deps, s, "test", false) // first tick: not a resume
+	c.advance(30 * time.Second)
+	tickDNS(deps, s, "test", false) // normal gap: not a resume
+	if heals != 0 {
+		t.Fatalf("non-resume ticks must not heal the machine, got %d", heals)
+	}
+
+	c.suspend(2 * time.Hour)
+	tickDNS(deps, s, "test", false) // suspend gap: resume -> heal
+	if heals != 1 {
+		t.Fatalf("resume must heal the machine once, got %d", heals)
+	}
+}
+
+// TestHealMachineOnResume: heals when set, no-ops on an unset hook or a
+// deliberately stopped stack.
+func TestHealMachineOnResume(t *testing.T) {
+	heals := 0
+	d := dnsWatchDeps{healMachine: func() { heals++ }}
+	healMachineOnResume(d)
+	if heals != 1 {
+		t.Fatalf("resume must heal, got %d", heals)
+	}
+
+	d.isStopped = func() bool { return true }
+	healMachineOnResume(d)
+	if heals != 1 {
+		t.Fatalf("stopped stack must not heal, got %d", heals)
+	}
+
+	healMachineOnResume(dnsWatchDeps{}) // nil hook: no panic, no-op
+}
+
 // TestTickDNS_resumeHealsEvenWhenIdle: an idle/locked poll tick backs off the DNS
 // probe, but a detected resume must still heal nginx.
 func TestTickDNS_resumeHealsEvenWhenIdle(t *testing.T) {

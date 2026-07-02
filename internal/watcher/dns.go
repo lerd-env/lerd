@@ -41,6 +41,10 @@ type dnsWatchDeps struct {
 	// until a manual lerd restart. Both nil off the Linux rootless-podman path.
 	nginxHealthy func() bool
 	repairNginx  func() error
+	// healMachine restarts the shared podman machine VM if a host suspend left it
+	// stalled, healing the MCP/exec path on wake before the next call. macOS only
+	// (nil elsewhere: Linux has no machine VM).
+	healMachine func()
 	// isStopped reports an intentional `lerd stop`, after which the watcher must
 	// not restart anything the user stopped on purpose. now is the clock (a seam
 	// for tests) used to detect a resume from the wall-clock gap between ticks.
@@ -179,6 +183,29 @@ func publishOnTransition(cur **bool, next bool, pub func()) {
 // If the watcher isn't running at the moment of resume (e.g. it restarted during
 // the outage), that resume is missed and the user falls back to `lerd start`; a
 // rare edge, far better than a continuous poll that fights every bring-up.
+// defaultHealMachine un-stalls the podman machine VM after a host resume, so the
+// MCP/exec path recovers proactively before the next agent call. It reuses the
+// reactive probe+heal (podman.EnsureMachineResponsive) so both share one
+// cooldown and it only restarts the VM when a bounded probe actually fails.
+func defaultHealMachine() {
+	if err := podman.EnsureMachineResponsive(); err != nil {
+		logger.Warn("podman machine heal after resume failed", "err", err)
+	}
+}
+
+// healMachineOnResume restarts the podman machine VM on the tick that detected a
+// resume, mirroring healNginxOnResume. No-op when healMachine is unset (Linux,
+// tests) or the stack was intentionally stopped.
+func healMachineOnResume(d dnsWatchDeps) {
+	if d.healMachine == nil {
+		return
+	}
+	if d.isStopped != nil && d.isStopped() {
+		return
+	}
+	d.healMachine()
+}
+
 func healNginxOnResume(d dnsWatchDeps) {
 	if d.nginxHealthy == nil {
 		return
@@ -323,6 +350,14 @@ func WatchDNS(interval time.Duration, tld string) {
 		// lerd restart (issue #665). DNS resolution is already repaired below.
 		deps.nginxHealthy = defaultNginxHealthy
 		deps.repairNginx = defaultRepairNginx
+		deps.isStopped = config.IsStopped
+	}
+
+	// A host suspend can stall the shared podman machine VM (issue #715); the
+	// resume tick restarts it so the MCP/exec path is healed before the next
+	// agent call. isStopped keeps a deliberate `lerd stop` from resurrecting it.
+	if runtime.GOOS == "darwin" {
+		deps.healMachine = defaultHealMachine
 		deps.isStopped = config.IsStopped
 	}
 
@@ -473,9 +508,11 @@ func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 		s.dnsEnvSeen = true
 	}
 
-	// Recover nginx after a resume, once the container DNS above has re-synced the
-	// network it will rebind onto.
+	// Recover after a resume: on macOS un-stall the podman machine VM first (the
+	// shared VM everything runs in), then on Linux rebind nginx's host forward
+	// once the container DNS above has re-synced the network.
 	if resumed {
+		healMachineOnResume(d)
 		healNginxOnResume(d)
 	}
 

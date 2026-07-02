@@ -49,10 +49,20 @@ func (c *ContainerCache) SetOnChange(fn func()) {
 	c.onChangeMu.Unlock()
 }
 
+// pollTimeout bounds the non-started fallback podman calls so a stalled VM
+// (macOS post-sleep) yields a fast empty snapshot instead of hanging the caller.
+const pollTimeout = 10 * time.Second
+
 func defaultPollFn() (string, error) {
-	return Run("ps", "-a",
+	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+	defer cancel()
+	out, err := CmdContext(ctx, "ps", "-a",
 		"--filter", "name=lerd-",
-		"--format", "{{.Names}}\t{{.State}}")
+		"--format", "{{.Names}}\t{{.State}}").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
 }
 
 // Cache is the process-wide container state store. Start it once from serve-ui;
@@ -84,10 +94,21 @@ func (c *ContainerCache) Running(name string) bool {
 	c.mu.RUnlock()
 
 	if !started {
-		running, _ := ContainerRunning(name)
-		return running
+		return containerRunningBounded(name)
 	}
 	return v
+}
+
+// containerRunningBounded is the non-started fallback's container check, bounded
+// by pollTimeout so a stalled VM returns fast (false) instead of hanging.
+func containerRunningBounded(name string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), pollTimeout)
+	defer cancel()
+	out, err := CmdContext(ctx, "inspect", "--format={{.State.Running}}", name).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "true"
 }
 
 // Snapshot returns a copy of the cached container map. When the cache has not
