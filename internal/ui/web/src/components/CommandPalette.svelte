@@ -15,6 +15,7 @@
     loadSites
   } from '$stores/sites';
   import { coreServices, serviceLabel } from '$stores/services';
+  import { installablePresets, loadPresets, installPresetAndOpen } from '$stores/presets';
   import { unhealthyWorkers, healAll, loadWorkerHealth } from '$stores/workerHealth';
   import { openLinkModal, openPresetModal } from '$stores/modals';
   import { openDocs } from '$stores/dashboard';
@@ -31,7 +32,7 @@
   } from '$stores/commands';
   import { m } from '../paraglide/messages.js';
 
-  type Group = 'pages' | 'sites' | 'services' | 'toggles' | 'commands' | 'actions';
+  type Group = 'pages' | 'sites' | 'services' | 'presets' | 'toggles' | 'commands' | 'actions';
   interface Entry {
     id: string;
     label: string;
@@ -71,6 +72,20 @@
         group: 'services',
         action: () => goToTab('services', svc.name)
       });
+    }
+
+    // Installable service presets: each surfaces as a direct install action so
+    // a search like "install redis" runs the install without opening the modal.
+    if ($accessMode.loopback) {
+      for (const p of $installablePresets) {
+        list.push({
+          id: 'preset:' + p.name,
+          label: m.palette_install_preset({ name: serviceLabel(p.name) }),
+          hint: p.description || p.image || p.name,
+          group: 'presets',
+          action: async () => { await installPresetAndOpen(p); }
+        });
+      }
     }
 
     // Toggles: site-level state toggles (HTTPS, LAN share) and worker
@@ -234,6 +249,7 @@
     pages: () => m.palette_group_pages(),
     sites: () => m.palette_group_sites(),
     services: () => m.palette_group_services(),
+    presets: () => m.palette_group_presets(),
     toggles: () => m.palette_groupToggles(),
     commands: () => m.cmd_commands(),
     actions: () => m.palette_group_actions()
@@ -245,6 +261,7 @@
     openCommandPalette();
     queueMicrotask(() => inputEl?.focus());
     void preloadCommandsFor($sites.map((s) => s.domain));
+    void loadPresets();
   }
 
   function closePalette() {
@@ -263,6 +280,7 @@
       query = '';
       selected = 0;
       queueMicrotask(() => inputEl?.focus());
+      void loadPresets();
     }
   });
 
