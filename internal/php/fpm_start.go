@@ -29,6 +29,12 @@ func FPMInstalled(version, container string) bool {
 // callers add any user-facing progress. Shared by the CLI php/artisan/shell
 // commands and the MCP exec handlers so both auto-start the same way.
 func StartFPM(version, container string) error {
+	// Gate on a bounded machine probe so a post-sleep stall surfaces (and self-
+	// heals) fast instead of hanging the caller on the untimed inspect below.
+	// Once this passes the VM is responsive, so the exec that follows won't hang.
+	if err := podman.EnsureMachineResponsive(); err != nil {
+		return err
+	}
 	if running, _ := podman.ContainerRunning(container); running {
 		return nil
 	}
