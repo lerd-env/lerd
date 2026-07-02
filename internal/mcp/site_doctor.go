@@ -12,10 +12,10 @@ import (
 // or for a project path / the cwd, returning the structured check report.
 func execSiteDoctor(args map[string]any) (any, *rpcError) {
 	var path, fwName string
-	if domain := strArg(args, "site"); domain != "" {
-		site, err := config.FindSiteByDomain(domain)
+	if ref := strArg(args, "site"); ref != "" {
+		site, err := config.FindSiteByRef(ref)
 		if err != nil {
-			return toolErr("site not found: " + domain), nil
+			return toolErr("site not found: " + ref), nil
 		}
 		path, fwName = site.Path, site.Framework
 	} else {

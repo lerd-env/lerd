@@ -229,6 +229,14 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 		args = map[string]any{}
 	}
 
+	// A `site` argument may be given as a site name or any of the site's domains;
+	// canonicalize it to the site name once here so every action keys on the same
+	// value, including those that build systemd unit names or read paths straight
+	// from it and would otherwise silently miss when handed a domain.
+	if raw := strArg(args, "site"); raw != "" {
+		args["site"] = config.ResolveSiteRef(raw)
+	}
+
 	// Working on a site through MCP counts as activity, so idle-suspend keeps it
 	// awake (and wakes it) the same as an HTTP request or a CLI command would.
 	recordToolActivity(args)
@@ -490,7 +498,7 @@ func diagTool() mcpTool {
 			Properties: map[string]mcpProp{
 				"action":          {Type: "string", Enum: []string{"status", "doctor", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "xdebug_on", "xdebug_off", "xdebug_status"}},
 				"path":            {Type: "string", Description: "Project root (which/check/site_doctor). Defaults to cwd."},
-				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route: site filter (site_doctor: domain)."},
+				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor: site filter (site name or domain)."},
 				"branch":          {Type: "string", Description: "dumps_recent/route_timing/optimize_route: worktree branch filter."},
 				"ctx":             {Type: "string", Enum: []string{"fpm", "cli"}, Description: "dumps_recent: context filter."},
 				"kind":            {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http"}, Description: "dumps_recent: event kind."},

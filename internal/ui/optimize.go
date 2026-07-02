@@ -28,6 +28,13 @@ type OptimizeReport struct {
 	Routes       []RouteOptimization `json:"routes"`
 }
 
+// resolveSiteName maps a site identifier that may be a domain (astrolov.test) to
+// the internal site name (astrolov) the dumps ring and reqstats key on, so a
+// caller can pass either. Shares one resolver with the MCP dispatch boundary.
+func resolveSiteName(s string) string {
+	return config.ResolveSiteRef(s)
+}
+
 // joinOptimize buckets captured-query findings onto the slow routes by the shared
 // reqstats route normalizer, so a route and its N+1s line up on the same key.
 // Pure (no I/O) so the join is unit-testable.
@@ -79,7 +86,7 @@ func handleRouteTiming(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	key := q.Get("site")
+	key := resolveSiteName(q.Get("site"))
 	if branch := q.Get("branch"); branch != "" {
 		key = wtKey(key, branch)
 	}
@@ -101,5 +108,5 @@ func handleOptimize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	minRepeat, _ := strconv.Atoi(q.Get("min_repeat"))
 	slowMS, _ := strconv.ParseFloat(q.Get("slow_ms"), 64)
-	writeJSON(w, optimizeSite(q.Get("site"), q.Get("branch"), minRepeat, slowMS))
+	writeJSON(w, optimizeSite(resolveSiteName(q.Get("site")), q.Get("branch"), minRepeat, slowMS))
 }

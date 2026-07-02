@@ -182,6 +182,6 @@ func handleQueriesAnalyze(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	minRepeat, _ := strconv.Atoi(q.Get("min_repeat"))
 	slowMS, _ := strconv.ParseFloat(q.Get("slow_ms"), 64)
-	events := srv.Filter(dumps.FilterOpts{Site: q.Get("site"), Kind: dumps.KindQuery})
+	events := srv.Filter(dumps.FilterOpts{Site: resolveSiteName(q.Get("site")), Kind: dumps.KindQuery})
 	writeJSON(w, analyzeQueries(events, minRepeat, slowMS))
 }

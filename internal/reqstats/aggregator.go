@@ -22,6 +22,10 @@ const (
 	defaultMinSample = 5
 	defaultFactor    = 3.0
 	slowListLimit    = 10
+	// slowAbsoluteMillis flags a route whose p95 is slow in absolute terms even
+	// below the sample floor: a full second is worth surfacing from a single hit,
+	// since a local dev rarely repeats a slow page enough to clear defaultMinSample.
+	slowAbsoluteMillis = 1000.0
 )
 
 // RouteStat is one flagged route in a site snapshot. The representative time is
@@ -144,22 +148,26 @@ func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 		UpdatedAt:    sa.updated,
 	}
 	for route, r := range sa.routes {
-		if r.times.len() < defaultMinSample {
+		// Flag on the route's tail (p95). Relatively slow: p95 >= factor x the site
+		// median, once it has enough samples to trust. Absolutely slow: p95 over a
+		// full second, surfaced even from a single hit so a genuinely broken route a
+		// dev triggers once doesn't hide under the sample floor.
+		tail := percentile(r.times.values(), 95)
+		relSlow := r.times.len() >= defaultMinSample && base > 0 && tail/base >= defaultFactor
+		absSlow := tail >= slowAbsoluteMillis
+		if !relSlow && !absSlow {
 			continue
 		}
-		// Flag on the route's tail (p95) against the site's typical (median), so an
-		// occasionally-slow route surfaces without its slow hits having to outnumber
-		// the fast ones first.
-		tail := percentile(r.times.values(), 95)
-		if base <= 0 || tail/base < defaultFactor {
-			continue
+		mult := 0.0
+		if base > 0 {
+			mult = tail / base
 		}
 		st.Slow = append(st.Slow, RouteStat{
 			Route:      route,
 			Method:     r.method,
 			Example:    r.example,
 			P95Millis:  round1(tail),
-			Multiplier: round1(tail / base),
+			Multiplier: round1(mult),
 			Samples:    r.times.len(),
 		})
 	}

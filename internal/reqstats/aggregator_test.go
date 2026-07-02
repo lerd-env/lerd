@@ -81,6 +81,29 @@ func TestAggregatorSampleFloor(t *testing.T) {
 	}
 }
 
+// A route slow in absolute terms (p95 over a full second) must be flagged even
+// below the sample floor, so a genuinely broken route a dev hits once still
+// surfaces instead of hiding under the minimum-sample rule.
+func TestAggregatorAbsoluteSlowFloor(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/home", 40, 20)
+	recordN(a, "myapp.test", "POST", "/place/search", 1200, 2)
+
+	snap, _ := a.SiteSnapshot("myapp")
+	var found *RouteStat
+	for i := range snap.Slow {
+		if snap.Slow[i].Route == "POST /place/search" {
+			found = &snap.Slow[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("a 1.2s route must be flagged even with only 2 samples")
+	}
+	if found.P95Millis < 1000 {
+		t.Errorf("p95 = %v, want ~1200", found.P95Millis)
+	}
+}
+
 // Slow must be a non-nil empty slice when nothing is flagged, so it serializes
 // as [] rather than null and the UI can treat it as an array unconditionally.
 func TestAggregatorSlowNeverNil(t *testing.T) {
