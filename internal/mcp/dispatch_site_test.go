@@ -29,7 +29,7 @@ var siteActionsUnderTest = map[string][]string{
 		"stripe_start", "stripe_stop", "stripe_config"},
 	"exec": {"commands_list", "commands_run", "command_add", "command_remove"},
 	"logs": {"sources", "fetch"},
-	"diag": {"site_doctor", "dumps_recent", "analyze_queries", "route_timing", "optimize_route"},
+	"diag": {"site_doctor", "dumps_recent", "analyze_queries", "route_timing", "optimize_route", "profiler_report"},
 }
 
 // The dispatch boundary must canonicalize a `site` argument passed as a domain to
