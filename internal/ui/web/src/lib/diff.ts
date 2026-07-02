@@ -48,3 +48,19 @@ export function diffLines(a: string, b: string): DiffLine[] {
   while (j < n) out.push({ op: '+', line: bLines[j++] });
   return out;
 }
+
+/**
+ * 1-based line numbers in `current` that are additions relative to `original`.
+ * Recomputed from content, so unlike tracked editor decorations it never goes
+ * stale when lines are inserted or deleted between calls.
+ */
+export function addedLineNumbers(original: string, current: string): number[] {
+  const out: number[] = [];
+  let ln = 0;
+  for (const d of diffLines(original, current)) {
+    if (d.op === '-') continue; // removed from original, absent in current
+    ln++; // context or addition occupies a line in current
+    if (d.op === '+') out.push(ln);
+  }
+  return out;
+}

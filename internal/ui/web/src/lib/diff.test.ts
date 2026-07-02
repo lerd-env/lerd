@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { diffLines } from './diff';
+import { diffLines, addedLineNumbers } from './diff';
 
 describe('diffLines', () => {
   it('marks every line as context when inputs match', () => {
@@ -50,5 +50,24 @@ describe('diffLines', () => {
 
   it('returns an empty array for identical empty inputs', () => {
     expect(diffLines('', '')).toEqual([]);
+  });
+});
+
+describe('addedLineNumbers', () => {
+  it('reports the current-buffer lines inserted since original', () => {
+    const original = 'DB_HOST=x\nDB_DATABASE=app';
+    const current = 'DB_HOST=x\nDB_PORT=5432\nDB_DATABASE=app';
+    expect(addedLineNumbers(original, current)).toEqual([2]);
+  });
+
+  it('does not shift onto surviving lines when an added line is removed again', () => {
+    const original = 'A=1\nB=2';
+    // User inserted two lines then deleted the first insertion; only the
+    // remaining insertion should be marked, on its new line number.
+    expect(addedLineNumbers(original, 'A=1\nNEW2=y\nB=2')).toEqual([2]);
+  });
+
+  it('is empty when nothing changed', () => {
+    expect(addedLineNumbers('A=1\nB=2', 'A=1\nB=2')).toEqual([]);
   });
 });

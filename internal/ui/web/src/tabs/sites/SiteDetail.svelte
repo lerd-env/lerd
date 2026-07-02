@@ -8,7 +8,7 @@
   import SiteNginxModal from '../../modals/SiteNginxModal.svelte';
   import SiteDebugTab from '$tabs/sites/SiteDebugTab.svelte';
   import { resumeSite, loadSites, activeWorktreeDomain, type Site } from '$stores/sites';
-  import { routeRest } from '$stores/route';
+  import { routeRest, goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
 
   let resumeBusy = $state(false);
@@ -78,6 +78,16 @@
     if (!exists) activeWorktreeBranch = '';
   });
 
+  // Select a tab and mirror it into the URL hash so the two never drift. Without
+  // this, clicking a tab left the hash pointing at whatever deep link last set it
+  // (e.g. the doctor's "edit env" #sites/<d>/env), so a refresh snapped back to
+  // that tab and a repeat deep link to the same hash fired no hashchange and so
+  // appeared to do nothing.
+  function selectTab(t: TabId) {
+    active = t;
+    goToTab('sites', `${site.domain}/${t}`);
+  }
+
   const tabBtn = (tab: TabId, isActive: boolean) =>
     'pb-1 text-xs font-medium border-b-2 transition-colors ' +
     (isActive
@@ -86,15 +96,15 @@
 </script>
 
 {#snippet tabs()}
-  <button class={tabBtn('overview', active === 'overview')} onclick={() => (active = 'overview')}>{m.sites_tabs_overview()}</button>
+  <button class={tabBtn('overview', active === 'overview')} onclick={() => selectTab('overview')}>{m.sites_tabs_overview()}</button>
   {#if canEnv}
-    <button class={tabBtn('env', active === 'env')} onclick={() => (active = 'env')}>{m.sites_tabs_env()}</button>
+    <button class={tabBtn('env', active === 'env')} onclick={() => selectTab('env')}>{m.sites_tabs_env()}</button>
   {/if}
   {#if canTinker}
-    <button class={tabBtn('tinker', active === 'tinker')} onclick={() => (active = 'tinker')}>{m.sites_tabs_tinker()}</button>
+    <button class={tabBtn('tinker', active === 'tinker')} onclick={() => selectTab('tinker')}>{m.sites_tabs_tinker()}</button>
   {/if}
   {#if canDumps}
-    <button class={tabBtn('dumps', active === 'dumps')} onclick={() => (active = 'dumps')}>{m.debug_title()}</button>
+    <button class={tabBtn('dumps', active === 'dumps')} onclick={() => selectTab('dumps')}>{m.debug_title()}</button>
   {/if}
 {/snippet}
 

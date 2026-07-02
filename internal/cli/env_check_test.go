@@ -82,6 +82,40 @@ func TestEnvCheck_commentsIgnored(t *testing.T) {
 	}
 }
 
+func TestMergeEnvFile_insertsInPlace(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "DB_HOST=localhost\nDB_PORT=5432\nDB_DATABASE=app\n")
+	writeFile(t, dir, ".env", "DB_HOST=lerd-postgres\nDB_DATABASE=app\n")
+
+	ex, envs := envPaths(dir, ".env")
+	res, err := mergeEnvFile(ex, envs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "DB_HOST=lerd-postgres\nDB_PORT=5432\nDB_DATABASE=app\n"
+	if res.Merged != want {
+		t.Errorf("merged mismatch\n got: %q\nwant: %q", res.Merged, want)
+	}
+	if len(res.Added) != 1 || res.Added[0] != "DB_PORT" {
+		t.Errorf("expected [DB_PORT], got %v", res.Added)
+	}
+}
+
+func TestMergeEnvFile_noMissingReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".env.example", "A=\nB=\n")
+	writeFile(t, dir, ".env", "A=1\nB=2\n")
+
+	ex, envs := envPaths(dir, ".env")
+	res, err := mergeEnvFile(ex, envs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Added) != 0 {
+		t.Errorf("expected nothing added, got %v", res.Added)
+	}
+}
+
 func TestFindEnvFiles_findsVariants(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, ".env", "A=1\n")

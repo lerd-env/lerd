@@ -145,6 +145,53 @@ func TestCheckEnvDrift_classifiesRequiredVsOptional(t *testing.T) {
 	}
 }
 
+func TestProposeEnvMerge(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".env.example", "APP_KEY=\nDB_HOST=localhost\nLOG_LEVEL=debug\n")
+	writeEnv(t, dir, ".env", "APP_KEY=set\n")
+
+	mustMkdir(t, filepath.Join(dir, "config"))
+	writeEnv(t, dir, filepath.Join("config", "app.php"),
+		"<?php return [\n"+
+			"  'host' => env('DB_HOST'),\n"+ // required (no default)
+			"  'log' => env('LOG_LEVEL', 'debug'),\n"+ // optional (has default)
+			"];\n")
+
+	prop, ok := ProposeEnvMerge(dir, nil)
+	if !ok {
+		t.Fatal("expected ok=true for a dotenv project with an example")
+	}
+	if prop.EnvFile != ".env" {
+		t.Errorf("EnvFile = %q, want .env", prop.EnvFile)
+	}
+	if want := []string{"DB_HOST"}; !equalStrings(prop.Required, want) {
+		t.Errorf("Required = %v, want %v", prop.Required, want)
+	}
+	if want := []string{"LOG_LEVEL"}; !equalStrings(prop.Optional, want) {
+		t.Errorf("Optional = %v, want %v", prop.Optional, want)
+	}
+}
+
+func TestProposeEnvMerge_noExampleSkips(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".env", "APP_KEY=set\n")
+	if _, ok := ProposeEnvMerge(dir, nil); ok {
+		t.Error("expected ok=false when there's no .env.example")
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 func TestCheckEnvDrift_ignoresCompiledPublicBundle(t *testing.T) {
 	dir := t.TempDir()
 	envPath := filepath.Join(dir, ".env")
