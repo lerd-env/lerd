@@ -487,9 +487,9 @@ func RemoveProjectAISkills(abs string, verbose bool) error {
 //go:embed aidocs/lerd-reference.md
 var lerdReference string
 
-const skillDescription = "Manage the lerd local PHP development environment — run framework console commands (artisan, bin/console, etc.), manage services, start/stop queue workers, run composer, manage Node.js versions, and inspect site status via MCP tools."
+const skillDescription = "Manage the lerd local PHP development environment via MCP tools: run framework console commands (artisan, bin/console, etc.), manage services, start/stop queue workers, run composer, manage Node.js versions, and inspect site status. Also the way to diagnose and optimize a slow site: find N+1 and slow queries, read per-site response-time and slow-route timings, profile requests, and run site health checks, from real captured traffic rather than reading code."
 
-const cursorDescription = "Lerd local PHP development environment — use the lerd MCP tools to manage sites, services, workers, and PHP/Node runtimes."
+const cursorDescription = "Lerd local PHP development environment — use the lerd MCP tools to manage sites, services, workers, and PHP/Node runtimes, and to diagnose slow sites (N+1 and slow queries, request timing, slow routes, profiling) from real traffic."
 
 // renderClaudeSkill wraps the reference with Claude Code skill frontmatter.
 func renderClaudeSkill() string {

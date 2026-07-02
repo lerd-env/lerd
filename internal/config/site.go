@@ -626,6 +626,28 @@ func FindSite(name string) (*Site, error) {
 	return nil, fmt.Errorf("site %q not found", name)
 }
 
+// FindSiteByRef looks up a site by its internal name first, then by any of its
+// domains, so a caller can pass either identifier.
+func FindSiteByRef(ref string) (*Site, error) {
+	if s, err := FindSite(ref); err == nil {
+		return s, nil
+	}
+	return FindSiteByDomain(ref)
+}
+
+// ResolveSiteRef maps a site reference that may be a name or any of the site's
+// domains to the canonical site name. An unknown reference is returned unchanged,
+// so callers still surface their own "not found" error rather than a rewrite.
+func ResolveSiteRef(ref string) string {
+	if ref == "" {
+		return ""
+	}
+	if s, err := FindSiteByRef(ref); err == nil {
+		return s.Name
+	}
+	return ref
+}
+
 // FindSiteByPath returns the site whose path matches, or an error if not found.
 func FindSiteByPath(path string) (*Site, error) {
 	reg, err := LoadSites()

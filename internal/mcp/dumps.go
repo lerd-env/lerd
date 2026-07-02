@@ -85,6 +85,64 @@ func execAnalyzeQueries(args map[string]any) (any, *rpcError) {
 	return toolOK(string(body)), nil
 }
 
+// execRouteTiming calls lerd-ui's /api/queries/route-timing endpoint, returning
+// the per-site request-timing snapshot (median response time and the routes
+// whose p95 runs well above it) verbatim. This is the timing table the doctor's
+// slow_routes finding only summarizes in prose.
+func execRouteTiming(args map[string]any) (any, *rpcError) {
+	q := []string{}
+	if s := strArg(args, "site"); s != "" {
+		q = append(q, "site="+s)
+	}
+	if b := strArg(args, "branch"); b != "" {
+		q = append(q, "branch="+b)
+	}
+	path := "/api/queries/route-timing"
+	if len(q) > 0 {
+		path += "?" + strings.Join(q, "&")
+	}
+	body, status, err := uiGET(path)
+	if err != nil {
+		return toolErr("lerd-ui not reachable: " + err.Error()), nil
+	}
+	if status != http.StatusOK {
+		return toolErr(fmt.Sprintf("lerd-ui returned %d: %s", status, body)), nil
+	}
+	return toolOK(string(body)), nil
+}
+
+// execOptimizeRoute calls lerd-ui's /api/queries/optimize endpoint, returning the
+// joined view: each slow route alongside the N+1 and slow-query findings captured
+// against it, so an agent gets the symptom and its cause in one call rather than
+// pivoting between route_timing and analyze_queries by hand.
+func execOptimizeRoute(args map[string]any) (any, *rpcError) {
+	q := []string{}
+	if s := strArg(args, "site"); s != "" {
+		q = append(q, "site="+s)
+	}
+	if b := strArg(args, "branch"); b != "" {
+		q = append(q, "branch="+b)
+	}
+	if v, ok := args["min_repeat"]; ok {
+		q = append(q, fmt.Sprintf("min_repeat=%v", v))
+	}
+	if v, ok := args["slow_ms"]; ok {
+		q = append(q, fmt.Sprintf("slow_ms=%v", v))
+	}
+	path := "/api/queries/optimize"
+	if len(q) > 0 {
+		path += "?" + strings.Join(q, "&")
+	}
+	body, status, err := uiGET(path)
+	if err != nil {
+		return toolErr("lerd-ui not reachable: " + err.Error()), nil
+	}
+	if status != http.StatusOK {
+		return toolErr(fmt.Sprintf("lerd-ui returned %d: %s", status, body)), nil
+	}
+	return toolOK(string(body)), nil
+}
+
 func execDumpsStatus(_ map[string]any) (any, *rpcError) {
 	body, status, err := uiGET("/api/dumps/status")
 	if err != nil {

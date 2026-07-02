@@ -75,7 +75,7 @@ func handleDumpsList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	out := srv.Filter(dumps.FilterOpts{
-		Site:    q.Get("site"),
+		Site:    resolveSiteName(q.Get("site")),
 		Branch:  q.Get("branch"),
 		Ctx:     q.Get("ctx"),
 		Kind:    q.Get("kind"),

@@ -226,6 +226,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
 	mux.HandleFunc("/api/queries/analyze", withCORS(handleQueriesAnalyze))
+	mux.HandleFunc("/api/queries/route-timing", withCORS(handleRouteTiming))
+	mux.HandleFunc("/api/queries/optimize", withCORS(handleOptimize))
 	mux.HandleFunc("/api/dumps/stream", withCORS(handleDumpsStream))
 	mux.HandleFunc("/api/dumps/status", withCORS(handleDumpsStatus))
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))

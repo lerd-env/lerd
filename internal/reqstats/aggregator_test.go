@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 )
 
 func siteResolver(m map[string]string) SiteResolver {
@@ -79,6 +80,64 @@ func TestAggregatorSampleFloor(t *testing.T) {
 			t.Error("route under the sample floor must not be flagged")
 		}
 	}
+}
+
+// A route slow in absolute terms (p95 over a full second) must be flagged even
+// below the sample floor, so a genuinely broken route a dev hits once still
+// surfaces instead of hiding under the minimum-sample rule.
+func TestAggregatorAbsoluteSlowFloor(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/home", 40, 20)
+	recordN(a, "myapp.test", "POST", "/place/search", 1200, 2)
+
+	snap, _ := a.SiteSnapshot("myapp")
+	var found *RouteStat
+	for i := range snap.Slow {
+		if snap.Slow[i].Route == "POST /place/search" {
+			found = &snap.Slow[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("a 1.2s route must be flagged even with only 2 samples")
+	}
+	if found.P95Millis < 1000 {
+		t.Errorf("p95 = %v, want ~1200", found.P95Millis)
+	}
+}
+
+// A route that was slow but whose slow samples have aged past the recency window
+// must clear, so a fixed (or abandoned) route stops lingering on stale outliers.
+func TestAggregatorRecentWindowDecay(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	clock := time.Unix(1_700_000_000, 0)
+	a.now = func() time.Time { return clock }
+
+	recordN(a, "myapp.test", "GET", "/home", 40, 20)
+	recordN(a, "myapp.test", "POST", "/place/search", 6000, 2)
+
+	snap, _ := a.SiteSnapshot("myapp")
+	if !hasSlowRoute(snap, "POST /place/search") {
+		t.Fatal("a 6s route must be flagged while its samples are recent")
+	}
+
+	// Advance past the recency window; the old slow samples fall out of scope. A
+	// little fresh fast traffic keeps the site alive so the snapshot still renders.
+	clock = clock.Add(recentWindow + time.Minute)
+	recordN(a, "myapp.test", "GET", "/home", 40, 5)
+
+	snap, _ = a.SiteSnapshot("myapp")
+	if hasSlowRoute(snap, "POST /place/search") {
+		t.Error("a route whose slow samples aged out of the recency window must clear")
+	}
+}
+
+func hasSlowRoute(s SiteStats, route string) bool {
+	for _, r := range s.Slow {
+		if r.Route == route {
+			return true
+		}
+	}
+	return false
 }
 
 // Slow must be a non-nil empty slice when nothing is flagged, so it serializes
