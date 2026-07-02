@@ -133,6 +133,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	if c, ok := checkPHPVersion(path, fw); ok {
 		resp.add(c)
 	}
+	if c, ok := checkSlowRoutes(path); ok {
+		resp.add(c)
+	}
 	applyLabels(&resp)
 	return resp
 }
@@ -205,6 +208,7 @@ var universalLabels = map[string]string{
 	"node_deps":       "Node Dependencies",
 	"node_audit":      "Node Audit",
 	"php_version":     "PHP Version",
+	"slow_routes":     "Response Time",
 }
 
 // humanize turns a snake_case check name into a Title Case fallback label.

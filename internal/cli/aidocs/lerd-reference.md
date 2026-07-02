@@ -97,7 +97,7 @@ Actions: `list`, `add`, `remove`, `prune`, `search`, `install`, `project_new`, `
 #### `diag` — diagnostics & observability
 Actions: `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
 - `status` (DNS/nginx/FPM/watcher health) and `doctor` (full JSON diagnostic) are the first stops when something is broken; `dns_diagnose` walks the DNS chain
-- `site_doctor` runs framework-agnostic app-level checks for one site (env file, env drift, app key, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP range, plus the framework's own checks); pass `site` (domain) or `path`, defaults to cwd
+- `site_doctor` runs framework-agnostic app-level checks for one site (env file, env drift, app key, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP range, a `slow_routes` warning for routes whose p95 runs well above the site's typical response time, plus the framework's own checks); pass `site` (domain) or `path`, defaults to cwd. `slow_routes` reads the watcher's request-timing snapshot and has no command fix; the remedy is to profile the route (`profiler_toggle`)
 - reading logs lives in the `logs` tool (below), not here
 - `which` shows resolved PHP/Node/docroot/nginx for a site; `check` validates `.lerd.yaml`
 - debug bridge loop: `dumps_toggle` (enable) → `dumps_clear` → hit the page → `analyze_queries` (N+1 / slow-query report with file:line) or `dumps_recent` (filter by site/branch/ctx/kind/since/limit)

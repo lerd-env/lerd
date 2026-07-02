@@ -12,12 +12,27 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/idle"
+	"github.com/geodro/lerd/internal/push"
+	"github.com/geodro/lerd/internal/reqstats"
 )
 
 // activityTracker records per-site last-active times fed by the access feed and
 // control socket, read by the engine and persisted to config.IdleActivityFile()
 // for lerd-ui and the CLI to render. Allocated once by StartIdle.
 var activityTracker *idle.Tracker
+
+// reqAggregator holds rolling per-site request-timing windows fed by the same
+// access feed. It runs regardless of idle-suspend and is persisted to
+// config.RequestStatsFile() for lerd-ui to read. Allocated once by StartIdle.
+var reqAggregator *reqstats.Aggregator
+
+// reqStatsSaveInterval is how often the request-timing snapshot is flushed to
+// disk for lerd-ui. Shorter than the idle tick so the panel feels live.
+const reqStatsSaveInterval = 10 * time.Second
+
+// slowNotifier fires a one-time push per newly-flagged slow route on each save
+// tick. Allocated once by StartIdle.
+var slowNotifier = newSlowRouteNotifier()
 
 // Idle-suspend lifecycle. The control socket is always bound (the toggle/wake
 // point); everything else lives in an enabled session started by enableIdle and
@@ -39,8 +54,19 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	idleStartSrc = sourceWatcher
 	activityTracker = idle.NewTracker(resolveHostToSite)
 	idleEng = newIdleEngine(activityTracker)
+	reqAggregator = reqstats.New(resolveHostToSite)
 	go runNotifier()
 	startControlSocket()
+
+	// The access feed is bound once, for the daemon's life, and fans out to both
+	// request stats (always) and idle activity (only while enabled). Idle used to
+	// bind it inside its session, but timing stats must run even with idle off, so
+	// there is a single always-on reader here. Best-effort: a bind failure loses
+	// the feed, and both consumers degrade to their other signals.
+	if conn, ok := accessFeedConn(); ok {
+		go readDatagrams(conn, handleAccessDatagram)
+	}
+	go runReqStatsSaver()
 
 	// Boot memory is the persisted config flag, not the ephemeral socket. When
 	// off, still resume any workers a prior session left suspended (e.g. toggled
@@ -71,13 +97,9 @@ func enableIdle() {
 
 	go idleEng.run(ctx)
 
-	// The nginx access feed turns a plain web request into activity, so browsing
-	// a quiet site wakes it. Best-effort: on a bind failure the source-file
-	// watcher and control-socket pings still feed activity.
-	if conn, ok := accessFeedConn(); ok {
-		go func() { <-ctx.Done(); conn.Close() }()
-		go readDatagrams(conn, handleAccessDatagram)
-	}
+	// The access feed is bound once in StartIdle and gated on idleActive, so
+	// enabling just flips the gate: browsing a quiet site now wakes it. The
+	// source-file watcher is the only thing this session still starts.
 	if idleStartSrc != nil {
 		go func() { _ = idleStartSrc(ctx.Done()) }()
 	}
@@ -97,12 +119,42 @@ func disableIdle() {
 	go idleEng.resumeUntilClear()
 }
 
-// handleAccessDatagram records one site touch per nginx access datagram, waking a
-// suspended site when the request host resolves to one.
+// handleAccessDatagram fans one nginx access datagram out to both consumers:
+// request-timing stats always, and idle activity only while idle-suspend is
+// enabled (so a disabled feature never wakes or records). A single datagram
+// carries both signals in one pipe-delimited record.
 func handleAccessDatagram(b []byte) {
+	if reqAggregator != nil {
+		if rec, ok := reqstats.ParseAccessRecord(b); ok {
+			reqAggregator.Record(rec)
+		}
+	}
+	if !idleActive.Load() {
+		return
+	}
 	if host := idle.ParseAccessHost(b); host != "" {
 		if site := activityTracker.TouchHost(host, time.Now()); site != "" {
 			idleEng.OnActivity(site)
+		}
+	}
+}
+
+// runReqStatsSaver flushes the request-timing snapshot to disk on a fixed tick
+// for lerd-ui to read, and fires a one-time push for any route newly flagged as
+// slow. Runs for the daemon's life, independent of idle. push.Send is a no-op
+// when no subscription has opted into the slow_route kind.
+func runReqStatsSaver() {
+	t := time.NewTicker(reqStatsSaveInterval)
+	defer t.Stop()
+	for range t.C {
+		if reqAggregator == nil {
+			continue
+		}
+		snap := reqAggregator.Snapshot()
+		_ = reqAggregator.Save(config.RequestStatsFile())
+		domainOf := siteDomainResolver()
+		for _, n := range slowNotifier.notifications(snap, domainOf) {
+			_ = push.Send(n)
 		}
 	}
 }

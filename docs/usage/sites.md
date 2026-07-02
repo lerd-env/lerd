@@ -234,6 +234,18 @@ Toggling workers from the CLI (`lerd queue:start`, `lerd schedule:stop`, etc.) o
 
 ---
 
+## Request timing
+
+The Debug tab of a PHP site opens with a **Request timing** panel that reads the nginx access feed to show how the site is responding as you work. It reports the site's typical response time and, below it, the routes running well above their own baseline, slowest first, with the multiplier and how many samples back the figure. Unlike the other Debug lenses, it does not need the debug bridge, so it stays visible whether or not capture is on.
+
+Routes are grouped after collapsing id-like path segments, so `/users/123` and `/users/456` aggregate as one `GET /users/:id` entry, and query strings are dropped before anything is recorded. A route only appears once it has enough samples to trust its median, so a single cold-cache hit does not light up as an anomaly. The window is in memory on the watcher and resets when the daemon restarts.
+
+The same flagged routes also surface as a `Response Time` warning in the site doctor (`lerd site:doctor`, the dashboard doctor card, and the MCP `diag site_doctor` action), so the nudge reaches you even when the Debug tab is closed. The doctor reads the watcher's snapshot rather than re-measuring, so it stays quiet on a healthy or idle site. If you've enabled notifications, a route crossing the threshold also fires a `slow_route` push. It's edge-triggered: one push when the route goes slow, then it rearms once the route drops back within the typical band, so you're told again if it regresses later (see [Notifications](../features/notifications.md)).
+
+This is a local, single-developer signal meant to catch a route that is dragging, not a production analytics system. Each flagged route carries a **Profile** button that does the whole handoff in one click: it arms the SPX profiler, waits for it to actually be armed, then opens the route in a new tab so that request is captured and switches you to the Profiler where the fresh capture lands on top. Profiling is global and stays off until you ask for it, so the button turns it on for every request until you turn it back off. A non-navigable route (a POST, say) can't be opened for you, so there the button just arms profiling and opens the Profiler for you to reproduce it (see [Profiler](../features/profiler.md)).
+
+---
+
 ## Name collision handling
 
 When a directory is parked or linked and another site is already registered with the same name:

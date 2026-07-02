@@ -449,6 +449,13 @@ func IdleActivityFile() string {
 	return filepath.Join(RunDir(), "idle-activity.json")
 }
 
+// RequestStatsFile is where the watcher persists its rolling per-site request
+// timing snapshot for lerd-ui to read, since the two run as separate processes
+// and only the watcher binds the nginx access feed. Ephemeral, lives in RunDir.
+func RequestStatsFile() string {
+	return filepath.Join(RunDir(), "request-stats.json")
+}
+
 // AccessSocketPath is the unix datagram socket the lerd-watcher binds to receive
 // the nginx access feed (one "$host" line per request) that drives idle-suspend's
 // per-site last-active tracking. It lives in RunDir, which is bind-mounted into
