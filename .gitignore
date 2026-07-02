@@ -3,6 +3,12 @@ dist/
 dist-tray/
 *.tmp
 .venv/
+.idea/
+/lerd
+lerd-frameworks/
+lerd-services/
+.claude/*
+!.claude/skills/
 site/
 docs/node_modules/
 docs/.vitepress/dist/
