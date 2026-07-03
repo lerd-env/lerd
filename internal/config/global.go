@@ -24,8 +24,16 @@ type ServiceConfig struct {
 	// container-internal port is unchanged, so bridge clients still use 3306.
 	// Unlike Port (auto-seeded from the preset), this stays 0 until the user
 	// explicitly overrides, so it is an unambiguous "use default" sentinel.
-	PublishedPort int    `yaml:"published_port,omitempty" mapstructure:"published_port"`
-	PreviousImage string `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
+	PublishedPort int `yaml:"published_port,omitempty" mapstructure:"published_port"`
+	// PublishedPorts overrides the host (published) side of this service's
+	// secondary mappings, keyed by container-internal port. A multi-port service
+	// (mailpit's 8025 UI behind the 1025 SMTP primary, rustfs' 9001 console)
+	// exposes ports past the primary; this lets the user remap each one while the
+	// primary stays in PublishedPort. Empty = every secondary on its preset
+	// default. Keyed on the container port because that is the stable identity
+	// when the host side moves.
+	PublishedPorts map[int]int `yaml:"published_ports,omitempty" mapstructure:"published_ports"`
+	PreviousImage  string      `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
 	// LastOp records the most recent mutation kind ("update" or "migrate") so
 	// the rollback flow can refuse a swap that would race the new image
 	// against the post-migrate (fresh) data dir. Empty means no recent op or a
@@ -348,12 +356,32 @@ func (s ServiceConfig) HostPorts() []int {
 	if primary > 0 {
 		ports = append(ports, primary)
 	}
+	for _, h := range s.PublishedPorts {
+		if h > 0 {
+			ports = append(ports, h)
+		}
+	}
 	for _, ep := range s.ExtraPorts {
 		if n := mappingHostPort(ep); n > 0 {
 			ports = append(ports, n)
 		}
 	}
 	return ports
+}
+
+// HostPortFor returns the effective host port this service publishes for the
+// mapping whose container-internal port is containerPort, given that mapping's
+// preset default host side defaultHost and whether it is the primary (index-0)
+// mapping. A per-port override in PublishedPorts wins; else the legacy primary
+// PublishedPort applies to the primary mapping; else the preset default stands.
+func (s ServiceConfig) HostPortFor(containerPort, defaultHost int, isPrimary bool) int {
+	if v, ok := s.PublishedPorts[containerPort]; ok && v > 0 {
+		return v
+	}
+	if isPrimary && s.PublishedPort > 0 {
+		return s.PublishedPort
+	}
+	return defaultHost
 }
 
 // mappingHostPort extracts the host port from a podman port mapping: a bare host

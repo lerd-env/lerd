@@ -19,6 +19,7 @@ import (
 	"runtime"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -979,6 +980,36 @@ func buildSites() []SiteResponse {
 	return sites
 }
 
+// ServicePortMapping describes one published port of a service: its
+// container-internal port, its preset-default host port, and the current host
+// override (0 = on the default). The ports modal renders and edits these.
+type ServicePortMapping struct {
+	Container int `json:"container"`
+	Default   int `json:"default"`
+	Published int `json:"published,omitempty"`
+}
+
+// secondaryPortMappings returns a service's published mappings past the primary
+// (index 0), pairing each with its current host override from the config.
+func secondaryPortMappings(defaultPorts []string, sc config.ServiceConfig) []ServicePortMapping {
+	var out []ServicePortMapping
+	for i, spec := range defaultPorts {
+		if i == 0 {
+			continue
+		}
+		c := podman.ContainerPort(spec)
+		if c == 0 {
+			continue
+		}
+		out = append(out, ServicePortMapping{
+			Container: c,
+			Default:   podman.PrimaryHostPort([]string{spec}),
+			Published: sc.PublishedPorts[c],
+		})
+	}
+	return out
+}
+
 // ServiceResponse is the response for GET /api/services.
 type ServiceResponse struct {
 	Name              string            `json:"name"`
@@ -1000,8 +1031,13 @@ type ServiceResponse struct {
 	PublishedPort int      `json:"published_port,omitempty"`
 	DefaultPort   int      `json:"default_port,omitempty"`
 	ExtraPorts    []string `json:"extra_ports,omitempty"`
-	Custom        bool     `json:"custom,omitempty"`
-	IsDefault     bool     `json:"is_default,omitempty"`
+	// SecondaryPorts are the service's published mappings past the primary (a
+	// multi-port service like mailpit or rustfs), each with its container-internal
+	// port, preset-default host port, and current override. The ports modal renders
+	// one editable host-port field per entry so every published port is movable.
+	SecondaryPorts []ServicePortMapping `json:"secondary_ports,omitempty"`
+	Custom         bool                 `json:"custom,omitempty"`
+	IsDefault      bool                 `json:"is_default,omitempty"`
 	// PresetOwned is true when lerd ships this service as a bundled preset
 	// (default-stack or optional like gotenberg). The ports modal keys the
 	// extra-ports affordance off this, not is_default, so every service we
@@ -1127,7 +1163,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Status:        status,
 		Version:       podman.ServiceVersionLabel(podman.InstalledImage(unit)),
 		EnvVars:       envMap,
-		Dashboard:     config.DefaultPresetDashboard(name),
+		Dashboard:     serviceops.WithDashboardPort(config.DefaultPresetDashboard(name), presetPorts, services[name]),
 		ConnectionURL: serviceops.WithURLPort(config.DefaultPresetConnectionURL(name), hostPort),
 		Port:          hostPort,
 		SiteCount:     countSitesUsingService(name),
@@ -1138,6 +1174,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		PresetOwned:   config.PresetExists(name),
 		DefaultPort:   defaultPort,
 	}
+	resp.SecondaryPorts = secondaryPortMappings(presetPorts, services[name])
 	if sc, ok := services[name]; ok {
 		resp.PublishedPort = sc.PublishedPort
 		resp.ExtraPorts = sc.ExtraPorts
@@ -1267,7 +1304,7 @@ func buildServicesList() []ServiceResponse {
 			Status:            status,
 			Version:           podman.ServiceVersionLabel(svc.Image),
 			EnvVars:           envMap,
-			Dashboard:         dashboard,
+			Dashboard:         serviceops.WithDashboardPort(dashboard, svc.Ports, svcCfg[svc.Name]),
 			DashboardExternal: dashboardExternal,
 			ConnectionURL:     serviceops.WithURLPort(svc.ConnectionURL, hostPort),
 			Port:              hostPort,
@@ -1276,6 +1313,7 @@ func buildServicesList() []ServiceResponse {
 			DefaultPort:       podman.PrimaryHostPort(svc.Ports),
 			PublishedPort:     config.ServicePublishedPort(svc.Name),
 			ExtraPorts:        config.ServiceExtraPorts(svc.Name),
+			SecondaryPorts:    secondaryPortMappings(svc.Ports, svcCfg[svc.Name]),
 			Tunable:           tunable,
 			SiteCount:         countSitesUsingService(svc.Name),
 			SiteDomains:       sitesUsingService(svc.Name),
@@ -2353,8 +2391,9 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 // preset default.
 func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 	var body struct {
-		PublishedPort *int     `json:"published_port"`
-		ExtraPorts    []string `json:"extra_ports"`
+		PublishedPort  *int           `json:"published_port"`
+		PublishedPorts map[string]int `json:"published_ports"`
+		ExtraPorts     []string       `json:"extra_ports"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
@@ -2374,6 +2413,18 @@ func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 	if _, err := serviceops.SetPublishedPort(name, port); err != nil {
 		fail(err)
 		return
+	}
+	// Secondary published ports keyed by container-internal port (a multi-port
+	// service's UI/console mapping). Each moves through the same shared gate.
+	for cs, hp := range body.PublishedPorts {
+		c, err := strconv.Atoi(cs)
+		if err != nil {
+			continue
+		}
+		if _, err := serviceops.SetPublishedPortFor(name, c, hp); err != nil {
+			fail(err)
+			return
+		}
 	}
 	// Extra ports apply to any preset lerd ships; genuinely custom services
 	// declare their ports in their own YAML.

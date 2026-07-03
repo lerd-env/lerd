@@ -108,6 +108,58 @@ func PrimaryHostPort(ports []string) int {
 	return n
 }
 
+// ContainerPort returns the container (internal) port of a port spec — the last
+// numeric segment of "host:container" or "ip:host:container", ignoring any
+// /proto suffix. Returns 0 for a bare host port or an unparseable spec.
+func ContainerPort(spec string) int {
+	if slash := strings.IndexByte(spec, '/'); slash >= 0 {
+		spec = spec[:slash]
+	}
+	segs := strings.Split(spec, ":")
+	if len(segs) < 2 {
+		return 0
+	}
+	n, err := strconv.Atoi(segs[len(segs)-1])
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
+// SetHostPortForContainerPort rewrites the host (published) side of whichever
+// spec in ports maps to containerPort, leaving the container-internal port and
+// every other mapping untouched. It generalises SetPrimaryHostPort past the
+// index-0 primary so a service's secondary published port (mailpit's 8025 UI,
+// rustfs' 9001 console) can be remapped too. Returns ports unchanged when empty,
+// hostPort is non-positive, or no spec maps to containerPort. Pure.
+func SetHostPortForContainerPort(ports []string, containerPort, hostPort int) []string {
+	if len(ports) == 0 || hostPort <= 0 || containerPort <= 0 {
+		return ports
+	}
+	for i, spec := range ports {
+		if ContainerPort(spec) != containerPort {
+			continue
+		}
+		body, proto := spec, ""
+		if slash := strings.IndexByte(spec, '/'); slash >= 0 {
+			body, proto = spec[:slash], spec[slash:]
+		}
+		segs := strings.Split(body, ":")
+		switch len(segs) {
+		case 2: // host:container
+			segs[0] = strconv.Itoa(hostPort)
+		case 3: // ip:host:container
+			segs[1] = strconv.Itoa(hostPort)
+		default:
+			return ports
+		}
+		out := append([]string(nil), ports...)
+		out[i] = strings.Join(segs, ":") + proto
+		return out
+	}
+	return ports
+}
+
 // ApplyExtraPorts appends extra PublishPort lines to quadlet content.
 func ApplyExtraPorts(content string, extraPorts []string) string {
 	var sb strings.Builder

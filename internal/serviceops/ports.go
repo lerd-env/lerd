@@ -164,6 +164,117 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	return res, nil
 }
 
+// serviceDefaultPorts returns a service's default host:container mappings — the
+// preset's for a bundled service, the YAML's for an installed custom one — the
+// canonical list SetPublishedPortFor resolves a container port against.
+func serviceDefaultPorts(name string) []string {
+	if p := config.PresetPorts(name); len(p) > 0 {
+		return p
+	}
+	if svc, err := config.LoadCustomService(name); err == nil {
+		return svc.Ports
+	}
+	return nil
+}
+
+// SetPublishedPortFor moves the published host port of the mapping whose
+// container-internal port is containerPort, the multi-port generalisation of
+// SetPublishedPort. hostPort 0 (or the mapping's preset default) clears the
+// override. When containerPort is the primary mapping it delegates to
+// SetPublishedPort so the primary keeps its guard and host-proxy-follower
+// handling; secondary ports (mailpit's 8025 UI, rustfs' 9001 console) persist to
+// PublishedPorts and re-render like an extra-ports change.
+func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, error) {
+	res := PortChange{Requested: hostPort, Actual: hostPort}
+	if !config.IsDefaultPreset(name) && !ServiceInstalled(name) {
+		return res, fmt.Errorf("%q is not a built-in or installed service", name)
+	}
+	if hostPort < 0 || hostPort > 65535 {
+		return res, fmt.Errorf("invalid port %d: must be 0-65535", hostPort)
+	}
+	ports := serviceDefaultPorts(name)
+	defHost, isPrimary, found := 0, false, false
+	for i, spec := range ports {
+		if podman.ContainerPort(spec) == containerPort {
+			defHost, isPrimary, found = podman.PrimaryHostPort([]string{spec}), i == 0, true
+			break
+		}
+	}
+	if !found {
+		return res, fmt.Errorf("%s has no published port mapping for container port %d", name, containerPort)
+	}
+	if isPrimary {
+		return SetPublishedPort(name, hostPort)
+	}
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return res, err
+	}
+	svcCfg := cfg.Services[name]
+	// Requesting the preset default is a reset: normalise to 0 so we clear the
+	// override rather than storing a redundant one and needlessly probing a port
+	// this mapping already legitimately owns.
+	if hostPort == defHost {
+		hostPort = 0
+	}
+	if hostPort == svcCfg.PublishedPorts[containerPort] {
+		res.NoOp = true
+		res.Actual = svcCfg.PublishedPorts[containerPort]
+		return res, nil
+	}
+	if hostPort > 0 {
+		for i, spec := range ports {
+			if podman.ContainerPort(spec) == containerPort {
+				continue
+			}
+			if svcCfg.HostPortFor(podman.ContainerPort(spec), podman.PrimaryHostPort([]string{spec}), i == 0) == hostPort {
+				return res, fmt.Errorf("%w: %d", ErrPortInUse, hostPort)
+			}
+		}
+		for _, ep := range svcCfg.ExtraPorts {
+			if extraHostPort(ep) == hostPort {
+				return res, fmt.Errorf("%w: %d", ErrPortInUse, hostPort)
+			}
+		}
+		if portReservedByOther(name, hostPort) {
+			return res, fmt.Errorf("%w: %d", ErrPortReserved, hostPort)
+		}
+		if !PortAvailable(hostPort) {
+			return res, fmt.Errorf("%w: %d", ErrPortInUse, hostPort)
+		}
+	}
+	if hostPort > 0 {
+		if svcCfg.PublishedPorts == nil {
+			svcCfg.PublishedPorts = map[int]int{}
+		}
+		svcCfg.PublishedPorts[containerPort] = hostPort
+	} else {
+		delete(svcCfg.PublishedPorts, containerPort)
+		if len(svcCfg.PublishedPorts) == 0 {
+			svcCfg.PublishedPorts = nil
+		}
+	}
+	cfg.Services[name] = svcCfg
+	if err := config.SaveGlobal(cfg); err != nil {
+		return res, err
+	}
+	res.Actual = hostPort
+	if !ServiceInstalled(name) {
+		res.Installed = false
+		return res, nil
+	}
+	res.Installed = true
+	if err := rerenderServiceQuadlet(name); err != nil {
+		return res, err
+	}
+	if status, _ := podman.UnitStatus("lerd-" + name); status == "active" {
+		res.WasActive = true
+		_ = podman.RestartUnit("lerd-" + name)
+	}
+	return res, nil
+}
+
 // SetExtraPorts replaces a bundled preset's extra published ports with ports
 // (each a bare "host", "host:container", or "ip:host:container" mapping),
 // de-duplicating and validating, then re-rendering and restarting the unit when
