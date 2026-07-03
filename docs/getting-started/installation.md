@@ -39,7 +39,7 @@ The installer will:
 - Automatically run `lerd install` to complete environment setup
 
 ::: info DNS setup requires sudo
-`lerd install` writes to `/etc/NetworkManager/dnsmasq.d/` and `/etc/NetworkManager/conf.d/` and restarts NetworkManager. This is the only step that requires `sudo`.
+`lerd install` writes to `/etc/NetworkManager/dnsmasq.d/` and `/etc/NetworkManager/conf.d/` and restarts NetworkManager. This is the only step that requires `sudo`. It also installs a passwordless sudoers rule for the DNS resolver operations, so this is a one-time prompt: reinstalling for an update or a test reuses the existing rule and does not ask again.
 :::
 
 After install, reload your shell or open a new terminal so `PATH` takes effect.

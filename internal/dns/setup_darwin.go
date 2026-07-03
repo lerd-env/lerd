@@ -91,7 +91,7 @@ func InstallSudoers() error {
 	content := renderDarwinSudoers(user, tld)
 
 	const sudoersPath = "/etc/sudoers.d/lerd"
-	if isFileContent(sudoersPath, []byte(content)) {
+	if sudoersInstalled([]byte(content)) {
 		return nil
 	}
 
@@ -99,6 +99,7 @@ func InstallSudoers() error {
 	if err := sudoWriteFile(sudoersPath, []byte(content), 0440); err != nil {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
+	recordSudoersInstalled([]byte(content))
 	return nil
 }
 
