@@ -7,6 +7,14 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.27.1] - 2026-07-03
+
+### Fixed
+
+- **Every published port of a service is now movable, and dashboard links follow the port they are served on** (#736). A multi-port service (Mailpit's SMTP `1025` plus web UI `8025`, RustFS's S3 `9000` plus console `9001`, Selenium's WebDriver `4444` plus noVNC `7900`) could only have its primary port moved, so its other ports were stuck on the defaults and the dashboard link and iframe kept pointing at the old port after any change. Services now carry a per-container-port override so every published mapping is movable from the CLI with `lerd service port <svc> <port> --container <cport>`, from MCP with `container_port`, and from the dashboard Ports modal, which lists one editable field per published port. The dashboard link follows whichever port its service is served on, and the port-ownership guard shifts the other ports off host-owned defaults the same way it already did for the primary.
+
+---
+
 ## [1.27.0] - 2026-07-01
 
 This release makes service ports something you manage rather than fight, rebuilds the site doctor as a framework-agnostic engine that works for every project, and hardens lerd against the messy realities of unclean shutdowns and podman upgrades. A containerised database now coexists with a host-installed server of the same engine by auto-shifting its published port, published and extra ports are editable from the dashboard and the CLI, and every bundled preset can publish the ports it declares. The Laravel-only doctor becomes a universal baseline plus store-declared per-framework checks, available from the web UI, the TUI, a new `lerd site:doctor` command, and the MCP `diag site_doctor` action. `lerd auth ssh` brings a shared ssh-agent so composer can reach private git repositories, `lerd cleanup` reclaims the podman disk lerd's own rebuilds leave behind, and FPM auto-starts (or offers to install) instead of dead-ending. Underneath, lerd now self-heals rootless podman after a major upgrade, recovers ghost containers and a lost nginx port after suspend, and routes every podman call through a single seam. A security pass closes the host-execution boundary so an untrusted project can no longer run commands or host workers without consent.

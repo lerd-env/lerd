@@ -33,6 +33,58 @@ func TestSetPrimaryHostPort(t *testing.T) {
 	}
 }
 
+func TestContainerPort(t *testing.T) {
+	cases := []struct {
+		spec string
+		want int
+	}{
+		{"8025:8025", 8025},
+		{"8083:8080", 8080},
+		{"127.0.0.1:9001:9001", 9001},
+		{"9000:9000/tcp", 9000},
+		{"3306", 0},
+		{"", 0},
+	}
+	for _, c := range cases {
+		if got := ContainerPort(c.spec); got != c.want {
+			t.Errorf("ContainerPort(%q) = %d, want %d", c.spec, got, c.want)
+		}
+	}
+}
+
+func TestSetHostPortForContainerPort(t *testing.T) {
+	cases := []struct {
+		name      string
+		ports     []string
+		container int
+		host      int
+		want      []string
+	}{
+		{"secondary mapping", []string{"1025:1025", "8025:8025"}, 8025, 8026, []string{"1025:1025", "8026:8025"}},
+		{"distinct container port", []string{"8085:5540"}, 5540, 8090, []string{"8090:5540"}},
+		{"ip:host:container form", []string{"127.0.0.1:9001:9001"}, 9001, 9002, []string{"127.0.0.1:9002:9001"}},
+		{"preserves proto", []string{"9000:9000/tcp"}, 9000, 9002, []string{"9002:9000/tcp"}},
+		{"no match is no-op", []string{"1025:1025"}, 8025, 8026, []string{"1025:1025"}},
+		{"zero host is no-op", []string{"8025:8025"}, 8025, 0, []string{"8025:8025"}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := SetHostPortForContainerPort(c.ports, c.container, c.host)
+			if strings.Join(got, ",") != strings.Join(c.want, ",") {
+				t.Errorf("SetHostPortForContainerPort(%v, %d, %d) = %v, want %v", c.ports, c.container, c.host, got, c.want)
+			}
+		})
+	}
+}
+
+func TestSetHostPortForContainerPortDoesNotMutateInput(t *testing.T) {
+	in := []string{"1025:1025", "8025:8025"}
+	_ = SetHostPortForContainerPort(in, 8025, 8026)
+	if in[1] != "8025:8025" {
+		t.Errorf("SetHostPortForContainerPort mutated its input: in[1]=%q", in[1])
+	}
+}
+
 func TestSetPrimaryHostPortDoesNotMutateInput(t *testing.T) {
 	in := []string{"3306:3306", "extra:extra"}
 	_ = SetPrimaryHostPort(in, 3307)

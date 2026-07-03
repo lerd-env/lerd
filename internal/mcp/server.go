@@ -4221,6 +4221,7 @@ func execServiceUnpin(args map[string]any) (any, *rpcError) {
 // serviceops.SetPublishedPort, so the CLI, MCP and Web UI enforce the same
 // gate, pre-flight, fail-closed persistence and host-proxy refresh.
 // published_port sets the port (0 resets); reset:true is shorthand for the default.
+// container_port targets a specific mapping of a multi-port service (else the primary).
 func execServicePort(args map[string]any) (any, *rpcError) {
 	name := strArg(args, "name")
 	if name == "" {
@@ -4233,7 +4234,13 @@ func execServicePort(args map[string]any) (any, *rpcError) {
 			return toolErr("provide published_port (0 to reset), or set reset: true"), nil
 		}
 	}
-	res, err := serviceops.SetPublishedPort(name, port)
+	var res serviceops.PortChange
+	var err error
+	if cport := intArg(args, "container_port", 0); cport > 0 {
+		res, err = serviceops.SetPublishedPortFor(name, cport, port)
+	} else {
+		res, err = serviceops.SetPublishedPort(name, port)
+	}
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}

@@ -3,6 +3,14 @@ import { apiJson, apiFetch } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 import { sites } from './sites';
 
+// One published port of a service: its container-internal port, its preset
+// default host port, and the current host override (0/undefined = on default).
+export interface ServicePortMapping {
+  container: number;
+  default: number;
+  published?: number;
+}
+
 export interface Service {
   name: string;
   status: string;
@@ -18,6 +26,9 @@ export interface Service {
   published_port?: number;
   default_port?: number;
   extra_ports?: string[];
+  // Published mappings past the primary (a multi-port service like mailpit or
+  // rustfs): container-internal port, preset-default host port, current override.
+  secondary_ports?: ServicePortMapping[];
   custom?: boolean;
   is_default?: boolean;
   // True when lerd ships this service as a bundled preset (default-stack or
@@ -169,13 +180,18 @@ export async function serviceAction(
   }
 }
 
-// setServicePorts sends the published-port override (null = reset to default)
-// and the full extra-ports set in one request, routed through the shared
-// serviceops layer server-side. Returns {ok, error} so the modal can surface a
-// validation failure (e.g. a port already in use).
+// setServicePorts sends the primary published-port override (null = reset to
+// default), any secondary-port overrides keyed by container port, and the full
+// extra-ports set in one request, routed through the shared serviceops layer
+// server-side. Returns {ok, error} so the modal can surface a validation failure
+// (e.g. a port already in use).
 export async function setServicePorts(
   name: string,
-  body: { published_port: number | null; extra_ports: string[] }
+  body: {
+    published_port: number | null;
+    published_ports?: Record<string, number>;
+    extra_ports: string[];
+  }
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await apiFetch('/api/services/' + encodeURIComponent(name) + '/ports', {

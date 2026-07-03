@@ -73,6 +73,28 @@ describe('services store', () => {
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
   });
 
+  it('setServicePorts POSTs secondary published_ports keyed by container port', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      if (String(url).endsWith('/mailpit/ports'))
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response('[]', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { setServicePorts } = await import('./services');
+    const res = await setServicePorts('mailpit', {
+      published_port: null,
+      published_ports: { '8025': 8026 },
+      extra_ports: []
+    });
+    expect(res.ok).toBe(true);
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({
+      published_port: null,
+      published_ports: { '8025': 8026 },
+      extra_ports: []
+    });
+  });
+
   it('setServicePorts surfaces a server error without reloading', async () => {
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (url: unknown) => {

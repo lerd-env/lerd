@@ -1,6 +1,7 @@
 <script lang="ts">
   import Modal from '$components/Modal.svelte';
   import DetailButton from '$components/DetailButton.svelte';
+  import PortRow from './PortRow.svelte';
   import { type Service, setServicePorts } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
@@ -20,6 +21,8 @@
   // Number inputs bound with bind:value yield number | null (null when empty),
   // so these stay numeric — never strings.
   let publishedInput = $state<number | null>(null);
+  // Secondary published ports (a multi-port service), keyed by container port.
+  let secondaryInputs = $state<Record<number, number | null>>({});
   let extraPorts = $state<string[]>([]);
   let newHost = $state<number | null>(null);
   let newContainer = $state<number | null>(null);
@@ -31,6 +34,13 @@
   $effect(() => {
     if (open) {
       publishedInput = svc.published_port || svc.default_port || null;
+      // Build the seed locally and assign once — mutating secondaryInputs in place
+      // here would make this effect read and write the same state and loop.
+      const seeded: Record<number, number | null> = {};
+      for (const p of svc.secondary_ports ?? []) {
+        seeded[p.container] = p.published || p.default;
+      }
+      secondaryInputs = seeded;
       extraPorts = [...(svc.extra_ports ?? [])];
       newHost = null;
       newContainer = null;
@@ -73,10 +83,23 @@
       // unset and keeps the auto-shift guard on.
       published = svc.default_port && publishedInput === svc.default_port ? null : publishedInput;
     }
+    // Secondary mappings: send every field (the backend normalises a value equal
+    // to the preset default back to "no override"), keyed by container port.
+    const publishedPorts: Record<string, number> = {};
+    for (const p of svc.secondary_ports ?? []) {
+      const v = secondaryInputs[p.container];
+      if (v == null) continue;
+      if (!validPort(v)) {
+        error = m.services_ports_invalidPort();
+        return;
+      }
+      publishedPorts[String(p.container)] = v;
+    }
     saving = true;
     try {
       const res = await setServicePorts(svc.name, {
         published_port: published,
+        published_ports: publishedPorts,
         extra_ports: isBuiltin ? extraPorts : []
       });
       if (!res.ok) {
@@ -101,29 +124,10 @@
           {m.services_ports_publishedHelp({ name: svc.name })}
         </p>
       </div>
-      <div class="flex items-center gap-3">
-        <input
-          type="number"
-          min="0"
-          max="65535"
-          bind:value={publishedInput}
-          placeholder={svc.default_port ? String(svc.default_port) : ''}
-          onkeydown={(e) => e.key === 'Enter' && save()}
-          disabled={saving}
-          class="w-32 {inputCls}"
-        />
-        {#if svc.default_port}
-          <span class="text-xs text-gray-500 dark:text-gray-400">
-            {m.services_ports_defaultHint({ port: svc.default_port })}
-          </span>
-          <button
-            type="button"
-            onclick={() => (publishedInput = svc.default_port ?? null)}
-            disabled={publishedInput === svc.default_port}
-            class="ml-auto text-xs text-gray-500 dark:text-gray-400 hover:text-lerd-red transition-colors disabled:opacity-40 disabled:hover:text-gray-500 dark:disabled:hover:text-gray-400"
-          >{m.services_ports_resetDefault()}</button>
-        {/if}
-      </div>
+      <PortRow bind:value={publishedInput} defaultPort={svc.default_port} disabled={saving} onenter={save} />
+      {#each svc.secondary_ports ?? [] as p (p.container)}
+        <PortRow bind:value={secondaryInputs[p.container]} defaultPort={p.default} disabled={saving} onenter={save} />
+      {/each}
     </div>
 
     <div class="space-y-2 border-t border-gray-100 dark:border-lerd-border pt-4">

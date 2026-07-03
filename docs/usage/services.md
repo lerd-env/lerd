@@ -16,7 +16,8 @@
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service expose <name> <host:container>` | Publish an extra port on a built-in service |
 | `lerd service expose <name> <host:container> --remove` | Remove a previously exposed port |
-| `lerd service port <name> <port>` | Move a service's published host port (e.g. free 3306 for a host server) |
+| `lerd service port <name> <port>` | Move a service's primary published host port (e.g. free 3306 for a host server) |
+| `lerd service port <name> <port> --container <cport>` | Move a specific mapping of a multi-port service (e.g. Mailpit's 8025 UI) |
 | `lerd service port <name> --reset` | Reset a service to its preset default published port |
 
 Available services: `mysql` (8.4 LTS canonical, 9.7 LTS / 5.7 alternates), `redis` (7-alpine), `postgres` (16 canonical with PostGIS, 17 / 18 alternates), `meilisearch` (v1.42), `rustfs` (S3-compatible), `mailpit` (SMTP catcher).
@@ -83,9 +84,21 @@ lerd service port mysql --reset   # or: lerd service port mysql 0
 
 The container-internal port never changes, so containerized apps (which reach the service by name over the `lerd` network) are unaffected. Only host clients pointed at the old published port need to follow. [Host-proxy sites](host-proxy.md) that connect over the published loopback port have their `.env` regenerated automatically when the port moves. A host-proxy site that is paused when the port moves is skipped at that moment and picks up the new port when it is next unpaused.
 
-The chosen port is persisted under `services.<name>.published_port` in `~/.config/lerd/config.yaml` and reapplied on every start. Once a port is set, automatically or with `lerd service port`, it sticks: lerd never moves it again on its own, not even back to the default when that frees up later. Change it only with `lerd service port`.
+Some services publish more than one host port: Mailpit exposes SMTP on `1025` and its web UI on `8025`, RustFS the S3 API on `9000` and the console on `9001`, Selenium the WebDriver on `4444` and the noVNC view on `7900`. `lerd service port <name> <port>` moves the primary (first) mapping. To move any other published port, name the mapping by its container-internal port with `--container`:
 
-The published port can also be moved from the dashboard: the cog button on a service opens the **Ports** modal, where you set a new host port or reset to the preset default. The TUI shows the current published and extra ports read-only; editing stays in the CLI, dashboard and MCP.
+```bash
+# Move Mailpit's web UI off 8025 to 8026 (SMTP on 1025 is untouched)
+lerd service port mailpit 8026 --container 8025
+
+# Put it back
+lerd service port mailpit --reset --container 8025
+```
+
+The dashboard link for a service always follows the port its dashboard is served on, so moving Mailpit's UI port re-points the dashboard and the "open dashboard" iframe automatically.
+
+The chosen ports are persisted in `~/.config/lerd/config.yaml` and reapplied on every start: the primary under `services.<name>.published_port`, any other mapping under `services.<name>.published_ports` keyed by container port. Once a port is set, automatically or with `lerd service port`, it sticks: lerd never moves it again on its own, not even back to the default when that frees up later. Change it only with `lerd service port`.
+
+Every published port can also be moved from the dashboard: the cog button on a service opens the **Ports** modal, which lists one editable host-port field per published port (primary and secondary alike), each with a reset-to-default. The TUI shows the current published and extra ports read-only; editing stays in the CLI, dashboard and MCP.
 
 ::: warning Known limitation
 The shift is decided at quadlet-write time, from whether the port can be bound right then. A host server that is installed but stopped at that moment leaves its port looking free, so lerd may take it and clash when that server next starts (for example at boot). This is the deliberate trade for not inspecting the host: a host database is usually running, and the failure is loud. Recover by moving lerd onto a free port with `lerd service port <name> <port>`.
