@@ -2790,13 +2790,23 @@ func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Sit
 // offer to also pull in the optional (has-a-code-default) keys. Every slice is
 // non-nil so the client can render without null guards.
 type SiteEnvProposeResponse struct {
-	File       string   `json:"file"`
-	Current    string   `json:"current"`
-	Merged     string   `json:"merged"`
-	Added      []string `json:"added"`
-	AddedLines []int    `json:"addedLines"`
-	Required   []string `json:"required"`
-	Optional   []string `json:"optional"`
+	File       string                `json:"file"`
+	Current    string                `json:"current"`
+	Merged     string                `json:"merged"`
+	Added      []string              `json:"added"`
+	AddedLines []int                 `json:"addedLines"`
+	Required   []string              `json:"required"`
+	Optional   []string              `json:"optional"`
+	Entries    []SiteEnvProposeEntry `json:"entries"`
+}
+
+// SiteEnvProposeEntry is one missing example key with the value that would be
+// written for it (verbatim from .env.example) and whether the app requires it,
+// so the UI can list every candidate key with its value for the user to pick.
+type SiteEnvProposeEntry struct {
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Required bool   `json:"required"`
 }
 
 // handleSiteEnvPropose returns a proposed .env that inserts the framework env
@@ -2823,17 +2833,41 @@ func handleSiteEnvPropose(w http.ResponseWriter, r *http.Request, site *config.S
 	}
 	prop, ok := sitedoctor.ProposeEnvMerge(dir, fw)
 	if !ok {
-		writeJSON(w, SiteEnvProposeResponse{File: ".env", Added: []string{}, AddedLines: []int{}, Required: []string{}, Optional: []string{}})
+		writeJSON(w, SiteEnvProposeResponse{File: ".env", Added: []string{}, AddedLines: []int{}, Required: []string{}, Optional: []string{}, Entries: []SiteEnvProposeEntry{}})
 		return
 	}
 
-	include := make(map[string]bool, len(prop.Required)+len(prop.Optional))
+	values := envfile.ExampleValues(prop.ExampleContent)
+	entries := make([]SiteEnvProposeEntry, 0, len(prop.Required)+len(prop.Optional))
 	for _, k := range prop.Required {
-		include[k] = true
+		entries = append(entries, SiteEnvProposeEntry{Key: k, Value: values[k], Required: true})
 	}
-	if r.URL.Query().Get("optional") == "1" {
-		for _, k := range prop.Optional {
+	for _, k := range prop.Optional {
+		entries = append(entries, SiteEnvProposeEntry{Key: k, Value: values[k], Required: false})
+	}
+
+	// ?keys=A,B stages exactly the picked keys (intersected with the missing
+	// set so the caller can't inject arbitrary example lines); without it we
+	// fall back to all required keys, plus the optional ones when ?optional=1.
+	include := make(map[string]bool, len(prop.Required)+len(prop.Optional))
+	if sel := r.URL.Query().Get("keys"); sel != "" {
+		missing := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			missing[e.Key] = true
+		}
+		for _, k := range strings.Split(sel, ",") {
+			if k = strings.TrimSpace(k); missing[k] {
+				include[k] = true
+			}
+		}
+	} else {
+		for _, k := range prop.Required {
 			include[k] = true
+		}
+		if r.URL.Query().Get("optional") == "1" {
+			for _, k := range prop.Optional {
+				include[k] = true
+			}
 		}
 	}
 	res := envfile.MergeMissing(prop.ExampleContent, prop.EnvContent, include)
@@ -2850,6 +2884,7 @@ func handleSiteEnvPropose(w http.ResponseWriter, r *http.Request, site *config.S
 		AddedLines: addedLines,
 		Required:   nonNilStrings(prop.Required),
 		Optional:   nonNilStrings(prop.Optional),
+		Entries:    entries,
 	})
 }
 

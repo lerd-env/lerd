@@ -11,6 +11,7 @@
   import AddPhpModal from './AddPhpModal.svelte';
   import ConfirmEnvSaveModal from './ConfirmEnvSaveModal.svelte';
   import ConfirmEnvRestoreModal from './ConfirmEnvRestoreModal.svelte';
+  import EnvProposeModal from './EnvProposeModal.svelte';
   import ConfirmNginxSaveModal from './ConfirmNginxSaveModal.svelte';
   import ConfirmNginxRestoreModal from './ConfirmNginxRestoreModal.svelte';
   import ConfirmNginxResetModal from './ConfirmNginxResetModal.svelte';
@@ -48,6 +49,8 @@
   <ConfirmEnvSaveModal />
 {:else if $modal.kind === 'envRestore' && $modal.envRestore}
   <ConfirmEnvRestoreModal />
+{:else if $modal.kind === 'envPropose' && $modal.envPropose}
+  <EnvProposeModal />
 {:else if $modal.kind === 'nginxSave' && $modal.nginxSave}
   <ConfirmNginxSaveModal />
 {:else if $modal.kind === 'nginxRestore' && $modal.nginxRestore}

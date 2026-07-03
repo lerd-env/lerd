@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import type { Site } from './sites';
+import type { Site, EnvProposeEntry } from './sites';
 
 export type ModalKind =
   | 'domain'
@@ -13,6 +13,7 @@ export type ModalKind =
   | 'phpAdd'
   | 'envSave'
   | 'envRestore'
+  | 'envPropose'
   | 'nginxSave'
   | 'nginxRestore'
   | 'nginxReset'
@@ -45,6 +46,14 @@ export interface EnvRestoreTarget {
   current: string;
   backupName: string;
   backup: string;
+}
+
+export interface EnvProposeTarget {
+  file: string;
+  entries: EnvProposeEntry[];
+  /** Called with the keys the user ticked; the tab stages just those into the
+   *  editor buffer for review before saving. */
+  onAdd: (keys: string[]) => void;
 }
 
 export interface NginxSaveTarget {
@@ -139,6 +148,7 @@ export interface ModalState {
   branch?: string;
   envSave?: EnvSaveTarget;
   envRestore?: EnvRestoreTarget;
+  envPropose?: EnvProposeTarget;
   nginxSave?: NginxSaveTarget;
   nginxRestore?: NginxRestoreTarget;
   nginxReset?: NginxResetTarget;
@@ -198,6 +208,10 @@ export function openEnvSaveModal(target: EnvSaveTarget, onSuccess?: () => void) 
 
 export function openEnvRestoreModal(target: EnvRestoreTarget, onSuccess?: () => void) {
   modal.set({ kind: 'envRestore', envRestore: target, onSuccess });
+}
+
+export function openEnvProposeModal(target: EnvProposeTarget) {
+  modal.set({ kind: 'envPropose', envPropose: target });
 }
 
 export function openNginxSaveModal(target: NginxSaveTarget, onSuccess?: () => void) {
