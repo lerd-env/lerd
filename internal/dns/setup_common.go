@@ -2,6 +2,8 @@ package dns
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +16,35 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 )
+
+// sudoersMarkerPath is a user-owned record of the sudoers drop-in lerd last
+// installed. /etc/sudoers.d is root-only (0750), so the invoking user cannot
+// read the drop-in back to compare content; without this marker InstallSudoers
+// would rewrite the file, and prompt for sudo, on every run. Overridable in tests.
+var sudoersMarkerPath = func() string {
+	return filepath.Join(config.DataDir(), "sudoers.sha256")
+}
+
+// sudoersInstalled reports whether a drop-in matching content was already
+// installed on this or a prior run, per the user-owned marker.
+func sudoersInstalled(content []byte) bool {
+	got, err := os.ReadFile(sudoersMarkerPath())
+	if err != nil {
+		return false
+	}
+	sum := sha256.Sum256(content)
+	return strings.TrimSpace(string(got)) == hex.EncodeToString(sum[:])
+}
+
+// recordSudoersInstalled stores content's hash after a successful write so the
+// next run can skip the redundant, sudo-prompting rewrite.
+func recordSudoersInstalled(content []byte) {
+	if err := os.MkdirAll(filepath.Dir(sudoersMarkerPath()), 0755); err != nil {
+		return
+	}
+	sum := sha256.Sum256(content)
+	os.WriteFile(sudoersMarkerPath(), []byte(hex.EncodeToString(sum[:])+"\n"), 0644) //nolint:errcheck
+}
 
 // pastaDefaultForwarder is pasta's rootless-netns DNS forwarder IP, which
 // bridges into the host resolver and preserves .test routing. Last-resort
