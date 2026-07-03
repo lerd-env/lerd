@@ -245,8 +245,9 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// env, runtime, worker, exec, framework, diag, worktree) roughly halved the
 	// manifest from the prior 32000-byte ceiling. Bumped 18000 → 18500 for the
 	// `service port` action, then 18500 → 18800 for the diag `route_timing` and
-	// `optimize_route` actions (justified content additions, kept terse).
-	const ceiling = 18800
+	// `optimize_route` actions, then 18800 → 19100 for `profiler_report` and its
+	// `args` property (justified content additions, kept terse).
+	const ceiling = 19100
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

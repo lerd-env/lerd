@@ -205,6 +205,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"profiler_toggle": execProfilerToggle,
 		"profiler_status": execProfilerStatus,
 		"profiler_clear":  execProfilerClear,
+		"profiler_report": execProfilerReport,
 		"xdebug_on":       func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, true) },
 		"xdebug_off":      func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, false) },
 		"xdebug_status":   func(a map[string]any) (any, *rpcError) { return execXdebugStatus() },
@@ -492,13 +493,14 @@ func frameworkTool() mcpTool {
 func diagTool() mcpTool {
 	return mcpTool{
 		Name:        "diag",
-		Description: "Diagnostics & observability. action: status, doctor (lerd environment), site_doctor (app-level checks for a site: env, dependencies, security audit, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries), dumps_recent, dumps_status, dumps_clear, dumps_toggle, profiler_toggle, profiler_status, profiler_clear, xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
+		Description: "Diagnostics & observability. action: status, doctor (lerd environment), site_doctor (app-level checks for a site: env, dependencies, security audit, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":          {Type: "string", Enum: []string{"status", "doctor", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "xdebug_on", "xdebug_off", "xdebug_status"}},
-				"path":            {Type: "string", Description: "Project root (which/check/site_doctor). Defaults to cwd."},
-				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor: site filter (site name or domain)."},
+				"action":          {Type: "string", Enum: []string{"status", "doctor", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
+				"path":            {Type: "string", Description: "Project root (which/check/site_doctor/profiler_report). Defaults to cwd."},
+				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor/profiler_report: site filter (site name or domain)."},
+				"args":            {Type: "array", Description: `profiler_report: argv to run under php and profile, e.g. ["artisan","app:import"].`},
 				"branch":          {Type: "string", Description: "dumps_recent/route_timing/optimize_route: worktree branch filter."},
 				"ctx":             {Type: "string", Enum: []string{"fpm", "cli"}, Description: "dumps_recent: context filter."},
 				"kind":            {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http"}, Description: "dumps_recent: event kind."},

@@ -8,6 +8,15 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
+	"github.com/geodro/lerd/internal/spxreport"
+)
+
+// spxTopN and spxMinPct bound the CPU hotspots attached to a slow route: the top
+// few functions by exclusive wall time, and only those above a small share of the
+// request, so the profile stays a few lines rather than a full flat profile.
+const (
+	spxTopN   = 8
+	spxMinPct = 1.0
 )
 
 // RouteOptimization pairs one flagged slow route with the captured N+1 and
@@ -16,7 +25,8 @@ import (
 // snapshot and the query ring by hand.
 type RouteOptimization struct {
 	reqstats.RouteStat
-	Evidence []RequestAnalysis `json:"evidence,omitempty"`
+	Evidence []RequestAnalysis  `json:"evidence,omitempty"`
+	Profile  *spxreport.Profile `json:"profile,omitempty"`
 }
 
 // OptimizeReport is the joined per-site view: the response-time baseline and
@@ -73,7 +83,33 @@ func optimizeSite(site, branch string, minRepeat int, slowMS float64) OptimizeRe
 	if srv := dumpsServer.Load(); srv != nil {
 		events = srv.Filter(dumps.FilterOpts{Site: site, Branch: branch, Kind: dumps.KindQuery})
 	}
-	return joinOptimize(stats, events, minRepeat, slowMS)
+	report := joinOptimize(stats, events, minRepeat, slowMS)
+	attachProfiles(&report, site)
+	return report
+}
+
+// attachProfiles hangs the freshest SPX capture's top hotspots onto each slow
+// route that has one, so a CPU-bound route shows where its time went next to its
+// queries. Captures only exist when the profiler was on when the route was hit,
+// so a route without one is left as-is.
+func attachProfiles(report *OptimizeReport, site string) {
+	if len(report.Routes) == 0 {
+		return
+	}
+	s, err := config.FindSite(site)
+	if err != nil || len(s.Domains) == 0 {
+		return
+	}
+	routes := make([]string, len(report.Routes))
+	for i, r := range report.Routes {
+		routes[i] = r.Route
+	}
+	profiles := spxreport.ProfilesForRoutes(config.SpxDataDir(), s.Domains, routes, spxTopN, spxMinPct)
+	for i := range report.Routes {
+		if p, ok := profiles[report.Routes[i].Route]; ok {
+			report.Routes[i].Profile = &p
+		}
+	}
 }
 
 // handleRouteTiming serves the per-site request-timing snapshot (median + slow

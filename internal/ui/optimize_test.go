@@ -1,9 +1,14 @@
 package ui
 
 import (
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
 )
@@ -67,5 +72,41 @@ func TestJoinOptimize_NoSlowRoutesIsEmpty(t *testing.T) {
 	}
 	if rep.Routes == nil {
 		t.Error("Routes should serialize as [], not null")
+	}
+}
+
+func TestAttachProfiles_HangsHotspotsOnMatchingRoute(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := config.AddSite(config.Site{Name: "acme", Path: t.TempDir(), Domains: []string{"acme.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	// A captured SPX report for a concrete hit of the flagged route.
+	dir := config.SpxDataDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	trace := "[events]\n0 1 0 0\n1 1 100 0\n1 0 1100 0\n0 0 1200 0\n[functions]\nmain\nslow\n"
+	os.WriteFile(filepath.Join(dir, "r.json"), []byte(`{"exec_ts":1000,"http_method":"GET","http_host":"acme.test","http_request_uri":"/users/7","cli":0}`), 0o644)
+	var buf bytes.Buffer
+	gw := gzip.NewWriter(&buf)
+	gw.Write([]byte(trace))
+	gw.Close()
+	os.WriteFile(filepath.Join(dir, "r.txt.gz"), buf.Bytes(), 0o644)
+
+	report := OptimizeReport{Routes: []RouteOptimization{
+		{RouteStat: reqstats.RouteStat{Route: "GET /users/:id", Method: "GET"}},
+		{RouteStat: reqstats.RouteStat{Route: "POST /nope", Method: "POST"}},
+	}}
+	attachProfiles(&report, "acme")
+
+	if report.Routes[0].Profile == nil {
+		t.Fatal("expected a profile attached to the captured route")
+	}
+	if h := report.Routes[0].Profile.Hotspots; len(h) == 0 || h[0].Function != "slow" {
+		t.Errorf("hotspots = %+v, want slow on top", h)
+	}
+	if report.Routes[1].Profile != nil {
+		t.Error("a route with no capture must have no profile")
 	}
 }
