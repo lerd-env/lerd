@@ -8,9 +8,10 @@
     loadSiteEnvBackupContent,
     proposeSiteEnv,
     type Site,
-    type SiteEnvBackup
+    type SiteEnvBackup,
+    type EnvProposeEntry
   } from '$stores/sites';
-  import { openEnvSaveModal, openEnvRestoreModal } from '$stores/modals';
+  import { openEnvSaveModal, openEnvRestoreModal, openEnvProposeModal } from '$stores/modals';
   import { addedLineNumbers } from '$lib/diff';
   import { m } from '../../paraglide/messages.js';
 
@@ -34,8 +35,8 @@
   // file), so it's tracked separately from the file dropdown and only surfaced
   // when that file is the one selected.
   let missingCount = $state(0);
-  let optionalCount = $state(0);
   let proposeFile = $state('.env');
+  let proposeEntries = $state<EnvProposeEntry[]>([]);
   let inserting = $state(false);
   let insertError = $state('');
 
@@ -64,27 +65,34 @@
       .then((p) => {
         if (site.domain !== domain || branch !== b) return;
         missingCount = p.added.length;
-        optionalCount = p.optional.length;
         proposeFile = p.file;
+        proposeEntries = p.entries;
       })
       .catch(() => {
         if (site.domain !== domain || branch !== b) return;
         missingCount = 0;
-        optionalCount = 0;
+        proposeEntries = [];
       });
   }
 
-  // Stage the proposed merge into the editable buffer: the user then fills in
-  // values, drops keys they don't want, and saves with the normal Save button.
-  // The green bars track their edits, so this is an ordinary unsaved change, not
-  // a separate mode.
-  async function insertProposed(includeOptional: boolean) {
+  // Open the review modal so the user sees every missing key with the value it
+  // would get, ticks the ones to add, and only then stages them.
+  function reviewKeys() {
+    openEnvProposeModal({ file: proposeFile, entries: proposeEntries, onAdd: stageKeys });
+  }
+
+  // Stage exactly the picked keys into the editable buffer: the user then fills
+  // in values, drops any they change their mind on, and saves with the normal
+  // Save button. The green bars track their edits, so this is an ordinary
+  // unsaved change, not a separate mode.
+  async function stageKeys(keys: string[]) {
+    if (keys.length === 0) return;
     const domain = site.domain;
     const b = branch;
     inserting = true;
     insertError = '';
     try {
-      const p = await proposeSiteEnv(domain, b, includeOptional);
+      const p = await proposeSiteEnv(domain, b, false, keys);
       if (site.domain !== domain || branch !== b || file !== p.file) return;
       // Staging the merge makes the buffer differ from disk, so highlightLines
       // (derived from that diff) lights up the inserted lines on its own.
@@ -325,23 +333,13 @@
         {m.envEditor_proposeBanner({ n: missingCount, file: proposeFile })}
       </span>
       <div class="flex items-center gap-2 shrink-0">
-        {#if optionalCount > 0}
-          <button
-            type="button"
-            onclick={() => insertProposed(true)}
-            disabled={inserting}
-            class="text-xs px-2 py-1 rounded-sm text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-900/25 disabled:opacity-40 whitespace-nowrap"
-          >
-            {m.envEditor_proposeAddOptional({ n: optionalCount })}
-          </button>
-        {/if}
         <button
           type="button"
-          onclick={() => insertProposed(false)}
+          onclick={reviewKeys}
           disabled={inserting}
           class="text-xs px-2 py-1 rounded-sm border border-amber-300 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/25 disabled:opacity-40 whitespace-nowrap"
         >
-          {m.envEditor_proposeAdd({ n: missingCount })}
+          {m.envEditor_proposeReview()}
         </button>
       </div>
     </div>

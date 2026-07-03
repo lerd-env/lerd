@@ -126,3 +126,18 @@ func TestMergeMissing_addedLines(t *testing.T) {
 		}
 	}
 }
+
+// TestExampleValues extracts each key's verbatim value, keeps quoting and
+// placeholders intact, and lets the first occurrence of a duplicate key win.
+func TestExampleValues(t *testing.T) {
+	example := "# header\nDB_HOST=localhost\nAPP_NAME=\"My App\"\nEMPTY=\nDB_HOST=ignored\n"
+	got := ExampleValues(example)
+	want := map[string]string{
+		"DB_HOST":  "localhost",
+		"APP_NAME": "\"My App\"",
+		"EMPTY":    "",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("ExampleValues = %v, want %v", got, want)
+	}
+}

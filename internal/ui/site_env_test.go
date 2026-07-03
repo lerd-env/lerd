@@ -92,6 +92,51 @@ func TestHandleSiteEnvPropose_insertsInPlace(t *testing.T) {
 	if resp.File != ".env" {
 		t.Errorf("File = %q, want .env", resp.File)
 	}
+	// Every missing key is listed with the value that would be written, so the
+	// UI can show the user what each key resolves to before adding it.
+	if len(resp.Entries) != 1 || resp.Entries[0].Key != "DB_PORT" || resp.Entries[0].Value != "5432" {
+		t.Errorf("Entries = %+v, want one DB_PORT=5432", resp.Entries)
+	}
+}
+
+// /env/propose?keys=A,B stages only the picked keys, and ignores names that
+// aren't among the missing example keys.
+func TestHandleSiteEnvPropose_selectsKeys(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.example"),
+		[]byte("DB_HOST=localhost\nDB_PORT=5432\nMAIL_HOST=smtp\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"),
+		[]byte("DB_HOST=lerd-postgres\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "sel", Path: sitePath, Domains: []string{"sel.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/sel.test/env/propose?keys=DB_PORT,NOPE", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp SiteEnvProposeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(resp.Added) != 1 || resp.Added[0] != "DB_PORT" {
+		t.Errorf("Added = %v, want [DB_PORT]", resp.Added)
+	}
+	want := "DB_HOST=lerd-postgres\nDB_PORT=5432\n"
+	if resp.Merged != want {
+		t.Errorf("Merged mismatch\n got: %q\nwant: %q", resp.Merged, want)
+	}
 }
 
 // Missing .env returns 200 with an empty body so the UI's gate falls back

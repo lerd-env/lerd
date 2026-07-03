@@ -96,6 +96,23 @@ func MergeMissing(exampleContent, envContent string, include map[string]bool) Me
 	return MergeResult{Merged: merged, Added: added, AddedLines: addedLines}
 }
 
+// ExampleValues maps each key in an .env.example to its raw value, everything
+// after the first "=", copied verbatim so placeholders and quoting survive. The
+// first occurrence of a key wins, matching the first-wins placement MergeMissing
+// uses when inserting a duplicated example key.
+func ExampleValues(exampleContent string) map[string]string {
+	entries := parseExampleEntries(exampleContent)
+	vals := make(map[string]string, len(entries))
+	for _, e := range entries {
+		if _, ok := vals[e.key]; ok {
+			continue
+		}
+		_, v, _ := strings.Cut(e.line, "=")
+		vals[e.key] = v
+	}
+	return vals
+}
+
 // parseExampleEntries returns the key lines of an .env.example in order, each
 // carrying the comment lines directly above it (broken by any blank line).
 func parseExampleEntries(content string) []exampleEntry {
