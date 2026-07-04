@@ -105,6 +105,37 @@ func TestSaveLoadGlobal_RoundTrip(t *testing.T) {
 	}
 }
 
+func TestNodeManagedPref(t *testing.T) {
+	setConfigDir(t)
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	// A fresh config predates the field, so the preference is unset and callers
+	// fall back to the on-disk shim state.
+	if _, set := cfg.NodeManagedPref(); set {
+		t.Fatal("expected NodeManagedPref unset on a fresh config")
+	}
+
+	cfg.SetNodeManaged(false)
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	got, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal after save: %v", err)
+	}
+	val, set := got.NodeManagedPref()
+	if !set {
+		t.Fatal("expected NodeManagedPref set after SetNodeManaged")
+	}
+	if val {
+		t.Errorf("NodeManagedPref = true, want false (the opt-out must survive a round-trip)")
+	}
+}
+
 // ── RequestTimeoutSeconds ─────────────────────────────────────────────────────
 
 func TestRequestTimeoutSeconds_DefaultsTo60WhenUnset(t *testing.T) {

@@ -100,6 +100,8 @@ You can flip the choice at any time without re-running the whole installer:
 
 Both also regenerate any host worker units (Vite and other `host: true` workers) so they switch between fnm, your system Node, and bun to match the new state. The dashboard and Settings exposes the same toggle: the Node page shows a **Let lerd manage Node** / **Stop managing** button.
 
+The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
+
 ---
 
 ## bun
