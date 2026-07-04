@@ -9,6 +9,11 @@ php:
   default_version: "8.5"
 node:
   default_version: "22"
+  managed: true           # optional. Whether lerd manages Node.js via fnm shims.
+                          # Written by the install prompt and by lerd node:manage
+                          # / node:unmanage; honoured on lerd update so an opt-out
+                          # is not undone. Omitted on configs predating it, which
+                          # fall back to whatever shims are on disk.
 nginx:
   http_port: 80
   https_port: 443

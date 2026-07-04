@@ -77,6 +77,11 @@ type GlobalConfig struct {
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
+		// Managed records whether lerd manages Node.js via fnm shims. A pointer
+		// so a config predating the field (nil) keeps the historical
+		// shim-presence behaviour, while an explicit false survives updates that
+		// would otherwise re-add the shims a `node:unmanage` removed.
+		Managed *bool `yaml:"managed,omitempty" mapstructure:"managed"`
 	} `yaml:"node" mapstructure:"node"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`
@@ -921,6 +926,22 @@ func (c *GlobalConfig) IsNotificationsEnabled() bool {
 // SaveGlobal; dispatchNotification re-reads the flag on every event.
 func (c *GlobalConfig) SetNotificationsEnabled(enabled bool) {
 	c.Notifications.Disabled = !enabled
+}
+
+// NodeManagedPref returns the persisted Node-management choice. set is false
+// when the config predates the field, so callers fall back to the on-disk shim
+// state instead of assuming a default.
+func (c *GlobalConfig) NodeManagedPref() (val bool, set bool) {
+	if c.Node.Managed == nil {
+		return false, false
+	}
+	return *c.Node.Managed, true
+}
+
+// SetNodeManaged records the Node-management choice. Persist via SaveGlobal;
+// the install/update flow reads it to keep the choice across updates.
+func (c *GlobalConfig) SetNodeManaged(managed bool) {
+	c.Node.Managed = &managed
 }
 
 // SaveGlobal writes the configuration to config.yaml.
