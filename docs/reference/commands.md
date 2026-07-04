@@ -69,6 +69,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected) |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
+| `lerd secure --renew [name]` | Reissue a secured site's TLS cert on demand, resetting its expiry |
 | `lerd unsecure [name]` | Remove TLS and switch back to HTTP, updates `APP_URL` in `.env` |
 | `lerd pause [name]` | Pause a site: stop workers (and custom container if applicable), replace vhost with landing page |
 | `lerd unpause [name]` | Resume a paused site: start container, restore vhost, restart workers |

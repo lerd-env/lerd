@@ -15,12 +15,14 @@ import (
 
 // NewSecureCmd returns the secure command.
 func NewSecureCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "secure [name]",
 		Short: "Enable HTTPS for the current site using mkcert (cert SANs cover *.<branch>.<site>.test for worktrees)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runSecure,
 	}
+	cmd.Flags().Bool("renew", false, "Reissue the cert on an already-secured site, resetting expiry")
+	return cmd
 }
 
 // NewUnsecureCmd returns the unsecure command.
@@ -49,12 +51,37 @@ func resolveSiteName(args []string) (string, error) {
 	return filepath.Base(cwd), nil
 }
 
-func runSecure(_ *cobra.Command, args []string) error {
+func runSecure(cmd *cobra.Command, args []string) error {
+	if renew, _ := cmd.Flags().GetBool("renew"); renew {
+		return renewCert(args)
+	}
 	return toggleSecureCmd(args, true)
 }
 
 func runUnsecure(_ *cobra.Command, args []string) error {
 	return toggleSecureCmd(args, false)
+}
+
+// renewCert force-reissues the site's certificate through siteops.RenewCert (the
+// single source of truth shared with MCP) so a long-lived cert can be reset
+// without toggling HTTPS off and on. Backs `lerd secure --renew`.
+func renewCert(args []string) error {
+	name, err := resolveSiteName(args)
+	if err != nil {
+		return err
+	}
+	site, err := config.FindSite(name)
+	if err != nil {
+		return fmt.Errorf("site %q not found — run 'lerd link' first", name)
+	}
+	feedback.Begin()
+	step := feedback.Start("renewing certificate")
+	if err := siteops.RenewCert(site); err != nil {
+		step.Fail(err)
+		return err
+	}
+	step.OK(feedback.Val("https://" + site.PrimaryDomain()))
+	return nil
 }
 
 // toggleSecureCmd is the CLI entry-point shared by `lerd secure` and

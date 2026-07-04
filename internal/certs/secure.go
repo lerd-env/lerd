@@ -86,6 +86,25 @@ func ReissueCertForWorktree(site config.Site) error {
 	return issueCertWithWorktrees(site)
 }
 
+// EnsureCert reuses the site's existing certificate when it is still valid and
+// clear of the reissue window, otherwise reissues one covering the site's own
+// domains plus every current worktree domain. Unlike ReissueCertForWorktree it
+// never forces, so it is cheap to call on every boot/watcher pass as the routine
+// self-heal that keeps a long-lived secured site's leaf cert from expiring.
+func EnsureCert(site config.Site) error {
+	certsDir := filepath.Join(config.CertsDir(), "sites")
+
+	var wtDomains []string
+	if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
+		for _, wt := range worktrees {
+			wtDomains = append(wtDomains, wt.Domain)
+		}
+	}
+	domains := WorktreeCertDomains(site.Domains, wtDomains)
+
+	return IssueCert(site.PrimaryDomain(), domains, certsDir)
+}
+
 // issueCertWithWorktrees detects all worktrees for the site and issues a
 // certificate covering the site's own domains plus *.worktreeDomain for each
 // worktree, so that deep subdomains (e.g. app.branch.domain.test) work. The

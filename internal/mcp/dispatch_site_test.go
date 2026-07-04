@@ -22,7 +22,7 @@ func callToolRaw(t *testing.T, tool string, args map[string]any) (any, *rpcError
 // covered by TestDispatchCanonicalizesSiteArg_Worktree.
 var siteActionsUnderTest = map[string][]string{
 	"site": {"php", "node", "runtime", "pause", "unpause", "restart", "rebuild",
-		"tls_enable", "tls_disable", "nginx_read", "nginx_write", "nginx_reset"},
+		"tls_enable", "tls_disable", "tls_renew", "nginx_read", "nginx_write", "nginx_reset"},
 	"worker": {"start", "stop", "list", "add", "remove",
 		"queue_start", "queue_stop", "reverb_start", "reverb_stop",
 		"horizon_start", "horizon_stop", "schedule_start", "schedule_stop",

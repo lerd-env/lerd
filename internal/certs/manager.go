@@ -2,6 +2,8 @@ package certs
 
 import (
 	"bytes"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -15,6 +17,12 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 )
+
+// certReissueWindow is how close to NotAfter a leaf cert may drift before the
+// IssueCert reuse path stops trusting it and reissues. Mirrors the 30-day
+// threshold `lerd status` warns at, so the self-heal kicks in as the warning
+// starts rather than waiting for the cert to actually expire.
+const certReissueWindow = 30 * 24 * time.Hour
 
 // issueCertMu serialises issueCertAtomic calls per primaryDomain. Two
 // concurrent reissues for the same site (e.g. boot scanWorktrees racing the
@@ -55,16 +63,41 @@ func InstallCA() error {
 
 // IssueCert issues a TLS certificate covering all the given domains using mkcert.
 // The cert files are named after primaryDomain. Each domain also gets a wildcard entry.
-// If the cert and key files already exist they are reused without re-running mkcert.
+// An existing cert/key pair is reused without re-running mkcert only while the
+// cert is still valid and more than certReissueWindow from NotAfter; a cert that
+// is expired, near expiry, or unreadable falls through to the atomic reissue so
+// an ordinary start or watcher pass self-heals an aging cert.
 func IssueCert(primaryDomain string, allDomains []string, certsDir string) error {
 	certFile := filepath.Join(certsDir, primaryDomain+".crt")
 	keyFile := filepath.Join(certsDir, primaryDomain+".key")
 	if _, certErr := os.Stat(certFile); certErr == nil {
 		if _, keyErr := os.Stat(keyFile); keyErr == nil {
-			return nil
+			if !certNeedsReissue(certFile, certReissueWindow) {
+				return nil
+			}
 		}
 	}
 	return issueCertAtomic(primaryDomain, allDomains, certsDir)
+}
+
+// certNeedsReissue reports whether the PEM cert at path should be reissued: it
+// returns true when the file is unreadable, not a parseable certificate, or
+// within window of (or past) its NotAfter. An unreadable or malformed cert is
+// treated as needing reissue rather than trusted.
+func certNeedsReissue(path string, window time.Duration) bool {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return true
+	}
+	block, _ := pem.Decode(data)
+	if block == nil {
+		return true
+	}
+	parsed, err := x509.ParseCertificate(block.Bytes)
+	if err != nil {
+		return true
+	}
+	return time.Until(parsed.NotAfter) < window
 }
 
 // IssueCertForce regenerates the certificate for primaryDomain even if files

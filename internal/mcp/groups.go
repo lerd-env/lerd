@@ -79,6 +79,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"group_list":     execSiteGroupList,
 		"tls_enable":     execSecure,
 		"tls_disable":    execUnsecure,
+		"tls_renew":      execRenew,
 		"php":            execSitePHP,
 		"node":           execSiteNode,
 		"pause":          execSitePause,
@@ -275,11 +276,11 @@ func sortedActions(m map[string]handlerFn) []string {
 func siteTool() mcpTool {
 	return mcpTool{
 		Name:        "site",
-		Description: "Manage sites. action: list (discover sites — CALL FIRST), link, unlink, domain_add, domain_remove, group_assign, group_unassign, group_label, group_db, group_list, tls_enable, tls_disable, php, node, pause, unpause, restart, rebuild, runtime, nginx_read, nginx_write, nginx_reset, park, unpark.",
+		Description: "Manage sites. action: list (discover sites — CALL FIRST), link, unlink, domain_add, domain_remove, group_assign, group_unassign, group_label, group_db, group_list, tls_enable, tls_disable, tls_renew, php, node, pause, unpause, restart, rebuild, runtime, nginx_read, nginx_write, nginx_reset, park, unpark.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":   {Type: "string", Enum: []string{"list", "link", "unlink", "domain_add", "domain_remove", "group_assign", "group_unassign", "group_label", "group_db", "group_list", "tls_enable", "tls_disable", "php", "node", "pause", "unpause", "restart", "rebuild", "runtime", "nginx_read", "nginx_write", "nginx_reset", "park", "unpark"}},
+				"action":   {Type: "string", Enum: []string{"list", "link", "unlink", "domain_add", "domain_remove", "group_assign", "group_unassign", "group_label", "group_db", "group_list", "tls_enable", "tls_disable", "tls_renew", "php", "node", "pause", "unpause", "restart", "rebuild", "runtime", "nginx_read", "nginx_write", "nginx_reset", "park", "unpark"}},
 				"path":     {Type: "string", Description: "Targets the site by directory (link, unlink, domain_*, group_* [the secondary], park, unpark). Defaults to cwd."},
 				"site":     {Type: "string", Description: "Targets the site by name from action=list (php, node, tls_*, pause, unpause, restart, rebuild, runtime, nginx_*). group_* use path, not site."},
 				"name":     {Type: "string", Description: "link: site name without .test TLD."},

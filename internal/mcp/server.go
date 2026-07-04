@@ -2674,6 +2674,24 @@ func execUnsecure(args map[string]any) (any, *rpcError) {
 	return execToggleSecure(args, false)
 }
 
+// execRenew force-reissues a secured site's certificate through
+// siteops.RenewCert, the same path `lerd secure --renew` uses, so the manual
+// reset-the-clock behaviour is identical across MCP and CLI.
+func execRenew(args map[string]any) (any, *rpcError) {
+	siteName := strArg(args, "site")
+	if siteName == "" {
+		return toolErr("site is required"), nil
+	}
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return toolErr(fmt.Sprintf("site %q not found", siteName)), nil
+	}
+	if err := siteops.RenewCert(site); err != nil {
+		return toolErr(err.Error()), nil
+	}
+	return toolOK(fmt.Sprintf("Renewed certificate: https://%s", site.PrimaryDomain())), nil
+}
+
 // execToggleSecure is the MCP entry-point shared by site_secure / site_unsecure.
 // It funnels through siteops.SetSecured, the single source of truth shared
 // with CLI and UI. All post-toggle work (Stripe restart, LAN share refresh)
