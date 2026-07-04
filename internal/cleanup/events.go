@@ -12,15 +12,26 @@ func defaultAutoEnabled() bool {
 
 // SweepSafe runs the safe-tier cleanup immediately when auto_cleanup is on. It
 // is the event hook for the moment a PHP image rebuild orphans the old image,
-// reaping it at once instead of waiting for the daily watcher. Returns the
-// number of images reaped and bytes freed; err is non-nil only when the image
-// scan itself failed, so the watcher can tell a transient failure (retry) from
-// "nothing to do" (throttle). All-zero with nil err when disabled or clean.
-func SweepSafe() (images int, bytes int64, err error) {
+// reaping it at once instead of waiting for the daily watcher.
+func SweepSafe() (images int, bytes int64, err error) { return sweep(false) }
+
+// SweepDeep runs the deep tier: the safe-tier orphans plus service catalog
+// images no service references any more. This is the daily watcher's sweep, so
+// old service versions left by an upgrade get reclaimed unattended. Protected
+// images (the current one and the one-back rollback) and user-added tags are
+// always kept, and the deep tier degrades to safe when the preset store can't
+// be read, so the unattended path stays safe.
+func SweepDeep() (images int, bytes int64, err error) { return sweep(true) }
+
+// sweep runs a cleanup tier when auto_cleanup is on. Returns the number of
+// images reaped and bytes freed; err is non-nil only when the image scan itself
+// failed, so the watcher can tell a transient failure (retry) from "nothing to
+// do" (throttle). All-zero with nil err when disabled or clean.
+func sweep(deep bool) (images int, bytes int64, err error) {
 	if !autoEnabled() {
 		return 0, 0, nil
 	}
-	plan, err := Inspect(false)
+	plan, err := Inspect(deep)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -100,7 +100,10 @@ func deepTargets(imgs []image, repos, protected map[string]bool) []Target {
 // a non-catalog tag the user added both mean "leave this whole image alone", so
 // cleanup never untags an image something else still relies on.
 func removableServiceRefs(img image, repos, protected map[string]bool) []string {
-	if len(img.Names) == 0 {
+	// An image a container still holds can't be removed by podman, so keep it even
+	// when no service config references it (a container running a catalog image the
+	// config no longer names would otherwise be listed forever).
+	if len(img.Names) == 0 || inUse(img) {
 		return nil
 	}
 	refs := make([]string, 0, len(img.Names))

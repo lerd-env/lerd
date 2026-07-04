@@ -26,11 +26,11 @@
 | `lerd check` | Validate `.lerd.yaml` syntax, services, and PHP version before setup |
 | `lerd doctor` | Full environment diagnostic: podman, systemd, DNS, ports, PHP images, config validity; also reports how much podman disk is reclaimable |
 | `lerd site:doctor [domain]` | App-level health checks for a single site (env file, env drift, application key, a configured SQLite database that is missing or empty, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP version range, routes running well above the site's typical response time, plus the framework's own checks). A broken database suppresses the framework migration check so the remedy isn't repeated. Defaults to the site in the current directory; pass a domain to target another. Add `--json` for machine-readable output |
-| `lerd cleanup` | Reclaim podman disk from orphaned lerd images: old PHP build images and stale base images a rebuild left behind. Previews the list and confirms before removing. Only ever touches lerd's own images, never your databases, volumes, or other images |
+| `lerd cleanup` | Reclaim podman disk from orphaned lerd images (old PHP build and base images a rebuild left behind), unused service images no installed service references any more (e.g. an old `mysql:8.0` after upgrading, keeping each service's current image and its one-back rollback target), and dangling untagged images. Previews the list and confirms before removing. Never touches a tagged image in use, your databases, or volumes |
 | `lerd cleanup --dry-run` | Show what would be reclaimed and the approximate size, remove nothing |
-| `lerd cleanup --deep` | Also remove unused service images no installed service references any more (e.g. an old `mysql:8.0` after upgrading), keeping each service's current image and its one-back rollback target |
+| `lerd cleanup --safe` | Only reclaim images provably built by lerd, leave unused service and dangling images alone |
 | `lerd cleanup --yes` | Remove without the confirmation prompt |
-| `lerd cleanup auto on` | Enable automatic cleanup (the default): the watcher's daily safe-tier sweep plus immediate reaping after a PHP rebuild or service update/remove |
+| `lerd cleanup auto on` | Enable automatic cleanup (the default): the watcher's daily deep sweep plus immediate reaping after a PHP rebuild or service update/remove |
 | `lerd cleanup auto off` | Disable automatic cleanup; `lerd cleanup` still works on demand |
 | `lerd cleanup auto status` | Show whether automatic cleanup is enabled |
 | `lerd bug-report [-o file] [--log-lines n] [--show-real-names]` | Dump doctor output, config files, unit state, recent logs, network state and env vars to a plain-text file you can attach to a GitHub issue. Site names, domains, parked paths, home paths and the username are anonymized by default; `--show-real-names` keeps raw values |

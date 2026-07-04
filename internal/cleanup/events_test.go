@@ -50,6 +50,56 @@ func TestSweepRefs_GatedOffNoOp(t *testing.T) {
 	}
 }
 
+// SweepDeep runs the deep tier, reaping a service image no service references
+// any more where the safe tier would leave it, and crediting its bytes.
+func TestSweepDeep_ReapsUnusedServiceImages(t *testing.T) {
+	autoEnabled = func() bool { return true }
+	withImages(t, []image{
+		{ID: "m57", Names: []string{"docker.io/library/mysql:5.7"}, Size: 400}, // unused → reap
+		{ID: "m84", Names: []string{"docker.io/library/mysql:8.4"}, Size: 500}, // current → keep
+	}, nil)
+	serviceRepos = func() (map[string]bool, error) {
+		return map[string]bool{"docker.io/library/mysql": true}, nil
+	}
+	protectedImages = func() (map[string]bool, error) {
+		return map[string]bool{"docker.io/library/mysql:8.4": true}, nil
+	}
+	var removed []string
+	removeImage = func(id string) error { removed = append(removed, id); return nil }
+	t.Cleanup(func() {
+		autoEnabled = defaultAutoEnabled
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+		removeImage = podmanRemoveImage
+	})
+
+	images, bytes, err := SweepDeep()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(removed) != 1 || removed[0] != "docker.io/library/mysql:5.7" {
+		t.Fatalf("want only the unused mysql:5.7 reaped, got %v", removed)
+	}
+	if images != 1 || bytes != 400 {
+		t.Errorf("images=%d bytes=%d, want 1 and 400", images, bytes)
+	}
+}
+
+func TestSweepDeep_GatedOffNoOp(t *testing.T) {
+	autoEnabled = func() bool { return false }
+	scanned := false
+	scanImages = func() ([]image, error) { scanned = true; return nil, nil }
+	t.Cleanup(func() {
+		autoEnabled = defaultAutoEnabled
+		scanImages = podmanImages
+	})
+
+	images, bytes, err := SweepDeep()
+	if err != nil || images != 0 || bytes != 0 || scanned {
+		t.Errorf("gated off must no-op without scanning: images=%d bytes=%d err=%v scanned=%v", images, bytes, err, scanned)
+	}
+}
+
 func TestSweepSafe_GatedOffNoOp(t *testing.T) {
 	autoEnabled = func() bool { return false }
 	scanned := false

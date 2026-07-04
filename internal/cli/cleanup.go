@@ -12,17 +12,21 @@ import (
 // NewCleanupCmd returns the cleanup command: reclaim podman disk that lerd's
 // own image rebuilds have orphaned, without ever touching a non-lerd resource.
 func NewCleanupCmd() *cobra.Command {
-	var dryRun, yes, deep bool
+	var dryRun, yes, safe, deep bool
 	cmd := &cobra.Command{
 		Use:   "cleanup",
-		Short: "Reclaim podman disk from orphaned lerd images",
+		Short: "Reclaim podman disk from orphaned lerd images, unused service images, and dangling leftovers",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runCleanup(dryRun, yes, deep)
+			return runCleanup(dryRun, yes, !safe)
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be reclaimed without removing anything")
 	cmd.Flags().BoolVar(&yes, "yes", false, "Remove without confirming")
-	cmd.Flags().BoolVar(&deep, "deep", false, "Also remove unused service images no service references any more")
+	cmd.Flags().BoolVar(&safe, "safe", false, "Only reclaim images provably built by lerd, keep unused service and dangling images")
+	// --deep is now the default; kept as a hidden no-op so existing muscle memory
+	// and scripts don't break.
+	cmd.Flags().BoolVar(&deep, "deep", false, "")
+	_ = cmd.Flags().MarkHidden("deep")
 	cmd.AddCommand(newCleanupAutoCmd())
 	return cmd
 }
@@ -34,9 +38,10 @@ func newCleanupAutoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auto",
 		Short: "Enable, disable, or show automatic cleanup",
-		Long: `Toggle automatic cleanup: the lerd-watcher's daily safe-tier sweep and
-the immediate reaping after a PHP rebuild or a service update/remove. On by
-default. Only ever runs the safe tier, never --deep.`,
+		Long: `Toggle automatic cleanup: the lerd-watcher's daily deep sweep and the
+immediate reaping after a PHP rebuild or a service update/remove. On by
+default. The deep sweep always keeps the current image and the one-back
+rollback target, and never touches images lerd didn't pull.`,
 	}
 	cmd.AddCommand(
 		&cobra.Command{Use: "on", Short: "Enable automatic cleanup", Args: cobra.NoArgs,
@@ -92,7 +97,8 @@ func runCleanup(dryRun, yes, deep bool) error {
 		return err
 	}
 	if len(plan.Targets) == 0 {
-		feedback.Line("Nothing to clean up. No orphaned lerd images.")
+		feedback.Line("Nothing to reclaim right now.")
+		showHeldHint(plan)
 		return nil
 	}
 
@@ -107,6 +113,7 @@ func runCleanup(dryRun, yes, deep bool) error {
 	feedback.Note(fmt.Sprintf("About %s across %d image(s).", humanSize(plan.ReclaimBytes()), len(plan.Targets)))
 
 	if dryRun {
+		showHeldHint(plan)
 		return nil
 	}
 	if !yes && !feedback.Confirm("Remove these images?", false) {
@@ -114,5 +121,23 @@ func runCleanup(dryRun, yes, deep bool) error {
 	}
 
 	feedback.Done(fmt.Sprintf("Freed about %s.", humanSize(cleanup.Apply(plan))))
+	showHeldHint(plan)
 	return nil
+}
+
+// showHeldHint tells the user when reclaimable disk is locked behind running
+// containers: those images can't be removed now, but a restart recreates the
+// containers on the current images and releases the old ones. Silent otherwise.
+func showHeldHint(plan cleanup.Plan) {
+	if h := heldHint(plan); h != "" {
+		feedback.Note(h)
+	}
+}
+
+func heldHint(plan cleanup.Plan) string {
+	if plan.Held.Count == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s across %d image(s) is held by running containers. Run `lerd restart` to release it, then cleanup again.",
+		humanSize(plan.Held.Bytes), plan.Held.Count)
 }

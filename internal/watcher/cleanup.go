@@ -11,16 +11,19 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// autoCleanupInterval is the minimum gap between automatic safe-tier sweeps.
-// Orphaned images aren't urgent, so a slow daily cadence reclaims rebuild
-// leftovers on its own while keeping the watcher quiet.
+// autoCleanupInterval is the minimum gap between automatic sweeps. Orphaned and
+// unused images aren't urgent, so a slow daily cadence reclaims them on its own
+// while keeping the watcher quiet.
 const autoCleanupInterval = 24 * time.Hour
 
-// WatchCleanup periodically reclaims orphaned lerd images (the safe tier only,
-// never the --deep service-image tier). It ticks at interval but acts at most
-// once per autoCleanupInterval, throttled by a persisted timestamp so a
-// restarting watcher can't sweep more often. The auto_cleanup config gate turns
-// it off.
+// autoSweep is the sweep the watcher runs; the deep tier so upgraded service
+// images left behind get reclaimed unattended. Seam for tests.
+var autoSweep = cleanup.SweepDeep
+
+// WatchCleanup periodically reclaims orphaned lerd images and unused service
+// images (the deep tier). It ticks at interval but acts at most once per
+// autoCleanupInterval, throttled by a persisted timestamp so a restarting
+// watcher can't sweep more often. The auto_cleanup config gate turns it off.
 func WatchCleanup(interval time.Duration) {
 	// Check once at startup too: the daily stamp throttles it, but a watcher
 	// that restarts more often than interval would otherwise never sweep, and a
@@ -34,10 +37,10 @@ func WatchCleanup(interval time.Duration) {
 	}
 }
 
-// runAutoCleanup performs one throttled, gated safe-tier sweep. Split from the
+// runAutoCleanup performs one throttled, gated deep-tier sweep. Split from the
 // ticker so its decision points are unit-testable with an injected clock. The
-// actual reclaim is delegated to cleanup.SweepSafe so the watcher only adds the
-// throttle and the log line on top of the shared pipeline.
+// actual reclaim is delegated to autoSweep so the watcher only adds the throttle
+// and the log line on top of the shared pipeline.
 func runAutoCleanup(now time.Time) {
 	cfg, err := config.LoadGlobal()
 	if err != nil || !cfg.AutoCleanupEnabled() {
@@ -47,7 +50,7 @@ func runAutoCleanup(now time.Time) {
 		return
 	}
 
-	images, freed, err := cleanup.SweepSafe()
+	images, freed, err := autoSweep()
 	if err != nil {
 		// Transient podman failure: don't stamp, so the next tick retries
 		// instead of being throttled out for a full interval.
@@ -55,7 +58,7 @@ func runAutoCleanup(now time.Time) {
 	}
 	stampAutoCleanup(now)
 	if images > 0 {
-		logger.Info("auto-cleanup reclaimed orphaned images", "images", images, "bytes", freed)
+		logger.Info("auto-cleanup reclaimed unused images", "images", images, "bytes", freed)
 	}
 }
 
