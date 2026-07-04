@@ -191,8 +191,9 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service rollback <name>` | Swap back to the previously-running image; toggles, so a second rollback redoes the update |
 | `lerd service expose <name> <host:container>` | Publish an extra port on any bundled preset service (persisted, auto-restarts if running) |
 | `lerd service expose <name> <host:container> --remove` | Remove a previously exposed port |
-| `lerd service port <name> <port>` | Move a service's published host port without touching its container-internal port; persisted and auto-restarts if running |
-| `lerd service port <name> --reset` | Reset a service to its preset default published port (same as `port <name> 0`) |
+| `lerd service port <name> <port>` | Move a service's primary published host port without touching its container-internal port; persisted and auto-restarts if running |
+| `lerd service port <name> <port> --container <cport>` | Move a specific mapping of a multi-port service (e.g. Mailpit's `8025` web UI behind the `1025` SMTP primary), named by its container-internal port |
+| `lerd service port <name> --reset` | Reset a service to its preset default published port (same as `port <name> 0`); combine with `--container` to reset one mapping |
 | `lerd service pin <name>` | Pin a service so it is never auto-stopped when no sites use it |
 | `lerd service unpin <name>` | Unpin a service so it can be auto-stopped when unused |
 | `lerd service add [file.yaml]` | Register a new custom service (from a YAML file or flags) |

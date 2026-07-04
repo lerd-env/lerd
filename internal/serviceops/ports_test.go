@@ -292,6 +292,199 @@ func TestSetPublishedPortRollsBackOnStartFailure(t *testing.T) {
 	}
 }
 
+// TestSetPublishedPortForSecondary moves a multi-port service's secondary mapping
+// (mailpit's 8025 UI) and persists it under PublishedPorts keyed by container port,
+// leaving the primary untouched.
+func TestSetPublishedPortForSecondary(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	res, err := SetPublishedPortFor("mailpit", 8025, 38026)
+	if err != nil {
+		t.Fatalf("SetPublishedPortFor: %v", err)
+	}
+	if res.Actual != 38026 {
+		t.Errorf("Actual = %d, want 38026", res.Actual)
+	}
+	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 38026 {
+		t.Errorf("PublishedPorts[8025] = %d, want 38026", got)
+	}
+	if config.ServicePublishedPort("mailpit") != 0 {
+		t.Error("moving a secondary must not touch the primary PublishedPort")
+	}
+}
+
+// TestSetPublishedPortForReset clears a secondary override when asked for its
+// preset default, and reports NoOp on a repeat of the same override.
+func TestSetPublishedPortForReset(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+		t.Fatalf("initial move: %v", err)
+	}
+	repeat, err := SetPublishedPortFor("mailpit", 8025, 38026)
+	if err != nil || !repeat.NoOp {
+		t.Errorf("repeat = %+v, err %v, want NoOp", repeat, err)
+	}
+	if _, err := SetPublishedPortFor("mailpit", 8025, 8025); err != nil { // the preset default
+		t.Fatalf("reset to default: %v", err)
+	}
+	if got := config.ServicePublishedPorts("mailpit"); len(got) != 0 {
+		t.Errorf("requesting the default must clear the override, got %v", got)
+	}
+}
+
+// TestSetPublishedPortForPrimaryDelegates: targeting the primary mapping's
+// container port routes through SetPublishedPort so the primary keeps its own
+// override field and guard handling.
+func TestSetPublishedPortForPrimaryDelegates(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := SetPublishedPortFor("mailpit", 1025, 41025); err != nil {
+		t.Fatalf("SetPublishedPortFor primary: %v", err)
+	}
+	if config.ServicePublishedPort("mailpit") != 41025 {
+		t.Errorf("primary override = %d, want 41025", config.ServicePublishedPort("mailpit"))
+	}
+	if len(config.ServicePublishedPorts("mailpit")) != 0 {
+		t.Error("primary move must not write the secondary map")
+	}
+}
+
+// TestSetPublishedPortForRejects covers the guard rails: an unknown container
+// port, an out-of-range host port, and colliding a secondary onto the primary's port.
+func TestSetPublishedPortForRejects(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := SetPublishedPortFor("mailpit", 9999, 38026); err == nil {
+		t.Error("unknown container port = nil, want error")
+	}
+	if _, err := SetPublishedPortFor("mailpit", 8025, 70000); err == nil {
+		t.Error("out-of-range host port = nil, want error")
+	}
+	if _, err := SetPublishedPortFor("mailpit", 8025, 1025); !errors.Is(err, ErrPortInUse) {
+		t.Errorf("secondary onto primary's port err = %v, want ErrPortInUse", err)
+	}
+}
+
+// TestSetPublishedPortForRollsBackOnStartFailure: a secondary move whose restart
+// can't bind the new port restores the previous override and brings the unit back
+// up, instead of leaving it down with the config already moved — the same recovery
+// the primary path has, which the secondary path previously lacked.
+func TestSetPublishedPortForRollsBackOnStartFailure(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	fakeQuadletOnDisk(t, "mailpit") // ServiceInstalled -> true
+
+	prevStatus, prevStop, prevStart := portsUnitStatus, portsStopUnit, portsStartUnit
+	prevWait, prevRerender := portsWaitReady, portsRerender
+	t.Cleanup(func() {
+		portsUnitStatus, portsStopUnit, portsStartUnit = prevStatus, prevStop, prevStart
+		portsWaitReady, portsRerender = prevWait, prevRerender
+	})
+
+	startCalls := 0
+	portsUnitStatus = func(string) (string, error) { return "active", nil }
+	portsStopUnit = func(string) error { return nil }
+	portsRerender = func(string) error { return nil }
+	portsWaitReady = func(string, time.Duration) error { return nil }
+	portsStartUnit = func(string) error {
+		startCalls++
+		if startCalls == 1 {
+			return errors.New("address already in use")
+		}
+		return nil // the rollback restart on the previous port succeeds
+	}
+
+	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err == nil {
+		t.Fatal("a failed start must surface an error so the caller knows the move didn't take")
+	}
+	if startCalls != 2 {
+		t.Fatalf("expected a rollback restart attempt after the failed start, startCalls=%d", startCalls)
+	}
+	if got := config.ServicePublishedPorts("mailpit"); len(got) != 0 {
+		t.Errorf("config must roll the secondary override back (had none), got %v", got)
+	}
+}
+
+// TestPortReservedBySecondaryDefaultOfOther pins finding C: a stopped multi-port
+// service reserves its un-overridden secondary DEFAULT port too, so another
+// service can't be assigned onto it and collide at boot (mailpit's 8025 UI).
+func TestPortReservedBySecondaryDefaultOfOther(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if _, err := SetPublishedPort("redis", 8025); !errors.Is(err, ErrPortReserved) {
+		t.Fatalf("SetPublishedPort(redis, 8025) err = %v, want ErrPortReserved (mailpit's secondary default)", err)
+	}
+}
+
+// TestSetPublishedPortForResetNormalizesRequested pins finding 5: resetting a
+// secondary by passing the mapping's default reports Requested 0, so callers print
+// "cleared the override" rather than "saved published port 8025".
+func TestSetPublishedPortForResetNormalizesRequested(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+		t.Fatalf("initial move: %v", err)
+	}
+	res, err := SetPublishedPortFor("mailpit", 8025, 8025) // pass the preset default
+	if err != nil {
+		t.Fatalf("reset via default: %v", err)
+	}
+	if res.Requested != 0 {
+		t.Errorf("Requested = %d, want 0 (passing the default is a reset)", res.Requested)
+	}
+	if got := config.ServicePublishedPorts("mailpit"); len(got) != 0 {
+		t.Errorf("override must be cleared, got %v", got)
+	}
+}
+
+// TestSnapshotRestorePublishedPorts: the ports-modal transaction can capture a
+// service's published-port config and roll it back wholesale after a partial save.
+func TestSnapshotRestorePublishedPorts(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if _, err := SetPublishedPort("mailpit", 41025); err != nil {
+		t.Fatalf("seed primary: %v", err)
+	}
+	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+		t.Fatalf("seed secondary: %v", err)
+	}
+	snap, ok := SnapshotPublishedPorts("mailpit")
+	if !ok {
+		t.Fatal("SnapshotPublishedPorts returned !ok")
+	}
+
+	// Mutate away from the snapshot, then restore.
+	if _, err := SetPublishedPort("mailpit", 42025); err != nil {
+		t.Fatalf("mutate primary: %v", err)
+	}
+	if _, err := SetPublishedPortFor("mailpit", 8025, 8025); err != nil {
+		t.Fatalf("mutate secondary: %v", err)
+	}
+	if err := RestorePublishedPorts("mailpit", snap); err != nil {
+		t.Fatalf("RestorePublishedPorts: %v", err)
+	}
+	if got := config.ServicePublishedPort("mailpit"); got != 41025 {
+		t.Errorf("primary not restored, got %d want 41025", got)
+	}
+	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 38026 {
+		t.Errorf("secondary not restored, got %d want 38026", got)
+	}
+}
+
 func TestErrPortInUseSentinel(t *testing.T) {
 	err := errors.Join(ErrPortInUse)
 	if !errors.Is(err, ErrPortInUse) {

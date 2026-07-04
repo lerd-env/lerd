@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // Bundled admin dashboards (rabbitmq, redisinsight) set session/consent cookies
@@ -248,6 +249,15 @@ func injectDashboardBootstrap(resp *http.Response, script string) error {
 	return nil
 }
 
+// resolveDashboardURL returns the dashboard upstream a proxied service should
+// target. The stored dashboard URL keeps the preset's default host port; a user
+// port move is recorded in the service config, not rewritten into svc.Dashboard,
+// so follow the move the same way the dashboard link does, or the proxy keeps
+// dialing the stale port after the container rebinds.
+func resolveDashboardURL(svc *config.CustomService, services map[string]config.ServiceConfig) string {
+	return serviceops.WithDashboardPort(svc.Dashboard, svc.Ports, services[svc.Name])
+}
+
 // handleDashProxy serves a bundled service dashboard same-origin under
 // /_svc/<name>/. Loopback-only, since it forwards into a local admin UI.
 func handleDashProxy(w http.ResponseWriter, r *http.Request) {
@@ -278,7 +288,7 @@ func handleDashProxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	target, err := url.Parse(svc.Dashboard)
+	target, err := url.Parse(resolveDashboardURL(svc, loadServicesMap()))
 	if err != nil || target.Host == "" {
 		http.Error(w, fmt.Sprintf("invalid dashboard URL for %s", name), http.StatusBadGateway)
 		return

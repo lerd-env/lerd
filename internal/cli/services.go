@@ -1017,6 +1017,7 @@ func newServiceUnpinCmd() *cobra.Command {
 // or installed custom service.
 func newServicePortCmd() *cobra.Command {
 	var reset bool
+	var container int
 	cmd := &cobra.Command{
 		Use:   "port <service> [port]",
 		Short: "Set or reset a service's published host port",
@@ -1028,7 +1029,13 @@ container-internal port. For example:
 frees 127.0.0.1:3306 for a host-installed MySQL while lerd-mysql stays reachable
 on 3307. Containerized apps reach the service over the lerd network by name, so
 they are unaffected. Works for any built-in or installed service. Use --reset
-(or "port mysql 0") to return to the default.`,
+(or "port mysql 0") to return to the default.
+
+A multi-port service exposes more than its primary port (mailpit's 8025 web UI
+behind the 1025 SMTP port). Target a specific mapping with --container, the
+container-internal port of the mapping to move:
+
+    lerd service port mailpit 8026 --container 8025`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
@@ -1043,7 +1050,13 @@ they are unaffected. Works for any built-in or installed service. Use --reset
 				}
 				newPort = p
 			}
-			res, err := serviceops.SetPublishedPort(name, newPort)
+			set := func() (serviceops.PortChange, error) {
+				if container > 0 {
+					return serviceops.SetPublishedPortFor(name, container, newPort)
+				}
+				return serviceops.SetPublishedPort(name, newPort)
+			}
+			res, err := set()
 			if err != nil {
 				if errors.Is(err, serviceops.ErrPortInUse) {
 					return fmt.Errorf("%w; pick another (check: %s)", err, FindListenerCmd(strconv.Itoa(newPort)))
@@ -1071,6 +1084,7 @@ they are unaffected. Works for any built-in or installed service. Use --reset
 		},
 	}
 	cmd.Flags().BoolVar(&reset, "reset", false, "Reset to the preset default published port")
+	cmd.Flags().IntVar(&container, "container", 0, "Container-internal port of a specific mapping to move (multi-port services)")
 	return cmd
 }
 

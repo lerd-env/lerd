@@ -169,6 +169,28 @@ func persistPublishedPort(name string, port int) error {
 	return nil
 }
 
+// persistPublishedPortFor records port as the host override for the mapping whose
+// container-internal port is containerPort, the secondary-port analogue of
+// persistPublishedPort. Used by the port-ownership guard when it shifts a
+// non-primary published port off a host-owned default. Fails closed like its
+// primary sibling so the quadlet never publishes a port the config doesn't record.
+func persistPublishedPortFor(name string, containerPort, port int) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("loading global config: %w", err)
+	}
+	entry := cfg.Services[name]
+	if entry.PublishedPorts == nil {
+		entry.PublishedPorts = map[int]int{}
+	}
+	entry.PublishedPorts[containerPort] = port
+	cfg.Services[name] = entry
+	if err := config.SaveGlobal(cfg); err != nil {
+		return fmt.Errorf("saving published port %d for %s container port %d: %w", port, name, containerPort, err)
+	}
+	return nil
+}
+
 // WithURLPort returns rawURL with its host port set to port, preserving scheme,
 // userinfo, host, and path. Used to keep a service's developer-facing connection
 // URL in sync after its published port is overridden. Returns the input unchanged
@@ -183,6 +205,36 @@ func WithURLPort(rawURL string, port int) string {
 	}
 	u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(port))
 	return u.String()
+}
+
+// WithDashboardPort re-ports a dashboard URL to follow a published-port move of
+// whichever mapping it is served on. It matches the URL's host port against the
+// service's default port mappings, resolves that mapping's effective host port
+// (per-port override, then primary override, then default), and rewrites the URL
+// to it. A dashboard on the primary (meilisearch's 7700) follows a primary move;
+// one on a secondary (mailpit's 8025 UI, rustfs' 9001 console) follows only a
+// move of that secondary, and stays put otherwise. Proxied same-origin paths
+// (/_svc/<name>/) have no host and pass through unchanged.
+func WithDashboardPort(rawURL string, defaultPorts []string, cfg config.ServiceConfig) string {
+	if rawURL == "" {
+		return rawURL
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Hostname() == "" {
+		return rawURL
+	}
+	dashHost, _ := strconv.Atoi(u.Port())
+	if dashHost <= 0 {
+		return rawURL
+	}
+	for i, spec := range defaultPorts {
+		if podman.PrimaryHostPort([]string{spec}) != dashHost {
+			continue
+		}
+		eff := cfg.HostPortFor(podman.ContainerPort(spec), dashHost, i == 0)
+		return WithURLPort(rawURL, eff)
+	}
+	return rawURL
 }
 
 // PhaseEvent is one step of the streaming preset-install flow.
@@ -581,6 +633,32 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	if pp > 0 {
 		svc.Ports = podman.SetPrimaryHostPort(svc.Ports, pp)
 		svc.ConnectionURL = WithURLPort(svc.ConnectionURL, pp)
+	}
+	// Secondary published ports (mailpit's UI, rustfs' console): apply any recorded
+	// per-port override, then run the same ownership guard the primary gets on the
+	// rest — an unoverridden secondary whose default host port is taken shifts to a
+	// free port and persists, so a multi-port service can't fail to bind at boot.
+	overrides := config.ServicePublishedPorts(svc.Name)
+	for i, spec := range svc.Ports {
+		if i == 0 {
+			continue // primary handled above
+		}
+		cport := podman.ContainerPort(spec)
+		if cport == 0 {
+			continue
+		}
+		if hport, ok := overrides[cport]; ok && hport > 0 {
+			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, hport)
+			continue
+		}
+		host := podman.PrimaryHostPort([]string{spec})
+		if free := maybeShiftPublishedPort(svc.Name, host, unitActive(svc.Name)); free > 0 && free != host {
+			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {
+				return fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, host, err)
+			}
+			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, free)
+			fmt.Fprintf(os.Stderr, "Note: 127.0.0.1:%d is in use; publishing lerd-%s on 127.0.0.1:%d instead.\n", host, svc.Name, free)
+		}
 	}
 	// Extra published ports (set via `lerd service expose` / the Web UI ports
 	// modal) apply to any bundled preset, not just default-stack ones. Appended

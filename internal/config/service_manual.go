@@ -116,6 +116,20 @@ func ServicePublishedPort(name string) int {
 	return 0
 }
 
+// ServicePublishedPorts returns the per-container-port host overrides for a
+// service's secondary mappings (nil when none). The primary override lives in
+// ServicePublishedPort; these cover the extra ports a multi-port service exposes.
+func ServicePublishedPorts(name string) map[int]int {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return nil
+	}
+	if sc, ok := cfg.Services[name]; ok {
+		return sc.PublishedPorts
+	}
+	return nil
+}
+
 // ServiceExtraPorts returns the extra published port mappings recorded for a
 // service (set via `lerd service expose` or the Web UI ports modal), or nil when
 // none. Applied at the quadlet choke point so every preset-backed service, not

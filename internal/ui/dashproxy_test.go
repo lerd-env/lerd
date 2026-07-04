@@ -227,6 +227,21 @@ func TestDashProxyDirector_RecomputesInjectedForwardedProto(t *testing.T) {
 	}
 }
 
+func TestResolveDashboardURL_FollowsPublishedPortMove(t *testing.T) {
+	svc := &config.CustomService{
+		Name:      "redisinsight",
+		Dashboard: "http://localhost:8085",
+		Ports:     []string{"8085:5540"},
+	}
+	if got := resolveDashboardURL(svc, nil); got != "http://localhost:8085" {
+		t.Errorf("no override should keep the default port, got %q", got)
+	}
+	moved := map[string]config.ServiceConfig{"redisinsight": {PublishedPort: 8090}}
+	if got := resolveDashboardURL(svc, moved); got != "http://localhost:8090" {
+		t.Errorf("proxy target must follow the port move, got %q", got)
+	}
+}
+
 func TestHandleDashProxy_UnknownService404(t *testing.T) {
 	req := httptest.NewRequest("GET", "http://lerd.localhost/_svc/not-installed-xyz/", nil)
 	req.RemoteAddr = "127.0.0.1:5050"
