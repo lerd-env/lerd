@@ -19,6 +19,10 @@ nginx:
                         # proxy and custom-container sites. A project's
                         # .lerd.yaml request_timeout overrides it per site.
 dns:
+  enabled: true          # whether lerd manages DNS (dnsmasq, .test, HTTPS). Asked
+                         # once at first install, then flipped with lerd dns:enable
+                         # / dns:disable, never re-prompted. dns:repair re-runs the
+                         # setup to fix a broken but enabled resolver.
   tld: "test"
   upstream:              # optional. Pins the upstream DNS servers dnsmasq
     - 192.168.100.129    # forwards non-.test queries to. Leave unset to

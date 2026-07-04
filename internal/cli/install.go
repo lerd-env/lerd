@@ -130,6 +130,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	fromUpdate, _ := cmd.Flags().GetBool("from-update")
 	dnsFlag, _ := cmd.Flags().GetString("dns")
+	// Captured before any step writes config: a missing file means this is a
+	// first install, the only time the DNS question is asked. Every later run
+	// honours the saved choice, which is flipped afterward with dns:enable /
+	// dns:disable rather than by re-prompting.
+	_, cfgStatErr := os.Stat(config.GlobalConfigFile())
+	configExisted := cfgStatErr == nil
 	if noIPv6 {
 		podman.MarkIPv6Disabled("lerd")
 		feedback.Line("IPv6 disabled by user, lerd network will be v4-only")
@@ -279,16 +285,18 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		if dnsCfg.DNS.TLD != "" {
 			prevTLD = dnsCfg.DNS.TLD
 		}
-		if fromUpdate {
-			wantDNS = prevEnabled
-		} else if flagDNS, ok := parseDNSMode(dnsFlag); ok {
-			wantDNS = flagDNS
-		} else {
-			wantDNS = confirmInstallPromptDefault(
+		var flagDNS *bool
+		if v, ok := parseDNSMode(dnsFlag); ok {
+			flagDNS = &v
+		}
+		want, needPrompt := dnsManageDecision(fromUpdate, configExisted, flagDNS, prevEnabled)
+		if needPrompt {
+			want = confirmInstallPromptDefault(
 				"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
-				prevEnabled,
+				true,
 			)
 		}
+		wantDNS = want
 		// Only flip TLD on a real toggle and only when the current TLD is the
 		// canonical default for the previous state; preserves any custom TLD
 		// the user has set in config.yaml.
@@ -316,7 +324,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			}
 		}
 
-		if prevEnabled != wantDNS || newTLD != prevTLD {
+		// Persist on any real change, and always on a first install so the
+		// remembered choice exists on disk for the next run to honour, even when
+		// the user just accepted the enabled default.
+		if !configExisted || prevEnabled != wantDNS || newTLD != prevTLD {
 			dnsCfg.DNS.Enabled = wantDNS
 			dnsCfg.DNS.TLD = newTLD
 			if err := config.SaveGlobal(dnsCfg); err != nil {
@@ -1338,6 +1349,24 @@ func parseDNSMode(flag string) (enabled bool, ok bool) {
 	default:
 		return false, false
 	}
+}
+
+// dnsManageDecision resolves whether lerd should manage DNS for this install
+// run, and whether the question must be asked. The choice is asked once and then
+// remembered: the --dns flag always wins, an update honours the saved choice
+// silently, and any run over an existing config honours the saved choice without
+// re-prompting. Only a genuine first install (no config file yet) asks, and it
+// defaults to managed. After that the mode is flipped with dns:enable /
+// dns:disable, not by re-running the installer. When needPrompt is true the
+// caller runs the prompt and overrides want with the answer.
+func dnsManageDecision(fromUpdate, configExisted bool, flag *bool, savedEnabled bool) (want, needPrompt bool) {
+	if flag != nil {
+		return *flag, false
+	}
+	if fromUpdate || configExisted {
+		return savedEnabled, false
+	}
+	return true, true
 }
 
 // confirmInstallPromptDefault is like confirmInstallPrompt but lets the caller

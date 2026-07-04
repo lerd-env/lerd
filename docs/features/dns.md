@@ -10,6 +10,8 @@ Some users would rather not have lerd touch the system resolver, particularly on
 --> Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)? [Y/n] n
 ```
 
+This prompt appears only at the first install; afterward the choice is remembered and you switch with `lerd dns:disable` / `lerd dns:enable` (see [Switching modes](#switching-modes)).
+
 When DNS is disabled lerd will:
 
 - skip the `lerd-dns` container, the dnsmasq config, and the sudoers rule
@@ -41,14 +43,20 @@ dns:
   tld: test
 ```
 
-To flip an existing install, re-run `lerd install` and answer the DNS prompt with the opposite choice. The installer detects the TLD change, lists the affected sites, and offers to migrate everything in one pass:
+The DNS question is asked once, at your first `lerd install`, and then remembered in `config.yaml`. Neither a later `lerd install` nor `lerd update` asks again or changes the mode, so a deliberate choice is never undone by a reinstall. To flip an existing install, use the dedicated commands:
+
+- `lerd dns:enable` turns lerd-managed DNS on (dnsmasq, `.test`, HTTPS)
+- `lerd dns:disable` turns it off, tears down `lerd-dns`, and moves sites to `*.localhost`
+- `lerd dns:repair` re-runs the setup to fix a broken but enabled `.test` (dead CA, dnsmasq, or resolver) without changing the mode
+
+`dns:enable` and `dns:disable` detect the TLD change, list the affected sites, and offer to migrate everything in one pass:
 
 - stored domains in the registry and `.lerd.yaml`
 - each project's `.env` `APP_URL` plus `VITE_REVERB_*` keys
 - git-worktree vhosts and per-worktree `.env` files
 - stale primary vhost confs and (when disabling) the previous TLS cert and key
 
-The lerd-dns service itself is also torn down on the disable transition, `systemctl stop` plus quadlet remove on Linux, `launchctl bootout` plus plist remove on macOS. NetworkManager / `/etc/resolver` entries from the previous run are left in place because removing them needs sudo and they are inert when dnsmasq is no longer running. Run `lerd-cleanup` (macOS) or remove the dropins manually if you want a fully clean system.
+The lerd-dns service itself is torn down on the disable transition, `systemctl stop` plus quadlet remove on Linux, `launchctl bootout` plus plist remove on macOS. NetworkManager / `/etc/resolver` entries from the previous run are left in place because removing them needs sudo and they are inert when dnsmasq is no longer running. Run `lerd-cleanup` (macOS) or remove the dropins manually if you want a fully clean system. Running `dns:enable` while DNS is already on simply repairs the setup, the same as `dns:repair`.
 
 Custom TLDs (anything other than `test` or `localhost`) are preserved across toggles, lerd only flips the canonical defaults.
 
