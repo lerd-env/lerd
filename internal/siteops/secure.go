@@ -15,6 +15,7 @@ import (
 var (
 	secureCertFn   = certs.SecureSite
 	unsecureCertFn = certs.UnsecureSite
+	reissueCertFn  = certs.ReissueCertForWorktree
 	nginxReloadFn  = nginx.Reload
 	notifyDaemonFn = defaultNotifyDaemon
 )
@@ -84,5 +85,25 @@ func SetSecured(site *config.Site, secured bool) error {
 	}
 	_ = notifyDaemonFn(site.PrimaryDomain(), "stripe:refresh")
 	_ = notifyDaemonFn(site.PrimaryDomain(), "lan:refresh")
+	return nil
+}
+
+// RenewCert force-reissues a secured site's TLS certificate on demand, resetting
+// its validity window, and reloads nginx so the fresh cert takes effect. The new
+// cert covers the site's own domains plus every worktree wildcard SAN, matching
+// what securing the site issues. This is the manual counterpart to the automatic
+// self-heal (certs.EnsureCert reissues only an aging cert on start/watcher pass);
+// callers reach for it to reset the clock without toggling HTTPS off and on. It
+// is the single source of truth shared by the CLI and MCP renew paths.
+func RenewCert(site *config.Site) error {
+	if !site.Secured {
+		return fmt.Errorf("site %q is not secured, run 'lerd secure' first", site.Name)
+	}
+	if err := reissueCertFn(*site); err != nil {
+		return fmt.Errorf("reissuing certificate: %w", err)
+	}
+	if err := nginxReloadFn(); err != nil {
+		return fmt.Errorf("reloading nginx: %w", err)
+	}
 	return nil
 }

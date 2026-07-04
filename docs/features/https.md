@@ -25,6 +25,22 @@ Certificates are stored in `~/.local/share/lerd/certs/sites/`.
 
 ---
 
+## Automatic renewal
+
+mkcert issues each leaf certificate with a lifetime of a little over two years. Lerd renews a secured site's certificate on its own before it lapses: whenever a certificate is within roughly 30 days of its `NotAfter` (or has already expired, gone missing, or been corrupted), the next ordinary `lerd start` or watcher pass reissues it in place. A still-valid certificate comfortably clear of that window is left untouched, so the renewal check is cheap and silent. `lerd status` continues to surface the same 30-day expiry warning under `[TLS Certificates]`, but you no longer need to act on it manually; a long-lived site that just keeps running self-heals its own certificate.
+
+To reset the clock on demand, without toggling HTTPS off and on, run:
+
+```bash
+cd ~/Lerd/my-app
+lerd secure --renew
+# Reissues the certificate for my-app.test (covering worktree SANs), reloads nginx
+```
+
+`lerd secure --renew` only applies to already-secured sites; on an HTTP site it tells you to run `lerd secure` first. From an AI assistant the same action is available as the `tls_renew` action on the `site` MCP tool.
+
+---
+
 ## From the Web UI
 
 The Sites tab has an HTTPS toggle per site; clicking it runs `lerd secure` or `lerd unsecure` inline and updates the vhost without touching the terminal. If `.lerd.yaml` exists in the project, the `secured` field is updated there too so the state is preserved for future `lerd init` runs.

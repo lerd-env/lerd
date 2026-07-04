@@ -724,6 +724,14 @@ func scanWorktrees() bool {
 			generated = true
 		}
 		if len(worktrees) == 0 {
+			// A plain secured site never hits the worktree reissue below, so
+			// self-heal its leaf cert here: EnsureCert reuses a still-valid one
+			// and only reissues when it's aging, missing, or unparseable.
+			if s.Secured {
+				if err := certs.EnsureCert(s); err != nil {
+					fmt.Printf("[WARN] ensure cert for %s: %v\n", s.PrimaryDomain(), err)
+				}
+			}
 			continue
 		}
 		// Reissue once per site so the cert covers the wildcard SAN for every
