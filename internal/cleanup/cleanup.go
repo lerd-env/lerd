@@ -1,8 +1,10 @@
-// Package cleanup reclaims podman disk that lerd itself created — the orphaned
-// PHP/FrankenPHP images that rebuilds leave behind — and nothing else. An image
-// is only ever eligible when it is provably lerd's: a dev.lerd.* label, or the
-// lerd-php*-fpm-base repo name only lerd's pre-built base images use. So it can
-// never touch images, containers, or volumes belonging to anything else.
+// Package cleanup reclaims podman disk lerd's own image rebuilds leave behind.
+// The safe tier only ever removes what is provably lerd's: an image with a
+// dev.lerd.* label, or the lerd-php*-fpm-base repo name only lerd's pre-built
+// base images use. The deep tier additionally reaps every dangling image, which
+// is untagged and unreferenced by definition so removing it strands nothing, and
+// catalog service images no service references any more. Neither tier ever
+// touches a tagged image in use, a container, or a named volume.
 package cleanup
 
 import (
@@ -35,6 +37,16 @@ type Target struct {
 // Plan is the set of lerd-owned resources that are safe to reclaim.
 type Plan struct {
 	Targets []Target
+	// Held counts dangling images a running container still holds that would
+	// otherwise be reaped. They can't be removed now, but a restart recreates the
+	// container on the current image and releases them, so the caller can hint it.
+	Held HeldByContainers
+}
+
+// HeldByContainers tallies reclaimable disk a restart would free.
+type HeldByContainers struct {
+	Count int
+	Bytes int64
 }
 
 // ReclaimBytes is the total disk the plan would free.
@@ -56,7 +68,15 @@ type image struct {
 	Size       int64             `json:"Size"`
 	SharedSize int64             `json:"SharedSize"`
 	Labels     map[string]string `json:"Labels"`
+	// Containers is how many containers still reference this image. Any non-zero
+	// count means podman refuses to remove it, so it must never be listed.
+	Containers int `json:"Containers"`
 }
+
+// inUse reports whether a container still holds the image, which makes it
+// unremovable: podman errors "image is in use by a container". Listing such an
+// image would show it as reclaimable forever while freeing nothing.
+func inUse(img image) bool { return img.Containers > 0 }
 
 // reclaimable is the disk removing img would actually free: its layers that no
 // other image shares. Never negative.
@@ -111,8 +131,8 @@ func podmanImageLayers(ids []string) (map[string][]string, error) {
 	return m, nil
 }
 
-// Inspect returns the safe-tier cleanup plan. It reclaims two kinds of lerd
-// image a rebuild leaves behind:
+// Inspect returns the cleanup plan. The always-safe tier reclaims what is
+// provably lerd's:
 //   - derived images lerd built and then orphaned: lerd tags every live build
 //     with a fixed :local tag, so a rebuild re-points the tag and leaves the old
 //     image dangling — the unambiguous "superseded" signal.
@@ -121,9 +141,12 @@ func podmanImageLayers(ids []string) (map[string][]string, error) {
 //
 // Both removals are refcount-safe: layers a live image still shares are kept.
 //
-// When deep is true it also reclaims the more aggressive tier: catalog service
-// images no service references any more (see deepTargets). If the protected set
-// can't be built, the deep tier is skipped rather than risk a wrong removal.
+// When deep is true it also reclaims the aggressive tier: every remaining
+// dangling image (untagged and unreferenced, so removing it strands nothing),
+// plus catalog service images no service references any more (see deepTargets).
+// An image a container still holds is skipped everywhere, since podman can't
+// remove it. If the protected set can't be built the service reap is skipped
+// rather than risk a wrong removal.
 func Inspect(deep bool) (Plan, error) {
 	imgs, err := scanImages()
 	if err != nil {
@@ -137,8 +160,23 @@ func Inspect(deep bool) (Plan, error) {
 	var baseCandidates []image
 	for _, img := range imgs {
 		switch {
-		case isLerd(img) && isOrphaned(img):
-			add(shortID(img.ID), describe(img.Labels), reclaimable(img))
+		case inUse(img):
+			// A container still holds this image; podman can't remove it, so skip
+			// it. If it is a dangling image this tier would otherwise reap (an old
+			// build the container hasn't been recreated off yet), tally it so the
+			// caller can hint that a restart would release the space.
+			if isOrphaned(img) && (isLerd(img) || deep) {
+				p.Held.Count++
+				p.Held.Bytes += reclaimable(img)
+			}
+			continue
+		case isOrphaned(img):
+			// A dangling image is untagged and unreferenced, so removing it frees
+			// disk and strands nothing. Provable lerd orphans go in every tier;
+			// other dangling leftovers only when the deep tier is on.
+			if isLerd(img) || deep {
+				add(shortID(img.ID), describeOrphan(img), reclaimable(img))
+			}
 		default:
 			if baseName(img) != "" {
 				baseCandidates = append(baseCandidates, img)
@@ -252,15 +290,29 @@ func podmanRemoveImage(id string) error {
 	return podman.RunSilent("image", "rm", id)
 }
 
-// Apply removes every target in the plan and returns the disk reclaimed. A
-// target that fails to remove (e.g. it became referenced since Inspect) is
-// skipped, so one stuck image can't abort the whole sweep.
+// Apply removes every target in the plan and returns the disk reclaimed. It
+// sweeps in repeated passes, retrying targets that failed until a full pass
+// frees nothing new: podman refuses a parent image while a child is still
+// present, so removing a dangling build chain listed parent-first needs the
+// children gone first. A target that never succeeds (e.g. it became referenced
+// since Inspect) is simply left, so one stuck image can't abort the sweep.
 func Apply(p Plan) (reclaimed int64) {
-	for _, t := range p.Targets {
-		if err := removeImage(t.ID); err != nil {
-			continue
+	remaining := p.Targets
+	for len(remaining) > 0 {
+		var stuck []Target
+		progress := false
+		for _, t := range remaining {
+			if err := removeImage(t.ID); err != nil {
+				stuck = append(stuck, t)
+				continue
+			}
+			reclaimed += t.Bytes
+			progress = true
 		}
-		reclaimed += t.Bytes
+		if !progress {
+			break
+		}
+		remaining = stuck
 	}
 	return reclaimed
 }
@@ -285,6 +337,15 @@ func isOrphaned(img image) bool {
 		}
 	}
 	return true
+}
+
+// describeOrphan names a dangling image for the plan: its lerd build kind when
+// the image is labelled, or a generic dangling leftover otherwise.
+func describeOrphan(img image) string {
+	if isLerd(img) {
+		return describe(img.Labels)
+	}
+	return "dangling image"
 }
 
 // describe names the kind of orphaned derived image for the plan output, by its

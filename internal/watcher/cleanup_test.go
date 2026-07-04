@@ -3,7 +3,29 @@ package watcher
 import (
 	"testing"
 	"time"
+
+	"github.com/geodro/lerd/internal/cleanup"
 )
+
+// The daily sweep must run the deep tier so upgraded service images are
+// reclaimed unattended, not just the safe-tier orphans.
+func TestRunAutoCleanup_UsesDeepSweep(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	stampPathFn = func() string { return tmp + "/auto-cleanup.stamp" }
+	called := false
+	autoSweep = func() (int, int64, error) { called = true; return 0, 0, nil }
+	t.Cleanup(func() {
+		stampPathFn = defaultStampPath
+		autoSweep = cleanup.SweepDeep
+	})
+
+	runAutoCleanup(time.Unix(2_000_000_000, 0))
+	if !called {
+		t.Error("auto cleanup should invoke the deep sweep")
+	}
+}
 
 func TestCleanupDue(t *testing.T) {
 	now := time.Unix(1_000_000_000, 0)

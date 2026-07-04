@@ -6,33 +6,39 @@ Local PHP development on podman accumulates reclaimable image data. Every PHP im
 
 ## What it removes
 
-**Safe tier** (the default, and what runs automatically):
+By default (and automatically) cleanup reclaims everything below. Pass `--safe` to drop back to the conservative sweep that removes only images provably built by lerd.
+
+**Orphaned lerd images** (always removed, even with `--safe`):
 
 - **Orphaned PHP build images** — the old `lerd-php<ver>-fpm:local` / `lerd-frankenphp<ver>:local` image a rebuild left dangling when it re-pointed the tag.
 - **Orphaned base images** — a pre-built `lerd-php*-fpm-base` image nothing live is built on: an old Containerfile hash, or a PHP version you no longer have installed. Whether a base is still in use is decided by **layer ancestry** (is its top layer part of any live image?), so a base the current PHP image is built on is always kept, never untagged into a needless re-pull.
 
-**Deep tier** (`--deep`, on demand only):
+**Unused service images** (the deep tier, default):
 
-- **Unused service images** — a service image no installed service references any more, e.g. an old `mysql:8.0` after you upgraded to `8.4`. Each service's **current image and its one-back rollback target are kept**, so a rollback still works.
+- A service image no installed service references any more, e.g. an old `mysql:8.0` after you upgraded to `8.4`. Each service's **current image and its one-back rollback target are kept**, so a rollback still works.
+
+**Dangling images** (the deep tier, default):
+
+- Every untagged `<none>` image left behind by repeated rebuilds and re-pulls, including old upstream images that lost their tag when a newer digest was pulled. A dangling image is unreferenced by definition, so removing it frees disk and strands nothing. This is the bulk of what a long-lived install accumulates.
 
 ## What it never touches
 
-- Any image not provably lerd's. An image qualifies only by a `dev.lerd.*` label or the `lerd-php*-fpm-base` repo name (service images are matched against lerd's own preset catalogue). Your own `mysql:8.0` pulled outside lerd, or any unrelated image, is left alone.
-- Named data volumes — your databases are never in scope.
-- Any image a running container uses, and any image still referenced by an installed service.
+- **Named data volumes** — your databases are never in scope.
+- **Any tagged image in use** — an image a running container uses, and each installed service's current image and one-back rollback target, are always kept.
+- With **`--safe`**, only images provably built by lerd (a `dev.lerd.*` label or the `lerd-php*-fpm-base` repo name) are removed, and nothing else is touched at all.
 
-Removal is reference-count safe: layers an image still shares with a live image stay on disk, and an image that turns out to be in use is skipped rather than forced.
+The default reaches further than `--safe` in one place: it also removes **dangling** (untagged) images. That is deliberately safe, a dangling image is unreferenced by definition, so nothing depends on it. On a machine that also runs podman for non-lerd projects, that means the default reclaims their untagged leftovers too; use `--safe` there if you want cleanup scoped strictly to lerd. Removal is reference-count safe throughout: shared layers stay on disk, and an image that turns out to be in use is skipped rather than forced.
 
 ## Commands
 
 ```bash
-lerd cleanup              # preview, confirm, then reclaim the safe tier
+lerd cleanup              # preview, confirm, then reclaim orphaned lerd, unused service, and dangling images
 lerd cleanup --dry-run    # show what would be reclaimed and the size, remove nothing
-lerd cleanup --deep       # also reclaim unused service images (keeps current + rollback)
+lerd cleanup --safe       # only reclaim images provably built by lerd, keep unused service and dangling images
 lerd cleanup --yes        # skip the confirmation prompt (for scripts)
 ```
 
-Reported sizes are the disk actually freed (an image's unique layers, not its full size), so the figure is honest even when images share base layers. `lerd doctor` shows the reclaimable total as a read-only line so you discover the bloat early.
+Reported sizes are an estimate of the disk each removal frees. An image a live image is still built on is never listed (removing it is impossible and would free nothing), so cleanup never promises space it can't reclaim, though images that share layers with each other can add up to less than their sizes suggest. `lerd doctor` shows the reclaimable total as a read-only line so you discover the bloat early.
 
 The destructive command is CLI-only by design, consistent with keeping destructive operations out of the dashboard and TUI.
 
@@ -41,9 +47,9 @@ The destructive command is CLI-only by design, consistent with keeping destructi
 Cleanup is on by default and safe, so the disk doesn't grow on its own:
 
 - **On rebuild / service change** — a PHP rebuild (`lerd use`, `lerd php:rebuild`, `lerd php:ext`/`php:pkg`, a `lerd update` that bumps the Containerfile) reclaims the image it just superseded immediately. A `lerd service update` or `lerd service remove` reclaims that service's now-unused versions, scoped to that one service.
-- **Daily backstop** — the `lerd-watcher` runs a safe-tier sweep about once a day (throttled by a timestamp so a restarting watcher can't sweep more often), catching anything an interrupted operation left behind.
+- **Daily backstop** — the `lerd-watcher` runs a deep sweep about once a day (throttled by a timestamp so a restarting watcher can't sweep more often), catching anything an interrupted operation left behind, old service versions that fell out of the one-back rollback window, and accumulated dangling images. It keeps every tagged image in use (the current image and the rollback target), and dangling images it removes are unreferenced by definition, so it stays safe unattended.
 
-The automatic path only ever runs the **safe tier**, never `--deep`. Toggle it with `lerd cleanup auto on` / `lerd cleanup auto off` (or set `auto_cleanup` in [`~/.config/lerd/config.yaml`](../configuration.md)); `lerd cleanup auto status` shows the current state. When off, `lerd cleanup` stays available on demand.
+Toggle automatic cleanup with `lerd cleanup auto on` / `lerd cleanup auto off` (or set `auto_cleanup` in [`~/.config/lerd/config.yaml`](../configuration.md)); `lerd cleanup auto status` shows the current state. When off, `lerd cleanup` stays available on demand.
 
 ```bash
 lerd cleanup auto off       # disable the automatic sweep and event-driven reaping

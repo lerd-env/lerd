@@ -67,6 +67,22 @@ func TestDeepTargets_MultiTagRemovesAllTagsCreditsOnce(t *testing.T) {
 
 func hasKey(m map[string]int64, k string) bool { _, ok := m[k]; return ok }
 
+// A catalog image a container still holds is kept even when no service config
+// references it: podman can't remove an in-use image, so listing it would just
+// report "Freed 0 B" every run.
+func TestDeepTargets_KeepsInUseServiceImage(t *testing.T) {
+	imgs := []image{
+		{Names: []string{"docker.io/library/redis:7-alpine"}, Size: 40, Containers: 1},
+	}
+	repos := map[string]bool{"docker.io/library/redis": true}
+
+	got := deepTargets(imgs, repos, map[string]bool{})
+
+	if len(got) != 0 {
+		t.Fatalf("an in-use service image must be kept, got %+v", got)
+	}
+}
+
 // The deep tier is additive: the safe tier never touches service images, and
 // only --deep reaps the unused one, leaving the current image alone.
 func TestInspect_DeepAppendsUnusedServiceImages(t *testing.T) {

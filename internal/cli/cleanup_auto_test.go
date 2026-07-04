@@ -1,10 +1,41 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/cleanup"
 	"github.com/geodro/lerd/internal/config"
 )
+
+// The held-by-containers hint is silent when nothing is held, and otherwise
+// names the size and points at restart as the way to release it.
+func TestHeldHint(t *testing.T) {
+	if got := heldHint(cleanup.Plan{}); got != "" {
+		t.Errorf("no held images should give an empty hint, got %q", got)
+	}
+	got := heldHint(cleanup.Plan{Held: cleanup.HeldByContainers{Count: 8, Bytes: 2 << 30}})
+	if !strings.Contains(got, "8 image") || !strings.Contains(got, "lerd restart") {
+		t.Errorf("hint should mention the count and restart, got %q", got)
+	}
+}
+
+// cleanup runs the deep tier by default; --safe opts back down to the
+// conservative sweep, and the old --deep flag stays as a hidden no-op.
+func TestNewCleanupCmd_DeepByDefaultSafeOptOut(t *testing.T) {
+	cmd := NewCleanupCmd()
+	safe := cmd.Flags().Lookup("safe")
+	if safe == nil {
+		t.Fatal("expected a --safe opt-out flag")
+	}
+	if safe.DefValue != "false" {
+		t.Errorf("--safe should default false so deep is on by default, got %q", safe.DefValue)
+	}
+	deep := cmd.Flags().Lookup("deep")
+	if deep == nil || !deep.Hidden {
+		t.Error("--deep should remain as a hidden deprecated no-op")
+	}
+}
 
 // runCleanupAutoToggle persists the auto_cleanup flag so the watcher and event
 // hooks read it back. Default is on; off then on must round-trip through config.

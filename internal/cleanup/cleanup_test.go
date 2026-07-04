@@ -77,6 +77,74 @@ func TestInspect_NeverTargetsNonLerd(t *testing.T) {
 	}
 }
 
+// The deep tier reaps every dangling image, lerd's own labelled orphans and
+// unlabelled upstream leftovers alike, since a dangling image is unreferenced by
+// definition. The safe tier still keeps non-lerd dangling images (proven by
+// TestInspect_NeverTargetsNonLerd), so the aggressive reap is opt-out via --safe.
+func TestInspect_DeepReapsAllDanglingImages(t *testing.T) {
+	withImages(t, []image{
+		{ID: "sha256:lerd", Names: nil, Size: 100, Labels: map[string]string{"dev.lerd.fpm.containerfile-hash": "h"}}, // lerd orphan
+		{ID: "sha256:mysql", Names: nil, Size: 800}, // old upstream image that lost its tag
+		{ID: "sha256:live", Names: []string{"lerd-php84-fpm:local"}, Size: 200, Labels: map[string]string{"dev.lerd.fpm.containerfile-hash": "h2"}},
+		{ID: "sha256:tag", Names: []string{"mysql:8.4"}, Size: 900}, // tagged, not dangling → keep
+	}, nil)
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, tg := range p.Targets {
+		got[tg.ID] = true
+	}
+	if !got["lerd"] || !got["mysql"] {
+		t.Fatalf("deep tier should reap both the lerd orphan and the untagged upstream image, got %+v", p.Targets)
+	}
+	if got["live"] || got["tag"] {
+		t.Errorf("a tagged image must never be reaped, got %+v", p.Targets)
+	}
+}
+
+// A dangling image a container still holds cannot be removed (podman refuses),
+// so it must be kept out of the plan rather than listed forever as "Freed 0 B".
+func TestInspect_SkipsInUseDanglingImages(t *testing.T) {
+	withImages(t, []image{
+		{ID: "sha256:free", Names: nil, Size: 400},                // no container → reap
+		{ID: "sha256:held", Names: nil, Size: 500, Containers: 1}, // a container holds it → keep
+	}, nil)
+	serviceRepos = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	protectedImages = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	p, err := Inspect(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, tg := range p.Targets {
+		got[tg.ID] = true
+	}
+	if got["held"] {
+		t.Error("an image a container holds must be kept (unremovable)")
+	}
+	if !got["free"] {
+		t.Error("a free dangling image should still be reaped")
+	}
+	// The held dangling image is tallied so the caller can hint a restart frees it.
+	if p.Held.Count != 1 || p.Held.Bytes != 500 {
+		t.Errorf("Held = %+v, want {Count:1 Bytes:500}", p.Held)
+	}
+}
+
 // A base image is reaped only when nothing live is built on it — covering both
 // an old Containerfile hash for an installed version and a base for a PHP
 // version no longer installed. The base whose layers the live image shares is
@@ -136,6 +204,30 @@ func TestApply_RemovesTargetsAndSumsReclaimed(t *testing.T) {
 	}
 	if len(removed) != 2 || removed[0] != "aaa" || removed[1] != "bbb" {
 		t.Errorf("removed = %v, want [aaa bbb]", removed)
+	}
+}
+
+// A parent image podman refuses while its child is still present is retried on
+// a later pass once the child is gone, so a single Apply reclaims the whole
+// dangling build chain even when the parent is listed first.
+func TestApply_RetriesUntilDependentsFreed(t *testing.T) {
+	present := map[string]bool{"child": true, "parent": true}
+	removeImage = func(id string) error {
+		if id == "parent" && present["child"] {
+			return errors.New("image has dependent child images")
+		}
+		delete(present, id)
+		return nil
+	}
+	t.Cleanup(func() { removeImage = podmanRemoveImage })
+
+	got := Apply(Plan{Targets: []Target{{ID: "parent", Bytes: 500}, {ID: "child", Bytes: 100}}})
+
+	if got != 600 {
+		t.Errorf("reclaimed = %d, want 600 (both freed across passes)", got)
+	}
+	if present["parent"] {
+		t.Error("parent should be removed once the child is gone")
 	}
 }
 
