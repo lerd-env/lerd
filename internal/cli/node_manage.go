@@ -47,6 +47,7 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 	}
 	step.OK("")
 	ensureDefaultNode()
+	persistNodeManaged(true)
 	// Host workers (Vite etc.) were generated to run directly or via bun while
 	// Node was unmanaged; rewrite them so they route through fnm again.
 	regenerateHostWorkers()
@@ -64,6 +65,24 @@ func NewNodeUnmanageCmd() *cobra.Command {
 		Short: "Stop managing Node.js: remove lerd's node shims and fnm-installed versions",
 		Args:  cobra.NoArgs,
 		RunE:  runNodeUnmanage,
+	}
+}
+
+// persistNodeManaged records the Node-management choice in config.yaml so it
+// survives `lerd update`, which otherwise recomputes the intent and would
+// re-add the shims a node:unmanage removed. Best-effort: a save failure is
+// warned, not fatal, since the shims themselves already reflect the choice.
+func persistNodeManaged(managed bool) {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return
+	}
+	if v, set := cfg.NodeManagedPref(); set && v == managed {
+		return
+	}
+	cfg.SetNodeManaged(managed)
+	if err := config.SaveGlobal(cfg); err != nil {
+		feedback.Warn("persist Node-management choice: %v", err)
 	}
 }
 
@@ -100,6 +119,7 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 	// Existing host worker units still reference `fnm exec --using=… -- npm …`,
 	// which now has no Node to run; rewrite them so they use bun (when present)
 	// or the user's system Node directly.
+	persistNodeManaged(false)
 	feedback.Begin()
 	regen := feedback.Start("regenerating host worker units")
 	regenerateHostWorkers()

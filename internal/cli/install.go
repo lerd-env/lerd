@@ -257,14 +257,33 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		feedback.Line(fmt.Sprintf("bun detected at %s, lerd will use it automatically for projects that use bun", bunPath))
 	}
 
-	wantLerdNode := true
-	if systemNode := detectSystemNode(); systemNode != "" {
+	// Resolve the Node-management choice from the persisted preference, the
+	// on-disk shim state (for configs predating the preference), and whether a
+	// system node exists. Update runs non-interactively so a prior node:unmanage
+	// survives; a fresh install only prompts when a system node is present.
+	var savedNode *bool
+	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
+		if v, set := nodeCfg.NodeManagedPref(); set {
+			savedNode = &v
+		}
+	}
+	systemNode := detectSystemNode()
+	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", lerdManagesNode())
+	if promptNode {
 		feedback.Line("Node.js detected at " + systemNode)
 		prompt := "Let lerd manage Node.js versions (installs fnm shims, may override system node)?"
 		if bunPath != "" {
 			prompt += " Decline to keep your system Node and use bun."
 		}
-		wantLerdNode = confirmInstallPrompt(prompt)
+		wantLerdNode = confirmInstallPromptDefault(prompt, nodeDefault)
+	}
+	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
+		if v, set := nodeCfg.NodeManagedPref(); !set || v != wantLerdNode {
+			nodeCfg.SetNodeManaged(wantLerdNode)
+			if err := config.SaveGlobal(nodeCfg); err != nil {
+				fmt.Printf("    WARN: persist Node-management choice: %v\n", err)
+			}
+		}
 	}
 
 	// Ask whether lerd should manage local DNS. Prompted on every direct
@@ -1241,6 +1260,27 @@ func lerdManagesNode() bool {
 	return err == nil
 }
 
+// nodeManageDecision resolves whether lerd should manage Node.js for this
+// install run. The choice is asked once and then remembered: an explicit saved
+// preference always wins silently, and a config predating the field adopts the
+// current on-disk shim state as that choice without asking. Only a genuine
+// first-time install (no saved preference and no shim) prompts, and then only
+// when a system node exists; with none it defaults to managed. Update never
+// prompts. When needPrompt is true the caller runs the prompt and overrides want
+// with the answer.
+func nodeManageDecision(fromUpdate bool, saved *bool, systemNodeDetected, shimPresent bool) (want, needPrompt, promptDefault bool) {
+	if saved != nil {
+		return *saved, false, *saved
+	}
+	if shimPresent || fromUpdate {
+		return shimPresent, false, shimPresent
+	}
+	if systemNodeDetected {
+		return true, true, true
+	}
+	return true, false, true
+}
+
 // ensureNodeManaged is called by the node:install/use/uninstall commands to
 // guard against running fnm operations while the user has opted out of
 // lerd-managed Node. Prompts for confirmation and writes shims on accept.
@@ -1261,6 +1301,7 @@ func ensureNodeManaged() error {
 	if err := addShellShims(true); err != nil {
 		return fmt.Errorf("writing shims: %w", err)
 	}
+	persistNodeManaged(true)
 	return nil
 }
 
