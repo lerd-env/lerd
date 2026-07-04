@@ -12,6 +12,35 @@ func setDataDir(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 }
 
+// ResolveSiteRef and FindSiteByRef must accept either the site name or any of
+// its domains, and leave an unknown reference untouched so callers still error.
+func TestResolveSiteRef(t *testing.T) {
+	setDataDir(t)
+	if err := AddSite(Site{Name: "astrolov", Domains: []string{"astrolov.test", "www.astrolov.test"}, Path: "/srv/astrolov"}); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := map[string]string{
+		"astrolov":          "astrolov",     // name passes through
+		"astrolov.test":     "astrolov",     // primary domain resolves to the name
+		"www.astrolov.test": "astrolov",     // secondary domain too
+		"unknown.test":      "unknown.test", // unknown stays as-is
+		"":                  "",
+	}
+	for in, want := range cases {
+		if got := ResolveSiteRef(in); got != want {
+			t.Errorf("ResolveSiteRef(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	if s, err := FindSiteByRef("astrolov.test"); err != nil || s.Name != "astrolov" {
+		t.Errorf("FindSiteByRef(domain) = %+v, %v", s, err)
+	}
+	if _, err := FindSiteByRef("nope.test"); err == nil {
+		t.Error("FindSiteByRef of an unknown ref should error")
+	}
+}
+
 // ── AddSite / LoadSites ───────────────────────────────────────────────────────
 
 func TestAddSite_Basic(t *testing.T) {

@@ -120,6 +120,7 @@
     op_done: m.notify_settings_category_op_done(),
     update_available: m.notify_settings_category_update_available(),
     nplusone: m.notify_settings_category_nplusone(),
+    slow_route: m.notify_settings_category_slow_route(),
     dump: m.notify_settings_category_dump()
   };
   const kindHint: Record<NotifyKind, string> = {
@@ -128,6 +129,7 @@
     op_done: m.notify_settings_category_op_done_hint(),
     update_available: m.notify_settings_category_update_available_hint(),
     nplusone: m.notify_settings_category_nplusone_hint(),
+    slow_route: m.notify_settings_category_slow_route_hint(),
     dump: m.notify_settings_category_dump_hint()
   };
 

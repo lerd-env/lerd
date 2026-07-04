@@ -152,9 +152,10 @@ func normalizeHost(host string) string {
 }
 
 // ParseAccessHost extracts the request host from one nginx access datagram. The
-// access feed logs a minimal "$host" message through syslog framing, so the host
-// is the final whitespace-delimited token of the line. Returns "" for nginx's
-// "-" placeholder (a request with no Host header) or an unparseable line.
+// feed ships a pipe-delimited "$host|$status|..." message as the final
+// whitespace token (surviving syslog framing), so the host is the token's first
+// pipe field. A bare "$host" line (no pipe) is still accepted for compatibility.
+// Returns "" for nginx's "-" placeholder or an unparseable line.
 func ParseAccessHost(datagram []byte) string {
 	line := strings.TrimRight(string(datagram), "\n\x00 ")
 	if line == "" {
@@ -165,7 +166,10 @@ func ParseAccessHost(datagram []byte) string {
 		return ""
 	}
 	host := fields[len(fields)-1]
-	if host == "-" || strings.HasSuffix(host, ":") {
+	if i := strings.IndexByte(host, '|'); i >= 0 {
+		host = host[:i]
+	}
+	if host == "" || host == "-" || strings.HasSuffix(host, ":") {
 		return ""
 	}
 	return host

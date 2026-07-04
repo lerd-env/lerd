@@ -342,12 +342,20 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	dnsChanged := false
 
 	if wantDNS {
-		// 4. mkcert CA, interactive (may prompt for sudo)
-		feedback.Sudo("Installing mkcert CA")
+		// 4. mkcert CA. When the CA is already in the system trust store,
+		// mkcert -install is a silent no-op that never prompts, so skip the
+		// gold sudo header and swallow its "already installed" banner. Only a
+		// genuine first install announces the sudo step and runs interactively.
 		mkcertCmd := exec.Command(certs.MkcertPath(), "-install")
-		mkcertCmd.Stdin = os.Stdin
-		mkcertCmd.Stdout = os.Stdout
-		mkcertCmd.Stderr = os.Stderr
+		if certs.CATrusted() {
+			mkcertCmd.Stdout = io.Discard
+			mkcertCmd.Stderr = io.Discard
+		} else {
+			feedback.Sudo("Installing mkcert CA")
+			mkcertCmd.Stdin = os.Stdin
+			mkcertCmd.Stdout = os.Stdout
+			mkcertCmd.Stderr = os.Stderr
+		}
 		mkcertCmd.Run() //nolint:errcheck
 
 		// 5. DNS config + sudoers

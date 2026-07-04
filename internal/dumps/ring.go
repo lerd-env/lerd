@@ -3,9 +3,11 @@ package dumps
 import "sync"
 
 // DefaultCapacity is the maximum number of events the ring keeps before it
-// overwrites the oldest entry. Sized to match the web LogViewer's 500-line
-// cap so the in-memory budget for either feed is similar.
-const DefaultCapacity = 500
+// overwrites the oldest entry. A single N+1 request can emit well over a
+// thousand query events, so the old 500-line cap could not even retain one
+// request's worth for analyze_queries to read; sized up so a fresh capture of
+// one pathological request survives long enough to be analyzed.
+const DefaultCapacity = 3000
 
 // Ring is a fixed-size ring buffer of Events safe for concurrent use.
 // Snapshots are taken under a read lock and returned in insertion order.

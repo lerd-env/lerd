@@ -40,6 +40,14 @@ func ReconcileServices(emit func(PhaseEvent)) (ReconcileResult, error) {
 		return res, fmt.Errorf("listing custom services: %w", err)
 	}
 	for _, svc := range customs {
+		// Backfill: an add-on preset now lives in the store, not the binary. A
+		// service installed by an older (add-on-embedding) lerd has no cached
+		// preset after upgrade, so its file mounts, family and dashboard would go
+		// missing. Fetch it once into the cache; best-effort, offline just defers
+		// it to the next reconcile. Guarded by PresetExists so it never re-fetches.
+		if svc.Preset != "" && !config.PresetExists(svc.Preset) {
+			_, _ = config.EnsurePreset(svc.Preset)
+		}
 		if UnitInstalledFn("lerd-" + svc.Name) {
 			continue
 		}

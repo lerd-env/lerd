@@ -35,6 +35,7 @@ import (
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/eventbus"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
@@ -44,6 +45,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
@@ -225,6 +227,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
 	mux.HandleFunc("/api/queries/analyze", withCORS(handleQueriesAnalyze))
+	mux.HandleFunc("/api/queries/route-timing", withCORS(handleRouteTiming))
+	mux.HandleFunc("/api/queries/optimize", withCORS(handleOptimize))
 	mux.HandleFunc("/api/dumps/stream", withCORS(handleDumpsStream))
 	mux.HandleFunc("/api/dumps/status", withCORS(handleDumpsStatus))
 	mux.HandleFunc("/api/dumps/clear", withCORS(handleDumpsClear))
@@ -1479,7 +1483,7 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	presets, err := config.ListPresets()
+	presets, err := cli.ListInstallablePresets()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -2842,6 +2846,119 @@ func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Sit
 	writeJSON(w, files)
 }
 
+// SiteEnvProposeResponse previews inserting the .env.example keys a site's env
+// file is missing. Current and Merged feed a diff editor; Added lists the keys
+// the merge inserts, Required/Optional the doctor's classification so the UI can
+// offer to also pull in the optional (has-a-code-default) keys. Every slice is
+// non-nil so the client can render without null guards.
+type SiteEnvProposeResponse struct {
+	File       string                `json:"file"`
+	Current    string                `json:"current"`
+	Merged     string                `json:"merged"`
+	Added      []string              `json:"added"`
+	AddedLines []int                 `json:"addedLines"`
+	Required   []string              `json:"required"`
+	Optional   []string              `json:"optional"`
+	Entries    []SiteEnvProposeEntry `json:"entries"`
+}
+
+// SiteEnvProposeEntry is one missing example key with the value that would be
+// written for it (verbatim from .env.example) and whether the app requires it,
+// so the UI can list every candidate key with its value for the user to pick.
+type SiteEnvProposeEntry struct {
+	Key      string `json:"key"`
+	Value    string `json:"value"`
+	Required bool   `json:"required"`
+}
+
+// handleSiteEnvPropose returns a proposed .env that inserts the framework env
+// file's missing example keys next to their neighbours. It targets the
+// framework-resolved env file (the same one the env_drift check inspects), so
+// ?file is not honoured; ?branch selects a worktree, ?optional=1 also pulls in
+// the keys the app reads with a code default.
+func handleSiteEnvPropose(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir := resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return
+	}
+
+	var fw *config.Framework
+	if f, ok := config.GetFramework(site.Framework); ok {
+		fw = f
+	}
+	prop, ok := sitedoctor.ProposeEnvMerge(dir, fw)
+	if !ok {
+		writeJSON(w, SiteEnvProposeResponse{File: ".env", Added: []string{}, AddedLines: []int{}, Required: []string{}, Optional: []string{}, Entries: []SiteEnvProposeEntry{}})
+		return
+	}
+
+	values := envfile.ExampleValues(prop.ExampleContent)
+	entries := make([]SiteEnvProposeEntry, 0, len(prop.Required)+len(prop.Optional))
+	for _, k := range prop.Required {
+		entries = append(entries, SiteEnvProposeEntry{Key: k, Value: values[k], Required: true})
+	}
+	for _, k := range prop.Optional {
+		entries = append(entries, SiteEnvProposeEntry{Key: k, Value: values[k], Required: false})
+	}
+
+	// ?keys=A,B stages exactly the picked keys (intersected with the missing
+	// set so the caller can't inject arbitrary example lines); without it we
+	// fall back to all required keys, plus the optional ones when ?optional=1.
+	include := make(map[string]bool, len(prop.Required)+len(prop.Optional))
+	if sel := r.URL.Query().Get("keys"); sel != "" {
+		missing := make(map[string]bool, len(entries))
+		for _, e := range entries {
+			missing[e.Key] = true
+		}
+		for _, k := range strings.Split(sel, ",") {
+			if k = strings.TrimSpace(k); missing[k] {
+				include[k] = true
+			}
+		}
+	} else {
+		for _, k := range prop.Required {
+			include[k] = true
+		}
+		if r.URL.Query().Get("optional") == "1" {
+			for _, k := range prop.Optional {
+				include[k] = true
+			}
+		}
+	}
+	res := envfile.MergeMissing(prop.ExampleContent, prop.EnvContent, include)
+
+	addedLines := res.AddedLines
+	if addedLines == nil {
+		addedLines = []int{}
+	}
+	writeJSON(w, SiteEnvProposeResponse{
+		File:       prop.EnvFile,
+		Current:    prop.EnvContent,
+		Merged:     res.Merged,
+		Added:      nonNilStrings(res.Added),
+		AddedLines: addedLines,
+		Required:   nonNilStrings(prop.Required),
+		Optional:   nonNilStrings(prop.Optional),
+		Entries:    entries,
+	})
+}
+
+// nonNilStrings returns s unchanged unless it is nil, in which case it returns
+// an empty slice so JSON encodes [] rather than null.
+func nonNilStrings(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
 // SiteEnvRestoreRequest carries the previewed backup name so the restore
 // applies the exact bytes the user saw, not whatever is newest at accept time.
 type SiteEnvRestoreRequest struct {
@@ -3166,6 +3283,9 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 	if doctorRoute(w, r, domain, parts[1:]) {
 		return
 	}
+	if statsRoute(w, r, domain, parts[1:]) {
+		return
+	}
 	// /nginx subroutes (backups, restore) sit alongside the GET/POST on
 	// /nginx. The domain validation inside each handler closes the path
 	// traversal vector that the {domain} segment would otherwise open.
@@ -3205,6 +3325,11 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		case "files":
 			if len(parts) == 3 {
 				handleSiteEnvFiles(w, r, site)
+				return
+			}
+		case "propose":
+			if len(parts) == 3 {
+				handleSiteEnvPropose(w, r, site)
 				return
 			}
 		case "backups":

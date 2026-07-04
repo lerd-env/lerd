@@ -118,29 +118,44 @@ func runProfileStatus(_ *cobra.Command, _ []string) error {
 }
 
 func newProfileRunCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "run <command> [args...]",
+	cmd := &cobra.Command{
+		Use:   "run [--flat] <command> [args...]",
 		Short: "Profile a one-off CLI command (e.g. lerd profile run artisan queue:work)",
 		Long: `Run a PHP CLI command with SPX profiling enabled. The command is executed
-as 'php <command> [args...]' inside the project's container; the resulting
-report shows up in the Profiler view alongside HTTP-request reports. Useful
-for artisan commands, queue jobs, and test runs.`,
+as 'php <command> [args...]' inside the project's container. By default the
+report shows up in the Profiler view alongside HTTP-request reports. With
+--flat it instead prints a text flat profile (top functions by wall time and
+call count) to the terminal, the same report the MCP profiler_report action
+returns. Useful for artisan commands, queue jobs, and test runs.`,
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE:               runProfileRun,
 	}
+	return cmd
 }
 
 func runProfileRun(_ *cobra.Command, args []string) error {
+	// Flags are parsed by hand because DisableFlagParsing lets the profiled
+	// command carry its own flags; only a leading --flat is ours.
+	flat := false
+	if len(args) > 0 && (args[0] == "--flat" || args[0] == "-f") {
+		flat, args = true, args[1:]
+	}
 	if len(args) == 0 {
-		return fmt.Errorf("usage: lerd profile run <command> [args...]")
+		return fmt.Errorf("usage: lerd profile run [--flat] <command> [args...]")
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
-	fmt.Fprintln(os.Stderr, "[lerd] profiling this run with SPX, the report will appear in the Profiler view")
-	code, err := RunPHPCaptureEnv(cwd, args, []string{"SPX_ENABLED=1", "SPX_REPORT=full"})
+	report := "full"
+	if flat {
+		report = "fp"
+		fmt.Fprintln(os.Stderr, "[lerd] profiling this run with SPX, printing a flat profile below")
+	} else {
+		fmt.Fprintln(os.Stderr, "[lerd] profiling this run with SPX, the report will appear in the Profiler view")
+	}
+	code, err := RunPHPCaptureEnv(cwd, args, []string{"SPX_ENABLED=1", "SPX_REPORT=" + report})
 	if err != nil {
 		return err
 	}

@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/push"
+	"github.com/geodro/lerd/internal/reqstats"
 )
 
 // nPlusOneThreshold is the number of structurally-identical queries within one
@@ -55,18 +56,15 @@ func newNPlusOneTracker() *nPlusOneTracker {
 }
 
 // routeKeyForQuery collapses a query event to the "route or script" the warning
-// is deduped on: the worker command, or the request method + path with numeric
-// segments and the query string stripped so /users/1 and /users/2 share a key.
+// is deduped on: the worker command, or the site plus the request normalized
+// through the same reqstats route key the timing snapshot uses, so /users/1 and
+// /users/2 share a key and the two detectors bucket identically.
 func routeKeyForQuery(ev dumps.Event) string {
 	if ev.Ctx.Worker != "" {
 		return "worker:" + ev.Ctx.Worker
 	}
-	req := ev.Ctx.Request
-	if i := strings.IndexByte(req, '?'); i >= 0 {
-		req = req[:i]
-	}
-	req = reSQLNum.ReplaceAllString(req, "{n}")
-	return ev.Ctx.Site + " " + req
+	method, path, _ := strings.Cut(ev.Ctx.Request, " ")
+	return ev.Ctx.Site + " " + reqstats.NormalizeRoute(method, path)
 }
 
 // observe records a query event and returns a notification the first time a

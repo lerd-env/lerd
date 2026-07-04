@@ -70,6 +70,7 @@ Press **`Cmd+K`** (macOS) / **`Ctrl+K`** (Linux/Windows), or **`/`** anywhere ou
 - **Pages** — Dashboard, Sites, Services, System
 - **Sites** — every linked domain, with framework hint
 - **Services** — every core service, with version hint
+- **Install service** (loopback only) — every installable bundled preset, so searching "install redis" installs it inline without opening the picker modal
 - **Actions** — Link a site, Add a service, Heal failing workers (when any), Check for updates, Open documentation, Open current site in browser, Toggle theme
 
 Use `↑` / `↓` to move the selection, `↵` to execute, `esc` to close. The palette is available on every tab, not just the dashboard.
@@ -127,7 +128,7 @@ Selecting a site opens the detail panel with:
 
 The middle panel lists core infrastructure services (MySQL, Redis, PostgreSQL, Meilisearch, RustFS, Mailpit), any installed preset alternates (e.g. MySQL 5.7, MariaDB 11, MongoDB) and admin UIs (phpMyAdmin, pgAdmin, Mongo Express), plus grouped per-site workers (Queues, Horizon, Schedules, Workers, Stripe, Reverb).
 
-The header has a **+** button that opens the **preset picker modal**: a one-click installer for the bundled service presets. Multi-version presets like `mysql` and `mariadb` show a version dropdown next to the **Add** button. Already-installed entries are filtered out.
+The header has a **+** button that opens the **preset picker modal**: a one-click installer for the bundled service presets. A search box at the top filters the list by name, description, or image as you type. Multi-version presets like `mysql` and `mariadb` show a version dropdown next to the **Add** button. Already-installed entries are filtered out.
 
 ![Service preset picker modal](/assets/screenshots/preset-picker-modal.png)
 

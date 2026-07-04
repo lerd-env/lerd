@@ -133,6 +133,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	if c, ok := checkPHPVersion(path, fw); ok {
 		resp.add(c)
 	}
+	if c, ok := checkSlowRoutes(path); ok {
+		resp.add(c)
+	}
 	applyLabels(&resp)
 	return resp
 }
@@ -205,6 +208,7 @@ var universalLabels = map[string]string{
 	"node_deps":       "Node Dependencies",
 	"node_audit":      "Node Audit",
 	"php_version":     "PHP Version",
+	"slow_routes":     "Response Time",
 }
 
 // humanize turns a snake_case check name into a Title Case fallback label.
@@ -336,21 +340,9 @@ func checkEnvDrift(path, envPath, examplePath string) (Check, bool) {
 	if _, err := os.Stat(examplePath); err != nil {
 		return Check{}, false
 	}
-	exampleKeys, err := envfile.ReadKeys(examplePath)
-	if err != nil {
+	missing, ok := missingExampleKeys(examplePath, envPath)
+	if !ok {
 		return Check{}, false
-	}
-	have := map[string]bool{}
-	if envKeys, err := envfile.ReadKeys(envPath); err == nil {
-		for _, k := range envKeys {
-			have[k] = true
-		}
-	}
-	var missing []string
-	for _, k := range exampleKeys {
-		if !have[k] {
-			missing = append(missing, k)
-		}
 	}
 	if len(missing) == 0 {
 		return Check{Name: "env_drift", Status: StatusOK}, true
@@ -374,6 +366,71 @@ func checkEnvDrift(path, envPath, examplePath string) (Check, bool) {
 		Name:   "env_drift",
 		Status: StatusWarn,
 		Detail: detail,
+	}, true
+}
+
+// missingExampleKeys returns the example keys absent from the env file, in
+// example order. ok is false only when the example itself can't be read; a
+// missing env file yields every example key as missing. Shared by the env_drift
+// check and ProposeEnvMerge so both see the same key set.
+func missingExampleKeys(examplePath, envPath string) (missing []string, ok bool) {
+	exampleKeys, err := envfile.ReadKeys(examplePath)
+	if err != nil {
+		return nil, false
+	}
+	have := map[string]bool{}
+	if envKeys, err := envfile.ReadKeys(envPath); err == nil {
+		for _, k := range envKeys {
+			have[k] = true
+		}
+	}
+	for _, k := range exampleKeys {
+		if !have[k] {
+			missing = append(missing, k)
+		}
+	}
+	return missing, true
+}
+
+// EnvMergeProposal carries the raw example and env file contents plus the
+// missing keys, classified the same way the env_drift check splits them:
+// Required keys the app reads with no default, Optional keys code has a fallback
+// for. A caller pairs this with envfile.MergeMissing to build the proposed .env.
+type EnvMergeProposal struct {
+	EnvFile        string
+	ExampleContent string
+	EnvContent     string
+	Required       []string
+	Optional       []string
+}
+
+// ProposeEnvMerge resolves the env and example files for the framework rooted at
+// path and returns its classified missing keys. ok is false when the framework
+// has no dotenv example to compare against (php-const frameworks, or no example
+// file on disk), so the caller can skip offering an insert.
+func ProposeEnvMerge(path string, fw *config.Framework) (EnvMergeProposal, bool) {
+	envFile, format, exampleFile := envSetup(fw, path)
+	if format != "dotenv" {
+		return EnvMergeProposal{}, false
+	}
+	examplePath := filepath.Join(path, exampleFile)
+	exampleContent, err := os.ReadFile(examplePath)
+	if err != nil {
+		return EnvMergeProposal{}, false
+	}
+	envPath := filepath.Join(path, envFile)
+	missing, ok := missingExampleKeys(examplePath, envPath)
+	if !ok {
+		return EnvMergeProposal{}, false
+	}
+	required, optional := classifyMissingEnvKeys(path, missing)
+	envContent, _ := os.ReadFile(envPath) // absent env => empty, MergeMissing handles it
+	return EnvMergeProposal{
+		EnvFile:        envFile,
+		ExampleContent: string(exampleContent),
+		EnvContent:     string(envContent),
+		Required:       required,
+		Optional:       optional,
 	}, true
 }
 

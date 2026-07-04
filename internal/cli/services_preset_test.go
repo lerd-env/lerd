@@ -10,6 +10,12 @@ import (
 )
 
 func TestInstallPresetByName_Unknown(t *testing.T) {
+	// Installing an unknown preset now consults the external store. Point it at a
+	// dead endpoint so the fetch fails fast (no real network) and EnsurePreset
+	// surfaces the "unknown preset" error.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("LERD_SERVICES_BASE_URL", "http://127.0.0.1:1")
 	_, err := InstallPresetByName("does-not-exist", "")
 	if err == nil {
 		t.Fatalf("expected error for unknown preset, got nil")

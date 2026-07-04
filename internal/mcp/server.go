@@ -1939,6 +1939,39 @@ func execServicePresetList(_ map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+func execServicePresetSearch(args map[string]any) (any, *rpcError) {
+	results, err := store.NewServiceClient().SearchServices(strArg(args, "name"))
+	if err != nil {
+		return toolErr("searching the service store: " + err.Error()), nil
+	}
+	type entry struct {
+		Name        string   `json:"name"`
+		Description string   `json:"description,omitempty"`
+		Family      string   `json:"family,omitempty"`
+		Dashboard   string   `json:"dashboard,omitempty"`
+		DependsOn   []string `json:"depends_on,omitempty"`
+		Installed   bool     `json:"installed"`
+		Local       bool     `json:"local"`
+	}
+	out := make([]entry, 0, len(results))
+	for _, e := range results {
+		out = append(out, entry{
+			Name:        e.Name,
+			Description: e.Description,
+			Family:      e.Family,
+			Dashboard:   e.Dashboard,
+			DependsOn:   e.DependsOn,
+			Installed:   serviceops.ServiceInstalled(e.Name),
+			Local:       config.PresetExists(e.Name),
+		})
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return toolErr("encoding search results: " + err.Error()), nil
+	}
+	return toolOK(string(data)), nil
+}
+
 func execServicePresetInstall(args map[string]any) (any, *rpcError) {
 	name := strArg(args, "name")
 	if name == "" {

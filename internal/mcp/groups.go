@@ -113,6 +113,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"config_reset":        execServiceConfigReset,
 		"config_list_backups": execServiceConfigListBackups,
 		"preset_list":         func(a map[string]any) (any, *rpcError) { return execServicePresetList(a) },
+		"preset_search":       execServicePresetSearch,
 		"preset_install":      execServicePresetInstall,
 		"check_updates":       execServiceCheckUpdates,
 	},
@@ -195,6 +196,8 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"dns_diagnose":    execDNSDiagnose,
 		"bug_report":      execBugReport,
 		"analyze_queries": execAnalyzeQueries,
+		"route_timing":    execRouteTiming,
+		"optimize_route":  execOptimizeRoute,
 		"dumps_recent":    execDumpsRecent,
 		"dumps_status":    execDumpsStatus,
 		"dumps_clear":     execDumpsClear,
@@ -202,6 +205,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"profiler_toggle": execProfilerToggle,
 		"profiler_status": execProfilerStatus,
 		"profiler_clear":  execProfilerClear,
+		"profiler_report": execProfilerReport,
 		"xdebug_on":       func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, true) },
 		"xdebug_off":      func(a map[string]any) (any, *rpcError) { return execXdebugToggle(a, false) },
 		"xdebug_status":   func(a map[string]any) (any, *rpcError) { return execXdebugStatus() },
@@ -224,6 +228,14 @@ func handleToolCall(params json.RawMessage) (any, *rpcError) {
 	}
 	if args == nil {
 		args = map[string]any{}
+	}
+
+	// A `site` argument may be given as a site name or any of the site's domains;
+	// canonicalize it to the site name once here so every action keys on the same
+	// value, including those that build systemd unit names or read paths straight
+	// from it and would otherwise silently miss when handed a domain.
+	if raw := strArg(args, "site"); raw != "" {
+		args["site"] = config.ResolveSiteRef(raw)
 	}
 
 	// Working on a site through MCP counts as activity, so idle-suspend keeps it
@@ -290,11 +302,11 @@ func siteTool() mcpTool {
 func serviceTool() mcpTool {
 	return mcpTool{
 		Name:        "service",
-		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_install, check_updates. update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
+		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_search, preset_install, check_updates. preset_search browses the store (name=filter). update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_install", "check_updates"}},
+				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_search", "preset_install", "check_updates"}},
 				"name":           {Type: "string", Description: "Service name/slug."},
 				"tag":            {Type: "string", Description: "update/migrate: image tag."},
 				"remove_data":    {Type: "boolean", Description: "remove: rename data dir aside."},
@@ -482,20 +494,21 @@ func frameworkTool() mcpTool {
 func diagTool() mcpTool {
 	return mcpTool{
 		Name:        "diag",
-		Description: "Diagnostics & observability. action: status, doctor (lerd environment), site_doctor (app-level checks for a site: env, dependencies, security audit, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), dumps_recent, dumps_status, dumps_clear, dumps_toggle, profiler_toggle, profiler_status, profiler_clear, xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
+		Description: "Diagnostics & observability. action: status, doctor (lerd environment), site_doctor (app-level checks for a site: env, dependencies, security audit, framework specifics), which, check, dns_diagnose, bug_report, analyze_queries (N+1/slow queries), route_timing (response-time table + slow routes), optimize_route (slow routes joined with their N+1/slow queries, plus CPU hotspots when profiling was on), dumps_recent, dumps_status, dumps_clear, dumps_toggle, profiler_toggle, profiler_status, profiler_clear, profiler_report (flat CPU profile of a command), xdebug_on, xdebug_off, xdebug_status. (Reading logs moved to the `logs` tool.)",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":          {Type: "string", Enum: []string{"status", "doctor", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "xdebug_on", "xdebug_off", "xdebug_status"}},
-				"path":            {Type: "string", Description: "Project root (which/check/site_doctor). Defaults to cwd."},
-				"site":            {Type: "string", Description: "dumps/analyze_queries/site_doctor: site filter (domain for site_doctor)."},
-				"branch":          {Type: "string", Description: "dumps_recent: worktree branch filter."},
+				"action":          {Type: "string", Enum: []string{"status", "doctor", "site_doctor", "which", "check", "dns_diagnose", "bug_report", "analyze_queries", "route_timing", "optimize_route", "dumps_recent", "dumps_status", "dumps_clear", "dumps_toggle", "profiler_toggle", "profiler_status", "profiler_clear", "profiler_report", "xdebug_on", "xdebug_off", "xdebug_status"}},
+				"path":            {Type: "string", Description: "Project root (which/check/site_doctor/profiler_report). Defaults to cwd."},
+				"site":            {Type: "string", Description: "dumps/analyze_queries/route_timing/optimize_route/site_doctor/profiler_report: site filter (site name or domain)."},
+				"args":            {Type: "array", Description: `profiler_report: argv to run under php and profile, e.g. ["artisan","app:import"].`},
+				"branch":          {Type: "string", Description: "dumps_recent/route_timing/optimize_route: worktree branch filter."},
 				"ctx":             {Type: "string", Enum: []string{"fpm", "cli"}, Description: "dumps_recent: context filter."},
 				"kind":            {Type: "string", Enum: []string{"dump", "query", "job", "view", "mail", "cache", "event", "http"}, Description: "dumps_recent: event kind."},
 				"since":           {Type: "string", Description: "dumps_recent: time filter."},
 				"limit":           {Type: "integer", Description: "dumps_recent: max events."},
-				"min_repeat":      {Type: "integer", Description: "analyze_queries: N+1 repeat threshold."},
-				"slow_ms":         {Type: "number", Description: "analyze_queries: slow-query threshold."},
+				"min_repeat":      {Type: "integer", Description: "analyze_queries/optimize_route: N+1 repeat threshold."},
+				"slow_ms":         {Type: "number", Description: "analyze_queries/optimize_route: slow-query threshold."},
 				"enable":          {Type: "boolean", Description: "dumps_toggle/profiler_toggle: on/off."},
 				"output":          {Type: "string", Description: "bug_report: output file path."},
 				"log_lines":       {Type: "integer", Description: "bug_report: lines per log (default 200)."},

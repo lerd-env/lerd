@@ -10,7 +10,7 @@ versions:
   - tag: "9.7"
     label: "9.7 LTS"
     image: docker.io/library/mysql:9.7
-    host_port: 3397
+    host_port: 3306
   - tag: "8.4"
     label: "8.4 LTS (default)"
     image: docker.io/library/mysql:8.4
@@ -19,7 +19,7 @@ versions:
   - tag: "5.7"
     label: "5.7"
     image: docker.io/library/mysql:5.7
-    host_port: 3357
+    host_port: 3306
 ports:
   - "{{host_port}}:3306"
 data_dir: /var/lib/mysql
@@ -34,3 +34,14 @@ env_vars:
   - DB_USERNAME=root
   - DB_PASSWORD=lerd
 connection_url: mysql://root:lerd@127.0.0.1:{{host_port}}/lerd
+files:
+  - target: /etc/mysql/conf.d/lerd.cnf
+    content: |
+      [mysqld]
+      character-set-server=utf8mb4
+      collation-server=utf8mb4_unicode_ci
+      innodb_file_per_table=ON
+      innodb_strict_mode=OFF
+      loose-innodb_default_row_format=DYNAMIC
+      loose-mysql-native-password=ON
+      loose-restrict-fk-on-non-standard-key=OFF

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 )
 
@@ -57,6 +59,7 @@ func NewServiceCmd() *cobra.Command {
 	cmd.AddCommand(newServiceListCmd())
 	cmd.AddCommand(newServiceAddCmd())
 	cmd.AddCommand(newServicePresetCmd())
+	cmd.AddCommand(newServiceSearchCmd())
 	cmd.AddCommand(newServiceUpdateCmd())
 	cmd.AddCommand(newServiceRollbackCmd())
 	cmd.AddCommand(newServiceMigrateCmd())
@@ -588,7 +591,9 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 			name := args[0]
 			pickedVersion := version
 			if pickedVersion == "" {
-				if loaded, err := config.LoadPreset(name); err == nil && len(loaded.Versions) > 0 {
+				// EnsurePreset fetches a store-only preset so the version picker can
+				// show its versions on first install, not just built-ins.
+				if loaded, err := config.EnsurePreset(name); err == nil && len(loaded.Versions) > 0 {
 					if isInteractive() {
 						pickedVersion, err = promptPresetVersion(loaded)
 						if err != nil {
@@ -649,9 +654,45 @@ func promptPresetVersion(p *config.Preset) (string, error) {
 	return picked, nil
 }
 
-// printPresetList prints the bundled presets in a simple table.
+// ListInstallablePresets returns every preset a user can install: the local
+// presets (embedded defaults plus anything already cached) merged with the
+// external store index for add-ons that aren't local yet. The store fetch is
+// best-effort — offline, the local set is returned so the picker still works.
+// Store entries carry enough (versions, image, description) to render the
+// picker; the full definition is fetched on install.
+func ListInstallablePresets() ([]config.PresetMeta, error) {
+	metas, err := config.ListPresets()
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(metas))
+	for _, m := range metas {
+		seen[m.Name] = true
+	}
+	if idx, ierr := store.NewServiceClient().FetchServiceIndex(); ierr == nil {
+		for _, e := range idx.Services {
+			if seen[e.Name] {
+				continue
+			}
+			seen[e.Name] = true
+			metas = append(metas, config.PresetMeta{
+				Name:           e.Name,
+				Description:    e.Description,
+				Dashboard:      e.Dashboard,
+				DependsOn:      e.DependsOn,
+				Image:          e.Image,
+				Versions:       e.Versions,
+				DefaultVersion: e.DefaultVersion,
+			})
+		}
+	}
+	sort.Slice(metas, func(i, j int) bool { return metas[i].Name < metas[j].Name })
+	return metas, nil
+}
+
+// printPresetList prints the installable presets (local + store) in a table.
 func printPresetList() error {
-	presets, err := config.ListPresets()
+	presets, err := ListInstallablePresets()
 	if err != nil {
 		return err
 	}
@@ -701,6 +742,59 @@ func printPresetList() error {
 	fmt.Println("\n* = default version")
 	fmt.Println("Install with: lerd service preset <name> [--version <tag>]")
 	return nil
+}
+
+// newServiceSearchCmd returns the `service search` command, which queries the
+// external service-preset store so users can discover presets that aren't
+// bundled with this build. Install any hit with `lerd service preset <name>`,
+// which fetches it on demand.
+func newServiceSearchCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "search [query]",
+		Short: "Search the external service-preset store",
+		Long: `Search the external service-preset store for installable presets.
+
+Run with no query to list everything the store offers:
+  lerd service search
+
+Filter by a substring of the name, description, or family:
+  lerd service search search-engine
+
+Install any result with the usual command, which fetches it on demand:
+  lerd service preset <name>`,
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(_ *cobra.Command, args []string) error {
+			query := ""
+			if len(args) > 0 {
+				query = args[0]
+			}
+			results, err := store.NewServiceClient().SearchServices(query)
+			if err != nil {
+				return fmt.Errorf("searching the service store: %w", err)
+			}
+			if len(results) == 0 {
+				fmt.Println("No matching presets in the service store.")
+				return nil
+			}
+			var rows [][]string
+			for _, e := range results {
+				where := "store"
+				if serviceops.ServiceInstalled(e.Name) {
+					where = "installed"
+				} else if config.PresetExists(e.Name) {
+					where = "local"
+				}
+				family := e.Family
+				if family == "" {
+					family = "-"
+				}
+				rows = append(rows, []string{e.Name, family, where, e.Description})
+			}
+			feedback.Table([]string{"Name", "Family", "Where", "Description"}, rows)
+			fmt.Println("\nInstall with: lerd service preset <name>")
+			return nil
+		},
+	}
 }
 
 // InstallPresetByName is a thin wrapper around serviceops.InstallPresetByName

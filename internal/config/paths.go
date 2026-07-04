@@ -367,6 +367,16 @@ func StoreFrameworksDir() string {
 	return filepath.Join(DataDir(), "frameworks")
 }
 
+// StorePresetsDir returns the directory for store-installed service-preset YAML
+// files, fetched from the external service store. It sits under the preset-source
+// seam as a layer above the embedded bundle: a valid preset here is served in
+// place of (or in addition to) the built-in of the same name, while the embed
+// bundle stays as the permanent offline fallback. Distinct from ConfigDir()/services
+// (user-defined custom services) so store presets and user services never mix.
+func StorePresetsDir() string {
+	return filepath.Join(DataDir(), "service-presets")
+}
+
 // UpdateCheckFile returns the path to the cached update-check state file.
 func UpdateCheckFile() string {
 	return filepath.Join(DataDir(), "update-check.json")
@@ -437,6 +447,13 @@ func UIClientAddr() string {
 // and the CLI read it to render each site's idle state. Lives in RunDir.
 func IdleActivityFile() string {
 	return filepath.Join(RunDir(), "idle-activity.json")
+}
+
+// RequestStatsFile is where the watcher persists its rolling per-site request
+// timing snapshot for lerd-ui to read, since the two run as separate processes
+// and only the watcher binds the nginx access feed. Ephemeral, lives in RunDir.
+func RequestStatsFile() string {
+	return filepath.Join(RunDir(), "request-stats.json")
 }
 
 // AccessSocketPath is the unix datagram socket the lerd-watcher binds to receive

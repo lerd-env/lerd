@@ -28,7 +28,8 @@ func listenAccessSock(t *testing.T) (net.PacketConn, string) {
 // syslog framing nginx wraps the "$host" message in.
 func TestReadAccessFeed_recordsTouch(t *testing.T) {
 	prev := activityTracker
-	t.Cleanup(func() { activityTracker = prev })
+	idleActive.Store(true)
+	t.Cleanup(func() { activityTracker = prev; idleActive.Store(false) })
 	activityTracker = idle.NewTracker(func(h string) (string, bool) {
 		if h == "myapp.test" {
 			return "myapp", true
@@ -63,7 +64,8 @@ func TestReadAccessFeed_recordsTouch(t *testing.T) {
 // off a UDP socket. Ephemeral port so it never collides with a live daemon's.
 func TestReadAccessFeed_overUDP(t *testing.T) {
 	prev := activityTracker
-	t.Cleanup(func() { activityTracker = prev })
+	idleActive.Store(true)
+	t.Cleanup(func() { activityTracker = prev; idleActive.Store(false) })
 	activityTracker = idle.NewTracker(func(h string) (string, bool) {
 		if h == "myapp.test" {
 			return "myapp", true

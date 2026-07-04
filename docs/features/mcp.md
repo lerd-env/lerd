@@ -125,7 +125,7 @@ The MCP surface is **eleven grouped tools**, each driven by an `action` argument
 | `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
 | `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `install`, `project_new`, `setup` |
-| `diag` | `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
+| `diag` | `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |
 | `worktree` | `list`, `add`, `remove`, `db_isolate`, `db_share` |
 
@@ -204,4 +204,16 @@ You: the app is throwing 500s, check the logs
 AI:  → logs(action: "sources", site: "myapp")
      → logs(action: "fetch", source: "app:laravel.log", level: "error", since: "15m")
      PHP Fatal error: Class "App\Jobs\ProcessOrder" not found ...
+
+You: this site feels slow, optimize it
+AI:  → diag(action: "route_timing", site: "myapp")
+       # GET /reports/:id runs at 1080ms p95, 27x the site's 40ms median
+     → diag(action: "dumps_toggle", enable: true)
+       # then hit the slow route a couple of times so queries are captured
+     → diag(action: "optimize_route", site: "myapp")
+       { "routes": [ { "route": "GET /reports/:id", "p95_millis": 1080,
+         "evidence": [ { "n_plus_one": [ { "count": 38,
+           "fingerprint": "select * from line_items where report_id = ?",
+           "caller": { "file": "app/Http/Controllers/ReportController.php", "line": 44 } } ] } ] } ] }
+     # the N+1 and its exact caller, from real traffic, not from reading code
 ```

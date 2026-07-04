@@ -66,6 +66,23 @@ var (
 //
 // emit may be nil. Default-preset services are accepted: their YAML doesn't
 // exist on disk, so RemoveCustomService is a tolerated no-op.
+// presetStillReferenced reports whether any installed custom service is still
+// materialised from the given preset (e.g. mariadb-11-8 and mariadb-10-11 both
+// reference "mariadb"). Fails safe — on a listing error it returns true so a
+// still-needed cached preset is never pruned out from under a live service.
+func presetStillReferenced(preset string) bool {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return true
+	}
+	for _, c := range customs {
+		if c.Preset == preset {
+			return true
+		}
+	}
+	return false
+}
+
 func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error {
 	if emit == nil {
 		emit = func(PhaseEvent) {}
@@ -76,9 +93,10 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	// cleanup can reclaim exactly those once nothing references them.
 	removedImage, removedPrev := serviceImageRefs(name)
 
-	var family string
+	var family, preset string
 	if existing, err := config.LoadCustomService(name); err == nil {
 		family = existing.Family
+		preset = existing.Preset
 	}
 
 	emit(PhaseEvent{Phase: "stopping_unit", Unit: unit})
@@ -118,6 +136,14 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 	emit(PhaseEvent{Phase: "removing_config"})
 	if err := config.RemoveCustomService(name); err != nil {
 		return fmt.Errorf("remove service config: %w", err)
+	}
+
+	// Prune the cached store preset once no installed service still references it,
+	// so a removed add-on reverts from "local" back to "store" and a reinstall
+	// fetches a fresh definition. Never touches embedded presets. Best-effort: a
+	// leftover cache file is harmless, so a failure here doesn't fail the removal.
+	if preset != "" && !presetStillReferenced(preset) {
+		_ = config.RemoveStorePreset(preset)
 	}
 
 	emit(PhaseEvent{Phase: "regenerating_consumers"})

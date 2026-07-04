@@ -3,7 +3,6 @@ package config
 import (
 	"embed"
 	"fmt"
-	"io/fs"
 	"path"
 	"runtime"
 	"sort"
@@ -28,9 +27,11 @@ type PresetVersion struct {
 	Tag   string `yaml:"tag" json:"tag"`
 	Label string `yaml:"label,omitempty" json:"label,omitempty"`
 	Image string `yaml:"image" json:"image"`
-	// HostPort is the host-side port published for this specific version.
-	// Each version gets its own fixed port so multiple alternates can run
-	// side by side without colliding. Substituted into the family's
+	// HostPort is the host-side port published for this version. Since #704
+	// every member of a family shares the family's canonical port (e.g. 3306,
+	// 5432); the runtime port-ownership guard shifts a later sibling off it only
+	// when another installed service already holds it, so the common single
+	// instance lands on the familiar port. Substituted into the family's
 	// templated ports, env_vars and connection_url via {{host_port}}.
 	HostPort int `yaml:"host_port,omitempty" json:"host_port,omitempty"`
 	// Canonical marks this version as the default-preset's bare instance:
@@ -88,16 +89,8 @@ type PresetMeta struct {
 // ListPresets returns the metadata for all bundled service presets, sorted by
 // name.
 func ListPresets() ([]PresetMeta, error) {
-	entries, err := fs.ReadDir(presetFS, "presets")
-	if err != nil {
-		return nil, err
-	}
 	var out []PresetMeta
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".yaml")
+	for _, name := range presetNames() {
 		p, err := LoadPreset(name)
 		if err != nil {
 			continue
@@ -134,8 +127,8 @@ func LoadPreset(name string) (*Preset, error) {
 	if cached, ok := presetCache.Load(name); ok {
 		return cached.(*Preset), nil
 	}
-	data, err := presetFS.ReadFile("presets/" + name + ".yaml")
-	if err != nil {
+	data, ok := readPresetBytes(name)
+	if !ok {
 		return nil, fmt.Errorf("unknown preset %q", name)
 	}
 	if err := ValidatePresetYAML(data, name); err != nil {
@@ -189,8 +182,7 @@ func ValidatePresetYAML(data []byte, name string) error {
 
 // PresetExists reports whether a bundled preset with the given name exists.
 func PresetExists(name string) bool {
-	_, err := presetFS.Open("presets/" + name + ".yaml")
-	return err == nil
+	return presetSourceExists(name)
 }
 
 // PresetVersionServiceName returns the resolved service (container) name for
@@ -232,6 +224,7 @@ func (p *Preset) Resolve(version string) (*CustomService, error) {
 	if len(p.Versions) == 0 {
 		svc := p.CustomService
 		svc.Preset = p.Name
+		svc.Files = nil // files live on the preset, read via PresetFiles; never on the resolved service
 		return &svc, nil
 	}
 	if version == "" {
@@ -249,6 +242,7 @@ func (p *Preset) Resolve(version string) (*CustomService, error) {
 	}
 	safe := SanitizeImageTag(picked.Tag)
 	svc := p.CustomService
+	svc.Files = nil // files live on the preset, read via PresetFiles; never on the resolved service
 	svc.Image = picked.Image
 	svc.Preset = p.Name
 	svc.PresetVersion = picked.Tag
@@ -326,6 +320,7 @@ func (p *Preset) ResolvePinned(tag string) (*CustomService, error) {
 	}
 	safe := SanitizeImageTag(picked.Tag)
 	svc := p.CustomService
+	svc.Files = nil // files live on the preset, read via PresetFiles; never on the resolved service
 	svc.Image = picked.Image
 	svc.Preset = p.Name
 	svc.PresetVersion = picked.Tag
@@ -441,15 +436,7 @@ func IsDefaultPreset(name string) bool {
 
 func loadDefaultPresetIndex() {
 	defaultPresetNamesSet = map[string]bool{}
-	entries, err := fs.ReadDir(presetFS, "presets")
-	if err != nil {
-		return
-	}
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
-			continue
-		}
-		name := strings.TrimSuffix(e.Name(), ".yaml")
+	for _, name := range presetNames() {
 		p, err := LoadPreset(name)
 		if err != nil || !p.Default {
 			continue
