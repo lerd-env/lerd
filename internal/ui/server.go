@@ -2410,29 +2410,40 @@ func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 	if body.PublishedPort != nil {
 		port = *body.PublishedPort
 	}
-	if _, err := serviceops.SetPublishedPort(name, port); err != nil {
+	// A modal save applies the primary, secondaries, and extras in sequence.
+	// Snapshot first so a failure partway through rolls the whole save back to a
+	// consistent state instead of leaving some ports moved while reporting failure.
+	snapshot, canRestore := serviceops.SnapshotPublishedPorts(name)
+	apply := func() error {
+		if _, err := serviceops.SetPublishedPort(name, port); err != nil {
+			return err
+		}
+		// Secondary published ports keyed by container-internal port (a multi-port
+		// service's UI/console mapping). Each moves through the same shared gate.
+		for cs, hp := range body.PublishedPorts {
+			c, err := strconv.Atoi(cs)
+			if err != nil {
+				continue
+			}
+			if _, err := serviceops.SetPublishedPortFor(name, c, hp); err != nil {
+				return err
+			}
+		}
+		// Extra ports apply to any preset lerd ships; genuinely custom services
+		// declare their ports in their own YAML.
+		if config.PresetExists(name) {
+			if err := serviceops.SetExtraPorts(name, body.ExtraPorts); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	if err := apply(); err != nil {
+		if canRestore {
+			_ = serviceops.RestorePublishedPorts(name, snapshot)
+		}
 		fail(err)
 		return
-	}
-	// Secondary published ports keyed by container-internal port (a multi-port
-	// service's UI/console mapping). Each moves through the same shared gate.
-	for cs, hp := range body.PublishedPorts {
-		c, err := strconv.Atoi(cs)
-		if err != nil {
-			continue
-		}
-		if _, err := serviceops.SetPublishedPortFor(name, c, hp); err != nil {
-			fail(err)
-			return
-		}
-	}
-	// Extra ports apply to any preset lerd ships; genuinely custom services
-	// declare their ports in their own YAML.
-	if config.PresetExists(name) {
-		if err := serviceops.SetExtraPorts(name, body.ExtraPorts); err != nil {
-			fail(err)
-			return
-		}
 	}
 	writeJSON(w, ServiceActionResponse{
 		ServiceResponse: buildServiceResponse(name),

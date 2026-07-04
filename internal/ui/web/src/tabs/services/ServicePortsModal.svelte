@@ -83,12 +83,12 @@
       // unset and keeps the auto-shift guard on.
       published = svc.default_port && publishedInput === svc.default_port ? null : publishedInput;
     }
-    // Secondary mappings: send every field (the backend normalises a value equal
-    // to the preset default back to "no override"), keyed by container port.
+    // Secondary mappings: send every field keyed by container port. A blanked
+    // input means "reset to default", so send the preset default, which the
+    // backend normalises back to "no override" and thus clears an existing one.
     const publishedPorts: Record<string, number> = {};
     for (const p of svc.secondary_ports ?? []) {
-      const v = secondaryInputs[p.container];
-      if (v == null) continue;
+      const v = secondaryInputs[p.container] ?? p.default;
       if (!validPort(v)) {
         error = m.services_ports_invalidPort();
         return;

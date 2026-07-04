@@ -77,6 +77,7 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	// 3306 (the Web UI already converts the default to null client-side).
 	if port > 0 && port == svcCfg.Port {
 		port = 0
+		res.Requested = 0
 	}
 	if port == svcCfg.PublishedPort {
 		res.NoOp = true
@@ -116,45 +117,23 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 		return res, nil
 	}
 	res.Installed = true
-	unit := "lerd-" + name
-	status, _ := portsUnitStatus(unit)
-	res.WasActive = status == "active" || status == "activating"
-	// Stop a running unit before the write: its own live listener would look
-	// like a foreign owner to the guard and suppress a needed shift, leaving it
-	// unable to bind on restart. Stopped, the write/guard/start see the true state.
-	if res.WasActive {
-		if err := portsStopUnit(unit); err != nil {
-			return res, fmt.Errorf("stopping %s: %w", unit, err)
-		}
-	}
-	if err := portsRerender(name); err != nil {
-		return res, err
-	}
-	// The guard inside the write may have overridden the request, so report the
-	// actual resulting published port, not the requested one.
 	res.Actual = port
-	if cfg2, lerr := config.LoadGlobal(); lerr == nil && cfg2 != nil {
-		if sc, ok := cfg2.Services[name]; ok {
-			res.Actual = sc.PublishedPort
-		}
-	}
-	if res.WasActive {
-		if startErr := portsStartUnit(unit); startErr != nil {
-			// The new port wouldn't bind (a TOCTOU grab between the pre-flight and the
-			// start, or the guard landing on a host-owned port). Don't leave the
-			// service down with the config already moved: restore the previous
-			// published port, re-render, and bring it back up on the port it had.
-			res.Actual = prevPublished
-			restored := persistPublishedPort(name, prevPublished) == nil &&
-				portsRerender(name) == nil &&
-				portsStartUnit(unit) == nil
-			if restored {
-				_ = portsWaitReady(name, 30*time.Second)
-				return res, fmt.Errorf("could not start %s on port %d, restored the previous port %d: %w", unit, port, prevPublished, startErr)
+	// The guard inside the write may override the request, so read back the actual
+	// resulting primary published port, not the requested one.
+	err = applyServicePortRestart(name, &res, prevPublished,
+		func() int {
+			actual := port
+			if cfg2, lerr := config.LoadGlobal(); lerr == nil && cfg2 != nil {
+				if sc, ok := cfg2.Services[name]; ok {
+					actual = sc.PublishedPort
+				}
 			}
-			return res, fmt.Errorf("could not start %s and could not restore the previous port, run `lerd start`: %w", unit, startErr)
-		}
-		_ = portsWaitReady(name, 30*time.Second)
+			return actual
+		},
+		func() error { return persistPublishedPort(name, prevPublished) },
+	)
+	if err != nil {
+		return res, err
 	}
 	// Host-proxy sites reach the service over the published loopback port, so
 	// refresh their .env to follow the change (no-op when none use it).
@@ -162,6 +141,45 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 		savedHook(name, res.Actual)
 	}
 	return res, nil
+}
+
+// applyServicePortRestart applies a just-persisted published-port change to a
+// running service and recovers if it can't take. It stops the unit first (a live
+// listener would look like a foreign owner and suppress a needed guard shift),
+// re-renders the quadlet, reads the actual resulting port via rereadActual into
+// res.Actual, then restarts. If the unit can't bind the new port, persistPrev
+// restores the previous port in config and the unit is re-rendered and brought
+// back up on it, so a failed move never leaves the service down. Shared by the
+// primary and secondary port paths so both recover identically.
+func applyServicePortRestart(name string, res *PortChange, prevActual int, rereadActual func() int, persistPrev func() error) error {
+	unit := "lerd-" + name
+	status, _ := portsUnitStatus(unit)
+	res.WasActive = status == "active" || status == "activating"
+	if res.WasActive {
+		if err := portsStopUnit(unit); err != nil {
+			return fmt.Errorf("stopping %s: %w", unit, err)
+		}
+	}
+	if err := portsRerender(name); err != nil {
+		return err
+	}
+	res.Actual = rereadActual()
+	if !res.WasActive {
+		return nil
+	}
+	if startErr := portsStartUnit(unit); startErr != nil {
+		res.Actual = prevActual
+		restored := persistPrev() == nil &&
+			portsRerender(name) == nil &&
+			portsStartUnit(unit) == nil
+		if restored {
+			_ = portsWaitReady(name, 30*time.Second)
+			return fmt.Errorf("could not start %s on the new port, restored the previous port %d: %w", unit, prevActual, startErr)
+		}
+		return fmt.Errorf("could not start %s and could not restore the previous port, run `lerd start`: %w", unit, startErr)
+	}
+	_ = portsWaitReady(name, 30*time.Second)
+	return nil
 }
 
 // serviceDefaultPorts returns a service's default host:container mappings — the
@@ -212,15 +230,17 @@ func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, 
 		return res, err
 	}
 	svcCfg := cfg.Services[name]
+	prevPublished := svcCfg.PublishedPorts[containerPort]
 	// Requesting the preset default is a reset: normalise to 0 so we clear the
 	// override rather than storing a redundant one and needlessly probing a port
 	// this mapping already legitimately owns.
 	if hostPort == defHost {
 		hostPort = 0
+		res.Requested = 0
 	}
-	if hostPort == svcCfg.PublishedPorts[containerPort] {
+	if hostPort == prevPublished {
 		res.NoOp = true
-		res.Actual = svcCfg.PublishedPorts[containerPort]
+		res.Actual = prevPublished
 		return res, nil
 	}
 	if hostPort > 0 {
@@ -244,19 +264,7 @@ func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, 
 			return res, fmt.Errorf("%w: %d", ErrPortInUse, hostPort)
 		}
 	}
-	if hostPort > 0 {
-		if svcCfg.PublishedPorts == nil {
-			svcCfg.PublishedPorts = map[int]int{}
-		}
-		svcCfg.PublishedPorts[containerPort] = hostPort
-	} else {
-		delete(svcCfg.PublishedPorts, containerPort)
-		if len(svcCfg.PublishedPorts) == 0 {
-			svcCfg.PublishedPorts = nil
-		}
-	}
-	cfg.Services[name] = svcCfg
-	if err := config.SaveGlobal(cfg); err != nil {
+	if err := persistSecondaryOverride(name, containerPort, hostPort); err != nil {
 		return res, err
 	}
 	res.Actual = hostPort
@@ -265,14 +273,46 @@ func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, 
 		return res, nil
 	}
 	res.Installed = true
-	if err := rerenderServiceQuadlet(name); err != nil {
-		return res, err
+	// Same stop-before-write and start-failure rollback the primary path gets: a
+	// secondary move whose new port can't bind must not leave the unit down.
+	return res, applyServicePortRestart(name, &res, prevPublished,
+		func() int {
+			actual := hostPort
+			if cfg2, lerr := config.LoadGlobal(); lerr == nil && cfg2 != nil {
+				if sc, ok := cfg2.Services[name]; ok {
+					actual = sc.PublishedPorts[containerPort]
+				}
+			}
+			return actual
+		},
+		func() error { return persistSecondaryOverride(name, containerPort, prevPublished) },
+	)
+}
+
+// persistSecondaryOverride records port as the host override for the mapping whose
+// container-internal port is containerPort, or clears the override when port is 0.
+// The delete-aware form SetPublishedPortFor uses for both its write and its
+// rollback, so restoring a mapping that had no prior override leaves the config
+// clean rather than pinning it to a stale 0.
+func persistSecondaryOverride(name string, containerPort, port int) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("loading global config: %w", err)
 	}
-	if status, _ := podman.UnitStatus("lerd-" + name); status == "active" {
-		res.WasActive = true
-		_ = podman.RestartUnit("lerd-" + name)
+	entry := cfg.Services[name]
+	if port > 0 {
+		if entry.PublishedPorts == nil {
+			entry.PublishedPorts = map[int]int{}
+		}
+		entry.PublishedPorts[containerPort] = port
+	} else {
+		delete(entry.PublishedPorts, containerPort)
+		if len(entry.PublishedPorts) == 0 {
+			entry.PublishedPorts = nil
+		}
 	}
-	return res, nil
+	cfg.Services[name] = entry
+	return config.SaveGlobal(cfg)
 }
 
 // SetExtraPorts replaces a bundled preset's extra published ports with ports
@@ -398,8 +438,9 @@ func rerenderServiceQuadlet(name string) error {
 }
 
 // portReservedByOther reports whether host port p is already claimed by a lerd
-// service other than self (its default, published, or extra ports), reusing the
-// same config.HostPorts() the port-ownership guard reserves from.
+// service other than self: its effective primary, its extra ports, and — unlike a
+// bare HostPorts() read — a multi-port service's un-overridden SECONDARY default
+// ports too, so a stopped mailpit still reserves its 8025 web UI.
 func portReservedByOther(self string, p int) bool {
 	cfg, err := config.LoadGlobal()
 	if err != nil || cfg == nil {
@@ -409,13 +450,38 @@ func portReservedByOther(self string, p int) bool {
 		if svcName == self {
 			continue
 		}
-		for _, hp := range svc.HostPorts() {
+		for _, hp := range serviceEffectiveHostPorts(svcName, svc) {
 			if hp == p {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+// serviceEffectiveHostPorts returns every host port a service will actually
+// publish: each default mapping resolved through its override (primary or per-port
+// via HostPortFor), plus its extra ports. It differs from ServiceConfig.HostPorts
+// by also reporting a multi-port service's un-overridden secondary default ports
+// (mailpit's 8025 UI, rustfs' 9001 console), which no config field records, so the
+// interactive reservation check can't hand another service a port a stopped
+// sibling owns by default and collide at boot.
+func serviceEffectiveHostPorts(name string, cfg config.ServiceConfig) []int {
+	seen := map[int]bool{}
+	var ports []int
+	add := func(n int) {
+		if n > 0 && !seen[n] {
+			seen[n] = true
+			ports = append(ports, n)
+		}
+	}
+	for i, spec := range serviceDefaultPorts(name) {
+		add(cfg.HostPortFor(podman.ContainerPort(spec), podman.PrimaryHostPort([]string{spec}), i == 0))
+	}
+	for _, hp := range cfg.HostPorts() {
+		add(hp)
+	}
+	return ports
 }
 
 // extraHostPort returns the host-side port of a "host", "host:container", or
@@ -439,4 +505,73 @@ func removePort(ports []string, port string) []string {
 		}
 	}
 	return out
+}
+
+// PublishedPortSnapshot captures a service's published-port configuration so a
+// multi-step change (the Web UI ports modal applies the primary port, the
+// secondary ports, and the extra ports in sequence) can be rolled back to a
+// consistent pre-save state when a later step fails.
+type PublishedPortSnapshot struct {
+	PublishedPort  int
+	PublishedPorts map[int]int
+	ExtraPorts     []string
+}
+
+// SnapshotPublishedPorts records a service's current published-port config. The
+// bool is false only when the global config can't be read, in which case the
+// caller should skip the transactional rollback rather than restore junk.
+func SnapshotPublishedPorts(name string) (PublishedPortSnapshot, bool) {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return PublishedPortSnapshot{}, false
+	}
+	sc := cfg.Services[name]
+	snap := PublishedPortSnapshot{PublishedPort: sc.PublishedPort}
+	if len(sc.PublishedPorts) > 0 {
+		snap.PublishedPorts = make(map[int]int, len(sc.PublishedPorts))
+		for k, v := range sc.PublishedPorts {
+			snap.PublishedPorts[k] = v
+		}
+	}
+	if len(sc.ExtraPorts) > 0 {
+		snap.ExtraPorts = append([]string{}, sc.ExtraPorts...)
+	}
+	return snap, true
+}
+
+// RestorePublishedPorts rolls a service's published-port config back to a snapshot
+// and re-renders and restarts the unit so the running service matches, undoing a
+// partially applied ports-modal save. It restores the whole port set at once, so a
+// mapping the failed save had already moved returns to its prior port.
+func RestorePublishedPorts(name string, snap PublishedPortSnapshot) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("loading global config: %w", err)
+	}
+	entry := cfg.Services[name]
+	entry.PublishedPort = snap.PublishedPort
+	entry.PublishedPorts = snap.PublishedPorts
+	entry.ExtraPorts = snap.ExtraPorts
+	cfg.Services[name] = entry
+	if err := config.SaveGlobal(cfg); err != nil {
+		return err
+	}
+	if !ServiceInstalled(name) {
+		return nil
+	}
+	unit := "lerd-" + name
+	wasActive := unitActive(name)
+	if wasActive {
+		_ = portsStopUnit(unit)
+	}
+	if err := portsRerender(name); err != nil {
+		return err
+	}
+	if wasActive {
+		if err := portsStartUnit(unit); err != nil {
+			return err
+		}
+		_ = portsWaitReady(name, 30*time.Second)
+	}
+	return nil
 }

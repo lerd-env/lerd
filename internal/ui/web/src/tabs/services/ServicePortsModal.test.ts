@@ -38,6 +38,23 @@ describe('ServicePortsModal', () => {
     });
   });
 
+  it('clears a secondary override when its field is blanked', async () => {
+    const s = svc({ secondary_ports: [{ container: 8025, default: 8025, published: 38026 }] });
+    const { container, getByText } = render(ServicePortsModal, {
+      props: { open: true, svc: s, onclose: () => {} }
+    });
+    const inputs = container.querySelectorAll('input[type="number"]');
+    // Blank the seeded 38026 override: an empty field means reset to default, so
+    // the default is sent and the backend clears the override.
+    await fireEvent.input(inputs[1], { target: { value: '' } });
+    await fireEvent.click(getByText('Save'));
+    expect(setServicePorts).toHaveBeenCalledWith('mailpit', {
+      published_port: null,
+      published_ports: { '8025': 8025 },
+      extra_ports: []
+    });
+  });
+
   it('saves a changed secondary port keyed by container port', async () => {
     const { container, getByText } = render(ServicePortsModal, {
       props: { open: true, svc: svc(), onclose: () => {} }
