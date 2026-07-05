@@ -7,8 +7,9 @@
   import ServiceEnvTab from './ServiceEnvTab.svelte';
   import ServiceTuningTab from './ServiceTuningTab.svelte';
   import ServiceToolsTab from './ServiceToolsTab.svelte';
+  import ServicePortsTab from './ServicePortsTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
-  import type { Service } from '$stores/services';
+  import { isServiceWorker, type Service } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -16,16 +17,19 @@
   }
   let { svc }: Props = $props();
 
-  type TabId = 'logs' | 'env' | 'config' | 'tools';
+  type TabId = 'logs' | 'env' | 'config' | 'tools' | 'ports';
   let active = $state<TabId>('logs');
 
   const hasEnv = $derived(Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0));
   const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
+  // Workers publish nothing, so the ports tab tracks the header gear's old guard.
+  const hasPorts = $derived(!isServiceWorker(svc));
   const tabs = $derived<TabItem<TabId>[]>([
     { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
     { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable },
-    { id: 'tools', label: m.services_tabs_tools(), hidden: !hasTools }
+    { id: 'tools', label: m.services_tabs_tools(), hidden: !hasTools },
+    { id: 'ports', label: m.services_tabs_ports(), hidden: !hasPorts }
   ]);
 
   // Fall back to logs when the active tab is hidden for the selected service
@@ -34,6 +38,7 @@
     if (active === 'env' && !hasEnv) active = 'logs';
     if (active === 'config' && !svc.tunable) active = 'logs';
     if (active === 'tools' && !hasTools) active = 'logs';
+    if (active === 'ports' && !hasPorts) active = 'logs';
   });
 
   const logPath = $derived.by(() => {
@@ -73,5 +78,7 @@
     <ServiceTuningTab {svc} />
   {:else if active === 'tools'}
     <ServiceToolsTab {svc} />
+  {:else if active === 'ports'}
+    <ServicePortsTab {svc} />
   {/if}
 </DetailPanel>

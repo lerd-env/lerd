@@ -67,7 +67,7 @@ services:
 
 Then apply with `lerd service restart mysql`.
 
-You can also manage extra ports from the dashboard: open a service, click the cog button in the action group (between the main button and the dropdown), and add or remove mappings in the **Ports** modal alongside the published port. The CLI, dashboard, MCP and TUI all route through the same logic, so a change made on one surface shows up on the others.
+You can also manage extra ports from the dashboard: open a service and switch to the **Ports** tab, then add or remove mappings alongside the published port. The CLI, dashboard, MCP and TUI all route through the same logic, so a change made on one surface shows up on the others.
 
 ### Moving a service's published host port
 
@@ -99,7 +99,7 @@ The dashboard link for a service always follows the port its dashboard is served
 
 The chosen ports are persisted in `~/.config/lerd/config.yaml` and reapplied on every start: the primary under `services.<name>.published_port`, any other mapping under `services.<name>.published_ports` keyed by container port. Once a port is set, automatically or with `lerd service port`, it sticks: lerd never moves it again on its own, not even back to the default when that frees up later. Change it only with `lerd service port`.
 
-Every published port can also be moved from the dashboard: the cog button on a service opens the **Ports** modal, which lists one editable host-port field per published port (primary and secondary alike), each with a reset-to-default. The TUI shows the current published and extra ports read-only; editing stays in the CLI, dashboard and MCP.
+Every published port can also be moved from the dashboard: a service's **Ports** tab lists one editable host-port field per published port (primary and secondary alike), each with a reset-to-default. The TUI shows the current published and extra ports read-only; editing stays in the CLI, dashboard and MCP.
 
 ::: warning Known limitation
 The shift is decided at quadlet-write time, from whether the port can be bound right then. A host server that is installed but stopped at that moment leaves its port looking free, so lerd may take it and clash when that server next starts (for example at boot). This is the deliberate trade for not inspecting the host: a host database is usually running, and the failure is loud. Recover by moving lerd onto a free port with `lerd service port <name> <port>`.

@@ -1,16 +1,13 @@
 <script lang="ts">
-  import Modal from '$components/Modal.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import PortRow from './PortRow.svelte';
   import { type Service, setServicePorts } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
-    open: boolean;
     svc: Service;
-    onclose: () => void;
   }
-  let { open, svc, onclose }: Props = $props();
+  let { svc }: Props = $props();
 
   const isBuiltin = $derived(Boolean(svc.preset_owned));
 
@@ -21,7 +18,6 @@
   // Number inputs bound with bind:value yield number | null (null when empty),
   // so these stay numeric — never strings.
   let publishedInput = $state<number | null>(null);
-  // Secondary published ports (a multi-port service), keyed by container port.
   let secondaryInputs = $state<Record<number, number | null>>({});
   let extraPorts = $state<string[]>([]);
   let newHost = $state<number | null>(null);
@@ -29,24 +25,46 @@
   let saving = $state(false);
   let error = $state('');
 
-  // Reseed from the service every time the modal opens so a reopen never shows
-  // stale edits from a cancelled session.
+  // The seed a service would produce. `published` mirrors the modal's fallback
+  // chain so an unset override reads as the preset default, not a blank field.
+  function seed(s: Service) {
+    const secondary: Record<number, number | null> = {};
+    for (const p of s.secondary_ports ?? []) secondary[p.container] = p.published || p.default;
+    return {
+      published: s.published_port || s.default_port || null,
+      secondary,
+      extra: [...(s.extra_ports ?? [])]
+    };
+  }
+
+  // Pin the reseed to the service name only. Every services WebSocket broadcast
+  // passes a fresh svc object even when the name is unchanged; reseeding on the
+  // object would clobber in-progress edits on every push.
+  const currentName = $derived(svc.name);
   $effect(() => {
-    if (open) {
-      publishedInput = svc.published_port || svc.default_port || null;
-      // Build the seed locally and assign once — mutating secondaryInputs in place
-      // here would make this effect read and write the same state and loop.
-      const seeded: Record<number, number | null> = {};
-      for (const p of svc.secondary_ports ?? []) {
-        seeded[p.container] = p.published || p.default;
-      }
-      secondaryInputs = seeded;
-      extraPorts = [...(svc.extra_ports ?? [])];
-      newHost = null;
-      newContainer = null;
-      saving = false;
-      error = '';
+    currentName;
+    const s = seed(svc);
+    publishedInput = s.published;
+    secondaryInputs = s.secondary;
+    extraPorts = [...s.extra];
+    newHost = null;
+    newContainer = null;
+    saving = false;
+    error = '';
+  });
+
+  // Live baseline off the current svc so a successful save (which updates svc
+  // via the broadcast) settles dirty back to false without an extra reseed.
+  const baseline = $derived(seed(svc));
+  const dirty = $derived.by(() => {
+    if ((publishedInput ?? null) !== (baseline.published ?? null)) return true;
+    for (const p of svc.secondary_ports ?? []) {
+      if ((secondaryInputs[p.container] ?? null) !== (baseline.secondary[p.container] ?? null)) return true;
     }
+    const cur = [...extraPorts].sort();
+    const base = [...baseline.extra].sort();
+    if (cur.length !== base.length) return true;
+    return cur.some((v, i) => v !== base[i]);
   });
 
   function validPort(n: number | null): n is number {
@@ -69,6 +87,16 @@
 
   function removeExtra(spec: string) {
     extraPorts = extraPorts.filter((p) => p !== spec);
+  }
+
+  function revert() {
+    const s = seed(svc);
+    publishedInput = s.published;
+    secondaryInputs = s.secondary;
+    extraPorts = [...s.extra];
+    newHost = null;
+    newContainer = null;
+    error = '';
   }
 
   async function save() {
@@ -106,15 +134,44 @@
         error = res.error || m.common_failed();
         return;
       }
-      onclose();
     } finally {
       saving = false;
     }
   }
 </script>
 
-<Modal {open} {onclose} title={m.services_ports_title({ name: svc.name })} size="md">
-  <div class="px-5 py-4 space-y-5">
+<div class="flex flex-col h-full">
+  <div class="sticky top-0 z-10">
+    <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
+      <div class="flex items-center gap-2 min-w-0">
+        {#if dirty && !saving}
+          <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.tuningEditor_unsaved()}</span>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2 shrink-0">
+        {#if dirty}
+          <button
+            type="button"
+            onclick={revert}
+            disabled={saving}
+            class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
+          >
+            {m.tuningEditor_revert()}
+          </button>
+          <button
+            type="button"
+            onclick={save}
+            disabled={saving}
+            class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors disabled:opacity-40"
+          >
+            {saving ? m.services_ports_applying() : m.common_save()}
+          </button>
+        {/if}
+      </div>
+    </div>
+  </div>
+
+  <div class="flex-1 overflow-y-auto p-3 sm:p-5 space-y-5">
     <div class="space-y-2">
       <div>
         <span class="text-sm font-medium text-gray-800 dark:text-gray-200">
@@ -199,17 +256,4 @@
       <p class="text-xs text-red-500">{error}</p>
     {/if}
   </div>
-  {#snippet footer()}
-    <button
-      type="button"
-      onclick={onclose}
-      class="text-xs px-3 py-1.5 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
-    >{m.common_cancel()}</button>
-    <button
-      type="button"
-      onclick={save}
-      disabled={saving}
-      class="text-xs px-3 py-1.5 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-    >{saving ? m.services_ports_applying() : m.common_save()}</button>
-  {/snippet}
-</Modal>
+</div>
