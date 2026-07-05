@@ -38,12 +38,26 @@ func sitesWithTLD(oldTLD string) []string {
 	return names
 }
 
+// projectWantsHTTPS reports whether the site's committed .lerd.yaml records
+// HTTPS intent. It is the record the DNS re-enable migration restores from; a
+// missing or unreadable file means no intent, so the site stays plain HTTP.
+func projectWantsHTTPS(dir string) bool {
+	cfg, err := config.LoadProjectConfig(dir)
+	if err != nil || cfg == nil {
+		return false
+	}
+	return cfg.Secured
+}
+
 // migrateSiteTLD rewrites every site's domain suffix from oldTLD to newTLD,
 // removes stale nginx vhost confs at the previous primary-domain paths, and
 // updates each site's .env APP_URL (plus Vite/Reverb keys) via
 // envfile.SyncPrimaryDomain. When forceUnsecure is true (DNS being disabled,
-// so HTTPS is unavailable) the site's Secured flag is also flipped off so the
-// regen pass writes plain HTTP vhosts.
+// so HTTPS is unavailable) the site's registry Secured flag is flipped off so
+// the regen pass writes plain HTTP vhosts, but the project's committed HTTPS
+// intent in .lerd.yaml is left intact. When forceUnsecure is false (DNS being
+// enabled) each site's Secured flag is restored from that intent, so a
+// disable/enable round trip returns previously secured sites to https.
 //
 // Returns the list of sites that were actually mutated. Errors on individual
 // sites are printed but do not stop the migration: a partial rename is still
@@ -82,8 +96,12 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 		worktrees, _ := gitpkg.DetectWorktrees(s.Path, oldPrimary)
 
 		s.Domains = newDomains
+		// Registry flag off while DNS is down; on re-enable restore HTTPS from
+		// the committed .lerd.yaml intent so the round trip is lossless.
 		if forceUnsecure {
 			s.Secured = false
+		} else {
+			s.Secured = projectWantsHTTPS(s.Path)
 		}
 		if err := config.AddSite(s); err != nil {
 			fmt.Printf("    WARN: %s: persist domains: %v\n", s.Name, err)
@@ -132,7 +150,6 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 		if err := envfile.SyncPrimaryDomain(s.Path, newPrimary, s.Secured); err != nil {
 			fmt.Printf("    WARN: %s: update .env: %v\n", s.Name, err)
 		}
-		_ = config.SetProjectSecured(s.Path, s.Secured)
 		_ = config.SyncProjectDomains(s.Path, s.Domains, newTLD)
 
 		feedback.Note(fmt.Sprintf("%s: %s → %s://%s", s.Name, oldPrimary, scheme, newPrimary))

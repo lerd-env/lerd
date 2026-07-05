@@ -56,6 +56,8 @@ The DNS question is asked once, at your first `lerd install`, and then remembere
 - git-worktree vhosts and per-worktree `.env` files
 - stale primary vhost confs and (when disabling) the previous TLS cert and key
 
+The round trip is lossless for HTTPS. Disabling flips a site to plain `http` because there is no trusted CA on `*.localhost`, but the project's committed HTTPS intent in `.lerd.yaml` is left untouched. Re-enabling reads that intent back and re-secures every site that wanted HTTPS, reissuing the cert and syncing `.env` back to `https://`, so a site served over HTTPS before a `dns:disable` comes back to HTTPS on `dns:enable`. Sites you deliberately kept on plain HTTP stay that way.
+
 The lerd-dns service itself is torn down on the disable transition, `systemctl stop` plus quadlet remove on Linux, `launchctl bootout` plus plist remove on macOS. NetworkManager / `/etc/resolver` entries from the previous run are left in place because removing them needs sudo and they are inert when dnsmasq is no longer running. Run `lerd-cleanup` (macOS) or remove the dropins manually if you want a fully clean system. Running `dns:enable` while DNS is already on simply repairs the setup, the same as `dns:repair`.
 
 Custom TLDs (anything other than `test` or `localhost`) are preserved across toggles, lerd only flips the canonical defaults.

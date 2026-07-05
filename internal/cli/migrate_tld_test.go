@@ -50,6 +50,10 @@ func TestMigrateSiteTLD_RewritesDomainsAndEnv(t *testing.T) {
 	if err := os.WriteFile(envPath, []byte("APP_URL=http://alpha.test\n"), 0644); err != nil {
 		t.Fatalf("write .env: %v", err)
 	}
+	// The project committed HTTPS intent; disabling DNS must leave it intact.
+	if err := config.SaveProjectConfig(siteDir, &config.ProjectConfig{Secured: true}); err != nil {
+		t.Fatalf("save .lerd.yaml: %v", err)
+	}
 
 	staleVhost := filepath.Join(config.NginxConfD(), "alpha.test.conf")
 	if err := os.WriteFile(staleVhost, []byte("server {}\n"), 0644); err != nil {
@@ -91,6 +95,14 @@ func TestMigrateSiteTLD_RewritesDomainsAndEnv(t *testing.T) {
 	}
 	if site.Secured {
 		t.Errorf("Secured should be false after forceUnsecure")
+	}
+
+	proj, err := config.LoadProjectConfig(siteDir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+	if !proj.Secured {
+		t.Errorf(".lerd.yaml secured intent should survive DNS disable; got false")
 	}
 
 	envBytes, _ := os.ReadFile(envPath)
@@ -246,6 +258,10 @@ echo "FAKE-KEY" > "$KEY"
 	if err := os.WriteFile(filepath.Join(checkout, ".env"), []byte("APP_URL=https://feat-x.alpha.test\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	// The enable path restores HTTPS from the committed .lerd.yaml intent.
+	if err := config.SaveProjectConfig(siteDir, &config.ProjectConfig{Secured: true}); err != nil {
+		t.Fatalf("save .lerd.yaml: %v", err)
+	}
 
 	if err := config.AddSite(config.Site{
 		Name:       "alpha",
@@ -292,6 +308,142 @@ echo "FAKE-KEY" > "$KEY"
 	}
 	if _, err := os.Stat(filepath.Join(certsDir, "alpha.test.key")); !os.IsNotExist(err) {
 		t.Errorf("old key should be removed after migration; stat err = %v", err)
+	}
+}
+
+// TestMigrateSiteTLD_DNSRoundTripRestoresHTTPS pins the fix for #749: disabling
+// then re-enabling DNS must be lossless. A site secured on .test falls back to
+// plain .localhost http on disable (registry flag off) but keeps its committed
+// HTTPS intent in .lerd.yaml; re-enabling reads that intent and re-secures the
+// site on .test, reissuing the cert and syncing the .env back to https.
+func TestMigrateSiteTLD_DNSRoundTripRestoresHTTPS(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fakeMkcert := `#!/bin/sh
+CRT=""
+KEY=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    -cert-file) shift; CRT="$1" ;;
+    -key-file) shift; KEY="$1" ;;
+  esac
+  shift
+done
+echo "CERT" > "$CRT"
+echo "KEY" > "$KEY"
+`
+	if err := os.WriteFile(filepath.Join(binDir, "mkcert"), []byte(fakeMkcert), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	siteDir := filepath.Join(tmp, "alpha")
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(siteDir, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_URL=https://alpha.test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveProjectConfig(siteDir, &config.ProjectConfig{Secured: true}); err != nil {
+		t.Fatalf("save .lerd.yaml: %v", err)
+	}
+	if err := config.AddSite(config.Site{
+		Name:       "alpha",
+		Path:       siteDir,
+		Domains:    []string{"alpha.test"},
+		PHPVersion: "8.4",
+		Secured:    true,
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	// Disable DNS: site falls back to plain-http .localhost.
+	if changed := migrateSiteTLD("test", "localhost", true); !slices.Equal(changed, []string{"alpha"}) {
+		t.Fatalf("disable changed = %v, want [alpha]", changed)
+	}
+	site, err := config.FindSite("alpha")
+	if err != nil {
+		t.Fatalf("FindSite after disable: %v", err)
+	}
+	if site.PrimaryDomain() != "alpha.localhost" || site.Secured {
+		t.Fatalf("after disable: domain=%q secured=%v, want alpha.localhost/false", site.PrimaryDomain(), site.Secured)
+	}
+	if envBytes, _ := os.ReadFile(envPath); !contains(envBytes, "APP_URL=http://alpha.localhost") {
+		t.Errorf("after disable .env = %q, want http://alpha.localhost", envBytes)
+	}
+	if proj, _ := config.LoadProjectConfig(siteDir); !proj.Secured {
+		t.Fatalf("after disable: .lerd.yaml secured intent lost")
+	}
+
+	// Re-enable DNS: site returns to .test and HTTPS is restored from intent.
+	if changed := migrateSiteTLD("localhost", "test", false); !slices.Equal(changed, []string{"alpha"}) {
+		t.Fatalf("enable changed = %v, want [alpha]", changed)
+	}
+	site, err = config.FindSite("alpha")
+	if err != nil {
+		t.Fatalf("FindSite after enable: %v", err)
+	}
+	if site.PrimaryDomain() != "alpha.test" || !site.Secured {
+		t.Fatalf("after enable: domain=%q secured=%v, want alpha.test/true", site.PrimaryDomain(), site.Secured)
+	}
+	if envBytes, _ := os.ReadFile(envPath); !contains(envBytes, "APP_URL=https://alpha.test") {
+		t.Errorf("after enable .env = %q, want https://alpha.test", envBytes)
+	}
+	certPath := filepath.Join(config.CertsDir(), "sites", "alpha.test.crt")
+	if _, err := os.Stat(certPath); err != nil {
+		t.Errorf("expected reissued cert at %s: %v", certPath, err)
+	}
+}
+
+// TestMigrateSiteTLD_EnableLeavesPlainSiteHTTP confirms a site the user
+// intentionally kept on plain http (no .lerd.yaml secured intent) is not
+// promoted to HTTPS when DNS is enabled.
+func TestMigrateSiteTLD_EnableLeavesPlainSiteHTTP(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	siteDir := filepath.Join(tmp, "beta")
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	envPath := filepath.Join(siteDir, ".env")
+	if err := os.WriteFile(envPath, []byte("APP_URL=http://beta.localhost\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveProjectConfig(siteDir, &config.ProjectConfig{Secured: false}); err != nil {
+		t.Fatalf("save .lerd.yaml: %v", err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "beta", Path: siteDir, Domains: []string{"beta.localhost"}, PHPVersion: "8.4",
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	if changed := migrateSiteTLD("localhost", "test", false); !slices.Equal(changed, []string{"beta"}) {
+		t.Fatalf("changed = %v, want [beta]", changed)
+	}
+	site, err := config.FindSite("beta")
+	if err != nil {
+		t.Fatalf("FindSite: %v", err)
+	}
+	if site.Secured {
+		t.Errorf("plain-http site should stay unsecured after DNS enable")
+	}
+	if envBytes, _ := os.ReadFile(envPath); !contains(envBytes, "APP_URL=http://beta.test") {
+		t.Errorf(".env = %q, want http://beta.test", envBytes)
 	}
 }
 
