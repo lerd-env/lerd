@@ -136,7 +136,7 @@ brews:
       - lerd-darwin-amd64
       - lerd-darwin-arm64
     repository:
-      owner: geodro
+      owner: lerd-env
       name: homebrew-lerd
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
     homepage: "https://lerd.sh"
@@ -185,7 +185,7 @@ changelog:
 
 release:
   github:
-    owner: geodro
+    owner: lerd-env
     name: lerd
   name_template: "v{{ .Version }}"
   draft: false
@@ -211,7 +211,7 @@ release:
     ### Install on macOS
 
     ```bash
-    brew tap geodro/lerd
+    brew tap lerd-env/lerd
     brew install lerd
     lerd install
     ```
@@ -223,4 +223,4 @@ release:
     lerd install
     ```
   footer: |
-    **Full Changelog**: https://github.com/geodro/lerd/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full Changelog**: https://github.com/lerd-env/lerd/compare/{{ .PreviousTag }}...{{ .Tag }}

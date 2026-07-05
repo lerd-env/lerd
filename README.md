@@ -4,8 +4,8 @@
 > with Windows supported via WSL2 (beta). Podman-native, rootless, with a
 > built-in Web UI.
 
-[![CI](https://github.com/geodro/lerd/actions/workflows/ci.yml/badge.svg)](https://github.com/geodro/lerd/actions/workflows/ci.yml)
-[![Release](https://img.shields.io/github/v/release/geodro/lerd)](https://github.com/geodro/lerd/releases)
+[![CI](https://github.com/lerd-env/lerd/actions/workflows/ci.yml/badge.svg)](https://github.com/lerd-env/lerd/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/lerd-env/lerd)](https://github.com/lerd-env/lerd/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WSL2%20(beta)-lightgrey)]()
 [![Docs](https://img.shields.io/badge/docs-lerd.sh-blue)](https://lerd.sh)
@@ -120,11 +120,11 @@ The installer needs the `podman` CLI; it will offer to `brew install podman` if 
 <summary>Install via Homebrew instead</summary>
 
 ```bash
-brew install geodro/lerd/lerd
+brew install lerd-env/lerd/lerd
 lerd install
 ```
 
-Recent Homebrew versions block third-party taps until trusted, so you may need to run `brew trust geodro/lerd` first. Update later with `brew upgrade lerd && lerd install`.
+Recent Homebrew versions block third-party taps until trusted, so you may need to run `brew trust lerd-env/lerd` first. Update later with `brew upgrade lerd && lerd install`.
 
 </details>
 
@@ -163,7 +163,7 @@ See [Start, Stop & Autostart](https://lerd.sh/usage/lifecycle) for the full life
 
 ## Framework Store
 
-Install community framework definitions from [geodro/lerd-frameworks](https://github.com/geodro/lerd-frameworks):
+Install community framework definitions from [lerd-env/frameworks](https://github.com/lerd-env/frameworks):
 
 ```bash
 lerd framework search                   # list all available

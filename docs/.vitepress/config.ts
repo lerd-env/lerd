@@ -290,7 +290,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/geodro/lerd' },
+      { icon: 'github', link: 'https://github.com/lerd-env/lerd' },
       { icon: 'discord', link: 'https://discord.gg/ej33c5N9s' },
       {
         icon: {
@@ -310,7 +310,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/geodro/lerd/edit/main/docs/:path',
+      pattern: 'https://github.com/lerd-env/lerd/edit/main/docs/:path',
       text: 'Edit this page on GitHub',
     },
   },

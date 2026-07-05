@@ -81,7 +81,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Force rebuild requested, skipping existence check."
           else
-            IMG="ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
+            IMG="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
             if docker manifest inspect "$IMG" > /dev/null 2>&1; then
               echo "exists=true" >> "$GITHUB_OUTPUT"
               echo "Image already exists, skipping build."
@@ -103,14 +103,14 @@ jobs:
           push: true
           pull: ${{ inputs.force_rebuild == 'true' }}
           platforms: linux/${{ matrix.arch.name }}
-          tags: ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}
+          tags: ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}
           cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}
           cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}
 
       - name: Smoke-test built image
         if: steps.check.outputs.exists != 'true'
         run: |
-          IMG="ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
+          IMG="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
           docker pull "$IMG" >/dev/null
           MODULES=$(docker run --rm "$IMG" php -m 2>&1 | grep -v '^\[' | sort -u)
           COUNT=$(echo "$MODULES" | grep -c .)
@@ -183,7 +183,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "Force rebuild requested, recreating manifest."
           else
-            IMG="ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}"
+            IMG="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}"
             if docker manifest inspect "$IMG" > /dev/null 2>&1; then
               echo "exists=true" >> "$GITHUB_OUTPUT"
               echo "Manifest already exists, skipping."
@@ -195,7 +195,7 @@ jobs:
       - name: Create and push multi-arch manifest
         if: steps.check.outputs.exists != 'true'
         run: |
-          BASE="ghcr.io/geodro/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base"
+          BASE="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base"
           TAG="${{ steps.tag.outputs.tag }}"
           docker buildx imagetools create \
             --tag "${BASE}:${TAG}" \

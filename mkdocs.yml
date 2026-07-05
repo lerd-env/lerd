@@ -1,8 +1,8 @@
 site_name: Lerd
 site_description: Lerd is an open-source, Herd-like local PHP development environment for Linux. Automatic .test domains, PHP 8.2–8.4, rootless Podman. Works on Ubuntu, Fedora, Arch, and Debian. No Docker required.
-site_url: https://geodro.github.io/lerd/
-repo_url: https://github.com/geodro/lerd
-repo_name: geodro/lerd
+site_url: https://lerd.sh/
+repo_url: https://github.com/lerd-env/lerd
+repo_name: lerd-env/lerd
 edit_uri: edit/main/docs/
 
 docs_dir: docs
@@ -119,6 +119,6 @@ nav:
 extra:
   social:
     - icon: fontawesome/brands/github
-      link: https://github.com/geodro/lerd
+      link: https://github.com/lerd-env/lerd
 
 copyright: "Lerd — MIT License"

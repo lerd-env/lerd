@@ -11,7 +11,7 @@ set -euo pipefail
 # ── Constants ────────────────────────────────────────────────────────────────
 # REPO is the GitHub owner/name release assets are fetched from; override with
 # LERD_REPO so a future org move needs no installer change.
-REPO="${LERD_REPO:-geodro/lerd}"
+REPO="${LERD_REPO:-lerd-env/lerd}"
 BINARY="lerd"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"

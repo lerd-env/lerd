@@ -254,7 +254,7 @@ teardown() {
   # Mock curl -fsSLI to return headers containing a Location pointing to the tag
   function curl() {
     echo "HTTP/2 302"
-    echo "location: https://github.com/geodro/lerd/releases/tag/v2.0.0"
+    echo "location: https://github.com/lerd-env/lerd/releases/tag/v2.0.0"
     echo ""
   }
   export -f curl

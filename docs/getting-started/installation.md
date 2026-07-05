@@ -21,7 +21,7 @@ wget -qO- https://lerd.sh/install.sh | bash
 ```
 
 ```bash [From source]
-git clone https://github.com/geodro/lerd
+git clone https://github.com/lerd-env/lerd
 cd lerd
 make build
 make install            # installs to ~/.local/bin/lerd
@@ -157,14 +157,14 @@ The installer itself doesn't require Homebrew. It's used only to install the `po
 ### Install via Homebrew (alternative)
 
 ```bash
-brew install geodro/lerd/lerd
+brew install lerd-env/lerd/lerd
 lerd install
 ```
 
 Podman is installed automatically as a Homebrew dependency.
 
 ::: warning Untrusted tap
-Recent Homebrew versions refuse to load formulae from third-party taps until they're trusted. If you see `Refusing to load formula ... from untrusted tap`, run `brew trust geodro/lerd` once, then retry.
+Recent Homebrew versions refuse to load formulae from third-party taps until they're trusted. If you see `Refusing to load formula ... from untrusted tap`, run `brew trust lerd-env/lerd` once, then retry.
 :::
 
 ### Update
