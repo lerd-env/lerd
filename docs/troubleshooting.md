@@ -11,7 +11,7 @@ lerd status   # quick health snapshot of all running services
 
 ## Filing a bug report
 
-If you need help on the [issue tracker](https://github.com/geodro/lerd/issues), run:
+If you need help on the [issue tracker](https://github.com/lerd-env/lerd/issues), run:
 
 ```bash
 lerd bug-report
