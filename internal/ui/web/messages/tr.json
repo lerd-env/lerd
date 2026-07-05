@@ -1001,6 +1001,7 @@
   "tinker_lspConnecting": "Dil sunucusu başlatılıyor…",
   "tinker_lspUnavailable": "Dil sunucusu kullanılamıyor",
   "services_tabs_tools": "Tools",
+  "services_tabs_ports": "Ports",
   "services_tools_title": "Client tools on your PATH",
   "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
   "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",

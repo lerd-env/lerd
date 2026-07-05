@@ -5,7 +5,6 @@
   import ServiceDependencies from './ServiceDependencies.svelte';
   import ServiceDeleteModal from './ServiceDeleteModal.svelte';
   import ServiceReinstallModal from './ServiceReinstallModal.svelte';
-  import ServicePortsModal from './ServicePortsModal.svelte';
   import {
     type Service,
     services as allServices,
@@ -90,7 +89,6 @@
   let localBusy = $state(false);
   let deleteOpen = $state(false);
   let reinstallOpen = $state(false);
-  let portsOpen = $state(false);
   let checking = $state(false);
   let checkMessage = $state<{ text: string; tone: 'ok' | 'info' | 'error' } | null>(null);
   let checkMessageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -467,8 +465,6 @@
         checkUpdates: checkUpdatesIcon
       })}
       {busy}
-      onSettings={isWorker ? undefined : () => (portsOpen = true)}
-      settingsTitle={m.services_ports_settingsTitle()}
     />
     {#if updating}
       <span
@@ -507,5 +503,3 @@
   onclose={() => (reinstallOpen = false)}
   onconfirm={confirmReinstall}
 />
-
-<ServicePortsModal open={portsOpen} {svc} onclose={() => (portsOpen = false)} />
