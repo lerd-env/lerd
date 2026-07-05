@@ -45,6 +45,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/shims"
 	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
@@ -1078,6 +1079,10 @@ type ServiceResponse struct {
 	MigrationSupported bool           `json:"migration_supported"`
 	CanRollback        bool           `json:"can_rollback"`
 	PortConflicts      []PortConflict `json:"port_conflicts,omitempty"`
+	// ClientShims are the client tools this service exposes as host shims
+	// (mysqldump, pg_dump…), each with whether the host already has the tool and
+	// the user's current decision. The service card renders a toggle per tool.
+	ClientShims []shims.Info `json:"client_shims,omitempty"`
 }
 
 // PortConflict reports a host port lerd wants to bind that is already taken
@@ -1138,45 +1143,102 @@ func loadServicesMap() map[string]config.ServiceConfig {
 }
 
 func buildServiceResponse(name string) ServiceResponse {
-	return buildServiceResponseWithPortList(loadServicesMap(), name, "")
+	return buildServiceResponseWithPortList(loadServicesMap(), name, "", nil)
 }
 
-func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string) ServiceResponse {
+// buildServiceResponseWithPortList is the single builder for a service's UI
+// response, covering both built-in default presets and custom/add-on services.
+// The definition source differs (bundled preset helpers vs the stored YAML), so
+// it is resolved once up front; every response field is then set in this one
+// place. Do not add a second builder for a service kind — a field set here must
+// never be silently missing for the other kind (that is exactly how client_shims
+// went missing for add-ons).
+// custom is the already-loaded definition for an add-on service (passed by the
+// list rebuild so it is not re-read and an error cannot blank the card); pass
+// nil for a default preset or to have it loaded by name.
+func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status == "" {
 		status = "inactive"
 	}
 
-	envMap := map[string]string{}
-	for _, kv := range config.DefaultPresetEnvVars(name) {
-		parts := strings.SplitN(kv, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
+	// Resolve the definition source once: a default preset reads from the
+	// bundled preset helpers, a custom/add-on service from its stored YAML.
+	isDefault := config.IsDefaultPreset(name)
+	if !isDefault && custom == nil {
+		custom, _ = config.LoadCustomService(name)
+	}
+
+	var (
+		envKVs       []string
+		presetPorts  []string
+		dashboardRaw string
+		dashExternal bool
+		connURL      string
+		dependsOn    []string
+	)
+	switch {
+	case isDefault:
+		envKVs = config.DefaultPresetEnvVars(name)
+		presetPorts = config.PresetPorts(name)
+		dashboardRaw = config.DefaultPresetDashboard(name)
+		connURL = config.DefaultPresetConnectionURL(name)
+	case custom != nil:
+		envKVs = custom.EnvVars
+		presetPorts = custom.Ports
+		dashboardRaw = custom.Dashboard
+		dashExternal = custom.DashboardExternal
+		connURL = custom.ConnectionURL
+		dependsOn = custom.DependsOn
+		// Bundled dashboards that asked to open externally (cross-origin cookie
+		// trouble) are proxied same-origin under /_svc/<name>/ so they embed in
+		// the iframe overlay; user custom services keep the new tab.
+		if dashProxyEligible(custom) {
+			dashboardRaw, dashExternal = dashProxyPath(name), false
 		}
 	}
 
-	presetPorts := config.PresetPorts(name)
+	handle := "lerd-" + name
+	envMap := map[string]string{}
+	for _, kv := range envKVs {
+		parts := strings.SplitN(kv, "=", 2)
+		if len(parts) == 2 {
+			v := strings.ReplaceAll(parts[1], "{{site}}", handle)
+			v = strings.ReplaceAll(v, "{{site_testing}}", handle+"_testing")
+			envMap[parts[0]] = v
+		}
+	}
+
 	hostPort := effectiveHostPort(services, name, presetPorts)
 	defaultPort := podman.PrimaryHostPort(presetPorts)
 	if sc, ok := services[name]; ok && sc.Port > 0 {
 		defaultPort = sc.Port
 	}
+	// Prefer the installed quadlet's image; fall back to the stored definition so
+	// a custom service whose quadlet is momentarily absent keeps its version.
+	image := podman.InstalledImage(unit)
+	if image == "" && custom != nil {
+		image = custom.Image
+	}
 	resp := ServiceResponse{
-		Name:          name,
-		Status:        status,
-		Version:       podman.ServiceVersionLabel(podman.InstalledImage(unit)),
-		EnvVars:       envMap,
-		Dashboard:     serviceops.WithDashboardPort(config.DefaultPresetDashboard(name), presetPorts, services[name]),
-		ConnectionURL: serviceops.WithURLPort(config.DefaultPresetConnectionURL(name), hostPort),
-		Port:          hostPort,
-		SiteCount:     countSitesUsingService(name),
-		SiteDomains:   sitesUsingService(name),
-		Pinned:        config.ServiceIsPinned(name),
-		Paused:        config.ServiceIsPaused(name),
-		IsDefault:     config.IsDefaultPreset(name),
-		PresetOwned:   config.PresetExists(name),
-		DefaultPort:   defaultPort,
+		Name:              name,
+		Status:            status,
+		Version:           podman.ServiceVersionLabel(image),
+		EnvVars:           envMap,
+		Dashboard:         serviceops.WithDashboardPort(dashboardRaw, presetPorts, services[name]),
+		DashboardExternal: dashExternal,
+		ConnectionURL:     serviceops.WithURLPort(connURL, hostPort),
+		Port:              hostPort,
+		SiteCount:         countSitesUsingService(name),
+		SiteDomains:       sitesUsingService(name),
+		Pinned:            config.ServiceIsPinned(name),
+		Paused:            config.ServiceIsPaused(name),
+		IsDefault:         isDefault,
+		Custom:            custom != nil,
+		PresetOwned:       config.PresetExists(name),
+		DefaultPort:       defaultPort,
+		DependsOn:         dependsOn,
 	}
 	resp.SecondaryPorts = secondaryPortMappings(presetPorts, services[name])
 	if sc, ok := services[name]; ok {
@@ -1197,6 +1259,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 				resp.Tunable = true
 			}
 		}
+		resp.ClientShims = shims.ServiceShims(name)
 	}
 	// Default-preset services advertise update availability so the dashboard
 	// can show an "→ v8.4.3" badge. Stopped services also run the check so the
@@ -1267,65 +1330,14 @@ func buildServicesList() []ServiceResponse {
 	defaultNames := siteinfo.KnownServices()
 	services := make([]ServiceResponse, 0, len(defaultNames))
 	for _, name := range defaultNames {
-		services = append(services, buildServiceResponseWithPortList(svcCfg, name, ssOutput))
+		services = append(services, buildServiceResponseWithPortList(svcCfg, name, ssOutput, nil))
 	}
+	// Optional presets (gotenberg, mongo, …) and user services materialise as
+	// custom services; they go through the SAME builder as the default presets
+	// so every field is populated identically for both kinds.
 	customs, _ := config.ListCustomServices()
 	for _, svc := range customs {
-		unit := "lerd-" + svc.Name
-		status, _ := podman.UnitStatus(unit)
-		if status == "" {
-			status = "inactive"
-		}
-		displayHandle := "lerd-" + svc.Name
-		envMap := map[string]string{}
-		for _, kv := range svc.EnvVars {
-			parts := strings.SplitN(kv, "=", 2)
-			if len(parts) == 2 {
-				v := strings.ReplaceAll(parts[1], "{{site}}", displayHandle)
-				v = strings.ReplaceAll(v, "{{site_testing}}", displayHandle+"_testing")
-				envMap[parts[0]] = v
-			}
-		}
-		var conflicts []PortConflict
-		if status != "active" {
-			conflicts = portConflictsFor(unit, ssOutput)
-		}
-		_, tunable := config.ServiceTuningMount(svc)
-		// Bundled dashboards that asked to open externally (cross-origin cookie
-		// trouble) are instead proxied same-origin under /_svc/<name>/ so they
-		// embed in the iframe overlay; user custom services keep the new tab.
-		dashboard, dashboardExternal := svc.Dashboard, svc.DashboardExternal
-		if dashProxyEligible(svc) {
-			dashboard, dashboardExternal = dashProxyPath(svc.Name), false
-		}
-		hostPort := effectiveHostPort(svcCfg, svc.Name, svc.Ports)
-		// Optional presets (gotenberg, mongo, …) materialise as custom services, so
-		// they land here rather than in the default-preset loop. Surface the same
-		// port fields the ports modal needs: preset ownership drives the extra-ports
-		// affordance, and the declared default host port drives the autofill.
-		services = append(services, ServiceResponse{
-			Name:              svc.Name,
-			Status:            status,
-			Version:           podman.ServiceVersionLabel(svc.Image),
-			EnvVars:           envMap,
-			Dashboard:         serviceops.WithDashboardPort(dashboard, svc.Ports, svcCfg[svc.Name]),
-			DashboardExternal: dashboardExternal,
-			ConnectionURL:     serviceops.WithURLPort(svc.ConnectionURL, hostPort),
-			Port:              hostPort,
-			Custom:            true,
-			PresetOwned:       config.PresetExists(svc.Name),
-			DefaultPort:       podman.PrimaryHostPort(svc.Ports),
-			PublishedPort:     config.ServicePublishedPort(svc.Name),
-			ExtraPorts:        config.ServiceExtraPorts(svc.Name),
-			SecondaryPorts:    secondaryPortMappings(svc.Ports, svcCfg[svc.Name]),
-			Tunable:           tunable,
-			SiteCount:         countSitesUsingService(svc.Name),
-			SiteDomains:       sitesUsingService(svc.Name),
-			Pinned:            config.ServiceIsPinned(svc.Name),
-			Paused:            config.ServiceIsPaused(svc.Name),
-			DependsOn:         svc.DependsOn,
-			PortConflicts:     conflicts,
-		})
+		services = append(services, buildServiceResponseWithPortList(svcCfg, svc.Name, ssOutput, svc))
 	}
 	for _, siteName := range listActiveQueueWorkers() {
 		services = append(services, ServiceResponse{
@@ -2037,6 +2049,11 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if action == "shims" && r.Method == http.MethodPost {
+		handleServiceShims(w, r, name)
+		return
+	}
+
 	if action == "update" && r.Method == http.MethodPost {
 		targetTag := r.URL.Query().Get("tag")
 		var targetImage string
@@ -2447,6 +2464,43 @@ func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 			_ = serviceops.RestorePublishedPorts(name, snapshot)
 		}
 		fail(err)
+		return
+	}
+	writeJSON(w, ServiceActionResponse{
+		ServiceResponse: buildServiceResponse(name),
+		OK:              true,
+	})
+}
+
+// handleServiceShims records the user's decision for one client-tool shim and
+// reconciles the shim dir so it takes effect immediately. Mirrors the ports
+// handler's request/response shape so the frontend refreshes off the returned
+// service state.
+func handleServiceShims(w http.ResponseWriter, r *http.Request, name string) {
+	var body struct {
+		Tool    string `json:"tool"`
+		Enabled bool   `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Tool == "" {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	// A shared same-family tool is managed only from its owning service, so a
+	// toggle from a non-owner is rejected (its toggle is disabled in the UI).
+	if owner := shims.ToolOwner(body.Tool); owner != "" && owner != name {
+		writeJSON(w, ServiceActionResponse{
+			ServiceResponse: buildServiceResponse(name),
+			OK:              false,
+			Error:           fmt.Sprintf("%s is provided by %s; manage it there", body.Tool, owner),
+		})
+		return
+	}
+	if err := shims.Set(body.Tool, body.Enabled); err != nil {
+		writeJSON(w, ServiceActionResponse{
+			ServiceResponse: buildServiceResponse(name),
+			OK:              false,
+			Error:           err.Error(),
+		})
 		return
 	}
 	writeJSON(w, ServiceActionResponse{

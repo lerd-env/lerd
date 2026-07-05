@@ -73,6 +73,17 @@
             </svg>
           </span>
         {/if}
+        {#if svc.client_shims && svc.client_shims.some((s) => s.enabled)}
+          <span
+            class="shrink-0 text-gray-400 dark:text-gray-500"
+            title={m.services_shimsInstalled() + ': ' + svc.client_shims.filter((s) => s.enabled).map((s) => s.tool).join(', ')}
+          >
+            <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 17 10 11 4 5"/>
+              <line x1="12" y1="19" x2="20" y2="19"/>
+            </svg>
+          </span>
+        {/if}
         {#if svc.site_count > 0}
           <span class="text-[10px] font-medium tabular-nums shrink-0 {selected === svc.name ? 'text-lerd-red/70' : 'text-gray-400 dark:text-gray-600'}">{svc.site_count}</span>
         {/if}

@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/shims"
 	"github.com/spf13/cobra"
 )
 
@@ -814,6 +815,11 @@ func reconcileCustomServices() {
 	res, err := serviceops.ReconcileServices(nil)
 	if err != nil {
 		feedback.Warn("reconciling services: %v", err)
+	}
+	// A refreshed definition may add client tools (client_shims), so bring the
+	// shim dir in line non-interactively.
+	if len(res.DefinitionsRefreshed) > 0 {
+		_ = shims.Reconcile(nil)
 	}
 	for _, name := range res.QuadletsRegenerated {
 		feedback.Warn("regenerated missing unit for %s from its config", name)

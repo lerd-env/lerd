@@ -6,6 +6,7 @@
   import ServiceSiteBadges from './ServiceSiteBadges.svelte';
   import ServiceEnvTab from './ServiceEnvTab.svelte';
   import ServiceTuningTab from './ServiceTuningTab.svelte';
+  import ServiceToolsTab from './ServiceToolsTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import type { Service } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
@@ -15,14 +16,16 @@
   }
   let { svc }: Props = $props();
 
-  type TabId = 'logs' | 'env' | 'config';
+  type TabId = 'logs' | 'env' | 'config' | 'tools';
   let active = $state<TabId>('logs');
 
   const hasEnv = $derived(Boolean(svc.env_vars && Object.keys(svc.env_vars).length > 0));
+  const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
   const tabs = $derived<TabItem<TabId>[]>([
     { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
-    { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable }
+    { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable },
+    { id: 'tools', label: m.services_tabs_tools(), hidden: !hasTools }
   ]);
 
   // Fall back to logs when the active tab is hidden for the selected service
@@ -30,6 +33,7 @@
   $effect(() => {
     if (active === 'env' && !hasEnv) active = 'logs';
     if (active === 'config' && !svc.tunable) active = 'logs';
+    if (active === 'tools' && !hasTools) active = 'logs';
   });
 
   const logPath = $derived.by(() => {
@@ -67,5 +71,7 @@
     <ServiceEnvTab {svc} />
   {:else if active === 'config'}
     <ServiceTuningTab {svc} />
+  {:else if active === 'tools'}
+    <ServiceToolsTab {svc} />
   {/if}
 </DetailPanel>

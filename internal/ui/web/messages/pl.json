@@ -999,5 +999,21 @@
   "services_cat_other": "Inne",
   "services_cat_messaging": "Komunikaty",
   "tinker_lspConnecting": "Uruchamianie serwera języka…",
-  "tinker_lspUnavailable": "Serwer języka niedostępny"
+  "tinker_lspUnavailable": "Serwer języka niedostępny",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Przejrzyj klucze",
+  "envEditor_proposeModalTitle": "Dodaj brakujące klucze środowiskowe",
+  "envEditor_proposeModalBody": "Wybierz, które klucze dodać do {file}. Wartości są kopiowane z .env.example, więc sprawdź je i wprowadź prawdziwe po dodaniu.",
+  "envEditor_proposeRequiredHeading": "Wymagane",
+  "envEditor_proposeOptionalHeading": "Opcjonalne",
+  "envEditor_proposeSelectAll": "Zaznacz wszystko",
+  "envEditor_proposeSelectNone": "Wyczyść",
+  "envEditor_proposeAddSelected": "Dodaj {n}",
+  "envEditor_proposeAddNone": "Dodaj zaznaczone",
+  "services_shimsInstalled": "Narzędzia klienta w Twoim PATH",
+  "services_tools_providedBy": "Dostarczane przez {service}"
 }

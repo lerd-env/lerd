@@ -999,5 +999,21 @@
   "services_cat_other": "Autres",
   "services_cat_messaging": "Messagerie",
   "tinker_lspConnecting": "Démarrage du serveur de langage…",
-  "tinker_lspUnavailable": "Serveur de langage indisponible"
+  "tinker_lspUnavailable": "Serveur de langage indisponible",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Vérifier les clés",
+  "envEditor_proposeModalTitle": "Ajouter les clés d’environnement manquantes",
+  "envEditor_proposeModalBody": "Choisissez les clés à ajouter à {file}. Les valeurs sont copiées depuis .env.example, vérifiez-les et renseignez les vraies après l’ajout.",
+  "envEditor_proposeRequiredHeading": "Requises",
+  "envEditor_proposeOptionalHeading": "Facultatives",
+  "envEditor_proposeSelectAll": "Tout sélectionner",
+  "envEditor_proposeSelectNone": "Effacer",
+  "envEditor_proposeAddSelected": "Ajouter {n}",
+  "envEditor_proposeAddNone": "Ajouter la sélection",
+  "services_shimsInstalled": "Outils client sur votre PATH",
+  "services_tools_providedBy": "Fourni par {service}"
 }

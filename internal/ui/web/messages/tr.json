@@ -999,5 +999,21 @@
   "services_cat_other": "Diğer",
   "services_cat_messaging": "Mesajlaşma",
   "tinker_lspConnecting": "Dil sunucusu başlatılıyor…",
-  "tinker_lspUnavailable": "Dil sunucusu kullanılamıyor"
+  "tinker_lspUnavailable": "Dil sunucusu kullanılamıyor",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Anahtarları gözden geçir",
+  "envEditor_proposeModalTitle": "Eksik ortam anahtarlarını ekle",
+  "envEditor_proposeModalBody": "{file} dosyasına eklenecek anahtarları seçin. Değerler .env.example dosyasından kopyalanır, bu yüzden bunları gözden geçirin ve ekledikten sonra gerçek değerleri girin.",
+  "envEditor_proposeRequiredHeading": "Zorunlu",
+  "envEditor_proposeOptionalHeading": "İsteğe bağlı",
+  "envEditor_proposeSelectAll": "Tümünü seç",
+  "envEditor_proposeSelectNone": "Temizle",
+  "envEditor_proposeAddSelected": "{n} ekle",
+  "envEditor_proposeAddNone": "Seçilenleri ekle",
+  "services_shimsInstalled": "PATH’inizdeki istemci araçları",
+  "services_tools_providedBy": "{service} tarafından sağlanıyor"
 }

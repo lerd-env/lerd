@@ -3,9 +3,11 @@ package serviceops
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"gopkg.in/yaml.v3"
 )
 
 // Seams so tests can drive reconcile without real podman/quadlet work.
@@ -20,6 +22,7 @@ type ReconcileResult struct {
 	QuadletsRegenerated   []string // YAML present, unit was missing and regenerated
 	OrphansRemoved        []string // service quadlet with no YAML, removed
 	RunningOrphansSkipped []string // orphan left in place because its container is up
+	DefinitionsRefreshed  []string // preset-backed YAML re-materialised from the store
 }
 
 // ReconcileServices enforces the issue #678 invariant: regenerate a missing
@@ -40,22 +43,34 @@ func ReconcileServices(emit func(PhaseEvent)) (ReconcileResult, error) {
 		return res, fmt.Errorf("listing custom services: %w", err)
 	}
 	for _, svc := range customs {
-		// Backfill: an add-on preset now lives in the store, not the binary. A
-		// service installed by an older (add-on-embedding) lerd has no cached
-		// preset after upgrade, so its file mounts, family and dashboard would go
-		// missing. Fetch it once into the cache; best-effort, offline just defers
-		// it to the next reconcile. Guarded by PresetExists so it never re-fetches.
-		if svc.Preset != "" && !config.PresetExists(svc.Preset) {
-			_, _ = config.EnsurePreset(svc.Preset)
+		// Re-materialise declarative fields (client_shims, family, dashboard,
+		// env mappings…) from the store preset so a store change reaches an
+		// already-installed service, preserving install-time pins. EnsurePreset
+		// inside also backfills the cache for a service installed by an older
+		// lerd. Best-effort: offline or an unresolvable version leaves the
+		// snapshot untouched.
+		if refreshed, changed := refreshPresetDefinition(svc); changed {
+			if err := config.SaveCustomService(refreshed); err != nil {
+				errs = append(errs, fmt.Errorf("refreshing %s from preset: %w", svc.Name, err))
+			} else {
+				svc = refreshed
+				res.DefinitionsRefreshed = append(res.DefinitionsRefreshed, svc.Name)
+			}
 		}
-		if UnitInstalledFn("lerd-" + svc.Name) {
+		unitInstalled := UnitInstalledFn("lerd-" + svc.Name)
+		if unitInstalled && !slices.Contains(res.DefinitionsRefreshed, svc.Name) {
 			continue
 		}
+		// Regenerate the quadlet when the unit is missing, or when the definition
+		// changed. WriteQuadletDiff is a no-op when the content is identical, so a
+		// client_shims-only change (which never appears in the quadlet) is free.
 		if err := ensureQuadletFn(svc); err != nil {
 			errs = append(errs, fmt.Errorf("regenerating quadlet for %s: %w", svc.Name, err))
 			continue
 		}
-		res.QuadletsRegenerated = append(res.QuadletsRegenerated, svc.Name)
+		if !unitInstalled {
+			res.QuadletsRegenerated = append(res.QuadletsRegenerated, svc.Name)
+		}
 	}
 
 	// Backward: a service quadlet with no YAML is an orphan. Candidates are marked
@@ -80,6 +95,57 @@ func ReconcileServices(emit func(PhaseEvent)) (ReconcileResult, error) {
 		res.OrphansRemoved = append(res.OrphansRemoved, name)
 	}
 	return res, errors.Join(errs...)
+}
+
+// refreshPresetDefinition re-resolves a preset-backed service from the store
+// preset so declarative additions (client_shims, family, dashboard…) reach an
+// already-installed service, while preserving install-time pins: the running
+// image, rollback/migrate state, and identity. Returns the refreshed definition
+// and whether it changed. A non-preset service, an unresolvable preset, or a
+// removed version leaves the snapshot unchanged.
+func refreshPresetDefinition(svc *config.CustomService) (*config.CustomService, bool) {
+	if svc.Preset == "" {
+		return svc, false
+	}
+	preset, err := config.EnsurePreset(svc.Preset)
+	if err != nil {
+		return svc, false
+	}
+	// A canonical install carries the bare preset name; resolve it pinned so a
+	// later canonical-version flip in the store never renames it (which would
+	// rewrite its {{name}}-templated DB_HOST/connection_url to a container that
+	// does not exist). An alternate install keeps its version-suffixed name.
+	var fresh *config.CustomService
+	if svc.Name == preset.Name {
+		fresh, err = preset.ResolvePinned(svc.PresetVersion)
+	} else {
+		fresh, err = preset.Resolve(svc.PresetVersion)
+	}
+	if err != nil {
+		return svc, false
+	}
+	// Preserve install-time pins and state; everything else comes from the
+	// store. Image stays put so a passive reconcile never upgrades the running
+	// container, that remains an explicit `lerd service update`/`migrate`.
+	fresh.Image = svc.Image
+	fresh.PreviousImage = svc.PreviousImage
+	fresh.LastOp = svc.LastOp
+	fresh.PreMigrateBackup = svc.PreMigrateBackup
+	fresh.Name = svc.Name
+	fresh.Preset = svc.Preset
+	fresh.PresetVersion = svc.PresetVersion
+
+	if sameDefinition(fresh, svc) {
+		return svc, false
+	}
+	return fresh, true
+}
+
+// sameDefinition compares two service definitions by their serialised form.
+func sameDefinition(a, b *config.CustomService) bool {
+	ay, err1 := yaml.Marshal(a)
+	by, err2 := yaml.Marshal(b)
+	return err1 == nil && err2 == nil && string(ay) == string(by)
 }
 
 // orphanCandidates is the deduped set of service names worth checking for an

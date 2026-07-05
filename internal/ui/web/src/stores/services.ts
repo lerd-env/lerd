@@ -58,11 +58,24 @@ export interface Service {
   migration_supported?: boolean;
   can_rollback?: boolean;
   port_conflicts?: PortConflict[];
+  // Client tools this service exposes as host shims (mysqldump, pg_dump…), each
+  // with whether the host already has the tool and the user's current decision.
+  client_shims?: ClientShimInfo[];
 }
 
 export interface PortConflict {
   port: string;
   label?: string;
+}
+
+export interface ClientShimInfo {
+  tool: string;
+  // The service that actually backs the shim. When it differs from the service
+  // being viewed, this row is a same-family duplicate managed elsewhere.
+  owner?: string;
+  host_has: boolean;
+  enabled: boolean;
+  decided: boolean;
 }
 
 export interface PhaseEvent {
@@ -195,6 +208,27 @@ export async function setServicePorts(
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const res = await apiFetch('/api/services/' + encodeURIComponent(name) + '/ports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (res.ok && data.ok) {
+      await loadServices();
+      return { ok: true };
+    }
+    return { ok: false, error: data.error || 'failed' };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+
+export async function setServiceShim(
+  name: string,
+  body: { tool: string; enabled: boolean }
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/services/' + encodeURIComponent(name) + '/shims', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)

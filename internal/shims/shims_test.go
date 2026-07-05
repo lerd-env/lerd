@@ -1,0 +1,141 @@
+package shims
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/geodro/lerd/internal/config"
+)
+
+func TestScript(t *testing.T) {
+	got := script("/home/u/.local/bin/lerd", "mysqldump")
+	for _, want := range []string{"#!/bin/sh", marker, "client-exec mysqldump", "\"$@\""} {
+		if !strings.Contains(got, want) {
+			t.Errorf("script missing %q:\n%s", want, got)
+		}
+	}
+}
+
+func TestIsShimFile(t *testing.T) {
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "mysqldump")
+	_ = os.WriteFile(shim, []byte(script("lerd", "mysqldump")), 0755)
+	other := filepath.Join(dir, "realtool")
+	_ = os.WriteFile(other, []byte("#!/bin/sh\necho hi\n"), 0755)
+	if !isShimFile(shim) {
+		t.Error("marked shim not detected")
+	}
+	if isShimFile(other) {
+		t.Error("user binary wrongly detected as shim")
+	}
+}
+
+func TestRemoveIfShim(t *testing.T) {
+	dir := t.TempDir()
+	shim := filepath.Join(dir, "psql")
+	user := filepath.Join(dir, "psql-user")
+	_ = os.WriteFile(shim, []byte(script("lerd", "psql")), 0755)
+	_ = os.WriteFile(user, []byte("#!/bin/sh\n"), 0755)
+
+	removeIfShim(shim)
+	removeIfShim(user)
+
+	if _, err := os.Stat(shim); !os.IsNotExist(err) {
+		t.Error("shim should have been removed")
+	}
+	if _, err := os.Stat(user); err != nil {
+		t.Error("user binary must never be removed")
+	}
+}
+
+func TestPruneOrphans(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	binDir := config.BinDir()
+	_ = os.MkdirAll(binDir, 0755)
+	live := filepath.Join(binDir, "mysqldump")
+	orphan := filepath.Join(binDir, "pg_dump")
+	user := filepath.Join(binDir, "sqlite3")
+	_ = os.WriteFile(live, []byte(script("lerd", "mysqldump")), 0755)
+	_ = os.WriteFile(orphan, []byte(script("lerd", "pg_dump")), 0755)
+	_ = os.WriteFile(user, []byte("#!/bin/sh\n"), 0755)
+	_ = setDecision("pg_dump", true)
+
+	pruneOrphans(map[string]Target{"mysqldump": {Service: "mysql", Binaries: []string{"mysqldump"}}})
+
+	if _, err := os.Stat(live); err != nil {
+		t.Error("live shim must be kept")
+	}
+	if _, err := os.Stat(orphan); !os.IsNotExist(err) {
+		t.Error("orphan shim must be pruned")
+	}
+	if _, err := os.Stat(user); err != nil {
+		t.Error("non-lerd binary must never be pruned")
+	}
+	if _, decided := decision("pg_dump"); decided {
+		t.Error("pruned tool's decision must be forgotten")
+	}
+}
+
+func TestHostHasTool(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	hostDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(hostDir, "mysqldump"), []byte("#!/bin/sh\n"), 0755)
+	binDir := config.BinDir()
+	_ = os.MkdirAll(binDir, 0755)
+	_ = os.WriteFile(filepath.Join(binDir, "pg_dump"), []byte("#!/bin/sh\n"), 0755)
+	t.Setenv("PATH", hostDir+string(os.PathListSeparator)+binDir)
+
+	if !hostHasTool("mysqldump") {
+		t.Error("host tool on PATH should be detected")
+	}
+	if hostHasTool("pg_dump") {
+		t.Error("a tool only in lerd's bin dir must not count as host-installed")
+	}
+	if hostHasTool("nonexistent-tool") {
+		t.Error("absent tool must not be detected")
+	}
+}
+
+func TestDecisionTriState(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	if _, decided := decision("mysqldump"); decided {
+		t.Fatal("fresh tool should be undecided")
+	}
+	_ = setDecision("mysqldump", true)
+	if e, d := decision("mysqldump"); !d || !e {
+		t.Fatalf("want decided+enabled, got decided=%v enabled=%v", d, e)
+	}
+	_ = setDecision("mysqldump", false)
+	if e, d := decision("mysqldump"); !d || e {
+		t.Fatalf("want decided+disabled, got decided=%v enabled=%v", d, e)
+	}
+	_ = forgetDecision("mysqldump")
+	if _, decided := decision("mysqldump"); decided {
+		t.Fatal("forgotten tool should be undecided again")
+	}
+}
+
+func TestDecideAutoEnablesWhenHostLacksTool(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir()) // host has nothing
+
+	enabled, decided := decide("mysqldump", nil)
+	if !enabled || !decided {
+		t.Fatalf("host lacking the tool should auto-enable, got enabled=%v decided=%v", enabled, decided)
+	}
+}
+
+func TestDecideLeavesConflictUndecidedWithoutPrompter(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	hostDir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(hostDir, "mysqldump"), []byte("#!/bin/sh\n"), 0755)
+	t.Setenv("PATH", hostDir)
+
+	enabled, decided := decide("mysqldump", nil)
+	if enabled || decided {
+		t.Fatalf("a host conflict with no prompter must stay undecided, got enabled=%v decided=%v", enabled, decided)
+	}
+}
