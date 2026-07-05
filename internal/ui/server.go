@@ -591,10 +591,11 @@ type ServiceCheck struct {
 }
 
 type PHPStatus struct {
-	Version       string `json:"version"`
-	Running       bool   `json:"running"`
-	XdebugEnabled bool   `json:"xdebug_enabled"`
-	XdebugMode    string `json:"xdebug_mode,omitempty"`
+	Version       string   `json:"version"`
+	Running       bool     `json:"running"`
+	XdebugEnabled bool     `json:"xdebug_enabled"`
+	XdebugMode    string   `json:"xdebug_mode,omitempty"`
+	Ports         []string `json:"ports,omitempty"`
 }
 
 func handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -621,10 +622,12 @@ func buildStatus() StatusResponse {
 		short := strings.ReplaceAll(v, ".", "")
 		running := podman.Cache.Running("lerd-php" + short + "-fpm")
 		xdebugMode := ""
+		var ports []string
 		if cfg != nil {
 			xdebugMode = cfg.GetXdebugMode(v)
+			ports = cfg.PHP.FPMPorts[v]
 		}
-		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode})
+		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports})
 	}
 
 	phpDefault := ""
@@ -4316,6 +4319,20 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})
+	case "ports":
+		var body struct {
+			Ports []string `json:"ports"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		resolved, err := podman.SetFPMPorts(version, body.Ports)
+		if err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+			return
+		}
+		writeJSON(w, map[string]any{"ok": true, "ports": resolved})
 	default:
 		http.NotFound(w, r)
 	}

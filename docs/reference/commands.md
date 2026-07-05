@@ -129,6 +129,9 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, and the fro
 | `lerd php:pkg add <package...> [--php VERSION]` | Add extra Alpine packages to the FPM image and rebuild; the list is persisted so future rebuilds reapply it |
 | `lerd php:pkg remove <package...> [--php VERSION]` | Remove extra Alpine packages and rebuild |
 | `lerd php:pkg list [--php VERSION]` | List the extra Alpine packages configured for a PHP version |
+| `lerd php:ports add <host:container...> [--php VERSION]` | Publish extra host ports on the version's shell (FPM) container so a process in `lerd shell` is reachable at `localhost:PORT`; a bare number publishes straight through, and a busy host port shifts to the next free one |
+| `lerd php:ports remove <host...> [--php VERSION]` | Unpublish host ports from the version's shell container |
+| `lerd php:ports list [--php VERSION]` | List the extra host ports published for a PHP version |
 | `lerd php:ini [version]` | Open the user php.ini for a PHP version in `$EDITOR` |
 | `lerd pest:browser install [version]` | Set up in-container Pest browser testing: bake musl chromium into the FPM image, download the Playwright registry into a persistent volume, and shim Playwright's glibc browser to it |
 | `lerd pest:browser remove [version]` | Remove chromium from the FPM image and disable Pest browser testing (the Playwright cache volume is left intact) |

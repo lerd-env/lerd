@@ -246,8 +246,10 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// manifest from the prior 32000-byte ceiling. Bumped 18000 → 18500 for the
 	// `service port` action, then 18500 → 18800 for the diag `route_timing` and
 	// `optimize_route` actions, then 18800 → 19100 for `profiler_report` and its
-	// `args` property (justified content additions, kept terse).
-	const ceiling = 19100
+	// `args` property, then 19100 → 19500 for the runtime `ports_list`, `ports_add`,
+	// `ports_remove` actions and their `host`/`container` properties (justified
+	// content additions, kept terse).
+	const ceiling = 19500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

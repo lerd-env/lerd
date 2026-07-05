@@ -8,6 +8,7 @@ export interface PHPStatus {
   running: boolean;
   xdebug_enabled: boolean;
   xdebug_mode?: string;
+  ports?: string[];
 }
 
 export interface StatusResponse {

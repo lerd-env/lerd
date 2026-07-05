@@ -799,6 +799,10 @@ func WriteFPMQuadlet(version string) error {
 	if err != nil {
 		return err
 	}
+	// Publish this version's extra shell ports on the SHARED FPM container only.
+	// generateCustomFPMQuadlet reuses renderFPMQuadletContent without these lines,
+	// so a version's shared and custom-FPM containers can't fight over one host port.
+	content = ApplyExtraPorts(content, config.FPMPortsFor(version))
 
 	// Skip the write and daemon-reload if the quadlet is already up to date.
 	// Unnecessary daemon-reloads cause Podman's quadlet generator to regenerate
@@ -857,22 +861,11 @@ func RewriteFPMQuadlets() error {
 		short := strings.ReplaceAll(v, ".", "")
 		unitName := "lerd-php" + short + "-fpm"
 
-		tmplContent, tmplErr := GetQuadletTemplate("lerd-php-fpm.container.tmpl")
-		if tmplErr != nil {
+		content, renderErr := renderFPMQuadletContent(v)
+		if renderErr != nil {
 			continue
 		}
-		content := strings.ReplaceAll(tmplContent, "{{.Version}}", v)
-		content = strings.ReplaceAll(content, "{{.VersionShort}}", short)
-		content = strings.ReplaceAll(content, "{{.XdebugIniPath}}", config.PHPConfFile(v))
-		content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(v))
-		content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
-		content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
-		content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
-		content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
-		content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
-		content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
-		content = applyShellMounts(content, short)
-		content = InjectExtraVolumes(content, extraPaths)
+		content = ApplyExtraPorts(content, config.FPMPortsFor(v))
 
 		changed, writeErr := WriteQuadletDiff(unitName, content)
 		if writeErr != nil {

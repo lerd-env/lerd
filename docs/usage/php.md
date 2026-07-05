@@ -23,6 +23,9 @@
 | `lerd php:pkg add <package...> [--php version]` | Install extra Alpine packages into the FPM image and rebuild |
 | `lerd php:pkg remove <package...> [--php version]` | Remove extra Alpine packages and rebuild |
 | `lerd php:pkg list [--php version]` | List the extra packages configured for a PHP version |
+| `lerd php:ports add <host:container...> [--php version]` | Publish a host port on the version's shell container; a bare number publishes the same port straight through, and a busy host port shifts to the next free one |
+| `lerd php:ports remove <host...> [--php version]` | Unpublish a host port from the version's shell container |
+| `lerd php:ports list [--php version]` | List the extra host ports published for a PHP version |
 | `lerd pest:browser install [version]` | Set up in-container Pest browser testing (musl chromium + Playwright shim); see [browser testing](browser-testing#pest-browser-testing-playwright) |
 | `lerd pest:browser remove [version]` | Remove chromium from the FPM image and disable Pest browser testing |
 | `lerd pest:browser doctor [version]` | Diagnose the Pest browser testing setup for a PHP version |
@@ -363,6 +366,21 @@ If you want extra packages in the image (additional CLI tools, language toolchai
 For other tools and runtime libraries, `lerd php:pkg add <packages>` installs Alpine packages into the FPM image's runtime stage and rebuilds, for example `lerd php:pkg add htop vim`. The packages are saved in `~/.config/lerd/config.yaml` (under `php.packages`, keyed by version) and re-applied on every rebuild, so they survive `php:rebuild` and base image updates, exactly like custom extensions. They are layered onto the shared image rather than baked into the published base, so they only affect your local build. A non-existent package name fails the rebuild and the change is reverted.
 
 For [bun](https://bun.sh) specifically, run `lerd php:bun install` to drop a musl bun into the container's persistent `/root/.bun` volume (so `lerd shell` has it without rebuilding the image). See [bun](node#bun) for the full host and container story.
+
+### Reachable ports
+
+By default a TCP port you open by hand inside `lerd shell` is not reachable at `localhost:PORT` on the host, because the PHP-FPM container has no published host ports of its own. Framework servers like [Reverb](queue-workers) or an in-container Vite worker are reachable, but only because a worker exposes them through the nginx proxy on the site's `.test` domain (`https://your-site.test/app`), not as a raw localhost port; Xdebug likewise connects outbound to your IDE rather than listening on a published port. When you instead want to run a process directly in the container (a Vite dev server, a websocket, an ad-hoc HTTP or debug listener) and hit it straight from a host browser or tool, publish the port on the version's shell container:
+
+```bash
+lerd php:ports add 5173        # localhost:5173 -> container 5173 (same port through)
+lerd php:ports add 8080:80     # localhost:8080 -> container 80
+lerd php:ports list
+lerd php:ports remove 5173
+```
+
+The same list is available in the dashboard under **System > PHP > (version) > Ports**. If the host port is already taken (by a lerd service, another PHP version's list, or any other listener) lerd shifts it to the next free one and tells you where it landed, so an add never fails on a collision. Ports bind loopback by default and follow `lerd lan:expose` like every other lerd port. Changing the list restarts that version's FPM container, so PHP bounces for every site on that version.
+
+This is a per-version pool, not per site. There is one shared FPM container per PHP version serving every site on it, so a published port maps to whichever single process binds it inside, and two sites wanting the same in-container port on the same version collide. It is a power-user escape hatch: for anything you can reach for a blessed path instead, prefer [host-proxy](host-proxy) (run the dev server on the host) or a worker with a proxy, which both scope cleanly to a single site.
 
 ---
 

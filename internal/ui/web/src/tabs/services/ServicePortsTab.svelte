@@ -1,6 +1,6 @@
 <script lang="ts">
-  import DetailButton from '$components/DetailButton.svelte';
   import PortRow from './PortRow.svelte';
+  import PortsEditor from '$components/PortsEditor.svelte';
   import { type Service, setServicePorts } from '$stores/services';
   import { m } from '../../paraglide/messages.js';
 
@@ -11,17 +11,11 @@
 
   const isBuiltin = $derived(Boolean(svc.preset_owned));
 
-  // Shared with the domains modal's add inputs so the two read identically.
-  const inputCls =
-    'text-sm tabular-nums bg-transparent border border-gray-200 dark:border-lerd-border rounded-sm px-2 py-1.5 text-gray-700 dark:text-gray-300 placeholder-gray-400 dark:placeholder-gray-600 focus:outline-hidden focus:border-lerd-red/50 transition-colors disabled:opacity-50';
-
   // Number inputs bound with bind:value yield number | null (null when empty),
   // so these stay numeric — never strings.
   let publishedInput = $state<number | null>(null);
   let secondaryInputs = $state<Record<number, number | null>>({});
   let extraPorts = $state<string[]>([]);
-  let newHost = $state<number | null>(null);
-  let newContainer = $state<number | null>(null);
   let saving = $state(false);
   let error = $state('');
 
@@ -47,8 +41,6 @@
     publishedInput = s.published;
     secondaryInputs = s.secondary;
     extraPorts = [...s.extra];
-    newHost = null;
-    newContainer = null;
     saving = false;
     error = '';
   });
@@ -71,31 +63,11 @@
     return n != null && Number.isInteger(n) && n >= 0 && n <= 65535;
   }
 
-  // Assemble the two number fields into a single "host:container" mapping, the
-  // form the backend, CLI and config.yaml all use.
-  function addExtra() {
-    if (!validPort(newHost) || !validPort(newContainer)) {
-      error = m.services_ports_invalidPort();
-      return;
-    }
-    const spec = newHost + ':' + newContainer;
-    if (!extraPorts.includes(spec)) extraPorts = [...extraPorts, spec];
-    newHost = null;
-    newContainer = null;
-    error = '';
-  }
-
-  function removeExtra(spec: string) {
-    extraPorts = extraPorts.filter((p) => p !== spec);
-  }
-
   function revert() {
     const s = seed(svc);
     publishedInput = s.published;
     secondaryInputs = s.secondary;
     extraPorts = [...s.extra];
-    newHost = null;
-    newContainer = null;
     error = '';
   }
 
@@ -195,60 +167,13 @@
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.services_ports_extraPresetOnly()}</p>
       {:else}
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.services_ports_extraHelp()}</p>
-        {#if extraPorts.length === 0}
-          <p class="text-xs text-gray-400 dark:text-gray-500 italic">{m.services_ports_extraEmpty()}</p>
-        {:else}
-          <div class="space-y-1.5">
-            {#each extraPorts as spec (spec)}
-              <div class="flex items-center gap-2">
-                <div class="flex-1 min-w-0 flex items-center gap-1.5">
-                  <span class="text-sm font-mono text-gray-700 dark:text-gray-300 truncate">{spec}</span>
-                </div>
-                <button
-                  type="button"
-                  onclick={() => removeExtra(spec)}
-                  disabled={saving}
-                  title={m.common_remove()}
-                  class="text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50"
-                >
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
-                  </svg>
-                </button>
-              </div>
-            {/each}
-          </div>
-        {/if}
-        <div class="flex items-center gap-2 pt-1">
-          <input
-            type="number"
-            min="0"
-            max="65535"
-            bind:value={newHost}
-            placeholder={m.services_ports_extraHostPlaceholder()}
-            onkeydown={(e) => e.key === 'Enter' && addExtra()}
-            disabled={saving}
-            class="w-28 {inputCls}"
-          />
-          <span class="text-sm text-gray-400 shrink-0">:</span>
-          <input
-            type="number"
-            min="0"
-            max="65535"
-            bind:value={newContainer}
-            placeholder={m.services_ports_extraContainerPlaceholder()}
-            onkeydown={(e) => e.key === 'Enter' && addExtra()}
-            disabled={saving}
-            class="w-28 {inputCls}"
-          />
-          <DetailButton
-            tone="primary"
-            onclick={addExtra}
-            disabled={saving || newHost == null || newContainer == null}
-          >
-            {m.common_add()}
-          </DetailButton>
-        </div>
+        <PortsEditor
+          ports={extraPorts}
+          disabled={saving}
+          empty={m.services_ports_extraEmpty()}
+          onadd={(spec) => (extraPorts = [...extraPorts, spec])}
+          onremove={(spec) => (extraPorts = extraPorts.filter((p) => p !== spec))}
+        />
       {/if}
     </div>
 
