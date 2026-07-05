@@ -999,5 +999,21 @@
   "services_cat_other": "Lainnya",
   "services_cat_messaging": "Perpesanan",
   "tinker_lspConnecting": "Memulai server bahasa…",
-  "tinker_lspUnavailable": "Server bahasa tidak tersedia"
+  "tinker_lspUnavailable": "Server bahasa tidak tersedia",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Tinjau kunci",
+  "envEditor_proposeModalTitle": "Tambahkan kunci env yang hilang",
+  "envEditor_proposeModalBody": "Pilih kunci mana yang akan ditambahkan ke {file}. Nilai disalin dari .env.example, jadi tinjau dan isi nilai sebenarnya setelah menambahkan.",
+  "envEditor_proposeRequiredHeading": "Wajib",
+  "envEditor_proposeOptionalHeading": "Opsional",
+  "envEditor_proposeSelectAll": "Pilih semua",
+  "envEditor_proposeSelectNone": "Hapus",
+  "envEditor_proposeAddSelected": "Tambah {n}",
+  "envEditor_proposeAddNone": "Tambah yang dipilih",
+  "services_shimsInstalled": "Alat klien di PATH Anda",
+  "services_tools_providedBy": "Disediakan oleh {service}"
 }

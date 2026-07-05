@@ -999,5 +999,21 @@
   "services_cat_other": "Altele",
   "services_cat_messaging": "Mesagerie",
   "tinker_lspConnecting": "Serverul de limbaj pornește…",
-  "tinker_lspUnavailable": "Server de limbaj indisponibil"
+  "tinker_lspUnavailable": "Server de limbaj indisponibil",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Verifică cheile",
+  "envEditor_proposeModalTitle": "Adaugă cheile de mediu lipsă",
+  "envEditor_proposeModalBody": "Alege ce chei să adaugi în {file}. Valorile sunt copiate din .env.example, așa că verifică-le și completează valorile reale după adăugare.",
+  "envEditor_proposeRequiredHeading": "Obligatorii",
+  "envEditor_proposeOptionalHeading": "Opționale",
+  "envEditor_proposeSelectAll": "Selectează tot",
+  "envEditor_proposeSelectNone": "Șterge",
+  "envEditor_proposeAddSelected": "Adaugă {n}",
+  "envEditor_proposeAddNone": "Adaugă selecția",
+  "services_shimsInstalled": "Instrumente client în PATH-ul tău",
+  "services_tools_providedBy": "Furnizat de {service}"
 }

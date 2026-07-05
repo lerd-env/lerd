@@ -53,6 +53,38 @@ describe('services store', () => {
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
   });
 
+  it('setServiceShim POSTs the tool decision and reloads', async () => {
+    const calls: Array<[string, RequestInit | undefined]> = [];
+    globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {
+      calls.push([String(url), init]);
+      if (String(url).endsWith('/mysql/shims'))
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      return new Response('[]', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { setServiceShim } = await import('./services');
+    const res = await setServiceShim('mysql', { tool: 'mysqldump', enabled: true });
+    expect(res.ok).toBe(true);
+    expect(calls[0][0]).toBe('/api/services/mysql/shims');
+    expect(calls[0][1]?.method).toBe('POST');
+    expect(JSON.parse(String(calls[0][1]?.body))).toEqual({ tool: 'mysqldump', enabled: true });
+    expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
+  });
+
+  it('setServiceShim surfaces a server error without reloading', async () => {
+    const calls: string[] = [];
+    globalThis.fetch = vi.fn(async (url: unknown) => {
+      calls.push(String(url));
+      if (String(url).endsWith('/mysql/shims'))
+        return new Response(JSON.stringify({ ok: false, error: 'boom' }), { status: 200 });
+      return new Response('[]', { status: 200 });
+    }) as unknown as typeof fetch;
+    const { setServiceShim } = await import('./services');
+    const res = await setServiceShim('mysql', { tool: 'mysqldump', enabled: true });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe('boom');
+    expect(calls.includes('/api/services')).toBe(false);
+  });
+
   it('setServicePorts POSTs the published port and extra ports as JSON', async () => {
     const calls: Array<[string, RequestInit | undefined]> = [];
     globalThis.fetch = vi.fn(async (url: unknown, init?: RequestInit) => {

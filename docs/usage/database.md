@@ -191,6 +191,53 @@ lerd db:shell --service postgres --database myapp
 lerd db:shell
 ```
 
+## Client tools for external databases and IDEs
+
+The `db:*` commands work against lerd's own service containers. When you need to dump or query a database that lives **outside** lerd, for example a managed cluster on DigitalOcean, or you want to point an IDE like PhpStorm at a real `mysqldump` executable, lerd exposes the client tools that already ship inside its database images as host shims.
+
+A service declares which tools it exposes in its YAML, so the set grows with the store. Today: mysql and mariadb expose `mysql` and `mysqldump` (mariadb backed by the `mariadb`/`mariadb-dump` binaries); postgres and its pgvector/timescaledb variants expose `psql`, `pg_dump`, `pg_dumpall`, `pg_restore`; redis exposes `redis-cli`; valkey exposes `valkey-cli`; and mongo exposes `mongosh`, `mongodump`, `mongorestore`, `mongoexport`, `mongoimport`. Each becomes a shim on your PATH in `~/.local/share/lerd/bin`.
+
+When you install a service, lerd installs its shims. If you do not already have the tool on your system there is nothing to shadow, so the shim is installed automatically. If you **do** already have the tool installed, lerd asks first (default no) because the shim sits ahead of your own binary on PATH. Removing a service removes its shims. A tool added to a service in the store reaches an already-installed service on the next `lerd update`, without a reinstall.
+
+The shims pass every argument straight through, so targeting an external host is just a matter of supplying your own connection flags:
+
+```bash
+# Dump a managed database to a file in the current directory
+mysqldump -h db.example.com -P 25060 -u doadmin -p yourdb > dump.sql
+
+# Same for postgres
+pg_dump -h db.example.com -p 25060 -U doadmin -d yourdb > dump.sql
+```
+
+Each tool runs in a throwaway container spun from the service's image, so nothing touches your running database container. Your home directory is mounted read-write, so the tool can read a CA cert and write its output anywhere under it, whether you use a shell redirect (`> dump.sql`), the tool's own `--result-file`/`-f` flag, or an IDE that fills one in. Output files are owned by you, not root.
+
+Managed databases usually require TLS. Keep the CA file you pass with a flag like `--ssl-ca` somewhere under your home directory so the tool can read it:
+
+```bash
+mysqldump -h db.example.com -P 25060 -u doadmin -p --ssl-ca=ca.crt yourdb > dump.sql
+```
+
+When you give no host, the tool connects to a local lerd database with its admin credentials, so `pg_dump mydb` or `mysqldump mydb` just works. If you run it from a project directory, it targets that project's own database service, read from the project's `DB_HOST`, so a mariadb-backed project routes to your mariadb container rather than the default mysql one. Outside a project, or when the project's database is a different family than the tool, it falls back to the family's default service. Passing `-h` (an external host) turns all of this off and the shim forwards everything untouched. For scripted local dumps `lerd db:export` is still the tidier option; the raw shim is there for external databases and IDEs.
+
+To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`.
+
+### Managing shims
+
+List the shims your installed services expose and whether each is installed:
+
+```bash
+lerd shims
+```
+
+Add or remove an individual shim, for example if you declined it at install time and later want it, or you would rather keep your own binary on PATH:
+
+```bash
+lerd shims remove mysqldump   # take lerd's shim off your PATH
+lerd shims add mysqldump      # put it back
+```
+
+The same per-tool toggles are on each database service's Tools tab in the web UI. When two services of the same family are installed (say mysql and mariadb, which both provide `mysqldump`), one owns the shim and runs it; the others show that tool disabled on their Tools tab so it is managed in one place.
+
 ## Recovering after a service reinstall
 
 `lerd service reinstall <name> --reset-data` wipes the database server's data dir (rename-aside, recoverable) and then walks every active site that depends on the service to recreate the database it expects via `CREATE DATABASE IF NOT EXISTS`. Database name resolution is the same as `lerd env`: `.lerd.yaml` `db.database` first, then `.env` `DB_DATABASE`, then a name derived from the site name.

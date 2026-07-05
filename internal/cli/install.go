@@ -23,6 +23,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/shims"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
@@ -967,6 +968,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	step("Adding shell PATH configuration")
 	if err := addShellShims(wantLerdNode); err != nil {
+		fmt.Printf("    WARN: %v\n", err)
+	}
+	if err := shims.Reconcile(clientShimPrompter()); err != nil {
 		fmt.Printf("    WARN: %v\n", err)
 	}
 	ok()

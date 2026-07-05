@@ -999,5 +999,21 @@
   "services_cat_other": "其他",
   "services_cat_messaging": "消息",
   "tinker_lspConnecting": "语言服务器启动中…",
-  "tinker_lspUnavailable": "语言服务器不可用"
+  "tinker_lspUnavailable": "语言服务器不可用",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "检查键",
+  "envEditor_proposeModalTitle": "添加缺失的环境变量键",
+  "envEditor_proposeModalBody": "选择要添加到 {file} 的键。值从 .env.example 复制，请检查并在添加后填入真实值。",
+  "envEditor_proposeRequiredHeading": "必填",
+  "envEditor_proposeOptionalHeading": "可选",
+  "envEditor_proposeSelectAll": "全选",
+  "envEditor_proposeSelectNone": "清除",
+  "envEditor_proposeAddSelected": "添加 {n} 个",
+  "envEditor_proposeAddNone": "添加所选",
+  "services_shimsInstalled": "PATH 中的客户端工具",
+  "services_tools_providedBy": "由 {service} 提供"
 }

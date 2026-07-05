@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/shims"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 )
@@ -613,6 +614,9 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 			if len(svc.DependsOn) > 0 {
 				fmt.Printf("Depends on: %s (will be auto-started)\n", strings.Join(svc.DependsOn, ", "))
 			}
+			if err := shims.Reconcile(clientShimPrompter()); err != nil {
+				fmt.Printf("    WARN: client shims: %v\n", err)
+			}
 			return nil
 		},
 	}
@@ -836,6 +840,10 @@ func newServiceRemoveCmd() *cobra.Command {
 
 			if err := serviceops.RemoveService(name, serviceops.RemoveOptions{RemoveData: purge}, emit); err != nil {
 				return err
+			}
+
+			if err := shims.Reconcile(nil); err != nil {
+				fmt.Printf("    WARN: client shims: %v\n", err)
 			}
 
 			if !purge {

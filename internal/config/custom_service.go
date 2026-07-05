@@ -148,6 +148,47 @@ type CustomService struct {
 	// handler when it runs as PID 1, which makes podman stop time out and
 	// systemctl restart wedge for ~90s.
 	Init bool `yaml:"init,omitempty" json:"init,omitempty"`
+	// ClientShims lists the client tools this service exposes as host shims
+	// (mysqldump, pg_dump, psql…) so host tools and IDEs can run them against
+	// external databases. Empty for services with nothing to expose.
+	ClientShims []ClientShim `yaml:"client_shims,omitempty" json:"client_shims,omitempty"`
+}
+
+// ClientShim declares a service client tool that lerd exposes as a host shim.
+// Name is the command written onto the host PATH; Binaries are the candidate
+// binaries to resolve inside the service container, tried in order, so a mariadb
+// service can back the mysqldump shim with mariadb-dump. In YAML a bare string
+// is shorthand for a shim whose host name and container binary are identical.
+type ClientShim struct {
+	Name     string   `yaml:"name" json:"name"`
+	Binaries []string `yaml:"binary,omitempty" json:"binary,omitempty"`
+}
+
+// UnmarshalYAML accepts either a bare string (name == binary) or a mapping with
+// an explicit name and one or more candidate binaries.
+func (c *ClientShim) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.ScalarNode:
+		c.Name = value.Value
+		c.Binaries = []string{value.Value}
+		return nil
+	case yaml.MappingNode:
+		var raw struct {
+			Name   string   `yaml:"name"`
+			Binary []string `yaml:"binary"`
+		}
+		if err := value.Decode(&raw); err != nil {
+			return err
+		}
+		c.Name = raw.Name
+		c.Binaries = raw.Binary
+		if len(c.Binaries) == 0 {
+			c.Binaries = []string{c.Name}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unexpected YAML node kind %v for client shim", value.Kind)
+	}
 }
 
 // ServiceFilePath returns the deterministic host path for a single FileMount

@@ -94,6 +94,20 @@ func serviceToDBEnv(name string) *dbEnv {
 	return &dbEnv{service: name, connection: "mysql", username: "root", password: "lerd"}
 }
 
+// lerdServiceFromHost returns the lerd service a DB host of the form
+// "lerd-<service>" points at (e.g. "lerd-mariadb-11-8" -> "mariadb-11-8"), or ""
+// when the host is not a lerd service container (an external host, or the
+// loopback a host-proxy site uses). Lets the db commands target the exact
+// service a site runs on instead of collapsing to the family's canonical
+// service, so a mariadb- or postgres-18-backed site dumps the right server.
+func lerdServiceFromHost(host string) string {
+	svc, ok := strings.CutPrefix(strings.TrimSpace(host), "lerd-")
+	if !ok || svc == "" {
+		return ""
+	}
+	return svc
+}
+
 // resolveDB resolves database connection config using the following priority:
 //  1. --service flag (flagService)
 //  2. .lerd.yaml db: block (present even on unlinked sites)
@@ -171,6 +185,11 @@ func resolveDBFromFramework(cwd string) *dbEnv {
 			continue
 		}
 		env := serviceToDBEnv(svc)
+		// Target the exact service the site points at (an alternate like mariadb
+		// or postgres-18), not just the family's canonical service.
+		if s := lerdServiceFromHost(readKey("DB_HOST")); s != "" {
+			env.service = s
+		}
 		// Resolve database name from the framework's env file.
 		env.database = readKey("DB_DATABASE")
 		if env.database == "" {
@@ -261,8 +280,12 @@ func loadDBEnv(cwd string) (*dbEnv, error) {
 	// DB_PASSWORD avoids authenticating as a role that doesn't exist in the
 	// container (e.g. DB_USERNAME=root against pgsql).
 	svcDefaults := serviceToDBEnv(connToService(conn))
+	service := connToService(conn)
+	if s := lerdServiceFromHost(vals["DB_HOST"]); s != "" {
+		service = s
+	}
 	return &dbEnv{
-		service:    connToService(conn),
+		service:    service,
 		connection: conn,
 		database:   db,
 		username:   svcDefaults.username,
@@ -646,8 +669,12 @@ func loadDBEnvLenient(cwd string) (*dbEnv, error) {
 	}
 
 	svcDefaults := serviceToDBEnv(connToService(conn))
+	service := connToService(conn)
+	if s := lerdServiceFromHost(vals["DB_HOST"]); s != "" {
+		service = s
+	}
 	return &dbEnv{
-		service:    connToService(conn),
+		service:    service,
 		connection: conn,
 		database:   db,
 		username:   svcDefaults.username,

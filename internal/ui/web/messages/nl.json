@@ -999,5 +999,21 @@
   "services_cat_other": "Overige",
   "services_cat_messaging": "Berichten",
   "tinker_lspConnecting": "Taalserver wordt gestart…",
-  "tinker_lspUnavailable": "Taalserver niet beschikbaar"
+  "tinker_lspUnavailable": "Taalserver niet beschikbaar",
+  "services_tabs_tools": "Tools",
+  "services_tools_title": "Client tools on your PATH",
+  "services_tools_hint": "Expose this service’s client tools on your host so you can run them against an external database or from an IDE like PhpStorm.",
+  "services_tools_shadow": "You already have this installed; enabling the shim shadows it on your PATH.",
+  "services_tools_none": "This service exposes no client tools.",
+  "envEditor_proposeReview": "Sleutels controleren",
+  "envEditor_proposeModalTitle": "Ontbrekende env-sleutels toevoegen",
+  "envEditor_proposeModalBody": "Kies welke sleutels aan {file} worden toegevoegd. Waarden worden gekopieerd uit .env.example, controleer ze en vul na het toevoegen de echte in.",
+  "envEditor_proposeRequiredHeading": "Vereist",
+  "envEditor_proposeOptionalHeading": "Optioneel",
+  "envEditor_proposeSelectAll": "Alles selecteren",
+  "envEditor_proposeSelectNone": "Wissen",
+  "envEditor_proposeAddSelected": "{n} toevoegen",
+  "envEditor_proposeAddNone": "Selectie toevoegen",
+  "services_shimsInstalled": "Clienttools op je PATH",
+  "services_tools_providedBy": "Geleverd door {service}"
 }
