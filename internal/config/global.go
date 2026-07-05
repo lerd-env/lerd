@@ -74,6 +74,15 @@ type GlobalConfig struct {
 		// FPM image's runtime stage (lerd php:pkg). For CLI tools and runtime
 		// libraries users want available in the container; re-applied on rebuild.
 		Packages map[string][]string `yaml:"packages,omitempty" mapstructure:"packages"`
+		// FPMPorts maps a PHP version to extra host ports published on that
+		// version's shared FPM container, so a process bound inside `lerd shell`
+		// (a Vite dev server, a websocket, an ad-hoc listener) is reachable at
+		// localhost:PORT. Environment-wide per version, not per site; the one
+		// shared FPM container per version owns the list, so two sites wanting
+		// the same in-container port on the same version collide. Each mapping is
+		// a "host:container" spec; the loopback/LAN bind is applied centrally on
+		// write. Managed via the PHP page's Ports tab (lerd php:ports).
+		FPMPorts map[string][]string `yaml:"fpm_ports,omitempty" mapstructure:"fpm_ports"`
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
@@ -427,6 +436,9 @@ func ReservedHostPorts() map[int]bool {
 				reserved[p] = true
 			}
 		}
+		for _, specs := range cfg.PHP.FPMPorts {
+			addMappings(specs)
+		}
 	}
 	if presets, err := ListPresets(); err == nil {
 		for _, meta := range presets {
@@ -441,6 +453,19 @@ func ReservedHostPorts() map[int]bool {
 		}
 	}
 	return reserved
+}
+
+// FPMPortsFor returns the extra published port mappings recorded for a PHP
+// version's shared FPM container, or nil when none are configured. Read by the
+// FPM quadlet renderer so a `lerd shell` process on one of these ports is
+// reachable from the host, and by the port-shift guard to skip a version's own
+// ports when relocating a colliding one.
+func FPMPortsFor(version string) []string {
+	cfg, err := LoadGlobal()
+	if err != nil || cfg == nil || cfg.PHP.FPMPorts == nil {
+		return nil
+	}
+	return cfg.PHP.FPMPorts[version]
 }
 
 // firstHostPort returns the host-side port number from the first ports entry,
@@ -587,6 +612,14 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			cp := make([]string, len(v))
 			copy(cp, v)
 			out.PHP.Packages[k] = cp
+		}
+	}
+	if in.PHP.FPMPorts != nil {
+		out.PHP.FPMPorts = make(map[string][]string, len(in.PHP.FPMPorts))
+		for k, v := range in.PHP.FPMPorts {
+			cp := make([]string, len(v))
+			copy(cp, v)
+			out.PHP.FPMPorts[k] = cp
 		}
 	}
 	if in.ParkedDirectories != nil {

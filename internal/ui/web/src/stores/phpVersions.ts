@@ -123,6 +123,32 @@ export const startPhp = (v: string) => phpAction(v, 'start');
 export const stopPhp = (v: string) => phpAction(v, 'stop');
 export const removePhp = (v: string) => phpAction(v, 'remove');
 
+// setFpmPorts replaces the extra host ports published on a version's shared FPM
+// container. The server shifts any colliding host port to the next free one, so
+// the returned list may differ from what was sent; the status broadcast carries
+// the resolved set, so the caller reseeds from it rather than the response.
+export async function setFpmPorts(
+  version: string,
+  ports: string[]
+): Promise<{ ok: boolean; error?: string; ports?: string[] }> {
+  try {
+    const res = await apiFetch('/api/php-versions/' + encodeURIComponent(version) + '/ports', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ports })
+    });
+    const data = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      ports?: string[];
+    };
+    if (res.ok && data.ok) return { ok: true, ports: data.ports };
+    return { ok: false, error: data.error || 'failed' };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+  }
+}
+
 export interface PhpIni {
   path: string;
   content: string;

@@ -4724,6 +4724,57 @@ func execPHPExtRemove(args map[string]any) (any, *rpcError) {
 	return toolOK(fmt.Sprintf("Extension %q removed from PHP %s. FPM container restarted.", ext, version)), nil
 }
 
+func execPHPPortsList(args map[string]any) (any, *rpcError) {
+	version, err := resolvePHPVersion(args)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	ports := config.FPMPortsFor(version)
+	if len(ports) == 0 {
+		return toolOK(fmt.Sprintf("No shell ports published for PHP %s.", version)), nil
+	}
+	data, _ := json.MarshalIndent(map[string]any{
+		"version": version,
+		"ports":   ports,
+	}, "", "  ")
+	return toolOK(string(data)), nil
+}
+
+func execPHPPortsAdd(args map[string]any) (any, *rpcError) {
+	version, err := resolvePHPVersion(args)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	host := intArg(args, "host", 0)
+	if host < 1 || host > 65535 {
+		return toolErr("host is required and must be 1-65535"), nil
+	}
+	container := intArg(args, "container", host)
+	actual, aerr := podman.AddFPMPort(version, host, container)
+	if aerr != nil {
+		return toolErr(aerr.Error()), nil
+	}
+	if actual != host {
+		return toolOK(fmt.Sprintf("Host port %d was in use; published on %d instead. PHP %s: localhost:%d -> container %d.", host, actual, version, actual, container)), nil
+	}
+	return toolOK(fmt.Sprintf("Published PHP %s shell port: localhost:%d -> container %d.", version, actual, container)), nil
+}
+
+func execPHPPortsRemove(args map[string]any) (any, *rpcError) {
+	version, err := resolvePHPVersion(args)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	host := intArg(args, "host", 0)
+	if host < 1 || host > 65535 {
+		return toolErr("host is required and must be 1-65535"), nil
+	}
+	if err := podman.RemoveFPMPort(version, host); err != nil {
+		return toolErr(err.Error()), nil
+	}
+	return toolOK(fmt.Sprintf("Unpublished PHP %s shell port %d.", version, host)), nil
+}
+
 // resolvePHPVersion picks the PHP version from args["version"], the site .php-version file, or the global default.
 func resolvePHPVersion(args map[string]any) (string, error) {
 	if v := strArg(args, "version"); v != "" {

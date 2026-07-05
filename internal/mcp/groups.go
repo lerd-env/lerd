@@ -142,6 +142,9 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"ext_list":       execPHPExtList,
 		"ext_add":        execPHPExtAdd,
 		"ext_remove":     execPHPExtRemove,
+		"ports_list":     execPHPPortsList,
+		"ports_add":      execPHPPortsAdd,
+		"ports_remove":   execPHPPortsRemove,
 	},
 	"worker": {
 		"start":  execWorkerStart,
@@ -380,14 +383,16 @@ func envTool() mcpTool {
 func runtimeTool() mcpTool {
 	return mcpTool{
 		Name:        "runtime",
-		Description: "PHP/Node runtimes. action: versions (installed PHP+Node), node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove. ext_add/ext_remove rebuild the FPM image (slow).",
+		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove. ext_add/ext_remove rebuild the FPM image (slow). ports_* publish host ports on a version's shell container; a busy port shifts to the next free one.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove"}},
-				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ext_*: PHP version (defaults project/global)."},
+				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove"}},
+				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ext_*/ports_*: PHP version."},
 				"extension": {Type: "string", Description: "ext_add/ext_remove: extension name (imagick, redis, swoole)."},
 				"apk_deps":  {Type: "string", Description: "ext_add: extra Alpine build packages, space-separated."},
+				"host":      {Type: "integer", Description: "ports_add/remove: host port."},
+				"container": {Type: "integer", Description: "ports_add: container port."},
 			},
 			Required: []string{"action"},
 		},

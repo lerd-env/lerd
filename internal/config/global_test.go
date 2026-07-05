@@ -702,3 +702,56 @@ func TestServiceConfig_HostPorts_defaultWhenNoOverride(t *testing.T) {
 		t.Errorf("HostPorts = %v, want [5432]", got)
 	}
 }
+
+// ── FPMPorts ─────────────────────────────────────────────────────────────────
+
+func TestFPMPortsFor_RoundTrip(t *testing.T) {
+	setConfigDir(t)
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.PHP.FPMPorts = map[string][]string{"8.3": {"3000:3000", "5173:5173"}}
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	got := FPMPortsFor("8.3")
+	if len(got) != 2 || got[0] != "3000:3000" || got[1] != "5173:5173" {
+		t.Errorf("FPMPortsFor(8.3) = %v, want [3000:3000 5173:5173]", got)
+	}
+	if v := FPMPortsFor("8.4"); v != nil {
+		t.Errorf("FPMPortsFor(8.4) = %v, want nil", v)
+	}
+}
+
+// The version key carries a dot, so this pins that viper's "::" delimiter keeps
+// "8.3" a single key rather than nesting it under an "8" map.
+func TestFPMPortsFor_DottedVersionKeySurvivesLoad(t *testing.T) {
+	setConfigDir(t)
+	cfg, _ := LoadGlobal()
+	cfg.PHP.FPMPorts = map[string][]string{"8.3": {"9000:9000"}}
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	reloaded, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if got := reloaded.PHP.FPMPorts["8.3"]; len(got) != 1 || got[0] != "9000:9000" {
+		t.Errorf("reloaded FPMPorts[8.3] = %v, want [9000:9000]", got)
+	}
+}
+
+// A version's FPM ports must be reserved so the service port-ownership guard
+// never hands one of them to a service and collides at boot.
+func TestReservedHostPorts_IncludesFPMPorts(t *testing.T) {
+	setConfigDir(t)
+	cfg, _ := LoadGlobal()
+	cfg.PHP.FPMPorts = map[string][]string{"8.3": {"3000:3000"}}
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if !ReservedHostPorts()[3000] {
+		t.Errorf("ReservedHostPorts must reserve an FPM port 3000; got %v", ReservedHostPorts())
+	}
+}
