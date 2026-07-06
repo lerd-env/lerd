@@ -26,6 +26,10 @@ This command is normally invoked automatically by the AI assistant via
 the MCP configuration injected by 'lerd mcp:inject'.`,
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			// Inject the cross-platform queue lifecycle so the MCP queue tools
+			// derive the command from the framework instead of hardcoding artisan.
+			mcp.QueueStartFn = QueueStartTuned
+			mcp.QueueStopFn = QueueStopForSite
 			return mcp.Serve()
 		},
 	}

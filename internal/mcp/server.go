@@ -561,6 +561,14 @@ func execSiteNginxReset(args map[string]any) (any, *rpcError) {
 	return toolOK(fmt.Sprintf("Reset %s to the bundled nginx defaults.", domain)), nil
 }
 
+// QueueStartFn and QueueStopFn are injected by the cli package (which owns the
+// cross-platform worker lifecycle) so the queue tools reuse it without a
+// cli -> mcp -> cli import cycle.
+var (
+	QueueStartFn func(siteName, sitePath, phpVersion, queue string, tries, timeout int) error
+	QueueStopFn  func(siteName string) error
+)
+
 func execQueueStart(args map[string]any) (any, *rpcError) {
 	siteName := strArg(args, "site")
 	if siteName == "" {
@@ -581,47 +589,21 @@ func execQueueStart(args map[string]any) (any, *rpcError) {
 	if queue == "" {
 		queue = "default"
 	}
-	// The queue name is interpolated into the worker unit's ExecStart line;
-	// whitespace would add stray artisan arguments and a newline would inject a
-	// systemd directive, so reject both.
+	// The queue name is interpolated into the worker command; whitespace or a
+	// newline could inject extra arguments or a systemd directive.
 	if strings.ContainsAny(queue, " \t\r\n") {
 		return toolErr("invalid queue name: must not contain whitespace"), nil
 	}
 	tries := intArg(args, "tries", 3)
 	timeout := intArg(args, "timeout", 60)
 
-	versionShort := strings.ReplaceAll(phpVersion, ".", "")
-	fpmUnit := "lerd-php" + versionShort + "-fpm"
-	container := "lerd-php" + versionShort + "-fpm"
-	unitName := "lerd-queue-" + siteName
-
-	artisanArgs := fmt.Sprintf("queue:work --queue=%s --tries=%d --timeout=%d", queue, tries, timeout)
-	unit := fmt.Sprintf(`[Unit]
-Description=Lerd Queue Worker (%s)
-After=network.target %s.service
-BindsTo=%s.service
-
-[Service]
-Type=simple
-Restart=on-failure
-RestartSec=5
-ExecStart=%s exec -w %s %s php artisan %s
-
-[Install]
-WantedBy=default.target
-`, siteName, fpmUnit, fpmUnit, podman.PodmanBin(), site.Path, container, artisanArgs)
-
-	if err := lerdSystemd.WriteService(unitName, unit); err != nil {
-		return toolErr("writing service unit: " + err.Error()), nil
+	if QueueStartFn == nil {
+		return toolErr("queue control unavailable"), nil
 	}
-	if err := podman.DaemonReloadFn(); err != nil {
-		return toolErr("daemon-reload: " + err.Error()), nil
+	if err := QueueStartFn(siteName, site.Path, phpVersion, queue, tries, timeout); err != nil {
+		return toolErr(err.Error()), nil
 	}
-	_ = lerdSystemd.EnableService(unitName)
-	if err := lerdSystemd.StartService(unitName); err != nil {
-		return toolErr("starting queue worker: " + err.Error()), nil
-	}
-	return toolOK(fmt.Sprintf("Queue worker started for %s (queue: %s)\nLogs: journalctl --user -u %s -f", siteName, queue, unitName)), nil
+	return toolOK(fmt.Sprintf("Queue worker started for %s (queue: %s)", siteName, queue)), nil
 }
 
 func execQueueStop(args map[string]any) (any, *rpcError) {
@@ -629,16 +611,12 @@ func execQueueStop(args map[string]any) (any, *rpcError) {
 	if siteName == "" {
 		return toolErr("site is required"), nil
 	}
-
-	unitName := "lerd-queue-" + siteName
-	unitFile := filepath.Join(config.SystemdUserDir(), unitName+".service")
-
-	_ = lerdSystemd.DisableService(unitName)
-	_ = podman.StopUnit(unitName)
-	if err := os.Remove(unitFile); err != nil && !os.IsNotExist(err) {
-		return toolErr("removing unit file: " + err.Error()), nil
+	if QueueStopFn == nil {
+		return toolErr("queue control unavailable"), nil
 	}
-	_ = podman.DaemonReloadFn()
+	if err := QueueStopFn(siteName); err != nil {
+		return toolErr(err.Error()), nil
+	}
 	return toolOK("Queue worker stopped for " + siteName), nil
 }
 
