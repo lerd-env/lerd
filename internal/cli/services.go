@@ -958,7 +958,7 @@ func newServiceExposeCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().BoolVar(&remove, "remove", false, "Remove the port mapping instead of adding it")
+	cmd.Flags().BoolVar(&remove, "remove", false, "Remove the port mapping instead of adding it (accepts the host port or the full host:container spec)")
 	return cmd
 }
 

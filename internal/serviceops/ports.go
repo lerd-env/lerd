@@ -60,9 +60,7 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	// Silence the guard's shift hook during our own quadlet write; we fire it
 	// once at the end with the actual resulting port, so a --reset that the guard
 	// re-shifts off a host-owned default never refreshes followers twice.
-	savedHook := OnPublishedPortShift
-	OnPublishedPortShift = nil
-	defer func() { OnPublishedPortShift = savedHook }()
+	defer suppressPublishedPortShift()()
 
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -87,7 +85,7 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 	// A published port can't double as one of this service's own extra ports.
 	if port > 0 {
 		for _, ep := range svcCfg.ExtraPorts {
-			if extraHostPort(ep) == port {
+			if config.MappingHostPort(ep) == port {
 				return res, fmt.Errorf("%w: %d", ErrPortInUse, port)
 			}
 		}
@@ -136,10 +134,9 @@ func SetPublishedPort(name string, port int) (PortChange, error) {
 		return res, err
 	}
 	// Host-proxy sites reach the service over the published loopback port, so
-	// refresh their .env to follow the change (no-op when none use it).
-	if savedHook != nil {
-		savedHook(name, res.Actual)
-	}
+	// refresh their .env to follow the change (no-op when none use it). Fired
+	// once here with the final port, bypassing our own suppression window.
+	firePublishedPortShiftForced(name, res.Actual)
 	return res, nil
 }
 
@@ -253,7 +250,7 @@ func SetPublishedPortFor(name string, containerPort, hostPort int) (PortChange, 
 			}
 		}
 		for _, ep := range svcCfg.ExtraPorts {
-			if extraHostPort(ep) == hostPort {
+			if config.MappingHostPort(ep) == hostPort {
 				return res, fmt.Errorf("%w: %d", ErrPortInUse, hostPort)
 			}
 		}
@@ -323,6 +320,14 @@ func persistSecondaryOverride(name string, containerPort, port int) error {
 // optional like gotenberg); genuinely custom services declare their ports in
 // their own YAML, so they're excluded.
 func SetExtraPorts(name string, ports []string) error {
+	return updateExtraPorts(name, func(_ []string) []string { return ports })
+}
+
+// updateExtraPorts loads the global config once, derives the new extra-port list
+// from the current one via mutate, then validates, persists, and re-renders.
+// SetExtraPorts/AddExtraPort/RemoveExtraPort all funnel through here so a single
+// mutation reads the config file once, not twice.
+func updateExtraPorts(name string, mutate func(current []string) []string) error {
 	if !config.PresetExists(name) {
 		return fmt.Errorf("%q is not a bundled service", name)
 	}
@@ -331,6 +336,7 @@ func SetExtraPorts(name string, ports []string) error {
 		return err
 	}
 	svcCfg := cfg.Services[name]
+	ports := mutate(svcCfg.ExtraPorts)
 	// The service's own main host port (published override, else preset default)
 	// is reserved — an extra mapping must not republish it.
 	mainHost := svcCfg.Port
@@ -348,7 +354,7 @@ func SetExtraPorts(name string, ports []string) error {
 		if err := ValidateExtraPort(p); err != nil {
 			return err
 		}
-		host := extraHostPort(p)
+		host := config.MappingHostPort(p)
 		if host > 0 {
 			if host == mainHost || seenHost[host] {
 				return fmt.Errorf("%w: %d", ErrPortInUse, host)
@@ -372,30 +378,27 @@ func SetExtraPorts(name string, ports []string) error {
 	if err := rerenderServiceQuadlet(name); err != nil {
 		return err
 	}
-	if status, _ := podman.UnitStatus("lerd-" + name); status == "active" {
+	// Treat "activating" as running too (a slow-booting unit), matching
+	// applyServicePortRestart, so a port exposed mid-boot still takes effect.
+	if status, _ := podman.UnitStatus("lerd-" + name); status == "active" || status == "activating" {
 		_ = podman.RestartUnit("lerd-" + name)
 	}
 	return nil
 }
 
 // AddExtraPort adds a single extra published port to a built-in service. Adding a
-// mapping already present is a harmless re-render (SetExtraPorts de-duplicates).
+// mapping already present is a harmless re-render (updateExtraPorts de-duplicates).
 func AddExtraPort(name, spec string) error {
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return err
-	}
-	cur := cfg.Services[name].ExtraPorts
-	return SetExtraPorts(name, append(append([]string{}, cur...), spec))
+	return updateExtraPorts(name, func(cur []string) []string {
+		return append(append([]string{}, cur...), spec)
+	})
 }
 
 // RemoveExtraPort removes a single extra published port from a built-in service.
 func RemoveExtraPort(name, spec string) error {
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return err
-	}
-	return SetExtraPorts(name, removePort(append([]string{}, cfg.Services[name].ExtraPorts...), spec))
+	return updateExtraPorts(name, func(cur []string) []string {
+		return removePort(append([]string{}, cur...), spec)
+	})
 }
 
 // ValidateExtraPort checks that spec is a usable podman port mapping: a bare host
@@ -484,23 +487,16 @@ func serviceEffectiveHostPorts(name string, cfg config.ServiceConfig) []int {
 	return ports
 }
 
-// extraHostPort returns the host-side port of a "host", "host:container", or
-// "ip:host:container" mapping (an optional /proto suffix is ignored), or 0 when
-// none is parseable.
-func extraHostPort(spec string) int {
-	parts := strings.Split(strings.SplitN(spec, "/", 2)[0], ":")
-	host := parts[0]
-	if len(parts) > 1 {
-		host = parts[len(parts)-2]
-	}
-	n, _ := strconv.Atoi(strings.TrimSpace(host))
-	return n
-}
-
-func removePort(ports []string, port string) []string {
+// removePort drops the mapping whose host port matches target, which may be a
+// bare host port ("39996") or a full "host:container" spec. Matching on the host
+// port lets `service expose --remove <hostport>` work without echoing the exact
+// spec back; a host port uniquely identifies an extra mapping, so this can't drop
+// the wrong one. An unparseable target removes nothing.
+func removePort(ports []string, target string) []string {
+	want := config.MappingHostPort(target)
 	out := ports[:0]
 	for _, p := range ports {
-		if p != port {
+		if want == 0 || config.MappingHostPort(p) != want {
 			out = append(out, p)
 		}
 	}

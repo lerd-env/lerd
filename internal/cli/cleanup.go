@@ -120,7 +120,8 @@ func runCleanup(dryRun, yes, deep bool) error {
 		return nil
 	}
 
-	feedback.Done(fmt.Sprintf("Freed about %s.", humanSize(cleanup.Apply(plan))))
+	_, freed := cleanup.Apply(plan)
+	feedback.Done(fmt.Sprintf("Freed about %s.", humanSize(freed)))
 	showHeldHint(plan)
 	return nil
 }

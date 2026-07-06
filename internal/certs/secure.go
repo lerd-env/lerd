@@ -92,17 +92,22 @@ func ReissueCertForWorktree(site config.Site) error {
 // never forces, so it is cheap to call on every boot/watcher pass as the routine
 // self-heal that keeps a long-lived secured site's leaf cert from expiring.
 func EnsureCert(site config.Site) error {
-	certsDir := filepath.Join(config.CertsDir(), "sites")
+	certsDir, domains := siteCertDomains(site)
+	return IssueCert(site.PrimaryDomain(), domains, certsDir)
+}
 
+// siteCertDomains assembles the cert output directory and the full SAN list (the
+// site's own domains plus every current worktree domain) shared by the reuse and
+// force reissue paths so they cannot drift.
+func siteCertDomains(site config.Site) (certsDir string, domains []string) {
+	certsDir = filepath.Join(config.CertsDir(), "sites")
 	var wtDomains []string
 	if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
 		for _, wt := range worktrees {
 			wtDomains = append(wtDomains, wt.Domain)
 		}
 	}
-	domains := WorktreeCertDomains(site.Domains, wtDomains)
-
-	return IssueCert(site.PrimaryDomain(), domains, certsDir)
+	return certsDir, WorktreeCertDomains(site.Domains, wtDomains)
 }
 
 // issueCertWithWorktrees detects all worktrees for the site and issues a
@@ -111,16 +116,7 @@ func EnsureCert(site config.Site) error {
 // reissue is atomic: a transient mkcert failure leaves the existing cert
 // intact rather than tripping RepairVhosts into flipping the site to HTTP.
 func issueCertWithWorktrees(site config.Site) error {
-	certsDir := filepath.Join(config.CertsDir(), "sites")
-
-	var wtDomains []string
-	if worktrees, err := gitpkg.ServableWorktrees(site.Path, site.PrimaryDomain()); err == nil {
-		for _, wt := range worktrees {
-			wtDomains = append(wtDomains, wt.Domain)
-		}
-	}
-	domains := WorktreeCertDomains(site.Domains, wtDomains)
-
+	certsDir, domains := siteCertDomains(site)
 	return IssueCertForce(site.PrimaryDomain(), domains, certsDir)
 }
 

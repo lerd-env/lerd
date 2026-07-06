@@ -1,6 +1,9 @@
 package cleanup
 
-import "github.com/geodro/lerd/internal/config"
+import (
+	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/podman"
+)
 
 // autoEnabled reports whether automatic cleanup is on. Seam for tests.
 var autoEnabled = defaultAutoEnabled
@@ -35,7 +38,11 @@ func sweep(deep bool) (images int, bytes int64, err error) {
 	if err != nil {
 		return 0, 0, err
 	}
-	return len(plan.Targets), Apply(plan), nil
+	// Report what Apply actually removed, not the planned count: a target that
+	// became referenced again since Inspect is skipped, so the plan can overstate
+	// the reclaim.
+	removed, bytesFreed := Apply(plan)
+	return removed, bytesFreed, nil
 }
 
 // SweepRefs reaps the exact image references lerd is dropping (the superseded
@@ -49,12 +56,18 @@ func SweepRefs(refs ...string) {
 		return
 	}
 	// De-dup the non-empty refs into canonical candidates, preserving order so a
-	// repeated ref is reaped once.
+	// repeated ref is reaped once. Apply the host image rewrite first
+	// (postgis/postgis -> imresamu/postgis on Apple Silicon) so the ref matches the
+	// name actually stored, otherwise the superseded image is never reclaimed.
 	candidates := map[string]bool{}
 	var order []string
 	for _, ref := range refs {
+		if ref == "" {
+			continue
+		}
+		ref = podman.PlatformImage(ref)
 		c := canonRef(ref)
-		if ref == "" || candidates[c] {
+		if candidates[c] {
 			continue
 		}
 		candidates[c] = true

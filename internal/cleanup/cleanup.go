@@ -290,13 +290,14 @@ func podmanRemoveImage(id string) error {
 	return podman.RunSilent("image", "rm", id)
 }
 
-// Apply removes every target in the plan and returns the disk reclaimed. It
-// sweeps in repeated passes, retrying targets that failed until a full pass
+// Apply removes every target in the plan and returns how many images were
+// actually removed and the disk reclaimed (a skipped target counts toward
+// neither). It sweeps in repeated passes, retrying targets that failed until a full pass
 // frees nothing new: podman refuses a parent image while a child is still
 // present, so removing a dangling build chain listed parent-first needs the
 // children gone first. A target that never succeeds (e.g. it became referenced
 // since Inspect) is simply left, so one stuck image can't abort the sweep.
-func Apply(p Plan) (reclaimed int64) {
+func Apply(p Plan) (removed int, reclaimed int64) {
 	remaining := p.Targets
 	for len(remaining) > 0 {
 		var stuck []Target
@@ -306,6 +307,7 @@ func Apply(p Plan) (reclaimed int64) {
 				stuck = append(stuck, t)
 				continue
 			}
+			removed++
 			reclaimed += t.Bytes
 			progress = true
 		}
@@ -314,7 +316,7 @@ func Apply(p Plan) (reclaimed int64) {
 		}
 		remaining = stuck
 	}
-	return reclaimed
+	return removed, reclaimed
 }
 
 // isLerd reports whether the image was built by lerd, proven by a dev.lerd.*

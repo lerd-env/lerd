@@ -111,7 +111,6 @@ func FetchChangelog(currentVersion, latestVersion string) (string, error) {
 			errs = append(errs, err.Error())
 			continue
 		}
-		origin.NoteFetched(url)
 		return extractChangelogSections(body, currentVersion, latestVersion), nil
 	}
 	return "", fmt.Errorf("fetching changelog: %s", strings.Join(errs, "; "))

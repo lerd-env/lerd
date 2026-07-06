@@ -48,8 +48,7 @@ func handleDoctorRun(w http.ResponseWriter, r *http.Request, site *config.Site) 
 	// it first — otherwise every file check reads a missing .env and reports a
 	// healthy worktree as broken. No-op for the parent and idempotent.
 	ensureWorktreeEnvIfBranch(site, branch)
-	fw, _ := config.GetFrameworkForDir(site.Framework, path)
-	writeJSON(w, sitedoctor.Run(r.Context(), path, fw))
+	writeJSON(w, sitedoctor.RunForPath(r.Context(), path, site.Framework))
 }
 
 // handleDoctorFixRun runs an allowlisted package-manager fix (composer
@@ -66,14 +65,7 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 	if !ok {
 		return
 	}
-	lockKey := site.Name
-	if lockKey == "" && len(site.Domains) > 0 {
-		lockKey = site.Domains[0]
-	}
-	if lockKey == "" {
-		lockKey = site.Path
-	}
-	release, busyWith, ok := tryAcquireRun(lockKey, key)
+	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), key)
 	if !ok {
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -89,6 +90,18 @@ func (d *Response) add(c Check) {
 // the universal baseline and the framework's declarative checks. fw may be nil
 // (an unknown framework) — only the file/dependency baseline runs then. The
 // cheap checks read files; command and audit checks touch the container.
+// RunForPath resolves the framework definition for a project path and runs the
+// doctor, so the CLI, MCP, and Web UI share one path -> framework -> Run chain
+// instead of re-deriving it three ways. fwName is the site's recorded framework
+// when known; pass "" to detect it from the path.
+func RunForPath(ctx context.Context, path, fwName string) Response {
+	if fwName == "" {
+		fwName, _ = config.DetectFrameworkForDir(path)
+	}
+	fw, _ := config.GetFrameworkForDir(fwName, path)
+	return Run(ctx, path, fw)
+}
+
 func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	resp := Response{Checks: []Check{}}
 	envFile, envFormat, exampleFile := envSetup(fw, path)
@@ -115,19 +128,23 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		}
 	}
 
+	// The framework command checks and the composer/node dependency + audit checks
+	// each block on an independent container-exec timeout. Run them concurrently
+	// (results collected in order) so a down app caps the panel at roughly one
+	// timeout instead of the sum of them all.
+	var tasks []func() (Check, bool)
 	for _, spec := range frameworkChecks(fw) {
+		spec := spec
 		// A known-broken database turns a migration check into "couldn't run" noise
 		// that just repeats the database finding's remedy, so skip a command check
 		// whose fix is the same migrate command; unrelated command checks still run.
 		if dbBroken && spec.Type == "command" && spec.Fix == sqliteFixCommand {
 			continue
 		}
-		if c, ok := runDeclaredCheck(ctx, path, envPath, spec); ok {
-			resp.add(c)
-		}
+		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, spec) })
 	}
-
-	for _, c := range dependencyChecks(ctx, path, fw) {
+	tasks = append(tasks, dependencyCheckTasks(ctx, path, fw)...)
+	for _, c := range runChecksConcurrently(tasks) {
 		resp.add(c)
 	}
 	if c, ok := checkPHPVersion(path, fw); ok {
@@ -649,20 +666,58 @@ func checkCommand(ctx context.Context, path string, spec config.DoctorCheck) Che
 	return Check{Name: spec.Name, Status: StatusOK}
 }
 
-// dependencyChecks runs the universal package-manager checks: composer and node
-// dependency install + lock state, plus their security audits. Each is skipped
-// when its manifest is absent.
-func dependencyChecks(ctx context.Context, path string, fw *config.Framework) []Check {
-	var checks []Check
+// maxDoctorConcurrency bounds how many checks (mostly container execs) run at
+// once, so the panel's latency is capped near a single timeout without spawning
+// an unbounded number of concurrent podman execs.
+const maxDoctorConcurrency = 6
+
+// runChecksConcurrently runs each task in its own goroutine, bounded by
+// maxDoctorConcurrency, and returns the checks that fired in the original task
+// order, so independent container-exec checks no longer add up their timeouts.
+func runChecksConcurrently(tasks []func() (Check, bool)) []Check {
+	results := make([]struct {
+		c  Check
+		ok bool
+	}, len(tasks))
+	sem := make(chan struct{}, maxDoctorConcurrency)
+	var wg sync.WaitGroup
+	for i, t := range tasks {
+		wg.Add(1)
+		go func(i int, t func() (Check, bool)) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			results[i].c, results[i].ok = t()
+		}(i, t)
+	}
+	wg.Wait()
+	var out []Check
+	for _, r := range results {
+		if r.ok {
+			out = append(out, r.c)
+		}
+	}
+	return out
+}
+
+// dependencyCheckTasks builds the universal package-manager checks (composer and
+// node dependency install + lock state, plus their security audits) as deferred
+// tasks. Each is skipped when its manifest is absent, and the composer audit is
+// skipped when vendor/ is missing (checkComposerDeps already flags that, and the
+// audit can only degrade to "unknown" without installed packages).
+func dependencyCheckTasks(ctx context.Context, path string, fw *config.Framework) []func() (Check, bool) {
+	var tasks []func() (Check, bool)
 	if fileExists(filepath.Join(path, "composer.json")) && !composerDisabled(fw) {
-		checks = append(checks, checkComposerDeps(ctx, path))
-		checks = append(checks, checkComposerAudit(ctx, path))
+		tasks = append(tasks, func() (Check, bool) { return checkComposerDeps(ctx, path), true })
+		if dirExists(filepath.Join(path, "vendor")) {
+			tasks = append(tasks, func() (Check, bool) { return checkComposerAudit(ctx, path), true })
+		}
 	}
 	if fileExists(filepath.Join(path, "package.json")) {
-		checks = append(checks, checkNodeDeps(path))
-		checks = append(checks, checkNodeAudit(ctx, path))
+		tasks = append(tasks, func() (Check, bool) { return checkNodeDeps(path), true })
+		tasks = append(tasks, func() (Check, bool) { return checkNodeAudit(ctx, path), true })
 	}
-	return checks
+	return tasks
 }
 
 // composerDisabled reports whether the framework explicitly opts out of composer

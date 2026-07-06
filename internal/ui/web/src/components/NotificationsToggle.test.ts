@@ -10,7 +10,8 @@ const allKinds: Record<NotifyKind, boolean> = {
   op_done: true,
   update_available: true,
   nplusone: true,
-  dump: false
+  dump: false,
+  slow_route: false
 };
 
 describe('NotificationsToggle', () => {

@@ -355,7 +355,6 @@ func tryPullBaseImage(version string, w io.Writer) string {
 		var stderr strings.Builder
 		cmd.Stderr = &stderr
 		if err := cmd.Run(); err == nil {
-			origin.NoteFetched(ref)
 			return ref
 		} else if s := strings.TrimSpace(stderr.String()); s != "" {
 			lastErr = pullErrLine(s)

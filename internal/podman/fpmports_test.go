@@ -95,6 +95,19 @@ func TestSetFPMPorts_ShiftsDuplicateWithinBatch(t *testing.T) {
 	}
 }
 
+// An exact-duplicate host:container spec in the batch collapses to a single
+// mapping rather than being shifted onto a redundant extra host port.
+func TestSetFPMPorts_CollapsesExactDuplicate(t *testing.T) {
+	fpmTestEnv(t)
+	got, err := SetFPMPorts("8.3", []string{"3000:3000", "3000:3000"})
+	if err != nil {
+		t.Fatalf("SetFPMPorts: %v", err)
+	}
+	if len(got) != 1 || got[0] != "3000:3000" {
+		t.Errorf("resolved = %v, want [3000:3000] (duplicate collapsed)", got)
+	}
+}
+
 func TestSetFPMPorts_EmptyClearsVersion(t *testing.T) {
 	fpmTestEnv(t)
 	if _, err := SetFPMPorts("8.3", []string{"3000:3000"}); err != nil {

@@ -24,7 +24,6 @@ func FetchLatestVersion() (string, error) {
 	for _, base := range ReleaseBaseURLs() {
 		v, err := fetchLatestFrom(base)
 		if err == nil {
-			origin.NoteFetched(base)
 			return v, nil
 		}
 		errs = append(errs, err.Error())
@@ -84,7 +83,6 @@ func FetchLatestPrerelease() (string, error) {
 	for _, base := range APIBaseURLs() {
 		v, err := fetchPrereleaseFrom(base)
 		if err == nil {
-			origin.NoteFetched(base)
 			return v, nil
 		}
 		errs = append(errs, err.Error())

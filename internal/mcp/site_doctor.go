@@ -27,8 +27,6 @@ func execSiteDoctor(args map[string]any) (any, *rpcError) {
 			}
 			path = cwd
 		}
-		fwName, _ = config.DetectFrameworkForDir(path)
 	}
-	fw, _ := config.GetFrameworkForDir(fwName, path)
-	return toolJSON(sitedoctor.Run(context.Background(), path, fw)), nil
+	return toolJSON(sitedoctor.RunForPath(context.Background(), path, fwName)), nil
 }

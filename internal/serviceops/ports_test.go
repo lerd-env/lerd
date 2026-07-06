@@ -2,11 +2,37 @@ package serviceops
 
 import (
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
+
+// The guard's shift hook is silenced only while a SetPublishedPort window is
+// open, counted so overlapping windows both hold it, while the forced fire
+// (SetPublishedPort's own end-of-change refresh) always runs. This is the
+// non-racy replacement for nil-swapping the package-global hook.
+func TestPublishedPortShiftSuppression(t *testing.T) {
+	var fired []int
+	prev := OnPublishedPortShift
+	OnPublishedPortShift = func(_ string, port int) { fired = append(fired, port) }
+	t.Cleanup(func() { OnPublishedPortShift = prev })
+
+	firePublishedPortShift("mysql", 1) // not suppressed: fires
+	unsuppress := suppressPublishedPortShift()
+	firePublishedPortShift("mysql", 2)       // suppressed: silenced
+	firePublishedPortShiftForced("mysql", 3) // forced: fires despite suppression
+	un2 := suppressPublishedPortShift()      // nested window
+	unsuppress()                             // one window closed, still suppressed
+	firePublishedPortShift("mysql", 4)       // silenced
+	un2()                                    // all windows closed
+	firePublishedPortShift("mysql", 5)       // fires again
+
+	if want := []int{1, 3, 5}; !reflect.DeepEqual(fired, want) {
+		t.Errorf("fired = %v, want %v", fired, want)
+	}
+}
 
 func TestValidateExtraPort(t *testing.T) {
 	cases := []struct {
@@ -37,9 +63,19 @@ func TestValidateExtraPort(t *testing.T) {
 }
 
 func TestRemovePort(t *testing.T) {
+	// Full spec removes every mapping on that host port.
 	got := removePort([]string{"3411:3306", "39580:80", "3411:3306"}, "3411:3306")
 	if len(got) != 1 || got[0] != "39580:80" {
-		t.Errorf("removePort dropped wrong entries: %v", got)
+		t.Errorf("removePort(full spec) dropped wrong entries: %v", got)
+	}
+	// A bare host port removes the mapping too, so `expose --remove 39580` works.
+	got = removePort([]string{"3411:3306", "39580:80"}, "39580")
+	if len(got) != 1 || got[0] != "3411:3306" {
+		t.Errorf("removePort(host only) should drop 39580:80: %v", got)
+	}
+	// An unparseable target removes nothing.
+	if got := removePort([]string{"39580:80"}, ""); len(got) != 1 {
+		t.Errorf("removePort(empty) should keep everything: %v", got)
 	}
 }
 

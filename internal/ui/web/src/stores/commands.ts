@@ -165,7 +165,7 @@ export type RunLine = { stream: 'stdout' | 'stderr' | 'meta'; text: string };
 
 export type CurrentRun =
   | { kind: 'idle' }
-  | { kind: 'confirm'; domain: string; cmd: Command }
+  | { kind: 'confirm'; domain: string; cmd: Command; branch: string }
   | { kind: 'running'; domain: string; cmd: Command; lines: RunLine[]; started: number }
   | {
       kind: 'done';
@@ -202,7 +202,9 @@ export function launchCommand(domain: string, cmd: Command, opts: { skipConfirm?
     return;
   }
   if (cmd.confirm && !opts.skipConfirm) {
-    currentRun.set({ kind: 'confirm', domain, cmd });
+    // Carry the branch into the confirm state so Run Anyway targets the same
+    // worktree the command was launched for, not the parent checkout.
+    currentRun.set({ kind: 'confirm', domain, cmd, branch: opts.branch ?? '' });
     return;
   }
   void executeCommand(domain, cmd, opts.branch);

@@ -376,7 +376,7 @@ func (s ServiceConfig) HostPorts() []int {
 		}
 	}
 	for _, ep := range s.ExtraPorts {
-		if n := mappingHostPort(ep); n > 0 {
+		if n := MappingHostPort(ep); n > 0 {
 			ports = append(ports, n)
 		}
 	}
@@ -398,10 +398,10 @@ func (s ServiceConfig) HostPortFor(containerPort, defaultHost int, isPrimary boo
 	return defaultHost
 }
 
-// mappingHostPort extracts the host port from a podman port mapping: a bare host
+// MappingHostPort extracts the host port from a podman port mapping: a bare host
 // port "3411", "3411:3306", or "127.0.0.1:3411:3306", with an optional "/tcp"
 // suffix. Returns 0 when no valid host port is present.
-func mappingHostPort(mapping string) int {
+func MappingHostPort(mapping string) int {
 	parts := strings.Split(mapping, ":")
 	host := parts[0]
 	if len(parts) > 1 {
@@ -409,6 +409,16 @@ func mappingHostPort(mapping string) int {
 	}
 	host = strings.SplitN(host, "/", 2)[0]
 	n, _ := strconv.Atoi(strings.TrimSpace(host))
+	return n
+}
+
+// mappingContainerPort extracts the container (internal) port from a podman port
+// mapping — the last numeric segment after stripping an optional "/proto" suffix.
+// A bare "3411" reports 3411, matching podman's host==container publish.
+func mappingContainerPort(mapping string) int {
+	body := strings.SplitN(mapping, "/", 2)[0]
+	parts := strings.Split(body, ":")
+	n, _ := strconv.Atoi(strings.TrimSpace(parts[len(parts)-1]))
 	return n
 }
 
@@ -423,33 +433,56 @@ func mappingHostPort(mapping string) int {
 // and customs.
 func ReservedHostPorts() map[int]bool {
 	reserved := map[int]bool{}
-	addMappings := func(mappings []string) {
-		for _, m := range mappings {
-			if n := mappingHostPort(m); n > 0 {
-				reserved[n] = true
-			}
+	cfg, _ := LoadGlobal()
+	add := func(n int) {
+		if n > 0 {
+			reserved[n] = true
 		}
 	}
-	if cfg, err := LoadGlobal(); err == nil && cfg != nil {
+	// reserveDefaults reserves a service's default mappings, resolving each through
+	// the service's recorded published override so a moved primary or secondary port
+	// reserves its NEW port and frees the default, instead of pinning the vacated
+	// default reserved forever (which would keep the guard and the host-proxy
+	// allocator from ever reusing it). Matches HostPorts()'s freed-default contract.
+	reserveDefaults := func(name string, mappings []string) {
+		var svc ServiceConfig
+		configured := false
+		if cfg != nil {
+			svc, configured = cfg.Services[name]
+		}
+		for i, m := range mappings {
+			host := MappingHostPort(m)
+			if host <= 0 {
+				continue
+			}
+			if configured {
+				host = svc.HostPortFor(mappingContainerPort(m), host, i == 0)
+			}
+			add(host)
+		}
+	}
+	if cfg != nil {
 		for _, svc := range cfg.Services {
 			for _, p := range svc.HostPorts() {
-				reserved[p] = true
+				add(p)
 			}
 		}
 		for _, specs := range cfg.PHP.FPMPorts {
-			addMappings(specs)
+			for _, m := range specs {
+				add(MappingHostPort(m))
+			}
 		}
 	}
 	if presets, err := ListPresets(); err == nil {
 		for _, meta := range presets {
 			if p, err := LoadPreset(meta.Name); err == nil {
-				addMappings(p.Ports)
+				reserveDefaults(meta.Name, p.Ports)
 			}
 		}
 	}
 	if customs, err := ListCustomServices(); err == nil {
 		for _, svc := range customs {
-			addMappings(svc.Ports)
+			reserveDefaults(svc.Name, svc.Ports)
 		}
 	}
 	return reserved
@@ -634,6 +667,12 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			cp := v
 			if v.ExtraPorts != nil {
 				cp.ExtraPorts = append([]string(nil), v.ExtraPorts...)
+			}
+			if v.PublishedPorts != nil {
+				cp.PublishedPorts = make(map[int]int, len(v.PublishedPorts))
+				for pk, pv := range v.PublishedPorts {
+					cp.PublishedPorts[pk] = pv
+				}
 			}
 			out.Services[k] = cp
 		}

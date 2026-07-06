@@ -41,8 +41,7 @@ func runSiteDoctor(domain string, asJSON bool) error {
 	if err != nil {
 		return err
 	}
-	fw, _ := config.GetFrameworkForDir(fwName, path)
-	resp := sitedoctor.Run(context.Background(), path, fw)
+	resp := sitedoctor.RunForPath(context.Background(), path, fwName)
 
 	if asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -71,8 +70,8 @@ func resolveSiteDoctorTarget(domain string) (path, fwName, label string, err err
 	if err != nil {
 		return "", "", "", err
 	}
-	name, _ := config.DetectFrameworkForDir(cwd)
-	return cwd, name, cwd, nil
+	// Leave fwName empty; sitedoctor.RunForPath detects it from the path.
+	return cwd, "", cwd, nil
 }
 
 func printSiteDoctor(resp sitedoctor.Response, label string) {

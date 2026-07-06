@@ -407,6 +407,22 @@ func TestExtApkDeps_DeepCopied(t *testing.T) {
 	}
 }
 
+// A clone's per-service PublishedPorts map must not alias the original's, or a
+// secondary-port override written into a loaded config would mutate the shared
+// cache (risking a concurrent map read/write in lerd-ui).
+func TestCloneGlobalConfig_PublishedPortsDeepCopied(t *testing.T) {
+	cfg := &GlobalConfig{
+		Services: map[string]ServiceConfig{
+			"mailpit": {PublishedPorts: map[int]int{8025: 8025}},
+		},
+	}
+	clone := cloneGlobalConfig(cfg)
+	clone.Services["mailpit"].PublishedPorts[8025] = 9025
+	if got := cfg.Services["mailpit"].PublishedPorts[8025]; got != 8025 {
+		t.Errorf("mutating the clone must not affect the original: got %d, want 8025", got)
+	}
+}
+
 func TestExtensions_AddIdempotent(t *testing.T) {
 	cfg := &GlobalConfig{}
 	cfg.AddExtension("8.3", "redis")
@@ -753,5 +769,31 @@ func TestReservedHostPorts_IncludesFPMPorts(t *testing.T) {
 	}
 	if !ReservedHostPorts()[3000] {
 		t.Errorf("ReservedHostPorts must reserve an FPM port 3000; got %v", ReservedHostPorts())
+	}
+}
+
+// A published-port override that moves a service off its preset default must free
+// that default for reuse: the preset's own default port loop must not keep it
+// reserved, matching HostPorts()'s freed-default contract.
+func TestReservedHostPorts_FreesDefaultWhenPublishedOverrideMovesIt(t *testing.T) {
+	setConfigDir(t)
+	cfg, _ := LoadGlobal()
+	svc := cfg.Services["mysql"]
+	def := svc.Port
+	if def == 0 {
+		t.Skip("mysql preset has no default port in this build")
+	}
+	moved := def + 1000
+	svc.PublishedPort = moved
+	cfg.Services["mysql"] = svc
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	reserved := ReservedHostPorts()
+	if reserved[def] {
+		t.Errorf("moved-off default port %d must be freed, but it is still reserved", def)
+	}
+	if !reserved[moved] {
+		t.Errorf("the new published port %d must be reserved; got %v", moved, reserved)
 	}
 }

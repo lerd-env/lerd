@@ -129,6 +129,16 @@ describe('launchCommand', () => {
     expect(s.cmd.name).toBe('echo');
   });
 
+  // Regression: the confirm state must carry the branch so Run Anyway targets the
+  // worktree the command was launched for, not the parent checkout.
+  it('carries the worktree branch into the confirm state', () => {
+    launchCommand('acme.test', cmd({ confirm: true }), { branch: 'feat-x' });
+    const s = get(currentRun);
+    expect(s.kind).toBe('confirm');
+    if (s.kind !== 'confirm') return;
+    expect(s.branch).toBe('feat-x');
+  });
+
   it('skips confirm when skipConfirm: true', async () => {
     mockSSE(['event: done\ndata: {"exit":0,"durationMs":1}\n\n']);
     launchCommand('acme.test', cmd({ confirm: true }), { skipConfirm: true });
