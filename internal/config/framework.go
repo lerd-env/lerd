@@ -297,12 +297,12 @@ type FrameworkPHP struct {
 // FrameworkRule is a single detection rule for a framework.
 // Any matching rule is sufficient to identify the framework.
 type FrameworkRule struct {
-	File             string   `yaml:"file,omitempty"`              // file must exist in project root
-	Composer         string   `yaml:"composer,omitempty"`          // package must be in composer.json require/require-dev
-	ComposerSections []string `yaml:"composer_sections,omitempty"` // extra composer.json keys to search (e.g. flex-require)
-	VersionKey       string   `yaml:"version_key,omitempty"`       // dot-path to version in composer.json (e.g. extra.symfony.require)
-	VersionFile      string   `yaml:"version_file,omitempty"`      // file to read version from (relative to project root)
-	VersionPattern   string   `yaml:"version_pattern,omitempty"`   // regex with capture group for version (e.g. "\\$wp_version = '([^']+)'")
+	File             string   `yaml:"file,omitempty" json:"file,omitempty"`                           // file must exist in project root
+	Composer         string   `yaml:"composer,omitempty" json:"composer,omitempty"`                   // package must be in composer.json require/require-dev
+	ComposerSections []string `yaml:"composer_sections,omitempty" json:"composer_sections,omitempty"` // extra composer.json keys to search (e.g. flex-require)
+	VersionKey       string   `yaml:"version_key,omitempty" json:"version_key,omitempty"`             // dot-path to version in composer.json (e.g. extra.symfony.require)
+	VersionFile      string   `yaml:"version_file,omitempty" json:"version_file,omitempty"`           // file to read version from (relative to project root)
+	VersionPattern   string   `yaml:"version_pattern,omitempty" json:"version_pattern,omitempty"`     // regex with capture group for version (e.g. "\\$wp_version = '([^']+)'")
 }
 
 // FrameworkEnvConf describes how the framework manages its env file.

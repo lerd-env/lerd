@@ -367,6 +367,14 @@ func StoreFrameworksDir() string {
 	return filepath.Join(DataDir(), "frameworks")
 }
 
+// StoreIndexFile returns the path to the locally cached framework store index.
+// The store package refreshes it in the background; offline detection and
+// listing read it so a fresh machine can resolve any framework without a
+// definition already on disk.
+func StoreIndexFile() string {
+	return filepath.Join(StoreFrameworksDir(), "index.json")
+}
+
 // StorePresetsDir returns the directory for store-installed service-preset YAML
 // files, fetched from the external service store. It sits under the preset-source
 // seam as a layer above the embedded bundle: a valid preset here is served in
