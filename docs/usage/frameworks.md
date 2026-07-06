@@ -48,7 +48,7 @@ lerd framework search
 
 ### Getting definitions from the store
 
-Definitions arrive automatically. Linking a project detects its framework and version and fetches the matching definition from the store, and the cached catalogue refreshes on its own in the background, so there is no install step to run.
+Definitions arrive automatically. Linking a project detects its framework and version and fetches the matching definition from the store, and the cached catalogue refreshes on its own in the background, so there is no install step to run. Because the catalogue is cached locally, detection resolves the right framework and version even offline and for frameworks you have not linked before.
 
 To refresh manually, `lerd framework update`. With no arguments it refreshes the cached catalogue and re-fetches every installed definition; with a name it fetches that one, installing it if it isn't cached yet:
 
