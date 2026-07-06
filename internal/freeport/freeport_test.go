@@ -19,6 +19,28 @@ func TestBindable_falseForBoundPort(t *testing.T) {
 	}
 }
 
+// TestBindable_falseForAllInterfacesBoundPort: a server listening on all
+// interfaces must read as not bindable. Go binds every wildcard string
+// ("0.0.0.0:0", ":0", "[::]:0") as a dual-stack [::] socket — the shape gvproxy
+// uses to publish a container's port on macOS and that a DB configured to listen
+// on all interfaces (bind-address *, listen_addresses '*') takes. A
+// specific-loopback probe alone slips past it under SO_REUSEADDR on macOS and
+// lets lerd publish a container on the same port; the wildcard probe catches it.
+// Both wildcard spellings are exercised so the coverage is explicit.
+func TestBindable_falseForAllInterfacesBoundPort(t *testing.T) {
+	for _, spec := range []string{"0.0.0.0:0", "[::]:0"} {
+		ln, err := net.Listen("tcp", spec)
+		if err != nil {
+			t.Skipf("cannot listen on %s here: %v", spec, err)
+		}
+		port := ln.Addr().(*net.TCPAddr).Port
+		if Bindable(port) {
+			t.Errorf("Bindable(%d) = true for a %s listener, want false", port, spec)
+		}
+		ln.Close()
+	}
+}
+
 // TestFirstFree exercises the injected-predicate search: skipping taken ports,
 // returning start when nothing is taken, clamping start < 1, and returning 0
 // when everything is taken.

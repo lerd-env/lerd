@@ -1,11 +1,42 @@
 package tui
 
 import (
+	"context"
+	"net"
+	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/dumps"
 )
+
+// TestStreamDumpsOnce_DialsConfiguredTransport confirms the TUI dumps stream
+// dials the OS-appropriate transport from config (TCP loopback on macOS, where
+// the lerd-ui unix socket is never created) rather than a hardcoded unix socket:
+// reaching the TCP server and reading its HTTP status is only possible if the
+// dial is not hardwired to unix.
+func TestStreamDumpsOnce_DialsConfiguredTransport(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/dumps/stream", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	srv := &http.Server{Handler: mux}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close(); _ = ln.Close() })
+
+	prev := dumpsClientDial
+	dumpsClientDial = func() (string, string) { return "tcp", ln.Addr().String() }
+	t.Cleanup(func() { dumpsClientDial = prev })
+
+	err = streamDumpsOnce(context.Background(), nil)
+	if err == nil || !strings.Contains(err.Error(), "503") {
+		t.Fatalf("streamDumpsOnce err = %v, want status 503 (reached tcp server)", err)
+	}
+}
 
 // dumpEv builds a dump-kind event from the DumpEntry fields the tests use, so
 // the model-level tests can keep expressing fixtures compactly while the buffer

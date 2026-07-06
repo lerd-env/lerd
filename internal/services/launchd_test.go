@@ -626,3 +626,32 @@ func TestLANExposedPublishPortsSurvive(t *testing.T) {
 		}
 	}
 }
+
+// TestPrecreateBindMountDirs_SkipsNamedVolume confirms a bind mount's absolute
+// source is pre-created while a named volume (bare name, e.g. the new
+// lerd-ssh-agent:/ssh-agent) is left to podman, so MkdirAll never drops a stray
+// relative directory into the process working directory.
+func TestPrecreateBindMountDirs_SkipsNamedVolume(t *testing.T) {
+	dir := t.TempDir()
+	old, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(dir); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(old) })
+
+	bind := filepath.Join(dir, "mnt", "data")
+	precreateBindMountDirs([]string{
+		"lerd-ssh-agent:/ssh-agent", // named volume: podman-managed, must be skipped
+		bind + ":" + bind + ":rw",   // bind mount: absolute source, must be created
+	})
+
+	if _, err := os.Stat(filepath.Join(dir, "lerd-ssh-agent")); !os.IsNotExist(err) {
+		t.Errorf("named volume created a stray relative dir lerd-ssh-agent (err=%v)", err)
+	}
+	if _, err := os.Stat(bind); err != nil {
+		t.Errorf("bind-mount source not pre-created: %v", err)
+	}
+}
