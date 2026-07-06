@@ -43,9 +43,10 @@ type debugBatchMsg []lerddumps.Event
 // program, capping render frequency under a firehose.
 const debugFlushInterval = 100 * time.Millisecond
 
-// runDumpsListener opens the lerd-ui Unix-socket SSE endpoint and pumps
-// parsed events into the bubbletea program. Reconnects with backoff so the
-// TUI keeps refreshing across lerd-ui restarts. Cancelled by ctx.
+// runDumpsListener opens the lerd-ui SSE endpoint over the OS-appropriate
+// transport (unix socket on Linux, TCP loopback on macOS) and pumps parsed
+// events into the bubbletea program. Reconnects with backoff so the TUI keeps
+// refreshing across lerd-ui restarts. Cancelled by ctx.
 func runDumpsListener(ctx context.Context, p *tea.Program) {
 	backoff := 500 * time.Millisecond
 	for ctx.Err() == nil {
@@ -65,8 +66,16 @@ func runDumpsListener(ctx context.Context, p *tea.Program) {
 	}
 }
 
+// dumpsClientDial reports the transport used to reach the lerd-ui daemon: the
+// unix socket on Linux, the TCP loopback on macOS where the socket isn't
+// created. A var so tests can point it at a fake listener.
+var dumpsClientDial = func() (network, addr string) {
+	return config.UIClientNetwork(), config.UIClientAddr()
+}
+
 func streamDumpsOnce(ctx context.Context, p *tea.Program) error {
-	conn, err := net.DialTimeout("unix", config.UISocketPath(), 2*time.Second)
+	network, addr := dumpsClientDial()
+	conn, err := net.DialTimeout(network, addr, 2*time.Second)
 	if err != nil {
 		return err
 	}

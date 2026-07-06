@@ -279,6 +279,20 @@ func expandSpecifiers(s string) string {
 	return strings.ReplaceAll(s, "%h", home)
 }
 
+// precreateBindMountDirs creates the host source directory of each bind-mount
+// volume so podman run doesn't fail with statfs. A named volume (a bare name
+// with no absolute source, e.g. lerd-ssh-agent:/ssh-agent) is skipped: podman
+// manages it, and MkdirAll on the bare name would drop a stray relative
+// directory into the process working directory.
+func precreateBindMountDirs(vols []string) {
+	for _, vol := range vols {
+		parts := strings.SplitN(expandSpecifiers(vol), ":", 3)
+		if len(parts) >= 2 && filepath.IsAbs(parts[0]) {
+			os.MkdirAll(parts[0], 0755) //nolint:errcheck
+		}
+	}
+}
+
 // stripSELinuxVolOpts removes SELinux relabelling flags (:z, :Z) from a
 // volume mount spec. On macOS with Podman Machine the source path is a
 // virtiofs mount and SELinux relabelling is unsupported; passing :z causes
@@ -567,13 +581,7 @@ func (m *darwinServiceManager) WriteContainerUnit(name, content string) error {
 		return fmt.Errorf("container unit %s: %w", name, err)
 	}
 
-	// Pre-create volume source directories so podman doesn't fail with statfs.
-	for _, vol := range c["Volume"] {
-		parts := strings.SplitN(expandSpecifiers(vol), ":", 3)
-		if len(parts) >= 2 {
-			os.MkdirAll(parts[0], 0755) //nolint:errcheck
-		}
-	}
+	precreateBindMountDirs(c["Volume"])
 
 	if err := ensurePlistDirs(name); err != nil {
 		return err
