@@ -88,6 +88,44 @@ func TestDetectFrameworkForDir_LerdYAMLTakesPriority(t *testing.T) {
 	}
 }
 
+func TestDetectMajorVersion_SymfonyFromBuiltinRules(t *testing.T) {
+	setConfigDir(t)
+	dir := t.TempDir()
+
+	// No symfony store definition installed yet, only a composer.json. Detection
+	// must fall back to the built-in adapter's rules so a version resolves and the
+	// store auto-fetch can trigger (previously this returned "" and served built-in).
+	composer := `{"require":{"symfony/framework-bundle":"7.1.*"}}`
+	os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0644) //nolint:errcheck
+
+	if v := DetectMajorVersion(dir, "symfony"); v != "7" {
+		t.Errorf("expected major 7 from built-in symfony rules, got %q", v)
+	}
+}
+
+func TestListFrameworksDetailed_SymfonyStoreNoDuplicate(t *testing.T) {
+	setConfigDir(t)
+
+	storeDir := StoreFrameworksDir()
+	os.MkdirAll(storeDir, 0755) //nolint:errcheck
+	fw := &Framework{Name: "symfony", Version: "8", Label: "Symfony"}
+	fwData, _ := yaml.Marshal(fw)
+	os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"), fwData, 0644) //nolint:errcheck
+
+	var symfony []FrameworkInfo
+	for _, info := range ListFrameworksDetailed() {
+		if info.Name == "symfony" {
+			symfony = append(symfony, info)
+		}
+	}
+	if len(symfony) != 1 {
+		t.Fatalf("expected a single symfony entry, got %d", len(symfony))
+	}
+	if symfony[0].Source != SourceStore {
+		t.Errorf("expected store source, got %q", symfony[0].Source)
+	}
+}
+
 func TestDetectFrameworkForDir_EmbeddedDefRestored(t *testing.T) {
 	setConfigDir(t)
 	dir := t.TempDir()

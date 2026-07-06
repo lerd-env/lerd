@@ -580,6 +580,11 @@ func linkApplyServices(cwd string, proj *config.ProjectConfig) error {
 		return nil
 	}
 	for _, svc := range proj.Services {
+		// SQLite is a per-project file, not a container: env setup writes its vars
+		// and creates the db file. There is nothing to install or start here.
+		if svc.Name == "sqlite" {
+			continue
+		}
 		// A bare entry whose name is a bundled tool preset (e.g. phpmyadmin from a
 		// detected docker-compose, or an older .lerd.yaml written before this was
 		// normalised) has no Preset/Custom set; resolve it to its preset so it

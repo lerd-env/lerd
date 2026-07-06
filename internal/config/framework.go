@@ -431,7 +431,7 @@ func (e FrameworkEnvConf) Resolve(projectDir string) (file, format string) {
 	return primary, primaryFmt
 }
 
-// laravelFramework is the only built-in framework definition.
+// laravelFramework is the built-in Laravel adapter, the default shipped stack.
 var laravelFramework = &Framework{
 	Name:      "laravel",
 	Label:     "Laravel",
@@ -1386,7 +1386,7 @@ type FrameworkInfo struct {
 func ListFrameworksDetailed() []FrameworkInfo {
 	var result []FrameworkInfo
 	seenNameVersion := map[string]bool{}
-	hasStoreLaravel := false
+	storeNames := map[string]bool{}
 
 	key := func(name, version string) string { return name + "@" + version }
 
@@ -1405,20 +1405,15 @@ func ListFrameworksDetailed() []FrameworkInfo {
 		seenNameVersion[k] = true
 		merged := mergeUserOverlay(fw)
 		result = append(result, FrameworkInfo{Framework: merged, Source: SourceStore})
-		if fw.Name == "laravel" {
-			hasStoreLaravel = true
-		}
+		storeNames[fw.Name] = true
 	}
 
-	// Built-in Laravel (only if no store-installed version exists).
-	if !hasStoreLaravel {
-		if fw, ok := GetFramework("laravel"); ok {
-			result = append(result, FrameworkInfo{Framework: fw, Source: SourceBuiltIn})
+	// Built-in adapters, only when no store-installed version supersedes them.
+	for _, b := range builtinFrameworks() {
+		if storeNames[b.Name] {
+			continue
 		}
-	}
-	// Built-in Symfony.
-	if !seenNameVersion[key("symfony", "")] {
-		if fw, ok := GetFramework("symfony"); ok {
+		if fw, ok := GetFramework(b.Name); ok {
 			result = append(result, FrameworkInfo{Framework: fw, Source: SourceBuiltIn})
 		}
 	}
@@ -1860,6 +1855,15 @@ func DetectMajorVersion(projectDir, frameworkName string) string {
 				rules = fw.Detect
 				break
 			}
+		}
+	}
+
+	// No store definition installed yet: fall back to the built-in adapter's
+	// detect rules so a first-time link can resolve a version and auto-fetch the
+	// store definition, instead of silently serving the built-in.
+	if len(rules) == 0 {
+		if b := builtinFramework(frameworkName); b != nil {
+			rules = b.Detect
 		}
 	}
 
