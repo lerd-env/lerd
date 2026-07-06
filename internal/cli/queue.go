@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -93,7 +94,7 @@ func runQueueStart(queue string, tries, timeout int) error {
 		phpVersion = cfg.PHP.DefaultVersion
 	}
 
-	if err := queueStartExplicit(siteName, cwd, phpVersion, queue, tries, timeout); err != nil {
+	if err := queueStartTuned(siteName, cwd, phpVersion, queue, tries, timeout); err != nil {
 		return err
 	}
 	if site, err := config.FindSite(siteName); err == nil && !site.Paused {
@@ -126,7 +127,29 @@ func runQueueStop() error {
 	return nil
 }
 
-func queueStartExplicit(siteName, sitePath, phpVersion, queue string, tries, timeout int) error {
+// renderQueueCommand substitutes {queue}/{tries}/{timeout} into the worker's
+// TuneCommand template (each framework declares its own flag syntax), falling
+// back to the plain Command when no template is defined.
+func renderQueueCommand(w config.FrameworkWorker, queue string, tries, timeout int) string {
+	if w.TuneCommand == "" {
+		return w.Command
+	}
+	return strings.NewReplacer(
+		"{queue}", queue,
+		"{tries}", strconv.Itoa(tries),
+		"{timeout}", strconv.Itoa(timeout),
+	).Replace(w.TuneCommand)
+}
+
+// queueStartTuned starts the queue worker with a specific queue/tries/timeout by
+// rendering the framework's TuneCommand. Used by `lerd queue:start` and, via the
+// mcp.QueueStartFn hook, by the MCP queue_start tool.
+func queueStartTuned(siteName, sitePath, phpVersion, queue string, tries, timeout int) error {
+	// The queue name is interpolated into the worker command; whitespace or a
+	// newline could inject extra arguments or a systemd directive.
+	if strings.ContainsAny(queue, " \t\r\n") {
+		return fmt.Errorf("invalid queue name: must not contain whitespace")
+	}
 	// Pre-flight: if the site uses Redis as its queue connection, make sure
 	// lerd-redis is actually running. Without it the queue worker fails immediately
 	// with a cryptic PHP "getaddrinfo for lerd-redis failed" DNS error.
@@ -146,9 +169,11 @@ func queueStartExplicit(siteName, sitePath, phpVersion, queue string, tries, tim
 		return fmt.Errorf("framework %q has no worker named \"queue\"", fw.Label)
 	}
 
-	// Build the command with custom flags if they differ from defaults.
+	// Derive the command from the framework definition instead of hardcoding
+	// Laravel's artisan syntax, so non-Laravel frameworks (e.g. CodeIgniter's
+	// `php spark queue:work`) run their own worker command.
 	workerCopy := worker
-	workerCopy.Command = fmt.Sprintf("php artisan queue:work --queue=%s --tries=%d --timeout=%d", queue, tries, timeout)
+	workerCopy.Command = renderQueueCommand(worker, queue, tries, timeout)
 
 	return WorkerStartForSite(siteName, sitePath, phpVersion, "queue", workerCopy, true)
 }
@@ -167,92 +192,45 @@ func QueueStartForSite(siteName, sitePath, phpVersion string) error {
 	return WorkerStartForSite(siteName, sitePath, phpVersion, "queue", worker, true)
 }
 
-// buildQueueUnit renders the systemd unit body for a queue worker. Pure
-// function: fpmUnit (the container to exec into) is resolved by the caller,
-// so the dep wiring can be exercised in tests without the live site registry.
-func buildQueueUnit(siteName, sitePath, fpmUnit, queue string, tries, timeout int) string {
-	container := fpmUnit
-	artisanArgs := fmt.Sprintf("queue:work --queue=%s --tries=%d --timeout=%d", queue, tries, timeout)
-
-	// Wants= the backing service so systemd pulls it in; Restart=always covers
-	// the ready-window between activation and the container accepting connections.
-	depUnits := append([]string{fpmUnit + ".service"}, queueDependencyUnits(sitePath)...)
-	afterLine := "After=network.target " + strings.Join(depUnits, " ")
-	wantsLine := "Wants=" + strings.Join(depUnits, " ")
-
-	return fmt.Sprintf(`[Unit]
-Description=Lerd Queue Worker (%s)
-%s
-%s
-BindsTo=%s.service
-
-[Service]
-Type=simple
-Restart=always
-RestartSec=5
-ExecStart=%s exec -w %s %s php artisan %s
-
-[Install]
-WantedBy=default.target
-`, siteName, afterLine, wantsLine, fpmUnit, podman.PodmanBin(), sitePath, container, artisanArgs)
-}
-
-// queueDependencyUnits returns the lerd service unit(s) the queue worker
-// needs based on QUEUE_CONNECTION (and DB_CONNECTION). FPM is added by the
-// caller. Returns nil for sync / sqs / sqlite / unreadable .env.
-func queueDependencyUnits(sitePath string) []string {
-	envPath := filepath.Join(sitePath, ".env")
-	switch envfile.ReadKey(envPath, "QUEUE_CONNECTION") {
-	case "redis":
-		return []string{"lerd-redis.service"}
-	case "database":
-		switch envfile.ReadKey(envPath, "DB_CONNECTION") {
-		case "mysql", "mariadb":
-			return []string{"lerd-mysql.service"}
-		case "pgsql", "pgsql_pdo", "postgres":
-			return []string{"lerd-postgres.service"}
-		}
-	}
-	return nil
-}
-
-// QueueRestartForSite signals the Laravel queue worker to gracefully restart by
-// running php artisan queue:restart inside the PHP-FPM container. It is a no-op
-// when no queue unit exists for the site. systemd restarts the worker after the
-// graceful exit because the unit uses Restart=always.
+// QueueRestartForSite gracefully restarts the queue worker by running the
+// framework's RestartCommand in the FPM container. No-op when the site has no
+// queue unit or the framework declares no restart command (e.g. CodeIgniter).
 func QueueRestartForSite(siteName, sitePath, phpVersion string) error {
-	if phpVersion == "" {
-		cfg, _ := config.LoadGlobal()
-		phpVersion = cfg.PHP.DefaultVersion
-	}
-
-	unitName := "lerd-queue-" + siteName
-	unitFile := filepath.Join(config.SystemdUserDir(), unitName+".service")
+	unitFile := filepath.Join(config.SystemdUserDir(), "lerd-queue-"+siteName+".service")
 	if _, err := os.Stat(unitFile); os.IsNotExist(err) {
-		return nil // no queue worker for this site
+		return nil
 	}
-
-	// Upgrade legacy units that used Restart=on-failure — queue:restart causes a
-	// clean exit (code 0) which on-failure does not restart.
+	fw, ok := config.GetFrameworkForDir(siteFrameworkName(siteName), sitePath)
+	if !ok {
+		return nil
+	}
+	worker, ok := fw.Workers["queue"]
+	if !ok || worker.RestartCommand == "" {
+		return nil
+	}
+	// Heal legacy units: a graceful restart exits cleanly (code 0), which
+	// Restart=on-failure would not respawn. Upgrade them to Restart=always.
 	if data, err := os.ReadFile(unitFile); err == nil {
-		if updated := strings.ReplaceAll(string(data), "Restart=on-failure", "Restart=always"); updated != string(data) {
-			if writeErr := os.WriteFile(unitFile, []byte(updated), 0644); writeErr == nil {
+		if healed := strings.ReplaceAll(string(data), "Restart=on-failure", "Restart=always"); healed != string(data) {
+			if err := os.WriteFile(unitFile, []byte(healed), 0644); err == nil {
 				_ = podman.DaemonReloadFn()
 			}
 		}
 	}
-
+	if phpVersion == "" {
+		cfg, _ := config.LoadGlobal()
+		phpVersion = cfg.PHP.DefaultVersion
+	}
 	container := resolveWorkerFPMUnit(siteName, phpVersion)
 	if container == "" {
 		container = "lerd-php" + strings.ReplaceAll(phpVersion, ".", "") + "-fpm"
 	}
-
 	if running, _ := podman.ContainerRunning(container); !running {
 		return nil
 	}
-
-	if _, err := podman.Run("exec", "-w", sitePath, container, "php", "artisan", "queue:restart"); err != nil {
-		return fmt.Errorf("queue:restart for %s: %w", siteName, err)
+	args := append([]string{"exec", "-w", sitePath, container}, strings.Fields(worker.RestartCommand)...)
+	if _, err := podman.Run(args...); err != nil {
+		return fmt.Errorf("queue restart for %s: %w", siteName, err)
 	}
 	fmt.Printf("Queue worker signaled to restart for %s\n", siteName)
 	return nil
