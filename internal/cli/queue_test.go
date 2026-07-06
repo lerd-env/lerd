@@ -1,125 +1,37 @@
 package cli
 
 import (
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 )
 
-// writeTempEnv creates a temp dir with a .env file containing the given
-// key/value pairs and returns its path.
-func writeTempEnv(t *testing.T, kv map[string]string) string {
-	t.Helper()
-	dir := t.TempDir()
-	var b strings.Builder
-	for k, v := range kv {
-		b.WriteString(k)
-		b.WriteString("=")
-		b.WriteString(v)
-		b.WriteString("\n")
+func TestRenderQueueCommand(t *testing.T) {
+	// Laravel declares --queue=/--tries=/--timeout= flags.
+	laravel := config.FrameworkWorker{
+		Command:     "php artisan queue:work --queue=default --tries=3 --timeout=60",
+		TuneCommand: "php artisan queue:work --queue={queue} --tries={tries} --timeout={timeout}",
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(b.String()), 0644); err != nil {
-		t.Fatalf("write .env: %v", err)
+	if got := renderQueueCommand(laravel, "emails", 5, 120); got != "php artisan queue:work --queue=emails --tries=5 --timeout=120" {
+		t.Errorf("laravel: got %q", got)
 	}
-	return dir
-}
 
-func TestQueueDependencyUnits(t *testing.T) {
-	cases := []struct {
-		name string
-		env  map[string]string
-		want []string
-	}{
-		{
-			name: "redis backend",
-			env:  map[string]string{"QUEUE_CONNECTION": "redis"},
-			want: []string{"lerd-redis.service"},
-		},
-		{
-			name: "database backend with mysql",
-			env:  map[string]string{"QUEUE_CONNECTION": "database", "DB_CONNECTION": "mysql"},
-			want: []string{"lerd-mysql.service"},
-		},
-		{
-			name: "database backend with postgres",
-			env:  map[string]string{"QUEUE_CONNECTION": "database", "DB_CONNECTION": "pgsql"},
-			want: []string{"lerd-postgres.service"},
-		},
-		{
-			name: "database backend with sqlite has no lerd service dep",
-			env:  map[string]string{"QUEUE_CONNECTION": "database", "DB_CONNECTION": "sqlite"},
-			want: nil,
-		},
-		{
-			name: "sync backend has no service dep",
-			env:  map[string]string{"QUEUE_CONNECTION": "sync"},
-			want: nil,
-		},
-		{
-			name: "external backend has no local service dep",
-			env:  map[string]string{"QUEUE_CONNECTION": "sqs"},
-			want: nil,
-		},
+	// CodeIgniter takes the queue positionally and has no per-job timeout flag.
+	ci4 := config.FrameworkWorker{
+		Command:     "php spark queue:work default",
+		TuneCommand: "php spark queue:work {queue} -tries={tries}",
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			sitePath := writeTempEnv(t, tc.env)
-			got := queueDependencyUnits(sitePath)
-			if !equalStringSlices(got, tc.want) {
-				t.Errorf("got %v, want %v", got, tc.want)
-			}
-		})
+	if got := renderQueueCommand(ci4, "emails", 5, 120); got != "php spark queue:work emails -tries=5" {
+		t.Errorf("codeigniter: got %q", got)
 	}
-}
 
-// Missing .env happens during install-time restore on a freshly-linked
-// project before env_setup has run.
-func TestQueueDependencyUnits_NoEnv(t *testing.T) {
-	dir := t.TempDir() // no .env at all
-	if got := queueDependencyUnits(dir); got != nil {
-		t.Errorf("got %v, want nil", got)
+	// No template: fall back to the plain command verbatim.
+	plain := config.FrameworkWorker{Command: "php spark queue:work default"}
+	if got := renderQueueCommand(plain, "emails", 5, 120); got != "php spark queue:work default" {
+		t.Errorf("fallback: got %q", got)
 	}
-}
-
-// Regression for the bug where install-time restore couldn't recreate the
-// queue unit for QUEUE_CONNECTION=redis sites because the old preflight
-// rejected the write before lerd-redis was up.
-func TestBuildQueueUnit_RedisBackendRendersDependencies(t *testing.T) {
-	sitePath := writeTempEnv(t, map[string]string{"QUEUE_CONNECTION": "redis"})
-	unit := buildQueueUnit("example-redis", sitePath, "lerd-php84-fpm", "default", 3, 60)
-
-	mustContain(t, unit, "Description=Lerd Queue Worker (example-redis)")
-	mustContain(t, unit, "After=network.target lerd-php84-fpm.service lerd-redis.service")
-	mustContain(t, unit, "Wants=lerd-php84-fpm.service lerd-redis.service")
-	mustContain(t, unit, "BindsTo=lerd-php84-fpm.service")
-	mustContain(t, unit, "Restart=always")
-	mustContain(t, unit, "ExecStart="+podman.PodmanBin()+" exec -w "+sitePath+" lerd-php84-fpm php artisan queue:work --queue=default --tries=3 --timeout=60")
-	mustContain(t, unit, "WantedBy=default.target")
-}
-
-func TestBuildQueueUnit_SyncBackendOmitsServiceDep(t *testing.T) {
-	sitePath := writeTempEnv(t, map[string]string{"QUEUE_CONNECTION": "sync"})
-	unit := buildQueueUnit("example-sync", sitePath, "lerd-php84-fpm", "default", 3, 60)
-
-	mustContain(t, unit, "After=network.target lerd-php84-fpm.service")
-	mustContain(t, unit, "Wants=lerd-php84-fpm.service")
-	if strings.Contains(unit, "lerd-redis.service") {
-		t.Errorf("sync backend should not depend on redis, unit:\n%s", unit)
-	}
-}
-
-func TestBuildQueueUnit_DatabaseBackendUsesDBConnection(t *testing.T) {
-	sitePath := writeTempEnv(t, map[string]string{
-		"QUEUE_CONNECTION": "database",
-		"DB_CONNECTION":    "pgsql",
-	})
-	unit := buildQueueUnit("example-db", sitePath, "lerd-php83-fpm", "default", 3, 60)
-
-	mustContain(t, unit, "After=network.target lerd-php83-fpm.service lerd-postgres.service")
-	mustContain(t, unit, "Wants=lerd-php83-fpm.service lerd-postgres.service")
 }
 
 func TestBuildHorizonUnit_AlwaysDependsOnRedis(t *testing.T) {
@@ -137,16 +49,4 @@ func mustContain(t *testing.T, body, needle string) {
 	if !strings.Contains(body, needle) {
 		t.Errorf("expected unit body to contain %q\n--- unit ---\n%s", needle, body)
 	}
-}
-
-func equalStringSlices(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
 }

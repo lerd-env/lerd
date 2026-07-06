@@ -134,14 +134,21 @@ type FrameworkWorker struct {
 	// flag (see resolveWorkerCommand). Keeping the literal command text in the
 	// framework definition rather than rewriting Command in Go means the store
 	// stays the single source of truth for what actually runs.
-	ReloadCommand string         `yaml:"reload_command,omitempty"`
-	Restart       string         `yaml:"restart,omitempty"`        // always | on-failure (default: always)
-	Schedule      string         `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
-	Check         *FrameworkRule `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
-	ExcludeCheck  *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
-	ConflictsWith []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
-	Proxy         *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
-	Host          bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
+	ReloadCommand string `yaml:"reload_command,omitempty"`
+	// TuneCommand is the parameterized variant of Command for `lerd queue:start`,
+	// a template with {queue}/{tries}/{timeout} placeholders so each framework
+	// declares its own flag syntax. Empty falls back to Command verbatim.
+	TuneCommand string `yaml:"tune_command,omitempty"`
+	// RestartCommand gracefully restarts the queue worker in-container (e.g.
+	// Laravel's "php artisan queue:restart"). Empty means no graceful restart.
+	RestartCommand string         `yaml:"restart_command,omitempty"`
+	Restart        string         `yaml:"restart,omitempty"`        // always | on-failure (default: always)
+	Schedule       string         `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
+	Check          *FrameworkRule `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
+	ExcludeCheck   *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
+	ConflictsWith  []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
+	Proxy          *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	Host           bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 	// PerWorktree opts the worker into running independently per git worktree
 	// (lerd-<wname>-<site>-<wt>). Defaults to false; set true on workers that
 	// need a separate process per checkout (e.g. dev servers like vite).
@@ -533,10 +540,12 @@ var laravelFramework = &Framework{
 	},
 	Workers: map[string]FrameworkWorker{
 		"queue": {
-			Label:        "Queue Worker",
-			Command:      "php artisan queue:work --queue=default --tries=3 --timeout=60",
-			Restart:      "always",
-			ExcludeCheck: &FrameworkRule{Composer: "laravel/horizon"}, // horizon supersedes queue
+			Label:          "Queue Worker",
+			Command:        "php artisan queue:work --queue=default --tries=3 --timeout=60",
+			TuneCommand:    "php artisan queue:work --queue={queue} --tries={tries} --timeout={timeout}",
+			RestartCommand: "php artisan queue:restart",
+			Restart:        "always",
+			ExcludeCheck:   &FrameworkRule{Composer: "laravel/horizon"}, // horizon supersedes queue
 		},
 		"schedule": {
 			Label:   "Task Scheduler",
