@@ -197,7 +197,6 @@ func (c *Client) fetch(path string) ([]byte, error) {
 	for _, base := range append([]string{c.BaseURL}, c.Fallbacks...) {
 		body, err := fetchOne(client, base+"/"+path)
 		if err == nil {
-			origin.NoteFetched(base)
 			return body, nil
 		}
 		errs = append(errs, err.Error())

@@ -141,12 +141,44 @@ func defaultNginxHealthy() bool {
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.Nginx.HTTPSPort > 0 {
 		port = cfg.Nginx.HTTPSPort
 	}
-	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", port), nginxHealthyDialTimeout)
+	if !loopbackServing(fmt.Sprintf("127.0.0.1:%d", port)) {
+		return false
+	}
+	// A resume can drop only the IPv6 (::1) forward while the IPv4 one survives,
+	// leaving sites a browser resolves to ::1 unreachable while this probe would
+	// otherwise call nginx healthy. Require the ::1 forward too, but only when the
+	// host actually has an IPv6 loopback, so an IPv4-only host isn't bounced on a
+	// ::1 that never existed.
+	if hasIPv6Loopback() && !loopbackServing(fmt.Sprintf("[::1]:%d", port)) {
+		return false
+	}
+	return true
+}
+
+// loopbackServing reports whether a loopback dial to addr connects within the
+// health-probe timeout.
+func loopbackServing(addr string) bool {
+	conn, err := net.DialTimeout("tcp", addr, nginxHealthyDialTimeout)
 	if err != nil {
 		return false
 	}
 	_ = conn.Close()
 	return true
+}
+
+// hasIPv6Loopback reports whether the host has the ::1 loopback address, so the
+// health probe only requires an IPv6 forward on hosts that actually run IPv6.
+func hasIPv6Loopback() bool {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		if ipnet, ok := a.(*net.IPNet); ok && ipnet.IP.Equal(net.IPv6loopback) {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultRepairNginx restarts nginx so it rebinds its host ports on the live

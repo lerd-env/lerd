@@ -10,7 +10,13 @@ import (
 // file and rename so a reader never sees a half-written file. The watcher calls
 // this on its tick; lerd-ui reads it with Load.
 func (a *Aggregator) Save(path string) error {
-	snap := a.Snapshot()
+	return SaveSnapshot(a.Snapshot(), path)
+}
+
+// SaveSnapshot persists an already-computed snapshot, so a caller that also needs
+// the snapshot (e.g. to feed slow-route notifications) can build it once and
+// avoid recomputing it inside Save.
+func SaveSnapshot(snap []SiteStats, path string) error {
 	b, err := json.Marshal(snap)
 	if err != nil {
 		return err

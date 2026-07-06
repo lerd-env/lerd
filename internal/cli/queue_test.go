@@ -1,12 +1,54 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"gopkg.in/yaml.v3"
 )
+
+// The store-fetched Laravel definitions must keep declaring restart_command and
+// tune_command on the queue worker: without them QueueRestartForSite no-ops and
+// queue:start drops its tuned flags, since no Go merger backfills the fields.
+func TestLaravelStoreQueueWorker_HasRestartAndTuneCommands(t *testing.T) {
+	dir := filepath.Join("..", "..", "lerd-frameworks", "frameworks", "laravel")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Skipf("laravel store checkout not present: %v", err)
+	}
+	checked := 0
+	for _, e := range entries {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".yaml" {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dir, e.Name()))
+		if err != nil {
+			t.Fatalf("read %s: %v", e.Name(), err)
+		}
+		var fw config.Framework
+		if err := yaml.Unmarshal(b, &fw); err != nil {
+			t.Fatalf("unmarshal %s: %v", e.Name(), err)
+		}
+		q, ok := fw.Workers["queue"]
+		if !ok {
+			continue
+		}
+		checked++
+		if q.RestartCommand == "" {
+			t.Errorf("%s: queue worker missing restart_command", e.Name())
+		}
+		if q.TuneCommand == "" {
+			t.Errorf("%s: queue worker missing tune_command", e.Name())
+		}
+	}
+	if checked == 0 {
+		t.Skip("no laravel version declares a queue worker")
+	}
+}
 
 func TestRenderQueueCommand(t *testing.T) {
 	// Laravel declares --queue=/--tries=/--timeout= flags.

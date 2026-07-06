@@ -52,8 +52,10 @@ func resolveSiteName(args []string) (string, error) {
 }
 
 func runSecure(cmd *cobra.Command, args []string) error {
-	if renew, _ := cmd.Flags().GetBool("renew"); renew {
-		return renewCert(args)
+	if cmd != nil {
+		if renew, _ := cmd.Flags().GetBool("renew"); renew {
+			return renewCert(args)
+		}
 	}
 	return toggleSecureCmd(args, true)
 }

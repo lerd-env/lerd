@@ -2,7 +2,6 @@ package podman
 
 import (
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -55,6 +54,7 @@ func SetFPMPorts(version string, specs []string) ([]string, error) {
 
 	resolved := make([]string, 0, len(specs))
 	seen := map[string]bool{}
+	requested := map[string]bool{}
 	for _, spec := range specs {
 		spec = strings.TrimSpace(spec)
 		if spec == "" {
@@ -64,6 +64,14 @@ func SetFPMPorts(version string, specs []string) ([]string, error) {
 		if err != nil {
 			return nil, err
 		}
+		// Collapse an exact-duplicate request before the shift, so re-adding a
+		// mapping the batch already carries is a no-op rather than being pushed
+		// onto a redundant extra host port.
+		reqKey := fmt.Sprintf("%d:%d", host, container)
+		if requested[reqKey] {
+			continue
+		}
+		requested[reqKey] = true
 		if taken(host) {
 			host = freeport.FirstFree(host+1, taken)
 			if host == 0 {
@@ -166,13 +174,8 @@ func parseFPMPortSpec(spec string) (host, container int, err error) {
 }
 
 // specHostPort returns the host-side port of a "host:container" or
-// "ip:host:container" mapping (an optional /proto suffix is ignored), or 0.
+// "ip:host:container" mapping (an optional /proto suffix is ignored), or 0. It
+// reuses PrimaryHostPort so there is a single host-port parser for FPM specs.
 func specHostPort(spec string) int {
-	parts := strings.Split(strings.SplitN(spec, "/", 2)[0], ":")
-	host := parts[0]
-	if len(parts) > 1 {
-		host = parts[len(parts)-2]
-	}
-	n, _ := strconv.Atoi(strings.TrimSpace(host))
-	return n
+	return PrimaryHostPort([]string{spec})
 }

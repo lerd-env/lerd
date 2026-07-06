@@ -642,3 +642,25 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 		}
 	})
 }
+
+// dependencyCheckTasks skips the composer audit when vendor/ is absent (the deps
+// check already flags that, and the audit could only burn a container-exec
+// timeout to reach "unknown").
+func TestDependencyCheckTasks_SkipsComposerAuditWithoutVendor(t *testing.T) {
+	t.Run("composer.json without vendor: deps only, no audit", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, "composer.json", "{}")
+		if got := len(dependencyCheckTasks(context.Background(), dir, nil)); got != 1 {
+			t.Errorf("want 1 task (deps only), got %d", got)
+		}
+	})
+
+	t.Run("composer.json with vendor: deps and audit", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, "composer.json", "{}")
+		mustMkdir(t, filepath.Join(dir, "vendor"))
+		if got := len(dependencyCheckTasks(context.Background(), dir, nil)); got != 2 {
+			t.Errorf("want 2 tasks (deps + audit), got %d", got)
+		}
+	})
+}

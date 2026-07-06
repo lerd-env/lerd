@@ -24,7 +24,8 @@ describe('CommandRunModal', () => {
     currentRun.set({
       kind: 'confirm',
       domain: 'acme.test',
-      cmd: { name: 'migrate:fresh', label: 'Fresh migrate', command: 'php artisan migrate:fresh --force', confirm: true }
+      cmd: { name: 'migrate:fresh', label: 'Fresh migrate', command: 'php artisan migrate:fresh --force', confirm: true },
+      branch: ''
     });
     await new Promise((r) => setTimeout(r, 0));
     expect(screen.getByText(/Run Fresh migrate/)).toBeInTheDocument();
@@ -104,7 +105,8 @@ describe('CommandRunModal', () => {
     currentRun.set({
       kind: 'confirm',
       domain: 'acme.test',
-      cmd: { name: 'x', label: 'X', command: 'true', confirm: true }
+      cmd: { name: 'x', label: 'X', command: 'true', confirm: true },
+      branch: ''
     });
     await new Promise((r) => setTimeout(r, 0));
     // Two buttons match "Cancel" (backdrop has aria-label and the footer Cancel

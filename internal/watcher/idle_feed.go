@@ -61,11 +61,8 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	// The access feed is bound once, for the daemon's life, and fans out to both
 	// request stats (always) and idle activity (only while enabled). Idle used to
 	// bind it inside its session, but timing stats must run even with idle off, so
-	// there is a single always-on reader here. Best-effort: a bind failure loses
-	// the feed, and both consumers degrade to their other signals.
-	if conn, ok := accessFeedConn(); ok {
-		go readDatagrams(conn, handleAccessDatagram)
-	}
+	// there is a single always-on reader here.
+	startAccessFeed()
 	go runReqStatsSaver()
 
 	// Boot memory is the persisted config flag, not the ephemeral socket. When
@@ -151,12 +148,37 @@ func runReqStatsSaver() {
 			continue
 		}
 		snap := reqAggregator.Snapshot()
-		_ = reqAggregator.Save(config.RequestStatsFile())
+		_ = reqstats.SaveSnapshot(snap, config.RequestStatsFile())
 		domainOf := siteDomainResolver()
 		for _, n := range slowNotifier.notifications(snap, domainOf) {
 			_ = push.Send(n)
 		}
 	}
+}
+
+// accessFeedRetryInterval is how often startAccessFeed retries a failed bind so
+// a transient boot-time failure recovers without a full daemon restart.
+const accessFeedRetryInterval = 30 * time.Second
+
+// startAccessFeed binds the always-on access-feed reader. A bind that fails at
+// boot (a transient FS/permission hiccup on the socket path) is retried in the
+// background so the feed and its consumers recover on their own; until it binds
+// both consumers degrade to their other signals.
+func startAccessFeed() {
+	if conn, ok := accessFeedConn(); ok {
+		go readDatagrams(conn, handleAccessDatagram)
+		return
+	}
+	go func() {
+		t := time.NewTicker(accessFeedRetryInterval)
+		defer t.Stop()
+		for range t.C {
+			if conn, ok := accessFeedConn(); ok {
+				go readDatagrams(conn, handleAccessDatagram)
+				return
+			}
+		}
+	}()
 }
 
 // accessFeedConn binds the nginx access feed listener per platform: a unix

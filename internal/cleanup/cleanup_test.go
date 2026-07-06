@@ -197,10 +197,13 @@ func TestApply_RemovesTargetsAndSumsReclaimed(t *testing.T) {
 	removeImage = func(id string) error { removed = append(removed, id); return nil }
 	t.Cleanup(func() { removeImage = podmanRemoveImage })
 
-	got := Apply(Plan{Targets: []Target{{ID: "aaa", Bytes: 100}, {ID: "bbb", Bytes: 250}}})
+	gotN, got := Apply(Plan{Targets: []Target{{ID: "aaa", Bytes: 100}, {ID: "bbb", Bytes: 250}}})
 
 	if got != 350 {
 		t.Errorf("reclaimed = %d, want 350", got)
+	}
+	if gotN != 2 {
+		t.Errorf("removed count = %d, want 2", gotN)
 	}
 	if len(removed) != 2 || removed[0] != "aaa" || removed[1] != "bbb" {
 		t.Errorf("removed = %v, want [aaa bbb]", removed)
@@ -221,10 +224,13 @@ func TestApply_RetriesUntilDependentsFreed(t *testing.T) {
 	}
 	t.Cleanup(func() { removeImage = podmanRemoveImage })
 
-	got := Apply(Plan{Targets: []Target{{ID: "parent", Bytes: 500}, {ID: "child", Bytes: 100}}})
+	gotN, got := Apply(Plan{Targets: []Target{{ID: "parent", Bytes: 500}, {ID: "child", Bytes: 100}}})
 
 	if got != 600 {
 		t.Errorf("reclaimed = %d, want 600 (both freed across passes)", got)
+	}
+	if gotN != 2 {
+		t.Errorf("removed count = %d, want 2", gotN)
 	}
 	if present["parent"] {
 		t.Error("parent should be removed once the child is gone")
@@ -242,9 +248,12 @@ func TestApply_SkipsFailedRemovalsButContinues(t *testing.T) {
 	}
 	t.Cleanup(func() { removeImage = podmanRemoveImage })
 
-	got := Apply(Plan{Targets: []Target{{ID: "bad", Bytes: 100}, {ID: "good", Bytes: 50}}})
+	gotN, got := Apply(Plan{Targets: []Target{{ID: "bad", Bytes: 100}, {ID: "good", Bytes: 50}}})
 
 	if got != 50 {
 		t.Errorf("reclaimed = %d, want 50 (only the successful removal)", got)
+	}
+	if gotN != 1 {
+		t.Errorf("removed count = %d, want 1 (only the successful removal)", gotN)
 	}
 }

@@ -437,7 +437,6 @@ func downloadArchive(ver, filename, archive string) error {
 			errs = append(errs, fmt.Sprintf("%s: %v", url, err))
 			continue
 		}
-		origin.NoteFetched(base)
 		return nil
 	}
 	return fmt.Errorf("download failed: %s", strings.Join(errs, "; "))

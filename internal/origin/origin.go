@@ -1,157 +1,85 @@
-// Package origin centralises every URL lerd fetches its own assets from (release
-// binaries, framework store, changelog, GHCR base images) and owns the
-// geodro->lerd-env move: old org first, new as fallback, flipping on a new-org hit.
+// Package origin centralises every URL lerd fetches its own assets from: release
+// binaries, the framework and service stores, the changelog, and the GHCR base
+// images. Everything is served from the lerd-env org (the geodro->lerd-env move
+// is complete), and each endpoint is overridable via its environment variable
+// for tests and mirrors.
 package origin
 
 import (
 	"os"
 	"strings"
-	"sync"
 )
 
-// org holds the repo coordinates for one GitHub owner.
-type org struct {
-	owner          string // GitHub org, also the GHCR namespace
-	mainRepo       string // owner/name for releases, installer, changelog
-	frameworksRepo string // owner/name for the framework store
-	servicesRepo   string // owner/name for the service-preset store
-}
+const (
+	owner          = "lerd-env"      // GitHub org, also the GHCR namespace
+	mainRepo       = "lerd-env/lerd" // releases, installer, changelog
+	frameworksRepo = "lerd-env/frameworks"
+	servicesRepo   = "lerd-env/services"
+)
 
-// Links is the centralized handler for lerd's distribution URLs and the
-// old->new org switch. The zero value is not usable; use New or Default.
-type Links struct {
-	old, new  org
-	mu        sync.RWMutex
-	preferNew bool // when true, the new org is served first
-}
-
-// New builds a Links with the geodro (old) and lerd-env (new) coordinates,
-// preferring old first unless LERD_DISTRIBUTION_ORG says otherwise.
-func New() *Links {
-	l := &Links{
-		// geodro is the current (old) org, served first and kept as the fallback.
-		old: org{owner: "geodro", mainRepo: "geodro/lerd", frameworksRepo: "geodro/lerd-frameworks", servicesRepo: "geodro/lerd-services"},
-		new: org{owner: "lerd-env", mainRepo: "lerd-env/lerd", frameworksRepo: "lerd-env/frameworks", servicesRepo: "lerd-env/services"},
-	}
-	switch strings.ToLower(os.Getenv("LERD_DISTRIBUTION_ORG")) {
-	case "lerd-env", "new":
-		l.preferNew = true
-	case "geodro", "old":
-		l.preferNew = false
-	}
-	return l
-}
-
-// Default is the process-wide Links used by the package-level helpers.
-var Default = New()
-
-// PreferNew reports whether the new (lerd-env) org is served first.
-func (l *Links) PreferNew() bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.preferNew
-}
-
-// SetPreferNew sets which org is served first.
-func (l *Links) SetPreferNew(v bool) {
-	l.mu.Lock()
-	l.preferNew = v
-	l.mu.Unlock()
-}
-
-// ordered returns [preferred, other] for a function that maps an org to a URL.
-func (l *Links) ordered(of func(org) string) []string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	if l.preferNew {
-		return []string{of(l.new), of(l.old)}
-	}
-	return []string{of(l.old), of(l.new)}
-}
-
-func rawRepo(o org) string     { return "https://raw.githubusercontent.com/" + o.frameworksRepo }
-func rawServices(o org) string { return "https://raw.githubusercontent.com/" + o.servicesRepo }
-func rawMain(o org) string     { return "https://raw.githubusercontent.com/" + o.mainRepo }
-func releases(o org) string    { return "https://github.com/" + o.mainRepo + "/releases" }
-func apiBase(o org) string     { return "https://api.github.com/repos/" + o.mainRepo }
-
-// StoreBaseURLs returns the framework-store base. The store content lives in the
-// new lerd-env org, so it is served directly without the geodro fallback the
-// binary-distribution endpoints still carry through the org move.
-func (l *Links) StoreBaseURLs() []string {
+// StoreBaseURLs returns the framework-store base. The definitions live under a
+// frameworks/ subdir (index.json + <name>.yaml), not at the repo root.
+func StoreBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_STORE_BASE_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{rawRepo(l.new) + "/main/frameworks"}
+	return []string{"https://raw.githubusercontent.com/" + frameworksRepo + "/main/frameworks"}
 }
 
-// ServiceStoreBaseURLs returns the service-preset-store base. Like the framework
-// store it targets the new lerd-env org directly and nests the definitions under
-// a services/ subdir (index.json + <name>.yaml live there, not at the repo root).
-func (l *Links) ServiceStoreBaseURLs() []string {
+// ServiceStoreBaseURLs returns the service-preset-store base, nested under a
+// services/ subdir.
+func ServiceStoreBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_SERVICES_BASE_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{rawServices(l.new) + "/main/services"}
+	return []string{"https://raw.githubusercontent.com/" + servicesRepo + "/main/services"}
 }
 
-// ReleaseBaseURLs lists GitHub releases bases in priority order.
-func (l *Links) ReleaseBaseURLs() []string {
+// ReleaseBaseURLs lists GitHub releases bases.
+func ReleaseBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_RELEASES_URL")); len(list) > 0 {
 		return list
 	}
-	return l.ordered(releases)
+	return []string{"https://github.com/" + mainRepo + "/releases"}
 }
 
-// ReleaseDownloadBases lists release-asset download bases in priority order.
-func (l *Links) ReleaseDownloadBases() []string {
+// ReleaseDownloadBases lists release-asset download bases.
+func ReleaseDownloadBases() []string {
 	if list := splitList(os.Getenv("LERD_RELEASE_DOWNLOAD_URL")); len(list) > 0 {
 		return list
 	}
-	out := l.ReleaseBaseURLs()
+	out := ReleaseBaseURLs()
 	for i := range out {
 		out[i] += "/download"
 	}
 	return out
 }
 
-// ReleaseAPIBaseURLs lists GitHub API bases in priority order.
-func (l *Links) ReleaseAPIBaseURLs() []string {
+// ReleaseAPIBaseURLs lists GitHub API bases.
+func ReleaseAPIBaseURLs() []string {
 	if list := splitList(os.Getenv("LERD_RELEASES_API_URL")); len(list) > 0 {
 		return list
 	}
-	return l.ordered(apiBase)
+	return []string{"https://api.github.com/repos/" + mainRepo}
 }
 
-// ChangelogURLs lists raw changelog URLs in priority order.
-func (l *Links) ChangelogURLs() []string {
+// ChangelogURLs lists raw changelog URLs.
+func ChangelogURLs() []string {
 	if list := splitList(os.Getenv("LERD_CHANGELOG_URL")); len(list) > 0 {
 		return list
 	}
-	return l.ordered(func(o org) string { return rawMain(o) + "/main/CHANGELOG.md" })
+	return []string{"https://raw.githubusercontent.com/" + mainRepo + "/main/CHANGELOG.md"}
 }
 
-// BaseImageRefs lists GHCR refs for a prebuilt PHP-FPM base image in priority
-// order, where phpShort is the dotless version (e.g. "85") and hash pins the
-// image to the embedded Containerfile template.
-func (l *Links) BaseImageRefs(phpShort, hash string) []string {
+// BaseImageRefs lists GHCR refs for a prebuilt PHP-FPM base image, where phpShort
+// is the dotless version (e.g. "85") and hash pins the image to the embedded
+// Containerfile template.
+func BaseImageRefs(phpShort, hash string) []string {
 	suffix := "/lerd-php" + phpShort + "-fpm-base:" + hash
 	if v := os.Getenv("LERD_BASE_IMAGE_REGISTRY"); v != "" {
 		return []string{v + suffix}
 	}
-	return l.ordered(func(o org) string { return "ghcr.io/" + o.owner + suffix })
-}
-
-// NoteFetched flips to serving the new org first the first time a real request
-// succeeds against a new-org URL (e.g. once the old org is retired). One-way,
-// old->new only; no probe, no timer.
-func (l *Links) NoteFetched(base string) {
-	if base == "" || l.PreferNew() {
-		return
-	}
-	if strings.Contains(base, "/"+l.new.owner+"/") {
-		l.SetPreferNew(true)
-	}
+	return []string{"ghcr.io/" + owner + suffix}
 }
 
 // splitList parses a comma-separated override into trimmed, non-empty entries.
@@ -164,13 +92,3 @@ func splitList(v string) []string {
 	}
 	return out
 }
-
-// Package-level helpers delegate to Default.
-func StoreBaseURLs() []string                      { return Default.StoreBaseURLs() }
-func ServiceStoreBaseURLs() []string               { return Default.ServiceStoreBaseURLs() }
-func ReleaseBaseURLs() []string                    { return Default.ReleaseBaseURLs() }
-func ReleaseDownloadBases() []string               { return Default.ReleaseDownloadBases() }
-func ReleaseAPIBaseURLs() []string                 { return Default.ReleaseAPIBaseURLs() }
-func ChangelogURLs() []string                      { return Default.ChangelogURLs() }
-func BaseImageRefs(phpShort, hash string) []string { return Default.BaseImageRefs(phpShort, hash) }
-func NoteFetched(base string)                      { Default.NoteFetched(base) }

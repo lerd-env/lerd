@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -58,6 +59,55 @@ func PortAvailable(port int) bool { return freeport.Bindable(port) }
 // reinstall, `service port --reset`) refreshes followers, not just the explicit
 // `lerd service port` command.
 var OnPublishedPortShift func(service string, newPort int)
+
+// shiftHookMu guards OnPublishedPortShift and shiftSuppressN. SetPublishedPort
+// runs in the long-lived lerd-ui process where HTTP handlers are concurrent, so
+// the hook must never be read or mutated without the lock, and suppression uses
+// a counter rather than nil-swapping the global (a nil-swap could race two
+// callers and leave the hook permanently nil for the process).
+var (
+	shiftHookMu    sync.Mutex
+	shiftSuppressN int
+)
+
+// suppressPublishedPortShift silences the guard's own shift-fire for the caller's
+// quadlet write (which fires it once itself with the final port) and returns the
+// restore func. Overlapping windows are counted, so one caller exiting doesn't
+// unsuppress another still mid-write.
+func suppressPublishedPortShift() func() {
+	shiftHookMu.Lock()
+	shiftSuppressN++
+	shiftHookMu.Unlock()
+	return func() {
+		shiftHookMu.Lock()
+		shiftSuppressN--
+		shiftHookMu.Unlock()
+	}
+}
+
+// firePublishedPortShift invokes the hook from the guard unless a caller has
+// suppressed it, reading both under the lock so a concurrent SetPublishedPort
+// can't race the func value.
+func firePublishedPortShift(service string, newPort int) {
+	shiftHookMu.Lock()
+	hook := OnPublishedPortShift
+	suppressed := shiftSuppressN > 0
+	shiftHookMu.Unlock()
+	if hook != nil && !suppressed {
+		hook(service, newPort)
+	}
+}
+
+// firePublishedPortShiftForced invokes the hook ignoring suppression, for the
+// deliberate end-of-change fire in SetPublishedPort.
+func firePublishedPortShiftForced(service string, newPort int) {
+	shiftHookMu.Lock()
+	hook := OnPublishedPortShift
+	shiftHookMu.Unlock()
+	if hook != nil {
+		hook(service, newPort)
+	}
+}
 
 // unitActive reports whether a service's own systemd unit is currently up. The
 // generic port guard uses it to avoid treating the service's *own* published
@@ -130,7 +180,7 @@ func portClaimedByOtherInstalled(self string, p int) bool {
 			continue // already counted from cfg.Services above
 		}
 		for _, m := range c.Ports {
-			if extraHostPort(m) == p {
+			if config.MappingHostPort(m) == p {
 				return true
 			}
 		}
@@ -621,9 +671,7 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 			fmt.Fprintf(os.Stderr, "      (override with: lerd service port %s <port>)\n", svc.Name)
 			// Host-proxy sites reach this service over the published loopback port,
 			// so their .env must follow the shift. The CLI registers the refresh hook.
-			if OnPublishedPortShift != nil {
-				OnPublishedPortShift(svc.Name, free)
-			}
+			firePublishedPortShift(svc.Name, free)
 		}
 	}
 	// Apply the recorded published port (guard-shifted or set via `lerd service

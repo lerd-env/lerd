@@ -40,6 +40,19 @@ func tryAcquireRun(domain, name string) (release func(), busyWith string, ok boo
 	}, "", true
 }
 
+// siteRunLockKey derives the per-site run-lock key: prefer the name, fall back to
+// the first domain, then the project path, so every site has a unique key shared
+// by the command runner and the doctor-fix runner (they must exclude each other).
+func siteRunLockKey(site *config.Site) string {
+	if site.Name != "" {
+		return site.Name
+	}
+	if len(site.Domains) > 0 {
+		return site.Domains[0]
+	}
+	return site.Path
+}
+
 // commandRoute dispatches the two commands subroutes:
 //
 //	GET  /api/sites/{domain}/commands              → list
@@ -159,16 +172,8 @@ func handleCommandRun(w http.ResponseWriter, r *http.Request, site *config.Site,
 
 	// Per-site mutex: refuse if another command is already running on this
 	// site. Prevents two tabs (or palette + dropdown) from concurrently
-	// hammering migrate:fresh, etc. Prefer site.Name, fall back to the
-	// first domain, then the project path so we always have a unique key.
-	lockKey := site.Name
-	if lockKey == "" && len(site.Domains) > 0 {
-		lockKey = site.Domains[0]
-	}
-	if lockKey == "" {
-		lockKey = site.Path
-	}
-	release, busyWith, ok := tryAcquireRun(lockKey, target.Name)
+	// hammering migrate:fresh, etc.
+	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), target.Name)
 	if !ok {
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})
