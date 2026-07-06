@@ -15,8 +15,9 @@ import (
 	"github.com/geodro/lerd/internal/dumpsops"
 )
 
-// execDumpsRecent calls lerd-ui's /api/dumps endpoint over the local Unix
-// socket and returns the JSON response verbatim. We don't reach into the
+// execDumpsRecent calls lerd-ui's /api/dumps endpoint over the local transport
+// (unix socket on Linux, TCP loopback on macOS) and returns the JSON response
+// verbatim. We don't reach into the
 // in-process ring directly because the MCP server may run in a different
 // process from lerd-ui (e.g. an editor-launched MCP subprocess).
 func execDumpsRecent(args map[string]any) (any, *rpcError) {
@@ -194,9 +195,10 @@ func execDumpsToggle(args map[string]any) (any, *rpcError) {
 	return toolOK(string(b)), nil
 }
 
-// uiGET / uiPOST: tiny HTTP-over-Unix-socket helpers. Local to mcp so callers
-// don't have to import a heavier client. uiRoundTrip is swappable so tests can
-// assert the path/body an exec builds without a live lerd-ui socket.
+// uiGET / uiPOST: tiny HTTP helpers over the OS-appropriate lerd-ui transport
+// (unix socket on Linux, TCP loopback on macOS). Local to mcp so callers don't
+// have to import a heavier client. uiRoundTrip is swappable so tests can assert
+// the path/body an exec builds without a live lerd-ui daemon.
 var uiRoundTrip = uiDo
 
 func uiGET(path string) ([]byte, int, error) {

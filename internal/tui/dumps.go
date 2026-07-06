@@ -43,9 +43,10 @@ type debugBatchMsg []lerddumps.Event
 // program, capping render frequency under a firehose.
 const debugFlushInterval = 100 * time.Millisecond
 
-// runDumpsListener opens the lerd-ui Unix-socket SSE endpoint and pumps
-// parsed events into the bubbletea program. Reconnects with backoff so the
-// TUI keeps refreshing across lerd-ui restarts. Cancelled by ctx.
+// runDumpsListener opens the lerd-ui SSE endpoint over the OS-appropriate
+// transport (unix socket on Linux, TCP loopback on macOS) and pumps parsed
+// events into the bubbletea program. Reconnects with backoff so the TUI keeps
+// refreshing across lerd-ui restarts. Cancelled by ctx.
 func runDumpsListener(ctx context.Context, p *tea.Program) {
 	backoff := 500 * time.Millisecond
 	for ctx.Err() == nil {
