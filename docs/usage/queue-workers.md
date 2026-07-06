@@ -11,7 +11,7 @@ Lerd can run framework-defined workers as persistent systemd user services. Work
 | `lerd queue start` | Same as `queue:start` (subcommand form) |
 | `lerd queue stop` | Same as `queue:stop` (subcommand form) |
 
-Works for any framework that defines a `queue` worker. Laravel has it built-in (`php artisan queue:work`).
+Works for any framework that defines a `queue` worker: Laravel (`php artisan queue:work`, built-in) and CodeIgniter (`php spark queue:work`, once `codeigniter4/queue` is installed). The `--queue`, `--tries`, and `--timeout` flags are rendered into each framework's own syntax, so `lerd queue:start --queue emails --tries 5` runs the right command either way.
 
 ---
 

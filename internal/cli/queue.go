@@ -94,7 +94,7 @@ func runQueueStart(queue string, tries, timeout int) error {
 		phpVersion = cfg.PHP.DefaultVersion
 	}
 
-	if err := QueueStartTuned(siteName, cwd, phpVersion, queue, tries, timeout); err != nil {
+	if err := queueStartTuned(siteName, cwd, phpVersion, queue, tries, timeout); err != nil {
 		return err
 	}
 	if site, err := config.FindSite(siteName); err == nil && !site.Paused {
@@ -141,10 +141,10 @@ func renderQueueCommand(w config.FrameworkWorker, queue string, tries, timeout i
 	).Replace(w.TuneCommand)
 }
 
-// QueueStartTuned starts the queue worker with a specific queue/tries/timeout,
-// rendering the framework's TuneCommand. Shared by `lerd queue:start` and the
-// MCP queue_start tool so both derive the command from the framework definition.
-func QueueStartTuned(siteName, sitePath, phpVersion, queue string, tries, timeout int) error {
+// queueStartTuned starts the queue worker with a specific queue/tries/timeout by
+// rendering the framework's TuneCommand. Used by `lerd queue:start` and, via the
+// mcp.QueueStartFn hook, by the MCP queue_start tool.
+func queueStartTuned(siteName, sitePath, phpVersion, queue string, tries, timeout int) error {
 	// The queue name is interpolated into the worker command; whitespace or a
 	// newline could inject extra arguments or a systemd directive.
 	if strings.ContainsAny(queue, " \t\r\n") {
