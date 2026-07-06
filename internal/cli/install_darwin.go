@@ -86,10 +86,9 @@ func downloadBinaries(w io.Writer) error {
 //
 // If the helper is not found or already installed, this is a no-op.
 func ensurePortForwarding() error {
-	// Check whether the LaunchDaemon is already installed.
-	const daemonPlist = "/Library/LaunchDaemons/com.github.containers.podman.helper.plist"
-	if _, err := os.Stat(daemonPlist); err == nil {
-		return nil // already installed
+	// Skip (and avoid the sudo prompt) if the LaunchDaemon is already installed.
+	if podmanHelperInstalled("/Library/LaunchDaemons", currentUsername(os.Getenv("HOME"))) {
+		return nil
 	}
 
 	// Locate the podman-mac-helper binary.
@@ -110,6 +109,24 @@ func ensurePortForwarding() error {
 		feedback.Note(fmt.Sprintf("Ports 80/443 may not work — run manually: sudo %s install", helperPath))
 	}
 	return nil
+}
+
+// podmanHelperInstalled reports whether the podman-mac-helper LaunchDaemon is
+// already present. Recent Podman names the plist per-user
+// (com.github.containers.podman.helper-<user>.plist); older releases used an
+// unsuffixed name. Checking both lets us skip the sudo prompt when the helper
+// is already installed.
+func podmanHelperInstalled(daemonDir, username string) bool {
+	candidates := []string{
+		"com.github.containers.podman.helper-" + username + ".plist",
+		"com.github.containers.podman.helper.plist",
+	}
+	for _, name := range candidates {
+		if _, err := os.Stat(filepath.Join(daemonDir, name)); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 // findPodmanMacHelper returns the path to podman-mac-helper if found.
