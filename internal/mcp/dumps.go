@@ -212,13 +212,20 @@ func uiPOST(path string, body []byte) ([]byte, int, error) {
 	return uiRoundTrip(req)
 }
 
+// uiClientDial reports the transport used to reach the lerd-ui daemon: the unix
+// socket on Linux, the TCP loopback on macOS where the socket isn't created. A
+// var so tests can point it at a fake listener regardless of the per-OS default.
+var uiClientDial = func() (network, addr string) {
+	return config.UIClientNetwork(), config.UIClientAddr()
+}
+
 func uiDo(req *http.Request) ([]byte, int, error) {
 	client := &http.Client{
 		Timeout: 5 * time.Second,
 		Transport: &http.Transport{
 			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				d := net.Dialer{Timeout: 2 * time.Second}
-				return d.DialContext(ctx, "unix", config.UISocketPath())
+				network, addr := uiClientDial()
+				return (&net.Dialer{Timeout: 2 * time.Second}).DialContext(ctx, network, addr)
 			},
 		},
 	}

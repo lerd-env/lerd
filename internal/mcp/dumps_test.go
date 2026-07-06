@@ -1,8 +1,10 @@
 package mcp
 
 import (
+	"net"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -16,6 +18,44 @@ func TestDumpActions_RoutableUnderDiag(t *testing.T) {
 		if _, ok := diag[want]; !ok {
 			t.Errorf("diag tool missing action %q", want)
 		}
+	}
+}
+
+// TestUiDo_DialsConfiguredTransport confirms the dump round-trip honors the
+// OS-appropriate transport from config (TCP loopback on macOS, where the lerd-ui
+// unix socket is never created) rather than a hardcoded unix socket.
+func TestUiDo_DialsConfiguredTransport(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	var gotPath atomic.Pointer[string]
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		gotPath.Store(&p)
+		_, _ = w.Write([]byte("ok"))
+	})
+	srv := &http.Server{Handler: mux}
+	go func() { _ = srv.Serve(ln) }()
+	t.Cleanup(func() { _ = srv.Close(); _ = ln.Close() })
+
+	prev := uiClientDial
+	uiClientDial = func() (string, string) { return "tcp", ln.Addr().String() }
+	t.Cleanup(func() { uiClientDial = prev })
+
+	body, status, err := uiGET("/api/dumps")
+	if err != nil {
+		t.Fatalf("uiGET over tcp: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Fatalf("status = %d, want 200", status)
+	}
+	if string(body) != "ok" {
+		t.Fatalf("body = %q, want ok", body)
+	}
+	if got := gotPath.Load(); got == nil || *got != "/api/dumps" {
+		t.Fatalf("server did not receive request over tcp transport")
 	}
 }
 

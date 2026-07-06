@@ -65,8 +65,16 @@ func runDumpsListener(ctx context.Context, p *tea.Program) {
 	}
 }
 
+// dumpsClientDial reports the transport used to reach the lerd-ui daemon: the
+// unix socket on Linux, the TCP loopback on macOS where the socket isn't
+// created. A var so tests can point it at a fake listener.
+var dumpsClientDial = func() (network, addr string) {
+	return config.UIClientNetwork(), config.UIClientAddr()
+}
+
 func streamDumpsOnce(ctx context.Context, p *tea.Program) error {
-	conn, err := net.DialTimeout("unix", config.UISocketPath(), 2*time.Second)
+	network, addr := dumpsClientDial()
+	conn, err := net.DialTimeout(network, addr, 2*time.Second)
 	if err != nil {
 		return err
 	}

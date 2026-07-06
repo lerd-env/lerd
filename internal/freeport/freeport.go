@@ -11,16 +11,29 @@ import (
 	"strconv"
 )
 
-// Bindable reports whether a TCP port can be bound on both loopback stacks
-// (127.0.0.1 and [::1]) — the two addresses lerd's published quadlets and
-// host-proxy dev servers bind. A bind test is stricter and more accurate than a
-// dial test for "can we publish here": it catches a port reserved on either
-// stack, not just one with a live listener. A host with no IPv6 loopback at all
-// is tolerated — the v6 check is skipped rather than treated as busy. The v4
-// listener is held open (deferred close) through the v6 bind so the pair is
-// tested atomically — closing it early would let another process grab v4 in the
-// window between the two checks.
+// Bindable reports whether a TCP port can be bound across the addresses lerd's
+// published quadlets and host-proxy dev servers publish on. A bind test is
+// stricter and more accurate than a dial test for "can we publish here": it
+// catches a port reserved on any stack, not just one with a live listener.
+//
+// Three probes must all succeed. The loopback specifics (127.0.0.1 and [::1])
+// catch a server bound to a specific loopback address. The IPv4 wildcard
+// (0.0.0.0) catches one bound to all interfaces — 0.0.0.0 or dual-stack [::] —
+// which a specific-address bind slips past under SO_REUSEADDR on BSD/macOS, so
+// probing only the loopback specifics reports a wildcard-bound host server
+// (e.g. a MySQL on bind-address 0.0.0.0) as free and lets lerd collide with it.
+// On macOS a running lerd container's gvproxy holds the dual-stack wildcard, so
+// the wildcard probe reports its port in use; gvproxy releases it synchronously
+// when the container stops, so a reinstall still rebinds without a spurious
+// shift. A host with no IPv6 loopback at all is tolerated — the v6 check is
+// skipped rather than treated as busy. Each listener is held open (deferred
+// close) through the following binds so the set is tested atomically.
 func Bindable(port int) bool {
+	ln4w, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(port)))
+	if err != nil {
+		return false
+	}
+	defer ln4w.Close()
 	ln4, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return false
@@ -31,7 +44,7 @@ func Bindable(port int) bool {
 		// Distinguish "port already taken on ::1" from "this host has no IPv6 loopback".
 		probe, perr := net.Listen("tcp", "[::1]:0")
 		if perr != nil {
-			return true // no IPv6 loopback here; the v4 bind is sufficient
+			return true // no IPv6 loopback here; the v4 binds are sufficient
 		}
 		_ = probe.Close()
 		return false // IPv6 works but this port is taken on ::1
