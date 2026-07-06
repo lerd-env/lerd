@@ -644,6 +644,25 @@ func TestReadConfirmAnswer(t *testing.T) {
 	}
 }
 
+// Successive prompts share one input source (reconcile asks per tool), so a
+// single answer must consume exactly its own line. Reading ahead past the
+// newline swallows a user's typed-ahead Enter and makes the next prompt appear
+// to hang until they press Enter again.
+func TestReadConfirmAnswerConsumesSingleLine(t *testing.T) {
+	r := strings.NewReader("\ny\n")
+	var first, second bool
+	withSilencedStdout(t, func() {
+		first = readConfirmAnswer(r, "one?", false)
+		second = readConfirmAnswer(r, "two?", false)
+	})
+	if first {
+		t.Fatalf("first answer = true, want false (empty line keeps the no default)")
+	}
+	if !second {
+		t.Fatalf("second answer = false, want true; the first read consumed past its own line")
+	}
+}
+
 // When stdin is a pipe (not a TTY) and /dev/tty isn't accessible either,
 // promptSource must report no terminal so confirmInstallPromptDefault can
 // fall back to the default rather than reading EOF from the pipe.
