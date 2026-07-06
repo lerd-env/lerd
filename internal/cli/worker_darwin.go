@@ -261,11 +261,15 @@ func reapInContainerWorker(reapPath string) {
 // phase 2 of runStart so we don't saturate the Podman Machine SSH connection
 // before containers are ready.
 func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.FrameworkWorker) {
+	// Resolve the same way WorkerStartForSite does so a project opted into
+	// auto-reload keeps its reload command across lerd start and reboots.
+	command := resolveWorkerCommand(sitePath, workerName, w)
 	// A project-supplied host worker only restores on boot if the user already
-	// approved its command; otherwise skip silently so a cloned repo's host worker
-	// can't run unattended on reboot.
+	// approved the resolved command it will actually run; otherwise skip silently
+	// so a cloned repo's host worker (or an unapproved reload command) can't run
+	// unattended on reboot.
 	if w.Host && w.ProjectOrigin {
-		if allowed, _ := config.HostCommandAllowed(siteName, w.Command); !allowed {
+		if allowed, _ := config.HostCommandAllowed(siteName, command); !allowed {
 			return
 		}
 	}
@@ -279,8 +283,5 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 	if label == "" {
 		label = workerName
 	}
-	// Resolve the same way WorkerStartForSite does so a project opted into
-	// auto-reload keeps its reload command across lerd start and reboots.
-	command := resolveWorkerCommand(sitePath, workerName, w)
 	writeWorkerUnitFile(unitName, label, displaySite, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit, w.Host) //nolint:errcheck
 }
