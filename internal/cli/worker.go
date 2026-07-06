@@ -310,11 +310,16 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		return nil
 	}
 
+	command := resolveWorkerCommand(sitePath, workerName, w)
+
 	// A host worker from an untrusted project .lerd.yaml (custom_workers) runs its
-	// command on the host, so require consent before starting it. Trusted workers
-	// (store/built-in/overlay) and in-container workers are unaffected.
+	// command on the host, so require consent before starting it. Consent is keyed
+	// on the resolved command actually executed (the reload variant when the
+	// project opts in), not w.Command, so a reload_command can't run unshown behind
+	// an approved plain command. Trusted workers (store/built-in/overlay) and
+	// in-container workers are unaffected.
 	if w.Host && w.ProjectOrigin {
-		if err := approveHostCommand(siteName, w.Command, fmt.Sprintf("worker %q", workerName)); err != nil {
+		if err := approveHostCommand(siteName, command, fmt.Sprintf("worker %q", workerName)); err != nil {
 			return err
 		}
 	}
@@ -325,8 +330,6 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	for _, conflict := range w.ConflictsWith {
 		WorkerStopForSite(siteName, sitePath, conflict) //nolint:errcheck
 	}
-
-	command := resolveWorkerCommand(sitePath, workerName, w)
 
 	// Handle proxy port assignment and command augmentation.
 	if w.Proxy != nil && w.Proxy.PortEnvKey != "" {
