@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -1450,13 +1449,34 @@ func promptSource() (io.Reader, io.Closer, bool) {
 
 func readConfirmAnswer(r io.Reader, question string, defaultYes bool) bool {
 	feedback.Prompt(question, defaultYes)
-	reader := bufio.NewReader(r)
-	answer, _ := reader.ReadString('\n')
-	answer = strings.TrimSpace(strings.ToLower(answer))
+	answer := strings.TrimSpace(strings.ToLower(readLine(r)))
 	if answer == "" {
 		return defaultYes
 	}
 	return answer != "n" && answer != "no"
+}
+
+// readLine reads a single line, one byte at a time, stopping after the first
+// newline. Reading unbuffered is deliberate: successive prompts share the
+// terminal, so a buffered reader would pull typed-ahead input past this line and
+// discard it, making the next prompt block. Byte-at-a-time leaves the rest in
+// the terminal buffer for the following prompt.
+func readLine(r io.Reader) string {
+	var b strings.Builder
+	buf := make([]byte, 1)
+	for {
+		n, err := r.Read(buf)
+		if n > 0 {
+			if buf[0] == '\n' {
+				break
+			}
+			b.WriteByte(buf[0])
+		}
+		if err != nil {
+			break
+		}
+	}
+	return b.String()
 }
 
 // downloadFile downloads a URL to a local file, printing a progress bar to w.
