@@ -25,7 +25,6 @@ func NewFrameworkCmd() *cobra.Command {
 	cmd.AddCommand(newFrameworkAddCmd())
 	cmd.AddCommand(newFrameworkRemoveCmd())
 	cmd.AddCommand(newFrameworkSearchCmd())
-	cmd.AddCommand(newFrameworkInstallCmd())
 	cmd.AddCommand(newFrameworkUpdateCmd())
 	cmd.AddCommand(newFrameworkPruneCmd())
 	return cmd
@@ -517,82 +516,21 @@ Examples:
 	}
 }
 
-func newFrameworkInstallCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "install <name>[@version]",
-		Short: "Install a framework definition from the store",
-		Long: `Download and install a framework definition from the community store.
-
-If no version is specified, the version is auto-detected from composer.lock
-in the current directory, falling back to the latest available version.
-
-Examples:
-  lerd framework install symfony
-  lerd framework install laravel@11
-  lerd framework install wordpress@6`,
-		Args: cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			name, version := parseNameVersion(args[0])
-
-			client := store.NewClient()
-
-			// Auto-detect version from cwd if not specified
-			if version == "" {
-				cwd, _ := os.Getwd()
-				if cwd != "" {
-					if idx, err := client.FetchIndex(); err == nil {
-						for _, entry := range idx.Frameworks {
-							if entry.Name == name {
-								version = store.ResolveVersion(cwd, entry.Detect, entry.Versions, "")
-								break
-							}
-						}
-					}
-				}
-			}
-
-			fw, err := client.FetchFramework(name, version)
-			if err != nil {
-				return err
-			}
-
-			// Check if already exists locally
-			if _, ok := config.GetFramework(name); ok {
-				fmt.Printf("Framework %q already exists locally. Overwriting with store definition.\n", name)
-			}
-
-			if err := config.SaveStoreFramework(fw); err != nil {
-				return fmt.Errorf("saving framework: %w", err)
-			}
-			// Remove old user-defined file so the store version takes effect.
-			config.RemoveUserFramework(name)
-
-			versionStr := fw.Version
-			if versionStr == "" {
-				versionStr = "latest"
-			}
-			filename := fw.Name + ".yaml"
-			if fw.Version != "" {
-				filename = fw.Name + "@" + fw.Version + ".yaml"
-			}
-			feedback.Done(fmt.Sprintf("installed %s@%s (%s)", fw.Name, versionStr, fw.Label))
-			feedback.Note("saved to " + config.StoreFrameworksDir() + "/" + filename)
-			return nil
-		},
-	}
-}
-
 func newFrameworkUpdateCmd() *cobra.Command {
 	var diff bool
 	cmd := &cobra.Command{
 		Use:   "update [name[@version]]",
-		Short: "Update installed framework definitions from the store",
+		Short: "Update framework definitions from the store",
 		Long: `Re-fetch framework definitions from the store.
 
-If a name is given, only that framework is updated.
-If no name is given, every cached version of every installed framework is
-re-fetched (e.g. laravel@10, @11, @12, @13 are all refreshed individually,
-not just the latest).
+Definitions normally auto-fetch when you link a project and refresh on their own
+in the background; this is the manual trigger.
+
+If a name is given, only that framework is fetched (installing it if it isn't
+cached yet).
+If no name is given, the cached store catalogue is refreshed and every cached
+version of every installed framework is re-fetched (e.g. laravel@10, @11, @12,
+@13 are all refreshed individually, not just the latest).
 Use --diff to preview changes before applying.
 
 Examples:
@@ -647,7 +585,9 @@ func updateSingleFramework(client *store.Client, name, version string, showDiff 
 }
 
 func updateAllFrameworks(client *store.Client, showDiff bool) error {
-	idx, err := client.FetchIndex()
+	// Refresh the cached catalogue first, so the manual update also pulls newly
+	// published frameworks and versions even on a machine with nothing installed.
+	idx, err := client.RefreshIndex()
 	if err != nil {
 		return err
 	}

@@ -88,10 +88,10 @@ Actions: `artisan` (Laravel), `console` (other frameworks), `composer`, `vendor_
 - **composer over git SSH (CLI-only)**: when `composer` needs a private repo reachable only over SSH, `lerd auth ssh` starts a shared ssh-agent container and loads the host's `~/.ssh/id_*` (or named keys) so passphrase-protected keys work in the FPM container; `lerd auth ssh --list` shows loaded keys, `--remove` flushes them. Keys live only in agent memory and clear on machine restart
 
 #### `framework` — framework definitions & scaffolding
-Actions: `list`, `add`, `remove`, `prune`, `search`, `install`, `project_new`, `setup`.
+Actions: `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup`.
 - `add` with `name: "laravel"` merges custom workers/setup into the built-in framework
 - `remove` refuses to drop a definition a linked site still uses (pass `force: true` to override); `prune` removes every framework definition no site uses
-- `search`/`install` use the community store (install auto-detects version from `composer.lock`)
+- `search`/`update` use the community store; definitions auto-fetch on link, so `update` is the manual refresh (no `name` refreshes the catalogue and all installed definitions; with `name` it fetches that one, auto-detecting version from `composer.lock`)
 - `project_new` scaffolds a new project (requires absolute `path`, default framework laravel); follow with `site` `link` + `env` `setup`
 - `setup` runs the framework's post-install steps (migrations, storage:link…) — MANDATORY after `env setup` on new/cloned projects; idempotent
 
