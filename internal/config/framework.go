@@ -1306,6 +1306,18 @@ func DetectFramework(dir string) (string, bool) {
 		}
 	}
 
+	// Cached store catalogue: lets any store framework be detected offline, not
+	// just the ones already fetched to disk or built into the binary.
+	for _, e := range loadCachedStoreEntries() {
+		if seen[e.Name] {
+			continue
+		}
+		seen[e.Name] = true
+		if matchesFramework(dir, &Framework{Name: e.Name, Detect: e.Detect}) {
+			matches = append(matches, e.Name)
+		}
+	}
+
 	// Built-in Laravel and Symfony as fallbacks.
 	for _, fw := range builtinFrameworks() {
 		if !seen[fw.Name] && matchesFramework(dir, fw) {
@@ -1838,35 +1850,33 @@ func matchesFramework(dir string, fw *Framework) bool {
 
 // DetectMajorVersion detects the major version of a framework from the project directory.
 // It tries composer.json constraints first, then falls back to version_file regex matching.
+// frameworkDetectRules resolves the detect rules for a framework offline,
+// preferring an installed store definition, then the cached store index (which
+// covers every framework in the catalogue, not just the built-ins), then the
+// built-in adapter as the no-network fallback.
+func frameworkDetectRules(frameworkName string) []FrameworkRule {
+	matches, _ := filepath.Glob(filepath.Join(StoreFrameworksDir(), frameworkName+"@*.yaml"))
+	matches = append(matches, filepath.Join(StoreFrameworksDir(), frameworkName+".yaml"))
+	for _, path := range matches {
+		if fw := loadFrameworkYAML(path); fw != nil && len(fw.Detect) > 0 {
+			return fw.Detect
+		}
+	}
+	if e := cachedStoreEntryByName(frameworkName); e != nil && len(e.Detect) > 0 {
+		return e.Detect
+	}
+	if b := builtinFramework(frameworkName); b != nil {
+		return b.Detect
+	}
+	return nil
+}
+
 func DetectMajorVersion(projectDir, frameworkName string) string {
 	if projectDir == "" {
 		return ""
 	}
 
-	var rules []FrameworkRule
-	if frameworkName == "laravel" {
-		rules = []FrameworkRule{{Composer: "laravel/framework"}}
-	} else {
-		pattern := filepath.Join(StoreFrameworksDir(), frameworkName+"@*.yaml")
-		matches, _ := filepath.Glob(pattern)
-		matches = append(matches, filepath.Join(StoreFrameworksDir(), frameworkName+".yaml"))
-		for _, path := range matches {
-			if fw := loadFrameworkYAML(path); fw != nil {
-				rules = fw.Detect
-				break
-			}
-		}
-	}
-
-	// No store definition installed yet: fall back to the built-in adapter's
-	// detect rules so a first-time link can resolve a version and auto-fetch the
-	// store definition, instead of silently serving the built-in.
-	if len(rules) == 0 {
-		if b := builtinFramework(frameworkName); b != nil {
-			rules = b.Detect
-		}
-	}
-
+	rules := frameworkDetectRules(frameworkName)
 	if len(rules) == 0 {
 		return ""
 	}
