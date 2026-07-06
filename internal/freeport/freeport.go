@@ -26,14 +26,18 @@ import (
 // the wildcard probe reports its port in use; gvproxy releases it synchronously
 // when the container stops, so a reinstall still rebinds without a spurious
 // shift. A host with no IPv6 loopback at all is tolerated — the v6 check is
-// skipped rather than treated as busy. Each listener is held open (deferred
-// close) through the following binds so the set is tested atomically.
+// skipped rather than treated as busy.
+//
+// The wildcard probe is released before the loopback pair is bound: on Linux a
+// held wildcard listener blocks a subsequent specific bind in the same process
+// (EADDRINUSE), so overlapping them would make every port read as busy. The
+// loopback pair is still held atomically across the two stacks.
 func Bindable(port int) bool {
 	ln4w, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(port)))
 	if err != nil {
 		return false
 	}
-	defer ln4w.Close()
+	_ = ln4w.Close()
 	ln4, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return false
