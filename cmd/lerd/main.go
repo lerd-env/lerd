@@ -27,6 +27,7 @@ import (
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/geodro/lerd/internal/ui"
 	"github.com/geodro/lerd/internal/version"
@@ -523,6 +524,10 @@ func newWatchCmd() *cobra.Command {
 			// so rebuild leftovers and stale base images don't pile up. Gated by
 			// the auto_cleanup config; never touches service images (--deep).
 			go watcher.WatchCleanup(time.Hour)
+
+			// Keep the cached framework store index fresh so offline detection and
+			// listing resolve the full catalogue without a network round trip.
+			go store.WatchIndex(6 * time.Hour)
 
 			// Idle-suspend: suspends/resumes workers by activity. The whole session,
 			// including the source-file watcher passed here, only runs while the

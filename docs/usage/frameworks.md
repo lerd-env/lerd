@@ -14,8 +14,7 @@ Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal,
 | `lerd framework list` | List all framework definitions with source and workers |
 | `lerd framework list --check` | Compare local definitions against the store |
 | `lerd framework search [query]` | Search the community store for available definitions |
-| `lerd framework install <name>[@version]` | Install a framework definition from the store |
-| `lerd framework update [name[@version]]` | Update installed definitions from the store |
+| `lerd framework update [name[@version]]` | Refresh definitions from the store (definitions otherwise auto-fetch on link) |
 | `lerd framework update --diff` | Preview changes before applying updates |
 | `lerd framework add <name>` | Add or update a user-defined framework definition |
 | `lerd framework remove <name>[@version]` | Remove a framework definition (prompts if multiple versions) |
@@ -47,17 +46,22 @@ lerd framework search
 ╰───────────┴───────────┴────────┴────────────────╯
 ```
 
-### Installing from the store
+### Getting definitions from the store
+
+Definitions arrive automatically. Linking a project detects its framework and version and fetches the matching definition from the store, and the cached catalogue refreshes on its own in the background, so there is no install step to run.
+
+To refresh manually, `lerd framework update`. With no arguments it refreshes the cached catalogue and re-fetches every installed definition; with a name it fetches that one, installing it if it isn't cached yet:
 
 ```bash
-lerd framework install symfony          # auto-detects version from composer.lock
-lerd framework install laravel@12       # explicit version
-lerd framework install wordpress        # latest version
+lerd framework update                   # refresh catalogue + all installed definitions
+lerd framework update symfony           # fetch/update symfony (auto-detects version from composer.lock)
+lerd framework update laravel@12        # explicit version
+lerd framework update --diff            # preview changes before applying
 ```
 
 When no version is specified, lerd reads `composer.lock` to detect the installed major version. If the version can't be determined, it falls back to the latest available.
 
-Store-installed definitions are saved to `~/.local/share/lerd/frameworks/<name>@<version>.yaml`, separate from user-defined frameworks.
+Store definitions are saved to `~/.local/share/lerd/frameworks/<name>@<version>.yaml`, separate from user-defined frameworks.
 
 ### Checking for updates
 

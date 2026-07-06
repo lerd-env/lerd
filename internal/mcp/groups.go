@@ -186,7 +186,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"add":         execFrameworkAdd,
 		"remove":      execFrameworkRemove,
 		"search":      execFrameworkSearch,
-		"install":     execFrameworkInstall,
+		"update":      execFrameworkUpdate,
 		"prune":       func(a map[string]any) (any, *rpcError) { return execFrameworkPrune(a) },
 		"project_new": execProjectNew,
 		"setup":       execSetup,
@@ -472,8 +472,8 @@ func frameworkTool() mcpTool {
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":              {Type: "string", Enum: []string{"list", "add", "remove", "prune", "search", "install", "project_new", "setup"}},
-				"name":                {Type: "string", Description: "add/remove/install: framework slug."},
+				"action":              {Type: "string", Enum: []string{"list", "add", "remove", "prune", "search", "update", "project_new", "setup"}},
+				"name":                {Type: "string", Description: "add/remove/update: framework slug."},
 				"force":               {Type: "boolean", Description: "remove: delete even if a site uses it."},
 				"label":               {Type: "string", Description: "add: human-readable name."},
 				"public_dir":          {Type: "string", Description: "add: document root."},

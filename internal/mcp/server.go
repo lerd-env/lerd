@@ -3787,16 +3787,46 @@ func execFrameworkSearch(args map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
-func execFrameworkInstall(args map[string]any) (any, *rpcError) {
-	name := strArg(args, "name")
-	if name == "" {
-		return toolErr("name is required"), nil
-	}
-	version := strArg(args, "version")
-
+func execFrameworkUpdate(args map[string]any) (any, *rpcError) {
 	client := store.NewClient()
+	name := strArg(args, "name")
 
-	// Auto-detect version from site path if not specified
+	// No name: refresh the cached catalogue and re-fetch every installed
+	// definition. Definitions otherwise auto-fetch on link and self-refresh, so
+	// this is the manual trigger.
+	if name == "" {
+		idx, err := client.RefreshIndex()
+		if err != nil {
+			return toolErr(fmt.Sprintf("refreshing store index: %v", err)), nil
+		}
+		updated := 0
+		for _, info := range config.ListFrameworksDetailed() {
+			if info.Source == config.SourceBuiltIn {
+				continue
+			}
+			inIndex := false
+			for _, entry := range idx.Frameworks {
+				if entry.Name == info.Name {
+					inIndex = true
+					break
+				}
+			}
+			if !inIndex {
+				continue
+			}
+			remote, ferr := client.FetchFramework(info.Name, info.Version)
+			if ferr != nil {
+				continue
+			}
+			if config.SaveStoreFramework(remote) == nil {
+				config.RemoveUserFramework(info.Name)
+				updated++
+			}
+		}
+		return toolOK(fmt.Sprintf("Refreshed store catalogue and updated %d framework definition(s).", updated)), nil
+	}
+
+	version := strArg(args, "version")
 	if version == "" {
 		sitePath := defaultSitePath
 		if sitePath != "" {
@@ -3815,20 +3845,16 @@ func execFrameworkInstall(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(fmt.Sprintf("fetching framework: %v", err)), nil
 	}
-
 	if err := config.SaveStoreFramework(fw); err != nil {
 		return toolErr(fmt.Sprintf("saving framework: %v", err)), nil
 	}
+	config.RemoveUserFramework(name)
 
 	versionStr := fw.Version
 	if versionStr == "" {
 		versionStr = "latest"
 	}
-	filename := fw.Name + ".yaml"
-	if fw.Version != "" {
-		filename = fw.Name + "@" + fw.Version + ".yaml"
-	}
-	return toolOK(fmt.Sprintf("Installed %s@%s (%s). Saved to %s/%s", fw.Name, versionStr, fw.Label, config.StoreFrameworksDir(), filename)), nil
+	return toolOK(fmt.Sprintf("Updated %s@%s (%s).", fw.Name, versionStr, fw.Label)), nil
 }
 
 func execProjectNew(args map[string]any) (any, *rpcError) {

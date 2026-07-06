@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -67,17 +69,70 @@ func NewClient() *Client {
 
 // FetchIndex downloads the store index.
 func (c *Client) FetchIndex() (*Index, error) {
+	idx, _, err := c.fetchIndex()
+	return idx, err
+}
+
+// fetchIndex downloads and parses the store index, returning the raw bytes too so
+// callers can persist them to the on-disk cache verbatim.
+func (c *Client) fetchIndex() (*Index, []byte, error) {
 	data, err := c.fetch("index.json")
 	if err != nil {
-		return nil, fmt.Errorf("fetching store index: %w", err)
+		return nil, nil, fmt.Errorf("fetching store index: %w", err)
 	}
 
 	var idx Index
 	if err := json.Unmarshal(data, &idx); err != nil {
-		return nil, fmt.Errorf("parsing store index: %w", err)
+		return nil, nil, fmt.Errorf("parsing store index: %w", err)
 	}
 
+	return &idx, data, nil
+}
+
+// RefreshIndex downloads the store index, updates the local cache, and returns
+// it, so offline detection and listing can read the full catalogue without a
+// network round trip.
+func (c *Client) RefreshIndex() (*Index, error) {
+	idx, data, err := c.fetchIndex()
+	if err != nil {
+		return nil, err
+	}
+	writeCachedIndex(data)
+	return idx, nil
+}
+
+// WatchIndex refreshes the cached store index once at startup and then on every
+// interval tick. Meant to run as a goroutine from the long-running watcher.
+func WatchIndex(interval time.Duration) {
+	_, _ = NewClient().RefreshIndex()
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for range t.C {
+		_, _ = NewClient().RefreshIndex()
+	}
+}
+
+// loadCachedIndex reads and parses the locally cached store index.
+func loadCachedIndex() (*Index, error) {
+	data, err := os.ReadFile(config.StoreIndexFile())
+	if err != nil {
+		return nil, err
+	}
+	var idx Index
+	if err := json.Unmarshal(data, &idx); err != nil {
+		return nil, err
+	}
 	return &idx, nil
+}
+
+// writeCachedIndex persists the raw index bytes to the local cache. Best effort:
+// a cache we cannot write just means the next read falls back to the network.
+func writeCachedIndex(data []byte) {
+	path := config.StoreIndexFile()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0o644)
 }
 
 // FetchFramework downloads a framework definition from the store.
