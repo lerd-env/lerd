@@ -28,27 +28,31 @@
   {#if shims.length === 0}
     <p class="text-xs text-gray-400">{m.services_tools_none()}</p>
   {:else}
-    <div class="rounded-lg border border-gray-200 dark:border-lerd-border divide-y divide-gray-200 dark:divide-lerd-border">
+    <div class="flex flex-wrap gap-3">
       {#each shims as shim (shim.tool)}
         {@const managedElsewhere = Boolean(shim.owner && shim.owner !== svc.name)}
-        <div class="flex items-center justify-between px-3 py-2.5">
+        <div
+          class="rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card px-4 py-3 min-w-[150px] flex flex-col gap-2"
+        >
           <div class="min-w-0">
-            <code class="text-xs text-gray-700 dark:text-gray-200">{shim.tool}</code>
+            <code class="block text-sm font-mono font-semibold text-gray-800 dark:text-gray-100 leading-tight truncate">{shim.tool}</code>
             {#if managedElsewhere}
               <p class="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{m.services_tools_providedBy({ service: shim.owner ?? '' })}</p>
             {:else if shim.host_has}
               <p class="text-[10px] text-amber-600 dark:text-amber-400 mt-0.5">{m.services_tools_shadow()}</p>
             {/if}
           </div>
-          <Toggle
-            on={shim.enabled}
-            tone={shim.host_has ? 'amber' : 'emerald'}
-            loading={pending[shim.tool]}
-            failing={failed[shim.tool]}
-            disabled={managedElsewhere}
-            title={managedElsewhere ? m.services_tools_providedBy({ service: shim.owner ?? '' }) : shim.tool}
-            onclick={() => toggle(shim.tool, !shim.enabled)}
-          />
+          <div class="flex justify-end">
+            <Toggle
+              on={shim.enabled}
+              tone={shim.host_has ? 'amber' : 'emerald'}
+              loading={pending[shim.tool]}
+              failing={failed[shim.tool]}
+              disabled={managedElsewhere}
+              title={managedElsewhere ? m.services_tools_providedBy({ service: shim.owner ?? '' }) : shim.tool}
+              onclick={() => toggle(shim.tool, !shim.enabled)}
+            />
+          </div>
         </div>
       {/each}
     </div>
