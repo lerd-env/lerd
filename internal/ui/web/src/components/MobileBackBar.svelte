@@ -9,10 +9,10 @@
   const title = $derived($routeRest || $tab);
 </script>
 
-<div class="flex items-center gap-3 px-3 py-3 border-b border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shrink-0 sticky top-0 z-10">
+<div class="flex items-center gap-2 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shrink-0 sticky top-0 z-10">
   <button
     onclick={back}
-    class="flex items-center justify-center w-8 h-8 rounded-sm text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    class="flex items-center justify-center w-7 h-7 -ml-1 rounded-sm text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
     title={m.common_back()}
     aria-label={m.common_back()}
   >

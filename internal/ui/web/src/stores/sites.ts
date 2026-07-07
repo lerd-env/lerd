@@ -207,10 +207,13 @@ export function siteHasWorkers(s: Site): boolean {
   );
 }
 
-export function openSiteInBrowser(s: Site, branch: string = '') {
+export function openSiteInBrowser(s: Site, branch: string = '', urlOverride?: string) {
   const target = activeWorktreeDomain(s, branch);
   const useTLS = Boolean(s.tls);
-  const url = (useTLS ? 'https://' : 'http://') + target;
+  // urlOverride carries the LAN share URL when a remote dashboard viewer opens
+  // the site: the .test domain only resolves on the host, so off-host we open
+  // http://<lan-ip>:<port> instead.
+  const url = urlOverride || (useTLS ? 'https://' : 'http://') + target;
   // Opening the site loads it, which wakes it via the activity feed. Clear the
   // idle marker optimistically so the sleep indicator drops immediately rather
   // than lingering until the next poll confirms the activity.

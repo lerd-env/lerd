@@ -19,7 +19,13 @@
   } from '$stores/services';
   import { adminServiceFor } from '$stores/presetSuggestions';
   import { openDashboard } from '$stores/dashboard';
+  import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
+
+  // Service ports and their web UIs bind to loopback on the host, so their
+  // localhost links are dead from a remote (LAN) dashboard. Disable the open
+  // actions with a "host only" hint rather than offering links that can't work.
+  const remote = $derived(!$accessMode.loopback);
 
   function localDetailLabel(s: Service): string {
     if (s.queue_site) return m.services_labels_queueWorker();
@@ -214,32 +220,39 @@
       });
     }
 
+    // Strip the click/link and grey out an open action when the dashboard is
+    // viewed remotely: the target is a loopback-only localhost URL.
+    const openAct = (a: ButtonMenuAction): ButtonMenuAction =>
+      remote
+        ? { id: a.id, tone: a.tone, icon: a.icon, disabled: true, label: `${a.label} · ${m.services_hostOnly()}`, title: m.services_hostOnly() }
+        : a;
+
     if (active && admin) {
       const adminLabel = m.services_openAdmin({ name: serviceLabel(admin.name) });
-      rest.push({
+      rest.push(openAct({
         id: 'admin',
         tone: 'info',
         icon: icons.external,
         label: adminLabel,
         title: adminLabel,
         onclick: openAdmin
-      });
+      }));
     } else if (active && svc.dashboard) {
-      rest.push({
+      rest.push(openAct({
         id: 'dashboard',
         icon: icons.external,
         label: m.services_dashboard(),
         title: m.services_dashboard(),
         onclick: () => openDashboard(svc)
-      });
+      }));
     } else if (active && svc.connection_url) {
-      rest.push({
+      rest.push(openAct({
         id: 'connection',
         icon: icons.external,
         label: m.services_openConnection(),
         title: svc.connection_url,
         href: svc.connection_url
-      });
+      }));
     }
 
     if (!isWorker && !active && !updating) {

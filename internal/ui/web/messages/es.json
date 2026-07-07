@@ -420,6 +420,7 @@
   "services_unpinTitle": "Desfijar, permitir auto-apagado cuando no se use",
   "services_removeCustom": "Eliminar este servicio personalizado",
   "services_dashboard": "Panel",
+  "services_hostOnly": "solo en el host",
   "services_openConnection": "Abrir URL de conexión",
   "services_openAdmin": "Abrir {name}",
   "services_labels_queueWorker": "Worker de cola",

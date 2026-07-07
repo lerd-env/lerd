@@ -405,6 +405,7 @@
   "services_unpinTitle": "Anulează fixarea, permite oprirea automată când nu este folosit",
   "services_removeCustom": "Elimină acest serviciu personalizat",
   "services_dashboard": "Tablou de bord",
+  "services_hostOnly": "doar pe gazdă",
   "services_openConnection": "Deschide URL-ul de conexiune",
   "services_openAdmin": "Deschide {name}",
   "services_labels_queueWorker": "Worker de coadă",

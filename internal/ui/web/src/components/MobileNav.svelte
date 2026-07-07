@@ -3,7 +3,12 @@
   import Icon, { type IconName } from './Icon.svelte';
   import { dashboardOpen } from '$stores/dashboard';
   import { mobileView, goToApps } from '$stores/mobileView';
+  import { accessMode } from '$stores/accessMode';
   import { m } from '../paraglide/messages.js';
+
+  // The Apps view only launches loopback-only service dashboards, dead from a
+  // remote (LAN) dashboard, so drop the tab there.
+  const remote = $derived(!$accessMode.loopback);
 
   const labels = $derived<Record<TabId, string>>({
     dashboard: m.nav_dashboard(),
@@ -36,15 +41,17 @@
       <span class="text-[10px] font-medium">{labels[t]}</span>
     </button>
   {/each}
-  <button
-    onclick={goToApps}
-    class="grow basis-0 min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors {$mobileView === 'apps'
-      ? 'text-lerd-red'
-      : 'text-gray-400 dark:text-gray-500'}"
-  >
-    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 6a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V6zM14 16a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z"/>
-    </svg>
-    <span class="text-[10px] font-medium">{m.nav_apps()}</span>
-  </button>
+  {#if !remote}
+    <button
+      onclick={goToApps}
+      class="grow basis-0 min-w-0 flex flex-col items-center justify-center gap-0.5 transition-colors {$mobileView === 'apps'
+        ? 'text-lerd-red'
+        : 'text-gray-400 dark:text-gray-500'}"
+    >
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 6a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2H6a2 2 0 01-2-2v-4zM14 6a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2V6zM14 16a2 2 0 012-2h4a2 2 0 012 2v4a2 2 0 01-2 2h-4a2 2 0 01-2-2v-4z"/>
+      </svg>
+      <span class="text-[10px] font-medium">{m.nav_apps()}</span>
+    </button>
+  {/if}
 </nav>

@@ -405,6 +405,7 @@
   "services_unpinTitle": "Bỏ ghim, cho phép tự động dừng khi không dùng",
   "services_removeCustom": "Gỡ dịch vụ tùy chỉnh này",
   "services_dashboard": "Bảng điều khiển",
+  "services_hostOnly": "chỉ trên máy chủ",
   "services_openConnection": "Mở URL kết nối",
   "services_openAdmin": "Mở {name}",
   "services_labels_queueWorker": "Queue worker",

@@ -405,6 +405,7 @@
   "services_unpinTitle": "Sblocca, consente l'arresto automatico quando inutilizzato",
   "services_removeCustom": "Rimuovi questo servizio personalizzato",
   "services_dashboard": "Dashboard",
+  "services_hostOnly": "solo sull'host",
   "services_openConnection": "Apri URL di connessione",
   "services_openAdmin": "Apri {name}",
   "services_labels_queueWorker": "Worker della coda",

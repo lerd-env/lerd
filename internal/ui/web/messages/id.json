@@ -420,6 +420,7 @@
   "services_unpinTitle": "Lepas sematan, izinkan berhenti otomatis saat tidak digunakan",
   "services_removeCustom": "Hapus layanan kustom ini",
   "services_dashboard": "Dasbor",
+  "services_hostOnly": "hanya di host",
   "services_openConnection": "Buka URL koneksi",
   "services_openAdmin": "Buka {name}",
   "services_labels_queueWorker": "Worker queue",

@@ -420,6 +420,7 @@
   "services_unpinTitle": "Désépingler, autoriser l'arrêt automatique quand inutilisé",
   "services_removeCustom": "Supprimer ce service personnalisé",
   "services_dashboard": "Tableau de bord",
+  "services_hostOnly": "hôte uniquement",
   "services_openConnection": "Ouvrir l'URL de connexion",
   "services_openAdmin": "Ouvrir {name}",
   "services_labels_queueWorker": "Worker de file",

@@ -78,3 +78,15 @@ button {
   width: 3px !important;
   margin-left: 3px;
 }
+
+/* iOS Safari zooms into any focused field whose font is under 16px. Monaco's
+   keystroke capture is a hidden textarea that inherits the 12px editor font, so
+   focusing the Tinker editor zooms the page and throws the fixed-position
+   suggest widget off-screen. The textarea is invisible (Monaco paints text in
+   its own view layers) so bumping it to 16px stops the zoom with no visual
+   change. Scoped to touch pointers so desktop is untouched. */
+@media (pointer: coarse) {
+  .monaco-editor .inputarea {
+    font-size: 16px !important;
+  }
+}

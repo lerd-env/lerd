@@ -127,7 +127,7 @@
 </script>
 
 <div class="flex-1 flex flex-col overflow-hidden min-h-0">
-  <div class="flex items-center gap-2 px-3 py-2 shrink-0 border-b border-gray-100 dark:border-lerd-border">
+  <div class="flex flex-wrap items-center gap-2 px-3 py-2 shrink-0 border-b border-gray-100 dark:border-lerd-border">
     {#if files.length > 0}
       <Dropdown
         value={selectedFile}
@@ -164,7 +164,7 @@
       </svg>
     {/if}
 
-    <div class="relative flex-1">
+    <div class="relative flex-1 min-w-[7rem]">
       <svg class="absolute left-2 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
       </svg>
