@@ -447,6 +447,152 @@ func TestMigrateSiteTLD_EnableLeavesPlainSiteHTTP(t *testing.T) {
 	}
 }
 
+// A site secured only in the registry, with no .lerd.yaml to carry the intent,
+// must still return to HTTPS after a disable/enable round trip. The enable path
+// used to read intent solely from .lerd.yaml, so such a site stayed plain http.
+func TestMigrateSiteTLD_DNSRoundTripRestoresHTTPS_NoProjectFile(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	fakeMkcert := "#!/bin/sh\nwhile [ \"$#\" -gt 0 ]; do case \"$1\" in -cert-file) shift; echo CERT > \"$1\" ;; -key-file) shift; echo KEY > \"$1\" ;; esac; shift; done\n"
+	if err := os.WriteFile(filepath.Join(binDir, "mkcert"), []byte(fakeMkcert), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	siteDir := filepath.Join(tmp, "alpha")
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(siteDir, ".env"), []byte("APP_URL=https://alpha.test\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// Deliberately NO .lerd.yaml: the site's HTTPS state lives only in the registry.
+	if err := config.AddSite(config.Site{
+		Name: "alpha", Path: siteDir, Domains: []string{"alpha.test"}, PHPVersion: "8.4", Secured: true,
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	if changed := migrateSiteTLD("test", "localhost", true); !slices.Equal(changed, []string{"alpha"}) {
+		t.Fatalf("disable changed = %v, want [alpha]", changed)
+	}
+	if site, _ := config.FindSite("alpha"); site.Secured {
+		t.Fatalf("after disable the site should be plain http")
+	}
+
+	if changed := migrateSiteTLD("localhost", "test", false); !slices.Equal(changed, []string{"alpha"}) {
+		t.Fatalf("enable changed = %v, want [alpha]", changed)
+	}
+	site, err := config.FindSite("alpha")
+	if err != nil {
+		t.Fatalf("FindSite after enable: %v", err)
+	}
+	if !site.Secured {
+		t.Errorf("a registry-secured site with no .lerd.yaml must return to HTTPS after a DNS round trip")
+	}
+}
+
+// Disabling DNS while sites use a custom TLD (which toggledCanonicalTLD leaves
+// unchanged) must still drop them off HTTPS: the custom-TLD path used to return
+// early, leaving sites on HTTPS-only vhosts nginx keeps serving after DNS is gone.
+func TestApplyDNSTLDMigration_CustomTLDDisableUnsecures(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	certsDir := filepath.Join(config.CertsDir(), "sites")
+	if err := os.MkdirAll(certsDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	for _, ext := range []string{".crt", ".key"} {
+		if err := os.WriteFile(filepath.Join(certsDir, "alpha.dev"+ext), []byte("x"), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	siteDir := filepath.Join(tmp, "alpha")
+	if err := os.MkdirAll(siteDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "alpha", Path: siteDir, Domains: []string{"alpha.dev"}, PHPVersion: "8.4", Secured: true,
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	if got := applyDNSTLDMigration("dev", false); got != "dev" {
+		t.Fatalf("custom TLD must be preserved on disable, got %q", got)
+	}
+	site, err := config.FindSite("alpha")
+	if err != nil {
+		t.Fatalf("FindSite: %v", err)
+	}
+	if site.Secured {
+		t.Errorf("a custom-TLD site must be unsecured when DNS is disabled")
+	}
+	if _, err := os.Stat(filepath.Join(certsDir, "alpha.dev.crt")); !os.IsNotExist(err) {
+		t.Errorf("cert should be removed when the site is unsecured on DNS disable")
+	}
+}
+
+// On a custom-TLD disable, a site's worktree vhosts must be regenerated to plain
+// http, not left on an ssl vhost whose wildcard cert was just removed. Without
+// the regeneration the worktree is unserved until the watcher reconciles.
+func TestApplyDNSTLDMigration_CustomTLDDisableRegeneratesWorktreeVhosts(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A git worktree the DetectWorktrees scan will find (gitdir + HEAD).
+	siteDir := filepath.Join(tmp, "app")
+	checkout := filepath.Join(tmp, "feature-checkout")
+	if err := os.MkdirAll(checkout, 0755); err != nil {
+		t.Fatal(err)
+	}
+	wtMeta := filepath.Join(siteDir, ".git", "worktrees", "feature")
+	if err := os.MkdirAll(wtMeta, 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feature\n"), 0644)
+	os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(checkout, ".git")+"\n"), 0644)
+	os.WriteFile(filepath.Join(checkout, ".env"), []byte("APP_URL=https://feature.app.dev\n"), 0644)
+
+	// A stale SSL worktree vhost that must be replaced by a plain-http one.
+	staleSSL := filepath.Join(config.NginxConfD(), "feature.app.dev-ssl.conf")
+	if err := os.WriteFile(staleSSL, []byte("server {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := config.AddSite(config.Site{
+		Name: "app", Path: siteDir, Domains: []string{"app.dev"}, PHPVersion: "8.4", Secured: true,
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	applyDNSTLDMigration("dev", false)
+
+	if _, err := os.Stat(staleSSL); !os.IsNotExist(err) {
+		t.Errorf("stale ssl worktree vhost must be removed on disable; stat err = %v", err)
+	}
+	httpConf := filepath.Join(config.NginxConfD(), "feature.app.dev.conf")
+	if _, err := os.Stat(httpConf); err != nil {
+		t.Errorf("worktree must be regenerated as a plain-http vhost: %v", err)
+	}
+}
+
 func TestMigrateSiteTLD_NoOpWhenSameTLD(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

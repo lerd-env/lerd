@@ -18,6 +18,32 @@ func TestScript(t *testing.T) {
 	}
 }
 
+// A client-tool name comes from semi-trusted store YAML and is used as both a
+// shim filename and a token in the generated script, so a name with a path
+// separator, "..", or a shell/whitespace character must be rejected. Without the
+// guard a name like "../../bin/lerd" writes outside BinDir and a name with a
+// newline or ";" injects a line into the shim script.
+func TestValidShimName(t *testing.T) {
+	for _, ok := range []string{"mysqldump", "pg_dump", "mariadb-dump", "redis-cli", "psql", "mongosh"} {
+		if !validShimName(ok) {
+			t.Errorf("%q should be a valid shim name", ok)
+		}
+	}
+	for _, bad := range []string{
+		"", ".", "..", "../evil", "../../bin/lerd", "a/b", "a\\b",
+		"foo;rm -rf /", "foo bar", "foo\nbar", "foo$(id)", "-rf", ".hidden", "a|b", "a`b`",
+	} {
+		if validShimName(bad) {
+			t.Errorf("%q must be rejected as a shim name", bad)
+		}
+	}
+	// A rejected name with a path separator never resolves inside BinDir, and one
+	// with a newline never survives as a single-line shim: the two concrete risks.
+	if p := filepath.Join("/bindir", "../../bin/lerd"); filepath.Dir(p) == "/bindir" {
+		t.Errorf("path-separator name should escape BinDir under join, got %q", p)
+	}
+}
+
 func TestIsShimFile(t *testing.T) {
 	dir := t.TempDir()
 	shim := filepath.Join(dir, "mysqldump")

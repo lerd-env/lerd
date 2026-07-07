@@ -3,6 +3,7 @@ package mcp
 import (
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -90,6 +91,29 @@ func TestExecAnalyzeQueries_BuildsQueryAndPassesBody(t *testing.T) {
 	}
 	if !strings.Contains(toolText(got), "n_plus_one_findings") {
 		t.Errorf("body not passed through: %q", toolText(got))
+	}
+}
+
+// A branch name with query-significant characters must be escaped, not spliced
+// raw into the query string where & or = would corrupt the request.
+func TestExecRouteTiming_EscapesBranch(t *testing.T) {
+	path := stubRoundTrip(t, `{}`)
+	if _, rpcErr := execRouteTiming(map[string]any{"site": "acme", "branch": "feat/a&b=c"}); rpcErr != nil {
+		t.Fatalf("rpcErr: %v", rpcErr)
+	}
+	if strings.Contains(*path, "a&b=c") {
+		t.Errorf("branch was not escaped: %q", *path)
+	}
+	if !strings.Contains(*path, "site=acme") {
+		t.Errorf("site param lost: %q", *path)
+	}
+	// The escaped branch must round-trip back to the original value.
+	u, err := url.Parse("http://x" + *path)
+	if err != nil {
+		t.Fatalf("path not parseable: %v", err)
+	}
+	if got := u.Query().Get("branch"); got != "feat/a&b=c" {
+		t.Errorf("branch decoded to %q, want %q", got, "feat/a&b=c")
 	}
 }
 

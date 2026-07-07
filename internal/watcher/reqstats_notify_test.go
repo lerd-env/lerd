@@ -46,13 +46,52 @@ func TestSlowRouteNotifier_renotifiesAfterRecovery(t *testing.T) {
 	if got := n.notifications(snapWithSlow("GET /reports/:id"), idDomain); len(got) != 1 {
 		t.Fatalf("initial slowdown should notify, got %d", len(got))
 	}
-	// Route drops back within typical (absent from Slow): no notification, and
-	// the warned state must be cleared.
-	if got := n.notifications([]reqstats.SiteStats{{Site: "acme", MedianMillis: 40}}, idDomain); len(got) != 0 {
-		t.Fatalf("recovery must not notify, got %d", len(got))
+	// Route drops back within typical (absent from Slow) for a sustained run of
+	// snapshots: only then is the warned state cleared.
+	empty := []reqstats.SiteStats{{Site: "acme", MedianMillis: 40}}
+	for i := 0; i < slowRouteClearAfter; i++ {
+		if got := n.notifications(empty, idDomain); len(got) != 0 {
+			t.Fatalf("recovery must not notify, got %d", len(got))
+		}
 	}
 	// Slow again: since it recovered, it notifies afresh.
 	if got := n.notifications(snapWithSlow("GET /reports/:id"), idDomain); len(got) != 1 {
 		t.Errorf("a route that recovered then slowed again must re-notify, got %d", len(got))
+	}
+}
+
+// A still-slow route can be bumped off the truncated Slow list by slower siblings
+// for a snapshot or two, then reappear. That brief displacement must not be read
+// as a recovery, or it fires a duplicate notification (finding #3).
+func TestSlowRouteNotifier_noRenotifyOnBriefDisplacement(t *testing.T) {
+	n := newSlowRouteNotifier()
+
+	if got := n.notifications(snapWithSlow("GET /reports/:id"), idDomain); len(got) != 1 {
+		t.Fatalf("initial slowdown should notify, got %d", len(got))
+	}
+	// Absent for fewer than the clear threshold (displaced, not recovered).
+	empty := []reqstats.SiteStats{{Site: "acme", MedianMillis: 40}}
+	for i := 0; i < slowRouteClearAfter-1; i++ {
+		if got := n.notifications(empty, idDomain); len(got) != 0 {
+			t.Fatalf("displacement must not notify, got %d", len(got))
+		}
+	}
+	// Reappears while still within the grace window: must stay silent.
+	if got := n.notifications(snapWithSlow("GET /reports/:id"), idDomain); len(got) != 0 {
+		t.Errorf("a route briefly displaced from the top list must not re-notify, got %d", len(got))
+	}
+}
+
+// A route flagged only in absolute terms (no usable site baseline, multiplier 0)
+// must read as its p95, not "0x slower than usual" (finding #4).
+func TestNotificationForSlowRoute_zeroMultiplierUsesAbsolute(t *testing.T) {
+	r := reqstats.RouteStat{Route: "GET /export", Method: "GET", P95Millis: 1200, Multiplier: 0}
+	body := notificationForSlowRoute("acme", "acme.test", r).Body
+	if want := "GET /export p95 is 1200ms"; body != want {
+		t.Errorf("body = %q, want %q", body, want)
+	}
+	r.Multiplier = 5
+	if body := notificationForSlowRoute("acme", "acme.test", r).Body; body == "GET /export p95 is 1200ms" {
+		t.Errorf("with a real multiplier the body should use the slower-than-usual phrasing, got %q", body)
 	}
 }

@@ -42,6 +42,60 @@ func writeQuadlet(t *testing.T, name string, marked bool) {
 	}
 }
 
+// refreshPresetDefinition must refresh a preset service's declarative fields from
+// the store while preserving install-time pins. A regression in the preservation
+// list would silently overwrite a running service's pinned image on reconcile.
+func TestRefreshPresetDefinition_RefreshesDeclarativePreservesPins(t *testing.T) {
+	reconcileEnv(t)
+
+	presetDir := config.StorePresetsDir()
+	if err := os.MkdirAll(presetDir, 0o755); err != nil {
+		t.Fatalf("mkdir preset dir: %v", err)
+	}
+	// The store now describes a newer definition: fresh description and dashboard.
+	presetYAML := "name: myadmin\n" +
+		"description: new description\n" +
+		"dashboard: http://localhost:9000\n" +
+		"versions:\n" +
+		"  - tag: \"1\"\n" +
+		"    image: myimg:2\n" +
+		"    canonical: true\n"
+	if err := os.WriteFile(filepath.Join(presetDir, "myadmin.yaml"), []byte(presetYAML), 0o644); err != nil {
+		t.Fatalf("write preset: %v", err)
+	}
+
+	installed := &config.CustomService{
+		Name:          "myadmin",
+		Preset:        "myadmin",
+		PresetVersion: "1",
+		Image:         "myimg:1", // pinned: the running image, must not be upgraded
+		LastOp:        "install", // pinned op state
+		Description:   "old description",
+	}
+
+	fresh, changed := refreshPresetDefinition(installed)
+	if !changed {
+		t.Fatal("a differing store definition should report changed")
+	}
+	if fresh.Description != "new description" || fresh.Dashboard != "http://localhost:9000" {
+		t.Errorf("declarative fields not refreshed from the store: %+v", fresh)
+	}
+	if fresh.Image != "myimg:1" {
+		t.Errorf("pinned image must be preserved, got %q", fresh.Image)
+	}
+	if fresh.LastOp != "install" {
+		t.Errorf("pinned op state must be preserved, got %q", fresh.LastOp)
+	}
+
+	// An identical store definition must be a no-op, so a steady-state reconcile
+	// never rewrites the service snapshot.
+	installed.Description = "new description"
+	installed.Dashboard = "http://localhost:9000"
+	if _, changed := refreshPresetDefinition(installed); changed {
+		t.Error("an identical store definition should not report changed")
+	}
+}
+
 // TestReconcileServices_forwardHealsMissingQuadlet: a service whose YAML exists
 // but whose quadlet is missing gets its quadlet regenerated (issue #678).
 func TestReconcileServices_forwardHealsMissingQuadlet(t *testing.T) {

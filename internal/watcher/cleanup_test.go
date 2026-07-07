@@ -7,9 +7,10 @@ import (
 	"github.com/geodro/lerd/internal/cleanup"
 )
 
-// The daily sweep must run the deep tier so upgraded service images are
-// reclaimed unattended, not just the safe-tier orphans.
-func TestRunAutoCleanup_UsesDeepSweep(t *testing.T) {
+// The daily sweep must run the managed tier so upgraded service images are
+// reclaimed unattended, without reaping a user's foreign dangling images the way
+// the interactive deep tier does.
+func TestRunAutoCleanup_UsesManagedSweep(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -18,12 +19,12 @@ func TestRunAutoCleanup_UsesDeepSweep(t *testing.T) {
 	autoSweep = func() (int, int64, error) { called = true; return 0, 0, nil }
 	t.Cleanup(func() {
 		stampPathFn = defaultStampPath
-		autoSweep = cleanup.SweepDeep
+		autoSweep = cleanup.SweepManaged
 	})
 
 	runAutoCleanup(time.Unix(2_000_000_000, 0))
 	if !called {
-		t.Error("auto cleanup should invoke the deep sweep")
+		t.Error("auto cleanup should invoke the managed sweep")
 	}
 }
 

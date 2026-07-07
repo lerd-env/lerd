@@ -16,25 +16,27 @@ func defaultAutoEnabled() bool {
 // SweepSafe runs the safe-tier cleanup immediately when auto_cleanup is on. It
 // is the event hook for the moment a PHP image rebuild orphans the old image,
 // reaping it at once instead of waiting for the daily watcher.
-func SweepSafe() (images int, bytes int64, err error) { return sweep(false) }
+func SweepSafe() (images int, bytes int64, err error) { return sweep(ScopeSafe) }
 
-// SweepDeep runs the deep tier: the safe-tier orphans plus service catalog
-// images no service references any more. This is the daily watcher's sweep, so
-// old service versions left by an upgrade get reclaimed unattended. Protected
-// images (the current one and the one-back rollback) and user-added tags are
-// always kept, and the deep tier degrades to safe when the preset store can't
-// be read, so the unattended path stays safe.
-func SweepDeep() (images int, bytes int64, err error) { return sweep(true) }
+// SweepManaged runs the managed tier (safe orphans plus lerd's unused catalog
+// images), the daily watcher's sweep: it reclaims an upgrade's leftovers
+// unattended without ever touching a foreign dangling image.
+func SweepManaged() (images int, bytes int64, err error) { return sweep(ScopeManaged) }
+
+// SweepDeep runs the deep tier: the managed tier plus every remaining dangling
+// image on the host, foreign leftovers included. Interactive only, never run
+// unattended.
+func SweepDeep() (images int, bytes int64, err error) { return sweep(ScopeDeep) }
 
 // sweep runs a cleanup tier when auto_cleanup is on. Returns the number of
 // images reaped and bytes freed; err is non-nil only when the image scan itself
 // failed, so the watcher can tell a transient failure (retry) from "nothing to
 // do" (throttle). All-zero with nil err when disabled or clean.
-func sweep(deep bool) (images int, bytes int64, err error) {
+func sweep(scope Scope) (images int, bytes int64, err error) {
 	if !autoEnabled() {
 		return 0, 0, nil
 	}
-	plan, err := Inspect(deep)
+	plan, err := Inspect(scope)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -31,16 +31,24 @@
   // Poll on the watcher's snapshot cadence so the panel tracks live traffic
   // without hammering the endpoint. Re-fetches when the domain or branch changes.
   async function load() {
-    const q = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+    const reqDomain = domain;
+    const reqBranch = branch;
+    const q = reqBranch ? `?branch=${encodeURIComponent(reqBranch)}` : '';
     try {
-      stats = await apiJson<SiteStats>(`/api/sites/${encodeURIComponent(domain)}/stats${q}`);
+      const s = await apiJson<SiteStats>(`/api/sites/${encodeURIComponent(reqDomain)}/stats${q}`);
+      // Drop a response that resolved after the user switched site/branch, so a
+      // slow request for the old site never paints its numbers over the new one.
+      if (reqDomain !== domain || reqBranch !== branch) return;
+      stats = s;
     } catch {
+      if (reqDomain !== domain || reqBranch !== branch) return;
       stats = null;
     }
   }
 
   onMount(() => {
-    load();
+    // The $effect below fires load() on mount too, so don't also call it here or
+    // the panel double-fetches every time it opens.
     void loadProfilerStatus();
     const id = setInterval(load, 10000);
     return () => clearInterval(id);

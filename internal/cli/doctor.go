@@ -412,7 +412,7 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 		}
 	}
 
-	if plan, planErr := cleanup.Inspect(false); planErr == nil && plan.ReclaimBytes() > 0 {
+	if plan, planErr := cleanup.Inspect(cleanup.ScopeSafe); planErr == nil && plan.ReclaimBytes() > 0 {
 		info("Reclaimable disk", fmt.Sprintf("about %s (run: lerd cleanup)", humanSize(plan.ReclaimBytes())))
 	}
 

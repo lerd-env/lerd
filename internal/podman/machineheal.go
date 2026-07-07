@@ -25,9 +25,9 @@ var (
 	lastHealAt time.Time
 )
 
-// EnsureMachineResponsive probes the VM before an MCP handler shells out. On a
-// stall it heals once (cooldown-guarded) and re-probes, turning a post-sleep
-// freeze into a self-healed retry or a fast error instead of an unbounded hang.
+// EnsureMachineResponsive probes the VM before a caller shells into it (the FPM
+// start path and the DNS watcher). On a stall it heals once (cooldown-guarded)
+// and re-probes, turning a post-sleep freeze into a retry or a fast error.
 func EnsureMachineResponsive() error {
 	if MachineHeal == nil {
 		return nil // no machine VM to stall or heal (Linux, tests): skip the probe

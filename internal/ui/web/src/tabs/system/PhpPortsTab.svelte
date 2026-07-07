@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import PortsEditor from '$components/PortsEditor.svelte';
   import { status } from '$stores/status';
   import { setFpmPorts } from '$stores/phpVersions';
@@ -17,12 +18,13 @@
   let saving = $state(false);
   let error = $state('');
 
-  // Track the persisted set. Reseed the optimistic list from it on version change
-  // or when a broadcast delivers a new resolved set (a port may have been shifted
-  // server-side), but never while a save is in flight.
+  // Reseed on version change or a broadcast. `saving` is read untracked so the
+  // save's own saving->false transition never re-runs this (the old flicker),
+  // and a mid-save broadcast is skipped so it can't clobber the optimistic list.
   $effect(() => {
+    version;
     const c = current;
-    if (saving) return;
+    if (untrack(() => saving)) return;
     ports = [...c];
     error = '';
   });

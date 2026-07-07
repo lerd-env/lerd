@@ -33,7 +33,13 @@ func checkSlowRoutes(path string) (Check, bool) {
 		if len(parts) == slowRoutesInDetail {
 			break
 		}
-		parts = append(parts, fmt.Sprintf("%s (%gx, %gms)", r.Route, r.Multiplier, r.P95Millis))
+		// A route flagged only in absolute terms has no baseline multiplier, so
+		// name it by its p95 rather than an "0x" that reads as a bug.
+		if r.Multiplier > 0 {
+			parts = append(parts, fmt.Sprintf("%s (%gx, %gms)", r.Route, r.Multiplier, r.P95Millis))
+		} else {
+			parts = append(parts, fmt.Sprintf("%s (%gms)", r.Route, r.P95Millis))
+		}
 	}
 	detail := fmt.Sprintf("%d route(s) run well above this site's typical %gms response: %s.",
 		len(stats.Slow), stats.MedianMillis, strings.Join(parts, ", "))

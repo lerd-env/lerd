@@ -17,7 +17,20 @@ func TestArgsSpecifyHost(t *testing.T) {
 		{[]string{"--help"}, false},
 		{[]string{"postgresql://user@ext.example.com/db"}, true},
 		{[]string{"host=ext.example.com dbname=prod"}, true},
+		{[]string{"dbname=prod host=ext.example.com"}, true},
 		{[]string{"mydb"}, false},
+		// A host= or a URL inside a -c/-e SQL body must NOT be read as a host, or
+		// a legitimate query fails to connect to the lerd service.
+		{[]string{"-c", "SELECT * FROM logs WHERE host='node1'"}, false},
+		{[]string{"-e", "UPDATE s SET url='http://x' WHERE id=1"}, false},
+		{[]string{"--command", "SELECT 'host=' || h FROM t"}, false},
+		// The inline flag form (one argv token) must be handled the same way.
+		{[]string{"-eSELECT * FROM logs WHERE host='node1'"}, false},
+		{[]string{"--command=SELECT * FROM t WHERE host='x'"}, false},
+		// -c/-e are boolean flags for some tools (mysqldump --complete-insert),
+		// so a following -h is a real host and must still be detected.
+		{[]string{"-c", "-h", "prod.example.com", "mydb"}, true},
+		{[]string{"-e", "-h", "prod.example.com"}, true},
 	}
 	for _, c := range cases {
 		if got := argsSpecifyHost(c.args); got != c.want {

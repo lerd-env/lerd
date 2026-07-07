@@ -31,17 +31,19 @@ func NewCleanupCmd() *cobra.Command {
 	return cmd
 }
 
-// newCleanupAutoCmd toggles automatic cleanup (the watcher's daily safe-tier
+// newCleanupAutoCmd toggles automatic cleanup (the watcher's daily managed-tier
 // sweep and the post-rebuild / post-service-change reaping), so users don't have
 // to hand-edit config.yaml. Matches the on/off/status shape of lerd idle/notify.
 func newCleanupAutoCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "auto",
 		Short: "Enable, disable, or show automatic cleanup",
-		Long: `Toggle automatic cleanup: the lerd-watcher's daily deep sweep and the
-immediate reaping after a PHP rebuild or a service update/remove. On by
-default. The deep sweep always keeps the current image and the one-back
-rollback target, and never touches images lerd didn't pull.`,
+		Long: `Toggle automatic cleanup: the lerd-watcher's daily managed sweep and
+the immediate reaping after a PHP rebuild or a service update/remove. On by
+default. The managed sweep reclaims lerd's own orphaned builds and old service
+versions, always keeps the current image and the one-back rollback target, and
+never touches an image lerd didn't pull. The wider dangling-image reap is
+reserved for the interactive lerd cleanup.`,
 	}
 	cmd.AddCommand(
 		&cobra.Command{Use: "on", Short: "Enable automatic cleanup", Args: cobra.NoArgs,
@@ -92,7 +94,11 @@ func autoStateWord(enabled bool) string {
 }
 
 func runCleanup(dryRun, yes, deep bool) error {
-	plan, err := cleanup.Inspect(deep)
+	scope := cleanup.ScopeSafe
+	if deep {
+		scope = cleanup.ScopeDeep
+	}
+	plan, err := cleanup.Inspect(scope)
 	if err != nil {
 		return err
 	}

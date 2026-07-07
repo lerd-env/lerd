@@ -50,6 +50,43 @@ describe('SiteRequestStats', () => {
     expect(await findByText(/within the typical range/i)).toBeTruthy();
   });
 
+  // A slow response for the previous site must not paint its numbers over the
+  // site the user has since switched to.
+  it('drops a stale response after the domain changes', async () => {
+    let resolveA!: (r: Response) => void;
+    const aPending = new Promise<Response>((res) => (resolveA = res));
+    globalThis.fetch = vi.fn((url: string | URL | Request) => {
+      if (String(url).includes('aaa.test')) return aPending;
+      return Promise.resolve(
+        new Response(JSON.stringify({ site: 'bbb', median_millis: 99, samples: 5, slow: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' }
+        })
+      );
+    }) as unknown as typeof fetch;
+
+    const { rerender, findByText, queryByText } = render(SiteRequestStats, {
+      props: { domain: 'aaa.test' }
+    });
+    await rerender({ domain: 'bbb.test' });
+    await findByText(/within the typical range/i);
+
+    // Resolve the now-stale aaa request with slow data; it must be ignored.
+    resolveA(
+      new Response(
+        JSON.stringify({
+          site: 'aaa',
+          median_millis: 5,
+          samples: 50,
+          slow: [{ route: 'GET /old', method: 'GET', example: '/old', p95_millis: 999, multiplier: 20, samples: 10 }]
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    );
+    await new Promise((r) => setTimeout(r, 0));
+    expect(queryByText('GET /old')).toBeNull();
+  });
+
   it('links a GET route to its concrete example URL', async () => {
     mockFetch(SNAPSHOT);
     const { findByText } = render(SiteRequestStats, { props: { domain: 'acme.test' } });

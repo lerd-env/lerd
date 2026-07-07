@@ -37,6 +37,30 @@ func TestSudoersMarker(t *testing.T) {
 	}
 }
 
+// dns:repair must be able to restore a drop-in that was deleted out of band.
+// The content marker can't detect that (the drop-in is unreadable), so repair
+// forgets the marker to force InstallSudoers to rewrite. Without this the marker
+// keeps reporting "installed" and repair silently no-ops on the one case it
+// exists for.
+func TestForgetSudoersMarker_ForcesRewrite(t *testing.T) {
+	orig := sudoersMarkerPath
+	t.Cleanup(func() { sudoersMarkerPath = orig })
+	dir := t.TempDir()
+	sudoersMarkerPath = func() string { return filepath.Join(dir, "sudoers.sha256") }
+
+	content := []byte("user ALL=(root) NOPASSWD: /usr/bin/resolvectl\n")
+	recordSudoersInstalled(content)
+	if !sudoersInstalled(content) {
+		t.Fatal("marker should report installed after record")
+	}
+
+	ForgetSudoersMarker()
+
+	if sudoersInstalled(content) {
+		t.Fatal("after forgetting the marker, InstallSudoers must rewrite (report not installed)")
+	}
+}
+
 // A future lerd version that changes the sudoers rule must still reinstall it
 // on `lerd update` (which re-runs `lerd install`), then go quiet again. This
 // guards the marker against silently skipping a genuine rule change.

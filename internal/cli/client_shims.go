@@ -106,13 +106,44 @@ func argsSpecifyHost(args []string) bool {
 		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || (strings.HasPrefix(a, "-h") && len(a) > 2) {
 			return true
 		}
-		// A connection URI or a libpq conninfo string carries its own host, so
-		// the shim must not override it with a local default.
-		if strings.Contains(a, "://") || strings.Contains(a, "host=") {
+		// A connection URI (scheme://…) or a libpq conninfo string carries its own
+		// host. A "host=" is only read as a conninfo key when the whole arg is
+		// key=value pairs, so a host= inside a SQL body (passed via -c/-e, whether
+		// spaced or inline) is never mistaken for one.
+		if isConnURI(a) || (strings.Contains(a, "host=") && looksLikeConninfo(a)) {
 			return true
 		}
 	}
 	return false
+}
+
+// isConnURI reports whether a is a database connection URI, matched by a known
+// scheme prefix rather than a bare "://" so a URL literal inside a query value
+// is not mistaken for a connection target.
+func isConnURI(a string) bool {
+	for _, scheme := range []string{"postgres://", "postgresql://", "mysql://", "mariadb://"} {
+		if strings.HasPrefix(a, scheme) {
+			return true
+		}
+	}
+	return false
+}
+
+// looksLikeConninfo reports whether a is a libpq conninfo string: every
+// whitespace-separated token is a key=value pair. A SQL query fails this on its
+// first bare word (SELECT, WHERE…), so it separates "host=db port=5432" from a
+// "WHERE host='x'" predicate without knowing the tool or its flags.
+func looksLikeConninfo(a string) bool {
+	fields := strings.Fields(a)
+	if len(fields) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		if i := strings.IndexByte(f, '='); i <= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // hostEnvSet reports whether the caller pointed the tool at a host via the

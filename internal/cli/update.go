@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sort"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -222,6 +223,40 @@ func refreshStoreFrameworks() {
 			continue
 		}
 		if err := config.SaveStoreFramework(fw); err != nil {
+			step.Fail(err)
+			continue
+		}
+		step.OK("")
+	}
+}
+
+// refreshStorePresets re-fetches the store preset backing every installed
+// service so its definition and file mounts keep resolving offline after an
+// upgrade, mirroring refreshStoreFrameworks. Best-effort: a failed fetch leaves
+// the existing cached (or still-embedded) copy in place.
+func refreshStorePresets() {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	var names []string
+	for _, svc := range customs {
+		if svc.Preset == "" || seen[svc.Preset] {
+			continue
+		}
+		seen[svc.Preset] = true
+		names = append(names, svc.Preset)
+	}
+	if len(names) == 0 {
+		return
+	}
+	sort.Strings(names)
+	feedback.Header(fmt.Sprintf("Refreshing %d service preset%s", len(names), pluralS(len(names))))
+	client := store.NewServiceClient()
+	for _, name := range names {
+		step := feedback.Start(name)
+		if _, err := client.FetchServicePreset(name); err != nil {
 			step.Fail(err)
 			continue
 		}
