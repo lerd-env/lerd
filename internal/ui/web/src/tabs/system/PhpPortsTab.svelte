@@ -17,13 +17,12 @@
   let saving = $state(false);
   let error = $state('');
 
-  // Track the persisted set. Reseed the optimistic list from it on version change
-  // or when a broadcast delivers a new resolved set (a port may have been shifted
-  // server-side), but never while a save is in flight.
+  // Reseed the optimistic list from the persisted set on version change or a
+  // broadcast. Not gated on `saving`: gating made the save's own saving->false
+  // transition reseed from a lagging `current` and flicker the just-changed card.
   $effect(() => {
-    const c = current;
-    if (saving) return;
-    ports = [...c];
+    version;
+    ports = [...current];
     error = '';
   });
 
