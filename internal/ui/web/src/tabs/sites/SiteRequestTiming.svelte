@@ -21,7 +21,6 @@
   let range = $state<TimeRange>('1h');
   let data = $state<Analytics | null>(null);
   let tab = $state<'routes' | 'recent'>('routes');
-  let now = $state(Date.now());
 
   async function load() {
     const d = site.domain;
@@ -46,22 +45,22 @@
 
   onMount(() => {
     const poll = setInterval(load, 10000);
-    const clock = setInterval(() => (now = Date.now()), 1000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(clock);
-    };
+    return () => clearInterval(poll);
   });
 
   const hasData = $derived(!!data && data.samples > 0);
   const errorCount = $derived((data?.status.c4xx ?? 0) + (data?.status.c5xx ?? 0));
   const errorRate = $derived(data && data.samples ? (errorCount / data.samples) * 100 : 0);
+  // The slowest list ranks and reads by each route's recent p95, so a route that
+  // was slow but has since been fixed drops down or off as newer, faster requests
+  // arrive, even while its old slow samples still sit in the window's overall p95.
+  const recentP95 = (r: RouteStat) => r.recent_p95_millis ?? r.p95_millis;
   const slowest = $derived(
-    [...(data?.routes ?? [])].sort((a, b) => b.p95_millis - a.p95_millis).slice(0, 5)
+    [...(data?.routes ?? [])].sort((a, b) => recentP95(b) - recentP95(a)).slice(0, 5)
   );
   const histMax = $derived(Math.max(1, ...(data?.distribution ?? []).map((b) => b.count)));
   const routeMax = $derived(Math.max(1, ...(data?.routes ?? []).map((r) => r.p95_millis)));
-  const slowMax = $derived(Math.max(1, ...slowest.map((r) => r.p95_millis)));
+  const slowMax = $derived(Math.max(1, ...slowest.map((r) => recentP95(r))));
 
   // Throughput area path in a 100x30 viewBox, so the SVG scales to any width
   // without measuring the DOM. A single point still draws a flat line.
@@ -108,11 +107,8 @@
     if (s < 500) return 'text-amber-600 dark:text-amber-400';
     return 'text-red-600 dark:text-red-400';
   }
-  function ago(atMillis: number): string {
-    const s = Math.max(0, Math.round((now - atMillis) / 1000));
-    if (s < 60) return s + 's';
-    if (s < 3600) return Math.round(s / 60) + 'm';
-    return Math.round(s / 3600) + 'h';
+  function fmtTime(atMillis: number): string {
+    return new Date(atMillis).toLocaleTimeString([], { hour12: false });
   }
 
   let arming = $state(false);
@@ -223,9 +219,9 @@
               <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-lerd-red">{r.route.replace(r.method + ' ', '')}</span>
             </span>
             <span class="h-2 rounded-full bg-gray-100 dark:bg-white/5 overflow-hidden">
-              <span class="block h-full rounded-full {SEV_BG[sev(r.p95_millis)]}" style="width:{(r.p95_millis / slowMax) * 100}%"></span>
+              <span class="block h-full rounded-full {SEV_BG[sev(recentP95(r))]}" style="width:{(recentP95(r) / slowMax) * 100}%"></span>
             </span>
-            <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(r.p95_millis)]}">{fmtMs(r.p95_millis)}</span>
+            <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
           </button>
         {/each}
       </div>
@@ -278,7 +274,7 @@
         <div class="divide-y divide-gray-100 dark:divide-lerd-border">
           {#each data.recent as r (r.at_millis + r.uri)}
             <div class="flex items-center gap-3 px-3 py-2 text-xs">
-              <span class="w-10 shrink-0 text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{ago(r.at_millis)}</span>
+              <span class="shrink-0 font-mono text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{fmtTime(r.at_millis)}</span>
               <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
               <span class="font-mono text-gray-700 dark:text-gray-200 truncate flex-1 min-w-0">{r.uri}</span>
               {#if r.cold}

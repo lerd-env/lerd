@@ -42,6 +42,11 @@ func IsColdStart(last time.Time, seen bool, now time.Time, gap time.Duration) bo
 // bucket (UpperMillis 0) catches everything above the last edge.
 var latencyEdges = []float64{25, 50, 100, 250, 500, 1000}
 
+// recentRouteWindow is how many of a route's most recent samples feed its recent
+// p95, the recency-aware figure the slowest-routes list ranks by so a fixed route
+// falls off once newer, faster requests arrive.
+const recentRouteWindow = 20
+
 // Store is the durable SQLite record of requests. The watcher (the only process
 // on the nginx access feed) writes to it; lerd-ui opens it read-only to build the
 // request-timing analytics view over any window. Pure-Go driver, so the CGO-free
@@ -259,15 +264,21 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 	a.MedianMillis = round1(median(warm))
 	a.P95Millis = round1(percentile(warm, 95))
 	for route, r := range routes {
-		// A route seen only as cold starts has no warm samples; fall back to a zero
-		// timing rather than dropping the row, so its traffic still shows.
+		// r.warm is in time order (rows come back oldest first), so the tail slice is
+		// the route's most recent samples. A route seen only as cold starts has no
+		// warm samples; fall back to a zero timing rather than dropping the row.
+		recent := r.warm
+		if len(recent) > recentRouteWindow {
+			recent = recent[len(recent)-recentRouteWindow:]
+		}
 		a.Routes = append(a.Routes, RouteStat{
-			Route:     route,
-			Method:    r.method,
-			Example:   r.example,
-			P50Millis: round1(median(r.warm)),
-			P95Millis: round1(percentile(r.warm, 95)),
-			Samples:   r.total,
+			Route:           route,
+			Method:          r.method,
+			Example:         r.example,
+			P50Millis:       round1(median(r.warm)),
+			P95Millis:       round1(percentile(r.warm, 95)),
+			RecentP95Millis: round1(percentile(recent, 95)),
+			Samples:         r.total,
 		})
 	}
 	sort.Slice(a.Routes, func(i, j int) bool {

@@ -6,6 +6,7 @@ export interface RouteStat {
   example: string;
   p50_millis: number;
   p95_millis: number;
+  recent_p95_millis?: number;
   multiplier: number;
   samples: number;
 }

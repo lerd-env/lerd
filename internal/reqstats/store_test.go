@@ -118,6 +118,28 @@ func TestStoreAnalyticsExcludesColdFromTiming(t *testing.T) {
 	}
 }
 
+func TestStoreAnalyticsRecentP95TracksImprovement(t *testing.T) {
+	s := tempStore(t)
+	// A route slow early, then a run of fast requests: its window p95 stays high
+	// (the old slow samples are still in the window) but its recent p95 recovers,
+	// so the slowest list can demote it once it's been fixed.
+	recs := mk(5, 0, "app", "GET", "GET /x", "/x", 200, 2000)
+	recs = append(recs, mk(25, time.Minute, "app", "GET", "GET /x", "/x", 200, 20)...)
+	seed(t, s, recs)
+
+	a, err := s.SiteAnalytics("app", base.Add(-time.Hour), base.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("SiteAnalytics: %v", err)
+	}
+	r := a.Routes[0]
+	if r.P95Millis < 1000 {
+		t.Errorf("window p95 = %v, want high (old slow samples still in window)", r.P95Millis)
+	}
+	if r.RecentP95Millis > 100 {
+		t.Errorf("recent p95 = %v, want low (route has been fixed)", r.RecentP95Millis)
+	}
+}
+
 func TestStoreAnalyticsRespectsRange(t *testing.T) {
 	s := tempStore(t)
 	seed(t, s, mk(5, -2*time.Hour, "app", "GET", "GET /old", "/old", 200, 20))
