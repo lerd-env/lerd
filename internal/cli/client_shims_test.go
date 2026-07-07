@@ -24,6 +24,13 @@ func TestArgsSpecifyHost(t *testing.T) {
 		{[]string{"-c", "SELECT * FROM logs WHERE host='node1'"}, false},
 		{[]string{"-e", "UPDATE s SET url='http://x' WHERE id=1"}, false},
 		{[]string{"--command", "SELECT 'host=' || h FROM t"}, false},
+		// The inline flag form (one argv token) must be handled the same way.
+		{[]string{"-eSELECT * FROM logs WHERE host='node1'"}, false},
+		{[]string{"--command=SELECT * FROM t WHERE host='x'"}, false},
+		// -c/-e are boolean flags for some tools (mysqldump --complete-insert),
+		// so a following -h is a real host and must still be detected.
+		{[]string{"-c", "-h", "prod.example.com", "mydb"}, true},
+		{[]string{"-e", "-h", "prod.example.com"}, true},
 	}
 	for _, c := range cases {
 		if got := argsSpecifyHost(c.args); got != c.want {

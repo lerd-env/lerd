@@ -102,25 +102,15 @@ func runShimsSet(tool string, enabled bool) error {
 // which case the shim leaves the connection untouched (an external database).
 // Both the postgres and mysql client families use -h / --host for the host.
 func argsSpecifyHost(args []string) bool {
-	skipNext := false
 	for _, a := range args {
-		if skipNext {
-			skipNext = false
-			continue
-		}
-		// The value after a query/command flag is SQL, not a connection arg, so a
-		// "host=" predicate or a "://" URL literal inside it must not be read as a
-		// host, which would suppress the local default and break the connection.
-		if a == "-c" || a == "--command" || a == "-e" || a == "--execute" {
-			skipNext = true
-			continue
-		}
 		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || (strings.HasPrefix(a, "-h") && len(a) > 2) {
 			return true
 		}
-		// A connection URI (scheme://…) or a libpq conninfo string (host= as a
-		// keyword, at the start or on a word boundary) carries its own host.
-		if isConnURI(a) || strings.HasPrefix(a, "host=") || strings.Contains(a, " host=") {
+		// A connection URI (scheme://…) or a libpq conninfo string carries its own
+		// host. A "host=" is only read as a conninfo key when the whole arg is
+		// key=value pairs, so a host= inside a SQL body (passed via -c/-e, whether
+		// spaced or inline) is never mistaken for one.
+		if isConnURI(a) || (strings.Contains(a, "host=") && looksLikeConninfo(a)) {
 			return true
 		}
 	}
@@ -137,6 +127,23 @@ func isConnURI(a string) bool {
 		}
 	}
 	return false
+}
+
+// looksLikeConninfo reports whether a is a libpq conninfo string: every
+// whitespace-separated token is a key=value pair. A SQL query fails this on its
+// first bare word (SELECT, WHERE…), so it separates "host=db port=5432" from a
+// "WHERE host='x'" predicate without knowing the tool or its flags.
+func looksLikeConninfo(a string) bool {
+	fields := strings.Fields(a)
+	if len(fields) == 0 {
+		return false
+	}
+	for _, f := range fields {
+		if i := strings.IndexByte(f, '='); i <= 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // hostEnvSet reports whether the caller pointed the tool at a host via the
