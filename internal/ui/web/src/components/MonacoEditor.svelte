@@ -46,10 +46,22 @@
 
   onMount(() => {
     let unsubTheme: (() => void) | undefined;
+    let vvCleanup: (() => void) | undefined;
     void (async () => {
       const monaco = await loadMonaco();
       if (disposed || !container) return;
       monacoRef = monaco;
+
+      // On touch the soft keyboard shrinks the visible area but Monaco still
+      // lays out to the full container height, so with the caret near the top it
+      // decides there's no room below and flips the suggest popup above,
+      // off-screen. We constrain the editor to the visual viewport below so its
+      // geometry matches what's actually visible and the popup lands by the
+      // caret. Widgets stay fixed-positioned so they clear the overflow-hidden card.
+      const coarse =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(pointer: coarse)').matches;
 
       const ed = monaco.editor.create(container, {
         value,
@@ -73,6 +85,29 @@
       });
       editor = ed;
 
+      // Keyboard-aware sizing on touch (see the note above the create call):
+      // cap the editor at the gap between its top and the visual viewport
+      // bottom (the keyboard), and refit as the keyboard shows or hides.
+      // automaticLayout picks up the max-height change and Monaco then places
+      // the suggest popup within the visible area.
+      if (coarse && typeof window !== 'undefined' && window.visualViewport && container) {
+        const host = container;
+        const vv = window.visualViewport;
+        const fit = () => {
+          const top = host.getBoundingClientRect().top;
+          const avail = vv.offsetTop + vv.height - top - 8;
+          host.style.maxHeight = avail > 120 ? `${avail}px` : '';
+        };
+        fit();
+        vv.addEventListener('resize', fit);
+        vv.addEventListener('scroll', fit);
+        vvCleanup = () => {
+          vv.removeEventListener('resize', fit);
+          vv.removeEventListener('scroll', fit);
+          host.style.maxHeight = '';
+        };
+      }
+
       ed.onDidChangeModelContent(() => {
         if (internalUpdate) return;
         const next = ed.getValue();
@@ -90,6 +125,7 @@
     return () => {
       disposed = true;
       unsubTheme?.();
+      vvCleanup?.();
       editor?.dispose();
       editor = undefined;
     };

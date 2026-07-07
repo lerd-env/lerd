@@ -420,6 +420,7 @@
   "services_unpinTitle": "Losmaken, staat auto-stop bij inactiviteit toe",
   "services_removeCustom": "Deze aangepaste service verwijderen",
   "services_dashboard": "Dashboard",
+  "services_hostOnly": "alleen op host",
   "services_openConnection": "Verbindings-URL openen",
   "services_openAdmin": "{name} openen",
   "services_labels_queueWorker": "Queue-worker",

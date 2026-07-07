@@ -405,6 +405,7 @@
   "services_unpinTitle": "取消固定，闲置时允许自动停止",
   "services_removeCustom": "移除此自定义服务",
   "services_dashboard": "仪表盘",
+  "services_hostOnly": "仅限主机",
   "services_openConnection": "打开连接 URL",
   "services_openAdmin": "打开 {name}",
   "services_labels_queueWorker": "队列 worker",

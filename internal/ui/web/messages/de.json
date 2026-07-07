@@ -420,6 +420,7 @@
   "services_unpinTitle": "Lösen, erlaubt Auto-Stopp bei Nichtnutzung",
   "services_removeCustom": "Diesen benutzerdefinierten Dienst entfernen",
   "services_dashboard": "Dashboard",
+  "services_hostOnly": "nur auf dem Host",
   "services_openConnection": "Verbindungs-URL öffnen",
   "services_openAdmin": "{name} öffnen",
   "services_labels_queueWorker": "Queue-Worker",

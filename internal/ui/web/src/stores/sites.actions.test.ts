@@ -234,4 +234,22 @@ describe('sites actions', () => {
     expect(siteWorkerFailing({ domain: 'a', framework_workers: [{ name: 'x', failing: true }] })).toBe(true);
     expect(siteWorkerFailing({ domain: 'a' })).toBe(false);
   });
+
+  it('openSiteInBrowser opens the .test domain by default', async () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url: string) => opened.push(url));
+    const { openSiteInBrowser } = await import('./sites');
+    openSiteInBrowser({ domain: 'a.test', name: 'a', tls: true });
+    expect(opened).toEqual(['https://a.test']);
+    vi.unstubAllGlobals();
+  });
+
+  it('openSiteInBrowser prefers an explicit url override (remote LAN open)', async () => {
+    const opened: string[] = [];
+    vi.stubGlobal('open', (url: string) => opened.push(url));
+    const { openSiteInBrowser } = await import('./sites');
+    openSiteInBrowser({ domain: 'a.test', name: 'a', tls: true }, '', 'http://192.168.0.200:8080');
+    expect(opened).toEqual(['http://192.168.0.200:8080']);
+    vi.unstubAllGlobals();
+  });
 });

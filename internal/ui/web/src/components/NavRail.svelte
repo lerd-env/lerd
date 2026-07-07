@@ -16,11 +16,16 @@
   import { dashboardIconSvg } from '$lib/dashboardIcons';
   import { profilerEnabled, loadProfilerStatus } from '$stores/profiler';
   import { serviceLabel } from '$stores/services';
+  import { accessMode } from '$stores/accessMode';
   import { m } from '../paraglide/messages.js';
 
   onMount(() => {
     void loadProfilerStatus();
   });
+
+  // The profiler and service dashboards are loopback-only localhost web UIs, so
+  // their launch icons are dead from a remote (LAN) dashboard. Hide them there.
+  const remote = $derived(!$accessMode.loopback);
 
   const labels = $derived<Record<TabId, string>>({
     dashboard: m.nav_dashboard(),
@@ -54,36 +59,38 @@
     {/each}
   </div>
 
-  <div class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-gray-200 dark:border-lerd-border w-8">
-    <IconButton
-      title={m.nav_profiler()}
-      active={$dashboardOpen?.name === 'profiler'}
-      onclick={openProfiler}
-    >
-      <span class="relative flex items-center justify-center">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          {@html dashboardIconSvg('profiler')}
-        </svg>
-        {#if $profilerEnabled}
-          <span
-            title={m.profiler_toggle_on()}
-            class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-lerd-card"
-          ></span>
-        {/if}
-      </span>
-    </IconButton>
-    {#each $dashboardServices as svc (svc.name)}
+  {#if !remote}
+    <div class="flex flex-col items-center gap-1 mt-3 pt-3 border-t border-gray-200 dark:border-lerd-border w-8">
       <IconButton
-        title={serviceLabel(svc.name) + ' ' + m.services_dashboard().toLowerCase()}
-        active={$dashboardOpen?.name === svc.name}
-        onclick={() => openDashboard(svc)}
+        title={m.nav_profiler()}
+        active={$dashboardOpen?.name === 'profiler'}
+        onclick={openProfiler}
       >
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          {@html dashboardIconSvg(svc.name)}
-        </svg>
+        <span class="relative flex items-center justify-center">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {@html dashboardIconSvg('profiler')}
+          </svg>
+          {#if $profilerEnabled}
+            <span
+              title={m.profiler_toggle_on()}
+              class="absolute -top-1 -right-1.5 w-2 h-2 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-lerd-card"
+            ></span>
+          {/if}
+        </span>
       </IconButton>
-    {/each}
-  </div>
+      {#each $dashboardServices as svc (svc.name)}
+        <IconButton
+          title={serviceLabel(svc.name) + ' ' + m.services_dashboard().toLowerCase()}
+          active={$dashboardOpen?.name === svc.name}
+          onclick={() => openDashboard(svc)}
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {@html dashboardIconSvg(svc.name)}
+          </svg>
+        </IconButton>
+      {/each}
+    </div>
+  {/if}
 
   <div class="mt-auto flex flex-col items-center gap-2">
     <IconButton

@@ -405,6 +405,7 @@
   "services_unpinTitle": "Odepnij, zezwól na automatyczne zatrzymanie, gdy nieużywane",
   "services_removeCustom": "Usuń tę niestandardową usługę",
   "services_dashboard": "Pulpit",
+  "services_hostOnly": "tylko na hoście",
   "services_openConnection": "Otwórz URL połączenia",
   "services_openAdmin": "Otwórz {name}",
   "services_labels_queueWorker": "Worker kolejki",

@@ -401,6 +401,7 @@
   "services_unpinTitle": "Unpin, allow auto-stop when unused",
   "services_removeCustom": "Remove this custom service",
   "services_dashboard": "Dashboard",
+  "services_hostOnly": "host only",
   "services_openConnection": "Open connection URL",
   "services_openAdmin": "Open {name}",
   "services_labels_queueWorker": "Queue worker",

@@ -128,6 +128,18 @@
   const useTLS = $derived(Boolean(site.tls));
   const scheme = $derived(useTLS ? 'https://' : 'http://');
 
+  // On a remote (non-loopback) dashboard the site's .test domain doesn't
+  // resolve, so the open action targets the LAN share URL instead. When the
+  // site isn't shared yet the primary button flips to a share action, since
+  // there is nothing openable off-host until it is. Loopback is unchanged.
+  const remoteView = $derived(!$accessMode.loopback);
+  const primaryShare = $derived(remoteView && !lanOn && !site.paused);
+  const showLanToggle = $derived(!site.paused && ($accessMode.loopback || lanOn));
+
+  function openTarget() {
+    openSiteInBrowser(site, activeWorktreeBranch, remoteView && lanOn && lanURL ? lanURL : undefined);
+  }
+
   async function togglePause() {
     pauseBusy = true;
     try {
@@ -208,8 +220,8 @@
 
 <div class="border-b border-gray-100 dark:border-lerd-border shrink-0 @container flex flex-col">
   {#if showWorktreeTabs}
-    <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02]">
-      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
+    <div class="flex flex-col-reverse @md:flex-row @md:items-end bg-gray-50/60 dark:bg-white/[0.02]">
+      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto @md:flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
         <div
@@ -286,8 +298,8 @@
       {/if}
       </div>
       {#if activePath}
-        <div class="shrink-0 pl-2 pr-3 pb-2 flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400 min-w-0">
-          <span class="font-mono leading-none truncate max-w-[22rem]" title={activePath}>{activePath}</span>
+        <div class="@md:shrink-0 px-3 pt-2 pb-1 @md:pt-0 @md:pb-2 @md:pl-2 @md:pr-3 flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400 min-w-0">
+          <span class="font-mono leading-none truncate max-w-full @md:max-w-[22rem]" title={activePath}>{activePath}</span>
         </div>
       {/if}
     </div>
@@ -436,7 +448,7 @@
 
       <span class="flex items-center gap-1.5 shrink-0">
         {#if activeFrameworkLabel}
-          <Badge tone="framework">{activeFrameworkLabel}</Badge>
+          <span class="hidden @md:inline-flex"><Badge tone="framework">{activeFrameworkLabel}</Badge></span>
         {/if}
         {#if lanOn && lanURL}
           <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
@@ -479,24 +491,46 @@
     </div>
 
     <div class="flex items-center shrink-0">
-      <button
-        type="button"
-        onclick={() => openSiteInBrowser(site, activeWorktreeBranch)}
-        aria-label={m.common_open()}
-        use:tooltip={m.common_open() + ' — ' + activeDomain}
-        class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
-      >
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path
-            stroke-linecap="round"
-            stroke-linejoin="round"
-            stroke-width="2"
-            d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-          />
-        </svg>
-      </button>
+      {#if primaryShare}
+        <button
+          type="button"
+          onclick={flipLAN}
+          disabled={lanBusy}
+          aria-label={m.sites_controls_lanToggle_off()}
+          use:tooltip={m.sites_controls_lanToggle_off()}
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+        >
+          {#if lanBusy}
+            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+            </svg>
+          {:else}
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+              <path d="M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01" />
+            </svg>
+          {/if}
+        </button>
+      {:else}
+        <button
+          type="button"
+          onclick={openTarget}
+          aria-label={m.common_open()}
+          use:tooltip={m.common_open() + ' — ' + (remoteView && lanOn && lanURL ? lanURL : activeDomain)}
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+        >
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+            />
+          </svg>
+        </button>
+      {/if}
 
-      {#if !site.paused}
+      {#if showLanToggle}
         <button
           type="button"
           onclick={flipLAN}
@@ -689,7 +723,7 @@
                 {m.sites_manageDomains()}
               </button>
             {/if}
-            {#if !site.paused}
+            {#if showLanToggle}
               <button
                 type="button"
                 role="menuitem"
@@ -704,6 +738,25 @@
                   <path d="M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01" />
                 </svg>
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
+              </button>
+            {/if}
+            {#if showXdebug && !site.paused}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  toggleXdebug();
+                }}
+                disabled={xdebugBusy}
+                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {xdebugEnabled ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-700 dark:text-gray-200'}"
+              >
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+                  <path d="m8 2 1.88 1.88M14.12 3.88 16 2M9 7.13v-1a3.003 3.003 0 1 1 6 0v1" />
+                  <path d="M12 20c-3.3 0-6-2.7-6-6v-3a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v3c0 3.3-2.7 6-6 6zM12 20v-9" />
+                  <path d="M6.53 9C4.6 8.8 3 7.1 3 5M6 13H2M3 21c0-2.1 1.7-3.9 3.8-4M20.97 5c0 2.1-1.6 3.8-3.5 4M22 13h-4M17.2 17c2.1.1 3.8 1.9 3.8 4" />
+                </svg>
+                {xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()}
               </button>
             {/if}
             {#if !site.paused || !activeWorktreeBranch}
@@ -734,6 +787,15 @@
       </div>
     </div>
   </div>
+
+  {#if lanOn && lanURL}
+    <div class="@md:hidden px-3 pb-2 flex items-center gap-1.5 text-[11px] text-teal-600 dark:text-teal-400 min-w-0">
+      <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
+        <path d="M5 12.55a11 11 0 0114 0M8.5 16.5a5 5 0 017 0M2 8.82a15 15 0 0120 0M12 20h.01" />
+      </svg>
+      <LANShareLink domain={lanDomain} url={lanURL} siteDomain={site.domain} branch={activeWorktreeBranch} />
+    </div>
+  {/if}
 
   {#if activePath && !showWorktreeTabs}
     <div class="px-2 pb-2 flex items-center text-[11px] text-gray-500 dark:text-gray-400 min-w-0">

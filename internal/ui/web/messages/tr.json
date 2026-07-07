@@ -420,6 +420,7 @@
   "services_unpinTitle": "Sabitlemeyi kaldır, kullanılmadığında otomatik durdurmaya izin ver",
   "services_removeCustom": "Bu özel servisi kaldır",
   "services_dashboard": "Pano",
+  "services_hostOnly": "yalnızca ana makinede",
   "services_openConnection": "Bağlantı URL'sini aç",
   "services_openAdmin": "{name} aç",
   "services_labels_queueWorker": "Kuyruk worker'ı",

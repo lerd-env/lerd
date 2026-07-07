@@ -405,6 +405,7 @@
   "services_unpinTitle": "ピン留めを解除して、未使用時の自動停止を許可",
   "services_removeCustom": "このカスタムサービスを削除",
   "services_dashboard": "ダッシュボード",
+  "services_hostOnly": "ホストのみ",
   "services_openConnection": "接続 URL を開く",
   "services_openAdmin": "{name} を開く",
   "services_labels_queueWorker": "キューワーカー",
