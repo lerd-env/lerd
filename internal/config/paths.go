@@ -464,6 +464,14 @@ func RequestStatsFile() string {
 	return filepath.Join(RunDir(), "request-stats.json")
 }
 
+// RequestStatsDB is the durable SQLite store of individual requests the watcher
+// writes and lerd-ui reads to build the request-timing analytics view over any
+// window. Unlike the ephemeral snapshot it lives in DataDir so history survives
+// a reboot.
+func RequestStatsDB() string {
+	return filepath.Join(DataDir(), "request-stats.db")
+}
+
 // AccessSocketPath is the unix datagram socket the lerd-watcher binds to receive
 // the nginx access feed (one "$host" line per request) that drives idle-suspend's
 // per-site last-active tracking. It lives in RunDir, which is bind-mounted into

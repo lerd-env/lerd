@@ -46,6 +46,7 @@ type RouteStat struct {
 	Route      string  `json:"route"`
 	Method     string  `json:"method"`
 	Example    string  `json:"example"` // a concrete path last seen for this route, openable in a browser
+	P50Millis  float64 `json:"p50_millis,omitempty"`
 	P95Millis  float64 `json:"p95_millis"`
 	Multiplier float64 `json:"multiplier"`
 	Samples    int     `json:"samples"`
