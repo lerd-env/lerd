@@ -41,8 +41,10 @@ func writeTestCA(t *testing.T, dir string) []byte {
 }
 
 func TestCATrusted(t *testing.T) {
-	origRoot, origPaths := caRootFunc, caTrustPaths
-	t.Cleanup(func() { caRootFunc, caTrustPaths = origRoot, origPaths })
+	origRoot, origPaths, origPlat := caRootFunc, caTrustPaths, platformTrustCheck
+	t.Cleanup(func() { caRootFunc, caTrustPaths, platformTrustCheck = origRoot, origPaths, origPlat })
+	// Exercise the bundle logic in isolation; the keychain path has its own test.
+	platformTrustCheck = nil
 
 	caDir := t.TempDir()
 	certPEM := writeTestCA(t, caDir)

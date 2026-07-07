@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -176,4 +177,7 @@ func teardownDNS() {
 	_ = services.Mgr.RemoveServiceUnit("lerd-dns")
 	// Defensive: if a legacy container plist is still around, clear that too.
 	_ = services.Mgr.RemoveContainerUnit("lerd-dns")
+	// Remove the /etc/resolver files lerd wrote so a disabled setup doesn't leave
+	// a resolver pointing at the dnsmasq we just tore down.
+	dns.Teardown()
 }

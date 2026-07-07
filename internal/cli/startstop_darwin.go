@@ -196,7 +196,7 @@ func recreateBrokenMachine(name string, running bool, targetMemoryMiB int64) {
 // failures from every command that follows.
 func ensurePodmanMachineRunning() error {
 	// machine list only exposes Name and Running; use inspect for Rootful.
-	listOut, _ := podman.Cmd("machine", "list", "--format", "{{.Name}}\t{{.Running}}").Output()
+	listOut, _ := machineQuery("machine", "list", "--format", "{{.Name}}\t{{.Running}}")
 
 	type machineInfo struct {
 		name    string
@@ -225,7 +225,7 @@ func ensurePodmanMachineRunning() error {
 
 		// Inspect to get Rootful status.
 		rootful := false
-		inspectOut, err := podman.Cmd("machine", "inspect", "--format", "{{.Rootful}}", name).Output()
+		inspectOut, err := machineQuery("machine", "inspect", "--format", "{{.Rootful}}", name)
 		if err == nil {
 			rootful = strings.TrimSpace(string(inspectOut)) == "true"
 		}
@@ -280,8 +280,8 @@ func ensurePodmanMachineRunning() error {
 		} else {
 			needsRootful := !m.rootful
 			needsMemory := false
-			if inspectMem, err := podman.Cmd("machine", "inspect",
-				"--format", "{{.Resources.Memory}}", m.name).Output(); err == nil {
+			if inspectMem, err := machineQuery("machine", "inspect",
+				"--format", "{{.Resources.Memory}}", m.name); err == nil {
 				if memMiB, parseErr := strconv.ParseInt(strings.TrimSpace(string(inspectMem)), 10, 64); parseErr == nil && memMiB > 0 {
 					if memMiB < targetMemoryMiB {
 						needsMemory = true
@@ -300,10 +300,7 @@ func ensurePodmanMachineRunning() error {
 					}
 					reason := strings.Join(parts, " and ")
 					feedback.Line(fmt.Sprintf("Stopping Podman Machine to %s…", reason))
-					stopCmd := podman.Cmd("machine", "stop", m.name)
-					stopCmd.Stdout = os.Stdout
-					stopCmd.Stderr = os.Stderr
-					stopCmd.Run() //nolint:errcheck
+					_ = runMachineStreaming(machineStopTimeout, "machine", "stop", m.name)
 				}
 				if needsRootful {
 					feedback.Line("Enabling rootful mode for Podman Machine (required for ports 80/443)…")
@@ -370,10 +367,7 @@ func ensurePodmanMachineRunning() error {
 // podman command cascade into confusing "exit status 125" errors.
 func startPodmanMachineWithRetry() error {
 	run := func() error {
-		cmd := podman.Cmd("machine", "start")
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		return cmd.Run()
+		return runMachineStreaming(machineStartTimeout, "machine", "start")
 	}
 
 	err := run()
