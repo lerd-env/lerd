@@ -5,6 +5,7 @@
 import version from './fixtures/version.json';
 import sitesFixture from './fixtures/sites.json';
 import servicesFixture from './fixtures/services.json';
+import presetsFixture from './fixtures/presets.json';
 import status from './fixtures/status.json';
 import accessMode from './fixtures/access-mode.json';
 import settings from './fixtures/settings.json';
@@ -27,7 +28,8 @@ try {
 
 // Mutable state so mock mutations (e.g. creating a worktree) persist across reloads of the list.
 const sites = structuredClone(sitesFixture) as Array<Record<string, unknown>>;
-const services = structuredClone(servicesFixture);
+const services = structuredClone(servicesFixture) as Array<Record<string, unknown>>;
+const presets = structuredClone(presetsFixture) as Array<Record<string, unknown>>;
 
 // Static GET fixtures keyed by exact path.
 const ROUTES: Record<string, unknown> = {
@@ -147,6 +149,29 @@ $total = Order::where('status', 'paid')->sum('total');
 User::count();
 collect([1, 2, 3])->map(fn ($n) => $n * 2);`;
 
+// Per-site request timing (the Debug tab's Request timing panel). Keyed by
+// domain: acme has flagged slow routes off its typical response, the rest sit
+// within their own normal range so the panel shows the "all good" state.
+const SITE_STATS: Record<string, unknown> = {
+  'acme.test': {
+    site: 'acme.test',
+    median_millis: 41,
+    samples: 1846,
+    slow: [
+      { route: 'GET /orders/{id}', method: 'GET', example: '/orders/42', p95_millis: 233, multiplier: 5.7, samples: 214 },
+      { route: 'POST /checkout', method: 'POST', example: '', p95_millis: 512, multiplier: 12.5, samples: 63 },
+    ],
+  },
+  'shopfront.test': {
+    site: 'shopfront.test',
+    median_millis: 48,
+    samples: 921,
+    slow: [
+      { route: 'GET /cart', method: 'GET', example: '/cart', p95_millis: 176, multiplier: 3.7, samples: 148 },
+    ],
+  },
+};
+
 const WORKTREE_OPTIONS = {
   default_branch_label: 'main',
   local_branches: ['main', 'staging', 'feature/checkout-flow'],
@@ -215,6 +240,40 @@ function worktreeAddSSE(qs: URLSearchParams): Response {
   return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
 }
 
+// Installing a preset streams newline-delimited JSON phase events ending in a
+// `done`. Mark the preset installed and drop a minimal service into the live
+// list so the picker and the services grid update like the real flow.
+function presetInstallStream(name: string, version: string): Response {
+  const preset = presets.find((p) => p.name === name);
+  const image = (preset?.image as string) || `docker.io/library/${name}:latest`;
+  if (preset) {
+    preset.installed = true;
+    if (version) preset.installed_tags = [...((preset.installed_tags as string[]) || []), version];
+  }
+  const svcName = version ? `${name}-${version}` : name;
+  if (!services.some((s) => s.name === svcName)) {
+    services.push({
+      name: svcName,
+      status: 'active',
+      version: version || 'latest',
+      env_vars: {},
+      dashboard: (preset?.dashboard as string) || undefined,
+      custom: true,
+      preset_owned: true,
+      site_count: 0,
+      pinned: false,
+      migration_supported: false,
+      can_rollback: false,
+    });
+  }
+  const body =
+    `${JSON.stringify({ phase: 'pulling_image', image })}\n` +
+    `${JSON.stringify({ phase: 'starting_unit' })}\n` +
+    `${JSON.stringify({ phase: 'waiting_ready' })}\n` +
+    `${JSON.stringify({ phase: 'done', name: svcName })}\n`;
+  return new Response(body, { status: 200, headers: { 'content-type': 'application/x-ndjson' } });
+}
+
 const realFetch = window.fetch.bind(window);
 window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -234,6 +293,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   // Live (mutable) collections
   if (path === '/api/sites') return jsonResponse(sites);
   if (path === '/api/services') return jsonResponse(services);
+  if (path === '/api/services/presets') return jsonResponse(presets);
+
+  // Installing a preset streams progress; anything under presets/<name>.
+  const presetInstall = path.match(/^\/api\/services\/presets\/([^/]+)$/);
+  if (presetInstall && method === 'POST')
+    return presetInstallStream(decodeURIComponent(presetInstall[1]), qs.get('version') || '');
+
+  // Per-site request timing — flagged slow routes for a couple of sites, an
+  // empty "all good" snapshot for the rest.
+  const statsMatch = path.match(/^\/api\/sites\/([^/]+)\/stats$/);
+  if (statsMatch) {
+    const domain = decodeURIComponent(statsMatch[1]);
+    return jsonResponse(
+      SITE_STATS[domain] ?? { site: domain, median_millis: 36, samples: 420, slow: null }
+    );
+  }
 
   // Worktrees
   if (path === '/api/sites/worktree-options') return jsonResponse(WORKTREE_OPTIONS);
