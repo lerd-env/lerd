@@ -71,11 +71,10 @@ func storePresetStale(name string) bool {
 // Exists so later phases can layer a local store cache and a remote fetch
 // underneath without touching any call site.
 //
-// The embedded bundle is always the last layer: it ships the default services
-// the binary can always resolve with no network. Presets that have moved fully
-// to the external store are kept resolvable offline by caching them locally at
-// install and update time (refreshStorePresets fetches the preset backing every
-// installed service), which this seam then serves above the embed.
+// The embedded bundle is the last layer: it ships the default services the
+// binary always resolves offline. Presets that moved fully to the store stay
+// resolvable offline via the install/update cache (refreshStorePresets), which
+// this seam serves above the embed.
 
 // extraPresetsFS is an optional preset source layered under the store cache and
 // above the embedded bundle. It is nil in production; tests set it (via

@@ -232,11 +232,8 @@ func refreshStoreFrameworks() {
 
 // refreshStorePresets re-fetches the store preset backing every installed
 // service so its definition and file mounts keep resolving offline after an
-// upgrade, mirroring refreshStoreFrameworks. Presets that have moved out of the
-// embedded bundle only stay resolvable offline because this caches them locally
-// at install and update time; without it, a service installed by an older lerd
-// would lose its config mounts on the first offline start. Best-effort: a fetch
-// failure leaves the existing cached (or still-embedded) copy in place.
+// upgrade, mirroring refreshStoreFrameworks. Best-effort: a failed fetch leaves
+// the existing cached (or still-embedded) copy in place.
 func refreshStorePresets() {
 	customs, err := config.ListCustomServices()
 	if err != nil {

@@ -158,15 +158,9 @@ const (
 //
 // Both removals are refcount-safe: layers a live image still shares are kept.
 //
-// Beyond the safe tier the scope widens in two independent steps. ScopeManaged
-// adds catalog service images no service references any more (see deepTargets):
-// still provably lerd's, so the unattended watcher can reclaim an upgrade's
-// leftovers without surprising a user's other podman images. ScopeDeep adds
-// every remaining dangling image on the host (untagged and unreferenced, so
-// removing it strands nothing), including foreign ones, and is only reached from
-// the interactive `lerd cleanup --deep`. An image a container still holds is
-// skipped everywhere, since podman can't remove it. If the protected set can't
-// be built the service reap is skipped rather than risk a wrong removal.
+// ScopeManaged widens this to lerd's catalog upgrade leftovers, ScopeDeep to
+// every remaining dangling image (foreign included). An image a container holds
+// is always skipped, and the catalog reap is skipped if the protected set fails.
 func Inspect(scope Scope) (Plan, error) {
 	reapCatalog := scope >= ScopeManaged
 	reapAllDangling := scope >= ScopeDeep

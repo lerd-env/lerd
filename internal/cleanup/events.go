@@ -18,13 +18,9 @@ func defaultAutoEnabled() bool {
 // reaping it at once instead of waiting for the daily watcher.
 func SweepSafe() (images int, bytes int64, err error) { return sweep(ScopeSafe) }
 
-// SweepManaged runs the managed tier: the safe-tier orphans plus service catalog
-// images no service references any more. This is the daily watcher's sweep, so
-// old service versions left by an upgrade get reclaimed unattended without ever
-// touching a foreign dangling image. Protected images (the current one and the
-// one-back rollback) and user-added tags are always kept, and the catalog reap
-// degrades to safe when the preset store can't be read, so the unattended path
-// stays safe.
+// SweepManaged runs the managed tier (safe orphans plus lerd's unused catalog
+// images), the daily watcher's sweep: it reclaims an upgrade's leftovers
+// unattended without ever touching a foreign dangling image.
 func SweepManaged() (images int, bytes int64, err error) { return sweep(ScopeManaged) }
 
 // SweepDeep runs the deep tier: the managed tier plus every remaining dangling

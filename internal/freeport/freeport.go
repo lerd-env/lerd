@@ -17,12 +17,11 @@ import (
 // catches a port reserved on any stack, not just one with a live listener.
 //
 // Three probes must all succeed. The loopback specifics (127.0.0.1 and [::1])
-// catch a server bound to a specific loopback address. The wildcard probe
-// (net.Listen on "0.0.0.0", which Go binds as a dual-stack [::] socket) catches
-// one bound to all interfaces — 0.0.0.0 or [::], including a v6-only wildcard —
-// which a specific-address bind slips past under SO_REUSEADDR on BSD/macOS, so
-// probing only the loopback specifics reports a wildcard-bound host server
-// (e.g. a MySQL on bind-address 0.0.0.0) as free and lets lerd collide with it.
+// catch a server on a specific loopback address, and the [::1] probe also catches
+// a v6-only wildcard [::] since it covers ::1. The wildcard probe (net.Listen on
+// "0.0.0.0", an IPv4 all-interfaces socket) catches a v4-wildcard server (e.g. a
+// MySQL on bind-address 0.0.0.0) that a specific-address bind slips past under
+// SO_REUSEADDR on BSD/macOS, which would otherwise read as free.
 // On macOS a running lerd container's gvproxy holds the dual-stack wildcard, so
 // the wildcard probe reports its port in use; gvproxy releases it synchronously
 // when the container stops, so a reinstall still rebinds without a spurious

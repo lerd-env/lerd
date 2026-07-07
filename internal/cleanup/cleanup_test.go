@@ -111,10 +111,9 @@ func TestInspect_DeepReapsAllDanglingImages(t *testing.T) {
 	}
 }
 
-// The managed tier is the unattended watcher's scope: it reclaims a lerd catalog
-// upgrade leftover but must never touch a user's foreign dangling image, which
-// only the interactive deep tier reaps. This is the guard against the daily
-// sweep silently pruning another podman workload's dangling layers.
+// The managed tier (the watcher's scope) reclaims a lerd catalog upgrade leftover
+// but must never touch a foreign dangling image, which only the interactive deep
+// tier reaps. Guards against the daily sweep pruning another workload's layers.
 func TestInspect_ManagedReapsCatalogNotForeignDangling(t *testing.T) {
 	withImages(t, []image{
 		{ID: "m57", Names: []string{"docker.io/library/mysql:5.7"}, Size: 400}, // catalog leftover
