@@ -29,7 +29,7 @@ describe('PulseToggle', () => {
   it('forwards clicks', () => {
     const onclick = vi.fn();
     render(Harness, { props: { enabled: false, title: 'T', onclick } });
-    screen.getByTitle('T').click();
+    screen.getByRole('button', { name: 'T' }).click();
     expect(onclick).toHaveBeenCalledOnce();
   });
 });

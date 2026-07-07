@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { tooltip } from '$lib/tooltip';
 
   // Compact icon-button toggle: a glyph that turns emerald with a slow
   // pulsing dot while the feature is on. Shared by the debug bridge and
@@ -18,7 +19,8 @@
 
 <button
   type="button"
-  {title}
+  aria-label={title}
+  use:tooltip={title ?? ''}
   {onclick}
   disabled={busy}
   aria-pressed={enabled}

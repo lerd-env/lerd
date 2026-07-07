@@ -23,7 +23,7 @@ describe('NotificationsToggle', () => {
     permissionState.set('granted');
     notifyPrefs.set({ enabled: true, kinds: { ...allKinds } });
     const { container } = render(NotificationsToggle);
-    expect(container.querySelector('button')!.getAttribute('title')).toMatch(/on,/i);
+    expect(container.querySelector('button')!.getAttribute('aria-label')).toMatch(/on,/i);
     expect(container.querySelector('.lerd-pulse-ping')).not.toBeNull();
   });
 
@@ -31,7 +31,7 @@ describe('NotificationsToggle', () => {
     permissionState.set('granted');
     notifyPrefs.set({ enabled: false, kinds: { ...allKinds } });
     const { container } = render(NotificationsToggle);
-    expect(container.querySelector('button')!.getAttribute('title')).toMatch(/off/i);
+    expect(container.querySelector('button')!.getAttribute('aria-label')).toMatch(/off/i);
     expect(container.querySelector('.lerd-pulse-ping')).toBeNull();
   });
 
@@ -39,6 +39,6 @@ describe('NotificationsToggle', () => {
     permissionState.set('denied');
     const { container } = render(NotificationsToggle);
     expect((container.querySelector('button') as HTMLButtonElement).disabled).toBe(true);
-    expect(container.querySelector('button')!.getAttribute('title')).toMatch(/block/i);
+    expect(container.querySelector('button')!.getAttribute('aria-label')).toMatch(/block/i);
   });
 });

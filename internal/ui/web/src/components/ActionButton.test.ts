@@ -5,30 +5,30 @@ import Harness from './ActionButton.test.svelte';
 describe('ActionButton', () => {
   it('renders its title and an icon', () => {
     render(Harness, { props: { title: 'Refresh' } });
-    const btn = screen.getByTitle('Refresh');
+    const btn = screen.getByRole('button', { name: 'Refresh' });
     expect(btn).toBeInTheDocument();
     expect(btn.querySelector('svg')).toBeInTheDocument();
   });
 
   it('shows a spinner when loading', () => {
     render(Harness, { props: { title: 'X', loading: true } });
-    const btn = screen.getByTitle('X');
+    const btn = screen.getByRole('button', { name: 'X' });
     expect(btn.querySelector('svg.animate-spin')).toBeInTheDocument();
   });
 
   it('applies danger tone', () => {
     render(Harness, { props: { title: 'Y', tone: 'danger' } });
-    expect(screen.getByTitle('Y').className).toMatch(/text-red-500/);
+    expect(screen.getByRole('button', { name: 'Y' }).className).toMatch(/text-red-500/);
   });
 
   it('applies success tone', () => {
     render(Harness, { props: { title: 'Z', tone: 'success' } });
-    expect(screen.getByTitle('Z').className).toMatch(/text-emerald-600/);
+    expect(screen.getByRole('button', { name: 'Z' }).className).toMatch(/text-emerald-600/);
   });
 
   it('disables the button and dims it', () => {
     render(Harness, { props: { title: 'D', disabled: true } });
-    const btn = screen.getByTitle('D') as HTMLButtonElement;
+    const btn = screen.getByRole('button', { name: 'D' }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(btn.className).toMatch(/disabled:opacity-40/);
   });
@@ -36,7 +36,7 @@ describe('ActionButton', () => {
   it('forwards clicks', () => {
     const onclick = vi.fn();
     render(Harness, { props: { title: 'C', onclick } });
-    screen.getByTitle('C').click();
+    screen.getByRole('button', { name: 'C' }).click();
     expect(onclick).toHaveBeenCalledOnce();
   });
 });
