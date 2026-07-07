@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/mcp"
 	"github.com/spf13/cobra"
@@ -50,7 +51,6 @@ assistant into the target project directory:
   .cursor/rules/lerd.mdc           Cursor rules file
   .junie/mcp/mcp.json              JetBrains Junie MCP config
   .junie/guidelines.md             JetBrains Junie guidelines
-  .ai/mcp/mcp.json                 Windsurf MCP config
   .gemini/settings.json            Gemini CLI MCP config
   GEMINI.md                        Gemini CLI context
   .vscode/mcp.json                 GitHub Copilot (VS Code) MCP config
@@ -64,6 +64,48 @@ Run this from a Laravel project root, or use --path to specify a directory.`,
 	}
 	cmd.Flags().StringVar(&targetPath, "path", "", "Target project directory (defaults to current directory)")
 	return cmd
+}
+
+// NewMCPEjectCmd returns the mcp:eject command, the inverse of mcp:inject.
+func NewMCPEjectCmd() *cobra.Command {
+	var targetPath string
+	cmd := &cobra.Command{
+		Use:   "mcp:eject",
+		Short: "Remove lerd MCP config and AI skill files from a project",
+		Long: `Removes every lerd-owned MCP server entry and context file that
+mcp:inject wrote into the target project directory, leaving other MCP servers
+(e.g. laravel-boost) and your own instructions content untouched. Also strips
+the entry an older lerd left in .ai/mcp/mcp.json.
+
+Run this from a project root, or use --path to specify a directory.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return runMCPEject(targetPath)
+		},
+	}
+	cmd.Flags().StringVar(&targetPath, "path", "", "Target project directory (defaults to current directory)")
+	return cmd
+}
+
+func runMCPEject(targetPath string) error {
+	if targetPath == "" {
+		var err error
+		targetPath, err = os.Getwd()
+		if err != nil {
+			return err
+		}
+	}
+	abs, err := filepath.Abs(targetPath)
+	if err != nil {
+		return err
+	}
+
+	feedback.Begin()
+	feedback.Line("removing lerd MCP config from " + feedback.Val(abs))
+	if err := RemoveProjectAISkills(abs, true); err != nil {
+		return err
+	}
+	feedback.Done("done — restart your AI assistant to unload the lerd MCP server")
+	return nil
 }
 
 func runMCPInject(targetPath string) error {
@@ -100,7 +142,12 @@ func WriteProjectAISkills(abs string, verbose bool) error {
 // RefreshProjectAISkills re-writes only the per-project artefacts a client was
 // already set up with, so `lerd update` keeps existing files current without
 // expanding a project's footprint with files for clients it never opted into.
+// A project that set mcp_inject: false in .lerd.yaml is skipped entirely so
+// lerd never touches its committed config on a self-update.
 func RefreshProjectAISkills(abs string, verbose bool) error {
+	if cfg, err := config.LoadProjectConfig(abs); err == nil && cfg.MCPInjectDisabled() {
+		return nil
+	}
 	return writeProjectArtefacts(abs, verbose, false)
 }
 
@@ -115,7 +162,7 @@ func writeProjectArtefacts(abs string, verbose, createMissing bool) error {
 		if c.ProjectMCP != "" {
 			full := filepath.Join(abs, c.ProjectMCP)
 			if createMissing || mcpConfigHasLerd(full, c) {
-				if err := writeClientMCP(full, c, abs); err != nil {
+				if err := writeClientMCP(full, c); err != nil {
 					return err
 				}
 				log("  updated " + c.ProjectMCP)
@@ -135,6 +182,9 @@ func writeProjectArtefacts(abs string, verbose, createMissing bool) error {
 		}
 	}
 
+	if sweepLegacySharedAIMCP(abs) {
+		log("  cleaned " + legacySharedAIMCP + " (no longer written)")
+	}
 	return nil
 }
 
@@ -181,7 +231,7 @@ no LERD_SITE_PATH configuration needed.
 This command updates:
   claude mcp add --scope user      Claude Code user-scope MCP registration
   ~/.cursor/mcp.json               Cursor global MCP config
-  ~/.ai/mcp/mcp.json               Windsurf global MCP config
+  ~/.codeium/windsurf/mcp_config.json  Windsurf global MCP config
   ~/.junie/mcp/mcp.json            JetBrains Junie global MCP config
   ~/.gemini/settings.json          Gemini CLI global MCP config
   ~/.codex/config.toml             Codex CLI global MCP config
@@ -221,6 +271,39 @@ func RunMCPEnableGlobal() error {
 	return nil
 }
 
+// NewMCPDisableGlobalCmd returns the mcp:disable-global command, the inverse of
+// mcp:enable-global.
+func NewMCPDisableGlobalCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "mcp:disable-global",
+		Short: "Unregister the user-scope lerd MCP server for all AI assistants",
+		Long: `Removes the user-scope lerd MCP registration and context docs written
+by mcp:enable-global: the Claude Code user-scope entry, each client's global MCP
+config, and the user-scope skill/guidelines files. Other MCP servers and your own
+instructions content are left untouched.`,
+		RunE: func(_ *cobra.Command, _ []string) error {
+			return RunMCPDisableGlobal()
+		},
+	}
+}
+
+// RunMCPDisableGlobal tears down the user-scope lerd MCP registration.
+func RunMCPDisableGlobal() error {
+	feedback.Begin()
+	feedback.Line("unregistering lerd MCP globally")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	if err := RemoveGlobalAISkills(home, true); err != nil {
+		return err
+	}
+
+	feedback.Done("done — restart your AI assistant for changes to take effect")
+	return nil
+}
+
 // writeGlobalMCPConfigs registers the user-scope MCP server for every client in
 // the registry: file-backed clients via their global config, Claude via the
 // idempotent `claude mcp add` CLI. Global entries omit LERD_SITE_PATH so the
@@ -247,10 +330,13 @@ func writeGlobalMCPConfigs(home string, verbose bool) error {
 		if c.GlobalMCP == "" {
 			continue
 		}
-		if err := writeClientMCP(filepath.Join(home, c.GlobalMCP), c, ""); err != nil {
+		if err := writeClientMCP(filepath.Join(home, c.GlobalMCP), c); err != nil {
 			return err
 		}
 		log("updated ~/" + c.GlobalMCP)
+	}
+	if sweepLegacySharedAIMCP(home) {
+		log("cleaned ~/" + legacySharedAIMCP + " (no longer written)")
 	}
 	return nil
 }
@@ -446,6 +532,9 @@ func RemoveGlobalAISkills(home string, verbose bool) error {
 			}
 		}
 	}
+	if sweepLegacySharedAIMCP(home) {
+		log("  cleaned ~/" + legacySharedAIMCP)
+	}
 	return nil
 }
 
@@ -479,6 +568,9 @@ func RemoveProjectAISkills(abs string, verbose bool) error {
 				log("  removed " + full)
 			}
 		}
+	}
+	if sweepLegacySharedAIMCP(abs) {
+		log("  cleaned " + legacySharedAIMCP)
 	}
 	return nil
 }

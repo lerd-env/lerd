@@ -112,6 +112,18 @@ type ProjectConfig struct {
 	// route events forward to and which .env key holds the secret. Absent for
 	// projects on the Laravel defaults, which are auto-detected.
 	Stripe *StripeConfig `yaml:"stripe,omitempty"`
+	// MCPInject opts the project out of automatic AI/MCP config refresh. When set
+	// to false, `lerd update`/`install` leaves the project's committed MCP config
+	// and skill files untouched so they change only when the user asks. Nil/unset
+	// keeps the default (refresh in place). An explicit `lerd mcp:inject` still
+	// writes, since that is the user asking.
+	MCPInject *bool `yaml:"mcp_inject,omitempty"`
+}
+
+// MCPInjectDisabled reports whether the project opted out of automatic MCP
+// config injection via `mcp_inject: false` in .lerd.yaml.
+func (c *ProjectConfig) MCPInjectDisabled() bool {
+	return c.MCPInject != nil && !*c.MCPInject
 }
 
 // IsEmpty returns true when the config has no meaningful content, which
@@ -124,7 +136,8 @@ func (c *ProjectConfig) IsEmpty() bool {
 		len(c.Workers) == 0 && len(c.CustomWorkers) == 0 && len(c.ReloadWorkers) == 0 && len(c.Commands) == 0 && !c.Secured &&
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
-		!c.DBIsolated && len(c.EnvOverrides) == 0 && c.RequestTimeout == 0 && c.Stripe == nil
+		!c.DBIsolated && len(c.EnvOverrides) == 0 && c.RequestTimeout == 0 && c.Stripe == nil &&
+		c.MCPInject == nil
 }
 
 // Validate reports configuration that can't be honoured. A site is either a
@@ -427,6 +440,10 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 	if in.Stripe != nil {
 		cp := *in.Stripe
 		out.Stripe = &cp
+	}
+	if in.MCPInject != nil {
+		cp := *in.MCPInject
+		out.MCPInject = &cp
 	}
 	if in.FrameworkDef != nil {
 		out.FrameworkDef = cloneFrameworkMutable(in.FrameworkDef)

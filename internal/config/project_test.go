@@ -626,6 +626,29 @@ func TestProjectConfig_RequestTimeout_IsEmpty(t *testing.T) {
 	}
 }
 
+func TestProjectConfig_MCPInject_IsEmpty(t *testing.T) {
+	cfg := &ProjectConfig{}
+	if !cfg.IsEmpty() {
+		t.Error("empty config should be empty")
+	}
+	if cfg.MCPInjectDisabled() {
+		t.Error("unset mcp_inject should not report disabled")
+	}
+	off := false
+	cfg.MCPInject = &off
+	if cfg.IsEmpty() {
+		t.Error("config with mcp_inject should not be empty")
+	}
+	if !cfg.MCPInjectDisabled() {
+		t.Error("mcp_inject: false should report disabled")
+	}
+	on := true
+	cfg.MCPInject = &on
+	if cfg.MCPInjectDisabled() {
+		t.Error("mcp_inject: true should not report disabled")
+	}
+}
+
 func TestProjectConfig_OldFormatCompat(t *testing.T) {
 	// Old .lerd.yaml used services: [mysql, redis] — must still parse.
 	input := `php_version: "8.3"

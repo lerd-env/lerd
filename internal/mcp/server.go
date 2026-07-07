@@ -50,9 +50,11 @@ func builtinServiceEnv(name string) []string { return config.DefaultPresetEnvVar
 // phpVersionRe matches PHP version strings like "8.4" or "8.3" — digits only, no domain names.
 var phpVersionRe = regexp.MustCompile(`^\d+\.\d+$`)
 
-// defaultSitePath is resolved at startup: LERD_SITE_PATH takes precedence (injected by
-// mcp:inject for project-scoped use); if not set, the working directory is used so that
-// global MCP sessions (registered via mcp:enable-global) are automatically context-aware.
+// defaultSitePath is resolved at startup: LERD_SITE_PATH takes precedence when set
+// (honoured for hand-written configs and older injected files), otherwise the working
+// directory is used. lerd no longer writes LERD_SITE_PATH into project configs — both
+// global and project scopes resolve from the directory the assistant is opened in, so a
+// committed config stays portable across machines.
 var defaultSitePath = func() string {
 	if p := os.Getenv("LERD_SITE_PATH"); p != "" {
 		return p
