@@ -41,6 +41,39 @@ describe('version store', () => {
     });
   });
 
+  it('flips checking on during a user-initiated check', async () => {
+    let resolve: (r: Response) => void = () => {};
+    globalThis.fetch = vi.fn(
+      () => new Promise<Response>((r) => (resolve = r))
+    ) as unknown as typeof fetch;
+    const { version, loadVersion } = await import('./version');
+    const pending = loadVersion(true);
+    expect(get(version).checking).toBe(true);
+    resolve(
+      new Response(JSON.stringify({ current: '1.19.0', has_update: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    await pending;
+    expect(get(version).checking).toBe(false);
+  });
+
+  it('requests a live refresh when forced', async () => {
+    const spy = vi.fn(async () =>
+      new Response(JSON.stringify({ current: '1.19.0', has_update: false }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    );
+    globalThis.fetch = spy as unknown as typeof fetch;
+    const { loadVersion } = await import('./version');
+    await loadVersion(true);
+    expect(String(spy.mock.calls[0][0])).toContain('refresh=1');
+    await loadVersion();
+    expect(String(spy.mock.calls[1][0])).not.toContain('refresh=1');
+  });
+
   it('tolerates fetch failure without throwing', async () => {
     globalThis.fetch = vi.fn(async () => {
       throw new Error('nope');

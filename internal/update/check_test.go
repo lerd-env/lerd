@@ -2,8 +2,12 @@ package update
 
 import (
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,6 +78,51 @@ func TestCachedUpdateCheck_stableUserSeesNewerStable(t *testing.T) {
 	if info.LatestVersion != "v1.19.2" {
 		t.Errorf("got %q, want v1.19.2", info.LatestVersion)
 	}
+}
+
+// TestForceUpdateCheck_bypassesCache pins the fix for the "check for updates"
+// button doing nothing: even when a fresh cache says we are current, an explicit
+// check must query GitHub live and surface a newer release, then refresh the cache.
+func TestForceUpdateCheck_bypassesCache(t *testing.T) {
+	// Cache says we are already on the latest (1.19.1), well within the 24h TTL.
+	withTempCache(t, "v1.19.1")
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "changelog") {
+			io.WriteString(w, "## [1.20.0] — 2026-01-01\n- new stuff\n") //nolint:errcheck
+			return
+		}
+		w.Header().Set("Location", "https://example.test/releases/tag/v1.20.0")
+		w.WriteHeader(http.StatusFound)
+	}))
+	defer srv.Close()
+
+	defer stubURLs(&ReleaseBaseURLs, []string{srv.URL})()
+	defer stubURLs(&changelogURLs, []string{srv.URL + "/changelog"})()
+
+	info, err := ForceUpdateCheck("1.19.1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info == nil {
+		t.Fatal("expected a live update result bypassing the cache, got nil")
+	}
+	if info.LatestVersion != "v1.20.0" {
+		t.Errorf("LatestVersion = %q, want v1.20.0 (from the network, not the cache)", info.LatestVersion)
+	}
+
+	// The live fetch should have rewritten the cache so later cached reads agree.
+	if got := cachedLatest(); got != "v1.20.0" {
+		t.Errorf("cache after ForceUpdateCheck = %q, want v1.20.0", got)
+	}
+}
+
+// stubURLs swaps a package-level URL provider for the duration of a test and
+// returns a restore func.
+func stubURLs(fn *func() []string, urls []string) func() {
+	orig := *fn
+	*fn = func() []string { return urls }
+	return func() { *fn = orig }
 }
 
 // withTempCache pre-seeds the on-disk update-check cache so CachedUpdateCheck
