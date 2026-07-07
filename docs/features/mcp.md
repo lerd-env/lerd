@@ -26,7 +26,7 @@ MCP server registration:
 |---|---|
 | Claude Code | `claude mcp add --scope user` (CLI) |
 | Cursor | `~/.cursor/mcp.json` |
-| Windsurf | `~/.ai/mcp/mcp.json` |
+| Windsurf | `~/.codeium/windsurf/mcp_config.json` |
 | JetBrains Junie | `~/.junie/mcp/mcp.json` |
 | Gemini CLI | `~/.gemini/settings.json` |
 | Codex CLI | `~/.codex/config.toml` |
@@ -57,7 +57,7 @@ All clients share a single canonical tool reference, so the guidance never drift
 
 ### Project-scoped registration
 
-To pin lerd to a specific project path (useful for teams or when sharing config via git):
+To commit the lerd MCP config into a project so every teammate picks it up from git:
 
 ```bash
 cd ~/Lerd/my-app
@@ -72,7 +72,6 @@ This writes MCP config and context files for every supported client into the pro
 | `.claude/skills/lerd/SKILL.md` | Claude Code skill |
 | `.cursor/mcp.json` | Cursor MCP config |
 | `.cursor/rules/lerd.mdc` | Cursor rules |
-| `.ai/mcp/mcp.json` | Windsurf MCP config |
 | `.junie/mcp/mcp.json` | JetBrains Junie MCP config |
 | `.junie/guidelines.md` | JetBrains Junie guidelines (merged) |
 | `.gemini/settings.json` | Gemini CLI MCP config |
@@ -81,9 +80,9 @@ This writes MCP config and context files for every supported client into the pro
 | `.github/copilot-instructions.md` | GitHub Copilot instructions (merged) |
 | `AGENTS.md` | Codex CLI context (merged) |
 
-The MCP config includes a `LERD_SITE_PATH` environment variable pointing to the project root, which takes precedence over the cwd fallback.
+The written entries carry no machine-specific data: the server resolves the site from the directory the assistant is opened in, exactly like a global registration. A committed `.mcp.json` therefore stays identical across every teammate's checkout, with no absolute path to drift or break on another machine. (An older lerd wrote a `LERD_SITE_PATH` absolute path into these files; it is still honoured if you set it by hand, but no longer written.)
 
-> **Codex** has no project-scoped MCP config (it reads only `~/.codex/config.toml`), so `mcp:inject` writes its `AGENTS.md` context but not a per-project server entry. Register Codex once with `lerd mcp:enable-global`.
+> **Codex and Windsurf** have no project-scoped MCP config (Codex reads only `~/.codex/config.toml`, Windsurf only `~/.codeium/windsurf/mcp_config.json`), so `mcp:inject` writes their context but not a per-project server entry. Register them once with `lerd mcp:enable-global`. lerd used to write a Windsurf entry into `.ai/mcp/mcp.json`, but that path was never Windsurf's (it belongs to Laravel Boost), so lerd no longer touches it and strips any entry an older version left behind.
 
 The command **merges** into existing configs; other MCP servers (e.g. `laravel-boost`, `herd`) and any existing instructions content are left untouched. Re-running it is safe.
 
@@ -93,15 +92,19 @@ To target a different directory:
 lerd mcp:inject --path ~/Lerd/another-app
 ```
 
+To reverse an injection, `lerd mcp:eject` (with an optional `--path`) strips every lerd-owned entry and skill file back out of the project, leaving other MCP servers and your own instructions content intact. The user-scope equivalent is `lerd mcp:disable-global`.
+
 > **During `lerd update`:** Projects that previously ran `mcp:inject` are detected automatically (by the presence of `.claude/skills/lerd/SKILL.md`, `.cursor/rules/lerd.mdc`, or the lerd marker in `.junie/guidelines.md`) and refreshed in place. Only files that already exist for a client are rewritten, so update never drops new client files into your repo; re-run `mcp:inject` to add a newly supported assistant. Directories whose content already matches the new binary stay untouched, so git status stays clean. Projects that never opted in are skipped.
+
+To opt a project out of this automatic refresh entirely, set `mcp_inject: false` in its `.lerd.yaml`. lerd then never rewrites that project's MCP config or skill files on a self-update, which is the right choice when you keep those files under version control and want them changed only when you say so. An explicit `lerd mcp:inject` still writes when you run it, since that is you asking directly.
 
 ### Path resolution
 
 Most actions accept an optional `path` argument. When omitted, the server resolves it in this order:
 
 1. Explicit `path` argument (highest priority)
-2. `LERD_SITE_PATH` env var (set by `mcp:inject`)
-3. Current working directory, the directory the assistant was opened in (global sessions)
+2. `LERD_SITE_PATH` env var (honoured if set by hand; lerd no longer writes it)
+3. Current working directory, the directory the assistant was opened in
 
 ### Agent detection passthrough
 
@@ -141,7 +144,7 @@ The `logs` tool lets an assistant debug a site's logs without opening files by h
 
 ## Example interactions
 
-The `path` argument is omitted from most calls; the server resolves it from the directory the assistant was opened in (global sessions) or from `LERD_SITE_PATH` (project-scoped sessions).
+The `path` argument is omitted from most calls; the server resolves it from the directory the assistant was opened in.
 
 ```
 You: create a new Laravel project and get it running

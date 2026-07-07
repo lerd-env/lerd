@@ -282,6 +282,9 @@ func refreshGlobalMCPSkills() {
 	if err := RefreshGlobalAISkills(home, true); err != nil {
 		feedback.Warn("could not refresh global AI skills: %v", err)
 	}
+	if sweepLegacySharedAIMCP(home) {
+		feedback.Note("cleaned ~/" + legacySharedAIMCP + " (no longer written)")
+	}
 	if !IsMCPGloballyRegistered() {
 		feedback.Note("re-registering lerd with Claude Code (was missing)")
 		ensureClaudeMCPRegistered()
