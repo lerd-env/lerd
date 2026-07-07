@@ -23,6 +23,7 @@
     openWorktreeRemoveModal
   } from '$stores/modals';
   import Icon from '$components/Icon.svelte';
+  import { tooltip } from '$lib/tooltip';
   import { accessMode } from '$stores/accessMode';
   import { idleEnabled } from '$stores/idle';
   import { status, loadStatus } from '$stores/status';
@@ -219,7 +220,7 @@
           <button
             type="button"
             onclick={() => pickWorktree(e)}
-            title={e.domain}
+            use:tooltip={e.domain}
             class="flex items-center gap-1.5 pl-3 pr-3 py-2.5 text-xs min-w-0 {isActive
               ? 'text-gray-800 dark:text-gray-100 font-medium'
               : 'text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200'}"
@@ -259,7 +260,7 @@
                 ev.stopPropagation();
                 openWorktreeRemoveModal(site, e.branch);
               }}
-              title={m.common_remove() + ' ' + e.branch}
+              use:tooltip={m.common_remove() + ' ' + e.branch}
               aria-label={m.common_remove() + ' ' + e.branch}
               class="shrink-0 mr-1 w-4 h-4 flex items-center justify-center rounded-sm text-gray-400 hover:text-red-500 hover:bg-gray-100 dark:hover:bg-white/10 transition-colors"
             >
@@ -275,7 +276,7 @@
           type="button"
           onclick={() => openWorktreeAddModal(site)}
           class="ml-1 mb-0.5 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
-          title={m.worktreeMgr_add()}
+          use:tooltip={m.worktreeMgr_add()}
           aria-label={m.worktreeMgr_add()}
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -303,8 +304,8 @@
           type="button"
           onclick={flipTLS}
           disabled={tlsBusy}
-          title={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
           aria-label={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
+          use:tooltip={site.tls ? m.sites_controls_httpsToggle_on() : m.sites_controls_httpsToggle_off()}
           class="shrink-0 -ml-1 p-1 rounded-sm transition-colors disabled:opacity-50 {site.tls
             ? 'text-emerald-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
             : 'text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5'}"
@@ -400,7 +401,8 @@
         <button
           type="button"
           onclick={() => openDomainModal(site)}
-          title={m.sites_manageDomains()}
+          use:tooltip={m.sites_manageDomains()}
+          aria-label={m.sites_manageDomains()}
           class="flex items-center min-w-0 flex-1 font-mono cursor-text text-left pt-1.5"
         >
           <span class="text-sm text-gray-400 dark:text-gray-500 shrink-0 leading-none">{scheme}</span>
@@ -419,8 +421,8 @@
         <button
           type="button"
           onclick={() => openGroupModal(site)}
-          title={site.group ? 'Manage group' : 'Group with another site'}
           aria-label={m.group_manage()}
+          use:tooltip={site.group ? 'Manage group' : 'Group with another site'}
           class="inline-flex items-center gap-1 shrink-0 text-xs transition-colors {site.group
             ? 'text-lerd-red'
             : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red'}"
@@ -462,8 +464,8 @@
         <button
           type="button"
           onclick={onOpenNginx}
-          title={m.sites_nginx_editTitle()}
           aria-label={m.sites_nginx_editTitle()}
+          use:tooltip={m.sites_nginx_editTitle()}
           class="shrink-0 -mr-1 p-1 rounded-sm text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
         >
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24">
@@ -480,8 +482,8 @@
       <button
         type="button"
         onclick={() => openSiteInBrowser(site, activeWorktreeBranch)}
-        title={m.common_open() + ' — ' + activeDomain}
         aria-label={m.common_open()}
+        use:tooltip={m.common_open() + ' — ' + activeDomain}
         class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -499,8 +501,8 @@
           type="button"
           onclick={flipLAN}
           disabled={lanBusy}
-          title={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
           aria-label={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
+          use:tooltip={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
           class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md transition-colors disabled:opacity-50 {lanOn
             ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
             : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
@@ -523,9 +525,9 @@
           type="button"
           onclick={toggleXdebug}
           disabled={xdebugBusy}
-          title={(xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()) + ' · ' + m.system_php_xdebugHint()}
           aria-label={m.sites_badges_xdebug()}
           aria-pressed={xdebugEnabled}
+          use:tooltip={xdebugEnabled ? m.sites_badges_xdebugOn({ mode: xdebugMode }) : m.sites_badges_xdebugDisabled()}
           class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md transition-colors disabled:opacity-50 {xdebugEnabled
             ? 'text-emerald-500 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20'
             : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
@@ -549,8 +551,8 @@
         <button
           type="button"
           onclick={() => openTerminal(site.domain, activeWorktreeBranch)}
-          title={m.sites_openInTerminal()}
           aria-label={m.common_terminal()}
+          use:tooltip={m.sites_openInTerminal()}
           class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
         >
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -571,6 +573,7 @@
           aria-label={m.common_moreActions()}
           aria-haspopup="menu"
           aria-expanded={overflowOpen}
+          use:tooltip={m.common_moreActions()}
           class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
         >
           <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">

@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { tooltip } from '$lib/tooltip';
 
   interface Props {
     label: string;
@@ -60,7 +61,7 @@
 <button
   type="button"
   {disabled}
-  {title}
+  use:tooltip={title}
   {onclick}
   class="inline-flex items-center gap-1.5 h-7 px-2.5 {rounding} border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed {tintClass}"
 >

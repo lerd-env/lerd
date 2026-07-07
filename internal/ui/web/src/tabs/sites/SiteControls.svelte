@@ -29,6 +29,7 @@
   import SiteDoctorModal from './SiteDoctorModal.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import ToggleButton from '$components/ToggleButton.svelte';
+  import { tooltip } from '$lib/tooltip';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -467,7 +468,7 @@
         type="button"
         onclick={() => (doctorOpen = true)}
         class="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-gray-700 dark:text-gray-200"
-        title={m.sites_doctor_title()}
+        use:tooltip={m.sites_doctor_title()}
         aria-label={m.sites_doctor_button()}
       >
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

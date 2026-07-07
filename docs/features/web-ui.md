@@ -32,7 +32,7 @@ A service worker ships with the dashboard, so when lerd is stopped (including vi
 
 The default landing page is a **Dashboard** with at-a-glance widgets across sites, services, workers, and system health. Selecting Sites, Services, or System switches to a three-pane layout:
 
-- **Left icon rail**: the lerd logo at the top is the link back to the Dashboard; below it sit the Sites, Services, and System icon buttons; a separator further down lists a per-service icon for every running service that exposes a dashboard (phpMyAdmin, pgAdmin, Mailpit, RustFS, Meilisearch, Mongo Express, Selenium, etc.), and clicking one opens that dashboard inline as a full-width iframe over the middle and detail panels; theme toggle and docs link at the bottom
+- **Left icon rail**: the lerd logo at the top is the link back to the Dashboard; below it sit the Sites, Services, and System icon buttons; a separator further down lists a per-service icon for every running service that exposes a dashboard (phpMyAdmin, pgAdmin, Mailpit, RustFS, Meilisearch, Mongo Express, Selenium, etc.), and clicking one opens that dashboard inline as a full-width iframe over the middle and detail panels; theme toggle and docs link at the bottom. Hovering any rail icon reveals its label in a floating tooltip to the right, so the collapsed rail stays readable at a glance
 - **Middle list panel**: scrollable list of all items in the active section; status dots, compact rows, collapsible groups (hidden on the Dashboard)
 - **Detail panel**: full controls and live logs for the selected item
 
@@ -91,7 +91,7 @@ Before you pick a site the detail panel shows a **sites overview** instead of an
 
 Selecting a site opens the detail panel with:
 
-- **Address bar header**: a browser-style row with the site's favicon, scheme, and domain. The leading **lock icon** toggles TLS in one click (green closed when enabled, gray open when disabled, static on worktrees and when DNS is off). Clicking the URL text opens the Manage Domains modal. The trailing actions are a circular **reload** (restart FPM), **pause/resume**, **open in browser**, a **wifi** toggle for LAN sharing, **terminal** (loopback only), and **unlink**. On narrow panels the secondary actions fold into a ⋮ menu. When LAN sharing is on, the shareable URL appears as a teal chip inside the address bar with a hover-QR.
+- **Address bar header**: a browser-style row with the site's favicon, scheme, and domain. The leading **lock icon** toggles TLS in one click (green closed when enabled, gray open when disabled, static on worktrees and when DNS is off). Clicking the URL text opens the Manage Domains modal. The trailing actions are a circular **reload** (restart FPM), **pause/resume**, **open in browser**, a **wifi** toggle for LAN sharing, **terminal** (loopback only), and **unlink**. On narrow panels the secondary actions fold into a ⋮ menu. Hovering any of these icon buttons reveals a themed label tooltip beneath it, matching the left rail. When LAN sharing is on, the shareable URL appears as a teal chip inside the address bar with a hover-QR.
 - **PHP / Node dropdowns**: change the version per site; writes `.php-version` / `.node-version` into the project and regenerates the nginx vhost on the fly
 - **Queue toggle**: start or stop the queue worker; amber when running; live log stream below
 - **Schedule toggle**: start or stop the task scheduler; live log stream below

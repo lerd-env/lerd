@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
+  import { tooltip } from '$lib/tooltip';
 
   type Tone = 'default' | 'accent' | 'success' | 'danger';
 
@@ -33,7 +34,8 @@
 </script>
 
 <button
-  {title}
+  aria-label={title}
+  use:tooltip={title}
   {onclick}
   {disabled}
   class="w-6 h-6 flex items-center justify-center rounded-sm transition-colors disabled:opacity-40 {toneClass[tone]}"

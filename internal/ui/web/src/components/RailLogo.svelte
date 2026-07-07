@@ -2,11 +2,17 @@
   import { version } from '$stores/version';
   import { goToTab } from '$stores/route';
   import { m } from '../paraglide/messages.js';
+  import { tooltip } from '$lib/tooltip';
+
+  const label = $derived(
+    $version.hasUpdate ? m.system_lerd_updateAvailable() : m.nav_dashboard()
+  );
 </script>
 
 <button
   class="mb-4 flex items-center justify-center relative rounded-lg p-0.5 transition-colors hover:bg-gray-100 dark:hover:bg-white/5"
-  title={$version.hasUpdate ? m.system_lerd_updateAvailable() : m.nav_dashboard()}
+  aria-label={label}
+  use:tooltip={{ label, placement: 'right' }}
   onclick={() => goToTab('dashboard')}
 >
   <img src="/icons/icon.svg" class="w-7 h-7 rounded-lg" alt="Lerd" />
