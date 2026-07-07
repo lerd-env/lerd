@@ -17,7 +17,9 @@ lerd service search search-engine  # filter by name, description, or family
 lerd service preset <name>         # install a store preset (fetched on demand)
 ```
 
-`lerd service search` shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. The bundled presets always remain as an offline fallback, so a service installed by an older lerd keeps resolving by name even when the store is unreachable, and a store preset of the same name supersedes the built-in only when it validates.
+`lerd service search` shows whether each hit is already `installed`, available `local`ly (bundled or cached), or only in the `store`. Installing a store-only preset fetches its YAML, validates it, and caches it under `~/.local/share/lerd/service-presets/`, after which it behaves exactly like a bundled preset. A cached preset older than 24 hours is refreshed opportunistically on the next install. A store preset of the same name as a bundled one supersedes the built-in only when it validates.
+
+The binary embeds the default presets as a permanent offline fallback, and `lerd install` and `lerd update` re-fetch the store preset backing every installed service into that same cache, so an add-on service (pgAdmin, phpMyAdmin, and the rest that live only in the store) keeps resolving by name, config-mount files included, even when the store is later unreachable. If the store can't be reached during install the previously cached copy is left in place, so an offline install never breaks a service that already resolved.
 
 Point `LERD_SERVICES_BASE_URL` at an alternate base (comma-separated for several) to use a private or local store instead of `lerd-env/services`.
 

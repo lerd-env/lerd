@@ -63,6 +63,8 @@ When no version is specified, lerd reads `composer.lock` to detect the installed
 
 Store definitions are saved to `~/.local/share/lerd/frameworks/<name>@<version>.yaml`, separate from user-defined frameworks.
 
+Point `LERD_STORE_BASE_URL` at an alternate base (comma-separated for several) to fetch framework definitions from a private or local mirror instead of `lerd-env/frameworks`, mirroring `LERD_SERVICES_BASE_URL` for the [service store](service-presets.md).
+
 ### Checking for updates
 
 ```bash
