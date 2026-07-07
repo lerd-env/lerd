@@ -162,12 +162,26 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 }
 
 // adjustSitesSecuredForDNS tracks DNS availability for sites on a preserved
-// (custom) TLD without renaming: disabling records the state and drops to http
-// (certs removed), enabling restores HTTPS from .lerd.yaml or that record.
+// (custom) TLD without renaming: disabling drops to http (certs and worktree
+// vhosts follow), enabling restores HTTPS from .lerd.yaml or the recorded state.
 func adjustSitesSecuredForDNS(tld string, enabling bool) {
 	reg, err := config.LoadSites()
 	if err != nil || reg == nil {
 		return
+	}
+	// regenWorktrees rewrites a site's worktree vhosts at the unchanged primary
+	// with the site's current secured state (http vs ssl), so a worktree tracks
+	// the parent's HTTPS flip instead of pointing at a removed wildcard cert.
+	regenWorktrees := func(s config.Site) {
+		worktrees, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
+		if len(worktrees) == 0 {
+			return
+		}
+		var wtProxy *config.ProxyConfig
+		if s.IsHostProxy() {
+			wtProxy = parentProxyConfig(s)
+		}
+		migrateWorktreeVhosts(worktrees, s.PrimaryDomain(), s.PHPVersion, s.Name, s.Secured, wtProxy)
 	}
 	suffix := "." + tld
 	for _, s := range reg.Sites {
@@ -199,6 +213,7 @@ func adjustSitesSecuredForDNS(tld string, enabling bool) {
 				fmt.Printf("    WARN: %s: reissue cert: %v\n", s.Name, err)
 			}
 			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), true)
+			regenWorktrees(s)
 			feedback.Note(fmt.Sprintf("%s: restored https://%s", s.Name, s.PrimaryDomain()))
 		} else {
 			if !s.Secured {
@@ -212,6 +227,7 @@ func adjustSitesSecuredForDNS(tld string, enabling bool) {
 			}
 			removeStaleCerts(s.PrimaryDomain())
 			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), false)
+			regenWorktrees(s)
 			feedback.Note(fmt.Sprintf("%s: dropped to http://%s (HTTPS unavailable with DNS off)", s.Name, s.PrimaryDomain()))
 		}
 	}

@@ -545,6 +545,54 @@ func TestApplyDNSTLDMigration_CustomTLDDisableUnsecures(t *testing.T) {
 	}
 }
 
+// On a custom-TLD disable, a site's worktree vhosts must be regenerated to plain
+// http, not left on an ssl vhost whose wildcard cert was just removed. Without
+// the regeneration the worktree is unserved until the watcher reconciles.
+func TestApplyDNSTLDMigration_CustomTLDDisableRegeneratesWorktreeVhosts(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	// A git worktree the DetectWorktrees scan will find (gitdir + HEAD).
+	siteDir := filepath.Join(tmp, "app")
+	checkout := filepath.Join(tmp, "feature-checkout")
+	if err := os.MkdirAll(checkout, 0755); err != nil {
+		t.Fatal(err)
+	}
+	wtMeta := filepath.Join(siteDir, ".git", "worktrees", "feature")
+	if err := os.MkdirAll(wtMeta, 0755); err != nil {
+		t.Fatal(err)
+	}
+	os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feature\n"), 0644)
+	os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(checkout, ".git")+"\n"), 0644)
+	os.WriteFile(filepath.Join(checkout, ".env"), []byte("APP_URL=https://feature.app.dev\n"), 0644)
+
+	// A stale SSL worktree vhost that must be replaced by a plain-http one.
+	staleSSL := filepath.Join(config.NginxConfD(), "feature.app.dev-ssl.conf")
+	if err := os.WriteFile(staleSSL, []byte("server {}\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := config.AddSite(config.Site{
+		Name: "app", Path: siteDir, Domains: []string{"app.dev"}, PHPVersion: "8.4", Secured: true,
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	applyDNSTLDMigration("dev", false)
+
+	if _, err := os.Stat(staleSSL); !os.IsNotExist(err) {
+		t.Errorf("stale ssl worktree vhost must be removed on disable; stat err = %v", err)
+	}
+	httpConf := filepath.Join(config.NginxConfD(), "feature.app.dev.conf")
+	if _, err := os.Stat(httpConf); err != nil {
+		t.Errorf("worktree must be regenerated as a plain-http vhost: %v", err)
+	}
+}
+
 func TestMigrateSiteTLD_NoOpWhenSameTLD(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

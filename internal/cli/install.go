@@ -341,6 +341,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 					feedback.Note("skipped, sites still reference ." + prevTLD)
 				}
 			}
+		} else if prevEnabled != wantDNS {
+			// A DNS toggle with no canonical rename (a custom TLD): HTTPS still
+			// tracks DNS, so drop/restore it in place like the dns: commands.
+			// Idempotent, so a re-exec from those commands is a no-op.
+			adjustSitesSecuredForDNS(prevTLD, wantDNS)
 		}
 
 		// Persist on any real change, and always on a first install so the
