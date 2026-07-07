@@ -540,6 +540,14 @@ export const unlinkSite = (d: string) => postAction(site(d, 'unlink'));
 export const openTerminal = (d: string, branch: string = '') =>
   postAction(site(d, 'terminal') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 
+export function openFolder(path: string) {
+  return apiFetch('/api/open-folder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path })
+  });
+}
+
 export function setWorktreeDBIsolated(
   d: string,
   branch: string,
