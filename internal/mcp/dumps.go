@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -62,20 +63,14 @@ func execDumpsRecent(args map[string]any) (any, *rpcError) {
 // reads the same captured-query ring; the analysis itself is server-side so the
 // fingerprinting matches the dashboard and the N+1 notifications.
 func execAnalyzeQueries(args map[string]any) (any, *rpcError) {
-	q := []string{}
-	if s := strArg(args, "site"); s != "" {
-		q = append(q, "site="+s)
-	}
+	params := [][2]string{{"site", strArg(args, "site")}}
 	if v, ok := args["min_repeat"]; ok {
-		q = append(q, fmt.Sprintf("min_repeat=%v", v))
+		params = append(params, [2]string{"min_repeat", fmt.Sprintf("%v", v)})
 	}
 	if v, ok := args["slow_ms"]; ok {
-		q = append(q, fmt.Sprintf("slow_ms=%v", v))
+		params = append(params, [2]string{"slow_ms", fmt.Sprintf("%v", v)})
 	}
-	path := "/api/queries/analyze"
-	if len(q) > 0 {
-		path += "?" + strings.Join(q, "&")
-	}
+	path := queryPath("/api/queries/analyze", params)
 	body, status, err := uiGET(path)
 	if err != nil {
 		return toolErr("lerd-ui not reachable: " + err.Error()), nil
@@ -91,17 +86,10 @@ func execAnalyzeQueries(args map[string]any) (any, *rpcError) {
 // whose p95 runs well above it) verbatim. This is the timing table the doctor's
 // slow_routes finding only summarizes in prose.
 func execRouteTiming(args map[string]any) (any, *rpcError) {
-	q := []string{}
-	if s := strArg(args, "site"); s != "" {
-		q = append(q, "site="+s)
-	}
-	if b := strArg(args, "branch"); b != "" {
-		q = append(q, "branch="+b)
-	}
-	path := "/api/queries/route-timing"
-	if len(q) > 0 {
-		path += "?" + strings.Join(q, "&")
-	}
+	path := queryPath("/api/queries/route-timing", [][2]string{
+		{"site", strArg(args, "site")},
+		{"branch", strArg(args, "branch")},
+	})
 	body, status, err := uiGET(path)
 	if err != nil {
 		return toolErr("lerd-ui not reachable: " + err.Error()), nil
@@ -117,23 +105,17 @@ func execRouteTiming(args map[string]any) (any, *rpcError) {
 // against it, so an agent gets the symptom and its cause in one call rather than
 // pivoting between route_timing and analyze_queries by hand.
 func execOptimizeRoute(args map[string]any) (any, *rpcError) {
-	q := []string{}
-	if s := strArg(args, "site"); s != "" {
-		q = append(q, "site="+s)
-	}
-	if b := strArg(args, "branch"); b != "" {
-		q = append(q, "branch="+b)
+	params := [][2]string{
+		{"site", strArg(args, "site")},
+		{"branch", strArg(args, "branch")},
 	}
 	if v, ok := args["min_repeat"]; ok {
-		q = append(q, fmt.Sprintf("min_repeat=%v", v))
+		params = append(params, [2]string{"min_repeat", fmt.Sprintf("%v", v)})
 	}
 	if v, ok := args["slow_ms"]; ok {
-		q = append(q, fmt.Sprintf("slow_ms=%v", v))
+		params = append(params, [2]string{"slow_ms", fmt.Sprintf("%v", v)})
 	}
-	path := "/api/queries/optimize"
-	if len(q) > 0 {
-		path += "?" + strings.Join(q, "&")
-	}
+	path := queryPath("/api/queries/optimize", params)
 	body, status, err := uiGET(path)
 	if err != nil {
 		return toolErr("lerd-ui not reachable: " + err.Error()), nil
@@ -193,6 +175,22 @@ func execDumpsToggle(args map[string]any) (any, *rpcError) {
 	}
 	b, _ := json.Marshal(res)
 	return toolOK(string(b)), nil
+}
+
+// queryPath joins base with the non-empty params as an escaped, key-sorted query
+// string. Escaping matters because a value like a git branch name can carry &,
+// =, # or +, which raw concatenation would splice into the query.
+func queryPath(base string, params [][2]string) string {
+	q := url.Values{}
+	for _, p := range params {
+		if p[1] != "" {
+			q.Set(p[0], p[1])
+		}
+	}
+	if enc := q.Encode(); enc != "" {
+		return base + "?" + enc
+	}
+	return base
 }
 
 // uiGET / uiPOST: tiny HTTP helpers over the OS-appropriate lerd-ui transport

@@ -102,13 +102,37 @@ func runShimsSet(tool string, enabled bool) error {
 // which case the shim leaves the connection untouched (an external database).
 // Both the postgres and mysql client families use -h / --host for the host.
 func argsSpecifyHost(args []string) bool {
+	skipNext := false
 	for _, a := range args {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		// The value after a query/command flag is SQL, not a connection arg, so a
+		// "host=" predicate or a "://" URL literal inside it must not be read as a
+		// host, which would suppress the local default and break the connection.
+		if a == "-c" || a == "--command" || a == "-e" || a == "--execute" {
+			skipNext = true
+			continue
+		}
 		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || (strings.HasPrefix(a, "-h") && len(a) > 2) {
 			return true
 		}
-		// A connection URI or a libpq conninfo string carries its own host, so
-		// the shim must not override it with a local default.
-		if strings.Contains(a, "://") || strings.Contains(a, "host=") {
+		// A connection URI (scheme://…) or a libpq conninfo string (host= as a
+		// keyword, at the start or on a word boundary) carries its own host.
+		if isConnURI(a) || strings.HasPrefix(a, "host=") || strings.Contains(a, " host=") {
+			return true
+		}
+	}
+	return false
+}
+
+// isConnURI reports whether a is a database connection URI, matched by a known
+// scheme prefix rather than a bare "://" so a URL literal inside a query value
+// is not mistaken for a connection target.
+func isConnURI(a string) bool {
+	for _, scheme := range []string{"postgres://", "postgresql://", "mysql://", "mariadb://"} {
+		if strings.HasPrefix(a, scheme) {
 			return true
 		}
 	}

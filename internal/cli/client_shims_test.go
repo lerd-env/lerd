@@ -17,7 +17,13 @@ func TestArgsSpecifyHost(t *testing.T) {
 		{[]string{"--help"}, false},
 		{[]string{"postgresql://user@ext.example.com/db"}, true},
 		{[]string{"host=ext.example.com dbname=prod"}, true},
+		{[]string{"dbname=prod host=ext.example.com"}, true},
 		{[]string{"mydb"}, false},
+		// A host= or a URL inside a -c/-e SQL body must NOT be read as a host, or
+		// a legitimate query fails to connect to the lerd service.
+		{[]string{"-c", "SELECT * FROM logs WHERE host='node1'"}, false},
+		{[]string{"-e", "UPDATE s SET url='http://x' WHERE id=1"}, false},
+		{[]string{"--command", "SELECT 'host=' || h FROM t"}, false},
 	}
 	for _, c := range cases {
 		if got := argsSpecifyHost(c.args); got != c.want {
