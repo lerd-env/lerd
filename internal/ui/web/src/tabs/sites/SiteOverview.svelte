@@ -1,6 +1,7 @@
 <script lang="ts">
   import SiteControls from './SiteControls.svelte';
   import SiteServiceCard from './SiteServiceCard.svelte';
+  import SiteRequestTiming from './SiteRequestTiming.svelte';
   import type { Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
@@ -35,4 +36,6 @@
       </div>
     </section>
   {/if}
+
+  <SiteRequestTiming {site} {activeWorktreeBranch} />
 </div>

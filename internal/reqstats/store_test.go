@@ -78,6 +78,46 @@ func TestStoreAnalyticsAggregates(t *testing.T) {
 	}
 }
 
+func TestStoreAnalyticsExcludesColdFromTiming(t *testing.T) {
+	s := tempStore(t)
+	recs := mk(10, 0, "app", "GET", "GET /x", "/x", 200, 20)
+	cold := mk(1, time.Minute, "app", "GET", "GET /x", "/x", 200, 3000)[0]
+	cold.Cold = true
+	recs = append(recs, cold)
+	seed(t, s, recs)
+
+	a, err := s.SiteAnalytics("app", base.Add(-time.Hour), base.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("SiteAnalytics: %v", err)
+	}
+	if a.Samples != 11 {
+		t.Errorf("samples = %d, want 11 (cold counted)", a.Samples)
+	}
+	if a.ColdStarts != 1 {
+		t.Errorf("cold starts = %d, want 1", a.ColdStarts)
+	}
+	if a.P95Millis > 100 {
+		t.Errorf("p95 = %v, the 3000ms cold start must be excluded from timing", a.P95Millis)
+	}
+	if len(a.Routes) != 1 {
+		t.Fatalf("routes = %d, want 1", len(a.Routes))
+	}
+	r := a.Routes[0]
+	if r.P95Millis > 100 {
+		t.Errorf("route p95 = %v, cold start must be excluded", r.P95Millis)
+	}
+	if r.Samples != 11 {
+		t.Errorf("route samples = %d, want 11 (cold counted)", r.Samples)
+	}
+	total := 0
+	for _, b := range a.Distribution {
+		total += b.Count
+	}
+	if total != 10 {
+		t.Errorf("distribution total = %d, want 10 (warm only)", total)
+	}
+}
+
 func TestStoreAnalyticsRespectsRange(t *testing.T) {
 	s := tempStore(t)
 	seed(t, s, mk(5, -2*time.Hour, "app", "GET", "GET /old", "/old", 200, 20))
@@ -124,6 +164,22 @@ func TestRecordFromNormalizes(t *testing.T) {
 	}
 	if rec.Millis != 150 {
 		t.Errorf("ms = %v, want 150", rec.Millis)
+	}
+}
+
+func TestIsColdStart(t *testing.T) {
+	gap := 30 * time.Minute
+	if IsColdStart(time.Time{}, false, base, gap) {
+		t.Error("first request ever seen must not be a cold start")
+	}
+	if IsColdStart(base.Add(-time.Minute), true, base, gap) {
+		t.Error("a request one minute after the last must not be cold")
+	}
+	if !IsColdStart(base.Add(-time.Hour), true, base, gap) {
+		t.Error("a request an hour after the last must be cold")
+	}
+	if IsColdStart(base.Add(-time.Hour), true, base, 0) {
+		t.Error("a zero gap disables cold detection")
 	}
 }
 

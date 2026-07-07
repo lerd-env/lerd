@@ -31,10 +31,12 @@ var reqAggregator *reqstats.Aggregator
 // one batch so a busy site isn't a transaction per request. Best-effort: a failed
 // open leaves it nil and the aggregator snapshot still drives the live panel.
 var (
-	reqStore  *reqstats.Store
-	reqBufMu  sync.Mutex
-	reqBuf    []reqstats.Record
-	lastPrune time.Time
+	reqStore    *reqstats.Store
+	reqBufMu    sync.Mutex
+	reqBuf      []reqstats.Record
+	lastPrune   time.Time
+	reqLastSeen = map[string]time.Time{} // per-site last request time, for cold-start detection
+	coldGap     time.Duration            // a gap this long or longer marks the next request a cold start
 )
 
 // reqStatsSaveInterval is how often the request-timing snapshot is flushed to
@@ -75,6 +77,13 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	reqAggregator = reqstats.New(resolveHostToSite)
 	if st, err := reqstats.OpenStore(config.RequestStatsDB()); err == nil {
 		reqStore = st
+	}
+	// A request after the site has been idle at least this long is a cold start;
+	// tie it to the idle-suspend timeout, the point lerd already treats a site as
+	// gone quiet, so a wake's inflated time is kept out of the timing view.
+	coldGap = reqstats.DefaultColdGap
+	if cfg, err := config.LoadGlobal(); err == nil {
+		coldGap = cfg.IdleSuspendTimeout()
 	}
 	go runNotifier()
 	startControlSocket()
@@ -147,8 +156,14 @@ func handleAccessDatagram(b []byte) {
 			reqAggregator.Record(rec)
 			if reqStore != nil {
 				if site, ok := resolveHostToSite(rec.Host); ok {
+					now := time.Now()
+					sr := reqstats.RecordFrom(rec, site, now)
 					reqBufMu.Lock()
-					reqBuf = append(reqBuf, reqstats.RecordFrom(rec, site, time.Now()))
+					// Cold start: first request after the site sat idle past coldGap.
+					last, seen := reqLastSeen[site]
+					sr.Cold = reqstats.IsColdStart(last, seen, now, coldGap)
+					reqLastSeen[site] = now
+					reqBuf = append(reqBuf, sr)
 					reqBufMu.Unlock()
 				}
 			}

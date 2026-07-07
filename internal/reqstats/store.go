@@ -25,6 +25,18 @@ func RecordFrom(r AccessRecord, site string, at time.Time) Record {
 	}
 }
 
+// DefaultColdGap is the fallback idle gap after which a request is treated as a
+// cold start, used when the idle-suspend timeout can't be read. The watcher
+// prefers that configured timeout.
+const DefaultColdGap = 30 * time.Minute
+
+// IsColdStart reports whether a request at now is a cold start: the site has been
+// seen before and sat idle at least gap since. The first request ever seen for a
+// site isn't a cold start, since there's no prior time to prove it was idle.
+func IsColdStart(last time.Time, seen bool, now time.Time, gap time.Duration) bool {
+	return seen && gap > 0 && now.Sub(last) >= gap
+}
+
 // latencyEdges is the fixed ladder the response-time distribution buckets into.
 // Each edge is an exclusive upper bound in milliseconds; a final open-ended
 // bucket (UpperMillis 0) catches everything above the last edge.
@@ -49,6 +61,10 @@ type Record struct {
 	Status int
 	Millis float64
 	URI    string
+	// Cold marks the first request after the site had gone idle: a cold start
+	// (suspended workers waking, cold caches) whose inflated time would skew the
+	// timing view, so it's kept out of the percentiles but still counted.
+	Cold bool
 }
 
 // LatencyBucket is one bar of the response-time histogram. UpperMillis is the
@@ -77,6 +93,7 @@ type ThroughputPoint struct {
 type Analytics struct {
 	Site         string            `json:"site"`
 	Samples      int               `json:"samples"`
+	ColdStarts   int               `json:"cold_starts"` // excluded from timing, still counted
 	MedianMillis float64           `json:"median_millis"`
 	P95Millis    float64           `json:"p95_millis"`
 	Status       StatusCounts      `json:"status"`
@@ -97,6 +114,13 @@ func OpenStore(path string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("init schema: %w", err)
 	}
+	// Migrate stores created before the cold column existed. The ALTER errors with
+	// "duplicate column name" on an up-to-date store, which is the expected no-op.
+	if _, err := db.Exec(`ALTER TABLE requests ADD COLUMN cold INTEGER NOT NULL DEFAULT 0`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column name") {
+		db.Close()
+		return nil, fmt.Errorf("migrate cold column: %w", err)
+	}
 	return &Store{db: db}, nil
 }
 
@@ -108,7 +132,8 @@ CREATE TABLE IF NOT EXISTS requests (
   method TEXT    NOT NULL,
   status INTEGER NOT NULL,
   ms     REAL    NOT NULL,
-  uri    TEXT    NOT NULL
+  uri    TEXT    NOT NULL,
+  cold   INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_requests_site_at ON requests(site, at_ms);`
 
@@ -125,14 +150,14 @@ func (s *Store) Insert(recs []Record) error {
 	if err != nil {
 		return err
 	}
-	stmt, err := tx.Prepare(`INSERT INTO requests(at_ms, site, route, method, status, ms, uri) VALUES(?,?,?,?,?,?,?)`)
+	stmt, err := tx.Prepare(`INSERT INTO requests(at_ms, site, route, method, status, ms, uri, cold) VALUES(?,?,?,?,?,?,?,?)`)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
 	defer stmt.Close()
 	for _, r := range recs {
-		if _, err := stmt.Exec(r.At.UnixMilli(), r.Site, r.Route, r.Method, r.Status, r.Millis, r.URI); err != nil {
+		if _, err := stmt.Exec(r.At.UnixMilli(), r.Site, r.Route, r.Method, r.Status, r.Millis, r.URI, boolToInt(r.Cold)); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -153,7 +178,7 @@ func (s *Store) Prune(before time.Time) (int64, error) {
 // Recent returns the newest limit requests for a site, newest first.
 func (s *Store) Recent(site string, limit int) ([]Record, error) {
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
+		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
 		site, limit)
 	if err != nil {
 		return nil, err
@@ -162,11 +187,13 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 	var out []Record
 	for rows.Next() {
 		var atMs int64
+		var cold int
 		var r = Record{Site: site}
-		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI); err != nil {
+		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold); err != nil {
 			return nil, err
 		}
 		r.At = time.UnixMilli(atMs)
+		r.Cold = cold != 0
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -178,7 +205,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 // percentile and local request volumes are small.
 func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, error) {
 	rows, err := s.db.Query(
-		`SELECT at_ms, route, method, status, ms, uri FROM requests
+		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests
 		 WHERE site = ? AND at_ms >= ? AND at_ms < ? ORDER BY at_ms ASC`,
 		site, since.UnixMilli(), until.UnixMilli())
 	if err != nil {
@@ -187,10 +214,11 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 	defer rows.Close()
 
 	a := Analytics{Site: site, Distribution: emptyBuckets(), Throughput: []ThroughputPoint{}, Routes: []RouteStat{}}
-	var all []float64
+	var warm []float64
 	type agg struct {
 		method, example string
-		ms              []float64
+		warm            []float64
+		total           int
 	}
 	routes := map[string]*agg{}
 	minutes := map[int64]int{}
@@ -198,38 +226,48 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 	for rows.Next() {
 		var atMs int64
 		var route, method, uri string
-		var status int
+		var status, cold int
 		var ms float64
-		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri); err != nil {
+		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold); err != nil {
 			return Analytics{}, err
 		}
+		// Cold starts count toward the total, status, and throughput, but are kept
+		// out of every timing figure (site and per-route percentiles, distribution)
+		// so a wake never makes a route look slow.
 		a.Samples++
-		all = append(all, ms)
 		classify(&a.Status, status)
-		a.Distribution[bucketIndex(ms)].Count++
 		minutes[atMs/60000*60000]++
 		r := routes[route]
 		if r == nil {
 			r = &agg{method: method}
 			routes[route] = r
 		}
-		r.ms = append(r.ms, ms)
+		r.total++
 		r.example = uri
+		if cold != 0 {
+			a.ColdStarts++
+			continue
+		}
+		warm = append(warm, ms)
+		a.Distribution[bucketIndex(ms)].Count++
+		r.warm = append(r.warm, ms)
 	}
 	if err := rows.Err(); err != nil {
 		return Analytics{}, err
 	}
 
-	a.MedianMillis = round1(median(all))
-	a.P95Millis = round1(percentile(all, 95))
+	a.MedianMillis = round1(median(warm))
+	a.P95Millis = round1(percentile(warm, 95))
 	for route, r := range routes {
+		// A route seen only as cold starts has no warm samples; fall back to a zero
+		// timing rather than dropping the row, so its traffic still shows.
 		a.Routes = append(a.Routes, RouteStat{
 			Route:     route,
 			Method:    r.method,
 			Example:   r.example,
-			P50Millis: round1(median(r.ms)),
-			P95Millis: round1(percentile(r.ms, 95)),
-			Samples:   len(r.ms),
+			P50Millis: round1(median(r.warm)),
+			P95Millis: round1(percentile(r.warm, 95)),
+			Samples:   r.total,
 		})
 	}
 	sort.Slice(a.Routes, func(i, j int) bool {
@@ -264,6 +302,14 @@ func bucketIndex(ms float64) int {
 		}
 	}
 	return len(latencyEdges)
+}
+
+// boolToInt maps a bool to the 0/1 SQLite stores for the cold flag.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // classify increments the status-class counter for one response code.
