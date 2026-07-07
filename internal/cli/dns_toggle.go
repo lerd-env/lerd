@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
@@ -54,6 +55,7 @@ func runDNSEnable(_ *cobra.Command, _ []string) error {
 	feedback.Begin()
 	if cfg.DNS.Enabled {
 		feedback.Line("lerd DNS is already enabled, repairing the setup")
+		dns.ForgetSudoersMarker()
 		return reexecInstallReconcile()
 	}
 	newTLD := applyDNSTLDMigration(cfg.DNS.TLD, true)
@@ -96,6 +98,10 @@ func runDNSRepair(_ *cobra.Command, _ []string) error {
 	}
 	feedback.Begin()
 	feedback.Line("repairing lerd-managed DNS")
+	// Force the sudoers drop-in to be rewritten: repair exists to restore a
+	// broken setup, and the content marker alone can't tell a deleted drop-in
+	// from an up-to-date one.
+	dns.ForgetSudoersMarker()
 	return reexecInstallReconcile()
 }
 
@@ -123,19 +129,23 @@ func applyDNSTLDMigration(prevTLD string, enabling bool) string {
 		prevTLD = "test"
 	}
 	newTLD := toggledCanonicalTLD(prevTLD, enabling)
-	if newTLD == prevTLD {
-		return prevTLD
-	}
-	if affected := sitesWithTLD(prevTLD); len(affected) > 0 {
-		feedback.Line(fmt.Sprintf("TLD change: %d site(s) currently on .%s -> .%s", len(affected), prevTLD, newTLD))
-		feedback.Note(strings.Join(affected, ", "))
-		if confirmInstallPromptDefault(fmt.Sprintf("Rewrite domains, .env APP_URL, and vhosts to .%s?", newTLD), true) {
-			migrateSiteTLD(prevTLD, newTLD, !enabling)
-		} else {
-			feedback.Note("skipped, sites still reference ." + prevTLD)
+	if newTLD != prevTLD {
+		if affected := sitesWithTLD(prevTLD); len(affected) > 0 {
+			feedback.Line(fmt.Sprintf("TLD change: %d site(s) currently on .%s -> .%s", len(affected), prevTLD, newTLD))
+			feedback.Note(strings.Join(affected, ", "))
+			if confirmInstallPromptDefault(fmt.Sprintf("Rewrite domains, .env APP_URL, and vhosts to .%s?", newTLD), true) {
+				migrateSiteTLD(prevTLD, newTLD, !enabling)
+			} else {
+				feedback.Note("skipped, sites still reference ." + prevTLD)
+			}
 		}
+		return newTLD
 	}
-	return newTLD
+	// No canonical rename (a preserved custom TLD): domains stay, but HTTPS still
+	// tracks DNS, so a disabled custom-TLD site doesn't keep an HTTPS-only vhost
+	// nginx serves after the cert/resolver layer is gone.
+	adjustSitesSecuredForDNS(prevTLD, enabling)
+	return prevTLD
 }
 
 // reexecInstallReconcile re-execs `lerd install --from-update`, the idempotent

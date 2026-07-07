@@ -36,6 +36,14 @@ func sudoersInstalled(content []byte) bool {
 	return strings.TrimSpace(string(got)) == hex.EncodeToString(sum[:])
 }
 
+// ForgetSudoersMarker deletes the user-owned marker so the next InstallSudoers
+// rewrites the drop-in even if unchanged. dns:repair needs it: the marker
+// records only content, not whether the root-only drop-in still exists, so a
+// deleted one would otherwise be skipped and never restored.
+func ForgetSudoersMarker() {
+	_ = os.Remove(sudoersMarkerPath())
+}
+
 // recordSudoersInstalled stores content's hash after a successful write so the
 // next run can skip the redundant, sudo-prompting rewrite.
 func recordSudoersInstalled(content []byte) {

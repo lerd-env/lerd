@@ -97,11 +97,14 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 
 		s.Domains = newDomains
 		// Registry flag off while DNS is down; on re-enable restore HTTPS from
-		// the committed .lerd.yaml intent so the round trip is lossless.
+		// the committed .lerd.yaml intent, or the registry-recorded pre-disable
+		// state for a site with no .lerd.yaml, so the round trip is lossless.
 		if forceUnsecure {
+			s.SecuredBeforeDNSOff = s.Secured
 			s.Secured = false
 		} else {
-			s.Secured = projectWantsHTTPS(s.Path)
+			s.Secured = projectWantsHTTPS(s.Path) || s.SecuredBeforeDNSOff
+			s.SecuredBeforeDNSOff = false
 		}
 		if err := config.AddSite(s); err != nil {
 			fmt.Printf("    WARN: %s: persist domains: %v\n", s.Name, err)
@@ -156,6 +159,62 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 		changed = append(changed, s.Name)
 	}
 	return changed
+}
+
+// adjustSitesSecuredForDNS tracks DNS availability for sites on a preserved
+// (custom) TLD without renaming: disabling records the state and drops to http
+// (certs removed), enabling restores HTTPS from .lerd.yaml or that record.
+func adjustSitesSecuredForDNS(tld string, enabling bool) {
+	reg, err := config.LoadSites()
+	if err != nil || reg == nil {
+		return
+	}
+	suffix := "." + tld
+	for _, s := range reg.Sites {
+		onTLD := false
+		for _, d := range s.Domains {
+			if strings.HasSuffix(d, suffix) {
+				onTLD = true
+				break
+			}
+		}
+		if !onTLD {
+			continue
+		}
+		if enabling {
+			if s.Secured || !(projectWantsHTTPS(s.Path) || s.SecuredBeforeDNSOff) {
+				if s.SecuredBeforeDNSOff {
+					s.SecuredBeforeDNSOff = false
+					_ = config.AddSite(s)
+				}
+				continue
+			}
+			s.Secured = true
+			s.SecuredBeforeDNSOff = false
+			if err := config.AddSite(s); err != nil {
+				fmt.Printf("    WARN: %s: restore HTTPS: %v\n", s.Name, err)
+				continue
+			}
+			if err := certs.ReissueCertForWorktree(s); err != nil {
+				fmt.Printf("    WARN: %s: reissue cert: %v\n", s.Name, err)
+			}
+			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), true)
+			feedback.Note(fmt.Sprintf("%s: restored https://%s", s.Name, s.PrimaryDomain()))
+		} else {
+			if !s.Secured {
+				continue
+			}
+			s.SecuredBeforeDNSOff = true
+			s.Secured = false
+			if err := config.AddSite(s); err != nil {
+				fmt.Printf("    WARN: %s: drop HTTPS: %v\n", s.Name, err)
+				continue
+			}
+			removeStaleCerts(s.PrimaryDomain())
+			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), false)
+			feedback.Note(fmt.Sprintf("%s: dropped to http://%s (HTTPS unavailable with DNS off)", s.Name, s.PrimaryDomain()))
+		}
+	}
 }
 
 // migrateWorktreeVhosts removes each worktree's stale vhost confs (built from
