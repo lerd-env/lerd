@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -25,6 +26,29 @@ import (
 // marker tags every generated shim so the reconcile only ever touches its own
 // files, never a user binary or another shim category.
 const marker = "lerd-managed service client shim"
+
+// shimNamePattern allowlists a store-declared client-tool name: it becomes a
+// filename and a token in the generated script, so a path separator or shell
+// char could escape BinDir or inject a line. Real tool names all match.
+var shimNamePattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)
+
+// validShimName reports whether a client-tool or candidate-binary name is safe
+// to use as a shim filename and as a token in the generated shell script.
+func validShimName(name string) bool {
+	return shimNamePattern.MatchString(name)
+}
+
+// validBinaries keeps only the candidate binary names safe to pass to
+// client-exec, dropping any a malformed or hostile store entry slipped in.
+func validBinaries(bins []string) []string {
+	out := bins[:0:0]
+	for _, b := range bins {
+		if validShimName(b) {
+			out = append(out, b)
+		}
+	}
+	return out
+}
 
 // Target records which service container a tool shim execs into and the
 // candidate binaries to resolve there (mariadb images ship mariadb-dump in
@@ -74,7 +98,7 @@ func Targets() map[string]Target {
 			continue
 		}
 		for _, cs := range svc.ClientShims {
-			if cs.Name == "" {
+			if !validShimName(cs.Name) {
 				continue
 			}
 			if _, exists := out[cs.Name]; exists {
@@ -83,6 +107,11 @@ func Targets() map[string]Target {
 			bins := cs.Binaries
 			if len(bins) == 0 {
 				bins = []string{cs.Name}
+			} else {
+				bins = validBinaries(bins)
+				if len(bins) == 0 {
+					continue
+				}
 			}
 			out[cs.Name] = Target{Service: name, Binaries: bins}
 		}
