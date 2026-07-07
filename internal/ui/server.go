@@ -2579,8 +2579,13 @@ type VersionResponse struct {
 	Changelog string `json:"changelog,omitempty"`
 }
 
-func handleVersion(w http.ResponseWriter, _ *http.Request, currentVersion string) {
-	info, _ := lerdUpdate.CachedUpdateCheck(currentVersion)
+func handleVersion(w http.ResponseWriter, r *http.Request, currentVersion string) {
+	check := lerdUpdate.CachedUpdateCheck
+	if r.URL.Query().Get("refresh") != "" {
+		// An explicit user-initiated check bypasses the 24h cache for a live answer.
+		check = lerdUpdate.ForceUpdateCheck
+	}
+	info, _ := check(currentVersion)
 	writeJSON(w, buildVersionResponse(currentVersion, info))
 }
 

@@ -28,9 +28,14 @@ interface VersionResponse {
   changelog?: string;
 }
 
-export async function loadVersion() {
+// loadVersion refreshes the version store. Pass force=true for a user-initiated
+// check: it flips `checking` so the button shows a spinner and adds ?refresh so
+// the backend queries GitHub live instead of returning the 24h-cached answer.
+// The passive on-mount call omits force and stays on the cache.
+export async function loadVersion(force = false) {
+  version.update((v) => ({ ...v, checking: true }));
   try {
-    const res = await apiJson<VersionResponse>('/api/version');
+    const res = await apiJson<VersionResponse>(force ? '/api/version?refresh=1' : '/api/version');
     version.set({
       current: res.current ?? '...',
       latest: res.latest ?? '',

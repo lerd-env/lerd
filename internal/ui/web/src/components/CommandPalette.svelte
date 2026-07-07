@@ -214,7 +214,7 @@
         }
       });
     }
-    list.push({ id: 'act:checkUpdates', label: m.palette_action_checkUpdates(), group: 'actions', action: () => loadVersion() });
+    list.push({ id: 'act:checkUpdates', label: m.palette_action_checkUpdates(), group: 'actions', action: () => loadVersion(true) });
     list.push({ id: 'act:docs', label: m.palette_action_openDocs(), group: 'actions', action: openDocs });
     list.push({
       id: 'act:openInBrowser',

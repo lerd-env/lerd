@@ -115,7 +115,7 @@
   {#snippet footer()}
     <div class="flex items-center gap-2">
       <button
-        onclick={loadVersion}
+        onclick={() => loadVersion(true)}
         disabled={$version.checking}
         class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-200 disabled:opacity-50 transition-colors"
       >

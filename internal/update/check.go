@@ -34,7 +34,21 @@ type updateCheckState struct {
 // (no network, GitHub unreachable, etc.). Network fetches are rate-limited to once
 // per 24 hours via a cache file at config.UpdateCheckFile().
 func CachedUpdateCheck(currentVersion string) (*UpdateInfo, error) {
-	latest := cachedLatest()
+	return evaluateUpdate(currentVersion, cachedLatest())
+}
+
+// ForceUpdateCheck queries GitHub for the latest release right away, ignoring the
+// 24-hour cache, and refreshes the cache with the result. Use it when the user
+// explicitly asks to check for updates and expects a live answer. Returns nil, nil
+// when already current or when the network fetch fails silently.
+func ForceUpdateCheck(currentVersion string) (*UpdateInfo, error) {
+	return evaluateUpdate(currentVersion, freshLatest())
+}
+
+// evaluateUpdate compares currentVersion against a latest tag and returns update
+// info only when latest is a strictly-greater release the caller should be told
+// about. latest == "" (unknown / fetch failed) yields nil, nil.
+func evaluateUpdate(currentVersion, latest string) (*UpdateInfo, error) {
 	if latest == "" {
 		return nil, nil
 	}
@@ -61,15 +75,19 @@ func CachedUpdateCheck(currentVersion string) (*UpdateInfo, error) {
 // cachedLatest returns the latest release version tag, using a 24-hour disk cache.
 // Returns "" on any error so callers degrade silently.
 func cachedLatest() string {
-	cacheFile := config.UpdateCheckFile()
-
-	if data, err := os.ReadFile(cacheFile); err == nil {
+	if data, err := os.ReadFile(config.UpdateCheckFile()); err == nil {
 		var state updateCheckState
 		if json.Unmarshal(data, &state) == nil && time.Since(state.CheckedAt) < 24*time.Hour {
 			return state.LatestVersion
 		}
 	}
+	return freshLatest()
+}
 
+// freshLatest fetches the latest release tag from GitHub and refreshes the disk
+// cache with the result. Returns "" on any error so callers degrade silently.
+func freshLatest() string {
+	cacheFile := config.UpdateCheckFile()
 	latest, err := FetchLatestVersion()
 	if err != nil {
 		// Cache the failure for 1 hour to avoid hammering GitHub on every invocation.
