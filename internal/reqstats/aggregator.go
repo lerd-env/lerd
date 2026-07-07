@@ -26,6 +26,10 @@ const (
 	// below the sample floor: a full second is worth surfacing from a single hit,
 	// since a local dev rarely repeats a slow page enough to clear defaultMinSample.
 	slowAbsoluteMillis = 1000.0
+	// relSlowFloorMillis is the p95 a route must clear before the relative
+	// (Nx-the-baseline) rule flags it, so a fast route isn't called slow when a
+	// frequent fast endpoint drags the baseline toward zero.
+	relSlowFloorMillis = 150.0
 )
 
 // recentWindow bounds the snapshot to recently-seen samples, so a route that was
@@ -78,6 +82,7 @@ type routeAgg struct {
 	times   *ring
 	method  string
 	example string
+	lastAt  int64 // UnixNano of the most recent sample, for stale-route eviction
 }
 
 // New returns an aggregator that maps hosts to sites via resolve. A nil resolver
@@ -113,14 +118,33 @@ func (a *Aggregator) Record(r AccessRecord) {
 	rr := sa.routes[route]
 	if rr == nil {
 		if len(sa.routes) >= defaultMaxRoutes {
-			return
+			// At the cap: reclaim slots held by routes that have gone quiet past
+			// the recent window before dropping this one, so a long-lived site
+			// that has seen many distinct paths keeps recording live traffic
+			// instead of wedging on dead routes.
+			sa.evictStaleRoutes(now.Add(-recentWindow).UnixNano())
+			if len(sa.routes) >= defaultMaxRoutes {
+				return
+			}
 		}
 		rr = &routeAgg{times: newRing(defaultWindow), method: strings.ToUpper(strings.TrimSpace(r.Method))}
 		sa.routes[route] = rr
 	}
 	rr.times.add(ms, at)
+	rr.lastAt = at
 	rr.example = StripQueryFragment(r.URI)
 	sa.updated = now
+}
+
+// evictStaleRoutes deletes routes whose most recent sample is older than cutoff.
+// A route with no recent samples contributes nothing to a snapshot anyway, so
+// freeing its slot is loss-free and keeps the route cap counting live routes.
+func (sa *siteAgg) evictStaleRoutes(cutoff int64) {
+	for route, r := range sa.routes {
+		if r.lastAt < cutoff {
+			delete(sa.routes, route)
+		}
+	}
 }
 
 // SiteSnapshot returns the current view for one site, ok=false when the site has
@@ -167,7 +191,7 @@ func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 		// full second, surfaced even from a single hit so a genuinely broken route a
 		// dev triggers once doesn't hide under the sample floor.
 		tail := percentile(vals, 95)
-		relSlow := len(vals) >= defaultMinSample && base > 0 && tail/base >= defaultFactor
+		relSlow := len(vals) >= defaultMinSample && base > 0 && tail >= relSlowFloorMillis && tail/base >= defaultFactor
 		absSlow := tail >= slowAbsoluteMillis
 		if !relSlow && !absSlow {
 			continue

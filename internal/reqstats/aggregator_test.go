@@ -2,6 +2,7 @@ package reqstats
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -128,6 +129,52 @@ func TestAggregatorRecentWindowDecay(t *testing.T) {
 	snap, _ = a.SiteSnapshot("myapp")
 	if hasSlowRoute(snap, "POST /place/search") {
 		t.Error("a route whose slow samples aged out of the recency window must clear")
+	}
+}
+
+// At the route cap a new route is dropped while every existing route is still
+// recent, but once the old routes age past the recency window they are evicted
+// so the site keeps recording live traffic instead of wedging forever (#1).
+func TestAggregatorEvictsStaleRoutesAtCap(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	clock := time.Unix(1_700_000_000, 0)
+	a.now = func() time.Time { return clock }
+
+	for i := 0; i < defaultMaxRoutes; i++ {
+		a.Record(AccessRecord{Host: "myapp.test", Status: 200, RequestTime: 0.04, Method: "GET", URI: fmt.Sprintf("/old%d", i)})
+	}
+	// Cap is full and nothing is stale: a new slow route can't get in.
+	recordN(a, "myapp.test", "GET", "/blocked", 2000, 2)
+	if snap, _ := a.SiteSnapshot("myapp"); hasSlowRoute(snap, "GET /blocked") {
+		t.Fatal("a new route at a full cap of live routes must be dropped")
+	}
+
+	// Age every existing route out of the recency window, then a new slow route
+	// evicts the stale ones and is recorded.
+	clock = clock.Add(recentWindow + time.Minute)
+	recordN(a, "myapp.test", "GET", "/fresh", 2000, 2)
+	if snap, _ := a.SiteSnapshot("myapp"); !hasSlowRoute(snap, "GET /fresh") {
+		t.Error("a new route must be recorded once stale routes free slots under the cap")
+	}
+}
+
+// A fast route must not be flagged slow just because a very frequent faster
+// endpoint drags the site baseline toward zero: the relative rule requires the
+// route's p95 to clear an absolute floor first (#2).
+func TestAggregatorRelativeSlowFloor(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/health", 5, 300)     // fast poller skews the median down
+	recordN(a, "myapp.test", "GET", "/dashboard", 100, 20) // 20x the skewed baseline, but only 100ms
+
+	snap, _ := a.SiteSnapshot("myapp")
+	if hasSlowRoute(snap, "GET /dashboard") {
+		t.Error("a 100ms route must not be flagged off a baseline skewed by a fast poller")
+	}
+
+	recordN(a, "myapp.test", "GET", "/reports", 400, 20) // genuinely slow, clears the floor
+	snap, _ = a.SiteSnapshot("myapp")
+	if !hasSlowRoute(snap, "GET /reports") {
+		t.Error("a 400ms route well above baseline must still be flagged")
 	}
 }
 

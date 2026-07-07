@@ -8,23 +8,27 @@ import (
 	"github.com/geodro/lerd/internal/reqstats"
 )
 
-// slowRouteNotifier turns newly-flagged slow routes into push notifications. It
-// is edge-triggered: a route notifies once when it crosses into the slow band,
-// and its warned state is cleared once it drops back within the site's typical
-// response time, so a later slowdown of the same route notifies again. This
-// keeps the kind low-volume without silencing a route forever.
+// slowRouteClearAfter is how many consecutive snapshots a warned route must be
+// missing from the (truncated) slow list before it re-arms, so a route briefly
+// bumped off the top by slower siblings doesn't fire a duplicate notification.
+const slowRouteClearAfter = 3
+
+// slowRouteNotifier turns newly-flagged slow routes into push notifications,
+// edge-triggered: a route notifies once on crossing into the slow band and
+// re-arms only after it stays off the list long enough to count as recovered.
 type slowRouteNotifier struct {
-	warned map[string]bool
+	// absences counts consecutive snapshots a warned route has been missing from
+	// the slow list; 0 means seen this round. A key present here is "warned".
+	absences map[string]int
 }
 
 func newSlowRouteNotifier() *slowRouteNotifier {
-	return &slowRouteNotifier{warned: map[string]bool{}}
+	return &slowRouteNotifier{absences: map[string]int{}}
 }
 
-// notifications returns a push notification for each route that has become slow
-// since a prior call, and clears any previously-warned route that is no longer
-// flagged (it recovered). domainOf resolves a site name to the domain used in
-// the dashboard deep link.
+// notifications returns a push notification for each route newly gone slow, and
+// clears a warned route only after slowRouteClearAfter snapshots off the list.
+// domainOf resolves a site name to the domain used in the dashboard deep link.
 func (n *slowRouteNotifier) notifications(snaps []reqstats.SiteStats, domainOf func(string) string) []push.Notification {
 	current := make(map[string]bool)
 	var out []push.Notification
@@ -32,28 +36,39 @@ func (n *slowRouteNotifier) notifications(snaps []reqstats.SiteStats, domainOf f
 		for _, r := range s.Slow {
 			key := s.Site + "\x00" + r.Route
 			current[key] = true
-			if n.warned[key] {
+			if _, warned := n.absences[key]; warned {
+				n.absences[key] = 0 // still slow: reset the absence streak
 				continue
 			}
-			n.warned[key] = true
+			n.absences[key] = 0
 			out = append(out, notificationForSlowRoute(s.Site, domainOf(s.Site), r))
 		}
 	}
-	// Drop routes that fell back within the typical band so the next slowdown
-	// fires a fresh notification.
-	for key := range n.warned {
-		if !current[key] {
-			delete(n.warned, key)
+	// Age out routes missing this round; clear only after a sustained absence so a
+	// route briefly displaced from the truncated slow list doesn't re-notify.
+	for key := range n.absences {
+		if current[key] {
+			continue
+		}
+		n.absences[key]++
+		if n.absences[key] >= slowRouteClearAfter {
+			delete(n.absences, key)
 		}
 	}
 	return out
 }
 
 func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.Notification {
+	// With no usable baseline (an all-zero-ms site median) the multiplier is 0,
+	// so fall back to the absolute phrasing instead of "0x slower than usual".
+	body := fmt.Sprintf("%s p95 is %gms", r.Route, r.P95Millis)
+	if r.Multiplier > 0 {
+		body = fmt.Sprintf("%s is %gx slower than usual (%gms)", r.Route, r.Multiplier, r.P95Millis)
+	}
 	return push.Notification{
 		Kind:    "slow_route",
 		Title:   "Slow route on " + site,
-		Body:    fmt.Sprintf("%s is %gx slower than usual (%gms)", r.Route, r.Multiplier, r.P95Millis),
+		Body:    body,
 		Tag:     "lerd-slowroute-" + site + "-" + r.Route,
 		URL:     "#sites/" + domain + "/dumps",
 		Data:    map[string]string{"site": site, "route": r.Route},
