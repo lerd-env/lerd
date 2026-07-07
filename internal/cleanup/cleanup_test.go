@@ -40,7 +40,7 @@ func TestInspect_ReclaimsOnlyOrphanedLerdImages(t *testing.T) {
 		{ID: "sha256:eee", Names: []string{"<none>:<none>"}, Size: 1600, SharedSize: 600, Labels: map[string]string{"dev.lerd.frankenphp.containerfile-hash": "h3"}},
 	}, nil)
 
-	p, err := Inspect(false)
+	p, err := Inspect(ScopeSafe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestInspect_NeverTargetsNonLerd(t *testing.T) {
 		{ID: "sha256:333", Names: []string{"<none>:<none>"}, Size: 999, Labels: map[string]string{"maintainer": "x"}}, // dangling, foreign label
 	}, nil)
 
-	p, err := Inspect(false)
+	p, err := Inspect(ScopeSafe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func TestInspect_DeepReapsAllDanglingImages(t *testing.T) {
 		protectedImages = realProtectedImages
 	})
 
-	p, err := Inspect(true)
+	p, err := Inspect(ScopeDeep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -108,6 +108,55 @@ func TestInspect_DeepReapsAllDanglingImages(t *testing.T) {
 	}
 	if got["live"] || got["tag"] {
 		t.Errorf("a tagged image must never be reaped, got %+v", p.Targets)
+	}
+}
+
+// The managed tier is the unattended watcher's scope: it reclaims a lerd catalog
+// upgrade leftover but must never touch a user's foreign dangling image, which
+// only the interactive deep tier reaps. This is the guard against the daily
+// sweep silently pruning another podman workload's dangling layers.
+func TestInspect_ManagedReapsCatalogNotForeignDangling(t *testing.T) {
+	withImages(t, []image{
+		{ID: "m57", Names: []string{"docker.io/library/mysql:5.7"}, Size: 400}, // catalog leftover
+		{ID: "m84", Names: []string{"docker.io/library/mysql:8.4"}, Size: 500}, // current → keep
+		{ID: "foreign", Names: nil, Size: 900},                                 // foreign dangling → managed keeps
+	}, nil)
+	serviceRepos = func() (map[string]bool, error) {
+		return map[string]bool{"docker.io/library/mysql": true}, nil
+	}
+	protectedImages = func() (map[string]bool, error) {
+		return map[string]bool{"docker.io/library/mysql:8.4": true}, nil
+	}
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	managed, err := Inspect(ScopeManaged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, tg := range managed.Targets {
+		got[tg.ID] = true
+	}
+	if !got["docker.io/library/mysql:5.7"] {
+		t.Errorf("managed tier should reap the catalog leftover, got %+v", managed.Targets)
+	}
+	if got["foreign"] {
+		t.Errorf("managed tier must not reap a foreign dangling image, got %+v", managed.Targets)
+	}
+
+	deep, err := Inspect(ScopeDeep)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deepGot := map[string]bool{}
+	for _, tg := range deep.Targets {
+		deepGot[tg.ID] = true
+	}
+	if !deepGot["docker.io/library/mysql:5.7"] || !deepGot["foreign"] {
+		t.Errorf("deep tier should reap both the catalog leftover and the foreign dangling image, got %+v", deep.Targets)
 	}
 }
 
@@ -125,7 +174,7 @@ func TestInspect_SkipsInUseDanglingImages(t *testing.T) {
 		protectedImages = realProtectedImages
 	})
 
-	p, err := Inspect(true)
+	p, err := Inspect(ScopeDeep)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,7 +218,7 @@ func TestInspect_ReclaimsOrphanBasesKeepsInUse(t *testing.T) {
 		},
 	)
 
-	p, err := Inspect(false)
+	p, err := Inspect(ScopeSafe)
 	if err != nil {
 		t.Fatal(err)
 	}

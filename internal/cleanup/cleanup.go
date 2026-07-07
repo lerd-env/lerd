@@ -131,6 +131,23 @@ func podmanImageLayers(ids []string) (map[string][]string, error) {
 	return m, nil
 }
 
+// Scope selects how wide a cleanup reaches. The levels are ordered and additive,
+// so each tier includes everything the tier before it removes.
+type Scope int
+
+const (
+	// ScopeSafe reclaims only images provably lerd's own: orphaned derived builds
+	// and unreferenced base images.
+	ScopeSafe Scope = iota
+	// ScopeManaged additionally reclaims catalog service images no service
+	// references any more (upgrade leftovers). Still lerd-scoped, so it is safe to
+	// run unattended; this is the daily watcher's tier.
+	ScopeManaged
+	// ScopeDeep additionally reclaims every remaining dangling image on the host,
+	// foreign ones included. Interactive only (`lerd cleanup --deep`).
+	ScopeDeep
+)
+
 // Inspect returns the cleanup plan. The always-safe tier reclaims what is
 // provably lerd's:
 //   - derived images lerd built and then orphaned: lerd tags every live build
@@ -141,13 +158,18 @@ func podmanImageLayers(ids []string) (map[string][]string, error) {
 //
 // Both removals are refcount-safe: layers a live image still shares are kept.
 //
-// When deep is true it also reclaims the aggressive tier: every remaining
-// dangling image (untagged and unreferenced, so removing it strands nothing),
-// plus catalog service images no service references any more (see deepTargets).
-// An image a container still holds is skipped everywhere, since podman can't
-// remove it. If the protected set can't be built the service reap is skipped
-// rather than risk a wrong removal.
-func Inspect(deep bool) (Plan, error) {
+// Beyond the safe tier the scope widens in two independent steps. ScopeManaged
+// adds catalog service images no service references any more (see deepTargets):
+// still provably lerd's, so the unattended watcher can reclaim an upgrade's
+// leftovers without surprising a user's other podman images. ScopeDeep adds
+// every remaining dangling image on the host (untagged and unreferenced, so
+// removing it strands nothing), including foreign ones, and is only reached from
+// the interactive `lerd cleanup --deep`. An image a container still holds is
+// skipped everywhere, since podman can't remove it. If the protected set can't
+// be built the service reap is skipped rather than risk a wrong removal.
+func Inspect(scope Scope) (Plan, error) {
+	reapCatalog := scope >= ScopeManaged
+	reapAllDangling := scope >= ScopeDeep
 	imgs, err := scanImages()
 	if err != nil {
 		return Plan{}, err
@@ -165,7 +187,7 @@ func Inspect(deep bool) (Plan, error) {
 			// it. If it is a dangling image this tier would otherwise reap (an old
 			// build the container hasn't been recreated off yet), tally it so the
 			// caller can hint that a restart would release the space.
-			if isOrphaned(img) && (isLerd(img) || deep) {
+			if isOrphaned(img) && (isLerd(img) || reapAllDangling) {
 				p.Held.Count++
 				p.Held.Bytes += reclaimable(img)
 			}
@@ -174,7 +196,7 @@ func Inspect(deep bool) (Plan, error) {
 			// A dangling image is untagged and unreferenced, so removing it frees
 			// disk and strands nothing. Provable lerd orphans go in every tier;
 			// other dangling leftovers only when the deep tier is on.
-			if isLerd(img) || deep {
+			if isLerd(img) || reapAllDangling {
 				add(shortID(img.ID), describeOrphan(img), reclaimable(img))
 			}
 		default:
@@ -200,7 +222,7 @@ func Inspect(deep bool) (Plan, error) {
 		}
 	}
 
-	if deep {
+	if reapCatalog {
 		repos, repoErr := serviceRepos()
 		prot, protErr := protectedImages()
 		if repoErr == nil && protErr == nil {

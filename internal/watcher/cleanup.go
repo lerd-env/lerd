@@ -16,12 +16,13 @@ import (
 // while keeping the watcher quiet.
 const autoCleanupInterval = 24 * time.Hour
 
-// autoSweep is the sweep the watcher runs; the deep tier so upgraded service
-// images left behind get reclaimed unattended. Seam for tests.
-var autoSweep = cleanup.SweepDeep
+// autoSweep is the sweep the watcher runs; the managed tier so upgraded service
+// images left behind get reclaimed unattended, without ever reaping a foreign
+// dangling image the way the interactive deep tier does. Seam for tests.
+var autoSweep = cleanup.SweepManaged
 
 // WatchCleanup periodically reclaims orphaned lerd images and unused service
-// images (the deep tier). It ticks at interval but acts at most once per
+// images (the managed tier). It ticks at interval but acts at most once per
 // autoCleanupInterval, throttled by a persisted timestamp so a restarting
 // watcher can't sweep more often. The auto_cleanup config gate turns it off.
 func WatchCleanup(interval time.Duration) {

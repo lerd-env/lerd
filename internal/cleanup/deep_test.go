@@ -101,7 +101,7 @@ func TestInspect_DeepAppendsUnusedServiceImages(t *testing.T) {
 		protectedImages = realProtectedImages
 	})
 
-	safe, err := Inspect(false)
+	safe, err := Inspect(ScopeSafe)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -109,7 +109,7 @@ func TestInspect_DeepAppendsUnusedServiceImages(t *testing.T) {
 		t.Fatalf("safe tier must not touch service images, got %+v", safe.Targets)
 	}
 
-	deep, err := Inspect(true)
+	deep, err := Inspect(ScopeDeep)
 	if err != nil {
 		t.Fatal(err)
 	}
