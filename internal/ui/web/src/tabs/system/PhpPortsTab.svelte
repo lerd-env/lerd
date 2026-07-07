@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import PortsEditor from '$components/PortsEditor.svelte';
   import { status } from '$stores/status';
   import { setFpmPorts } from '$stores/phpVersions';
@@ -17,12 +18,14 @@
   let saving = $state(false);
   let error = $state('');
 
-  // Reseed the optimistic list from the persisted set on version change or a
-  // broadcast. Not gated on `saving`: gating made the save's own saving->false
-  // transition reseed from a lagging `current` and flicker the just-changed card.
+  // Reseed on version change or a broadcast. `saving` is read untracked so the
+  // save's own saving->false transition never re-runs this (the old flicker),
+  // and a mid-save broadcast is skipped so it can't clobber the optimistic list.
   $effect(() => {
     version;
-    ports = [...current];
+    const c = current;
+    if (untrack(() => saving)) return;
+    ports = [...c];
     error = '';
   });
 

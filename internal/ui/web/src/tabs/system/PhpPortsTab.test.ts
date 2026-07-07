@@ -50,6 +50,26 @@ describe('PhpPortsTab', () => {
     expect(getByText('9100')).toBeTruthy();
   });
 
+  it('does not clobber the optimistic list when a broadcast arrives mid-save', async () => {
+    let resolveSave!: (r: unknown) => void;
+    setFpmPorts.mockImplementation(() => new Promise((res) => (resolveSave = res)));
+    const { container, getByLabelText, getByText } = render(PhpPortsTab, { props: { version: '8.4' } });
+    const [host, cont] = numberInputs(container);
+    await fireEvent.input(host, { target: { value: '9100' } });
+    await fireEvent.input(cont, { target: { value: '9100' } });
+    await fireEvent.click(getByLabelText('Add'));
+    expect(getByText('9100')).toBeTruthy();
+
+    // A status broadcast lands while the save is still in flight, showing the
+    // pre-save ports (the FPM restart hasn't applied yet). It must not revert
+    // the optimistic 9100 card.
+    status.set({ php_fpms: [{ version: '8.4', ports: ['9000:9000'] }] });
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getByText('9100')).toBeTruthy();
+
+    resolveSave({ ok: true, ports: ['9000:9000', '9100:9100'] });
+  });
+
   it('rolls back to the persisted set when the save fails', async () => {
     setFpmPorts.mockResolvedValue({ ok: false, error: 'nope' });
     const { container, getByLabelText, getByText, queryByText } = render(PhpPortsTab, {
