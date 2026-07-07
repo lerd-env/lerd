@@ -96,11 +96,14 @@ var aiClients = []aiClient{
 		}},
 	},
 	{
-		Name:       "windsurf",
-		ProjectMCP: filepath.Join(".ai", "mcp", "mcp.json"),
-		GlobalMCP:  filepath.Join(".ai", "mcp", "mcp.json"),
-		MCPFormat:  fmtJSONMcpServers,
-		ServerKey:  "mcpServers",
+		Name: "windsurf",
+		// Windsurf reads a single user-level config and has no project-scoped MCP
+		// file, so register globally only. The old .ai/mcp/mcp.json path was never
+		// Windsurf's — that directory belongs to Laravel Boost — so lerd no longer
+		// writes it; legacySharedAIMCP sweeps up any entry an older lerd left there.
+		GlobalMCP: filepath.Join(".codeium", "windsurf", "mcp_config.json"),
+		MCPFormat: fmtJSONMcpServers,
+		ServerKey: "mcpServers",
 	},
 	{
 		Name: "codex",
@@ -152,30 +155,29 @@ var aiClients = []aiClient{
 	},
 }
 
-// lerdJSONEntry builds the JSON MCP server entry. sitePath, when non-empty, is
-// written as LERD_SITE_PATH so a project-scoped server pins to its directory;
-// global entries omit it and the server falls back to the cwd at runtime.
-func lerdJSONEntry(needsType bool, sitePath string) map[string]any {
+// lerdJSONEntry builds the JSON MCP server entry. The entry is identical at
+// every scope and carries no machine-specific data: the server resolves the
+// site from the directory the assistant is opened in (cwd) at runtime. Project
+// entries deliberately omit LERD_SITE_PATH so a committed .mcp.json / .ai config
+// stays portable across every teammate's checkout.
+func lerdJSONEntry(needsType bool) map[string]any {
 	entry := map[string]any{"command": "lerd", "args": []string{"mcp"}}
 	if needsType {
 		entry["type"] = "stdio"
-	}
-	if sitePath != "" {
-		entry["env"] = map[string]string{"LERD_SITE_PATH": sitePath}
 	}
 	return entry
 }
 
 // writeClientMCP writes/merges the lerd MCP entry into a client's config file,
 // creating parent directories as needed.
-func writeClientMCP(path string, c aiClient, sitePath string) error {
+func writeClientMCP(path string, c aiClient) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return fmt.Errorf("creating %s: %w", filepath.Dir(path), err)
 	}
 	if c.MCPFormat == fmtTOMLCodex {
 		return mergeCodexTOML(path)
 	}
-	return mergeServerJSON(path, c.ServerKey, lerdJSONEntry(c.NeedsType, sitePath))
+	return mergeServerJSON(path, c.ServerKey, lerdJSONEntry(c.NeedsType))
 }
 
 // writeClientContext writes a context/instructions doc per its format.
@@ -217,6 +219,31 @@ func contextAlreadyPresent(path string, cx ctxFile) bool {
 	}
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// legacySharedAIMCP is the .ai/mcp/mcp.json path (relative to a project root or
+// $HOME) that an older lerd wrote as "Windsurf" config. Windsurf never read it
+// and it collides with Laravel Boost's .ai/ directory, so lerd no longer writes
+// it and sweeps up any stray lerd entry left behind.
+var legacySharedAIMCP = filepath.Join(".ai", "mcp", "mcp.json")
+
+// sweepLegacySharedAIMCP strips the lerd entry from dir/.ai/mcp/mcp.json,
+// preserving any other MCP servers (e.g. laravel-boost) and removing the file
+// plus its now-empty parents when lerd was the only entry. Missing file is a
+// no-op. Returns whether anything changed.
+func sweepLegacySharedAIMCP(dir string) bool {
+	path := filepath.Join(dir, legacySharedAIMCP)
+	changed, err := removeServerJSON(path, "mcpServers", "lerd")
+	if err != nil || !changed {
+		return false
+	}
+	// removeServerJSON deletes the file when lerd was the only server; clear the
+	// empty .ai/mcp and .ai directories too so nothing dangles in the repo.
+	if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+		_ = os.Remove(filepath.Dir(path))
+		_ = os.Remove(filepath.Dir(filepath.Dir(path)))
+	}
+	return true
 }
 
 // removeClientMCP drops the lerd entry from a client's MCP config file.

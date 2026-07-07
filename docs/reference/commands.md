@@ -328,8 +328,10 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | Command | Description |
 |---|---|
 | `lerd mcp:enable-global` | Register lerd MCP at user scope across every supported assistant (Claude Code, Cursor, Junie, Codex, Gemini, Copilot, Antigravity, Windsurf), available in every session regardless of directory |
+| `lerd mcp:disable-global` | Unregister the user-scope lerd MCP server and remove the user-scope skill files (inverse of `mcp:enable-global`) |
 | `lerd mcp:inject` | Inject the lerd MCP config and AI skill files into the current project |
 | `lerd mcp:inject --path <dir>` | Inject into a specific project directory |
+| `lerd mcp:eject` | Remove the lerd MCP config and AI skill files from the current project (inverse of `mcp:inject`); use `--path <dir>` to target another directory |
 
 ## Dashboard
 

@@ -234,7 +234,6 @@ func TestWriteProjectAISkills_writesAllArtefacts(t *testing.T) {
 	want := []string{
 		".mcp.json",
 		".cursor/mcp.json",
-		".ai/mcp/mcp.json",
 		".junie/mcp/mcp.json",
 		".gemini/settings.json",
 		".vscode/mcp.json",
@@ -258,6 +257,11 @@ func TestWriteProjectAISkills_writesAllArtefacts(t *testing.T) {
 	// Codex MCP is global-only: no project config file should be written.
 	if _, err := os.Stat(filepath.Join(dir, ".codex", "config.toml")); !os.IsNotExist(err) {
 		t.Errorf("expected no project .codex/config.toml (Codex is global-only), err=%v", err)
+	}
+	// Windsurf is global-only and .ai/ belongs to Laravel Boost: lerd must never
+	// write a project .ai/mcp/mcp.json.
+	if _, err := os.Stat(filepath.Join(dir, ".ai", "mcp", "mcp.json")); !os.IsNotExist(err) {
+		t.Errorf("expected no project .ai/mcp/mcp.json (Windsurf is global-only), err=%v", err)
 	}
 	if !ProjectHasLerdSkills(dir) {
 		t.Errorf("ProjectHasLerdSkills should return true after WriteProjectAISkills")
@@ -485,6 +489,25 @@ func TestRemoveProjectAISkills_roundTripWithWrite(t *testing.T) {
 		if _, err := os.Stat(filepath.Join(abs, rel)); !os.IsNotExist(err) {
 			t.Errorf("%s should be removed, err=%v", rel, err)
 		}
+	}
+}
+
+func TestRunMCPEject_roundTripWithInject(t *testing.T) {
+	dir := t.TempDir()
+	if err := runMCPInject(dir); err != nil {
+		t.Fatalf("inject: %v", err)
+	}
+	if !ProjectHasLerdSkills(dir) {
+		t.Fatal("precondition: inject should have produced markers")
+	}
+	if err := runMCPEject(dir); err != nil {
+		t.Fatalf("eject: %v", err)
+	}
+	if ProjectHasLerdSkills(dir) {
+		t.Errorf("ProjectHasLerdSkills should be false after eject")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".mcp.json")); !os.IsNotExist(err) {
+		t.Errorf(".mcp.json should be gone after eject, err=%v", err)
 	}
 }
 

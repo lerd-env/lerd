@@ -87,7 +87,7 @@ func TestAntigravityGlobalConfig(t *testing.T) {
 	if ag.ProjectMCP != "" {
 		t.Errorf("antigravity should be global-only, got ProjectMCP=%q", ag.ProjectMCP)
 	}
-	if err := writeClientMCP(filepath.Join(home, ag.GlobalMCP), ag, ""); err != nil {
+	if err := writeClientMCP(filepath.Join(home, ag.GlobalMCP), ag); err != nil {
 		t.Fatalf("writeClientMCP: %v", err)
 	}
 	data, err := os.ReadFile(filepath.Join(home, ".gemini", "config", "mcp_config.json"))
@@ -230,13 +230,13 @@ func TestWriteGlobalMCPConfigs_writesFileBackedClients(t *testing.T) {
 		if c.GlobalViaCLI || c.GlobalMCP == "" {
 			continue
 		}
-		if err := writeClientMCP(filepath.Join(home, c.GlobalMCP), c, ""); err != nil {
+		if err := writeClientMCP(filepath.Join(home, c.GlobalMCP), c); err != nil {
 			t.Fatalf("writeClientMCP(%s): %v", c.Name, err)
 		}
 	}
 	for _, rel := range []string{
 		filepath.Join(".cursor", "mcp.json"),
-		filepath.Join(".ai", "mcp", "mcp.json"),
+		filepath.Join(".codeium", "windsurf", "mcp_config.json"),
 		filepath.Join(".junie", "mcp", "mcp.json"),
 		filepath.Join(".gemini", "settings.json"),
 		filepath.Join(".codex", "config.toml"),
@@ -338,18 +338,98 @@ func TestRefreshProjectAISkills_onlyTouchesExisting(t *testing.T) {
 	}
 }
 
-// TestProjectMCP_carriesSitePath confirms project-scoped JSON entries pin the
-// site directory via LERD_SITE_PATH.
-func TestProjectMCP_carriesSitePath(t *testing.T) {
+// TestRefreshProjectAISkills_respectsOptOut confirms a project with
+// mcp_inject: false in .lerd.yaml is left untouched on the automatic refresh
+// path, so a self-update never rewrites its committed MCP config.
+func TestRefreshProjectAISkills_respectsOptOut(t *testing.T) {
+	dir := t.TempDir()
+	stale := []byte(`{"mcpServers":{"lerd":{"command":"lerd","args":["mcp"]}}}`)
+	if err := os.WriteFile(filepath.Join(dir, ".mcp.json"), stale, 0644); err != nil {
+		t.Fatalf("seed mcp.json: %v", err)
+	}
+	skill := filepath.Join(dir, ".claude", "skills", "lerd", "SKILL.md")
+	if err := os.MkdirAll(filepath.Dir(skill), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(skill, []byte("stale"), 0644); err != nil {
+		t.Fatalf("seed skill: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("mcp_inject: false\n"), 0644); err != nil {
+		t.Fatalf("seed .lerd.yaml: %v", err)
+	}
+
+	if err := RefreshProjectAISkills(dir, false); err != nil {
+		t.Fatalf("RefreshProjectAISkills: %v", err)
+	}
+
+	if got, _ := os.ReadFile(skill); string(got) != "stale" {
+		t.Error("opted-out project had its SKILL.md rewritten")
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, ".mcp.json")); string(got) != string(stale) {
+		t.Errorf("opted-out project had its .mcp.json rewritten: %s", got)
+	}
+}
+
+// TestSweepLegacySharedAIMCP_removesLerdKeepsBoost confirms the .ai/mcp/mcp.json
+// cleanup strips only lerd's entry, leaves a Boost-owned entry intact, and
+// deletes the file plus its empty parents when lerd was the sole server.
+func TestSweepLegacySharedAIMCP_removesLerdKeepsBoost(t *testing.T) {
+	// Boost owns the file: lerd's entry is stripped, laravel-boost stays.
+	shared := t.TempDir()
+	p := filepath.Join(shared, ".ai", "mcp", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(p), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	body := `{"mcpServers":{"laravel-boost":{"command":"php"},"lerd":{"command":"lerd","args":["mcp"]}}}`
+	if err := os.WriteFile(p, []byte(body), 0644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if !sweepLegacySharedAIMCP(shared) {
+		t.Fatal("sweep should report a change")
+	}
+	got, _ := os.ReadFile(p)
+	if strings.Contains(string(got), `"lerd"`) {
+		t.Errorf("lerd entry should be gone: %s", got)
+	}
+	if !strings.Contains(string(got), "laravel-boost") {
+		t.Errorf("laravel-boost entry should survive: %s", got)
+	}
+
+	// lerd-only file: the whole .ai/mcp/mcp.json and its empty parents are removed.
+	solo := t.TempDir()
+	sp := filepath.Join(solo, ".ai", "mcp", "mcp.json")
+	if err := os.MkdirAll(filepath.Dir(sp), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(sp, []byte(`{"mcpServers":{"lerd":{"command":"lerd"}}}`), 0644); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	if !sweepLegacySharedAIMCP(solo) {
+		t.Fatal("sweep should report a change for the solo file")
+	}
+	if _, err := os.Stat(filepath.Join(solo, ".ai")); !os.IsNotExist(err) {
+		t.Errorf("empty .ai directory should be removed, err=%v", err)
+	}
+
+	// No file: no-op.
+	if sweepLegacySharedAIMCP(t.TempDir()) {
+		t.Error("sweep of a dir with no .ai/mcp/mcp.json should report no change")
+	}
+}
+
+// TestProjectMCP_isPortable confirms project-scoped JSON entries carry no
+// machine-specific data: no LERD_SITE_PATH and no absolute site path, so a
+// committed .mcp.json stays identical across every teammate's checkout.
+func TestProjectMCP_isPortable(t *testing.T) {
 	dir := t.TempDir()
 	if err := WriteProjectAISkills(dir, false); err != nil {
 		t.Fatalf("WriteProjectAISkills: %v", err)
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, ".mcp.json"))
-	if !strings.Contains(string(data), "LERD_SITE_PATH") {
-		t.Errorf("project entry should pin LERD_SITE_PATH: %s", data)
+	if strings.Contains(string(data), "LERD_SITE_PATH") {
+		t.Errorf("project entry should not pin LERD_SITE_PATH: %s", data)
 	}
-	if !strings.Contains(string(data), dir) {
-		t.Errorf("project entry should reference the site dir %s: %s", dir, data)
+	if strings.Contains(string(data), dir) {
+		t.Errorf("project entry should not bake in the absolute site dir %s: %s", dir, data)
 	}
 }
