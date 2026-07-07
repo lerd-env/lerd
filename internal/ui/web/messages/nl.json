@@ -610,6 +610,7 @@
   "system_lan_remote_copyTooltip_copied": "Gekopieerd!",
   "system_lan_remote_footer": "Het eindpunt is beperkt tot RFC 1918-bron-IP's en de code is eenmalig bruikbaar. Klik opnieuw op {generate} voor een nieuwe code.",
   "system_remote_title": "Externe dashboardtoegang",
+  "system_remote_address": "Dashboardadres",
   "system_remote_status_active": "actief",
   "system_remote_status_inert": "inert",
   "system_remote_status_disabled": "uitgeschakeld",

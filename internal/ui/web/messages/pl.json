@@ -595,6 +595,7 @@
   "system_lan_remote_copyTooltip_copied": "Skopiowano!",
   "system_lan_remote_footer": "Punkt końcowy jest ograniczony do źródłowych adresów IP z RFC 1918, a kod jest jednorazowy. Kliknij {generate} ponownie, aby uzyskać świeży kod.",
   "system_remote_title": "Zdalny dostęp do pulpitu",
+  "system_remote_address": "Adres panelu",
   "system_remote_status_active": "aktywny",
   "system_remote_status_inert": "nieaktywny",
   "system_remote_status_disabled": "wyłączony",

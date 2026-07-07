@@ -610,6 +610,7 @@
   "system_lan_remote_copyTooltip_copied": "Kopyalandı!",
   "system_lan_remote_footer": "Uç nokta RFC 1918 kaynak IP'leriyle kısıtlıdır ve kod tek kullanımlıktır. Yeni bir kod için tekrar {generate}'a tıklayın.",
   "system_remote_title": "Uzak pano erişimi",
+  "system_remote_address": "Pano adresi",
   "system_remote_status_active": "aktif",
   "system_remote_status_inert": "atıl",
   "system_remote_status_disabled": "devre dışı",

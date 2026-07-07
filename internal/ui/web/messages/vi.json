@@ -595,6 +595,7 @@
   "system_lan_remote_copyTooltip_copied": "Đã sao chép!",
   "system_lan_remote_footer": "Endpoint bị giới hạn cho các IP nguồn RFC 1918 và mã chỉ dùng một lần. Nhấp {generate} lần nữa để có mã mới.",
   "system_remote_title": "Truy cập bảng điều khiển từ xa",
+  "system_remote_address": "Địa chỉ bảng điều khiển",
   "system_remote_status_active": "đang hoạt động",
   "system_remote_status_inert": "không hoạt động",
   "system_remote_status_disabled": "đã tắt",

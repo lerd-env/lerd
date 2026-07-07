@@ -190,6 +190,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/push/devices", withCORS(handlePushDevices))
 	mux.HandleFunc("/api/push/test", withCORS(handlePushTest))
 	mux.HandleFunc("/api/lan-qr/", withCORS(handleLANQR))
+	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
 
 	// Cross-process notifier for CLI/MCP. Loopback-only. PollNow in a
 	// goroutine so the handler returns under the CLI's 500 ms POST
@@ -3093,6 +3094,30 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	png, err := qrcode.Encode(shareURL, qrcode.Medium, 160)
+	if err != nil {
+		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
+}
+
+// handleDashboardQR serves a QR code PNG encoding the dashboard's own LAN URL
+// (http://<lan-ip>:7073) so a phone can scan straight into the remote
+// dashboard. Only meaningful while LAN exposure is on; 404 otherwise.
+func handleDashboardQR(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := config.LoadGlobal()
+	if cfg == nil || !cfg.LAN.Exposed {
+		http.NotFound(w, r)
+		return
+	}
+	ip := uiPrimaryLANIP()
+	if ip == "" {
+		http.NotFound(w, r)
+		return
+	}
+	png, err := qrcode.Encode("http://"+ip+":7073", qrcode.Medium, 160)
 	if err != nil {
 		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
 		return

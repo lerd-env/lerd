@@ -595,6 +595,7 @@
   "system_lan_remote_copyTooltip_copied": "已复制！",
   "system_lan_remote_footer": "该端点仅限 RFC 1918 源 IP，且代码为一次性使用。再次点击 {generate} 获取新代码。",
   "system_remote_title": "远程仪表盘访问",
+  "system_remote_address": "仪表板地址",
   "system_remote_status_active": "活动",
   "system_remote_status_inert": "未生效",
   "system_remote_status_disabled": "已禁用",

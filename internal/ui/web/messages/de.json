@@ -610,6 +610,7 @@
   "system_lan_remote_copyTooltip_copied": "Kopiert!",
   "system_lan_remote_footer": "Der Endpunkt ist auf RFC-1918-Quell-IPs beschränkt und der Code ist einmalig nutzbar. Klicke erneut auf {generate} für einen neuen Code.",
   "system_remote_title": "Entfernter Dashboard-Zugriff",
+  "system_remote_address": "Dashboard-Adresse",
   "system_remote_status_active": "aktiv",
   "system_remote_status_inert": "inaktiv",
   "system_remote_status_disabled": "deaktiviert",

@@ -279,7 +279,19 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 			return
 		}
 
-		// 5. Validate HTTP Basic auth.
+		// 5. A valid session cookie authenticates without re-challenging.
+		// It is issued after a Basic-auth success below and HMAC'd with the
+		// password hash, so changing or clearing credentials invalidates it.
+		// This is what stops iOS Safari, which drops cached Basic
+		// credentials between refreshes, from prompting on every load.
+		now := time.Now()
+		if c, err := r.Cookie(remoteSessionCookie); err == nil &&
+			remoteSessionValid(c.Value, cfg.UI.Username, cfg.UI.PasswordHash, now) {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		// 6. Validate HTTP Basic auth.
 		user, pass, ok := r.BasicAuth()
 		if !ok {
 			w.Header().Set("WWW-Authenticate", `Basic realm="lerd dashboard"`)
@@ -300,6 +312,9 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 			return
 		}
 
+		// Basic auth cleared — mint a session cookie so the browser skips
+		// the challenge on subsequent requests.
+		setRemoteSessionCookie(w, cfg.UI.Username, cfg.UI.PasswordHash, now)
 		next.ServeHTTP(w, r)
 	})
 }
