@@ -594,6 +594,7 @@
   "system_lan_remote_copyTooltip_copied": "コピーしました！",
   "system_lan_remote_footer": "エンドポイントは RFC 1918 の送信元 IP に制限され、コードは 1 回限りです。新しいコードが必要なら再度 {generate} をクリックしてください。",
   "system_remote_title": "リモートダッシュボードアクセス",
+  "system_remote_address": "ダッシュボードのアドレス",
   "system_remote_status_active": "アクティブ",
   "system_remote_status_inert": "不活性",
   "system_remote_status_disabled": "無効",

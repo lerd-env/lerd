@@ -171,6 +171,67 @@ func TestRemoteControlGate_lanRequiresAuthWhenEnabled(t *testing.T) {
 	})
 }
 
+// TestRemoteControlGate_sessionCookie verifies that a successful Basic auth
+// mints a session cookie and that the cookie alone authenticates a later LAN
+// request without re-presenting the Authorization header. A tampered cookie
+// falls through to the 401 challenge. This is the iOS Safari fix: Safari drops
+// cached Basic credentials between refreshes, so the cookie carries the
+// session instead.
+func TestRemoteControlGate_sessionCookie(t *testing.T) {
+	setupConfigDir(t, "alice", "s3cret")
+
+	// Basic auth success must set the session cookie.
+	next := &nextHandler{}
+	gate := withRemoteControlGate(next)
+	req := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
+	req.RemoteAddr = "192.168.1.42:54321"
+	req.SetBasicAuth("alice", "s3cret")
+	rec := httptest.NewRecorder()
+	gate.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("Basic auth status = %d, want 200", rec.Code)
+	}
+	var session *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == remoteSessionCookie {
+			session = c
+		}
+	}
+	if session == nil {
+		t.Fatal("no session cookie set after successful Basic auth")
+	}
+
+	t.Run("cookie authenticates without Basic header", func(t *testing.T) {
+		next2 := &nextHandler{}
+		gate2 := withRemoteControlGate(next2)
+		req2 := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
+		req2.RemoteAddr = "192.168.1.42:54321"
+		req2.AddCookie(session)
+		rec2 := httptest.NewRecorder()
+		gate2.ServeHTTP(rec2, req2)
+		if !next2.called || rec2.Code != http.StatusOK {
+			t.Errorf("session cookie did not authenticate, status=%d", rec2.Code)
+		}
+	})
+
+	t.Run("tampered cookie falls through to 401", func(t *testing.T) {
+		flip := byte('0')
+		if session.Value[len(session.Value)-1] == '0' {
+			flip = '1'
+		}
+		next2 := &nextHandler{}
+		gate2 := withRemoteControlGate(next2)
+		req2 := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
+		req2.RemoteAddr = "192.168.1.42:54321"
+		req2.AddCookie(&http.Cookie{Name: remoteSessionCookie, Value: session.Value[:len(session.Value)-1] + string(flip)})
+		rec2 := httptest.NewRecorder()
+		gate2.ServeHTTP(rec2, req2)
+		if next2.called || rec2.Code != http.StatusUnauthorized {
+			t.Errorf("tampered cookie status = %d, want 401", rec2.Code)
+		}
+	})
+}
+
 // TestRemoteControlGate_lanOffOverridesCredentials verifies the top-level
 // LAN-exposure gate: when cfg.LAN.Exposed is false, LAN clients are denied
 // even if they present valid Basic auth credentials. This catches the
