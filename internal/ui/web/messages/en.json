@@ -602,6 +602,7 @@
   "system_lan_remote_copyTooltip_copied": "Copied!",
   "system_lan_remote_footer": "The endpoint is restricted to RFC 1918 source IPs and the code is single-use. Click {generate} again for a fresh code.",
   "system_remote_title": "Remote dashboard access",
+  "system_remote_address": "Dashboard address",
   "system_remote_status_active": "active",
   "system_remote_status_inert": "inert",
   "system_remote_status_disabled": "disabled",

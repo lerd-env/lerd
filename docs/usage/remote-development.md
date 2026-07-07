@@ -317,7 +317,9 @@ lerd lan:unexpose        # flip nginx back to 127.0.0.1, stop forwarder
 
 Check the current state with `lerd remote-control status` and `lerd lan:status`. Both can be run from a loopback shell at any time, even if you've forgotten the password.
 
-The browser handles the Basic auth prompt natively the first time the user visits `http://<server-ip>:7073`; they're prompted once and the credentials are cached for the session. There is no separate UI login screen.
+The browser handles the Basic auth prompt natively the first time the user visits `http://<server-ip>:7073`. On that first success lerd sets a `lerd_session` cookie (HttpOnly, `SameSite=Lax`, one week) and accepts it in place of the Authorization header on later requests, so the device stays signed in across refreshes rather than re-prompting. The cookie is HMAC-signed with the stored password hash, so rotating or clearing the credentials invalidates every outstanding session. This matters on iOS Safari, which otherwise drops cached Basic credentials between page loads and pops the password dialog on every refresh. There is no separate UI login screen.
+
+Once the dashboard is exposed and credentials are set, the **Remote dashboard access** card shows the `http://<server-ip>:7073` address alongside a QR code, so a phone on the same network can scan straight in.
 
 `lerd remote-control on` refuses to run when `lan:expose` is off, since dashboard credentials are meaningless while the dashboard is loopback-only.
 

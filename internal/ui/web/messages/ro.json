@@ -594,6 +594,7 @@
   "system_lan_remote_copyTooltip_copied": "Copiat!",
   "system_lan_remote_footer": "Endpoint-ul este restricționat la IP-uri sursă RFC 1918, iar codul este de unică folosință. Apasă {generate} din nou pentru un cod nou.",
   "system_remote_title": "Acces la tabloul de bord la distanță",
+  "system_remote_address": "Adresa panoului",
   "system_remote_status_active": "activ",
   "system_remote_status_inert": "inert",
   "system_remote_status_disabled": "dezactivat",

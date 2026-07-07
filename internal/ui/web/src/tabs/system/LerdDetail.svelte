@@ -15,8 +15,13 @@
   import Toggle from '$components/Toggle.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
-  import { apiFetch } from '$lib/api';
+  import { apiFetch, apiBase } from '$lib/api';
   import { m } from '../../paraglide/messages.js';
+
+  // The remote dashboard always binds :7073; when LAN-exposed we surface the
+  // address plus a scannable QR so a phone can jump straight in.
+  const dashboardURL = $derived('http://' + $lan.lanIP + ':7073');
+  const dashboardQRSrc = $derived(apiBase + '/api/dashboard-qr?v=' + encodeURIComponent($lan.lanIP));
 
   onMount(() => {
     loadLANStatus();
@@ -393,6 +398,15 @@
 
       {#if $remoteControl.enabled}
         <div class="space-y-2">
+          {#if $lan.exposed}
+            <div class="flex items-center justify-between gap-3 p-3 rounded-lg bg-gray-50 dark:bg-white/3 border border-gray-100 dark:border-lerd-border">
+              <div class="min-w-0">
+                <p class="text-[10px] font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">{m.system_remote_address()}</p>
+                <a href={dashboardURL} target="_blank" rel="noopener" class="text-sm text-teal-600 dark:text-teal-400 font-mono hover:underline break-all">{dashboardURL}</a>
+              </div>
+              <img src={dashboardQRSrc} width="112" height="112" alt={m.lanShare_qrAlt()} class="shrink-0 rounded-sm bg-white p-1" />
+            </div>
+          {/if}
           <p class="text-xs text-gray-600 dark:text-gray-400">
             {@html m.system_remote_usernameRow({ username: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + $remoteControl.username + '</code>' })}
           </p>

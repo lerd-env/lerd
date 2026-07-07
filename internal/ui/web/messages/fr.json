@@ -609,6 +609,7 @@
   "system_lan_remote_copyTooltip_copied": "Copié !",
   "system_lan_remote_footer": "Le endpoint est restreint aux IPs source RFC 1918 et le code est à usage unique. Cliquez {generate} à nouveau pour un code frais.",
   "system_remote_title": "Accès distant au tableau de bord",
+  "system_remote_address": "Adresse du tableau de bord",
   "system_remote_status_active": "actif",
   "system_remote_status_inert": "inerte",
   "system_remote_status_disabled": "désactivé",
