@@ -240,6 +240,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/devtools/status", withCORS(handleDevtoolsStatus))
 	mux.HandleFunc("/api/devtools/workers", withCORS(publishAfter(handleDevtoolsWorkers, eventbus.KindDevtoolsStatus)))
 	mux.HandleFunc("/api/open-editor", withCORS(handleOpenEditor))
+	mux.HandleFunc("/api/open-folder", withCORS(handleOpenFolder))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
@@ -577,6 +578,9 @@ type StatusResponse struct {
 	// image for, so the UI can limit a FrankenPHP site's version dropdown to
 	// the ones it can actually run (intersected client-side with installed).
 	FrankenPHPVersions []string `json:"frankenphp_php_versions"`
+	// Home is the user's home directory, so the UI can shorten displayed paths
+	// under it to a leading ~ without shipping the absolute path in the label.
+	Home string `json:"home"`
 }
 
 type DNSStatus struct {
@@ -646,6 +650,7 @@ func buildStatus() StatusResponse {
 		bunVersion = lerdNode.BunVersion()
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
+	homeDir, _ := os.UserHomeDir()
 	return StatusResponse{
 		DNS:                DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
 		Nginx:              ServiceCheck{Running: nginxRunning},
@@ -658,6 +663,7 @@ func buildStatus() StatusResponse {
 		UsingSystemBun:     usingSystemBun,
 		WatcherRunning:     watcherRunning,
 		FrankenPHPVersions: config.FrankenPHPVersions(),
+		Home:               homeDir,
 	}
 }
 

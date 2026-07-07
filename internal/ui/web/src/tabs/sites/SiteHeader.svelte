@@ -11,6 +11,7 @@
     restartSite,
     openSiteInBrowser,
     openTerminal,
+    openFolder,
     loadSites,
     activeWorktreeDomain,
     toggleTLS,
@@ -29,7 +30,7 @@
   import { status, loadStatus } from '$stores/status';
   import { xdebugOn, xdebugOff, type XdebugMode } from '$stores/xdebug';
   import { apiBase } from '$lib/api';
-  import ServiceBadgeRow from './ServiceBadgeRow.svelte';
+  import { homeShorten } from '$lib/path';
   import DomainMorePill from './DomainMorePill.svelte';
   import LANShareLink from './LANShareLink.svelte';
   import { m } from '../../paraglide/messages.js';
@@ -100,6 +101,7 @@
     return (site.worktrees || []).find((w) => w.branch === activeWorktreeBranch);
   });
   const activePath = $derived(activeWorktree?.path || site.path || '');
+  const activePathLabel = $derived(homeShorten(activePath, $status.home));
   const activeFrameworkLabel = $derived(activeWorktree?.framework_label || site.framework_label);
 
   type TabEntry = { branch: string; domain: string; isMain: boolean };
@@ -242,13 +244,13 @@
                 class="w-3.5 h-3.5 shrink-0 {isActive ? 'text-lerd-red' : 'text-gray-400 dark:text-gray-500'}"
                 fill="none"
                 stroke="currentColor"
-                stroke-width="1.8"
+                stroke-width="2"
                 stroke-linecap="round"
                 stroke-linejoin="round"
                 viewBox="0 0 24 24"
                 aria-label={m.sites_ariaMain()}
               >
-                <path d="M3 10.5L12 3l9 7.5V20a1 1 0 01-1 1h-4v-6h-8v6H4a1 1 0 01-1-1v-9.5z" />
+                <path d="M6 3v12M15 6a3 3 0 1 0 6 0a3 3 0 1 0-6 0M3 18a3 3 0 1 0 6 0a3 3 0 1 0-6 0M18 9a9 9 0 0 1-9 9" />
               </svg>
             {:else}
               <svg
@@ -299,7 +301,16 @@
       </div>
       {#if activePath}
         <div class="@md:shrink-0 px-3 pt-2 pb-1 @md:pt-0 @md:pb-2 @md:pl-2 @md:pr-3 flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400 min-w-0">
-          <span class="font-mono leading-none truncate max-w-full @md:max-w-[22rem]" title={activePath}>{activePath}</span>
+          {#if $accessMode.loopback}
+            <button
+              type="button"
+              onclick={() => openFolder(activePath)}
+              use:tooltip={m.sites_openFolder()}
+              class="font-mono leading-none truncate max-w-full @md:max-w-[22rem] hover:text-lerd-red transition-colors"
+            >{activePathLabel}</button>
+          {:else}
+            <span class="font-mono leading-none truncate max-w-full @md:max-w-[22rem]" title={activePath}>{activePathLabel}</span>
+          {/if}
         </div>
       {/if}
     </div>
@@ -429,23 +440,6 @@
 
       <DomainMorePill {site} />
 
-      {#if !activeWorktreeBranch && !site.host_proxy}
-        <button
-          type="button"
-          onclick={() => openGroupModal(site)}
-          aria-label={m.group_manage()}
-          use:tooltip={site.group ? 'Manage group' : 'Group with another site'}
-          class="inline-flex items-center gap-1 shrink-0 text-xs transition-colors {site.group
-            ? 'text-lerd-red'
-            : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red'}"
-        >
-          <Icon name="group" class="w-3.5 h-3.5" />
-          {#if site.group_subdomain}
-            <span class="font-mono">{site.group_subdomain}.</span>
-          {/if}
-        </button>
-      {/if}
-
       <span class="flex items-center gap-1.5 shrink-0">
         {#if activeFrameworkLabel}
           <span class="hidden @md:inline-flex"><Badge tone="framework">{activeFrameworkLabel}</Badge></span>
@@ -463,10 +457,6 @@
             </svg>
             {m.sites_paused().toLowerCase()}
           </span>
-        {:else if site.fpm_running}
-          <span class="w-2 h-2 rounded-full bg-emerald-500" title={m.common_running()} aria-label={m.common_running()}></span>
-        {:else}
-          <span class="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600" title={m.common_stopped()} aria-label={m.common_stopped()}></span>
         {/if}
       </span>
 
@@ -523,6 +513,20 @@
               d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
             />
           </svg>
+        </button>
+      {/if}
+
+      {#if !activeWorktreeBranch && !site.host_proxy}
+        <button
+          type="button"
+          onclick={() => openGroupModal(site)}
+          aria-label={m.group_manage()}
+          use:tooltip={site.group ? 'Manage group' : 'Group with another site'}
+          class="w-8 h-8 flex items-center justify-center rounded-md transition-colors hover:bg-gray-100 dark:hover:bg-white/5 {site.group
+            ? 'text-lerd-red'
+            : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red'}"
+        >
+          <Icon name="group" class="w-4 h-4" />
         </button>
       {/if}
 
@@ -789,16 +793,20 @@
 
   {#if activePath && !showWorktreeTabs}
     <div class="px-2 pb-2 flex items-center text-[11px] text-gray-500 dark:text-gray-400 min-w-0">
-      <span class="font-mono truncate" title={activePath}>{activePath}</span>
+      {#if $accessMode.loopback}
+        <button
+          type="button"
+          onclick={() => openFolder(activePath)}
+          use:tooltip={m.sites_openFolder()}
+          class="font-mono truncate hover:text-lerd-red transition-colors"
+        >{activePathLabel}</button>
+      {:else}
+        <span class="font-mono truncate" title={activePath}>{activePathLabel}</span>
+      {/if}
     </div>
   {/if}
 
-  <div class="px-3 flex flex-col @xl:flex-row justify-between gap-2">
-    <div class="pb-3">
-      <ServiceBadgeRow {site} />
-    </div>
-    {#if tabs}
-      <div class="flex items-end gap-4 -mb-px pt-2">{@render tabs()}</div>
-    {/if}
-  </div>
+  {#if tabs}
+    <div class="px-3 flex items-end gap-4 -mb-px pt-1">{@render tabs()}</div>
+  {/if}
 </div>

@@ -1,6 +1,6 @@
 # Framework commands
 
-Every PHP site in the lerd dashboard exposes a **Commands ▾** dropdown in the site controls band, alongside the version pickers and worker toggles. It surfaces a curated set of one-shot admin actions for the detected framework, plus anything the project adds in its `.lerd.yaml`. The same set is reachable from the command palette (`⌘K` / `/`) and from the terminal via `lerd run <name>`.
+Every PHP site in the lerd dashboard exposes a **Commands ▾** dropdown in the site Overview's Runtime & workers row, alongside the version pickers and worker toggles. It surfaces a curated set of one-shot admin actions for the detected framework, plus anything the project adds in its `.lerd.yaml`. The same set is reachable from the command palette (`⌘K` / `/`) and from the terminal via `lerd run <name>`.
 
 The feature exists for the actions you'd otherwise ssh in for: clearing caches, applying migrations, generating an admin login link, exporting the database before a risky change.
 

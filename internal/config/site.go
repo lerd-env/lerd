@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -384,10 +385,42 @@ func SaveSites(reg *SiteRegistry) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(SitesFile(), data, 0644); err != nil {
+	if err := writeFileAtomic(SitesFile(), data, 0644); err != nil {
 		return err
 	}
 	invalidateSitesCache()
+	return nil
+}
+
+// writeFileAtomic writes data to path through a uniquely named temp file in the
+// same directory followed by a rename. The rename is atomic on the same
+// filesystem, so a crash, a restart mid-write, or a second concurrent writer can
+// never leave sites.yaml half-written or interleaved; a reader always sees a
+// complete file and the last full write wins. A unique temp name (rather than a
+// fixed path.tmp) keeps two concurrent writers from clobbering each other's temp.
+func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	tmp := f.Name()
+	if _, err := f.Write(data); err != nil {
+		f.Close()
+		os.Remove(tmp)
+		return err
+	}
+	if err := f.Close(); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Chmod(tmp, mode); err != nil {
+		os.Remove(tmp)
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		os.Remove(tmp)
+		return err
+	}
 	return nil
 }
 

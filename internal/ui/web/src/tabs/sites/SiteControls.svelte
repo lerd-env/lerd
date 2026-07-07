@@ -290,7 +290,7 @@
   }
 </script>
 
-<div class="px-3 pt-3 shrink-0">
+<div class="shrink-0">
   <div class="flex items-center gap-3">
   <div class="flex items-center gap-3 overflow-x-auto flex-1 min-w-0">
     {#if site.custom_container}
@@ -461,25 +461,28 @@
         />
       {/each}
     {/if}
-  </div>
+
+    <div class="flex-grow-1"></div>
 
     {#if canDoctor}
       <button
-        type="button"
-        onclick={() => (doctorOpen = true)}
-        class="shrink-0 inline-flex items-center justify-center h-7 w-7 rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-gray-700 dark:text-gray-200"
-        use:tooltip={m.sites_doctor_title()}
-        aria-label={m.sites_doctor_button()}
+              type="button"
+              onclick={() => (doctorOpen = true)}
+              class="shrink-0 inline-flex items-center gap-1.5 h-7 px-2.5 rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-xs font-medium text-gray-700 dark:text-gray-200"
+              use:tooltip={m.sites_doctor_title()}
+              aria-label={m.sites_doctor_button()}
       >
-        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M4.8 2.3A.3.3 0 1 0 5 2H4a2 2 0 00-2 2v5a6 6 0 006 6 6 6 0 006-6V4a2 2 0 00-2-2h-1a.3.3 0 10.2.3" />
           <path d="M8 15v1a6 6 0 006 6 6 6 0 006-6v-4" />
           <circle cx="20" cy="10" r="2" />
         </svg>
+        <span>{m.sites_doctor_title()}</span>
       </button>
     {/if}
 
     <CommandsDropdown domain={site.domain} branch={activeWorktreeBranch} />
+  </div>
   </div>
 </div>
 

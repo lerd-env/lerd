@@ -69,7 +69,7 @@
   import { loadDoctor, type DoctorCheck, type DoctorReport } from '$stores/doctor';
   import { loadCommands, executeCommand, executeDoctorFix, type Command } from '$stores/commands';
   import { goToTab } from '$stores/route';
-  import type { Site } from '$stores/sites';
+  import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -79,6 +79,8 @@
     onclose: () => void;
   }
   let { open, site, branch = '', onclose }: Props = $props();
+
+  const activeDomain = $derived(activeWorktreeDomain(site, branch));
 
   let report = $state<DoctorReport | null>(null);
   let commands = $state<Command[]>([]);
@@ -237,7 +239,7 @@
         <p class="text-sm font-semibold text-gray-900 dark:text-white">
           {loading && !report ? m.sites_doctor_running() : allClear ? m.sites_doctor_allClear() : m.sites_doctor_summary({ failures: report?.failures ?? 0, warnings: report?.warnings ?? 0 })}
         </p>
-        <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{site.domain}</p>
+        <p class="text-[11px] text-gray-500 dark:text-gray-400 truncate">{activeDomain}</p>
       </div>
       {#if report}
         <div class="hidden sm:flex items-center gap-1.5 shrink-0">

@@ -191,6 +191,71 @@ const WORKTREE_OPTIONS = {
   can_migrate: true,
 };
 
+// ---- Overview "Actions" section: per-framework command sets + doctor ----
+// The command cards and the doctor card both call per-site endpoints; give them
+// framework-appropriate fixtures so the section looks like a real project.
+const LARAVEL_COMMANDS = [
+  { name: 'migrate', label: 'Migrate', command: 'php artisan migrate', icon: 'database', description: 'Run pending database migrations', confirm: true },
+  { name: 'migrate-fresh', label: 'Fresh + seed', command: 'php artisan migrate:fresh --seed', icon: 'refresh', description: 'Drop all tables, re-migrate and seed', confirm: true },
+  { name: 'optimize-clear', label: 'Clear caches', command: 'php artisan optimize:clear', icon: 'broom', description: 'Flush config, route, view and event caches' },
+  { name: 'key-generate', label: 'App key', command: 'php artisan key:generate', icon: 'key', description: 'Generate the application key' },
+  { name: 'route-list', label: 'Routes', command: 'php artisan route:list', icon: 'list', description: 'List the registered routes' },
+  { name: 'storage-link', label: 'Storage link', command: 'php artisan storage:link', icon: 'link', description: 'Symlink public/storage to storage/app/public' },
+];
+const SYMFONY_COMMANDS = [
+  { name: 'migrate', label: 'Migrate', command: 'php bin/console doctrine:migrations:migrate', icon: 'database', description: 'Apply Doctrine migrations', confirm: true },
+  { name: 'cache-clear', label: 'Clear cache', command: 'php bin/console cache:clear', icon: 'broom', description: 'Clear the Symfony cache' },
+  { name: 'router', label: 'Routes', command: 'php bin/console debug:router', icon: 'list', description: 'List the configured routes' },
+];
+const WORDPRESS_COMMANDS = [
+  { name: 'cache-flush', label: 'Flush cache', command: 'wp cache flush', icon: 'broom', description: 'Flush the object cache' },
+  { name: 'plugin-list', label: 'Plugins', command: 'wp plugin list', icon: 'list', description: 'List installed plugins' },
+  { name: 'core-update', label: 'Update core', command: 'wp core update', icon: 'arrow-up', description: 'Update WordPress core', confirm: true },
+];
+
+function frameworkOf(domain: string): string {
+  return (sites.find((s) => s.domain === domain)?.framework as string) || '';
+}
+function commandsFor(domain: string): Array<Record<string, unknown>> {
+  switch (frameworkOf(domain)) {
+    case 'laravel': return LARAVEL_COMMANDS;
+    case 'symfony': return SYMFONY_COMMANDS;
+    case 'wordpress': return WORDPRESS_COMMANDS;
+    default: return [];
+  }
+}
+
+const DOCTOR_LARAVEL = {
+  checks: [
+    { name: 'app_key', label: 'Application key', status: 'ok' },
+    { name: 'migrations', label: 'Migrations', status: 'warn', detail: '2 pending migrations', fix: 'migrate' },
+    { name: 'env_drift', label: '.env drift', status: 'ok' },
+    { name: 'storage_link', label: 'Storage link', status: 'ok' },
+  ],
+  failures: 0,
+  warnings: 1,
+};
+const DOCTOR_OK = {
+  checks: [{ name: 'serving', label: 'Serving over HTTPS', status: 'ok' }],
+  failures: 0,
+  warnings: 0,
+};
+function doctorFor(domain: string): Record<string, unknown> {
+  return frameworkOf(domain) === 'laravel' ? DOCTOR_LARAVEL : DOCTOR_OK;
+}
+
+// Running a command card streams the same SSE contract the daemon emits.
+function commandRunSSE(domain: string, name: string): Response {
+  const cmd = commandsFor(domain).find((c) => c.name === name);
+  const line = (cmd?.command as string) || name;
+  const body =
+    `event: stdout\ndata: $ ${line}\n\n` +
+    `event: stdout\ndata: Running…\n\n` +
+    `event: stdout\ndata: Done.\n\n` +
+    `event: done\ndata: ${JSON.stringify({ exit: 0, durationMs: 640 })}\n\n`;
+  return new Response(body, { status: 200, headers: { 'content-type': 'text/event-stream' } });
+}
+
 // Pre-seed the Tinker editor for each site so the tab isn't empty.
 try {
   for (const s of sites) {
@@ -344,6 +409,15 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   // php.ini config (per PHP version, or per-site for FrankenPHP) — GET reads only
   if (method === 'GET' && /\/php-versions\/[^/]+\/config$/.test(path))
     return jsonResponse({ path: '~/.config/lerd/php/8.4/php.ini', content: PHP_INI_TEXT, exists: true });
+
+  // Overview "Actions": command list, doctor report, and running a command.
+  const cmdRun = path.match(/^\/api\/sites\/([^/]+)\/commands\/([^/]+)\/run$/);
+  if (cmdRun && method === 'POST')
+    return commandRunSSE(decodeURIComponent(cmdRun[1]), decodeURIComponent(cmdRun[2]));
+  const cmdList = path.match(/^\/api\/sites\/([^/]+)\/commands$/);
+  if (cmdList) return jsonResponse({ commands: commandsFor(decodeURIComponent(cmdList[1])) });
+  const doctorMatch = path.match(/^\/api\/sites\/([^/]+)\/doctor$/);
+  if (doctorMatch) return jsonResponse(doctorFor(decodeURIComponent(doctorMatch[1])));
 
   // Static fixtures
   if (path in ROUTES) return jsonResponse(ROUTES[path]);
