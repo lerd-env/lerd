@@ -108,7 +108,7 @@ describe('status store', () => {
 
   it('dnsState reads the status field and falls back to ok for old payloads', async () => {
     const { dnsState } = await import('./status');
-    const base = { nginx: { running: true }, php_fpms: [], php_default: '', node_default: '', node_managed_by_lerd: true, bun_available: false, bun_version: '', using_system_bun: false, watcher_running: true, frankenphp_php_versions: [] };
+    const base = { nginx: { running: true }, php_fpms: [], php_default: '', node_default: '', node_managed_by_lerd: true, bun_available: false, bun_version: '', using_system_bun: false, watcher_running: true, frankenphp_php_versions: [], home: '' };
     expect(dnsState({ ...base, dns: { ok: false, status: 'degraded', enabled: true, tld: 'test' } })).toBe('degraded');
     expect(dnsState({ ...base, dns: { ok: false, status: 'down', enabled: true, tld: 'test' } })).toBe('down');
     expect(dnsState({ ...base, dns: { ok: true, enabled: true, tld: 'test' } })).toBe('ok');

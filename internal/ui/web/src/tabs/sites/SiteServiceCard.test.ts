@@ -27,4 +27,22 @@ describe('SiteServiceCard', () => {
     const { getByText } = render(SiteServiceCard, { props: { name: 'redis' } });
     expect(getByText('Stopped')).toBeTruthy();
   });
+
+  it('offers a dashboard button when an active service has one', () => {
+    services.set([{ name: 'mailpit', status: 'active', dashboard: 'http://localhost:8025' } as never]);
+    const { getByLabelText } = render(SiteServiceCard, { props: { name: 'mailpit' } });
+    expect(getByLabelText('Dashboard')).toBeTruthy();
+  });
+
+  it('hides the dashboard button when the service has no dashboard', () => {
+    services.set([{ name: 'mysql', status: 'active' } as never]);
+    const { queryByLabelText } = render(SiteServiceCard, { props: { name: 'mysql' } });
+    expect(queryByLabelText('Dashboard')).toBeNull();
+  });
+
+  it('hides the dashboard button while the service is stopped', () => {
+    services.set([{ name: 'mailpit', status: 'inactive', dashboard: 'http://localhost:8025' } as never]);
+    const { queryByLabelText } = render(SiteServiceCard, { props: { name: 'mailpit' } });
+    expect(queryByLabelText('Dashboard')).toBeNull();
+  });
 });

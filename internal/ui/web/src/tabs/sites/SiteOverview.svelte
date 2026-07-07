@@ -1,7 +1,6 @@
 <script lang="ts">
   import SiteControls from './SiteControls.svelte';
   import SiteServiceCard from './SiteServiceCard.svelte';
-  import SiteActionCards from './SiteActionCards.svelte';
   import type { Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
@@ -36,9 +35,4 @@
       </div>
     </section>
   {/if}
-
-  <section>
-    {@render sectionTitle(m.palette_group_actions())}
-    <SiteActionCards {site} branch={activeWorktreeBranch} />
-  </section>
 </div>

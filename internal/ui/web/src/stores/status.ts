@@ -23,6 +23,7 @@ export interface StatusResponse {
   using_system_bun: boolean;
   watcher_running: boolean;
   frankenphp_php_versions: string[];
+  home: string;
 }
 
 const empty: StatusResponse = {
@@ -36,7 +37,8 @@ const empty: StatusResponse = {
   bun_version: '',
   using_system_bun: false,
   watcher_running: false,
-  frankenphp_php_versions: []
+  frankenphp_php_versions: [],
+  home: ''
 };
 
 export const status = writable<StatusResponse>(empty);
