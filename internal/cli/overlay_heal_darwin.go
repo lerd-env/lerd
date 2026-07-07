@@ -3,10 +3,7 @@
 package cli
 
 import (
-	"os"
-
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/podman"
 )
 
 // healOverlayCorruptionIfNeeded recovers from the overlay-storage error (see
@@ -37,10 +34,7 @@ func restartPodmanMachineForHeal() {
 		return
 	}
 	feedback.Line("Container storage looks stale after an unclean shutdown; restarting the Podman Machine to remount it…")
-	stop := podman.Cmd("machine", "stop", name)
-	stop.Stdout = os.Stdout
-	stop.Stderr = os.Stderr
-	if err := stop.Run(); err != nil {
+	if err := runMachineStreaming(machineStopTimeout, "machine", "stop", name); err != nil {
 		feedback.Warn("podman machine stop: %v", err)
 	}
 	// ensurePodmanMachineRunning starts the VM and waits for the API socket.

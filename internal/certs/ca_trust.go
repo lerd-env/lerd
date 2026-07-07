@@ -20,6 +20,11 @@ var caTrustPaths = []string{
 	"/etc/ssl/cert.pem",                  // openSUSE and others
 }
 
+// platformTrustCheck reports whether der is trusted through a non-bundle store.
+// The darwin build wires it to a keychain lookup (mkcert installs its root
+// there, not in a PEM bundle); nil on Linux, where caTrustPaths is authoritative.
+var platformTrustCheck func(der []byte) bool
+
 // caRootFunc resolves mkcert's CAROOT directory. Overridable in tests.
 var caRootFunc = func() (string, error) {
 	out, err := exec.Command(MkcertPath(), "-CAROOT").Output()
@@ -45,6 +50,9 @@ func CATrusted() bool {
 		if bundleContainsDER(readFileNoErr(p), der) {
 			return true
 		}
+	}
+	if platformTrustCheck != nil {
+		return platformTrustCheck(der)
 	}
 	return false
 }

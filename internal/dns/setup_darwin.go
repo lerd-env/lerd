@@ -3,6 +3,7 @@
 package dns
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +12,15 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 )
+
+// resolverDir is the macOS per-TLD resolver directory. A var so tests can point
+// the stale-file scan at a fixture.
+var resolverDir = "/etc/resolver"
+
+// resolverContent is what ConfigureResolver writes into /etc/resolver/<tld>: it
+// routes .<tld> queries at the lerd-dns dnsmasq container. Teardown matches on it
+// so it removes exactly the resolver files lerd created.
+var resolverContent = []byte("nameserver 127.0.0.1\nport 5300\n")
 
 // readUpstreamDNS reads upstream DNS servers from /etc/resolv.conf.
 // On macOS the OS keeps /etc/resolv.conf up-to-date with DHCP-assigned DNS servers,
@@ -41,8 +51,8 @@ func ConfigureResolver() error {
 		tld = "test"
 	}
 
-	resolverFile := filepath.Join("/etc/resolver", tld)
-	content := []byte("nameserver 127.0.0.1\nport 5300\n")
+	resolverFile := filepath.Join(resolverDir, tld)
+	content := resolverContent
 
 	if isFileContent(resolverFile, content) {
 		return nil
@@ -52,22 +62,42 @@ func ConfigureResolver() error {
 	return sudoWriteFile(resolverFile, content, 0644)
 }
 
-// Teardown removes the /etc/resolver/<tld> file written by ConfigureResolver.
+// Teardown removes every /etc/resolver file lerd wrote (matched by content) so
+// disabling DNS never orphans a resolver pointing at the torn-down dnsmasq.
+// Content-matching beats the config TLD: disable flips cfg.DNS.TLD first, so it
+// no longer names the file to remove, and a custom TLD leaves its own to clean.
 func Teardown() {
-	cfg, _ := config.LoadGlobal()
-	tld := "test"
-	if cfg != nil && cfg.DNS.TLD != "" {
-		tld = cfg.DNS.TLD
+	stale := staleResolverFiles(resolverDir)
+	if len(stale) == 0 {
+		return
 	}
+	rmCmd := exec.Command("sudo", append([]string{"rm", "-f"}, stale...)...)
+	rmCmd.Stdin = os.Stdin
+	rmCmd.Stdout = os.Stdout
+	rmCmd.Stderr = os.Stderr
+	rmCmd.Run() //nolint:errcheck
+}
 
-	resolverFile := filepath.Join("/etc/resolver", tld)
-	if _, err := os.Stat(resolverFile); err == nil {
-		rmCmd := exec.Command("sudo", "rm", "-f", resolverFile)
-		rmCmd.Stdin = os.Stdin
-		rmCmd.Stdout = os.Stdout
-		rmCmd.Stderr = os.Stderr
-		rmCmd.Run() //nolint:errcheck
+// staleResolverFiles returns the resolver files under dir whose content matches
+// what ConfigureResolver writes, so Teardown removes exactly those and leaves a
+// user's or another tool's resolver files untouched.
+func staleResolverFiles(dir string) []string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
 	}
+	want := bytes.TrimSpace(resolverContent)
+	var stale []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if body, rerr := os.ReadFile(path); rerr == nil && bytes.Equal(bytes.TrimSpace(body), want) {
+			stale = append(stale, path)
+		}
+	}
+	return stale
 }
 
 // InstallSudoers writes a sudoers drop-in granting the current user passwordless
