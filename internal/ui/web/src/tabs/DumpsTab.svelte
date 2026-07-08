@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
+  import { debugSearch } from '$stores/debugLens';
   import {
     dumps,
     status,
@@ -35,32 +37,34 @@
   // search and vice versa. The unscoped instance keeps using the global
   // stores so user choices persist between visits.
   let localCtx = $state<'' | 'fpm' | 'cli'>('');
-  let localText = $state('');
-
   const effectiveCtx = $derived(scoped ? localCtx : $filterCtx);
-  const effectiveText = $derived(scoped ? localText : $filterText);
+  // Scoped lenses share one search (debugSearch) so it carries between the site's
+  // Debug tabs; the unscoped System view keeps its own global filterText.
+  const effectiveText = $derived(scoped ? $debugSearch : $filterText);
 
   const groups = $derived(
     buildDumpGroups($dumps, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
   );
 
+  let textInput = $state('');
+
   onMount(() => {
     startDumpsStream();
     void refreshStatus();
+    if (scoped) textInput = get(debugSearch);
   });
 
   onDestroy(() => {
     stopDumpsStream();
   });
 
-  let textInput = $state('');
   let textTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const v = textInput;
     if (textTimer) clearTimeout(textTimer);
     textTimer = setTimeout(() => {
       if (scoped) {
-        localText = v;
+        debugSearch.set(v);
       } else {
         filterText.set(v);
       }

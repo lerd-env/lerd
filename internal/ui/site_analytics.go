@@ -2,13 +2,10 @@ package ui
 
 import (
 	"net/http"
-	"sort"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
 )
 
@@ -106,58 +103,6 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 			Millis:   rec.Millis,
 			Cold:     rec.Cold,
 		})
-	}
-	writeJSON(w, out)
-	return true
-}
-
-// routeQueriesResponse is the debug-bridge evidence captured against one route:
-// the requests seen while capture was on, worst by query time first, each with
-// its query count and any N+1 or slow-query findings.
-type routeQueriesResponse struct {
-	Route    string            `json:"route"`
-	Captures int               `json:"captures"`
-	Evidence []RequestAnalysis `json:"evidence"`
-}
-
-// routeQueriesRoute serves the query evidence captured against one route key, so
-// the timing view can link a slow route straight to the queries behind it. The
-// route is matched on the same reqstats key the timing view groups by, and
-// evidence only exists for requests hit while debug capture was on.
-//
-//	GET /api/sites/{domain}/route-queries?route=<key>[&branch=<sanitized>]
-func routeQueriesRoute(w http.ResponseWriter, r *http.Request, domain string, rest []string) bool {
-	if len(rest) != 1 || rest[0] != "route-queries" || r.Method != http.MethodGet {
-		return false
-	}
-	site, err := config.FindSiteByDomain(domain)
-	if err != nil {
-		writeJSON(w, map[string]any{"error": "site not found: " + domain})
-		return true
-	}
-	routeKey := r.URL.Query().Get("route")
-	branch := r.URL.Query().Get("branch")
-
-	var events []dumps.Event
-	if srv := dumpsServer.Load(); srv != nil {
-		events = srv.Filter(dumps.FilterOpts{Site: site.Name, Branch: branch, Kind: dumps.KindQuery})
-	}
-	out := routeQueriesResponse{Route: routeKey, Evidence: []RequestAnalysis{}}
-	for _, ra := range analyzeQueries(events, 0, 0).Requests {
-		if ra.Request == "" {
-			continue
-		}
-		method, path, _ := strings.Cut(ra.Request, " ")
-		if reqstats.NormalizeRoute(method, path) == routeKey {
-			out.Evidence = append(out.Evidence, ra)
-		}
-	}
-	sort.Slice(out.Evidence, func(i, j int) bool {
-		return out.Evidence[i].TotalTimeMS > out.Evidence[j].TotalTimeMS
-	})
-	out.Captures = len(out.Evidence)
-	if len(out.Evidence) > 20 {
-		out.Evidence = out.Evidence[:20]
 	}
 	writeJSON(w, out)
 	return true

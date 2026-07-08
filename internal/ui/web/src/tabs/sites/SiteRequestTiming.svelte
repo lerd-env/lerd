@@ -10,8 +10,9 @@
   import { profilerEnabled, setProfiler } from '$stores/profiler';
   import { openProfiler } from '$stores/dashboard';
   import { debugCaptureEnabled } from '$stores/queries';
+  import { debugLens, debugSearch } from '$stores/debugLens';
+  import { goToTab } from '$stores/route';
   import { tooltip } from '$lib/tooltip';
-  import RouteQueriesModal from './RouteQueriesModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -20,11 +21,15 @@
   }
   let { site, activeWorktreeBranch = '' }: Props = $props();
 
-  let inspectRoute = $state('');
-  let inspectOpen = $state(false);
-  function openInspect(route: string) {
-    inspectRoute = route;
-    inspectOpen = true;
+  // Inspect a route's queries in the Debug tab's Queries lens, the one place that
+  // renders captured queries. Seed the lens filter with the route's path prefix
+  // (up to the first :id/:slug placeholder) so it scopes to that route, then
+  // switch the lens on and navigate to the Debug tab.
+  function inspectRoute(route: string) {
+    const path = route.replace(/^[A-Z]+\s+/, '');
+    debugSearch.set(path.split('/:')[0]);
+    debugLens.set('queries');
+    goToTab('sites', `${site.domain}/dumps`);
   }
 
   let range = $state<TimeRange>('1h');
@@ -161,7 +166,7 @@
   {#if $debugCaptureEnabled}
     <button
       type="button"
-      onclick={(e) => { e.stopPropagation(); openInspect(routeKey); }}
+      onclick={(e) => { e.stopPropagation(); inspectRoute(routeKey); }}
       use:tooltip={m.sites_timing_inspectQueries()}
       aria-label={m.sites_timing_inspectQueries()}
       class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
@@ -342,11 +347,3 @@
     </div>
   {/if}
 </section>
-
-<RouteQueriesModal
-  domain={site.domain}
-  route={inspectRoute}
-  branch={activeWorktreeBranch}
-  open={inspectOpen}
-  onclose={() => (inspectOpen = false)}
-/>

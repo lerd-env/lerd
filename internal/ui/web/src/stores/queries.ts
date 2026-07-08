@@ -98,6 +98,7 @@ export function buildQueryGroups(events: DumpEvent[], site = '', text = '', hide
       needle &&
       !(
         data.sql.toLowerCase().includes(needle) ||
+        (ev.ctx.request ?? '').toLowerCase().includes(needle) ||
         (ev.src.file ?? '').toLowerCase().includes(needle) ||
         (ev.ctx.worker ?? '').toLowerCase().includes(needle) ||
         (ev.ctx.branch ?? '').toLowerCase().includes(needle)

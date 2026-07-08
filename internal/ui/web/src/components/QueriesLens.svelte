@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
+  import { debugSearch } from '$stores/debugLens';
   import { dumps, startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import {
     buildQueryGroups,
@@ -30,15 +32,19 @@
 
   // Queries ride the dumps SSE stream (shared receiver), so mounting this lens
   // opens the same reference-counted connection a DumpsTab would.
+  let textInput = $state('');
+
   onMount(() => {
     startDumpsStream();
     void refreshDevtoolsStatus();
+    // Scoped lenses share one search (debugSearch), which a deep link like the
+    // timing view's Inspect queries seeds; mirror it into the input on open.
+    if (scoped) textInput = get(debugSearch);
   });
   onDestroy(() => stopDumpsStream());
 
-  let localText = $state('');
   const groups = $derived(
-    buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? localText : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
   let togglingWorkers = $state(false);
@@ -53,13 +59,12 @@
     }
   }
 
-  let textInput = $state('');
   let textTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const v = textInput;
     if (textTimer) clearTimeout(textTimer);
     textTimer = setTimeout(() => {
-      if (scoped) localText = v;
+      if (scoped) debugSearch.set(v);
       else queryFilterText.set(v);
     }, 100);
   });
@@ -90,11 +95,24 @@
 
 <div class="flex flex-col h-full overflow-hidden">
   <div class="flex items-center gap-2 px-3 py-3 border-b border-gray-200 dark:border-lerd-border flex-wrap">
-    <input
-      class="text-xs px-2 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card flex-1 min-w-[140px]"
-      placeholder={m.queries_searchPlaceholder()}
-      bind:value={textInput}
-    />
+    <div class="relative flex-1 min-w-[140px]">
+      <input
+        class="w-full text-xs pl-2 pr-6 py-1 rounded-sm border border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card"
+        placeholder={m.queries_searchPlaceholder()}
+        bind:value={textInput}
+      />
+      {#if textInput}
+        <button
+          type="button"
+          onclick={() => (textInput = '')}
+          title={m.queries_clearFilter()}
+          aria-label={m.queries_clearFilter()}
+          class="absolute right-1 top-1/2 -translate-y-1/2 w-4 h-4 flex items-center justify-center rounded-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-white/10"
+        >
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+      {/if}
+    </div>
     {#if !scoped}
       <Dropdown
         value={$queryFilterSite}
@@ -129,6 +147,7 @@
       type="button"
       class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5"
       onclick={onClear}
+      title={m.queries_clearCaptured()}
     >
       {m.common_clear()}
     </button>
