@@ -25,6 +25,11 @@ function initial(): DebugLens {
 
 export const debugLens = writable<DebugLens>(initial());
 
+// debugSearch is the one text filter shared across a site's Debug lenses (Queries,
+// Dumps, Kinds), so a search set in one lens (or seeded by a deep link like the
+// timing view's Inspect queries) carries over when you switch lenses.
+export const debugSearch = writable<string>('');
+
 debugLens.subscribe((v) => {
   try {
     if (typeof localStorage !== 'undefined') localStorage.setItem(KEY, v);

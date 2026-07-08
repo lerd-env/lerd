@@ -16,6 +16,31 @@ func StripQueryFragment(rawURI string) string {
 	return path
 }
 
+// staticAssetExts are the file extensions served as static assets. A single page
+// load fires dozens of them, so they're kept out of the request-timing view to
+// leave only the app routes that actually exercise the framework.
+var staticAssetExts = map[string]bool{
+	"js": true, "mjs": true, "cjs": true, "css": true, "map": true,
+	"png": true, "jpg": true, "jpeg": true, "gif": true, "svg": true, "webp": true,
+	"avif": true, "ico": true, "bmp": true, "cur": true,
+	"woff": true, "woff2": true, "ttf": true, "eot": true, "otf": true,
+	"mp4": true, "webm": true, "ogg": true, "mp3": true, "wav": true, "flac": true,
+}
+
+// IsStaticAsset reports whether a request URI points at a static asset, judged by
+// the file extension of its last path segment, so the timing view can skip it.
+func IsStaticAsset(rawURI string) bool {
+	path := StripQueryFragment(rawURI)
+	if i := strings.LastIndexByte(path, '/'); i >= 0 {
+		path = path[i+1:]
+	}
+	dot := strings.LastIndexByte(path, '.')
+	if dot < 0 {
+		return false
+	}
+	return staticAssetExts[strings.ToLower(path[dot+1:])]
+}
+
 // NormalizeRoute turns a method and raw request URI into a stable route key by
 // dropping the query string and collapsing id-like path segments to ":id", so
 // "/users/123" and "/users/456" aggregate as one route. Dropping the query also

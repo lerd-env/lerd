@@ -21,6 +21,22 @@ func recordN(a *Aggregator, host, method, uri string, ms float64, n int) {
 	}
 }
 
+func TestAggregatorSkipsAssetsAndZeroTime(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/home", 40, 10)
+	recordN(a, "myapp.test", "GET", "/build/app.js", 5, 10) // static asset
+	// A zero request time is nginx answering a static file directly.
+	a.Record(AccessRecord{Host: "myapp.test", Status: 200, RequestTime: 0, Method: "GET", URI: "/manifest.json"})
+
+	snap, ok := a.SiteSnapshot("myapp")
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snap.Samples != 10 {
+		t.Errorf("samples = %d, want 10 (assets and zero-time excluded)", snap.Samples)
+	}
+}
+
 func TestAggregatorFlagsOutlier(t *testing.T) {
 	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
 	recordN(a, "myapp.test", "GET", "/home", 40, 20)

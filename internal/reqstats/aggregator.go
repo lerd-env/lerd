@@ -43,12 +43,17 @@ const recentWindow = 10 * time.Minute
 // fast redirects and slow renders under one path) hides in the median but shows
 // in the tail, which is the "this request takes a second" the user actually feels.
 type RouteStat struct {
-	Route      string  `json:"route"`
-	Method     string  `json:"method"`
-	Example    string  `json:"example"` // a concrete path last seen for this route, openable in a browser
-	P95Millis  float64 `json:"p95_millis"`
-	Multiplier float64 `json:"multiplier"`
-	Samples    int     `json:"samples"`
+	Route     string  `json:"route"`
+	Method    string  `json:"method"`
+	Example   string  `json:"example"` // a concrete path last seen for this route, openable in a browser
+	P50Millis float64 `json:"p50_millis"`
+	P95Millis float64 `json:"p95_millis"`
+	// RecentP95Millis is the p95 over only the route's most recent samples, so a
+	// route that was slow but has since been fixed reads as fast again even while
+	// its old slow samples still sit in the window's overall p95.
+	RecentP95Millis float64 `json:"recent_p95_millis"`
+	Multiplier      float64 `json:"multiplier"`
+	Samples         int     `json:"samples"`
 }
 
 // SiteStats is the per-site view the UI renders: the typical response time and
@@ -102,8 +107,15 @@ func (a *Aggregator) Record(r AccessRecord) {
 	if !ok {
 		return
 	}
-	route := NormalizeRoute(r.Method, r.URI)
 	ms := r.SecondsToMillis()
+	// Skip requests nginx served without the app (a static-asset extension, or a
+	// zero request time like a static file it answered directly), so they don't
+	// weigh on the typical response time or the slow-route baseline. Mirrors the
+	// durable store, keeping the doctor and route_timing consistent with the view.
+	if IsStaticAsset(r.URI) || ms == 0 {
+		return
+	}
+	route := NormalizeRoute(r.Method, r.URI)
 
 	a.mu.Lock()
 	defer a.mu.Unlock()

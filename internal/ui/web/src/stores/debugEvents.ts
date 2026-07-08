@@ -45,6 +45,8 @@ export function buildKindGroups(
       const hay = (
         JSON.stringify(ev.data ?? {}) +
         ' ' +
+        (ev.ctx.request ?? '') +
+        ' ' +
         (ev.ctx.worker ?? '') +
         ' ' +
         (ev.ctx.branch ?? '')

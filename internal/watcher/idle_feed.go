@@ -26,9 +26,29 @@ var activityTracker *idle.Tracker
 // config.RequestStatsFile() for lerd-ui to read. Allocated once by StartIdle.
 var reqAggregator *reqstats.Aggregator
 
+// reqStore is the durable SQLite record of individual requests, written from the
+// access feed for the analytics view. Buffered between save ticks and flushed in
+// one batch so a busy site isn't a transaction per request. Best-effort: a failed
+// open leaves it nil and the aggregator snapshot still drives the live panel.
+var (
+	reqStore    *reqstats.Store
+	reqBufMu    sync.Mutex
+	reqBuf      []reqstats.Record
+	lastPrune   time.Time
+	reqLastSeen = map[string]time.Time{} // per-site last request time, for cold-start detection
+	coldGap     time.Duration            // a gap this long or longer marks the next request a cold start
+)
+
 // reqStatsSaveInterval is how often the request-timing snapshot is flushed to
 // disk for lerd-ui. Shorter than the idle tick so the panel feels live.
 const reqStatsSaveInterval = 10 * time.Second
+
+// reqStatsRetention bounds the durable store; rows older than this are pruned so
+// the DB stays small. reqStatsPruneInterval throttles how often that runs.
+const (
+	reqStatsRetention     = 7 * 24 * time.Hour
+	reqStatsPruneInterval = time.Hour
+)
 
 // slowNotifier fires a one-time push per newly-flagged slow route on each save
 // tick. Allocated once by StartIdle.
@@ -55,6 +75,16 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	activityTracker = idle.NewTracker(resolveHostToSite)
 	idleEng = newIdleEngine(activityTracker)
 	reqAggregator = reqstats.New(resolveHostToSite)
+	if st, err := reqstats.OpenStore(config.RequestStatsDB()); err == nil {
+		reqStore = st
+	}
+	// A request after the site has been idle at least this long is a cold start;
+	// tie it to the idle-suspend timeout, the point lerd already treats a site as
+	// gone quiet, so a wake's inflated time is kept out of the timing view.
+	coldGap = reqstats.DefaultColdGap
+	if cfg, err := config.LoadGlobal(); err == nil {
+		coldGap = cfg.IdleSuspendTimeout()
+	}
 	go runNotifier()
 	startControlSocket()
 
@@ -124,6 +154,22 @@ func handleAccessDatagram(b []byte) {
 	if reqAggregator != nil {
 		if rec, ok := reqstats.ParseAccessRecord(b); ok {
 			reqAggregator.Record(rec)
+			// Skip requests nginx served without the app: a static-asset extension,
+			// or a zero request time, which is nginx answering a static file directly
+			// (manifest.json, robots.txt, service workers) rather than PHP.
+			if reqStore != nil && !reqstats.IsStaticAsset(rec.URI) && rec.SecondsToMillis() > 0 {
+				if site, ok := resolveHostToSite(rec.Host); ok {
+					now := time.Now()
+					sr := reqstats.RecordFrom(rec, site, now)
+					reqBufMu.Lock()
+					// Cold start: first request after the site sat idle past coldGap.
+					last, seen := reqLastSeen[site]
+					sr.Cold = reqstats.IsColdStart(last, seen, now, coldGap)
+					reqLastSeen[site] = now
+					reqBuf = append(reqBuf, sr)
+					reqBufMu.Unlock()
+				}
+			}
 		}
 	}
 	if !idleActive.Load() {
@@ -149,10 +195,31 @@ func runReqStatsSaver() {
 		}
 		snap := reqAggregator.Snapshot()
 		_ = reqstats.SaveSnapshot(snap, config.RequestStatsFile())
+		flushReqStore()
 		domainOf := siteDomainResolver()
 		for _, n := range slowNotifier.notifications(snap, domainOf) {
 			_ = push.Send(n)
 		}
+	}
+}
+
+// flushReqStore writes the buffered access records to the durable store in one
+// batch and prunes rows past the retention window on a throttled cadence, so the
+// store stays bounded without a delete on every tick.
+func flushReqStore() {
+	if reqStore == nil {
+		return
+	}
+	reqBufMu.Lock()
+	batch := reqBuf
+	reqBuf = nil
+	reqBufMu.Unlock()
+	if len(batch) > 0 {
+		_ = reqStore.Insert(batch)
+	}
+	if now := time.Now(); now.Sub(lastPrune) >= reqStatsPruneInterval {
+		_, _ = reqStore.Prune(now.Add(-reqStatsRetention))
+		lastPrune = now
 	}
 }
 

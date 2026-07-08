@@ -55,7 +55,7 @@ export function buildDumpGroups(
     if (site && ev.ctx.site !== site) return false;
     if (ctx && ev.ctx.type !== ctx) return false;
     if (needle) {
-      const haystack = [ev.label ?? '', ev.text ?? '', ev.src.file ?? '', ev.ctx.branch ?? '']
+      const haystack = [ev.label ?? '', ev.text ?? '', ev.ctx.request ?? '', ev.src.file ?? '', ev.ctx.branch ?? '']
         .join(' ')
         .toLowerCase();
       if (!haystack.includes(needle)) return false;

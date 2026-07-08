@@ -1,5 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { get } from 'svelte/store';
+  import { debugSearch } from '$stores/debugLens';
   import { dumps, startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import {
     queryFilterSite,
@@ -29,23 +31,28 @@
     ({ jobs: 'job', views: 'view', mail: 'mail', cache: 'cache', events: 'event', http: 'http' })[kind]
   );
 
+  let localText = $state('');
+  let textInput = $state('');
+
   onMount(() => {
     startDumpsStream();
     void refreshDevtoolsStatus();
+    if (scoped) textInput = get(debugSearch);
   });
   onDestroy(() => stopDumpsStream());
 
-  let localText = $state('');
-  let textInput = $state('');
   let textTimer: ReturnType<typeof setTimeout> | null = null;
   $effect(() => {
     const v = textInput;
     if (textTimer) clearTimeout(textTimer);
-    textTimer = setTimeout(() => (localText = v), 100);
+    textTimer = setTimeout(() => (scoped ? debugSearch.set(v) : (localText = v)), 100);
   });
 
+  // Scoped lenses share one search (debugSearch) so it carries across the site's
+  // Debug tabs; unscoped keeps a local search.
+  const effectiveText = $derived(scoped ? $debugSearch : localText);
   const groups = $derived(
-    buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, localText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
   let enabling = $state(false);
