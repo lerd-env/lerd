@@ -64,6 +64,9 @@ func TestSweepDeep_ReapsUnusedServiceImages(t *testing.T) {
 	protectedImages = func() (map[string]bool, error) {
 		return map[string]bool{"docker.io/library/mysql:8.4": true}, nil
 	}
+	loadPulledImages = func() map[string]bool {
+		return map[string]bool{"docker.io/library/mysql:5.7": true}
+	}
 	var removed []string
 	removeImage = func(id string) error { removed = append(removed, id); return nil }
 	t.Cleanup(func() {

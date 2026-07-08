@@ -59,6 +59,18 @@ func TestHandleOpenFolderRejects(t *testing.T) {
 		}
 	})
 
+	t.Run("symlink under home pointing outside home is 403", func(t *testing.T) {
+		link := filepath.Join(home, "escape")
+		if err := os.Symlink("/etc", link); err != nil {
+			t.Skipf("cannot create symlink: %v", err)
+		}
+		defer os.Remove(link)
+		rr := postFolder(t, "127.0.0.1:5000", `{"path":"`+link+`"}`)
+		if rr.Code != http.StatusForbidden {
+			t.Fatalf("status = %d, want 403 (symlink must not escape home)", rr.Code)
+		}
+	})
+
 	t.Run("a file (not a dir) is 404", func(t *testing.T) {
 		f := filepath.Join(home, "notadir.txt")
 		if err := os.WriteFile(f, []byte("x"), 0644); err != nil {

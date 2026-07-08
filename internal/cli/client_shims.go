@@ -103,14 +103,16 @@ func runShimsSet(tool string, enabled bool) error {
 // Both the postgres and mysql client families use -h / --host for the host.
 func argsSpecifyHost(args []string) bool {
 	for _, a := range args {
-		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || (strings.HasPrefix(a, "-h") && len(a) > 2) {
+		// The glued short form is "-hHOST" with no whitespace; "-h note" (a space)
+		// is a -c/-e body that happens to start with -h, not a host flag.
+		gluedHost := strings.HasPrefix(a, "-h") && len(a) > 2 && !strings.ContainsAny(a, " \t")
+		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || gluedHost {
 			return true
 		}
 		// A connection URI (scheme://…) or a libpq conninfo string carries its own
-		// host. A "host=" is only read as a conninfo key when the whole arg is
-		// key=value pairs, so a host= inside a SQL body (passed via -c/-e, whether
-		// spaced or inline) is never mistaken for one.
-		if isConnURI(a) || (strings.Contains(a, "host=") && looksLikeConninfo(a)) {
+		// host. Conninfo detection requires an actual "host" key, so a host= inside a
+		// SQL body (via -c/-e) or a "--where=host=x" filter is never mistaken for one.
+		if isConnURI(a) || looksLikeConninfo(a) {
 			return true
 		}
 	}
@@ -129,21 +131,27 @@ func isConnURI(a string) bool {
 	return false
 }
 
-// looksLikeConninfo reports whether a is a libpq conninfo string: every
-// whitespace-separated token is a key=value pair. A SQL query fails this on its
-// first bare word (SELECT, WHERE…), so it separates "host=db port=5432" from a
-// "WHERE host='x'" predicate without knowing the tool or its flags.
+// looksLikeConninfo reports whether a is a libpq conninfo string that names a
+// host: every whitespace-separated token is a key=value pair AND one token's key
+// is exactly "host". A SQL query fails the first test on its first bare word
+// (SELECT, WHERE…); a spaceless "--where=host=x" filter passes that but fails the
+// host-key test, since its only key is "--where". So neither is read as a host.
 func looksLikeConninfo(a string) bool {
 	fields := strings.Fields(a)
 	if len(fields) == 0 {
 		return false
 	}
+	hasHost := false
 	for _, f := range fields {
-		if i := strings.IndexByte(f, '='); i <= 0 {
+		i := strings.IndexByte(f, '=')
+		if i <= 0 {
 			return false
 		}
+		if f[:i] == "host" {
+			hasHost = true
+		}
 	}
-	return true
+	return hasHost
 }
 
 // hostEnvSet reports whether the caller pointed the tool at a host via the

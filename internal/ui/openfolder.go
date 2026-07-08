@@ -35,7 +35,20 @@ func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "path must be absolute", http.StatusBadRequest)
 		return
 	}
+	// Resolve symlinks before the home check so a symlink under home that points
+	// outside home can't slip a foreign path past the prefix guard. Home is
+	// resolved the same way in case it is itself a symlink.
+	path, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		http.Error(w, "folder not found", http.StatusNotFound)
+		return
+	}
 	home, _ := os.UserHomeDir()
+	if home != "" {
+		if h, err := filepath.EvalSymlinks(home); err == nil {
+			home = h
+		}
+	}
 	if home == "" || (path != home && !strings.HasPrefix(path, home+string(os.PathSeparator))) {
 		http.Error(w, "path outside home", http.StatusForbidden)
 		return

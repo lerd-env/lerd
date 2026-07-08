@@ -143,6 +143,40 @@ func TestPortClaimedByOtherInstalled(t *testing.T) {
 	}
 }
 
+// A multi-port service reserves its un-overridden SECONDARY default too, not just
+// the ports HostPorts() records. Without this, two installed services defaulting a
+// secondary mapping to the same host port both pass the boot guard and collide.
+func TestPortClaimedByOtherInstalled_SecondaryDefault(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	svc := &config.CustomService{Name: "twoport", Image: "example/x:1", Ports: []string{"33061:3306", "8025:8025"}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	// A config entry with only the primary set, so HostPorts() omits the 8025
+	// secondary default (the gap this guards against).
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.Services["twoport"] = config.ServiceConfig{Enabled: true, Port: 33061}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	if !portClaimedByOtherInstalled("other", 8025) {
+		t.Error("the un-overridden secondary default 8025 must count as claimed")
+	}
+	if !portClaimedByOtherInstalled("other", 33061) {
+		t.Error("the primary default 33061 must count as claimed")
+	}
+	if portClaimedByOtherInstalled("other", 9999) {
+		t.Error("an unrelated port must not be claimed")
+	}
+}
+
 // Issue #704: the guard keeps a bindable canonical port when only a phantom
 // (uninstalled) preset holds it, and shifts when an installed sibling does.
 func TestGenericGuard_704CanonicalSharing(t *testing.T) {

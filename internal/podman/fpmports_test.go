@@ -1,11 +1,36 @@
 package podman
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
 )
+
+// stubFPMUnit makes the FPM unit look installed and active, with a no-op quadlet
+// write and a restart whose failures follow the given sequence (one bool per call,
+// true = fail). It returns a pointer to the live call count.
+func stubFPMUnit(t *testing.T, restartFails ...bool) *int {
+	t.Helper()
+	oInstalled, oStatus, oWrite, oRestart := fpmQuadletInstalled, fpmUnitStatus, fpmWriteQuadlet, fpmRestartUnit
+	t.Cleanup(func() {
+		fpmQuadletInstalled, fpmUnitStatus, fpmWriteQuadlet, fpmRestartUnit = oInstalled, oStatus, oWrite, oRestart
+	})
+	fpmQuadletInstalled = func(string) bool { return true }
+	fpmUnitStatus = func(string) (string, error) { return "active", nil }
+	fpmWriteQuadlet = func(string) error { return nil }
+	calls := 0
+	fpmRestartUnit = func(string) error {
+		i := calls
+		calls++
+		if i < len(restartFails) && restartFails[i] {
+			return fmt.Errorf("restart %d failed", i)
+		}
+		return nil
+	}
+	return &calls
+}
 
 // fpmTestEnv points config at a temp dir and stubs bindability so the shift
 // guard is driven by an explicit busy-port set rather than real sockets.
@@ -118,6 +143,33 @@ func TestSetFPMPorts_EmptyClearsVersion(t *testing.T) {
 	}
 	if got := config.FPMPortsFor("8.3"); got != nil {
 		t.Errorf("after clear, FPMPortsFor(8.3) = %v, want nil", got)
+	}
+}
+
+// A restart that fails on the new mapping (a port grabbed between the probe and
+// the restart) rolls the version's ports back to what was serving before, and the
+// persisted config and returned list both reflect the restored ports.
+func TestSetFPMPorts_RestartFailureRestoresPreviousPorts(t *testing.T) {
+	fpmTestEnv(t)
+	seeded, err := SetFPMPorts("8.4", []string{"41000:9003"})
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	calls := stubFPMUnit(t, true, false) // new-port restart fails, rollback restart succeeds
+
+	resolved, err := SetFPMPorts("8.4", []string{"41100:9003"})
+	if err == nil {
+		t.Fatal("expected an error surfacing the failed restart")
+	}
+	if strings.Join(resolved, ",") != strings.Join(seeded, ",") {
+		t.Fatalf("resolved = %v, want the restored previous ports %v", resolved, seeded)
+	}
+	cfg, _ := config.LoadGlobal()
+	if got := strings.Join(cfg.PHP.FPMPorts["8.4"], ","); got != strings.Join(seeded, ",") {
+		t.Fatalf("persisted ports = %v, want %v restored", got, seeded)
+	}
+	if *calls != 2 {
+		t.Errorf("restart calls = %d, want 2 (new port fails, rollback succeeds)", *calls)
 	}
 }
 

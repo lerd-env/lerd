@@ -31,6 +31,12 @@ func TestArgsSpecifyHost(t *testing.T) {
 		// so a following -h is a real host and must still be detected.
 		{[]string{"-c", "-h", "prod.example.com", "mydb"}, true},
 		{[]string{"-e", "-h", "prod.example.com"}, true},
+		// A spaceless "--where=host=x" filter: its only key is --where, not host, so
+		// it must not be read as a conninfo host and suppress the local default.
+		{[]string{"mysqldump", "db", "t", "--where=host=x"}, false},
+		// A -c/-e body that merely starts with "-h" is not a glued host flag: the
+		// real glued form ("-hHOST") carries no whitespace.
+		{[]string{"-c", "-h note"}, false},
 	}
 	for _, c := range cases {
 		if got := argsSpecifyHost(c.args); got != c.want {

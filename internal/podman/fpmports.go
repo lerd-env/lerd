@@ -9,8 +9,33 @@ import (
 )
 
 // fpmPortsBindable is the port-bindability probe, swapped in tests so the shift
-// guard can be exercised without binding real sockets.
-var fpmPortsBindable = freeport.Bindable
+// guard can be exercised without binding real sockets. The unit lifecycle calls
+// are seams for the same reason: the restart-rollback path is exercised without a
+// live podman.
+var (
+	fpmPortsBindable    = freeport.Bindable
+	fpmQuadletInstalled = QuadletInstalled
+	fpmUnitStatus       = UnitStatus
+	fpmWriteQuadlet     = WriteFPMQuadlet
+	fpmRestartUnit      = RestartUnit
+)
+
+// setVersionFPMPorts writes (or clears) a version's FPM port overrides on cfg,
+// pruning the map to nil when the last version is removed. Shared by the save and
+// its rollback so both persist the port list the same way.
+func setVersionFPMPorts(cfg *config.GlobalConfig, version string, ports []string) {
+	if len(ports) == 0 {
+		delete(cfg.PHP.FPMPorts, version)
+		if len(cfg.PHP.FPMPorts) == 0 {
+			cfg.PHP.FPMPorts = nil
+		}
+		return
+	}
+	if cfg.PHP.FPMPorts == nil {
+		cfg.PHP.FPMPorts = map[string][]string{}
+	}
+	cfg.PHP.FPMPorts[version] = ports
+}
 
 // SetFPMPorts replaces the extra published ports for a PHP version's shared FPM
 // container with the given "host:container" specs, shifting any requested host
@@ -25,6 +50,9 @@ func SetFPMPorts(version string, specs []string) ([]string, error) {
 	if err != nil || cfg == nil {
 		return nil, fmt.Errorf("loading global config: %w", err)
 	}
+	// Prior ports for this version, so a failed restart can roll the whole change
+	// back to the mapping that was actually serving.
+	prevPorts := append([]string(nil), cfg.PHP.FPMPorts[version]...)
 
 	// A port this version already publishes is not a collision with itself: the
 	// running container holds it now but frees it on the restart below, so a probe
@@ -87,17 +115,7 @@ func SetFPMPorts(version string, specs []string) ([]string, error) {
 		resolved = append(resolved, mapping)
 	}
 
-	if len(resolved) == 0 {
-		delete(cfg.PHP.FPMPorts, version)
-		if len(cfg.PHP.FPMPorts) == 0 {
-			cfg.PHP.FPMPorts = nil
-		}
-	} else {
-		if cfg.PHP.FPMPorts == nil {
-			cfg.PHP.FPMPorts = map[string][]string{}
-		}
-		cfg.PHP.FPMPorts[version] = resolved
-	}
+	setVersionFPMPorts(cfg, version, resolved)
 	if err := config.SaveGlobal(cfg); err != nil {
 		return nil, err
 	}
@@ -106,16 +124,34 @@ func SetFPMPorts(version string, specs []string) ([]string, error) {
 	// version whose FPM quadlet actually exists, so a save for a not-yet-installed
 	// version doesn't resurrect a unit that would grab a host port at boot.
 	unit := "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
-	if !QuadletInstalled(unit) {
+	if !fpmQuadletInstalled(unit) {
 		return resolved, nil
 	}
-	if err := WriteFPMQuadlet(version); err != nil {
+	if err := fpmWriteQuadlet(version); err != nil {
 		return resolved, err
 	}
-	if status, _ := UnitStatus(unit); status == "active" || status == "activating" {
-		_ = RestartUnit(unit)
+	if status, _ := fpmUnitStatus(unit); status == "active" || status == "activating" {
+		if err := fpmRestartUnit(unit); err != nil {
+			return rollbackFPMPorts(version, unit, prevPorts, resolved, err)
+		}
 	}
 	return resolved, nil
+}
+
+// rollbackFPMPorts restores a version's previous FPM ports after a restart on the
+// new mapping failed (a port grabbed between the bindability probe and the restart
+// can leave the shared FPM down). On a clean restore it returns the previous ports
+// with an explanatory error; if the restore itself fails the unit may be down and
+// the operator is told to run `lerd start`.
+func rollbackFPMPorts(version, unit string, prevPorts, resolved []string, cause error) ([]string, error) {
+	cfg, err := config.LoadGlobal()
+	if err == nil && cfg != nil {
+		setVersionFPMPorts(cfg, version, prevPorts)
+		if config.SaveGlobal(cfg) == nil && fpmWriteQuadlet(version) == nil && fpmRestartUnit(unit) == nil {
+			return prevPorts, fmt.Errorf("could not restart %s on the new ports, restored the previous ports: %w", unit, cause)
+		}
+	}
+	return resolved, fmt.Errorf("could not restart %s and could not restore the previous ports, run `lerd start`: %w", unit, cause)
 }
 
 // AddFPMPort appends a single "host:container" mapping to a version's FPM ports,

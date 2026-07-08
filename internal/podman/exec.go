@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/imgledger"
 )
 
 // execCommand and execCommandContext are the single seam every podman
@@ -131,6 +132,9 @@ func runPull(image string, stdout, stderr io.Writer) error {
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("pulling %s: %w", image, err)
 	}
+	// Record the ref lerd pulled (platform-resolved, matching the stored image)
+	// so cleanup can tell its own catalog leftovers from images the user pulled.
+	imgledger.Record(PlatformImage(image))
 	return nil
 }
 
