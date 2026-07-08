@@ -244,6 +244,8 @@ The same flagged routes also surface as a `Response Time` warning in the site do
 
 This is a local, single-developer signal meant to catch a route that is dragging, not a production analytics system. Each flagged route carries a **Profile** button that does the whole handoff in one click: it arms the SPX profiler, waits for it to actually be armed, then opens the route in a new tab so that request is captured and switches you to the Profiler where the fresh capture lands on top. Profiling is global and stays off until you ask for it, so the button turns it on for every request until you turn it back off. A non-navigable route (a POST, say) can't be opened for you, so there the button just arms profiling and opens the Profiler for you to reproduce it (see [Profiler](../features/profiler.md)).
 
+When debug capture is on, each route also gains an **Inspect queries** button that links the timing straight to the database work behind it: it opens the queries captured against that exact route, matched on the same route key, each request with its query count and total query time and any N+1 or slow-query findings with the offending SQL and its caller. Evidence only exists for requests hit while capture was on, so a route you haven't exercised with the debugger reads as empty until you reload it. See [Queries](../features/queries.md) for the capture itself.
+
 ---
 
 ## Name collision handling

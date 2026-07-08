@@ -52,6 +52,54 @@ export interface Analytics {
   recent: RecentRequest[];
 }
 
+export interface AnalyzedCaller {
+  file: string;
+  line: number;
+}
+
+export interface NPlusOneFinding {
+  fingerprint: string;
+  count: number;
+  total_time_ms: number;
+  sample_sql: string;
+  caller: AnalyzedCaller;
+}
+
+export interface SlowFinding {
+  sql: string;
+  time_ms: number;
+  caller: AnalyzedCaller;
+}
+
+export interface RequestAnalysis {
+  request?: string;
+  rid?: string;
+  query_count: number;
+  total_time_ms: number;
+  n_plus_one?: NPlusOneFinding[];
+  slow?: SlowFinding[];
+}
+
+export interface RouteQueries {
+  route: string;
+  captures: number;
+  evidence: RequestAnalysis[];
+}
+
+// loadRouteQueries fetches the debug-bridge query evidence captured against one
+// route, keyed by the same route string the analytics view groups by.
+export async function loadRouteQueries(
+  domain: string,
+  route: string,
+  branch = ''
+): Promise<RouteQueries> {
+  const params = new URLSearchParams({ route });
+  if (branch) params.set('branch', branch);
+  return apiJson<RouteQueries>(
+    `/api/sites/${encodeURIComponent(domain)}/route-queries?${params.toString()}`
+  );
+}
+
 export type TimeRange = '15m' | '1h' | '24h' | '7d';
 export const TIME_RANGES: TimeRange[] = ['15m', '1h', '24h', '7d'];
 

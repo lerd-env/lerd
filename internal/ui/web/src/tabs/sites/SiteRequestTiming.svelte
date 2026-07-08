@@ -9,7 +9,9 @@
   } from '$stores/analytics';
   import { profilerEnabled, setProfiler } from '$stores/profiler';
   import { openProfiler } from '$stores/dashboard';
+  import { debugCaptureEnabled } from '$stores/queries';
   import { tooltip } from '$lib/tooltip';
+  import RouteQueriesModal from './RouteQueriesModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -17,6 +19,13 @@
     activeWorktreeBranch?: string;
   }
   let { site, activeWorktreeBranch = '' }: Props = $props();
+
+  let inspectRoute = $state('');
+  let inspectOpen = $state(false);
+  function openInspect(route: string) {
+    inspectRoute = route;
+    inspectOpen = true;
+  }
 
   let range = $state<TimeRange>('1h');
   let data = $state<Analytics | null>(null);
@@ -148,6 +157,23 @@
   </div>
 {/snippet}
 
+{#snippet inspectBtn(routeKey: string)}
+  {#if $debugCaptureEnabled}
+    <button
+      type="button"
+      onclick={(e) => { e.stopPropagation(); openInspect(routeKey); }}
+      use:tooltip={m.sites_timing_inspectQueries()}
+      aria-label={m.sites_timing_inspectQueries()}
+      class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+    >
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <ellipse cx="12" cy="5" rx="8" ry="3" />
+        <path d="M4 5v6c0 1.66 3.58 3 8 3s8-1.34 8-3V5M4 11v6c0 1.66 3.58 3 8 3s8-1.34 8-3v-6" />
+      </svg>
+    </button>
+  {/if}
+{/snippet}
+
 <section>
   <div class="mb-2.5 flex items-center justify-between gap-3">
     <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
@@ -234,17 +260,20 @@
       <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2.5">{m.sites_timing_slowest()}</div>
       <div class="flex flex-col gap-2">
         {#each slowest as r (r.method + r.route)}
-          <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
-            class="grid grid-cols-[minmax(7rem,14rem)_1fr_auto] items-center gap-3 text-left group disabled:opacity-60">
-            <span class="flex items-center gap-1.5 min-w-0">
-              <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
-              <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-lerd-red">{r.route.replace(r.method + ' ', '')}</span>
-            </span>
-            <span class="h-2 rounded-full bg-gray-100 dark:bg-white/5 overflow-hidden">
-              <span class="block h-full rounded-full {SEV_BG[sev(recentP95(r))]}" style="width:{(recentP95(r) / slowMax) * 100}%"></span>
-            </span>
-            <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
-          </button>
+          <div class="flex items-center gap-2">
+            <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
+              class="flex-1 min-w-0 grid grid-cols-[minmax(7rem,14rem)_1fr_auto] items-center gap-3 text-left group disabled:opacity-60">
+              <span class="flex items-center gap-1.5 min-w-0">
+                <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
+                <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-lerd-red">{r.route.replace(r.method + ' ', '')}</span>
+              </span>
+              <span class="h-2 rounded-full bg-gray-100 dark:bg-white/5 overflow-hidden">
+                <span class="block h-full rounded-full {SEV_BG[sev(recentP95(r))]}" style="width:{(recentP95(r) / slowMax) * 100}%"></span>
+              </span>
+              <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
+            </button>
+            {@render inspectBtn(r.route)}
+          </div>
         {/each}
       </div>
     </div>
@@ -268,6 +297,7 @@
                 <th class="text-right font-semibold px-3 py-2">p95</th>
                 <th class="text-left font-semibold px-3 py-2 w-24">{m.sites_timing_latency()}</th>
                 <th class="text-right font-semibold px-3 py-2">{m.sites_timing_requests()}</th>
+                {#if $debugCaptureEnabled}<th class="px-2 py-2 w-8"></th>{/if}
               </tr>
             </thead>
             <tbody>
@@ -287,6 +317,7 @@
                     </span>
                   </td>
                   <td class="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{r.samples.toLocaleString()}</td>
+                  {#if $debugCaptureEnabled}<td class="px-2 py-2 text-right">{@render inspectBtn(r.route)}</td>{/if}
                 </tr>
               {/each}
             </tbody>
@@ -311,3 +342,11 @@
     </div>
   {/if}
 </section>
+
+<RouteQueriesModal
+  domain={site.domain}
+  route={inspectRoute}
+  branch={activeWorktreeBranch}
+  open={inspectOpen}
+  onclose={() => (inspectOpen = false)}
+/>
