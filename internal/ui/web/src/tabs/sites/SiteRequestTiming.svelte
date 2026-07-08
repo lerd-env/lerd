@@ -62,16 +62,21 @@
   const routeMax = $derived(Math.max(1, ...(data?.routes ?? []).map((r) => r.p95_millis)));
   const slowMax = $derived(Math.max(1, ...slowest.map((r) => recentP95(r))));
 
-  // Throughput area path in a 100x30 viewBox, so the SVG scales to any width
-  // without measuring the DOM. A single point still draws a flat line.
-  const tputPath = $derived.by(() => {
+  // Throughput area+line in a 0..100 box (scaled to any width via preserveAspect),
+  // with points placed by their real time so the x axis reads as a clock, and the
+  // peak carried out so the y axis can be labelled. Null when there's no traffic.
+  const tput = $derived.by(() => {
     const pts = data?.throughput ?? [];
-    if (pts.length === 0) return { area: '', line: '' };
+    if (pts.length === 0) return null;
     const max = Math.max(1, ...pts.map((p) => p.count));
-    const x = (i: number) => (pts.length === 1 ? 100 : (i / (pts.length - 1)) * 100);
-    const y = (v: number) => 30 - (v / max) * 28 - 1;
-    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.count).toFixed(1)}`).join(' ');
-    return { area: `M0,30 ${line.replace('M', 'L')} L100,30 Z`, line };
+    const first = pts[0].at_millis;
+    const last = pts[pts.length - 1].at_millis;
+    const span = Math.max(1, last - first);
+    const x = (at: number) => (pts.length === 1 ? 50 : ((at - first) / span) * 100);
+    const y = (v: number) => 96 - (v / max) * 92;
+    const line = pts.map((p, i) => `${i ? 'L' : 'M'}${x(p.at_millis).toFixed(1)},${y(p.count).toFixed(1)}`).join(' ');
+    const area = `M${x(first).toFixed(1)},100 ${line.replace('M', 'L')} L${x(last).toFixed(1)},100 Z`;
+    return { max, first, last, line, area };
   });
 
   function fmtMs(ms: number): string {
@@ -200,10 +205,27 @@
           <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{m.sites_timing_throughput()}</div>
           <div class="text-[10px] text-gray-400 dark:text-gray-500">{m.sites_timing_perMin()}</div>
         </div>
-        <svg viewBox="0 0 100 30" preserveAspectRatio="none" class="w-full h-24">
-          <path d={tputPath.area} class="fill-lerd-red/10" />
-          <path d={tputPath.line} fill="none" class="stroke-lerd-red" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" />
-        </svg>
+        {#if tput}
+          <div class="flex gap-1.5">
+            <div class="flex flex-col justify-between items-end w-6 py-0.5 text-[9px] tabular-nums text-gray-400 dark:text-gray-500 leading-none">
+              <span>{tput.max}</span>
+              <span>0</span>
+            </div>
+            <div class="flex-1 min-w-0">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="w-full h-24">
+                <line x1="0" y1="4" x2="100" y2="4" class="stroke-gray-200/70 dark:stroke-white/5" stroke-width="1" vector-effect="non-scaling-stroke" />
+                <path d={tput.area} class="fill-lerd-red/10" />
+                <path d={tput.line} fill="none" class="stroke-lerd-red" stroke-width="1.5" vector-effect="non-scaling-stroke" stroke-linejoin="round" />
+              </svg>
+              <div class="flex justify-between text-[9px] tabular-nums text-gray-400 dark:text-gray-500 mt-1">
+                <span>{fmtTime(tput.first)}</span>
+                <span>{fmtTime(tput.last)}</span>
+              </div>
+            </div>
+          </div>
+        {:else}
+          <div class="h-24 flex items-center justify-center text-[11px] text-gray-400 dark:text-gray-500">{m.sites_reqstats_watching()}</div>
+        {/if}
       </div>
     </div>
 

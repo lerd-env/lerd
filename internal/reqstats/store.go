@@ -182,20 +182,28 @@ func (s *Store) Prune(before time.Time) (int64, error) {
 
 // Recent returns the newest limit requests for a site, newest first.
 func (s *Store) Recent(site string, limit int) ([]Record, error) {
+	// Over-fetch and drop static assets in Go, so a burst of asset requests can't
+	// crowd real requests out of the list; the scan is capped so it stays cheap.
 	rows, err := s.db.Query(
 		`SELECT at_ms, route, method, status, ms, uri, cold FROM requests WHERE site = ? ORDER BY at_ms DESC LIMIT ?`,
-		site, limit)
+		site, limit*20+100)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var out []Record
 	for rows.Next() {
+		if len(out) >= limit {
+			break
+		}
 		var atMs int64
 		var cold int
 		var r = Record{Site: site}
 		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold); err != nil {
 			return nil, err
+		}
+		if IsStaticAsset(r.URI) || r.Millis == 0 {
+			continue
 		}
 		r.At = time.UnixMilli(atMs)
 		r.Cold = cold != 0
@@ -235,6 +243,12 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		var ms float64
 		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold); err != nil {
 			return Analytics{}, err
+		}
+		// Skip requests nginx served without the app: static assets, or a zero time
+		// (nginx answering a static file directly, e.g. manifest.json). New ones
+		// aren't recorded; this also drops any already stored before the filter.
+		if IsStaticAsset(uri) || ms == 0 {
+			continue
 		}
 		// Cold starts count toward the total, status, and throughput, but are kept
 		// out of every timing figure (site and per-route percentiles, distribution)

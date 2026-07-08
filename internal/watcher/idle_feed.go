@@ -154,7 +154,10 @@ func handleAccessDatagram(b []byte) {
 	if reqAggregator != nil {
 		if rec, ok := reqstats.ParseAccessRecord(b); ok {
 			reqAggregator.Record(rec)
-			if reqStore != nil {
+			// Skip requests nginx served without the app: a static-asset extension,
+			// or a zero request time, which is nginx answering a static file directly
+			// (manifest.json, robots.txt, service workers) rather than PHP.
+			if reqStore != nil && !reqstats.IsStaticAsset(rec.URI) && rec.SecondsToMillis() > 0 {
 				if site, ok := resolveHostToSite(rec.Host); ok {
 					now := time.Now()
 					sr := reqstats.RecordFrom(rec, site, now)

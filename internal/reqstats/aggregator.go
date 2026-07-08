@@ -46,12 +46,12 @@ type RouteStat struct {
 	Route     string  `json:"route"`
 	Method    string  `json:"method"`
 	Example   string  `json:"example"` // a concrete path last seen for this route, openable in a browser
-	P50Millis float64 `json:"p50_millis,omitempty"`
+	P50Millis float64 `json:"p50_millis"`
 	P95Millis float64 `json:"p95_millis"`
 	// RecentP95Millis is the p95 over only the route's most recent samples, so a
 	// route that was slow but has since been fixed reads as fast again even while
 	// its old slow samples still sit in the window's overall p95.
-	RecentP95Millis float64 `json:"recent_p95_millis,omitempty"`
+	RecentP95Millis float64 `json:"recent_p95_millis"`
 	Multiplier      float64 `json:"multiplier"`
 	Samples         int     `json:"samples"`
 }
