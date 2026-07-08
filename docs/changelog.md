@@ -42,6 +42,7 @@ This release turns the per-request signal lerd already carried into a full reque
 - **Host-worker consent is keyed on the command that actually runs** (#770), so the v1.27 host-execution gate remembers the approval for the resolved command rather than re-prompting.
 - **MCP podman hot-path calls are bounded and a stalled machine self-heals** (#715), and the web UI check-for-updates button gives live feedback instead of appearing to hang (#786).
 - **macOS machine heal, DNS teardown, and CA trust check are hardened** (#791).
+- **A large MySQL or MariaDB restore no longer dies with "Lost connection during query"**. A dump with a single statement above the server's `max_allowed_packet` aborted the connection partway through, and the bundled MySQL config never raised it off the image default while MariaDB shipped no config at all, leaving it on the 16MB default that a moderately large row already exceeds. The bundled MySQL config now sets `max_allowed_packet` to 256M and the MariaDB preset gains the same, with the service Config tab documented for dumps that need more. `lerd db:import`, `lerd db:restore`, and a cross-version service migrate also pass `--max-allowed-packet` on every SQL-load path so the client is never a second bottleneck once the server ceiling is raised.
 - **v1.27 review follow-ups** (#763, #773, #799, #802). Correctness, macOS-compatibility and safety issues found reviewing the v1.27 changes.
 
 ### Docs

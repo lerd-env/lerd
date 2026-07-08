@@ -272,12 +272,12 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Family: "mysql", Database: "myapp"},
-			`gunzip -c | $(command -v mysql || command -v mariadb) -uroot 'myapp'`,
+			`gunzip -c | $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot 'myapp'`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Family: "mariadb", AllDatabases: true},
-			`gunzip -c | $(command -v mysql || command -v mariadb) -uroot`,
+			`gunzip -c | $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot`,
 		},
 		{
 			"postgres one database",

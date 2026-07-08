@@ -160,7 +160,7 @@ func snapshotDumpCommand(t SnapshotTarget) (string, error) {
 func snapshotRestoreCommand(t SnapshotTarget) (string, error) {
 	switch t.Family {
 	case "mysql", "mariadb":
-		bin := "$(command -v mysql || command -v mariadb)"
+		bin := "$(command -v mysql || command -v mariadb) --max-allowed-packet=" + config.MySQLImportMaxPacket
 		if t.AllDatabases {
 			return "gunzip -c | " + bin + " -uroot", nil
 		}

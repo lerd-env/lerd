@@ -381,7 +381,8 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
-	restoreCmd := "mysql -h 127.0.0.1 -uroot 2>&1 || mariadb -h 127.0.0.1 -uroot 2>&1"
+	packet := "--max-allowed-packet=" + config.MySQLImportMaxPacket
+	restoreCmd := "mysql " + packet + " -h 127.0.0.1 -uroot 2>&1 || mariadb " + packet + " -h 127.0.0.1 -uroot 2>&1"
 	if err := restoreFromHost(unit, restoreCmd, rootEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}

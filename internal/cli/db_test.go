@@ -31,6 +31,30 @@ func TestDbImportCmdMySQLPasswordNotInArgs(t *testing.T) {
 	}
 }
 
+func TestDbImportCmdMySQLRaisesClientPacket(t *testing.T) {
+	for _, conn := range []string{"mysql", "mariadb"} {
+		env := &dbEnv{connection: conn, database: "shop", username: "root", password: "lerd"}
+		cmd, err := dbImportCmd(env)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(strings.Join(cmd.Args, " "), "--max-allowed-packet=") {
+			t.Errorf("%s import must raise the client max_allowed_packet so a large dump is not capped at 16MB: %v", conn, cmd.Args)
+		}
+	}
+}
+
+func TestDbImportCmdPostgresHasNoPacketFlag(t *testing.T) {
+	env := &dbEnv{connection: "pgsql", database: "shop", username: "postgres", password: "lerd"}
+	cmd, err := dbImportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.Join(cmd.Args, " "), "max-allowed-packet") {
+		t.Errorf("postgres import must not carry a mysql-only flag: %v", cmd.Args)
+	}
+}
+
 func TestDbExportCmdMySQLPasswordNotInArgs(t *testing.T) {
 	env := &dbEnv{
 		connection: "mysql",

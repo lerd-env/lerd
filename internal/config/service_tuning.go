@@ -95,6 +95,13 @@ func resolveTuningMount(svc *CustomService) (tuningMount, bool) {
 	return m, ok
 }
 
+// MySQLImportMaxPacket is the client-side max_allowed_packet lerd passes whenever
+// it loads a dump into mysql/mariadb (db:import, snapshot restore, cross-version
+// migrate), so a large extended-insert statement is never truncated by the client's
+// 16MB default. The server ceiling still governs the effective limit, set in the
+// bundled lerd.cnf and raiseable from the service Config tab.
+const MySQLImportMaxPacket = "1G"
+
 // mysqlTuningTemplate seeds the mysql/mariadb override. The zz- filename prefix
 // makes it sort after the bundled /etc/mysql/conf.d/lerd.cnf, so anything the
 // user sets here overrides the defaults. Everything ships commented out so the
@@ -111,6 +118,11 @@ const mysqlTuningTemplate = `[mysqld]
 # innodb_buffer_pool_size = 512M
 # innodb_log_file_size = 256M
 # max_connections = 200
+
+# Restoring a large dump with an external client (a GUI, a manual mysql call)?
+# Raise the client ceiling too, lerd's own db:import already does:
+# [client]
+# max_allowed_packet = 1G
 `
 
 // redisTuningTemplate seeds the redis override. Redis loads no config file by
