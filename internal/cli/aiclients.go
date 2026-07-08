@@ -1,12 +1,22 @@
 package cli
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+// jsonEqual reports whether a and b serialise to the same canonical JSON. Go
+// sorts map keys on marshal, so this compares structure and values regardless of
+// key order or the Go-side slice type ([]string vs the []any a decode produces).
+func jsonEqual(a, b any) bool {
+	ab, err1 := json.Marshal(a)
+	bb, err2 := json.Marshal(b)
+	return err1 == nil && err2 == nil && bytes.Equal(ab, bb)
+}
 
 // mcpFormat selects how a client's MCP server config file is written.
 type mcpFormat int
@@ -283,6 +293,11 @@ func mergeServerJSON(path, serverKey string, entry map[string]any) error {
 	servers, _ := cfg[serverKey].(map[string]any)
 	if servers == nil {
 		servers = map[string]any{}
+	}
+	// Leave a file that already carries an equivalent lerd entry untouched, so a
+	// committed, hand-formatted config isn't reindented on every install/update.
+	if existing, ok := servers["lerd"]; ok && jsonEqual(existing, entry) {
+		return nil
 	}
 	servers["lerd"] = entry
 	cfg[serverKey] = servers

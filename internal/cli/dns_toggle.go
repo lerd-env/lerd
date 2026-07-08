@@ -118,6 +118,10 @@ func toggledCanonicalTLD(prevTLD string, enabling bool) string {
 	return prevTLD
 }
 
+// confirmTLDRewrite is the prompt seam for the TLD-rewrite decision, overridden
+// in tests to exercise the accept and decline branches without a terminal.
+var confirmTLDRewrite = confirmInstallPromptDefault
+
 // applyDNSTLDMigration computes the new canonical TLD for a mode flip and, when
 // it changes and sites still carry the old TLD, offers to rewrite their domains,
 // .env APP_URL and vhosts (mirroring the installer's TLD-migration prompt).
@@ -133,10 +137,14 @@ func applyDNSTLDMigration(prevTLD string, enabling bool) string {
 		if affected := sitesWithTLD(prevTLD); len(affected) > 0 {
 			feedback.Line(fmt.Sprintf("TLD change: %d site(s) currently on .%s -> .%s", len(affected), prevTLD, newTLD))
 			feedback.Note(strings.Join(affected, ", "))
-			if confirmInstallPromptDefault(fmt.Sprintf("Rewrite domains, .env APP_URL, and vhosts to .%s?", newTLD), true) {
+			if confirmTLDRewrite(fmt.Sprintf("Rewrite domains, .env APP_URL, and vhosts to .%s?", newTLD), true) {
 				migrateSiteTLD(prevTLD, newTLD, !enabling)
 			} else {
 				feedback.Note("skipped, sites still reference ." + prevTLD)
+				// Domains stay on the old TLD, but HTTPS tracks DNS: unsecure them
+				// on disable (restore on enable) so a declined rewrite never leaves
+				// an HTTPS-only vhost the torn-down resolver can no longer reach.
+				adjustSitesSecuredForDNS(prevTLD, enabling)
 			}
 		}
 		return newTLD

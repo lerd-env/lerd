@@ -555,6 +555,12 @@ func RestorePublishedPorts(name string, snap PublishedPortSnapshot) error {
 	if !ServiceInstalled(name) {
 		return nil
 	}
+	// Silence the guard's shift hook during our own quadlet rewrite and fire it
+	// once at the end with the restored port, mirroring SetPublishedPort. Without
+	// this a partially-applied save that moved the port (and refreshed host-proxy
+	// .env to follow it) would roll the port back but leave host-proxy sites
+	// pointing at the port the service no longer publishes.
+	defer suppressPublishedPortShift()()
 	unit := "lerd-" + name
 	wasActive := unitActive(name)
 	if wasActive {
@@ -569,5 +575,6 @@ func RestorePublishedPorts(name string, snap PublishedPortSnapshot) error {
 		}
 		_ = portsWaitReady(name, 30*time.Second)
 	}
+	firePublishedPortShiftForced(name, snap.PublishedPort)
 	return nil
 }

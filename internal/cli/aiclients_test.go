@@ -433,3 +433,52 @@ func TestProjectMCP_isPortable(t *testing.T) {
 		t.Errorf("project entry should not bake in the absolute site dir %s: %s", dir, data)
 	}
 }
+
+// mergeServerJSON must leave a config that already carries an equivalent lerd
+// entry byte-for-byte untouched, so a committed, hand-formatted .mcp.json isn't
+// reindented (a spurious git diff) on every install/update. A differing or
+// missing entry still writes, and unrelated servers are preserved.
+func TestMergeServerJSON_IdempotentOnUnchangedEntry(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".mcp.json")
+
+	original := []byte(`{
+  "mcpServers": {
+    "lerd": {
+      "command": "lerd",
+      "args": ["mcp"]
+    },
+    "other": {
+      "command": "their-tool"
+    }
+  }
+}
+`)
+	if err := os.WriteFile(path, original, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	entry := map[string]any{"command": "lerd", "args": []string{"mcp"}}
+	if err := mergeServerJSON(path, "mcpServers", entry); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.ReadFile(path)
+	if string(after) != string(original) {
+		t.Errorf("file rewritten though the lerd entry was unchanged:\n--- before ---\n%s\n--- after ---\n%s", original, after)
+	}
+
+	// A genuinely different entry must still be written, preserving other servers.
+	if err := mergeServerJSON(path, "mcpServers", map[string]any{"command": "lerd", "args": []string{"mcp", "--verbose"}}); err != nil {
+		t.Fatal(err)
+	}
+	changed, _ := os.ReadFile(path)
+	if string(changed) == string(original) {
+		t.Fatal("a differing entry should have been written")
+	}
+	if !strings.Contains(string(changed), "their-tool") {
+		t.Fatal("unrelated server must be preserved on write")
+	}
+	if !strings.Contains(string(changed), "--verbose") {
+		t.Fatal("updated lerd entry must be written")
+	}
+}

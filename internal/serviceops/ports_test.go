@@ -527,3 +527,55 @@ func TestErrPortInUseSentinel(t *testing.T) {
 		t.Error("ErrPortInUse not matchable via errors.Is")
 	}
 }
+
+// A ports-modal save that fails partway through rolls back with RestorePublishedPorts.
+// The forward path fired the host-proxy .env refresh to the new port, so the
+// rollback must re-fire it to the restored port, or host-proxy sites are left
+// pointing at a port the service no longer publishes.
+func TestRestorePublishedPorts_RefreshesHostProxyToRestoredPort(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	fakeQuadletOnDisk(t, "mysql") // ServiceInstalled -> true
+
+	prevStatus, prevStop, prevStart := portsUnitStatus, portsStopUnit, portsStartUnit
+	prevWait, prevRerender := portsWaitReady, portsRerender
+	t.Cleanup(func() {
+		portsUnitStatus, portsStopUnit, portsStartUnit = prevStatus, prevStop, prevStart
+		portsWaitReady, portsRerender = prevWait, prevRerender
+	})
+	portsUnitStatus = func(string) (string, error) { return "active", nil }
+	portsStopUnit = func(string) error { return nil }
+	portsStartUnit = func(string) error { return nil }
+	portsWaitReady = func(string, time.Duration) error { return nil }
+	portsRerender = func(string) error { return nil }
+
+	var fired []int
+	prevHook := OnPublishedPortShift
+	OnPublishedPortShift = func(_ string, port int) { fired = append(fired, port) }
+	t.Cleanup(func() { OnPublishedPortShift = prevHook })
+
+	if _, err := SetPublishedPort("mysql", 33061); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	snap, ok := SnapshotPublishedPorts("mysql")
+	if !ok {
+		t.Fatal("snapshot !ok")
+	}
+	// The apply moved the primary and refreshed host-proxy .env to 33072.
+	if _, err := SetPublishedPort("mysql", 33072); err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+
+	fired = nil
+	if err := RestorePublishedPorts("mysql", snap); err != nil {
+		t.Fatalf("restore: %v", err)
+	}
+	if got := config.ServicePublishedPort("mysql"); got != 33061 {
+		t.Fatalf("port not restored, got %d want 33061", got)
+	}
+	// Exactly one refresh, carrying the restored port, so host-proxy .env follows.
+	if len(fired) != 1 || fired[0] != 33061 {
+		t.Errorf("rollback must refresh host-proxy sites to the restored port; fired=%v want [33061]", fired)
+	}
+}
