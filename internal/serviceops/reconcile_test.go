@@ -96,6 +96,93 @@ func TestRefreshPresetDefinition_RefreshesDeclarativePreservesPins(t *testing.T)
 	}
 }
 
+// A single-version preset (no versions list) installs under its bare canonical
+// name, so refreshPresetDefinition must resolve it too; routing it through
+// ResolvePinned would error and silently skip every store refresh for it.
+func TestRefreshPresetDefinition_SingleVersionPresetRefreshes(t *testing.T) {
+	reconcileEnv(t)
+
+	presetDir := config.StorePresetsDir()
+	if err := os.MkdirAll(presetDir, 0o755); err != nil {
+		t.Fatalf("mkdir preset dir: %v", err)
+	}
+	presetYAML := "name: pdfsvc\n" +
+		"image: docker.io/gotenberg/gotenberg:8\n" +
+		"description: PDF service\n" +
+		"dashboard: http://localhost:3000\n"
+	if err := os.WriteFile(filepath.Join(presetDir, "pdfsvc.yaml"), []byte(presetYAML), 0o644); err != nil {
+		t.Fatalf("write preset: %v", err)
+	}
+
+	installed := &config.CustomService{
+		Name:   "pdfsvc",
+		Preset: "pdfsvc",
+		Image:  "docker.io/gotenberg/gotenberg:8",
+		LastOp: "install",
+		// dashboard missing: a store addition that reconcile must now deliver.
+	}
+	fresh, changed := refreshPresetDefinition(installed)
+	if !changed {
+		t.Fatal("single-version preset should refresh from the store, got changed=false")
+	}
+	if fresh.Dashboard != "http://localhost:3000" || fresh.Description != "PDF service" {
+		t.Errorf("declarative fields not refreshed: %+v", fresh)
+	}
+}
+
+// A service whose host port was shifted off the preset default (a collision at
+// quadlet generation) must not be seen as changed on every reconcile, or the
+// snapshot churns and shim reconciliation reruns each start.
+func TestRefreshPresetDefinition_PreservesShiftedPortNoChurn(t *testing.T) {
+	reconcileEnv(t)
+
+	presetDir := config.StorePresetsDir()
+	if err := os.MkdirAll(presetDir, 0o755); err != nil {
+		t.Fatalf("mkdir preset dir: %v", err)
+	}
+	presetYAML := "name: mydb\n" +
+		"description: db\n" +
+		"ports:\n" +
+		"  - \"{{host_port}}:3306\"\n" +
+		"connection_url: mysql://root:lerd@127.0.0.1:{{host_port}}/lerd\n" +
+		"versions:\n" +
+		"  - tag: \"11.8\"\n" +
+		"    image: docker.io/library/mariadb:11.8\n" +
+		"    canonical: true\n" +
+		"    host_port: 3306\n"
+	if err := os.WriteFile(filepath.Join(presetDir, "mydb.yaml"), []byte(presetYAML), 0o644); err != nil {
+		t.Fatalf("write preset: %v", err)
+	}
+
+	installed := &config.CustomService{
+		Name:          "mydb",
+		Preset:        "mydb",
+		PresetVersion: "11.8",
+		Image:         "docker.io/library/mariadb:11.8",
+		Description:   "db",
+		Ports:         []string{"3399:3306"}, // shifted host port
+		ConnectionURL: "mysql://root:lerd@127.0.0.1:3399/lerd",
+	}
+	fresh, changed := refreshPresetDefinition(installed)
+	if changed {
+		t.Errorf("a store-identical, port-shifted service should not churn; got changed=true (fresh=%+v)", fresh)
+	}
+
+	// The shift is preserved (not reset to the preset default), and a real
+	// declarative change is still detected.
+	installed.Description = "stale"
+	fresh, changed = refreshPresetDefinition(installed)
+	if !changed {
+		t.Fatal("a genuine declarative change should still report changed")
+	}
+	if len(fresh.Ports) == 0 || fresh.Ports[0] != "3399:3306" {
+		t.Errorf("shifted host port not preserved through a refresh: %v", fresh.Ports)
+	}
+	if fresh.ConnectionURL != "mysql://root:lerd@127.0.0.1:3399/lerd" {
+		t.Errorf("shifted connection URL not preserved: %q", fresh.ConnectionURL)
+	}
+}
+
 // TestReconcileServices_forwardHealsMissingQuadlet: a service whose YAML exists
 // but whose quadlet is missing gets its quadlet regenerated (issue #678).
 func TestReconcileServices_forwardHealsMissingQuadlet(t *testing.T) {

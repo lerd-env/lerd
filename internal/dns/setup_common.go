@@ -26,14 +26,50 @@ var sudoersMarkerPath = func() string {
 }
 
 // sudoersInstalled reports whether a drop-in matching content was already
-// installed on this or a prior run, per the user-owned marker.
+// installed on this or a prior run, per the user-owned marker. The marker alone
+// can't tell a deleted drop-in from an intact one (the root-only file is
+// unreadable), so a matching marker is additionally checked against a live
+// passwordless probe: only a conclusive "the grant is gone" answer forces a
+// reinstall, an inconclusive probe leaves the marker's verdict standing.
 func sudoersInstalled(content []byte) bool {
 	got, err := os.ReadFile(sudoersMarkerPath())
 	if err != nil {
 		return false
 	}
 	sum := sha256.Sum256(content)
-	return strings.TrimSpace(string(got)) == hex.EncodeToString(sum[:])
+	if strings.TrimSpace(string(got)) != hex.EncodeToString(sum[:]) {
+		return false
+	}
+	if permitted, conclusive := sudoProbe(); conclusive && !permitted {
+		return false
+	}
+	return true
+}
+
+// sudoersProbeCommand is one of the commands the drop-in grants passwordless;
+// used only to probe whether that grant is still live.
+const sudoersProbeCommand = "/usr/bin/resolvectl"
+
+// sudoProbe is the seam tests override. It reports whether the drop-in's
+// passwordless grant is currently live and whether the answer is conclusive.
+var sudoProbe = defaultSudoProbe
+
+// defaultSudoProbe asks sudo, without prompting, whether the invoking user may
+// run the granted command passwordless. Exit 0 means the grant is live (from the
+// drop-in or a broader rule); a "password is required" refusal means it is gone;
+// anything else (no sudo, an unsupported flag) is inconclusive and defers to the
+// content marker so a working setup is never needlessly reinstalled.
+func defaultSudoProbe() (permitted, conclusive bool) {
+	var stderr bytes.Buffer
+	cmd := exec.Command("sudo", "-n", "-l", sudoersProbeCommand)
+	cmd.Stderr = &stderr
+	if cmd.Run() == nil {
+		return true, true
+	}
+	if strings.Contains(strings.ToLower(stderr.String()), "password is required") {
+		return false, true
+	}
+	return false, false
 }
 
 // ForgetSudoersMarker deletes the user-owned marker so the next InstallSudoers

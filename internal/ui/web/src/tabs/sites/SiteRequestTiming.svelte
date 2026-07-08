@@ -330,7 +330,7 @@
         </div>
       {:else}
         <div class="divide-y divide-gray-100 dark:divide-lerd-border">
-          {#each data.recent as r (r.at_millis + r.uri)}
+          {#each data.recent as r, i (r.at_millis + '-' + r.uri + '-' + i)}
             <div class="flex items-center gap-3 px-3 py-2 text-xs">
               <span class="shrink-0 font-mono text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{fmtTime(r.at_millis)}</span>
               <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>

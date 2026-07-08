@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+// stubSudoProbe pins the passwordless-grant probe so marker tests are isolated
+// from the host's real sudo configuration. Inconclusive by default so the marker
+// verdict stands.
+func stubSudoProbe(t *testing.T, permitted, conclusive bool) {
+	t.Helper()
+	orig := sudoProbe
+	t.Cleanup(func() { sudoProbe = orig })
+	sudoProbe = func() (bool, bool) { return permitted, conclusive }
+}
+
 // The sudoers drop-in lives in /etc/sudoers.d (root-only 0750), so the invoking
 // user cannot read it back to compare. InstallSudoers relies on a user-owned
 // marker instead; without it the drop-in was rewritten, prompting for sudo, on
@@ -15,6 +25,7 @@ func TestSudoersMarker(t *testing.T) {
 	t.Cleanup(func() { sudoersMarkerPath = orig })
 	dir := t.TempDir()
 	sudoersMarkerPath = func() string { return filepath.Join(dir, "sub", "sudoers.sha256") }
+	stubSudoProbe(t, false, false)
 
 	content := []byte("user ALL=(root) NOPASSWD: /usr/bin/resolvectl\n")
 
@@ -47,6 +58,7 @@ func TestForgetSudoersMarker_ForcesRewrite(t *testing.T) {
 	t.Cleanup(func() { sudoersMarkerPath = orig })
 	dir := t.TempDir()
 	sudoersMarkerPath = func() string { return filepath.Join(dir, "sudoers.sha256") }
+	stubSudoProbe(t, false, false)
 
 	content := []byte("user ALL=(root) NOPASSWD: /usr/bin/resolvectl\n")
 	recordSudoersInstalled(content)
@@ -69,6 +81,7 @@ func TestSudoersMarker_upgradeReinstallsOnce(t *testing.T) {
 	t.Cleanup(func() { sudoersMarkerPath = orig })
 	dir := t.TempDir()
 	sudoersMarkerPath = func() string { return filepath.Join(dir, "sudoers.sha256") }
+	stubSudoProbe(t, false, false)
 
 	oldRule := []byte("v1 rule\n")
 	newRule := []byte("v2 rule with an extra grant\n")
@@ -90,5 +103,38 @@ func TestSudoersMarker_upgradeReinstallsOnce(t *testing.T) {
 	}
 	if sudoersInstalled(oldRule) {
 		t.Fatal("old rule must no longer match after the marker is refreshed")
+	}
+}
+
+// The content marker can't tell a deleted drop-in from an intact one. When the
+// passwordless probe conclusively reports the grant is gone, sudoersInstalled
+// must report not-installed so an ordinary install/update restores it, without
+// needing dns:repair. An inconclusive or affirmative probe leaves a working
+// setup alone.
+func TestSudoersInstalled_ProbeInvalidatesDeletedDropIn(t *testing.T) {
+	orig := sudoersMarkerPath
+	t.Cleanup(func() { sudoersMarkerPath = orig })
+	dir := t.TempDir()
+	sudoersMarkerPath = func() string { return filepath.Join(dir, "sudoers.sha256") }
+
+	content := []byte("user ALL=(root) NOPASSWD: /usr/bin/resolvectl\n")
+	recordSudoersInstalled(content)
+
+	// Grant conclusively gone: force a reinstall despite the matching marker.
+	stubSudoProbe(t, false, true)
+	if sudoersInstalled(content) {
+		t.Fatal("a conclusive gone-grant probe must force reinstall (report not installed)")
+	}
+
+	// Grant live: the marker's verdict stands.
+	stubSudoProbe(t, true, true)
+	if !sudoersInstalled(content) {
+		t.Fatal("a live grant with a matching marker should report installed")
+	}
+
+	// Inconclusive (no sudo, unsupported flag): never regress marker-only behaviour.
+	stubSudoProbe(t, false, false)
+	if !sudoersInstalled(content) {
+		t.Fatal("an inconclusive probe must defer to the marker (report installed)")
 	}
 }
