@@ -15,7 +15,7 @@ By default (and automatically) cleanup reclaims everything below. Pass `--safe` 
 
 **Unused service images** (the deep tier, default):
 
-- A service image no installed service references any more, e.g. an old `mysql:8.0` after you upgraded to `8.4`. Each service's **current image and its one-back rollback target are kept**, so a rollback still works.
+- A service image **lerd itself pulled** that no installed service references any more, e.g. an old `mysql:8.0` after you upgraded to `8.4`. Each service's **current image and its one-back rollback target are kept**, so a rollback still works. lerd records every image it pulls, so a catalog image you pulled yourself for another project (a `redis` or `postgres` for a non-lerd stack) is never in scope, even though it shares a repo with a lerd service.
 
 **Dangling images** (the deep tier, default):
 
@@ -25,9 +25,10 @@ By default (and automatically) cleanup reclaims everything below. Pass `--safe` 
 
 - **Named data volumes** — your databases are never in scope.
 - **Any tagged image in use** — an image a running container uses, and each installed service's current image and one-back rollback target, are always kept.
+- **A tagged image lerd didn't pull** — a `mysql`, `redis`, `postgres` (or any catalog repo) you pulled yourself is kept, because the reap only removes service images lerd's own pull recorded. Sharing a repo with a lerd service is not enough to make it a target.
 - With **`--safe`**, only images provably built by lerd (a `dev.lerd.*` label or the `lerd-php*-fpm-base` repo name) are removed, and nothing else is touched at all.
 
-The default reaches further than `--safe` in one place: it also removes **dangling** (untagged) images. That is deliberately safe, a dangling image is unreferenced by definition, so nothing depends on it. On a machine that also runs podman for non-lerd projects, that means the default reclaims their untagged leftovers too; use `--safe` there if you want cleanup scoped strictly to lerd. Removal is reference-count safe throughout: shared layers stay on disk, and an image that turns out to be in use is skipped rather than forced.
+The default reaches further than `--safe` in one place: it also removes **dangling** (untagged) images. That is deliberately safe, a dangling image is unreferenced by definition, so nothing depends on it. On a machine that also runs podman for non-lerd projects, that means the interactive `lerd cleanup` reclaims their untagged leftovers too (the unattended daily sweep never does); use `--safe` there if you want cleanup scoped strictly to lerd. Tagged images are unaffected either way, only lerd's own pulls are in scope. Removal is reference-count safe throughout: shared layers stay on disk, and an image that turns out to be in use is skipped rather than forced.
 
 ## Commands
 

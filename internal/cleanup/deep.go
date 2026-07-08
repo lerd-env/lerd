@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/imgledger"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/registry"
 )
@@ -25,7 +26,24 @@ var (
 	// installedServiceImages is a seam so the short-circuit (config covers every
 	// candidate, so the per-quadlet image reads are skipped) is assertable.
 	installedServiceImages = realInstalledServiceImages
+
+	// loadPulledImages is the seam onto lerd's pull ledger: the catalog reap only
+	// removes a tagged image whose ref lerd recorded pulling, so a user's own copy
+	// of a catalog image lerd never touched is left alone.
+	loadPulledImages = imgledger.Load
 )
+
+// canonPulled canonicalises the ledger refs so they compare equal to the
+// canonicalised image names the reap inspects, regardless of short vs
+// fully-qualified form.
+func canonPulled() map[string]bool {
+	raw := loadPulledImages()
+	out := make(map[string]bool, len(raw))
+	for r := range raw {
+		out[canonRef(r)] = true
+	}
+	return out
+}
 
 // realReferencedImages returns the subset of candidates (keyed by canonical ref)
 // still used by a service config entry, a custom service, or an installed service
@@ -76,10 +94,10 @@ func realReferencedImages(candidates map[string]bool) map[string]bool {
 // behind after upgrading, while the protected set keeps the live image and the
 // one-back rollback target, and an image carrying any non-catalog tag (one the
 // user added themselves) is left entirely alone.
-func deepTargets(imgs []image, repos, protected map[string]bool) []Target {
+func deepTargets(imgs []image, repos, protected, pulled map[string]bool) []Target {
 	var out []Target
 	for _, img := range imgs {
-		refs := removableServiceRefs(img, repos, protected)
+		refs := removableServiceRefs(img, repos, protected, pulled)
 		// Remove every owned tag so the image actually frees on the last one;
 		// credit the reclaimable bytes once (on that last removal), since
 		// untagging the earlier aliases frees nothing on its own.
@@ -96,10 +114,11 @@ func deepTargets(imgs []image, repos, protected map[string]bool) []Target {
 
 // removableServiceRefs returns the tags to remove for an unused service image,
 // or nil to keep it. An image is removable only when EVERY one of its tags is an
-// unprotected catalog ref: a protected tag (current image or rollback target) or
-// a non-catalog tag the user added both mean "leave this whole image alone", so
-// cleanup never untags an image something else still relies on.
-func removableServiceRefs(img image, repos, protected map[string]bool) []string {
+// unprotected catalog ref AND lerd's ledger records having pulled it: a protected
+// tag (current image or rollback target), a non-catalog tag the user added, or an
+// image lerd never pulled all mean "leave this whole image alone", so cleanup
+// never untags an image the user owns or that something else still relies on.
+func removableServiceRefs(img image, repos, protected, pulled map[string]bool) []string {
 	// An image a container still holds can't be removed by podman, so keep it even
 	// when no service config references it (a container running a catalog image the
 	// config no longer names would otherwise be listed forever).
@@ -107,11 +126,18 @@ func removableServiceRefs(img image, repos, protected map[string]bool) []string 
 		return nil
 	}
 	refs := make([]string, 0, len(img.Names))
+	lerdPulled := false
 	for _, n := range img.Names {
 		if protected[canonRef(n)] || !repos[canonRepo(n)] {
 			return nil
 		}
+		if pulled[canonRef(n)] {
+			lerdPulled = true
+		}
 		refs = append(refs, n)
+	}
+	if !lerdPulled {
+		return nil
 	}
 	return refs
 }

@@ -3,6 +3,8 @@ package cleanup
 import (
 	"errors"
 	"testing"
+
+	"github.com/geodro/lerd/internal/imgledger"
 )
 
 // withImages swaps the image-scan and layer-inspect seams for fixtures and
@@ -19,9 +21,13 @@ func withImages(t *testing.T, imgs []image, layers map[string][]string) {
 		}
 		return m, nil
 	}
+	// Default to an empty ledger so a test that doesn't care never reads the real
+	// on-disk file; catalog-reap tests override this after calling withImages.
+	loadPulledImages = func() map[string]bool { return map[string]bool{} }
 	t.Cleanup(func() {
 		scanImages = podmanImages
 		imageLayers = podmanImageLayers
+		loadPulledImages = imgledger.Load
 	})
 }
 
@@ -126,6 +132,9 @@ func TestInspect_ManagedReapsCatalogNotForeignDangling(t *testing.T) {
 	protectedImages = func() (map[string]bool, error) {
 		return map[string]bool{"docker.io/library/mysql:8.4": true}, nil
 	}
+	loadPulledImages = func() map[string]bool {
+		return map[string]bool{"docker.io/library/mysql:5.7": true}
+	}
 	t.Cleanup(func() {
 		serviceRepos = realServiceRepos
 		protectedImages = realProtectedImages
@@ -156,6 +165,43 @@ func TestInspect_ManagedReapsCatalogNotForeignDangling(t *testing.T) {
 	}
 	if !deepGot["docker.io/library/mysql:5.7"] || !deepGot["foreign"] {
 		t.Errorf("deep tier should reap both the catalog leftover and the foreign dangling image, got %+v", deep.Targets)
+	}
+}
+
+// A tagged catalog image lerd never pulled (the user pulled it themselves for an
+// unrelated project) must be left alone even though its repo is in the catalog and
+// nothing lerd runs references it. The ledger is what separates lerd's own
+// leftovers from the user's own images sharing a catalog repo.
+func TestInspect_ManagedSparesCatalogImageLerdNeverPulled(t *testing.T) {
+	withImages(t, []image{
+		{ID: "r6", Names: []string{"docker.io/library/redis:6"}, Size: 300}, // user's own pull
+		{ID: "r7", Names: []string{"docker.io/library/redis:7"}, Size: 300}, // lerd's leftover
+	}, nil)
+	serviceRepos = func() (map[string]bool, error) {
+		return map[string]bool{"docker.io/library/redis": true}, nil
+	}
+	protectedImages = func() (map[string]bool, error) { return map[string]bool{}, nil }
+	loadPulledImages = func() map[string]bool {
+		return map[string]bool{"docker.io/library/redis:7": true}
+	}
+	t.Cleanup(func() {
+		serviceRepos = realServiceRepos
+		protectedImages = realProtectedImages
+	})
+
+	managed, err := Inspect(ScopeManaged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, tg := range managed.Targets {
+		got[tg.ID] = true
+	}
+	if got["docker.io/library/redis:6"] {
+		t.Errorf("must not reap the user's own redis:6 that lerd never pulled, got %+v", managed.Targets)
+	}
+	if !got["docker.io/library/redis:7"] {
+		t.Errorf("should reap lerd's own recorded redis:7 leftover, got %+v", managed.Targets)
 	}
 }
 

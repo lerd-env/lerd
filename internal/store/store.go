@@ -125,14 +125,22 @@ func loadCachedIndex() (*Index, error) {
 	return &idx, nil
 }
 
-// writeCachedIndex persists the raw index bytes to the local cache. Best effort:
-// a cache we cannot write just means the next read falls back to the network.
+// writeCachedIndex persists the raw index bytes to the local cache atomically
+// (temp then rename) so an offline reader in another process, or a crash
+// mid-write, never sees a truncated file. Best effort: a cache we cannot write
+// just means the next read falls back to the network.
 func writeCachedIndex(data []byte) {
 	path := config.StoreIndexFile()
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return
 	}
-	_ = os.WriteFile(path, data, 0o644)
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o644); err != nil {
+		return
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		_ = os.Remove(tmp)
+	}
 }
 
 // FetchFramework downloads a framework definition from the store.

@@ -38,6 +38,21 @@ func validShimName(name string) bool {
 	return shimNamePattern.MatchString(name)
 }
 
+// reservedShimNames are the host-shim filenames the installer owns (addShellShims
+// and the fnm node mirror). They share BinDir with the client shims but carry no
+// marker, so a store-declared client tool must never claim one, else a preset
+// could repoint the host php or composer at a database client container.
+var reservedShimNames = map[string]bool{
+	"php": true, "composer": true, "composer.phar": true, "laravel": true,
+	"node": true, "npm": true, "npx": true, "fnm": true,
+}
+
+// isReservedShimName reports whether name is an installer-owned shim the client
+// reconcile must not generate over.
+func isReservedShimName(name string) bool {
+	return reservedShimNames[name]
+}
+
 // validBinaries keeps only the candidate binary names safe to pass to
 // client-exec, dropping any a malformed or hostile store entry slipped in.
 func validBinaries(bins []string) []string {
@@ -98,7 +113,7 @@ func Targets() map[string]Target {
 			continue
 		}
 		for _, cs := range svc.ClientShims {
-			if !validShimName(cs.Name) {
+			if !validShimName(cs.Name) || isReservedShimName(cs.Name) {
 				continue
 			}
 			if _, exists := out[cs.Name]; exists {
@@ -277,7 +292,9 @@ func Reconcile(prompt Prompter) error {
 		enabled, _ := decide(tool, prompt)
 		shimPath := filepath.Join(binDir, tool)
 		if enabled {
-			_ = os.WriteFile(shimPath, []byte(script(lerdBin, tool)), 0755)
+			if canWriteShim(shimPath) {
+				_ = os.WriteFile(shimPath, []byte(script(lerdBin, tool)), 0755)
+			}
 		} else {
 			removeIfShim(shimPath)
 		}
@@ -323,6 +340,17 @@ func hostHasTool(tool string) bool {
 		}
 	}
 	return false
+}
+
+// canWriteShim reports whether the reconcile may write path: only when it is
+// absent or already one of lerd's client shims. An existing non-shim file (the
+// installer's php/composer, or a user binary sharing a tool name) is left intact,
+// mirroring removeIfShim so the write and remove sides guard the same set.
+func canWriteShim(path string) bool {
+	if _, err := os.Lstat(path); os.IsNotExist(err) {
+		return true
+	}
+	return isShimFile(path)
 }
 
 // removeIfShim deletes path only when it is one of lerd's client shims, so the

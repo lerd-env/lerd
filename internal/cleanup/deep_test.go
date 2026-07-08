@@ -21,8 +21,9 @@ func TestDeepTargets_ReapsUnusedServiceImagesKeepsProtected(t *testing.T) {
 		"docker.io/library/redis:7":            true,
 		"docker.io/library/redis:7.4.9-alpine": true,
 	}
+	pulled := map[string]bool{"docker.io/library/mysql:5.7": true}
 
-	got := deepTargets(imgs, repos, protected)
+	got := deepTargets(imgs, repos, protected, pulled)
 
 	if len(got) != 1 || got[0].ID != "docker.io/library/mysql:5.7" {
 		t.Fatalf("want only mysql:5.7 reaped, got %+v", got)
@@ -44,8 +45,9 @@ func TestDeepTargets_MultiTagRemovesAllTagsCreditsOnce(t *testing.T) {
 	}
 	repos := map[string]bool{"docker.io/library/mysql": true}
 	protected := map[string]bool{}
+	pulled := map[string]bool{"docker.io/library/mysql:5.7": true}
 
-	got := deepTargets(imgs, repos, protected)
+	got := deepTargets(imgs, repos, protected, pulled)
 
 	removed := map[string]int64{}
 	for _, tg := range got {
@@ -76,10 +78,25 @@ func TestDeepTargets_KeepsInUseServiceImage(t *testing.T) {
 	}
 	repos := map[string]bool{"docker.io/library/redis": true}
 
-	got := deepTargets(imgs, repos, map[string]bool{})
+	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{})
 
 	if len(got) != 0 {
 		t.Fatalf("an in-use service image must be kept, got %+v", got)
+	}
+}
+
+// An unused catalog image lerd never recorded pulling is kept even by the deep
+// tier: the ledger, not the repo name, is what marks an image as lerd's to reap.
+func TestDeepTargets_KeepsCatalogImageLerdNeverPulled(t *testing.T) {
+	imgs := []image{
+		{Names: []string{"docker.io/library/redis:6"}, Size: 300},
+	}
+	repos := map[string]bool{"docker.io/library/redis": true}
+
+	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{})
+
+	if len(got) != 0 {
+		t.Fatalf("a catalog image lerd never pulled must be kept, got %+v", got)
 	}
 }
 
@@ -95,6 +112,9 @@ func TestInspect_DeepAppendsUnusedServiceImages(t *testing.T) {
 	}
 	protectedImages = func() (map[string]bool, error) {
 		return map[string]bool{"docker.io/library/mysql:8.4": true}, nil
+	}
+	loadPulledImages = func() map[string]bool {
+		return map[string]bool{"docker.io/library/mysql:5.7": true}
 	}
 	t.Cleanup(func() {
 		serviceRepos = realServiceRepos

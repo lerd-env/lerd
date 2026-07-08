@@ -13,16 +13,26 @@ import (
 // writes. Opened once, lazily, since lerd-ui and the watcher are separate
 // processes sharing the SQLite file (WAL, so the reader never blocks the writer).
 var (
-	analyticsStore     *reqstats.Store
-	analyticsStoreErr  error
-	analyticsStoreOnce sync.Once
+	analyticsStore   *reqstats.Store
+	analyticsStoreMu sync.Mutex
 )
 
+// getAnalyticsStore opens the durable request store lazily, caching only a
+// successful handle. A transient open failure is retried on the next call rather
+// than memoised, so analytics recovers once the file is reachable without a
+// lerd-ui restart.
 func getAnalyticsStore() (*reqstats.Store, error) {
-	analyticsStoreOnce.Do(func() {
-		analyticsStore, analyticsStoreErr = reqstats.OpenStore(config.RequestStatsDB())
-	})
-	return analyticsStore, analyticsStoreErr
+	analyticsStoreMu.Lock()
+	defer analyticsStoreMu.Unlock()
+	if analyticsStore != nil {
+		return analyticsStore, nil
+	}
+	st, err := reqstats.OpenStore(config.RequestStatsDB())
+	if err != nil {
+		return nil, err
+	}
+	analyticsStore = st
+	return analyticsStore, nil
 }
 
 // recentRequest is one row of the recent-requests list: enough to render it

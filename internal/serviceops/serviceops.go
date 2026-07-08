@@ -158,14 +158,25 @@ func portClaimedByOtherInstalled(self string, p int) bool {
 	if err != nil || cfg == nil {
 		return false
 	}
+	// serviceEffectiveHostPorts includes a multi-port service's un-overridden
+	// secondary defaults (mailpit's 8025, rustfs' 9001), which HostPorts() omits,
+	// so a stopped sibling still reserves them and two units can't collide at boot.
+	claims := func(name string, sc config.ServiceConfig) bool {
+		for _, hp := range serviceEffectiveHostPorts(name, sc) {
+			if hp == p {
+				return true
+			}
+		}
+		return false
+	}
+	seen := map[string]bool{}
 	for name, sc := range cfg.Services {
 		if name == self || !ServiceInstalled(name) {
 			continue
 		}
-		for _, hp := range sc.HostPorts() {
-			if hp == p {
-				return true
-			}
+		seen[name] = true
+		if claims(name, sc) {
+			return true
 		}
 	}
 	customs, err := config.ListCustomServices()
@@ -173,16 +184,11 @@ func portClaimedByOtherInstalled(self string, p int) bool {
 		return false
 	}
 	for _, c := range customs {
-		if c.Name == self || !ServiceInstalled(c.Name) {
-			continue
+		if c.Name == self || seen[c.Name] || !ServiceInstalled(c.Name) {
+			continue // seen entries were fully covered by the cfg.Services loop
 		}
-		if sc, ok := cfg.Services[c.Name]; ok && len(sc.HostPorts()) > 0 {
-			continue // already counted from cfg.Services above
-		}
-		for _, m := range c.Ports {
-			if config.MappingHostPort(m) == p {
-				return true
-			}
+		if claims(c.Name, cfg.Services[c.Name]) { // zero config when unconfigured
+			return true
 		}
 	}
 	return false

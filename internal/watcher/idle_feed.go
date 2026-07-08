@@ -153,23 +153,7 @@ func disableIdle() {
 func handleAccessDatagram(b []byte) {
 	if reqAggregator != nil {
 		if rec, ok := reqstats.ParseAccessRecord(b); ok {
-			reqAggregator.Record(rec)
-			// Skip requests nginx served without the app: a static-asset extension,
-			// or a zero request time, which is nginx answering a static file directly
-			// (manifest.json, robots.txt, service workers) rather than PHP.
-			if reqStore != nil && !reqstats.IsStaticAsset(rec.URI) && rec.SecondsToMillis() > 0 {
-				if site, ok := resolveHostToSite(rec.Host); ok {
-					now := time.Now()
-					sr := reqstats.RecordFrom(rec, site, now)
-					reqBufMu.Lock()
-					// Cold start: first request after the site sat idle past coldGap.
-					last, seen := reqLastSeen[site]
-					sr.Cold = reqstats.IsColdStart(last, seen, now, coldGap)
-					reqLastSeen[site] = now
-					reqBuf = append(reqBuf, sr)
-					reqBufMu.Unlock()
-				}
-			}
+			ingestAccessRecord(rec)
 		}
 	}
 	if !idleActive.Load() {
@@ -179,6 +163,40 @@ func handleAccessDatagram(b []byte) {
 		if site := activityTracker.TouchHost(host, time.Now()); site != "" {
 			idleEng.OnActivity(site)
 		}
+	}
+}
+
+// siteForHost is the seam the request-stats fan-out resolves through; a var so a
+// test can inject a resolver without a live site registry.
+var siteForHost = resolveHostToSite
+
+// ingestAccessRecord fans one parsed access record out to the durable store and
+// the live aggregator. It flags a cold start (the first request after the site
+// sat idle past coldGap) and keeps it out of the aggregator, whose snapshot feeds
+// the slow-route notifier and the doctor: a wake's inflated time must not trip
+// them, while the store still records it (marked cold, excluded from its timing).
+func ingestAccessRecord(rec reqstats.AccessRecord) {
+	// Skip requests nginx served without the app: a static-asset extension, or a
+	// zero request time, which is nginx answering a static file directly
+	// (manifest.json, robots.txt, service workers) rather than PHP.
+	appServed := !reqstats.IsStaticAsset(rec.URI) && rec.SecondsToMillis() > 0
+	site, resolved := siteForHost(rec.Host)
+	cold := false
+	if appServed && resolved {
+		now := time.Now()
+		reqBufMu.Lock()
+		last, seen := reqLastSeen[site]
+		cold = reqstats.IsColdStart(last, seen, now, coldGap)
+		reqLastSeen[site] = now
+		if reqStore != nil {
+			sr := reqstats.RecordFrom(rec, site, now)
+			sr.Cold = cold
+			reqBuf = append(reqBuf, sr)
+		}
+		reqBufMu.Unlock()
+	}
+	if !cold {
+		reqAggregator.Record(rec)
 	}
 }
 

@@ -2420,6 +2420,10 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 // shared serviceops layer so the Web UI enforces the same validation, guard and
 // host-proxy refresh as the CLI and MCP. A nil/zero published_port resets to the
 // preset default.
+// servicePortsMu serializes port-modal saves so their snapshot/apply/restore
+// sequences can't interleave across concurrent requests.
+var servicePortsMu sync.Mutex
+
 func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 	var body struct {
 		PublishedPort  *int           `json:"published_port"`
@@ -2441,10 +2445,6 @@ func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 	if body.PublishedPort != nil {
 		port = *body.PublishedPort
 	}
-	// A modal save applies the primary, secondaries, and extras in sequence.
-	// Snapshot first so a failure partway through rolls the whole save back to a
-	// consistent state instead of leaving some ports moved while reporting failure.
-	snapshot, canRestore := serviceops.SnapshotPublishedPorts(name)
 	apply := func() error {
 		if _, err := serviceops.SetPublishedPort(name, port); err != nil {
 			return err
@@ -2469,10 +2469,18 @@ func handleServicePorts(w http.ResponseWriter, r *http.Request, name string) {
 		}
 		return nil
 	}
-	if err := apply(); err != nil {
-		if canRestore {
-			_ = serviceops.RestorePublishedPorts(name, snapshot)
-		}
+	// A modal save applies the primary, secondaries, and extras in sequence.
+	// Snapshot first so a failure partway through rolls the whole save back to a
+	// consistent state. The lock spans snapshot, apply and restore so two
+	// concurrent saves can't interleave and restore each other's wrong baseline.
+	servicePortsMu.Lock()
+	snapshot, canRestore := serviceops.SnapshotPublishedPorts(name)
+	err := apply()
+	if err != nil && canRestore {
+		_ = serviceops.RestorePublishedPorts(name, snapshot)
+	}
+	servicePortsMu.Unlock()
+	if err != nil {
 		fail(err)
 		return
 	}

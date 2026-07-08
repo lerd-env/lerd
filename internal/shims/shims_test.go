@@ -76,6 +76,46 @@ func TestRemoveIfShim(t *testing.T) {
 	}
 }
 
+// The installer-owned shim names (php, composer, node…) are reserved: a store
+// preset can't have the client reconcile generate over them, so it can never
+// repoint the host php or composer at a database client container.
+func TestReservedShimNames(t *testing.T) {
+	for _, name := range []string{"php", "composer", "composer.phar", "laravel", "node", "npm", "npx", "fnm"} {
+		if !isReservedShimName(name) {
+			t.Errorf("%q should be reserved for the installer", name)
+		}
+	}
+	for _, name := range []string{"mysqldump", "psql", "pg_dump", "redis-cli", "mongosh"} {
+		if isReservedShimName(name) {
+			t.Errorf("%q is a real client tool and must not be reserved", name)
+		}
+	}
+}
+
+// canWriteShim guards the reconcile's write side the way removeIfShim guards its
+// remove side: an absent path or an existing lerd client shim is writable, but a
+// non-shim file (an installer shim, or a user binary of the same name) is not, so
+// the reconcile can never clobber it.
+func TestCanWriteShim(t *testing.T) {
+	dir := t.TempDir()
+	absent := filepath.Join(dir, "mysqldump")
+	if !canWriteShim(absent) {
+		t.Error("an absent path must be writable")
+	}
+
+	ours := filepath.Join(dir, "psql")
+	_ = os.WriteFile(ours, []byte(script("lerd", "psql")), 0755)
+	if !canWriteShim(ours) {
+		t.Error("our own client shim must be overwritable")
+	}
+
+	installer := filepath.Join(dir, "php")
+	_ = os.WriteFile(installer, []byte("#!/bin/sh\nexec lerd php \"$@\"\n"), 0755)
+	if canWriteShim(installer) {
+		t.Error("an installer shim (no marker) must never be overwritten")
+	}
+}
+
 func TestPruneOrphans(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	binDir := config.BinDir()
