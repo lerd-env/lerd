@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,7 +16,14 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-const httpTimeout = 10 * time.Second
+const (
+	httpTimeout       = 10 * time.Second
+	maxFetchAttempts  = 3
+	fetchRetryBackoff = 400 * time.Millisecond
+)
+
+// sleepFn is the backoff sleep, a seam so tests don't wait in real time.
+var sleepFn = time.Sleep
 
 // Client fetches framework definitions from the remote store. BaseURL is tried
 // first; Fallbacks are tried in order if it fails, so a binary can reach the new
@@ -258,13 +266,54 @@ func (c *Client) fetch(path string) ([]byte, error) {
 	client := &http.Client{Timeout: httpTimeout}
 	var errs []string
 	for _, base := range append([]string{c.BaseURL}, c.Fallbacks...) {
-		body, err := fetchOne(client, base+"/"+path)
+		body, err := fetchWithRetry(client, base+"/"+path)
 		if err == nil {
 			return body, nil
 		}
 		errs = append(errs, err.Error())
 	}
 	return nil, fmt.Errorf("fetching %s: %s", path, strings.Join(errs, "; "))
+}
+
+// fetchWithRetry retries a transient fetch failure, a request timeout, a dropped
+// connection, or a 5xx, with a short linear backoff before giving up. A slow
+// raw.githubusercontent.com response is common when refreshing many definitions at
+// once, and would otherwise fail a store entry on the first stall; a definitive 4xx
+// (e.g. a removed definition) is not retried.
+func fetchWithRetry(client *http.Client, url string) ([]byte, error) {
+	var lastErr error
+	for attempt := 1; attempt <= maxFetchAttempts; attempt++ {
+		body, err := fetchOne(client, url)
+		if err == nil {
+			return body, nil
+		}
+		lastErr = err
+		if !retryableFetchErr(err) || attempt == maxFetchAttempts {
+			break
+		}
+		sleepFn(fetchRetryBackoff * time.Duration(attempt))
+	}
+	return nil, lastErr
+}
+
+// httpStatusError carries a non-200 response code so retry classification can tell
+// a retryable 5xx from a definitive 4xx.
+type httpStatusError struct {
+	code int
+	url  string
+}
+
+func (e *httpStatusError) Error() string { return fmt.Sprintf("HTTP %d from %s", e.code, e.url) }
+
+// retryableFetchErr reports whether an error is worth retrying: any network or
+// timeout error (client.Do failing) is transient, an HTTP 5xx is transient, and a
+// 4xx is not.
+func retryableFetchErr(err error) bool {
+	var se *httpStatusError
+	if errors.As(err, &se) {
+		return se.code >= 500
+	}
+	return true
 }
 
 func fetchOne(client *http.Client, url string) ([]byte, error) {
@@ -281,7 +330,7 @@ func fetchOne(client *http.Client, url string) ([]byte, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("HTTP %d from %s", resp.StatusCode, url)
+		return nil, &httpStatusError{code: resp.StatusCode, url: url}
 	}
 
 	return io.ReadAll(resp.Body)

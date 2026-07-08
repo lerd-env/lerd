@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -306,5 +308,72 @@ func TestDetectFromStore_NoMatch(t *testing.T) {
 	_, _, ok := c.DetectFromStore(dir)
 	if ok {
 		t.Fatal("expected no detection in empty dir")
+	}
+}
+
+func TestFetchWithRetry_RecoversFromTransientFailure(t *testing.T) {
+	prevSleep := sleepFn
+	sleepFn = func(time.Duration) {}
+	t.Cleanup(func() { sleepFn = prevSleep })
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if atomic.AddInt32(&calls, 1) < 3 {
+			http.Error(w, "boom", http.StatusBadGateway) // 502, transient
+			return
+		}
+		_, _ = w.Write([]byte("ok"))
+	}))
+	t.Cleanup(srv.Close)
+
+	body, err := fetchWithRetry(&http.Client{Timeout: httpTimeout}, srv.URL)
+	if err != nil {
+		t.Fatalf("expected recovery, got %v", err)
+	}
+	if string(body) != "ok" {
+		t.Fatalf("body = %q, want ok", body)
+	}
+	if got := atomic.LoadInt32(&calls); got != 3 {
+		t.Fatalf("expected 3 attempts, got %d", got)
+	}
+}
+
+func TestFetchWithRetry_DoesNotRetry404(t *testing.T) {
+	prevSleep := sleepFn
+	sleepFn = func(time.Duration) {}
+	t.Cleanup(func() { sleepFn = prevSleep })
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		http.Error(w, "nope", http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+
+	if _, err := fetchWithRetry(&http.Client{Timeout: httpTimeout}, srv.URL); err == nil {
+		t.Fatal("expected error for 404")
+	}
+	if got := atomic.LoadInt32(&calls); got != 1 {
+		t.Fatalf("a 4xx must not be retried, got %d attempts", got)
+	}
+}
+
+func TestFetchWithRetry_GivesUpAfterMaxAttempts(t *testing.T) {
+	prevSleep := sleepFn
+	sleepFn = func(time.Duration) {}
+	t.Cleanup(func() { sleepFn = prevSleep })
+
+	var calls int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		atomic.AddInt32(&calls, 1)
+		http.Error(w, "down", http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(srv.Close)
+
+	if _, err := fetchWithRetry(&http.Client{Timeout: httpTimeout}, srv.URL); err == nil {
+		t.Fatal("expected error after exhausting retries")
+	}
+	if got := atomic.LoadInt32(&calls); got != maxFetchAttempts {
+		t.Fatalf("expected %d attempts, got %d", maxFetchAttempts, got)
 	}
 }
