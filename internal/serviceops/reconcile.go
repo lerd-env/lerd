@@ -15,6 +15,10 @@ var (
 	ensureQuadletFn          = EnsureCustomServiceQuadlet
 	listManagedServiceNames  = podman.ListManagedServiceNames
 	orphanContainerRunningFn = podman.ContainerRunningQuiet
+	materializeFilesFn       = config.MaterializeServiceFiles
+	newestFileMtimeFn        = config.ServiceFilesNewestMtime
+	containerStartedAtFn     = podman.ContainerStartedAt
+	restartUnitFn            = podman.RestartUnit
 )
 
 // ReconcileResult reports what ReconcileServices changed.
@@ -23,6 +27,7 @@ type ReconcileResult struct {
 	OrphansRemoved        []string // service quadlet with no YAML, removed
 	RunningOrphansSkipped []string // orphan left in place because its container is up
 	DefinitionsRefreshed  []string // preset-backed YAML re-materialised from the store
+	ConfigsApplied        []string // preset config file drifted; rewritten and the running service restarted
 }
 
 // ReconcileServices enforces the issue #678 invariant: regenerate a missing
@@ -58,8 +63,15 @@ func ReconcileServices(emit func(PhaseEvent)) (ReconcileResult, error) {
 			}
 		}
 		unitInstalled := UnitInstalledFn("lerd-" + svc.Name)
-		if unitInstalled && !slices.Contains(res.DefinitionsRefreshed, svc.Name) {
-			continue
+		if unitInstalled {
+			if applied, err := RestartIfConfigDrifted(svc.Name, svc.Preset); err != nil {
+				errs = append(errs, err)
+			} else if applied {
+				res.ConfigsApplied = append(res.ConfigsApplied, svc.Name)
+			}
+			if !slices.Contains(res.DefinitionsRefreshed, svc.Name) {
+				continue
+			}
 		}
 		// Regenerate the quadlet when the unit is missing, or when the definition
 		// changed. WriteQuadletDiff is a no-op when the content is identical, so a
@@ -95,6 +107,33 @@ func ReconcileServices(emit func(PhaseEvent)) (ReconcileResult, error) {
 		res.OrphansRemoved = append(res.OrphansRemoved, name)
 	}
 	return res, errors.Join(errs...)
+}
+
+// RestartIfConfigDrifted re-materialises a running service's preset config files
+// and, when the config file is newer than the container's boot (i.e. the container
+// is on stale config after a shipped preset change like a higher max_allowed_packet),
+// restarts it, returning whether it did. It is the single seam both the custom
+// reconcile and the default-stack start pass use, since those flow through separate
+// install paths. A stopped or missing container, or a preset with no config files,
+// is a no-op; the mtime only advances on a real content change, so a steady state
+// never restarts anything.
+func RestartIfConfigDrifted(name, preset string) (bool, error) {
+	started, running := containerStartedAtFn("lerd-" + name)
+	if !running {
+		return false, nil
+	}
+	probe := &config.CustomService{Name: name, Preset: preset}
+	if err := materializeFilesFn(probe); err != nil {
+		return false, fmt.Errorf("materialising files for %s: %w", name, err)
+	}
+	mtime, ok := newestFileMtimeFn(probe)
+	if !ok || !mtime.After(started) {
+		return false, nil
+	}
+	if err := restartUnitFn("lerd-" + name); err != nil {
+		return false, fmt.Errorf("restarting %s after a config change: %w", name, err)
+	}
+	return true, nil
 }
 
 // refreshPresetDefinition re-resolves a preset-backed service from the store

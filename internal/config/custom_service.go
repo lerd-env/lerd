@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -389,23 +390,59 @@ func uniqueFamilyHosts(families string) []string {
 // the Go binary is always the source of truth — updating lerd and restarting
 // the service is enough to roll out new file contents.
 func MaterializeServiceFiles(svc *CustomService) error {
+	_, err := MaterializeServiceFilesChanged(svc)
+	return err
+}
+
+// ServiceFilesNewestMtime returns the most recent modification time across svc's
+// materialised preset files, and whether any exist on disk. Because a re-materialise
+// only rewrites a file whose content actually changed, this mod time advances only
+// on a real config change, so comparing it against a container's start time tells
+// whether the running container is on stale config.
+func ServiceFilesNewestMtime(svc *CustomService) (time.Time, bool) {
+	var newest time.Time
+	found := false
+	for _, f := range PresetFiles(svc.Preset) {
+		if f.Target == "" {
+			continue
+		}
+		info, err := os.Stat(ServiceFilePath(svc.Name, f.Target))
+		if err != nil {
+			continue
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+			found = true
+		}
+	}
+	return newest, found
+}
+
+// MaterializeServiceFilesChanged is MaterializeServiceFiles with drift detection:
+// it rewrites a preset file only when its content differs from what is already on
+// disk, and reports whether anything changed. The passive reconcile uses this to
+// roll a shipped preset config bump (e.g. a higher max_allowed_packet) onto an
+// already-installed service on update and to know when a restart is warranted,
+// without churning a service whose config is already current.
+func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 	files := PresetFiles(svc.Preset)
 	if len(files) == 0 {
-		return nil
+		return false, nil
 	}
 	dir := ServiceFilesDir(svc.Name)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return fmt.Errorf("creating files dir for %s: %w", svc.Name, err)
+		return false, fmt.Errorf("creating files dir for %s: %w", svc.Name, err)
 	}
+	changed := false
 	for _, f := range files {
 		if f.Target == "" {
-			return fmt.Errorf("service %s: file mount missing target", svc.Name)
+			return changed, fmt.Errorf("service %s: file mount missing target", svc.Name)
 		}
 		mode := os.FileMode(0644)
 		if f.Mode != "" {
 			parsed, err := strconv.ParseUint(f.Mode, 8, 32)
 			if err != nil {
-				return fmt.Errorf("service %s: invalid mode %q for %s: %w", svc.Name, f.Mode, f.Target, err)
+				return changed, fmt.Errorf("service %s: invalid mode %q for %s: %w", svc.Name, f.Mode, f.Target, err)
 			}
 			mode = os.FileMode(parsed)
 		}
@@ -414,25 +451,39 @@ func MaterializeServiceFiles(svc *CustomService) error {
 		if f.ContentFn != nil {
 			out, err := f.ContentFn(svc)
 			if err != nil {
-				return fmt.Errorf("generating %s for service %s: %w", path, svc.Name, err)
+				return changed, fmt.Errorf("generating %s for service %s: %w", path, svc.Name, err)
 			}
 			content = out
+		}
+		// A file whose content already matches needs no rewrite; comparing by
+		// content (not ownership) leaves a podman :U-chowned file in place and, most
+		// importantly, avoids a needless service restart when nothing changed. The
+		// mode is still enforced so a re-materialise stays idempotent on permissions,
+		// but a mode-only fixup is not a content change and triggers no restart.
+		if existing, err := os.ReadFile(path); err == nil && string(existing) == content {
+			if info, statErr := os.Stat(path); statErr == nil && info.Mode().Perm() != mode.Perm() {
+				if err := os.Chmod(path, mode); err != nil {
+					return changed, fmt.Errorf("chmod %s: %w", path, err)
+				}
+			}
+			continue
 		}
 		// Unlink first: with chown:true podman's :U flag re-owns the file to a
 		// userns-mapped uid, so a plain rewrite would EACCES. Removing the dir
 		// entry succeeds because the parent dir is owned by us.
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("removing stale %s for service %s: %w", path, svc.Name, err)
+			return changed, fmt.Errorf("removing stale %s for service %s: %w", path, svc.Name, err)
 		}
 		if err := os.WriteFile(path, []byte(content), mode); err != nil {
-			return fmt.Errorf("writing %s for service %s: %w", path, svc.Name, err)
+			return changed, fmt.Errorf("writing %s for service %s: %w", path, svc.Name, err)
 		}
 		// WriteFile honours umask; chmod explicitly so 0600 sticks.
 		if err := os.Chmod(path, mode); err != nil {
-			return fmt.Errorf("chmod %s: %w", path, err)
+			return changed, fmt.Errorf("chmod %s: %w", path, err)
 		}
+		changed = true
 	}
-	return nil
+	return changed, nil
 }
 
 // CustomServicesDependingOn returns the names of all custom services that

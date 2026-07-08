@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -349,6 +350,77 @@ func TestReconcileServices_continuesPastForwardError(t *testing.T) {
 
 // TestReconcileServices_steadyStateNoop: a fully-installed service (YAML +
 // marked quadlet) triggers neither a regeneration nor a removal.
+// A shipped preset config-file change (e.g. a higher max_allowed_packet) must
+// reach an already-installed, running service on reconcile: when the config file
+// is newer than the container's boot, the service is restarted, so the fix lands
+// on `lerd update` rather than only on an explicit reinstall.
+func TestReconcileServices_appliesDriftedConfigAndRestarts(t *testing.T) {
+	reconcileEnv(t)
+	if err := config.SaveCustomService(&config.CustomService{Name: "mysql", Image: "docker.io/library/mysql:8.4"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	writeQuadlet(t, "mysql", true)
+
+	boot := time.Unix(1_000_000, 0)
+	restore := swapDriftSeams(t,
+		func(*config.CustomService) error { return nil },
+		func(*config.CustomService) (time.Time, bool) { return boot.Add(time.Hour), true }, // file newer than boot
+		func(string) (time.Time, bool) { return boot, true },
+		func(unit string) error { return nil },
+		func(string) bool { return true },
+	)
+	defer restore()
+
+	res, err := ReconcileServices(nil)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if !slices.Contains(res.ConfigsApplied, "mysql") {
+		t.Fatalf("expected mysql in ConfigsApplied, got %+v", res)
+	}
+}
+
+func TestReconcileServices_noRestartWhenConfigCurrent(t *testing.T) {
+	reconcileEnv(t)
+	if err := config.SaveCustomService(&config.CustomService{Name: "mysql", Image: "docker.io/library/mysql:8.4"}); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	writeQuadlet(t, "mysql", true)
+
+	boot := time.Unix(1_000_000, 0)
+	restarted := false
+	restore := swapDriftSeams(t,
+		func(*config.CustomService) error { return nil },
+		func(*config.CustomService) (time.Time, bool) { return boot.Add(-time.Hour), true }, // file older than boot
+		func(string) (time.Time, bool) { return boot, true },
+		func(unit string) error { restarted = true; return nil },
+		func(string) bool { return true },
+	)
+	defer restore()
+
+	res, err := ReconcileServices(nil)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if restarted {
+		t.Fatal("a service booted after its config was written must not be restarted")
+	}
+	if len(res.ConfigsApplied) != 0 {
+		t.Fatalf("expected no ConfigsApplied, got %+v", res)
+	}
+}
+
+// swapDriftSeams overrides the reconcile config-drift seams for a test, restoring
+// them on cleanup.
+func swapDriftSeams(t *testing.T, mat func(*config.CustomService) error, mtime func(*config.CustomService) (time.Time, bool), started func(string) (time.Time, bool), restart func(string) error, installed func(string) bool) func() {
+	t.Helper()
+	pm, pmt, ps, pr, pi := materializeFilesFn, newestFileMtimeFn, containerStartedAtFn, restartUnitFn, UnitInstalledFn
+	materializeFilesFn, newestFileMtimeFn, containerStartedAtFn, restartUnitFn, UnitInstalledFn = mat, mtime, started, restart, installed
+	return func() {
+		materializeFilesFn, newestFileMtimeFn, containerStartedAtFn, restartUnitFn, UnitInstalledFn = pm, pmt, ps, pr, pi
+	}
+}
+
 func TestReconcileServices_steadyStateNoop(t *testing.T) {
 	reconcileEnv(t)
 
