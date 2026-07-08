@@ -25,7 +25,7 @@ If you're a PHP developer on Linux and want frictionless local development — a
 
 ## Features
 
-- 🌐 **Automatic `.test` domains** with one-command TLS, or [opt out of lerd-managed DNS](https://lerd.sh/features/dns) and use `*.localhost` (no dnsmasq, no system resolver tweak, no sudo for the DNS bits)
+- 🌐 **Automatic `.test` domains** with one-command TLS that auto-reissues before it expires, or [opt out of lerd-managed DNS](https://lerd.sh/features/dns) and use `*.localhost`, toggling lerd-managed DNS on or off later with `dns:enable` / `dns:disable` / `dns:repair` (no dnsmasq, no system resolver tweak, no sudo for the DNS bits)
 - 🐘 **Per-project PHP version** (8.1–8.5, plus a frozen 7.4 / 8.0 legacy tier for hosted-on-the-old-stack projects), switch with one click
 - ⚡ **FrankenPHP runtime** per site as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode
 - 📦 **Node.js isolation** per project (Node 22, 24), or **bun** as the JS runtime on the host and, opt-in, inside the container
@@ -34,9 +34,10 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - 🧪 **Tinker tab** - in-browser PHP REPL per site with autocomplete (project models, composer helpers, PHP built-ins), live `php -l` syntax checking, and a collapsible tree view for `dump()` output. Works on Laravel (`artisan tinker`), Symfony, and any composer-based PHP project
 - 🛰️ **Debug window** that intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI (`D` key), MCP, and `lerd dump tail`, scoped per site and per worktree branch, with the original response left clean unless you flip passthrough on. The same window captures SQL queries with N+1 and slow-query detection, plus outgoing mail, rendered views, dispatched events, queued jobs, and outgoing HTTP, across both Laravel and Symfony, with optional opt-in capture of queue-worker activity
 - 🔥 **SPX profiler** with one-click on/off, every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard. No FPM restart, no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command
+- 📈 **Request timing analytics** per site, a durable view of typical and p95 response times, throughput, error rate, and the slowest routes ranked by recent p95 with one-click profiling, surfaced as a site-doctor warning and an opt-in slow-route push notification, all read from real traffic. Agents get the same signal over MCP with `route_timing` and `optimize_route`, which joins a slow route to the N+1 queries and CPU hotspots behind it
 - 🩺 **Site doctor** — framework-agnostic health checks (env file and drift, application key, composer/node install and lockfile state, security audits, database presence, PHP version range) plus each framework's own store-declared checks, from the web UI, the TUI, `lerd site:doctor`, and MCP, with one-click fixes for dependency and audit findings
 - 💻 **Terminal dashboard** (`lerd tui`) - btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort — the same operations surface as the web UI, for tmux and SSH workflows
-- 🗄️ **One-click services**: MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Gotenberg, Stripe Mock, Reverb, soketi, OpenSearch, RedisInsight, Beanstalkd and more. Every default service is a YAML preset you can update, migrate, rollback, or reinstall in place, including a reset-data reinstall that auto-recreates linked sites' databases and buckets. Move a project's database between same-family services with `lerd db:move`, control published and extra ports from the dashboard or `lerd service port`, and coexist with a host-installed database of the same engine by auto-shifting the container's published port
+- 🗄️ **One-click services**: MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Gotenberg, Stripe Mock, Reverb, soketi, OpenSearch, RedisInsight, Beanstalkd and more, the default stack built in and every add-on fetched from an external store that updates without a new lerd release. Each is a YAML preset you can update, migrate, rollback, or reinstall in place, including a reset-data reinstall that auto-recreates linked sites' databases and buckets. Move a project's database between same-family services with `lerd db:move`, expose each service's client tools (`mysqldump`, `pg_dump`, `psql`, `redis-cli`) as host shims with `lerd shims`, control published and extra ports from the dashboard or `lerd service port`, and coexist with a host-installed database of the same engine by auto-shifting the container's published port
 - 🔗 **Site groups** — group related sites so a main owns a base domain and the rest occupy its subdomains, with a shared or separate database per secondary
 - 🧱 **Host-proxy sites** — run a Node, Python, Go, or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included
 - 🌳 **First-class git worktrees** with auto-detected branch domains, per-worktree PHP/Node versions, optional per-worktree database isolation (clone from main or empty), a per-worktree LAN-share proxy, `env_overrides` templating in `.lerd.yaml` for multi-tenant apps, automatic wildcard cert SANs for `*.branch.site.test`, a built-in Vite dev server worker that runs on the host per branch, and a dashboard modal for adding and removing worktrees without touching the CLI
@@ -173,6 +174,13 @@ lerd framework list --check             # compare local vs store
 ```
 
 Frameworks auto-detect when you `lerd link` a project. Workers, env setup, nginx proxy, and setup commands are all driven by the framework definition — no hardcoded behavior.
+
+Services work the same way. The binary ships the default stack and every add-on lives in [lerd-env/services](https://github.com/lerd-env/services), fetched on demand and cached, so a new service ships without a new lerd release:
+
+```bash
+lerd service search                     # browse the store
+lerd service preset pgadmin             # install a store-only preset
+```
 
 ## Documentation
 

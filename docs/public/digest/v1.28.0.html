@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lerd v1.28.0 — dev digest</title>
+<meta name="description" content="Engineering digest for lerd v1.28.0: request-timing analytics, an external service store, and AI slow-site diagnosis from real traffic.">
+<meta name="theme-color" content="#ff4538">
+<link rel="canonical" href="https://lerd.sh/digest/v1.28.0.html">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="Lerd">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="lerd v1.28.0 — dev digest">
+<meta property="og:description" content="Engineering digest for lerd v1.28.0: request-timing analytics, an external service store, and AI slow-site diagnosis from real traffic.">
+<meta property="og:url" content="https://lerd.sh/digest/v1.28.0.html">
+<meta property="og:image" content="https://lerd.sh/assets/social-preview.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Lerd v1.28.0 dev digest">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lerd v1.28.0 — dev digest">
+<meta name="twitter:description" content="Request-timing analytics, an external service store, and AI slow-site diagnosis from real traffic.">
+<meta name="twitter:image" content="https://lerd.sh/assets/social-preview.png">
+<meta name="twitter:image:alt" content="Lerd v1.28.0 dev digest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #0f0f11;
+    --panel: #131316;
+    --panel-2: #18181c;
+    --line: #232329;
+    --line-2: #2e2e36;
+    --text: #ece9e2;
+    --muted: #9b978e;
+    --dim: #67645c;
+    --red: #ff4538;
+    --red-soft: rgba(255,69,56,0.12);
+    --amber: #eda33b;
+    --amber-soft: rgba(237,163,59,0.12);
+    --green: #3dd68c;
+    --green-soft: rgba(61,214,140,0.11);
+    --blue: #6cb2ff;
+    --blue-soft: rgba(108,178,255,0.11);
+    --violet: #b394ff;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Archivo", system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--red); color: #0a0a0b; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 999;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+
+  code, .mono { font-family: var(--mono); }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 48px); }
+
+  /* ---------- brand bar ---------- */
+  .brandbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px clamp(20px, 4vw, 48px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    background: var(--red); border-radius: 7px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 800; font-size: 17px; color: #fff;
+    box-shadow: 0 0 22px rgba(255,69,56,0.35);
+  }
+  .brand-name { font-weight: 700; font-size: 16px; }
+  .brand-path { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .brand-path b { color: var(--red); font-weight: 400; }
+  .gh-link {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 13px; transition: 0.2s;
+  }
+  .gh-link:hover { border-color: var(--red); color: var(--text); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: clamp(48px, 7vw, 88px) 0 clamp(36px, 5vw, 56px);
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 55% 60% at 12% 0%, rgba(255,69,56,0.09), transparent 60%),
+      radial-gradient(ellipse 40% 40% at 95% 90%, rgba(237,163,59,0.04), transparent 60%);
+  }
+  .hero-kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .hero-kicker .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 12px var(--red); animation: blink 1.6s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .hero-kicker em { color: var(--amber); font-style: normal; }
+
+  .hero h1 {
+    font-stretch: 125%; font-weight: 900;
+    font-size: clamp(56px, 10vw, 118px);
+    line-height: 0.95; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero h1 em { font-style: normal; color: var(--red); text-shadow: 0 0 38px rgba(255,69,56,0.45); }
+  .hero .sub {
+    font-stretch: 115%; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; font-size: clamp(14px, 1.8vw, 19px);
+    color: var(--dim); margin-top: 8px;
+  }
+  .hero .sub b { color: var(--text); }
+  .hero .lede {
+    margin-top: 24px; max-width: 700px;
+    color: var(--muted); font-size: 16px; line-height: 1.7;
+  }
+  .hero .lede b { color: var(--text); font-weight: 600; }
+
+  .stats {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; background: var(--bg-2);
+  }
+  .stat { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat .n { font-stretch: 120%; font-weight: 900; font-size: clamp(20px, 2.4vw, 28px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 2px; }
+  .stat.red .n { color: var(--red); }
+  .stat.green .n { color: var(--green); }
+  .stat.amber .n { color: var(--amber); }
+
+  .diffbar { margin-top: 18px; }
+  .diffbar .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .diffbar .bar i { display: block; height: 100%; }
+  .diffbar .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .diffbar .legend s { text-decoration: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---------- pill nav ---------- */
+  .pillnav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,11,0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px clamp(20px, 4vw, 48px);
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pillnav::-webkit-scrollbar { display: none; }
+  .pillnav a {
+    font-family: var(--mono); font-size: 12px; white-space: nowrap;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 6px 15px; transition: 0.2s;
+  }
+  .pillnav a i { font-style: normal; color: var(--dim); margin-right: 6px; }
+  .pillnav a:hover { color: var(--text); border-color: var(--line-2); }
+  .pillnav a.active { color: var(--red); border-color: rgba(255,69,56,0.5); background: var(--red-soft); }
+  .pillnav a.active i { color: var(--red); }
+
+  /* ---------- breaking ---------- */
+  .breaking {
+    margin: 36px 0 0;
+    border: 1px solid rgba(255,69,56,0.35); border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,69,56,0.06), rgba(255,69,56,0.01) 60%);
+  }
+  .breaking-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px; border-bottom: 1px solid rgba(255,69,56,0.25);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; font-weight: 700; color: var(--red);
+  }
+  .breaking-head .sig { animation: blink 1.4s steps(1) infinite; }
+  .breaking-body { padding: 18px 20px 20px; color: var(--muted); font-size: 14px; }
+  .breaking-body b { color: var(--text); }
+  .breaking-body code { font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; color: var(--amber); }
+
+  /* ---------- sections ---------- */
+  section.chapter { padding: clamp(48px, 6vw, 76px) 0 0; }
+  .ch-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .ch-num {
+    font-family: var(--mono); font-size: 13px; color: var(--red);
+    border: 1px solid rgba(255,69,56,0.4); border-radius: 6px; padding: 3px 9px;
+  }
+  .ch-head h2 {
+    font-stretch: 122%; font-weight: 900; text-transform: uppercase;
+    letter-spacing: -0.015em; font-size: clamp(26px, 4vw, 40px); line-height: 1.05;
+  }
+  .ch-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .pill.feat { color: var(--green); background: var(--green-soft); border: 1px solid rgba(61,214,140,0.35); }
+  .pill.fix { color: var(--blue); background: var(--blue-soft); border: 1px solid rgba(108,178,255,0.35); }
+  .pill.brk { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.sec { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.ref { color: var(--amber); background: var(--amber-soft); border: 1px solid rgba(237,163,59,0.35); }
+  .pill.ui { color: var(--violet); background: rgba(179,148,255,0.1); border: 1px solid rgba(179,148,255,0.3); }
+
+  .ch-intro { margin-top: 18px; max-width: 760px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .ch-intro b { color: var(--text); font-weight: 600; }
+  .ch-intro code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: var(--amber); }
+
+  /* ---------- flow diagrams ---------- */
+  .flow-wrap { margin-top: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); overflow: hidden; }
+  .flow-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); padding: 12px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .flow { display: flex; align-items: stretch; padding: 24px 18px; overflow-x: auto; }
+  .fnode {
+    flex: 0 0 auto;
+    border: 1px solid var(--line-2); border-radius: 10px;
+    background: var(--panel); padding: 12px 16px;
+    min-width: 132px; max-width: 200px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .fnode .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .fnode .v { font-weight: 700; font-size: 13.5px; line-height: 1.35; }
+  .fnode .d { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .fnode.hot { border-color: rgba(255,69,56,0.55); box-shadow: 0 0 22px rgba(255,69,56,0.12); }
+  .fnode.hot .t { color: var(--red); }
+  .fnode.ok { border-color: rgba(61,214,140,0.45); }
+  .fnode.ok .t { color: var(--green); }
+  .fnode.warn { border-color: rgba(237,163,59,0.45); }
+  .fnode.warn .t { color: var(--amber); }
+  .farr {
+    flex: 0 0 auto; display: flex; align-items: center;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 0 10px; white-space: nowrap;
+  }
+  .flow-note {
+    padding: 12px 18px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7;
+  }
+  .flow-note em { color: var(--amber); font-style: normal; }
+  .flow-note b { color: var(--green); font-weight: 600; }
+  .flow-note s { color: var(--red); text-decoration: none; }
+
+  /* vertical pipeline */
+  .pipe { padding: 20px 18px; }
+  .pipe-step { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 0 16px; position: relative; padding-bottom: 18px; }
+  .pipe-step:last-child { padding-bottom: 4px; }
+  .pipe-step::before { content: ""; position: absolute; left: 16px; top: 30px; bottom: 0; width: 1px; background: var(--line-2); }
+  .pipe-step:last-child::before { display: none; }
+  .pipe-n {
+    width: 33px; height: 33px; border-radius: 50%;
+    border: 1px solid var(--line-2); background: var(--panel);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted);
+    position: relative; z-index: 1;
+  }
+  .pipe-step.hot .pipe-n { border-color: var(--red); color: var(--red); }
+  .pipe-b { padding-top: 4px; }
+  .pipe-b h5 { font-size: 14px; font-weight: 700; }
+  .pipe-b p { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+  .pipe-b p code { color: var(--amber); }
+
+  /* ---------- cards ---------- */
+  .cards { margin-top: 26px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .cards.three { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); padding: 20px;
+    transition: border-color 0.25s, transform 0.25s;
+    min-width: 0;
+  }
+  .card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .card .card-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card h4 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; }
+  .card h4 .pr {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--dim);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 2px; transition: 0.2s;
+  }
+  .card h4 .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
+  .card p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-top: 7px; }
+  .card p code, .card li code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 0.5px 5px; border-radius: 4px; color: var(--amber); }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card ul { margin-top: 8px; padding-left: 0; list-style: none; }
+  .card li { color: var(--muted); font-size: 12.5px; line-height: 1.6; padding-left: 16px; position: relative; margin-top: 4px; }
+  .card li::before { content: "▸"; position: absolute; left: 0; color: var(--red); font-size: 10px; top: 3px; }
+  .card .file { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .file::before { content: "◇ "; color: var(--line-2); }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin-top: 16px;
+    background: #0c0c0e; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    background: var(--panel);
+  }
+  .code-bar .lang { color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 7px; font-size: 10px; }
+  .code pre {
+    padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+    color: #c9c5bd;
+  }
+  .code pre .k { color: var(--red); }
+  .code pre .s { color: var(--green); }
+  .code pre .c { color: var(--dim); font-style: italic; }
+  .code pre .f { color: var(--amber); }
+  .code pre .t { color: var(--blue); }
+  .code pre .del { color: #e2766c; background: rgba(255,69,56,0.08); display: inline-block; width: 100%; }
+  .code pre .add { color: #6fdca6; background: rgba(61,214,140,0.08); display: inline-block; width: 100%; }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  thead th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--dim); text-align: left; padding: 11px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--muted); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,0.015); }
+  tbody td b { color: var(--text); font-weight: 600; }
+  tbody td code { font-family: var(--mono); font-size: 11.5px; color: var(--amber); }
+  td .mini { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+
+  /* group chips for MCP */
+  .groups { margin-top: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .group-chip {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 13px 14px; transition: border-color 0.2s;
+  }
+  .group-chip:hover { border-color: rgba(255,69,56,0.45); }
+  .group-chip .g { font-family: var(--mono); font-weight: 700; font-size: 13.5px; color: var(--red); }
+  .group-chip .a { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 5px; line-height: 1.6; word-break: break-word; }
+
+  .footnote { margin-top: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7; }
+  .footnote em { color: var(--amber); font-style: normal; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: clamp(56px, 8vw, 96px);
+    border-top: 1px solid var(--line);
+    padding: clamp(44px, 6vw, 72px) clamp(20px, 4vw, 48px);
+    background: radial-gradient(ellipse 50% 60% at 88% 100%, rgba(255,69,56,0.07), transparent 60%);
+  }
+  .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1180px; margin: 0 auto; align-items: start; }
+  footer h2 { font-stretch: 125%; font-weight: 900; font-size: clamp(26px, 3.4vw, 40px); text-transform: uppercase; line-height: 1; letter-spacing: -0.02em; }
+  footer h2 span { color: var(--red); }
+  footer .fn { margin-top: 14px; color: var(--muted); font-size: 14px; max-width: 430px; }
+  footer .fn code { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .term { background: #0c0c0e; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+  .term-bar i:first-child { background: var(--red); }
+  .term-bar span { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .term-body { padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 2.05; overflow-x: auto; }
+  .term-body div { white-space: pre; }
+  .term-body .c { color: var(--dim); }
+  .term-body .p { color: var(--red); }
+  .term-body .out { color: var(--green); }
+  .foot-end { max-width: 1180px; margin: 48px auto 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .foot-end a { color: var(--muted); text-decoration: none; }
+  .foot-end a:hover { color: var(--red); }
+
+  /* reveal */
+  .fx { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1); }
+  .fx.in { opacity: 1; transform: none; }
+  .rise { opacity: 0; transform: translateY(14px); animation: rise 0.8s cubic-bezier(0.2,0.7,0.2,1) forwards; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.16s; } .d3 { animation-delay: 0.28s; } .d4 { animation-delay: 0.4s; } .d5 { animation-delay: 0.52s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  @media (max-width: 880px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .stat:nth-child(3) { border-right: 0; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
+    .cards, .cards.three { grid-template-columns: 1fr; }
+    .groups { grid-template-columns: repeat(2, 1fr); }
+    .ba { grid-template-columns: 1fr; gap: 18px; }
+    .ba-arrow { padding: 0; transform: rotate(90deg); width: fit-content; }
+    .foot-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    .fx, .rise { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="brandbar">
+  <a class="brand" href="https://github.com/lerd-env/lerd">
+    <span class="brand-mark">L</span>
+    <span><span class="brand-name">lerd</span> <span class="brand-path">lerd-env/<b>lerd</b></span></span>
+  </a>
+  <a class="gh-link" href="https://github.com/lerd-env/lerd/compare/v1.27.1...v1.28.0">v1.27.1…v1.28.0 ↗</a>
+</header>
+
+<nav class="pillnav">
+  <a href="#timing"><i>01</i> Request Timing</a>
+  <a href="#diagnose"><i>02</i> AI Diagnosis</a>
+  <a href="#store"><i>03</i> Service Store</a>
+  <a href="#shims"><i>04</i> Client Shims</a>
+  <a href="#tls-dns"><i>05</i> TLS &amp; DNS</a>
+  <a href="#ports-env"><i>06</i> Ports &amp; Env</a>
+  <a href="#cleanup"><i>07</i> Disk Cleanup</a>
+  <a href="#ui"><i>08</i> Mobile &amp; UI</a>
+  <a href="#fixes"><i>09</i> Fixes &amp; Docs</a>
+</nav>
+
+<section class="hero"><div class="wrap">
+  <div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-07-01 → 2026-07-08</em></div>
+  <h1 class="rise d2">v1.<em>28</em>.0</h1>
+  <div class="sub rise d2">TIMING, DIAGNOSED · <b>Every site tells you where its time goes</b></div>
+  <p class="lede rise d3">The per-request signal lerd already carried, once starved down to a bare hostname for idle-suspend, becomes a full <b>request-timing analytics view</b> for every site, with slow-route detection, cold-start exclusion, and one-click profiling. Service presets follow frameworks out of the binary into an <b>external store</b> that updates without a release. And the whole thing joins up for agents: <code>route_timing</code> finds the slow route, <code>optimize_route</code> hands back the N+1 queries and CPU hotspots behind it, from real traffic rather than reading code. Alongside, certificates renew themselves, DNS toggles through dedicated commands, database client tools become host shims, and the dashboard grows a QR code and a mobile session.</p>
+
+  <div class="stats rise d4">
+    <div class="stat"><div class="n">79</div><div class="l">commits</div></div>
+    <div class="stat"><div class="n">45</div><div class="l">merged PRs</div></div>
+    <div class="stat"><div class="n">373</div><div class="l">files</div></div>
+    <div class="stat green"><div class="n">+19,045</div><div class="l">insertions</div></div>
+    <div class="stat red"><div class="n">−2,075</div><div class="l">deletions</div></div>
+    <div class="stat amber"><div class="n">2</div><div class="l">contributors</div></div>
+  </div>
+
+  <div class="diffbar rise d5">
+    <div class="bar">
+      <i style="width:29%;background:var(--red)"></i>
+      <i style="width:16%;background:var(--amber)"></i>
+      <i style="width:8%;background:var(--green)"></i>
+      <i style="width:7%;background:var(--blue)"></i>
+      <i style="width:8%;background:var(--violet)"></i>
+      <i style="width:32%;background:var(--line-2)"></i>
+    </div>
+    <div class="legend">
+      <span><s style="background:var(--red)"></s>web UI 29%</span>
+      <span><s style="background:var(--amber)"></s>cli 16%</span>
+      <span><s style="background:var(--green)"></s>request timing 8%</span>
+      <span><s style="background:var(--blue)"></s>services + shims 7%</span>
+      <span><s style="background:var(--violet)"></s>config 8%</span>
+      <span><s style="background:var(--line-2)"></s>rest 32%</span>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ 01 REQUEST TIMING ============ -->
+<section id="timing" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">01</span>
+    <h2>Request Timing</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">The nginx access feed was widened from the bare request host it fed idle-suspend to carry <b>status, request time, method and URI</b>, and a framework-agnostic aggregator in the watcher keeps a rolling per-site, per-route window off that same syslog feed, running whether or not idle-suspend is on. The site Overview gains a <b>Request timing</b> section backed by a durable SQLite record: a range picker, KPIs for the typical and p95 response, request count and error rate, a response-time distribution, a throughput chart, the slowest routes, and routes and recent-requests panels.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>SYSLOG → SNAPSHOT → SIGNAL</span><span>one feed, three consumers</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">nginx access</div><div class="v">status · time · method · uri</div><div class="d">query strings dropped</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">aggregator</div><div class="v">per-route window</div><div class="d">id-like segments collapsed</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode warn"><div class="t">p95 vs typical</div><div class="v">flag a slow route</div><div class="d">min sample count first</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode hot"><div class="t">reaches you</div><div class="v">panel · doctor · push</div><div class="d">no capture needed</div></div>
+    </div>
+    <div class="flow-note"><b>Grouped, not raw</b> — routes aggregate after id-like path segments are collapsed and query strings dropped, so <em>no query-string value is ever kept in memory</em> and traffic aggregates meaningfully.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Analytics on the Overview <a class="pr" href="https://github.com/lerd-env/lerd/pull/797">#797</a></h4><p>A durable store drives the range picker, the typical and p95 KPIs, the distribution, a live throughput series, and the slowest routes with click-to-profile.</p><span class="file">internal/reqstats</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Cold starts don't skew it <a class="pr" href="https://github.com/lerd-env/lerd/pull/797">#797</a></h4><p>The first request after a site sits idle past the suspend timeout is recorded with a <b>cold flag</b> and kept out of every timing figure, while still counting toward the total and showing in the recent list with a marker.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>The finding follows you <a class="pr" href="https://github.com/lerd-env/lerd/pull/724">#724</a></h4><p>A slow route surfaces as a <b>Response Time</b> warning in the site doctor that the CLI, dashboard, and MCP all inherit, and as an opt-in <code>slow_route</code> push that fires once and rearms when the route recovers.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 02 AI DIAGNOSIS ============ -->
+<section id="diagnose" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">02</span>
+    <h2>AI Diagnosis</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">The timing signal is only half the story. An agent asking "why is this route slow?" wants the symptom and its cause in one call, without reading controllers to guess at N+1s. <code>route_timing</code> returns the response-time table from real traffic, and <code>optimize_route</code> joins each slow route to the queries and the CPU behind it. A new <b>spxreport</b> package parses SPX's on-disk trace into a flat profile and keeps only the outliers, so a CPU-bound route shows where its time went next to its queries.</p>
+
+  <div class="flow-wrap"><div class="flow-title"><span>OPTIMIZE-ROUTE JOIN</span><span>symptom + both causes</span></div>
+    <div class="pipe">
+      <div class="pipe-step hot"><div class="pipe-n">1</div><div class="pipe-b"><h5>route_timing</h5><p>the per-site response-time table, the routes whose p95 runs well above the site's typical, read from the snapshot with no capture needed <a class="pr" href="https://github.com/lerd-env/lerd/pull/726">#726</a></p></div></div>
+      <div class="pipe-step"><div class="pipe-n">2</div><div class="pipe-b"><h5>enable capture, hit the route</h5><p><code>dumps_toggle</code> for queries and <code>profiler_toggle</code> for SPX, then a few real hits, an authenticated POST just works, no synthetic request to forge</p></div></div>
+      <div class="pipe-step hot"><div class="pipe-n">3</div><div class="pipe-b"><h5>optimize_route</h5><p>each slow route paired with its N+1 and slow queries at <code>file:line</code>, plus a <b>profile</b> block of the top functions by exclusive wall time from the freshest capture <a class="pr" href="https://github.com/lerd-env/lerd/pull/728">#728</a></p></div></div>
+    </div>
+    <div class="flow-note"><b>The same distilled hotspots</b> that <code>lerd profile run --flat</code> and <code>profiler_report</code> already return for a command, now in a route-scoped, historical form from passive traffic.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>drive it from real traffic, not from reading code</span><span class="lang">mcp</span></div>
+<pre><span class="f">route_timing</span>(site: <span class="s">"shop"</span>)              <span class="c"># which routes are slow</span>
+<span class="f">dumps_toggle</span>(enable) · <span class="f">profiler_toggle</span>(enable)
+<span class="c"># … hit GET /orders a few times …</span>
+<span class="f">optimize_route</span>(site: <span class="s">"shop"</span>, route: <span class="s">"/orders"</span>)
+  <span class="t">→ N+1</span>: OrderController@index:42  eager-load <span class="s">`items`</span>
+  <span class="t">→ CPU</span>: CurrencyFormatter::format  61% excl. wall</pre>
+  </div>
+</div></section>
+
+<!-- ============ 03 SERVICE STORE ============ -->
+<section id="store" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">03</span>
+    <h2>Service Store</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ref">STORE</span></div>
+  </div>
+  <p class="ch-intro">Service presets adopt the same fetch-and-cache model frameworks already use. The binary now embeds <b>only the default stack</b>, mysql, redis, postgres, meilisearch, rustfs, mailpit, and every add-on lives in the <code>lerd-env/services</code> store, fetched on demand into a local cache, refreshed after 24 hours, with the embedded defaults kept as an offline fallback so older installs keep resolving. A new service ships to every install without a binary release, which is the whole point.</p>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Search and install from the store <a class="pr" href="https://github.com/lerd-env/lerd/pull/714">#714</a></h4><p><code>lerd service search</code> browses the store, <code>lerd service preset &lt;name&gt;</code> fetches a store-only preset on demand, and a reconcile backfill on start pulls the definitions of already-installed add-ons so their file mounts, families and dashboards survive the move out of the binary.</p><ul><li>YAML config-file mounts, inline or via a named generator</li><li>keeps phpMyAdmin, pgAdmin, RedisInsight and RabbitMQ dashboards working from the store</li></ul><span class="file">internal/serviceops · internal/store</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Picker search + palette install <a class="pr" href="https://github.com/lerd-env/lerd/pull/720">#720</a></h4><p>The preset picker filters live by name, description or image with an empty state, and every installable preset is promoted into the global command palette under an <b>Install service</b> group, so "install redis" installs it without opening the picker. Service tools render as cards <a class="pr" href="https://github.com/lerd-env/lerd/pull/765" style="color:var(--dim);font-family:var(--mono);font-size:11px">#765</a>.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 04 CLIENT SHIMS ============ -->
+<section id="shims" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">04</span>
+    <h2>Client Shims</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">The client tools that ship inside each database service image, <code>mysqldump</code>, <code>pg_dump</code>, <code>psql</code>, <code>redis-cli</code>, <code>mongodump</code> and friends, are surfaced as <b>pass-through shims on the host PATH</b>. Dump or query a database that lives outside lerd, or point PhpStorm at a real client binary, without installing the tool yourself. Each shim runs the tool in a throwaway container built from the service image with your home directory mounted, so output files and CA certs behave like a native binary and the running database container is never touched.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>pg_dump ON THE HOST PATH</span><span>no local client install</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">you type</div><div class="v">pg_dump mydb</div><div class="d">host shell</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">shim</div><div class="v">adopt project DB</div><div class="d">read from DB_HOST</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">throwaway container</div><div class="v">service image + $HOME</div><div class="d">files land natively</div></div>
+    </div>
+    <div class="flow-note"><b>Hostless adopts the project's own service</b> — a mariadb or postgres-18 backed project routes to its own server; <em>an explicit host passes straight through</em> for external databases. When several same-family services expose a tool, one owns the shim and the others show it disabled.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>list, toggle, and a Tools tab per database service</span><span class="lang">bash</span></div>
+<pre><span class="k">lerd shims</span>                    <span class="c"># list every exposed client tool</span>
+<span class="k">lerd shims add</span> psql          <span class="c"># put psql on the host PATH</span>
+<span class="k">pg_dump</span> mydb &gt; dump.sql      <span class="c"># runs in a throwaway container</span></pre>
+  </div>
+</div></section>
+
+<!-- ============ 05 TLS & DNS ============ -->
+<section id="tls-dns" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">05</span>
+    <h2>TLS &amp; DNS</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Two long-standing sharp edges, rounded off. A secured site used to serve its mkcert leaf until it expired and then keep serving the expired one, and switching lerd-managed DNS on or off meant re-running the whole installer. Certificates now <b>renew themselves</b>, and DNS gets three dedicated commands.</p>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Certificates renew before they expire <a class="pr" href="https://github.com/lerd-env/lerd/pull/741">#741</a></h4><p><code>IssueCert</code> is now expiry-aware: it keeps an existing certificate only while it parses, is valid, and sits more than <b>thirty days</b> from expiry, otherwise it reissues. The watcher boot scan runs a new <code>EnsureCert</code> for secured sites so an ordinary <code>lerd start</code> heals an aging cert, covering the site's own domains and every worktree wildcard SAN.</p><ul><li><code>lerd secure --renew</code> and MCP <code>tls_renew</code> for an on-demand reissue</li></ul><span class="file">internal/certs</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>DNS switches through commands <a class="pr" href="https://github.com/lerd-env/lerd/pull/746">#746</a></h4><p>The install-time DNS question is asked <b>once</b>, on a genuine first install, and every later install or update honours the saved choice silently, the same way the Node-management choice does.</p><ul><li><code>dns:enable</code> turns lerd-managed DNS on</li><li><code>dns:disable</code> moves sites to <code>localhost</code></li><li><code>dns:repair</code> re-runs setup to fix a broken but enabled resolver</li></ul></div>
+  </div>
+</div></section>
+
+<!-- ============ 06 PORTS & ENV ============ -->
+<section id="ports-env" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">06</span>
+    <h2>Ports &amp; Env</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Two power-user gaps closed. Nothing you started on a raw TCP port inside <code>lerd shell</code> used to be reachable from the host, and filling in a project's missing <code>.env</code> keys meant hunting for where each one belonged.</p>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Extra host ports per PHP version <a class="pr" href="https://github.com/lerd-env/lerd/pull/755">#755</a></h4><p>Each PHP version carries its own list of extra host ports, published on that version's shared FPM container so <code>localhost:PORT</code> reaches a Vite dev server, a websocket, or an ad-hoc listener you start in the shell. A requested port already claimed shifts to the next free one, and changing a version's list restarts only that version's FPM.</p><ul><li>a Ports tab per version, <code>lerd php:ports add|remove|list</code></li><li>MCP runtime <code>ports_list</code> / <code>ports_add</code> / <code>ports_remove</code></li></ul></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>Insert missing .env keys in place <a class="pr" href="https://github.com/lerd-env/lerd/pull/718">#718</a></h4><p>An anchor-based merge places each key the project's <code>.env</code> is missing next to the neighbours it has in <code>.env.example</code>, carrying its inline comment and value verbatim, purely additively. <code>lerd env:check --fix</code> shows a unified diff; the dashboard Env tab opens a <b>Review keys</b> modal <a class="pr" href="https://github.com/lerd-env/lerd/pull/735" style="color:var(--dim);font-family:var(--mono);font-size:11px">#735</a> listing each missing key with its value and a checkbox, required keys pre-ticked.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 07 DISK CLEANUP ============ -->
+<section id="cleanup" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">07</span>
+    <h2>Disk Cleanup</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Cleanup only reaped provably-lerd orphaned images by default, so upgraded service versions and the dangling leftovers repeated rebuilds pile up went untouched unless someone remembered <code>--deep</code>. On a long-lived install that let podman grow tens of gigabytes while both <code>lerd cleanup</code> and the daily sweep reported nothing to do. <b>Deep is now the default</b> <a href="https://github.com/lerd-env/lerd/pull/740" style="color:var(--amber);text-decoration:none">#740</a>, with a <code>--safe</code> flag to drop back to the conservative pass.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>DEFAULT NOW RECLAIMS</span><span>--safe drops back to conservative</span></div>
+    <div class="flow">
+      <div class="fnode ok"><div class="t">reap</div><div class="v">catalog service images</div><div class="d">nothing references them</div></div>
+      <div class="farr">+</div>
+      <div class="fnode ok"><div class="t">reap</div><div class="v">every dangling image</div><div class="d">untagged, unreferenced</div></div>
+      <div class="farr">+</div>
+      <div class="fnode warn"><div class="t">retry across passes</div><div class="v">build chains</div><div class="d">reclaim in one run</div></div>
+      <div class="farr">·</div>
+      <div class="fnode"><div class="t">skip</div><div class="v">held by a container</div><div class="d">podman refuses anyway</div></div>
+    </div>
+    <div class="flow-note"><b>Held by a running container?</b> Cleanup reports <em>how much a restart would free</em> instead of a bare nothing to do, because recreating the containers on the current images releases the old ones it was holding.</div>
+  </div>
+</div></section>
+
+<!-- ============ 08 MOBILE & UI ============ -->
+<section id="ui" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">08</span>
+    <h2>Mobile &amp; UI</h2>
+    <div class="ch-pills"><span class="pill ui">UI</span><span class="pill feat">FEAT</span></div>
+  </div>
+  <p class="ch-intro">Nearly a third of the release lands in the web UI. The dashboard learns to be driven from a phone over a shared LAN, the site page is rebuilt as a resource view, and every tooltip is rewritten to escape the panels that used to clip it.</p>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Remote address + mobile session <a class="pr" href="https://github.com/lerd-env/lerd/pull/783">#783</a></h4><p>The Remote dashboard card shows the <code>http://&lt;lan-ip&gt;:7073</code> address next to a scannable QR. A first Basic-auth success sets an HttpOnly, HMAC-signed <code>lerd_session</code> cookie valid for a week, so iOS Safari stops re-prompting on every refresh; rotating the credentials invalidates every session.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Phone polish <a class="pr" href="https://github.com/lerd-env/lerd/pull/785">#785</a></h4><p>Toolbars wrap, the framework badge hides on narrow screens, the open action targets the LAN share URL where <code>.test</code> won't resolve, Tinker no longer zooms on iOS focus, and loopback-only launchers drop out of a remote dashboard.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Resource-view site page <a class="pr" href="https://github.com/lerd-env/lerd/pull/794">#794</a></h4><p>The Overview becomes a stack of sections, a runtime-and-workers row with the doctor and framework commands as a matched pair, a service-card grid where each running service opens its dashboard, and live logs on their own tab. The project path opens the folder in the host file manager.</p></div>
+  </div>
+
+  <div class="cards" style="margin-top:14px">
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Themed hover tooltips <a class="pr" href="https://github.com/lerd-env/lerd/pull/781">#781</a></h4><p>A shared <code>use:tooltip</code> action renders one themed bubble portaled to the body, so tooltips escape the panels and scroll containers that clipped the native <code>title</code> labels, follow the light or dark theme, and clamp to the viewport. Every trigger keeps an <code>aria-label</code>.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>queue:start from the framework <a class="pr" href="https://github.com/lerd-env/lerd/pull/769">#769</a></h4><p>A <code>tune_command</code> template with <code>{queue}</code>/<code>{tries}</code>/<code>{timeout}</code> and a <code>restart_command</code> on the framework worker replace the hardcoded <code>php artisan queue:work</code>, so CodeIgniter's <code>php spark queue:work</code> and any non-Laravel framework declare their own flag syntax. Detection also resolves offline from the cached store index <a class="pr" href="https://github.com/lerd-env/lerd/pull/776" style="color:var(--dim);font-family:var(--mono);font-size:11px">#776</a>.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 09 FIXES & DOCS ============ -->
+<section id="fixes" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">09</span>
+    <h2>Fixes &amp; Docs</h2>
+    <div class="ch-pills"><span class="pill fix">FIX</span><span class="pill ref">CHORE</span></div>
+  </div>
+  <p class="ch-intro">Fixes that landed against previously shipped code, plus the org move. Correctness fixes to features born in this cycle are folded into their chapters above, not listed here.</p>
+
+  <div class="tbl-wrap"><table>
+    <thead><tr><th>Fix</th><th>What changed</th><th>PR</th></tr></thead>
+    <tbody>
+      <tr><td><b>AI config pollution</b></td><td><code>mcp:inject</code> stops writing lerd's block into a shared, committed AGENTS.md or guidelines file that belongs to the project</td><td><code>#795</code></td></tr>
+      <tr><td><b>Install idempotency</b></td><td>the DNS sudoers rule is no longer rewritten on every install, prompts stop swallowing typed-ahead input, and podman-mac-helper's sudo prompt is skipped when already installed</td><td><code>#731 #759 #761</code></td></tr>
+      <tr><td><b>Host-worker consent</b></td><td>keyed on the command that actually runs, so the v1.27 gate remembers the approval instead of re-prompting</td><td><code>#772</code></td></tr>
+      <tr><td><b>MCP + UI feedback</b></td><td>podman hot-path calls are bounded and a stalled machine self-heals; the check-for-updates button gives live feedback</td><td><code>#716 #787</code></td></tr>
+      <tr><td><b>macOS heal</b></td><td>the machine heal, DNS teardown, and CA trust check are hardened</td><td><code>#791</code></td></tr>
+      <tr><td><b>v1.27 review</b></td><td>correctness, macOS-compatibility and safety follow-ups from reviewing the v1.27 changes</td><td><code>#763 #773 #799 #802</code></td></tr>
+    </tbody>
+  </table></div>
+
+  <p class="footnote">Under the hood, distribution and CI moved from <code>geodro/lerd</code> to the <em>lerd-env</em> organisation <a href="https://github.com/lerd-env/lerd/pull/757" style="color:var(--muted)">#757</a>, Go dependencies were updated including the <code>x/net</code> DoS fix <a href="https://github.com/lerd-env/lerd/pull/767" style="color:var(--muted)">#767</a>, and the repo gained a <code>CLAUDE.md</code> agent guide with contributor-agent skills <a href="https://github.com/lerd-env/lerd/pull/722" style="color:var(--muted)">#722</a>.</p>
+</div></section>
+
+<footer>
+  <div class="foot-grid">
+    <div>
+      <h2>SHIP <span>IT</span></h2>
+      <p class="fn">Install on Linux or macOS, or <code>lerd update</code> if you're already on board. Full
+      story in the <a href="https://lerd.sh/changelog" style="color:var(--amber)">changelog</a>.</p>
+    </div>
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>bash</span></div>
+      <div class="term-body">
+        <div class="c"># Linux &amp; macOS</div>
+        <div><span class="p">$</span> curl -fsSL https://lerd.sh/install.sh | bash</div>
+        <div class="c"># macOS via Homebrew</div>
+        <div><span class="p">$</span> brew install lerd-env/lerd/lerd &amp;&amp; lerd install</div>
+        <div class="c"># already installed</div>
+        <div><span class="p">$</span> lerd update <span class="out"># → v1.28.0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-end">
+    <span>lerd v1.28.0 · 2026-07-08</span>
+    <span><a href="https://github.com/lerd-env/lerd/compare/v1.27.1...v1.28.0">v1.27.1…v1.28.0</a> · <a href="https://lerd.sh/">docs</a> · <a href="https://github.com/lerd-env/lerd">github</a></span>
+  </div>
+</footer>
+
+<script>
+  const reveal = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); reveal.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fx').forEach(el => reveal.observe(el));
+  addEventListener('load', () => document.querySelectorAll('.fx').forEach(el => el.classList.add('in')));
+
+  const links = [...document.querySelectorAll('.pillnav a')];
+  const spy = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id)); });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  document.querySelectorAll('section.chapter').forEach(s => spy.observe(s));
+</script>
+</body>
+</html>
