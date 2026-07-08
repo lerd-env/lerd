@@ -32,7 +32,9 @@ const DefaultColdGap = 30 * time.Minute
 
 // IsColdStart reports whether a request at now is a cold start: the site has been
 // seen before and sat idle at least gap since. The first request ever seen for a
-// site isn't a cold start, since there's no prior time to prove it was idle.
+// site isn't a cold start, since there's no prior time to prove it was idle; the
+// watcher seeds the last-seen clock from the durable store on startup so a wake
+// right after a daemon restart still counts against a real prior time.
 func IsColdStart(last time.Time, seen bool, now time.Time, gap time.Duration) bool {
 	return seen && gap > 0 && now.Sub(last) >= gap
 }
@@ -178,6 +180,28 @@ func (s *Store) Prune(before time.Time) (int64, error) {
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// LastSeenBySite returns the most recent request time for every site in the
+// store, so the watcher can seed its cold-start clock on startup. Without it a
+// daemon restart forgets the last request and judges the next wake as warm,
+// letting the cold boot's inflated time dominate the route p95.
+func (s *Store) LastSeenBySite() (map[string]time.Time, error) {
+	rows, err := s.db.Query(`SELECT site, MAX(at_ms) FROM requests GROUP BY site`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]time.Time{}
+	for rows.Next() {
+		var site string
+		var atMs int64
+		if err := rows.Scan(&site, &atMs); err != nil {
+			return nil, err
+		}
+		out[site] = time.UnixMilli(atMs)
+	}
+	return out, rows.Err()
 }
 
 // Recent returns the newest limit requests for a site, newest first.

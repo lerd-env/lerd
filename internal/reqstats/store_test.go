@@ -205,6 +205,28 @@ func TestIsColdStart(t *testing.T) {
 	}
 }
 
+func TestLastSeenBySite(t *testing.T) {
+	s := tempStore(t)
+	seed(t, s, mk(3, 0, "app", "GET", "GET /", "/", 200, 20))
+	seed(t, s, mk(2, 5*time.Minute, "app", "GET", "GET /x", "/x", 200, 20))
+	seed(t, s, mk(1, time.Minute, "blog", "GET", "GET /", "/", 200, 20))
+
+	got, err := s.LastSeenBySite()
+	if err != nil {
+		t.Fatalf("LastSeenBySite: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("sites = %d, want 2", len(got))
+	}
+	// app's newest sample is the last record of the +5m batch (offset +5m+1s).
+	if want := base.Add(5*time.Minute + time.Second); !got["app"].Equal(want) {
+		t.Errorf("app last seen = %v, want %v", got["app"], want)
+	}
+	if want := base.Add(time.Minute); !got["blog"].Equal(want) {
+		t.Errorf("blog last seen = %v, want %v", got["blog"], want)
+	}
+}
+
 func TestStorePruneDropsOldRows(t *testing.T) {
 	s := tempStore(t)
 	seed(t, s, mk(4, -48*time.Hour, "app", "GET", "GET /old", "/old", 200, 20))
