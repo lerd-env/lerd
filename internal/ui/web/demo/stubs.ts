@@ -149,28 +149,192 @@ $total = Order::where('status', 'paid')->sum('total');
 User::count();
 collect([1, 2, 3])->map(fn ($n) => $n * 2);`;
 
-// Per-site request timing (the Debug tab's Request timing panel). Keyed by
-// domain: acme has flagged slow routes off its typical response, the rest sit
-// within their own normal range so the panel shows the "all good" state.
-const SITE_STATS: Record<string, unknown> = {
+// Per-site request-timing analytics (the site Overview's Request timing view,
+// served at /api/sites/<domain>/analytics). The real view reads a durable SQLite
+// store; each profile below is expanded into the same shape, with the throughput
+// series and recent-request timestamps placed relative to now so the chart and
+// list read as live. acme and shopfront run busy with flagged slow routes and a
+// cold start; every other site falls back to DEFAULT_ANALYTICS so the panel is
+// never empty. Route p95s and the cold flag exercise the severity colours, the
+// "cold excluded" note, and the greyed cold row.
+const LATENCY_EDGES = [25, 50, 100, 250, 500, 1000];
+
+interface DemoRouteStat {
+  route: string;
+  method: string;
+  example: string;
+  p50_millis: number;
+  p95_millis: number;
+  recent_p95_millis: number;
+  multiplier: number;
+  samples: number;
+}
+
+interface DemoRecent {
+  agoSec: number; // seconds before now, so the list reads as live
+  method: string;
+  route: string;
+  uri: string;
+  status: number;
+  millis: number;
+  cold?: boolean;
+}
+
+interface AnalyticsProfile {
+  samples: number;
+  cold_starts: number;
+  median_millis: number;
+  p95_millis: number;
+  status: { c2xx: number; c3xx: number; c4xx: number; c5xx: number };
+  distribution: number[]; // one count per LATENCY_EDGES bucket, last is the open >1s bucket
+  throughput: number[]; // per-minute counts, oldest first, ending at the current minute
+  routes: DemoRouteStat[];
+  recent: DemoRecent[]; // newest first
+}
+
+// wave builds a smooth per-minute throughput series of length n around avg, so
+// each profile gets a realistic curve without a hand-written array.
+function wave(n: number, avg: number): number[] {
+  return Array.from({ length: n }, (_, i) => Math.max(1, Math.round(avg + avg * 0.5 * Math.sin(i / 2))));
+}
+
+const ANALYTICS_PROFILES: Record<string, AnalyticsProfile> = {
   'acme.test': {
-    site: 'acme.test',
-    median_millis: 41,
     samples: 1846,
-    slow: [
-      { route: 'GET /orders/{id}', method: 'GET', example: '/orders/42', p95_millis: 233, multiplier: 5.7, samples: 214 },
-      { route: 'POST /checkout', method: 'POST', example: '', p95_millis: 512, multiplier: 12.5, samples: 63 },
+    cold_starts: 3,
+    median_millis: 72,
+    p95_millis: 240,
+    status: { c2xx: 1720, c3xx: 88, c4xx: 34, c5xx: 4 },
+    distribution: [90, 360, 720, 430, 130, 40, 6],
+    throughput: wave(24, 15),
+    routes: [
+      { route: 'GET /', method: 'GET', example: '/', p50_millis: 78, p95_millis: 150, recent_p95_millis: 138, multiplier: 3.5, samples: 1846 },
+      { route: 'POST /checkout', method: 'POST', example: '', p50_millis: 190, p95_millis: 512, recent_p95_millis: 512, multiplier: 12.5, samples: 63 },
+      { route: 'GET /orders/:id', method: 'GET', example: '/orders/42', p50_millis: 96, p95_millis: 233, recent_p95_millis: 233, multiplier: 5.7, samples: 214 },
+      { route: 'GET /dashboard', method: 'GET', example: '/dashboard', p50_millis: 120, p95_millis: 268, recent_p95_millis: 260, multiplier: 6.4, samples: 96 },
+      { route: 'GET /cart', method: 'GET', example: '/cart', p50_millis: 60, p95_millis: 176, recent_p95_millis: 176, multiplier: 4.1, samples: 148 },
+      { route: 'GET /products', method: 'GET', example: '/products', p50_millis: 44, p95_millis: 92, recent_p95_millis: 88, multiplier: 1.8, samples: 402 },
+    ],
+    recent: [
+      { agoSec: 4, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 147 },
+      { agoSec: 18, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 130 },
+      { agoSec: 46, method: 'GET', route: 'GET /products', uri: '/products', status: 200, millis: 70 },
+      { agoSec: 62, method: 'POST', route: 'POST /checkout', uri: '/checkout', status: 302, millis: 199 },
+      { agoSec: 75, method: 'GET', route: 'GET /cart', uri: '/cart', status: 200, millis: 88 },
+      { agoSec: 121, method: 'GET', route: 'GET /orders/:id', uri: '/orders/42', status: 200, millis: 233 },
+      { agoSec: 140, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 138 },
+      { agoSec: 168, method: 'GET', route: 'GET /dashboard', uri: '/dashboard', status: 200, millis: 268 },
+      { agoSec: 205, method: 'GET', route: 'GET /products', uri: '/products', status: 200, millis: 66 },
+      { agoSec: 232, method: 'GET', route: 'GET /cart', uri: '/cart', status: 404, millis: 41 },
+      { agoSec: 300, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 106 },
+      { agoSec: 360, method: 'GET', route: 'GET /orders/:id', uri: '/orders/99', status: 200, millis: 210 },
+      { agoSec: 900, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 613, cold: true },
     ],
   },
   'shopfront.test': {
-    site: 'shopfront.test',
-    median_millis: 48,
     samples: 921,
-    slow: [
-      { route: 'GET /cart', method: 'GET', example: '/cart', p95_millis: 176, multiplier: 3.7, samples: 148 },
+    cold_starts: 1,
+    median_millis: 44,
+    p95_millis: 150,
+    status: { c2xx: 900, c3xx: 12, c4xx: 9, c5xx: 0 },
+    distribution: [140, 420, 300, 60, 8, 2, 0],
+    throughput: wave(24, 9),
+    routes: [
+      { route: 'GET /', method: 'GET', example: '/', p50_millis: 40, p95_millis: 96, recent_p95_millis: 92, multiplier: 2.4, samples: 921 },
+      { route: 'GET /cart', method: 'GET', example: '/cart', p50_millis: 58, p95_millis: 176, recent_p95_millis: 176, multiplier: 3.7, samples: 148 },
+      { route: 'GET /catalog', method: 'GET', example: '/catalog', p50_millis: 52, p95_millis: 120, recent_p95_millis: 118, multiplier: 2.9, samples: 260 },
+      { route: 'POST /cart/add', method: 'POST', example: '', p50_millis: 70, p95_millis: 150, recent_p95_millis: 150, multiplier: 3.8, samples: 88 },
+    ],
+    recent: [
+      { agoSec: 9, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 62 },
+      { agoSec: 33, method: 'GET', route: 'GET /catalog', uri: '/catalog', status: 200, millis: 118 },
+      { agoSec: 51, method: 'POST', route: 'POST /cart/add', uri: '/cart/add', status: 200, millis: 150 },
+      { agoSec: 88, method: 'GET', route: 'GET /cart', uri: '/cart', status: 200, millis: 176 },
+      { agoSec: 140, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 48 },
+      { agoSec: 210, method: 'GET', route: 'GET /catalog', uri: '/catalog', status: 200, millis: 96 },
+      { agoSec: 720, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 388, cold: true },
     ],
   },
 };
+
+// DEFAULT_ANALYTICS is a healthy, populated profile for every other demo site, so
+// the panel shows real numbers rather than the empty "watching for requests" card.
+const DEFAULT_ANALYTICS: AnalyticsProfile = {
+  samples: 816,
+  cold_starts: 0,
+  median_millis: 30,
+  p95_millis: 70,
+  status: { c2xx: 804, c3xx: 6, c4xx: 6, c5xx: 0 },
+  distribution: [260, 180, 60, 10, 0, 0, 0],
+  throughput: wave(24, 6),
+  routes: [
+    { route: 'GET /', method: 'GET', example: '/', p50_millis: 34, p95_millis: 78, recent_p95_millis: 72, multiplier: 1.9, samples: 420 },
+    { route: 'GET /login', method: 'GET', example: '/login', p50_millis: 28, p95_millis: 62, recent_p95_millis: 60, multiplier: 1.6, samples: 96 },
+    { route: 'GET /api/health', method: 'GET', example: '/api/health', p50_millis: 8, p95_millis: 18, recent_p95_millis: 16, multiplier: 1.1, samples: 300 },
+  ],
+  recent: [
+    { agoSec: 6, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 34 },
+    { agoSec: 24, method: 'GET', route: 'GET /api/health', uri: '/api/health', status: 200, millis: 12 },
+    { agoSec: 58, method: 'GET', route: 'GET /login', uri: '/login', status: 200, millis: 60 },
+    { agoSec: 132, method: 'GET', route: 'GET /', uri: '/', status: 200, millis: 44 },
+    { agoSec: 240, method: 'GET', route: 'GET /api/health', uri: '/api/health', status: 200, millis: 10 },
+  ],
+};
+
+// Per-site application logs (Logs tab → App logs, the default sub-tab), served
+// over REST at /api/app-logs/<domain>[/<file>]. A realistic Laravel run: mostly
+// INFO with a WARNING and one ERROR carrying a stack trace, so the expandable
+// detail and the level colours both have something to show.
+const APP_LOG_FILES = [
+  { name: 'laravel.log', size: 48213 },
+  { name: 'laravel-2026-07-07.log', size: 15922 },
+];
+
+function appLogEntries(): Array<Record<string, unknown>> {
+  const now = Date.now();
+  const at = (secAgo: number) => new Date(now - secAgo * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  return [
+    { level: 'INFO', date: at(640), message: 'User authenticated', detail: 'local.INFO: User authenticated {"user_id":42,"guard":"web"}' },
+    { level: 'INFO', date: at(600), message: 'Order placed', detail: 'local.INFO: Order placed {"order_id":900,"total":"249.00"}' },
+    { level: 'WARNING', date: at(320), message: 'Coupon code not found, ignoring', detail: 'local.WARNING: Coupon code not found, ignoring {"code":"SUMMER"}' },
+    { level: 'INFO', date: at(180), message: 'Shipment notification queued', detail: 'local.INFO: Shipment notification queued {"job":"App\\\\Jobs\\\\SendShipmentNotification"}' },
+    { level: 'ERROR', date: at(70), message: 'Stripe charge failed: card_declined', detail: 'local.ERROR: Stripe charge failed: card_declined {"exception":"[object] (Stripe\\\\Exception\\\\CardException(code: 402): Your card was declined.)"}\n#0 /app/Services/Billing.php(67): Stripe\\Charge::create()\n#1 /app/Http/Controllers/CheckoutController.php(63): App\\Services\\Billing->charge()\n#2 {main}' },
+    { level: 'INFO', date: at(20), message: 'Cache warmed', detail: 'local.INFO: Cache warmed {"keys":128}' },
+  ];
+}
+
+// analyticsFor expands a profile into the analytics response the view expects,
+// stamping the throughput points and recent list with times relative to now.
+function analyticsFor(domain: string, range: string): unknown {
+  const p = ANALYTICS_PROFILES[domain] ?? DEFAULT_ANALYTICS;
+  const now = Date.now();
+  const minute = 60_000;
+  const nowMin = Math.floor(now / minute) * minute;
+  return {
+    site: domain,
+    range,
+    samples: p.samples,
+    cold_starts: p.cold_starts,
+    median_millis: p.median_millis,
+    p95_millis: p.p95_millis,
+    status: p.status,
+    distribution: p.distribution.map((count, i) => ({ upper_millis: LATENCY_EDGES[i] ?? 0, count })),
+    throughput: p.throughput.map((count, i) => ({
+      at_millis: nowMin - (p.throughput.length - 1 - i) * minute,
+      count,
+    })),
+    routes: p.routes,
+    recent: p.recent.map((r) => ({
+      at_millis: now - r.agoSec * 1000,
+      method: r.method,
+      route: r.route,
+      uri: r.uri,
+      status: r.status,
+      millis: r.millis,
+      cold: !!r.cold,
+    })),
+  };
+}
 
 const WORKTREE_OPTIONS = {
   default_branch_label: 'main',
@@ -365,14 +529,21 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (presetInstall && method === 'POST')
     return presetInstallStream(decodeURIComponent(presetInstall[1]), qs.get('version') || '');
 
-  // Per-site request timing — flagged slow routes for a couple of sites, an
-  // empty "all good" snapshot for the rest.
-  const statsMatch = path.match(/^\/api\/sites\/([^/]+)\/stats$/);
-  if (statsMatch) {
-    const domain = decodeURIComponent(statsMatch[1]);
-    return jsonResponse(
-      SITE_STATS[domain] ?? { site: domain, median_millis: 36, samples: 420, slow: null }
-    );
+  // Per-site request-timing analytics — a busy profile with flagged slow routes
+  // and a cold start for a couple of sites, a healthy populated one for the rest.
+  const analyticsMatch = path.match(/^\/api\/sites\/([^/]+)\/analytics$/);
+  if (analyticsMatch) {
+    const domain = decodeURIComponent(analyticsMatch[1]);
+    return jsonResponse(analyticsFor(domain, qs.get('range') || '1h'));
+  }
+
+  // Per-site application logs (Logs tab → App logs). List files, then a file's
+  // entries; the /clear POST falls through to {ok:true} like other actions.
+  const appLogsMatch = path.match(/^\/api\/app-logs\/([^/]+)(?:\/([^/]+))?$/);
+  if (appLogsMatch && method === 'GET') {
+    const file = appLogsMatch[2];
+    if (!file) return jsonResponse({ files: APP_LOG_FILES });
+    if (file !== 'clear') return jsonResponse({ entries: appLogEntries() });
   }
 
   // Worktrees
@@ -500,10 +671,72 @@ function debugEvents(): Array<Record<string, unknown>> {
   S('event', { data: { name: 'kernel.request' }, src: { file: 'src/EventSubscriber/LocaleSubscriber.php', line: 33 } }, 4600);
   S('http', { data: { method: 'GET', url: 'https://api.exchangerate.host/latest', status: 200 }, src: { file: 'src/Service/Fx.php', line: 18 } }, 4400);
   S('mail', { data: { subject: 'You left items in your cart', from: ['shop@shopfront.test'], to: ['sam@shopfront.test'] }, src: { file: 'src/Mailer/CartReminder.php', line: 12 } }, 4200);
+  // acme — the other routes surfaced in Request timing, so the database icon on
+  // each slow route (which deep-links to the Queries lens filtered by that route)
+  // lands on the queries captured behind it instead of an empty lens: a slow
+  // write on checkout, a classic N+1 on the dashboard, light reads on the rest.
+  const R = (rid: string, request: string, kind: string, extra: Record<string, unknown>, over: number) =>
+    out.push(make(over, 'acme', 'acme.test', rid, request, kind, extra));
+  R('req-acme-checkout', 'POST /checkout', 'query', { data: { sql: 'select * from `carts` where `user_id` = ? limit 1', bindings: [42], time_ms: 1.1, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/CheckoutController.php', line: 33 } }, 6800);
+  R('req-acme-checkout', 'POST /checkout', 'query', { data: { sql: 'insert into `orders` (`user_id`, `total`, `status`) values (?, ?, ?)', bindings: [42, '249.00', 'pending'], time_ms: 3.2, connection: 'mysql', rw_type: 'write' }, src: { file: 'app/Http/Controllers/CheckoutController.php', line: 41 } }, 6700);
+  R('req-acme-checkout', 'POST /checkout', 'query', { data: { sql: 'update `inventory` set `stock` = `stock` - ? where `product_id` = ?', bindings: [1, 12], time_ms: 214.0, connection: 'mysql', rw_type: 'write' }, src: { file: 'app/Services/Inventory.php', line: 58 } }, 6600);
+  R('req-acme-checkout', 'POST /checkout', 'job', { data: { class: 'App\\Jobs\\ChargeCard', status: 'queued', connection: 'redis' }, src: { file: 'app/Http/Controllers/CheckoutController.php', line: 63 } }, 6500);
+  const DASH = [1, 2, 3, 4, 5];
+  for (const uid of DASH)
+    R('req-acme-dash', 'GET /dashboard', 'query', { data: { sql: 'select count(*) from `orders` where `user_id` = ?', bindings: [uid], time_ms: 2.0 + uid / 10, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/DashboardController.php', line: 27 } }, 5200 - uid * 40);
+  R('req-acme-dash', 'GET /dashboard', 'query', { data: { sql: 'select * from `users` where `team_id` = ?', bindings: [3], time_ms: 1.8, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/DashboardController.php', line: 22 } }, 5250);
+  R('req-acme-home', 'GET /', 'query', { data: { sql: 'select * from `products` where `featured` = ? limit 12', bindings: [1], time_ms: 4.6, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/HomeController.php', line: 19 } }, 4200);
+  R('req-acme-home', 'GET /', 'query', { data: { sql: 'select * from `categories` order by `sort` asc', bindings: [], time_ms: 0.7, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/HomeController.php', line: 24 } }, 4100);
+  R('req-acme-products', 'GET /products', 'query', { data: { sql: 'select * from `products` order by `created_at` desc limit 24 offset 0', bindings: [], time_ms: 5.3, connection: 'mysql', rw_type: 'read' }, src: { file: 'app/Http/Controllers/ProductController.php', line: 30 } }, 3600);
   return out;
 }
 
-// EventSource that "connects" then replays the canned debug events once.
+// Canned log lines for the Logs tab's streamed views (FPM/container, queue,
+// schedule, reverb, and the host dev-server journal), picked off the stream path
+// so each sub-tab shows realistic output instead of a forever-connecting empty
+// viewer. Timestamps are stamped relative to now so the tail reads as live.
+function logLinesFor(url: string): string[] {
+  const now = Date.now();
+  const t = (secAgo: number) => new Date(now - secAgo * 1000).toISOString().replace('T', ' ').slice(0, 19);
+  if (/\/queue\//.test(url) || /\/horizon\//.test(url))
+    return [
+      `[${t(52)}] Processing: App\\Jobs\\SendShipmentNotification`,
+      `[${t(52)}] Processed:  App\\Jobs\\SendShipmentNotification`,
+      `[${t(30)}] Processing: App\\Jobs\\ChargeCard`,
+      `[${t(29)}] Processed:  App\\Jobs\\ChargeCard`,
+      `[${t(8)}] Processing: App\\Jobs\\RebuildSearchIndex`,
+    ];
+  if (/\/schedule\//.test(url))
+    return [
+      `[${t(120)}] Running scheduled command: php artisan telescope:prune --hours=48`,
+      `[${t(120)}] Command "telescope:prune" ran successfully.`,
+      `[${t(60)}] Running scheduled command: php artisan sitemap:generate`,
+      `[${t(60)}] Command "sitemap:generate" ran successfully.`,
+    ];
+  if (/\/reverb\//.test(url))
+    return [
+      `${t(40)}  Connection 8f2ac1 established`,
+      `${t(38)}  Subscribed to channel: orders.42`,
+      `${t(12)}  Broadcasting App\\Events\\OrderShipped on orders.42`,
+    ];
+  if (/\/worker\//.test(url))
+    return [
+      `  VITE v5.4.10  ready in 214 ms`,
+      `  ➜  Local:   https://acme.test:5173/`,
+      `  ➜  press h + enter to show help`,
+      `${t(6)} [vite] hmr update /resources/js/app.js`,
+    ];
+  // FPM / container: an access + php-error mix (the default runtime tab)
+  return [
+    `[${t(18)}] 127.0.0.1  "GET /"  200  138ms`,
+    `[${t(15)}] 127.0.0.1  "GET /products"  200  70ms`,
+    `[${t(9)}] 127.0.0.1  "POST /checkout"  302  199ms`,
+    `[${t(6)}] PHP Warning:  Undefined array key "coupon" in /app/Http/Controllers/CheckoutController.php on line 52`,
+    `[${t(4)}] 127.0.0.1  "GET /orders/42"  200  233ms`,
+  ];
+}
+
+// EventSource that "connects" then replays the canned debug events or log lines.
 class DemoEventSource {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -515,12 +748,16 @@ class DemoEventSource {
   private listeners: Record<string, Array<(ev: unknown) => void>> = {};
 
   constructor(url: string) {
-    const isDumps = String(url).includes('/api/dumps/stream');
+    const u = String(url);
+    const isDumps = u.includes('/api/dumps/stream');
+    const isLog = !isDumps && /\/logs(\/|$|\?)/.test(u);
     setTimeout(() => {
       this.readyState = 1;
       this.emit('open', { type: 'open' });
       if (isDumps) {
         for (const e of debugEvents()) this.emit('message', { data: JSON.stringify(e) });
+      } else if (isLog) {
+        for (const line of logLinesFor(u)) this.emit('message', { data: line });
       }
     }, 0);
   }
