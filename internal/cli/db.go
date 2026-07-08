@@ -336,7 +336,7 @@ func dbImportCmd(env *dbEnv) (*exec.Cmd, error) {
 	case "mysql", "mariadb":
 		// MariaDB 11+ images ship `mariadb` instead of `mysql`; resolve whichever
 		// client exists in the container at runtime.
-		shellCmd := "$(command -v mysql || command -v mariadb) -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
+		shellCmd := "$(command -v mysql || command -v mariadb) --max-allowed-packet=" + config.MySQLImportMaxPacket + " -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
 		return podman.Cmd("exec", "-i",
 			"-e", "MYSQL_PWD="+env.password,
 			container, "sh", "-c", shellCmd), nil

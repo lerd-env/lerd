@@ -119,6 +119,17 @@ An all-databases restore drops and recreates every database contained in the sna
 
 `db:snapshot` rejects names that look like command verbs (`list`, `rm`, `delete`, `restore`, …), so `lerd db snapshot list` errors with a hint instead of silently creating a snapshot literally named "list". Use `lerd db:snapshots` to list.
 
+### Large dumps and `max_allowed_packet`
+
+A big restore that dies partway with "Lost connection to MySQL server during query" is almost always a single SQL statement exceeding `max_allowed_packet`, which is enforced on both the client and the server. `lerd db:import`, `lerd db:restore`, and a cross-version `service migrate` all raise the client ceiling to 1G automatically, so the client is never the bottleneck, and the bundled MySQL config ships a `max_allowed_packet` of 256M on the server. If a dump has an even larger single statement, raise the server ceiling in the service **Config** tab (or the `zz-*.cnf` tuning file) under `[mysqld]` and run `lerd service restart <name>`:
+
+```ini
+[mysqld]
+max_allowed_packet = 1G
+```
+
+When you restore with an external client instead (a GUI, a manual `mysql` call), raise the packet size there too, either with `mysql --max-allowed-packet=1G` or a matching `[client]` entry in the same tuning file.
+
 ---
 
 ## Picking a database for a Laravel project

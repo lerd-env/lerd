@@ -521,11 +521,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.27.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.28.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.27.0 dev digest</span>
-            <span class="digest-sub">Service ports you manage, a framework-agnostic site doctor, SSH auth for composer, disk cleanup, and a self-healing runtime.</span>
+            <span class="digest-title">v1.28.0 dev digest</span>
+            <span class="digest-sub">Request-timing analytics per site, an external service store, AI slow-site diagnosis from real traffic, auto-renewing TLS, and a mobile-ready dashboard.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
