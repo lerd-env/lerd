@@ -77,6 +77,12 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	reqAggregator = reqstats.New(resolveHostToSite)
 	if st, err := reqstats.OpenStore(config.RequestStatsDB()); err == nil {
 		reqStore = st
+		// Seed the cold-start clock from the durable store so the first request
+		// after a daemon restart is judged against the real last-seen time instead
+		// of counting the wake as warm and skewing the route p95.
+		if seen, err := st.LastSeenBySite(); err == nil {
+			reqLastSeen = seen
+		}
 	}
 	// A request after the site has been idle at least this long is a cold start;
 	// tie it to the idle-suspend timeout, the point lerd already treats a site as
