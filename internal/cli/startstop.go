@@ -821,6 +821,20 @@ func reconcileCustomServices() {
 	if len(res.DefinitionsRefreshed) > 0 {
 		_ = shims.Reconcile(nil)
 	}
+	for _, name := range res.ConfigsApplied {
+		feedback.Warn("applied an updated config to %s and restarted it", name)
+	}
+	// Default-stack services (mysql, postgres, redis…) don't flow through the custom
+	// reconcile above, so apply the same config-drift restart to them: a shipped
+	// preset config bump (e.g. a higher max_allowed_packet) must reach a running
+	// default service on update, not only on an explicit reinstall.
+	for _, name := range config.DefaultPresetNames() {
+		if applied, err := serviceops.RestartIfConfigDrifted(name, name); err != nil {
+			feedback.Warn("applying config for %s: %v", name, err)
+		} else if applied {
+			feedback.Warn("applied an updated config to %s and restarted it", name)
+		}
+	}
 	for _, name := range res.QuadletsRegenerated {
 		feedback.Warn("regenerated missing unit for %s from its config", name)
 	}

@@ -154,6 +154,41 @@ func TestMaterializeServiceFiles_OverwritesReadOnlyFile(t *testing.T) {
 	}
 }
 
+func TestMaterializeServiceFilesChanged_DetectsContentDrift(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	svc := &CustomService{Name: "pgadmin", Image: "docker.io/dpage/pgadmin4:latest", Preset: "pgadmin"}
+
+	changed, err := MaterializeServiceFilesChanged(svc)
+	if err != nil {
+		t.Fatalf("first materialize: %v", err)
+	}
+	if !changed {
+		t.Fatal("first materialize must report a change (files did not exist yet)")
+	}
+
+	changed, err = MaterializeServiceFilesChanged(svc)
+	if err != nil {
+		t.Fatalf("second materialize: %v", err)
+	}
+	if changed {
+		t.Fatal("re-materialize with identical content must report no change, so no restart is triggered")
+	}
+
+	// A drifted file (what a shipped preset config bump looks like) must be detected.
+	path := ServiceFilePath(svc.Name, "/pgpass")
+	if err := os.WriteFile(path, []byte("stale-content\n"), 0o600); err != nil {
+		t.Fatalf("simulate drift: %v", err)
+	}
+	changed, err = MaterializeServiceFilesChanged(svc)
+	if err != nil {
+		t.Fatalf("drift materialize: %v", err)
+	}
+	if !changed {
+		t.Fatal("a drifted preset file must report a change so the service is restarted")
+	}
+}
+
 func TestValidateCustomService_rejectsEnvInjection(t *testing.T) {
 	svc := &CustomService{Name: "evil", Image: "alpine",
 		Environment: map[string]string{"X": "ok\nPodmanArgs=--privileged"}}

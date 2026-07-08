@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/imgledger"
@@ -295,6 +296,29 @@ func ContainerRunning(name string) (bool, error) {
 		return false, nil
 	}
 	return strings.TrimSpace(out) == "true", nil
+}
+
+// ContainerStartedAt returns the running container's last start time and whether
+// it is currently running. A stopped or missing container reports (zero, false).
+// Used to tell whether a bind-mounted config file has been rewritten since the
+// container booted, i.e. whether it is running stale config.
+func ContainerStartedAt(name string) (time.Time, bool) {
+	// Render StartedAt via its .Format method: the bare {{.State.StartedAt}} emits
+	// Go's time.String() ("2006-01-02 15:04:05 -0700 MST"), not RFC3339, which does
+	// not round-trip through time.Parse.
+	out, err := Run("inspect", `--format={{.State.Running}}|{{.State.StartedAt.Format "2006-01-02T15:04:05.999999999Z07:00"}}`, name)
+	if err != nil {
+		return time.Time{}, false
+	}
+	parts := strings.SplitN(strings.TrimSpace(out), "|", 2)
+	if len(parts) != 2 || parts[0] != "true" {
+		return time.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339Nano, parts[1])
+	if err != nil {
+		return time.Time{}, false
+	}
+	return t, true
 }
 
 // ContainerExists returns true if the named container exists (running or not).
