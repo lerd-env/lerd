@@ -7,6 +7,21 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.28.1] - 2026-07-08
+
+A patch release that gets the v1.28.0 `max_allowed_packet` change to actually reach running services on update, and hardens the framework and service store against transient fetch failures.
+
+### Fixed
+
+- **A shipped preset config change reaches a running service on update, not only on reinstall** (#805). The v1.28.0 bump of MySQL's `max_allowed_packet` only took effect after an explicit `lerd service reinstall`, because the reconcile pass regenerated a service's config files only when its unit was missing and never restarted a running container. Reconcile now re-materialises a running service's preset files and restarts the container when its config file is newer than the container's boot, meaning the config genuinely drifted, so a shipped preset config change lands on a plain `lerd update`. The mod time only advances on a real content change, so a steady state restarts nothing, and the same drift check covers both the default stack and store services.
+- **A transient store fetch is retried instead of dropping a definition** (#807). Refreshing the framework or service store fetches each definition over its own request, and a single slow `raw.githubusercontent.com` response would fail that entry with a context-deadline error and leave it stale until the next refresh. A fetch now retries a transient failure, a request timeout, a dropped connection, or a 5xx, up to three attempts with a short backoff, while still giving up immediately on a definitive 4xx such as a removed definition.
+
+### Changed
+
+- **Go dependencies refreshed** (#806). `golang.org/x/net` moves to v0.56.0 and the module graph is re-tidied, clearing stale Dependabot alerts that lingered against already-patched versions.
+
+---
+
 ## [1.28.0] - 2026-07-08
 
 This release turns the per-request signal lerd already carried into a full request-timing analytics view for every site, moves service presets to the same external store frameworks already use, and rounds out the AI diagnosis surface so an assistant can find a slow route, its N+1 queries, and its CPU hotspots in one call. Alongside that, TLS certificates renew themselves before they expire, DNS switches on and off through dedicated commands, database client tools become host shims, `lerd cleanup` reclaims real disk by default, the site page is rebuilt as a resource view, and the dashboard grows a QR code, a mobile session, and a round of phone polish.
