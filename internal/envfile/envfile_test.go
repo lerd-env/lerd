@@ -378,6 +378,9 @@ func TestReferencesContainer(t *testing.T) {
 		{"family alternate matches itself", "DB_HOST=lerd-mysql-5-7\n", "mysql-5-7", true},
 		{"no reference", "DB_HOST=127.0.0.1\n", "postgres", false},
 		{"match at EOF no newline", "DB_HOST=lerd-redis", "redis", true},
+		{"commented reference ignored", "#DB_HOST=lerd-mysql\nDB_HOST=lerd-mariadb-10-11\n", "mysql", false},
+		{"indented comment ignored", "  # DB_HOST=lerd-mysql\n", "mysql", false},
+		{"active wins over commented", "#DB_HOST=lerd-mysql\nDB_HOST=lerd-mysql\n", "mysql", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

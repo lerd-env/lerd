@@ -193,16 +193,32 @@ func ReadValues(path string) map[string]string {
 
 // ReferencesContainer reports whether content references the lerd container
 // hostname "lerd-<serviceName>" as a whole token, so bare "postgres" is not
-// matched by a "lerd-postgres-18" reference (and vice versa).
+// matched by a "lerd-postgres-18" reference (and vice versa). Commented-out
+// lines are ignored so a disabled "#DB_HOST=lerd-mysql" doesn't keep a removed
+// service's badge alive on the site page.
 func ReferencesContainer(content, serviceName string) bool {
 	needle := "lerd-" + serviceName
+	for _, line := range strings.Split(content, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		if lineReferencesNeedle(line, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+// lineReferencesNeedle reports whether line contains needle as a whole token
+// (the next byte, if any, is not part of a service name).
+func lineReferencesNeedle(line, needle string) bool {
 	for i := 0; ; {
-		j := strings.Index(content[i:], needle)
+		j := strings.Index(line[i:], needle)
 		if j < 0 {
 			return false
 		}
 		end := i + j + len(needle)
-		if end >= len(content) || !isServiceNameByte(content[end]) {
+		if end >= len(line) || !isServiceNameByte(line[end]) {
 			return true
 		}
 		i += j + 1
