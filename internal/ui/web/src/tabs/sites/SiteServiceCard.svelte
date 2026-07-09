@@ -34,7 +34,7 @@
   // A service with no dashboard of its own (mysql, redis) is reached through
   // its suggested admin tool, the same resolution the service page uses.
   const target = $derived(
-    svc?.dashboard ? svc : svc ? (adminServiceFor(svc, $services) ?? undefined) : undefined
+    !svc ? undefined : svc.dashboard ? svc : (adminServiceFor(svc, $services) ?? undefined)
   );
   const hasDashboard = $derived(active && Boolean(target?.dashboard));
   const dashLabel = $derived(

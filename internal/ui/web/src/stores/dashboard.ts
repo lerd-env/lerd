@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import { services, serviceAction, loadServices, type Service } from './services';
+import { services, serviceAction, type Service } from './services';
 
 export interface DashboardRef {
   name: string;
@@ -55,12 +55,10 @@ export function openDashboard(svc: Service) {
 
 // openServiceDashboard opens a dashboard, starting the service first when it is
 // installed but stopped. Shared by the service page and the site overview card
-// so an admin tool is reached the same way from either.
+// so an admin tool is reached the same way from either. A failed start opens
+// nothing; the overlay would only embed a URL nothing is listening on.
 export async function openServiceDashboard(svc: Service) {
-  if (svc.status !== 'active') {
-    await serviceAction(svc.name, 'start');
-    await loadServices();
-  }
+  if (svc.status !== 'active' && !(await serviceAction(svc.name, 'start'))) return;
   openDashboard(get(services).find((s) => s.name === svc.name) || svc);
 }
 
