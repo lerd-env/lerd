@@ -1340,6 +1340,12 @@ func buildServicesList() []ServiceResponse {
 	defaultNames := siteinfo.KnownServices()
 	services := make([]ServiceResponse, 0, len(defaultNames))
 	for _, name := range defaultNames {
+		// A removed default preset (no unit) is not installed, so it belongs in
+		// the preset picker as installable, not lingering here as "inactive".
+		// ServiceInstalled is the #678 single source of truth.
+		if !serviceops.ServiceInstalled(name) {
+			continue
+		}
 		services = append(services, buildServiceResponseWithPortList(svcCfg, name, ssOutput, nil))
 	}
 	// Optional presets (gotenberg, mongo, …) and user services materialise as
