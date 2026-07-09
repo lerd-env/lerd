@@ -668,10 +668,16 @@ func (e *EnrichedSite) enrichServices() {
 	}
 	envStr := string(envData)
 	for _, svcName := range KnownServices() {
-		if !svcSet[svcName] && envfile.ReferencesContainer(envStr, svcName) {
-			e.Services = append(e.Services, svcName)
-			svcSet[svcName] = true
+		if svcSet[svcName] || !envfile.ReferencesContainer(envStr, svcName) {
+			continue
 		}
+		// Skip a referenced-but-uninstalled default preset so a removed service
+		// (quadlet gone) stops ghosting on sites whose .env still points at it.
+		if !podman.QuadletInstalled("lerd-" + svcName) {
+			continue
+		}
+		e.Services = append(e.Services, svcName)
+		svcSet[svcName] = true
 	}
 	if customs, err := config.ListCustomServices(); err == nil {
 		for _, cs := range customs {
