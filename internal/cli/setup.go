@@ -178,12 +178,13 @@ func runSetup(allSteps, skipOpen bool) error {
 	jsRuntime := "npm"
 	if nodeDet.UsesBun(cwd) && nodeDet.BunPath() != "" {
 		jsRuntime = "bun"
+	} else if pm := nodeDet.PackageManager(cwd); pm == "pnpm" || pm == "yarn" {
+		jsRuntime = pm
 	}
 	installLabel := "npm install/ci"
-	buildLabel := "npm run " + buildScript
-	if jsRuntime == "bun" {
-		installLabel = "bun install"
-		buildLabel = "bun run " + buildScript
+	buildLabel := jsRuntime + " run " + buildScript
+	if jsRuntime != "npm" {
+		installLabel = jsRuntime + " install"
 	}
 	steps = append(steps, []setupStep{
 		{

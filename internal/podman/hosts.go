@@ -1,9 +1,11 @@
 package podman
 
 import (
+	"bytes"
 	"fmt"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,18 +25,28 @@ const fallbackHostGatewayIP = "169.254.1.2"
 // host-side TCP listener lerd guarantees.
 const hostProbePort = "7073"
 
+// nginxInspectTimeout caps the per-tick `podman inspect`, mirroring the cap
+// probeHostFromNginx puts on the exec probe.
+var nginxInspectTimeout = 5 * time.Second
+
 // WriteContainerHosts writes the shared /etc/hosts bind-mounted into every
 // PHP-FPM container. host.containers.internal uses an IP that has been
 // verified reachable from inside lerd-nginx; .test domains point at
 // lerd-nginx directly on the lerd bridge network.
 func WriteContainerHosts() error {
+	hostIP := DetectHostGatewayIP()
+	return WriteContainerHostsWith(hostIP, nginxContainerIP())
+}
+
+// WriteContainerHostsWith writes both hosts files from addresses the caller
+// already resolved. Callers that compared against a live address pass it back
+// in, so a recreation mid-write cannot pin the two files to different IPs, and
+// a caller repointing one address cannot silently move the other.
+func WriteContainerHostsWith(hostIP, nginxIP string) error {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return fmt.Errorf("loading sites: %w", err)
 	}
-
-	hostIP := DetectHostGatewayIP()
-	nginxIP := nginxContainerIP()
 
 	content := renderContainerHosts(reg, hostIP, nginxIP)
 	hostsPath := config.ContainerHostsFile()
@@ -48,7 +60,7 @@ func WriteContainerHosts() error {
 	// Write the browser-testing variant: same domains but resolved to
 	// lerd-nginx's IP on the Podman network so Chromium inside Selenium
 	// (or similar containers) can reach sites via HTTP/HTTPS.
-	return writeBrowserHosts(reg)
+	return writeBrowserHosts(reg, nginxIP)
 }
 
 // renderContainerHosts builds the /etc/hosts contents for PHP-FPM containers.
@@ -68,13 +80,11 @@ func renderContainerHosts(reg *config.SiteRegistry, hostIP, nginxIP string) stri
 	return sb.String()
 }
 
-// writeBrowserHosts writes the browser-testing hosts file. It resolves
-// lerd-nginx's IP on the lerd Podman network and maps all .test domains
-// to it. If nginx isn't running the file is still written with loopback
-// entries (safe no-op — Selenium simply can't reach sites until nginx starts).
-func writeBrowserHosts(reg *config.SiteRegistry) error {
-	nginxIP := nginxContainerIP()
-
+// writeBrowserHosts writes the browser-testing hosts file, mapping all .test
+// domains to nginxIP. When nginx isn't running the caller passes loopback and
+// the file stays well-formed (safe no-op — Selenium simply can't reach sites
+// until nginx starts).
+func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string) error {
 	var sb strings.Builder
 	sb.WriteString("127.0.0.1 localhost\n")
 	sb.WriteString("::1 localhost\n")
@@ -189,18 +199,79 @@ func ReadHostGatewayFromFile() string {
 	if err != nil {
 		return ""
 	}
+	var found string
+	eachHostsEntry(data, func(ip string, names []string) bool {
+		for _, name := range names {
+			if name == "host.containers.internal" {
+				found = ip
+				return true
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// ReadNginxIPFromFile returns the IP that the shared hosts file currently maps
+// site domains to, or "" when the file is missing or no site is linked. Used by
+// the watcher to spot a stale lerd-nginx address without rewriting every tick.
+func ReadNginxIPFromFile() string {
+	return readNginxIPFrom(config.ContainerHostsFile())
+}
+
+// ReadBrowserNginxIPFromFile is ReadNginxIPFromFile for the browser-testing
+// hosts file. The watcher checks both, so a write that updated one file and
+// failed on the other is retried rather than mistaken for a fresh pair.
+func ReadBrowserNginxIPFromFile() string {
+	return readNginxIPFrom(config.BrowserHostsFile())
+}
+
+func readNginxIPFrom(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return parseNginxIP(data)
+}
+
+// parseNginxIP returns the address of the first site entry, skipping the
+// loopback and host-gateway lines that renderContainerHosts writes above it.
+func parseNginxIP(data []byte) string {
+	var found string
+	eachHostsEntry(data, func(ip string, names []string) bool {
+		for _, name := range names {
+			if !isInfraHostname(name) {
+				found = ip
+				return true
+			}
+		}
+		return false
+	})
+	return found
+}
+
+// eachHostsEntry walks the "ip name..." lines of a hosts file, skipping blank
+// and malformed ones, and stops as soon as fn returns true.
+func eachHostsEntry(data []byte, fn func(ip string, names []string) bool) {
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) < 2 {
 			continue
 		}
-		for _, name := range fields[1:] {
-			if name == "host.containers.internal" {
-				return fields[0]
-			}
+		if fn(fields[0], fields[1:]) {
+			return
 		}
 	}
-	return ""
+}
+
+// isInfraHostname reports whether a hostname is one of the fixed entries lerd
+// writes ahead of the site domains.
+func isInfraHostname(name string) bool {
+	switch name {
+	case "localhost", "host.containers.internal", "host.docker.internal":
+		return true
+	}
+	return false
 }
 
 // probeHostFromNginx returns true if lerd-nginx can open a TCP connection to
@@ -260,18 +331,47 @@ func firstField(s string) string {
 }
 
 // nginxContainerIP returns the IP address of lerd-nginx on the lerd Podman
-// network. Falls back to 127.0.0.1 if the container isn't running.
+// network. Falls back to 127.0.0.1 if the container isn't running, so the
+// hosts file is still well-formed.
 func nginxContainerIP() string {
-	out, err := execCommand(PodmanBin(), "inspect", "lerd-nginx",
-		"--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}").Output()
+	if ip := LookupNginxContainerIP(); ip != "" {
+		return ip
+	}
+	return "127.0.0.1"
+}
+
+// LookupNginxContainerIP is like nginxContainerIP but returns "" when
+// lerd-nginx is absent or stopped, so the watcher can tell "no IP yet" apart
+// from a real address and skip the rewrite instead of writing loopback.
+func LookupNginxContainerIP() string {
+	cmd := execCommand(PodmanBin(), "inspect", "lerd-nginx",
+		"--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}")
+	out, err := outputWithTimeout(cmd, nginxInspectTimeout)
 	if err != nil {
-		return "127.0.0.1"
+		return ""
 	}
-	ip := strings.TrimSpace(string(out))
-	if ip == "" {
-		return "127.0.0.1"
+	return strings.TrimSpace(string(out))
+}
+
+// outputWithTimeout runs cmd and returns its stdout, killing it if it outruns
+// timeout. The watcher calls this every tick from a background goroutine, where
+// a wedged podman socket would otherwise stall the loop for good.
+func outputWithTimeout(cmd *exec.Cmd, timeout time.Duration) ([]byte, error) {
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+	if err := cmd.Start(); err != nil {
+		return nil, err
 	}
-	return ip
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	select {
+	case err := <-done:
+		return stdout.Bytes(), err
+	case <-time.After(timeout):
+		_ = cmd.Process.Kill()
+		<-done
+		return nil, fmt.Errorf("%s timed out after %s", cmd.Path, timeout)
+	}
 }
 
 // primaryLANIP returns the local IPv4 address that the kernel would use to
