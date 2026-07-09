@@ -433,6 +433,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	ok()
 
+	// Ahead of the regen pass, which reads the registry below: a secondary left
+	// on plain HTTP under a secured main has no 443 block and the main's
+	// wildcard answers its subdomain. This is the reconcile dns:enable re-execs.
+	secured, securedErr := siteops.EnforceGroupSecondaries()
+	if len(secured) > 0 {
+		feedback.Note("restored https for group secondaries: " + strings.Join(secured, ", "))
+	}
+	if securedErr != nil {
+		feedback.Warn("securing group secondaries: %v", securedErr)
+	}
+
 	step("Regenerating vhosts")
 	reg, err := config.LoadSites()
 	if err == nil {
