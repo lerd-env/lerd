@@ -641,10 +641,10 @@ func mkGroupSite(t *testing.T, root, name, domain string, wantsHTTPS bool) strin
 }
 
 // dns:disable followed by dns:enable must return a grouped, secured site *and
-// its secondary* to HTTPS. A secondary left on http has no 443 block, so the
-// main's "*.<main>" wildcard answers its subdomain and serves the wrong app
-// (issue #811).
-func TestMigrateSiteTLD_GroupedSecuredRoundTrip(t *testing.T) {
+// its secondary* to HTTPS, here from the registry's recorded pre-disable state
+// (no .lerd.yaml). A secondary left on http has no 443 block, so the main's
+// "*.<main>" wildcard answers its subdomain and serves the wrong app (#811).
+func TestMigrateSiteTLD_GroupedSecuredRoundTripRestoresFromRegistry(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -652,8 +652,8 @@ func TestMigrateSiteTLD_GroupedSecuredRoundTrip(t *testing.T) {
 		t.Fatalf("mkdir NginxConfD: %v", err)
 	}
 
-	mainDir := mkGroupSite(t, tmp, "astrolov", "astrolov.test", true)
-	secDir := mkGroupSite(t, tmp, "admin", "admin.astrolov.test", true)
+	mainDir := mkGroupSite(t, tmp, "astrolov", "astrolov.test", false)
+	secDir := mkGroupSite(t, tmp, "admin", "admin.astrolov.test", false)
 
 	mustAddSite(t, config.Site{
 		Name: "astrolov", Path: mainDir, Domains: []string{"astrolov.test"},
@@ -705,10 +705,41 @@ func TestMigrateSiteTLD_GroupedSecuredRoundTrip(t *testing.T) {
 	}
 }
 
-// A secondary with no committed .lerd.yaml has no HTTPS intent to restore, so
-// the round trip leaves it on http. The install-time invariant pass
-// (grouping.EnforceSecondarySecured) is what lifts it back under a secured main.
-func TestMigrateSiteTLD_SecondaryWithoutProjectIntentStaysHTTP(t *testing.T) {
+// The other restore source: a secondary that was never secured in the registry
+// but whose project commits `secured: true` is lifted to HTTPS on re-enable.
+// This is the branch a site linked while DNS was off comes back through.
+func TestMigrateSiteTLD_SecondaryRestoresFromCommittedIntent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatalf("mkdir NginxConfD: %v", err)
+	}
+
+	mainDir := mkGroupSite(t, tmp, "astrolov", "astrolov.test", true)
+	blogDir := mkGroupSite(t, tmp, "blog", "blog.astrolov.test", true)
+
+	mustAddSite(t, config.Site{
+		Name: "astrolov", Path: mainDir, Domains: []string{"astrolov.test"},
+		Secured: true, Group: "astrolov",
+	})
+	mustAddSite(t, config.Site{
+		Name: "astrolov-2", Path: blogDir, Domains: []string{"blog.astrolov.test"},
+		Group: "astrolov", GroupSubdomain: "blog",
+	})
+
+	migrateSiteTLD("test", "localhost", true)
+	migrateSiteTLD("localhost", "test", false)
+
+	if blog, _ := config.FindSite("astrolov-2"); !blog.Secured {
+		t.Error("a secondary with secured: true in .lerd.yaml should be restored to https")
+	}
+}
+
+// With neither a committed intent nor a recorded pre-disable state there is
+// nothing for the TLD migration to restore, so the secondary stays on http.
+// siteops.EnforceGroupSecondaries, which install runs next, is what lifts it.
+func TestMigrateSiteTLD_SecondaryWithNoHTTPSIntentStaysHTTP(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -737,7 +768,7 @@ func TestMigrateSiteTLD_SecondaryWithoutProjectIntentStaysHTTP(t *testing.T) {
 	}
 	blog, _ := config.FindSite("astrolov-2")
 	if blog.Secured {
-		t.Error("a secondary with no committed intent should not be secured by the TLD migration itself")
+		t.Error("a secondary with no HTTPS intent should not be secured by the TLD migration itself")
 	}
 }
 

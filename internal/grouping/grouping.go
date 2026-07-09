@@ -9,6 +9,7 @@
 package grouping
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -100,7 +101,8 @@ func AssignSecondary(main, secondary *config.Site, label string, shareDB bool) e
 	secondary.Domains = []string{newDomain}
 	// A secured main serves "<main> *.<main>", so an HTTP-only secondary would
 	// have no 443 block and the wildcard would answer its subdomain instead.
-	if main.Secured {
+	inheritedSecured := main.Secured && !secondary.Secured
+	if inheritedSecured {
 		secondary.Secured = true
 	}
 	if err := config.AddSite(*secondary); err != nil {
@@ -113,6 +115,11 @@ func AssignSecondary(main, secondary *config.Site, label string, shareDB bool) e
 			_ = config.AddSite(*main)
 		}
 		return fmt.Errorf("grouping %q: %w", secondary.Name, err)
+	}
+	// Commit the inherited HTTPS intent so a dns disable/enable round trip
+	// restores it from .lerd.yaml rather than relying on the repair pass.
+	if inheritedSecured {
+		_ = config.SetProjectSecured(secondary.Path, true)
 	}
 	if shareDB {
 		applySharedDBEnv(secondary, MainDBName(main))
@@ -347,23 +354,35 @@ func WorktreeLabelTaken(main *config.Site, label string) (bool, error) {
 	return false, nil
 }
 
+// Indirection points so the regeneration order can be asserted without mkcert
+// or nginx on the box.
+var (
+	reissueCertFn     = certs.ReissueCertForWorktree
+	regenerateVhostFn = siteops.RegenerateSiteVhost
+)
+
 // regenerateSecondary mirrors the proven domain-edit regeneration sequence:
-// sync .lerd.yaml, regenerate the vhost (renaming on primary change), reissue
-// the cert when secured, rewrite container hosts, reload nginx and sync .env.
+// sync .lerd.yaml, issue the cert when secured, regenerate the vhost (renaming
+// on primary change), rewrite container hosts, reload nginx and sync .env.
 // It is a package var so tests can stub out the heavy filesystem/container side
 // effects and assert on registry state alone.
 var regenerateSecondary = func(secondary *config.Site, oldPrimary string) error {
 	syncSecondaryProjectDomains(secondary, oldPrimary)
-	if err := siteops.RegenerateSiteVhost(secondary, oldPrimary); err != nil {
-		return err
-	}
+	// Before the vhost that references it: a secondary securing for the first
+	// time has no cert, and an SSL vhost pointing at a missing file makes the
+	// next nginx start fail for every site, not just this one.
 	if secondary.Secured {
-		if err := certs.ReissueCertForWorktree(*secondary); err != nil {
-			fmt.Fprintf(os.Stderr, "lerd: reissuing certificate for %s: %v\n", secondary.PrimaryDomain(), err)
+		if err := reissueCertFn(*secondary); err != nil {
+			return fmt.Errorf("issuing certificate for %s: %w", secondary.PrimaryDomain(), err)
 		}
 	}
+	if err := regenerateVhostFn(secondary, oldPrimary); err != nil {
+		return err
+	}
 	_ = podman.WriteContainerHosts()
-	_ = nginx.Reload()
+	if err := nginx.Reload(); err != nil && !errors.Is(err, nginx.ErrNotRunning) {
+		fmt.Fprintf(os.Stderr, "lerd: reloading nginx: %v\n", err)
+	}
 	if err := siteops.SyncEnvIfPrimaryChanged(secondary, oldPrimary); err != nil {
 		fmt.Fprintf(os.Stderr, "lerd: syncing .env to new primary domain: %v\n", err)
 	}

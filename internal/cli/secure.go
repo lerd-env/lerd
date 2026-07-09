@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -112,7 +113,8 @@ func toggleSecureCmd(args []string, secured bool) error {
 	}
 	feedback.Begin()
 	step := feedback.Start(verb)
-	if err := siteops.SetSecured(site, secured); err != nil {
+	cascaded, err := siteops.SetSecuredCascade(site, secured)
+	if err != nil {
 		step.Fail(err)
 		return err
 	}
@@ -121,6 +123,9 @@ func toggleSecureCmd(args []string, secured bool) error {
 		scheme = "https"
 	}
 	step.OK(feedback.Val(scheme + "://" + site.PrimaryDomain()))
+	if len(cascaded) > 0 {
+		feedback.Note("also secured group secondaries: " + strings.Join(cascaded, ", "))
+	}
 	return nil
 }
 
