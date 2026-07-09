@@ -141,9 +141,11 @@ func runBun(dir, bun string, args []string, exitOnFail bool) error {
 	return nil
 }
 
-// runJSInstall installs JS dependencies in dir: `bun install` when the project
-// uses bun (frozen adds --frozen-lockfile), otherwise `npm ci`/`npm install`
-// via fnm.
+// runJSInstall installs JS dependencies in dir with the project's package
+// manager: bun when the project uses bun, else pnpm/yarn (via corepack, which
+// ships with Node so neither needs a separate global install) or npm, picked
+// from the lockfile / packageManager field. frozen uses each manager's
+// lockfile-respecting install.
 func runJSInstall(dir string, frozen bool) error {
 	if bun := bunRunnerFor(dir, true); bun != "" {
 		args := []string{"install"}
@@ -157,19 +159,43 @@ func runJSInstall(dir string, frozen bool) error {
 		}
 		return runBun(dir, bun, args, false)
 	}
-	if frozen {
-		return runWithFnm("npm", []string{"ci"}, false)
+	switch nodeDet.PackageManager(dir) {
+	case "pnpm":
+		args := []string{"pnpm", "install"}
+		if frozen {
+			args = append(args, "--frozen-lockfile")
+		}
+		return runWithFnm("corepack", args, false)
+	case "yarn":
+		// --immutable covers yarn berry; classic (v1) ignores it and does a
+		// normal install, which is what we want with a lockfile present.
+		args := []string{"yarn", "install"}
+		if frozen {
+			args = append(args, "--immutable")
+		}
+		return runWithFnm("corepack", args, false)
+	default:
+		if frozen {
+			return runWithFnm("npm", []string{"ci"}, false)
+		}
+		return runWithFnm("npm", []string{"install"}, false)
 	}
-	return runWithFnm("npm", []string{"install"}, false)
 }
 
-// runJSScript runs a package.json script in dir via `bun run <script>` when the
-// project uses bun, otherwise `npm run <script>` via fnm.
+// runJSScript runs a package.json script in dir with the project's package
+// manager (`bun run` / `pnpm run` / `yarn run` / `npm run`).
 func runJSScript(dir, script string) error {
 	if bun := bunRunnerFor(dir, true); bun != "" {
 		return runBun(dir, bun, []string{"run", script}, false)
 	}
-	return runWithFnm("npm", []string{"run", script}, false)
+	switch nodeDet.PackageManager(dir) {
+	case "pnpm":
+		return runWithFnm("corepack", []string{"pnpm", "run", script}, false)
+	case "yarn":
+		return runWithFnm("corepack", []string{"yarn", "run", script}, false)
+	default:
+		return runWithFnm("npm", []string{"run", script}, false)
+	}
 }
 
 // shimLeadingEnv prepends lerd's bin dir (home of the `php` shim) to PATH so
@@ -230,6 +256,11 @@ func runWithFnm(bin string, args []string, exitOnFail bool) error {
 	manageGlobals := bin == "npm" || bin == "npx"
 	prefix := config.NodeGlobalDir()
 	cmd.Env = shimLeadingEnv(os.Environ())
+	if bin == "corepack" {
+		// First use of a manager downloads it; don't block on the interactive
+		// "Corepack is about to download…" prompt in a non-interactive setup.
+		cmd.Env = append(cmd.Env, "COREPACK_ENABLE_DOWNLOAD_PROMPT=0")
+	}
 	if manageGlobals {
 		if err := os.MkdirAll(filepath.Join(prefix, "bin"), 0o755); err == nil {
 			cmd.Env = append(cmd.Env, "npm_config_prefix="+prefix)

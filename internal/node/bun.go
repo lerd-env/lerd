@@ -63,6 +63,41 @@ func UsesBun(dir string) bool {
 	return false
 }
 
+// PackageManager reports the JS package manager a project uses: the
+// package.json "packageManager" field (corepack's pin) wins, then the lockfile.
+// Returns "bun", "pnpm", "yarn", or "npm" (the default). bun is normally
+// resolved earlier via UsesBun/BunPath; it is reported here too for callers
+// that want the raw signal.
+func PackageManager(dir string) string {
+	if data, err := os.ReadFile(filepath.Join(dir, "package.json")); err == nil {
+		var pkg struct {
+			PackageManager string `json:"packageManager"`
+		}
+		if json.Unmarshal(data, &pkg) == nil {
+			name, _, _ := strings.Cut(strings.TrimSpace(pkg.PackageManager), "@")
+			switch name {
+			case "bun", "pnpm", "yarn", "npm":
+				return name
+			}
+		}
+	}
+	switch {
+	case fileInDir(dir, "bun.lockb"), fileInDir(dir, "bun.lock"):
+		return "bun"
+	case fileInDir(dir, "pnpm-lock.yaml"):
+		return "pnpm"
+	case fileInDir(dir, "yarn.lock"):
+		return "yarn"
+	default:
+		return "npm"
+	}
+}
+
+func fileInDir(dir, name string) bool {
+	_, err := os.Stat(filepath.Join(dir, name))
+	return err == nil
+}
+
 // BunPath resolves the host bun binary: the official installer drops it in
 // ~/.bun/bin, which is not on the controlled PATH lerd gives host workers, so
 // check there first and fall back to PATH. Returns "" when bun isn't installed.
