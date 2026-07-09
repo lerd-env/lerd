@@ -202,11 +202,23 @@ func ReferencesContainer(content, serviceName string) bool {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
 		}
-		if lineReferencesNeedle(line, needle) {
+		if lineReferencesNeedle(stripInlineComment(line), needle) {
 			return true
 		}
 	}
 	return false
+}
+
+// stripInlineComment drops a trailing "# ..." comment from an .env line. A '#'
+// only starts a comment when preceded by whitespace (dotenv convention), so a
+// '#' inside a value (e.g. a password) is preserved.
+func stripInlineComment(line string) string {
+	for i := 1; i < len(line); i++ {
+		if line[i] == '#' && (line[i-1] == ' ' || line[i-1] == '\t') {
+			return line[:i]
+		}
+	}
+	return line
 }
 
 // lineReferencesNeedle reports whether line contains needle as a whole token
