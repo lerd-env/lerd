@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import { services, type Service } from './services';
+import { services, serviceAction, loadServices, type Service } from './services';
 
 export interface DashboardRef {
   name: string;
@@ -51,6 +51,17 @@ export function openDashboard(svc: Service) {
   }
   dashboardOpen.set({ name: svc.name, label: svc.name, dashboard: svc.dashboard });
   location.hash = 'service/' + svc.name;
+}
+
+// openServiceDashboard opens a dashboard, starting the service first when it is
+// installed but stopped. Shared by the service page and the site overview card
+// so an admin tool is reached the same way from either.
+export async function openServiceDashboard(svc: Service) {
+  if (svc.status !== 'active') {
+    await serviceAction(svc.name, 'start');
+    await loadServices();
+  }
+  openDashboard(get(services).find((s) => s.name === svc.name) || svc);
 }
 
 // openMailpitMessage opens the mailpit dashboard overlay with the iframe

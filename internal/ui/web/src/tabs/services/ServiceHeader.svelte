@@ -14,11 +14,10 @@
     serviceAction,
     streamServiceAction,
     checkServiceUpdates,
-    updateProgress,
-    loadServices
+    updateProgress
   } from '$stores/services';
   import { adminServiceFor } from '$stores/presetSuggestions';
-  import { openDashboard } from '$stores/dashboard';
+  import { openDashboard, openServiceDashboard } from '$stores/dashboard';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
@@ -47,12 +46,7 @@
 
   async function openAdmin() {
     if (!admin) return;
-    if (admin.status !== 'active') {
-      await serviceAction(admin.name, 'start');
-      await loadServices();
-    }
-    const latest = $allServices.find((s) => s.name === admin.name) || admin;
-    openDashboard(latest);
+    await openServiceDashboard(admin);
   }
 
   const isWorker = $derived(isServiceWorker(svc));
