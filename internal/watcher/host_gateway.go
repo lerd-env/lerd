@@ -14,6 +14,8 @@ type hostGatewayDeps struct {
 	readCurrent  func() string
 	reachable    func(ip string) bool
 	detectFresh  func() string
+	readNginxIP  func() string
+	freshNginxIP func() string
 	writeHosts   func() error
 	onUpdate     func()
 	log          func(level, msg string, kv ...any)
@@ -33,31 +35,17 @@ type hostGatewayState struct {
 	lastLAN string
 }
 
-// WatchHostGateway keeps the host.containers.internal entry in the shared
-// PHP-FPM /etc/hosts file pointing at an IP that actually routes back to the
-// host. Without this, a laptop that changes networks (coffee shop to home
-// wifi to mobile hotspot) ends up with a stale LAN IP in /etc/hosts and
-// Xdebug silently times out until the next `lerd start`.
-//
-// Steady-state cost is deliberately near-zero: we track the host's primary
-// LAN IP across ticks and only run the expensive podman exec reachability
-// probe when it changes. The LAN-IP lookup is a Go net.Dial("udp4",
-// "1.1.1.1:80") which never sends a packet — the kernel just returns the
-// route source address — so it's microseconds per tick. This matters on
-// macOS in particular, where podman exec goes through the podman-machine
-// VM's gvproxy / sshd / runtime and costs 300 ms – 1 s per call.
-//
-// A LAN change on macOS doesn't necessarily invalidate gvproxy's
-// host.containers.internal address, so the reprobe after a LAN rotation
-// may turn up the same IP on disk and correctly skip the write. One
-// spurious podman exec per real network change is cheap enough not to
-// justify a platform-specific fast path.
+// WatchHostGateway keeps both addresses in the shared hosts files fresh:
+// lerd-nginx's bridge IP, and the host.containers.internal gateway that Xdebug
+// needs. Costs one podman inspect per tick; the exec probe stays LAN-gated.
 func WatchHostGateway(interval time.Duration) {
 	deps := hostGatewayDeps{
 		primaryLANIP: primaryLANIP,
 		readCurrent:  podman.ReadHostGatewayFromFile,
 		reachable:    podman.HostReachable,
 		detectFresh:  podman.DetectHostGatewayIPProbeOnly,
+		readNginxIP:  podman.ReadNginxIPFromFile,
+		freshNginxIP: podman.NginxContainerIPProbeOnly,
 		writeHosts:   podman.WriteContainerHosts,
 		onUpdate:     OnGatewayIPChange,
 		log: func(level, msg string, kv ...any) {
@@ -77,12 +65,37 @@ func WatchHostGateway(interval time.Duration) {
 	}
 }
 
-// tickHostGateway runs one iteration of the watch loop. The fast path
-// (LAN IP unchanged since last tick) returns without touching podman,
-// keeping the steady-state cost to a UDP-dial's worth of CPU. The slow
-// path only fires when the host's primary LAN IP actually changes, which
-// is the signal a laptop moved networks.
+// tickHostGateway runs one iteration of the watch loop, checking the two
+// addresses baked into the hosts files: lerd-nginx's bridge IP, and the
+// host-gateway IP behind host.containers.internal.
 func tickHostGateway(d hostGatewayDeps, s *hostGatewayState) {
+	tickNginxIP(d)
+	tickGatewayIP(d, s)
+}
+
+// tickNginxIP repoints the hosts files when lerd-nginx returns on a new bridge
+// IP, as it does on every recreation. This inspects each tick: rootless
+// containers aren't host-reachable, so there is no cheaper recreation signal.
+func tickNginxIP(d hostGatewayDeps) {
+	fresh := d.freshNginxIP()
+	if fresh == "" {
+		return
+	}
+	current := d.readNginxIP()
+	if current == "" || current == fresh {
+		return
+	}
+	if err := d.writeHosts(); err != nil {
+		d.log("warn", "rewriting container hosts file", "err", err)
+		return
+	}
+	d.log("info", "nginx container IP updated", "old", current, "new", fresh)
+}
+
+// tickGatewayIP keeps host.containers.internal pointing at a routable address.
+// The fast path (LAN IP unchanged since last tick) returns without a podman
+// exec; the slow path fires only when the laptop actually moved networks.
+func tickGatewayIP(d hostGatewayDeps, s *hostGatewayState) {
 	lan := d.primaryLANIP()
 	if lan == s.lastLAN {
 		return

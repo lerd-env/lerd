@@ -203,6 +203,40 @@ func ReadHostGatewayFromFile() string {
 	return ""
 }
 
+// ReadNginxIPFromFile returns the IP that the shared hosts file currently maps
+// site domains to, or "" when the file is missing or no site is linked. Used by
+// the watcher to spot a stale lerd-nginx address without rewriting every tick.
+func ReadNginxIPFromFile() string {
+	data, err := os.ReadFile(config.ContainerHostsFile())
+	if err != nil {
+		return ""
+	}
+	return parseNginxIP(data)
+}
+
+// parseNginxIP returns the address of the first site entry, skipping the
+// loopback and host-gateway lines that renderContainerHosts writes above it.
+func parseNginxIP(data []byte) string {
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 || isInfraHost(fields[1]) {
+			continue
+		}
+		return fields[0]
+	}
+	return ""
+}
+
+// isInfraHost reports whether a hostname is one of the fixed entries lerd
+// writes ahead of the site domains.
+func isInfraHost(name string) bool {
+	switch name {
+	case "localhost", "host.containers.internal", "host.docker.internal":
+		return true
+	}
+	return false
+}
+
 // probeHostFromNginx returns true if lerd-nginx can open a TCP connection to
 // ip:port within 2 seconds. Uses busybox nc (-z = scan only, -w = timeout).
 func probeHostFromNginx(ip, port string) bool {
@@ -260,18 +294,25 @@ func firstField(s string) string {
 }
 
 // nginxContainerIP returns the IP address of lerd-nginx on the lerd Podman
-// network. Falls back to 127.0.0.1 if the container isn't running.
+// network. Falls back to 127.0.0.1 if the container isn't running, so the
+// hosts file is still well-formed.
 func nginxContainerIP() string {
+	if ip := NginxContainerIPProbeOnly(); ip != "" {
+		return ip
+	}
+	return "127.0.0.1"
+}
+
+// NginxContainerIPProbeOnly is like nginxContainerIP but returns "" when
+// lerd-nginx is absent or stopped, so the watcher can tell "no IP yet" apart
+// from a real address and skip the rewrite instead of writing loopback.
+func NginxContainerIPProbeOnly() string {
 	out, err := execCommand(PodmanBin(), "inspect", "lerd-nginx",
 		"--format", "{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}").Output()
 	if err != nil {
-		return "127.0.0.1"
+		return ""
 	}
-	ip := strings.TrimSpace(string(out))
-	if ip == "" {
-		return "127.0.0.1"
-	}
-	return ip
+	return strings.TrimSpace(string(out))
 }
 
 // primaryLANIP returns the local IPv4 address that the kernel would use to

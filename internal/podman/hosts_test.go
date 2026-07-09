@@ -22,6 +22,66 @@ func TestFirstField(t *testing.T) {
 	}
 }
 
+func TestParseNginxIP(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "site entry wins",
+			in: "127.0.0.1 localhost\n::1 localhost\n" +
+				"169.254.1.2 host.containers.internal host.docker.internal\n" +
+				"10.89.7.11 blog.test\n10.89.7.11 shop.test\n",
+			want: "10.89.7.11",
+		},
+		{
+			// No sites linked yet: nothing to compare against, so the watcher
+			// must not treat the gateway or loopback line as an nginx IP.
+			name: "no site entries",
+			in: "127.0.0.1 localhost\n::1 localhost\n" +
+				"169.254.1.2 host.containers.internal host.docker.internal\n",
+			want: "",
+		},
+		{
+			name: "gateway aliased to a bare host.docker.internal",
+			in:   "127.0.0.1 localhost\n10.0.2.2 host.docker.internal\n10.89.7.11 blog.test\n",
+			want: "10.89.7.11",
+		},
+		{
+			name: "blank lines and trailing whitespace",
+			in:   "\n\n  10.89.7.11   blog.test  \n",
+			want: "10.89.7.11",
+		},
+		{name: "empty file", in: "", want: ""},
+		{name: "malformed single-token lines", in: "garbage\n127.0.0.1\n", want: ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := parseNginxIP([]byte(c.in)); got != c.want {
+				t.Errorf("parseNginxIP() = %q, want %q", got, c.want)
+			}
+		})
+	}
+}
+
+// The reader and the writer have to agree, or the watcher compares a value
+// it can never produce and rewrites the file on every tick.
+func TestParseNginxIP_RoundTripsRenderContainerHosts(t *testing.T) {
+	reg := &config.SiteRegistry{Sites: []config.Site{{Domains: []string{"blog.test"}}}}
+	rendered := renderContainerHosts(reg, "169.254.1.2", "10.89.7.11")
+	if got := parseNginxIP([]byte(rendered)); got != "10.89.7.11" {
+		t.Errorf("parseNginxIP(rendered) = %q, want %q", got, "10.89.7.11")
+	}
+}
+
+func TestReadNginxIPFromFile_MissingFile(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if got := ReadNginxIPFromFile(); got != "" {
+		t.Errorf("ReadNginxIPFromFile() with no file = %q, want %q", got, "")
+	}
+}
+
 func TestRenderContainerHosts_EmptyRegistry(t *testing.T) {
 	got := renderContainerHosts(&config.SiteRegistry{}, "169.254.1.2", "10.89.0.2")
 	want := "127.0.0.1 localhost\n" +
