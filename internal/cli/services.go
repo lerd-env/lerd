@@ -421,6 +421,12 @@ func newServiceListCmd() *cobra.Command {
 				return cell
 			}
 			for _, svc := range knownServices() {
+				// A removed default preset (no unit) is not installed; it lives in
+				// the preset picker as installable, so it shouldn't linger here as
+				// "unknown". ServiceInstalled is the #678 single source of truth.
+				if !serviceops.ServiceInstalled(svc) {
+					continue
+				}
 				unit := "lerd-" + svc
 				status, err := podman.UnitStatus(unit)
 				if err != nil {
