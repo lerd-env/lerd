@@ -592,8 +592,28 @@ func TestLatestLogTime(t *testing.T) {
 
 // ── Service auto-detection ──────────────────────────────────────────────────
 
+// installQuadlets points QuadletDir() at a temp XDG_CONFIG_HOME and writes a
+// quadlet file for each named default preset so enrichServices sees it as
+// installed.
+func installQuadlets(t *testing.T, names ...string) {
+	t.Helper()
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	dir := filepath.Join(cfg, "containers", "systemd")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		path := filepath.Join(dir, "lerd-"+n+".container")
+		if err := os.WriteFile(path, []byte("[Container]\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 func TestEnrichServices(t *testing.T) {
-	t.Run("detects services from .env", func(t *testing.T) {
+	t.Run("detects installed services from .env", func(t *testing.T) {
+		installQuadlets(t, "mysql", "redis")
 		dir := t.TempDir()
 		envContent := "DB_HOST=lerd-mysql\nCACHE_STORE=lerd-redis\n"
 		os.WriteFile(filepath.Join(dir, ".env"), []byte(envContent), 0644)
@@ -613,6 +633,26 @@ func TestEnrichServices(t *testing.T) {
 		}
 		if svcMap["postgres"] {
 			t.Error("expected postgres to NOT be detected")
+		}
+	})
+
+	t.Run("skips a referenced but uninstalled service", func(t *testing.T) {
+		installQuadlets(t, "redis") // mysql intentionally not installed
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".env"), []byte("DB_HOST=lerd-mysql\nCACHE_STORE=lerd-redis\n"), 0644)
+
+		e := &EnrichedSite{Path: dir}
+		e.enrichServices()
+
+		svcMap := make(map[string]bool)
+		for _, s := range e.Services {
+			svcMap[s] = true
+		}
+		if svcMap["mysql"] {
+			t.Error("expected removed mysql to be skipped, got a ghost badge")
+		}
+		if !svcMap["redis"] {
+			t.Error("expected installed redis to still be detected")
 		}
 	})
 
