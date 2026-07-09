@@ -1,8 +1,12 @@
 package podman
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -204,5 +208,175 @@ func TestHostCandidates(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// setupHostsFixture points the config paths at a temp tree holding one linked
+// site, and routes execCommand at a scripted podman. nginxIPs is consumed one
+// entry per inspect of the nginx container's network, so a test can make
+// consecutive inspects disagree the way a mid-write recreation would.
+func setupHostsFixture(t *testing.T, nginxIPs ...string) *[]string {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	sites := "sites:\n  - name: blog\n    domains: [blog.test]\n    path: /home/u/blog\n"
+	if err := os.MkdirAll(filepath.Dir(config.SitesFile()), 0755); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+	if err := os.WriteFile(config.SitesFile(), []byte(sites), 0644); err != nil {
+		t.Fatalf("write sites.yaml: %v", err)
+	}
+
+	var seen []string
+	var inspectN int
+	prev := execCommand
+	t.Cleanup(func() { execCommand = prev })
+	execCommand = func(name string, args ...string) *exec.Cmd {
+		joined := strings.Join(args, " ")
+		seen = append(seen, joined)
+		switch {
+		case strings.Contains(joined, "State.Running"):
+			return fakeExec("true", "", 0)(name, args...)
+		case strings.Contains(joined, "NetworkSettings.Networks"):
+			ip := nginxIPs[len(nginxIPs)-1]
+			if inspectN < len(nginxIPs) {
+				ip = nginxIPs[inspectN]
+			}
+			inspectN++
+			return fakeExec(ip, "", 0)(name, args...)
+		case strings.Contains(joined, "getent"):
+			return fakeExec("169.254.1.2 host.containers.internal", "", 0)(name, args...)
+		case strings.Contains(joined, " nc "):
+			return fakeExec("", "", 0)(name, args...)
+		}
+		return fakeExec("", "unexpected: "+joined, 1)(name, args...)
+	}
+	return &seen
+}
+
+func siteIPIn(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return parseNginxIP(data)
+}
+
+func countCalls(calls []string, needle string) int {
+	n := 0
+	for _, c := range calls {
+		if strings.Contains(c, needle) {
+			n++
+		}
+	}
+	return n
+}
+
+// Both hosts files must be pinned to the same address. Resolving the IP once
+// per file let a recreation land between the two lookups and leave PHP-FPM and
+// Selenium pointed at different nginx containers.
+func TestWriteContainerHosts_ResolvesNginxIPOncePerCall(t *testing.T) {
+	calls := setupHostsFixture(t, "10.89.7.11", "10.89.7.99")
+
+	if err := WriteContainerHosts(); err != nil {
+		t.Fatalf("WriteContainerHosts: %v", err)
+	}
+
+	container := siteIPIn(t, config.ContainerHostsFile())
+	browser := siteIPIn(t, config.BrowserHostsFile())
+	if container != browser {
+		t.Errorf("hosts files disagree on the nginx IP: container=%q browser=%q", container, browser)
+	}
+	if n := countCalls(*calls, "NetworkSettings.Networks"); n != 1 {
+		t.Errorf("inspected the nginx IP %d times, want 1", n)
+	}
+}
+
+// A caller repointing only the nginx IP must not disturb host.containers.internal.
+// Re-detecting it inside the writer let the watcher's nginx path move the gateway
+// without firing OnGatewayIPChange, stranding host-proxy vhosts on a dead address.
+func TestWriteContainerHostsWith_PreservesTheGivenGateway(t *testing.T) {
+	setupHostsFixture(t, "10.89.7.11")
+
+	if err := WriteContainerHostsWith("192.168.1.50", "10.89.7.11"); err != nil {
+		t.Fatalf("WriteContainerHostsWith: %v", err)
+	}
+
+	if got := ReadHostGatewayFromFile(); got != "192.168.1.50" {
+		t.Errorf("gateway = %q, want the supplied %q", got, "192.168.1.50")
+	}
+	if got := siteIPIn(t, config.ContainerHostsFile()); got != "10.89.7.11" {
+		t.Errorf("nginx IP = %q, want %q", got, "10.89.7.11")
+	}
+	if got := siteIPIn(t, config.BrowserHostsFile()); got != "10.89.7.11" {
+		t.Errorf("browser-hosts nginx IP = %q, want %q", got, "10.89.7.11")
+	}
+}
+
+// Writing with both addresses supplied must not shell out at all: the watcher
+// calls this every time nginx moves, and the old path ran the reachability
+// probe plus a `podman run --rm alpine` that can trigger an image pull.
+func TestWriteContainerHostsWith_RunsNoPodman(t *testing.T) {
+	calls := setupHostsFixture(t, "10.89.7.11")
+
+	if err := WriteContainerHostsWith("169.254.1.2", "10.89.7.11"); err != nil {
+		t.Fatalf("WriteContainerHostsWith: %v", err)
+	}
+	if len(*calls) != 0 {
+		t.Errorf("shelled out to podman %d times, want 0: %v", len(*calls), *calls)
+	}
+}
+
+// The watcher calls this every tick from a background goroutine, so it needs
+// the same wall-clock cap probeHostFromNginx gives the exec probe.
+func TestLookupNginxContainerIP_CapsWallClock(t *testing.T) {
+	prevExec, prevTimeout := execCommand, nginxInspectTimeout
+	t.Cleanup(func() { execCommand, nginxInspectTimeout = prevExec, prevTimeout })
+	nginxInspectTimeout = 50 * time.Millisecond
+	execCommand = func(string, ...string) *exec.Cmd {
+		return exec.Command("sleep", "30")
+	}
+
+	done := make(chan string, 1)
+	go func() { done <- LookupNginxContainerIP() }()
+
+	select {
+	case got := <-done:
+		if got != "" {
+			t.Errorf("LookupNginxContainerIP() = %q, want %q on timeout", got, "")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no wall-clock cap; a hung podman blocks the watcher goroutine forever")
+	}
+}
+
+// writeBrowserHosts relies on the loopback fallback to keep the file
+// well-formed while nginx is down.
+func TestNginxContainerIP_FallsBackToLoopback(t *testing.T) {
+	prev := execCommand
+	t.Cleanup(func() { execCommand = prev })
+	execCommand = fakeExec("", "no such container", 1)
+
+	if got := nginxContainerIP(); got != "127.0.0.1" {
+		t.Errorf("nginxContainerIP() = %q, want %q when nginx is absent", got, "127.0.0.1")
+	}
+}
+
+// ReadBrowserNginxIPFromFile reads the second bind-mounted file, which carries
+// no gateway line of its own.
+func TestReadBrowserNginxIPFromFile(t *testing.T) {
+	setupHostsFixture(t, "10.89.7.11")
+
+	if got := ReadBrowserNginxIPFromFile(); got != "" {
+		t.Errorf("ReadBrowserNginxIPFromFile() with no file = %q, want %q", got, "")
+	}
+	if err := WriteContainerHostsWith("169.254.1.2", "10.89.7.11"); err != nil {
+		t.Fatalf("WriteContainerHostsWith: %v", err)
+	}
+	if got := ReadBrowserNginxIPFromFile(); got != "10.89.7.11" {
+		t.Errorf("ReadBrowserNginxIPFromFile() = %q, want %q", got, "10.89.7.11")
 	}
 }
