@@ -60,6 +60,8 @@ lerd group list                   # show all groups and their members
 
 **Renaming the base domain.** Changing the main's domain cascades to every secondary automatically: each one's subdomain is recomputed against the new base domain and its vhost, certificate and `.env` are regenerated.
 
+**HTTPS.** A secondary inherits HTTPS from its main. The exact-match preference nginx applies to `admin.astrolov.test` only holds on ports the secondary actually listens on, so a secondary left on plain HTTP under a secured main would have no `443` block and the main's `*.astrolov.test` wildcard would answer its subdomain over HTTPS, serving the main's app instead. Lerd therefore secures a secondary when it joins a secured main, and repairs the combination on `lerd install` and whenever DNS is re-enabled. An unsecured main has no wildcard on `443`, so a secondary may still be secured on its own there.
+
 ## Limitations
 
 Groups are one level deep: a secondary cannot itself have secondaries, and a site that is already a secondary cannot be a group main. To change which site is the main, dissolve the group and recreate it.

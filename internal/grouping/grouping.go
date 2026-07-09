@@ -98,6 +98,11 @@ func AssignSecondary(main, secondary *config.Site, label string, shareDB bool) e
 	secondary.GroupSubdomain = label
 	secondary.GroupSharedDB = shareDB
 	secondary.Domains = []string{newDomain}
+	// A secured main serves "<main> *.<main>", so an HTTP-only secondary would
+	// have no 443 block and the wildcard would answer its subdomain instead.
+	if main.Secured {
+		secondary.Secured = true
+	}
 	if err := config.AddSite(*secondary); err != nil {
 		return fmt.Errorf("updating site registry: %w", err)
 	}

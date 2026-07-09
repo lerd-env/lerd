@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/nginx"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -432,6 +433,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 	ok()
+
+	// Ahead of the regen pass, which reads the registry below: a secondary left
+	// on plain HTTP under a secured main has no 443 block and the main's
+	// wildcard answers its subdomain. This is the reconcile dns:enable re-execs.
+	if secured, err := grouping.EnforceSecondarySecured(); err != nil {
+		feedback.Warn("securing group secondaries: %v", err)
+	} else if len(secured) > 0 {
+		feedback.Note("restored https for group secondaries: " + strings.Join(secured, ", "))
+	}
 
 	step("Regenerating vhosts")
 	reg, err := config.LoadSites()

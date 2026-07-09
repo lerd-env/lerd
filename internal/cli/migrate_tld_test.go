@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -616,4 +617,133 @@ func contains(haystack []byte, needle string) bool {
 		}
 	}
 	return false
+}
+
+// mkGroupSite writes a site dir with a .env and, when wantsHTTPS, a .lerd.yaml
+// recording the committed HTTPS intent that the DNS re-enable restores from.
+func mkGroupSite(t *testing.T, root, name, domain string, wantsHTTPS bool) string {
+	t.Helper()
+	dir := filepath.Join(root, name)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		t.Fatalf("mkdir %s: %v", name, err)
+	}
+	env := "APP_URL=https://" + domain + "\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0644); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+	if wantsHTTPS {
+		yml := "domains:\n  - " + domain + "\nsecured: true\n"
+		if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte(yml), 0644); err != nil {
+			t.Fatalf("write .lerd.yaml: %v", err)
+		}
+	}
+	return dir
+}
+
+// dns:disable followed by dns:enable must return a grouped, secured site *and
+// its secondary* to HTTPS. A secondary left on http has no 443 block, so the
+// main's "*.<main>" wildcard answers its subdomain and serves the wrong app
+// (issue #811).
+func TestMigrateSiteTLD_GroupedSecuredRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatalf("mkdir NginxConfD: %v", err)
+	}
+
+	mainDir := mkGroupSite(t, tmp, "astrolov", "astrolov.test", true)
+	secDir := mkGroupSite(t, tmp, "admin", "admin.astrolov.test", true)
+
+	mustAddSite(t, config.Site{
+		Name: "astrolov", Path: mainDir, Domains: []string{"astrolov.test"},
+		Secured: true, Group: "astrolov",
+	})
+	mustAddSite(t, config.Site{
+		Name: "admin-astrolov", Path: secDir, Domains: []string{"admin.astrolov.test"},
+		Secured: true, Group: "astrolov", GroupSubdomain: "admin",
+	})
+
+	migrateSiteTLD("test", "localhost", true)
+
+	for _, name := range []string{"astrolov", "admin-astrolov"} {
+		s, err := config.FindSite(name)
+		if err != nil {
+			t.Fatalf("FindSite(%s) after disable: %v", name, err)
+		}
+		if s.Secured {
+			t.Errorf("%s: still secured with DNS off", name)
+		}
+		if !s.SecuredBeforeDNSOff {
+			t.Errorf("%s: pre-disable HTTPS state not recorded", name)
+		}
+		if !strings.HasSuffix(s.PrimaryDomain(), ".localhost") {
+			t.Errorf("%s: domain %q not rewritten to .localhost", name, s.PrimaryDomain())
+		}
+	}
+
+	migrateSiteTLD("localhost", "test", false)
+
+	for _, name := range []string{"astrolov", "admin-astrolov"} {
+		s, err := config.FindSite(name)
+		if err != nil {
+			t.Fatalf("FindSite(%s) after enable: %v", name, err)
+		}
+		if !s.Secured {
+			t.Errorf("%s: HTTPS not restored on dns:enable", name)
+		}
+		if s.SecuredBeforeDNSOff {
+			t.Errorf("%s: SecuredBeforeDNSOff not cleared after restore", name)
+		}
+		if !strings.HasSuffix(s.PrimaryDomain(), ".test") {
+			t.Errorf("%s: domain %q not restored to .test", name, s.PrimaryDomain())
+		}
+	}
+
+	if sec, _ := config.FindSite("admin-astrolov"); sec.PrimaryDomain() != "admin.astrolov.test" {
+		t.Errorf("secondary domain = %q, want admin.astrolov.test", sec.PrimaryDomain())
+	}
+}
+
+// A secondary with no committed .lerd.yaml has no HTTPS intent to restore, so
+// the round trip leaves it on http. The install-time invariant pass
+// (grouping.EnforceSecondarySecured) is what lifts it back under a secured main.
+func TestMigrateSiteTLD_SecondaryWithoutProjectIntentStaysHTTP(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		t.Fatalf("mkdir NginxConfD: %v", err)
+	}
+
+	mainDir := mkGroupSite(t, tmp, "astrolov", "astrolov.test", true)
+	blogDir := mkGroupSite(t, tmp, "blog", "blog.astrolov.test", false)
+
+	mustAddSite(t, config.Site{
+		Name: "astrolov", Path: mainDir, Domains: []string{"astrolov.test"},
+		Secured: true, Group: "astrolov",
+	})
+	mustAddSite(t, config.Site{
+		Name: "astrolov-2", Path: blogDir, Domains: []string{"blog.astrolov.test"},
+		Group: "astrolov", GroupSubdomain: "blog",
+	})
+
+	migrateSiteTLD("test", "localhost", true)
+	migrateSiteTLD("localhost", "test", false)
+
+	main, _ := config.FindSite("astrolov")
+	if !main.Secured {
+		t.Fatal("main should be restored to https")
+	}
+	blog, _ := config.FindSite("astrolov-2")
+	if blog.Secured {
+		t.Error("a secondary with no committed intent should not be secured by the TLD migration itself")
+	}
+}
+
+func mustAddSite(t *testing.T, s config.Site) {
+	t.Helper()
+	if err := config.AddSite(s); err != nil {
+		t.Fatalf("AddSite(%s): %v", s.Name, err)
+	}
 }
