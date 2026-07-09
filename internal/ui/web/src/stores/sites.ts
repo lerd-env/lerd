@@ -11,6 +11,8 @@ export interface FrameworkWorker {
 
 export interface Site {
   name?: string;
+  // Display-only grouping; a group secondary reports its main's workspace.
+  workspace?: string;
   app_name?: string;
   domain: string;
   domains?: string[];

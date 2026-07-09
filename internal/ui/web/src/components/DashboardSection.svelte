@@ -2,7 +2,7 @@
   import type { Snippet } from 'svelte';
 
   interface Props {
-    label: string;
+    label?: string; // omitted for a bucket that needs no heading
     sub?: boolean;
     children: Snippet;
   }
@@ -10,7 +10,9 @@
 </script>
 
 <section class={sub ? 'space-y-2' : 'space-y-2.5'}>
-  {#if sub}
+  {#if !label}
+    {''}
+  {:else if sub}
     <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</h3>
   {:else}
     <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{label}</h2>

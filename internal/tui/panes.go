@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -438,7 +439,10 @@ func (m *Model) renderSites(w, h int) string {
 		contentW = innerW
 	}
 
+	// cursorLine maps siteCursor (an index into the sites slice) to the rendered
+	// line it lands on, which the grouped layout shifts by its headers.
 	var rowData []string
+	cursorLine := 0
 	switch {
 	case total == 0:
 		rowData = []string{
@@ -452,6 +456,8 @@ func (m *Model) renderSites(w, h int) string {
 			padToWidth(dimStyle.Render("no sites match filter"), contentW),
 			padToWidth(dimStyle.Render("  press ")+accentStyle.Render("esc")+dimStyle.Render(" to clear"), contentW),
 		}
+	case m.siteSort == siteSortWorkspace:
+		rowData, cursorLine = renderGroupedSiteRows(sites, m.snap.Workspaces, m.siteCursor, m.focus == paneSites, contentW)
 	default:
 		for i, s := range sites {
 			row := renderSiteRow(i == m.siteCursor && m.focus == paneSites, s, contentW)
@@ -461,11 +467,12 @@ func (m *Model) renderSites(w, h int) string {
 			// unaffected (bubblezone markers are zero-width to ansi).
 			rowData = append(rowData, zone.Mark(fmt.Sprintf("site:%d", i), row))
 		}
+		cursorLine = m.siteCursor
 	}
 
 	cur := -1
 	if m.focus == paneSites && m.followCursor {
-		cur = m.siteCursor
+		cur = cursorLine
 	}
 	visible := viewport(rowData, cur, availRows, &m.siteScroll)
 	bar := renderScrollbar(availRows, len(rowData), m.siteScroll, len(visible))
@@ -696,6 +703,39 @@ func classifyService(s ServiceRow) serviceGroup {
 // the focused service so the viewport keeps it visible. Cursor still
 // indexes the flat services slice unchanged — only the visual layout is
 // grouped, navigation never lands on a header.
+// renderGroupedSiteRows interleaves a header per workspace into the site-row
+// stream and reports the line index of the focused site so the viewport keeps
+// it visible. The cursor still indexes the flat sites slice, so navigation
+// never lands on a header. Sites in no workspace trail the sections with no
+// header of their own, matching the sidebar and the dashboard.
+func renderGroupedSiteRows(sites []siteinfo.EnrichedSite, workspaces []config.Workspace, cursor int, paneFocused bool, contentW int) (rows []string, cursorLine int) {
+	of := siteWorkspaces(sites, workspaces)
+	rows = make([]string, 0, len(sites)+len(workspaces)*2)
+	current := ""
+	first := true
+	for i, s := range sites {
+		if ws := of[s.Name]; ws != current || first {
+			if ws != "" {
+				if !first {
+					rows = append(rows, padToWidth("", contentW))
+				}
+				rows = append(rows, padToWidth("  "+sectionStyle.Render(ws), contentW))
+			} else if !first {
+				rows = append(rows, padToWidth("", contentW))
+			}
+			current = ws
+			first = false
+		}
+		if i == cursor && paneFocused {
+			cursorLine = len(rows)
+		}
+		row := renderSiteRow(i == cursor && paneFocused, s, contentW)
+		row = padToWidth(clipLine(row, contentW), contentW)
+		rows = append(rows, zone.Mark(fmt.Sprintf("site:%d", i), row))
+	}
+	return rows, cursorLine
+}
+
 func renderGroupedServiceRows(services []ServiceRow, cursor int, paneFocused bool, contentW int) (rows []string, cursorLine int) {
 	rows = make([]string, 0, len(services)+6)
 	currentGroup := serviceGroup(-1)

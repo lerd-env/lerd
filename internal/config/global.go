@@ -252,6 +252,9 @@ type GlobalConfig struct {
 	AutoCleanup       bool                     `yaml:"auto_cleanup"       mapstructure:"auto_cleanup"`
 	ParkedDirectories []string                 `yaml:"parked_directories" mapstructure:"parked_directories"`
 	Services          map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
+	// Workspaces group sites for display only, in the web UI and the TUI. See
+	// workspaces.go; they never affect how a site is served.
+	Workspaces []Workspace `yaml:"workspaces,omitempty" mapstructure:"workspaces"`
 }
 
 // AutoCleanupEnabled reports whether the watcher's periodic image cleanup is on.
@@ -675,6 +678,14 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 				}
 			}
 			out.Services[k] = cp
+		}
+	}
+	if in.Workspaces != nil {
+		out.Workspaces = make([]Workspace, len(in.Workspaces))
+		for i, w := range in.Workspaces {
+			cp := w
+			cp.Sites = append([]string(nil), w.Sites...)
+			out.Workspaces[i] = cp
 		}
 	}
 	return &out

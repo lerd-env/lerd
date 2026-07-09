@@ -28,7 +28,9 @@ var helpReference = []helpSection{
 			{"/", "type to filter the focused list by name"},
 			{"  enter", "apply filter and leave input mode"},
 			{"  esc", "clear filter and leave input mode"},
-			{"o", "cycle sort order (name · status · …)"},
+			{"o", "cycle the focused list's sort order"},
+			{"  sites", "name · status · framework · workspace"},
+			{"  services", "name · status · usage"},
 		},
 	},
 	{

@@ -22,6 +22,7 @@
   import ConfirmPhpIniRestoreModal from './ConfirmPhpIniRestoreModal.svelte';
   import ConfirmPhpIniResetModal from './ConfirmPhpIniResetModal.svelte';
   import ConfirmPhpRemoveModal from './ConfirmPhpRemoveModal.svelte';
+  import ConfirmWorkspaceDeleteModal from './ConfirmWorkspaceDeleteModal.svelte';
   import ConfirmTuningSaveModal from './ConfirmTuningSaveModal.svelte';
   import ConfirmTuningRestoreModal from './ConfirmTuningRestoreModal.svelte';
   import ConfirmTuningResetModal from './ConfirmTuningResetModal.svelte';
@@ -77,4 +78,6 @@
   <ConfirmTuningRestoreModal />
 {:else if $modal.kind === 'tuningReset' && $modal.tuningReset}
   <ConfirmTuningResetModal />
+{:else if $modal.kind === 'workspaceDelete' && $modal.workspaceDelete}
+  <ConfirmWorkspaceDeleteModal />
 {/if}
