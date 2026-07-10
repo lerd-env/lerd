@@ -142,6 +142,51 @@ func TestUnitStatusCachedSystemctlFailure(t *testing.T) {
 	}
 }
 
+func TestParseUnitMeta(t *testing.T) {
+	boot := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
+	raw := "Id=lerd-vite-app.service\nActiveEnterTimestampMonotonic=5000000\nWorkingDirectory=/home/u/app\n\n" +
+		"Id=lerd-queue-app.service\nActiveEnterTimestampMonotonic=0\nWorkingDirectory=\n"
+
+	m := parseUnitMeta(raw, boot, true)
+
+	v, ok := m["lerd-vite-app"] // .service suffix aliased
+	if !ok {
+		t.Fatal("expected the .service-stripped alias to be present")
+	}
+	if v.WorkingDir != "/home/u/app" {
+		t.Errorf("WorkingDir = %q, want /home/u/app", v.WorkingDir)
+	}
+	if want := boot.Add(5 * time.Second); !v.ActiveEnter.Equal(want) { // 5_000_000 usec
+		t.Errorf("ActiveEnter = %v, want %v", v.ActiveEnter, want)
+	}
+	// Monotonic 0 (never active) leaves ActiveEnter zero.
+	if q := m["lerd-queue-app"]; !q.ActiveEnter.IsZero() {
+		t.Errorf("zero-monotonic ActiveEnter = %v, want zero", q.ActiveEnter)
+	}
+	// Unreadable boot time leaves ActiveEnter zero even with a monotonic value.
+	if got := parseUnitMeta(raw, time.Time{}, false)["lerd-vite-app"]; !got.ActiveEnter.IsZero() {
+		t.Error("bootOK=false should leave ActiveEnter zero")
+	}
+}
+
+func TestRefreshPopulatesMetaWorkingDir(t *testing.T) {
+	prevList, prevShow := unitCacheListFn, unitShowFn
+	unitCacheListFn = func() (string, error) { return "lerd-vite-app.service loaded active running Vite\n", nil }
+	unitShowFn = func([]string) (string, error) {
+		return "Id=lerd-vite-app.service\nActiveEnterTimestampMonotonic=0\nWorkingDirectory=/home/u/wt\n", nil
+	}
+	InvalidateUnitCache()
+	t.Cleanup(func() { unitCacheListFn = prevList; unitShowFn = prevShow; InvalidateUnitCache() })
+
+	unitStatusCached("lerd-vite-app") // triggers a refresh that fills states + meta
+	globalUnitCache.mu.Lock()
+	wd := globalUnitCache.meta["lerd-vite-app"].WorkingDir
+	globalUnitCache.mu.Unlock()
+	if wd != "/home/u/wt" {
+		t.Errorf("meta WorkingDir = %q, want /home/u/wt", wd)
+	}
+}
+
 type errFakeSystemctl struct{}
 
 func (errFakeSystemctl) Error() string { return "boom" }
