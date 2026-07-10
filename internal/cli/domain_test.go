@@ -110,7 +110,19 @@ func TestRegenerateSiteVhost_removes_old_on_primary_change(t *testing.T) {
 
 // ── SetProjectWorkers (config package) ─────────────────────────────────────
 
+// isolateUnitDir points the unit directory and the site registry at temp dirs.
+// CollectRunningWorkerNames scans $XDG_CONFIG_HOME/systemd/user for orphaned
+// worker units, so without this it reads whatever lerd units the developer has
+// on their own machine and a stray lerd-<worker>-myapp.service fails the run.
+func isolateUnitDir(t *testing.T) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+}
+
 func TestSetProjectWorkers_noop_without_file(t *testing.T) {
+	isolateUnitDir(t)
 	dir := t.TempDir()
 	// No .lerd.yaml — should be a no-op
 	_ = config.SetProjectWorkers(dir, CollectRunningWorkerNames(&config.Site{Name: "myapp", Path: dir}))
@@ -121,20 +133,21 @@ func TestSetProjectWorkers_noop_without_file(t *testing.T) {
 }
 
 func TestSetProjectWorkers_writes_empty(t *testing.T) {
+	isolateUnitDir(t)
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("php_version: \"8.4\"\nworkers:\n  - queue\n"), 0644)
 
 	site := &config.Site{Name: "myapp", Path: dir}
-	// CollectRunningWorkerNames returns empty in test env (no systemd)
+	// The project declares no framework and the unit dir is empty, so nothing
+	// is collected and the workers list is rewritten empty.
 	_ = config.SetProjectWorkers(site.Path, CollectRunningWorkerNames(site))
 
 	proj, err := config.LoadProjectConfig(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Workers should be empty since no systemd services are running in test
 	if len(proj.Workers) != 0 {
-		t.Errorf("expected empty workers in test env, got %v", proj.Workers)
+		t.Errorf("expected no collected workers, got %v", proj.Workers)
 	}
 	// PHP version should be preserved
 	if proj.PHPVersion != "8.4" {
