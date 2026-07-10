@@ -389,8 +389,8 @@ type FrameworkEnvConf struct {
 }
 
 // HasEnvConfig reports whether the framework manages an env file at all. A
-// framework that keeps its config elsewhere (Magento's app/etc/env.php) declares
-// no env section, so `lerd env` and the doctor's env checks must skip it.
+// framework with no env section (a static or host-proxy app) is skipped by
+// `lerd env` and the doctor's env checks, not flagged for a file it never had.
 func (f *Framework) HasEnvConfig() bool {
 	if f == nil {
 		return false

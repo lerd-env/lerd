@@ -7,11 +7,13 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -96,14 +98,50 @@ type VhostData struct {
 // nginx syntax of its own.
 func resolveFrameworkNginx(site config.Site, publicDir, fpmContainer string) string {
 	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-	if !ok || fw.Nginx == nil || strings.TrimSpace(fw.Nginx.Snippet) == "" {
+	if !ok || fw.Nginx == nil {
 		return ""
 	}
-	if err := config.ValidateNginxSnippet(fw.Nginx.Snippet); err != nil {
+	var warn bytes.Buffer
+	block := frameworkNginxBlock(&warn, site.Framework, site.PrimaryDomain(), fw.Nginx.Snippet, site.Path, publicDir, fpmContainer)
+	emitOnce(os.Stdout, warn.String())
+	return block
+}
+
+var (
+	frameworkNginxWarnMu   sync.Mutex
+	frameworkNginxWarnSeen = map[string]bool{}
+)
+
+// emitOnce writes msg to w only the first time this process sees it. A dropped
+// snippet then surfaces on `lerd link` without the watcher repeating it on every
+// vhost regeneration, and the http/ssl pair for one site collapses to one line.
+func emitOnce(w io.Writer, msg string) {
+	if msg == "" {
+		return
+	}
+	frameworkNginxWarnMu.Lock()
+	defer frameworkNginxWarnMu.Unlock()
+	if frameworkNginxWarnSeen[msg] {
+		return
+	}
+	frameworkNginxWarnSeen[msg] = true
+	fmt.Fprint(w, msg)
+}
+
+// frameworkNginxBlock validates and expands a framework snippet into an indented
+// server-block fragment, "" when it declares none. A drop writes a warning to w
+// rather than vanishing silently (the caller rate-limits it, see emitOnce).
+func frameworkNginxBlock(w io.Writer, framework, domain, snippet, sitePath, publicDir, fpmContainer string) string {
+	if strings.TrimSpace(snippet) == "" {
 		return ""
 	}
-	expanded, err := expandNginxSnippet(fw.Nginx.Snippet, site.Path, publicDir, fpmContainer)
+	if err := config.ValidateNginxSnippet(snippet); err != nil {
+		fmt.Fprintf(w, "[WARN] dropping %s nginx config for %s: %v\n", framework, domain, err)
+		return ""
+	}
+	expanded, err := expandNginxSnippet(snippet, sitePath, publicDir, fpmContainer)
 	if err != nil {
+		fmt.Fprintf(w, "[WARN] dropping %s nginx config for %s: %v\n", framework, domain, err)
 		return ""
 	}
 	return indentBlock(strings.TrimRight(expanded, "\n"), "    ")
