@@ -35,6 +35,7 @@ Actions: `list` (discover sites — CALL FIRST), `link`, `unlink`, `domain_add`,
 - `link` registers a directory; non-PHP sites need `.lerd.yaml` `container.port` + a Containerfile first, or they register as PHP (wrong)
 - `domain_*` take a domain without the `.test` TLD; you can't remove the last domain
 - `group_*` nest a secondary site under a main's subdomain (one level deep): they identify the secondary by `path` (defaults to cwd), not by `site`; `group_assign` with `main` + `label` (+ optional `share_db`), `group_db` = share|separate
+- a group secondary follows its main's HTTPS: `group_assign` under a secured main secures the secondary, `tls_enable` on a main secures its secondaries too, and `tls_disable` on a secondary is refused while its main is secured (the main's `*.<main>` wildcard would answer the subdomain and serve the main's app). Disable the main's TLS first
 - `php`/`node` take `version`; pass `branch` to pin the override on a worktree's checkout
 - `runtime` switches `fpm` ↔ `frankenphp` (`worker: true` enables frankenphp worker mode)
 - `nginx_write` saves a custom override (runs `nginx -t`, backs up, reloads); `branch` targets a worktree

@@ -739,9 +739,32 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
-// Reload signals nginx to reload its configuration.
+// ErrNotRunning reports that lerd-nginx is down, so there is no process to
+// signal. The on-disk config is still authoritative: whoever starts nginx next
+// reads it. Callers that only need the config correct (the install reconcile,
+// which starts nginx later in the same run) treat this as benign.
+var ErrNotRunning = errors.New("lerd-nginx is not running")
+
+var (
+	containerRunningFn = podman.ContainerRunning
+	reloadExecFn       = func() error {
+		_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
+		return err
+	}
+)
+
+// Reload signals nginx to reload its configuration. A failed signal is
+// classified after the fact rather than pre-checked, so the common path costs
+// no extra inspect and a genuine podman failure is never mistaken for a
+// stopped container.
 func Reload() error {
-	_, err := podman.Run("exec", "lerd-nginx", "nginx", "-s", "reload")
+	err := reloadExecFn()
+	if err == nil {
+		return nil
+	}
+	if running, rerr := containerRunningFn("lerd-nginx"); rerr == nil && !running {
+		return ErrNotRunning
+	}
 	return err
 }
 
@@ -760,8 +783,10 @@ func reloadWithRetry(reload func() error, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	for {
 		err := reload()
-		if err == nil {
-			return nil
+		// A stopped nginx will not come back within the window; retrying only
+		// stalls the caller for the full timeout before failing anyway.
+		if err == nil || errors.Is(err, ErrNotRunning) {
+			return err
 		}
 		if !time.Now().Before(deadline) {
 			return err
