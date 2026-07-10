@@ -388,6 +388,13 @@ func runLink(args []string) error {
 
 	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
 
+	// Fold in the framework's required services before any runtime path applies
+	// them, so a custom-FPM or FrankenPHP site gets them too, not only the
+	// standard PHP-FPM path below.
+	if fw, ok := config.GetFrameworkForDir(framework, cwd); ok {
+		proj = ensureRequiredServices(cwd, proj, fw, presetResolvable)
+	}
+
 	if site.IsCustomFPM() {
 		result := "php " + feedback.Val(phpVersion) + " · nginx vhost written"
 		if err := provisionAndSecure("building custom FPM image", result, site,
@@ -455,9 +462,6 @@ func runLink(args []string) error {
 			}
 		}
 
-		if fw, ok := config.GetFrameworkForDir(framework, cwd); ok {
-			proj = ensureRequiredServices(cwd, proj, fw, presetResolvable)
-		}
 		if err := linkApplyServices(cwd, proj); err != nil {
 			return err
 		}
