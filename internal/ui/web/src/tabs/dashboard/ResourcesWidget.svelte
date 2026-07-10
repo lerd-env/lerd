@@ -1,17 +1,43 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import DashboardCard from './DashboardCard.svelte';
+  import DetailButton from '$components/DetailButton.svelte';
+  import CleanupModal from './CleanupModal.svelte';
   import { stats, statsLoaded, startStatsPolling, formatBytes } from '$stores/stats';
-  import { serviceLabel } from '$stores/services';
+  import { disk, startDiskPolling, runCleanup } from '$stores/disk';
   import { m } from '../../paraglide/messages.js';
 
   let stop: (() => void) | null = null;
+  let stopDisk: (() => void) | null = null;
   onMount(() => {
     stop = startStatsPolling();
+    stopDisk = startDiskPolling();
   });
   onDestroy(() => {
     if (stop) stop();
+    if (stopDisk) stopDisk();
   });
+
+  let modalOpen = $state(false);
+  let cleaning = $state(false);
+  let cleanupError = $state<string | undefined>(undefined);
+
+  function openModal() {
+    cleanupError = undefined;
+    modalOpen = true;
+  }
+
+  async function doCleanup() {
+    cleaning = true;
+    cleanupError = undefined;
+    const res = await runCleanup();
+    cleaning = false;
+    if (res.ok) {
+      modalOpen = false;
+    } else {
+      cleanupError = res.error ?? 'Cleanup failed';
+    }
+  }
 
   const rows = $derived($stats.containers);
   const memPercentOfHost = $derived(
@@ -58,6 +84,23 @@
       </div>
     </div>
 
+    {#if $disk.available && $disk.reclaimable_bytes > 0}
+      <div class="pt-2 mt-2 border-t border-gray-100 dark:border-lerd-border">
+        <div class="flex items-center justify-between gap-2">
+          <div>
+            <div class="text-[10px] uppercase tracking-wide text-gray-400 dark:text-gray-500">{m.dashboard_disk_reclaimable()}</div>
+            <div class="text-sm font-semibold text-gray-900 dark:text-white tabular-nums">{formatBytes($disk.reclaimable_bytes)}</div>
+          </div>
+          <DetailButton tone="warn" onclick={openModal}>{m.dashboard_disk_cleanup()}</DetailButton>
+        </div>
+        {#if $disk.held_bytes > 0}
+          <div class="text-[10px] text-gray-400 dark:text-gray-500 mt-1">
+            {m.dashboard_disk_held({ size: formatBytes($disk.held_bytes) })}
+          </div>
+        {/if}
+      </div>
+    {/if}
+
     {#if rows.length > 0}
       <div class="pt-2 border-t border-gray-100 dark:border-lerd-border space-y-1">
         <div class="text-[10px] font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide">{m.dashboard_resources_top()}</div>
@@ -74,3 +117,15 @@
     {/if}
   {/if}
 </DashboardCard>
+
+<CleanupModal
+  open={modalOpen}
+  images={$disk.images}
+  reclaimableBytes={$disk.reclaimable_bytes}
+  loading={cleaning}
+  error={cleanupError}
+  onconfirm={doCleanup}
+  onclose={() => {
+    if (!cleaning) modalOpen = false;
+  }}
+/>

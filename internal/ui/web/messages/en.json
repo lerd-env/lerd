@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "Delete \"{name}\"?",
   "workspaces_deleteBody": "The workspace is removed. Its sites stay linked and become ungrouped.",
   "workspaces_deleteSiteCount": "Sites affected: {count}",
-  "dashboard_sites_pausedCount": "{count} paused"
+  "dashboard_sites_pausedCount": "{count} paused",
+  "dashboard_disk_reclaimable": "Reclaimable disk",
+  "dashboard_disk_cleanup": "Clean up",
+  "dashboard_disk_held": "{size} more held by running containers, freed on restart",
+  "dashboard_disk_modalTitle": "Reclaim disk",
+  "dashboard_disk_modalBody": "These images can be removed to free about {size}:",
+  "dashboard_disk_modalDeepNote": "This deep clean also removes dangling untagged images left by other podman workloads on this machine. It never touches named data volumes.",
+  "dashboard_disk_modalConfirm": "Reclaim",
+  "dashboard_disk_cleaning": "Reclaiming…"
 }

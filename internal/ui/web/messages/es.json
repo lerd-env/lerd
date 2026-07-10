@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "¿Eliminar \"{name}\"?",
   "workspaces_deleteBody": "Se elimina el espacio de trabajo. Sus sitios siguen vinculados y quedan sin agrupar.",
   "workspaces_deleteSiteCount": "Sitios afectados: {count}",
-  "dashboard_sites_pausedCount": "{count} pausados"
+  "dashboard_sites_pausedCount": "{count} pausados",
+  "dashboard_disk_reclaimable": "Disco recuperable",
+  "dashboard_disk_cleanup": "Limpiar",
+  "dashboard_disk_held": "{size} más retenidos por contenedores en ejecución, se liberan al reiniciar",
+  "dashboard_disk_modalTitle": "Recuperar disco",
+  "dashboard_disk_modalBody": "Estas imágenes se pueden eliminar para liberar unos {size}:",
+  "dashboard_disk_modalDeepNote": "Esta limpieza profunda también elimina imágenes colgantes sin etiqueta dejadas por otras cargas de trabajo de podman en esta máquina. Nunca toca los volúmenes de datos con nombre.",
+  "dashboard_disk_modalConfirm": "Recuperar",
+  "dashboard_disk_cleaning": "Recuperando…"
 }
