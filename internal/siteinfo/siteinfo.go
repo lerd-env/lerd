@@ -558,11 +558,22 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 		if label == "" {
 			label = wname
 		}
+		running := unitStatus == "active" || unitStatus == "activating"
+		failing := unitStatus == "failed"
+		// A worker whose process is up but whose server isn't accepting is
+		// unhealthy, not running (a vite dev server that died under npm). Probe
+		// only "active" (a still-activating server may not have bound yet).
+		if unitStatus == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(e.Path, w.Health); probed && !reachable {
+				running = false
+				failing = true
+			}
+		}
 		e.FrameworkWorkers = append(e.FrameworkWorkers, WorkerInfo{
 			Name:    wname,
 			Label:   label,
-			Running: unitStatus == "active" || unitStatus == "activating",
-			Failing: unitStatus == "failed",
+			Running: running,
+			Failing: failing,
 		})
 	}
 }
@@ -594,11 +605,21 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 		if label == "" {
 			label = wname
 		}
+		running := status == "active" || status == "activating"
+		failing := status == "failed"
+		// Same server-reachability check as enrichWorkers, against this worktree's
+		// own checkout where its dev server writes the URL file.
+		if status == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(wtPath, w.Health); probed && !reachable {
+				running = false
+				failing = true
+			}
+		}
 		out = append(out, WorkerInfo{
 			Name:    wname,
 			Label:   label,
-			Running: status == "active" || status == "activating",
-			Failing: status == "failed",
+			Running: running,
+			Failing: failing,
 		})
 	}
 	return out

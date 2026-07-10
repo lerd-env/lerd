@@ -421,3 +421,80 @@ func TestEnrich_NilAndEmpty(t *testing.T) {
 		t.Errorf("Enrich(empty) = %v, want empty", got)
 	}
 }
+
+// An active worker whose declared server has died (process up, port refused) is
+// flagged "unreachable"; a plain active worker with no health probe is not.
+func TestDetect_UnreachableActiveWorkerFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{
+			"lerd-vite-myapp.service":  "active",
+			"lerd-queue-myapp.service": "active",
+		},
+		nil,
+	)
+	prev := workerReachableFn
+	workerReachableFn = func(_, _, worker string) (reachable, probed bool) {
+		if worker == "vite" {
+			return false, true // process up, server not accepting
+		}
+		return false, false // no health probe for other workers
+	}
+	t.Cleanup(func() { workerReachableFn = prev })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 || got[0].Unit != "lerd-vite-myapp" {
+		t.Fatalf("got %v, want [lerd-vite-myapp]", unitNames(got))
+	}
+	if got[0].State != "unreachable" {
+		t.Errorf("state = %q, want unreachable", got[0].State)
+	}
+}
+
+func TestDetect_ReachableActiveWorkerNotFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp.service": "active"},
+		nil,
+	)
+	prev := workerReachableFn
+	workerReachableFn = func(_, _, _ string) (bool, bool) { return true, true } // serving
+	t.Cleanup(func() { workerReachableFn = prev })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("a reachable server must not be flagged, got %v", unitNames(got))
+	}
+}
+
+// An unreachable worker's process is still up, so heal must restart it (a start
+// is a no-op on an active unit), while failed/stopped workers still start.
+func TestHealAll_RestartsUnreachableWorker(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp.service": "active"},
+		func(string) error { t.Fatal("unreachable worker must be restarted, not started"); return nil },
+	)
+	prevReach, prevRestart := workerReachableFn, restartFn
+	workerReachableFn = func(_, _, _ string) (bool, bool) { return false, true }
+	var restarted string
+	restartFn = func(unit string) error { restarted = unit; return nil }
+	t.Cleanup(func() { workerReachableFn = prevReach; restartFn = prevRestart })
+
+	res, err := HealAll(nil)
+	if err != nil {
+		t.Fatalf("HealAll: %v", err)
+	}
+	if restarted != "lerd-vite-myapp" {
+		t.Errorf("restarted %q, want lerd-vite-myapp", restarted)
+	}
+	if len(res.Healed) != 1 {
+		t.Errorf("healed %d, want 1", len(res.Healed))
+	}
+}

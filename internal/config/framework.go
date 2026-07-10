@@ -148,6 +148,7 @@ type FrameworkWorker struct {
 	ExcludeCheck   *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
 	ConflictsWith  []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
 	Proxy          *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	Health         *WorkerHealth  `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
 	Host           bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 	// PerWorktree opts the worker into running independently per git worktree
 	// (lerd-<wname>-<site>-<wt>). Defaults to false; set true on workers that
@@ -177,6 +178,17 @@ type WorkerProxy struct {
 	Path        string `yaml:"path"`                   // URL path to proxy (e.g. "/app")
 	PortEnvKey  string `yaml:"port_env_key,omitempty"` // env key holding the port (e.g. "REVERB_SERVER_PORT")
 	DefaultPort int    `yaml:"default_port,omitempty"` // fallback port if env key is missing (default: 8080)
+}
+
+// WorkerHealth declares how to tell whether a worker's server is actually
+// reachable, not merely that its process is alive. A dev server (vite under
+// fnm/npm) can keep its process up after its HTTP server has died, so systemd
+// still reports the unit active while nothing is listening. Where the port lives
+// is declared here, never in Go: URLFile names a file the server writes on boot
+// (vite's public/hot) whose contents carry the URL to probe. A worker with no
+// Health block keeps the process-only liveness check unchanged.
+type WorkerHealth struct {
+	URLFile string `yaml:"url_file,omitempty"` // file (relative to site root) holding the server URL, e.g. "public/hot"
 }
 
 // FrameworkLogSource describes where application log files live for a framework.

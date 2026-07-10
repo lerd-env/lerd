@@ -21,7 +21,7 @@ type UnhealthyWorker struct {
 	Site      string `json:"site"`
 	Worker    string `json:"worker"`
 	Unit      string `json:"unit"`
-	State     string `json:"state"` // "failed" today; reserve for future "start-limit-hit", "expected-but-stopped"
+	State     string `json:"state"` // "failed" | "expected-but-stopped" | "unreachable" (process up, server not accepting)
 	LastError string `json:"last_error,omitempty"`
 }
 
@@ -58,12 +58,30 @@ var nonWorkerPerSitePrefixes = map[string]bool{
 // Swappable for tests so the detector can be exercised without touching the
 // real systemd unit-state cache or starting real units.
 var (
-	unitStatesFn  = siteinfo.AllUnitStates
-	unitEnabledFn = isUnitEnabled
-	healFn        = podman.StartUnit
-	lastErrorFn   = readLastError
-	isStoppedFn   = config.IsStopped
+	unitStatesFn      = siteinfo.AllUnitStates
+	unitEnabledFn     = isUnitEnabled
+	healFn            = podman.StartUnit
+	restartFn         = podman.RestartUnit
+	lastErrorFn       = readLastError
+	isStoppedFn       = config.IsStopped
+	workerReachableFn = defaultWorkerReachable
 )
+
+// defaultWorkerReachable probes a running worker that declares a health block.
+// probed is false (keep process-only liveness) when the worker has no health
+// block or its framework can't be resolved. The framework read is cached, so the
+// cost lands once per site that has active workers, not per worker.
+func defaultWorkerReachable(sitePath, framework, worker string) (reachable, probed bool) {
+	fw, ok := config.GetFrameworkForDir(framework, sitePath)
+	if !ok {
+		return false, false
+	}
+	w, ok := fw.Workers[worker]
+	if !ok || w.Health == nil {
+		return false, false
+	}
+	return siteinfo.WorkerServerReachable(sitePath, w.Health)
+}
 
 // HumanState renders an UnhealthyWorker.State for end-user copy. The machine
 // values ("failed", "expected-but-stopped") read awkwardly in a sentence.
@@ -154,6 +172,9 @@ func Detect() ([]UnhealthyWorker, error) {
 		return nil, err
 	}
 	siteSet := make(map[string]bool, len(reg.Sites))
+	// path + framework per site, for resolving a health-probed worker's block.
+	type siteMeta struct{ path, framework string }
+	meta := make(map[string]siteMeta, len(reg.Sites))
 	// Workers a site has intentionally idle-suspended must never be reported as
 	// failing or drifted — they are asleep on purpose and resume on the next
 	// request, so flagging or healing them would be noise (and a heal would wake
@@ -164,6 +185,7 @@ func Detect() ([]UnhealthyWorker, error) {
 			continue
 		}
 		siteSet[s.Name] = true
+		meta[s.Name] = siteMeta{path: s.Path, framework: s.Framework}
 		if len(s.IdleSuspendedWorkers) > 0 {
 			set := make(map[string]bool, len(s.IdleSuspendedWorkers))
 			for _, w := range s.IdleSuspendedWorkers {
@@ -187,6 +209,31 @@ func Detect() ([]UnhealthyWorker, error) {
 		if !strings.HasSuffix(unit, ".service") {
 			continue
 		}
+		// Only these states can be unhealthy; skip the rest before the
+		// site-name resolution below so the hot path stays cheap.
+		if state != "failed" && state != "inactive" && state != "active" {
+			continue
+		}
+		body := strings.TrimPrefix(unit, "lerd-")
+		body = strings.TrimSuffix(body, ".service")
+		// Find the longest site-name suffix match so worker names with
+		// embedded hyphens (e.g. emit-events) survive intact.
+		var site, worker string
+		for s := range siteSet {
+			if strings.HasSuffix(body, "-"+s) && len(s) > len(site) {
+				site = s
+				worker = strings.TrimSuffix(body, "-"+s)
+			}
+		}
+		if site == "" || worker == "" {
+			continue
+		}
+		if nonWorkerPerSitePrefixes[worker] {
+			continue
+		}
+		if suspended[site][worker] {
+			continue // intentionally idle-suspended, not a failure
+		}
 		var detected string
 		switch state {
 		case "failed":
@@ -202,30 +249,13 @@ func Detect() ([]UnhealthyWorker, error) {
 				continue
 			}
 			detected = "expected-but-stopped"
-		default:
-			continue
-		}
-		body := strings.TrimPrefix(unit, "lerd-")
-		body = strings.TrimSuffix(body, ".service")
-		// Find the longest site-name suffix match so worker names with
-		// embedded hyphens (e.g. emit-events) survive intact.
-		var site, worker string
-		for s := range siteSet {
-			if strings.HasSuffix(body, "-"+s) {
-				if len(s) > len(site) {
-					site = s
-					worker = strings.TrimSuffix(body, "-"+s)
-				}
+		default: // "active": up, but a health-probed server may have died under it.
+			m := meta[site]
+			reachable, probed := workerReachableFn(m.path, m.framework, worker)
+			if !probed || reachable {
+				continue // no health probe declared, or the server is serving
 			}
-		}
-		if site == "" || worker == "" {
-			continue
-		}
-		if nonWorkerPerSitePrefixes[worker] {
-			continue
-		}
-		if suspended[site][worker] {
-			continue // intentionally idle-suspended, not a failure
+			detected = "unreachable"
 		}
 		out = append(out, UnhealthyWorker{
 			Site:   site,
@@ -264,7 +294,13 @@ func HealAll(emit func(Event)) (Result, error) {
 	report := Result{}
 	for _, u := range unhealthy {
 		emit(Event{Phase: "starting", Site: u.Site, Unit: u.Unit})
-		if err := HealUnit(u.Unit); err != nil {
+		// An unreachable worker's process is still up, so a plain start is a no-op;
+		// restart to rebind its server. Failed/stopped workers just start.
+		heal := HealUnit
+		if u.State == "unreachable" {
+			heal = restartFn
+		}
+		if err := heal(u.Unit); err != nil {
 			report.Failed = append(report.Failed, Failure{Worker: u, Err: err.Error()})
 			emit(Event{Phase: "failed", Site: u.Site, Unit: u.Unit, Error: err.Error()})
 			continue
