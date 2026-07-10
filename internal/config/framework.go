@@ -85,6 +85,50 @@ type Framework struct {
 	// doctor runs in addition to the universal defaults (env, dependency, and
 	// audit checks every framework gets). See FrameworkDoctor.
 	Doctor *FrameworkDoctor `yaml:"doctor,omitempty"`
+	// Nginx, when set, declares extra server-block config the framework needs
+	// (Magento's /setup, /static, and /media handling). See FrameworkNginx.
+	Nginx *FrameworkNginx `yaml:"nginx,omitempty"`
+}
+
+// FrameworkNginx carries a raw nginx block spliced into the site's server block
+// ahead of lerd's generic `location /` and `location ~ \.php$`, so a framework
+// can claim paths those would otherwise swallow.
+type FrameworkNginx struct {
+	// Snippet is nginx config with three placeholders expanded before render:
+	// {{root}} (project root), {{public}} (document root), {{fpm}} (FPM container).
+	Snippet string `yaml:"snippet"`
+}
+
+// ValidateNginxSnippet returns nil when s is balanced enough to splice into a
+// server block: an unbalanced snippet would close the enclosing `server {` and
+// declare servers of its own. Balance alone cannot contain an interpolated value
+// (a `}` plus a `server {` still balances), so callers must also reject values
+// that carry nginx syntax before substituting them.
+func ValidateNginxSnippet(s string) error {
+	if strings.ContainsRune(s, 0) {
+		return fmt.Errorf("nginx snippet contains a NUL byte")
+	}
+	depth := 0
+	for _, line := range strings.Split(s, "\n") {
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = line[:i]
+		}
+		for _, r := range line {
+			switch r {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < 0 {
+					return fmt.Errorf("nginx snippet closes a block it did not open")
+				}
+			}
+		}
+	}
+	if depth != 0 {
+		return fmt.Errorf("nginx snippet has %d unclosed block(s)", depth)
+	}
+	return nil
 }
 
 // FrameworkFrankenPHP describes how to serve the framework via FrankenPHP.
@@ -1246,6 +1290,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 		safe.Workers = nil
 	}
 	safe.Commands = nil
+	// An nginx snippet is spliced into the site's server block, so it is a
+	// config-injection surface: only the trusted store may declare one.
+	safe.Nginx = nil
 	return safe
 }
 

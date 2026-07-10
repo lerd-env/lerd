@@ -4,7 +4,9 @@ server {
     server_name {{.ServerNames}};
     root {{.Path}}/{{.PublicDir}};
     index index.php index.html;
-{{if .Proxy}}
+{{if .FrameworkNginx}}
+{{.FrameworkNginx}}
+{{end}}{{if .Proxy}}
     location {{.ProxyPath}} {
         set $proxybackend "{{.FPMContainer}}";
         proxy_pass http://$proxybackend:{{.ProxyPort}};
