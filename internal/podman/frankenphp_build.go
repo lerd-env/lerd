@@ -21,7 +21,7 @@ import (
 // is intentionally excluded — it carries octane-specific behaviour and is
 // tracked separately.
 var frankenPHPRuntimeExtensions = []string{
-	"bcmath", "bz2", "calendar", "dba", "exif", "gd", "gmp", "intl", "ldap",
+	"bcmath", "bz2", "calendar", "dba", "exif", "ftp", "gd", "gmp", "intl", "ldap",
 	"mysqli", "opcache", "pcntl", "pdo_mysql", "pdo_pgsql", "shmop", "soap",
 	"sockets", "sysvmsg", "sysvsem", "sysvshm", "xsl", "zip",
 	"redis", "igbinary", "imagick", "mongodb",
