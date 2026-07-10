@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	phpkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // Check statuses, mirroring the MCP doctor's check shape so the diagnostics
@@ -107,6 +108,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	envFile, envFormat, exampleFile := envSetup(fw, path)
 	envPath := filepath.Join(path, envFile)
 
+	if c, ok := checkRequiredServices(fw); ok {
+		resp.add(c)
+	}
 	if hasEnvConfig(fw) {
 		if c, ok := checkEnvPresent(path, envFile, fwExampleFile(fw)); ok {
 			resp.add(c)
@@ -184,6 +188,57 @@ func fwExampleFile(fw *config.Framework) string {
 	return fw.Env.ExampleFile
 }
 
+// Seams so the required-service check can be tested without podman.
+var (
+	quadletInstalledFn = podman.QuadletInstalled
+	unitStatusFn       = podman.UnitStatus
+)
+
+// checkRequiredServices reports the framework's declared required services that
+// are absent or stopped. Absent is a failure, since the app cannot boot without
+// it; stopped is a warning, since starting it is one command.
+func checkRequiredServices(fw *config.Framework) (Check, bool) {
+	if fw == nil || len(fw.Requires) == 0 {
+		return Check{}, false
+	}
+	var missing, stopped []string
+	for _, name := range fw.Requires {
+		unit := "lerd-" + name
+		if !quadletInstalledFn(unit) {
+			missing = append(missing, name)
+			continue
+		}
+		if status, _ := unitStatusFn(unit); status != "active" {
+			stopped = append(stopped, name)
+		}
+	}
+	switch {
+	case len(missing) > 0:
+		return Check{
+			Name:   "required_services",
+			Status: StatusFail,
+			Detail: fmt.Sprintf("%s cannot run without %s. Install it with 'lerd service preset %s'.",
+				frameworkLabel(fw), strings.Join(missing, ", "), missing[0]),
+		}, true
+	case len(stopped) > 0:
+		return Check{
+			Name:   "required_services",
+			Status: StatusWarn,
+			Detail: fmt.Sprintf("%s is required but not running. Start it with 'lerd service start %s'.",
+				strings.Join(stopped, ", "), stopped[0]),
+		}, true
+	}
+	return Check{Name: "required_services", Status: StatusOK}, true
+}
+
+// frameworkLabel prefers the display label, falling back to the slug.
+func frameworkLabel(fw *config.Framework) string {
+	if fw.Label != "" {
+		return fw.Label
+	}
+	return fw.Name
+}
+
 // frameworkChecks returns the framework's declarative doctor checks, or nil.
 func frameworkChecks(fw *config.Framework) []config.DoctorCheck {
 	if fw == nil || fw.Doctor == nil {
@@ -222,16 +277,17 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 // universalLabels maps the built-in check names to their display labels. The
 // declared framework checks carry their own labels from the store.
 var universalLabels = map[string]string{
-	"env_present":     "Env File",
-	"app_key":         "App Key",
-	"env_drift":       "Env Drift",
-	"sqlite_database": "Database",
-	"composer_deps":   "Composer Dependencies",
-	"composer_audit":  "Composer Audit",
-	"node_deps":       "Node Dependencies",
-	"node_audit":      "Node Audit",
-	"php_version":     "PHP Version",
-	"slow_routes":     "Response Time",
+	"required_services": "Required Services",
+	"env_present":       "Env File",
+	"app_key":           "App Key",
+	"env_drift":         "Env Drift",
+	"sqlite_database":   "Database",
+	"composer_deps":     "Composer Dependencies",
+	"composer_audit":    "Composer Audit",
+	"node_deps":         "Node Dependencies",
+	"node_audit":        "Node Audit",
+	"php_version":       "PHP Version",
+	"slow_routes":       "Response Time",
 }
 
 // humanize turns a snake_case check name into a Title Case fallback label.
