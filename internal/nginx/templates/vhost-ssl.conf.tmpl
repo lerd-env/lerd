@@ -14,7 +14,9 @@ server {
 
     ssl_certificate /etc/nginx/certs/{{.CertDomain}}.crt;
     ssl_certificate_key /etc/nginx/certs/{{.CertDomain}}.key;
-{{if .Proxy}}
+{{if .FrameworkNginx}}
+{{.FrameworkNginx}}
+{{end}}{{if .Proxy}}
     location {{.ProxyPath}} {
         set $proxybackend "{{.FPMContainer}}";
         proxy_pass http://$proxybackend:{{.ProxyPort}};

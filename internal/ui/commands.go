@@ -16,6 +16,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/sitetpl"
 )
 
 // runLocks holds a per-site mutex so two browser tabs (or the palette + the
@@ -117,7 +118,7 @@ func resolveSiteCommands(site *config.Site, branch string) []config.FrameworkCom
 	}
 	fw, _ := config.GetFrameworkForDir(site.Framework, path)
 	proj, _ := config.LoadProjectConfig(path)
-	return config.ResolveCommands(fw, proj, path)
+	return sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, path), sitetpl.ForPath(path))
 }
 
 // urlRegex matches the first http/https URL in stdout, used when the command

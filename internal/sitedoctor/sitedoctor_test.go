@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
 )
 
 func writeEnv(t *testing.T, dir, name, body string) {
@@ -44,13 +45,13 @@ func laravelLikeFW() *config.Framework {
 func TestCheckEnvPresent(t *testing.T) {
 	dir := t.TempDir()
 
-	c, _ := checkEnvPresent(dir, ".env")
+	c, _ := checkEnvPresent(dir, ".env", ".env.example")
 	if c.Status != StatusFail {
 		t.Errorf("missing .env: got %q, want fail", c.Status)
 	}
 
 	writeEnv(t, dir, ".env", "APP_KEY=x\n")
-	if c, _ := checkEnvPresent(dir, ".env"); c.Status != StatusOK {
+	if c, _ := checkEnvPresent(dir, ".env", ".env.example"); c.Status != StatusOK {
 		t.Errorf("present .env: got %q, want ok", c.Status)
 	}
 }
@@ -232,17 +233,17 @@ func TestCheckEnvCombo(t *testing.T) {
 
 	// production + debug on → warn (and "1" is treated truthily).
 	writeEnv(t, dir, ".env", "APP_ENV=production\nAPP_DEBUG=1\n")
-	if c := checkEnvCombo(envPath, spec); c.Status != StatusWarn {
+	if c := checkEnvCombo(envfile.Reader(envPath, "dotenv"), spec); c.Status != StatusWarn {
 		t.Errorf("prod+debug: got %q, want warn", c.Status)
 	}
 	// local + debug on → ok (When mismatch).
 	writeEnv(t, dir, ".env", "APP_ENV=local\nAPP_DEBUG=true\n")
-	if c := checkEnvCombo(envPath, spec); c.Status != StatusOK {
+	if c := checkEnvCombo(envfile.Reader(envPath, "dotenv"), spec); c.Status != StatusOK {
 		t.Errorf("local+debug: got %q, want ok", c.Status)
 	}
 	// production + debug off → ok (WarnIf mismatch).
 	writeEnv(t, dir, ".env", "APP_ENV=production\nAPP_DEBUG=false\n")
-	if c := checkEnvCombo(envPath, spec); c.Status != StatusOK {
+	if c := checkEnvCombo(envfile.Reader(envPath, "dotenv"), spec); c.Status != StatusOK {
 		t.Errorf("prod+nodebug: got %q, want ok", c.Status)
 	}
 }
