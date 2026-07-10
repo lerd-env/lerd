@@ -25,36 +25,6 @@ export const CATEGORY_ORDER: CategoryKey[] = [
   'other'
 ];
 
-const BY_NAME: Record<string, CategoryKey> = {
-  mysql: 'databases',
-  mariadb: 'databases',
-  postgres: 'databases',
-  'postgres-pgvector': 'databases',
-  'postgres-postgis': 'databases',
-  mongo: 'databases',
-  redis: 'cache',
-  valkey: 'cache',
-  memcached: 'cache',
-  rabbitmq: 'messaging',
-  beanstalkd: 'messaging',
-  soketi: 'messaging',
-  elasticsearch: 'search',
-  opensearch: 'search',
-  meilisearch: 'search',
-  typesense: 'search',
-  mailpit: 'mail',
-  gotenberg: 'mail',
-  phpmyadmin: 'admin',
-  pgadmin: 'admin',
-  'mongo-express': 'admin',
-  redisinsight: 'admin',
-  elasticvue: 'admin',
-  'typesense-dashboard': 'admin',
-  rustfs: 'storage',
-  selenium: 'testing',
-  'stripe-mock': 'testing'
-};
-
 // Display label per category. Record<CategoryKey, ...> makes a missing entry a
 // compile error, so adding a category can't silently fall back to "Other".
 export const CATEGORY_LABELS: Record<CategoryKey, () => string> = {
@@ -83,19 +53,20 @@ const ICON_TINT: Record<CategoryKey, string> = {
   other: 'bg-gray-100 text-gray-500 dark:bg-white/5 dark:text-gray-400'
 };
 
-// tintFor resolves a service's icon tint, preferring an explicit category when
-// the caller already knows it (a preset grouped under its section heading).
-export function tintFor(name: string, category?: CategoryKey): string {
-  return ICON_TINT[category ?? categoryOf(name)];
+export function tintFor(category: CategoryKey): string {
+  return ICON_TINT[category];
 }
 
-export function categoryOf(name: string): CategoryKey {
-  if (BY_NAME[name]) return BY_NAME[name];
-  // Fall back to the family prefix so versioned variants like "postgres-17"
-  // land in the same bucket as their base preset.
-  const fam = name.match(/^([a-z][a-z0-9]*)/);
-  if (fam && BY_NAME[fam[1]]) return BY_NAME[fam[1]];
-  return 'other';
+// A category the preset YAML doesn't declare, or declares as something this
+// build has no section for, lands in "other" rather than crashing the grid.
+export function asCategory(category: string | undefined): CategoryKey {
+  return category && (CATEGORY_ORDER as string[]).includes(category)
+    ? (category as CategoryKey)
+    : 'other';
+}
+
+export function categoryOf(preset: Pick<Preset, 'category'>): CategoryKey {
+  return asCategory(preset.category);
 }
 
 export interface CategoryGroup {
@@ -106,7 +77,7 @@ export interface CategoryGroup {
 export function groupByCategory(presets: Preset[]): CategoryGroup[] {
   const buckets = new Map<CategoryKey, Preset[]>();
   for (const p of presets) {
-    const k = categoryOf(p.name);
+    const k = categoryOf(p);
     const arr = buckets.get(k) || [];
     arr.push(p);
     buckets.set(k, arr);

@@ -8,3 +8,7 @@ environment:
 depends_on:
   - elasticsearch
 dashboard: http://localhost:8083
+category: admin
+icon: search
+admin_for:
+  - elasticsearch

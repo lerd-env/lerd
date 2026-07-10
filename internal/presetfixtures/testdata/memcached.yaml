@@ -9,3 +9,5 @@ env_vars:
 env_detect:
   key: MEMCACHED_HOST
 connection_url: memcached://127.0.0.1:11211
+category: cache
+icon: bolt

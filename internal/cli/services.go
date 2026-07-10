@@ -693,6 +693,9 @@ func ListInstallablePresets() ([]config.PresetMeta, error) {
 				Image:          e.Image,
 				Versions:       e.Versions,
 				DefaultVersion: e.DefaultVersion,
+				Category:       e.Category,
+				Icon:           e.Icon,
+				AdminFor:       e.AdminFor,
 			})
 		}
 	}

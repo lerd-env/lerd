@@ -46,3 +46,8 @@ files:
           ];
       }
       $cfg['AllowThirdPartyFraming'] = true;
+category: admin
+icon: database
+admin_for:
+  - mysql
+  - mariadb

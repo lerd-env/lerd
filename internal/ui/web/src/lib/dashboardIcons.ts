@@ -33,41 +33,14 @@ const ICONS: Record<string, string> = {
     '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/>'
 };
 
-const BY_NAME: Record<string, string> = {
-  postgres: ICONS.elephant,
-  'postgres-pgvector': ICONS.elephant,
-  'postgres-postgis': ICONS.elephant,
-  mysql: ICONS.database,
-  mariadb: ICONS.database,
-  redis: ICONS.bolt,
-  valkey: ICONS.bolt,
-  memcached: ICONS.bolt,
-  rabbitmq: ICONS.queue,
-  beanstalkd: ICONS.queue,
-  soketi: ICONS.broadcast,
-  gotenberg: ICONS.mail,
-  'stripe-mock': ICONS.card,
-  phpmyadmin: ICONS.database,
-  pgadmin: ICONS.elephant,
-  adminer: ICONS.database,
-  redisinsight: ICONS.database,
-  mailpit: ICONS.mail,
-  mailhog: ICONS.mail,
-  meilisearch: ICONS.search,
-  elasticsearch: ICONS.search,
-  opensearch: ICONS.search,
-  elasticvue: ICONS.search,
-  typesense: ICONS.search,
-  'typesense-dashboard': ICONS.search,
-  rustfs: ICONS.storage,
-  minio: ICONS.storage,
-  'mongo-express': ICONS.leaf,
-  mongo: ICONS.leaf,
-  selenium: ICONS.browserPlay,
+const UI_ONLY: Record<string, string> = {
   docs: ICONS.docs,
   profiler: ICONS.flame
 };
 
-export function dashboardIconSvg(name: string): string {
-  return BY_NAME[name] || ICONS.windowIcon;
+// A service names its icon in its preset YAML; the name map is only for the UI
+// dashboards (docs, profiler) that are not services and declare nothing.
+export function dashboardIconSvg(name: string, icon?: string): string {
+  if (icon && ICONS[icon]) return ICONS[icon];
+  return UI_ONLY[name] || ICONS.windowIcon;
 }

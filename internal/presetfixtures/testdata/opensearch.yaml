@@ -28,3 +28,5 @@ env_vars:
 env_detect:
   composer: opensearch-project/opensearch-php
 connection_url: http://127.0.0.1:9201
+category: search
+icon: search

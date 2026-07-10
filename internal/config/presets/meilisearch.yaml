@@ -15,3 +15,5 @@ dashboard: http://localhost:7700
 env_vars:
   - SCOUT_DRIVER=meilisearch
   - MEILISEARCH_HOST=http://lerd-meilisearch:7700
+category: search
+icon: search

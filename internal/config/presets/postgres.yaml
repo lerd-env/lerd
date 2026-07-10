@@ -39,3 +39,5 @@ client_shims:
   - pg_dump
   - pg_dumpall
   - pg_restore
+category: databases
+icon: elephant

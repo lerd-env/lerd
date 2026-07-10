@@ -163,6 +163,32 @@ enables `innodb_large_prefix`, `Barracuda`, `innodb_default_row_format=DYNAMIC`
 this lets stock Laravel migrations run on every supported version without
 needing `Schema::defaultStringLength(191)` in `AppServiceProvider`.
 
+## Discovery metadata
+
+A preset declares how it appears in the web UI, so adding one to the store
+never requires a change to lerd itself:
+
+```yaml
+category: admin       # discovery section: databases, cache, messaging, search,
+                      # mail, admin, storage, testing, other
+icon: search          # key in the UI icon set
+admin_for:            # the services this preset's UI administers
+  - opensearch
+```
+
+`admin_for` is not `depends_on`. `depends_on` orders container startup, while
+`admin_for` says which services a UI can administer. phpMyAdmin declares
+`admin_for: [mysql, mariadb]` but only depends on `mysql`, and RedisInsight
+declares `admin_for: [redis, valkey]` while never depending on Valkey.
+
+lerd matches `admin_for` against the **preset a service was installed from**, so
+a versioned member like `mariadb-11-8` still resolves to `mariadb`. A service the
+list names gets its admin UI suggested on its service page, and its dashboard
+button opens that UI once it is installed.
+
+An unrecognised `category` falls back to `other` and an unrecognised `icon` to a
+generic glyph, so a preset written for a newer lerd degrades rather than breaks.
+
 ## Service families and admin UI auto-discovery
 
 A preset can declare a `family:` so admin UIs can find every member with one

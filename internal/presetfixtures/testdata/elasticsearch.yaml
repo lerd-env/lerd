@@ -25,3 +25,5 @@ env_vars:
 env_detect:
   composer: elasticsearch/elasticsearch
 connection_url: http://127.0.0.1:9200
+category: search
+icon: search

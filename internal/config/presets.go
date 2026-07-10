@@ -84,6 +84,9 @@ type PresetMeta struct {
 	Image          string          `json:"image"`
 	Versions       []PresetVersion `json:"versions,omitempty"`
 	DefaultVersion string          `json:"default_version,omitempty"`
+	Category       string          `json:"category,omitempty"`
+	Icon           string          `json:"icon,omitempty"`
+	AdminFor       []string        `json:"admin_for,omitempty"`
 }
 
 // ListPresets returns the metadata for all bundled service presets, sorted by
@@ -111,6 +114,9 @@ func ListPresets() ([]PresetMeta, error) {
 			Image:          image,
 			Versions:       p.Versions,
 			DefaultVersion: p.DefaultVersion,
+			Category:       p.Category,
+			Icon:           p.Icon,
+			AdminFor:       p.AdminFor,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

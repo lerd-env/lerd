@@ -2,6 +2,7 @@ package config
 
 import (
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -11,24 +12,25 @@ func TestListPresets_IncludesShippedPresets(t *testing.T) {
 		t.Fatalf("ListPresets() error = %v", err)
 	}
 	want := map[string]bool{
-		"phpmyadmin":          false,
-		"pgadmin":             false,
-		"mongo":               false,
-		"mongo-express":       false,
-		"selenium":            false,
-		"stripe-mock":         false,
-		"mysql":               false,
-		"memcached":           false,
-		"rabbitmq":            false,
-		"elasticsearch":       false,
-		"elasticvue":          false,
-		"typesense":           false,
-		"typesense-dashboard": false,
-		"valkey":              false,
-		"soketi":              false,
-		"opensearch":          false,
-		"redisinsight":        false,
-		"beanstalkd":          false,
+		"phpmyadmin":            false,
+		"pgadmin":               false,
+		"mongo":                 false,
+		"mongo-express":         false,
+		"selenium":              false,
+		"stripe-mock":           false,
+		"mysql":                 false,
+		"memcached":             false,
+		"rabbitmq":              false,
+		"elasticsearch":         false,
+		"elasticvue":            false,
+		"typesense":             false,
+		"typesense-dashboard":   false,
+		"valkey":                false,
+		"soketi":                false,
+		"opensearch":            false,
+		"opensearch-dashboards": false,
+		"redisinsight":          false,
+		"beanstalkd":            false,
 	}
 	for _, p := range presets {
 		if _, ok := want[p.Name]; ok {
@@ -569,6 +571,94 @@ func TestLoadPreset_OpenSearch(t *testing.T) {
 	}
 	if p.Default {
 		t.Errorf("opensearch is an opt-in add-on preset and must not be default")
+	}
+}
+
+// A preset declares its own discovery metadata, so adding one to the store
+// never requires editing a name-keyed map in the UI.
+func TestListPresets_CarriesDiscoveryMetadata(t *testing.T) {
+	// readPresetBytes prefers the machine's fetched store cache over the test
+	// fixtures, so point XDG_DATA_HOME at an empty dir and drop the parse memo.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	presetCache = sync.Map{}
+	t.Cleanup(func() { presetCache = sync.Map{} })
+
+	presets, err := ListPresets()
+	if err != nil {
+		t.Fatalf("ListPresets() error = %v", err)
+	}
+	byName := map[string]PresetMeta{}
+	for _, p := range presets {
+		byName[p.Name] = p
+	}
+	for _, name := range []string{"mysql", "redis", "opensearch", "opensearch-dashboards"} {
+		p, ok := byName[name]
+		if !ok {
+			t.Fatalf("ListPresets() missing %q", name)
+		}
+		if p.Category == "" {
+			t.Errorf("%s must declare a category so the UI can group it without a hardcoded map", name)
+		}
+		if p.Icon == "" {
+			t.Errorf("%s must declare an icon so the UI can draw it without a hardcoded map", name)
+		}
+	}
+	// admin_for is what an admin UI administers, which is not depends_on:
+	// phpMyAdmin starts after mysql but administers mariadb too, and
+	// RedisInsight administers valkey without ever depending on it.
+	if got := byName["phpmyadmin"].AdminFor; len(got) != 2 || got[0] != "mysql" || got[1] != "mariadb" {
+		t.Errorf("phpmyadmin must declare admin_for [mysql mariadb], got %v", got)
+	}
+	if got := byName["redisinsight"].AdminFor; len(got) != 2 || got[0] != "redis" || got[1] != "valkey" {
+		t.Errorf("redisinsight must declare admin_for [redis valkey], got %v", got)
+	}
+	if got := byName["opensearch-dashboards"].AdminFor; len(got) != 1 || got[0] != "opensearch" {
+		t.Errorf("opensearch-dashboards must declare admin_for [opensearch], got %v", got)
+	}
+	if got := byName["opensearch"].AdminFor; len(got) != 0 {
+		t.Errorf("a plain engine preset administers nothing, got admin_for %v", got)
+	}
+}
+
+// imageTag returns the tag portion of an OCI reference, or "" if untagged.
+func imageTag(image string) string {
+	i := strings.LastIndex(image, ":")
+	if i < 0 || strings.Contains(image[i+1:], "/") {
+		return ""
+	}
+	return image[i+1:]
+}
+
+func TestLoadPreset_OpenSearchDashboards(t *testing.T) {
+	p, err := LoadPreset("opensearch-dashboards")
+	if err != nil {
+		t.Fatalf("LoadPreset(opensearch-dashboards) error = %v", err)
+	}
+	if len(p.DependsOn) != 1 || p.DependsOn[0] != "opensearch" {
+		t.Errorf("opensearch-dashboards should depend on opensearch, got %v", p.DependsOn)
+	}
+	if p.Dashboard == "" {
+		t.Errorf("opensearch-dashboards must expose its UI as dashboard")
+	}
+	// Reaches the engine over the podman network on 9200; the 9201 publish is
+	// a host-side shift to dodge elasticsearch and must not leak in here.
+	if got := p.Environment["OPENSEARCH_HOSTS"]; got != `["http://lerd-opensearch:9200"]` {
+		t.Errorf("opensearch-dashboards must point at the lerd OpenSearch container via OPENSEARCH_HOSTS, got %q", got)
+	}
+	if p.Environment["DISABLE_SECURITY_DASHBOARDS_PLUGIN"] != "true" {
+		t.Errorf("opensearch-dashboards must disable its security plugin to match the engine preset, got %q", p.Environment["DISABLE_SECURITY_DASHBOARDS_PLUGIN"])
+	}
+	// Dashboards refuses to talk to an engine on a different version, so the
+	// two image tags have to be bumped together.
+	engine, err := LoadPreset("opensearch")
+	if err != nil {
+		t.Fatalf("LoadPreset(opensearch) error = %v", err)
+	}
+	if imageTag(p.Image) != imageTag(engine.Image) {
+		t.Errorf("opensearch-dashboards %q must be pinned to the opensearch engine tag %q", p.Image, engine.Image)
+	}
+	if p.Default {
+		t.Errorf("opensearch-dashboards is an opt-in add-on preset and must not be default")
 	}
 }
 

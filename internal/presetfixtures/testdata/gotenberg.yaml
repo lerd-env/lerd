@@ -8,3 +8,5 @@ env_vars:
   - GOTENBERG_URL=http://lerd-gotenberg:3000
 env_detect:
   composer: spatie/laravel-pdf
+category: mail
+icon: mail

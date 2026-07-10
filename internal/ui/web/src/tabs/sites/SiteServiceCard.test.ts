@@ -8,7 +8,12 @@ vi.mock('$stores/dashboard', () => ({
   openServiceDashboard: (s: unknown) => openServiceDashboard(s)
 }));
 
-const phpmyadmin = { name: 'phpmyadmin', status: 'active', dashboard: 'http://localhost:8080' };
+const phpmyadmin = {
+  name: 'phpmyadmin',
+  status: 'active',
+  dashboard: 'http://localhost:8080',
+  admin_for: ['mysql', 'mariadb']
+};
 
 describe('SiteServiceCard', () => {
   beforeEach(() => {
@@ -72,11 +77,11 @@ describe('SiteServiceCard', () => {
     expect(openServiceDashboard).toHaveBeenCalledWith(expect.objectContaining({ name: 'phpmyadmin' }));
   });
 
-  // A MariaDB service reaches phpMyAdmin through the mysql family, matched on
-  // its connection_url rather than its name.
-  it('resolves the admin tool through the service family', () => {
+  // A versioned MariaDB reaches phpMyAdmin because phpMyAdmin declares
+  // admin_for mariadb, matched against the preset the service came from.
+  it('resolves the admin tool through the preset a versioned service came from', () => {
     services.set([
-      { name: 'mariadb-11-8', status: 'active', connection_url: 'mysql://localhost' },
+      { name: 'mariadb-11-8', status: 'active', preset: 'mariadb' },
       phpmyadmin
     ] as never);
     const { getByLabelText } = render(SiteServiceCard, { props: { name: 'mariadb-11-8' } });

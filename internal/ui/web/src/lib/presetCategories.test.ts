@@ -1,55 +1,65 @@
 import { describe, it, expect } from 'vitest';
-import { categoryOf, groupByCategory, CATEGORY_ORDER, CATEGORY_LABELS } from './presetCategories';
+import {
+  categoryOf,
+  asCategory,
+  groupByCategory,
+  CATEGORY_ORDER,
+  CATEGORY_LABELS
+} from './presetCategories';
 import type { Preset } from '$stores/presets';
 
-function p(name: string): Preset {
-  return { name } as Preset;
+function p(name: string, category: string): Preset {
+  return { name, category } as Preset;
 }
 
 describe('categoryOf', () => {
-  it('maps known presets to their category', () => {
-    expect(categoryOf('mysql')).toBe('databases');
-    expect(categoryOf('redis')).toBe('cache');
-    expect(categoryOf('typesense')).toBe('search');
-    expect(categoryOf('mailpit')).toBe('mail');
-    expect(categoryOf('pgadmin')).toBe('admin');
-    expect(categoryOf('rustfs')).toBe('storage');
-    expect(categoryOf('selenium')).toBe('testing');
+  it('reads the category the preset declares', () => {
+    expect(categoryOf(p('mysql', 'databases'))).toBe('databases');
+    expect(categoryOf(p('redis', 'cache'))).toBe('cache');
+    expect(categoryOf(p('opensearch-dashboards', 'admin'))).toBe('admin');
   });
 
-  it('maps the newer presets that landed on main', () => {
-    expect(categoryOf('opensearch')).toBe('search');
-    expect(categoryOf('redisinsight')).toBe('admin');
-    expect(categoryOf('beanstalkd')).toBe('messaging');
-    expect(categoryOf('soketi')).toBe('messaging');
-    // rabbitmq moved out of cache into the messaging bucket
-    expect(categoryOf('rabbitmq')).toBe('messaging');
+  it('returns other when a preset declares nothing', () => {
+    expect(categoryOf({ name: 'totally-new-thing' } as Preset)).toBe('other');
   });
 
-  it('falls back to the family prefix for versioned variants', () => {
-    expect(categoryOf('postgres-17')).toBe('databases');
-    expect(categoryOf('mysql-5-7')).toBe('databases');
+  // A store preset from a newer schema than this build must not break the grid.
+  it('returns other for a category this build has no section for', () => {
+    expect(categoryOf(p('from-the-future', 'quantum'))).toBe('other');
   });
+});
 
-  it('returns other for unknown presets', () => {
-    expect(categoryOf('totally-new-thing')).toBe('other');
+describe('asCategory', () => {
+  it('passes through a known category and rejects anything else', () => {
+    expect(asCategory('storage')).toBe('storage');
+    expect(asCategory('nonsense')).toBe('other');
+    expect(asCategory(undefined)).toBe('other');
   });
 });
 
 describe('groupByCategory', () => {
   it('groups presets and only returns non-empty categories in order', () => {
-    const groups = groupByCategory([p('redis'), p('mysql'), p('mongo'), p('mailpit')]);
+    const groups = groupByCategory([
+      p('redis', 'cache'),
+      p('mysql', 'databases'),
+      p('mongo', 'databases'),
+      p('mailpit', 'mail')
+    ]);
     expect(groups.map((g) => g.key)).toEqual(['databases', 'cache', 'mail']);
     expect(groups[0].presets.map((x) => x.name)).toEqual(['mongo', 'mysql']);
   });
 
   it('sorts presets alphabetically within a category', () => {
-    const groups = groupByCategory([p('valkey'), p('memcached'), p('redis')]);
+    const groups = groupByCategory([
+      p('valkey', 'cache'),
+      p('memcached', 'cache'),
+      p('redis', 'cache')
+    ]);
     expect(groups[0].presets.map((x) => x.name)).toEqual(['memcached', 'redis', 'valkey']);
   });
 
   it('keeps the global category order regardless of input order', () => {
-    const groups = groupByCategory([p('selenium'), p('mysql')]);
+    const groups = groupByCategory([p('selenium', 'testing'), p('mysql', 'databases')]);
     const idxDb = CATEGORY_ORDER.indexOf('databases');
     const idxTest = CATEGORY_ORDER.indexOf('testing');
     expect(idxDb).toBeLessThan(idxTest);
@@ -57,8 +67,17 @@ describe('groupByCategory', () => {
   });
 
   it('orders the messaging bucket between cache and search', () => {
-    const groups = groupByCategory([p('opensearch'), p('soketi'), p('redis')]);
+    const groups = groupByCategory([
+      p('opensearch', 'search'),
+      p('soketi', 'messaging'),
+      p('redis', 'cache')
+    ]);
     expect(groups.map((g) => g.key)).toEqual(['cache', 'messaging', 'search']);
+  });
+
+  it('buckets an undeclared preset into other rather than dropping it', () => {
+    const groups = groupByCategory([{ name: 'mystery' } as Preset]);
+    expect(groups.map((g) => g.key)).toEqual(['other']);
   });
 
   it('returns an empty list for no presets', () => {

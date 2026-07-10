@@ -1,0 +1,19 @@
+name: opensearch-dashboards
+image: docker.io/opensearchproject/opensearch-dashboards:2.19.5
+description: OpenSearch Dashboards web UI for the lerd OpenSearch service
+ports:
+  - "8086:5601"
+environment:
+  # The image expects a JSON array, and the opensearch preset publishes on
+  # 9201 only on the host; container-to-container it is still 9200.
+  OPENSEARCH_HOSTS: '["http://lerd-opensearch:9200"]'
+  # Matches DISABLE_SECURITY_PLUGIN on the opensearch preset; without this the
+  # dashboard boots expecting TLS and a demo admin user.
+  DISABLE_SECURITY_DASHBOARDS_PLUGIN: "true"
+depends_on:
+  - opensearch
+dashboard: http://localhost:8086
+category: admin
+icon: search
+admin_for:
+  - opensearch
