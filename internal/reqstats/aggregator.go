@@ -210,13 +210,17 @@ func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 		if base > 0 {
 			mult = tail / base
 		}
+		// vals is already bounded to the recent window, so the route's p95 over it is
+		// its recent p95; both fields carry it rather than leaving one at zero.
 		st.Slow = append(st.Slow, RouteStat{
-			Route:      route,
-			Method:     r.method,
-			Example:    r.example,
-			P95Millis:  round1(tail),
-			Multiplier: round1(mult),
-			Samples:    len(vals),
+			Route:           route,
+			Method:          r.method,
+			Example:         r.example,
+			P50Millis:       round1(median(vals)),
+			P95Millis:       round1(tail),
+			RecentP95Millis: round1(tail),
+			Multiplier:      round1(mult),
+			Samples:         len(vals),
 		})
 	}
 	sort.Slice(st.Slow, func(i, j int) bool { return st.Slow[i].Multiplier > st.Slow[j].Multiplier })
