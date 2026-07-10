@@ -2,16 +2,18 @@ package podman
 
 import "testing"
 
-// TestBundledExtensionsCoverContainerfile guards the invariant that broke in
-// #837: every extension the FPM Containerfile installs via docker-php-ext-install
-// must be listed in BundledExtensions, so `lerd park` warns accurately about what
-// a project's composer.json needs. Reuses the FPM parser from the parity test.
+// TestBundledExtensionsCoverContainerfile checks one direction: every extension
+// the FPM Containerfile installs or enables (docker-php-ext-install + the pecl
+// docker-php-ext-enable names) is listed in BundledExtensions, so adding one to
+// the image and forgetting the list is caught. This is NOT the #837 direction
+// (BundledExtensions claiming a name nothing installs); that unverifiable core
+// group is guarded by the php -m check in base-images.yml (#856).
 func TestBundledExtensionsCoverContainerfile(t *testing.T) {
 	cf, err := GetQuadletTemplate("lerd-php-fpm.Containerfile")
 	if err != nil {
 		t.Fatalf("reading FPM Containerfile: %v", err)
 	}
-	installed := fpmDockerExtInstallList(cf)
+	installed := fpmContainerfileExtensions(cf)
 	if len(installed) < 10 {
 		t.Fatalf("parsed only %d extensions, parser likely broke: %v", len(installed), installed)
 	}
