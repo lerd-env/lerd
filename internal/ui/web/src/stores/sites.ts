@@ -7,6 +7,9 @@ export interface FrameworkWorker {
   label?: string;
   running?: boolean;
   failing?: boolean;
+  // Process is up but its server isn't accepting connections. Distinct from
+  // failing (systemd failed); rendered as its own state, not folded into it.
+  unreachable?: boolean;
 }
 
 export interface Site {
