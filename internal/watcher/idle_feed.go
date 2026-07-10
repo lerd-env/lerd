@@ -182,10 +182,7 @@ var siteForHost = resolveHostToSite
 // the slow-route notifier and the doctor: a wake's inflated time must not trip
 // them, while the store still records it (marked cold, excluded from its timing).
 func ingestAccessRecord(rec reqstats.AccessRecord) {
-	// Skip requests nginx served without the app: a static-asset extension, or a
-	// zero request time, which is nginx answering a static file directly
-	// (manifest.json, robots.txt, service workers) rather than PHP.
-	appServed := !reqstats.IsStaticAsset(rec.URI) && rec.SecondsToMillis() > 0
+	appServed := reqstats.IsAppRequest(rec.Status, rec.URI, rec.SecondsToMillis())
 	site, resolved := siteForHost(rec.Host)
 	cold := false
 	if appServed && resolved {

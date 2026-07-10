@@ -41,6 +41,21 @@ func IsStaticAsset(rawURI string) bool {
 	return staticAssetExts[strings.ToLower(path[dot+1:])]
 }
 
+// statusSwitchingProtocols is the status nginx logs for an upgraded connection.
+// A WebSocket is logged once, when it closes, carrying the socket's whole
+// lifetime as its request time rather than any work the app did.
+const statusSwitchingProtocols = 101
+
+// IsAppRequest reports whether an access-log line represents a request the app
+// actually served, and so belongs in the request-timing view. Every reader and
+// writer of the timing data filters through it, so they agree on what counts.
+func IsAppRequest(status int, rawURI string, millis float64) bool {
+	if status == statusSwitchingProtocols {
+		return false
+	}
+	return !IsStaticAsset(rawURI) && millis > 0
+}
+
 // NormalizeRoute turns a method and raw request URI into a stable route key by
 // dropping the query string and collapsing id-like path segments to ":id", so
 // "/users/123" and "/users/456" aggregate as one route. Dropping the query also
