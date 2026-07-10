@@ -21,10 +21,10 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/grouping"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
+	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/spf13/cobra"
 )
 
@@ -151,22 +151,47 @@ func splitHostContainerPort(mapping string) (host, container string, ok bool) {
 // projectDBName returns a safe database name for the project at path.
 // It uses the registered site name, falling back to the directory name,
 // converting hyphens to underscores.
-func projectDBName(path string) string {
-	name := filepath.Base(path)
-	if reg, err := config.LoadSites(); err == nil {
-		for _, s := range reg.Sites {
-			if s.Path == path {
-				// A shared-DB group secondary uses the group main's database, so
-				// env setup must not reset it to the secondary's own slug.
-				if shared, ok := grouping.SharedDBNameFor(&s); ok {
-					return shared
-				}
-				name = s.Name
-				break
-			}
-		}
+func projectDBName(path string) string { return sitetpl.DBName(path) }
+
+// emptyEnvFile returns the seed contents for a freshly created env file. A PHP
+// format needs a parseable skeleton so the app can require() it before lerd has
+// written any keys into it.
+func emptyEnvFile(envFormat string) []byte {
+	switch envFormat {
+	case "php-array":
+		return []byte("<?php\nreturn [];\n")
+	case "php-const":
+		return []byte("<?php\n")
+	default:
+		return []byte("")
 	}
-	return config.SiteSlug(name)
+}
+
+// frameworkManagesEnv reports whether the project's framework declares an env
+// section. Link and setup call `lerd env` unconditionally; for a framework that
+// keeps its config elsewhere (Magento) that is an expected no-op, not a failure
+// worth printing twice.
+func frameworkManagesEnv(cwd string) bool {
+	name, ok := config.DetectFrameworkForDir(cwd)
+	if !ok {
+		return true // unknown framework: let runEnv decide as before
+	}
+	fw, ok := config.GetFrameworkForDir(name, cwd)
+	if !ok {
+		return true
+	}
+	return fw.HasEnvConfig()
+}
+
+// runEnvIfManaged runs fn only when the framework manages an env file, warning
+// on a real failure. Frameworks with no env section are skipped silently.
+func runEnvIfManaged(cwd string, fn func() error) {
+	if !frameworkManagesEnv(cwd) {
+		return
+	}
+	if err := fn(); err != nil {
+		feedback.Warn("lerd env: %v", err)
+	}
 }
 
 // NewEnvCmd returns the env command.
@@ -366,13 +391,14 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				return fmt.Errorf("copying %s: %w", exampleRelPath, err)
 			}
 		} else if len(fw.Env.Services) > 0 {
-			// No env or example file, but framework defines services — create
-			// an empty env file so service detection can populate it.
+			// No env or example file, but framework defines services — create an
+			// empty env file so service detection can populate it. A PHP format
+			// needs a parseable skeleton, not a zero-byte file.
 			if dir := filepath.Dir(envPath); dir != "." {
 				_ = os.MkdirAll(dir, 0755)
 			}
 			envInfo("Creating empty %s (no example file found)...\n", envRelPath)
-			if err := os.WriteFile(envPath, []byte(""), 0644); err != nil {
+			if err := os.WriteFile(envPath, emptyEnvFile(envFormat), 0644); err != nil {
 				return fmt.Errorf("creating %s: %w", envRelPath, err)
 			}
 		} else {
@@ -402,6 +428,8 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	switch envFormat {
 	case "php-const":
 		envMap, err = envfile.ReadPhpConst(envPath)
+	case "php-array":
+		envMap, err = envfile.ReadPhpArray(envPath)
 	default:
 		envMap, err = parseEnvMap(envPath)
 	}
@@ -776,11 +804,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	//    1. .lerd.yaml `app_url` — committed, shared across machines
 	//    2. sites.yaml `app_url` — per-machine override
 	//    3. <scheme>://<primary-domain> default generator
+	// `url_key: none` opts out: Magento keeps its base URL in the database, not
+	// in env.php, so writing an APP_URL there would just be litter.
 	urlKey := fw.Env.URLKey
 	if urlKey == "" {
 		urlKey = "APP_URL"
 	}
-	if url := resolveAppURL(cwd, site); url != "" {
+	if url := resolveAppURL(cwd, site); url != "" && !strings.EqualFold(urlKey, "none") {
 		updates[urlKey] = url
 		envInfo("  Setting %s=%s\n", urlKey, url)
 	}
@@ -810,6 +840,8 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		switch envFormat {
 		case "php-const":
 			writeErr = envfile.ApplyPhpConstUpdates(envPath, updates)
+		case "php-array":
+			writeErr = envfile.ApplyPhpArrayUpdates(envPath, updates)
 		default:
 			writeErr = envfile.ApplyUpdates(envPath, updates)
 		}
@@ -871,11 +903,13 @@ var worktreeDBConnectionKeys = []string{"DB_CONNECTION", "DB_HOST", "DB_PORT", "
 // next sync), and ApplyUpdates no-ops when nothing changed.
 //
 // Scoped to the dotenv format: the connection keys are Laravel-style and
-// php-const frameworks use a different writer and key set, so they are left to
-// their own env detection. envRelPath is the framework-resolved env file path so
-// a worktree of a framework whose env file isn't ".env" is still targeted.
+// Scoped to the dotenv format: the connection keys are Laravel-style, and the
+// php-const / php-array formats use a different writer and key set, so they are
+// left to their own env detection. envRelPath is the framework-resolved env file
+// path so a worktree of a framework whose env file isn't ".env" is still targeted.
 func alignWorktreeEnvDBConnection(site *config.Site, mainEnvPath, envRelPath, envFormat string) {
-	if site == nil || envFormat == "php-const" {
+	// Empty means the caller never resolved a format, which is dotenv.
+	if site == nil || (envFormat != "" && envFormat != "dotenv") {
 		return
 	}
 	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
@@ -1184,25 +1218,12 @@ type siteTemplateCtx struct {
 // applySiteHandle replaces {{site}}, {{site_testing}}, {{bucket}}, {{domain}},
 // {{scheme}}, and service version placeholders (e.g. {{mysql_version}}) in s.
 func applySiteHandle(s string, ctx siteTemplateCtx) string {
-	s = strings.ReplaceAll(s, "{{site}}", ctx.site)
-	s = strings.ReplaceAll(s, "{{site_testing}}", ctx.site+"_testing")
-	if ctx.bucket != "" {
-		s = strings.ReplaceAll(s, "{{bucket}}", ctx.bucket)
-	}
-	if ctx.domain != "" {
-		s = strings.ReplaceAll(s, "{{domain}}", ctx.domain)
-	}
-	if ctx.scheme != "" {
-		s = strings.ReplaceAll(s, "{{scheme}}", ctx.scheme)
-	}
-	// Lazy-resolve service version placeholders only when present.
-	for _, svc := range []string{"mysql", "postgres", "redis", "meilisearch"} {
-		placeholder := "{{" + svc + "_version}}"
-		if strings.Contains(s, placeholder) {
-			s = strings.ReplaceAll(s, placeholder, podman.ServiceVersion("lerd-"+svc))
-		}
-	}
-	return s
+	return sitetpl.Apply(s, sitetpl.Ctx{
+		Site:   ctx.site,
+		Bucket: ctx.bucket,
+		Domain: ctx.domain,
+		Scheme: ctx.scheme,
+	})
 }
 
 // runSiteInit executes the site_init.exec command inside the service container.

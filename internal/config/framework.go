@@ -376,6 +376,17 @@ type FrameworkEnvConf struct {
 	KeyGeneration *EnvKeyGeneration `yaml:"key_generation,omitempty"`
 }
 
+// HasEnvConfig reports whether the framework manages an env file at all. A
+// framework that keeps its config elsewhere (Magento's app/etc/env.php) declares
+// no env section, so `lerd env` and the doctor's env checks must skip it.
+func (f *Framework) HasEnvConfig() bool {
+	if f == nil {
+		return false
+	}
+	e := f.Env
+	return e.File != "" || e.FallbackFile != "" || e.ExampleFile != "" || e.KeyGeneration != nil || len(e.Services) > 0
+}
+
 // EnvKeyGeneration describes how to generate an application encryption key.
 type EnvKeyGeneration struct {
 	EnvKey         string `yaml:"env_key"`                   // env var to check/set (e.g. "APP_KEY")

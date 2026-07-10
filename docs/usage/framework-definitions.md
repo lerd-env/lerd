@@ -39,7 +39,7 @@ The `env` section in a framework definition controls how `lerd env` works:
 env:
   file: .env                        # primary env file
   example_file: .env.example        # copied to file if missing
-  format: dotenv                    # dotenv | php-const
+  format: dotenv                    # dotenv | php-const | php-array
   fallback_file: wp-config.php      # used when file doesn't exist
   fallback_format: php-const        # format for fallback_file
   url_key: APP_URL                  # env key holding the app URL
@@ -64,6 +64,16 @@ env:
         - DB_USERNAME=root
         - DB_PASSWORD=lerd
 ```
+
+### Env file formats
+
+| Format | Shape | Key syntax |
+|---|---|---|
+| `dotenv` | `KEY=value` lines | `DB_HOST` |
+| `php-const` | `define('KEY', 'value')` calls, as in WordPress's `wp-config.php` | `DB_HOST` |
+| `php-array` | a PHP file that `return`s a nested array, as in Magento's `app/etc/env.php` | dotted path, `db.connection.default.host` |
+
+The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento.
 
 ## YAML schema
 
@@ -90,10 +100,12 @@ detect:
 env:
   file: .env.local
   example_file: .env
-  format: dotenv                  # dotenv | php-const
+  format: dotenv                  # dotenv | php-const | php-array
   fallback_file: settings.php     # used when file doesn't exist (optional)
   fallback_format: php-const
-  url_key: DEFAULT_URI            # env key holding the app URL (default: APP_URL)
+  url_key: DEFAULT_URI            # env key holding the app URL (default: APP_URL;
+                                  # `none` opts out for frameworks that keep the
+                                  # base URL elsewhere, e.g. Magento's database)
   vars:                           # unconditional env defaults, always applied (optional)
     - "CI_ENVIRONMENT=development" # e.g. force CodeIgniter into dev mode for local work
   key_generation:                 # application key generation (optional)
@@ -124,7 +136,9 @@ env:
 # Scaffold command for "lerd new"
 create: composer create-project symfony/skeleton
 
-# Dependency installation
+# Dependency installation. `false` means the framework never uses that package
+# manager, and `lerd setup` does not offer its steps at all. Magento and Drupal
+# set npm: false; WordPress sets both to false.
 composer: auto                    # auto | true | false
 npm: auto
 
@@ -178,12 +192,51 @@ setup:
     default: true
     check:
       composer: doctrine/doctrine-migrations-bundle  # skipped if package not installed
+  - label: "Install the app"                         # placeholders work here too
+    command: "bin/install --url={{scheme}}://{{domain}}/ --db={{site}}"
 
 # Application log files shown in the UI "App Logs" tab
 logs:
   - path: "var/log/*.log"             # glob relative to project root
     format: raw                       # monolog | raw (plain text, default)
+
+# Extra nginx config spliced into the site's server block (optional)
+nginx:
+  snippet: |
+    location /static/ {
+      try_files $uri $uri/ /static.php?$args;
+    }
 ```
+
+## Site placeholders
+
+The `{{site}}`, `{{site_testing}}`, `{{bucket}}`, `{{domain}}`, `{{scheme}}`, and `{{<service>_version}}` placeholders listed above are expanded in three places: the `env.services` vars, every `setup:` command, and every `commands:` entry. They resolve against the registered site the command runs for. A git worktree is not a registered site, so a command run against one resolves `{{site}}` but leaves `{{domain}}` and `{{scheme}}` alone.
+
+This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`.
+
+A placeholder whose value is empty, or one lerd does not recognise, is left in the command verbatim rather than being replaced with an empty string, so a half-resolved context can never quietly produce `--base-url=://`.
+
+## Framework nginx config
+
+Most frameworks route every request through a single front controller, which lerd's generic `location /` already handles. A few need paths that the generic rules would otherwise swallow: Magento keeps `setup/` outside the document root and generates `/static/` and `/media/` on demand through `pub/static.php` and `pub/get.php`.
+
+The optional `nginx.snippet` is raw nginx config, spliced into the site's server block **before** lerd's `location /` and `location ~ \.php$`. Placement matters, because nginx picks the first matching regex location in declaration order, so a framework block always gets first refusal on the paths it claims.
+
+Three placeholders are expanded before the config is written:
+
+| Placeholder | Expands to |
+|---|---|
+| `{{root}}` | the project root |
+| `{{public}}` | the document root (project root joined with `public_dir`) |
+| `{{fpm}}` | the site's PHP-FPM container name |
+
+A snippet that passes requests to PHP should assign `{{fpm}}` to a variable first, `set $myfpm "{{fpm}}";` then `fastcgi_pass $myfpm:9000;`, exactly as the generated vhost does. nginx resolves a literal upstream name once when the config loads and caches it for the life of the process, so a container that comes back on a new address is never picked up.
+
+The snippet must have balanced braces, since an unbalanced one would close the enclosing `server` block and start declaring its own. Balance alone is not enough, because a `}` followed by a `server {` still balances, so the values substituted into the placeholders are rejected too if they contain `{`, `}`, `;`, `#`, or a newline. A snippet failing either check is dropped and the site renders without it, rather than risking an nginx config that fails to load for every site.
+
+Snippets are only honoured from the framework store and from user-defined definitions: an embedded `framework_def` in a project's `.lerd.yaml` is untrusted input, so its `nginx` block is stripped, the same way its host workers and command-type doctor checks are.
+
+This is distinct from the per-site [nginx override](nginx-overrides.md) in `custom.d/`, which you author yourself and which is included at the *end* of the server block. Use the framework snippet for what every site of that framework needs; use the override for what one site needs.
 
 ## Framework detection
 

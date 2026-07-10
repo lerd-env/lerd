@@ -1228,16 +1228,9 @@ func detectServicesHeuristic(envFilePath, envFormat string) []string {
 }
 
 // makeEnvReader returns a function that reads a single key from the env file,
-// handling both dotenv and php-const formats.
+// handling the dotenv, php-const, and php-array formats.
 func makeEnvReader(envFilePath, envFormat string) func(key string) string {
-	if envFormat == "php-const" {
-		values, err := envfile.ReadPhpConst(envFilePath)
-		if err != nil {
-			return func(string) string { return "" }
-		}
-		return func(key string) string { return values[key] }
-	}
-	return func(key string) string { return envfile.ReadKey(envFilePath, key) }
+	return envfile.Reader(envFilePath, envFormat)
 }
 
 // runSetupInit is called by lerd setup as its first step. It runs the init
@@ -1259,9 +1252,7 @@ func runSetupInit(cwd string, skipWizard bool) error {
 		if err := runLink([]string{}); err != nil {
 			return err
 		}
-		if err := runEnv(nil, nil); err != nil {
-			feedback.Warn("lerd env: %v", err)
-		}
+		runEnvIfManaged(cwd, func() error { return runEnv(nil, nil) })
 		return nil
 	}
 
@@ -1347,14 +1338,10 @@ func applyProjectConfig(cwd string) error {
 func applyEnvStep(cwd string) {
 	envApplied = true
 	if !feedback.Interactive() {
-		if err := runEnv(nil, nil); err != nil {
-			feedback.Warn("lerd env: %v", err)
-		}
+		runEnvIfManaged(cwd, func() error { return runEnv(nil, nil) })
 		return
 	}
-	if err := runEnvLive(nil, nil); err != nil {
-		feedback.Warn("lerd env: %v", err)
-	}
+	runEnvIfManaged(cwd, func() error { return runEnvLive(nil, nil) })
 }
 
 // runCapturingStdout redirects os.Stdout to a pipe for the duration of fn and

@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/spf13/cobra"
 )
 
@@ -88,7 +89,7 @@ func resolveCommandsForCwd(cwd string) []config.FrameworkCommand {
 			fw, _ = config.GetFrameworkForDir(name, root)
 		}
 	}
-	return config.ResolveCommands(fw, proj, root)
+	return sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, root), sitetpl.ForPath(root))
 }
 
 func listCommands(cmds []config.FrameworkCommand) error {
