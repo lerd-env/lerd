@@ -12,3 +12,5 @@ env_vars:
 env_detect:
   composer: pda/pheanstalk
 connection_url: beanstalkd://127.0.0.1:11300
+category: messaging
+icon: queue

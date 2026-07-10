@@ -19,3 +19,5 @@ env_vars:
   - MAIL_USERNAME=null
   - MAIL_PASSWORD=null
   - MAIL_ENCRYPTION=null
+category: mail
+icon: mail

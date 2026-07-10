@@ -40,6 +40,14 @@ export interface Service {
   pinned?: boolean;
   paused?: boolean;
   depends_on?: string[];
+  // Resolved from the service's preset YAML, so a service predating these
+  // fields still renders with the right category and icon.
+  category?: string;
+  icon?: string;
+  admin_for?: string[];
+  // The preset this service came from ("mariadb" for "mariadb-11-8"), matched
+  // against another preset's admin_for to find the UI that administers it.
+  preset?: string;
   queue_site?: string;
   stripe_listener_site?: string;
   schedule_worker_site?: string;

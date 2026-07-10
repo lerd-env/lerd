@@ -22,7 +22,7 @@
 {#snippet plusIcon()}<Icon name="plus" class="w-4 h-4" />{/snippet}
 
 <ServiceCardShell>
-  <ServiceIcon name={preset.name} {category} />
+  <ServiceIcon name={preset.name} category={category ?? preset.category} icon={preset.icon} />
   <div class="min-w-0 flex-1">
     <div class="text-sm font-semibold text-gray-900 dark:text-white truncate" title={serviceLabel(preset.name)}>{serviceLabel(preset.name)}</div>
     {#if preset.error}

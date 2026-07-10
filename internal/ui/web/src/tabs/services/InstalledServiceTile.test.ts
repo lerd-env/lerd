@@ -9,10 +9,22 @@ vi.mock('$stores/dashboard', () => ({
 }));
 
 function svc(over: Partial<Service> = {}): Service {
-  return { name: 'mysql', status: 'inactive', site_count: 0, ...over } as Service;
+  return {
+    name: 'mysql',
+    status: 'inactive',
+    site_count: 0,
+    category: 'databases',
+    icon: 'database',
+    ...over
+  } as Service;
 }
 
-const phpmyadmin = { name: 'phpmyadmin', status: 'active', dashboard: 'http://localhost:8080' };
+const phpmyadmin = {
+  name: 'phpmyadmin',
+  status: 'active',
+  dashboard: 'http://localhost:8080',
+  admin_for: ['mysql', 'mariadb']
+};
 
 describe('InstalledServiceTile', () => {
   beforeEach(() => {

@@ -24,3 +24,5 @@ env_vars:
 env_detect:
   composer: pusher/pusher-php-server
 connection_url: http://127.0.0.1:6001
+category: messaging
+icon: broadcast

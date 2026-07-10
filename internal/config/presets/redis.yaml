@@ -18,3 +18,5 @@ env_vars:
 connection_url: redis://127.0.0.1:6379
 client_shims:
   - redis-cli
+category: cache
+icon: bolt
