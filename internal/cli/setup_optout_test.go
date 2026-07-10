@@ -73,3 +73,30 @@ func TestHasEnvConfig(t *testing.T) {
 		t.Error("env.fallback_file should count")
 	}
 }
+
+// A service preset's env_vars are dotenv keys. When the framework already maps
+// that service (Magento wires opensearch through dotted php-array paths), the
+// preset's keys must not be layered on top, or env.php grows a meaningless
+// top-level OPENSEARCH_HOST beside the keys the framework just wrote.
+func TestFrameworkMapsService(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Services: map[string]config.FrameworkServiceDef{
+			"mysql":      {Vars: []string{"db.connection.default.host=lerd-mysql"}},
+			"opensearch": {Vars: []string{"system.default.catalog.search.engine=opensearch"}},
+		},
+	}}
+	for _, name := range []string{"mysql", "opensearch"} {
+		if !frameworkMapsService(fw, name) {
+			t.Errorf("framework maps %q but frameworkMapsService said no", name)
+		}
+	}
+	if frameworkMapsService(fw, "mailpit") {
+		t.Error("mailpit is not mapped by this framework")
+	}
+	if frameworkMapsService(nil, "mysql") {
+		t.Error("nil framework maps nothing")
+	}
+	if frameworkMapsService(&config.Framework{}, "mysql") {
+		t.Error("framework with no env section maps nothing")
+	}
+}

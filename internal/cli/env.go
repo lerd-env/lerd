@@ -153,6 +153,17 @@ func splitHostContainerPort(mapping string) (host, container string, ok bool) {
 // converting hyphens to underscores.
 func projectDBName(path string) string { return sitetpl.DBName(path) }
 
+// frameworkMapsService reports whether the framework definition declares its own
+// env wiring for the named service, in which case a service preset's generic
+// env_vars must not be written on top of it.
+func frameworkMapsService(fw *config.Framework, name string) bool {
+	if fw == nil {
+		return false
+	}
+	_, ok := fw.Env.Services[name]
+	return ok
+}
+
 // emptyEnvFile returns the seed contents for a freshly created env file. A PHP
 // format needs a parseable skeleton so the app can require() it before lerd has
 // written any keys into it.
@@ -728,6 +739,17 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 		}
 		if !pickedFromYAML && !detectedFromEnv {
+			continue
+		}
+		// The framework's own mapping for this service wins. A preset's env_vars
+		// are dotenv keys (OPENSEARCH_HOST=...), meaningless in a php-array env
+		// file, and they would sit alongside the keys the framework just wrote.
+		if frameworkMapsService(fw, svc.Name) {
+			if !extServices[svc.Name] {
+				if err := ensureServiceRunning(svc.Name); err != nil {
+					feedback.Warn("could not start %s: %v", svc.Name, err)
+				}
+			}
 			continue
 		}
 		if len(svc.EnvVars) == 0 {
