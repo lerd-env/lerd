@@ -37,6 +37,40 @@ func TestAggregatorSkipsAssetsAndZeroTime(t *testing.T) {
 	}
 }
 
+// Every flagged route carries its own median, not a zero. The live snapshot is
+// what route_timing and optimize_route serve, so a zero p50 there reads to a
+// caller as a route that is normally instant.
+func TestSnapshotPopulatesRoutePercentiles(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/home", 40, 20)
+	// A route that is usually fast but has a heavy tail: p50 and p95 must differ.
+	recordN(a, "myapp.test", "GET", "/reports/7", 50, 15)
+	recordN(a, "myapp.test", "GET", "/reports/7", 3000, 5)
+
+	snap, ok := a.SiteSnapshot("myapp")
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if len(snap.Slow) == 0 {
+		t.Fatal("expected the reports route to be flagged")
+	}
+	r := snap.Slow[0]
+	if r.P50Millis != 50 {
+		t.Errorf("p50 = %v, want 50 (the route's median, not zero)", r.P50Millis)
+	}
+	if r.P95Millis < 1000 {
+		t.Errorf("p95 = %v, want the heavy tail", r.P95Millis)
+	}
+	if r.P50Millis >= r.P95Millis {
+		t.Errorf("p50 %v must sit below p95 %v", r.P50Millis, r.P95Millis)
+	}
+	// The live window is already bounded to the recent window, so its p95 is the
+	// recent p95. Reporting zero would understate a route that is still slow.
+	if r.RecentP95Millis != r.P95Millis {
+		t.Errorf("recent p95 = %v, want %v (the window is already recent)", r.RecentP95Millis, r.P95Millis)
+	}
+}
+
 func TestAggregatorFlagsOutlier(t *testing.T) {
 	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
 	recordN(a, "myapp.test", "GET", "/home", 40, 20)
