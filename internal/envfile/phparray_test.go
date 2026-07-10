@@ -107,6 +107,24 @@ return array(
 	}
 }
 
+// A `return` sitting inside a string literal before the real return statement
+// must not be mistaken for it, or the scanner parses the wrong value.
+func TestReadPhpArraySkipsReturnInsideString(t *testing.T) {
+	src := `<?php
+$note = 'remember to return the array';
+return [
+    'db' => ['host' => 'localhost'],
+];
+`
+	got, err := ReadPhpArray(writeTemp(t, src))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got["db.host"] != "localhost" {
+		t.Fatalf("scanner matched a return inside a string: %v", got)
+	}
+}
+
 func TestReadPhpArrayMissingOrEmptyFile(t *testing.T) {
 	if _, err := ReadPhpArray(filepath.Join(t.TempDir(), "nope.php")); err == nil {
 		t.Error("missing file should error")
