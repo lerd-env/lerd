@@ -106,6 +106,52 @@ func TestExpandNginxSnippetRejectsHostileValues(t *testing.T) {
 	}
 }
 
+// A snippet dropped because a substituted value carries nginx syntax (here a
+// project path with a metacharacter) must warn, not vanish silently.
+func TestFrameworkNginxBlockWarnsOnDrop(t *testing.T) {
+	snippet := "location /a/ {\n    root {{root}};\n}"
+
+	var buf bytes.Buffer
+	if got := frameworkNginxBlock(&buf, "magento", "shop.test", snippet, "/home/u/a;b", "pub", "fpm"); got != "" {
+		t.Fatalf("hostile path should be dropped, got %q", got)
+	}
+	if !strings.Contains(buf.String(), "[WARN]") || !strings.Contains(buf.String(), "shop.test") {
+		t.Fatalf("drop was silent: %q", buf.String())
+	}
+
+	// A clean snippet expands and stays quiet.
+	buf.Reset()
+	if got := frameworkNginxBlock(&buf, "magento", "shop.test", snippet, "/home/u/a", "pub", "fpm"); got == "" {
+		t.Fatal("valid snippet was dropped")
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("valid snippet warned: %q", buf.String())
+	}
+	// An empty snippet is the common case: no output, no block.
+	buf.Reset()
+	if got := frameworkNginxBlock(&buf, "laravel", "app.test", "  ", "/p", "public", "fpm"); got != "" || buf.Len() != 0 {
+		t.Fatalf("empty snippet: got %q, warned %q", got, buf.String())
+	}
+}
+
+// A dropped-snippet warning reaches the user once per process, so `lerd link`
+// shows the reason while the watcher does not repeat it on every regeneration.
+func TestEmitOnceDedupes(t *testing.T) {
+	var buf bytes.Buffer
+	msg := "[WARN] dropping magento nginx config for emitonce-unique.test: bad\n"
+	emitOnce(&buf, msg)
+	emitOnce(&buf, msg)
+	if strings.Count(buf.String(), "emitonce-unique.test") != 1 {
+		t.Fatalf("want one emission, got %q", buf.String())
+	}
+	// A different reason still surfaces; an empty message never emits.
+	emitOnce(&buf, "[WARN] dropping magento nginx config for emitonce-unique.test: other\n")
+	emitOnce(&buf, "")
+	if strings.Count(buf.String(), "emitonce-unique.test") != 2 {
+		t.Fatalf("distinct reason or empty msg mishandled: %q", buf.String())
+	}
+}
+
 // The framework block must land inside the server block and BEFORE the generic
 // `location /` and `location ~ \.php$`, since nginx picks the first matching
 // regex location in declaration order.

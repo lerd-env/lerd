@@ -79,6 +79,9 @@ func fpmContainerForDir(dir, version string) string {
 // SPX_ENABLED so a CLI command is profiled.
 func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error) {
 	recordCwdActivity(cwd) // keep the site awake under idle-suspend while you work in the terminal
+	// The CLI SAPI ignores a project's .user.ini, so a framework declaring
+	// php.cli_ini gets it as -d on every PHP process lerd starts for it.
+	args = prependPHPIniArgs(phpIniArgsForDir(cwd), args)
 	version, err := phpDet.DetectVersion(cwd)
 	if err != nil {
 		cfg, cfgErr := config.LoadGlobal()

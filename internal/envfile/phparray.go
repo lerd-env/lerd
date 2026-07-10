@@ -242,7 +242,15 @@ func parsePhpReturn(src string) (*phpValue, error) {
 			p.skipTrivia()
 			return p.parseValue()
 		}
-		p.pos++
+		// Step over a string literal whole, so a `return` sitting inside one is
+		// never mistaken for the statement. skipTrivia already ate comments.
+		if c := p.src[p.pos]; c == '\'' || c == '"' {
+			if _, err := p.parseString(); err != nil {
+				return nil, err
+			}
+		} else {
+			p.pos++
+		}
 		p.skipTrivia()
 	}
 	return nil, nil
