@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"strings"
 	"testing"
@@ -256,6 +257,44 @@ func TestHandleWorkspaceLayoutRejectsADuplicateName(t *testing.T) {
 	}
 	if got := cfg.WorkspaceNames(); !reflect.DeepEqual(got, []string{"Keep"}) {
 		t.Errorf("a rejected layout changed the config: %v", got)
+	}
+}
+
+// When the registry write fails the config goes back and the caller hears why
+// the reorder failed, not why the restore did or didn't.
+func TestHandleWorkspaceLayoutRollsBackAndReportsTheReorderError(t *testing.T) {
+	workspaceEnv(t)
+	if err := config.AddSite(config.Site{Name: "one", Path: t.TempDir(), Domains: []string{"one.test"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorkspaceLayout([]config.Workspace{{Name: "Before", Sites: []string{"one"}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Make sites.yaml unwritable so ReorderSites fails after the config write.
+	if err := os.Chmod(config.DataDir(), 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(config.DataDir(), 0o755) })
+
+	body := workspaceLayoutRequest{
+		Workspaces: []WorkspaceResponse{{Name: "After", Sites: []string{"one"}}},
+		SiteOrder:  []string{"one"},
+	}
+	rec := postWorkspace(t, http.MethodPut, "/api/workspaces/layout", body)
+	if strings.Contains(rec.Body.String(), `"ok":true`) {
+		t.Fatalf("expected a failure, got %s", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "permission denied") {
+		t.Errorf("expected the reorder error, got %s", rec.Body.String())
+	}
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.WorkspaceNames(); !reflect.DeepEqual(got, []string{"Before"}) {
+		t.Errorf("names = %v, want the pre-write layout [Before]", got)
 	}
 }
 

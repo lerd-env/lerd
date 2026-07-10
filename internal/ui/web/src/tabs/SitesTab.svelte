@@ -82,6 +82,12 @@
     return s.workspace && wsOrder.includes(s.workspace) ? s.workspace : UNGROUPED;
   }
 
+  // A section's zone holds only its mains, so counting zone items would hide the
+  // group secondaries drawn under them. Count the sites instead.
+  function countIn(key: string, list: Site[]): number {
+    return list.filter((s) => s.workspace === key).length;
+  }
+
   // Active secondaries whose main isn't active (e.g. the main is paused) render
   // on their own below the sections so they never disappear.
   const orphanSecondaries = $derived.by(() => {
@@ -177,13 +183,17 @@
     dragStarted = false;
     dragDisabled = false;
     rowDragActive = true;
+    // Only one of the two fires, so each removes the other: {once:true} alone
+    // would leave the sibling bound to the window for the life of the page.
     const settle = () => {
+      window.removeEventListener('mouseup', settle);
+      window.removeEventListener('touchend', settle);
       if (dragStarted) return; // a real drag ends on finalize instead
       dragDisabled = true;
       rowDragActive = false;
     };
-    window.addEventListener('mouseup', settle, { once: true });
-    window.addEventListener('touchend', settle, { once: true });
+    window.addEventListener('mouseup', settle);
+    window.addEventListener('touchend', settle);
     // svelte-dnd-action only attaches its drag listener while enabled; flush the
     // state change now so the listener catches this same press as it bubbles up.
     flushSync();
@@ -253,28 +263,33 @@
     persistHeaderDrop();
   }
 
-  // The workspace list implied by the current zones. Sites that never appear in
-  // a zone (paused, orphan secondaries) keep the membership the server gave
-  // them, so a drag never silently ungroups them.
+  // The workspace list implied by the current zones. Only a main's membership is
+  // stored: a secondary displays in its main's workspace, so listing it too
+  // would be state nothing reads and that goes stale the day the group is
+  // dissolved. Sites that never appear in a zone (paused, orphan secondaries)
+  // keep the membership the server gave them, so a drag never silently ungroups
+  // them.
   function layoutFromZones(order: string[]): WorkspaceLayoutEntry[] {
-    const all = get(sites);
     const moved = new Map<string, string>();
     for (const key of [...order, UNGROUPED]) {
       const workspace = key === UNGROUPED ? '' : key;
       for (const item of zones[key] ?? []) {
         if (item.site.name) moved.set(item.site.name, workspace);
-        for (const sec of secondariesOf(all, item.site)) {
-          if (sec.name) moved.set(sec.name, workspace);
-        }
       }
     }
     const members = new Map<string, string[]>(order.map((n) => [n, []]));
-    for (const s of all) {
-      if (!s.name) continue;
-      const workspace = moved.has(s.name) ? moved.get(s.name)! : (s.workspace ?? '');
-      members.get(workspace)?.push(s.name);
+    for (const s of get(sites)) {
+      if (!s.name || s.group_subdomain) continue;
+      members.get(moved.get(s.name) ?? s.workspace ?? '')?.push(s.name);
     }
     return order.map((name) => ({ name, sites: members.get(name) ?? [] }));
+  }
+
+  // The workspace a site displays under, given a layout about to be persisted.
+  // Mirrors the server's rule so the optimistic update matches the push.
+  function displayWorkspace(s: Site, workspaceOf: Map<string, string>): string {
+    const owner = s.group_subdomain ? s.group : s.name;
+    return (owner && workspaceOf.get(owner)) || '';
   }
 
   // The flat registry order implied by the current zones: sections top to
@@ -317,7 +332,7 @@
 
     savingLayout = true;
     sitesSort.set('manual'); // dragging is what enables manual ordering
-    sites.set(ordered.map((s) => ({ ...s, workspace: s.name ? (workspaceOf.get(s.name) ?? '') : '' })));
+    sites.set(ordered.map((s) => ({ ...s, workspace: displayWorkspace(s, workspaceOf) })));
 
     const order = ordered.map((s) => s.name).filter((n): n is string => Boolean(n));
     const res = await saveWorkspaceLayout(layout, order);
@@ -381,9 +396,11 @@
     if (!res.ok) console.error('rename workspace failed:', res.error);
   }
 
+  // Every member is ungrouped by a delete, paused ones included, so the count in
+  // the confirmation is drawn from the whole list rather than the visible rows.
   function removeWorkspace(key: string) {
     menuKey = null;
-    openWorkspaceDeleteModal({ name: key, siteCount: zones[key]?.length ?? 0 });
+    openWorkspaceDeleteModal({ name: key, siteCount: countIn(key, $sites) });
   }
 
   // ── sort menu ───────────────────────────────────────────────────────────────
@@ -659,7 +676,7 @@
   {:else}
     <SitesSectionHeader
       label={key}
-      count={zones[key]?.length ?? 0}
+      count={countIn(key, active)}
       collapsed={isCollapsed(key)}
       ontoggle={() => toggleWorkspaceCollapse(key)}
       draggable={canReorder && wsOrder.length > 1}

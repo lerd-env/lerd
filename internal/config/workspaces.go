@@ -18,6 +18,7 @@ var (
 	ErrWorkspaceName     = errors.New("workspace name cannot be empty")
 	ErrWorkspaceExists   = errors.New("workspace already exists")
 	ErrWorkspaceNotFound = errors.New("workspace not found")
+	ErrWorkspaceReserved = errors.New(`"none" is reserved for the ungrouped sites`)
 )
 
 type Workspace struct {
@@ -25,9 +26,11 @@ type Workspace struct {
 	Sites []string `yaml:"sites,omitempty" mapstructure:"sites"`
 }
 
-// globalWriteMu serializes every read-modify-write of config.yaml, the way
-// siteWriteMu does for the registry. Without it two concurrent workspace
-// mutations (a UI drag and a CLI assign) would clobber each other.
+// globalWriteMu serializes the read-modify-write cycles below within one
+// process, so two workspace mutations racing inside lerd-ui cannot clobber each
+// other. It is not a cross-process lock: a CLI write landing between this
+// process's read and write still wins, as it does for every other config.yaml
+// writer.
 var globalWriteMu sync.Mutex
 
 // WorkspaceNames returns the workspace names in display order, empty ones included.
@@ -80,10 +83,15 @@ func (c *GlobalConfig) workspaceIndex(name string) int {
 	return -1
 }
 
+// cleanWorkspaceName trims and rejects the names a workspace may not take.
+// "none" is the CLI's ungroup sentinel and the picker's ungrouped label.
 func cleanWorkspaceName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return "", ErrWorkspaceName
+	}
+	if strings.EqualFold(name, "none") {
+		return "", ErrWorkspaceReserved
 	}
 	return name, nil
 }
@@ -240,7 +248,8 @@ func (c *GlobalConfig) setWorkspaceLayout(layout []Workspace) error {
 }
 
 // mutateGlobal runs fn against the on-disk config under the write lock and
-// saves the result. Every exported workspace mutator goes through it.
+// saves the result. Every exported workspace mutator goes through it. fn
+// returning errNoWorkspaceChange skips the write and reports success.
 func mutateGlobal(fn func(*GlobalConfig) error) error {
 	globalWriteMu.Lock()
 	defer globalWriteMu.Unlock()
@@ -249,6 +258,9 @@ func mutateGlobal(fn func(*GlobalConfig) error) error {
 		return err
 	}
 	if err := fn(cfg); err != nil {
+		if errors.Is(err, errNoWorkspaceChange) {
+			return nil
+		}
 		return err
 	}
 	return SaveGlobal(cfg)
@@ -273,8 +285,9 @@ func DeleteWorkspace(name string) error {
 	})
 }
 
-// AssignSiteWorkspace moves sites in one write, so a group main and its
-// secondaries land together. An empty workspace ungroups them.
+// AssignSiteWorkspace moves the named sites in a single write. An empty
+// workspace ungroups them. Only a site's own membership is ever stored; a group
+// secondary is never listed, it displays under its main.
 func AssignSiteWorkspace(sites []string, workspace string, create bool) error {
 	return mutateGlobal(func(c *GlobalConfig) error { return c.assignSites(sites, workspace, create) })
 }
@@ -287,8 +300,34 @@ func SetWorkspaceLayout(layout []Workspace) error {
 	return mutateGlobal(func(c *GlobalConfig) error { return c.setWorkspaceLayout(layout) })
 }
 
-// ListWorkspaces returns the configured workspaces with names of unlinked sites
-// dropped. The pruning is a read-time view; config.yaml is left alone.
+// SetWorkspaceLayoutWith builds the new layout from the workspaces as they are
+// on disk, under the write lock. A caller merging a client's layout must use
+// this rather than reading the config first: a workspace created between that
+// read and the write would otherwise be dropped.
+func SetWorkspaceLayoutWith(fn func(current []Workspace) []Workspace) error {
+	return mutateGlobal(func(c *GlobalConfig) error { return c.setWorkspaceLayout(fn(c.Workspaces)) })
+}
+
+// RemoveSiteFromWorkspaces drops an unlinked site's membership. Without it a
+// stale name lingers and a different project relinked under it inherits the
+// workspace.
+func RemoveSiteFromWorkspaces(site string) error {
+	return mutateGlobal(func(c *GlobalConfig) error {
+		if c.WorkspaceOfSite(site) == "" {
+			return errNoWorkspaceChange
+		}
+		return c.assignSites([]string{site}, "", false)
+	})
+}
+
+// errNoWorkspaceChange short-circuits mutateGlobal so a no-op never rewrites
+// config.yaml. It never reaches a caller.
+var errNoWorkspaceChange = errors.New("no workspace change")
+
+// ListWorkspaces returns the configured workspaces, dropping the names of sites
+// that are no longer linked and of group secondaries, which display in their
+// main's workspace and hold no membership of their own. The pruning is a
+// read-time view; config.yaml is left alone.
 func ListWorkspaces() ([]Workspace, error) {
 	cfg, err := LoadGlobal()
 	if err != nil {
@@ -300,7 +339,7 @@ func ListWorkspaces() ([]Workspace, error) {
 	}
 	valid := make(map[string]bool, len(reg.Sites))
 	for _, s := range reg.Sites {
-		valid[s.Name] = true
+		valid[s.Name] = s.GroupSubdomain == ""
 	}
 	cfg.pruneWorkspaceSites(valid)
 	return cfg.Workspaces, nil

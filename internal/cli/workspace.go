@@ -125,6 +125,9 @@ func runWorkspaceAssign(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if site.GroupSubdomain != "" {
+		return fmt.Errorf("%s is a group secondary and shows in its main's workspace; assign %s instead", site.Name, site.Group)
+	}
 	workspace := strings.TrimSpace(args[1])
 	if strings.EqualFold(workspace, "none") {
 		workspace = ""
@@ -166,15 +169,41 @@ func runWorkspaceList(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	grouped := map[string]bool{}
+	// Only a main's membership is stored, so a secondary is printed under
+	// whichever workspace its main landed in, the way the sidebar draws it.
+	secondaries := map[string][]string{}
+	for _, s := range reg.Sites {
+		if s.GroupSubdomain != "" {
+			secondaries[s.Group] = append(secondaries[s.Group], s.Name)
+		}
+	}
+	printSite := func(name string) {
+		fmt.Printf("  %s\n", name)
+		for _, sec := range secondaries[name] {
+			fmt.Printf("    %s\n", sec)
+		}
+	}
+
+	shown := map[string]bool{}
 	for _, ws := range workspaces {
 		for _, name := range ws.Sites {
-			grouped[name] = true
+			shown[name] = true
+			for _, sec := range secondaries[name] {
+				shown[sec] = true
+			}
 		}
+	}
+	known := map[string]bool{}
+	for _, s := range reg.Sites {
+		known[s.Name] = true
 	}
 	var ungrouped []string
 	for _, s := range reg.Sites {
-		if !grouped[s.Name] {
+		if shown[s.Name] {
+			continue
+		}
+		// A secondary prints under its main, unless that main is gone.
+		if s.GroupSubdomain == "" || !known[s.Group] {
 			ungrouped = append(ungrouped, s.Name)
 		}
 	}
@@ -185,13 +214,13 @@ func runWorkspaceList(_ *cobra.Command, _ []string) error {
 	for _, ws := range workspaces {
 		fmt.Println(ws.Name)
 		for _, name := range ws.Sites {
-			fmt.Printf("  %s\n", name)
+			printSite(name)
 		}
 	}
 	if len(ungrouped) > 0 {
 		fmt.Println("Ungrouped")
 		for _, name := range ungrouped {
-			fmt.Printf("  %s\n", name)
+			printSite(name)
 		}
 	}
 	return nil

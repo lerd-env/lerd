@@ -21,13 +21,20 @@ describe('ConfirmWorkspaceDeleteModal', () => {
     const { getByText } = render(ConfirmWorkspaceDeleteModal);
     expect(getByText('Delete "Client Work"?')).toBeTruthy();
     expect(getByText(/stay linked and become ungrouped/)).toBeTruthy();
-    expect(getByText('2 sites will become ungrouped.')).toBeTruthy();
+    expect(getByText('Sites affected: 2')).toBeTruthy();
+  });
+
+  // The count reads the same for one site as for many, so it needs no plural.
+  it('states the count for a single site', () => {
+    openWorkspaceDeleteModal({ name: 'Client Work', siteCount: 1 });
+    const { getByText } = render(ConfirmWorkspaceDeleteModal);
+    expect(getByText('Sites affected: 1')).toBeTruthy();
   });
 
   it('omits the site count for an empty workspace', () => {
     openWorkspaceDeleteModal({ name: 'Empty', siteCount: 0 });
     const { queryByText } = render(ConfirmWorkspaceDeleteModal);
-    expect(queryByText(/will become ungrouped\./)).toBeNull();
+    expect(queryByText(/Sites affected/)).toBeNull();
   });
 
   it('deletes nothing and closes when cancelled', async () => {

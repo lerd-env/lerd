@@ -211,6 +211,90 @@ describe('SitesTab workspace sections', () => {
     expect(layout).toEqual([{ name: 'Client Work', sites: ['a', 'b'] }]);
   });
 
+  // A secondary displays in its main's workspace and is never a zone item, so a
+  // count taken from the zone would miss it.
+  it('counts the group secondaries drawn under a main in the section header', () => {
+    setWorkspaces(['Client Work']);
+    sites.set([
+      site({ domain: 'astrolov.test', name: 'astrolov', workspace: 'Client Work', group: 'astrolov' }),
+      site({
+        domain: 'admin.astrolov.test',
+        name: 'admin',
+        workspace: 'Client Work',
+        group: 'astrolov',
+        group_subdomain: 'admin'
+      })
+    ]);
+    const { getByText } = render(SitesTab);
+    expect(getByText('Client Work').closest('button')?.textContent?.trim()).toMatch(/2$/);
+  });
+
+  // Deleting ungroups every member, paused ones included, so the confirmation
+  // has to count them rather than the rows on screen.
+  it('counts paused members when confirming a workspace delete', async () => {
+    setWorkspaces(['Client Work']);
+    sites.set([
+      site({ domain: 'a.test', name: 'a', workspace: 'Client Work' }),
+      site({ domain: 'old.test', name: 'old', workspace: 'Client Work', paused: true })
+    ]);
+    const { getByLabelText, getByText } = render(SitesTab);
+
+    await fireEvent.click(getByLabelText('Workspace actions'));
+    await fireEvent.click(getByText('Delete workspace'));
+
+    expect(get(modal)).toMatchObject({ workspaceDelete: { name: 'Client Work', siteCount: 2 } });
+    closeModal();
+  });
+
+  // Only a main's membership is stored. Listing a secondary too would be state
+  // nothing reads, and it would strand the site in a workspace the day its
+  // group is dissolved.
+  it('persists only the mains, never the group secondaries', async () => {
+    setWorkspaces(['Client Work']);
+    sites.set([
+      site({ domain: 'astrolov.test', name: 'astrolov', group: 'astrolov' }),
+      site({ domain: 'admin.astrolov.test', name: 'admin', group: 'astrolov', group_subdomain: 'admin' })
+    ]);
+    const { container } = render(SitesTab);
+    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('section'));
+
+    const detail = (items: unknown[]) => ({ items, info: { source: 'pointer', trigger: 'droppedIntoZone' } });
+    wsZone.dispatchEvent(
+      new CustomEvent('finalize', {
+        detail: detail([{ id: 'astrolov.test', site: { domain: 'astrolov.test', name: 'astrolov', group: 'astrolov' } }])
+      })
+    );
+    ungroupedZone.dispatchEvent(new CustomEvent('finalize', { detail: detail([]) }));
+
+    await vi.waitFor(() => expect(saveWorkspaceLayout).toHaveBeenCalledTimes(1));
+    const [layout] = saveWorkspaceLayout.mock.calls[0];
+    expect(layout).toEqual([{ name: 'Client Work', sites: ['astrolov'] }]);
+  });
+
+  // The optimistic update has to apply the server's rule, or the secondary
+  // flickers into the ungrouped list until the websocket push corrects it.
+  it('moves a secondary with its main in the optimistic update', async () => {
+    setWorkspaces(['Client Work']);
+    sites.set([
+      site({ domain: 'astrolov.test', name: 'astrolov', group: 'astrolov' }),
+      site({ domain: 'admin.astrolov.test', name: 'admin', group: 'astrolov', group_subdomain: 'admin' })
+    ]);
+    const { container } = render(SitesTab);
+    const [wsZone, ungroupedZone] = Array.from(container.querySelectorAll('section'));
+
+    const detail = (items: unknown[]) => ({ items, info: { source: 'pointer', trigger: 'droppedIntoZone' } });
+    wsZone.dispatchEvent(
+      new CustomEvent('finalize', {
+        detail: detail([{ id: 'astrolov.test', site: { domain: 'astrolov.test', name: 'astrolov', group: 'astrolov' } }])
+      })
+    );
+    ungroupedZone.dispatchEvent(new CustomEvent('finalize', { detail: detail([]) }));
+
+    await vi.waitFor(() => expect(saveWorkspaceLayout).toHaveBeenCalledTimes(1));
+    const admin = get(sites).find((s) => s.name === 'admin');
+    expect(admin?.workspace).toBe('Client Work');
+  });
+
   // The header is the drag target, so it must not carry a separate handle, and
   // clicking it still has to toggle the section rather than start a drag.
   it('drags workspace headers directly, with no grip and only when several exist', async () => {

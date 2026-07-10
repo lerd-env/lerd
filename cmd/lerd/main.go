@@ -1087,6 +1087,7 @@ func removeStale(_ *config.GlobalConfig) bool {
 			}
 			_ = nginx.RemoveVhost(s.PrimaryDomain())
 			_ = config.RemoveSite(s.Name)
+			_ = config.RemoveSiteFromWorkspaces(s.Name)
 			removed = true
 		}
 	}

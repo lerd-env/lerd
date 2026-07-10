@@ -698,16 +698,9 @@ func classifyService(s ServiceRow) serviceGroup {
 	}
 }
 
-// renderGroupedServiceRows interleaves dim section headers (Core / Custom
-// / Workers) into the service-row stream and reports the line index of
-// the focused service so the viewport keeps it visible. Cursor still
-// indexes the flat services slice unchanged — only the visual layout is
-// grouped, navigation never lands on a header.
 // renderGroupedSiteRows interleaves a header per workspace into the site-row
-// stream and reports the line index of the focused site so the viewport keeps
-// it visible. The cursor still indexes the flat sites slice, so navigation
-// never lands on a header. Sites in no workspace trail the sections with no
-// header of their own, matching the sidebar and the dashboard.
+// stream and reports the line index of the focused site. The cursor still
+// indexes the flat sites slice, so navigation never lands on a header.
 func renderGroupedSiteRows(sites []siteinfo.EnrichedSite, workspaces []config.Workspace, cursor int, paneFocused bool, contentW int) (rows []string, cursorLine int) {
 	of := siteWorkspaces(sites, workspaces)
 	rows = make([]string, 0, len(sites)+len(workspaces)*2)
@@ -736,6 +729,11 @@ func renderGroupedSiteRows(sites []siteinfo.EnrichedSite, workspaces []config.Wo
 	return rows, cursorLine
 }
 
+// renderGroupedServiceRows interleaves dim section headers (Core / Custom
+// / Workers) into the service-row stream and reports the line index of
+// the focused service so the viewport keeps it visible. Cursor still
+// indexes the flat services slice unchanged — only the visual layout is
+// grouped, navigation never lands on a header.
 func renderGroupedServiceRows(services []ServiceRow, cursor int, paneFocused bool, contentW int) (rows []string, cursorLine int) {
 	rows = make([]string, 0, len(services)+6)
 	currentGroup := serviceGroup(-1)

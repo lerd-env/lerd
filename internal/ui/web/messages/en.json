@@ -245,6 +245,7 @@
   "sites_emptyHint": "Run {cmd}",
   "sites_select": "Select a site",
   "sites_dash_overview": "Overview",
+  "sites_dash_otherFramework": "Other",
   "sites_paused": "Paused",
   "sites_reqstats_title": "Request timing",
   "sites_reqstats_typical": "Typical {ms} ms",
@@ -1053,6 +1054,6 @@
   "workspaces_expand": "Expand section",
   "workspaces_deleteTitle": "Delete \"{name}\"?",
   "workspaces_deleteBody": "The workspace is removed. Its sites stay linked and become ungrouped.",
-  "workspaces_deleteSiteCount": "{count} sites will become ungrouped.",
+  "workspaces_deleteSiteCount": "Sites affected: {count}",
   "dashboard_sites_pausedCount": "{count} paused"
 }

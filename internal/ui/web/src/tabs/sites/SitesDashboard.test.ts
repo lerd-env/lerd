@@ -68,12 +68,36 @@ describe('SitesDashboard', () => {
     expect(queryByText('Deleted')).toBeNull();
   });
 
-  it('renders a flat grid when no workspace is configured', () => {
-    sites.set([site({ domain: 'a.test' }), site({ domain: 'b.test' })]);
-    const { getByText, container } = render(SitesDashboard);
-    expect(getByText('a.test')).toBeTruthy();
-    expect(getByText('b.test')).toBeTruthy();
-    expect(container.querySelectorAll('h2').length).toBe(0);
+  // Without workspaces the overview keeps the framework grouping it has always
+  // had, so a user who never creates one loses no structure.
+  it('falls back to framework sections when no workspace is configured', () => {
+    sites.set([
+      site({ domain: 'a.test', framework_label: 'Laravel' }),
+      site({ domain: 'b.test', framework_label: 'Symfony' }),
+      site({ domain: 'c.test' })
+    ]);
+    const { getByRole, getByText } = render(SitesDashboard);
+    expect(getByRole('heading', { name: 'Laravel' })).toBeTruthy();
+    expect(getByRole('heading', { name: 'Symfony' })).toBeTruthy();
+    expect(getByRole('heading', { name: 'Other' })).toBeTruthy();
+    expect(getByText('c.test')).toBeTruthy();
+  });
+
+  // The unknown-framework bucket trails the named ones.
+  it('sorts the Other framework bucket last', () => {
+    sites.set([site({ domain: 'a.test' }), site({ domain: 'b.test', framework_label: 'Laravel' })]);
+    const { container } = render(SitesDashboard);
+    const headings = [...container.querySelectorAll('h2')].map((h) => h.textContent);
+    expect(headings).toEqual(['Laravel', 'Other']);
+  });
+
+  // Once a workspace exists the framework headings give way to it.
+  it('drops the framework headings as soon as a workspace exists', () => {
+    setWorkspaces(['Client Work']);
+    sites.set([site({ domain: 'a.test', workspace: 'Client Work', framework_label: 'Laravel' })]);
+    const { getByRole, queryByRole } = render(SitesDashboard);
+    expect(getByRole('heading', { name: 'Client Work' })).toBeTruthy();
+    expect(queryByRole('heading', { name: 'Laravel' })).toBeNull();
   });
 
   it('lists paused sites in their own section', () => {

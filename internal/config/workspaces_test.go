@@ -465,3 +465,123 @@ func TestListWorkspacesPrunesStaleSiteNames(t *testing.T) {
 		t.Error("ListWorkspaces rewrote the config on disk")
 	}
 }
+
+// A secondary displays in its main's workspace. An entry naming one is state
+// nothing reads, and it would strand the site the day its group is dissolved.
+func TestListWorkspacesDropsAGroupSecondary(t *testing.T) {
+	setConfigDir(t)
+	if err := SetWorkspaceLayout([]Workspace{{Name: "A", Sites: []string{"astrolov", "admin"}}}); err != nil {
+		t.Fatalf("SetWorkspaceLayout: %v", err)
+	}
+	if err := AddSite(Site{Name: "astrolov", Path: t.TempDir(), Domains: []string{"astrolov.test"}, Group: "astrolov"}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+	if err := AddSite(Site{
+		Name: "admin", Path: t.TempDir(), Domains: []string{"admin.astrolov.test"},
+		Group: "astrolov", GroupSubdomain: "admin",
+	}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	got, err := ListWorkspaces()
+	if err != nil {
+		t.Fatalf("ListWorkspaces: %v", err)
+	}
+	want := []Workspace{{Name: "A", Sites: []string{"astrolov"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ListWorkspaces() = %+v, want %+v", got, want)
+	}
+}
+
+// The layout callback must see the config as it is on disk at write time, not a
+// snapshot the caller read earlier, or a merge drops a workspace created in
+// between.
+func TestSetWorkspaceLayoutWithSeesTheOnDiskWorkspaces(t *testing.T) {
+	setConfigDir(t)
+	if err := SetWorkspaceLayout([]Workspace{{Name: "A", Sites: []string{"one"}}}); err != nil {
+		t.Fatalf("SetWorkspaceLayout: %v", err)
+	}
+
+	var seen []Workspace
+	err := SetWorkspaceLayoutWith(func(current []Workspace) []Workspace {
+		seen = current
+		return append(current, Workspace{Name: "B"})
+	})
+	if err != nil {
+		t.Fatalf("SetWorkspaceLayoutWith: %v", err)
+	}
+	if !reflect.DeepEqual(seen, []Workspace{{Name: "A", Sites: []string{"one"}}}) {
+		t.Errorf("callback saw %+v, want the on-disk workspaces", seen)
+	}
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if got := cfg.WorkspaceNames(); !reflect.DeepEqual(got, []string{"A", "B"}) {
+		t.Errorf("names = %v, want [A B]", got)
+	}
+}
+
+// A rejected layout leaves the config alone.
+func TestSetWorkspaceLayoutWithRejectsADuplicate(t *testing.T) {
+	setConfigDir(t)
+	if err := AddWorkspace("A"); err != nil {
+		t.Fatalf("AddWorkspace: %v", err)
+	}
+	err := SetWorkspaceLayoutWith(func([]Workspace) []Workspace {
+		return []Workspace{{Name: "B"}, {Name: "B"}}
+	})
+	if !errors.Is(err, ErrWorkspaceExists) {
+		t.Fatalf("err = %v, want ErrWorkspaceExists", err)
+	}
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if got := cfg.WorkspaceNames(); !reflect.DeepEqual(got, []string{"A"}) {
+		t.Errorf("a rejected layout changed the config: %v", got)
+	}
+}
+
+// Unlinking a site must drop its membership from disk, or relinking a different
+// project under the same name silently inherits the old workspace.
+func TestRemoveSiteFromWorkspacesPersists(t *testing.T) {
+	setConfigDir(t)
+	if err := SetWorkspaceLayout([]Workspace{
+		{Name: "A", Sites: []string{"blog", "shop"}},
+		{Name: "Empty"},
+	}); err != nil {
+		t.Fatalf("SetWorkspaceLayout: %v", err)
+	}
+
+	if err := RemoveSiteFromWorkspaces("blog"); err != nil {
+		t.Fatalf("RemoveSiteFromWorkspaces: %v", err)
+	}
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if got := cfg.Workspaces[0].Sites; !reflect.DeepEqual(got, []string{"shop"}) {
+		t.Errorf("A sites = %v, want [shop]", got)
+	}
+	if got := cfg.WorkspaceNames(); !reflect.DeepEqual(got, []string{"A", "Empty"}) {
+		t.Errorf("names = %v, want [A Empty]", got)
+	}
+}
+
+// Removing a site that is in no workspace must not rewrite anything.
+func TestRemoveSiteFromWorkspacesIgnoresAnUngroupedSite(t *testing.T) {
+	setConfigDir(t)
+	if err := RemoveSiteFromWorkspaces("never-grouped"); err != nil {
+		t.Fatalf("RemoveSiteFromWorkspaces: %v", err)
+	}
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if len(cfg.Workspaces) != 0 {
+		t.Errorf("workspaces = %+v, want none", cfg.Workspaces)
+	}
+}

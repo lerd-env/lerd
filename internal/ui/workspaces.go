@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -136,23 +137,26 @@ func handleWorkspaceRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// applyWorkspaceLayout writes the config first, then the registry order. If the
-// registry write fails the config is restored, so the client has a single
+// applyWorkspaceLayout writes the config first, then the registry order. The
+// merge runs inside the config write lock, against the workspaces as they are on
+// disk, so a workspace created between this request and the write survives. If
+// the registry write fails the config is restored, so the client has a single
 // failure to roll back rather than a half-applied pair.
 func applyWorkspaceLayout(req workspaceLayoutRequest) error {
-	prev, err := config.LoadGlobal()
+	var prev []config.Workspace
+	err := config.SetWorkspaceLayoutWith(func(current []config.Workspace) []config.Workspace {
+		prev = current
+		return mergeWorkspaceLayout(req.Workspaces, current)
+	})
 	if err != nil {
-		return err
-	}
-	if err := config.SetWorkspaceLayout(mergeWorkspaceLayout(req.Workspaces, prev.Workspaces)); err != nil {
 		return err
 	}
 	if len(req.SiteOrder) == 0 {
 		return nil
 	}
 	if err := config.ReorderSites(req.SiteOrder); err != nil {
-		if restoreErr := config.SetWorkspaceLayout(prev.Workspaces); restoreErr != nil {
-			return restoreErr
+		if restoreErr := config.SetWorkspaceLayout(prev); restoreErr != nil {
+			return fmt.Errorf("%w (restoring the workspace layout also failed: %v)", err, restoreErr)
 		}
 		return err
 	}

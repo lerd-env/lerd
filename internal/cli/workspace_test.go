@@ -152,6 +152,75 @@ func TestWorkspaceListShowsMembersAndUngrouped(t *testing.T) {
 	}
 }
 
+// addSecondary registers a group secondary of the given main.
+func addSecondary(t *testing.T, name, main string) {
+	t.Helper()
+	site := config.Site{
+		Name: name, Path: t.TempDir(), Domains: []string{name + "." + main + ".test"},
+		Group: main, GroupSubdomain: name,
+	}
+	if err := config.AddSite(site); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A secondary displays in its main's workspace, so it has no membership of its
+// own to set and assigning it directly would write state nothing ever reads.
+func TestWorkspaceAssignRejectsAGroupSecondary(t *testing.T) {
+	workspaceEnv(t)
+	addSecondary(t, "admin", "astrolov")
+	if err := runWorkspaceAdd(nil, []string{"Clients"}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := runWorkspaceAssign(nil, []string{"admin", "Clients"})
+	if err == nil || !strings.Contains(err.Error(), "astrolov") {
+		t.Fatalf("err = %v, want a pointer at the group main", err)
+	}
+	cfg, _ := config.LoadGlobal()
+	if got := cfg.WorkspaceOfSite("admin"); got != "" {
+		t.Errorf("admin was written into %q", got)
+	}
+}
+
+// "none" is the sentinel that ungroups a site, and the UI labels the ungrouped
+// option "None", so a workspace may not take the name.
+func TestWorkspaceAddRejectsTheReservedName(t *testing.T) {
+	workspaceEnv(t)
+	for _, name := range []string{"none", "None", " NONE "} {
+		if err := runWorkspaceAdd(nil, []string{name}); !errors.Is(err, config.ErrWorkspaceReserved) {
+			t.Errorf("add %q err = %v, want ErrWorkspaceReserved", name, err)
+		}
+	}
+}
+
+// A secondary is listed under its main's workspace, matching the sidebar.
+func TestWorkspaceListNestsSecondariesUnderTheirMain(t *testing.T) {
+	workspaceEnv(t)
+	addSecondary(t, "admin", "astrolov")
+	if err := runWorkspaceAdd(nil, []string{"Clients"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runWorkspaceAssign(nil, []string{"astrolov", "Clients"}); err != nil {
+		t.Fatal(err)
+	}
+
+	out := captureStdout(t, func() {
+		if err := runWorkspaceList(nil, nil); err != nil {
+			t.Errorf("list: %v", err)
+		}
+	})
+	clients := strings.Index(out, "Clients")
+	admin := strings.Index(out, "admin")
+	ungrouped := strings.Index(out, "Ungrouped")
+	if clients < 0 || admin < 0 || ungrouped < 0 {
+		t.Fatalf("list output missing a section:\n%s", out)
+	}
+	if !(clients < admin && admin < ungrouped) {
+		t.Errorf("admin should sit under Clients, not below Ungrouped:\n%s", out)
+	}
+}
+
 func TestWorkspaceListWithoutWorkspaces(t *testing.T) {
 	workspaceEnv(t)
 	out := captureStdout(t, func() {
