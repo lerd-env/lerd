@@ -171,6 +171,42 @@ func TestStoreRecentOrdersNewestFirst(t *testing.T) {
 	}
 }
 
+// Rows written before the ingest filter existed are still in the store, so both
+// read paths must drop WebSocket upgrades rather than report an hour-long socket
+// as the site's slowest route.
+func TestStoreExcludesWebSocketUpgrade(t *testing.T) {
+	s := tempStore(t)
+	seed(t, s, mk(4, 0, "app", "GET", "GET /home", "/home", 200, 40))
+	seed(t, s, mk(1, time.Hour, "app", "GET", "GET /app/key", "/app/key", 101, 3623181))
+
+	a, err := s.SiteAnalytics("app", base.Add(-time.Hour), base.Add(2*time.Hour))
+	if err != nil {
+		t.Fatalf("SiteAnalytics: %v", err)
+	}
+	if a.Samples != 4 {
+		t.Errorf("samples = %d, want 4 (the upgrade excluded)", a.Samples)
+	}
+	if len(a.Routes) != 1 {
+		t.Errorf("routes = %d, want 1: the upgrade must not become a route", len(a.Routes))
+	}
+	if a.P95Millis != 40 {
+		t.Errorf("p95 = %v, want 40 (undragged by the upgrade)", a.P95Millis)
+	}
+
+	recent, err := s.Recent("app", 10)
+	if err != nil {
+		t.Fatalf("Recent: %v", err)
+	}
+	if len(recent) != 4 {
+		t.Fatalf("recent = %d, want 4 (the upgrade excluded)", len(recent))
+	}
+	for _, r := range recent {
+		if r.Status == 101 {
+			t.Errorf("Recent returned a websocket upgrade: %+v", r)
+		}
+	}
+}
+
 func TestRecordFromNormalizes(t *testing.T) {
 	rec := RecordFrom(AccessRecord{
 		Host: "app.test", Status: 200, RequestTime: 0.15, Method: "get", URI: "/products/42?ref=x",
