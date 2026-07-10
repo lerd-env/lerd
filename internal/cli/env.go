@@ -179,9 +179,8 @@ func emptyEnvFile(envFormat string) []byte {
 }
 
 // frameworkManagesEnv reports whether the project's framework declares an env
-// section. Link and setup call `lerd env` unconditionally; for a framework that
-// keeps its config elsewhere (Magento) that is an expected no-op, not a failure
-// worth printing twice.
+// section. For a framework with no env section (a static or host-proxy app) the
+// unconditional `lerd env` in link and setup is an expected no-op, not a failure.
 func frameworkManagesEnv(cwd string) bool {
 	name, ok := config.DetectFrameworkForDir(cwd)
 	if !ok {

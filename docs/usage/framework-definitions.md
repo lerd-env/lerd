@@ -16,7 +16,7 @@ Lerd resolves framework definitions from multiple sources. Higher priority wins:
 Workers from the user overlay and project `.lerd.yaml` are merged on top of store or built-in definitions. See [Framework workers](framework-workers.md) for the worker lifecycle and how custom workers are added and managed.
 
 ::: warning Untrusted projects
-A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, and the whole `commands:` list are dropped, because each would otherwise run on your host straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
+A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, and `requires:` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
 
 A project's own host extensions still work, just with consent: a `host: true` entry in top-level `custom_workers`, and any top-level `commands:` you run via `lerd run` or the dashboard, prompt once showing the exact command before they run on your host, and the approval is remembered per site. Set `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them outright) in the global config to change that.
 :::
@@ -136,6 +136,12 @@ env:
 # Scaffold command for "lerd new"
 create: composer create-project symfony/skeleton
 
+# Service presets the framework cannot run without (optional). Link installs and
+# starts them and records them in .lerd.yaml, so a teammate cloning the repo gets
+# them too. The doctor fails when one is missing and warns when it is stopped.
+requires:
+  - opensearch
+
 # Dependency installation. `false` means the framework never uses that package
 # manager, and `lerd setup` does not offer its steps at all. Magento and Drupal
 # set npm: false; WordPress sets both to false.
@@ -215,6 +221,16 @@ The `{{site}}`, `{{site_testing}}`, `{{bucket}}`, `{{domain}}`, `{{scheme}}`, an
 This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`.
 
 A placeholder whose value is empty, or one lerd does not recognise, is left in the command verbatim rather than being replaced with an empty string, so a half-resolved context can never quietly produce `--base-url=://`.
+
+## Required services
+
+Most frameworks run against whatever services the project happens to reference. A few cannot start at all without one. Magento 2.4 removed the MySQL catalog search engine, so a store without OpenSearch or Elasticsearch fails partway through `setup:install` with a stack trace that never mentions the search engine.
+
+A definition lists those in `requires:`, naming service presets. On `lerd link` each one is resolved from the service store, installed if it is not already, started, and appended to the project's `.lerd.yaml` so the requirement travels with the repo. Re-linking does not duplicate an entry, and a name the service store does not know is reported and skipped rather than written into the project's committed config.
+
+The site doctor reports the same thing after the fact: a required service that is not installed is a failure, since the app cannot boot, and one that is installed but stopped is a warning, since starting it is a single command.
+
+A required service pulls an image and runs a container, so, like host workers and `nginx.snippet`, `requires:` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
 
 ## Framework nginx config
 

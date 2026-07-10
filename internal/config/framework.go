@@ -88,6 +88,10 @@ type Framework struct {
 	// Nginx, when set, declares extra server-block config the framework needs
 	// (Magento's /setup, /static, and /media handling). See FrameworkNginx.
 	Nginx *FrameworkNginx `yaml:"nginx,omitempty"`
+	// Requires names the service presets the framework cannot run without
+	// (Magento 2.4 has no MySQL catalog search engine, so it needs opensearch).
+	// Link installs and starts them; the doctor reports one that goes missing.
+	Requires []string `yaml:"requires,omitempty"`
 }
 
 // FrameworkNginx carries a raw nginx block spliced into the site's server block
@@ -389,8 +393,8 @@ type FrameworkEnvConf struct {
 }
 
 // HasEnvConfig reports whether the framework manages an env file at all. A
-// framework that keeps its config elsewhere (Magento's app/etc/env.php) declares
-// no env section, so `lerd env` and the doctor's env checks must skip it.
+// framework with no env section (a static or host-proxy app) is skipped by
+// `lerd env` and the doctor's env checks, not flagged for a file it never had.
 func (f *Framework) HasEnvConfig() bool {
 	if f == nil {
 		return false
@@ -1316,6 +1320,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	// An nginx snippet is spliced into the site's server block, so it is a
 	// config-injection surface: only the trusted store may declare one.
 	safe.Nginx = nil
+	// A required service pulls an image and starts a container, so an untrusted
+	// definition must not be able to drive that either.
+	safe.Requires = nil
 	return safe
 }
 
