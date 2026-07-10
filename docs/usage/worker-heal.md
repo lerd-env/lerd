@@ -13,6 +13,12 @@ Two common paths:
 
 The second case requires fixing the underlying error before heal will stick. Heal will start the unit, but if it crashes again it'll burn through the rate limit and re-enter `failed`. The dashboard banner will reappear; check the worker logs (`lerd worker logs <name>` or the dashboard logs pane) for the real cause.
 
+## Workers that run but stop serving
+
+A worker can keep its process alive after its server has died: a Vite dev server whose HTTP server crashes under `npm` while the Node process lingers. systemd still reports the unit active, so process liveness alone reads it as running when nothing is listening.
+
+A worker that declares a [`health` block](/usage/framework-workers) is probed for reachability instead. While its process is up, lerd reads the URL file the server writes on boot (Vite's `public/hot`) and dials its host and port; if nothing is accepting, the worker is reported **unreachable** and heal restarts it (a plain start is a no-op on a still-running unit). Workers with no `health` block keep the process-only check.
+
 ## CLI
 
 ```sh

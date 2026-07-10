@@ -369,6 +369,7 @@
             label={w.label || w.name}
             on={Boolean(w.running)}
             failing={Boolean(w.failing)}
+            unreachable={Boolean(w.unreachable)}
             loading={isPending('worker:' + w.name)}
             disabled={isPending('worker:' + w.name)}
             onclick={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w, activeWorktreeBranch))}
@@ -448,6 +449,7 @@
           on={Boolean(w.running)}
           asleep={asleepWorkers.has(w.name)}
           failing={Boolean(w.failing)}
+          unreachable={Boolean(w.unreachable)}
           loading={isPending('worker:' + w.name)}
           disabled={isPending('worker:' + w.name)}
           onclick={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w))}

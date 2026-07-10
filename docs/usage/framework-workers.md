@@ -48,6 +48,19 @@ workers:
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 
+**Server health probe**: A worker whose process can outlive its server (a Vite dev server that dies under `npm` while the Node process lingers) declares a `health` block, so lerd probes reachability rather than mere process liveness:
+
+```yaml
+workers:
+  vite:
+    command: npm run dev
+    host: true
+    health:
+      url_file: public/hot   # a file the server writes on boot, holding its URL
+```
+
+`url_file` names a file the dev server writes when it binds (Vite's `public/hot` holds a URL like `http://[::1]:5173`). While the process is up, lerd reads that file and makes a short TCP dial to its host and port; if nothing is accepting, the worker reports **unreachable** instead of running and [worker-heal](/usage/worker-heal) restarts it. A worker with no `health` block keeps the process-only liveness check. A missing `url_file` is treated as not-probeable, so idle-suspend clearing `public/hot` never trips a false alarm.
+
 **Host workers**: Workers that need to run on the host instead of inside the PHP-FPM container set `host: true`. The command runs via fnm at the project's pinned Node.js version. This is used for tools like Vite that need direct filesystem access for HMR:
 
 ```yaml

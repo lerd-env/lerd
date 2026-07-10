@@ -28,6 +28,7 @@ import (
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
@@ -3130,7 +3131,7 @@ func execCommandsList(args map[string]any) (any, *rpcError) {
 	if site.Framework != "" {
 		fw, _ = config.GetFrameworkForDir(site.Framework, site.Path)
 	}
-	cmds := config.ResolveCommands(fw, proj, site.Path)
+	cmds := sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, site.Path), sitetpl.ForSite(site))
 	if len(cmds) == 0 {
 		return toolOK("(no commands defined for this site)"), nil
 	}
@@ -3168,7 +3169,7 @@ func execCommandsRun(args map[string]any) (any, *rpcError) {
 	if site.Framework != "" {
 		fw, _ = config.GetFrameworkForDir(site.Framework, site.Path)
 	}
-	cmds := config.ResolveCommands(fw, proj, site.Path)
+	cmds := sitetpl.ExpandCommands(config.ResolveCommands(fw, proj, site.Path), sitetpl.ForSite(site))
 	var target *config.FrameworkCommand
 	for i := range cmds {
 		if cmds[i].Name == name {

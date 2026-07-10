@@ -85,6 +85,50 @@ type Framework struct {
 	// doctor runs in addition to the universal defaults (env, dependency, and
 	// audit checks every framework gets). See FrameworkDoctor.
 	Doctor *FrameworkDoctor `yaml:"doctor,omitempty"`
+	// Nginx, when set, declares extra server-block config the framework needs
+	// (Magento's /setup, /static, and /media handling). See FrameworkNginx.
+	Nginx *FrameworkNginx `yaml:"nginx,omitempty"`
+}
+
+// FrameworkNginx carries a raw nginx block spliced into the site's server block
+// ahead of lerd's generic `location /` and `location ~ \.php$`, so a framework
+// can claim paths those would otherwise swallow.
+type FrameworkNginx struct {
+	// Snippet is nginx config with three placeholders expanded before render:
+	// {{root}} (project root), {{public}} (document root), {{fpm}} (FPM container).
+	Snippet string `yaml:"snippet"`
+}
+
+// ValidateNginxSnippet returns nil when s is balanced enough to splice into a
+// server block: an unbalanced snippet would close the enclosing `server {` and
+// declare servers of its own. Balance alone cannot contain an interpolated value
+// (a `}` plus a `server {` still balances), so callers must also reject values
+// that carry nginx syntax before substituting them.
+func ValidateNginxSnippet(s string) error {
+	if strings.ContainsRune(s, 0) {
+		return fmt.Errorf("nginx snippet contains a NUL byte")
+	}
+	depth := 0
+	for _, line := range strings.Split(s, "\n") {
+		if i := strings.IndexByte(line, '#'); i >= 0 {
+			line = line[:i]
+		}
+		for _, r := range line {
+			switch r {
+			case '{':
+				depth++
+			case '}':
+				depth--
+				if depth < 0 {
+					return fmt.Errorf("nginx snippet closes a block it did not open")
+				}
+			}
+		}
+	}
+	if depth != 0 {
+		return fmt.Errorf("nginx snippet has %d unclosed block(s)", depth)
+	}
+	return nil
 }
 
 // FrameworkFrankenPHP describes how to serve the framework via FrankenPHP.
@@ -148,6 +192,7 @@ type FrameworkWorker struct {
 	ExcludeCheck   *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
 	ConflictsWith  []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
 	Proxy          *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	Health         *WorkerHealth  `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
 	Host           bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 	// PerWorktree opts the worker into running independently per git worktree
 	// (lerd-<wname>-<site>-<wt>). Defaults to false; set true on workers that
@@ -177,6 +222,17 @@ type WorkerProxy struct {
 	Path        string `yaml:"path"`                   // URL path to proxy (e.g. "/app")
 	PortEnvKey  string `yaml:"port_env_key,omitempty"` // env key holding the port (e.g. "REVERB_SERVER_PORT")
 	DefaultPort int    `yaml:"default_port,omitempty"` // fallback port if env key is missing (default: 8080)
+}
+
+// WorkerHealth declares how to tell whether a worker's server is actually
+// reachable, not merely that its process is alive. A dev server (vite under
+// fnm/npm) can keep its process up after its HTTP server has died, so systemd
+// still reports the unit active while nothing is listening. Where the port lives
+// is declared here, never in Go: URLFile names a file the server writes on boot
+// (vite's public/hot) whose contents carry the URL to probe. A worker with no
+// Health block keeps the process-only liveness check unchanged.
+type WorkerHealth struct {
+	URLFile string `yaml:"url_file,omitempty"` // file (relative to site root) holding the server URL, e.g. "public/hot"
 }
 
 // FrameworkLogSource describes where application log files live for a framework.
@@ -330,6 +386,17 @@ type FrameworkEnvConf struct {
 
 	// KeyGeneration describes how to generate an application key if missing.
 	KeyGeneration *EnvKeyGeneration `yaml:"key_generation,omitempty"`
+}
+
+// HasEnvConfig reports whether the framework manages an env file at all. A
+// framework that keeps its config elsewhere (Magento's app/etc/env.php) declares
+// no env section, so `lerd env` and the doctor's env checks must skip it.
+func (f *Framework) HasEnvConfig() bool {
+	if f == nil {
+		return false
+	}
+	e := f.Env
+	return e.File != "" || e.FallbackFile != "" || e.ExampleFile != "" || e.KeyGeneration != nil || len(e.Services) > 0
 }
 
 // EnvKeyGeneration describes how to generate an application encryption key.
@@ -1246,6 +1313,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 		safe.Workers = nil
 	}
 	safe.Commands = nil
+	// An nginx snippet is spliced into the site's server block, so it is a
+	// config-injection surface: only the trusted store may declare one.
+	safe.Nginx = nil
 	return safe
 }
 
@@ -1898,14 +1968,54 @@ func DetectMajorVersion(projectDir, frameworkName string) string {
 	return ""
 }
 
-func detectVersionFromComposer(projectDir string, rules []FrameworkRule) string {
-	data, err := os.ReadFile(filepath.Join(projectDir, "composer.json"))
-	if err != nil {
-		return ""
+// composerParseCache memoises the parsed top-level sections of a project's
+// composer.json, keyed by path and invalidated by mtime+size. DetectMajorVersion
+// runs on the daemon's hot snapshot path (once per site per tick, and now once
+// per site inside workerheal.Detect), where re-reading and re-unmarshalling
+// composer.json every call showed up as avoidable work. The cached map is only
+// read by callers, so sharing it is safe.
+type composerParseEntry struct {
+	raw   map[string]json.RawMessage
+	mtime time.Time
+	size  int64
+}
+
+var (
+	composerParseCacheMu sync.Mutex
+	composerParseCache   = map[string]composerParseEntry{}
+)
+
+// parseComposerJSON returns the top-level sections of a project's composer.json,
+// mtime-cached. ok is false when the file is missing or unparseable.
+func parseComposerJSON(projectDir string) (raw map[string]json.RawMessage, ok bool) {
+	path := filepath.Join(projectDir, "composer.json")
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		return nil, false
 	}
 
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) != nil {
+	composerParseCacheMu.Lock()
+	if e, hit := composerParseCache[path]; hit && e.mtime.Equal(info.ModTime()) && e.size == info.Size() {
+		composerParseCacheMu.Unlock()
+		return e.raw, e.raw != nil
+	}
+	composerParseCacheMu.Unlock()
+
+	var parsed map[string]json.RawMessage
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &parsed) // nil on failure -> cached as a miss
+	}
+
+	composerParseCacheMu.Lock()
+	composerParseCache[path] = composerParseEntry{raw: parsed, mtime: info.ModTime(), size: info.Size()}
+	composerParseCacheMu.Unlock()
+
+	return parsed, parsed != nil
+}
+
+func detectVersionFromComposer(projectDir string, rules []FrameworkRule) string {
+	raw, ok := parseComposerJSON(projectDir)
+	if !ok {
 		return ""
 	}
 
