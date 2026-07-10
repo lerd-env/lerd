@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Witryny",
   "dashboard_sites_summary": "{running}/{total} działa",
   "dashboard_sites_running": "Działa",
-  "dashboard_sites_paused": "Wstrzymane",
   "dashboard_sites_failing": "Niesprawne",
   "dashboard_sites_frameworks": "Frameworki",
   "dashboard_sites_link": "Połącz witrynę",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "Dodaj {n}",
   "envEditor_proposeAddNone": "Dodaj zaznaczone",
   "services_shimsInstalled": "Narzędzia klienta w Twoim PATH",
-  "services_tools_providedBy": "Dostarczane przez {service}"
+  "services_tools_providedBy": "Dostarczane przez {service}",
+  "workspaces_add": "Dodaj przestrzeń roboczą",
+  "workspaces_new": "Nowa przestrzeń robocza…",
+  "workspaces_none": "Brak",
+  "workspaces_namePlaceholder": "Nazwa przestrzeni roboczej",
+  "workspaces_rename": "Zmień nazwę przestrzeni roboczej",
+  "workspaces_delete": "Usuń przestrzeń roboczą",
+  "workspaces_pickerLabel": "Przestrzeń robocza",
+  "workspaces_sectionMenu": "Akcje przestrzeni roboczej",
+  "workspaces_collapse": "Zwiń sekcję",
+  "workspaces_expand": "Rozwiń sekcję",
+  "workspaces_deleteTitle": "Usunąć „{name}”?",
+  "workspaces_deleteBody": "Przestrzeń robocza zostanie usunięta. Jej witryny pozostaną połączone i nie będą pogrupowane.",
+  "workspaces_deleteSiteCount": "Witryny, których to dotyczy: {count}",
+  "dashboard_sites_pausedCount": "{count} wstrzymane"
 }

@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Situs",
   "dashboard_sites_summary": "{running}/{total} berjalan",
   "dashboard_sites_running": "Berjalan",
-  "dashboard_sites_paused": "Dijeda",
   "dashboard_sites_failing": "Gagal",
   "dashboard_sites_frameworks": "Framework",
   "dashboard_sites_link": "Tautkan situs",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "Tambah {n}",
   "envEditor_proposeAddNone": "Tambah yang dipilih",
   "services_shimsInstalled": "Alat klien di PATH Anda",
-  "services_tools_providedBy": "Disediakan oleh {service}"
+  "services_tools_providedBy": "Disediakan oleh {service}",
+  "workspaces_add": "Tambah ruang kerja",
+  "workspaces_new": "Ruang kerja baru…",
+  "workspaces_none": "Tidak ada",
+  "workspaces_namePlaceholder": "Nama ruang kerja",
+  "workspaces_rename": "Ganti nama ruang kerja",
+  "workspaces_delete": "Hapus ruang kerja",
+  "workspaces_pickerLabel": "Ruang kerja",
+  "workspaces_sectionMenu": "Tindakan ruang kerja",
+  "workspaces_collapse": "Ciutkan bagian",
+  "workspaces_expand": "Bentangkan bagian",
+  "workspaces_deleteTitle": "Hapus \"{name}\"?",
+  "workspaces_deleteBody": "Ruang kerja dihapus. Situsnya tetap tertaut dan menjadi tidak dikelompokkan.",
+  "workspaces_deleteSiteCount": "Situs yang terpengaruh: {count}",
+  "dashboard_sites_pausedCount": "{count} dijeda"
 }

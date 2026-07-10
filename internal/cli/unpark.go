@@ -82,6 +82,7 @@ func runUnpark(_ *cobra.Command, args []string) error {
 			feedback.Warn("removing site %s: %v", site.Name, err)
 			continue
 		}
+		_ = config.RemoveSiteFromWorkspaces(site.Name)
 		feedback.Start("unlinking " + site.Name).OK(feedback.Val(site.PrimaryDomain()))
 		removed++
 	}

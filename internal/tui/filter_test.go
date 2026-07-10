@@ -15,28 +15,28 @@ func sitesFixture() []siteinfo.EnrichedSite {
 }
 
 func TestFilterSites_ByDomain(t *testing.T) {
-	got := filteredSortedSites(sitesFixture(), "admin", siteSortName)
+	got := filteredSortedSites(sitesFixture(), "admin", siteSortName, nil)
 	if len(got) != 1 || got[0].Name != "beta" {
 		t.Fatalf("expected beta (matches beta-admin.test), got %+v", names(got))
 	}
 }
 
 func TestFilterSites_ByFrameworkLabel(t *testing.T) {
-	got := filteredSortedSites(sitesFixture(), "symfony", siteSortName)
+	got := filteredSortedSites(sitesFixture(), "symfony", siteSortName, nil)
 	if len(got) != 1 || got[0].Name != "beta" {
 		t.Fatalf("expected beta, got %+v", names(got))
 	}
 }
 
 func TestFilterSites_CaseInsensitive(t *testing.T) {
-	got := filteredSortedSites(sitesFixture(), "ALPHA", siteSortName)
+	got := filteredSortedSites(sitesFixture(), "ALPHA", siteSortName, nil)
 	if len(got) != 1 || got[0].Name != "alpha" {
 		t.Fatalf("filter should be case-insensitive, got %+v", names(got))
 	}
 }
 
 func TestSortSites_Framework(t *testing.T) {
-	got := filteredSortedSites(sitesFixture(), "", siteSortFramework)
+	got := filteredSortedSites(sitesFixture(), "", siteSortFramework, nil)
 	// Laravel entries come before Symfony alphabetically.
 	if got[0].FrameworkLabel != "Laravel 11" || got[len(got)-1].FrameworkLabel != "Symfony 7" {
 		t.Fatalf("framework sort wrong: %+v", frameworkLabels(got))
@@ -44,7 +44,7 @@ func TestSortSites_Framework(t *testing.T) {
 }
 
 func TestSortSites_StatusBuckets(t *testing.T) {
-	got := filteredSortedSites(sitesFixture(), "", siteSortStatus)
+	got := filteredSortedSites(sitesFixture(), "", siteSortStatus, nil)
 	if got[0].Name != "alpha" {
 		t.Fatalf("running site should come first, got %s", got[0].Name)
 	}

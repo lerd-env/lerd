@@ -80,6 +80,12 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd group db <share\|separate>` | Switch the current secondary between sharing the main's database and keeping its own |
 | `lerd group remove` | Ungroup the current secondary, restoring a standalone domain |
 | `lerd group list` | List all site groups and their members |
+| `lerd workspace add <name>` | Create an empty workspace, a display-only grouping of sites. See [Workspaces](../usage/sites.md#workspaces) |
+| `lerd workspace rename <old> <new>` | Rename a workspace, keeping its sites |
+| `lerd workspace rm <name>` | Delete a workspace; its sites stay linked and become ungrouped |
+| `lerd workspace assign <site> <workspace\|none>` | Move a site into a workspace, or out of one with `none`; assign a group main, not a secondary |
+| `lerd workspace move <name> <position>` | Reposition a workspace in the display order (`0` is first) |
+| `lerd workspace list` | List the workspaces and their sites |
 | `lerd env` | Configure `.env` for the current project with lerd service connection settings; backs up the original as `.env.before_lerd` on first run (skipped if lerd has already written to the file) |
 | `lerd env:restore` | Restore `.env` from the pre-lerd backup (`.env.before_lerd`) |
 | `lerd env:override [KEY=VALUE ...]` | Create/seed a personal, gitignored `.env.lerd_override` whose values win over lerd's defaults on `lerd env`; `LERD_EXTERNAL_SERVICES=` marks services lerd should not start or provision |

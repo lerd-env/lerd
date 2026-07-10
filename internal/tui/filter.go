@@ -4,6 +4,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
@@ -14,7 +15,11 @@ const (
 	siteSortName siteSortMode = iota
 	siteSortStatus
 	siteSortFramework
+	siteSortWorkspace
 )
+
+// siteSortModes is how many modes the "o" key cycles through.
+const siteSortModes = 4
 
 func (m siteSortMode) label() string {
 	switch m {
@@ -22,6 +27,8 @@ func (m siteSortMode) label() string {
 		return "status"
 	case siteSortFramework:
 		return "framework"
+	case siteSortWorkspace:
+		return "workspace"
 	}
 	return "name"
 }
@@ -48,7 +55,7 @@ func (m svcSortMode) label() string {
 // filteredSortedSites returns the sites list after applying the active
 // filter and sort. Always returns a new slice so the caller can safely
 // mutate ordering without affecting m.snap.
-func filteredSortedSites(list []siteinfo.EnrichedSite, filter string, mode siteSortMode) []siteinfo.EnrichedSite {
+func filteredSortedSites(list []siteinfo.EnrichedSite, filter string, mode siteSortMode, workspaces []config.Workspace) []siteinfo.EnrichedSite {
 	out := make([]siteinfo.EnrichedSite, 0, len(list))
 	needle := strings.ToLower(strings.TrimSpace(filter))
 	for _, s := range list {
@@ -69,10 +76,59 @@ func filteredSortedSites(list []siteinfo.EnrichedSite, filter string, mode siteS
 			}
 			return out[i].Name < out[j].Name
 		})
+	case siteSortWorkspace:
+		of := siteWorkspaces(out, workspaces)
+		rank := workspaceRanks(workspaces)
+		sort.SliceStable(out, func(i, j int) bool {
+			ri, rj := rank[of[out[i].Name]], rank[of[out[j].Name]]
+			if ri != rj {
+				return ri < rj
+			}
+			return out[i].Name < out[j].Name
+		})
 	default:
 		sort.SliceStable(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	}
 	return groupSecondariesUnderMains(out)
+}
+
+// workspaceRanks maps a workspace name to its position. Sites in no workspace
+// rank last, so they trail the sections the way they do in the dashboard.
+func workspaceRanks(workspaces []config.Workspace) map[string]int {
+	rank := make(map[string]int, len(workspaces)+1)
+	for i, ws := range workspaces {
+		rank[ws.Name] = i
+	}
+	rank[""] = len(workspaces)
+	return rank
+}
+
+// siteWorkspaces maps each site's name to the workspace it displays under. A
+// group secondary follows its main, so a group is never split across sections.
+func siteWorkspaces(list []siteinfo.EnrichedSite, workspaces []config.Workspace) map[string]string {
+	member := map[string]string{}
+	for _, ws := range workspaces {
+		for _, name := range ws.Sites {
+			member[name] = ws.Name
+		}
+	}
+	mainName := map[string]string{}
+	for _, s := range list {
+		if s.Group != "" && s.GroupSubdomain == "" {
+			mainName[s.Group] = s.Name
+		}
+	}
+	of := make(map[string]string, len(list))
+	for _, s := range list {
+		if s.GroupSubdomain != "" {
+			if main, ok := mainName[s.Group]; ok {
+				of[s.Name] = member[main]
+				continue
+			}
+		}
+		of[s.Name] = member[s.Name]
+	}
+	return of
 }
 
 // groupSecondariesUnderMains reorders a sorted site list so each group secondary

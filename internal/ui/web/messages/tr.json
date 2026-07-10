@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Siteler",
   "dashboard_sites_summary": "{running}/{total} çalışıyor",
   "dashboard_sites_running": "Çalışıyor",
-  "dashboard_sites_paused": "Duraklatıldı",
   "dashboard_sites_failing": "Hatalı",
   "dashboard_sites_frameworks": "Framework'ler",
   "dashboard_sites_link": "Site bağla",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "{n} ekle",
   "envEditor_proposeAddNone": "Seçilenleri ekle",
   "services_shimsInstalled": "PATH’inizdeki istemci araçları",
-  "services_tools_providedBy": "{service} tarafından sağlanıyor"
+  "services_tools_providedBy": "{service} tarafından sağlanıyor",
+  "workspaces_add": "Çalışma alanı ekle",
+  "workspaces_new": "Yeni çalışma alanı…",
+  "workspaces_none": "Yok",
+  "workspaces_namePlaceholder": "Çalışma alanı adı",
+  "workspaces_rename": "Çalışma alanını yeniden adlandır",
+  "workspaces_delete": "Çalışma alanını sil",
+  "workspaces_pickerLabel": "Çalışma alanı",
+  "workspaces_sectionMenu": "Çalışma alanı işlemleri",
+  "workspaces_collapse": "Bölümü daralt",
+  "workspaces_expand": "Bölümü genişlet",
+  "workspaces_deleteTitle": "\"{name}\" silinsin mi?",
+  "workspaces_deleteBody": "Çalışma alanı kaldırılır. Siteleri bağlı kalır ve gruplanmamış duruma geçer.",
+  "workspaces_deleteSiteCount": "Etkilenen siteler: {count}",
+  "dashboard_sites_pausedCount": "{count} duraklatıldı"
 }

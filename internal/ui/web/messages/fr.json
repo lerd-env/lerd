@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Sites",
   "dashboard_sites_summary": "{running}/{total} actifs",
   "dashboard_sites_running": "Actifs",
-  "dashboard_sites_paused": "En pause",
   "dashboard_sites_failing": "En échec",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Lier un site",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "Ajouter {n}",
   "envEditor_proposeAddNone": "Ajouter la sélection",
   "services_shimsInstalled": "Outils client sur votre PATH",
-  "services_tools_providedBy": "Fourni par {service}"
+  "services_tools_providedBy": "Fourni par {service}",
+  "workspaces_add": "Ajouter un espace de travail",
+  "workspaces_new": "Nouvel espace de travail…",
+  "workspaces_none": "Aucun",
+  "workspaces_namePlaceholder": "Nom de l'espace de travail",
+  "workspaces_rename": "Renommer l'espace de travail",
+  "workspaces_delete": "Supprimer l'espace de travail",
+  "workspaces_pickerLabel": "Espace de travail",
+  "workspaces_sectionMenu": "Actions de l'espace de travail",
+  "workspaces_collapse": "Réduire la section",
+  "workspaces_expand": "Développer la section",
+  "workspaces_deleteTitle": "Supprimer \"{name}\" ?",
+  "workspaces_deleteBody": "L'espace de travail est supprimé. Ses sites restent liés et ne sont plus regroupés.",
+  "workspaces_deleteSiteCount": "Sites concernés : {count}",
+  "dashboard_sites_pausedCount": "{count} en pause"
 }

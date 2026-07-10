@@ -642,7 +642,7 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "o":
 		switch m.focus {
 		case paneSites:
-			m.siteSort = (m.siteSort + 1) % 3
+			m.siteSort = (m.siteSort + 1) % siteSortModes
 			m.siteCursor = 0
 		case paneServices:
 			m.svcSort = (m.svcSort + 1) % 3
@@ -1510,7 +1510,7 @@ func (m *Model) clampCursors() {
 // this so filtered-out rows are invisible to navigation, not just hidden
 // visually.
 func (m *Model) visibleSites() []siteinfo.EnrichedSite {
-	return filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort)
+	return filteredSortedSites(m.snap.Sites, m.siteFilter, m.siteSort, m.snap.Workspaces)
 }
 
 func (m *Model) visibleServices() []ServiceRow {

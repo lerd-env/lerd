@@ -33,6 +33,7 @@
   import { homeShorten } from '$lib/path';
   import DomainMorePill from './DomainMorePill.svelte';
   import LANShareLink from './LANShareLink.svelte';
+  import WorkspacePicker from './WorkspacePicker.svelte';
   import { m } from '../../paraglide/messages.js';
 
   import type { Snippet } from 'svelte';
@@ -528,6 +529,12 @@
         >
           <Icon name="group" class="w-4 h-4" />
         </button>
+      {/if}
+
+      <!-- A group secondary shows its main's workspace and moves with it, so it
+           has nothing of its own to pick. -->
+      {#if $accessMode.loopback && !activeWorktreeBranch && !site.group_subdomain}
+        <WorkspacePicker {site} />
       {/if}
 
       {#if showLanToggle}
