@@ -239,18 +239,22 @@ func requireFrameworkWorker(cwd, workerName string) error {
 // up front when chokidar is absent (see ApplyHorizonReload), so this fallback
 // only bites if the package is removed after the fact.
 func resolveWorkerCommand(sitePath, workerName string, w config.FrameworkWorker) string {
+	// A worker execs its command straight from its unit, so the framework's
+	// cli_ini has to be folded in here too. Magento cannot even bootstrap at
+	// PHP's 128M default, so a worker without it simply crash-loops.
+	ini := phpIniArgsForDir(sitePath)
 	if w.ReloadCommand == "" || !config.ProjectReloadsWorker(sitePath, workerName) {
-		return w.Command
+		return injectPHPIniIntoCommand(w.Command, ini)
 	}
 	if !projectHasChokidar(sitePath) {
 		feedback.Warn("%s auto-reload is on but chokidar is not installed in %s, running the standard command. Install it with: npm install -D chokidar", workerName, sitePath)
-		return w.Command
+		return injectPHPIniIntoCommand(w.Command, ini)
 	}
 	command := w.ReloadCommand
 	if watcherNeedsPolling(sitePath) {
 		command += " --poll"
 	}
-	return command
+	return injectPHPIniIntoCommand(command, ini)
 }
 
 // watcherNeedsPolling reports whether the reload watcher has to poll because

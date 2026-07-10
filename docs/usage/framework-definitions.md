@@ -16,7 +16,7 @@ Lerd resolves framework definitions from multiple sources. Higher priority wins:
 Workers from the user overlay and project `.lerd.yaml` are merged on top of store or built-in definitions. See [Framework workers](framework-workers.md) for the worker lifecycle and how custom workers are added and managed.
 
 ::: warning Untrusted projects
-A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, and `requires:` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
+A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, `requires:`, and `php.cli_ini` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
 
 A project's own host extensions still work, just with consent: a `host: true` entry in top-level `custom_workers`, and any top-level `commands:` you run via `lerd run` or the dashboard, prompt once showing the exact command before they run on your host, and the approval is remembered per site. Set `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them outright) in the global config to change that.
 :::
@@ -90,6 +90,8 @@ version: "8"                      # framework major version this definition targ
 php:
   min: "8.2"                      # minimum supported PHP version
   max: "8.5"                      # maximum supported PHP version
+  cli_ini:                        # php.ini directives for PHP processes lerd runs (optional)
+    memory_limit: 2G              # bounded: workers get these too
 
 # Detection rules, any match is sufficient
 detect:
@@ -221,6 +223,20 @@ The `{{site}}`, `{{site_testing}}`, `{{bucket}}`, `{{domain}}`, `{{scheme}}`, an
 This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`.
 
 A placeholder whose value is empty, or one lerd does not recognise, is left in the command verbatim rather than being replaced with an empty string, so a half-resolved context can never quietly produce `--base-url=://`.
+
+## PHP ini for the CLI
+
+A project can already raise php.ini settings for its **web** requests by shipping a `.user.ini` in the document root, which PHP-FPM reads per directory. Magento does exactly that, with `memory_limit = 756M`.
+
+The **CLI SAPI never reads `.user.ini`**, not even from inside the document root. So a framework whose commands need more than PHP's 128M default has nowhere to say so, and Magento's `setup:upgrade` and `deploy:mode:set` die with an allocation failure deep inside `symfony/cache` that never mentions memory.
+
+`php.cli_ini` fills that gap. Each directive is passed as `-d name=value` to every PHP process lerd starts for that project: the `php` shim (and therefore `lerd artisan`, `lerd run`, a `vendor/bin` binary, and a `command`-type doctor check), and the `setup:` steps and the workers, which exec in the container directly. Directives are sorted, so the argv is stable, and they are prepended, so a `-d` you type yourself lands later and wins.
+
+Workers get the directives too. They exec their command straight from a systemd unit, and Magento cannot even bootstrap at PHP's 128M default, so a cron or consumer worker without them simply crash-loops. That makes the value a definition author's responsibility: give it a bounded `memory_limit` rather than `-1`, because a worker runs until you stop it. A worker whose command is not a `php` invocation, a host-side `npm run dev`, is left alone.
+
+Set only what the CLI needs. Copying a framework's web values across is a trap: CLI `max_execution_time` defaults to `0`, meaning unlimited, so applying a web value of `600` would cap a long install at ten minutes.
+
+`PHP_VALUE`-style directives can set `auto_prepend_file`, which makes every PHP process execute a file from the repo, so `cli_ini` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
 
 ## Required services
 
