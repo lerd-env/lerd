@@ -226,7 +226,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold); err != nil {
 			return nil, err
 		}
-		if IsStaticAsset(r.URI) || r.Millis == 0 {
+		if !IsAppRequest(r.Status, r.URI, r.Millis) {
 			continue
 		}
 		r.At = time.UnixMilli(atMs)
@@ -268,10 +268,9 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 		if err := rows.Scan(&atMs, &route, &method, &status, &ms, &uri, &cold); err != nil {
 			return Analytics{}, err
 		}
-		// Skip requests nginx served without the app: static assets, or a zero time
-		// (nginx answering a static file directly, e.g. manifest.json). New ones
-		// aren't recorded; this also drops any already stored before the filter.
-		if IsStaticAsset(uri) || ms == 0 {
+		// New ones aren't recorded; filtering on read also drops any already stored
+		// before the ingest filter existed.
+		if !IsAppRequest(status, uri, ms) {
 			continue
 		}
 		// Cold starts count toward the total, status, and throughput, but are kept

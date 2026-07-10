@@ -37,6 +37,29 @@ func TestAggregatorSkipsAssetsAndZeroTime(t *testing.T) {
 	}
 }
 
+// An upgraded WebSocket is logged once, at close, carrying the socket's whole
+// lifetime as its request time. Recording it would plant a permanent slow route
+// and drag the site median, so it must never reach a window.
+func TestAggregatorSkipsWebSocketUpgrade(t *testing.T) {
+	a := New(siteResolver(map[string]string{"myapp.test": "myapp"}))
+	recordN(a, "myapp.test", "GET", "/home", 40, 10)
+	a.Record(AccessRecord{Host: "myapp.test", Status: 101, RequestTime: 3623.181, Method: "GET", URI: "/app/cb1dxmnqqfb88d7hnchk"})
+
+	snap, ok := a.SiteSnapshot("myapp")
+	if !ok {
+		t.Fatal("expected snapshot")
+	}
+	if snap.Samples != 10 {
+		t.Errorf("samples = %d, want 10 (the upgrade excluded)", snap.Samples)
+	}
+	if len(snap.Slow) != 0 {
+		t.Errorf("slow = %+v, want none: the upgrade must not be flagged", snap.Slow)
+	}
+	if snap.MedianMillis != 40 {
+		t.Errorf("median = %v, want 40 (undragged by the upgrade)", snap.MedianMillis)
+	}
+}
+
 // Every flagged route carries its own median, not a zero. The live snapshot is
 // what route_timing and optimize_route serve, so a zero p50 there reads to a
 // caller as a route that is normally instant.

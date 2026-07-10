@@ -108,11 +108,9 @@ func (a *Aggregator) Record(r AccessRecord) {
 		return
 	}
 	ms := r.SecondsToMillis()
-	// Skip requests nginx served without the app (a static-asset extension, or a
-	// zero request time like a static file it answered directly), so they don't
-	// weigh on the typical response time or the slow-route baseline. Mirrors the
-	// durable store, keeping the doctor and route_timing consistent with the view.
-	if IsStaticAsset(r.URI) || ms == 0 {
+	// Anything the app didn't serve would weigh on the typical response time and
+	// the slow-route baseline, so it never enters a window.
+	if !IsAppRequest(r.Status, r.URI, ms) {
 		return
 	}
 	route := NormalizeRoute(r.Method, r.URI)
