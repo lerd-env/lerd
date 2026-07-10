@@ -565,19 +565,19 @@ func fpmGlyph(s siteinfo.EnrichedSite) string {
 
 func workerGlyphs(s siteinfo.EnrichedSite) string {
 	var out []string
-	add := func(has, running, failing, suspended bool, label string) {
+	add := func(has, running, failing, unreachable, suspended bool, label string) {
 		if !has {
 			return
 		}
-		st, _, _ := workerVisual(failing, running, suspended)
+		st, _, _ := workerVisual(failing, unreachable, running, suspended)
 		out = append(out, st.Render(label))
 	}
-	add(s.HasQueueWorker, s.QueueRunning, s.QueueFailing, workerSuspended(&s, "queue"), "q")
-	add(s.HasScheduleWorker, s.ScheduleRunning, s.ScheduleFailing, workerSuspended(&s, "schedule"), "s")
-	add(s.HasReverb, s.ReverbRunning, s.ReverbFailing, workerSuspended(&s, "reverb"), "v")
-	add(s.HasHorizon, s.HorizonRunning, s.HorizonFailing, workerSuspended(&s, "horizon"), "h")
+	add(s.HasQueueWorker, s.QueueRunning, s.QueueFailing, false, workerSuspended(&s, "queue"), "q")
+	add(s.HasScheduleWorker, s.ScheduleRunning, s.ScheduleFailing, false, workerSuspended(&s, "schedule"), "s")
+	add(s.HasReverb, s.ReverbRunning, s.ReverbFailing, false, workerSuspended(&s, "reverb"), "v")
+	add(s.HasHorizon, s.HorizonRunning, s.HorizonFailing, false, workerSuspended(&s, "horizon"), "h")
 	for _, fw := range s.FrameworkWorkers {
-		add(true, fw.Running, fw.Failing, workerSuspended(&s, fw.Name), "•")
+		add(true, fw.Running, fw.Failing, fw.Unreachable, workerSuspended(&s, fw.Name), "•")
 	}
 	return strings.Join(out, " ")
 }

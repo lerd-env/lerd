@@ -14,14 +14,16 @@ import (
 
 // workerVisual is the single source for how a worker's live state renders: its
 // style, dot glyph, and one-word label, applying the one precedence used
-// everywhere — failing > running > suspended > stopped. The five render sites
+// everywhere — failing > unreachable > running > suspended > stopped. The five render sites
 // (site rows, detail rows, worktree rows) all route through this so the
 // orderings and colours can't drift apart. stoppedStyle and dimStyle share a
 // colour, so the stopped word looks identical to the old dimStyle rendering.
-func workerVisual(failing, running, suspended bool) (style lipgloss.Style, glyph, word string) {
+func workerVisual(failing, unreachable, running, suspended bool) (style lipgloss.Style, glyph, word string) {
 	switch {
 	case failing:
 		return failingStyle, glyphFailing, "failing"
+	case unreachable:
+		return unreachableStyle, glyphUnreachable, "unreachable"
 	case running:
 		return runningStyle, glyphRunning, "running"
 	case suspended:
@@ -278,6 +280,18 @@ func worktreeWorkerFailing(wt *siteinfo.WorktreeInfo, name string) bool {
 	return false
 }
 
+func worktreeWorkerUnreachable(wt *siteinfo.WorktreeInfo, name string) bool {
+	if wt == nil {
+		return false
+	}
+	for _, fw := range wt.FrameworkWorkers {
+		if fw.Name == name {
+			return fw.Unreachable
+		}
+	}
+	return false
+}
+
 func worktreeWorkerSuspended(wt *siteinfo.WorktreeInfo, name string) bool {
 	if wt == nil {
 		return false
@@ -411,6 +425,18 @@ func workerFailing(s *siteinfo.EnrichedSite, name string) bool {
 	for _, fw := range s.FrameworkWorkers {
 		if fw.Name == name {
 			return fw.Failing
+		}
+	}
+	return false
+}
+
+// workerUnreachable reports whether the worker's process is up but its server
+// isn't accepting. Only health-probed framework workers (e.g. vite) can be
+// unreachable; q/s/r/h have no health block.
+func workerUnreachable(s *siteinfo.EnrichedSite, name string) bool {
+	for _, fw := range s.FrameworkWorkers {
+		if fw.Name == name {
+			return fw.Unreachable
 		}
 	}
 	return false
@@ -853,12 +879,12 @@ func domainRole(s *siteinfo.EnrichedSite, domain string) string {
 }
 
 func worktreeWorkerGlyph(wt *siteinfo.WorktreeInfo, name string) string {
-	st, glyph, _ := workerVisual(worktreeWorkerFailing(wt, name), worktreeWorkerRunning(wt, name), worktreeWorkerSuspended(wt, name))
+	st, glyph, _ := workerVisual(worktreeWorkerFailing(wt, name), worktreeWorkerUnreachable(wt, name), worktreeWorkerRunning(wt, name), worktreeWorkerSuspended(wt, name))
 	return st.Render(glyph)
 }
 
 func worktreeWorkerStateText(wt *siteinfo.WorktreeInfo, name string) string {
-	st, _, word := workerVisual(worktreeWorkerFailing(wt, name), worktreeWorkerRunning(wt, name), worktreeWorkerSuspended(wt, name))
+	st, _, word := workerVisual(worktreeWorkerFailing(wt, name), worktreeWorkerUnreachable(wt, name), worktreeWorkerRunning(wt, name), worktreeWorkerSuspended(wt, name))
 	return st.Render(word)
 }
 
@@ -887,12 +913,12 @@ func worktreeVersionText(version string, override bool) string {
 }
 
 func workerGlyphFor(s *siteinfo.EnrichedSite, name string) string {
-	st, glyph, _ := workerVisual(workerFailing(s, name), workerRunning(s, name), workerSuspended(s, name))
+	st, glyph, _ := workerVisual(workerFailing(s, name), workerUnreachable(s, name), workerRunning(s, name), workerSuspended(s, name))
 	return st.Render(glyph)
 }
 
 func workerStateText(s *siteinfo.EnrichedSite, name string) string {
-	st, _, word := workerVisual(workerFailing(s, name), workerRunning(s, name), workerSuspended(s, name))
+	st, _, word := workerVisual(workerFailing(s, name), workerUnreachable(s, name), workerRunning(s, name), workerSuspended(s, name))
 	return st.Render(word)
 }
 

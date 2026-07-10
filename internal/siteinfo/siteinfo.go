@@ -40,11 +40,18 @@ const (
 )
 
 // WorkerInfo describes a framework worker and its runtime state.
+//
+// Failing means systemd reports the unit failed. Unreachable is a distinct
+// state: the unit is active (its process is up) but its declared server is not
+// accepting connections — a vite dev server that died under npm. The two are
+// kept apart so a surface never labels an active unit "failed" (which would
+// attach a misleading last-log line); they are mutually exclusive.
 type WorkerInfo struct {
-	Name    string
-	Label   string
-	Running bool
-	Failing bool
+	Name        string
+	Label       string
+	Running     bool
+	Failing     bool
+	Unreachable bool
 }
 
 // WorktreeInfo describes a git worktree associated with a site.
@@ -558,11 +565,25 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 		if label == "" {
 			label = wname
 		}
+		running := unitStatus == "active" || unitStatus == "activating"
+		failing := unitStatus == "failed"
+		unreachable := false
+		// A worker whose process is up but whose server isn't accepting is
+		// unhealthy, not running (a vite dev server that died under npm). Probe
+		// only "active" (a still-activating server may not have bound yet). It is
+		// unreachable, not failed: systemd still calls the unit active.
+		if unitStatus == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(e.Path, w.Health); probed && !reachable {
+				running = false
+				unreachable = true
+			}
+		}
 		e.FrameworkWorkers = append(e.FrameworkWorkers, WorkerInfo{
-			Name:    wname,
-			Label:   label,
-			Running: unitStatus == "active" || unitStatus == "activating",
-			Failing: unitStatus == "failed",
+			Name:        wname,
+			Label:       label,
+			Running:     running,
+			Failing:     failing,
+			Unreachable: unreachable,
 		})
 	}
 }
@@ -594,11 +615,24 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 		if label == "" {
 			label = wname
 		}
+		running := status == "active" || status == "activating"
+		failing := status == "failed"
+		unreachable := false
+		// Same server-reachability check as enrichWorkers, against this worktree's
+		// own checkout where its dev server writes the URL file. Active-but-unbound
+		// is unreachable, not failed.
+		if status == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(wtPath, w.Health); probed && !reachable {
+				running = false
+				unreachable = true
+			}
+		}
 		out = append(out, WorkerInfo{
-			Name:    wname,
-			Label:   label,
-			Running: status == "active" || status == "activating",
-			Failing: status == "failed",
+			Name:        wname,
+			Label:       label,
+			Running:     running,
+			Failing:     failing,
+			Unreachable: unreachable,
 		})
 	}
 	return out

@@ -6,6 +6,11 @@
     label: string;
     on: boolean;
     failing?: boolean;
+    // unreachable marks a worker whose process is up but whose server isn't
+    // accepting connections (a dev server that died under its runner). Its own
+    // amber ringed dot, distinct from failing's solid red, so an active unit is
+    // never shown as a systemd failure. Clicking it restarts (rebinds) the server.
+    unreachable?: boolean;
     loading?: boolean;
     disabled?: boolean;
     // asleep marks a worker that idle-suspend has intentionally stopped: shown
@@ -24,6 +29,7 @@
     label,
     on,
     failing = false,
+    unreachable = false,
     loading = false,
     disabled = false,
     asleep = false,
@@ -34,7 +40,17 @@
   }: Props = $props();
 
   const state = $derived(
-    loading ? 'loading' : failing ? 'failing' : asleep ? 'asleep' : on ? 'on' : 'off'
+    loading
+      ? 'loading'
+      : failing
+        ? 'failing'
+        : unreachable
+          ? 'unreachable'
+          : asleep
+            ? 'asleep'
+            : on
+              ? 'on'
+              : 'off'
   );
 
   const dotClass = $derived(
@@ -42,9 +58,11 @@
       ? 'bg-emerald-500'
       : state === 'failing'
         ? 'bg-red-500'
-        : state === 'loading'
-          ? 'bg-amber-400'
-          : 'border border-gray-300 dark:border-gray-600 bg-transparent'
+        : state === 'unreachable'
+          ? 'bg-amber-500 ring-2 ring-amber-500/30'
+          : state === 'loading'
+            ? 'bg-amber-400'
+            : 'border border-gray-300 dark:border-gray-600 bg-transparent'
   );
 
   const tintClass = $derived(
@@ -52,9 +70,11 @@
       ? 'bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25'
       : state === 'failing'
         ? 'bg-red-50/60 dark:bg-red-900/15 hover:bg-red-50 dark:hover:bg-red-900/25'
-        : state === 'asleep'
-          ? 'bg-sky-50/60 dark:bg-sky-900/15 hover:bg-sky-50 dark:hover:bg-sky-900/25'
-          : 'bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5'
+        : state === 'unreachable'
+          ? 'bg-amber-50/60 dark:bg-amber-900/15 hover:bg-amber-50 dark:hover:bg-amber-900/25'
+          : state === 'asleep'
+            ? 'bg-sky-50/60 dark:bg-sky-900/15 hover:bg-sky-50 dark:hover:bg-sky-900/25'
+            : 'bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5'
   );
 </script>
 

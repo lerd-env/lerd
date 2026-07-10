@@ -20,19 +20,22 @@ var (
 )
 
 var (
-	titleStyle     = lipgloss.NewStyle().Bold(true).Foreground(colTitle)
-	sectionStyle   = lipgloss.NewStyle().Bold(true).Foreground(colDim)
-	dimStyle       = lipgloss.NewStyle().Foreground(colDim)
-	selectedStyle  = lipgloss.NewStyle().Bold(true).Foreground(colSelected)
-	focusedPane    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(0, 1)
-	unfocusedPane  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
-	runningStyle   = lipgloss.NewStyle().Foreground(colRunning)
-	stoppedStyle   = lipgloss.NewStyle().Foreground(colStopped)
-	failingStyle   = lipgloss.NewStyle().Foreground(colFailing).Bold(true)
-	pausedStyle    = lipgloss.NewStyle().Foreground(colPaused)
-	suspendedStyle = lipgloss.NewStyle().Foreground(colPaused)
-	accentStyle    = lipgloss.NewStyle().Foreground(colAccent)
-	helpStyle      = lipgloss.NewStyle().Foreground(colDim)
+	titleStyle    = lipgloss.NewStyle().Bold(true).Foreground(colTitle)
+	sectionStyle  = lipgloss.NewStyle().Bold(true).Foreground(colDim)
+	dimStyle      = lipgloss.NewStyle().Foreground(colDim)
+	selectedStyle = lipgloss.NewStyle().Bold(true).Foreground(colSelected)
+	focusedPane   = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colAccent).Padding(0, 1)
+	unfocusedPane = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
+	runningStyle  = lipgloss.NewStyle().Foreground(colRunning)
+	stoppedStyle  = lipgloss.NewStyle().Foreground(colStopped)
+	failingStyle  = lipgloss.NewStyle().Foreground(colFailing).Bold(true)
+	// Active-but-unreachable: same problem colour as failing, but not bold and a
+	// distinct glyph, so it reads as its own state rather than a systemd failure.
+	unreachableStyle = lipgloss.NewStyle().Foreground(colFailing)
+	pausedStyle      = lipgloss.NewStyle().Foreground(colPaused)
+	suspendedStyle   = lipgloss.NewStyle().Foreground(colPaused)
+	accentStyle      = lipgloss.NewStyle().Foreground(colAccent)
+	helpStyle        = lipgloss.NewStyle().Foreground(colDim)
 )
 
 // Footer key-hint styles. Navigation/view keys stay in the main accent colour
@@ -62,11 +65,12 @@ var (
 var cardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
 
 const (
-	glyphRunning   = "●"
-	glyphStopped   = "○"
-	glyphFailing   = "✖"
-	glyphPaused    = "◐"
-	glyphSuspended = "◔"
+	glyphRunning     = "●"
+	glyphStopped     = "○"
+	glyphFailing     = "✖"
+	glyphUnreachable = "⊘"
+	glyphPaused      = "◐"
+	glyphSuspended   = "◔"
 )
 
 // keyChipStyle wraps a single keybinding name (e.g. " y ", " esc ") in a
