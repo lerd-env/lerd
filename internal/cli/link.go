@@ -455,6 +455,9 @@ func runLink(args []string) error {
 			}
 		}
 
+		if fw, ok := config.GetFrameworkForDir(framework, cwd); ok {
+			proj = ensureRequiredServices(cwd, proj, fw, presetResolvable)
+		}
 		if err := linkApplyServices(cwd, proj); err != nil {
 			return err
 		}
@@ -550,6 +553,68 @@ func linkRuntimeLabel(site config.Site) string {
 	default:
 		return "FPM"
 	}
+}
+
+// ensureRequiredServices folds the framework's required service presets into the
+// project's service list, so linkApplyServices installs and starts them like any
+// other declared service and a teammate cloning the repo gets them too. A name
+// the service store does not know is reported and skipped rather than written
+// into the project's committed config. resolvePreset is a seam for tests; the
+// real one fetches a store-only preset, since a required service is precisely
+// the one that is not installed yet.
+func ensureRequiredServices(cwd string, proj *config.ProjectConfig, fw *config.Framework, resolvePreset func(string) bool) *config.ProjectConfig {
+	if fw == nil || len(fw.Requires) == 0 {
+		return proj
+	}
+	if proj == nil {
+		proj = &config.ProjectConfig{}
+	}
+	have := make(map[string]bool, len(proj.Services))
+	for _, s := range proj.Services {
+		have[s.Name] = true
+	}
+	added := false
+	for _, name := range fw.Requires {
+		if have[name] {
+			continue
+		}
+		if !resolvePreset(name) {
+			feedback.Warn("%s requires the %q service, which the service store does not have", frameworkLabelOf(fw), name)
+			continue
+		}
+		svc := config.ProjectService{Name: name}
+		if !config.IsDefaultPreset(name) {
+			svc.Preset = name
+		}
+		proj.Services = append(proj.Services, svc)
+		have[name] = true
+		added = true
+	}
+	if added {
+		if err := config.SaveProjectConfig(cwd, proj); err != nil {
+			feedback.Warn("could not save .lerd.yaml: %v", err)
+		}
+	}
+	return proj
+}
+
+// presetResolvable reports whether a preset name can be served, fetching a
+// store-only preset into the local cache on the way. PresetExists alone would
+// reject any preset not already installed, which is the whole point of requires.
+func presetResolvable(name string) bool {
+	if config.PresetExists(name) {
+		return true
+	}
+	_, err := config.EnsurePreset(name)
+	return err == nil
+}
+
+// frameworkLabelOf prefers the display label, falling back to the slug.
+func frameworkLabelOf(fw *config.Framework) string {
+	if fw.Label != "" {
+		return fw.Label
+	}
+	return fw.Name
 }
 
 // linkApplyServices installs and starts services declared in .lerd.yaml.
