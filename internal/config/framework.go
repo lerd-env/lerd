@@ -352,6 +352,34 @@ func ResolveCommands(fw *Framework, proj *ProjectConfig, projectDir string) []Fr
 type FrameworkPHP struct {
 	Min string `yaml:"min,omitempty"` // minimum PHP version (e.g. "8.2")
 	Max string `yaml:"max,omitempty"` // maximum PHP version (e.g. "8.4")
+	// CLIIni are php.ini directives every PHP process lerd runs for this
+	// framework needs. The CLI SAPI never reads a project's .user.ini, so a
+	// framework whose commands exhaust PHP's 128M default declares it here
+	// instead of prefixing every command with `php -d`.
+	CLIIni map[string]string `yaml:"cli_ini,omitempty"`
+}
+
+// phpIniDirective matches a php.ini directive name: letters, digits, underscore,
+// and the dot that namespaces an extension's settings (opcache.enable).
+var phpIniDirective = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_.]*$`)
+
+// phpIniForbidden are the characters a value may not contain. Each directive
+// becomes one `-d name=value` argv entry, so an `=`, whitespace, or a NUL would
+// split it into something PHP reads differently than the definition wrote.
+const phpIniForbidden = "= \t\n\r\x00"
+
+// ValidatePHPIni returns nil when every directive and value is safe to pass as
+// a `-d name=value` argument.
+func ValidatePHPIni(ini map[string]string) error {
+	for k, v := range ini {
+		if !phpIniDirective.MatchString(k) {
+			return fmt.Errorf("invalid php.ini directive %q", k)
+		}
+		if i := strings.IndexAny(v, phpIniForbidden); i >= 0 {
+			return fmt.Errorf("php.ini value for %q contains %q", k, v[i])
+		}
+	}
+	return nil
 }
 
 // FrameworkRule is a single detection rule for a framework.
@@ -1323,6 +1351,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	// A required service pulls an image and starts a container, so an untrusted
 	// definition must not be able to drive that either.
 	safe.Requires = nil
+	// auto_prepend_file would make every PHP process lerd runs execute a file from
+	// the repo, so php.ini directives come only from the trusted store.
+	safe.PHP.CLIIni = nil
 	return safe
 }
 
