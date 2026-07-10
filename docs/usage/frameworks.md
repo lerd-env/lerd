@@ -2,7 +2,7 @@
 
 Lerd uses **framework definitions** to describe how a PHP project type behaves: where the document root is, how to detect it automatically, which env file to use, and which background workers it supports.
 
-Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal, CakePHP, Statamic, etc.) can be installed from the [community store](https://github.com/lerd-env/frameworks) or defined manually.
+Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal, CakePHP, Statamic, Magento, etc.) can be installed from the [community store](https://github.com/lerd-env/frameworks) or defined manually.
 
 ---
 

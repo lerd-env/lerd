@@ -17,6 +17,7 @@ import (
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/sitetpl"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
 )
@@ -91,6 +92,27 @@ func siteServedByPHPFPM(site *config.Site) bool {
 	return !site.IsHostProxy() && !site.IsCustomContainer()
 }
 
+// declaredFalse reports a framework definition explicitly opting a package
+// manager out (`composer: false`, `npm: false`). Empty and "auto" mean "detect".
+func declaredFalse(v string) bool { return strings.EqualFold(strings.TrimSpace(v), "false") }
+
+// frameworkForSetup resolves the site's framework definition, falling back to
+// detection. Returns a zero Framework rather than nil so callers can read its
+// fields unconditionally.
+func frameworkForSetup(site *config.Site, cwd string) *config.Framework {
+	name := ""
+	if site != nil {
+		name = site.Framework
+	}
+	if name == "" {
+		name, _ = config.DetectFrameworkForDir(cwd)
+	}
+	if fw, ok := config.GetFrameworkForDir(name, cwd); ok {
+		return fw
+	}
+	return &config.Framework{}
+}
+
 func runSetup(allSteps, skipOpen bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -160,10 +182,17 @@ func runSetup(allSteps, skipOpen bool) error {
 		}
 	}
 
+	// A definition may opt out of a package manager (`npm: false` for Magento,
+	// Drupal, WordPress). Honour it, and never offer a JS step to a project with
+	// no package.json at all.
+	setupFW := frameworkForSetup(site, cwd)
+	wantComposer := hasComposerJSON && !declaredFalse(setupFW.Composer)
+	wantJS := hasPackageJSON && !declaredFalse(setupFW.NPM)
+
 	steps := []setupStep{}
 	// composer install only makes sense for a PHP project; skip it entirely for
 	// Node-only / host-proxy sites that have no composer.json.
-	if hasComposerJSON {
+	if wantComposer {
 		steps = append(steps, setupStep{
 			label:   "composer install",
 			enabled: os.IsNotExist(vendorMissing),
@@ -186,24 +215,26 @@ func runSetup(allSteps, skipOpen bool) error {
 	if jsRuntime != "npm" {
 		installLabel = jsRuntime + " install"
 	}
-	steps = append(steps, []setupStep{
-		{
+	if wantJS {
+		steps = append(steps, setupStep{
 			label:   installLabel,
-			enabled: os.IsNotExist(nodeModulesMissing) && hasPackageJSON,
+			enabled: os.IsNotExist(nodeModulesMissing),
 			run: func() error {
 				return runJSInstall(cwd, hasLockFile)
 			},
+		})
+	}
+	steps = append(steps, setupStep{
+		label:   "lerd mcp:inject",
+		enabled: false,
+		run: func() error {
+			return runMCPInject("")
 		},
-		{
-			label:   "lerd mcp:inject",
-			enabled: false,
-			run: func() error {
-				return runMCPInject("")
-			},
-		},
-		{
+	})
+	if wantJS {
+		steps = append(steps, setupStep{
 			label:   buildLabel,
-			enabled: hasPackageJSON && buildScript != "" && !buildReplaced,
+			enabled: buildScript != "" && !buildReplaced,
 			run: func() error {
 				if _, err := os.Stat(cwd + "/node_modules"); os.IsNotExist(err) {
 					fmt.Println("  node_modules not found.")
@@ -223,8 +254,8 @@ func runSetup(allSteps, skipOpen bool) error {
 				}
 				return runJSScript(cwd, buildScript)
 			},
-		},
-	}...)
+		})
+	}
 
 	// Mirror the host's bun into the PHP-FPM container so `lerd shell` has a
 	// working (musl) bun, with no extra command. lerd never installs bun on the
@@ -286,12 +317,14 @@ func runSetup(allSteps, skipOpen bool) error {
 			fwName, _ = config.DetectFrameworkForDir(cwd)
 		}
 		if fw, ok := config.GetFrameworkForDir(fwName, cwd); ok {
+			tplCtx := sitetpl.ForSite(site)
 			for _, sc := range fw.Setup {
 				// Skip commands whose check doesn't pass.
 				if sc.Check != nil && !config.MatchesRule(cwd, *sc.Check) {
 					continue
 				}
 				setupCmd := sc
+				setupCmd.Command = sitetpl.Apply(setupCmd.Command, tplCtx)
 				enabled := setupCmd.Default
 				steps = append(steps, setupStep{
 					label:   setupCmd.Label,

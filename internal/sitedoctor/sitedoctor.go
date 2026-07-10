@@ -108,7 +108,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	envPath := filepath.Join(path, envFile)
 
 	if hasEnvConfig(fw) {
-		if c, ok := checkEnvPresent(path, envFile); ok {
+		if c, ok := checkEnvPresent(path, envFile, fwExampleFile(fw)); ok {
 			resp.add(c)
 		}
 	}
@@ -141,7 +141,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		if dbBroken && spec.Type == "command" && spec.Fix == sqliteFixCommand {
 			continue
 		}
-		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, spec) })
+		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, envFormat, spec) })
 	}
 	tasks = append(tasks, dependencyCheckTasks(ctx, path, fw)...)
 	for _, c := range runChecksConcurrently(tasks) {
@@ -173,12 +173,15 @@ func envSetup(fw *config.Framework, path string) (envFile, format, exampleFile s
 
 // hasEnvConfig reports whether the framework uses an env file at all, so a plain
 // site with no framework isn't flagged for a missing .env it never needed.
-func hasEnvConfig(fw *config.Framework) bool {
+func hasEnvConfig(fw *config.Framework) bool { return fw.HasEnvConfig() }
+
+// fwExampleFile returns the framework's declared example file, or "" when it has
+// none (Magento's env.php is generated, never copied from a template).
+func fwExampleFile(fw *config.Framework) string {
 	if fw == nil {
-		return false
+		return ""
 	}
-	e := fw.Env
-	return e.File != "" || e.FallbackFile != "" || e.ExampleFile != "" || e.KeyGeneration != nil || len(e.Services) > 0
+	return fw.Env.ExampleFile
 }
 
 // frameworkChecks returns the framework's declarative doctor checks, or nil.
@@ -192,14 +195,17 @@ func frameworkChecks(fw *config.Framework) []config.DoctorCheck {
 // runDeclaredCheck dispatches one store-declared check to its typed evaluator,
 // stamping the spec's label. An unknown type is skipped (ok=false) so a newer
 // store never errors an older binary.
-func runDeclaredCheck(ctx context.Context, path, envPath string, spec config.DoctorCheck) (Check, bool) {
+func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec config.DoctorCheck) (Check, bool) {
+	// The declared env checks must read the file in the framework's own format,
+	// or a php-const / php-array config silently reads as an empty dotenv.
+	read := envfile.Reader(envPath, envFormat)
 	var c Check
 	var ok bool
 	switch spec.Type {
 	case "env_key_set":
-		c, ok = checkEnvKeySet(envPath, spec.Name, spec.EnvKey, spec.Fix, spec.Detail), true
+		c, ok = checkEnvKeySet(read, spec.Name, spec.EnvKey, spec.Fix, spec.Detail), true
 	case "env_combo":
-		c, ok = checkEnvCombo(envPath, spec), true
+		c, ok = checkEnvCombo(read, spec), true
 	case "symlink":
 		c, ok = checkSymlink(path, spec)
 	case "command":
@@ -256,12 +262,19 @@ func applyLabels(resp *Response) {
 
 // checkEnvPresent fails when the framework's env file is missing — every other
 // env-driven check would otherwise read an empty file and misreport.
-func checkEnvPresent(path, envFile string) (Check, bool) {
+func envMissingDetail(envFile, exampleFile string) string {
+	if exampleFile == "" {
+		return fmt.Sprintf("%s is missing.", envFile)
+	}
+	return fmt.Sprintf("%s is missing, copy it from the example and configure it.", envFile)
+}
+
+func checkEnvPresent(path, envFile, exampleFile string) (Check, bool) {
 	if _, err := os.Stat(filepath.Join(path, envFile)); err != nil {
 		return Check{
 			Name:   "env_present",
 			Status: StatusFail,
-			Detail: fmt.Sprintf("%s is missing, copy it from the example and configure it.", envFile),
+			Detail: envMissingDetail(envFile, exampleFile),
 		}, true
 	}
 	return Check{Name: "env_present", Status: StatusOK}, true
@@ -276,7 +289,7 @@ func checkAppKey(envPath string, fw *config.Framework) (Check, bool) {
 	}
 	kg := fw.Env.KeyGeneration
 	detail := fmt.Sprintf("%s is empty, so encryption, signed URLs, and sessions won't work until it's set.", kg.EnvKey)
-	return checkEnvKeySet(envPath, "app_key", kg.EnvKey, kg.Command, detail), true
+	return checkEnvKeySet(envfile.Reader(envPath, "dotenv"), "app_key", kg.EnvKey, kg.Command, detail), true
 }
 
 // checkSQLiteDatabase fails when the env file selects the sqlite driver but the
@@ -339,8 +352,8 @@ func frameworkHasCommand(fw *config.Framework, name string) bool {
 }
 
 // checkEnvKeySet fails when key is empty in the env file.
-func checkEnvKeySet(envPath, name, key, fix, detail string) Check {
-	if strings.TrimSpace(envfile.ReadKey(envPath, key)) == "" {
+func checkEnvKeySet(read func(string) string, name, key, fix, detail string) Check {
+	if strings.TrimSpace(read(key)) == "" {
 		if detail == "" {
 			detail = fmt.Sprintf("%s is empty.", key)
 		}
@@ -610,14 +623,14 @@ func valueMatches(actual, expected string) bool {
 // checkEnvCombo warns (the production footgun pattern) when every key in When
 // matches and every key in WarnIf matches — e.g. APP_ENV=production with
 // APP_DEBUG on. Any mismatch passes quietly.
-func checkEnvCombo(envPath string, spec config.DoctorCheck) Check {
+func checkEnvCombo(read func(string) string, spec config.DoctorCheck) Check {
 	for k, v := range spec.When {
-		if !valueMatches(envfile.ReadKey(envPath, k), v) {
+		if !valueMatches(read(k), v) {
 			return Check{Name: spec.Name, Status: StatusOK}
 		}
 	}
 	for k, v := range spec.WarnIf {
-		if !valueMatches(envfile.ReadKey(envPath, k), v) {
+		if !valueMatches(read(k), v) {
 			return Check{Name: spec.Name, Status: StatusOK}
 		}
 	}

@@ -84,6 +84,73 @@ type VhostData struct {
 	// fastcgi_*_timeout / proxy_*_timeout directives. Resolved per site by
 	// resolveRequestTimeout (project .lerd.yaml, then global config, then 60s).
 	RequestTimeout int
+	// FrameworkNginx is the framework definition's nginx block, already
+	// placeholder-expanded and indented. Rendered ahead of the generic
+	// locations so a framework can claim paths they would otherwise swallow.
+	FrameworkNginx string
+}
+
+// resolveFrameworkNginx returns the site framework's nginx block, expanded and
+// indented for splicing into the server block. Empty when the framework declares
+// none, when the snippet is unbalanced, or when a substituted value carries
+// nginx syntax of its own.
+func resolveFrameworkNginx(site config.Site, publicDir, fpmContainer string) string {
+	fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
+	if !ok || fw.Nginx == nil || strings.TrimSpace(fw.Nginx.Snippet) == "" {
+		return ""
+	}
+	if err := config.ValidateNginxSnippet(fw.Nginx.Snippet); err != nil {
+		return ""
+	}
+	expanded, err := expandNginxSnippet(fw.Nginx.Snippet, site.Path, publicDir, fpmContainer)
+	if err != nil {
+		return ""
+	}
+	return indentBlock(strings.TrimRight(expanded, "\n"), "    ")
+}
+
+// nginxValueForbidden are the characters that let a substituted value break out
+// of the directive it lands in: braces open or close blocks, `;` ends a
+// directive, `#` comments out the rest of the line, newlines do both.
+const nginxValueForbidden = "{};#\n\r\x00"
+
+// expandNginxSnippet substitutes the placeholders a framework snippet may use.
+// Plain string replacement, not text/template: the snippet is data rendered into
+// a template, so its braces must never be evaluated as template actions. Values
+// are rejected rather than escaped, since nginx has no general escape for them
+// and every legitimate value here is a path or a container name.
+func expandNginxSnippet(snippet, sitePath, publicDir, fpmContainer string) (string, error) {
+	docRoot := sitePath
+	if publicDir != "" && publicDir != "." {
+		docRoot = filepath.Join(sitePath, publicDir)
+	}
+	for _, v := range []string{sitePath, docRoot, fpmContainer} {
+		if i := strings.IndexAny(v, nginxValueForbidden); i >= 0 {
+			return "", fmt.Errorf("nginx value %q contains %q", v, v[i])
+		}
+	}
+	out := strings.NewReplacer(
+		"{{root}}", sitePath,
+		"{{public}}", docRoot,
+		"{{fpm}}", fpmContainer,
+	).Replace(snippet)
+	// A misspelled placeholder has balanced braces, so it survives validation and
+	// would reach nginx verbatim, breaking the config for every site.
+	if strings.Contains(out, "{{") {
+		return "", fmt.Errorf("nginx snippet has an unknown {{placeholder}}")
+	}
+	return out, nil
+}
+
+// indentBlock prefixes every non-blank line with indent.
+func indentBlock(s, indent string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			lines[i] = indent + l
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // resolveRequestTimeout returns the effective request timeout in seconds for
@@ -161,13 +228,14 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 	serverNames := serverNamesWithWildcards(site.Domains)
 
 	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
+	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
 		ServerNames:     serverNames,
 		Path:            site.Path,
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
-		FPMContainer:    podman.FPMContainerName(site, phpVersion),
+		FPMContainer:    fpmContainer,
 		PublicDir:       publicDir,
 		Proxy:           hasProxy,
 		ProxyPath:       proxyPath,
@@ -175,6 +243,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path),
+		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
 	}
 
 	var buf bytes.Buffer
@@ -205,13 +274,14 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 	serverNames := serverNamesWithWildcards(site.Domains)
 
 	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
+	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
 		ServerNames:     serverNames,
 		Path:            site.Path,
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
-		FPMContainer:    podman.FPMContainerName(site, phpVersion),
+		FPMContainer:    fpmContainer,
 		CertDomain:      site.PrimaryDomain(),
 		PublicDir:       publicDir,
 		Proxy:           hasProxy,
@@ -220,6 +290,7 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path),
+		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
 	}
 
 	var buf bytes.Buffer

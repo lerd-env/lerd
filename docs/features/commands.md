@@ -14,10 +14,11 @@ The feature exists for the actions you'd otherwise ssh in for: clearing caches, 
 | Symfony | `cache:clear`, `doctrine:migrations:migrate`, `doctrine:fixtures:load` |
 | CakePHP | `cache:clear`, `migrate`, `schema:cache:clear` |
 | Statamic | `cache:clear`, `stache:warm`, `search:update` |
+| Magento | `setup:install`, `cache:flush`, `cache:clean`, `setup:upgrade`, `setup:di:compile`, `indexer:reindex`, `deploy:mode:developer`, `maintenance:enable`, `maintenance:disable` |
 
 Destructive commands (`migrate:fresh`, `cim`, `doctrine:fixtures:load`) are gated by a confirmation modal before running.
 
-Some commands include a `check:` rule and only surface when the relevant package is installed (`doctrine:migrations:migrate` requires `doctrine/doctrine-migrations-bundle`, CakePHP `migrate` requires `cakephp/migrations`).
+Some commands include a `check:` rule and only surface when the relevant package or file is present (`doctrine:migrations:migrate` requires `doctrine/doctrine-migrations-bundle`, CakePHP `migrate` requires `cakephp/migrations`). Magento uses this to hide every command that needs a deployment config until the store is installed, so a fresh checkout offers only `setup:install`.
 
 ## How a run works
 
