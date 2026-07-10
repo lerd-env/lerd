@@ -629,6 +629,9 @@ func execInContainer(dir, command string) error {
 	}
 	container := fpmContainerForDir(dir, version)
 	podman.EnsurePathMounted(dir, version)
+	// This execs php in the container directly, bypassing the shim, so the
+	// framework's cli_ini has to be folded in here too.
+	command = injectPHPIniIntoCommand(command, phpIniArgsForDir(dir))
 	parts := strings.Fields(command)
 	if len(parts) == 0 {
 		return fmt.Errorf("empty setup command")
