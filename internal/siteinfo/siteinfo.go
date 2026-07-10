@@ -40,11 +40,18 @@ const (
 )
 
 // WorkerInfo describes a framework worker and its runtime state.
+//
+// Failing means systemd reports the unit failed. Unreachable is a distinct
+// state: the unit is active (its process is up) but its declared server is not
+// accepting connections — a vite dev server that died under npm. The two are
+// kept apart so a surface never labels an active unit "failed" (which would
+// attach a misleading last-log line); they are mutually exclusive.
 type WorkerInfo struct {
-	Name    string
-	Label   string
-	Running bool
-	Failing bool
+	Name        string
+	Label       string
+	Running     bool
+	Failing     bool
+	Unreachable bool
 }
 
 // WorktreeInfo describes a git worktree associated with a site.
@@ -553,18 +560,48 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 	sort.Strings(names)
 	for _, wname := range names {
 		w := fw.Workers[wname]
-		unitStatus, _ := unitStatusFn("lerd-" + wname + "-" + e.Name)
+		unit := "lerd-" + wname + "-" + e.Name
+		serviceState, _ := unitStatusFn(unit)
+		timerState := ""
+		if w.Schedule != "" {
+			timerState, _ = unitStatusFn(unit + ".timer")
+		}
+		running, failing := workerLiveness(w.Schedule, serviceState, timerState)
 		label := w.Label
 		if label == "" {
 			label = wname
 		}
+		unreachable := false
+		// A worker whose process is up but whose server isn't accepting is
+		// unhealthy, not running (a vite dev server that died under npm). Probe
+		// only "active" (a still-activating server may not have bound yet). It is
+		// unreachable, not failed: systemd still calls the unit active.
+		if serviceState == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(e.Path, w.Health); probed && !reachable {
+				running = false
+				unreachable = true
+			}
+		}
 		e.FrameworkWorkers = append(e.FrameworkWorkers, WorkerInfo{
-			Name:    wname,
-			Label:   label,
-			Running: unitStatus == "active" || unitStatus == "activating",
-			Failing: unitStatus == "failed",
+			Name:        wname,
+			Label:       label,
+			Running:     running,
+			Failing:     failing,
+			Unreachable: unreachable,
 		})
 	}
+}
+
+// workerLiveness maps a worker's unit states to what a UI should show. A daemon
+// is alive when its service is. A scheduled worker is a Type=oneshot triggered
+// by a .timer, so its service is inactive between ticks and the timer carries
+// the liveness; a failed last run still surfaces.
+func workerLiveness(schedule, serviceState, timerState string) (running, failing bool) {
+	failing = serviceState == "failed"
+	if schedule != "" {
+		return timerState == "active" || timerState == "activating", failing
+	}
+	return serviceState == "active" || serviceState == "activating", failing
 }
 
 // enrichWorktreeWorkers returns running state for framework workers that the
@@ -589,16 +626,32 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 	for _, wname := range names {
 		w := fw.Workers[wname]
 		unit := "lerd-" + wname + "-" + siteName + "-" + wtBase
-		status, _ := unitStatusFn(unit)
+		serviceState, _ := unitStatusFn(unit)
+		timerState := ""
+		if w.Schedule != "" {
+			timerState, _ = unitStatusFn(unit + ".timer")
+		}
+		running, failing := workerLiveness(w.Schedule, serviceState, timerState)
 		label := w.Label
 		if label == "" {
 			label = wname
 		}
+		unreachable := false
+		// Same server-reachability check as enrichWorkers, against this worktree's
+		// own checkout where its dev server writes the URL file. Active-but-unbound
+		// is unreachable, not failed.
+		if serviceState == "active" && w.Health != nil {
+			if reachable, probed := WorkerServerReachable(wtPath, w.Health); probed && !reachable {
+				running = false
+				unreachable = true
+			}
+		}
 		out = append(out, WorkerInfo{
-			Name:    wname,
-			Label:   label,
-			Running: status == "active" || status == "activating",
-			Failing: status == "failed",
+			Name:        wname,
+			Label:       label,
+			Running:     running,
+			Failing:     failing,
+			Unreachable: unreachable,
 		})
 	}
 	return out

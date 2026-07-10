@@ -711,6 +711,9 @@ type WorkerStatus struct {
 	Label   string `json:"label"`
 	Running bool   `json:"running"`
 	Failing bool   `json:"failing,omitempty"`
+	// Unreachable: the unit is active but its server isn't accepting connections.
+	// Distinct from Failing (systemd failed) so the row shows its own state.
+	Unreachable bool `json:"unreachable,omitempty"`
 }
 
 // ConflictingDomain describes a domain declared in .lerd.yaml that wasn't
@@ -883,10 +886,11 @@ func buildSites() []SiteResponse {
 		var fwWorkers []WorkerStatus
 		for _, fw := range e.FrameworkWorkers {
 			fwWorkers = append(fwWorkers, WorkerStatus{
-				Name:    fw.Name,
-				Label:   fw.Label,
-				Running: fw.Running,
-				Failing: fw.Failing,
+				Name:        fw.Name,
+				Label:       fw.Label,
+				Running:     fw.Running,
+				Failing:     fw.Failing,
+				Unreachable: fw.Unreachable,
 			})
 		}
 
@@ -909,10 +913,11 @@ func buildSites() []SiteResponse {
 			var wtWorkers []WorkerStatus
 			for _, fw := range wt.FrameworkWorkers {
 				wtWorkers = append(wtWorkers, WorkerStatus{
-					Name:    fw.Name,
-					Label:   fw.Label,
-					Running: fw.Running,
-					Failing: fw.Failing,
+					Name:        fw.Name,
+					Label:       fw.Label,
+					Running:     fw.Running,
+					Failing:     fw.Failing,
+					Unreachable: fw.Unreachable,
 				})
 			}
 			wtKeyStr := wtKey(e.Name, config.WorktreeUnitSlug(filepath.Base(wt.Path)))

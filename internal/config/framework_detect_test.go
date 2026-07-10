@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"gopkg.in/yaml.v3"
@@ -100,6 +101,31 @@ func TestDetectMajorVersion_SymfonyFromBuiltinRules(t *testing.T) {
 
 	if v := DetectMajorVersion(dir, "symfony"); v != "7" {
 		t.Errorf("expected major 7 from built-in symfony rules, got %q", v)
+	}
+}
+
+func TestParseComposerJSON_MtimeCached(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "composer.json")
+	os.WriteFile(path, []byte(`{"require":{"laravel/framework":"11.0"}}`), 0644) //nolint:errcheck
+
+	first, ok := parseComposerJSON(dir)
+	if !ok {
+		t.Fatal("expected parse ok")
+	}
+	second, _ := parseComposerJSON(dir)
+	if reflect.ValueOf(first).Pointer() != reflect.ValueOf(second).Pointer() {
+		t.Error("unchanged file should return the same cached map, not a reparse")
+	}
+
+	// A changed file (different size) invalidates the cache and reparses.
+	os.WriteFile(path, []byte(`{"require":{"laravel/framework":"12.0","a/b":"1.0"}}`), 0644) //nolint:errcheck
+	third, ok := parseComposerJSON(dir)
+	if !ok {
+		t.Fatal("expected reparse ok")
+	}
+	if reflect.ValueOf(third).Pointer() == reflect.ValueOf(first).Pointer() {
+		t.Error("changed file should reparse, not serve the stale cached map")
 	}
 }
 
