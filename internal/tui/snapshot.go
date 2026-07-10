@@ -19,6 +19,9 @@ type Snapshot struct {
 	Sites    []siteinfo.EnrichedSite
 	Services []ServiceRow
 	Status   StatusRow
+	// Workspaces group sites for display only, in the order the user's config
+	// lists them. The TUI shows them and never edits them.
+	Workspaces []config.Workspace
 }
 
 // ServiceRow is a flat row for the services pane. Sourced from podman unit
@@ -76,6 +79,8 @@ func loadSnapshot() Snapshot {
 		sort.Slice(enriched, func(i, j int) bool { return enriched[i].Name < enriched[j].Name })
 		snap.Sites = enriched
 	}
+
+	snap.Workspaces, _ = config.ListWorkspaces()
 
 	snap.Services = loadServices()
 	// Workers live on sites but belong in the services pane too — same

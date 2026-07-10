@@ -225,6 +225,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
 	mux.HandleFunc("/api/sites/worktree-add", withCORS(publishAfter(handleSiteWorktreeAdd, eventbus.KindSites)))
 	mux.HandleFunc("/api/browse", withCORS(handleBrowse))
+	mux.HandleFunc("/api/workspaces", withCORS(publishAfter(handleWorkspaces, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/workspaces/", withCORS(publishAfter(handleWorkspaceRoutes, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/", withCORS(publishAfter(handleSiteAction, eventbus.KindSites, eventbus.KindServices)))
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
@@ -581,6 +583,9 @@ type StatusResponse struct {
 	// Home is the user's home directory, so the UI can shorten displayed paths
 	// under it to a leading ~ without shipping the absolute path in the label.
 	Home string `json:"home"`
+	// Workspaces are the configured workspace names in display order, empty
+	// ones included, so the sidebar can render a section the user just created.
+	Workspaces []string `json:"workspaces"`
 }
 
 type DNSStatus struct {
@@ -651,6 +656,10 @@ func buildStatus() StatusResponse {
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
 	homeDir, _ := os.UserHomeDir()
+	workspaces := cfg.WorkspaceNames()
+	if workspaces == nil {
+		workspaces = []string{}
+	}
 	return StatusResponse{
 		DNS:                DNSStatus{OK: dnsStatus == dns.StatusOK, Status: string(dnsStatus), VPN: dns.VPNActive(), Enabled: dnsEnabled, TLD: tld},
 		Nginx:              ServiceCheck{Running: nginxRunning},
@@ -664,6 +673,7 @@ func buildStatus() StatusResponse {
 		WatcherRunning:     watcherRunning,
 		FrankenPHPVersions: config.FrankenPHPVersions(),
 		Home:               homeDir,
+		Workspaces:         workspaces,
 	}
 }
 
@@ -801,6 +811,9 @@ type SiteResponse struct {
 	GroupMainDomain string `json:"group_main_domain,omitempty"`
 	GroupSharedDB   bool   `json:"group_shared_db,omitempty"`
 	MultiTenant     bool   `json:"multi_tenant,omitempty"`
+	// Workspace is the display-only grouping the site belongs to, if any. A
+	// group secondary reports its main's workspace so a group renders whole.
+	Workspace string `json:"workspace,omitempty"`
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
@@ -854,11 +867,16 @@ func buildSites() []SiteResponse {
 	// Map each group key to its main site's base domain so secondaries can
 	// report group_main_domain without a second lookup.
 	groupMainDomain := map[string]string{}
+	groupMainName := map[string]string{}
 	for _, e := range enriched {
 		if e.Group != "" && e.GroupSubdomain == "" {
 			groupMainDomain[e.Group] = e.PrimaryDomain()
+			groupMainName[e.Group] = e.Name
 		}
 	}
+
+	// Workspace membership is display-only and lives in the global config.
+	siteWorkspace := idleCfg.SiteWorkspaceMap()
 
 	sites := make([]SiteResponse, 0, len(enriched))
 	for _, e := range enriched {
@@ -990,6 +1008,7 @@ func buildSites() []SiteResponse {
 			GroupMainDomain:      groupMainDomain[e.Group],
 			GroupSharedDB:        e.GroupSharedDB,
 			MultiTenant:          e.Group != "" && e.GroupSubdomain == "" && siteHasEnvOverrides(e.Path),
+			Workspace:            resolveSiteWorkspace(e, groupMainName, siteWorkspace),
 		})
 	}
 	return sites

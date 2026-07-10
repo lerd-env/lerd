@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Sites",
   "dashboard_sites_summary": "{running}/{total} actief",
   "dashboard_sites_running": "Actief",
-  "dashboard_sites_paused": "Gepauzeerd",
   "dashboard_sites_failing": "Mislukt",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Site koppelen",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "{n} toevoegen",
   "envEditor_proposeAddNone": "Selectie toevoegen",
   "services_shimsInstalled": "Clienttools op je PATH",
-  "services_tools_providedBy": "Geleverd door {service}"
+  "services_tools_providedBy": "Geleverd door {service}",
+  "workspaces_add": "Werkruimte toevoegen",
+  "workspaces_new": "Nieuwe werkruimte…",
+  "workspaces_none": "Geen",
+  "workspaces_namePlaceholder": "Naam van de werkruimte",
+  "workspaces_rename": "Werkruimte hernoemen",
+  "workspaces_delete": "Werkruimte verwijderen",
+  "workspaces_pickerLabel": "Werkruimte",
+  "workspaces_sectionMenu": "Acties voor de werkruimte",
+  "workspaces_collapse": "Sectie inklappen",
+  "workspaces_expand": "Sectie uitklappen",
+  "workspaces_deleteTitle": "\"{name}\" verwijderen?",
+  "workspaces_deleteBody": "De werkruimte wordt verwijderd. De sites blijven gekoppeld en zijn niet langer gegroepeerd.",
+  "workspaces_deleteSiteCount": "Betrokken sites: {count}",
+  "dashboard_sites_pausedCount": "{count} gepauzeerd"
 }

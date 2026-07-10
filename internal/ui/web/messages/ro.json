@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Site-uri",
   "dashboard_sites_summary": "{running}/{total} rulează",
   "dashboard_sites_running": "Rulează",
-  "dashboard_sites_paused": "Întrerupt",
   "dashboard_sites_failing": "Cu probleme",
   "dashboard_sites_frameworks": "Framework-uri",
   "dashboard_sites_link": "Conectează site",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "Adaugă {n}",
   "envEditor_proposeAddNone": "Adaugă selecția",
   "services_shimsInstalled": "Instrumente client în PATH-ul tău",
-  "services_tools_providedBy": "Furnizat de {service}"
+  "services_tools_providedBy": "Furnizat de {service}",
+  "workspaces_add": "Adaugă spațiu de lucru",
+  "workspaces_new": "Spațiu de lucru nou…",
+  "workspaces_none": "Niciunul",
+  "workspaces_namePlaceholder": "Numele spațiului de lucru",
+  "workspaces_rename": "Redenumește spațiul de lucru",
+  "workspaces_delete": "Șterge spațiul de lucru",
+  "workspaces_pickerLabel": "Spațiu de lucru",
+  "workspaces_sectionMenu": "Acțiuni pentru spațiul de lucru",
+  "workspaces_collapse": "Restrânge secțiunea",
+  "workspaces_expand": "Extinde secțiunea",
+  "workspaces_deleteTitle": "Ștergi „{name}”?",
+  "workspaces_deleteBody": "Spațiul de lucru este eliminat. Site-urile rămân conectate și devin negrupate.",
+  "workspaces_deleteSiteCount": "Site-uri afectate: {count}",
+  "dashboard_sites_pausedCount": "{count} întrerupte"
 }

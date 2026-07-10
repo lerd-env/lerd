@@ -79,6 +79,7 @@ func UnlinkSiteCore(site *config.Site, parkedDirs []string) error {
 		_ = config.IgnoreSite(site.Name)
 	} else {
 		_ = config.RemoveSite(site.Name)
+		_ = config.RemoveSiteFromWorkspaces(site.Name)
 	}
 
 	_ = podman.WriteContainerHosts()

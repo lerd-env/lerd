@@ -7,12 +7,23 @@
   import Icon from '$components/Icon.svelte';
   import SiteIcon from '$components/SiteIcon.svelte';
   import SiteIndicators from '$components/SiteIndicators.svelte';
+  import SitesSectionHeader from '$components/SitesSectionHeader.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
   import { accessMode } from '$stores/accessMode';
   import { routeRest, goToTab } from '$stores/route';
-  import { sites, sitesLoaded, reorderSites, type Site } from '$stores/sites';
+  import { sites, sitesLoaded, type Site } from '$stores/sites';
   import { sitesSort, type SitesSort } from '$stores/sitesSort';
-  import { openLinkModal } from '$stores/modals';
+  import { status } from '$stores/status';
+  import {
+    UNGROUPED,
+    createWorkspace,
+    renameWorkspace,
+    saveWorkspaceLayout,
+    toggleWorkspaceCollapse,
+    workspaceCollapse,
+    type WorkspaceLayoutEntry
+  } from '$stores/workspaces';
+  import { openLinkModal, openWorkspaceDeleteModal } from '$stores/modals';
   import { get } from 'svelte/store';
   import { flushSync, untrack } from 'svelte';
   import { dndzone, SOURCES, TRIGGERS, type DndEvent } from 'svelte-dnd-action';
@@ -54,52 +65,135 @@
     }
   });
   // Reordering is available whenever we can write (loopback), in any sort mode.
-  // Dragging a site auto-switches the list into manual mode (see applyDrop).
+  // Dragging a site auto-switches the list into manual mode (see persistRowDrop).
   const canReorder = $derived($accessMode.loopback);
 
+  // Collapse key for the paused block. Leading space, like UNGROUPED, so it can
+  // never collide with a workspace name (the server trims those).
+  const PAUSED = ' paused';
+
+  // Workspaces are display-only sections. With none configured the list renders
+  // exactly as it did before: one zone, no headers.
+  let wsOrder = $state<string[]>([]);
+  const hasWorkspaces = $derived(wsOrder.length > 0);
+  const sectionKeys = $derived([...wsOrder, UNGROUPED]);
+
+  function sectionOf(s: Site): string {
+    return s.workspace && wsOrder.includes(s.workspace) ? s.workspace : UNGROUPED;
+  }
+
+  // A section's zone holds only its mains, so counting zone items would hide the
+  // group secondaries drawn under them. Count the sites instead.
+  function countIn(key: string, list: Site[]): number {
+    return list.filter((s) => s.workspace === key).length;
+  }
+
   // Active secondaries whose main isn't active (e.g. the main is paused) render
-  // on their own below the draggable list so they never disappear.
+  // on their own below the sections so they never disappear.
   const orphanSecondaries = $derived.by(() => {
     const covered = new Set<string>();
     for (const main of sortedMains) for (const sec of secondariesFor(main)) covered.add(sec.domain);
     return active.filter((s) => s.group_subdomain && !covered.has(s.domain));
   });
 
-  // Drag-and-drop via svelte-dnd-action. Each item is a main row carrying its
-  // secondaries, so a whole group moves and animates together. Dragging flips
-  // the list into manual mode, seeded from whatever order is shown at drag start.
+  // Drag-and-drop via svelte-dnd-action, in two layers. Rows move within and
+  // between section zones; workspace headers reorder the sections themselves.
+  // Each row item is a main carrying its secondaries, so a whole group moves and
+  // animates together. Dragging a row flips the list into manual mode, seeded
+  // from whatever order is shown at drag start.
   type DndItem = { id: string; site: Site };
   const FLIP_MS = 180;
   // Unique per instance so the desktop and mobile lists aren't connected zones.
-  const dndType = 'sites-' + Math.random().toString(36).slice(2, 9);
+  // Every section shares this one type so a row can cross between them.
+  const suffix = Math.random().toString(36).slice(2, 9);
+  const dndType = 'sites-' + suffix;
+  const wsDndType = 'workspaces-' + suffix;
+
   let dragDisabled = $state(true);
-  let dndItems = $state<DndItem[]>([]);
+  // Workspace headers are draggable outright: svelte-dnd-action only starts a
+  // drag after 3px of movement, so a plain click still toggles the section.
+  let headerDragging = $state(false);
+  let savingLayout = $state(false);
+  let zones = $state<Record<string, DndItem[]>>({});
+  let wsItems = $state<{ id: string }[]>([]);
+
+  // True from the moment a row is picked up until the drop has settled. It
+  // outlives dragDisabled, which svelte-dnd-action needs flipped back on the
+  // first finalize of a cross-zone drop, and it keeps the live snapshot from
+  // resyncing the zones out from under the drag.
+  let rowDragActive = $state(false);
+
+  // A collapsed section stays collapsed through a drag. Its zone is simply not
+  // mounted, so it is not a drop target and nothing can unmount mid-drag; its
+  // members are still carried through every layout we persist.
+  function isCollapsed(key: string): boolean {
+    return $workspaceCollapse.includes(key);
+  }
+
   $effect(() => {
-    // Resync from the sorted source whenever we're not mid-drag. When only the
-    // row data changed (same order, e.g. a live status push) refresh in place so
-    // the dnd zone isn't rebuilt on every snapshot; rebuild only when the order
-    // actually changed (sort switch or an external reorder).
-    if (!dragDisabled) return;
+    // Resync from the server whenever we're not mid-drag and no write is in
+    // flight, so a live status push never yanks the list out from under a drag
+    // or reverts an order we just persisted optimistically.
+    if (!dragDisabled || rowDragActive || headerDragging || savingLayout) return;
+    const names = $status.workspaces ?? [];
     const sorted = sortedMains;
-    // Read/write dndItems untracked so refreshing it here never feeds back into
-    // this effect (its only deps are sortedMains and dragDisabled).
     untrack(() => {
-      const cur = dndItems;
-      const sameOrder = sorted.length === cur.length && sorted.every((s, i) => s.domain === cur[i].id);
+      if (names.length !== wsOrder.length || names.some((n, i) => n !== wsOrder[i])) {
+        wsOrder = [...names];
+      }
+      if (names.length !== wsItems.length || names.some((n, i) => n !== wsItems[i].id)) {
+        wsItems = names.map((n) => ({ id: n }));
+      }
+      syncZones(sorted);
+    });
+  });
+
+  // Rebuild each section's items from the sorted source. When only the row data
+  // changed (same order, e.g. a live status push) refresh in place so the dnd
+  // zones aren't rebuilt on every snapshot.
+  function syncZones(sorted: Site[]) {
+    const next: Record<string, Site[]> = {};
+    for (const key of sectionKeys) next[key] = [];
+    for (const s of sorted) (next[sectionOf(s)] ??= []).push(s);
+
+    for (const key of sectionKeys) {
+      const want = next[key] ?? [];
+      const cur = zones[key] ?? [];
+      const sameOrder = want.length === cur.length && want.every((s, i) => s.domain === cur[i].id);
       if (sameOrder) {
-        sorted.forEach((s, i) => {
+        want.forEach((s, i) => {
           if (cur[i].site !== s) cur[i].site = s;
         });
       } else {
-        dndItems = sorted.map((s) => ({ id: s.domain, site: s }));
+        zones[key] = want.map((s) => ({ id: s.domain, site: s }));
       }
-    });
-  });
+    }
+    for (const key of Object.keys(zones)) {
+      if (!sectionKeys.includes(key)) delete zones[key];
+    }
+  }
+
+  // Set on the first consider, so a press on the grip that never became a drag
+  // (a plain click) can put the drag state back instead of leaving it latched.
+  let dragStarted = false;
 
   function startDrag(e: MouseEvent | TouchEvent) {
     if (e instanceof MouseEvent && e.button !== 0) return;
     e.preventDefault();
+    dragStarted = false;
     dragDisabled = false;
+    rowDragActive = true;
+    // Only one of the two fires, so each removes the other: {once:true} alone
+    // would leave the sibling bound to the window for the life of the page.
+    const settle = () => {
+      window.removeEventListener('mouseup', settle);
+      window.removeEventListener('touchend', settle);
+      if (dragStarted) return; // a real drag ends on finalize instead
+      dragDisabled = true;
+      rowDragActive = false;
+    };
+    window.addEventListener('mouseup', settle);
+    window.addEventListener('touchend', settle);
     // svelte-dnd-action only attaches its drag listener while enabled; flush the
     // state change now so the listener catches this same press as it bubbles up.
     flushSync();
@@ -119,53 +213,197 @@
       }
     };
   }
-  function handleConsider(e: CustomEvent<DndEvent<DndItem>>) {
-    dndItems = e.detail.items;
+
+  // Keeps a press on a row from reaching the workspace zone that wraps it,
+  // which is always live and would otherwise drag the whole workspace. The
+  // row's own grip listener has already run by the time this fires.
+  function stopDragBubbling(node: HTMLElement) {
+    const stop = (e: Event) => e.stopPropagation();
+    node.addEventListener('mousedown', stop);
+    node.addEventListener('touchstart', stop, { passive: true });
+    return {
+      destroy() {
+        node.removeEventListener('mousedown', stop);
+        node.removeEventListener('touchstart', stop);
+      }
+    };
+  }
+
+  function rowConsider(key: string, e: CustomEvent<DndEvent<DndItem>>) {
+    zones[key] = e.detail.items;
+    dragStarted = true;
     const { source, trigger } = e.detail.info;
     if (source === SOURCES.KEYBOARD && trigger === TRIGGERS.DRAG_STOPPED) dragDisabled = true;
   }
-  function handleFinalize(e: CustomEvent<DndEvent<DndItem>>) {
-    dndItems = e.detail.items;
+  function rowFinalize(key: string, e: CustomEvent<DndEvent<DndItem>>) {
+    zones[key] = e.detail.items;
     if (e.detail.info.source === SOURCES.POINTER) dragDisabled = true;
-    persistOrder(e.detail.items.map((i) => i.site));
+    schedulePersist();
   }
 
-  async function persistOrder(newMains: Site[]) {
-    const prevSites = get(sites);
-    const prevSort = get(sitesSort);
-    const all = prevSites;
+  // A drop across sections finalizes the source zone and the target zone in the
+  // same tick. Coalesce them so the layout is built once, from both, and one
+  // write goes out instead of two racing ones.
+  let persistTimer: ReturnType<typeof setTimeout> | undefined;
+  function schedulePersist() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(() => {
+      rowDragActive = false;
+      persistRowDrop();
+    }, 0);
+  }
+
+  function headerConsider(e: CustomEvent<DndEvent<{ id: string }>>) {
+    wsItems = e.detail.items;
+    headerDragging = true;
+  }
+  function headerFinalize(e: CustomEvent<DndEvent<{ id: string }>>) {
+    wsItems = e.detail.items;
+    headerDragging = false;
+    persistHeaderDrop();
+  }
+
+  // The workspace list implied by the current zones. Only a main's membership is
+  // stored: a secondary displays in its main's workspace, so listing it too
+  // would be state nothing reads and that goes stale the day the group is
+  // dissolved. Sites that never appear in a zone (paused, orphan secondaries)
+  // keep the membership the server gave them, so a drag never silently ungroups
+  // them.
+  function layoutFromZones(order: string[]): WorkspaceLayoutEntry[] {
+    const moved = new Map<string, string>();
+    for (const key of [...order, UNGROUPED]) {
+      const workspace = key === UNGROUPED ? '' : key;
+      for (const item of zones[key] ?? []) {
+        if (item.site.name) moved.set(item.site.name, workspace);
+      }
+    }
+    const members = new Map<string, string[]>(order.map((n) => [n, []]));
+    for (const s of get(sites)) {
+      if (!s.name || s.group_subdomain) continue;
+      members.get(moved.get(s.name) ?? s.workspace ?? '')?.push(s.name);
+    }
+    return order.map((name) => ({ name, sites: members.get(name) ?? [] }));
+  }
+
+  // The workspace a site displays under, given a layout about to be persisted.
+  // Mirrors the server's rule so the optimistic update matches the push.
+  function displayWorkspace(s: Site, workspaceOf: Map<string, string>): string {
+    const owner = s.group_subdomain ? s.group : s.name;
+    return (owner && workspaceOf.get(owner)) || '';
+  }
+
+  // The flat registry order implied by the current zones: sections top to
+  // bottom, each main followed by its pinned secondaries. Anything not on
+  // screen (paused, orphans) trails behind in its existing order.
+  function siteOrderFromZones(order: string[]): Site[] {
+    const all = get(sites);
     const byDomain = new Map(all.map((s) => [s.domain, s]));
     const next: Site[] = [];
     const used = new Set<string>();
-    for (const m of newMains) {
-      const main = byDomain.get(m.domain);
-      if (!main || used.has(main.domain)) continue;
-      next.push(main);
-      used.add(main.domain);
-      for (const sec of secondariesOf(all, main)) {
-        if (!used.has(sec.domain)) {
-          next.push(sec);
-          used.add(sec.domain);
+    for (const key of [...order, UNGROUPED]) {
+      for (const item of zones[key] ?? []) {
+        const main = byDomain.get(item.id);
+        if (!main || used.has(main.domain)) continue;
+        next.push(main);
+        used.add(main.domain);
+        for (const sec of secondariesOf(all, main)) {
+          if (!used.has(sec.domain)) {
+            next.push(sec);
+            used.add(sec.domain);
+          }
         }
       }
     }
     for (const s of all) if (!used.has(s.domain)) next.push(s);
+    return next;
+  }
 
+  // A row drag changes membership and the manual order, so it persists both in
+  // one write. Optimistic; the KindSites/KindStatus pushes reconcile to server
+  // truth, and a rejected write puts the previous order straight back.
+  async function persistRowDrop() {
+    const prevSites = get(sites);
+    const prevSort = get(sitesSort);
+    const layout = layoutFromZones(wsOrder);
+    const ordered = siteOrderFromZones(wsOrder);
+
+    const workspaceOf = new Map<string, string>();
+    for (const ws of layout) for (const name of ws.sites) workspaceOf.set(name, ws.name);
+
+    savingLayout = true;
     sitesSort.set('manual'); // dragging is what enables manual ordering
-    sites.set(next); // optimistic; the KindSites WS push reconciles to server truth
-    // Revert the optimistic order if the server rejected it, instead of leaving
-    // an order on screen that was never saved.
-    const res = await reorderSites(next.map((s) => s.name).filter((n): n is string => Boolean(n)));
+    sites.set(ordered.map((s) => ({ ...s, workspace: displayWorkspace(s, workspaceOf) })));
+
+    const order = ordered.map((s) => s.name).filter((n): n is string => Boolean(n));
+    const res = await saveWorkspaceLayout(layout, order);
+    savingLayout = false;
     if (!res.ok) {
       sites.set(prevSites);
       sitesSort.set(prevSort);
-      console.error('reorder failed:', res.error);
+      console.error('workspace layout failed:', res.error);
+    }
+  }
+
+  // Reordering the sections only moves whole blocks, so the registry order is
+  // left alone and sites.yaml is never rewritten.
+  async function persistHeaderDrop() {
+    const prevOrder = [...wsOrder];
+    const order = wsItems.map((w) => w.id);
+    savingLayout = true;
+    wsOrder = order;
+    const res = await saveWorkspaceLayout(layoutFromZones(order));
+    savingLayout = false;
+    if (!res.ok) {
+      wsOrder = prevOrder;
+      wsItems = prevOrder.map((n) => ({ id: n }));
+      console.error('workspace reorder failed:', res.error);
     }
   }
 
   function select(s: Site) {
     goToTab('sites', s.domain);
   }
+
+  // ── workspace create / rename / delete ──────────────────────────────────────
+
+  let addingWorkspace = $state(false);
+  let newWorkspaceName = $state('');
+  let renamingKey = $state<string | null>(null);
+  let renameValue = $state('');
+  let menuKey = $state<string | null>(null);
+
+  async function submitNewWorkspace() {
+    const name = newWorkspaceName.trim();
+    if (!name) return;
+    addingWorkspace = false;
+    newWorkspaceName = '';
+    const res = await createWorkspace(name);
+    if (!res.ok) console.error('create workspace failed:', res.error);
+  }
+
+  function startRename(key: string) {
+    menuKey = null;
+    renamingKey = key;
+    renameValue = key;
+  }
+
+  async function submitRename() {
+    const key = renamingKey;
+    const next = renameValue.trim();
+    renamingKey = null;
+    if (!key || !next || next === key) return;
+    const res = await renameWorkspace(key, next);
+    if (!res.ok) console.error('rename workspace failed:', res.error);
+  }
+
+  // Every member is ungrouped by a delete, paused ones included, so the count in
+  // the confirmation is drawn from the whole list rather than the visible rows.
+  function removeWorkspace(key: string) {
+    menuKey = null;
+    openWorkspaceDeleteModal({ name: key, siteCount: countIn(key, $sites) });
+  }
+
+  // ── sort menu ───────────────────────────────────────────────────────────────
 
   const sortOptions: Array<{ value: SitesSort; label: string }> = $derived([
     { value: 'recent', label: m.sites_sort_recent() },
@@ -174,25 +412,46 @@
   ]);
 
   let sortMenuOpen = $state(false);
-  let sortRootEl: HTMLDivElement | undefined = $state();
+  let overlayEl: HTMLDivElement | undefined = $state();
 
   function pickSort(v: SitesSort) {
     sitesSort.set(v);
     sortMenuOpen = false;
   }
-  function onSortDocClick(e: MouseEvent) {
-    if (sortRootEl && !sortRootEl.contains(e.target as Node)) sortMenuOpen = false;
+  function onOverlayDocClick(e: MouseEvent) {
+    if (overlayEl && !overlayEl.contains(e.target as Node)) {
+      sortMenuOpen = false;
+      addingWorkspace = false;
+    }
   }
-  function onSortKey(e: KeyboardEvent) {
-    if (e.key === 'Escape') sortMenuOpen = false;
+  function onOverlayKey(e: KeyboardEvent) {
+    if (e.key === 'Escape') {
+      sortMenuOpen = false;
+      addingWorkspace = false;
+    }
   }
   $effect(() => {
-    if (!sortMenuOpen) return;
-    document.addEventListener('mousedown', onSortDocClick);
-    document.addEventListener('keydown', onSortKey);
+    if (!sortMenuOpen && !addingWorkspace) return;
+    document.addEventListener('mousedown', onOverlayDocClick);
+    document.addEventListener('keydown', onOverlayKey);
     return () => {
-      document.removeEventListener('mousedown', onSortDocClick);
-      document.removeEventListener('keydown', onSortKey);
+      document.removeEventListener('mousedown', onOverlayDocClick);
+      document.removeEventListener('keydown', onOverlayKey);
+    };
+  });
+
+  // The section menus are separate popovers; one document listener closes them.
+  $effect(() => {
+    if (!menuKey) return;
+    const close = () => (menuKey = null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') menuKey = null;
+    };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
     };
   });
 </script>
@@ -211,12 +470,44 @@
   {@html m.sites_emptyHint({ cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd park</code>' })}
 {/snippet}
 
-{#snippet sortOverlay()}
-  <div bind:this={sortRootEl} class="absolute bottom-3 right-3 z-20">
+{#snippet overlayControls()}
+  <!-- Spans the panel so the popovers can size to the column rather than to the
+       button they hang off; the strip itself stays click-through. -->
+  <div
+    bind:this={overlayEl}
+    class="absolute bottom-3 left-3 right-3 z-20 flex items-center justify-end gap-2 pointer-events-none"
+  >
+    {#if addingWorkspace}
+      <div
+        class="absolute bottom-full left-0 right-0 mb-2 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl p-2 pointer-events-auto"
+      >
+        <!-- svelte-ignore a11y_autofocus -->
+        <input
+          autofocus
+          bind:value={newWorkspaceName}
+          onkeydown={(e) => e.key === 'Enter' && submitNewWorkspace()}
+          placeholder={m.workspaces_namePlaceholder()}
+          class="w-full px-2 py-1.5 text-xs rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg text-gray-800 dark:text-gray-200 focus:outline-none focus:border-lerd-red"
+        />
+        <div class="flex justify-end gap-1.5 mt-2">
+          <button
+            type="button"
+            onclick={() => (addingWorkspace = false)}
+            class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">{m.common_cancel()}</button
+          >
+          <button
+            type="button"
+            onclick={submitNewWorkspace}
+            class="px-2 py-1 text-xs font-medium rounded-md bg-lerd-red hover:bg-lerd-redhov text-white">{m.common_add()}</button
+          >
+        </div>
+      </div>
+    {/if}
+
     {#if sortMenuOpen}
       <div
         role="menu"
-        class="absolute bottom-full right-0 mb-2 min-w-44 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl py-1"
+        class="absolute bottom-full right-0 mb-2 min-w-44 max-w-full rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl py-1 pointer-events-auto"
       >
         {#each sortOptions as opt (opt.value)}
           <button
@@ -237,16 +528,30 @@
         {/each}
       </div>
     {/if}
+
+    {#if $accessMode.loopback}
+      <button
+        type="button"
+        onclick={() => ((addingWorkspace = !addingWorkspace), (sortMenuOpen = false))}
+        title={m.workspaces_add()}
+        aria-label={m.workspaces_add()}
+        aria-expanded={addingWorkspace}
+        class="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 backdrop-blur-sm text-gray-800 dark:text-gray-200 hover:border-lerd-red hover:text-lerd-red transition-colors"
+      >
+        <Icon name="plus" class="w-3.5 h-3.5" />
+      </button>
+    {/if}
+
     <button
       type="button"
-      onclick={() => (sortMenuOpen = !sortMenuOpen)}
+      onclick={() => ((sortMenuOpen = !sortMenuOpen), (addingWorkspace = false))}
       title={m.sites_sort_label()}
       aria-haspopup="menu"
       aria-expanded={sortMenuOpen}
       aria-label={m.sites_sort_label()}
-      class="flex items-center justify-center w-9 h-9 rounded-full bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 backdrop-blur-sm text-gray-800 dark:text-gray-200 hover:border-lerd-red hover:text-lerd-red transition-colors"
+      class="pointer-events-auto flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 dark:bg-white/10 border border-gray-200 dark:border-white/15 backdrop-blur-sm text-gray-800 dark:text-gray-200 hover:border-lerd-red hover:text-lerd-red transition-colors"
     >
-      <Icon name="sort" class="w-4 h-4" />
+      <Icon name="sort" class="w-3.5 h-3.5" />
     </button>
   </div>
 {/snippet}
@@ -288,34 +593,141 @@
   </button>
 {/snippet}
 
-<ListPanel title={m.sites_title()} {actions} overlay={$sitesLoaded && $sites.length > 0 ? sortOverlay : undefined}>
+{#snippet sectionRows(key: string)}
+  <!-- An empty section keeps a little height so it stays a drop target.
+       Rows swallow mousedown here: the workspace zone wrapping this section is
+       always live, and a press that reached it would drag the whole workspace
+       instead of the row. The grip's own listener has already run by then, so
+       row dragging is unaffected. -->
+  <section
+    class="{hasWorkspaces && (zones[key]?.length ?? 0) === 0 ? 'min-h-[1.75rem]' : ''} {key === UNGROUPED &&
+    hasWorkspaces
+      ? 'border-t border-gray-100 dark:border-lerd-border'
+      : ''}"
+    use:stopDragBubbling
+    use:dndzone={{ items: zones[key] ?? [], type: dndType, flipDurationMs: FLIP_MS, dragDisabled, dropTargetStyle: {} }}
+    onconsider={(e) => rowConsider(key, e)}
+    onfinalize={(e) => rowFinalize(key, e)}
+  >
+    {#each zones[key] ?? [] as item (item.id)}
+      <div animate:flip={{ duration: FLIP_MS }}>
+        {@render siteRow(item.site, false)}
+        {#each secondariesFor(item.site) as sec (sec.domain)}
+          {@render siteRow(sec, true)}
+        {/each}
+      </div>
+    {/each}
+  </section>
+{/snippet}
+
+{#snippet workspaceMenu(key: string)}
+  <div class="relative">
+    <button
+      type="button"
+      onmousedown={(e) => e.stopPropagation()}
+      onclick={(e) => (e.stopPropagation(), (menuKey = menuKey === key ? null : key))}
+      aria-haspopup="menu"
+      aria-expanded={menuKey === key}
+      aria-label={m.workspaces_sectionMenu()}
+      title={m.workspaces_sectionMenu()}
+      class="flex items-center justify-center w-5 h-5 rounded text-gray-400 hover:text-lerd-red transition-colors"
+    >
+      <Icon name="more" class="w-3.5 h-3.5" />
+    </button>
+    {#if menuKey === key}
+      <div
+        role="menu"
+        tabindex="-1"
+        onmousedown={(e) => e.stopPropagation()}
+        class="absolute right-0 top-full mt-1 z-30 min-w-40 rounded-lg border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-xl py-1"
+      >
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => startRename(key)}
+          class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5"
+          >{m.workspaces_rename()}</button
+        >
+        <button
+          type="button"
+          role="menuitem"
+          onclick={() => removeWorkspace(key)}
+          class="w-full px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-red-50 dark:hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400"
+          >{m.workspaces_delete()}</button
+        >
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet workspaceSection(key: string)}
+  {#snippet menu()}{@render workspaceMenu(key)}{/snippet}
+  {#if renamingKey === key}
+    <div class="px-2 py-1.5 border-t border-gray-100 dark:border-lerd-border">
+      <!-- svelte-ignore a11y_autofocus -->
+      <input
+        autofocus
+        bind:value={renameValue}
+        onblur={submitRename}
+        onkeydown={(e) => (e.key === 'Enter' ? submitRename() : e.key === 'Escape' ? (renamingKey = null) : null)}
+        class="w-full px-2 py-1 text-xs rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg text-gray-800 dark:text-gray-200 focus:outline-none focus:border-lerd-red"
+      />
+    </div>
+  {:else}
+    <SitesSectionHeader
+      label={key}
+      count={countIn(key, active)}
+      collapsed={isCollapsed(key)}
+      ontoggle={() => toggleWorkspaceCollapse(key)}
+      draggable={canReorder && wsOrder.length > 1}
+      trailing={canReorder ? menu : undefined}
+    />
+  {/if}
+  {#if !isCollapsed(key)}
+    {@render sectionRows(key)}
+  {/if}
+{/snippet}
+
+<ListPanel title={m.sites_title()} {actions} overlay={$sitesLoaded && $sites.length > 0 ? overlayControls : undefined}>
   {#if !$sitesLoaded}
     <LoadingRow />
   {:else if $sites.length === 0}
     <EmptyState title={m.sites_empty()} hint={parkHint} size="sm" />
   {:else}
-    <section
-      use:dndzone={{ items: dndItems, type: dndType, flipDurationMs: FLIP_MS, dragDisabled, dropTargetStyle: {} }}
-      onconsider={handleConsider}
-      onfinalize={handleFinalize}
+    <div
+      use:dndzone={{
+        items: wsItems,
+        type: wsDndType,
+        flipDurationMs: FLIP_MS,
+        dragDisabled: !canReorder || wsOrder.length < 2,
+        dropTargetStyle: {}
+      }}
+      onconsider={headerConsider}
+      onfinalize={headerFinalize}
     >
-      {#each dndItems as item (item.id)}
+      {#each wsItems as ws (ws.id)}
         <div animate:flip={{ duration: FLIP_MS }}>
-          {@render siteRow(item.site, false)}
-          {#each secondariesFor(item.site) as sec (sec.domain)}
-            {@render siteRow(sec, true)}
-          {/each}
+          {@render workspaceSection(ws.id)}
         </div>
       {/each}
-    </section>
+    </div>
+
+    <!-- Sites in no workspace trail the sections, unlabelled. With no
+         workspaces at all this is the whole list, exactly as it looked before. -->
+    {@render sectionRows(UNGROUPED)}
 
     {#each orphanSecondaries as s (s.domain)}
       {@render siteRow(s, true)}
     {/each}
 
     {#if paused.length > 0}
-      <div class="border-t border-gray-100 dark:border-lerd-border">
-        <div class="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{m.sites_paused()}</div>
+      <SitesSectionHeader
+        label={m.sites_paused()}
+        count={paused.length}
+        collapsed={isCollapsed(PAUSED)}
+        ontoggle={() => toggleWorkspaceCollapse(PAUSED)}
+      />
+      {#if !isCollapsed(PAUSED)}
         {#each paused as s (s.domain)}
           <button
             onclick={() => select(s)}
@@ -329,7 +741,7 @@
             <span class="flex-1 text-sm truncate">{s.domain}</span>
           </button>
         {/each}
-      </div>
+      {/if}
     {/if}
   {/if}
 </ListPanel>

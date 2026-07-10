@@ -210,6 +210,7 @@ func main() {
 	root.AddCommand(cli.NewShareCmd())
 	root.AddCommand(cli.NewDomainCmd())
 	root.AddCommand(cli.NewGroupCmd())
+	root.AddCommand(cli.NewWorkspaceCmd())
 	root.AddCommand(cli.NewFrameworkCmd())
 	root.AddCommand(cli.NewWorkerCmd())
 	root.AddCommand(cli.NewWorkersCmd())
@@ -1086,6 +1087,7 @@ func removeStale(_ *config.GlobalConfig) bool {
 			}
 			_ = nginx.RemoveVhost(s.PrimaryDomain())
 			_ = config.RemoveSite(s.Name)
+			_ = config.RemoveSiteFromWorkspaces(s.Name)
 			removed = true
 		}
 	}

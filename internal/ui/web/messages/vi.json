@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Sites",
   "dashboard_sites_summary": "{running}/{total} đang chạy",
   "dashboard_sites_running": "Đang chạy",
-  "dashboard_sites_paused": "Tạm dừng",
   "dashboard_sites_failing": "Đang lỗi",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Liên kết site",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "Thêm {n}",
   "envEditor_proposeAddNone": "Thêm mục đã chọn",
   "services_shimsInstalled": "Công cụ máy khách trong PATH của bạn",
-  "services_tools_providedBy": "Được cung cấp bởi {service}"
+  "services_tools_providedBy": "Được cung cấp bởi {service}",
+  "workspaces_add": "Thêm không gian làm việc",
+  "workspaces_new": "Không gian làm việc mới…",
+  "workspaces_none": "Không có",
+  "workspaces_namePlaceholder": "Tên không gian làm việc",
+  "workspaces_rename": "Đổi tên không gian làm việc",
+  "workspaces_delete": "Xóa không gian làm việc",
+  "workspaces_pickerLabel": "Không gian làm việc",
+  "workspaces_sectionMenu": "Thao tác không gian làm việc",
+  "workspaces_collapse": "Thu gọn mục",
+  "workspaces_expand": "Mở rộng mục",
+  "workspaces_deleteTitle": "Xóa \"{name}\"?",
+  "workspaces_deleteBody": "Không gian làm việc sẽ bị xóa. Các trang vẫn được liên kết và trở thành chưa nhóm.",
+  "workspaces_deleteSiteCount": "Số trang bị ảnh hưởng: {count}",
+  "dashboard_sites_pausedCount": "{count} tạm dừng"
 }

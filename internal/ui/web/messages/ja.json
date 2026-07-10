@@ -127,7 +127,6 @@
   "dashboard_sites_title": "サイト",
   "dashboard_sites_summary": "{running}/{total} 稼働中",
   "dashboard_sites_running": "稼働中",
-  "dashboard_sites_paused": "一時停止中",
   "dashboard_sites_failing": "失敗中",
   "dashboard_sites_frameworks": "フレームワーク",
   "dashboard_sites_link": "サイトをリンク",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "{n} 件追加",
   "envEditor_proposeAddNone": "選択項目を追加",
   "services_shimsInstalled": "PATH 上のクライアントツール",
-  "services_tools_providedBy": "{service} が提供"
+  "services_tools_providedBy": "{service} が提供",
+  "workspaces_add": "ワークスペースを追加",
+  "workspaces_new": "新しいワークスペース…",
+  "workspaces_none": "なし",
+  "workspaces_namePlaceholder": "ワークスペース名",
+  "workspaces_rename": "ワークスペースの名前を変更",
+  "workspaces_delete": "ワークスペースを削除",
+  "workspaces_pickerLabel": "ワークスペース",
+  "workspaces_sectionMenu": "ワークスペースの操作",
+  "workspaces_collapse": "セクションを折りたたむ",
+  "workspaces_expand": "セクションを展開",
+  "workspaces_deleteTitle": "「{name}」を削除しますか？",
+  "workspaces_deleteBody": "ワークスペースを削除します。サイトはリンクされたまま、グループ解除されます。",
+  "workspaces_deleteSiteCount": "影響を受けるサイト: {count}",
+  "dashboard_sites_pausedCount": "{count} 個一時停止中"
 }

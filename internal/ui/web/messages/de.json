@@ -127,7 +127,6 @@
   "dashboard_sites_title": "Sites",
   "dashboard_sites_summary": "{running}/{total} laufen",
   "dashboard_sites_running": "Laufend",
-  "dashboard_sites_paused": "Pausiert",
   "dashboard_sites_failing": "Fehlerhaft",
   "dashboard_sites_frameworks": "Frameworks",
   "dashboard_sites_link": "Site verknüpfen",
@@ -1042,5 +1041,19 @@
   "envEditor_proposeAddSelected": "{n} hinzufügen",
   "envEditor_proposeAddNone": "Auswahl hinzufügen",
   "services_shimsInstalled": "Client-Tools in deinem PATH",
-  "services_tools_providedBy": "Bereitgestellt von {service}"
+  "services_tools_providedBy": "Bereitgestellt von {service}",
+  "workspaces_add": "Arbeitsbereich hinzufügen",
+  "workspaces_new": "Neuer Arbeitsbereich…",
+  "workspaces_none": "Keiner",
+  "workspaces_namePlaceholder": "Name des Arbeitsbereichs",
+  "workspaces_rename": "Arbeitsbereich umbenennen",
+  "workspaces_delete": "Arbeitsbereich löschen",
+  "workspaces_pickerLabel": "Arbeitsbereich",
+  "workspaces_sectionMenu": "Aktionen für den Arbeitsbereich",
+  "workspaces_collapse": "Abschnitt einklappen",
+  "workspaces_expand": "Abschnitt ausklappen",
+  "workspaces_deleteTitle": "\"{name}\" löschen?",
+  "workspaces_deleteBody": "Der Arbeitsbereich wird entfernt. Seine Sites bleiben verknüpft und sind nicht mehr gruppiert.",
+  "workspaces_deleteSiteCount": "Betroffene Sites: {count}",
+  "dashboard_sites_pausedCount": "{count} pausiert"
 }

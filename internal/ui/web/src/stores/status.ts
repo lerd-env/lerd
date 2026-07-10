@@ -24,6 +24,8 @@ export interface StatusResponse {
   watcher_running: boolean;
   frankenphp_php_versions: string[];
   home: string;
+  // Workspace names in display order, empty ones included.
+  workspaces?: string[];
 }
 
 const empty: StatusResponse = {
@@ -38,7 +40,8 @@ const empty: StatusResponse = {
   using_system_bun: false,
   watcher_running: false,
   frankenphp_php_versions: [],
-  home: ''
+  home: '',
+  workspaces: []
 };
 
 export const status = writable<StatusResponse>(empty);
