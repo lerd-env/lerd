@@ -147,6 +147,10 @@ func applyDNSTLDMigration(prevTLD string, enabling bool) string {
 				adjustSitesSecuredForDNS(prevTLD, enabling)
 			}
 		}
+		// A prior declined rewrite advances config's TLD but leaves sites on the
+		// old physical TLD (== newTLD on the reverse flip); track HTTPS there too,
+		// so a re-enable restores them instead of skipping when sitesWithTLD(prevTLD) is empty.
+		adjustSitesSecuredForDNS(newTLD, enabling)
 		return newTLD
 	}
 	// No canonical rename (a preserved custom TLD): domains stay, but HTTPS still
