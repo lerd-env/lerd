@@ -1910,14 +1910,54 @@ func DetectMajorVersion(projectDir, frameworkName string) string {
 	return ""
 }
 
-func detectVersionFromComposer(projectDir string, rules []FrameworkRule) string {
-	data, err := os.ReadFile(filepath.Join(projectDir, "composer.json"))
-	if err != nil {
-		return ""
+// composerParseCache memoises the parsed top-level sections of a project's
+// composer.json, keyed by path and invalidated by mtime+size. DetectMajorVersion
+// runs on the daemon's hot snapshot path (once per site per tick, and now once
+// per site inside workerheal.Detect), where re-reading and re-unmarshalling
+// composer.json every call showed up as avoidable work. The cached map is only
+// read by callers, so sharing it is safe.
+type composerParseEntry struct {
+	raw   map[string]json.RawMessage
+	mtime time.Time
+	size  int64
+}
+
+var (
+	composerParseCacheMu sync.Mutex
+	composerParseCache   = map[string]composerParseEntry{}
+)
+
+// parseComposerJSON returns the top-level sections of a project's composer.json,
+// mtime-cached. ok is false when the file is missing or unparseable.
+func parseComposerJSON(projectDir string) (raw map[string]json.RawMessage, ok bool) {
+	path := filepath.Join(projectDir, "composer.json")
+	info, statErr := os.Stat(path)
+	if statErr != nil {
+		return nil, false
 	}
 
-	var raw map[string]json.RawMessage
-	if json.Unmarshal(data, &raw) != nil {
+	composerParseCacheMu.Lock()
+	if e, hit := composerParseCache[path]; hit && e.mtime.Equal(info.ModTime()) && e.size == info.Size() {
+		composerParseCacheMu.Unlock()
+		return e.raw, e.raw != nil
+	}
+	composerParseCacheMu.Unlock()
+
+	var parsed map[string]json.RawMessage
+	if data, err := os.ReadFile(path); err == nil {
+		_ = json.Unmarshal(data, &parsed) // nil on failure -> cached as a miss
+	}
+
+	composerParseCacheMu.Lock()
+	composerParseCache[path] = composerParseEntry{raw: parsed, mtime: info.ModTime(), size: info.Size()}
+	composerParseCacheMu.Unlock()
+
+	return parsed, parsed != nil
+}
+
+func detectVersionFromComposer(projectDir string, rules []FrameworkRule) string {
+	raw, ok := parseComposerJSON(projectDir)
+	if !ok {
 		return ""
 	}
 

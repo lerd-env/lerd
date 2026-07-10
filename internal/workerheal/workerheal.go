@@ -68,12 +68,12 @@ var (
 )
 
 // defaultWorkerReachable probes a running worker that declares a health block.
-// probed is false (keep process-only liveness) when the worker has no health
-// block or its framework can't be resolved. The framework read is cached, so the
-// cost lands once per site that has active workers, not per worker.
-func defaultWorkerReachable(sitePath, framework, worker string) (reachable, probed bool) {
-	fw, ok := config.GetFrameworkForDir(framework, sitePath)
-	if !ok {
+// probed is false (keep process-only liveness) when the site has no resolvable
+// framework or the worker has no health block. The framework is resolved once
+// per site by Detect and passed in, so the store is touched at most once per
+// site per tick, never per worker.
+func defaultWorkerReachable(sitePath string, fw *config.Framework, worker string) (reachable, probed bool) {
+	if fw == nil {
 		return false, false
 	}
 	w, ok := fw.Workers[worker]
@@ -136,6 +136,15 @@ func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
 		if in[i].State == "expected-but-stopped" {
 			continue
 		}
+		// An unreachable worker's process is still active, so its last journal line
+		// is whatever the live server last logged (often a harmless info line) and
+		// would read as a false cause. State the real problem instead of the journal.
+		// Framework-agnostic on purpose: which file/port carries the URL lives in the
+		// store, not here.
+		if in[i].State == "unreachable" {
+			in[i].LastError = "process is up but its server is not accepting connections"
+			continue
+		}
 		if time.Now().After(deadline) {
 			break
 		}
@@ -147,8 +156,10 @@ func Enrich(in []UnhealthyWorker) []UnhealthyWorker {
 // Detect returns every worker unit systemd considers "failed". Cheap by
 // design: it reads only the existing batched unit-state cache (one
 // systemctl call per 3s, shared with the dashboard's enrichment path) plus
-// sites.yaml. No per-site .lerd.yaml or composer.json reads, no extra
-// subprocess calls. Safe to invoke from a hot endpoint.
+// sites.yaml. For a site that has an active health-probed worker it resolves
+// the framework once per site, memoised by composer.json mtime, so a steady
+// tick reparses nothing. No extra subprocess calls; safe to invoke from a
+// hot endpoint.
 //
 // Two health problems are detected. "failed" — units that hit Restart= rate
 // limits or crash repeatedly and stay stuck until reset. "expected-but-stopped"
@@ -199,6 +210,11 @@ func Detect() ([]UnhealthyWorker, error) {
 	}
 
 	states := unitStatesFn()
+	// Framework resolved lazily, at most once per site with an active worker.
+	// GetFrameworkForDir is not a plain lookup (it can trigger an unthrottled
+	// store fetch), so it must never run per worker inside the loop.
+	resolvedFw := make(map[string]*config.Framework)
+	resolvedSet := make(map[string]bool)
 	var out []UnhealthyWorker
 	for unit, state := range states {
 		// The unit-state cache aliases each .service unit under both
@@ -251,7 +267,11 @@ func Detect() ([]UnhealthyWorker, error) {
 			detected = "expected-but-stopped"
 		default: // "active": up, but a health-probed server may have died under it.
 			m := meta[site]
-			reachable, probed := workerReachableFn(m.path, m.framework, worker)
+			if !resolvedSet[site] {
+				resolvedFw[site], _ = config.GetFrameworkForDir(m.framework, m.path)
+				resolvedSet[site] = true
+			}
+			reachable, probed := workerReachableFn(m.path, resolvedFw[site], worker)
 			if !probed || reachable {
 				continue // no health probe declared, or the server is serving
 			}
