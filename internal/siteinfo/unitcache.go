@@ -13,12 +13,9 @@ import (
 // a refresh is triggered on the next lookup.
 const unitCacheTTL = 3 * time.Second
 
-// UnitMeta carries the per-unit properties the reachability probe needs beyond
-// the active state: when the unit last entered active (wall-clock, derived from
-// systemd's monotonic timestamp so no locale-dependent string is parsed) and its
-// WorkingDirectory (a worktree worker's checkout path). Zero values mean the
-// property was unavailable this tick; callers treat that as "unknown" and fall
-// back to the process-only behaviour.
+// UnitMeta carries the two per-unit properties the reachability probe needs
+// beyond active state: when the unit last entered active (for the dial gate) and
+// its WorkingDirectory (a worktree's checkout). Zero means unavailable this tick.
 type UnitMeta struct {
 	ActiveEnter time.Time
 	WorkingDir  string
@@ -39,10 +36,8 @@ var (
 	unitCacheListFn = defaultUnitCacheList
 
 	// unitShowFn is swappable for tests. Given the discovered unit names it
-	// returns the raw output of `systemctl --user show -p Id -p
-	// ActiveEnterTimestampMonotonic -p WorkingDirectory <units...>`. The state
-	// path stays on list-units (unchanged, proven); this only adds the two
-	// extra properties the reachability probe needs.
+	// returns raw `systemctl show` output for the two extra probe properties;
+	// the state path stays on list-units, untouched.
 	unitShowFn = defaultUnitShow
 
 	// allUnitStatesFn lets non-systemd platforms override the enumeration
@@ -99,9 +94,8 @@ func systemBootTime() (time.Time, bool) {
 }
 
 // parseUnitMeta turns `systemctl show` output (blank-line-separated per-unit
-// blocks labelled by Id) into a unit→UnitMeta map. ActiveEnterTimestampMonotonic
-// is microseconds since boot; 0 (never active) yields a zero ActiveEnter. bootOK
-// false leaves ActiveEnter zero, so the gate that reads it simply doesn't fire.
+// blocks keyed by Id) into a unit→UnitMeta map. Monotonic 0 or bootOK false
+// leaves ActiveEnter zero, so the gate that reads it simply doesn't fire.
 func parseUnitMeta(raw string, boot time.Time, bootOK bool) map[string]UnitMeta {
 	out := make(map[string]UnitMeta)
 	var id string
@@ -201,10 +195,9 @@ func AllUnitStatesOK() (map[string]string, bool) {
 	return out, ok
 }
 
-// AllUnitMeta returns a snapshot of the per-unit ActiveEnter + WorkingDirectory
-// filled from the same batched refresh AllUnitStates uses, so the reachability
-// probe (worktree path + the mtime gate) reads one source. On the non-systemd
-// override path (darwin) it returns whatever the launchd walker can supply.
+// AllUnitMeta snapshots the per-unit ActiveEnter + WorkingDirectory filled by the
+// same batched refresh AllUnitStates uses, so the reachability probe reads one
+// source. On darwin it returns whatever the launchd walker can supply.
 func AllUnitMeta() map[string]UnitMeta {
 	if allUnitMetaFn != nil {
 		return allUnitMetaFn()

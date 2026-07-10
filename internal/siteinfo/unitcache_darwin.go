@@ -62,10 +62,8 @@ func init() {
 		darwinUnitStatesCache.mu.Unlock()
 	}
 
-	// launchd exposes neither an ActiveEnter timestamp nor a per-unit
-	// WorkingDirectory the way `systemctl show` does, so meta is empty on
-	// darwin: the reachability gate falls back to always dialing and worktree
-	// heal keeps its process-only path. Wiring the plist WorkingDirectory in is
-	// a darwin follow-up; the incident this targets is Linux/systemd.
+	// launchd exposes neither ActiveEnter nor a per-unit WorkingDirectory cleanly,
+	// so meta is empty on darwin: the gate falls back to always dialing and heal
+	// keeps its process-only path (a darwin follow-up; the incident is systemd).
 	allUnitMetaFn = func() map[string]UnitMeta { return map[string]UnitMeta{} }
 }
