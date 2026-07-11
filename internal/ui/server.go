@@ -43,6 +43,7 @@ import (
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/reqstats"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/shims"
@@ -930,8 +931,11 @@ func buildSites() []SiteResponse {
 					Unreachable: fw.Unreachable,
 				})
 			}
+			// Idle state keys a worktree by its checkout dir (what the worker units
+			// are named after), request traffic by its branch (what the store and the
+			// timing API share). Same worktree, two key schemes.
 			wtKeyStr := wtKey(e.Name, config.WorktreeUnitSlug(filepath.Base(wt.Path)))
-			usage = addUsage(usage, siteUsage[wtKeyStr])
+			usage = addUsage(usage, siteUsage[reqstats.Key(e.Name, wt.Branch)])
 			worktreeResponses = append(worktreeResponses, WorktreeResponse{
 				Branch:               wt.Branch,
 				Domain:               wt.Domain,

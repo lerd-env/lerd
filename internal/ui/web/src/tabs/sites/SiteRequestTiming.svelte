@@ -12,14 +12,19 @@
   import { debugCaptureEnabled } from '$stores/queries';
   import { debugLens, debugSearch } from '$stores/debugLens';
   import { goToTab } from '$stores/route';
+  import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { tooltip } from '$lib/tooltip';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
-    site: { domain: string };
+    site: Site;
     activeWorktreeBranch?: string;
   }
   let { site, activeWorktreeBranch = '' }: Props = $props();
+
+  // Requests are served by the active worktree's own subdomain, so opening or
+  // profiling a route has to target that, not the parent site.
+  let targetDomain = $derived(activeWorktreeDomain(site, activeWorktreeBranch));
 
   // Inspect a route's queries in the Debug tab's Queries lens, the one place that
   // renders captured queries. Seed the lens filter with the route's path prefix
@@ -133,7 +138,7 @@
   let arming = $state(false);
   function routeUrl(r: RouteStat): string {
     if (r.method !== 'GET' || !r.example) return '';
-    return `https://${site.domain}${r.example}`;
+    return `https://${targetDomain}${r.example}`;
   }
   async function profileRoute(r: RouteStat) {
     if (arming) return;
