@@ -337,7 +337,7 @@ func TestListEnvFiles_returnsEnvVariantsWithDefaultFirst(t *testing.T) {
 	must(".env.tmp.abc", 0o644)                     // matches via two-segment, excluded by regex
 	must("regular.txt", 0o644)                      // not an env file
 
-	got, err := listEnvFiles(dir)
+	got, err := listEnvFiles("", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestEnvFileFromQuery(t *testing.T) {
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest(http.MethodGet, "/?"+c.q, nil)
-		gotFile, gotOK := envFileFromQuery(req)
+		gotFile, gotOK := envFileFromQuery(req, ".env")
 		if gotOK != c.wantOK {
 			t.Errorf("q=%q ok: got %v want %v", c.q, gotOK, c.wantOK)
 		}
@@ -723,13 +723,13 @@ func TestHandleSiteEnv_backupsListsNewestFirst(t *testing.T) {
 // UI only surfaces the Env tab for sites whose root has a real .env file.
 func TestSiteHasEnv(t *testing.T) {
 	dir := t.TempDir()
-	if siteHasEnv(dir) {
+	if siteHasEnv("", dir) {
 		t.Error("expected false when .env missing")
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("X=1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !siteHasEnv(dir) {
+	if !siteHasEnv("", dir) {
 		t.Error("expected true after writing .env")
 	}
 
@@ -738,8 +738,81 @@ func TestSiteHasEnv(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dirOnly, ".env"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if siteHasEnv(dirOnly) {
+	if siteHasEnv("", dirOnly) {
 		t.Error("expected false when .env is a directory")
+	}
+}
+
+// A framework whose dotenv lives in a subdirectory (CakePHP config/.env) must
+// surface the Env tab, list that file, and read it through ?file=, even though
+// the file name contains a slash the root-only regex rejects.
+func TestSiteEnv_frameworkSubdirDotenv(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	// Register a custom framework pointing its env at config/.env.
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, "config", ".env"), []byte("DEBUG=true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("cakelike", sitePath) {
+		t.Error("expected has_env true for config/.env")
+	}
+
+	files, err := listEnvFiles("cakelike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "config/.env" {
+		t.Errorf("listEnvFiles: got %v want [config/.env]", files)
+	}
+
+	// The declared subdir file is allowed through the query even with its slash.
+	req := httptest.NewRequest(http.MethodGet, "/?file=config/.env", nil)
+	if got, ok := envFileFromQuery(req, "config/.env"); !ok || got != "config/.env" {
+		t.Errorf("envFileFromQuery(config/.env): got %q ok=%v", got, ok)
+	}
+	// An unrelated slashed name is still rejected.
+	req = httptest.NewRequest(http.MethodGet, "/?file=config/other", nil)
+	if _, ok := envFileFromQuery(req, "config/.env"); ok {
+		t.Error("expected config/other to be rejected")
+	}
+}
+
+// A non-dotenv framework (env stored in PHP source) gets no Env tab: siteHasEnv
+// is false even when a stray root .env exists.
+func TestSiteHasEnv_nonDotenvFrameworkExcluded(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "phpenv.yaml"),
+		[]byte("name: phpenv\nlabel: PHPEnv\nenv:\n  file: wp-config.php\n  format: php-const\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("X=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if siteHasEnv("phpenv", sitePath) {
+		t.Error("expected false: php-const framework must not surface the Env tab")
 	}
 }
 

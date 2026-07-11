@@ -988,7 +988,7 @@ func buildSites() []SiteResponse {
 			HasAppLogs:           e.HasAppLogs,
 			LatestLogTime:        e.LatestLogTime,
 			HasFavicon:           e.HasFavicon,
-			HasEnv:               siteHasEnv(e.Path),
+			HasEnv:               siteHasEnv(e.FrameworkName, e.Path),
 			Paused:               e.Paused,
 			LastActive:           idleActivity[e.Name],
 			IdleSuspended:        len(suspendedWorkers[e.Name]) > 0,
@@ -2757,17 +2757,8 @@ func handleSiteEnvRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 
@@ -2808,17 +2799,8 @@ func handleSiteEnvWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 
@@ -2862,26 +2844,52 @@ var envExcludedFiles = map[string]bool{
 	".env.before_lerd": true,
 }
 
-// envFileFromQuery extracts the ?file= parameter and validates it against
-// envFileRe and envExcludedFiles. An empty ?file= defaults to ".env" so
-// callers that pre-date the multi-file UI keep working.
-func envFileFromQuery(r *http.Request) (string, bool) {
+// envFileFromQuery extracts the ?file= parameter and validates it. An empty
+// ?file= defaults to the framework's declared env file. That file is always
+// allowed even when it lives in a subdirectory (CakePHP config/.env), which
+// envFileRe rejects; every other name must be a root dotenv variant.
+func envFileFromQuery(r *http.Request, defaultFile string) (string, bool) {
 	f := r.URL.Query().Get("file")
 	if f == "" {
-		return ".env", true
+		return defaultFile, true
 	}
-	if !envFileRe.MatchString(f) {
-		return "", false
+	if f == defaultFile {
+		return f, true
 	}
-	if envExcludedFiles[f] {
+	if envExcludedFiles[f] || !envFileRe.MatchString(f) {
 		return "", false
 	}
 	return f, true
 }
 
-// listEnvFiles enumerates the project's editable env files in dir.
-// .env always appears first; the rest are alphabetical.
-func listEnvFiles(dir string) ([]string, error) {
+// resolveEnvTarget resolves the branch directory and the target env file for a
+// site env request, shared by all five /env endpoints so they agree on the file
+// set. It writes the error and returns ok=false when the branch dir is unknown
+// (404) or the framework has no editable dotenv / the file is invalid (400).
+func resolveEnvTarget(w http.ResponseWriter, r *http.Request, site *config.Site) (dir, envFile string, ok bool) {
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir = resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return "", "", false
+	}
+	def, has := frameworkEnvFile(site.Framework, dir)
+	if !has {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return "", "", false
+	}
+	envFile, ok = envFileFromQuery(r, def)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return "", "", false
+	}
+	return dir, envFile, true
+}
+
+// listEnvFiles enumerates the project's editable env files in dir. The
+// framework's declared file appears first; the rest are alphabetical.
+func listEnvFiles(frameworkName, dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -2895,17 +2903,28 @@ func listEnvFiles(dir string) ([]string, error) {
 			continue
 		}
 		name := e.Name()
-		if envExcludedFiles[name] {
-			continue
-		}
-		if !envFileRe.MatchString(name) {
+		if envExcludedFiles[name] || !envFileRe.MatchString(name) {
 			continue
 		}
 		out = append(out, name)
 	}
 	sort.Strings(out)
+
+	primary, ok := frameworkEnvFile(frameworkName, dir)
+	if !ok {
+		return out, nil
+	}
+	// The framework's file may live in a subdirectory (CakePHP config/.env) the
+	// root scan never sees; surface it when present. A slashed path can never
+	// collide with the root basenames already in out.
+	if strings.ContainsRune(primary, '/') {
+		if info, statErr := os.Stat(filepath.Join(dir, primary)); statErr == nil && !info.IsDir() {
+			out = append(out, primary)
+		}
+	}
+	// Primary first so the file the framework actually reads is pre-selected.
 	for i, n := range out {
-		if n == ".env" && i != 0 {
+		if n == primary && i != 0 {
 			out[0], out[i] = out[i], out[0]
 			break
 		}
@@ -2922,16 +2941,8 @@ func handleSiteEnvBackupContent(w http.ResponseWriter, r *http.Request, site *co
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	data, err := envCfgFile(dir, envFile).ReadBackup(name)
@@ -2953,16 +2964,8 @@ func handleSiteEnvBackups(w http.ResponseWriter, r *http.Request, site *config.S
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	list, err := envCfgFile(dir, envFile).ListBackups()
@@ -2988,7 +2991,7 @@ func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Sit
 		http.NotFound(w, r)
 		return
 	}
-	files, err := listEnvFiles(dir)
+	files, err := listEnvFiles(site.Framework, dir)
 	if err != nil {
 		http.Error(w, "listing env files: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -3131,16 +3134,8 @@ func handleSiteEnvRestore(w http.ResponseWriter, r *http.Request, site *config.S
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	// Always attempt the decode: an empty body parses as the zero value via
@@ -5336,15 +5331,33 @@ func projectJSRuntime(sitePath string) string {
 	return ""
 }
 
-func siteHasEnv(sitePath string) bool {
+// frameworkEnvFile resolves the dotenv file a framework actually reads, relative
+// to dir (Laravel ".env", CakePHP "config/.env", Symfony ".env.local"). ok is
+// false for frameworks whose env is PHP source (WordPress wp-config.php, etc.):
+// those are out of scope for the flat key=value editor and get no Env tab. With
+// no known framework it defaults to ".env".
+func frameworkEnvFile(frameworkName, dir string) (file string, ok bool) {
+	fw, found := config.GetFramework(frameworkName)
+	if !found {
+		return ".env", true
+	}
+	file, format := fw.Env.Resolve(dir)
+	if format != "dotenv" {
+		return "", false
+	}
+	return file, true
+}
+
+func siteHasEnv(frameworkName, sitePath string) bool {
 	if sitePath == "" {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(sitePath, ".env"))
-	if err != nil {
+	file, ok := frameworkEnvFile(frameworkName, sitePath)
+	if !ok {
 		return false
 	}
-	return !info.IsDir()
+	info, err := os.Stat(filepath.Join(sitePath, file))
+	return err == nil && !info.IsDir()
 }
 
 // siteHasEnvOverrides reports whether the project declares env_overrides in its
