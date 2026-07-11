@@ -46,6 +46,7 @@ RUN apk update && apk add --no-cache \
         intl \
         pcntl \
         exif \
+        ftp \
         sockets \
         gmp \
         bz2 \
