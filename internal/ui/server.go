@@ -769,7 +769,6 @@ type SiteResponse struct {
 	HasScheduleWorker  bool           `json:"has_schedule_worker"`
 	FrameworkWorkers   []WorkerStatus `json:"framework_workers,omitempty"`
 	HasAppLogs         bool           `json:"has_app_logs"`
-	LatestLogTime      string         `json:"latest_log_time,omitempty"`
 	HasFavicon         bool           `json:"has_favicon"`
 	HasEnv             bool           `json:"has_env"`
 	Paused             bool           `json:"paused"`
@@ -779,6 +778,11 @@ type SiteResponse struct {
 	// idle-suspend activity feed. Zero (omitted) means no activity recorded yet
 	// this lerd-ui session.
 	LastActive int64 `json:"last_active,omitempty"`
+	// LastRequestAt (unix milliseconds) and RequestCount are the site's traffic
+	// over the request store's retention window, worktrees included, filtered to
+	// the requests the app actually served. The sites list orders by them.
+	LastRequestAt int64 `json:"last_request_at,omitempty"`
+	RequestCount  int   `json:"request_count,omitempty"`
 	// IdleSuspended is true when the idle engine has gracefully stopped this
 	// site's workers (a subset of Idle: only sites that had workers to stop).
 	IdleSuspended bool `json:"idle_suspended,omitempty"`
@@ -846,6 +850,9 @@ func buildSites() []SiteResponse {
 	// Last-active times live in the lerd-watcher process and are persisted to a
 	// file we read once per snapshot; suspended state comes from the site config.
 	idleActivity := loadIdleActivity()
+	// Traffic per site key, read once per snapshot, so the sites list can order by
+	// what has actually been used rather than by log-file mtime.
+	siteUsage := loadSiteUsage()
 
 	// Per-site list of workers the engine suspended, so the dashboard can keep
 	// showing their dots dimmed instead of dropping them.
@@ -903,6 +910,8 @@ func buildSites() []SiteResponse {
 			})
 		}
 
+		usage := siteUsage[e.Name]
+
 		var worktreeResponses []WorktreeResponse
 		for _, wt := range e.Worktrees {
 			lanPort := 0
@@ -922,6 +931,7 @@ func buildSites() []SiteResponse {
 				})
 			}
 			wtKeyStr := wtKey(e.Name, config.WorktreeUnitSlug(filepath.Base(wt.Path)))
+			usage = addUsage(usage, siteUsage[wtKeyStr])
 			worktreeResponses = append(worktreeResponses, WorktreeResponse{
 				Branch:               wt.Branch,
 				Domain:               wt.Domain,
@@ -987,11 +997,12 @@ func buildSites() []SiteResponse {
 			HasScheduleWorker:    e.HasScheduleWorker,
 			FrameworkWorkers:     fwWorkers,
 			HasAppLogs:           e.HasAppLogs,
-			LatestLogTime:        e.LatestLogTime,
 			HasFavicon:           e.HasFavicon,
 			HasEnv:               siteHasEnv(e.Path),
 			Paused:               e.Paused,
 			LastActive:           idleActivity[e.Name],
+			LastRequestAt:        unixMilliOrZero(usage.LastAt),
+			RequestCount:         usage.Count,
 			IdleSuspended:        len(suspendedWorkers[e.Name]) > 0,
 			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
 			IdleSuspendedWorkers: suspendedWorkers[e.Name],

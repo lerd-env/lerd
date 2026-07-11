@@ -43,12 +43,9 @@ var (
 // disk for lerd-ui. Shorter than the idle tick so the panel feels live.
 const reqStatsSaveInterval = 10 * time.Second
 
-// reqStatsRetention bounds the durable store; rows older than this are pruned so
-// the DB stays small. reqStatsPruneInterval throttles how often that runs.
-const (
-	reqStatsRetention     = 7 * 24 * time.Hour
-	reqStatsPruneInterval = time.Hour
-)
+// reqStatsPruneInterval throttles how often rows past reqstats.Retention are
+// pruned, which is what keeps the DB small.
+const reqStatsPruneInterval = time.Hour
 
 // slowNotifier fires a one-time push per newly-flagged slow route on each save
 // tick. Allocated once by StartIdle.
@@ -239,7 +236,7 @@ func flushReqStore() {
 		_ = reqStore.Insert(batch)
 	}
 	if now := time.Now(); now.Sub(lastPrune) >= reqStatsPruneInterval {
-		_, _ = reqStore.Prune(now.Add(-reqStatsRetention))
+		_, _ = reqStore.Prune(now.Add(-reqstats.Retention))
 		lastPrune = now
 	}
 }

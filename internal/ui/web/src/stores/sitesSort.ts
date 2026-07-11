@@ -2,12 +2,13 @@ import { writable } from 'svelte/store';
 
 // Remembers how the user wants the Sites list ordered, so a refresh keeps the
 // same view. 'manual' is the registry order from sites.yaml (drag-reorderable);
-// the others are display-only sorts computed in SitesTab.
-export type SitesSort = 'manual' | 'recent' | 'alpha' | 'newest';
+// the others are display-only sorts computed in SitesTab. 'recent' and 'used'
+// both read the request store: the last request served, and how many.
+export type SitesSort = 'manual' | 'recent' | 'used' | 'alpha' | 'newest';
 
 const KEY = 'lerd:sitesSort';
 
-const VALID: SitesSort[] = ['manual', 'recent', 'alpha', 'newest'];
+const VALID: SitesSort[] = ['manual', 'recent', 'used', 'alpha', 'newest'];
 
 function initial(): SitesSort {
   if (typeof localStorage === 'undefined') return 'manual';

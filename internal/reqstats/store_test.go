@@ -263,6 +263,42 @@ func TestLastSeenBySite(t *testing.T) {
 	}
 }
 
+func TestUsageBySite(t *testing.T) {
+	s := tempStore(t)
+	seed(t, s, mk(3, 0, "app", "GET", "GET /", "/", 200, 20))
+	seed(t, s, mk(2, 5*time.Minute, "app", "GET", "GET /x", "/x", 200, 20))
+	seed(t, s, mk(1, time.Minute, "blog", "GET", "GET /", "/", 200, 20))
+	// Traffic the app-request predicate drops: an asset burst, a WebSocket that
+	// logged once on close, and a request nginx timed at zero.
+	seed(t, s, mk(50, 10*time.Minute, "blog", "GET", "GET /app.js", "/app.js", 200, 5))
+	seed(t, s, mk(1, 11*time.Minute, "blog", "GET", "GET /ws", "/ws", 101, 900000))
+	seed(t, s, mk(1, 12*time.Minute, "blog", "GET", "GET /health", "/health", 200, 0))
+	seed(t, s, mk(4, -2*time.Hour, "archived", "GET", "GET /", "/", 200, 20))
+
+	got, err := s.UsageBySite(base.Add(-time.Hour), base.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("UsageBySite: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("sites = %v, want app and blog only", got)
+	}
+	if got["app"].Count != 5 {
+		t.Errorf("app count = %d, want 5", got["app"].Count)
+	}
+	// app's newest sample is the last record of the +5m batch (offset +5m+1s).
+	if want := base.Add(5*time.Minute + time.Second); !got["app"].LastAt.Equal(want) {
+		t.Errorf("app last request = %v, want %v", got["app"].LastAt, want)
+	}
+	if got["blog"].Count != 1 {
+		t.Errorf("blog count = %d, want 1 (assets, upgrade and zero-time excluded)", got["blog"].Count)
+	}
+	// The asset burst is blog's newest row but not its newest app request, so the
+	// last-request time must stay at the real one.
+	if want := base.Add(time.Minute); !got["blog"].LastAt.Equal(want) {
+		t.Errorf("blog last request = %v, want %v", got["blog"].LastAt, want)
+	}
+}
+
 func TestStorePruneDropsOldRows(t *testing.T) {
 	s := tempStore(t)
 	seed(t, s, mk(4, -48*time.Hour, "app", "GET", "GET /old", "/old", 200, 20))

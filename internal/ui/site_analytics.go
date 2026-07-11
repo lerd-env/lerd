@@ -35,6 +35,42 @@ func getAnalyticsStore() (*reqstats.Store, error) {
 	return analyticsStore, nil
 }
 
+// loadSiteUsage reads per-key request counts and last-request times over the
+// store's retention window, once per sites snapshot. Nil when the store isn't
+// reachable, which leaves every site reading as untrafficked rather than failing
+// the snapshot.
+func loadSiteUsage() map[string]reqstats.SiteUsage {
+	store, err := getAnalyticsStore()
+	if err != nil {
+		return nil
+	}
+	until := time.Now()
+	usage, err := store.UsageBySite(until.Add(-reqstats.Retention), until)
+	if err != nil {
+		return nil
+	}
+	return usage
+}
+
+// addUsage folds a worktree's traffic into its site's, so a project driven from a
+// worktree ranks by the work done on it rather than reading as untrafficked.
+func addUsage(a, b reqstats.SiteUsage) reqstats.SiteUsage {
+	a.Count += b.Count
+	if b.LastAt.After(a.LastAt) {
+		a.LastAt = b.LastAt
+	}
+	return a
+}
+
+// unixMilliOrZero renders a time for the sites payload, mapping the zero time to
+// 0 so a site with no traffic omits the field rather than sending a 1970 stamp.
+func unixMilliOrZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
+}
+
 // recentRequest is one row of the recent-requests list: enough to render it
 // without leaking the site key or absolute timestamps the UI doesn't need.
 type recentRequest struct {
