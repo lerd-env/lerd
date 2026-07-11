@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "Xóa \"{name}\"?",
   "workspaces_deleteBody": "Không gian làm việc sẽ bị xóa. Các trang vẫn được liên kết và trở thành chưa nhóm.",
   "workspaces_deleteSiteCount": "Số trang bị ảnh hưởng: {count}",
-  "dashboard_sites_pausedCount": "{count} tạm dừng"
+  "dashboard_sites_pausedCount": "{count} tạm dừng",
+  "dashboard_disk_reclaimable": "Đĩa có thể thu hồi",
+  "dashboard_disk_cleanup": "Dọn dẹp",
+  "dashboard_disk_held": "{size} nữa đang bị các container đang chạy giữ, được giải phóng khi khởi động lại",
+  "dashboard_disk_modalTitle": "Thu hồi dung lượng đĩa",
+  "dashboard_disk_modalBody": "Có thể xóa các image này để giải phóng khoảng {size}:",
+  "dashboard_disk_modalDeepNote": "Việc dọn dẹp sâu này cũng xóa các image lơ lửng không gắn thẻ do các tải công việc podman khác trên máy này để lại. Nó không bao giờ đụng đến các volume dữ liệu có tên.",
+  "dashboard_disk_modalConfirm": "Thu hồi",
+  "dashboard_disk_cleaning": "Đang thu hồi…"
 }

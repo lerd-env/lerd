@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "Hapus \"{name}\"?",
   "workspaces_deleteBody": "Ruang kerja dihapus. Situsnya tetap tertaut dan menjadi tidak dikelompokkan.",
   "workspaces_deleteSiteCount": "Situs yang terpengaruh: {count}",
-  "dashboard_sites_pausedCount": "{count} dijeda"
+  "dashboard_sites_pausedCount": "{count} dijeda",
+  "dashboard_disk_reclaimable": "Disk yang bisa direklamasi",
+  "dashboard_disk_cleanup": "Bersihkan",
+  "dashboard_disk_held": "{size} lagi ditahan oleh kontainer yang berjalan, dibebaskan saat mulai ulang",
+  "dashboard_disk_modalTitle": "Reklamasi disk",
+  "dashboard_disk_modalBody": "Image ini dapat dihapus untuk membebaskan sekitar {size}:",
+  "dashboard_disk_modalDeepNote": "Pembersihan mendalam ini juga menghapus image menggantung tanpa tag milik beban kerja podman lain di mesin ini. Volume data bernama tidak pernah disentuh.",
+  "dashboard_disk_modalConfirm": "Reklamasi",
+  "dashboard_disk_cleaning": "Mereklamasi…"
 }

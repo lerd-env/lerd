@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "\"{name}\" löschen?",
   "workspaces_deleteBody": "Der Arbeitsbereich wird entfernt. Seine Sites bleiben verknüpft und sind nicht mehr gruppiert.",
   "workspaces_deleteSiteCount": "Betroffene Sites: {count}",
-  "dashboard_sites_pausedCount": "{count} pausiert"
+  "dashboard_sites_pausedCount": "{count} pausiert",
+  "dashboard_disk_reclaimable": "Freigebbarer Speicher",
+  "dashboard_disk_cleanup": "Aufräumen",
+  "dashboard_disk_held": "{size} weitere von laufenden Containern belegt, werden beim Neustart frei",
+  "dashboard_disk_modalTitle": "Speicher freigeben",
+  "dashboard_disk_modalBody": "Diese Images können entfernt werden, um etwa {size} freizugeben:",
+  "dashboard_disk_modalDeepNote": "Diese gründliche Bereinigung entfernt auch ungetaggte, verwaiste Images anderer Podman-Workloads auf diesem Rechner. Benannte Datenvolumes werden nie angetastet.",
+  "dashboard_disk_modalConfirm": "Freigeben",
+  "dashboard_disk_cleaning": "Wird freigegeben…"
 }

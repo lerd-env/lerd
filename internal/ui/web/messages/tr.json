@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "\"{name}\" silinsin mi?",
   "workspaces_deleteBody": "Çalışma alanı kaldırılır. Siteleri bağlı kalır ve gruplanmamış duruma geçer.",
   "workspaces_deleteSiteCount": "Etkilenen siteler: {count}",
-  "dashboard_sites_pausedCount": "{count} duraklatıldı"
+  "dashboard_sites_pausedCount": "{count} duraklatıldı",
+  "dashboard_disk_reclaimable": "Geri kazanılabilir disk",
+  "dashboard_disk_cleanup": "Temizle",
+  "dashboard_disk_held": "Çalışan kapsayıcılar {size} daha tutuyor, yeniden başlatınca boşalır",
+  "dashboard_disk_modalTitle": "Disk alanı geri kazan",
+  "dashboard_disk_modalBody": "Bu görüntüler yaklaşık {size} boşaltmak için kaldırılabilir:",
+  "dashboard_disk_modalDeepNote": "Bu derin temizlik, bu makinedeki diğer podman iş yüklerinden kalan etiketsiz sarkan görüntüleri de kaldırır. Adlandırılmış veri birimlerine asla dokunmaz.",
+  "dashboard_disk_modalConfirm": "Geri kazan",
+  "dashboard_disk_cleaning": "Geri kazanılıyor…"
 }

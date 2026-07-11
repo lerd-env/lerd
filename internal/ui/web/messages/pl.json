@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "Usunąć „{name}”?",
   "workspaces_deleteBody": "Przestrzeń robocza zostanie usunięta. Jej witryny pozostaną połączone i nie będą pogrupowane.",
   "workspaces_deleteSiteCount": "Witryny, których to dotyczy: {count}",
-  "dashboard_sites_pausedCount": "{count} wstrzymane"
+  "dashboard_sites_pausedCount": "{count} wstrzymane",
+  "dashboard_disk_reclaimable": "Odzyskiwalny dysk",
+  "dashboard_disk_cleanup": "Wyczyść",
+  "dashboard_disk_held": "{size} więcej zajęte przez działające kontenery, zwalniane po restarcie",
+  "dashboard_disk_modalTitle": "Odzyskaj miejsce na dysku",
+  "dashboard_disk_modalBody": "Te obrazy można usunąć, aby zwolnić około {size}:",
+  "dashboard_disk_modalDeepNote": "To głębokie czyszczenie usuwa również nieoznaczone wiszące obrazy pozostawione przez inne zadania podman na tej maszynie. Nigdy nie narusza nazwanych woluminów danych.",
+  "dashboard_disk_modalConfirm": "Odzyskaj",
+  "dashboard_disk_cleaning": "Odzyskiwanie…"
 }

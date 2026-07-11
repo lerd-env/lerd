@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "删除“{name}”？",
   "workspaces_deleteBody": "工作区将被移除。其中的站点仍保持链接，只是不再分组。",
   "workspaces_deleteSiteCount": "受影响的站点：{count}",
-  "dashboard_sites_pausedCount": "{count} 个已暂停"
+  "dashboard_sites_pausedCount": "{count} 个已暂停",
+  "dashboard_disk_reclaimable": "可回收磁盘",
+  "dashboard_disk_cleanup": "清理",
+  "dashboard_disk_held": "运行中的容器还占用 {size}，重启后释放",
+  "dashboard_disk_modalTitle": "回收磁盘空间",
+  "dashboard_disk_modalBody": "删除这些镜像可释放约 {size}：",
+  "dashboard_disk_modalDeepNote": "此深度清理还会删除本机上其他 podman 工作负载遗留的未标记悬空镜像。它绝不会触及命名数据卷。",
+  "dashboard_disk_modalConfirm": "回收",
+  "dashboard_disk_cleaning": "正在回收…"
 }

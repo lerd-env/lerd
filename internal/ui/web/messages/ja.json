@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "「{name}」を削除しますか？",
   "workspaces_deleteBody": "ワークスペースを削除します。サイトはリンクされたまま、グループ解除されます。",
   "workspaces_deleteSiteCount": "影響を受けるサイト: {count}",
-  "dashboard_sites_pausedCount": "{count} 個一時停止中"
+  "dashboard_sites_pausedCount": "{count} 個一時停止中",
+  "dashboard_disk_reclaimable": "回収可能なディスク",
+  "dashboard_disk_cleanup": "クリーンアップ",
+  "dashboard_disk_held": "実行中のコンテナがさらに {size} を保持しています。再起動で解放されます",
+  "dashboard_disk_modalTitle": "ディスクを回収",
+  "dashboard_disk_modalBody": "これらのイメージを削除すると約 {size} を解放できます:",
+  "dashboard_disk_modalDeepNote": "このディープクリーンは、このマシン上の他の podman ワークロードが残した未タグのダングリングイメージも削除します。名前付きデータボリュームには一切触れません。",
+  "dashboard_disk_modalConfirm": "回収",
+  "dashboard_disk_cleaning": "回収中…"
 }
