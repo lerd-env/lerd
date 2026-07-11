@@ -1,9 +1,11 @@
 package watcher
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -56,6 +58,7 @@ func TestTick_pinnedSiteStillTicksWorktrees(t *testing.T) {
 
 	e := newIdleEngine(idle.NewTracker(nil))
 	e.tick()
+	e.wait() // a tick that does decide to act must not outlive this env
 
 	reg, err := config.LoadSites()
 	if err != nil {
@@ -146,6 +149,7 @@ func TestTick_reconcilesStaleSuspendedCache(t *testing.T) {
 	e.suspended["myapp"] = true // stale cache the install couldn't clear
 
 	e.tick()
+	e.wait()
 
 	if e.suspended["myapp"] {
 		t.Error("stale suspended cache should be reconciled to false against the empty persisted list")
@@ -198,6 +202,7 @@ func TestTick_reconcilesStaleSuspendedListAgainstReality(t *testing.T) {
 	e.suspended["myapp"] = true
 
 	e.tick()
+	e.wait()
 
 	if e.suspended["myapp"] {
 		t.Error("stale suspended list with a running worker must reconcile to not-suspended")
@@ -261,6 +266,7 @@ func TestTickWorktrees_reconcilesStaleSuspendedCache(t *testing.T) {
 	e.suspended[key] = true // stale: persisted WorktreeIdleSuspended has no entry
 
 	e.tick()
+	e.wait()
 
 	if e.suspended[key] {
 		t.Error("stale worktree suspended cache should be reconciled to false")
@@ -297,6 +303,129 @@ func TestResumeAllSuspended_preservesInFlightList(t *testing.T) {
 	}
 	if len(site.IdleSuspendedWorkers) == 0 {
 		t.Error("cleared an in-flight suspend's list, stranding it")
+	}
+}
+
+// Every slow worker operation the engine backgrounds must run in a goroutine that
+// wait() covers. One that doesn't goes on resolving systemd paths and shelling out
+// after whatever started it has returned, which in a test is once the temp XDG
+// environment is gone, so its units land in the developer's real home. Each case
+// holds its operation open and proves wait() blocks until it is let go; revert any
+// of the four to a bare `go` and wait() returns early and the case fails.
+func TestSpawnedWork_isTrackedByWait(t *testing.T) {
+	const wtBase = "feature-x"
+	wtPath := "/srv/myapp/" + wtBase
+
+	cases := []struct {
+		name    string
+		hold    func(t *testing.T, entered, release chan struct{})
+		trigger func(e *idleEngine)
+	}{
+		{
+			name: "suspend",
+			hold: func(t *testing.T, entered, release chan struct{}) {
+				prev := suspendWorkers
+				suspendWorkers = func(*config.Site) []string { close(entered); <-release; return nil }
+				t.Cleanup(func() { suspendWorkers = prev })
+			},
+			trigger: func(e *idleEngine) { e.suspend("myapp") },
+		},
+		{
+			name: "resume",
+			hold: func(t *testing.T, entered, release chan struct{}) {
+				prev := resumeWorkers
+				resumeWorkers = func(*config.Site, []string) { close(entered); <-release }
+				t.Cleanup(func() { resumeWorkers = prev })
+			},
+			trigger: func(e *idleEngine) {
+				e.suspended["myapp"] = true
+				e.resume("myapp")
+			},
+		},
+		{
+			name: "suspend worktree",
+			hold: func(t *testing.T, entered, release chan struct{}) {
+				prev := suspendWorktreeWorkers
+				suspendWorktreeWorkers = func(*config.Site, string) []string { close(entered); <-release; return nil }
+				t.Cleanup(func() { suspendWorktreeWorkers = prev })
+			},
+			trigger: func(e *idleEngine) { e.suspendWorktree("myapp", wtBase, wtPath) },
+		},
+		{
+			name: "resume worktree",
+			hold: func(t *testing.T, entered, release chan struct{}) {
+				prev := resumeWorktreeWorkers
+				resumeWorktreeWorkers = func(*config.Site, string, []string) { close(entered); <-release }
+				t.Cleanup(func() { resumeWorktreeWorkers = prev })
+			},
+			trigger: func(e *idleEngine) {
+				e.suspended[wtKey("myapp", wtBase)] = true
+				e.resumeWorktree("myapp", wtBase, wtPath)
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("XDG_DATA_HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			if err := config.AddSite(config.Site{
+				Name: "myapp", Path: "/srv/myapp", PHPVersion: "8.4", Domains: []string{"myapp.test"},
+			}); err != nil {
+				t.Fatalf("seed site: %v", err)
+			}
+			entered, release := make(chan struct{}), make(chan struct{})
+			c.hold(t, entered, release)
+
+			e := newIdleEngine(idle.NewTracker(nil))
+			c.trigger(e)
+			<-entered // the goroutine is now inside the operation we hold open
+
+			returned := make(chan struct{})
+			go func() { e.wait(); close(returned) }()
+			select {
+			case <-returned:
+				t.Fatal("wait returned while the work was still running, so its goroutine is untracked")
+			case <-time.After(50 * time.Millisecond):
+			}
+
+			close(release)
+			select {
+			case <-returned:
+			case <-time.After(2 * time.Second):
+				t.Fatal("wait did not return once the work finished")
+			}
+		})
+	}
+}
+
+// The tick loop is waited on too, so a session's evaluations can't run on into a
+// torn-down environment either. It ends only when the session is cancelled, which
+// is what makes wait() the basis of a clean shutdown and not just a test aid.
+func TestStart_tickLoopIsTrackedUntilCancelled(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	prev := detectWorktrees
+	detectWorktrees = func(string, string) ([]gitpkg.Worktree, error) { return nil, nil }
+	t.Cleanup(func() { detectWorktrees = prev })
+
+	e := newIdleEngine(idle.NewTracker(nil))
+	ctx, cancel := context.WithCancel(context.Background())
+	e.start(ctx)
+
+	returned := make(chan struct{})
+	go func() { e.wait(); close(returned) }()
+	select {
+	case <-returned:
+		t.Fatal("wait returned while the tick loop was still running, so it is untracked")
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	cancel()
+	select {
+	case <-returned:
+	case <-time.After(2 * time.Second):
+		t.Fatal("wait did not return once the session was cancelled")
 	}
 }
 

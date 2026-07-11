@@ -41,6 +41,7 @@ func TestEnableDisableIdle_lifecycle(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Cleanup(func() {
 		disableIdle()
+		idleEng.wait() // the tick loop and the disable drain must not outlive the test
 		idleStartSrc = nil
 		activityTracker = nil
 		idleEng = nil
@@ -110,6 +111,8 @@ func TestResumeUntilClear_exitsWhenClean(t *testing.T) {
 // TestResumeUntilClear_bailsWhenReenabled proves the drain bails the moment the
 // feature is re-enabled, so it never fights a fresh session's suspends.
 func TestResumeUntilClear_bailsWhenReenabled(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	prev := activityTracker
 	t.Cleanup(func() { activityTracker = prev; idleEng = nil; idleActive.Store(false) })
 	activityTracker = idle.NewTracker(nil)

@@ -109,7 +109,7 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	if cfg, err := config.LoadGlobal(); err == nil && cfg.IdleSuspend.Enabled {
 		enableIdle()
 	} else {
-		go idleEng.resumeUntilClear()
+		idleEng.startResumeUntilClear()
 	}
 }
 
@@ -130,13 +130,13 @@ func enableIdle() {
 	_ = os.MkdirAll(config.RunDir(), 0755)
 	_ = activityTracker.Save(config.IdleActivityFile())
 
-	go idleEng.run(ctx)
+	idleEng.start(ctx)
 
 	// The access feed is bound once in StartIdle and gated on idleActive, so
 	// enabling just flips the gate: browsing a quiet site now wakes it. The
 	// source-file watcher is the only thing this session still starts.
 	if idleStartSrc != nil {
-		go func() { _ = idleStartSrc(ctx.Done()) }()
+		idleEng.spawn("source-watcher", func() { _ = idleStartSrc(ctx.Done()) })
 	}
 }
 
@@ -151,7 +151,7 @@ func disableIdle() {
 		idleCancel = nil
 	}
 	idleMu.Unlock()
-	go idleEng.resumeUntilClear()
+	idleEng.startResumeUntilClear()
 }
 
 // handleAccessDatagram fans one nginx access datagram out to both consumers:
