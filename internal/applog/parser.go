@@ -80,35 +80,6 @@ func DiscoverLogFiles(projectDir string, sources []config.FrameworkLogSource) ([
 	return files, nil
 }
 
-// LatestModTime returns the most recent modification time across all log files
-// matched by the given sources. Returns zero time if no files found.
-func LatestModTime(projectDir string, sources []config.FrameworkLogSource) time.Time {
-	absProject, err := filepath.Abs(projectDir)
-	if err != nil {
-		return time.Time{}
-	}
-
-	var latest time.Time
-	for _, src := range sources {
-		pattern := filepath.Join(absProject, src.Path)
-		matches, _ := filepath.Glob(pattern)
-		for _, m := range matches {
-			abs, err := filepath.Abs(m)
-			if err != nil || !strings.HasPrefix(abs, absProject+string(filepath.Separator)) {
-				continue
-			}
-			info, err := os.Stat(abs)
-			if err != nil || info.IsDir() {
-				continue
-			}
-			if info.ModTime().After(latest) {
-				latest = info.ModTime()
-			}
-		}
-	}
-	return latest
-}
-
 // ResolveLogFilePath finds the full path for a log file by name within the
 // configured sources. Returns empty string if not found or path traversal detected.
 func ResolveLogFilePath(projectDir string, sources []config.FrameworkLogSource, filename string) string {

@@ -204,6 +204,52 @@ func (s *Store) LastSeenBySite() (map[string]time.Time, error) {
 	return out, rows.Err()
 }
 
+// Retention bounds the durable store: the watcher prunes rows older than this,
+// so every reader aggregating over the whole store works from the same window.
+const Retention = 7 * 24 * time.Hour
+
+// SiteUsage is one site's traffic over a window: how many requests it served and
+// when the last one arrived.
+type SiteUsage struct {
+	Count  int
+	LastAt time.Time
+}
+
+// UsageBySite aggregates the app requests each site served in [since, until), so
+// the sites list can order by real traffic. It filters through the same predicate
+// as the timing view, so an asset pipeline or a long-lived WebSocket can't make a
+// site look busy. The static-asset test is on the URI's extension, which SQL
+// can't express, so the window is aggregated in Go.
+func (s *Store) UsageBySite(since, until time.Time) (map[string]SiteUsage, error) {
+	rows, err := s.db.Query(
+		`SELECT site, at_ms, status, ms, uri FROM requests WHERE at_ms >= ? AND at_ms < ?`,
+		since.UnixMilli(), until.UnixMilli())
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]SiteUsage{}
+	for rows.Next() {
+		var site, uri string
+		var atMs int64
+		var status int
+		var ms float64
+		if err := rows.Scan(&site, &atMs, &status, &ms, &uri); err != nil {
+			return nil, err
+		}
+		if !IsAppRequest(status, uri, ms) {
+			continue
+		}
+		u := out[site]
+		u.Count++
+		if at := time.UnixMilli(atMs); at.After(u.LastAt) {
+			u.LastAt = at
+		}
+		out[site] = u
+	}
+	return out, rows.Err()
+}
+
 // Recent returns the newest limit requests for a site, newest first.
 func (s *Store) Recent(site string, limit int) ([]Record, error) {
 	// Over-fetch and drop static assets in Go, so a burst of asset requests can't

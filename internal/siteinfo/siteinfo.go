@@ -8,7 +8,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/geodro/lerd/internal/applog"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -184,9 +183,8 @@ type EnrichedSite struct {
 	LANPort int
 
 	// App metadata
-	HasAppLogs    bool
-	LatestLogTime string
-	HasFavicon    bool
+	HasAppLogs bool
+	HasFavicon bool
 	// AppName is the Laravel APP_NAME from .env, or "" for non-Laravel sites and
 	// for the stock "Laravel" default, so a surface can title a site by its
 	// application name without burying customised ones under identical defaults.
@@ -781,7 +779,6 @@ func (e *EnrichedSite) enrichDomainConflicts() {
 
 func (e *EnrichedSite) enrichLogs(fw *config.Framework, hasFw bool) {
 	e.HasAppLogs = hasLogFiles(hasFw, fw, e.Path)
-	e.LatestLogTime = latestLogTime(hasFw, fw, e.Path)
 }
 
 func frameworkLabel(name, path string, fw *config.Framework, hasFw bool) string {
@@ -872,17 +869,6 @@ func hasLogFiles(hasFw bool, fw *config.Framework, projectPath string) bool {
 		}
 	}
 	return false
-}
-
-func latestLogTime(hasFw bool, fw *config.Framework, projectPath string) string {
-	if !hasFw || len(fw.Logs) == 0 {
-		return ""
-	}
-	t := applog.LatestModTime(projectPath, fw.Logs)
-	if t.IsZero() {
-		return ""
-	}
-	return t.UTC().Format(time.RFC3339)
 }
 
 // DetectFavicon returns the absolute path of the first favicon file found in

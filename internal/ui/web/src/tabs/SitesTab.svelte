@@ -13,6 +13,7 @@
   import { routeRest, goToTab } from '$stores/route';
   import { sites, sitesLoaded, type Site } from '$stores/sites';
   import { sitesSort, type SitesSort } from '$stores/sitesSort';
+  import { sortSites } from '$lib/sitesOrder';
   import { status } from '$stores/status';
   import {
     UNGROUPED,
@@ -46,24 +47,11 @@
     return secondariesOf(active, s);
   }
 
-  // The main (non-secondary) active rows, ordered per the chosen sort mode.
-  // Only mains are sorted; secondaries always stay pinned under their main.
+  // The main (non-secondary) active rows, ordered per the chosen sort mode. Only
+  // mains are sorted; secondaries always stay pinned under their main, and each
+  // section keeps its own rows since syncZones fans this list into the zones.
   const mains = $derived(active.filter((s) => !s.group_subdomain));
-  const sortedMains = $derived.by(() => {
-    const list = [...mains];
-    switch ($sitesSort) {
-      case 'alpha':
-        return list.sort((a, b) => a.domain.localeCompare(b.domain));
-      case 'recent':
-        // Newest activity first; sites with no log activity sink to the bottom.
-        return list.sort((a, b) => (b.latest_log_time || '').localeCompare(a.latest_log_time || ''));
-      case 'newest':
-        return list.reverse();
-      case 'manual':
-      default:
-        return list;
-    }
-  });
+  const sortedMains = $derived(sortSites(mains, $sitesSort));
   // Reordering is available whenever we can write (loopback), in any sort mode.
   // Dragging a site auto-switches the list into manual mode (see persistRowDrop).
   const canReorder = $derived($accessMode.loopback);
@@ -407,6 +395,7 @@
 
   const sortOptions: Array<{ value: SitesSort; label: string }> = $derived([
     { value: 'recent', label: m.sites_sort_recent() },
+    { value: 'used', label: m.sites_sort_used() },
     { value: 'alpha', label: m.sites_sort_alpha() },
     { value: 'newest', label: m.sites_sort_newest() }
   ]);
