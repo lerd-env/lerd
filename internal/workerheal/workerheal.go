@@ -8,6 +8,7 @@ package workerheal
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -59,6 +60,7 @@ var nonWorkerPerSitePrefixes = map[string]bool{
 // real systemd unit-state cache or starting real units.
 var (
 	unitStatesFn      = siteinfo.AllUnitStates
+	unitMetaFn        = siteinfo.AllUnitMeta
 	unitEnabledFn     = isUnitEnabled
 	healFn            = podman.StartUnit
 	restartFn         = podman.RestartUnit
@@ -72,7 +74,7 @@ var (
 // framework or the worker has no health block. The framework is resolved once
 // per site by Detect and passed in, so the store is touched at most once per
 // site per tick, never per worker.
-func defaultWorkerReachable(sitePath string, fw *config.Framework, worker string) (reachable, probed bool) {
+func defaultWorkerReachable(sitePath string, fw *config.Framework, worker string, activeEnter time.Time) (reachable, probed bool) {
 	if fw == nil {
 		return false, false
 	}
@@ -80,7 +82,38 @@ func defaultWorkerReachable(sitePath string, fw *config.Framework, worker string
 	if !ok || w.Health == nil {
 		return false, false
 	}
-	return siteinfo.WorkerServerReachable(sitePath, w.Health)
+	return siteinfo.WorkerServerReachable(sitePath, w.Health, activeEnter)
+}
+
+// resolveWorkerUnit maps a unit body to site, worker, and probe path. Parents
+// resolve by longest site suffix; a worktree ("<worker>-<site>-<wtslug>") is pinned
+// by its WorkingDirectory's base slug. probePath is the worktree checkout, else "".
+func resolveWorkerUnit(body string, siteSet map[string]bool, workingDir string) (site, worker, probePath string) {
+	for s := range siteSet {
+		if strings.HasSuffix(body, "-"+s) && len(s) > len(site) {
+			site, worker = s, strings.TrimSuffix(body, "-"+s)
+		}
+	}
+	if site != "" {
+		return site, worker, ""
+	}
+	if workingDir == "" {
+		return "", "", ""
+	}
+	slug := config.WorktreeUnitSlug(filepath.Base(workingDir))
+	if slug == "" || !strings.HasSuffix(body, "-"+slug) {
+		return "", "", ""
+	}
+	core := strings.TrimSuffix(body, "-"+slug)
+	for s := range siteSet {
+		if strings.HasSuffix(core, "-"+s) && len(s) > len(site) {
+			site, worker = s, strings.TrimSuffix(core, "-"+s)
+		}
+	}
+	if site == "" || worker == "" {
+		return "", "", ""
+	}
+	return site, worker, workingDir
 }
 
 // HumanState renders an UnhealthyWorker.State for end-user copy. The machine
@@ -210,6 +243,10 @@ func Detect() ([]UnhealthyWorker, error) {
 	}
 
 	states := unitStatesFn()
+	// Per-unit ActiveEnter + WorkingDirectory from the same batched snapshot,
+	// used to resolve worktree units (by WorkingDirectory) and to gate the dial
+	// (by ActiveEnter). Empty on darwin; callers fall back to the prior behaviour.
+	unitMeta := unitMetaFn()
 	// Framework resolved lazily, at most once per site with an active worker.
 	// GetFrameworkForDir is not a plain lookup (it can trigger an unthrottled
 	// store fetch), so it must never run per worker inside the loop.
@@ -232,15 +269,10 @@ func Detect() ([]UnhealthyWorker, error) {
 		}
 		body := strings.TrimPrefix(unit, "lerd-")
 		body = strings.TrimSuffix(body, ".service")
-		// Find the longest site-name suffix match so worker names with
-		// embedded hyphens (e.g. emit-events) survive intact.
-		var site, worker string
-		for s := range siteSet {
-			if strings.HasSuffix(body, "-"+s) && len(s) > len(site) {
-				site = s
-				worker = strings.TrimSuffix(body, "-"+s)
-			}
-		}
+		// Resolve site + worker (longest site suffix for parents; the unit's
+		// WorkingDirectory disambiguates worktree units). probePath is the
+		// worktree checkout for a worktree unit, else "" (use the site path).
+		site, worker, probePath := resolveWorkerUnit(body, siteSet, unitMeta[unit].WorkingDir)
 		if site == "" || worker == "" {
 			continue
 		}
@@ -271,7 +303,11 @@ func Detect() ([]UnhealthyWorker, error) {
 				resolvedFw[site], _ = config.GetFrameworkForDir(m.framework, m.path)
 				resolvedSet[site] = true
 			}
-			reachable, probed := workerReachableFn(m.path, resolvedFw[site], worker)
+			path := probePath // worktree checkout, or the site root for a parent
+			if path == "" {
+				path = m.path
+			}
+			reachable, probed := workerReachableFn(path, resolvedFw[site], worker, unitMeta[unit].ActiveEnter)
 			if !probed || reachable {
 				continue // no health probe declared, or the server is serving
 			}
@@ -280,7 +316,7 @@ func Detect() ([]UnhealthyWorker, error) {
 		out = append(out, UnhealthyWorker{
 			Site:   site,
 			Worker: worker,
-			Unit:   "lerd-" + worker + "-" + site,
+			Unit:   strings.TrimSuffix(unit, ".service"),
 			State:  detected,
 		})
 	}

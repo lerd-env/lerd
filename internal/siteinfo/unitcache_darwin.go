@@ -61,4 +61,9 @@ func init() {
 		darwinUnitStatesCache.at = time.Time{}
 		darwinUnitStatesCache.mu.Unlock()
 	}
+
+	// launchd exposes neither ActiveEnter nor a per-unit WorkingDirectory cleanly,
+	// so meta is empty on darwin: the gate falls back to always dialing and heal
+	// keeps its process-only path (a darwin follow-up; the incident is systemd).
+	allUnitMetaFn = func() map[string]UnitMeta { return map[string]UnitMeta{} }
 }

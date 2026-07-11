@@ -558,6 +558,7 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+	meta := AllUnitMeta()
 	for _, wname := range names {
 		w := fw.Workers[wname]
 		unit := "lerd-" + wname + "-" + e.Name
@@ -577,7 +578,7 @@ func (e *EnrichedSite) enrichWorkers(fw *config.Framework, hasFw bool) {
 		// only "active" (a still-activating server may not have bound yet). It is
 		// unreachable, not failed: systemd still calls the unit active.
 		if serviceState == "active" && w.Health != nil {
-			if reachable, probed := WorkerServerReachable(e.Path, w.Health); probed && !reachable {
+			if reachable, probed := WorkerServerReachable(e.Path, w.Health, meta[unit].ActiveEnter); probed && !reachable {
 				running = false
 				unreachable = true
 			}
@@ -641,7 +642,7 @@ func enrichWorktreeWorkers(siteName, wtPath string, fw *config.Framework) []Work
 		// own checkout where its dev server writes the URL file. Active-but-unbound
 		// is unreachable, not failed.
 		if serviceState == "active" && w.Health != nil {
-			if reachable, probed := WorkerServerReachable(wtPath, w.Health); probed && !reachable {
+			if reachable, probed := WorkerServerReachable(wtPath, w.Health, AllUnitMeta()[unit].ActiveEnter); probed && !reachable {
 				running = false
 				unreachable = true
 			}

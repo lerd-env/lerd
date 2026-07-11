@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteinfo"
 )
 
 // stubEnv stages a sites.yaml with the given names in a temp XDG_DATA_HOME
@@ -452,7 +454,7 @@ func TestDetect_UnreachableActiveWorkerFlagged(t *testing.T) {
 		nil,
 	)
 	prev := workerReachableFn
-	workerReachableFn = func(_ string, _ *config.Framework, worker string) (reachable, probed bool) {
+	workerReachableFn = func(_ string, _ *config.Framework, worker string, _ time.Time) (reachable, probed bool) {
 		if worker == "vite" {
 			return false, true // process up, server not accepting
 		}
@@ -472,6 +474,50 @@ func TestDetect_UnreachableActiveWorkerFlagged(t *testing.T) {
 	}
 }
 
+func TestResolveWorkerUnit(t *testing.T) {
+	sites := map[string]bool{"ws": true, "feat": true, "app": true}
+
+	if s, w, p := resolveWorkerUnit("vite-app", sites, ""); s != "app" || w != "vite" || p != "" {
+		t.Errorf("parent: got %q/%q/%q, want app/vite/empty", s, w, p)
+	}
+	// WorkingDirectory pins the site to "ws" even though "feat" is a longer
+	// candidate that a plain longest-match would pick.
+	if s, w, p := resolveWorkerUnit("vite-ws-feat-x", sites, "/home/u/wt/feat-x"); s != "ws" || w != "vite" || p != "/home/u/wt/feat-x" {
+		t.Errorf("worktree: got %q/%q/%q, want ws/vite//home/u/wt/feat-x", s, w, p)
+	}
+	// Without a WorkingDirectory a worktree unit is unresolvable, so it is skipped
+	// rather than mis-parsed.
+	if s, _, _ := resolveWorkerUnit("vite-ws-feat-x", sites, ""); s != "" {
+		t.Errorf("no workingdir: got site %q, want empty", s)
+	}
+}
+
+func TestDetect_UnreachableWorktreeWorkerFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp-featx.service": "active"},
+		nil,
+	)
+	prevReach, prevMeta := workerReachableFn, unitMetaFn
+	workerReachableFn = func(_ string, _ *config.Framework, worker string, _ time.Time) (bool, bool) {
+		return false, worker == "vite" // vite: process up, not accepting
+	}
+	unitMetaFn = func() map[string]siteinfo.UnitMeta {
+		return map[string]siteinfo.UnitMeta{
+			"lerd-vite-myapp-featx.service": {WorkingDir: "/home/u/wt/featx"},
+		}
+	}
+	t.Cleanup(func() { workerReachableFn = prevReach; unitMetaFn = prevMeta })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 || got[0].Unit != "lerd-vite-myapp-featx" || got[0].State != "unreachable" {
+		t.Fatalf("got %v, want [lerd-vite-myapp-featx unreachable]", unitNames(got))
+	}
+}
+
 func TestDetect_ReachableActiveWorkerNotFlagged(t *testing.T) {
 	stubEnv(t,
 		[]string{"myapp"}, nil,
@@ -479,7 +525,7 @@ func TestDetect_ReachableActiveWorkerNotFlagged(t *testing.T) {
 		nil,
 	)
 	prev := workerReachableFn
-	workerReachableFn = func(_ string, _ *config.Framework, _ string) (bool, bool) { return true, true } // serving
+	workerReachableFn = func(_ string, _ *config.Framework, _ string, _ time.Time) (bool, bool) { return true, true } // serving
 	t.Cleanup(func() { workerReachableFn = prev })
 
 	got, err := Detect()
@@ -500,7 +546,7 @@ func TestHealAll_RestartsUnreachableWorker(t *testing.T) {
 		func(string) error { t.Fatal("unreachable worker must be restarted, not started"); return nil },
 	)
 	prevReach, prevRestart := workerReachableFn, restartFn
-	workerReachableFn = func(_ string, _ *config.Framework, _ string) (bool, bool) { return false, true }
+	workerReachableFn = func(_ string, _ *config.Framework, _ string, _ time.Time) (bool, bool) { return false, true }
 	var restarted string
 	restartFn = func(unit string) error { restarted = unit; return nil }
 	t.Cleanup(func() { workerReachableFn = prevReach; restartFn = prevRestart })
