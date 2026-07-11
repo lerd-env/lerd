@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "Ștergi „{name}”?",
   "workspaces_deleteBody": "Spațiul de lucru este eliminat. Site-urile rămân conectate și devin negrupate.",
   "workspaces_deleteSiteCount": "Site-uri afectate: {count}",
-  "dashboard_sites_pausedCount": "{count} întrerupte"
+  "dashboard_sites_pausedCount": "{count} întrerupte",
+  "dashboard_disk_reclaimable": "Disc recuperabil",
+  "dashboard_disk_cleanup": "Curăță",
+  "dashboard_disk_held": "încă {size} ocupați de containere active, eliberați la repornire",
+  "dashboard_disk_modalTitle": "Recuperează spațiu pe disc",
+  "dashboard_disk_modalBody": "Aceste imagini pot fi șterse pentru a elibera aproximativ {size}:",
+  "dashboard_disk_modalDeepNote": "Această curățare profundă șterge și imaginile fără etichetă rămase de la alte sarcini podman de pe această mașină. Nu atinge niciodată volumele de date denumite.",
+  "dashboard_disk_modalConfirm": "Recuperează",
+  "dashboard_disk_cleaning": "Se recuperează…"
 }

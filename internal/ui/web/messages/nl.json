@@ -1055,5 +1055,13 @@
   "workspaces_deleteTitle": "\"{name}\" verwijderen?",
   "workspaces_deleteBody": "De werkruimte wordt verwijderd. De sites blijven gekoppeld en zijn niet langer gegroepeerd.",
   "workspaces_deleteSiteCount": "Betrokken sites: {count}",
-  "dashboard_sites_pausedCount": "{count} gepauzeerd"
+  "dashboard_sites_pausedCount": "{count} gepauzeerd",
+  "dashboard_disk_reclaimable": "Vrijmaakbare schijf",
+  "dashboard_disk_cleanup": "Opruimen",
+  "dashboard_disk_held": "{size} meer vastgehouden door draaiende containers, vrijgemaakt bij herstart",
+  "dashboard_disk_modalTitle": "Schijfruimte vrijmaken",
+  "dashboard_disk_modalBody": "Deze images kunnen worden verwijderd om ongeveer {size} vrij te maken:",
+  "dashboard_disk_modalDeepNote": "Deze grondige opschoning verwijdert ook ongetagde losse images van andere podman-workloads op deze machine. Benoemde datavolumes worden nooit aangeraakt.",
+  "dashboard_disk_modalConfirm": "Vrijmaken",
+  "dashboard_disk_cleaning": "Bezig met vrijmaken…"
 }
