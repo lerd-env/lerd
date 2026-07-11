@@ -15,3 +15,5 @@ env_vars:
   - SESSION_DRIVER=redis
   - QUEUE_CONNECTION=redis
 connection_url: redis://127.0.0.1:6380
+category: cache
+icon: bolt

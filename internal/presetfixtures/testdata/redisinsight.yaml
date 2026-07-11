@@ -15,3 +15,8 @@ dashboard: http://localhost:8085
 # RedisInsight sets first-run consent cookies the iframe can't carry across
 # origins, so lerd-ui proxies it same-origin (see dashboard_external handling).
 dashboard_external: true
+category: admin
+icon: database
+admin_for:
+  - redis
+  - valkey

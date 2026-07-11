@@ -32,6 +32,9 @@ type ServiceIndexEntry struct {
 	Image          string                 `json:"image,omitempty"`
 	Versions       []config.PresetVersion `json:"versions,omitempty"`
 	DefaultVersion string                 `json:"default_version,omitempty"`
+	Category       string                 `json:"category,omitempty"`
+	Icon           string                 `json:"icon,omitempty"`
+	AdminFor       []string               `json:"admin_for,omitempty"`
 }
 
 func init() {

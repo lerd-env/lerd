@@ -18,7 +18,7 @@
           class="flex flex-col items-center justify-center gap-2 aspect-square rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-lerd-red/40 hover:bg-lerd-red/5 transition-colors p-3"
         >
           <svg class="w-7 h-7 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {@html dashboardIconSvg(svc.name)}
+            {@html dashboardIconSvg(svc.name, svc.icon)}
           </svg>
           <span class="text-[11px] font-medium text-gray-700 dark:text-gray-300 text-center truncate max-w-full">
             {serviceLabel(svc.name)}

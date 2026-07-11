@@ -45,6 +45,41 @@ func TestListInstallablePresets_MergesStoreIndex(t *testing.T) {
 	}
 }
 
+// A store admin tool the cache has never fetched is suggested purely from the
+// index, so the index fallback must carry its discovery metadata. Without this,
+// pgadmin gets no suggestion on the postgres page until it is first installed.
+func TestListInstallablePresets_IndexFallbackCarriesDiscoveryMetadata(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	mux := http.NewServeMux()
+	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"services":[{"name":"widget-admin","description":"admin UI","category":"admin","icon":"database","admin_for":["widget"]}]}`))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	t.Setenv("LERD_SERVICES_BASE_URL", srv.URL)
+
+	metas, err := ListInstallablePresets()
+	if err != nil {
+		t.Fatalf("ListInstallablePresets: %v", err)
+	}
+	var entry *config.PresetMeta
+	for i := range metas {
+		if metas[i].Name == "widget-admin" {
+			entry = &metas[i]
+		}
+	}
+	if entry == nil {
+		t.Fatal("store-only preset was not merged into the installable list")
+	}
+	if entry.Category != "admin" || entry.Icon != "database" {
+		t.Errorf("index fallback dropped category/icon, got %q/%q", entry.Category, entry.Icon)
+	}
+	if len(entry.AdminFor) != 1 || entry.AdminFor[0] != "widget" {
+		t.Errorf("index fallback dropped admin_for, got %v", entry.AdminFor)
+	}
+}
+
 // Offline (store unreachable) must degrade to the local presets, not error out
 // and blank the picker.
 func TestListInstallablePresets_OfflineReturnsLocal(t *testing.T) {

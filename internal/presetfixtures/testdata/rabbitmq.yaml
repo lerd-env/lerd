@@ -25,3 +25,5 @@ files:
   - target: /etc/rabbitmq/conf.d/10-lerd-path-prefix.conf
     content: |
       management.path_prefix = /_svc/rabbitmq
+category: messaging
+icon: queue

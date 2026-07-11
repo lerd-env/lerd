@@ -40,9 +40,10 @@ describe('PresetCard', () => {
     expect(container.innerHTML).toMatch(/text-indigo-600/);
   });
 
-  it('falls back to the preset name category when none is passed', () => {
-    const { container } = render(PresetCard, { props: { preset: preset({ name: 'redis' }) } });
-    // redis -> cache -> amber
+  it('uses the category the preset declares when none is passed', () => {
+    const { container } = render(PresetCard, {
+      props: { preset: preset({ name: 'redis', category: 'cache' }) }
+    });
     expect(container.innerHTML).toMatch(/text-amber-600/);
   });
 });
