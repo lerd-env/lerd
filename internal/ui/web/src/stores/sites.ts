@@ -251,7 +251,7 @@ function site(path: string, action: string): string {
 function envQS(branch: string, file?: string): string {
   const params = new URLSearchParams();
   if (branch) params.set('branch', branch);
-  if (file && file !== '.env') params.set('file', file);
+  if (file) params.set('file', file);
   const s = params.toString();
   return s ? '?' + s : '';
 }

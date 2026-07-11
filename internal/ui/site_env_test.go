@@ -898,6 +898,131 @@ func TestSiteHasEnv_nonDotenvFrameworkExcluded(t *testing.T) {
 	if siteHasEnv("phpenv", sitePath) {
 		t.Error("expected false: php-const framework must not surface the Env tab")
 	}
+	// /env/files must agree with read/write/backup (which all 400 here): a
+	// non-dotenv framework lists nothing, even with a stray root .env present.
+	files, err := listEnvFiles("phpenv", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("listEnvFiles: got %v want empty for non-dotenv framework", files)
+	}
+}
+
+// A backup of a nested dotenv (config/.env) must round-trip through the save,
+// list, and read endpoints. Before BkpDir/BkpName were split off the joined
+// path, the backup landed in config/ but ListBackups scanned the project root,
+// so the list came back empty, restore was impossible, and backups piled up in
+// the committed config directory.
+func TestSiteEnv_subdirBackupRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldBody := "DEBUG=true\n"
+	if err := os.WriteFile(filepath.Join(sitePath, "config", ".env"), []byte(oldBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "cake", Path: sitePath, Domains: []string{"cake.test"}, Framework: "cakelike"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save with backup on the nested file.
+	body, _ := json.Marshal(SiteEnvWriteRequest{Content: "DEBUG=false\n", Backup: true})
+	req := httptest.NewRequest(http.MethodPut, "/api/sites/cake.test/env?file=config/.env", bytes.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The backup must land next to the file, inside config/.
+	entries, err := os.ReadDir(filepath.Join(sitePath, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawBackup := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".env.bkp.") {
+			sawBackup = true
+		}
+	}
+	if !sawBackup {
+		t.Fatalf("no .env.bkp.* written into config/: %v", entries)
+	}
+
+	// The list endpoint must surface it (this is what came back empty before).
+	req = httptest.NewRequest(http.MethodGet, "/api/sites/cake.test/env/backups?file=config/.env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec = httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backups status %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []SiteEnvBackup
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("backups list: got %d want 1 (%s)", len(list), rec.Body.String())
+	}
+
+	// And the named backup must read back the pre-save contents.
+	req = httptest.NewRequest(http.MethodGet, "/api/sites/cake.test/env/backups/"+list[0].Name+"?file=config/.env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec = httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backup content status %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != oldBody {
+		t.Errorf("backup content: got %q want %q", rec.Body.String(), oldBody)
+	}
+}
+
+// A framework yaml whose declared dotenv escapes the site dir (absolute or
+// ../.. traversal) must be rejected everywhere, so the env endpoints can never
+// be steered onto something like ../../.ssh/config.
+func TestSiteEnv_frameworkDeclaredPathTraversalRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "evil.yaml"),
+		[]byte("name: evil\nlabel: Evil\nenv:\n  file: ../../.ssh/config\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if _, ok := frameworkEnvFile("evil", sitePath); ok {
+		t.Error("expected traversal declared path to be rejected by frameworkEnvFile")
+	}
+	if siteHasEnv("evil", sitePath) {
+		t.Error("expected has_env false for a traversal declared path")
+	}
+	files, err := listEnvFiles("evil", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("listEnvFiles: got %v want empty for a traversal declared path", files)
+	}
 }
 
 // laravelAppName surfaces APP_NAME from .env, but only for Laravel projects so

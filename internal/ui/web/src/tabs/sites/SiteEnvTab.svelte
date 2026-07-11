@@ -22,7 +22,10 @@
   let { site, branch }: Props = $props();
 
   let files = $state<string[]>(['.env']);
-  let file = $state<string>('.env');
+  // Empty until the file list loads: the server sorts the framework's primary
+  // dotenv first, so we snap to files[0] rather than assuming a root .env
+  // (which a framework like Symfony/CakePHP may not even have).
+  let file = $state<string>('');
   let original = $state<string>('');
   let text = $state<string>('');
   let loading = $state(true);
@@ -106,16 +109,16 @@
   }
 
   // Refresh the file list whenever the site or branch changes. When the
-  // selected file disappears we only snap back to .env if there are no
-  // unsaved edits; a dirty buffer for a file that vanished on disk stays
-  // open so the user can copy out or save to recreate.
+  // selected file disappears (or is still the empty initial value) we snap to
+  // the primary files[0] if there are no unsaved edits; a dirty buffer for a
+  // file that vanished on disk stays open so the user can copy out or save it.
   $effect(() => {
     const domain = site.domain;
     const b = branch;
     loadSiteEnvFiles(domain, b).then((list) => {
       if (site.domain !== domain || branch !== b) return;
       files = list;
-      if (!list.includes(file) && !dirty) file = '.env';
+      if (!list.includes(file) && !dirty) file = list[0] ?? '.env';
     });
   });
 

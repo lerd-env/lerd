@@ -2827,10 +2827,15 @@ func handleSiteEnvWrite(w http.ResponseWriter, r *http.Request) {
 // are not behind any include glob, so backups and write-staging share the
 // project dir; backups are named "{envFile}.bkp.{ts}".
 func envCfgFile(dir, envFile string) cfgedit.File {
+	// envFile may be nested (CakePHP config/.env), so the backup dir is the
+	// file's own dir and the name is its base. Keying BkpDir/BkpName off the
+	// joined path keeps backups next to the file and listable; a root .env
+	// still resolves to BkpDir=dir, BkpName=.env as before.
+	full := filepath.Join(dir, envFile)
 	return cfgedit.File{
-		Path:    filepath.Join(dir, envFile),
-		BkpDir:  dir,
-		BkpName: envFile,
+		Path:    full,
+		BkpDir:  filepath.Dir(full),
+		BkpName: filepath.Base(full),
 	}
 }
 
@@ -2913,7 +2918,9 @@ func listEnvFiles(frameworkName, dir string) ([]string, error) {
 
 	primary, ok := frameworkEnvFile(frameworkName, dir)
 	if !ok {
-		return out, nil
+		// Framework has no editable dotenv (WordPress, Magento): read/write/
+		// backup all 400, so /env/files must not list root dotenvs either.
+		return nil, nil
 	}
 	// The framework's file may live in a subdirectory (CakePHP config/.env) the
 	// root scan never sees; surface it when present. A slashed path can never
@@ -5344,6 +5351,12 @@ func frameworkEnvFile(frameworkName, dir string) (file string, ok bool) {
 	}
 	file, format := fw.Env.Resolve(dir)
 	if format != "dotenv" {
+		return "", false
+	}
+	// The declared path comes from framework yaml and is joined onto dir for
+	// read/write/backup; reject anything that escapes the site (absolute or
+	// ../.. traversal) so a bad declaration can't reach ../../.ssh/config.
+	if !filepath.IsLocal(file) {
 		return "", false
 	}
 	return file, true
