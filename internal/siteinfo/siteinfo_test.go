@@ -564,32 +564,6 @@ func TestHasLogFiles(t *testing.T) {
 	})
 }
 
-// ── LatestLogTime ───────────────────────────────────────────────────────────
-
-func TestLatestLogTime(t *testing.T) {
-	t.Run("no framework returns empty", func(t *testing.T) {
-		got := latestLogTime(false, nil, "/tmp")
-		if got != "" {
-			t.Errorf("got %q, want empty", got)
-		}
-	})
-
-	t.Run("returns timestamp for existing logs", func(t *testing.T) {
-		dir := t.TempDir()
-		logDir := filepath.Join(dir, "storage", "logs")
-		os.MkdirAll(logDir, 0755)
-		os.WriteFile(filepath.Join(logDir, "laravel.log"), []byte("log entry"), 0644)
-
-		fw := &config.Framework{
-			Logs: []config.FrameworkLogSource{{Path: "storage/logs/*.log"}},
-		}
-		got := latestLogTime(true, fw, dir)
-		if got == "" {
-			t.Error("expected non-empty timestamp")
-		}
-	})
-}
-
 // ── Service auto-detection ──────────────────────────────────────────────────
 
 // installQuadlets points QuadletDir() at a temp XDG_CONFIG_HOME and writes a

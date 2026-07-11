@@ -96,7 +96,8 @@ export interface Site {
   lan_port?: number;
   lan_share_url?: string;
   framework_workers?: FrameworkWorker[];
-  latest_log_time?: string;
+  last_request_at?: number;
+  request_count?: number;
   [k: string]: unknown;
 }
 

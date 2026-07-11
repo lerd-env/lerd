@@ -28,10 +28,11 @@ func (s stubUnitStatus) AllUnitStates() map[string]string { return nil }
 
 // TestTick_pinnedSiteStillTicksWorktrees is the regression guard for a pinned
 // site stranding its worktrees. Pinning used to `continue` past tickWorktrees, so
-// a pinned site's worktree was never re-detected: its domain dropped out of the
-// access-feed lookup (no wake) and a suspended worktree was never resumed. The
-// tick must still process the worktree, proven here by its domain landing in the
-// engine's worktreeKeyByDomain map.
+// a pinned site's worktree was never processed and a suspended one was never
+// resumed. The tick must still walk it, proven here by the walk's own side effect:
+// the stale slot of a worktree that no longer exists is pruned. Its domain
+// resolving for the access feed no longer depends on the tick at all, since the
+// index that answers that is refreshed for the daemon's whole life.
 func TestTick_pinnedSiteStillTicksWorktrees(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -39,24 +40,32 @@ func TestTick_pinnedSiteStillTicksWorktrees(t *testing.T) {
 	if err := config.AddSite(config.Site{
 		Name: "myapp", Path: "/srv/myapp", PHPVersion: "8.4",
 		Domains: []string{"myapp.test"}, Pinned: true,
+		WorktreeIdleSuspended: map[string][]string{"gone": {"vite"}},
 	}); err != nil {
 		t.Fatalf("seed site: %v", err)
 	}
 
-	prev := detectWorktrees
+	prevDetect, prevIndex := detectWorktrees, wtIndex
 	detectWorktrees = func(string, string) ([]gitpkg.Worktree, error) {
 		return []gitpkg.Worktree{{
 			Branch: "feature-x", Path: "/srv/myapp/feature-x", Domain: "feature-x.myapp.test",
 		}}, nil
 	}
-	t.Cleanup(func() { detectWorktrees = prev })
+	wtIndex = newWorktreeIndex()
+	t.Cleanup(func() { detectWorktrees, wtIndex = prevDetect, prevIndex })
 
 	e := newIdleEngine(idle.NewTracker(nil))
 	e.tick()
 
-	key := wtKey("myapp", config.WorktreeUnitSlug("feature-x"))
-	if got := e.worktreeKeyByDomain["feature-x.myapp.test"]; got != key {
-		t.Errorf("pinned site's worktree domain = %q, want %q (worktree was skipped)", got, key)
+	reg, err := config.LoadSites()
+	if err != nil {
+		t.Fatalf("reload sites: %v", err)
+	}
+	if _, stale := reg.Sites[0].WorktreeIdleSuspended["gone"]; stale {
+		t.Error("pinned site's worktrees were skipped by the tick")
+	}
+	if _, ok := wtIndex.lookup("feature-x.myapp.test"); !ok {
+		t.Error("worktree domain missing from the index, so its requests would resolve to no site")
 	}
 }
 

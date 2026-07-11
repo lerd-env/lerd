@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/reqstats"
+	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/spxreport"
 )
 
@@ -71,10 +72,7 @@ func joinOptimize(stats reqstats.SiteStats, events []dumps.Event, minRepeat int,
 // optimizeSite loads the watcher's slow-route snapshot and the captured-query
 // ring for a site and joins them. branch selects a git worktree's stats.
 func optimizeSite(site, branch string, minRepeat int, slowMS float64) OptimizeReport {
-	key := site
-	if branch != "" {
-		key = wtKey(site, branch)
-	}
+	key := reqstats.Key(site, branch)
 	stats, ok := reqstats.LoadSite(config.RequestStatsFile(), key)
 	if !ok {
 		stats = reqstats.SiteStats{Site: key}
@@ -84,15 +82,16 @@ func optimizeSite(site, branch string, minRepeat int, slowMS float64) OptimizeRe
 		events = srv.Filter(dumps.FilterOpts{Site: site, Branch: branch, Kind: dumps.KindQuery})
 	}
 	report := joinOptimize(stats, events, minRepeat, slowMS)
-	attachProfiles(&report, site)
+	attachProfiles(&report, site, branch)
 	return report
 }
 
 // attachProfiles hangs the freshest SPX capture's top hotspots onto each slow
 // route that has one, so a CPU-bound route shows where its time went next to its
 // queries. Captures only exist when the profiler was on when the route was hit,
-// so a route without one is left as-is.
-func attachProfiles(report *OptimizeReport, site string) {
+// so a route without one is left as-is. A worktree's captures carry its own
+// subdomain as the host, so its report matches on that rather than the parent's.
+func attachProfiles(report *OptimizeReport, site, branch string) {
 	if len(report.Routes) == 0 {
 		return
 	}
@@ -100,11 +99,19 @@ func attachProfiles(report *OptimizeReport, site string) {
 	if err != nil || len(s.Domains) == 0 {
 		return
 	}
+	hosts := s.Domains
+	if branch != "" {
+		wtDomain, err := siteops.WorktreeDomain(s, branch)
+		if err != nil {
+			return
+		}
+		hosts = []string{wtDomain}
+	}
 	routes := make([]string, len(report.Routes))
 	for i, r := range report.Routes {
 		routes[i] = r.Route
 	}
-	profiles := spxreport.ProfilesForRoutes(config.SpxDataDir(), s.Domains, routes, spxTopN, spxMinPct)
+	profiles := spxreport.ProfilesForRoutes(config.SpxDataDir(), hosts, routes, spxTopN, spxMinPct)
 	for i := range report.Routes {
 		if p, ok := profiles[report.Routes[i].Route]; ok {
 			report.Routes[i].Profile = &p
@@ -122,10 +129,7 @@ func handleRouteTiming(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	key := resolveSiteName(q.Get("site"))
-	if branch := q.Get("branch"); branch != "" {
-		key = wtKey(key, branch)
-	}
+	key := reqstats.Key(resolveSiteName(q.Get("site")), q.Get("branch"))
 	stats, ok := reqstats.LoadSite(config.RequestStatsFile(), key)
 	if !ok {
 		stats = reqstats.SiteStats{Site: key, Slow: []reqstats.RouteStat{}}

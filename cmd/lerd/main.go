@@ -462,6 +462,9 @@ func newWatchCmd() *cobra.Command {
 								fmt.Printf("[WARN] nginx reload: %v\n", err)
 							}
 						}
+						// Teach the access feed the new domain now, so the worktree's
+						// first request lands in its request timing rather than nowhere.
+						watcher.RefreshWorktreeIndex()
 					},
 					func(sitePath, worktreeName string) {
 						if syncWorktree(sitePath, worktreeName, "changed", true) {
@@ -470,8 +473,10 @@ func newWatchCmd() *cobra.Command {
 							}
 							eventbus.Default.Publish(eventbus.KindSites)
 						}
+						watcher.RefreshWorktreeIndex()
 					},
 					func(sitePath, worktreeName string) {
+						defer watcher.RefreshWorktreeIndex()
 						site, err := config.FindSiteByPath(sitePath)
 						if err != nil {
 							return

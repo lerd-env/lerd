@@ -98,7 +98,7 @@ func TestAttachProfiles_HangsHotspotsOnMatchingRoute(t *testing.T) {
 		{RouteStat: reqstats.RouteStat{Route: "GET /users/:id", Method: "GET"}},
 		{RouteStat: reqstats.RouteStat{Route: "POST /nope", Method: "POST"}},
 	}}
-	attachProfiles(&report, "acme")
+	attachProfiles(&report, "acme", "")
 
 	if report.Routes[0].Profile == nil {
 		t.Fatal("expected a profile attached to the captured route")
@@ -108,5 +108,15 @@ func TestAttachProfiles_HangsHotspotsOnMatchingRoute(t *testing.T) {
 	}
 	if report.Routes[1].Profile != nil {
 		t.Error("a route with no capture must have no profile")
+	}
+
+	// The same capture belongs to the parent's domain, so it must not be attached
+	// to a worktree's report: a branch shows the hotspots of its own requests.
+	wtReport := OptimizeReport{Routes: []RouteOptimization{
+		{RouteStat: reqstats.RouteStat{Route: "GET /users/:id", Method: "GET"}},
+	}}
+	attachProfiles(&wtReport, "acme", "feature-x")
+	if wtReport.Routes[0].Profile != nil {
+		t.Error("the parent's capture leaked into the worktree's report")
 	}
 }

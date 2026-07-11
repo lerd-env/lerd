@@ -43,12 +43,9 @@ var (
 // disk for lerd-ui. Shorter than the idle tick so the panel feels live.
 const reqStatsSaveInterval = 10 * time.Second
 
-// reqStatsRetention bounds the durable store; rows older than this are pruned so
-// the DB stays small. reqStatsPruneInterval throttles how often that runs.
-const (
-	reqStatsRetention     = 7 * 24 * time.Hour
-	reqStatsPruneInterval = time.Hour
-)
+// reqStatsPruneInterval throttles how often rows past reqstats.Retention are
+// pruned, which is what keeps the DB small.
+const reqStatsPruneInterval = time.Hour
 
 // slowNotifier fires a one-time push per newly-flagged slow route on each save
 // tick. Allocated once by StartIdle.
@@ -74,7 +71,12 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 	idleStartSrc = sourceWatcher
 	activityTracker = idle.NewTracker(resolveHostToSite)
 	idleEng = newIdleEngine(activityTracker)
-	reqAggregator = reqstats.New(resolveHostToSite)
+	reqAggregator = reqstats.New(resolveHostToStatsKey)
+	// Worktree domains resolve from an index that lives as long as the daemon, not
+	// as long as an idle-suspend session, so request timing attributes worktree
+	// traffic whether or not the feature is on.
+	wtIndex.refresh()
+	go wtIndex.run()
 	if st, err := reqstats.OpenStore(config.RequestStatsDB()); err == nil {
 		reqStore = st
 		// Seed the cold-start clock from the durable store so the first request
@@ -174,7 +176,7 @@ func handleAccessDatagram(b []byte) {
 
 // siteForHost is the seam the request-stats fan-out resolves through; a var so a
 // test can inject a resolver without a live site registry.
-var siteForHost = resolveHostToSite
+var siteForHost = resolveHostToStatsKey
 
 // ingestAccessRecord fans one parsed access record out to the durable store and
 // the live aggregator. It flags a cold start (the first request after the site
@@ -239,7 +241,7 @@ func flushReqStore() {
 		_ = reqStore.Insert(batch)
 	}
 	if now := time.Now(); now.Sub(lastPrune) >= reqStatsPruneInterval {
-		_, _ = reqStore.Prune(now.Add(-reqStatsRetention))
+		_, _ = reqStore.Prune(now.Add(-reqstats.Retention))
 		lastPrune = now
 	}
 }
@@ -323,9 +325,27 @@ func readDatagrams(conn net.PacketConn, handle func([]byte)) {
 // parent site); other hosts resolve to the owning site name. Hosts that belong to
 // no registered site resolve to ok=false and are ignored by the tracker.
 func resolveHostToSite(host string) (string, bool) {
-	if key := idleEng.worktreeKeyForHost(host); key != "" {
-		return key, true
+	if wt, ok := wtIndex.lookup(host); ok {
+		return wtKey(wt.Site, wt.Base), true
 	}
+	return siteNameForHost(host)
+}
+
+// resolveHostToStatsKey maps a request host to its request-store key. It is the
+// idle key's twin, and separate on purpose: a worktree's stats key carries the
+// sanitized branch, the identity the HTTP API, MCP and the worktree registries
+// already share, while its idle key carries the checkout dir the worker units are
+// named after. Readers ask by branch, so the writer must record by branch.
+func resolveHostToStatsKey(host string) (string, bool) {
+	if wt, ok := wtIndex.lookup(host); ok {
+		return reqstats.Key(wt.Site, wt.Branch), true
+	}
+	return siteNameForHost(host)
+}
+
+// siteNameForHost resolves a non-worktree host to the site that owns it, ok=false
+// when no registered site does.
+func siteNameForHost(host string) (string, bool) {
 	site, err := config.FindSiteByDomain(host)
 	if err != nil || site == nil {
 		return "", false
