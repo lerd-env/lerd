@@ -792,6 +792,90 @@ func TestSiteEnv_frameworkSubdirDotenv(t *testing.T) {
 	}
 }
 
+// A declared dotenv nested several directories deep (config/environments/.env.local)
+// must be accepted and listed first, while an arbitrary path of the same shape is
+// still rejected. Guards that the query whitelist keys on the exact declared path,
+// not merely "any name containing a slash".
+func TestSiteEnv_frameworkNestedDotenvAcceptVsReject(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	const declared = "config/environments/.env.local"
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "nested.yaml"),
+		[]byte("name: nested\nlabel: Nested\nenv:\n  file: "+declared+"\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config", "environments"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, declared), []byte("APP_ENV=local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("nested", sitePath) {
+		t.Errorf("expected has_env true for %s", declared)
+	}
+
+	files, err := listEnvFiles("nested", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != declared {
+		t.Errorf("listEnvFiles: got %v want [%s]", files, declared)
+	}
+
+	// The declared nested file is allowed through the query despite its slashes.
+	req := httptest.NewRequest(http.MethodGet, "/?file="+declared, nil)
+	if got, ok := envFileFromQuery(req, declared); !ok || got != declared {
+		t.Errorf("envFileFromQuery(%s): got %q ok=%v", declared, got, ok)
+	}
+	// A different path of the same nested shape must not pass.
+	req = httptest.NewRequest(http.MethodGet, "/?file=config/environments/.env.other", nil)
+	if _, ok := envFileFromQuery(req, declared); ok {
+		t.Error("expected config/environments/.env.other to be rejected")
+	}
+}
+
+// The framework fallback surfaces when the primary is absent: a Symfony-style
+// project with only .env (no .env.local) resolves the Env tab to the fallback,
+// so the tab still appears and edits the committed file rather than nothing.
+func TestSiteEnv_frameworkFallbackWhenPrimaryMissing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "sflike.yaml"),
+		[]byte("name: sflike\nlabel: SFLike\nenv:\n  file: .env.local\n  fallback_file: .env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("APP_ENV=prod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("sflike", sitePath) {
+		t.Error("expected has_env true via fallback when primary .env.local is absent")
+	}
+	files, err := listEnvFiles("sflike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != ".env" {
+		t.Errorf("listEnvFiles: got %v want [.env]", files)
+	}
+}
+
 // A non-dotenv framework (env stored in PHP source) gets no Env tab: siteHasEnv
 // is false even when a stray root .env exists.
 func TestSiteHasEnv_nonDotenvFrameworkExcluded(t *testing.T) {
