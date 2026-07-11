@@ -522,6 +522,7 @@ func MarkStopped() error {
 	if err := os.MkdirAll(RunDir(), 0755); err != nil {
 		return err
 	}
+	guardRealWrite(stoppedMarkerPath())
 	return os.WriteFile(stoppedMarkerPath(), []byte("stopped\n"), 0644)
 }
 

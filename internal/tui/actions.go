@@ -2,6 +2,7 @@ package tui
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"os/exec"
 	"strings"
@@ -63,6 +64,9 @@ func containerForSite(s *siteinfo.EnrichedSite) string {
 // This avoids drifting when ensureQuadlet / dependency logic moves around.
 func runLerd(dir string, args ...string) tea.Cmd {
 	return func() tea.Msg {
+		if !subprocessesAllowed {
+			return ActionResult{Summary: "lerd " + strings.Join(args, " "), Err: errNoSubprocess}
+		}
 		self, err := os.Executable()
 		if err != nil {
 			self = "lerd"
@@ -82,3 +86,11 @@ func runLerd(dir string, args ...string) tea.Cmd {
 		}
 	}
 }
+
+// subprocessesAllowed gates the TUI's two self-exec paths. The test harness turns
+// it off: under test os.Executable() is the test binary, so shelling out to it
+// re-runs the package's own tests against the developer's real environment.
+var subprocessesAllowed = true
+
+// errNoSubprocess is what an action reports when self-exec is off.
+var errNoSubprocess = errors.New("lerd subprocess not run under test")

@@ -399,6 +399,7 @@ func SaveSites(reg *SiteRegistry) error {
 // complete file and the last full write wins. A unique temp name (rather than a
 // fixed path.tmp) keeps two concurrent writers from clobbering each other's temp.
 func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
+	guardRealWrite(path)
 	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*.tmp")
 	if err != nil {
 		return err

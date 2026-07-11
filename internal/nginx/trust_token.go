@@ -75,6 +75,7 @@ func LoadOrGenerateTrustToken() (string, error) {
 	if err := os.MkdirAll(config.DataDir(), 0o755); err != nil {
 		return "", err
 	}
+	config.GuardRealWrite(path)
 	if err := os.WriteFile(path, []byte(token+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("writing trust token: %w", err)
 	}

@@ -104,6 +104,7 @@ func freshLatest() string {
 
 func writeCache(path string, state updateCheckState) {
 	data, _ := json.Marshal(state)
+	config.GuardRealWrite(path)
 	os.WriteFile(path, data, 0o644) //nolint:errcheck
 }
 

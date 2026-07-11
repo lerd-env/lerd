@@ -245,6 +245,9 @@ func longestCommonPrefix(in []string) string {
 // records a one-line summary so the user has lasting feedback even if
 // they want to refer back to the most recent action.
 func runPaletteCommand(raw string, args []string) tea.Cmd {
+	if !subprocessesAllowed {
+		return func() tea.Msg { return ActionResult{Summary: raw, Err: errNoSubprocess} }
+	}
 	self, err := os.Executable()
 	if err != nil {
 		self = "lerd"

@@ -90,6 +90,7 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 		fileChanged = false
 	}
 	if fileChanged {
+		config.GuardRealWrite(path)
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			return false, err
 		}
