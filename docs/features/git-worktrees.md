@@ -131,6 +131,7 @@ Picking a branch re-scopes the rest of the detail view to that worktree:
 - The site title and the **Open** / **Terminal** buttons target the worktree's domain and checkout path.
 - The **App logs** tab tails `storage/logs` from the worktree's directory rather than main's.
 - The **Tinker** tab REPL runs inside the worktree's PHP context (its own `.env`, its own vendor).
+- The **Request timing** panel shows the branch's own traffic: requests to the worktree's subdomain are recorded against it, and its slow routes open and profile on that subdomain. The parent's timing stays separate, though a worktree's requests still count toward the site when the sites list is ordered by traffic. See [Request timing](../usage/sites.md#request-timing).
 - The **PHP** and **Node** version selectors show the worktree's effective version. A dashed violet border indicates "Inherits from main"; changing the value persists a worktree-only override.
 - Worker toggles (queue, schedule, Horizon, Reverb, custom workers) collapse into a "Workers run from main" pill — those run against main's checkout regardless of which worktree is active. Switch to main to start or stop them.
 - The domain-edit pencil disappears (worktree domains are derived from the parent's primary).

@@ -120,10 +120,7 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 		writeJSON(w, map[string]any{"error": "site not found: " + domain})
 		return true
 	}
-	key := site.Name
-	if branch := r.URL.Query().Get("branch"); branch != "" {
-		key = wtKey(site.Name, branch)
-	}
+	key := reqstats.Key(site.Name, r.URL.Query().Get("branch"))
 	dur, rangeLabel := analyticsRange(r.URL.Query().Get("range"))
 
 	store, err := getAnalyticsStore()

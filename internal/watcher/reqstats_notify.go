@@ -77,8 +77,10 @@ func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.No
 	}
 }
 
-// siteDomainResolver loads the site registry once and returns a name->domain
-// lookup, falling back to the site name when it has no domain.
+// siteDomainResolver loads the site registry once and returns a key->domain
+// lookup, falling back to the key when it has no domain. A worktree key resolves
+// to the worktree's own domain, so the notification deep-links to the branch that
+// went slow rather than to its parent.
 func siteDomainResolver() func(string) string {
 	reg, err := config.LoadSites()
 	if err != nil {
@@ -90,10 +92,16 @@ func siteDomainResolver() func(string) string {
 			m[s.Name] = s.Domains[0]
 		}
 	}
-	return func(site string) string {
+	return func(key string) string {
+		site, branch := reqstats.SplitKey(key)
+		if branch != "" {
+			if d := wtIndex.domainFor(site, branch); d != "" {
+				return d
+			}
+		}
 		if d, ok := m[site]; ok {
 			return d
 		}
-		return site
+		return key
 	}
 }

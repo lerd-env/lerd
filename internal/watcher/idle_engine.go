@@ -86,22 +86,13 @@ type idleEngine struct {
 	// (a suspend may run a slow one-time `npm run build`), so the tick and other
 	// sites' wakes never block on it and the same site isn't worked twice at once.
 	inFlight map[string]bool
-	// worktreePath maps a worktree idle key to its checkout dir, and
-	// worktreeKeyByDomain maps a worktree domain to its idle key. Both are rebuilt
-	// each tick from git worktree detection so the access feed can attribute a
-	// worktree-domain hit to the right key, and resume can find the checkout to
-	// restart its workers in.
-	worktreePath        map[string]string
-	worktreeKeyByDomain map[string]string
 }
 
 func newIdleEngine(t *idle.Tracker) *idleEngine {
 	e := &idleEngine{
-		tracker:             t,
-		suspended:           map[string]bool{},
-		inFlight:            map[string]bool{},
-		worktreePath:        map[string]string{},
-		worktreeKeyByDomain: map[string]string{},
+		tracker:   t,
+		suspended: map[string]bool{},
+		inFlight:  map[string]bool{},
 	}
 	// Seed from persisted state so a lerd-ui restart remembers which sites and
 	// worktrees are suspended and resumes them on the next request rather than
@@ -176,9 +167,9 @@ func (e *idleEngine) tick() {
 	enabled := cfg.IdleSuspend.Enabled
 	timeout := cfg.IdleSuspendTimeout()
 	now := time.Now()
-	// Rebuilt every tick from worktree detection, then swapped in atomically.
-	newWtPath := map[string]string{}
-	newWtDomain := map[string]string{}
+	// Decide against a freshly detected worktree view, so a worktree removed since
+	// the last tick is pruned rather than kept alive on a stale entry.
+	wtIndex.refresh()
 	for i := range reg.Sites {
 		s := reg.Sites[i]
 		if s.Ignored || s.Paused {
@@ -221,7 +212,7 @@ func (e *idleEngine) tick() {
 			if suspended {
 				e.resume(s.Name)
 			}
-			e.tickWorktrees(&s, enabled, timeout, now, newWtPath, newWtDomain)
+			e.tickWorktrees(&s, enabled, timeout, now)
 			continue
 		}
 		idleFor, hasRecord := e.tracker.IdleFor(s.Name, now)
@@ -233,39 +224,26 @@ func (e *idleEngine) tick() {
 		}
 
 		// Each git worktree idles on its own timer, independent of the main site.
-		e.tickWorktrees(&s, enabled, timeout, now, newWtPath, newWtDomain)
+		e.tickWorktrees(&s, enabled, timeout, now)
 	}
-
-	// Swap in the freshly-detected worktree lookups for the access feed and resume.
-	e.mu.Lock()
-	e.worktreePath = newWtPath
-	e.worktreeKeyByDomain = newWtDomain
-	e.mu.Unlock()
 }
 
-// tickWorktrees evaluates each of the site's worktrees for suspend/resume and
-// records its path + domain in the rebuilding lookup maps. A worktree gets the
-// same startup grace as a site: never-before-seen keys are seeded to now so they
-// aren't suspended inside their first window.
-func (e *idleEngine) tickWorktrees(s *config.Site, enabled bool, timeout time.Duration, now time.Time, outPath, outDomain map[string]string) {
-	wts, err := detectWorktrees(s.Path, s.PrimaryDomain())
-	if err != nil {
-		// Detection failed (transient git error): leave state alone rather than
-		// risk pruning a worktree that still exists.
-		return
-	}
+// tickWorktrees evaluates each of the site's worktrees for suspend/resume, read
+// from the shared index the tick just refreshed. A worktree gets the same startup
+// grace as a site: never-before-seen keys are seeded to now so they aren't
+// suspended inside their first window. A site whose detection failed keeps its
+// last good worktrees in the index, so a transient git error can't prune one that
+// still exists.
+func (e *idleEngine) tickWorktrees(s *config.Site, enabled bool, timeout time.Duration, now time.Time) {
+	wts := wtIndex.forSite(s.Name)
 	// Track which worktree keys still exist so stale suspended state for a deleted
 	// worktree can be cleared below; a deleted worktree is never revisited
 	// otherwise and would show as suspended forever.
 	detected := make(map[string]bool, len(wts))
 	for _, wt := range wts {
-		wtBase := config.WorktreeUnitSlug(filepath.Base(wt.Path))
+		wtBase := wt.Base // the checkout dir's slug: what this worktree's units are named after
 		key := wtKey(s.Name, wtBase)
 		detected[key] = true
-		outPath[key] = wt.Path
-		if wt.Domain != "" {
-			outDomain[strings.ToLower(wt.Domain)] = key
-		}
 
 		e.mu.Lock()
 		inFlight := e.inFlight[key]
@@ -349,7 +327,6 @@ func (e *idleEngine) OnActivity(key string) {
 	}
 	e.mu.Lock()
 	suspended := e.suspended[key]
-	wtPath := e.worktreePath[key]
 	e.mu.Unlock()
 	if !suspended {
 		return
@@ -359,24 +336,12 @@ func (e *idleEngine) OnActivity(key string) {
 	// updated last-active, so once the suspend settles the next tick sees the site
 	// active again and resumes it (idle < timeout && suspended -> ActionResume).
 	if site, wtBase, isWt := splitWtKey(key); isWt {
-		if wtPath != "" {
+		if wtPath := wtIndex.pathFor(site, wtBase); wtPath != "" {
 			e.resumeWorktree(site, wtBase, wtPath) // resumeWorktree runs its own goroutine
 		}
 		return
 	}
 	e.resume(key) // resume runs its own goroutine
-}
-
-// worktreeKeyForHost returns the idle key for a worktree request host, or "" if
-// the host isn't a known worktree domain. Used by the access feed's resolver so a
-// worktree's own traffic wakes the worktree, not its parent site.
-func (e *idleEngine) worktreeKeyForHost(host string) string {
-	if e == nil {
-		return ""
-	}
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	return e.worktreeKeyByDomain[strings.ToLower(host)]
 }
 
 // resumeUntilClear is the disable path's safety net (replacing the tick that used

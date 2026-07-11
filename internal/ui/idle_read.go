@@ -9,7 +9,9 @@ import (
 
 // wtKey is the idle/activity key for a worktree: its parent site name and the
 // worktree's unit-slug base joined by "/". Mirrors the watcher's key scheme so
-// the UI can look up a worktree's last-active in the shared activity map.
+// the UI can look up a worktree's last-active in the shared activity map. Request
+// timing keys the same worktree by branch instead (reqstats.Key), since that is
+// the identity its API, MCP and store share; the two are not interchangeable.
 func wtKey(site, wtBase string) string { return site + "/" + wtBase }
 
 // loadIdleActivity reads the watcher's persisted per-key last-active map (unix
