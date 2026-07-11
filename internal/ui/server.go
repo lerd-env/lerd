@@ -1058,6 +1058,12 @@ type ServiceResponse struct {
 	Dashboard         string            `json:"dashboard,omitempty"`
 	DashboardExternal bool              `json:"dashboard_external,omitempty"`
 	ConnectionURL     string            `json:"connection_url,omitempty"`
+	Category          string            `json:"category,omitempty"`
+	Icon              string            `json:"icon,omitempty"`
+	AdminFor          []string          `json:"admin_for,omitempty"`
+	// Preset this service was installed from ("mariadb" for "mariadb-11-8"), so
+	// the UI can match it against another preset's admin_for without guessing.
+	Preset string `json:"preset,omitempty"`
 	// Port is the host (published) port the service is exposed on: the
 	// published-port override when set, else the preset/version default. 0 when
 	// the service publishes no host port (e.g. a worker). The UI shows it in the
@@ -1188,6 +1194,35 @@ func buildServiceResponse(name string) ServiceResponse {
 // never be silently missing for the other kind (that is exactly how client_shims
 // went missing for add-ons).
 // custom is the already-loaded definition for an add-on service (passed by the
+// presetNameOf returns the preset a service was installed from, falling back to
+// the service name for default-stack services that are their own preset.
+func presetNameOf(name string, custom *config.CustomService) string {
+	if custom != nil && custom.Preset != "" {
+		return custom.Preset
+	}
+	if config.PresetExists(name) {
+		return name
+	}
+	return ""
+}
+
+// servicePresentation resolves a service's discovery metadata from its preset,
+// so a service installed before these fields existed still renders correctly.
+// A genuinely user-defined service falls back to its own stored YAML.
+func servicePresentation(name string, custom *config.CustomService) (category, icon string, adminFor []string) {
+	presetName := name
+	if custom != nil && custom.Preset != "" {
+		presetName = custom.Preset
+	}
+	if p, err := config.LoadPreset(presetName); err == nil {
+		return p.Category, p.Icon, p.AdminFor
+	}
+	if custom != nil {
+		return custom.Category, custom.Icon, custom.AdminFor
+	}
+	return "", "", nil
+}
+
 // list rebuild so it is not re-read and an error cannot blank the card); pass
 // nil for a default preset or to have it loaded by name.
 func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, name, ssOutput string, custom *config.CustomService) ServiceResponse {
@@ -1255,6 +1290,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 	if image == "" && custom != nil {
 		image = custom.Image
 	}
+	category, icon, adminFor := servicePresentation(name, custom)
 	resp := ServiceResponse{
 		Name:              name,
 		Status:            status,
@@ -1263,6 +1299,10 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Dashboard:         serviceops.WithDashboardPort(dashboardRaw, presetPorts, services[name]),
 		DashboardExternal: dashExternal,
 		ConnectionURL:     serviceops.WithURLPort(connURL, hostPort),
+		Category:          category,
+		Icon:              icon,
+		AdminFor:          adminFor,
+		Preset:            presetNameOf(name, custom),
 		Port:              hostPort,
 		SiteCount:         countSitesUsingService(name),
 		SiteDomains:       sitesUsingService(name),
@@ -1526,6 +1566,9 @@ type PresetResponse struct {
 	Versions       []config.PresetVersion `json:"versions,omitempty"`
 	DefaultVersion string                 `json:"default_version,omitempty"`
 	InstalledTags  []string               `json:"installed_tags,omitempty"`
+	Category       string                 `json:"category,omitempty"`
+	Icon           string                 `json:"icon,omitempty"`
+	AdminFor       []string               `json:"admin_for,omitempty"`
 }
 
 // handleServicePresets returns the list of bundled presets and whether each is
@@ -1583,6 +1626,9 @@ func handleServicePresets(w http.ResponseWriter, r *http.Request) {
 			Versions:       p.Versions,
 			DefaultVersion: p.DefaultVersion,
 			InstalledTags:  installedTags,
+			Category:       p.Category,
+			Icon:           p.Icon,
+			AdminFor:       p.AdminFor,
 		})
 	}
 	writeJSON(w, out)

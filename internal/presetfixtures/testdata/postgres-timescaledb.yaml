@@ -29,3 +29,5 @@ env_vars:
 connection_url: postgresql://postgres:lerd@127.0.0.1:{{host_port}}/lerd
 site_init:
   exec: psql -U postgres -d {{site}} -c "CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE"
+category: databases
+icon: elephant

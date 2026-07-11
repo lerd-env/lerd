@@ -17,3 +17,5 @@ env_vars:
 env_detect:
   composer: typesense/typesense-php
 connection_url: http://127.0.0.1:8108
+category: search
+icon: search

@@ -15,6 +15,11 @@ export interface Preset {
   image?: string;
   dashboard?: string;
   depends_on?: string[];
+  // Declared by the preset YAML: discovery category, icon-set key, and the
+  // services this preset's admin UI administers.
+  category?: string;
+  icon?: string;
+  admin_for?: string[];
   missing_deps?: string[];
   installed?: boolean;
   installed_tags?: string[];

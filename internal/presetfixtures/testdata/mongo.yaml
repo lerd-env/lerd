@@ -15,3 +15,5 @@ env_detect:
   value_prefix: mongodb://
 site_init:
   exec: mongosh --quiet -u root -p lerd --authenticationDatabase admin --eval "try { db.getSiblingDB('{{site}}').createCollection('_lerd_init') } catch (e) {}"
+category: databases
+icon: leaf

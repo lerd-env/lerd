@@ -24,3 +24,5 @@ env_vars:
   - AWS_URL=http://localhost:9000
   - AWS_ENDPOINT=http://lerd-rustfs:9000
   - AWS_USE_PATH_STYLE_ENDPOINT=true
+category: storage
+icon: storage

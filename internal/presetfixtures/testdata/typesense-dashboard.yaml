@@ -11,3 +11,7 @@ environment:
 depends_on:
   - typesense
 dashboard: http://localhost:8084
+category: admin
+icon: search
+admin_for:
+  - typesense

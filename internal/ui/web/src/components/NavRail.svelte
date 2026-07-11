@@ -85,7 +85,7 @@
           onclick={() => openDashboard(svc)}
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            {@html dashboardIconSvg(svc.name)}
+            {@html dashboardIconSvg(svc.name, svc.icon)}
           </svg>
         </IconButton>
       {/each}

@@ -5,6 +5,9 @@ export interface DashboardRef {
   name: string;
   label?: string;
   dashboard: string;
+  // The service's declared icon key. Absent on the synthetic docs and profiler
+  // refs, which are named in the UI-only icon map instead.
+  icon?: string;
   // extraPath is appended to dashboard for the iframe src, used to deep-link
   // a service overlay (e.g. mailpit's /view/{id} for a captured email).
   extraPath?: string;
@@ -49,7 +52,7 @@ export function openDashboard(svc: Service) {
     location.hash = fallbackHash();
     return;
   }
-  dashboardOpen.set({ name: svc.name, label: svc.name, dashboard: svc.dashboard });
+  dashboardOpen.set({ name: svc.name, label: svc.name, dashboard: svc.dashboard, icon: svc.icon });
   location.hash = 'service/' + svc.name;
 }
 
@@ -73,6 +76,7 @@ export function openMailpitMessage(id: string) {
     name: 'mailpit',
     label: 'Mailpit',
     dashboard: mp.dashboard,
+    icon: mp.icon,
     extraPath: '/view/' + safeId
   });
   location.hash = 'service/mailpit/view/' + safeId;
@@ -125,12 +129,14 @@ function refFromHash(): DashboardRef | null {
           name: 'mailpit',
           label: 'Mailpit',
           dashboard: mp.dashboard,
+          icon: mp.icon,
           extraPath: '/view/' + mpDeep[1]
         };
       }
     }
     const svc = get(services).find((x) => x.name === rest);
-    if (svc?.dashboard) return { name: svc.name, label: svc.name, dashboard: svc.dashboard };
+    if (svc?.dashboard)
+      return { name: svc.name, label: svc.name, dashboard: svc.dashboard, icon: svc.icon };
   }
   return null;
 }

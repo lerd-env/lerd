@@ -10,3 +10,7 @@ environment:
 depends_on:
   - mongo
 dashboard: http://localhost:8082
+category: admin
+icon: leaf
+admin_for:
+  - mongo

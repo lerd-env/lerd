@@ -8,3 +8,5 @@ env_vars:
   - STRIPE_MOCK_URL=http://lerd-stripe-mock:12111
 env_detect:
   key: STRIPE_KEY
+category: testing
+icon: card

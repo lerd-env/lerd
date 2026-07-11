@@ -32,3 +32,9 @@ files:
       # browsers accept over HTTP on localhost.
       SESSION_COOKIE_SAMESITE = 'None'
       SESSION_COOKIE_SECURE = True
+category: admin
+icon: elephant
+admin_for:
+  - postgres
+  - postgres-pgvector
+  - postgres-timescaledb
