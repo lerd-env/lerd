@@ -63,3 +63,7 @@ func resolveLinks(path string) string {
 	}
 	return path
 }
+
+// UnderTest reports whether this process is a test binary, for packages that must
+// refuse to touch the real system (systemd, podman) when no stub is installed.
+func UnderTest() bool { return underTest }
