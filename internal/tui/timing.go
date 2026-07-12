@@ -31,6 +31,10 @@ const (
 	timingRecentLimit  = 6
 	timingRouteLimit   = 5
 	timingBarWidth     = 18
+	// timingMinBlockWidth is the narrowest a side-by-side block can get and still
+	// show a route or a URI worth reading next to its figures. Below it the panel
+	// drops a column rather than truncating every row to a stub.
+	timingMinBlockWidth = 38
 )
 
 // timingScope is one entry in the branch cycle. key is the reqstats identity the
@@ -200,44 +204,61 @@ func timingSectionLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []str
 	if a.ColdStarts > 0 {
 		line += fmt.Sprintf(" · %d cold", a.ColdStarts)
 	}
-	add(line)
-	add("  " + statusMix(a.Status))
+	add(line + "     " + statusMix(a.Status))
 	add("")
 
-	add("  " + sectionStyle.Render("Response times"))
-	for _, row := range distributionRows(a.Distribution) {
-		add(row)
-	}
-	add("")
+	// The three blocks sit side by side when the pane can carry them, which is
+	// what turns the panel from twenty rows into nine.
+	blocks := [][]string{}
+	cols := timingCols(innerW)
+	blockW := (innerW - overviewGutter*(cols-1)) / cols
 
-	if routes := topRoutes(a.Routes); len(routes) > 0 {
-		add("  " + sectionStyle.Render("Slowest routes"))
-		for _, r := range routes {
-			// Route already carries the method ("GET /products/:id"), so it isn't
-			// repeated as its own column.
-			add(fmt.Sprintf("    %-44s %8s  %4d×",
-				clipLine(r.Route, 44), ms(r.RecentP95Millis), r.Samples))
-		}
-		add("")
+	blocks = append(blocks, distributionBlock(a.Distribution, blockW))
+	if r := routesBlock(a.Routes, blockW); len(r) > 0 {
+		blocks = append(blocks, r)
+	}
+	if r := recentBlock(m.timingRecent, blockW); len(r) > 0 {
+		blocks = append(blocks, r)
 	}
 
-	if len(m.timingRecent) > 0 {
-		add("  " + sectionStyle.Render("Recent"))
-		for _, r := range m.timingRecent {
-			uri := r.URI
-			if uri == "" {
-				uri = r.Route
+	if cols == 1 {
+		for _, b := range blocks {
+			for _, ln := range b {
+				add(ln)
 			}
-			add(fmt.Sprintf("    %s  %-6s %s %-30s %8s",
-				r.At.Format("15:04:05"), r.Method, statusGlyph(r.Status), clipLine(uri, 30), ms(r.Millis)))
+			add("")
 		}
+		return out
+	}
+	// Pack the blocks into rows of at most cols, so a two-column pane stacks the
+	// third block beneath the first two rather than shredding all three.
+	for i := 0; i < len(blocks); i += cols {
+		end := i + cols
+		if end > len(blocks) {
+			end = len(blocks)
+		}
+		out = append(out, columnize(blocks[i:end], innerW)...)
+		add("")
 	}
 	return out
 }
 
-// distributionRows renders the latency histogram as one bar per bucket, scaled
-// against the busiest bucket so the shape reads at any request volume.
-func distributionRows(buckets []reqstats.LatencyBucket) []string {
+// timingCols is how many of the panel's blocks fit side by side. Each needs room
+// for a label, a bar or a route, and a figure.
+func timingCols(innerW int) int {
+	switch {
+	case innerW >= 3*timingMinBlockWidth+2*overviewGutter:
+		return 3
+	case innerW >= 2*timingMinBlockWidth+overviewGutter:
+		return 2
+	}
+	return 1
+}
+
+// distributionBlock renders the latency histogram, scaling the bars against both
+// the busiest bucket and the width on offer.
+func distributionBlock(buckets []reqstats.LatencyBucket, w int) []string {
+	out := []string{"  " + sectionStyle.Render("Response times")}
 	peak := 0
 	for _, b := range buckets {
 		if b.Count > peak {
@@ -245,22 +266,74 @@ func distributionRows(buckets []reqstats.LatencyBucket) []string {
 		}
 	}
 	if peak == 0 {
-		return nil
+		return append(out, dimStyle.Render("    (no timed requests)"))
 	}
-	rows := make([]string, 0, len(buckets))
+	// Label and count take a fixed slice; the bar gets whatever's left.
+	barW := w - 18
+	if barW < 4 {
+		barW = 4
+	}
+	if barW > timingBarWidth {
+		barW = timingBarWidth
+	}
 	for _, b := range buckets {
 		label := "≥1s"
 		if b.UpperMillis > 0 {
 			label = bucketLabel(b.UpperMillis)
 		}
-		width := b.Count * timingBarWidth / peak
+		width := b.Count * barW / peak
 		bar := strings.Repeat("▇", width)
 		if b.Count > 0 && width == 0 {
 			bar = "▏" // a bucket with traffic never renders as empty
 		}
-		rows = append(rows, fmt.Sprintf("    %-8s %-*s %4d", label, timingBarWidth, bar, b.Count))
+		out = append(out, fmt.Sprintf("    %-7s %-*s %4d", label, barW, bar, b.Count))
 	}
-	return rows
+	return out
+}
+
+// routesBlock ranks by recent p95, the same recency-aware figure the web UI sorts
+// on, so a route that's been fixed drops off as newer, faster samples arrive.
+func routesBlock(routes []reqstats.RouteStat, w int) []string {
+	top := topRoutes(routes)
+	if len(top) == 0 {
+		return nil
+	}
+	out := []string{"  " + sectionStyle.Render("Slowest routes")}
+	// Route already carries the method ("GET /products/:id"), so it isn't repeated.
+	// The row is 4 indent + name + 1 + 8 (time) + 1 + 4 + 1 ("×"), so the name gets
+	// what's left of w after those 19 cells.
+	nameW := w - 19
+	if nameW < 10 {
+		nameW = 10
+	}
+	for _, r := range top {
+		out = append(out, fmt.Sprintf("    %-*s %8s %4d×",
+			nameW, clipLine(r.Route, nameW), ms(r.RecentP95Millis), r.Samples))
+	}
+	return out
+}
+
+// recentBlock is the tail of requests as they arrived, newest first.
+func recentBlock(recent []reqstats.Record, w int) []string {
+	if len(recent) == 0 {
+		return nil
+	}
+	out := []string{"  " + sectionStyle.Render("Recent")}
+	// 4 indent + 8 (clock) + 1 + 4 (method) + 1 + 3 (status) + 1 + uri + 1 + 8 (time).
+	uriW := w - 31
+	if uriW < 8 {
+		uriW = 8
+	}
+	for _, r := range recent {
+		uri := r.URI
+		if uri == "" {
+			uri = r.Route
+		}
+		out = append(out, fmt.Sprintf("    %s %-4s %s %-*s %8s",
+			r.At.Format("15:04:05"), r.Method, statusGlyph(r.Status),
+			uriW, clipLine(uri, uriW), ms(r.Millis)))
+	}
+	return out
 }
 
 // topRoutes ranks by recent p95, the same recency-aware figure the web UI sorts

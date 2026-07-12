@@ -562,6 +562,17 @@ func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.switchTab(m.nextTab(-1))
 		return m, m.afterNav()
 
+	case "left", "right":
+		// The Overview lays Domains beside Toggles when the pane is wide enough;
+		// left and right cross between those columns while up and down walk one.
+		if m.timingActive() && m.focus == paneDetail {
+			site := m.currentSite()
+			rows := detailRows(site)
+			m.detailCursor = hopDetailColumn(rows, navigableRows(rows), m.detailCursor, m.detailInnerWidth())
+			m.followCursor = true
+		}
+		return m, nil
+
 	case "tab":
 		// On the Dashboard tab there are no list panes; tab moves focus
 		// between the grid cards so j/k and the wheel scroll the right one.
