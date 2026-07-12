@@ -41,6 +41,7 @@ Dots follow the same convention everywhere: green `●` running, grey `○` stop
 | click | Click a tab to switch screens, or a site / service row to select it |
 | `tab` / `shift+tab` | Cycle focus between the list and the detail pane on the current tab |
 | `↑` `↓` / `j` `k` | Move selection in the focused pane (scrolls the grid on the Dashboard tab) |
+| `←` `→` | Cross between the two columns of the site Overview grid (Domains and Toggles) when the pane is wide enough to pair them |
 | `pgup` `pgdn` | Jump by 10 rows |
 | `home` `g` | Jump to first row |
 | `end` `G` | Jump to last row |
@@ -137,13 +138,21 @@ The site detail pane is split into read-side tabs the user can jump between with
 
 | Key | Tab | Contents |
 | --- | --- | --- |
-| `1` | Overview | The default — domains, services used, workers, worktrees, toggles (HTTPS / LAN / PHP / Node), and the [request-timing panel](#request-timing) |
+| `1` | Overview | The default: domains, toggles (HTTPS / LAN / PHP / Node), services used, workers, worktrees, and the [request-timing panel](#request-timing), laid out as a [responsive grid](#overview-layout) |
 | `2` | Logs | A live tail of any of the site's log sources: the FPM or custom container, every worker unit, and each of the framework's app-log files. `[` / `]` cycle the source, `{` / `}` scroll back through the buffer, `f` finds within it. `l` is a shortcut to this tab from anywhere on the Sites tab |
 | `3` | Env | Read-only display of the site's `.env` file (read up to 256 KB so a runaway file can't wedge the render loop) |
 | `4` | Debug | This site's slice of the Debug window: the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP) scoped to the focused site, with `[` / `]` to switch lens and `w` to toggle worker capture. Rows show their detail inline; press `D` for the full cross-site window |
 | `5` | Doctor | The same framework-agnostic app-level health checks the web dashboard runs: a universal baseline (env file present, env drift warning only on keys the code reads without a default, application key set, composer and node dependencies installed with lockfiles in step, `composer audit` and `npm audit` clean, PHP version in range) plus each framework's own checks from its store definition (for Laravel, the `APP_DEBUG`-in-production footgun, the `public/storage` symlink, and pending migrations). Some checks exec in the container, so the run is on-demand: press `5` to run and again to re-run. The panel is read-only and names the suggested fix (e.g. `key:generate`, `migrate`) rather than running it, so a status view can never migrate a database |
 
 Switching tabs resets the detail-pane scroll so the user lands at the top of the new tab. Picker overlays (PHP / Node version) only show in Overview; selecting a different tab dismisses them.
+
+## Overview layout
+
+The Overview is a grid, not a column. Each section says whether it wants the whole pane or half of it, and half-width sections pair up: **Domains** sits beside **Toggles**, and **Services used** beside **Workers**. The identity header, worktrees and request timing take the full width, and the timing panel subdivides internally into its distribution, slowest-routes and recent columns.
+
+A column has a floor of 44 characters. When the pane can't give two columns that much, every section goes full width and the grid collapses to the single column it has always been, so a narrow terminal loses nothing. The same rule applies inside the timing panel, which drops from three blocks to two to one rather than truncating every row to a stub.
+
+Because sections sit side by side, `left` and `right` cross between the two columns of a grid row (Domains and Toggles), keeping the cursor's offset within the section, while `up` and `down` walk a single column as before.
 
 ## Request timing
 

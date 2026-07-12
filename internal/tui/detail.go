@@ -67,8 +67,11 @@ const (
 	kindWorktreeNode
 )
 
-// detailRows returns the ordered rows the detail view draws. Built on each
-// render so worker lists stay in sync with live state.
+// detailRows returns the rows the detail view draws, in the order the Overview
+// renders them: Domains, Toggles, Workers, then the worktrees. Cursor movement
+// walks this slice, so the order has to match the layout or `down` teleports the
+// cursor to a block somewhere else on screen. Built on each render so worker
+// lists stay in sync with live state.
 func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 	var rows []detailRow
 	rows = append(rows, detailRow{kind: kindInfo}) // header placeholder drawn separately
@@ -76,6 +79,16 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 		rows = append(rows, detailRow{kind: kindDomain, domain: d})
 	}
 	rows = append(rows, detailRow{kind: kindDomainAdd})
+	if s.ContainerPort == 0 && s.PHPVersion != "" {
+		rows = append(rows, detailRow{kind: kindPHP})
+	}
+	if s.NodeVersion != "" {
+		rows = append(rows, detailRow{kind: kindNode})
+	}
+	if cfg, _ := config.LoadGlobal(); cfg == nil || cfg.DNS.Enabled {
+		rows = append(rows, detailRow{kind: kindHTTPS})
+	}
+	rows = append(rows, detailRow{kind: kindLANShare})
 	if s.HasQueueWorker {
 		rows = append(rows, detailRow{kind: kindWorker, workerName: "queue"})
 	}
@@ -95,16 +108,6 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 		}
 		rows = append(rows, detailRow{kind: kindWorker, workerName: fw.Name})
 	}
-	if s.ContainerPort == 0 && s.PHPVersion != "" {
-		rows = append(rows, detailRow{kind: kindPHP})
-	}
-	if s.NodeVersion != "" {
-		rows = append(rows, detailRow{kind: kindNode})
-	}
-	if cfg, _ := config.LoadGlobal(); cfg == nil || cfg.DNS.Enabled {
-		rows = append(rows, detailRow{kind: kindHTTPS})
-	}
-	rows = append(rows, detailRow{kind: kindLANShare})
 	dbCapable := siteHasManagedDB(s)
 	for _, wt := range s.Worktrees {
 		rows = append(rows, detailRow{kind: kindWorktreeHeader, branch: wt.Branch, branchPath: wt.Path})
@@ -156,9 +159,13 @@ func findWorktree(s *siteinfo.EnrichedSite, branch string) *siteinfo.WorktreeInf
 func navigableRows(rows []detailRow) []int {
 	var idx []int
 	for i, r := range rows {
-		if r.kind != kindInfo {
-			idx = append(idx, i)
+		// The worktree header is a caption, not a control: it has no toggle and
+		// renders no cursor, so leaving it navigable made the cursor vanish for a
+		// keypress as it passed through.
+		if r.kind == kindInfo || r.kind == kindWorktreeHeader {
+			continue
 		}
+		idx = append(idx, i)
 	}
 	return idx
 }
@@ -554,8 +561,11 @@ func settingsContentLines(m *Model, focused bool, innerW int) []string {
 	return out
 }
 
-// detailContentLines returns the rendered lines for the site detail pane and
-// the line index of the currently selected row (for viewport scrolling).
+// detailContentLines renders the site Overview and returns the line index of the
+// selected row (for viewport scrolling). The Overview is a grid: sections declare
+// whether they want the whole pane or half of it, and half-width sections pair up
+// so Domains sits beside Toggles and Services beside Workers. A narrow pane
+// collapses every section to full width and the grid becomes a single column.
 func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, innerW int) ([]string, int) {
 	rows := detailRows(site)
 	nav := navigableRows(rows)
@@ -567,114 +577,112 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 		}
 		return -1
 	}
+	sel := func(i int) bool { return focused && navPos(i) == m.detailCursor }
 
-	out := renderSiteTabHeader(tabSiteOverview, innerW, availableSiteTabs(site))
-	cursorLine := 0
-	add := func(s string, selected bool) {
-		if selected && len(out) > 0 {
-			cursorLine = len(out)
-		}
-		out = append(out, padToWidth(clipLine(s, innerW), innerW))
-	}
-	addPlain := func(s string) { add(s, false) }
-
-	// Lead with the primary domain (what users see in the browser). The
-	// internal registry name is still surfaced as the "name:" line below,
-	// since commands and filters still accept it.
-	header := site.PrimaryDomain()
-	if header == "" {
-		header = site.Name
-	}
-	addPlain(sectionStyle.Render(header))
-	if site.AppName != "" {
-		addPlain(dimStyle.Render("  app: ") + site.AppName)
-	}
-	if site.Name != header {
-		addPlain(dimStyle.Render("  name: ") + site.Name)
-	}
-	if site.Path != "" {
-		addPlain(dimStyle.Render("  path: ") + site.Path)
-	}
-	if site.Group != "" {
-		if site.GroupSubdomain != "" {
-			// Resolve the main from the registry rather than trimming the label
-			// off this site's own domain, which breaks if the primary isn't
-			// literally <label>.<main> (e.g. an alias was promoted to primary).
-			mainDomain := ""
-			for _, s := range m.snap.Sites {
-				if s.Group == site.Group && s.GroupSubdomain == "" {
-					mainDomain = s.PrimaryDomain()
-					break
-				}
-			}
-			if mainDomain == "" {
-				mainDomain = strings.TrimPrefix(site.PrimaryDomain(), site.GroupSubdomain+".")
-			}
-			line := "  group: secondary of " + mainDomain
-			if site.GroupSharedDB {
-				line += " · shared db"
-			}
-			addPlain(dimStyle.Render(line))
-		} else {
-			n := 0
-			for _, s := range m.snap.Sites {
-				if s.Group == site.Group && s.GroupSubdomain != "" {
-					n++
-				}
-			}
-			noun := "secondaries"
-			if n == 1 {
-				noun = "secondary"
-			}
-			addPlain(dimStyle.Render(fmt.Sprintf("  group: main · %d %s", n, noun)))
-		}
-	}
-
+	colW := overviewColWidth(innerW)
 	scheme := "http"
 	if site.Secured {
 		scheme = "https"
 	}
 
-	addPlain("")
-	addPlain(sectionStyle.Render("Domains"))
-	if len(site.Domains) == 0 {
-		addPlain(dimStyle.Render("  (no domain)"))
-	}
-	for i, row := range rows {
-		if row.kind != kindDomain {
-			continue
-		}
-		selected := focused && navPos(i) == m.detailCursor
-		domain := row.domain
-		label := scheme + "://" + domain
-		add(renderDetailRow(selected, accentStyle.Render("⊙"), label, dimStyle.Render(domainRole(site, domain))), selected)
-	}
-	for i, row := range rows {
-		if row.kind != kindDomainAdd {
-			continue
-		}
-		selected := focused && navPos(i) == m.detailCursor
-		prefix := "  "
-		if selected {
-			prefix = " " + accentStyle.Render("▸")
-		}
-		if m.domainInputActive {
-			label := "add domain: "
-			if m.domainInputEditing != "" {
-				label = "rename " + m.domainInputEditing + " → "
-			}
-			add(prefix+" "+accentStyle.Render("+")+" "+selectedStyle.Render(label)+m.domainInput+"▌", selected)
-		} else {
-			add(prefix+" "+accentStyle.Render("+")+" "+dimStyle.Render("add domain (space or a)"), selected)
-		}
-	}
-	addPlain("")
+	var secs []ovSection
+	secs = append(secs, overviewIdentity(m, site, innerW)...)
+	secs = append(secs, overviewDomains(m, site, rows, sel, scheme, colW)...)
+	secs = append(secs, overviewToggles(site, rows, sel, colW)...)
+	secs = append(secs, overviewServices(m, site, colW)...)
+	secs = append(secs, overviewWorkers(site, rows, sel, colW)...)
+	secs = append(secs, overviewWorktrees(site, rows, sel, scheme, innerW)...)
+	secs = append(secs, overviewTiming(m, site, innerW)...)
 
+	body, cursorLine := composeOverview(secs, innerW)
+	out := renderSiteTabHeader(tabSiteOverview, innerW, availableSiteTabs(site))
+	if cursorLine >= 0 {
+		cursorLine += len(out)
+	} else {
+		cursorLine = 0
+	}
+	return append(out, body...), cursorLine
+}
+
+// overviewIdentity is the header: primary domain, then the facts about the site
+// packed onto as few lines as the pane allows.
+func overviewIdentity(m *Model, site *siteinfo.EnrichedSite, innerW int) []ovSection {
+	b := newOvBuilder(innerW)
+
+	// Lead with the primary domain (what users see in the browser). The internal
+	// registry name is still surfaced below, since commands and filters take it.
+	header := site.PrimaryDomain()
+	if header == "" {
+		header = site.Name
+	}
+	b.plain(sectionStyle.Render(header))
+
+	var facts []string
+	if site.AppName != "" {
+		facts = append(facts, dimStyle.Render("app: ")+site.AppName)
+	}
+	if site.Name != header {
+		facts = append(facts, dimStyle.Render("name: ")+site.Name)
+	}
+	if g := siteGroupLine(m, site); g != "" {
+		facts = append(facts, dimStyle.Render(g))
+	}
+	for _, ln := range joinInfo(facts, innerW-2) {
+		b.plain("  " + ln)
+	}
+	if site.Path != "" {
+		b.plain(dimStyle.Render("  path: ") + site.Path)
+	}
+	b.plain("  " + siteRuntimeLine(site))
+	b.plain("")
+	return b.section(ovFull)
+}
+
+// siteGroupLine describes the site's place in a group, or "" when it isn't in one.
+func siteGroupLine(m *Model, site *siteinfo.EnrichedSite) string {
+	if site.Group == "" {
+		return ""
+	}
+	if site.GroupSubdomain != "" {
+		// Resolve the main from the registry rather than trimming the label off
+		// this site's own domain, which breaks if the primary isn't literally
+		// <label>.<main> (e.g. an alias was promoted to primary).
+		mainDomain := ""
+		for _, s := range m.snap.Sites {
+			if s.Group == site.Group && s.GroupSubdomain == "" {
+				mainDomain = s.PrimaryDomain()
+				break
+			}
+		}
+		if mainDomain == "" {
+			mainDomain = strings.TrimPrefix(site.PrimaryDomain(), site.GroupSubdomain+".")
+		}
+		line := "group: secondary of " + mainDomain
+		if site.GroupSharedDB {
+			line += " · shared db"
+		}
+		return line
+	}
+	n := 0
+	for _, s := range m.snap.Sites {
+		if s.Group == site.Group && s.GroupSubdomain != "" {
+			n++
+		}
+	}
+	noun := "secondaries"
+	if n == 1 {
+		noun = "secondary"
+	}
+	return fmt.Sprintf("group: main · %d %s", n, noun)
+}
+
+// siteRuntimeLine is the one-liner of versions: PHP, Node, framework, runtime, branch.
+func siteRuntimeLine(site *siteinfo.EnrichedSite) string {
 	php := site.PHPVersion
 	if php == "" && site.ContainerPort > 0 {
 		php = "custom"
 	}
-	info := dimStyle.Render("  php: ") + php
+	info := dimStyle.Render("php: ") + php
 	if site.NodeVersion != "" {
 		info += dimStyle.Render("  node: ") + site.NodeVersion
 	}
@@ -691,133 +699,159 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 	if site.Branch != "" {
 		info += dimStyle.Render("  git: ") + site.Branch
 	}
-	addPlain(info)
-	addPlain("")
-	if len(site.Services) > 0 {
-		addPlain(sectionStyle.Render("Services used"))
-		states := m.serviceStatesByName()
-		for _, svc := range site.Services {
-			addPlain(renderSiteServiceRow(svc, states[svc]))
-		}
-		addPlain("")
-	}
+	return info
+}
 
-	hasWorkers := false
-	for _, row := range rows {
-		if row.kind == kindWorker {
-			hasWorkers = true
-			break
-		}
+func overviewDomains(m *Model, site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Domains"))
+	if len(site.Domains) == 0 {
+		b.plain(dimStyle.Render("  (no domain)"))
 	}
-	if hasWorkers {
-		addPlain(sectionStyle.Render("Workers"))
-		for i, row := range rows {
-			if row.kind != kindWorker {
-				continue
-			}
-			selected := focused && navPos(i) == m.detailCursor
-			add(renderDetailRow(selected,
-				workerGlyphFor(site, row.workerName),
-				workerLabel(site, row.workerName),
-				workerStateText(site, row.workerName)), selected)
-		}
-		addPlain("")
-	}
-
-	if len(site.Worktrees) > 0 {
-		addPlain(sectionStyle.Render("Worktrees"))
-		for _, wt := range site.Worktrees {
-			head := "  " + accentStyle.Render(wt.Branch)
-			if wt.Domain != "" {
-				head += "  " + dimStyle.Render(scheme+"://"+wt.Domain)
-			}
-			if wt.Path != "" {
-				head += "  " + dimStyle.Render(wt.Path)
-			}
-			addPlain(head)
-			renderedAny := false
-			for i, row := range rows {
-				if row.kind == kindWorktreeWorker && row.branch == wt.Branch {
-					renderedAny = true
-					selected := focused && navPos(i) == m.detailCursor
-					add(renderDetailRow(selected,
-						worktreeWorkerGlyph(&wt, row.workerName),
-						"    "+worktreeWorkerLabel(&wt, row.workerName),
-						worktreeWorkerStateText(&wt, row.workerName)), selected)
-				}
-			}
-			for i, row := range rows {
-				if row.kind == kindWorktreeDB && row.branch == wt.Branch {
-					renderedAny = true
-					selected := focused && navPos(i) == m.detailCursor
-					add(renderDetailRow(selected,
-						onOffGlyph(wt.DBIsolated),
-						"    "+"Isolated DB",
-						worktreeDBStateText(wt)), selected)
-				}
-			}
-			for i, row := range rows {
-				if row.kind == kindWorktreeLAN && row.branch == wt.Branch {
-					renderedAny = true
-					selected := focused && navPos(i) == m.detailCursor
-					add(renderDetailRow(selected,
-						onOffGlyph(wt.LANPort > 0),
-						"    "+"LAN share",
-						lanShareText(wt.LANPort)), selected)
-				}
-			}
-			for i, row := range rows {
-				if row.kind == kindWorktreePHP && row.branch == wt.Branch {
-					renderedAny = true
-					selected := focused && navPos(i) == m.detailCursor
-					add(renderDetailRow(selected,
-						accentStyle.Render("λ"),
-						"    "+"PHP",
-						worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), selected)
-				}
-				if row.kind == kindWorktreeNode && row.branch == wt.Branch {
-					renderedAny = true
-					selected := focused && navPos(i) == m.detailCursor
-					add(renderDetailRow(selected,
-						accentStyle.Render("⬢"),
-						"    "+"Node",
-						worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), selected)
-				}
-			}
-			if !renderedAny {
-				addPlain(dimStyle.Render("    (no per-worktree controls)"))
-			}
-		}
-		addPlain("")
-	}
-
-	addPlain(sectionStyle.Render("Toggles"))
 	for i, row := range rows {
-		selected := focused && navPos(i) == m.detailCursor
+		switch row.kind {
+		case kindDomain:
+			s := sel(i)
+			label := scheme + "://" + row.domain
+			b.add(renderDetailRow(s, accentStyle.Render("⊙"), label, dimStyle.Render(domainRole(site, row.domain))), s)
+		case kindDomainAdd:
+			s := sel(i)
+			prefix := "  "
+			if s {
+				prefix = " " + accentStyle.Render("▸")
+			}
+			if m.domainInputActive {
+				label := "add domain: "
+				if m.domainInputEditing != "" {
+					label = "rename " + m.domainInputEditing + " → "
+				}
+				b.add(prefix+" "+accentStyle.Render("+")+" "+selectedStyle.Render(label)+m.domainInput+"▌", s)
+			} else {
+				b.add(prefix+" "+accentStyle.Render("+")+" "+dimStyle.Render("add domain (space or a)"), s)
+			}
+		}
+	}
+	b.plain("")
+	return b.section(ovHalf)
+}
+
+func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Toggles"))
+	for i, row := range rows {
+		s := sel(i)
 		switch row.kind {
 		case kindPHP:
-			add(renderDetailRow(selected,
-				accentStyle.Render("λ"), "PHP", dimStyle.Render(site.PHPVersion)), selected)
+			b.add(renderDetailRow(s, accentStyle.Render("λ"), "PHP", dimStyle.Render(site.PHPVersion)), s)
 		case kindNode:
-			add(renderDetailRow(selected,
-				accentStyle.Render("⬢"), "Node", dimStyle.Render(site.NodeVersion)), selected)
+			b.add(renderDetailRow(s, accentStyle.Render("⬢"), "Node", dimStyle.Render(site.NodeVersion)), s)
 		case kindHTTPS:
-			add(renderDetailRow(selected,
-				onOffGlyph(site.Secured), "HTTPS", onOffText(site.Secured)), selected)
+			b.add(renderDetailRow(s, onOffGlyph(site.Secured), "HTTPS", onOffText(site.Secured)), s)
 		case kindLANShare:
-			add(renderDetailRow(selected,
-				onOffGlyph(site.LANPort > 0), "LAN share", lanShareText(site.LANPort)), selected)
+			b.add(renderDetailRow(s, onOffGlyph(site.LANPort > 0), "LAN share", lanShareText(site.LANPort)), s)
 		}
 	}
+	b.plain("")
+	return b.section(ovHalf)
+}
 
-	// The request-timing panel closes the Overview, in the space the app-logs
-	// sub-pane used to take. Read-only, so it sits below the navigable rows and
-	// never enters the cursor cycle.
-	if timing := timingSectionLines(m, site, innerW); len(timing) > 0 {
-		out = append(out, "")
-		out = append(out, timing...)
+func overviewServices(m *Model, site *siteinfo.EnrichedSite, w int) []ovSection {
+	if len(site.Services) == 0 {
+		return nil
 	}
-	return out, cursorLine
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Services used"))
+	states := m.serviceStatesByName()
+	for _, svc := range site.Services {
+		b.plain(renderSiteServiceRow(svc, states[svc]))
+	}
+	b.plain("")
+	return b.section(ovHalf)
+}
+
+func overviewWorkers(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, w int) []ovSection {
+	b := newOvBuilder(w)
+	for i, row := range rows {
+		if row.kind != kindWorker {
+			continue
+		}
+		if b.empty() {
+			b.plain(sectionStyle.Render("Workers"))
+		}
+		s := sel(i)
+		b.add(renderDetailRow(s,
+			workerGlyphFor(site, row.workerName),
+			workerLabel(site, row.workerName),
+			workerStateText(site, row.workerName)), s)
+	}
+	if b.empty() {
+		return nil
+	}
+	b.plain("")
+	return b.section(ovHalf)
+}
+
+func overviewWorktrees(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int) bool, scheme string, w int) []ovSection {
+	if len(site.Worktrees) == 0 {
+		return nil
+	}
+	b := newOvBuilder(w)
+	b.plain(sectionStyle.Render("Worktrees"))
+	for _, wt := range site.Worktrees {
+		head := "  " + accentStyle.Render(wt.Branch)
+		if wt.Domain != "" {
+			head += "  " + dimStyle.Render(scheme+"://"+wt.Domain)
+		}
+		if wt.Path != "" {
+			head += "  " + dimStyle.Render(wt.Path)
+		}
+		b.plain(head)
+		renderedAny := false
+		for i, row := range rows {
+			if row.branch != wt.Branch {
+				continue
+			}
+			s := sel(i)
+			switch row.kind {
+			case kindWorktreeWorker:
+				renderedAny = true
+				b.add(renderDetailRow(s, worktreeWorkerGlyph(&wt, row.workerName),
+					"    "+worktreeWorkerLabel(&wt, row.workerName),
+					worktreeWorkerStateText(&wt, row.workerName)), s)
+			case kindWorktreeDB:
+				renderedAny = true
+				b.add(renderDetailRow(s, onOffGlyph(wt.DBIsolated),
+					"    Isolated DB", worktreeDBStateText(wt)), s)
+			case kindWorktreeLAN:
+				renderedAny = true
+				b.add(renderDetailRow(s, onOffGlyph(wt.LANPort > 0),
+					"    LAN share", lanShareText(wt.LANPort)), s)
+			case kindWorktreePHP:
+				renderedAny = true
+				b.add(renderDetailRow(s, accentStyle.Render("λ"),
+					"    PHP", worktreeVersionText(wt.PHPVersion, wt.PHPVersionOverride)), s)
+			case kindWorktreeNode:
+				renderedAny = true
+				b.add(renderDetailRow(s, accentStyle.Render("⬢"),
+					"    Node", worktreeVersionText(wt.NodeVersion, wt.NodeVersionOverride)), s)
+			}
+		}
+		if !renderedAny {
+			b.plain(dimStyle.Render("    (no per-worktree controls)"))
+		}
+	}
+	b.plain("")
+	return b.section(ovFull)
+}
+
+// overviewTiming wraps the request-timing panel as a full-width section. It's
+// read-only, so it holds no cursor.
+func overviewTiming(m *Model, site *siteinfo.EnrichedSite, innerW int) []ovSection {
+	lines := timingSectionLines(m, site, innerW)
+	if len(lines) == 0 {
+		return nil
+	}
+	return []ovSection{{lines: lines, span: ovFull, cursor: -1}}
 }
 
 func renderDetailRow(selected bool, glyph, label, state string) string {
