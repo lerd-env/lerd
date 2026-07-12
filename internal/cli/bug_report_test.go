@@ -77,6 +77,11 @@ func TestWriteBugReportHeader_includesVersionAndOS(t *testing.T) {
 }
 
 func TestWriteBugReport_createsFile(t *testing.T) {
+	// The report gathers state through the real config paths, and its update check
+	// caches to the data dir, so without this it writes the developer's own.
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	dir := t.TempDir()
 	target := filepath.Join(dir, "report.txt")
 	got, err := writeBugReport(target, 5, false)
@@ -98,6 +103,9 @@ func TestWriteBugReport_createsFile(t *testing.T) {
 }
 
 func TestWriteBugReport_defaultPath(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	dir := t.TempDir()
 	cwd, err := os.Getwd()
 	if err != nil {

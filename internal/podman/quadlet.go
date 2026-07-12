@@ -2,6 +2,7 @@ package podman
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -90,6 +91,7 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 		fileChanged = false
 	}
 	if fileChanged {
+		config.GuardRealWrite(path)
 		if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 			return false, err
 		}
@@ -241,8 +243,19 @@ func unitOpCaller() string {
 	}
 }
 
+// errNoRealSystemd is what the unit lifecycle returns when a test drives it with
+// no stub installed. Falling through to the real user bus would start, stop and
+// enable units on the machine running the suite, which it has already done once.
+var errNoRealSystemd = errors.New("podman: refusing the real systemd from a test; set podman.UnitLifecycle")
+
+// realSystemdBlocked reports whether this call must not reach the real user bus.
+func realSystemdBlocked() bool { return UnitLifecycle == nil && config.UnderTest() }
+
 func StartUnit(name string) error {
 	logUnitOp("start", name)
+	if realSystemdBlocked() {
+		return errNoRealSystemd
+	}
 	if UnitLifecycle != nil {
 		err := UnitLifecycle.Start(name)
 		if err == nil {
@@ -260,6 +273,9 @@ func StartUnit(name string) error {
 // StopUnit stops a service unit.
 func StopUnit(name string) error {
 	logUnitOp("stop", name)
+	if realSystemdBlocked() {
+		return errNoRealSystemd
+	}
 	if UnitLifecycle != nil {
 		err := UnitLifecycle.Stop(name)
 		if err == nil {
@@ -280,7 +296,7 @@ func StopUnit(name string) error {
 // DBusStartUnit does. On macOS launchd has no separate failed state (the
 // bootstrap path replaces the job), so this is a no-op. Best-effort.
 func ResetFailedUnit(name string) {
-	if UnitLifecycle != nil {
+	if UnitLifecycle != nil || realSystemdBlocked() {
 		return
 	}
 	_ = systemd.DBusResetFailed(name)
@@ -289,6 +305,9 @@ func ResetFailedUnit(name string) {
 // RestartUnit restarts a service unit.
 func RestartUnit(name string) error {
 	logUnitOp("restart", name)
+	if realSystemdBlocked() {
+		return errNoRealSystemd
+	}
 	if UnitLifecycle != nil {
 		err := UnitLifecycle.Restart(name)
 		if err == nil {

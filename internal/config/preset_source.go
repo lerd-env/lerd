@@ -137,6 +137,7 @@ func SaveStorePreset(name string, data []byte) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
+	guardRealWrite(filepath.Join(dir, name+".yaml"))
 	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), data, 0o644); err != nil {
 		return err
 	}

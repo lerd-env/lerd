@@ -296,6 +296,7 @@ func MaterializeServiceTuning(svc *CustomService) error {
 
 	// Helper file: lerd-managed, always rewritten (not user-editable).
 	if m.AuxTarget != "" {
+		guardRealWrite(ServiceTuningAuxFile(svc.Name))
 		if err := os.WriteFile(ServiceTuningAuxFile(svc.Name), []byte(m.AuxContent), 0644); err != nil {
 			return err
 		}
@@ -308,6 +309,7 @@ func MaterializeServiceTuning(svc *CustomService) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
+	guardRealWrite(path)
 	return os.WriteFile(path, []byte(m.Template), 0644)
 }
 

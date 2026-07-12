@@ -58,12 +58,14 @@ func saveWorktreeDBRegistryLocked(entries []WorktreeDBEntry) error {
 		return err
 	}
 	if len(entries) == 0 {
+		guardRealWrite(path)
 		return os.WriteFile(path, []byte("worktree_dbs: []\n"), 0644)
 	}
 	data, err := yaml.Marshal(worktreeDBRegistry{Entries: entries})
 	if err != nil {
 		return err
 	}
+	guardRealWrite(path)
 	return os.WriteFile(path, data, 0644)
 }
 
