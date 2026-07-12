@@ -223,8 +223,8 @@
 
 <div class="border-b border-gray-100 dark:border-lerd-border shrink-0 @container flex flex-col">
   {#if showWorktreeTabs}
-    <div class="flex flex-col-reverse @md:flex-row @md:items-end bg-gray-50/60 dark:bg-white/[0.02]">
-      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto @md:flex-1 min-w-0">
+    <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02]">
+      <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
       {#each tabEntries as e (e.isMain ? '__main__' : e.branch)}
         {@const isActive = e.isMain ? activeWorktreeBranch === '' : e.branch === activeWorktreeBranch}
         <div
@@ -300,20 +300,6 @@
         </button>
       {/if}
       </div>
-      {#if activePath}
-        <div class="@md:shrink-0 px-3 pt-2 pb-1 @md:pt-0 @md:pb-2 @md:pl-2 @md:pr-3 flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400 min-w-0">
-          {#if $accessMode.loopback}
-            <button
-              type="button"
-              onclick={() => openFolder(activePath)}
-              use:tooltip={m.sites_openFolder()}
-              class="font-mono leading-none truncate max-w-full @md:max-w-[22rem] hover:text-lerd-red transition-colors"
-            >{activePathLabel}</button>
-          {:else}
-            <span class="font-mono leading-none truncate max-w-full @md:max-w-[22rem]" title={activePath}>{activePathLabel}</span>
-          {/if}
-        </div>
-      {/if}
     </div>
   {/if}
 
@@ -798,22 +784,33 @@
     </div>
   {/if}
 
-  {#if activePath && !showWorktreeTabs}
-    <div class="px-2 pb-2 flex items-center text-[11px] text-gray-500 dark:text-gray-400 min-w-0">
-      {#if $accessMode.loopback}
-        <button
-          type="button"
-          onclick={() => openFolder(activePath)}
-          use:tooltip={m.sites_openFolder()}
-          class="font-mono truncate hover:text-lerd-red transition-colors"
-        >{activePathLabel}</button>
-      {:else}
-        <span class="font-mono truncate" title={activePath}>{activePathLabel}</span>
-      {/if}
+  {#snippet pathLabel()}
+    {#if $accessMode.loopback}
+      <button
+        type="button"
+        onclick={() => openFolder(activePath)}
+        use:tooltip={m.sites_openFolder()}
+        class="font-mono leading-none truncate hover:text-lerd-red transition-colors"
+      >{activePathLabel}</button>
+    {:else}
+      <span class="font-mono leading-none truncate" title={activePath}>{activePathLabel}</span>
+    {/if}
+  {/snippet}
+
+  {#if activePath && !tabs}
+    <div class="px-3 pb-2 flex items-center text-[11px] text-gray-500 dark:text-gray-400 min-w-0">
+      {@render pathLabel()}
     </div>
   {/if}
 
   {#if tabs}
-    <div class="px-3 flex items-end gap-4 -mb-px pt-1">{@render tabs()}</div>
+    <div class="px-3 flex items-end justify-between gap-4 -mb-px pt-1">
+      <div class="flex items-end gap-4 min-w-0 overflow-x-auto">{@render tabs()}</div>
+      {#if activePath}
+        <div class="self-center min-w-0 max-w-[50%] flex items-center text-[11px] leading-none text-gray-500 dark:text-gray-400">
+          {@render pathLabel()}
+        </div>
+      {/if}
+    </div>
   {/if}
 </div>
