@@ -2937,22 +2937,24 @@ func listEnvFiles(frameworkName, dir string) ([]string, error) {
 		// backup all 400, so /env/files must not list root dotenvs either.
 		return nil, nil
 	}
-	// The framework's file may live in a subdirectory (CakePHP config/.env) the
-	// root scan never sees; surface it when present. A slashed path can never
-	// collide with the root basenames already in out.
-	if strings.ContainsRune(primary, '/') {
-		if info, statErr := os.Stat(filepath.Join(dir, primary)); statErr == nil && !info.IsDir() {
-			out = append(out, primary)
-		}
-	}
-	// Primary first so the file the framework actually reads is pre-selected.
+	// The root scan only sees names envFileRe accepts, so it misses a declared
+	// file that is nested (CakePHP config/.env) or simply named something else.
+	// Surface it whenever it is on disk, then hoist it: the file the framework
+	// actually reads is the one to pre-select, and the rest stay alphabetical.
+	scanned := false
 	for i, n := range out {
-		if n == primary && i != 0 {
-			out[0], out[i] = out[i], out[0]
+		if n == primary {
+			out = append(out[:i], out[i+1:]...)
+			scanned = true
 			break
 		}
 	}
-	return out, nil
+	if !scanned {
+		if info, statErr := os.Stat(filepath.Join(dir, primary)); statErr != nil || info.IsDir() {
+			return out, nil
+		}
+	}
+	return append([]string{primary}, out...), nil
 }
 
 // SiteEnvBackup is one row in the GET /api/sites/{domain}/env/backups list.
@@ -3068,8 +3070,12 @@ func handleSiteEnvPropose(w http.ResponseWriter, r *http.Request, site *config.S
 		return
 	}
 
+	// GetFrameworkForDir, like the Env tab's own resolver: GetFramework returns
+	// the Go built-in and ignores the versioned store yaml, so it would propose
+	// against a different file than the one the tab has open and the banner
+	// (gated on the two agreeing) could never appear.
 	var fw *config.Framework
-	if f, ok := config.GetFramework(site.Framework); ok {
+	if f, ok := config.GetFrameworkForDir(site.Framework, dir); ok {
 		fw = f
 	}
 	prop, ok := sitedoctor.ProposeEnvMerge(dir, fw)
@@ -5374,6 +5380,9 @@ func frameworkEnvFile(frameworkName, dir string) (file string, ok bool) {
 	// The declared path comes from framework yaml and is joined onto dir for
 	// read/write/backup; reject anything that escapes the site (absolute or
 	// ../.. traversal) so a bad declaration can't reach ../../.ssh/config.
+	// Symlinks are deliberately followed: a project sharing one .env through a
+	// symlink is a real layout, and it is the same file the CLI, the doctor and
+	// the service wiring already read.
 	if !filepath.IsLocal(file) {
 		return "", false
 	}

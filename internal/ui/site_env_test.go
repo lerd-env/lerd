@@ -1057,6 +1057,179 @@ func TestSiteEnv_frameworkDeclaredPathTraversalRejected(t *testing.T) {
 	}
 }
 
+// The propose endpoint has to target the file the tab has open. It resolved
+// through GetFramework, which serves the Go built-in and ignores the versioned
+// store yaml, so on Symfony it proposed against .env while the tab edited
+// .env.local. The UI gates the insert banner on the two agreeing, so the whole
+// missing-keys flow silently disappeared for exactly the frameworks this fix is
+// about.
+func TestHandleSiteEnvPropose_targetsTheFileTheTabOpens(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"),
+		[]byte("name: symfony\nversion: \"8\"\nenv:\n  file: .env.local\n  fallback_file: .env\n  example_file: .env.example\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	for name, body := range map[string]string{
+		".lerd.yaml":   "framework_version: \"8\"\n",
+		".env.local":   "APP_ENV=dev\n",
+		".env":         "APP_ENV=prod\n",
+		".env.example": "APP_ENV=\nAPP_SECRET=\n",
+	} {
+		if err := os.WriteFile(filepath.Join(sitePath, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "sf", Path: sitePath, Domains: []string{"sf.test"}, Framework: "symfony"}); err != nil {
+		t.Fatal(err)
+	}
+
+	tabFile, ok := frameworkEnvFile("symfony", sitePath)
+	if !ok {
+		t.Fatal("frameworkEnvFile: expected the symfony store def to resolve")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/sf.test/env/propose", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("propose status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp SiteEnvProposeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.File != tabFile {
+		t.Errorf("propose targets %q but the tab opens %q: the insert banner can never appear", resp.File, tabFile)
+	}
+}
+
+// Sharing one .env through a symlink (a monorepo pointing at a common file, a
+// secrets dir) is a real layout, and it is the same file the CLI, the doctor and
+// the service wiring read. Containing the declared path against the resolved site
+// dir would reject it, taking the Env tab away and 400ing every env route, so the
+// guard stays lexical and symlinks are followed.
+func TestSiteEnv_symlinkedEnvOutsideSiteIsStillEditable(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	shared := t.TempDir()
+	body := "APP_ENV=local\nDB_HOST=127.0.0.1\n"
+	if err := os.WriteFile(filepath.Join(shared, ".env"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath := t.TempDir()
+	if err := os.Symlink(filepath.Join(shared, ".env"), filepath.Join(sitePath, ".env")); err != nil {
+		t.Fatal(err)
+	}
+	// A named framework on purpose: an unknown one short-circuits before the
+	// declared path is ever checked, so it would prove nothing here.
+	if err := config.AddSite(config.Site{Name: "shared", Path: sitePath, Domains: []string{"shared.test"}, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("laravel", sitePath) {
+		t.Error("expected has_env true for a symlinked .env")
+	}
+	files, err := listEnvFiles("laravel", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != ".env" {
+		t.Errorf("listEnvFiles: got %v want [.env]", files)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/shared.test/env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != body {
+		t.Errorf("GET /env: status %d body %q, want 200 %q", rec.Code, rec.Body.String(), body)
+	}
+}
+
+// The root scan only accepts names envFileRe matches, so a framework declaring a
+// root dotenv under another name used to get a visible tab with an empty
+// dropdown, and the UI then fell back to editing a root .env the framework never
+// reads. The declared file must be listed whatever its shape.
+func TestListEnvFiles_listsDeclaredRootFileOutsideTheRegex(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "oddly.yaml"),
+		[]byte("name: oddly\nlabel: Oddly\nenv:\n  file: settings.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, "settings.env"), []byte("A=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("oddly", sitePath) {
+		t.Fatal("expected has_env true for the declared settings.env")
+	}
+	files, err := listEnvFiles("oddly", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "settings.env" {
+		t.Errorf("listEnvFiles: got %v want [settings.env] — the tab must not be left with an empty dropdown", files)
+	}
+}
+
+// The declared file is hoisted to the front so it is pre-selected; the rest of
+// the list has to stay alphabetical behind it.
+func TestListEnvFiles_declaredFileFirstAndRestAlphabetical(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"config/.env", ".env", ".env.example", ".env.testing"} {
+		if err := os.WriteFile(filepath.Join(sitePath, n), []byte("A=1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := listEnvFiles("cakelike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"config/.env", ".env", ".env.example", ".env.testing"}
+	if len(files) != len(want) {
+		t.Fatalf("listEnvFiles: got %v want %v", files, want)
+	}
+	for i := range want {
+		if files[i] != want[i] {
+			t.Fatalf("listEnvFiles: got %v want %v", files, want)
+		}
+	}
+}
+
 // laravelAppName surfaces APP_NAME from .env, but only for Laravel projects so
 // the sites dashboard can title a tile by its friendly name. Non-Laravel sites,
 // a missing .env, or an absent APP_NAME all yield "" and fall back to the domain.

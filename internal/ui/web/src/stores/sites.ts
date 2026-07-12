@@ -257,18 +257,21 @@ function envQS(branch: string, file?: string): string {
   return s ? '?' + s : '';
 }
 
+// An empty list is a real answer: the framework has no editable dotenv, or the
+// one it declares isn't on disk yet. Don't invent a .env the framework never
+// reads; the caller decides what to show.
 export async function loadSiteEnvFiles(domain: string, branch: string = ''): Promise<string[]> {
   try {
     const res = await apiFetch(site(domain, 'env') + '/files' + envQS(branch));
-    if (!res.ok) return ['.env'];
-    const list = (await res.json()) as string[];
-    return list.length > 0 ? list : ['.env'];
+    if (!res.ok) return [];
+    const list = (await res.json()) as string[] | null;
+    return Array.isArray(list) ? list : [];
   } catch {
-    return ['.env'];
+    return [];
   }
 }
 
-export async function loadSiteEnv(domain: string, branch: string = '', file: string = '.env'): Promise<string> {
+export async function loadSiteEnv(domain: string, branch: string = '', file: string = ''): Promise<string> {
   const res = await apiFetch(site(domain, 'env') + envQS(branch, file));
   if (!res.ok) throw new Error(`Failed to load ${file} (${res.status})`);
   return await res.text();
@@ -327,7 +330,7 @@ export interface SiteEnvBackup {
 export async function loadSiteEnvBackups(
   domain: string,
   branch: string = '',
-  file: string = '.env'
+  file: string = ''
 ): Promise<SiteEnvBackup[]> {
   try {
     const res = await apiFetch(site(domain, 'env') + '/backups' + envQS(branch, file));
@@ -342,7 +345,7 @@ export async function loadSiteEnvBackupContent(
   domain: string,
   name: string,
   branch: string = '',
-  file: string = '.env'
+  file: string = ''
 ): Promise<string> {
   const res = await apiFetch(site(domain, 'env') + '/backups/' + encodeURIComponent(name) + envQS(branch, file));
   if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
@@ -359,7 +362,7 @@ export interface RestoreEnvResult {
 export async function restoreSiteEnv(
   domain: string,
   branch: string = '',
-  file: string = '.env',
+  file: string = '',
   name: string = ''
 ): Promise<RestoreEnvResult> {
   try {
@@ -380,7 +383,7 @@ export async function saveSiteEnv(
   branch: string,
   content: string,
   backup: boolean,
-  file: string = '.env'
+  file: string = ''
 ): Promise<SaveEnvResult> {
   try {
     const res = await apiFetch(site(domain, 'env') + envQS(branch, file), {
