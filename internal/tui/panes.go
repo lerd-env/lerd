@@ -58,10 +58,10 @@ func (m *Model) View() string {
 		bodyH = 6
 	}
 
-	// The full-width logs pane is the manual `l` toggle. On the Services tab the
-	// logs live in a sub-pane inside the detail column instead, so the
-	// full-width one steps aside to avoid showing the tail twice.
-	showFullLogs := m.showLogs && !m.serviceLogsActive()
+	// The full-width logs pane is the manual `l` toggle. When the tail already
+	// shows inside the detail column (the site Logs tab, or a selected service)
+	// the full-width one steps aside rather than drawing the same logs twice.
+	showFullLogs := m.showLogs && !m.logsInDetail()
 
 	// Logs pane takes at least half the window when open, and can grow larger,
 	// leaving only a sliver of the top pane so the log view dominates.
@@ -87,7 +87,7 @@ func (m *Model) View() string {
 
 	sections := []string{tabs, top}
 	if showFullLogs {
-		sections = append(sections, zone.Mark("pane:logs", m.renderLogs(m.width, logH)))
+		sections = append(sections, zone.Mark("pane:logs", m.renderLogs(m.width, logH, nil, false)))
 	}
 	if statusBar != "" {
 		sections = append(sections, statusBar)
@@ -215,15 +215,17 @@ func (m *Model) renderBody(topH int) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, left, detail)
 }
 
-// renderDetailColumn renders the right-hand detail surface, splitting off a
-// scrollable app-logs pane beneath it when the Overview tab is showing a site
-// with declared log files. Falls back to the plain detail pane otherwise.
+// renderDetailColumn renders the right-hand detail surface. The site Logs tab
+// gives the whole column over to the tail, keeping the tab strip on top so the
+// other tabs stay one keypress away. The Services tab instead splits a logs
+// sub-pane beneath the service detail. Everything else is the plain detail pane.
 func (m *Model) renderDetailColumn(w, h int, focused bool) string {
-	// A bottom logs sub-pane opens for the Sites Overview (app-log file tail)
-	// and for the selected service/worker on the Services tab (streaming logs).
-	_, logPath, siteLogs := m.overviewLogsActive()
-	svcLogs := m.serviceLogsActive()
-	if !siteLogs && !svcLogs {
+	if m.siteLogsActive() {
+		innerW, _ := innerSize(paneStyle(focused), w, h)
+		header := renderSiteTabHeader(tabSiteLogs, innerW, availableSiteTabs(m.currentSite()))
+		return zone.Mark("pane:logs", m.renderLogs(w, h, header, focused))
+	}
+	if !m.serviceLogsActive() {
 		return zone.Mark("pane:detail", m.renderDetailInline(w, h, focused))
 	}
 	// The logs sub-pane takes at least half the detail column so it's actually
@@ -240,12 +242,7 @@ func (m *Model) renderDetailColumn(w, h int, focused bool) string {
 		return zone.Mark("pane:detail", m.renderDetailInline(w, h, focused))
 	}
 	detail := zone.Mark("pane:detail", m.renderDetailInline(w, h-logsH, focused))
-	var logPane string
-	if siteLogs {
-		logPane = zone.Mark("pane:overviewlogs", m.renderOverviewLogs(logPath, w, logsH))
-	} else {
-		logPane = zone.Mark("pane:logs", m.renderLogs(w, logsH))
-	}
+	logPane := zone.Mark("pane:logs", m.renderLogs(w, logsH, nil, false))
 	return lipgloss.JoinVertical(lipgloss.Left, detail, logPane)
 }
 
@@ -845,8 +842,12 @@ func renderServiceRow(selected bool, s ServiceRow, paneW int) string {
 	return fmt.Sprintf(" %s %s %s %s", prefix, glyph, styledName, padToWidth(meta, serviceMetaColWidth))
 }
 
-func (m *Model) renderLogs(w, h int) string {
-	style := unfocusedPane
+// renderLogs draws the streaming tail. header is prepended inside the pane (the
+// site tab strip, when the tail is the Logs tab rather than the `l` overlay) and
+// costs one row each; focused picks the border colour, so the pane reads as part
+// of the detail column when it stands in for it.
+func (m *Model) renderLogs(w, h int, header []string, focused bool) string {
+	style := paneStyle(focused)
 	innerW, innerH := innerSize(style, w, h)
 
 	target := m.logTail.Target()
@@ -854,8 +855,19 @@ func (m *Model) renderLogs(w, h int) string {
 	if label == "" {
 		label = target.ID
 	}
-	title := fmt.Sprintf("Logs · %s", label)
-	if n := len(m.currentLogTargets()); n > 1 {
+	// A stopped site with no container and no workers has nothing to tail; say so
+	// rather than leaving a dangling "Logs ·" above a permanent "waiting for
+	// output…", which reads as a hang.
+	targets := m.currentLogTargets()
+	noSource := len(targets) == 0
+	title := "Logs"
+	if !noSource {
+		title += " · " + label
+	}
+	if noSource {
+		title += dimStyle.Render("   no log source for this site")
+	}
+	if n := len(targets); n > 1 {
 		title += fmt.Sprintf("   [%d/%d · [ ] to switch]", m.logCursor+1, n)
 	}
 	if m.logScroll > 0 {
@@ -866,7 +878,7 @@ func (m *Model) renderLogs(w, h int) string {
 		title += m.logFilter
 	}
 
-	availRows := innerH - 1
+	availRows := innerH - 1 - len(header)
 	if availRows < 1 {
 		availRows = 1
 	}
@@ -918,7 +930,11 @@ func (m *Model) renderLogs(w, h int) string {
 		body = append(body, clipLine(styleLogLine(ln, m.logFilter), contentW))
 	}
 	if total == 0 {
-		body = append(body, clipLine(dimStyle.Render("waiting for output…"), contentW))
+		empty := "waiting for output…"
+		if noSource {
+			empty = "nothing to tail: the site has no running container and no workers"
+		}
+		body = append(body, clipLine(dimStyle.Render(empty), contentW))
 	}
 	for len(body) < availRows {
 		body = append(body, "")
@@ -926,7 +942,8 @@ func (m *Model) renderLogs(w, h int) string {
 
 	bar := renderScrollbar(availRows, total, start, len(visible))
 
-	lines := make([]string, 0, availRows+2)
+	lines := make([]string, 0, availRows+len(header)+2)
+	lines = append(lines, header...)
 	lines = append(lines, padToWidth(clipLine(sectionStyle.Render(title), innerW), innerW))
 	if m.logFilterActive {
 		lines = append(lines, padToWidth(filterBar(m.logFilter, true), innerW))

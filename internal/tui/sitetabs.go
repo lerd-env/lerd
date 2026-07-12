@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,13 +16,14 @@ import (
 )
 
 // siteTab identifies which sub-view of Site detail is showing. Tabs let the
-// detail pane mirror the web UI's Overview / Env / Dumps / App logs split
-// without forcing users to scroll past the toggles every time they want to
-// inspect a different facet of the site.
+// detail pane mirror the web UI's Overview / Logs / Env / Dumps split without
+// forcing users to scroll past the toggles every time they want to inspect a
+// different facet of the site.
 type siteTab int
 
 const (
 	tabSiteOverview siteTab = iota
+	tabSiteLogs
 	tabSiteEnv
 	tabSiteDebug
 	tabSiteDoctor
@@ -37,6 +37,8 @@ const envReadLimit = 256 * 1024
 // siteTabLabel returns the title shown in the tab strip header.
 func siteTabLabel(t siteTab) string {
 	switch t {
+	case tabSiteLogs:
+		return "Logs"
 	case tabSiteEnv:
 		return "Env"
 	case tabSiteDebug:
@@ -49,10 +51,10 @@ func siteTabLabel(t siteTab) string {
 }
 
 // siteTabsHeader renders the tab strip across the top of the site detail
-// pane, e.g. "[1] Overview · [2] Env · [3] Dumps · [4] App logs". The active
-// tab is highlighted in the accent colour; the others are dimmed. Lives at
-// the head of every site detail variant so the user always sees the
-// shortcuts and which tab is active without scrolling.
+// pane, e.g. "[1] Overview  [2] Logs  [3] Env". The active tab is highlighted
+// in the accent colour; the others are dimmed. Lives at the head of every site
+// detail variant so the user always sees the shortcuts and which tab is active
+// without scrolling.
 func siteTabsHeader(active siteTab, tabs []siteTab) string {
 	parts := make([]string, 0, len(tabs))
 	for i, t := range tabs {
@@ -83,7 +85,7 @@ func renderSiteTabHeader(active siteTab, innerW int, tabs []siteTab) []string {
 // source the strip numbering, the number-key shortcuts, and the render dispatch
 // all derive from, so a tab's position, label, and availability can never drift.
 func availableSiteTabs(s *siteinfo.EnrichedSite) []siteTab {
-	tabs := []siteTab{tabSiteOverview, tabSiteEnv, tabSiteDebug}
+	tabs := []siteTab{tabSiteOverview, tabSiteLogs, tabSiteEnv, tabSiteDebug}
 	if s != nil {
 		tabs = append(tabs, tabSiteDoctor)
 	}
@@ -224,23 +226,12 @@ func siteDebugContentLines(m *Model, site *siteinfo.EnrichedSite, innerW int) []
 	return out
 }
 
-// overviewLogsActive reports whether the Overview app-logs pane should render:
-// on the Sites tab, viewing a site's Overview, with at least one declared app
-// log path. It resolves the log paths once and also returns the newest log's
-// path (empty when none is written yet) so the renderer doesn't re-glob.
-func (m *Model) overviewLogsActive() (site *siteinfo.EnrichedSite, newest string, ok bool) {
-	if m.activeTab != tabSites || m.detailMode != detailSite || m.siteTab != tabSiteOverview {
-		return nil, "", false
-	}
-	site = m.currentSite()
-	if site == nil {
-		return nil, "", false
-	}
-	paths := appLogPathsForSite(site)
-	if len(paths) == 0 {
-		return nil, "", false
-	}
-	return site, newestOf(paths), true
+// siteLogsActive reports whether the Sites tab is showing the Logs tab for a
+// selected site, in which case the detail column is given over to the streaming
+// tail rather than the usual rows.
+func (m *Model) siteLogsActive() bool {
+	return m.activeTab == tabSites && m.detailMode == detailSite &&
+		m.siteTab == tabSiteLogs && m.currentSite() != nil
 }
 
 // serviceLogsActive reports whether the Services tab should show a logs
@@ -251,133 +242,12 @@ func (m *Model) serviceLogsActive() bool {
 	return m.activeTab == tabServices && m.currentService() != nil
 }
 
-// newestOf returns the most-recently-modified path among the given app-log
-// paths, or "" if none can be stat'd. Takes pre-resolved paths so the caller
-// globs only once per render.
-func newestOf(paths []string) string {
-	newest := ""
-	var newestT time.Time
-	for _, p := range paths {
-		info, err := os.Stat(p)
-		if err != nil {
-			continue
-		}
-		if newest == "" || info.ModTime().After(newestT) {
-			newest, newestT = p, info.ModTime()
-		}
-	}
-	return newest
-}
-
-// appLogTailBytes bounds how much of the newest app log the Overview pane
-// reads. 64 KB of tail is plenty of recent history without risking the render
-// loop on a multi-megabyte log.
-const appLogTailBytes = 64 * 1024
-
-// siteAppLogTail returns the severity-styled tail of the given app-log file.
-// The result is cached against the file's path, mtime and size so repeated
-// renders (wheel scrolling, idle ticks) reuse it instead of re-reading and
-// re-styling the same bytes every frame. The returned slice is owned by the
-// cache — callers must treat it as read-only.
-func (m *Model) siteAppLogTail(path string) []string {
-	if path == "" {
-		return []string{dimStyle.Render("no app log file written yet")}
-	}
-	info, err := os.Stat(path)
-	if err != nil {
-		return []string{failingStyle.Render("! " + err.Error())}
-	}
-	if m.appLogCacheLines != nil && path == m.appLogCachePath &&
-		info.ModTime().Equal(m.appLogCacheMod) && info.Size() == m.appLogCacheSize {
-		return m.appLogCacheLines
-	}
-
-	data, err := readTailBytes(path, appLogTailBytes)
-	if err != nil {
-		return []string{failingStyle.Render("! " + err.Error())}
-	}
-	raw := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
-	// When we seeked into the file the first line is probably a fragment; drop
-	// it so the pane never opens on half a log line.
-	if info.Size() > appLogTailBytes && len(raw) > 1 {
-		raw = raw[1:]
-	}
-	out := make([]string, 0, len(raw))
-	for _, l := range raw {
-		out = append(out, styleLogLine(l, ""))
-	}
-	m.appLogCachePath = path
-	m.appLogCacheMod = info.ModTime()
-	m.appLogCacheSize = info.Size()
-	m.appLogCacheLines = out
-	return out
-}
-
-// readTailBytes returns up to max bytes from the end of path.
-func readTailBytes(path string, max int64) ([]byte, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	info, err := f.Stat()
-	if err != nil {
-		return nil, err
-	}
-	if info.Size() > max {
-		if _, err := f.Seek(info.Size()-max, io.SeekStart); err != nil {
-			return nil, err
-		}
-	}
-	return io.ReadAll(f)
-}
-
-// renderOverviewLogs draws the scrollable app-logs pane shown beneath the site
-// Overview. overviewLogScroll counts lines back from the live tail, so the
-// newest output sits at the bottom by default and `{` / `}` page through the
-// history.
-func (m *Model) renderOverviewLogs(path string, w, h int) string {
-	style := unfocusedPane
-	innerW, innerH := innerSize(style, w, h)
-	contentW := innerW - 1
-	if contentW < 10 {
-		contentW = innerW
-	}
-
-	header := sectionStyle.Render("App logs")
-	if path != "" {
-		header += "  " + dimStyle.Render(filepath.Base(path)+" · { } scroll")
-	}
-	header = padToWidth(clipLine(header, innerW), innerW)
-
-	lines := m.siteAppLogTail(path)
-	avail := innerH - 1
-	if avail < 1 {
-		avail = 1
-	}
-	maxScroll := len(lines) - avail
-	if maxScroll < 0 {
-		maxScroll = 0
-	}
-	if m.overviewLogScroll > maxScroll {
-		m.overviewLogScroll = maxScroll
-	}
-	if m.overviewLogScroll < 0 {
-		m.overviewLogScroll = 0
-	}
-	start := maxScroll - m.overviewLogScroll
-	window := lines[start:min(start+avail, len(lines))]
-	bar := renderScrollbar(avail, len(lines), start, len(window))
-
-	body := []string{header}
-	for i := 0; i < avail; i++ {
-		row := spaces(contentW)
-		if i < len(window) {
-			row = padToWidth(clipLine(window[i], contentW), contentW)
-		}
-		body = append(body, row+bar[i])
-	}
-	return style.Render(strings.Join(body, "\n"))
+// logsInDetail reports whether the tail is already showing inside the detail
+// column, on either tab. The full-width `l` pane consults this so the same logs
+// can't be drawn twice, and syncLogs so it keeps retargeting the tail as the
+// selection moves even when that pane is closed.
+func (m *Model) logsInDetail() bool {
+	return m.siteLogsActive() || m.serviceLogsActive()
 }
 
 // readBoundedFile reads up to max bytes of path. Used for the env reader so
