@@ -12,7 +12,9 @@
     type EnvProposeEntry
   } from '$stores/sites';
   import { openEnvSaveModal, openEnvRestoreModal, openEnvProposeModal } from '$stores/modals';
+  import { status } from '$stores/status';
   import { addedLineNumbers } from '$lib/diff';
+  import { homeShorten } from '$lib/path';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -51,6 +53,7 @@
     }
     return (site.path || '') + '/' + file;
   });
+  const envPathLabel = $derived(homeShorten(envPath, $status.home));
 
   const dirty = $derived(text !== original);
   const latestBackup = $derived(backups[0]);
@@ -279,7 +282,7 @@
 <div class="flex-1 flex flex-col min-h-0 overflow-hidden">
   <div class="sticky top-0 z-10">
     <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 min-w-0">
         {#if files.length > 0}
           <Dropdown
             value={file}
@@ -287,6 +290,12 @@
             disabled={loading || files.length <= 1}
             onchange={(v) => (file = v)}
           />
+        {/if}
+        {#if file}
+          <span
+            class="text-[10px] text-gray-400 dark:text-gray-600 font-mono truncate"
+            title={envPath}>{envPathLabel}</span
+          >
         {/if}
         {#if dirty && !loading && !error}
           <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.envEditor_unsaved()}</span>
@@ -298,7 +307,7 @@
           >{m.envEditor_backupAvailable({ n: backups.length })}</span>
         {/if}
       </div>
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <button
           type="button"
           onclick={copy}
