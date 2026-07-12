@@ -7,7 +7,6 @@
     resumeSite,
     pinSite,
     unpinSite,
-    unlinkSite,
     restartSite,
     openSiteInBrowser,
     openTerminal,
@@ -20,6 +19,7 @@
   import {
     openDomainModal,
     openGroupModal,
+    openSiteUnlinkModal,
     openWorktreeAddModal,
     openWorktreeRemoveModal
   } from '$stores/modals';
@@ -54,7 +54,6 @@
   }: Props = $props();
 
   let pauseBusy = $state(false);
-  let unlinkBusy = $state(false);
   let restartBusy = $state(false);
   let tlsBusy = $state(false);
   let lanBusy = $state(false);
@@ -150,18 +149,6 @@
       await loadSites();
     } finally {
       pauseBusy = false;
-    }
-  }
-
-  async function unlink() {
-    if (!confirm(m.sites_confirmUnlink({ domain: site.domain }))) return;
-    unlinkBusy = true;
-    try {
-      const res = await unlinkSite(site.domain);
-      if (!res.ok) alert(m.sites_unlinkFailed({ error: res.error || '' }));
-      await loadSites();
-    } finally {
-      unlinkBusy = false;
     }
   }
 
@@ -756,10 +743,9 @@
               role="menuitem"
               onclick={() => {
                 overflowOpen = false;
-                unlink();
+                openSiteUnlinkModal({ domain: site.domain });
               }}
-              disabled={unlinkBusy}
-              class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors disabled:opacity-50"
+              class="w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
             >
               <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path
@@ -769,7 +755,7 @@
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
                 />
               </svg>
-              {unlinkBusy ? '...' : m.sites_unlink()}
+              {m.sites_unlink()}
             </button>
           </div>
         {/if}

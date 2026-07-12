@@ -180,7 +180,7 @@ The isolated database survives `lerd worktree remove` by default — the wrapper
 - **Reuse preserved isolated DB** — reconnects the worktree to the same data with no schema changes.
 - **Reset preserved DB to a fresh empty schema** — drops the existing DB, recreates it empty, then offers to run migrations.
 
-The same toggle is available on the dashboard for already-active worktrees: flipping **Isolated DB** off drops the database and restores the parent's `DB_DATABASE` value in `.env`. The toggle only appears when the parent uses a lerd-managed mysql/mariadb/postgres service. Sqlite is naturally file-based and isolated per checkout, no opt-in needed.
+The same toggle is available on the dashboard for already-active worktrees: flipping **Isolated DB** off opens a confirmation modal naming the database that is about to go, and on confirm it drops the database and restores the parent's `DB_DATABASE` value in `.env`. The toggle only appears when the parent uses a lerd-managed mysql/mariadb/postgres service. Sqlite is naturally file-based and isolated per checkout, no opt-in needed.
 
 ### Per-worktree LAN share
 

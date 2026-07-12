@@ -20,6 +20,7 @@
   import { nodeVersions } from '$stores/nodeVersions';
   import { status } from '$stores/status';
   import WorktreeDBIsolateModal from './WorktreeDBIsolateModal.svelte';
+  import WorktreeDBDropModal from './WorktreeDBDropModal.svelte';
   import HorizonControl from './HorizonControl.svelte';
   import HorizonReloadWatcherModal from './HorizonReloadWatcherModal.svelte';
   import OctaneControl from './OctaneControl.svelte';
@@ -83,6 +84,7 @@
   const dbIsolated = $derived(Boolean(activeWorktree?.db_isolated));
   let dbBusy = $state(false);
   let isolateModalOpen = $state(false);
+  let dropModalOpen = $state(false);
 
   // The doctor lives behind an on-demand button next to Commands rather than a
   // permanent tab: its checks (command and audit execs) only run when the modal
@@ -94,16 +96,13 @@
   function onDBIsolatedChange() {
     if (!activeWorktreeBranch || dbBusy) return;
     if (dbIsolated) {
-      void disableIsolation();
+      dropModalOpen = true;
     } else {
       isolateModalOpen = true;
     }
   }
 
   async function disableIsolation() {
-    if (!confirm(m.sites_controls_dbDropConfirm())) {
-      return;
-    }
     dbBusy = true;
     try {
       const res = await setWorktreeDBIsolated(site.domain, activeWorktreeBranch, false);
@@ -506,6 +505,16 @@
     onconfirm={(source) => {
       isolateModalOpen = false;
       void enableIsolation(source);
+    }}
+  />
+  <WorktreeDBDropModal
+    open={dropModalOpen}
+    branch={activeWorktreeBranch}
+    database={activeWorktree?.db_database ?? ''}
+    onclose={() => (dropModalOpen = false)}
+    onconfirm={() => {
+      dropModalOpen = false;
+      void disableIsolation();
     }}
   />
 {/if}
