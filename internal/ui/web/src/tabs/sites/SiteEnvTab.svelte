@@ -21,8 +21,12 @@
   }
   let { site, branch }: Props = $props();
 
-  let files = $state<string[]>(['.env']);
-  let file = $state<string>('.env');
+  // Both empty until the file list loads: the server sorts the framework's
+  // primary dotenv first, so we snap to files[0] rather than assuming a root
+  // .env (which a framework like Symfony/CakePHP may not even have). Nothing
+  // loads while file is still empty, so there is no request for the wrong file.
+  let files = $state<string[]>([]);
+  let file = $state<string>('');
   let original = $state<string>('');
   let text = $state<string>('');
   let loading = $state(true);
@@ -106,16 +110,16 @@
   }
 
   // Refresh the file list whenever the site or branch changes. When the
-  // selected file disappears we only snap back to .env if there are no
-  // unsaved edits; a dirty buffer for a file that vanished on disk stays
-  // open so the user can copy out or save to recreate.
+  // selected file disappears (or is still the empty initial value) we snap to
+  // the primary files[0] if there are no unsaved edits; a dirty buffer for a
+  // file that vanished on disk stays open so the user can copy out or save it.
   $effect(() => {
     const domain = site.domain;
     const b = branch;
     loadSiteEnvFiles(domain, b).then((list) => {
       if (site.domain !== domain || branch !== b) return;
       files = list;
-      if (!list.includes(file) && !dirty) file = '.env';
+      if (!list.includes(file) && !dirty) file = list[0] ?? '.env';
     });
   });
 
@@ -129,12 +133,16 @@
   });
 
   // Reload content + backups whenever the chosen file (or site/branch) changes.
+  // Stay in the loading state until the file list has named a file: fetching on
+  // the empty initial value would load one file and then immediately reload the
+  // one we snap to, and the editor must not be typeable against no file at all.
   $effect(() => {
     const domain = site.domain;
     const b = branch;
     const f = file;
     loading = true;
     error = '';
+    if (!f) return;
     insertError = '';
     original = '';
     text = '';
@@ -272,12 +280,14 @@
   <div class="sticky top-0 z-10">
     <div class="flex items-center justify-between bg-gray-50 dark:bg-white/3 px-3 py-1.5 border-b border-gray-200 dark:border-lerd-border">
       <div class="flex items-center gap-2">
-        <Dropdown
-          value={file}
-          options={files}
-          disabled={loading || files.length <= 1}
-          onchange={(v) => (file = v)}
-        />
+        {#if files.length > 0}
+          <Dropdown
+            value={file}
+            options={files}
+            disabled={loading || files.length <= 1}
+            onchange={(v) => (file = v)}
+          />
+        {/if}
         {#if dirty && !loading && !error}
           <span class="text-[10px] font-medium text-amber-600 dark:text-amber-400">{m.envEditor_unsaved()}</span>
         {/if}

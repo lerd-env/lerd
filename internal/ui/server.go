@@ -1002,7 +1002,7 @@ func buildSites() []SiteResponse {
 			FrameworkWorkers:     fwWorkers,
 			HasAppLogs:           e.HasAppLogs,
 			HasFavicon:           e.HasFavicon,
-			HasEnv:               siteHasEnv(e.Path),
+			HasEnv:               siteHasEnv(e.FrameworkName, e.Path),
 			Paused:               e.Paused,
 			LastActive:           idleActivity[e.Name],
 			LastRequestAt:        unixMilliOrZero(usage.LastAt),
@@ -2773,17 +2773,8 @@ func handleSiteEnvRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 
@@ -2824,17 +2815,8 @@ func handleSiteEnvWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 
@@ -2860,10 +2842,15 @@ func handleSiteEnvWrite(w http.ResponseWriter, r *http.Request) {
 // are not behind any include glob, so backups and write-staging share the
 // project dir; backups are named "{envFile}.bkp.{ts}".
 func envCfgFile(dir, envFile string) cfgedit.File {
+	// envFile may be nested (CakePHP config/.env), so the backup dir is the
+	// file's own dir and the name is its base. Keying BkpDir/BkpName off the
+	// joined path keeps backups next to the file and listable; a root .env
+	// still resolves to BkpDir=dir, BkpName=.env as before.
+	full := filepath.Join(dir, envFile)
 	return cfgedit.File{
-		Path:    filepath.Join(dir, envFile),
-		BkpDir:  dir,
-		BkpName: envFile,
+		Path:    full,
+		BkpDir:  filepath.Dir(full),
+		BkpName: filepath.Base(full),
 	}
 }
 
@@ -2878,26 +2865,52 @@ var envExcludedFiles = map[string]bool{
 	".env.before_lerd": true,
 }
 
-// envFileFromQuery extracts the ?file= parameter and validates it against
-// envFileRe and envExcludedFiles. An empty ?file= defaults to ".env" so
-// callers that pre-date the multi-file UI keep working.
-func envFileFromQuery(r *http.Request) (string, bool) {
+// envFileFromQuery extracts the ?file= parameter and validates it. An empty
+// ?file= defaults to the framework's declared env file. That file is always
+// allowed even when it lives in a subdirectory (CakePHP config/.env), which
+// envFileRe rejects; every other name must be a root dotenv variant.
+func envFileFromQuery(r *http.Request, defaultFile string) (string, bool) {
 	f := r.URL.Query().Get("file")
 	if f == "" {
-		return ".env", true
+		return defaultFile, true
 	}
-	if !envFileRe.MatchString(f) {
-		return "", false
+	if f == defaultFile {
+		return f, true
 	}
-	if envExcludedFiles[f] {
+	if envExcludedFiles[f] || !envFileRe.MatchString(f) {
 		return "", false
 	}
 	return f, true
 }
 
-// listEnvFiles enumerates the project's editable env files in dir.
-// .env always appears first; the rest are alphabetical.
-func listEnvFiles(dir string) ([]string, error) {
+// resolveEnvTarget resolves the branch directory and the target env file for a
+// site env request, shared by all five /env endpoints so they agree on the file
+// set. It writes the error and returns ok=false when the branch dir is unknown
+// (404) or the framework has no editable dotenv / the file is invalid (400).
+func resolveEnvTarget(w http.ResponseWriter, r *http.Request, site *config.Site) (dir, envFile string, ok bool) {
+	branch := r.URL.Query().Get("branch")
+	ensureWorktreeEnvIfBranch(site, branch)
+	dir = resolveSitePath(site, branch)
+	if dir == "" {
+		http.NotFound(w, r)
+		return "", "", false
+	}
+	def, has := frameworkEnvFile(site.Framework, dir)
+	if !has {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return "", "", false
+	}
+	envFile, ok = envFileFromQuery(r, def)
+	if !ok {
+		http.Error(w, "invalid file", http.StatusBadRequest)
+		return "", "", false
+	}
+	return dir, envFile, true
+}
+
+// listEnvFiles enumerates the project's editable env files in dir. The
+// framework's declared file appears first; the rest are alphabetical.
+func listEnvFiles(frameworkName, dir string) ([]string, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -2911,22 +2924,37 @@ func listEnvFiles(dir string) ([]string, error) {
 			continue
 		}
 		name := e.Name()
-		if envExcludedFiles[name] {
-			continue
-		}
-		if !envFileRe.MatchString(name) {
+		if envExcludedFiles[name] || !envFileRe.MatchString(name) {
 			continue
 		}
 		out = append(out, name)
 	}
 	sort.Strings(out)
+
+	primary, ok := frameworkEnvFile(frameworkName, dir)
+	if !ok {
+		// Framework has no editable dotenv (WordPress, Magento): read/write/
+		// backup all 400, so /env/files must not list root dotenvs either.
+		return nil, nil
+	}
+	// The root scan only sees names envFileRe accepts, so it misses a declared
+	// file that is nested (CakePHP config/.env) or simply named something else.
+	// Surface it whenever it is on disk, then hoist it: the file the framework
+	// actually reads is the one to pre-select, and the rest stay alphabetical.
+	scanned := false
 	for i, n := range out {
-		if n == ".env" && i != 0 {
-			out[0], out[i] = out[i], out[0]
+		if n == primary {
+			out = append(out[:i], out[i+1:]...)
+			scanned = true
 			break
 		}
 	}
-	return out, nil
+	if !scanned {
+		if info, statErr := os.Stat(filepath.Join(dir, primary)); statErr != nil || info.IsDir() {
+			return out, nil
+		}
+	}
+	return append([]string{primary}, out...), nil
 }
 
 // SiteEnvBackup is one row in the GET /api/sites/{domain}/env/backups list.
@@ -2938,16 +2966,8 @@ func handleSiteEnvBackupContent(w http.ResponseWriter, r *http.Request, site *co
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	data, err := envCfgFile(dir, envFile).ReadBackup(name)
@@ -2969,16 +2989,8 @@ func handleSiteEnvBackups(w http.ResponseWriter, r *http.Request, site *config.S
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	list, err := envCfgFile(dir, envFile).ListBackups()
@@ -3004,7 +3016,7 @@ func handleSiteEnvFiles(w http.ResponseWriter, r *http.Request, site *config.Sit
 		http.NotFound(w, r)
 		return
 	}
-	files, err := listEnvFiles(dir)
+	files, err := listEnvFiles(site.Framework, dir)
 	if err != nil {
 		http.Error(w, "listing env files: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -3058,8 +3070,12 @@ func handleSiteEnvPropose(w http.ResponseWriter, r *http.Request, site *config.S
 		return
 	}
 
+	// GetFrameworkForDir, like the Env tab's own resolver: GetFramework returns
+	// the Go built-in and ignores the versioned store yaml, so it would propose
+	// against a different file than the one the tab has open and the banner
+	// (gated on the two agreeing) could never appear.
 	var fw *config.Framework
-	if f, ok := config.GetFramework(site.Framework); ok {
+	if f, ok := config.GetFrameworkForDir(site.Framework, dir); ok {
 		fw = f
 	}
 	prop, ok := sitedoctor.ProposeEnvMerge(dir, fw)
@@ -3147,16 +3163,8 @@ func handleSiteEnvRestore(w http.ResponseWriter, r *http.Request, site *config.S
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	envFile, ok := envFileFromQuery(r)
+	dir, envFile, ok := resolveEnvTarget(w, r, site)
 	if !ok {
-		http.Error(w, "invalid file", http.StatusBadRequest)
-		return
-	}
-	branch := r.URL.Query().Get("branch")
-	ensureWorktreeEnvIfBranch(site, branch)
-	dir := resolveSitePath(site, branch)
-	if dir == "" {
-		http.NotFound(w, r)
 		return
 	}
 	// Always attempt the decode: an empty body parses as the zero value via
@@ -5352,15 +5360,45 @@ func projectJSRuntime(sitePath string) string {
 	return ""
 }
 
-func siteHasEnv(sitePath string) bool {
+// frameworkEnvFile resolves the dotenv file a framework actually reads, relative
+// to dir (Laravel ".env", CakePHP "config/.env", Symfony ".env.local"). ok is
+// false for frameworks whose env is PHP source (WordPress wp-config.php, etc.):
+// those are out of scope for the flat key=value editor and get no Env tab. With
+// no known framework it defaults to ".env".
+func frameworkEnvFile(frameworkName, dir string) (file string, ok bool) {
+	// GetFrameworkForDir (not GetFramework) so the tab resolves against the same
+	// version-aware store definition the env wiring and doctor use; GetFramework
+	// returns the Go built-in and ignores the per-version store yaml.
+	fw, found := config.GetFrameworkForDir(frameworkName, dir)
+	if !found {
+		return ".env", true
+	}
+	file, format := fw.Env.Resolve(dir)
+	if format != "dotenv" {
+		return "", false
+	}
+	// The declared path comes from framework yaml and is joined onto dir for
+	// read/write/backup; reject anything that escapes the site (absolute or
+	// ../.. traversal) so a bad declaration can't reach ../../.ssh/config.
+	// Symlinks are deliberately followed: a project sharing one .env through a
+	// symlink is a real layout, and it is the same file the CLI, the doctor and
+	// the service wiring already read.
+	if !filepath.IsLocal(file) {
+		return "", false
+	}
+	return file, true
+}
+
+func siteHasEnv(frameworkName, sitePath string) bool {
 	if sitePath == "" {
 		return false
 	}
-	info, err := os.Stat(filepath.Join(sitePath, ".env"))
-	if err != nil {
+	file, ok := frameworkEnvFile(frameworkName, sitePath)
+	if !ok {
 		return false
 	}
-	return !info.IsDir()
+	info, err := os.Stat(filepath.Join(sitePath, file))
+	return err == nil && !info.IsDir()
 }
 
 // siteHasEnvOverrides reports whether the project declares env_overrides in its

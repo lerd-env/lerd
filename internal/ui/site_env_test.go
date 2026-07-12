@@ -337,7 +337,7 @@ func TestListEnvFiles_returnsEnvVariantsWithDefaultFirst(t *testing.T) {
 	must(".env.tmp.abc", 0o644)                     // matches via two-segment, excluded by regex
 	must("regular.txt", 0o644)                      // not an env file
 
-	got, err := listEnvFiles(dir)
+	got, err := listEnvFiles("", dir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,7 @@ func TestEnvFileFromQuery(t *testing.T) {
 	}
 	for _, c := range cases {
 		req := httptest.NewRequest(http.MethodGet, "/?"+c.q, nil)
-		gotFile, gotOK := envFileFromQuery(req)
+		gotFile, gotOK := envFileFromQuery(req, ".env")
 		if gotOK != c.wantOK {
 			t.Errorf("q=%q ok: got %v want %v", c.q, gotOK, c.wantOK)
 		}
@@ -723,13 +723,13 @@ func TestHandleSiteEnv_backupsListsNewestFirst(t *testing.T) {
 // UI only surfaces the Env tab for sites whose root has a real .env file.
 func TestSiteHasEnv(t *testing.T) {
 	dir := t.TempDir()
-	if siteHasEnv(dir) {
+	if siteHasEnv("", dir) {
 		t.Error("expected false when .env missing")
 	}
 	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("X=1"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if !siteHasEnv(dir) {
+	if !siteHasEnv("", dir) {
 		t.Error("expected true after writing .env")
 	}
 
@@ -738,8 +738,495 @@ func TestSiteHasEnv(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(dirOnly, ".env"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if siteHasEnv(dirOnly) {
+	if siteHasEnv("", dirOnly) {
 		t.Error("expected false when .env is a directory")
+	}
+}
+
+// A framework whose dotenv lives in a subdirectory (CakePHP config/.env) must
+// surface the Env tab, list that file, and read it through ?file=, even though
+// the file name contains a slash the root-only regex rejects.
+func TestSiteEnv_frameworkSubdirDotenv(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	// Register a custom framework pointing its env at config/.env.
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, "config", ".env"), []byte("DEBUG=true\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("cakelike", sitePath) {
+		t.Error("expected has_env true for config/.env")
+	}
+
+	files, err := listEnvFiles("cakelike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "config/.env" {
+		t.Errorf("listEnvFiles: got %v want [config/.env]", files)
+	}
+
+	// The declared subdir file is allowed through the query even with its slash.
+	req := httptest.NewRequest(http.MethodGet, "/?file=config/.env", nil)
+	if got, ok := envFileFromQuery(req, "config/.env"); !ok || got != "config/.env" {
+		t.Errorf("envFileFromQuery(config/.env): got %q ok=%v", got, ok)
+	}
+	// An unrelated slashed name is still rejected.
+	req = httptest.NewRequest(http.MethodGet, "/?file=config/other", nil)
+	if _, ok := envFileFromQuery(req, "config/.env"); ok {
+		t.Error("expected config/other to be rejected")
+	}
+}
+
+// A declared dotenv nested several directories deep (config/environments/.env.local)
+// must be accepted and listed first, while an arbitrary path of the same shape is
+// still rejected. Guards that the query whitelist keys on the exact declared path,
+// not merely "any name containing a slash".
+func TestSiteEnv_frameworkNestedDotenvAcceptVsReject(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	const declared = "config/environments/.env.local"
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "nested.yaml"),
+		[]byte("name: nested\nlabel: Nested\nenv:\n  file: "+declared+"\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config", "environments"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, declared), []byte("APP_ENV=local\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("nested", sitePath) {
+		t.Errorf("expected has_env true for %s", declared)
+	}
+
+	files, err := listEnvFiles("nested", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != declared {
+		t.Errorf("listEnvFiles: got %v want [%s]", files, declared)
+	}
+
+	// The declared nested file is allowed through the query despite its slashes.
+	req := httptest.NewRequest(http.MethodGet, "/?file="+declared, nil)
+	if got, ok := envFileFromQuery(req, declared); !ok || got != declared {
+		t.Errorf("envFileFromQuery(%s): got %q ok=%v", declared, got, ok)
+	}
+	// A different path of the same nested shape must not pass.
+	req = httptest.NewRequest(http.MethodGet, "/?file=config/environments/.env.other", nil)
+	if _, ok := envFileFromQuery(req, declared); ok {
+		t.Error("expected config/environments/.env.other to be rejected")
+	}
+}
+
+// The framework fallback surfaces when the primary is absent: a Symfony-style
+// project with only .env (no .env.local) resolves the Env tab to the fallback,
+// so the tab still appears and edits the committed file rather than nothing.
+func TestSiteEnv_frameworkFallbackWhenPrimaryMissing(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "sflike.yaml"),
+		[]byte("name: sflike\nlabel: SFLike\nenv:\n  file: .env.local\n  fallback_file: .env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("APP_ENV=prod\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("sflike", sitePath) {
+		t.Error("expected has_env true via fallback when primary .env.local is absent")
+	}
+	files, err := listEnvFiles("sflike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != ".env" {
+		t.Errorf("listEnvFiles: got %v want [.env]", files)
+	}
+}
+
+// frameworkEnvFile must resolve against the version-aware store definition
+// (GetFrameworkForDir), the same one the doctor and service wiring use, not the
+// Go built-in (GetFramework) which ignores the per-version store yaml. A Symfony
+// project pinned to 8 whose store def declares .env.local must resolve to it,
+// even though the built-in symfony def declares plain .env.
+func TestSiteEnv_frameworkResolvesVersionedStoreDef(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"),
+		[]byte("name: symfony\nversion: \"8\"\nenv:\n  file: .env.local\n  fallback_file: .env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".lerd.yaml"), []byte("framework_version: \"8\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.local"), []byte("APP_ENV=dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, ok := frameworkEnvFile("symfony", sitePath)
+	if !ok || file != ".env.local" {
+		t.Errorf("frameworkEnvFile: got (%q, %v) want (.env.local, true) — store def must win over the built-in", file, ok)
+	}
+}
+
+// A non-dotenv framework (env stored in PHP source) gets no Env tab: siteHasEnv
+// is false even when a stray root .env exists.
+func TestSiteHasEnv_nonDotenvFrameworkExcluded(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "phpenv.yaml"),
+		[]byte("name: phpenv\nlabel: PHPEnv\nenv:\n  file: wp-config.php\n  format: php-const\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".env"), []byte("X=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if siteHasEnv("phpenv", sitePath) {
+		t.Error("expected false: php-const framework must not surface the Env tab")
+	}
+	// /env/files must agree with read/write/backup (which all 400 here): a
+	// non-dotenv framework lists nothing, even with a stray root .env present.
+	files, err := listEnvFiles("phpenv", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("listEnvFiles: got %v want empty for non-dotenv framework", files)
+	}
+}
+
+// A backup of a nested dotenv (config/.env) must round-trip through the save,
+// list, and read endpoints. Before BkpDir/BkpName were split off the joined
+// path, the backup landed in config/ but ListBackups scanned the project root,
+// so the list came back empty, restore was impossible, and backups piled up in
+// the committed config directory.
+func TestSiteEnv_subdirBackupRoundTrip(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	oldBody := "DEBUG=true\n"
+	if err := os.WriteFile(filepath.Join(sitePath, "config", ".env"), []byte(oldBody), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "cake", Path: sitePath, Domains: []string{"cake.test"}, Framework: "cakelike"}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Save with backup on the nested file.
+	body, _ := json.Marshal(SiteEnvWriteRequest{Content: "DEBUG=false\n", Backup: true})
+	req := httptest.NewRequest(http.MethodPut, "/api/sites/cake.test/env?file=config/.env", bytes.NewReader(body))
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("save status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// The backup must land next to the file, inside config/.
+	entries, err := os.ReadDir(filepath.Join(sitePath, "config"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	sawBackup := false
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".env.bkp.") {
+			sawBackup = true
+		}
+	}
+	if !sawBackup {
+		t.Fatalf("no .env.bkp.* written into config/: %v", entries)
+	}
+
+	// The list endpoint must surface it (this is what came back empty before).
+	req = httptest.NewRequest(http.MethodGet, "/api/sites/cake.test/env/backups?file=config/.env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec = httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backups status %d: %s", rec.Code, rec.Body.String())
+	}
+	var list []SiteEnvBackup
+	if err := json.Unmarshal(rec.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("backups list: got %d want 1 (%s)", len(list), rec.Body.String())
+	}
+
+	// And the named backup must read back the pre-save contents.
+	req = httptest.NewRequest(http.MethodGet, "/api/sites/cake.test/env/backups/"+list[0].Name+"?file=config/.env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec = httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("backup content status %d: %s", rec.Code, rec.Body.String())
+	}
+	if rec.Body.String() != oldBody {
+		t.Errorf("backup content: got %q want %q", rec.Body.String(), oldBody)
+	}
+}
+
+// A framework yaml whose declared dotenv escapes the site dir (absolute or
+// ../.. traversal) must be rejected everywhere, so the env endpoints can never
+// be steered onto something like ../../.ssh/config.
+func TestSiteEnv_frameworkDeclaredPathTraversalRejected(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "evil.yaml"),
+		[]byte("name: evil\nlabel: Evil\nenv:\n  file: ../../.ssh/config\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if _, ok := frameworkEnvFile("evil", sitePath); ok {
+		t.Error("expected traversal declared path to be rejected by frameworkEnvFile")
+	}
+	if siteHasEnv("evil", sitePath) {
+		t.Error("expected has_env false for a traversal declared path")
+	}
+	files, err := listEnvFiles("evil", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("listEnvFiles: got %v want empty for a traversal declared path", files)
+	}
+}
+
+// The propose endpoint has to target the file the tab has open. It resolved
+// through GetFramework, which serves the Go built-in and ignores the versioned
+// store yaml, so on Symfony it proposed against .env while the tab edited
+// .env.local. The UI gates the insert banner on the two agreeing, so the whole
+// missing-keys flow silently disappeared for exactly the frameworks this fix is
+// about.
+func TestHandleSiteEnvPropose_targetsTheFileTheTabOpens(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"),
+		[]byte("name: symfony\nversion: \"8\"\nenv:\n  file: .env.local\n  fallback_file: .env\n  example_file: .env.example\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	for name, body := range map[string]string{
+		".lerd.yaml":   "framework_version: \"8\"\n",
+		".env.local":   "APP_ENV=dev\n",
+		".env":         "APP_ENV=prod\n",
+		".env.example": "APP_ENV=\nAPP_SECRET=\n",
+	} {
+		if err := os.WriteFile(filepath.Join(sitePath, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := config.AddSite(config.Site{Name: "sf", Path: sitePath, Domains: []string{"sf.test"}, Framework: "symfony"}); err != nil {
+		t.Fatal(err)
+	}
+
+	tabFile, ok := frameworkEnvFile("symfony", sitePath)
+	if !ok {
+		t.Fatal("frameworkEnvFile: expected the symfony store def to resolve")
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/sf.test/env/propose", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("propose status %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp SiteEnvProposeResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.File != tabFile {
+		t.Errorf("propose targets %q but the tab opens %q: the insert banner can never appear", resp.File, tabFile)
+	}
+}
+
+// Sharing one .env through a symlink (a monorepo pointing at a common file, a
+// secrets dir) is a real layout, and it is the same file the CLI, the doctor and
+// the service wiring read. Containing the declared path against the resolved site
+// dir would reject it, taking the Env tab away and 400ing every env route, so the
+// guard stays lexical and symlinks are followed.
+func TestSiteEnv_symlinkedEnvOutsideSiteIsStillEditable(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	shared := t.TempDir()
+	body := "APP_ENV=local\nDB_HOST=127.0.0.1\n"
+	if err := os.WriteFile(filepath.Join(shared, ".env"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sitePath := t.TempDir()
+	if err := os.Symlink(filepath.Join(shared, ".env"), filepath.Join(sitePath, ".env")); err != nil {
+		t.Fatal(err)
+	}
+	// A named framework on purpose: an unknown one short-circuits before the
+	// declared path is ever checked, so it would prove nothing here.
+	if err := config.AddSite(config.Site{Name: "shared", Path: sitePath, Domains: []string{"shared.test"}, Framework: "laravel"}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("laravel", sitePath) {
+		t.Error("expected has_env true for a symlinked .env")
+	}
+	files, err := listEnvFiles("laravel", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != ".env" {
+		t.Errorf("listEnvFiles: got %v want [.env]", files)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites/shared.test/env", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if rec.Code != http.StatusOK || rec.Body.String() != body {
+		t.Errorf("GET /env: status %d body %q, want 200 %q", rec.Code, rec.Body.String(), body)
+	}
+}
+
+// The root scan only accepts names envFileRe matches, so a framework declaring a
+// root dotenv under another name used to get a visible tab with an empty
+// dropdown, and the UI then fell back to editing a root .env the framework never
+// reads. The declared file must be listed whatever its shape.
+func TestListEnvFiles_listsDeclaredRootFileOutsideTheRegex(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "oddly.yaml"),
+		[]byte("name: oddly\nlabel: Oddly\nenv:\n  file: settings.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, "settings.env"), []byte("A=1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if !siteHasEnv("oddly", sitePath) {
+		t.Fatal("expected has_env true for the declared settings.env")
+	}
+	files, err := listEnvFiles("oddly", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 1 || files[0] != "settings.env" {
+		t.Errorf("listEnvFiles: got %v want [settings.env] — the tab must not be left with an empty dropdown", files)
+	}
+}
+
+// The declared file is hoisted to the front so it is pre-selected; the rest of
+// the list has to stay alphabetical behind it.
+func TestListEnvFiles_declaredFileFirstAndRestAlphabetical(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	fwDir := config.FrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fwDir, "cakelike.yaml"),
+		[]byte("name: cakelike\nlabel: CakeLike\nenv:\n  file: config/.env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"config/.env", ".env", ".env.example", ".env.testing"} {
+		if err := os.WriteFile(filepath.Join(sitePath, n), []byte("A=1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	files, err := listEnvFiles("cakelike", sitePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"config/.env", ".env", ".env.example", ".env.testing"}
+	if len(files) != len(want) {
+		t.Fatalf("listEnvFiles: got %v want %v", files, want)
+	}
+	for i := range want {
+		if files[i] != want[i] {
+			t.Fatalf("listEnvFiles: got %v want %v", files, want)
+		}
 	}
 }
 
