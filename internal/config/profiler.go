@@ -31,6 +31,7 @@ func LoadOrGenerateProfilerKey() (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return "", err
 	}
+	guardRealWrite(path)
 	if err := os.WriteFile(path, []byte(key+"\n"), 0600); err != nil {
 		return "", fmt.Errorf("writing profiler key: %w", err)
 	}

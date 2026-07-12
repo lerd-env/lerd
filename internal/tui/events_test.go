@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -76,21 +77,40 @@ func runBatchUntil[T any](t *testing.T, cmd tea.Cmd, d time.Duration) *T {
 	if cmd == nil {
 		return nil
 	}
-	out := make(chan tea.Msg, 8)
+	// A command runs the real TUI load path, which touches the site registry, so
+	// don't return while the rest of the batch is still in it. The wait is bounded:
+	// some commands (busCmd) park until a cleanup registered before this one closes
+	// their channel, and cleanups run last-registered-first, so an unbounded wait
+	// here would hang the package instead of failing a test.
+	var wg sync.WaitGroup
+	t.Cleanup(func() { waitBounded(&wg, 5*time.Second) })
+
+	out := make(chan tea.Msg, 64)
+	send := func(m tea.Msg) { // never block a goroutine nobody is reading any more
+		select {
+		case out <- m:
+		default:
+		}
+	}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		msg := cmd()
 		if msg == nil {
-			out <- nil
+			send(nil)
 			return
 		}
 		switch v := msg.(type) {
 		case tea.BatchMsg:
 			for _, c := range v {
-				c := c
-				go func() { out <- c() }()
+				wg.Add(1)
+				go func() {
+					defer wg.Done()
+					send(c())
+				}()
 			}
 		default:
-			out <- v
+			send(v)
 		}
 	}()
 	deadline := time.After(d)
@@ -103,5 +123,16 @@ func runBatchUntil[T any](t *testing.T, cmd tea.Cmd, d time.Duration) *T {
 		case <-deadline:
 			return nil
 		}
+	}
+}
+
+// waitBounded waits for wg, giving up after d. A command parked on a channel that
+// only a later cleanup closes must not hang the whole package.
+func waitBounded(wg *sync.WaitGroup, d time.Duration) {
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(d):
 	}
 }

@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -13,10 +14,24 @@ import (
 )
 
 // TestMain initialises the global bubblezone manager so View() (which marks
-// clickable regions) doesn't panic outside of Run.
+// clickable regions) doesn't panic outside of Run, and points the whole package at
+// a temp XDG root. The TUI's load path reads and writes the site registry, and a
+// test driving it without isolation writes the developer's own sites.yaml; that
+// has already emptied one. Isolating here covers every test in the package rather
+// than relying on each to remember.
 func TestMain(m *testing.M) {
 	zone.NewGlobal()
-	os.Exit(m.Run())
+	subprocessesAllowed = false
+	dir, err := os.MkdirTemp("", "lerd-tui-test-")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "tui tests: temp XDG root:", err)
+		os.Exit(1)
+	}
+	os.Setenv("XDG_DATA_HOME", filepath.Join(dir, "data"))
+	os.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
+	code := m.Run()
+	os.RemoveAll(dir)
+	os.Exit(code)
 }
 
 // waitZone polls for a zone to register. zone.Scan hands positions to a

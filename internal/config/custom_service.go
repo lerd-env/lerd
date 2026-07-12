@@ -482,6 +482,7 @@ func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return changed, fmt.Errorf("removing stale %s for service %s: %w", path, svc.Name, err)
 		}
+		guardRealWrite(path)
 		if err := os.WriteFile(path, []byte(content), mode); err != nil {
 			return changed, fmt.Errorf("writing %s for service %s: %w", path, svc.Name, err)
 		}
@@ -545,6 +546,7 @@ func LoadCustomServiceFromFile(path string) (*CustomService, error) {
 	if len(svc.Files) > 0 {
 		svc.Files = nil
 		if migrated, err := yaml.Marshal(&svc); err == nil {
+			guardRealWrite(path)
 			_ = os.WriteFile(path, migrated, 0644)
 		}
 	}
@@ -610,6 +612,7 @@ func SaveCustomService(svc *CustomService) error {
 		return err
 	}
 	path := filepath.Join(dir, svc.Name+".yaml")
+	guardRealWrite(path)
 	return os.WriteFile(path, data, 0644)
 }
 

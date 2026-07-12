@@ -74,6 +74,16 @@ var idleEng *idleEngine
 // stand in fake worktrees without a real git checkout.
 var detectWorktrees = gitpkg.DetectWorktrees
 
+// The slow worker operations the engine backgrounds, vars for the same reason as
+// detectWorktrees: a test can stand in for one and hold it open, which is how it
+// observes that the goroutine running it is waited on.
+var (
+	suspendWorkers         = cli.SuspendWorkersForIdle
+	resumeWorkers          = cli.ResumeWorkersForIdle
+	suspendWorktreeWorkers = cli.SuspendWorktreeWorkersForIdle
+	resumeWorktreeWorkers  = cli.ResumeWorktreeWorkersForIdle
+)
+
 // idleEngine suspends a site's suspendable workers once it has been idle past
 // its timeout and resumes them on activity. It holds an in-memory mirror of
 // which sites are currently suspended (also persisted in Site.IdleSuspendedWorkers)
@@ -86,6 +96,32 @@ type idleEngine struct {
 	// (a suspend may run a slow one-time `npm run build`), so the tick and other
 	// sites' wakes never block on it and the same site isn't worked twice at once.
 	inFlight map[string]bool
+	// wg counts every goroutine the engine has started, so wait() can block on them.
+	wg sync.WaitGroup
+}
+
+// spawn runs one of the engine's background jobs in a goroutine wait() covers.
+// Every goroutine the engine starts goes through here.
+func (e *idleEngine) spawn(what string, fn func()) {
+	if e == nil {
+		return
+	}
+	e.wg.Add(1)
+	go func() {
+		defer e.wg.Done()
+		defer recoverEngine(what)
+		fn()
+	}()
+}
+
+// wait blocks until the goroutines the engine started have returned, so none of
+// them outlives the caller. A session's tick loop only ends on cancel, so cancel
+// first. Wakes must be quiet too: a WaitGroup grown while Wait runs panics.
+func (e *idleEngine) wait() {
+	if e == nil {
+		return
+	}
+	e.wg.Wait()
 }
 
 func newIdleEngine(t *idle.Tracker) *idleEngine {
@@ -129,11 +165,15 @@ func newIdleEngine(t *idle.Tracker) *idleEngine {
 	return e
 }
 
+// start runs the tick loop for a session, tracked so wait() covers it.
+func (e *idleEngine) start(ctx context.Context) {
+	e.spawn("ticker", func() { e.run(ctx) })
+}
+
 // run drives the suspend evaluation until the session is cancelled. It evaluates
 // once immediately so enabling idle-suspend sleeps already-idle sites at once
 // rather than waiting a full tick interval, then re-evaluates periodically.
 func (e *idleEngine) run(ctx context.Context) {
-	defer recoverEngine("ticker")
 	t := time.NewTicker(idleTickInterval)
 	defer t.Stop()
 	for {
@@ -344,6 +384,11 @@ func (e *idleEngine) OnActivity(key string) {
 	e.resume(key) // resume runs its own goroutine
 }
 
+// startResumeUntilClear runs the disable-path drain, tracked so wait() covers it.
+func (e *idleEngine) startResumeUntilClear() {
+	e.spawn("drain", func() { e.resumeUntilClear() })
+}
+
 // resumeUntilClear is the disable path's safety net (replacing the tick that used
 // to re-resume disabled-but-suspended sites): it retries until nothing is left
 // suspended, catching a site whose slow mid-flight suspend resume() had skipped.
@@ -483,14 +528,13 @@ func (e *idleEngine) suspend(siteName string) {
 	e.inFlight[siteName] = true
 	e.mu.Unlock()
 
-	go func() {
-		defer recoverEngine("suspend")
+	e.spawn("suspend", func() {
 		defer e.clearInFlight(siteName)
 		site, err := config.FindSite(siteName)
 		if err != nil {
 			return
 		}
-		workers := cli.SuspendWorkersForIdle(site)
+		workers := suspendWorkers(site)
 		if len(workers) == 0 {
 			return // nothing stoppable (e.g. only vite, no build yet)
 		}
@@ -502,7 +546,7 @@ func (e *idleEngine) suspend(siteName string) {
 		e.mu.Unlock()
 		fmt.Printf("[idle] suspended %s: %v\n", siteName, workers)
 		publishSitesChanged()
-	}()
+	})
 }
 
 // resume restarts a suspended site's workers in the background.
@@ -515,15 +559,14 @@ func (e *idleEngine) resume(siteName string) {
 	e.inFlight[siteName] = true
 	e.mu.Unlock()
 
-	go func() {
-		defer recoverEngine("resume")
+	e.spawn("resume", func() {
 		defer e.clearInFlight(siteName)
 		site, err := config.FindSite(siteName)
 		if err != nil {
 			return
 		}
 		workers := site.IdleSuspendedWorkers
-		cli.ResumeWorkersForIdle(site, workers)
+		resumeWorkers(site, workers)
 		if err := config.SetSiteIdleSuspendedWorkers(siteName, nil); err != nil {
 			fmt.Printf("[WARN] idle-resume persist %s: %v\n", siteName, err)
 		}
@@ -532,7 +575,7 @@ func (e *idleEngine) resume(siteName string) {
 		e.mu.Unlock()
 		fmt.Printf("[idle] resumed %s: %v\n", siteName, workers)
 		publishSitesChanged()
-	}()
+	})
 }
 
 // suspendWorktree stops a worktree's own workers in the background, mirroring
@@ -548,14 +591,13 @@ func (e *idleEngine) suspendWorktree(siteName, wtBase, wtPath string) {
 	e.inFlight[key] = true
 	e.mu.Unlock()
 
-	go func() {
-		defer recoverEngine("suspend-wt")
+	e.spawn("suspend-wt", func() {
 		defer e.clearInFlight(key)
 		site, err := config.FindSite(siteName)
 		if err != nil {
 			return
 		}
-		workers := cli.SuspendWorktreeWorkersForIdle(site, wtPath)
+		workers := suspendWorktreeWorkers(site, wtPath)
 		if len(workers) == 0 {
 			return
 		}
@@ -567,7 +609,7 @@ func (e *idleEngine) suspendWorktree(siteName, wtBase, wtPath string) {
 		e.mu.Unlock()
 		fmt.Printf("[idle] suspended %s (worktree %s): %v\n", siteName, wtBase, workers)
 		publishSitesChanged()
-	}()
+	})
 }
 
 // resumeWorktree restarts a worktree's previously suspended workers.
@@ -581,8 +623,7 @@ func (e *idleEngine) resumeWorktree(siteName, wtBase, wtPath string) {
 	e.inFlight[key] = true
 	e.mu.Unlock()
 
-	go func() {
-		defer recoverEngine("resume-wt")
+	e.spawn("resume-wt", func() {
 		defer e.clearInFlight(key)
 		site, err := config.FindSite(siteName)
 		if err != nil {
@@ -592,7 +633,7 @@ func (e *idleEngine) resumeWorktree(siteName, wtBase, wtPath string) {
 		if site.WorktreeIdleSuspended != nil {
 			workers = site.WorktreeIdleSuspended[wtBase]
 		}
-		cli.ResumeWorktreeWorkersForIdle(site, wtPath, workers)
+		resumeWorktreeWorkers(site, wtPath, workers)
 		if err := config.SetWorktreeIdleSuspendedWorkers(siteName, wtBase, nil); err != nil {
 			fmt.Printf("[WARN] idle-resume persist %s worktree %s: %v\n", siteName, wtBase, err)
 		}
@@ -601,7 +642,7 @@ func (e *idleEngine) resumeWorktree(siteName, wtBase, wtPath string) {
 		e.mu.Unlock()
 		fmt.Printf("[idle] resumed %s (worktree %s): %v\n", siteName, wtBase, workers)
 		publishSitesChanged()
-	}()
+	})
 }
 
 func (e *idleEngine) clearInFlight(siteName string) {

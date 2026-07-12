@@ -293,6 +293,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -340,6 +341,7 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -372,6 +374,7 @@ func GenerateFrankenPHPVhost(site config.Site) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -403,6 +406,7 @@ func GenerateFrankenPHPSSLVhost(site config.Site) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -438,6 +442,7 @@ func GenerateCustomVhost(site config.Site) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -473,6 +478,7 @@ func GenerateCustomSSLVhost(site config.Site) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -533,6 +539,7 @@ func generateHostProxyVhost(site config.Site, tmplName, confName string, ssl boo
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), confName)
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -595,6 +602,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -635,6 +643,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -673,6 +682,7 @@ func GenerateWorktreeHostProxyVhostFor(domain, path, parentDomain string, upstre
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
+	config.GuardRealWrite(filepath.Join(config.NginxConfD(), domain+".conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), domain+".conf"), buf.Bytes(), 0644)
 }
 
@@ -726,6 +736,7 @@ func writeLandingVhost(site config.Site, htmlFile string) error {
 	}
 	conf := landingVhostConf(site, config.PausedDir(), htmlFile)
 	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	config.GuardRealWrite(confPath)
 	if err := os.WriteFile(confPath, []byte(conf), 0644); err != nil {
 		return err
 	}
@@ -794,6 +805,7 @@ server {
 	}
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, []byte(conf), 0644)
 }
 
@@ -845,6 +857,7 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 		return err
 	}
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
+	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, buf.Bytes(), 0644)
 }
 
@@ -1134,6 +1147,7 @@ func WriteFileAtomic(path string, data []byte, mode os.FileMode) error {
 		effective = info.Mode().Perm()
 	}
 	tmp := path + ".tmp"
+	config.GuardRealWrite(tmp)
 	if err := os.WriteFile(tmp, data, effective); err != nil {
 		return err
 	}
@@ -1287,6 +1301,7 @@ func writeErrorPages() error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
+	config.GuardRealWrite(filepath.Join(dir, "404.html"))
 	return os.WriteFile(filepath.Join(dir, "404.html"), []byte(errorPageHTML), 0644)
 }
 
@@ -1429,6 +1444,7 @@ func EnsureLerdVhost() error {
 }
 `, config.UISocketPath())
 	}
+	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "lerd.localhost.conf"), []byte(content), 0644)
 }
 
@@ -1467,6 +1483,7 @@ func EnsureNginxConfig() error {
 	}); err != nil {
 		return fmt.Errorf("rendering nginx.conf: %w", err)
 	}
+	config.GuardRealWrite(destPath)
 	return os.WriteFile(destPath, buf.Bytes(), 0644)
 }
 
@@ -1506,6 +1523,7 @@ func EnsureForwardedConf() error {
 		return err
 	}
 	content := forwardedConf + spxKeyMap(key)
+	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_forwarded.conf"))
 	return os.WriteFile(
 		filepath.Join(config.NginxConfD(), "_forwarded.conf"),
 		[]byte(content),
@@ -1552,6 +1570,7 @@ func EnsureProfilerVhost() error {
     }
 }
 `, phpShort(cfg.PHP.DefaultVersion))
+	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
 }
 

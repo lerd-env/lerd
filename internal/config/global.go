@@ -1037,6 +1037,7 @@ func SaveGlobal(cfg *GlobalConfig) error {
 	if err != nil {
 		return err
 	}
+	guardRealWrite(GlobalConfigFile())
 	if err := os.WriteFile(GlobalConfigFile(), data, 0644); err != nil {
 		return err
 	}

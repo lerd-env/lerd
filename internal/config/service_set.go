@@ -42,6 +42,7 @@ func saveServiceNameSet(path string, m map[string]bool) error {
 	if err != nil {
 		return err
 	}
+	guardRealWrite(path)
 	return os.WriteFile(path, data, 0644)
 }
 
