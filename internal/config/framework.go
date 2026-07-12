@@ -745,14 +745,9 @@ var symfonyFramework = &Framework{
 		{Composer: "symfony/framework-bundle"},
 	},
 	Env: FrameworkEnvConf{
-		// Symfony reads local overrides from .env.local (gitignored) layered over
-		// the committed .env; edit and wire services into .env.local when it
-		// exists, else fall back to the committed .env.
-		File:           ".env.local",
-		FallbackFile:   ".env",
-		FallbackFormat: "dotenv",
-		ExampleFile:    ".env.example",
-		Format:         "dotenv",
+		File:        ".env",
+		ExampleFile: ".env.example",
+		Format:      "dotenv",
 		Services: map[string]FrameworkServiceDef{
 			"mysql": {
 				Detect: []FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},

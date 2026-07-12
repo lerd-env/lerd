@@ -5360,7 +5360,10 @@ func projectJSRuntime(sitePath string) string {
 // those are out of scope for the flat key=value editor and get no Env tab. With
 // no known framework it defaults to ".env".
 func frameworkEnvFile(frameworkName, dir string) (file string, ok bool) {
-	fw, found := config.GetFramework(frameworkName)
+	// GetFrameworkForDir (not GetFramework) so the tab resolves against the same
+	// version-aware store definition the env wiring and doctor use; GetFramework
+	// returns the Go built-in and ignores the per-version store yaml.
+	fw, found := config.GetFrameworkForDir(frameworkName, dir)
 	if !found {
 		return ".env", true
 	}

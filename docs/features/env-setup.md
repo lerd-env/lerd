@@ -119,6 +119,8 @@ The site detail panel has an **Env** tab that opens the project's env files in a
 
 A dropdown at the start of the toolbar lists every env file the project has (`.env`, `.env.local`, `.env.testing`, `.env.example`, `.env.production`, anything matching `^\.env(\.[A-Za-z][\w-]*)?$`). Our own timestamped backups, temp files, and `.env.before_lerd` never appear in the dropdown. Pick the file you want to edit; the editor, save, and revert flows all scope to it.
 
+The file the framework actually reads is pre-selected and listed first, so it matches the file the doctor and service wiring use. For most frameworks that is the root `.env`, but Symfony opens `.env.local` (falling back to the committed `.env` when no `.env.local` exists) and CakePHP opens `config/.env` in the subdirectory. The version is resolved from the project (for example Symfony 7 versus 8), so per-version differences are respected. Frameworks whose configuration is PHP source rather than a dotenv file (WordPress, Magento) have no Env tab.
+
 Edits stay client-side until you click **Save**, which opens a confirmation modal with a single checkbox: **Back up the current file first**. The box is unchecked by default; tick it to have lerd copy the current contents to `<file>.bkp.<YYYYMMDD-HHMMSS>` in the same directory before the new file lands. Each env file has its own backups, so `.env.testing.bkp.20260528-103045` belongs only to `.env.testing` and won't appear when you have `.env` open.
 
 The save preserves the file mode of the existing file, including permissions narrower than `0644` such as `0600`. New files default to `0644`. The write is atomic (staged temp file + rename), so a partial failure leaves the previous file (and the timestamped backup, when requested) intact.

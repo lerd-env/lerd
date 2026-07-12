@@ -876,6 +876,38 @@ func TestSiteEnv_frameworkFallbackWhenPrimaryMissing(t *testing.T) {
 	}
 }
 
+// frameworkEnvFile must resolve against the version-aware store definition
+// (GetFrameworkForDir), the same one the doctor and service wiring use, not the
+// Go built-in (GetFramework) which ignores the per-version store yaml. A Symfony
+// project pinned to 8 whose store def declares .env.local must resolve to it,
+// even though the built-in symfony def declares plain .env.
+func TestSiteEnv_frameworkResolvesVersionedStoreDef(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"),
+		[]byte("name: symfony\nversion: \"8\"\nenv:\n  file: .env.local\n  fallback_file: .env\n  format: dotenv\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.WriteFile(filepath.Join(sitePath, ".lerd.yaml"), []byte("framework_version: \"8\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, ".env.local"), []byte("APP_ENV=dev\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	file, ok := frameworkEnvFile("symfony", sitePath)
+	if !ok || file != ".env.local" {
+		t.Errorf("frameworkEnvFile: got (%q, %v) want (.env.local, true) — store def must win over the built-in", file, ok)
+	}
+}
+
 // A non-dotenv framework (env stored in PHP source) gets no Env tab: siteHasEnv
 // is false even when a stray root .env exists.
 func TestSiteHasEnv_nonDotenvFrameworkExcluded(t *testing.T) {
