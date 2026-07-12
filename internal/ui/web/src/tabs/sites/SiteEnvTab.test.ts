@@ -63,6 +63,23 @@ describe('SiteEnvTab', () => {
     expect(loadSiteEnv.mock.calls.every(([, , f]) => f !== '')).toBe(true);
   });
 
+  it('shows the absolute path of the selected dotenv', async () => {
+    const { getByText } = render(SiteEnvTab, { props: { site, branch: '' } });
+
+    await waitFor(() => getByText('/home/u/Code/sf/.env.local'));
+  });
+
+  it('shows the worktree path when a worktree branch is active', async () => {
+    const wtSite = {
+      ...site,
+      worktrees: [{ branch: 'feat', path: '/home/u/Code/sf-feat' }]
+    } as unknown as Site;
+
+    const { getByText } = render(SiteEnvTab, { props: { site: wtSite, branch: 'feat' } });
+
+    await waitFor(() => getByText('/home/u/Code/sf-feat/.env.local'));
+  });
+
   it('opens a nested dotenv when that is the only file the framework has', async () => {
     loadSiteEnvFiles.mockResolvedValueOnce(['config/.env']);
     proposeSiteEnv.mockResolvedValueOnce({
