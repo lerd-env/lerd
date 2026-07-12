@@ -809,6 +809,14 @@ func detailContentLines(m *Model, site *siteinfo.EnrichedSite, focused bool, inn
 				onOffGlyph(site.LANPort > 0), "LAN share", lanShareText(site.LANPort)), selected)
 		}
 	}
+
+	// The request-timing panel closes the Overview, in the space the app-logs
+	// sub-pane used to take. Read-only, so it sits below the navigable rows and
+	// never enters the cursor cycle.
+	if timing := timingSectionLines(m, site, innerW); len(timing) > 0 {
+		out = append(out, "")
+		out = append(out, timing...)
+	}
 	return out, cursorLine
 }
 

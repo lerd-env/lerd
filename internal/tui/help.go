@@ -50,11 +50,11 @@ var helpReference = []helpSection{
 	{
 		title: "Site detail tabs",
 		rows: [][2]string{
-			{"1", "Overview tab (default — workers, toggles, worktrees, app-logs pane beneath)"},
-			{"2", "Env tab (read-only .env display)"},
-			{"3", "Debug tab (this site's lenses: dumps, queries, jobs, mail, …)"},
-			{"4", "Doctor tab (Laravel only — APP_KEY, env drift, migrations, storage link; press again to re-run)"},
-			{"{ / }", "scroll the Overview app-logs pane (or the logs pane when open)"},
+			{"1", "Overview tab (default: workers, toggles, worktrees)"},
+			{"2", "Logs tab (FPM / container, every worker, the framework's app logs)"},
+			{"3", "Env tab (read-only .env display)"},
+			{"4", "Debug tab (this site's lenses: dumps, queries, jobs, mail, …)"},
+			{"5", "Doctor tab (framework-agnostic health checks; press again to re-run)"},
 		},
 	},
 	{
@@ -92,7 +92,7 @@ var helpReference = []helpSection{
 	{
 		title: "Logs",
 		rows: [][2]string{
-			{"l", "toggle the logs pane for the focused item"},
+			{"l", "jump to a site's Logs tab, or toggle the logs pane elsewhere"},
 			{"[ / ]", "cycle through the site's log sources (FPM, workers, app logs)"},
 			{"{ / }", "scroll back through buffered output / return to tail"},
 			{"f", "find within the tailed buffer — matches highlighted, non-matches dimmed"},

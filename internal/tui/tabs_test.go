@@ -224,35 +224,153 @@ func TestRecordActivity_CapsRing(t *testing.T) {
 	}
 }
 
-func TestOverviewLogsActive_GatedToSitesOverview(t *testing.T) {
+func TestSiteLogsActive_GatedToSitesLogsTab(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
+	m.siteTab = tabSiteLogs
 
 	m.activeTab = tabDashboard
-	if _, _, ok := m.overviewLogsActive(); ok {
-		t.Fatal("overview logs should be inactive on the Dashboard tab")
+	if m.siteLogsActive() {
+		t.Fatal("site logs should be inactive on the Dashboard tab")
 	}
 	m.activeTab = tabServices
-	if _, _, ok := m.overviewLogsActive(); ok {
-		t.Fatal("overview logs should be inactive on the Services tab")
+	if m.siteLogsActive() {
+		t.Fatal("site logs should be inactive on the Services tab")
 	}
 	m.activeTab = tabSites
-	m.siteTab = tabSiteEnv
-	if _, _, ok := m.overviewLogsActive(); ok {
-		t.Fatal("overview logs should be inactive on a non-Overview site tab")
+	m.siteTab = tabSiteOverview
+	if m.siteLogsActive() {
+		t.Fatal("site logs should be inactive on a non-Logs site tab")
+	}
+	m.siteTab = tabSiteLogs
+	if !m.siteLogsActive() {
+		t.Fatal("site logs should be active on the Sites Logs tab")
+	}
+	// A pane swap (S / Y / D) takes the detail column, so the tail steps aside.
+	m.detailMode = detailSystem
+	if m.siteLogsActive() {
+		t.Fatal("site logs should be inactive while a pane swap owns the detail column")
 	}
 }
 
-func TestRenderOverviewLogs_NoLogsPlaceholder(t *testing.T) {
-	m := NewModel("test")
-	// An empty path (no log file written yet) shows the placeholder rather
-	// than panicking.
-	out := stripANSI(m.renderOverviewLogs("", 60, 10))
-	if !strings.Contains(out, "App logs") {
-		t.Fatalf("overview logs pane missing title:\n%s", out)
+func TestSiteTabs_LogsIsSecondAndReachableByNumber(t *testing.T) {
+	tabs := availableSiteTabs(&siteinfo.EnrichedSite{Name: "alpha"})
+	if tabs[1] != tabSiteLogs {
+		t.Fatalf("Logs should be the second site tab, got %v", tabs)
 	}
-	if !strings.Contains(out, "no app log file written yet") {
-		t.Fatalf("expected placeholder for a site with no logs:\n%s", out)
+	// Every tab must be reachable by its 1-based number, so the strip's rendered
+	// index and the working key can't drift.
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.activeTab = tabSites
+	for i, want := range tabs {
+		if want == tabSiteDoctor {
+			// Doctor kicks off a real check run; its routing is covered separately.
+			continue
+		}
+		m.selectSiteTab(i + 1)
+		if m.siteTab != want {
+			t.Fatalf("key %d selected %v, want %v", i+1, m.siteTab, want)
+		}
+	}
+}
+
+func TestLKey_SelectsLogsTabOnSites(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.activeTab = tabSites
+
+	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.siteTab != tabSiteLogs {
+		t.Fatalf("l on the Sites tab should select the Logs tab, got %v", m.siteTab)
+	}
+	if m.showLogs {
+		t.Fatal("l on the Sites tab should not also open the full-width overlay")
+	}
+	if !m.logsInDetail() {
+		t.Fatal("the Logs tab should report the tail as showing in the detail column")
+	}
+}
+
+func TestLKey_ClosesAnOverlayCarriedInFromAnotherTab(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	// `l` on the Services tab sets showLogs, though the pane stays hidden behind
+	// the service detail's own tail. Walking onto the Sites tab then reveals it.
+	m.activeTab = tabServices
+	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if !m.showLogs {
+		t.Fatal("l on the Services tab should set showLogs")
+	}
+	m.activeTab = tabSites
+
+	// l must close the pane rather than select the tab underneath it, or the
+	// overlay would be stuck open with no key that dismisses it.
+	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.showLogs {
+		t.Fatal("l on the Sites tab should close an overlay carried in from another tab")
+	}
+	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	if m.siteTab != tabSiteLogs {
+		t.Fatal("with no overlay open, l should select the Logs tab")
+	}
+}
+
+func TestCycleLogTarget_WorksOnLogsTabWithoutTheOverlay(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	// alpha has FPM plus a queue worker, so it has more than one log source.
+	m.activeTab = tabSites
+	m.siteTab = tabSiteLogs
+	if n := len(m.currentLogTargets()); n < 2 {
+		t.Fatalf("fixture needs >1 log target to exercise cycling, got %d", n)
+	}
+	// The Logs tab shows the tail without the full-width `l` overlay, so cycling
+	// must not be gated on showLogs.
+	if m.showLogs {
+		t.Fatal("Logs tab should not set showLogs")
+	}
+	m.cycleLogTarget(1)
+	if m.logCursor != 1 {
+		t.Fatalf("] should advance the log target on the Logs tab, cursor stayed at %d", m.logCursor)
+	}
+	m.cycleLogTarget(-1)
+	if m.logCursor != 0 {
+		t.Fatalf("[ should step the log target back, cursor at %d", m.logCursor)
+	}
+}
+
+func TestRenderLogs_NoSourceEmptyState(t *testing.T) {
+	m := NewModel("test")
+	// A site with no container and no workers has nothing to tail.
+	m.snap = Snapshot{Sites: []siteinfo.EnrichedSite{{Name: "idle"}}}
+	m.activeTab = tabSites
+	m.siteTab = tabSiteLogs
+
+	out := stripANSI(m.renderDetailColumn(80, 16, true))
+	if strings.Contains(out, "Logs ·") {
+		t.Fatalf("no-source header should not dangle a separator:\n%s", out)
+	}
+	if !strings.Contains(out, "no log source for this site") {
+		t.Fatalf("expected a no-source header:\n%s", out)
+	}
+	if strings.Contains(out, "waiting for output") {
+		t.Fatalf("no-source site should not read as waiting on a live tail:\n%s", out)
+	}
+}
+
+func TestRenderLogs_LogsTabKeepsTabStrip(t *testing.T) {
+	m := NewModel("test")
+	m.snap = fakeSnap()
+	m.activeTab = tabSites
+	m.siteTab = tabSiteLogs
+
+	out := stripANSI(m.renderDetailColumn(80, 20, true))
+	if !strings.Contains(out, "[2] Logs") {
+		t.Fatalf("Logs tab should keep the site tab strip on top:\n%s", out)
+	}
+	if !strings.Contains(out, "Logs ·") {
+		t.Fatalf("Logs tab should render the tail header:\n%s", out)
 	}
 }
 

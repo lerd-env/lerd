@@ -31,9 +31,9 @@ func TestAvailableSiteTabs_DoctorForEveryFramework(t *testing.T) {
 	if !slices.Contains(laravel, tabSiteDoctor) {
 		t.Errorf("Laravel site should offer the Doctor tab, got %v", laravel)
 	}
-	// Doctor is the fourth tab, so the strip numbers it [4].
-	if got := stripANSI(siteTabsHeader(tabSiteOverview, laravel)); !strings.Contains(got, "[4] Doctor") {
-		t.Errorf("strip should carry [4] Doctor, got %q", got)
+	// Doctor is the fifth tab, so the strip numbers it [5].
+	if got := stripANSI(siteTabsHeader(tabSiteOverview, laravel)); !strings.Contains(got, "[5] Doctor") {
+		t.Errorf("strip should carry [5] Doctor, got %q", got)
 	}
 }
 

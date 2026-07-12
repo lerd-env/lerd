@@ -24,8 +24,8 @@ Mouse support is on: clicking a tab switches screens, clicking a site or service
 
 - **Sites pane (Sites tab, left column)** lists every linked site by its primary domain, with an FPM running dot and worker glyphs (`q` queue, `s` schedule, `v` reverb, `h` horizon, plus a dot per custom framework worker). Paused sites are dimmed and marked. Columns line up across rows regardless of how many workers each site runs. The column is intentionally slim; the Services tab keeps a wider list since its rows carry version and usage metadata.
 - **Services pane (Services tab, left column)** is a compact list of built-in services (mysql, redis, postgres, meilisearch, rustfs, mailpit), custom services, and every site-owned worker (`queue-<site>`, `schedule-<site>`, `horizon-<site>`, `reverb-<site>`, and custom framework workers). Each row shows a running dot, how many sites use it, and `pinned` / `custom` tags where applicable.
-- **Site detail (Sites tab, right column, full height)** always mirrors the focused site and shows primary domain, the Laravel `APP_NAME` when the site sets a custom one, internal name, disk path, all domains, services used (with live state), workers, git worktrees, HTTPS / LAN share toggles, and PHP / Node version pickers. On the Sites tab, `S` swaps it for global Settings, `?` swaps it for the Keybindings reference. When the Overview sub-tab is showing a site that writes app logs, a separate **App logs pane** opens beneath the detail showing a live tail of the newest log file; scroll it with `{` / `}` (or the mouse wheel).
-- **Logs pane** (toggle with `l`) tails the container, worker-journal, or app log file behind the focused item. Takes at least half the window and renders a right-edge scrollbar showing position in the buffer.
+- **Site detail (Sites tab, right column, full height)** always mirrors the focused site and shows primary domain, the Laravel `APP_NAME` when the site sets a custom one, internal name, disk path, all domains, services used (with live state), workers, git worktrees, HTTPS / LAN share toggles, PHP / Node version pickers, and the [request-timing panel](#request-timing). On the Sites tab, `S` swaps it for global Settings, `?` swaps it for the Keybindings reference. Logs live on their own [tab](#site-detail-tabs) rather than in a pane beneath the detail.
+- **Logs pane** (toggle with `l`) tails the container, worker-journal, or app log file behind the focused item. On the Sites tab `l` opens the Logs tab instead, since the detail column already has room for the tail; on the Dashboard it opens a full-width pane taking at least half the window. Either way it renders a right-edge scrollbar showing position in the buffer.
 - **Status bar** briefly shows the most recent action (e.g. `✓ lerd service stop redis` or `✖ …exit 1`).
 - **Footer** summarises active keybindings for the current mode.
 
@@ -73,8 +73,8 @@ Dots follow the same convention everywhere: green `●` running, grey `○` stop
 
 | Key | Action |
 | --- | --- |
-| `l` | Toggle the logs pane for the focused item |
-| `[` / `]` | Cycle the log pane target through the site's log sources |
+| `l` | Open a site's Logs tab, or toggle the logs pane for the focused item elsewhere |
+| `[` / `]` | Cycle the log target through the site's log sources |
 | `{` / `}` | Scroll back through buffered output / return to live tail |
 | `f` | Find within the tailed buffer. Matches are highlighted, non-matching lines dim. Severity colouring (red for `ERROR / FATAL / PANIC / EXCEPTION / CRITICAL`, amber for `WARN / WARNING / DEPRECATED`) is always on |
 
@@ -110,7 +110,7 @@ Available when focus is on the Detail pane with the cursor on a domain row.
 
 ## Log sources
 
-When the log pane is open, `[` and `]` cycle through every tail-able source for whatever's focused:
+Wherever logs are showing (a site's Logs tab, the service detail, or the full-width pane), `[` and `]` cycle through every tail-able source for whatever's focused:
 
 - **FPM / custom container** — `podman logs -f lerd-php<ver>-fpm` for PHP sites, or `lerd-custom-<name>` for custom container sites.
 - **Workers** — `journalctl --user -u lerd-queue-<site>` (and the same for schedule, reverb, horizon, custom framework workers). Workers are systemd user units, not containers, so their output lives in the user journal.
@@ -133,16 +133,34 @@ For worker rows (queue-X, schedule-X, custom framework workers) the detail varia
 
 ## Site detail tabs
 
-The site detail pane is split into read-side tabs the user can jump between with the number keys, mirroring the web UI's `Overview / Env / Debug` strip (Tinker is CLI-only since it needs an interactive REPL). App logs no longer have their own tab — the Overview tab shows a live tail of the newest log file in a pane beneath it (see [Layout](#layout)).
+The site detail pane is split into read-side tabs the user can jump between with the number keys, mirroring the web UI's `Overview / Logs / Env / Debug` strip (Tinker is CLI-only since it needs an interactive REPL).
 
 | Key | Tab | Contents |
 | --- | --- | --- |
-| `1` | Overview | The default — domains, services used, workers, worktrees, toggles (HTTPS / LAN / PHP / Node), and an app-logs pane beneath it |
-| `2` | Env | Read-only display of the site's `.env` file (read up to 256 KB so a runaway file can't wedge the render loop) |
-| `3` | Debug | This site's slice of the Debug window: the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP) scoped to the focused site, with `[` / `]` to switch lens and `w` to toggle worker capture. Rows show their detail inline; press `D` for the full cross-site window |
-| `4` | Doctor | The same framework-agnostic app-level health checks the web dashboard runs: a universal baseline (env file present, env drift warning only on keys the code reads without a default, application key set, composer and node dependencies installed with lockfiles in step, `composer audit` and `npm audit` clean, PHP version in range) plus each framework's own checks from its store definition (for Laravel, the `APP_DEBUG`-in-production footgun, the `public/storage` symlink, and pending migrations). Some checks exec in the container, so the run is on-demand: press `4` to run and again to re-run. The panel is read-only and names the suggested fix (e.g. `key:generate`, `migrate`) rather than running it, so a status view can never migrate a database |
+| `1` | Overview | The default — domains, services used, workers, worktrees, toggles (HTTPS / LAN / PHP / Node), and the [request-timing panel](#request-timing) |
+| `2` | Logs | A live tail of any of the site's log sources: the FPM or custom container, every worker unit, and each of the framework's app-log files. `[` / `]` cycle the source, `{` / `}` scroll back through the buffer, `f` finds within it. `l` is a shortcut to this tab from anywhere on the Sites tab |
+| `3` | Env | Read-only display of the site's `.env` file (read up to 256 KB so a runaway file can't wedge the render loop) |
+| `4` | Debug | This site's slice of the Debug window: the active lens (Dumps · Queries · Jobs · Views · Mail · Cache · Events · HTTP) scoped to the focused site, with `[` / `]` to switch lens and `w` to toggle worker capture. Rows show their detail inline; press `D` for the full cross-site window |
+| `5` | Doctor | The same framework-agnostic app-level health checks the web dashboard runs: a universal baseline (env file present, env drift warning only on keys the code reads without a default, application key set, composer and node dependencies installed with lockfiles in step, `composer audit` and `npm audit` clean, PHP version in range) plus each framework's own checks from its store definition (for Laravel, the `APP_DEBUG`-in-production footgun, the `public/storage` symlink, and pending migrations). Some checks exec in the container, so the run is on-demand: press `5` to run and again to re-run. The panel is read-only and names the suggested fix (e.g. `key:generate`, `migrate`) rather than running it, so a status view can never migrate a database |
 
 Switching tabs resets the detail-pane scroll so the user lands at the top of the new tab. Picker overlays (PHP / Node version) only show in Overview; selecting a different tab dismisses them.
+
+## Request timing
+
+The bottom of the Overview tab carries the same request-timing view the web dashboard shows, read straight from the durable request store the watcher fills from the nginx access feed. Because it reads the store directly rather than calling `lerd-ui`, the panel works whether or not the dashboard daemon is up.
+
+It shows the median and p95 response time, the request count, how many of those were cold starts (kept out of every timing figure, since a suspended worker waking would otherwise make a route look slow), the status-class mix, a response-time distribution, the slowest routes ranked by recent p95, and the tail of recent requests.
+
+Two keys scope it:
+
+| Key | Effect |
+| --- | --- |
+| `[` / `]` | Cycle the window through `15m · 1h · 24h · 7d` |
+| `b` | Cycle the branch across the site and each of its git worktrees |
+
+A worktree records its traffic under its own key, so `b` reads the work done on that branch rather than folding it into the parent's numbers. Sites without worktrees show no branch label and `b` does nothing.
+
+Static assets, nginx-served files and WebSocket upgrades are filtered out, so an asset pipeline can't make a site look busy.
 
 ## Site detail
 
