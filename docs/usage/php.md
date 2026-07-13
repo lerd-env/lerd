@@ -33,6 +33,10 @@
 
 If no version is given, the version is resolved from the current directory (`.php-version` or `composer.json`, falling back to the global default).
 
+Inside a linked site, the commands that run PHP in a container (`lerd php`, `lerd composer`, `lerd console`, `lerd php:shell`) use the version the site is registered on, which is the version its FPM container serves. That matters when a framework clamps the version at link time: a Laravel 13 project pinning `.php-version` to 8.1 is linked on 8.5, because Laravel 13 supports 8.3 to 8.5, and composer then runs on 8.5 too rather than resolving 8.1 from the file and quietly using a different PHP than the site itself.
+
+So that the project agrees with what actually runs, `lerd link` pins the resolved version into `.php-version`, the same file `lerd isolate` and the dashboard's PHP dropdown write. A pin the framework does not support is rewritten to the version lerd runs, and a version outside the framework's range is clamped rather than accepted, so the file, the site registry and the container can never drift apart. Sites with no lerd-managed PHP version (host-proxy, and custom containers whose version comes from their Containerfile) are left untouched.
+
 ---
 
 ## Usage
@@ -226,7 +230,7 @@ PHP 7.4 and 8.0 are available as a frozen legacy tier for old projects (Laravel 
 
 - They are end-of-life upstream and get no security patches. Use them only for local work on legacy apps.
 - Xdebug is pinned to the last release supporting that PHP line (3.1.6 for 7.4, 3.3.2 for 8.0).
-- The `mongodb` extension is unavailable (it requires PHP 8.1+); everything else in the standard bundle is present.
+- The `mongodb` extension is unavailable (it requires PHP 8.1+), and so is `random` (a PHP core extension only from 8.2); everything else in the standard bundle is present.
 - The base image is Alpine 3.16, so the bundled Node.js is 16.x.
 
 Use them like any other version:
@@ -242,6 +246,8 @@ lerd fetch 7.4 8.0
 ## Custom extensions
 
 The default lerd FPM image ships ~30 extensions covering the vast majority of Laravel projects (`bcmath`, `bz2`, `calendar`, `curl`, `dba`, `exif`, `ftp`, `gd`, `gmp`, `igbinary`, `imagick`, `intl`, `ldap`, `mbstring`, `mongodb`, `mysqli`, `opcache`, `pcntl`, `pdo_mysql`, `pdo_pgsql`, `pdo_sqlite`, `redis`, `soap`, `shmop`, `sockets`, `sqlite3`, `sysvmsg`, `sysvsem`, `sysvshm`, `xdebug`, `xsl`, `zip`, and more).
+
+Two of those names are version-gated, because the image genuinely cannot build them everywhere: `random` is a PHP core extension only from 8.2, and `mongodb` builds only on 8.1 and up. On older versions they are not part of the bundle, and `lerd park` warns when a project requires one rather than staying quiet and letting `composer install` fail its platform check.
 
 To add an extension that isn't in the bundle:
 
@@ -391,6 +397,13 @@ When you run `lerd park` or `lerd link`, Lerd reads `composer.json` and warns if
 ```
 [!] my-app requires PHP extensions not in the image: swoole
     Run: lerd php:ext add swoole
+```
+
+An extension can also be one the site's PHP version cannot have at all, rather than one that is merely absent from the image. `random` is a PHP core extension only from 8.2, and `mongodb` builds only on 8.1 and up, so on an older site no image rebuild can supply them and `lerd php:ext add` would fail after several minutes of building. Lerd says so up front instead of offering an install that cannot work:
+
+```
+[!] my-app requires ext-random, which is not available on PHP 8.1 (first shipped on 8.2)
+    lerd php:ext add cannot build it. Move the site to PHP 8.2 or newer, or require a polyfill package instead.
 ```
 
 A requirement can also fail even though the extension is in the image, because composer names a few extensions differently from the name they are installed under. Composer builds its `ext-*` names from the module name PHP reports, and OPcache reports itself as `Zend OPcache`, so composer publishes `ext-zend-opcache` and never `ext-opcache`. A `composer.json` asking for `ext-opcache` therefore fails its platform check on `composer install` even though OPcache is loaded, and `lerd php:ext add opcache` will not help because nothing is actually missing. Lerd recognises both spellings and tells you which one composer wants:
