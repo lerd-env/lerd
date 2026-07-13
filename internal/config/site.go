@@ -434,6 +434,12 @@ func AddSite(site Site) error {
 	if ContainsUnitInjectionChars(site.Name) || strings.ContainsRune(site.Name, '/') {
 		return fmt.Errorf("invalid site name %q: must not contain newline, NUL, or slash", site.Name)
 	}
+	// The filesystem root can never be a site: lerd bind-mounts a site's path into
+	// its containers, and mounting / over a container's own rootfs shadows its
+	// entrypoint so it cannot start (issue #884).
+	if filepath.Clean(site.Path) == "/" {
+		return fmt.Errorf("invalid site path %q: lerd would bind-mount / into every container and shadow its rootfs", site.Path)
+	}
 	siteWriteMu.Lock()
 	defer siteWriteMu.Unlock()
 	reg, err := LoadSites()

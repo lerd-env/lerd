@@ -81,6 +81,21 @@ func TestAddSite_RejectsUnitInjectionNames(t *testing.T) {
 	}
 }
 
+// A site at the filesystem root would be bind-mounted as /:/:rw into every
+// container, shadowing its rootfs so it cannot start (issue #884). AddSite must
+// refuse it.
+func TestAddSite_RejectsFilesystemRoot(t *testing.T) {
+	setDataDir(t)
+	for _, path := range []string{"/", "//", "/."} {
+		if err := AddSite(Site{Name: "root", Domains: []string{"root.test"}, Path: path}); err == nil {
+			t.Errorf("AddSite with path %q should have been rejected", path)
+		}
+	}
+	if err := AddSite(Site{Name: "ok", Domains: []string{"ok.test"}, Path: "/srv/ok"}); err != nil {
+		t.Errorf("AddSite with a real path should succeed: %v", err)
+	}
+}
+
 func TestAddSite_UpdateExisting(t *testing.T) {
 	setDataDir(t)
 

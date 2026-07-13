@@ -47,31 +47,57 @@ func ExtraVolumePaths() []string {
 	if home == "" {
 		return nil
 	}
-	// Ensure home has a trailing slash for prefix matching.
+
+	var candidates []string
+	if cfg, err := config.LoadGlobal(); err == nil {
+		candidates = append(candidates, cfg.ParkedDirectories...)
+	}
+	if reg, err := config.LoadSites(); err == nil {
+		for _, site := range reg.Sites {
+			candidates = append(candidates, site.Path)
+		}
+	}
+	return extraVolumePaths(candidates, home)
+}
+
+// bindMountable reports whether a host path is safe to bind-mount into a
+// container at the same location. The filesystem root is the fatal case
+// (issue #884): Volume=/:/:rw mounts the whole host root over the container's
+// own rootfs, shadowing its entrypoint and shell so crun aborts with exit 127
+// and the container never starts. Empty and relative paths are refused too, as
+// they cannot be resolved to a stable mount source. Shared by every code path
+// that emits a Volume= line for a host path.
+func bindMountable(path string) bool {
+	return path != "" && filepath.IsAbs(path) && filepath.Clean(path) != "/"
+}
+
+// extraVolumePaths reduces the candidate host paths (parked directories and
+// linked site paths) to the top-level ancestors that must be bind-mounted into
+// the containers because they live outside home.
+//
+// The filesystem root is refused outright: a candidate of "/" would be emitted
+// as Volume=/:/:rw, mounting the whole host root over a container's own rootfs
+// and shadowing its entrypoint and shell, so crun aborts with exit 127 and
+// nginx/php-fpm never start (issue #884). Left in, "/" would also swallow every
+// other path through the ancestor reduction below. Empty, non-absolute, home,
+// and under-home candidates are dropped too.
+func extraVolumePaths(candidates []string, home string) []string {
 	homePrefix := home
 	if !strings.HasSuffix(homePrefix, "/") {
 		homePrefix += "/"
 	}
 
 	seen := map[string]bool{}
-	add := func(p string) {
-		if p == "" || p == home || strings.HasPrefix(p, homePrefix) {
-			return
+	for _, p := range candidates {
+		if !bindMountable(p) {
+			continue
+		}
+		p = filepath.Clean(p)
+		if p == home || strings.HasPrefix(p, homePrefix) {
+			continue
 		}
 		seen[p] = true
 	}
-
-	if cfg, err := config.LoadGlobal(); err == nil {
-		for _, dir := range cfg.ParkedDirectories {
-			add(dir)
-		}
-	}
-	if reg, err := config.LoadSites(); err == nil {
-		for _, site := range reg.Sites {
-			add(site.Path)
-		}
-	}
-
 	if len(seen) == 0 {
 		return nil
 	}
@@ -1015,6 +1041,13 @@ const pathMountDebounce = 60 * time.Second
 // volume-mounted, the quadlets are updated and containers restarted
 // transparently before returning.
 func EnsurePathMounted(path, phpVersion string) {
+	// Never bind-mount the filesystem root (or an empty/relative path): it would
+	// inject Volume=/:/:rw into the nginx and FPM quadlets and restart them into
+	// a crun exit 127 (issue #884). This path is reached from `lerd php`, console,
+	// tinker, shell and setup, so a command run from / must not brick nginx.
+	if !bindMountable(path) {
+		return
+	}
 	home, _ := os.UserHomeDir()
 	if home == "" {
 		return

@@ -37,7 +37,14 @@ const FrankenPHPPort = 8000
 // FrankenPHP container. The container mounts the project at its host path,
 // joins the lerd network, and runs the framework's declared entrypoint. Any
 // env map entries are written as Environment= lines.
-func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string) string {
+//
+// A project path that cannot be bind-mounted is refused rather than rendered
+// without its Volume= line, which would leave the container serving nothing
+// (#884).
+func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypoint []string, env map[string]string) (string, error) {
+	if !bindMountable(projectPath) {
+		return "", fmt.Errorf("invalid project path %q for site %s: cannot be bind-mounted into a container", projectPath, siteName)
+	}
 	containerName := FrankenPHPContainerName(siteName)
 	image := FrankenPHPImage(phpVersion)
 
@@ -85,7 +92,7 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	b.WriteString("\n[Install]\n")
 	b.WriteString("WantedBy=default.target\n")
 
-	return b.String()
+	return b.String(), nil
 }
 
 // RestartSiteContainersForVersion restarts every per-site PHP container on the
@@ -132,7 +139,10 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 	_ = EnsureXdebugIni(phpVersion)
 	_ = EnsureDumpAssets()
 	_ = EnsureDevtoolsAssets()
-	content := GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env)
+	content, err := GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env)
+	if err != nil {
+		return false, err
+	}
 	return WriteQuadletDiff(FrankenPHPContainerName(siteName), content)
 }
 
