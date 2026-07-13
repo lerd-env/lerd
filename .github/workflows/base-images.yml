@@ -140,6 +140,11 @@ jobs:
     name: Manifest PHP ${{ matrix.php }}
     runs-on: ubuntu-latest
     needs: build
+    # Run per version even when a sibling build cell failed: a single arch/version
+    # failure must not skip manifest creation for every other version, or the
+    # pullable multi-arch tag never publishes and every install falls back to a
+    # slow from-source build. fail-fast:false keeps the versions independent.
+    if: ${{ !cancelled() }}
     permissions:
       packages: write
     strategy:
@@ -175,6 +180,19 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify both arch images exist
+        run: |
+          BASE="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base"
+          TAG="${{ steps.tag.outputs.tag }}"
+          MISSING=""
+          for a in amd64 arm64; do
+            docker manifest inspect "${BASE}:${TAG}-${a}" > /dev/null 2>&1 || MISSING="$MISSING ${a}"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::PHP ${{ matrix.php }} base build did not publish:$MISSING; manifest not created (this version will build from source on install until it is rebuilt)"
+            exit 1
+          fi
 
       - name: Check if manifest already exists
         id: check

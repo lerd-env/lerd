@@ -60,7 +60,7 @@ Whether you use `lerd worktree add` or the bare `git` command, the daemon's watc
 2. Seed `vendor/` and `node_modules/` from the main repo when the worktree's `composer.lock` / JS lockfile matches main's, using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS) and a plain copy elsewhere.
 3. Sync `.env` from main with `APP_URL` rewritten to the worktree's vhost domain. When `.lerd.yaml` defines `env_overrides`, those templates are resolved instead (see [env overrides](#env-overrides) below).
 4. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
-5. Generate the worktree's nginx vhost.
+5. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
 Frontend build (`npm run build`) is **not** part of the watcher pipeline — it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
 
