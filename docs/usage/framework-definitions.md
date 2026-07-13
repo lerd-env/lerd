@@ -264,6 +264,8 @@ Three placeholders are expanded before the config is written:
 
 A snippet that passes requests to PHP should assign `{{fpm}}` to a variable first, `set $myfpm "{{fpm}}";` then `fastcgi_pass $myfpm:9000;`, exactly as the generated vhost does. nginx resolves a literal upstream name once when the config loads and caches it for the life of the process, so a container that comes back on a new address is never picked up.
 
+A git worktree of the site gets the same block, expanded against its own checkout: `{{root}}` and `{{public}}` point at the worktree's directory, not the parent's, so a branch serves its own `setup/`, `/static/` and `/media/` paths.
+
 The snippet must have balanced braces, since an unbalanced one would close the enclosing `server` block and start declaring its own. Balance alone is not enough, because a `}` followed by a `server {` still balances, so the values substituted into the placeholders are rejected too if they contain `{`, `}`, `;`, `#`, or a newline. A snippet failing either check is dropped and the site renders without it, rather than risking an nginx config that fails to load for every site.
 
 Snippets are only honoured from the framework store and from user-defined definitions: an embedded `framework_def` in a project's `.lerd.yaml` is untrusted input, so its `nginx` block is stripped, the same way its host workers and command-type doctor checks are.

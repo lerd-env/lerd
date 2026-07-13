@@ -556,14 +556,28 @@ func GenerateWorktreeVhostFor(domain, path, phpVersion, parentDomain, siteName, 
 	return GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch)
 }
 
-// worktreeFPMContainer resolves the FPM container a worktree vhost points at:
-// the parent site's per-site container for custom-FPM sites, otherwise the
-// shared lerd-php<ver>-fpm.
-func worktreeFPMContainer(siteName, phpVersion string) string {
-	if site, _ := config.FindSite(siteName); site != nil {
-		return podman.FPMContainerName(*site, phpVersion)
+// worktreeSite rebases the parent site onto the worktree checkout: same
+// framework and public_dir, but rooted at the worktree's path and domain, so
+// everything derived from it (document root, framework nginx block) resolves
+// against the branch's own files. An unregistered parent yields a bare site,
+// which falls back to the shared FPM container and a "public" root.
+func worktreeSite(domain, path, siteName string) config.Site {
+	site := config.Site{Name: siteName, Domains: []string{domain}, Path: path}
+	if parent, _ := config.FindSite(siteName); parent != nil {
+		site = *parent
+		site.Path = path
+		site.Domains = []string{domain}
 	}
-	return "lerd-php" + phpShort(phpVersion) + "-fpm"
+	return site
+}
+
+// worktreeVhostConfig resolves the framework-dependent parts of a worktree
+// vhost, the same three the main-site generators resolve for the parent.
+func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, fpmContainer, frameworkNginx string) {
+	site := worktreeSite(domain, path, siteName)
+	publicDir = resolvePublicDir(site)
+	fpmContainer = podman.FPMContainerName(site, phpVersion)
+	return publicDir, fpmContainer, resolveFrameworkNginx(site, publicDir, fpmContainer)
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -579,18 +593,20 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		return err
 	}
 
+	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	data := VhostData{
 		Domain:          domain,
 		ServerNames:     domain + " *." + domain,
 		Path:            path,
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
-		FPMContainer:    worktreeFPMContainer(siteName, phpVersion),
-		PublicDir:       "public",
+		FPMContainer:    fpmContainer,
+		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path),
+		FrameworkNginx:  frameworkNginx,
 	}
 
 	var buf bytes.Buffer
@@ -619,19 +635,21 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		return err
 	}
 
+	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	data := VhostData{
 		Domain:          domain,
 		ServerNames:     domain + " *." + domain,
 		Path:            path,
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
-		FPMContainer:    worktreeFPMContainer(siteName, phpVersion),
+		FPMContainer:    fpmContainer,
 		CertDomain:      parentDomain,
-		PublicDir:       "public",
+		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path),
+		FrameworkNginx:  frameworkNginx,
 	}
 
 	var buf bytes.Buffer
