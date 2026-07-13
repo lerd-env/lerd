@@ -23,10 +23,18 @@ type extMismatch struct {
 	Platform string // the ext-* name composer actually publishes
 }
 
+// extUnavailable is a requirement no image for this PHP version can satisfy: the
+// extension only exists from a later version, so php:ext add can never build it.
+type extUnavailable struct {
+	Required string // the ext-* name composer.json asks for
+	Since    string // the first PHP version that ships it
+}
+
 // checkExtensions compares composer's ext-* requirements against the image, folding
 // both spellings of an extension onto one name so ext-opcache and ext-zend-opcache
-// resolve to the same module.
-func checkExtensions(detected, bundled, installed []string) ([]string, []extMismatch) {
+// resolve to the same module. A missing extension that is version-gated is reported
+// separately: bundled already excludes it for this version, so it cannot be built.
+func checkExtensions(detected, bundled, installed []string) ([]string, []extUnavailable, []extMismatch) {
 	inSet := func(ext string, set []string) bool {
 		for _, e := range set {
 			if podman.CanonicalExtension(e) == ext {
@@ -37,10 +45,15 @@ func checkExtensions(detected, bundled, installed []string) ([]string, []extMism
 	}
 
 	var missing []string
+	var unavailable []extUnavailable
 	var misnamed []extMismatch
 	for _, ext := range detected {
 		canonical := podman.CanonicalExtension(ext)
 		if !inSet(canonical, bundled) && !inSet(canonical, installed) {
+			if since, gated := podman.BundledSince(canonical); gated {
+				unavailable = append(unavailable, extUnavailable{Required: ext, Since: since})
+				continue
+			}
 			missing = append(missing, ext)
 			continue
 		}
@@ -48,7 +61,7 @@ func checkExtensions(detected, bundled, installed []string) ([]string, []extMism
 			misnamed = append(misnamed, extMismatch{Required: ext, Platform: platform})
 		}
 	}
-	return missing, misnamed
+	return missing, unavailable, misnamed
 }
 
 // warnMissingExtensions checks composer.json for ext-* requirements and warns if any are
@@ -58,11 +71,15 @@ func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfi
 	if len(detected) == 0 {
 		return
 	}
-	missing, misnamed := checkExtensions(detected, podman.BundledExtensions(), cfg.GetExtensions(phpVersion))
+	missing, unavailable, misnamed := checkExtensions(detected, podman.BundledExtensions(phpVersion), cfg.GetExtensions(phpVersion))
 
 	if len(missing) > 0 {
 		fmt.Printf("  [!] %s requires PHP extensions not in the image: %s\n", name, strings.Join(missing, ", "))
 		fmt.Printf("      Run: lerd php:ext add %s\n", strings.Join(missing, " "))
+	}
+	for _, u := range unavailable {
+		fmt.Printf("  [!] %s requires ext-%s, which is not available on PHP %s (first shipped on %s)\n", name, u.Required, phpVersion, u.Since)
+		fmt.Printf("      lerd php:ext add cannot build it. Move the site to PHP %s or newer, or require a polyfill package instead.\n", u.Since)
 	}
 	for _, m := range misnamed {
 		fmt.Printf("  [!] %s requires ext-%s, which composer publishes as ext-%s\n", name, m.Required, m.Platform)

@@ -140,10 +140,11 @@ func TestCheckExtensions(t *testing.T) {
 	installed := []string{"imap"}
 
 	cases := []struct {
-		name         string
-		detected     []string
-		wantMissing  []string
-		wantMisnamed []extMismatch
+		name            string
+		detected        []string
+		wantMissing     []string
+		wantUnavailable []extUnavailable
+		wantMisnamed    []extMismatch
 	}{
 		{
 			// #842: the extension is in the image, but composer publishes it as
@@ -162,6 +163,13 @@ func TestCheckExtensions(t *testing.T) {
 			wantMissing: []string{"snmp"},
 		},
 		{
+			// ext/random is core only from 8.2, so php:ext add can never build it
+			// on an older site. Offering the install is a dead-end image rebuild.
+			name:            "an extension this PHP version cannot ship is explained, not offered for install",
+			detected:        []string{"random"},
+			wantUnavailable: []extUnavailable{{Required: "random", Since: "8.2"}},
+		},
+		{
 			name:     "a custom-installed extension is not missing",
 			detected: []string{"imap"},
 		},
@@ -173,9 +181,12 @@ func TestCheckExtensions(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			missing, misnamed := checkExtensions(c.detected, bundled, installed)
+			missing, unavailable, misnamed := checkExtensions(c.detected, bundled, installed)
 			if !reflect.DeepEqual(missing, c.wantMissing) {
 				t.Errorf("missing = %v, want %v", missing, c.wantMissing)
+			}
+			if !reflect.DeepEqual(unavailable, c.wantUnavailable) {
+				t.Errorf("unavailable = %v, want %v", unavailable, c.wantUnavailable)
 			}
 			if !reflect.DeepEqual(misnamed, c.wantMisnamed) {
 				t.Errorf("misnamed = %v, want %v", misnamed, c.wantMisnamed)

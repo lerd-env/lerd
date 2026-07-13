@@ -112,10 +112,10 @@ jobs:
         run: |
           IMG="ghcr.io/lerd-env/lerd-php${{ steps.tag.outputs.php_short }}-fpm-base:${{ steps.tag.outputs.tag }}-${{ matrix.arch.name }}"
           docker pull "$IMG" >/dev/null
-          MODULES=$(docker run --rm "$IMG" php -m 2>&1 | grep -v '^\[' | sort -u)
-          COUNT=$(echo "$MODULES" | grep -c .)
+          docker run --rm "$IMG" php -m > /tmp/php-modules.txt 2>&1
+          COUNT=$(grep -vc '^\[\|^$' /tmp/php-modules.txt)
           echo "PHP ${{ matrix.php }}: $COUNT modules loaded"
-          echo "$MODULES"
+          cat /tmp/php-modules.txt
           # Drift guard: catch silent extension drops from Containerfile edits.
           # 50 is the safe floor; new modules push the count up, removed ones
           # trip the check here instead of in users' rebuilds.
@@ -123,18 +123,25 @@ jobs:
             echo "::error::PHP ${{ matrix.php }} module count dropped to $COUNT (expected >=50)"
             exit 1
           fi
-          # Spot check the load-bearing ones every framework needs.
-          REQUIRED="curl gd intl mbstring pdo_mysql redis xdebug zip"
-          MISSING=""
-          for ext in $REQUIRED; do
-            echo "$MODULES" | grep -qxF "$ext" || MISSING="$MISSING $ext"
-          done
-          if [ -n "$MISSING" ]; then
-            echo "::error::Critical PHP extensions missing from PHP ${{ matrix.php }}:$MISSING"
-            exit 1
-          fi
           docker run --rm "$IMG" php -r 'exit(count(PDO::getAvailableDrivers()) >= 3 ? 0 : 1);'
           docker run --rm "$IMG" composer --version >/dev/null
+
+      - name: Set up Go
+        if: steps.check.outputs.exists != 'true'
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # The image is the only thing that can falsify BundledExtensions: a name in
+      # the always-compiled core group is a claim about upstream php:fpm-alpine
+      # that nothing in this repo can contradict. Compare the whole advertised set
+      # against `php -m`, which is what the old eight-name spot check never did.
+      - name: Verify the image loads every advertised extension
+        if: steps.check.outputs.exists != 'true'
+        env:
+          LERD_PHP_MODULES: /tmp/php-modules.txt
+          LERD_PHP_VERSION: ${{ matrix.php }}
+        run: go test ./internal/podman -run TestImageReportsAdvertisedExtensions -v
 
   manifest:
     name: Manifest PHP ${{ matrix.php }}

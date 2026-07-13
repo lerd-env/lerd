@@ -33,7 +33,7 @@ func TestCanonicalExtensionIsCaseInsensitive(t *testing.T) {
 // silently orphan its composer counterpart.
 func TestBundledExtensionsUseInstallNames(t *testing.T) {
 	bundled := map[string]bool{}
-	for _, e := range BundledExtensions() {
+	for _, e := range BundledExtensions("8.4") {
 		bundled[e] = true
 	}
 	for install := range composerPlatformNames {
@@ -59,7 +59,7 @@ func TestBundledExtensionsCoverContainerfile(t *testing.T) {
 		t.Fatalf("parsed only %d extensions, parser likely broke: %v", len(installed), installed)
 	}
 	bundled := map[string]bool{}
-	for _, e := range BundledExtensions() {
+	for _, e := range BundledExtensions("8.4") {
 		bundled[e] = true
 	}
 	for _, ext := range installed {
