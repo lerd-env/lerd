@@ -340,6 +340,22 @@ var mariadbReadyArgs = []string{"mariadb-admin", "ping", "-h127.0.0.1", "-P3306"
 // catastrophic failures for the bare-name presets — versioned ones
 // fall through to the systemd-active probe which can report "active"
 // for a few seconds even when the container is crashlooping.
+// rustfsProbeAddr is the host address WaitReady dials to test rustfs readiness.
+// rustfs is probed over TCP from the host rather than via podman exec (the image
+// ships no shell), so the probe must follow the port rustfs is actually published
+// on. HostPorts() is the registry's effective primary: the PublishedPort override
+// the port-ownership guard sets when a host server owns 9000, else the preset
+// default seeded into Port. Without this the dial targets a port nothing is on and
+// WaitReady burns its full timeout on every php/composer call. Empty (rustfs not
+// configured, so not something WaitReady is starting) resolves to nothing to dial.
+func rustfsProbeAddr(svc config.ServiceConfig) string {
+	hp := svc.HostPorts()
+	if len(hp) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("localhost:%d", hp[0])
+}
+
 func readyFamily(service string) string {
 	for _, fam := range []string{"mariadb", "mysql", "postgres", "redis", "rustfs"} {
 		if service == fam || strings.HasPrefix(service, fam+"-") {
@@ -384,8 +400,12 @@ func WaitReady(service string, timeout time.Duration) error {
 			return cmd.Run() == nil
 		}
 	case "rustfs":
+		addr := rustfsProbeAddr(config.ServiceConfigFor(service))
 		probe = func() bool {
-			conn, err := net.DialTimeout("tcp", "localhost:9000", time.Second)
+			if addr == "" {
+				return false
+			}
+			conn, err := net.DialTimeout("tcp", addr, time.Second)
 			if err != nil {
 				return false
 			}
