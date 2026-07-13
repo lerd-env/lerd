@@ -375,7 +375,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("no framework detected for this site\nDefine one with 'lerd framework add' or add a framework YAML to %s", config.FrameworksDir())
 	}
 
-	fw, ok := config.GetFramework(fwName)
+	fw, ok := config.GetFrameworkForDir(fwName, cwd)
 	if !ok {
 		return fmt.Errorf("framework %q is not defined\nDefine it with 'lerd framework add'", fwName)
 	}
