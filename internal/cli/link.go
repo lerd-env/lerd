@@ -422,6 +422,10 @@ func runLink(args []string) error {
 	}
 	printLinkSummary(site, start)
 
+	// Warn before the setup prompt below: an ext-* requirement the image cannot
+	// satisfy fails composer install, which is the first thing setup runs.
+	warnMissingExtensions(cwd, site.Name, phpVersion, cfg)
+
 	// Sail detection — offer to import data before setup so lerd's DB is
 	// populated from the existing Sail environment. Gate on Sail actually being
 	// initialized (a compose file), not just the laravel/sail dev dependency

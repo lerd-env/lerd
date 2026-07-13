@@ -392,3 +392,11 @@ When you run `lerd park` or `lerd link`, Lerd reads `composer.json` and warns if
 [!] my-app requires PHP extensions not in the image: swoole
     Run: lerd php:ext add swoole
 ```
+
+A requirement can also fail even though the extension is in the image, because composer names a few extensions differently from the name they are installed under. Composer builds its `ext-*` names from the module name PHP reports, and OPcache reports itself as `Zend OPcache`, so composer publishes `ext-zend-opcache` and never `ext-opcache`. A `composer.json` asking for `ext-opcache` therefore fails its platform check on `composer install` even though OPcache is loaded, and `lerd php:ext add opcache` will not help because nothing is actually missing. Lerd recognises both spellings and tells you which one composer wants:
+
+```
+[!] my-app requires ext-opcache, which composer publishes as ext-zend-opcache
+    The extension is in the image; composer install will still fail its platform check.
+    Require ext-zend-opcache in composer.json instead.
+```
