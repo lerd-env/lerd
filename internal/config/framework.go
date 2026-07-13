@@ -745,8 +745,10 @@ var symfonyFramework = &Framework{
 		{Composer: "symfony/framework-bundle"},
 	},
 	Env: FrameworkEnvConf{
-		File:        ".env",
-		ExampleFile: ".env.example",
+		// Symfony commits .env and gitignores .env.local as the local override,
+		// so lerd writes its connection values into .env.local, seeded from .env.
+		File:        ".env.local",
+		ExampleFile: ".env",
 		Format:      "dotenv",
 		Services: map[string]FrameworkServiceDef{
 			"mysql": {

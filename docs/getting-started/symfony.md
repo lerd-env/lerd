@@ -27,8 +27,8 @@ public_dir: public
 create: composer create-project symfony/skeleton
 console: bin/console
 env:
-  file: .env
-  example_file: .env.dist
+  file: .env.local
+  example_file: .env
   format: dotenv
   url_key: DEFAULT_URI
   services:
@@ -197,7 +197,7 @@ App logs (anything in `var/log/*.log`) show up in the [Web UI](../features/web-u
 | `lerd framework add symfony` | Registered the YAML so Symfony projects are auto-detected |
 | `lerd link` | Assigned `myapp.test`, set document root to `public/` |
 | `lerd init` | Wrote `.lerd.yaml` with PHP, Node, MySQL, Mailpit, messenger |
-| `lerd env` (via setup) | Wrote `DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/myapp?serverVersion=8.0` and `MAILER_DSN=smtp://lerd-mailpit:1025` into `.env` |
+| `lerd env` (via setup) | Wrote `DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/myapp?serverVersion=8.0` and `MAILER_DSN=smtp://lerd-mailpit:1025` into `.env.local`, seeded from the committed `.env` |
 | `lerd secure` (via setup) | Issued mkcert cert, set `DEFAULT_URI=https://myapp.test` |
 | Doctrine migrations + cache:clear | Ran via the framework's `setup:` block |
 | `lerd worker start messenger` (via setup) | Launched `lerd-messenger-myapp` |

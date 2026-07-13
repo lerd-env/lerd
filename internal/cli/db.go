@@ -160,7 +160,7 @@ func resolveDBFromFramework(cwd string) *dbEnv {
 	if !ok {
 		return nil
 	}
-	fw, ok := config.GetFramework(fwName)
+	fw, ok := config.GetFrameworkForDir(fwName, cwd)
 	if !ok || len(fw.Env.Services) == 0 {
 		return nil
 	}

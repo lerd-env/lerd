@@ -130,6 +130,25 @@ func TestGetFrameworkCustom_WithLogs(t *testing.T) {
 	}
 }
 
+// The built-in Symfony def must follow Symfony's env convention: lerd writes its
+// connection values into .env.local (the gitignored local override), seeded from
+// the committed .env. Keeping the built-in aligned with the store def stops the
+// two from contradicting each other on the offline fallback path.
+func TestGetFrameworkSymfony_BuiltinEnvTargetsEnvLocal(t *testing.T) {
+	setConfigDir(t)
+
+	fw, ok := GetFramework("symfony")
+	if !ok {
+		t.Fatal("GetFramework(symfony): not found")
+	}
+	if fw.Env.File != ".env.local" {
+		t.Errorf("Env.File = %q, want .env.local", fw.Env.File)
+	}
+	if fw.Env.ExampleFile != ".env" {
+		t.Errorf("Env.ExampleFile = %q, want .env", fw.Env.ExampleFile)
+	}
+}
+
 func TestGetFrameworkCustom_WithoutLogs(t *testing.T) {
 	setConfigDir(t)
 
