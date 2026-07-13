@@ -61,6 +61,25 @@ func RunPHPCapture(cwd string, args []string) (int, error) {
 	return RunPHPCaptureEnv(cwd, args, nil)
 }
 
+// phpVersionForDir resolves the PHP version a directory's commands must run on.
+// A registered site's version wins: lerd link clamps to the framework's supported
+// range, so re-detecting here would run composer, console and php:shell on a
+// different PHP than the FPM container serving the site.
+func phpVersionForDir(dir string) (string, error) {
+	if site, _ := config.FindSiteByPath(siteRootFor(dir)); site != nil && site.PHPVersion != "" {
+		return site.PHPVersion, nil
+	}
+	version, err := phpDet.DetectVersion(dir)
+	if err == nil {
+		return version, nil
+	}
+	cfg, cfgErr := config.LoadGlobal()
+	if cfgErr != nil {
+		return "", fmt.Errorf("cannot detect PHP version: %w", err)
+	}
+	return cfg.PHP.DefaultVersion, nil
+}
+
 // fpmContainerForDir resolves the FPM container an exec in dir should target:
 // the per-site container for custom-FPM sites, otherwise the shared
 // lerd-php<version>-fpm container. dir may be a subdirectory of the project, so
@@ -82,13 +101,9 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 	// The CLI SAPI ignores a project's .user.ini, so a framework declaring
 	// php.cli_ini gets it as -d on every PHP process lerd starts for it.
 	args = prependPHPIniArgs(phpIniArgsForDir(cwd), args)
-	version, err := phpDet.DetectVersion(cwd)
+	version, err := phpVersionForDir(cwd)
 	if err != nil {
-		cfg, cfgErr := config.LoadGlobal()
-		if cfgErr != nil {
-			return 0, fmt.Errorf("cannot detect PHP version: %w", err)
-		}
-		version = cfg.PHP.DefaultVersion
+		return 0, err
 	}
 
 	container := fpmContainerForDir(cwd, version)

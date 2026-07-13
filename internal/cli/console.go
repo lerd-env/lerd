@@ -1,12 +1,10 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -37,13 +35,9 @@ func runConsole(_ *cobra.Command, args []string) error {
 		return err
 	}
 
-	version, err := phpDet.DetectVersion(cwd)
+	version, err := phpVersionForDir(cwd)
 	if err != nil {
-		cfg, cfgErr := config.LoadGlobal()
-		if cfgErr != nil {
-			return fmt.Errorf("cannot detect PHP version: %w", err)
-		}
-		version = cfg.PHP.DefaultVersion
+		return err
 	}
 
 	container := fpmContainerForDir(cwd, version)

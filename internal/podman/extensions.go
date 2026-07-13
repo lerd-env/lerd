@@ -1,10 +1,24 @@
 package podman
 
-import "strings"
+import (
+	"bufio"
+	"fmt"
+	"strings"
+)
 
-// BundledExtensions returns the set of PHP extensions included in the default lerd FPM image.
-func BundledExtensions() []string {
-	return []string{
+// bundledSince records the first PHP version whose image actually ships an
+// extension. ext/random is core only from 8.2, and PECL mongodb no longer builds
+// below 8.1, where the Containerfile's tolerant `|| true` drops it silently.
+var bundledSince = map[string][2]int{
+	"random":  {8, 2},
+	"mongodb": {8, 1},
+}
+
+// BundledExtensions returns the PHP extensions the default lerd FPM image ships
+// for phpVersion. Version-gated names are left out of the versions that do not
+// build them, so no caller advertises an extension the image never loads.
+func BundledExtensions(phpVersion string) []string {
+	all := []string{
 		// always-compiled PHP core
 		"ctype", "date", "dom", "fileinfo", "filter", "hash", "iconv",
 		"json", "libxml", "mysqlnd", "openssl", "pcre", "pdo", "phar", "posix",
@@ -18,6 +32,37 @@ func BundledExtensions() []string {
 		// PECL
 		"redis", "imagick", "igbinary", "mongodb", "pcov", "xdebug",
 	}
+
+	bundled := make([]string, 0, len(all))
+	for _, ext := range all {
+		if since, gated := bundledSince[ext]; gated && !phpAtLeast(phpVersion, since[0], since[1]) {
+			continue
+		}
+		bundled = append(bundled, ext)
+	}
+	return bundled
+}
+
+// BundledSince returns the first PHP version that ships ext, for the extensions an
+// older image genuinely cannot build. The second result is false for every other
+// extension, which is the ones php:ext add can install on request.
+func BundledSince(ext string) (string, bool) {
+	since, gated := bundledSince[CanonicalExtension(ext)]
+	if !gated {
+		return "", false
+	}
+	return fmt.Sprintf("%d.%d", since[0], since[1]), true
+}
+
+// phpAtLeast reports whether phpVersion is at least major.minor. A version that
+// will not parse is treated as new enough: the gated extensions are the exception,
+// and advertising them is the behaviour every supported version already gets.
+func phpAtLeast(phpVersion string, wantMajor, wantMinor int) bool {
+	major, minor, err := splitMajorMinor(phpVersion)
+	if err != nil {
+		return true
+	}
+	return versionAtLeast(major, minor, wantMajor, wantMinor)
 }
 
 // composerPlatformNames maps an extension's install name to the name composer's
@@ -37,13 +82,44 @@ func ComposerPlatformName(ext string) string {
 }
 
 // CanonicalExtension folds a composer ext-* name back onto the install name
-// BundledExtensions uses, so both spellings resolve to the same extension.
+// BundledExtensions uses, so both spellings resolve to the same extension. The
+// space fold also lands `php -m`'s "Zend OPcache" on the same name.
 func CanonicalExtension(name string) string {
-	name = strings.ToLower(name)
+	name = strings.ReplaceAll(strings.ToLower(strings.TrimSpace(name)), " ", "-")
 	for install, platform := range composerPlatformNames {
 		if platform == name {
 			return install
 		}
 	}
 	return name
+}
+
+// phpModules folds `php -m` output into the install names BundledExtensions uses:
+// the module list prints display names, so PDO, SimpleXML and "Zend OPcache" all
+// have to be canonicalised, and the [PHP Modules] section headers skipped.
+func phpModules(out string) map[string]bool {
+	modules := map[string]bool{}
+	scanner := bufio.NewScanner(strings.NewReader(out))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "[") {
+			continue
+		}
+		modules[CanonicalExtension(line)] = true
+	}
+	return modules
+}
+
+// MissingBundledExtensions returns every extension BundledExtensions advertises
+// for phpVersion that the image's `php -m` output does not report. Only the built
+// image can falsify the list, so this is what CI runs against a fresh build.
+func MissingBundledExtensions(phpVersion, phpMinusM string) []string {
+	modules := phpModules(phpMinusM)
+	var missing []string
+	for _, ext := range BundledExtensions(phpVersion) {
+		if !modules[CanonicalExtension(ext)] {
+			missing = append(missing, ext)
+		}
+	}
+	return missing
 }

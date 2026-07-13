@@ -382,6 +382,12 @@ func runLink(args []string) error {
 		return fmt.Errorf("registering site: %w", err)
 	}
 
+	// Custom-FPM takes its version from the Containerfile and host-proxy sites have
+	// none, so neither has a version the file should pin.
+	if !site.IsCustomContainer() && !site.IsHostProxy() {
+		_ = syncPHPVersionFile(cwd, site.PHPVersion)
+	}
+
 	// A re-link of a site that dropped its frankenphp or custom-FPM runtime
 	// leaves the old per-site quadlet behind; reconcile it to the site's real type.
 	reconcileStaleRuntimeQuadlets(site)
