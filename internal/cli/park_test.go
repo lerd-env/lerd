@@ -3,6 +3,7 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -129,6 +130,57 @@ func TestFreeSiteName_legacyDomainField(t *testing.T) {
 	got := freeSiteName("myapp", "/projects/new")
 	if got != "myapp-2" {
 		t.Errorf("got %q, want %q", got, "myapp-2")
+	}
+}
+
+// ── checkExtensions ──────────────────────────────────────────────────────────
+
+func TestCheckExtensions(t *testing.T) {
+	bundled := []string{"opcache", "redis", "mbstring"}
+	installed := []string{"imap"}
+
+	cases := []struct {
+		name         string
+		detected     []string
+		wantMissing  []string
+		wantMisnamed []extMismatch
+	}{
+		{
+			// #842: the extension is in the image, but composer publishes it as
+			// ext-zend-opcache, so composer install fails its platform check.
+			name:         "ext-opcache is present but misnamed",
+			detected:     []string{"opcache"},
+			wantMisnamed: []extMismatch{{Required: "opcache", Platform: "zend-opcache"}},
+		},
+		{
+			name:     "ext-zend-opcache resolves against the bundled opcache",
+			detected: []string{"zend-opcache"},
+		},
+		{
+			name:        "a genuinely absent extension is still reported",
+			detected:    []string{"snmp"},
+			wantMissing: []string{"snmp"},
+		},
+		{
+			name:     "a custom-installed extension is not missing",
+			detected: []string{"imap"},
+		},
+		{
+			name:     "a plainly bundled extension is silent",
+			detected: []string{"redis", "mbstring"},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			missing, misnamed := checkExtensions(c.detected, bundled, installed)
+			if !reflect.DeepEqual(missing, c.wantMissing) {
+				t.Errorf("missing = %v, want %v", missing, c.wantMissing)
+			}
+			if !reflect.DeepEqual(misnamed, c.wantMisnamed) {
+				t.Errorf("misnamed = %v, want %v", misnamed, c.wantMisnamed)
+			}
+		})
 	}
 }
 

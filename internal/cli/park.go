@@ -16,19 +16,20 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// warnMissingExtensions checks composer.json for ext-* requirements and warns if any are
-// not covered by the bundled image or the user's custom extension list.
-func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfig) {
-	detected := phpDet.DetectExtensions(dir)
-	if len(detected) == 0 {
-		return
-	}
-	bundled := podman.BundledExtensions()
-	installed := cfg.GetExtensions(phpVersion)
+// extMismatch is a composer.json requirement whose extension is in the image but
+// under a different platform name, so composer install still fails its check.
+type extMismatch struct {
+	Required string // the ext-* name composer.json asks for
+	Platform string // the ext-* name composer actually publishes
+}
 
+// checkExtensions compares composer's ext-* requirements against the image, folding
+// both spellings of an extension onto one name so ext-opcache and ext-zend-opcache
+// resolve to the same module.
+func checkExtensions(detected, bundled, installed []string) ([]string, []extMismatch) {
 	inSet := func(ext string, set []string) bool {
 		for _, e := range set {
-			if e == ext {
+			if podman.CanonicalExtension(e) == ext {
 				return true
 			}
 		}
@@ -36,14 +37,37 @@ func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfi
 	}
 
 	var missing []string
+	var misnamed []extMismatch
 	for _, ext := range detected {
-		if !inSet(ext, bundled) && !inSet(ext, installed) {
+		canonical := podman.CanonicalExtension(ext)
+		if !inSet(canonical, bundled) && !inSet(canonical, installed) {
 			missing = append(missing, ext)
+			continue
+		}
+		if platform := podman.ComposerPlatformName(canonical); platform != strings.ToLower(ext) {
+			misnamed = append(misnamed, extMismatch{Required: ext, Platform: platform})
 		}
 	}
+	return missing, misnamed
+}
+
+// warnMissingExtensions checks composer.json for ext-* requirements and warns if any are
+// not covered by the bundled image or the user's custom extension list.
+func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfig) {
+	detected := phpDet.DetectExtensions(dir)
+	if len(detected) == 0 {
+		return
+	}
+	missing, misnamed := checkExtensions(detected, podman.BundledExtensions(), cfg.GetExtensions(phpVersion))
+
 	if len(missing) > 0 {
 		fmt.Printf("  [!] %s requires PHP extensions not in the image: %s\n", name, strings.Join(missing, ", "))
 		fmt.Printf("      Run: lerd php:ext add %s\n", strings.Join(missing, " "))
+	}
+	for _, m := range misnamed {
+		fmt.Printf("  [!] %s requires ext-%s, which composer publishes as ext-%s\n", name, m.Required, m.Platform)
+		fmt.Printf("      The extension is in the image; composer install will still fail its platform check.\n")
+		fmt.Printf("      Require ext-%s in composer.json instead.\n", m.Platform)
 	}
 }
 
