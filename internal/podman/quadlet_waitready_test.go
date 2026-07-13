@@ -3,6 +3,8 @@ package podman
 import (
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestMySQLReadinessProbeForcesTCP(t *testing.T) {
@@ -35,6 +37,24 @@ func TestMariaDBReadinessProbeUsesMariaDBAdmin(t *testing.T) {
 	}
 	if !strings.Contains(joined, "-h127.0.0.1") {
 		t.Errorf("mariadb readiness probe must force TCP via -h127.0.0.1, got: %s", joined)
+	}
+}
+
+func TestRustFSProbeAddrFollowsPublishedPort(t *testing.T) {
+	// rustfs is the one service probed by a host-side TCP dial rather than an
+	// in-container exec, so its probe must target the port rustfs is actually
+	// published on, read from the registry's effective host port. When the
+	// port-ownership guard or `lerd service port` moves rustfs off 9000 (a host
+	// server owns it), a dial to a hardcoded 9000 never connects and WaitReady
+	// burns its full timeout on every php/composer call.
+	if got := rustfsProbeAddr(config.ServiceConfig{Port: 9000}); got != "localhost:9000" {
+		t.Errorf("preset default: rustfsProbeAddr = %q, want localhost:9000", got)
+	}
+	if got := rustfsProbeAddr(config.ServiceConfig{Port: 9000, PublishedPort: 9002}); got != "localhost:9002" {
+		t.Errorf("moved published port: rustfsProbeAddr = %q, want localhost:9002", got)
+	}
+	if got := rustfsProbeAddr(config.ServiceConfig{}); got != "" {
+		t.Errorf("unconfigured: rustfsProbeAddr = %q, want empty (nothing to dial)", got)
 	}
 }
 

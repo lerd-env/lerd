@@ -116,6 +116,18 @@ func ServicePublishedPort(name string) int {
 	return 0
 }
 
+// ServiceConfigFor returns the global config entry for a service (its ports,
+// image pin and enabled flag), or the zero ServiceConfig when the service isn't
+// configured. Callers that need the effective host ports read HostPorts() off it
+// so the preset default and any override resolve from the one registry.
+func ServiceConfigFor(name string) ServiceConfig {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return ServiceConfig{}
+	}
+	return cfg.Services[name]
+}
+
 // ServicePublishedPorts returns the per-container-port host overrides for a
 // service's secondary mappings (nil when none). The primary override lives in
 // ServicePublishedPort; these cover the extra ports a multi-port service exposes.
