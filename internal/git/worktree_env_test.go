@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
 )
 
 // EnsureWorktreeEnv must materialise .env in a fresh worktree (git worktree
@@ -367,5 +368,237 @@ func TestEnsureWorktreeEnv_noopWhenMainHasNoEnv(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
 		t.Errorf("expected no .env in worktree, got err=%v", err)
+	}
+}
+
+// Symfony commits .env and gitignores .env.local as the local override, so lerd
+// writes its connection values into .env.local and its base URL under DEFAULT_URI.
+// A worktree must seed that file and rewrite that key, not a hardcoded root .env
+// with APP_URL, which the app never reads.
+func TestEnsureWorktreeEnv_symfonySeedsEnvLocalAndDefaultURI(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	main := t.TempDir()
+	wt := t.TempDir()
+
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("framework: symfony\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	envLocal := "DEFAULT_URI=https://acme.test\nDATABASE_URL=mysql://root:lerd@lerd-mysql:3306/acme\n"
+	if err := os.WriteFile(filepath.Join(main, ".env.local"), []byte(envLocal), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat-a.acme.test", true)
+
+	got, err := os.ReadFile(filepath.Join(wt, ".env.local"))
+	if err != nil {
+		t.Fatalf("worktree .env.local not seeded: %v", err)
+	}
+	s := string(got)
+	if !strings.Contains(s, "DEFAULT_URI=https://feat-a.acme.test") {
+		t.Errorf("DEFAULT_URI not rewritten to worktree domain:\n%s", s)
+	}
+	if !strings.Contains(s, "DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/acme") {
+		t.Errorf(".env.local not seeded in full:\n%s", s)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
+		t.Errorf("a root .env was wrongly created for a Symfony worktree")
+	}
+}
+
+// The env file and url_key are resolved from the framework definition, so a
+// framework serving its env from config/.env under app.baseURL (CodeIgniter's
+// shape) is addressed through the store def, not the hardcoded .env / APP_URL.
+func TestEnsureWorktreeEnv_resolvesStoreFileAndURLKey(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: igniter\nlabel: Igniter\nenv:\n  file: config/.env\n  url_key: app.baseURL\n  format: dotenv\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "igniter.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("framework: igniter\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(main, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(main, "config", ".env"), []byte("app.baseURL='http://acme.test'\nKEEP=1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// The committed config/ dir exists in the checkout; only the env is gitignored.
+	if err := os.MkdirAll(filepath.Join(wt, "config"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat-a.acme.test", false)
+
+	got, err := os.ReadFile(filepath.Join(wt, "config", ".env"))
+	if err != nil {
+		t.Fatalf("worktree config/.env not seeded: %v", err)
+	}
+	s := string(got)
+	if !strings.Contains(s, "app.baseURL=http://feat-a.acme.test") {
+		t.Errorf("app.baseURL not rewritten:\n%s", s)
+	}
+	if !strings.Contains(s, "KEEP=1") {
+		t.Errorf("config/.env not seeded in full:\n%s", s)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
+		t.Errorf("a root .env was wrongly created")
+	}
+}
+
+// Magento's env is a php-array file (app/etc/env.php) nested under app/etc, and
+// its base URL lives in the database so it declares no url_key. The worktree must
+// seed that file so its database credentials carry across, write no root .env,
+// and leave the file's values otherwise intact (no url rewrite).
+func TestEnsureWorktreeEnv_seedsPhpArrayEnvFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: magish\nlabel: Magish\npublic_dir: pub\nenv:\n  file: app/etc/env.php\n  format: php-array\n  url_key: none\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "magish.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("framework: magish\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(main, "app", "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envPhp := "<?php\nreturn [\n    'db' => ['connection' => ['default' => ['host' => 'lerd-mysql', 'dbname' => 'shop']]],\n];\n"
+	if err := os.WriteFile(filepath.Join(main, "app", "etc", "env.php"), []byte(envPhp), 0644); err != nil {
+		t.Fatal(err)
+	}
+	// A stray root .env in main must not be copied across for a php-format site.
+	if err := os.WriteFile(filepath.Join(main, ".env"), []byte("STRAY=1\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(wt, "app", "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", false)
+
+	vals, err := envfile.ReadPhpArray(filepath.Join(wt, "app", "etc", "env.php"))
+	if err != nil {
+		t.Fatalf("worktree app/etc/env.php not seeded: %v", err)
+	}
+	if vals["db.connection.default.host"] != "lerd-mysql" || vals["db.connection.default.dbname"] != "shop" {
+		t.Errorf("database credentials not carried across: %+v", vals)
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
+		t.Errorf("a root .env was wrongly created for a php-array site")
+	}
+}
+
+// A framework whose url_key is none but which declares worktree_url_keys (Magento
+// overriding its database-hosted base URL through env.php) must have each of those
+// keys pointed at the worktree's own domain so it serves itself instead of
+// redirecting to the parent.
+func TestEnsureWorktreeEnv_writesWorktreeURLKeys(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: magish\nlabel: Magish\nenv:\n  file: app/etc/env.php\n  format: php-array\n  url_key: none\n  worktree_url_keys:\n    - system.default.web.unsecure.base_url\n    - system.default.web.secure.base_url\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "magish.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("framework: magish\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(main, "app", "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	envPhp := "<?php\nreturn [\n    'db' => ['connection' => ['default' => ['host' => 'lerd-mysql', 'dbname' => 'shop']]],\n];\n"
+	if err := os.WriteFile(filepath.Join(main, "app", "etc", "env.php"), []byte(envPhp), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(wt, "app", "etc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.shop.test", true)
+
+	vals, err := envfile.ReadPhpArray(filepath.Join(wt, "app", "etc", "env.php"))
+	if err != nil {
+		t.Fatalf("worktree app/etc/env.php not seeded: %v", err)
+	}
+	if got := vals["system.default.web.unsecure.base_url"]; got != "https://feat.shop.test/" {
+		t.Errorf("unsecure base_url = %q, want https://feat.shop.test/", got)
+	}
+	if got := vals["system.default.web.secure.base_url"]; got != "https://feat.shop.test/" {
+		t.Errorf("secure base_url = %q, want https://feat.shop.test/", got)
+	}
+	// DB credentials still carry across alongside the base URL override.
+	if vals["db.connection.default.dbname"] != "shop" {
+		t.Errorf("database credentials not preserved: %+v", vals)
+	}
+}
+
+// WordPress's env is a php-const file (wp-config.php) whose base URL key is
+// WP_HOME. The worktree must seed the file and rewrite WP_HOME through the
+// php-const writer, not the dotenv one.
+func TestEnsureWorktreeEnv_seedsPhpConstAndRewritesURLKey(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: wpish\nlabel: WPish\nenv:\n  file: wp-config.php\n  url_key: WP_HOME\n  format: php-const\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "wpish.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	main := t.TempDir()
+	wt := t.TempDir()
+	if err := os.WriteFile(filepath.Join(main, ".lerd.yaml"), []byte("framework: wpish\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	wpConfig := "<?php\ndefine('WP_HOME','http://acme.test');\ndefine('DB_NAME','wp');\n"
+	if err := os.WriteFile(filepath.Join(main, "wp-config.php"), []byte(wpConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	EnsureWorktreeEnv(main, wt, "feat.acme.test", true)
+
+	vals, err := envfile.ReadPhpConst(filepath.Join(wt, "wp-config.php"))
+	if err != nil {
+		t.Fatalf("worktree wp-config.php not seeded: %v", err)
+	}
+	if vals["WP_HOME"] != "https://feat.acme.test" {
+		t.Errorf("WP_HOME not rewritten to worktree domain: %q", vals["WP_HOME"])
+	}
+	if vals["DB_NAME"] != "wp" {
+		t.Errorf("DB_NAME not carried across: %q", vals["DB_NAME"])
+	}
+	if _, err := os.Stat(filepath.Join(wt, ".env")); !os.IsNotExist(err) {
+		t.Errorf("a root .env was wrongly created for a php-const site")
 	}
 }

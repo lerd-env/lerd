@@ -58,7 +58,7 @@ Whether you use `lerd worktree add` or the bare `git` command, the daemon's watc
 
 1. Wait for `HEAD` to be a final ref or SHA — git writes `gitdir`/`HEAD` over multiple steps and the watcher must avoid acting on a half-written detached state.
 2. Seed `vendor/` and `node_modules/` from the main repo when the worktree's `composer.lock` / JS lockfile matches main's, using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS) and a plain copy elsewhere.
-3. Sync `.env` from main with `APP_URL` rewritten to the worktree's vhost domain. When `.lerd.yaml` defines `env_overrides`, those templates are resolved instead (see [env overrides](#env-overrides) below).
+3. Sync the framework's env file from main with its base-URL key rewritten to the worktree's vhost domain. The file, its format and the key all come from the framework definition, so Laravel gets `.env` / `APP_URL`, Symfony `.env.local` / `DEFAULT_URI`, CodeIgniter `config/.env` / `app.baseURL`, and the PHP-config frameworks are seeded through their own writers: WordPress's `wp-config.php` (rewriting `WP_HOME`) and Magento's `app/etc/env.php` (carried across for its database credentials; Magento keeps its base URL in the database, so it declares no key and the file is otherwise left intact). When `.lerd.yaml` defines `env_overrides`, those dotenv templates are resolved on top (see [env overrides](#env-overrides) below).
 4. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
 5. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
@@ -71,7 +71,7 @@ Frontend build (`npm run build`) is **not** part of the watcher pipeline — it'
 | `vendor/` | Reflink/copy from main when `composer.lock` matches; otherwise skip and let `composer install` build from scratch (no stale autoload entries). |
 | `node_modules/` | Same lockfile-match guard against `pnpm-lock.yaml` / `yarn.lock` / `bun.lock*` / `package-lock.json` / `npm-shrinkwrap.json` (whichever exists). |
 | `public/build/` | Not seeded. Run `npm run dev` (Vite dev server, hot reload) or `npm run build` (static manifest) inside the worktree. |
-| `.env` | Copied from main; `APP_URL` rewritten to `http(s)://<branch>.<site>.test` (or resolved via `env_overrides` when defined). Realigned on every subsequent watcher pass so a branch rename keeps the value current. |
+| env file | The framework's env file (Laravel `.env`, Symfony `.env.local`, CakePHP `config/.env`) copied from main; the framework's base-URL key (`APP_URL`, `DEFAULT_URI`, `app.baseURL`) rewritten to `http(s)://<branch>.<site>.test` (or resolved via `env_overrides` when defined). Realigned on every subsequent watcher pass so a branch rename keeps the value current. |
 
 ::: info Why not symlink?
 Earlier lerd versions symlinked `vendor/` to save disk. PHP resolves `__DIR__` through symlinks to the real path, so Composer's `ClassLoader` would initialise against the main repo and silently load stale classes. Real copies (or reflinks) avoid the problem at no meaningful disk cost on modern filesystems.
@@ -90,11 +90,11 @@ lerd secure myapp
 # app.feature-auth.myapp.test         → https  (wildcard SAN)
 ```
 
-`APP_URL` in each worktree's `.env` is rewritten to `https://` when you secure the parent (and back to `http://` on `lerd unsecure`).
+The framework's base-URL key in each worktree's env file (`APP_URL` for Laravel, `DEFAULT_URI` for Symfony) is rewritten to `https://` when you secure the parent (and back to `http://` on `lerd unsecure`).
 
 ## Env overrides
 
-By default lerd only rewrites `APP_URL` in worktree `.env` files. Multi-tenant apps and other projects that derive multiple env variables from the site domain can define `env_overrides` in `.lerd.yaml`:
+By default lerd only rewrites the framework's base-URL key in worktree env files. Multi-tenant apps and other projects that derive multiple env variables from the site domain can define `env_overrides` in `.lerd.yaml`:
 
 ```yaml
 env_overrides:
@@ -165,7 +165,7 @@ Site-level resources stay shared and cannot be overridden per worktree: domain (
 
 ### Per-worktree database
 
-By default every worktree shares the parent site's database. The dashboard's **Isolated DB** toggle and the `lerd worktree add` prompt opt the worktree into its own schema, named `<parent_db>_<sanitized_branch>` in the same service the parent uses (mysql, mariadb, or postgres). The worktree's `.env` is rewritten so `DB_DATABASE` points at the new schema, and `db_isolated: true` is persisted to the worktree's `.lerd.yaml` so the choice travels with the branch.
+By default every worktree shares the parent site's database. The dashboard's **Isolated DB** toggle and the `lerd worktree add` prompt opt the worktree into its own schema, named `<parent_db>_<sanitized_branch>` in the same service the parent uses (mysql, mariadb, or postgres). The worktree's env file is rewritten so its database-name key points at the new schema, and `db_isolated: true` is persisted to the worktree's `.lerd.yaml` so the choice travels with the branch. The env file, its format and the host/name keys are resolved from the framework definition, so Laravel's `DB_DATABASE` in `.env` and Magento's `db.connection.default.dbname` in `app/etc/env.php` are rewritten the same way.
 
 When isolation is enabled lerd asks where the new schema should start from:
 
@@ -180,7 +180,7 @@ The isolated database survives `lerd worktree remove` by default — the wrapper
 - **Reuse preserved isolated DB** — reconnects the worktree to the same data with no schema changes.
 - **Reset preserved DB to a fresh empty schema** — drops the existing DB, recreates it empty, then offers to run migrations.
 
-The same toggle is available on the dashboard for already-active worktrees: flipping **Isolated DB** off opens a confirmation modal naming the database that is about to go, and on confirm it drops the database and restores the parent's `DB_DATABASE` value in `.env`. The toggle only appears when the parent uses a lerd-managed mysql/mariadb/postgres service. Sqlite is naturally file-based and isolated per checkout, no opt-in needed.
+The same toggle is available on the dashboard for already-active worktrees: flipping **Isolated DB** off opens a confirmation modal naming the database that is about to go, and on confirm it drops the database and restores the parent's database-name value in the worktree's env file. The toggle only appears when the parent uses a lerd-managed mysql/mariadb/postgres service. Sqlite is naturally file-based and isolated per checkout, no opt-in needed.
 
 ### Per-worktree LAN share
 

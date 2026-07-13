@@ -404,6 +404,14 @@ type FrameworkEnvConf struct {
 	// URLKey is the env key that holds the application URL (default: APP_URL).
 	URLKey string `yaml:"url_key,omitempty"`
 
+	// WorktreeURLKeys are env keys set to the worktree's own base URL
+	// ("<scheme>://<domain>/") on every worktree. They exist for frameworks
+	// whose canonical base URL lives outside the env file — Magento keeps its in
+	// the database, so url_key is "none", but env.php's web.*.base_url overrides
+	// the database and is what lets a worktree serve on its own domain instead of
+	// redirecting to the parent. Written verbatim through the env format's writer.
+	WorktreeURLKeys []string `yaml:"worktree_url_keys,omitempty"`
+
 	// Vars are unconditional KEY=VALUE env defaults the framework always wants
 	// applied during `lerd env`, regardless of which services are detected
 	// (e.g. CodeIgniter's CI_ENVIRONMENT=development for local dev). They
@@ -747,9 +755,11 @@ var symfonyFramework = &Framework{
 	Env: FrameworkEnvConf{
 		// Symfony commits .env and gitignores .env.local as the local override,
 		// so lerd writes its connection values into .env.local, seeded from .env.
+		// Symfony's base URL lives under DEFAULT_URI, not APP_URL.
 		File:        ".env.local",
 		ExampleFile: ".env",
 		Format:      "dotenv",
+		URLKey:      "DEFAULT_URI",
 		Services: map[string]FrameworkServiceDef{
 			"mysql": {
 				Detect: []FrameworkServiceDetect{{Key: "DATABASE_URL", ValuePrefix: "mysql"}},
