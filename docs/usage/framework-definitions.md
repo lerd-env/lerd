@@ -42,7 +42,10 @@ env:
   format: dotenv                    # dotenv | php-const | php-array
   fallback_file: wp-config.php      # used when file doesn't exist
   fallback_format: php-const        # format for fallback_file
-  url_key: APP_URL                  # env key holding the app URL
+  url_key: APP_URL                  # env key holding the app URL (or "none")
+  worktree_url_keys:                # keys set to a worktree's own base URL
+    - system.default.web.unsecure.base_url
+    - system.default.web.secure.base_url
 
   # Application key generation
   key_generation:
@@ -108,6 +111,11 @@ env:
   url_key: DEFAULT_URI            # env key holding the app URL (default: APP_URL;
                                   # `none` opts out for frameworks that keep the
                                   # base URL elsewhere, e.g. Magento's database)
+  worktree_url_keys:              # keys set to a worktree's own base URL, even
+    - web.unsecure.base_url       # when url_key is `none` — lets a worktree whose
+    - web.secure.base_url         # canonical base URL is database-hosted (Magento)
+                                  # override it in env.php and serve on its own
+                                  # domain instead of redirecting to the parent
   vars:                           # unconditional env defaults, always applied (optional)
     - "CI_ENVIRONMENT=development" # e.g. force CodeIgniter into dev mode for local work
   key_generation:                 # application key generation (optional)

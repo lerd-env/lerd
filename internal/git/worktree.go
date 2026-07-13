@@ -269,64 +269,115 @@ func lockfilesMatch(mainRepoPath, worktreePath string, lockfiles []string) bool 
 	return true
 }
 
-// EnsureWorktreeEnv copies .env from the main repo when missing (gitignored,
-// so `git worktree add` never carries it across) and rewrites APP_URL to the
-// worktree domain. When the main repo's .lerd.yaml defines env_overrides,
-// those values are resolved and layered on top — only keys declared in
+// EnsureWorktreeEnv seeds the worktree's env file from the main repo when
+// missing (gitignored, so `git worktree add` never carries it across) and
+// rewrites the framework's url_key to the worktree domain. The env file, its
+// format and url_key all come from the framework definition, so every framework
+// is seeded where it actually reads: Symfony's .env.local / DEFAULT_URI,
+// CodeIgniter's config/.env / app.baseURL, WordPress's wp-config.php / WP_HOME,
+// Magento's app/etc/env.php (php-array, whose base URL lives in the database so
+// it declares no url_key and only the file is carried across for its database
+// credentials). When the main repo's .lerd.yaml defines env_overrides, those
+// dotenv templates are resolved and layered on top — only keys declared in
 // env_overrides are touched, so partial overrides (e.g. SESSION_DOMAIN only)
-// don't suppress the default APP_URL rewrite. Idempotent and cheap; safe to
-// call on every request.
+// don't suppress the url_key rewrite. Idempotent and cheap; safe to call on
+// every request.
 func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secured bool) {
 	scheme := "http"
 	if secured {
 		scheme = "https"
 	}
-	worktreeEnv := filepath.Join(worktreePath, ".env")
+
+	// Resolve the env file, its format and url_key through the framework
+	// definition, the same resolver the Env tab, doctor and env wiring use.
+	envFile, urlKey, format := ".env", "APP_URL", "dotenv"
+	var worktreeURLKeys []string
+	if fwName, ok := config.DetectFrameworkForDir(mainRepoPath); ok {
+		if fw, ok := config.GetFrameworkForDir(fwName, mainRepoPath); ok {
+			file, f := fw.Env.Resolve(mainRepoPath)
+			if !filepath.IsLocal(file) {
+				return
+			}
+			envFile, format = file, f
+			if k := fw.Env.URLKey; k != "" {
+				urlKey = k
+			}
+			worktreeURLKeys = fw.Env.WorktreeURLKeys
+		}
+	}
+
+	worktreeEnv := filepath.Join(worktreePath, envFile)
 	if _, err := os.Lstat(worktreeEnv); err != nil {
-		mainEnv := filepath.Join(mainRepoPath, ".env")
+		mainEnv := filepath.Join(mainRepoPath, envFile)
+		if err := os.MkdirAll(filepath.Dir(worktreeEnv), 0o755); err != nil {
+			return
+		}
 		if err := copyFile(mainEnv, worktreeEnv); err != nil {
 			return
 		}
 	}
 
-	updates := map[string]string{
-		"APP_URL": scheme + "://" + worktreeDomain,
+	updates := map[string]string{}
+	// url_key: none opts out (Magento keeps its base URL in the database), so the
+	// seeded file is left as copied and only its database credentials carry over.
+	if !strings.EqualFold(urlKey, "none") {
+		updates[urlKey] = scheme + "://" + worktreeDomain
+	}
+	// worktree_url_keys point the seeded file at the worktree's own domain even
+	// when url_key is none, so a database-hosted base URL (Magento) is overridden
+	// and the worktree serves itself instead of redirecting to the parent.
+	for _, k := range worktreeURLKeys {
+		updates[k] = scheme + "://" + worktreeDomain + "/"
 	}
 
-	cfg, _ := config.LoadProjectConfig(mainRepoPath)
-	if cfg != nil && len(cfg.EnvOverrides) > 0 {
-		// {{site}}: legacy DB-safe slug of the FULL worktree domain, e.g.
-		// feat_a_acme_test. Kept for backward compatibility — new templates
-		// should prefer {{branch}} or {{parent}} which match user intent.
-		// {{branch}}: first segment of the worktree domain, e.g. "feat-a".
-		// {{parent}}: parent site name slug (DB-safe), e.g. "acme".
-		site := config.SiteSlug(worktreeDomain)
-		branch := worktreeDomain
-		if i := strings.IndexByte(worktreeDomain, '.'); i > 0 {
-			branch = worktreeDomain[:i]
-		}
-		parent := ""
-		if s, err := config.FindSiteByPath(mainRepoPath); err == nil && s != nil {
-			parent = config.SiteSlug(s.Name)
-		}
-		// When the user opted into an isolated worktree DB, DB_DATABASE is
-		// owned by SetWorktreeDBIsolated and any env_overrides template for
-		// the same key would clobber it on the next watcher tick.
-		dbIsolated := config.WorktreeDBIsolated(worktreePath)
-		for k, v := range cfg.EnvOverrides {
-			if dbIsolated && k == "DB_DATABASE" {
-				continue
+	// env_overrides are dotenv KEY=VALUE templates (Laravel multi-tenancy and
+	// similar); they don't apply to the php-config formats.
+	if format == "dotenv" {
+		cfg, _ := config.LoadProjectConfig(mainRepoPath)
+		if cfg != nil && len(cfg.EnvOverrides) > 0 {
+			// {{site}}: legacy DB-safe slug of the FULL worktree domain, e.g.
+			// feat_a_acme_test. Kept for backward compatibility — new templates
+			// should prefer {{branch}} or {{parent}} which match user intent.
+			// {{branch}}: first segment of the worktree domain, e.g. "feat-a".
+			// {{parent}}: parent site name slug (DB-safe), e.g. "acme".
+			site := config.SiteSlug(worktreeDomain)
+			branch := worktreeDomain
+			if i := strings.IndexByte(worktreeDomain, '.'); i > 0 {
+				branch = worktreeDomain[:i]
 			}
-			v = strings.ReplaceAll(v, "{{domain}}", worktreeDomain)
-			v = strings.ReplaceAll(v, "{{scheme}}", scheme)
-			v = strings.ReplaceAll(v, "{{site}}", site)
-			v = strings.ReplaceAll(v, "{{branch}}", branch)
-			v = strings.ReplaceAll(v, "{{parent}}", parent)
-			updates[k] = v
+			parent := ""
+			if s, err := config.FindSiteByPath(mainRepoPath); err == nil && s != nil {
+				parent = config.SiteSlug(s.Name)
+			}
+			// When the user opted into an isolated worktree DB, DB_DATABASE is
+			// owned by SetWorktreeDBIsolated and any env_overrides template for
+			// the same key would clobber it on the next watcher tick.
+			dbIsolated := config.WorktreeDBIsolated(worktreePath)
+			for k, v := range cfg.EnvOverrides {
+				if dbIsolated && k == "DB_DATABASE" {
+					continue
+				}
+				v = strings.ReplaceAll(v, "{{domain}}", worktreeDomain)
+				v = strings.ReplaceAll(v, "{{scheme}}", scheme)
+				v = strings.ReplaceAll(v, "{{site}}", site)
+				v = strings.ReplaceAll(v, "{{branch}}", branch)
+				v = strings.ReplaceAll(v, "{{parent}}", parent)
+				updates[k] = v
+			}
 		}
 	}
 
-	_ = envfile.ApplyUpdates(worktreeEnv, updates)
+	if len(updates) == 0 {
+		return
+	}
+	switch format {
+	case "php-const":
+		_ = envfile.ApplyPhpConstUpdates(worktreeEnv, updates)
+	case "php-array":
+		_ = envfile.ApplyPhpArrayUpdates(worktreeEnv, updates)
+	default:
+		_ = envfile.ApplyUpdates(worktreeEnv, updates)
+	}
 }
 
 func copyFile(src, dst string) error {

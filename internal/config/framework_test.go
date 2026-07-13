@@ -147,6 +147,9 @@ func TestGetFrameworkSymfony_BuiltinEnvTargetsEnvLocal(t *testing.T) {
 	if fw.Env.ExampleFile != ".env" {
 		t.Errorf("Env.ExampleFile = %q, want .env", fw.Env.ExampleFile)
 	}
+	if fw.Env.URLKey != "DEFAULT_URI" {
+		t.Errorf("Env.URLKey = %q, want DEFAULT_URI", fw.Env.URLKey)
+	}
 }
 
 func TestGetFrameworkCustom_WithoutLogs(t *testing.T) {
