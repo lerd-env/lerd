@@ -85,10 +85,10 @@ func TestGenerateWorktreeVhostUsesFrameworkPublicDir(t *testing.T) {
 	}
 	out := readWorktreeConf(t, "feature.shop.test")
 
-	if want := "root " + wt + "/pub;"; !strings.Contains(out, want) {
+	if want := `root "` + wt + `/pub";`; !strings.Contains(out, want) {
 		t.Errorf("missing %q in:\n%s", want, out)
 	}
-	if bad := "root " + wt + "/public;"; strings.Contains(out, bad) {
+	if bad := `root "` + wt + `/public";`; strings.Contains(out, bad) {
 		t.Errorf("worktree rooted at the hardcoded public dir:\n%s", out)
 	}
 }
@@ -106,10 +106,10 @@ func TestGenerateWorktreeVhostRendersFrameworkNginx(t *testing.T) {
 	if !strings.Contains(out, `location ~* ^/(setup|update)($|/) {`) {
 		t.Fatalf("framework snippet missing from worktree vhost:\n%s", out)
 	}
-	if want := "root " + wt + ";"; !strings.Contains(out, want) {
+	if want := `set $lerd_root "` + wt + `";`; !strings.Contains(out, want) {
 		t.Errorf("snippet {{root}} should expand to the worktree, want %q in:\n%s", want, out)
 	}
-	if bad := "root " + parent + ";"; strings.Contains(out, bad) {
+	if bad := `set $lerd_root "` + parent + `";`; strings.Contains(out, bad) {
 		t.Errorf("snippet {{root}} expanded to the parent checkout:\n%s", out)
 	}
 	if !strings.Contains(out, "fastcgi_pass lerd-php84-fpm:9000;") {
@@ -127,7 +127,7 @@ func TestGenerateWorktreeSSLVhostUsesFrameworkConfig(t *testing.T) {
 	}
 	out := readWorktreeConf(t, "feature.shop.test")
 
-	if want := "root " + wt + "/pub;"; !strings.Contains(out, want) {
+	if want := `root "` + wt + `/pub";`; !strings.Contains(out, want) {
 		t.Errorf("missing %q in:\n%s", want, out)
 	}
 	if !strings.Contains(out, `location ~* ^/(setup|update)($|/) {`) {
@@ -148,7 +148,7 @@ func TestGenerateWorktreeVhostHonoursSitePublicDir(t *testing.T) {
 	}
 	out := readWorktreeConf(t, "feature.shop.test")
 
-	if want := "root " + wt + "/web;"; !strings.Contains(out, want) {
+	if want := `root "` + wt + `/web";`; !strings.Contains(out, want) {
 		t.Errorf("missing %q in:\n%s", want, out)
 	}
 }
@@ -163,7 +163,7 @@ func TestGenerateWorktreeVhostUnknownParentFallsBack(t *testing.T) {
 	}
 	out := readWorktreeConf(t, "feature.ghost.test")
 
-	if want := "root " + wt + "/public;"; !strings.Contains(out, want) {
+	if want := `root "` + wt + `/public";`; !strings.Contains(out, want) {
 		t.Errorf("missing fallback %q in:\n%s", want, out)
 	}
 	if strings.Contains(out, "^/(setup|update)") {

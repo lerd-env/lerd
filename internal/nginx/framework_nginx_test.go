@@ -42,7 +42,13 @@ func TestExpandNginxSnippet(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expand: %v", err)
 	}
-	for _, want := range []string{"root /home/u/shop;", "alias /home/u/shop/pub;", "fastcgi_pass lerd-php84-fpm:9000;"} {
+	for _, want := range []string{
+		`set $lerd_root "/home/u/shop";`,
+		`set $lerd_public "/home/u/shop/pub";`,
+		"root ${lerd_root};",
+		"alias ${lerd_public};",
+		"fastcgi_pass lerd-php84-fpm:9000;",
+	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("missing %q in:\n%s", want, got)
 		}
@@ -70,8 +76,8 @@ func TestExpandNginxSnippetDotPublicDir(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expand: %v", err)
 	}
-	if got != "root /home/u/wp;" {
-		t.Fatalf("got %q", got)
+	if want := "set $lerd_public \"/home/u/wp\";"; !strings.Contains(got, want) {
+		t.Fatalf("got %q, want %q in it", got, want)
 	}
 }
 
@@ -168,7 +174,7 @@ func TestVhostRendersFrameworkNginxBeforeGenericLocations(t *testing.T) {
 	out := renderVhostForTest(t, "vhost.conf.tmpl", data)
 
 	iSetup := strings.Index(out, "^/setup($|/)")
-	iRoot := strings.Index(out, "root /home/u/shop/pub;")
+	iRoot := strings.Index(out, `root "/home/u/shop/pub";`)
 	iSlash := strings.Index(out, "location / {")
 	iPHP := strings.Index(out, `location ~ \.php$`)
 	iClose := strings.LastIndex(out, "}")

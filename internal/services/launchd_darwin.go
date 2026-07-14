@@ -446,7 +446,7 @@ func parseServiceUnit(name, content string) (args []string, keepAlive keepAliveP
 	if len(execStarts) == 0 {
 		return nil, keepAliveNever, fmt.Errorf("no ExecStart= found in service unit %s", name)
 	}
-	args = strings.Fields(expandSpecifiers(execStarts[0]))
+	args = SplitExecStart(expandSpecifiers(execStarts[0]))
 	if len(args) == 0 {
 		return nil, keepAliveNever, fmt.Errorf("empty ExecStart in service unit %s", name)
 	}

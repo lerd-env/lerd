@@ -150,7 +150,7 @@ func writeWorkerExecUnit(unitName, siteName, sitePath, phpVersion, command, rest
 	_ = fpmUnit
 	container := resolveWorkerFPMUnit(siteName, phpVersion)
 
-	podmanExec := fmt.Sprintf("%s exec -w %s %s %s", podman.PodmanBin(), sitePath, container, command)
+	podmanExec := fmt.Sprintf("%s exec -w %s %s %s", podman.PodmanBin(), podman.ShellQuote(sitePath), container, command)
 	script := buildDarwinExecWorkerGuardScript(pidFile, podman.PodmanBin(), container, sitePath, command, podmanExec)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing worker guard script: %w", err)

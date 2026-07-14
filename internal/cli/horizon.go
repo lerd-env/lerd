@@ -232,7 +232,7 @@ ExecStart=%s exec -w %s %s php artisan horizon
 
 [Install]
 WantedBy=default.target
-`, siteName, fpmUnit, fpmUnit, fpmUnit, podman.PodmanBin(), sitePath, container)
+`, siteName, fpmUnit, fpmUnit, fpmUnit, podman.PodmanBin(), podman.ShellQuote(sitePath), container)
 }
 
 // HorizonStopForSite stops and removes the Horizon unit for the named site.

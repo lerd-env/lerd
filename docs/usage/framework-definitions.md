@@ -279,6 +279,8 @@ Three placeholders are expanded before the config is written:
 | `{{public}}` | the document root (project root joined with `public_dir`) |
 | `{{fpm}}` | the site's PHP-FPM container name |
 
+The two path placeholders expand to nginx variables, `${lerd_root}` and `${lerd_public}`, which lerd declares at the top of the server block with the real paths. A project can live under a path with a space in it, and nginx splits a directive on whitespace: a literal path would turn `root` into three arguments and nginx would reject the whole config, taking every other site on the machine down with it. Quoting the value would fix a standalone `root {{root}};` but not a path used mid-token, as in `alias {{public}}/static/;`, since nginx will not glue a quoted token to a bare one. A variable is resolved after tokenizing, so it works in both positions. Write the placeholders exactly where you would write the path and lerd handles the rest.
+
 A snippet that passes requests to PHP should assign `{{fpm}}` to a variable first, `set $myfpm "{{fpm}}";` then `fastcgi_pass $myfpm:9000;`, exactly as the generated vhost does. nginx resolves a literal upstream name once when the config loads and caches it for the life of the process, so a container that comes back on a new address is never picked up.
 
 A git worktree of the site gets the same block, expanded against its own checkout: `{{root}}` and `{{public}}` point at the worktree's directory, not the parent's, so a branch serves its own `setup/`, `/static/` and `/media/` paths.

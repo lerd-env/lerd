@@ -114,7 +114,7 @@ func TestWriteWorkerHostUnit_writesGuardAndServiceUnit(t *testing.T) {
 	if mgr.unitName != "lerd-vite-mysite" {
 		t.Errorf("unit name = %q, want lerd-vite-mysite", mgr.unitName)
 	}
-	if !strings.Contains(mgr.unitBody, "ExecStart=/bin/sh "+scriptPath) {
+	if !strings.Contains(mgr.unitBody, "ExecStart=/bin/sh '"+scriptPath+"'") {
 		t.Errorf("service unit ExecStart missing or wrong:\n%s", mgr.unitBody)
 	}
 	if !strings.Contains(mgr.unitBody, "Restart=always") {
