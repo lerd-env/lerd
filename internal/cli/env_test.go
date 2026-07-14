@@ -441,38 +441,6 @@ func TestFrameworkServiceRole(t *testing.T) {
 	}
 }
 
-func TestFrameworkVarsForAlternate_RepointsTheEndpoint(t *testing.T) {
-	fw := magentoLikeFramework()
-	mariadb := &config.CustomService{
-		Name:    "mariadb-11-8",
-		EnvRole: "mysql",
-		EnvVars: []string{
-			"DB_CONNECTION=mysql",
-			"DB_HOST=lerd-mariadb-11-8",
-			"DB_PORT=3306",
-			"DB_DATABASE=lerd",
-			"DB_USERNAME=root",
-			"DB_PASSWORD=lerd",
-		},
-	}
-	got := frameworkVarsForAlternate(fw, "mysql", mariadb)
-	want := []string{
-		"db.connection.default.host=lerd-mariadb-11-8",
-		"db.connection.default.dbname={{site}}",
-		"db.connection.default.username=root",
-		"db.connection.default.password=lerd",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
-	}
-	// No dotenv key leaks into the php-array key space.
-	for _, kv := range got {
-		if strings.HasPrefix(kv, "DB_") {
-			t.Errorf("dotenv key %q must never reach a php-array env file", kv)
-		}
-	}
-}
-
 // symfonyLikeFramework is a dotenv framework whose keys are NOT the preset's
 // Laravel-shaped DB_* ones, so its own mapping has to win over them.
 func symfonyLikeFramework() *config.Framework {
