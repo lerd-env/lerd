@@ -374,6 +374,9 @@ func TestApplyHostProxyEnv_leavesNonConnectionKeysAlone(t *testing.T) {
 func TestRewriteEnvForHostProxy_usesPresetPorts(t *testing.T) {
 	// postgres + redis are default presets resolvable from the embedded YAML,
 	// so the full path (preset lookup -> port map -> rewrite) works offline.
+	// Isolate the config dir so a real install's published-port override (e.g.
+	// redis shifted to 6380 when the host owns 6379) cannot leak into the lookup.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	updates := map[string]string{
 		"DB_HOST":    "lerd-postgres",
 		"DB_PORT":    "5432",
