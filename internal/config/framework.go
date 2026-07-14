@@ -280,7 +280,7 @@ type FrameworkCommand struct {
 	Label       string         `yaml:"label" json:"label"`                                 // human label shown in the UI
 	Command     string         `yaml:"command" json:"command"`                             // shell command, passed to `sh -c`
 	Description string         `yaml:"description,omitempty" json:"description,omitempty"` // one-line description for tooltips
-	Output      string         `yaml:"output,omitempty" json:"output,omitempty"`           // silent | text | url | terminal (default: silent)
+	Output      string         `yaml:"output,omitempty" json:"output,omitempty"`           // silent | text | url | terminal (default: text)
 	Confirm     bool           `yaml:"confirm,omitempty" json:"confirm,omitempty"`         // gate behind a confirm modal before running
 	Icon        string         `yaml:"icon,omitempty" json:"icon,omitempty"`               // icon name from the known set
 	Check       *FrameworkRule `yaml:"check,omitempty" json:"check,omitempty"`             // hide the command when this rule fails

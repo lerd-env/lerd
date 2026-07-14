@@ -248,6 +248,37 @@ func TestCheckEnvCombo(t *testing.T) {
 	}
 }
 
+// TestCheckEnvKeySet pins that an empty key warns by default and that a check
+// can override the status to fail, the same as the other declared types.
+func TestCheckEnvKeySet(t *testing.T) {
+	dir := t.TempDir()
+	envPath := filepath.Join(dir, ".env")
+	spec := config.DoctorCheck{
+		Name: "mailer_dsn", Type: "env_key_set",
+		EnvKey: "MAILER_DSN", Detail: "mail is unconfigured", Fix: "mail:setup",
+	}
+
+	// Key set → ok.
+	writeEnv(t, dir, ".env", "MAILER_DSN=smtp://localhost\n")
+	if c := checkEnvKeySet(envfile.Reader(envPath, "dotenv"), spec); c.Status != StatusOK {
+		t.Errorf("key set: got %q, want ok", c.Status)
+	}
+
+	// Empty (whitespace-only) key → warn, carrying the detail and fix.
+	writeEnv(t, dir, ".env", "MAILER_DSN=   \n")
+	c := checkEnvKeySet(envfile.Reader(envPath, "dotenv"), spec)
+	if c.Status != StatusWarn || c.Detail != "mail is unconfigured" || c.Fix != "mail:setup" {
+		t.Errorf("empty key: got status=%q detail=%q fix=%q, want warn/mail is unconfigured/mail:setup", c.Status, c.Detail, c.Fix)
+	}
+
+	// severity: fail escalates the same finding.
+	strict := spec
+	strict.Severity = "fail"
+	if c := checkEnvKeySet(envfile.Reader(envPath, "dotenv"), strict); c.Status != StatusFail {
+		t.Errorf("severity fail: got %q, want fail", c.Status)
+	}
+}
+
 // TestCheckSymlink covers the public/storage link, expressed declaratively.
 func TestCheckSymlink(t *testing.T) {
 	spec := config.DoctorCheck{

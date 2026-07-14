@@ -1,16 +1,20 @@
-import { render, screen, cleanup } from '@testing-library/svelte';
+import { render, screen, cleanup, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
 const loadDoctor = vi.fn();
 const loadCommands = vi.fn();
-const executeCommand = vi.fn();
+const launchCommand = vi.fn();
+const executeDoctorFix = vi.fn();
+const runSettled = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('$stores/doctor', () => ({
   loadDoctor: (...a: unknown[]) => loadDoctor(...a)
 }));
 vi.mock('$stores/commands', () => ({
   loadCommands: (...a: unknown[]) => loadCommands(...a),
-  executeCommand: (...a: unknown[]) => executeCommand(...a)
+  launchCommand: (...a: unknown[]) => launchCommand(...a),
+  executeDoctorFix: (...a: unknown[]) => executeDoctorFix(...a),
+  runSettled: (...a: unknown[]) => runSettled(...a)
 }));
 
 import SiteDoctorModal from './SiteDoctorModal.svelte';
@@ -52,6 +56,25 @@ describe('SiteDoctorModal', () => {
     expect(screen.getByText('Debug mode')).toBeTruthy();
     expect(screen.getByText('APP_KEY is empty')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Fix' })).toBeTruthy();
+  });
+
+  // A fix naming a destructive command (migrate:fresh drops every table) must
+  // still go through the confirm gate, so Fix launches rather than executing.
+  it('launches the fix command so a confirm: true fix still prompts', async () => {
+    loadDoctor.mockResolvedValue({
+      checks: [{ name: 'migrations', status: 'fail', detail: 'pending migrations', fix: 'migrate:fresh' }],
+      failures: 1,
+      warnings: 0
+    });
+    const cmd = { name: 'migrate:fresh', label: 'Drop and re-migrate', command: 'php artisan migrate:fresh', confirm: true };
+    loadCommands.mockResolvedValue([cmd]);
+
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: 'feat-x', onclose: () => {} } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Fix' }));
+
+    expect(launchCommand).toHaveBeenCalledWith('acme.test', cmd, { branch: 'feat-x' });
+    expect(runSettled).toHaveBeenCalled();
   });
 
   it('omits the Fix button when no matching command is available', async () => {

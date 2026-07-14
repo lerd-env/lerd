@@ -6,6 +6,8 @@ import {
   closeRun,
   currentRun,
   runningName,
+  runToast,
+  runSettled,
   type Command
 } from './commands';
 
@@ -183,6 +185,76 @@ describe('history', () => {
     localStorage.setItem('lerd-commands-history-v1', 'not json');
     const { lastRunFor } = await import('./commands');
     expect(lastRunFor('a', 'b')).toBeNull();
+  });
+});
+
+describe('output: silent', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('runs without opening the modal and toasts when it succeeds', async () => {
+    mockSSE(['event: stdout\ndata: cache cleared\n\n', 'event: done\ndata: {"exit":0,"durationMs":8}\n\n']);
+    launchCommand('acme.test', { name: 'optimize:clear', label: 'Clear all caches', command: 'php artisan optimize:clear', output: 'silent' });
+    await new Promise((r) => setTimeout(r, 50));
+    expect(get(currentRun).kind).toBe('idle');
+    expect(get(runToast)).toBe('Clear all caches finished');
+  });
+
+  // The output is the only thing that explains a failure, so a silent command
+  // that exits non-zero still surfaces the modal.
+  it('opens the modal with the output when it fails', async () => {
+    mockSSE(['event: stderr\ndata: boom\n\n', 'event: done\ndata: {"exit":1,"durationMs":8}\n\n']);
+    launchCommand('acme.test', { name: 'migrate', label: 'Run migrations', command: 'php artisan migrate', output: 'silent' });
+    await new Promise((r) => setTimeout(r, 50));
+    const s = get(currentRun);
+    expect(s.kind).toBe('done');
+    if (s.kind !== 'done') return;
+    expect(s.exit).toBe(1);
+    expect(s.lines).toEqual([{ stream: 'stderr', text: 'boom' }]);
+  });
+
+  it('still records run history', async () => {
+    const { lastRunFor } = await import('./commands');
+    mockSSE(['event: stdout\ndata: done\n\n', 'event: done\ndata: {"exit":0,"durationMs":9}\n\n']);
+    launchCommand('acme.test', { name: 'key:generate', label: 'Generate key', command: 'php artisan key:generate', output: 'silent' });
+    await new Promise((r) => setTimeout(r, 50));
+    const prev = lastRunFor('acme.test', 'key:generate');
+    expect(prev).not.toBeNull();
+    expect(prev!.exit).toBe(0);
+    expect(prev!.lines).toEqual([{ stream: 'stdout', text: 'done' }]);
+  });
+});
+
+describe('runSettled', () => {
+  it('resolves immediately when nothing is pending', async () => {
+    await expect(runSettled()).resolves.toBeUndefined();
+  });
+
+  // The doctor's Fix button launches through the confirm gate, so it must not
+  // re-check while the prompt is still on screen waiting for the user.
+  it('stays pending while a confirmation is waiting, and resolves once the run finishes', async () => {
+    mockSSE(['event: done\ndata: {"exit":0,"durationMs":3}\n\n']);
+    const cmd: Command = { name: 'migrate:fresh', label: 'Fresh', command: 'php artisan migrate:fresh', confirm: true };
+    launchCommand('acme.test', cmd);
+    expect(get(currentRun).kind).toBe('confirm');
+
+    let settled = false;
+    const pending = runSettled().then(() => (settled = true));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(settled).toBe(false);
+
+    // The user confirms; the run goes through and settles.
+    const { executeCommand } = await import('./commands');
+    void executeCommand('acme.test', cmd, '', true);
+    await pending;
+    expect(settled).toBe(true);
+  });
+
+  it('resolves when the user cancels the confirmation', async () => {
+    launchCommand('acme.test', { name: 'x', label: 'X', command: 'true', confirm: true });
+    expect(get(currentRun).kind).toBe('confirm');
+    const pending = runSettled();
+    closeRun();
+    await expect(pending).resolves.toBeUndefined();
   });
 });
 
