@@ -9,7 +9,7 @@ server {
     listen 443 ssl;
     listen [::]:443 ssl;
     server_name {{.ServerNames}};
-    root {{.Path}}/{{.PublicDir}};
+    root {{.Root}};
     index index.php index.html;
 
     ssl_certificate /etc/nginx/certs/{{.CertDomain}}.crt;

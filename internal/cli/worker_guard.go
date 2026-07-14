@@ -88,5 +88,5 @@ fi
 echo $$ > %[1]s
 trap 'rm -f %[1]s' EXIT
 exec %[5]s
-`, pidFile, podmanBin, container, podman.ShellQuote(inner), runCmd)
+`, podman.ShellQuote(pidFile), podmanBin, container, podman.ShellQuote(inner), runCmd)
 }

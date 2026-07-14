@@ -92,6 +92,13 @@ type VhostData struct {
 	FrameworkNginx string
 }
 
+// Root is the document root as the templates render it, quoted so a path with a
+// space stays a single nginx token. Every generator that fills a VhostData goes
+// through it, so the site, worktree, and SSL vhosts are all covered.
+func (d VhostData) Root() string {
+	return nginxQuote(d.Path + "/" + d.PublicDir)
+}
+
 // resolveFrameworkNginx returns the site framework's nginx block, expanded and
 // indented for splicing into the server block. Empty when the framework declares
 // none, when the snippet is unbalanced, or when a substituted value carries
@@ -152,6 +159,30 @@ func frameworkNginxBlock(w io.Writer, framework, domain, snippet, sitePath, publ
 // directive, `#` comments out the rest of the line, newlines do both.
 const nginxValueForbidden = "{};#\n\r\x00"
 
+// nginxQuote renders a filesystem path as a quoted nginx token. nginx splits a
+// directive on whitespace, so a project under a path with a space would give
+// root three arguments and nginx rejects the whole config, taking every other
+// site down with it. Backslash-escaping the spaces parses but does not work:
+// nginx keeps the backslash in the value and realpath() then fails on it.
+func nginxQuote(p string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(p) + `"`
+}
+
+// Variables carrying the site paths for framework snippets to interpolate.
+const (
+	nginxRootVar   = "${lerd_root}"
+	nginxPublicVar = "${lerd_public}"
+)
+
+// nginxPathVars declares the variables a framework snippet interpolates. A
+// snippet may use a path mid-token, as Magento's does with {{public}}/static/,
+// and a quoted token cannot be glued to anything, so the path reaches the
+// snippet as a variable: nginx resolves it after tokenizing, spaces and all.
+func nginxPathVars(sitePath, docRoot string) string {
+	return fmt.Sprintf("set $lerd_root %s;\nset $lerd_public %s;\n\n",
+		nginxQuote(sitePath), nginxQuote(docRoot))
+}
+
 // expandNginxSnippet substitutes the placeholders a framework snippet may use.
 // Plain string replacement, not text/template: the snippet is data rendered into
 // a template, so its braces must never be evaluated as template actions. Values
@@ -168,14 +199,17 @@ func expandNginxSnippet(snippet, sitePath, publicDir, fpmContainer string) (stri
 		}
 	}
 	out := strings.NewReplacer(
-		"{{root}}", sitePath,
-		"{{public}}", docRoot,
+		"{{root}}", nginxRootVar,
+		"{{public}}", nginxPublicVar,
 		"{{fpm}}", fpmContainer,
 	).Replace(snippet)
 	// A misspelled placeholder has balanced braces, so it survives validation and
 	// would reach nginx verbatim, breaking the config for every site.
 	if strings.Contains(out, "{{") {
 		return "", fmt.Errorf("nginx snippet has an unknown {{placeholder}}")
+	}
+	if strings.Contains(out, nginxRootVar) || strings.Contains(out, nginxPublicVar) {
+		out = nginxPathVars(sitePath, docRoot) + out
 	}
 	return out, nil
 }
@@ -730,7 +764,7 @@ server {
         default_type text/html;
     }
 }
-`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), pausedDir, htmlFile)
+`, serverNames, serverNames, site.PrimaryDomain(), site.PrimaryDomain(), nginxQuote(pausedDir), htmlFile)
 	}
 	return fmt.Sprintf(`server {
     listen 80;
@@ -742,7 +776,7 @@ server {
         default_type text/html;
     }
 }
-`, serverNames, pausedDir, htmlFile)
+`, serverNames, nginxQuote(pausedDir), htmlFile)
 }
 
 // writeLandingVhost writes site's static-page vhost (serving htmlFile) to
@@ -807,7 +841,7 @@ server {
         default_type text/html;
     }
 }
-`, domain, domain, certDomain, certDomain, pausedDir)
+`, domain, domain, certDomain, certDomain, nginxQuote(pausedDir))
 	} else {
 		conf = fmt.Sprintf(`server {
     listen 80;
@@ -819,7 +853,7 @@ server {
         default_type text/html;
     }
 }
-`, domain, pausedDir)
+`, domain, nginxQuote(pausedDir))
 	}
 
 	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
@@ -1199,7 +1233,7 @@ server {
     listen [::]:443 default_server ssl;
     ssl_reject_handshake on;
 }
-`, errorDir))
+`, nginxQuote(errorDir)))
 }
 
 // contentHashHex is sha256 → hex, used as the managed-file sentinel value.

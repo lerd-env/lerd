@@ -1,8 +1,11 @@
 package cli
 
 import (
+	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/services"
 )
 
 // These builder tests are platform-agnostic — they exercise pure string
@@ -12,7 +15,7 @@ import (
 func TestBuildDarwinExecWorkerService_PointsAtGuardScript(t *testing.T) {
 	serviceUnit := buildDarwinExecWorkerService("/run/workers/lerd-queue-alpha.sh", "always")
 
-	if !strings.Contains(serviceUnit, "ExecStart=/bin/sh /run/workers/lerd-queue-alpha.sh") {
+	if !strings.Contains(serviceUnit, "ExecStart=/bin/sh '/run/workers/lerd-queue-alpha.sh'") {
 		t.Errorf("service unit should call guard script via /bin/sh, got:\n%s", serviceUnit)
 	}
 	if !strings.Contains(serviceUnit, "Restart=always") {
@@ -23,22 +26,19 @@ func TestBuildDarwinExecWorkerService_PointsAtGuardScript(t *testing.T) {
 	}
 }
 
-func TestBuildDarwinExecWorkerService_UnquotedPath(t *testing.T) {
-	// launchd's parseServiceUnit uses strings.Fields on ExecStart, which
-	// splits on whitespace — the path to the guard script must contain
-	// no spaces or quotes. Our constructor should produce a clean
-	// whitespace-free argument.
-	unit := buildDarwinExecWorkerService("/run/workers/lerd-queue-alpha.sh", "always")
+func TestBuildDarwinExecWorkerService_ScriptPathSurvivesTheSplit(t *testing.T) {
+	// The launchd translator splits ExecStart into argv, so a guard script
+	// under a data dir with a space in it has to come back as one argument.
+	script := "/Users/me/My Data/lerd/workers/lerd-queue-alpha.sh"
+	unit := buildDarwinExecWorkerService(script, "always")
 	line := findLine(unit, "ExecStart=")
 	if line == "" {
 		t.Fatalf("no ExecStart= line")
 	}
-	// "ExecStart=/bin/sh /path" should have exactly 3 whitespace-split
-	// fields after the `=`: /bin/sh, /path.
-	rhs := strings.TrimPrefix(line, "ExecStart=")
-	fields := strings.Fields(rhs)
-	if len(fields) != 2 {
-		t.Errorf("ExecStart RHS should have 2 fields, got %d: %q", len(fields), rhs)
+	args := services.SplitExecStart(strings.TrimPrefix(line, "ExecStart="))
+	want := []string{"/bin/sh", script}
+	if !reflect.DeepEqual(args, want) {
+		t.Errorf("ExecStart argv = %q, want %q", args, want)
 	}
 }
 
@@ -107,7 +107,7 @@ func TestBuildDarwinContainerWorkerUnit_CustomContainerUsesSiteImage(t *testing.
 func TestBuildDarwinHostWorkerService_PointsAtGuardScript(t *testing.T) {
 	unit := buildDarwinHostWorkerService("/run/workers/lerd-vite-alpha.sh", "always")
 
-	if !strings.Contains(unit, "ExecStart=/bin/sh /run/workers/lerd-vite-alpha.sh") {
+	if !strings.Contains(unit, "ExecStart=/bin/sh '/run/workers/lerd-vite-alpha.sh'") {
 		t.Errorf("host worker service unit should /bin/sh the guard, got:\n%s", unit)
 	}
 	if !strings.Contains(unit, "Restart=always") {

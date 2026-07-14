@@ -2,7 +2,7 @@ server {
     listen 80;
     listen [::]:80;
     server_name {{.ServerNames}};
-    root {{.Path}}/{{.PublicDir}};
+    root {{.Root}};
     index index.php index.html;
 {{if .FrameworkNginx}}
 {{.FrameworkNginx}}

@@ -11,9 +11,9 @@ import (
 // buildDarwinExecWorkerService renders the systemd-style service unit that
 // `services.Mgr.WriteServiceUnit` (macOS launchd backend) will translate
 // into a launchd plist. ExecStart points at a pre-written guard script
-// because parseServiceUnit in the launchd translator uses strings.Fields
-// on ExecStart, so an inline multi-line script would not survive the
-// split. scriptPath must contain no whitespace.
+// because the launchd translator splits ExecStart into argv, so an inline
+// multi-line script would not survive the split. The path is quoted, since a
+// data dir with a space in it would otherwise arrive as two arguments.
 func buildDarwinExecWorkerService(scriptPath, restart string) string {
 	return fmt.Sprintf(`[Unit]
 Description=Lerd Worker (exec mode)
@@ -21,7 +21,7 @@ Description=Lerd Worker (exec mode)
 [Service]
 Type=simple
 Restart=%s
-ExecStart=/bin/sh %s
+ExecStart=/bin/sh '%s'
 
 [Install]
 WantedBy=default.target
@@ -54,7 +54,7 @@ Description=Lerd Worker (host mode)
 [Service]
 Type=simple
 Restart=%s
-ExecStart=/bin/sh %s
+ExecStart=/bin/sh '%s'
 
 [Install]
 WantedBy=default.target
