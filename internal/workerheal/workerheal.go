@@ -110,8 +110,9 @@ func resolveWorkerUnit(body string, sitePaths map[string]string, workingDir stri
 }
 
 func isSiteCheckout(sitePaths map[string]string, dir string) bool {
+	dir = filepath.Clean(dir)
 	for _, p := range sitePaths {
-		if p != "" && p == dir {
+		if p != "" && filepath.Clean(p) == dir {
 			return true
 		}
 	}
