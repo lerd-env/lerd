@@ -24,8 +24,8 @@ Some commands include a `check:` rule and only surface when the relevant package
 
 Clicking a command (or pressing Enter on a palette entry, or running `lerd run <name>`) executes the shell command in the project's directory, with stdio routed depending on the command's `output:` value:
 
-- **`silent`** (default) — runs, captures output, shows a brief success or failure indicator in the modal.
-- **`text`** — same as silent but with the captured stdout rendered in a scrollable monospace block. Use for commands whose output you'd want to read (test runs, route lists, config diffs).
+- **`text`** (default) — streams stdout and stderr into the modal as a scrollable monospace block, and leaves it open on the exit code. Use for commands whose output you'd want to read (test runs, route lists, config diffs).
+- **`silent`** — runs without opening the modal and toasts when it's done, so a cache clear doesn't cost you a click. A failure still opens the modal with the captured output, since that's the only thing that explains it.
 - **`url`** — captures stdout, scans it for the first `http(s)://...` URL, and surfaces it with Copy and Open buttons. The killer feature for `drush uli` and similar one-time-login generators.
 - **`terminal`** — spawns the user's terminal emulator (kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, gnome-terminal, xterm; on macOS iTerm or Terminal.app) with the command running inside. Use for interactive commands like `php artisan tinker`, `bin/cake bake`, `wp shell` that need a real TTY. The lerd-ui modal stays closed.
 
@@ -75,7 +75,7 @@ commands:
     label: Clear all caches       # UI label
     command: php artisan optimize:clear   # shell, passed to `sh -c`
     description: Clear config, route, view, event, and compiled caches
-    output: silent                # silent | text | url | terminal
+    output: silent                # silent | text | url | terminal (default: text)
     confirm: false                # ask before running
     icon: broom                   # from the known icon set
     cwd: .                        # optional, relative to project root
@@ -86,7 +86,7 @@ commands:
 
 **Known icons**: `broom`, `database`, `refresh`, `link`, `check`, `list`, `key`, `edit`, `arrow-down`, `arrow-up`, `play`, `terminal`. An unknown icon falls back to a generic glyph; `lerd check` warns.
 
-**Output values:** invalid values fail `lerd check`. Defaults to `silent`.
+**Output values:** invalid values fail `lerd check`. Defaults to `text`.
 
 **Check rules**: reuse `FrameworkRule`. The two common forms are `composer: <package>` (the package must be in `composer.json`) and `file: <path>` (the file must exist relative to the project root).
 

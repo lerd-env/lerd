@@ -258,7 +258,7 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 	var ok bool
 	switch spec.Type {
 	case "env_key_set":
-		c, ok = checkEnvKeySet(read, spec.Name, spec.EnvKey, spec.Fix, spec.Detail), true
+		c, ok = checkEnvKeySet(read, spec), true
 	case "env_combo":
 		c, ok = checkEnvCombo(read, spec), true
 	case "symlink":
@@ -344,8 +344,13 @@ func checkAppKey(envPath string, fw *config.Framework) (Check, bool) {
 		return Check{}, false
 	}
 	kg := fw.Env.KeyGeneration
-	detail := fmt.Sprintf("%s is empty, so encryption, signed URLs, and sessions won't work until it's set.", kg.EnvKey)
-	return checkEnvKeySet(envfile.Reader(envPath, "dotenv"), "app_key", kg.EnvKey, kg.Command, detail), true
+	// An empty app key breaks encryption, signed URLs and sessions, so this one
+	// fails rather than taking the declared-check default of warn.
+	spec := config.DoctorCheck{
+		Name: "app_key", EnvKey: kg.EnvKey, Fix: kg.Command, Severity: StatusFail,
+		Detail: fmt.Sprintf("%s is empty, so encryption, signed URLs, and sessions won't work until it's set.", kg.EnvKey),
+	}
+	return checkEnvKeySet(envfile.Reader(envPath, "dotenv"), spec), true
 }
 
 // checkSQLiteDatabase fails when the env file selects the sqlite driver but the
@@ -407,15 +412,17 @@ func frameworkHasCommand(fw *config.Framework, name string) bool {
 	return false
 }
 
-// checkEnvKeySet fails when key is empty in the env file.
-func checkEnvKeySet(read func(string) string, name, key, fix, detail string) Check {
-	if strings.TrimSpace(read(key)) == "" {
+// checkEnvKeySet warns when key is empty in the env file. A check that considers
+// the key mandatory escalates with severity: fail.
+func checkEnvKeySet(read func(string) string, spec config.DoctorCheck) Check {
+	if strings.TrimSpace(read(spec.EnvKey)) == "" {
+		detail := spec.Detail
 		if detail == "" {
-			detail = fmt.Sprintf("%s is empty.", key)
+			detail = fmt.Sprintf("%s is empty.", spec.EnvKey)
 		}
-		return Check{Name: name, Status: StatusFail, Detail: detail, Fix: fix}
+		return Check{Name: spec.Name, Status: triggeredStatus(spec, StatusWarn), Detail: detail, Fix: spec.Fix}
 	}
-	return Check{Name: name, Status: StatusOK}
+	return Check{Name: spec.Name, Status: StatusOK}
 }
 
 // checkEnvDrift warns when .env.example declares keys the project's .env is

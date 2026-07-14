@@ -216,6 +216,32 @@ logs:
   - path: "var/log/*.log"             # glob relative to project root
     format: raw                       # monolog | raw (plain text, default)
 
+# Custom commands, shown in the dashboard and runnable with `lerd run` (optional)
+commands:
+  - name: cache:clear                 # stable id, unique; the `lerd run` argument
+    label: Clear cache                # display name
+    command: bin/console cache:clear  # shell, run through `sh -c`
+    description: Clear the Symfony cache for the current environment
+    output: silent                    # silent | text | url | terminal (default: text)
+    confirm: false                    # gate behind a confirmation (optional, default: false)
+    icon: broom                       # name from the known icon set (optional)
+    cwd: .                            # working dir relative to project root (optional, default: .)
+    check:                            # hide the command unless the rule matches (optional)
+      composer: symfony/framework-bundle
+
+# Site doctor checks, run after the universal baseline every framework gets (optional)
+doctor:
+  checks:
+    - name: storage_link              # stable id
+      type: symlink                   # env_key_set | env_combo | symlink | command
+      label: Storage Link             # display label
+      link: public/storage            # the path that must be a symlink
+      target: storage/app/public      # skipped unless this dir exists
+      requires_dir: public            # skipped unless this dir exists too (optional)
+      fix: storage:link               # names one of the framework's own commands
+      detail: The public/storage link is missing.   # overrides the generated message (optional)
+      severity: warn                  # warn | fail (optional, per-type default)
+
 # Extra nginx config spliced into the site's server block (optional)
 nginx:
   snippet: |
@@ -240,6 +266,83 @@ The `{{site}}`, `{{site_testing}}`, `{{bucket}}`, `{{domain}}`, `{{scheme}}`, an
 This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`.
 
 A placeholder whose value is empty, or one lerd does not recognise, is left in the command verbatim rather than being replaced with an empty string, so a half-resolved context can never quietly produce `--base-url=://`.
+
+## Custom commands
+
+The `commands:` list is the framework's own verbs: the things you would otherwise type into a console by hand. Each entry shows up on the site's dashboard, in the command palette, and as an argument to `lerd run`, and can be named as the `fix:` of a doctor check.
+
+`name` and `command` are the only required keys. The name is a stable identifier, unique within the definition, and is what `lerd run <name>` and a doctor `fix:` both refer to, so treat it as API and don't rename it casually. The command is a shell string handed to `sh -c`, with the [site placeholders](#site-placeholders) expanded first. It runs in the site's PHP-FPM container, from the project root unless `cwd` moves it; `cwd` is a path relative to that root, and `.` and an empty value both mean the root itself. When a command is run against a git worktree, the root is the worktree's own checkout.
+
+`output` decides where the command's output goes, and the four values are genuinely different surfaces:
+
+| Value | What happens |
+|---|---|
+| `text` | Streams stdout and stderr into the run modal as they arrive, and the modal stays open afterwards showing the exit code and duration. This is what you get when `output` is omitted. |
+| `silent` | Runs without opening the modal at all, and shows a toast when it finishes. A non-zero exit is the exception: the modal opens after all, carrying the captured output, because that output is the only thing that explains the failure. Use it for commands whose output nobody reads, like a cache clear. |
+| `url` | Streams like `text`, and additionally lifts the first `http://` or `https://` URL out of the output into a copy-and-open panel on the finished modal. This exists for one-time login links, like Drupal's `drush uli`. |
+| `terminal` | Spawns the user's terminal emulator running the command, instead of streaming it anywhere. Nothing is captured, so there is no output pane, no exit code, and no run history. Use it for commands that are interactive or long-lived enough that a modal is the wrong container. It is rejected over MCP, which has no terminal to open. |
+
+`confirm: true` puts the command behind a confirmation showing the exact command line before anything runs, and the dashboard, `lerd run` (unless you pass `--yes`) and MCP (unless the caller forces it) all honour it. This is what lets a genuinely destructive command ship as a command rather than as a setup step: Laravel's `migrate:fresh` drops every table, and Magento ships `setup:install` this way.
+
+`check` takes the same rule shape as a worker's or a setup step's, so `composer: <package>` or `file: <path>`, and a command whose check fails is dropped from the resolved set rather than merely hidden, which means it also disappears from `lerd run` and from any doctor `fix:` pointing at it. Use it for commands that only make sense when an optional package is installed.
+
+`icon` is drawn from a fixed vocabulary, and a name outside it renders a generic fallback rather than failing. The set is:
+
+`broom`, `database`, `refresh`, `link`, `check`, `list`, `key`, `edit`, `arrow-down`, `arrow-up`, `play`, `terminal`
+
+`lerd check` validates a definition's commands, and it is the fastest way to catch a typo: an unknown `output` is an error, and an unknown `icon` is a warning.
+
+## Doctor checks
+
+The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+
+Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, and an optional `fix`.
+
+`fix` names one of the framework's own `commands:` entries, by `name`. That indirection is the whole design: the doctor never grows its own mutation endpoints, it just points at a command the framework already exposes, and the UI renders a Fix button that runs it. A `fix` naming a command that does not exist, or one whose `check` rule failed, simply renders no button, and nothing validates the reference, so check your spelling. Four universal keys are also accepted, for the fixes that are not framework-specific: `composer_install`, `composer_update`, `npm_install` and `npm_audit_fix`.
+
+The Fix button runs the command through the same gate as everywhere else, so a fix pointing at a `confirm: true` command still asks first, and the doctor re-checks only once the command has actually run.
+
+There are four check types, each with its own fields.
+
+`env_key_set` fails when a single env key is empty. It takes `env_key`, the key to read.
+
+```yaml
+- name: mailer_dsn
+  type: env_key_set
+  label: Mailer
+  env_key: MAILER_DSN
+  detail: MAILER_DSN is empty, so no mail will be sent.
+```
+
+`env_combo` catches a combination of env values that is individually legal but collectively a footgun, the classic being debug mode left on in production. It takes `when` and `warn_if`, both maps of key to expected value, and only triggers when every pair in both maps matches. Values are compared truthily, so a `warn_if` of `true` matches `1`, `on` and `yes` as well.
+
+```yaml
+- name: app_debug
+  type: env_combo
+  label: Debug Mode
+  when: { APP_ENV: production }
+  warn_if: { APP_DEBUG: true }
+  detail: APP_DEBUG is on in production, which leaks stack traces.
+```
+
+`symlink` checks that a path is a symlink, for the likes of Laravel's `public/storage`. It takes `link`, the path that should be one, and `target`, the directory it should point into. The check skips itself entirely when `target` does not exist, since the link is meaningless then, and `requires_dir` adds a second directory that must exist for the check to apply at all.
+
+`command` runs a console command inside the site's container and judges the result. It takes `command`, and `fail_if_output_contains`, a plain substring that marks the finding as triggered when it appears in the output. `timeout` caps the run in seconds, defaulting to 25. `unknown_on_error: true` is the important one: when the command cannot run at all, because the app is wedged or the database is unreachable, the check reports "unknown" instead of failing, so a down app does not turn the whole panel red with checks that never actually ran.
+
+```yaml
+- name: migrations
+  type: command
+  label: Migrations
+  command: php artisan migrate:status
+  fail_if_output_contains: "Pending"
+  unknown_on_error: true
+  timeout: 30
+  fix: migrate
+```
+
+`severity` overrides the status a triggered check reports, and takes `warn` or `fail`. The default differs by type, which is not something you would guess: a `command` check defaults to `fail`, and the other three default to `warn`. So a pending-migrations check is a failure unless you say otherwise, while a missing symlink is a warning. An unrecognised severity is ignored rather than rejected, falling back to the type default.
+
+An unknown `type` is skipped rather than treated as an error, so a definition using a check type a newer lerd added still loads on an older binary; the new check just does not run.
 
 ## PHP ini for the CLI
 

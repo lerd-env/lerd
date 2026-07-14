@@ -67,7 +67,7 @@
 <script lang="ts">
   import Modal from '$components/Modal.svelte';
   import { loadDoctor, type DoctorCheck, type DoctorReport } from '$stores/doctor';
-  import { loadCommands, executeCommand, executeDoctorFix, type Command } from '$stores/commands';
+  import { loadCommands, launchCommand, runSettled, executeDoctorFix, type Command } from '$stores/commands';
   import { goToTab } from '$stores/route';
   import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
@@ -140,7 +140,10 @@
       } else {
         const cmd = commands.find((c) => c.name === check.fix);
         if (!cmd) return;
-        await executeCommand(site.domain, cmd, branch);
+        // Launched, not executed: a fix naming a confirm: true command must
+        // still prompt, and runSettled waits out that prompt before re-checking.
+        launchCommand(site.domain, cmd, { branch });
+        await runSettled();
       }
       await reload();
     } finally {

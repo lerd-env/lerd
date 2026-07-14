@@ -251,61 +251,85 @@ export async function executeDoctorFix(domain: string, key: string, label: strin
 
 // runInModal drives the shared CommandRunModal state for any streaming runner,
 // folding stdout/stderr/done/error into currentRun and persisting history.
+// A silent command runs without the modal and toasts instead, the way a
+// terminal one does; a terminal command streams nowhere at all.
 async function runInModal(domain: string, cmd: Command, branch: string, run: (cb: RunCallbacks) => Promise<void>) {
   const started = Date.now();
+  const quiet = cmd.output === 'silent' || cmd.output === 'terminal';
   runningName.set(cmd.name);
-  if (cmd.output === 'terminal') {
-    currentRun.set({ kind: 'idle' });
-  } else {
-    currentRun.set({ kind: 'running', domain, cmd, lines: [], started });
-  }
-  abortCtrl = new AbortController();
+  currentRun.set(quiet ? { kind: 'idle' } : { kind: 'running', domain, cmd, lines: [], started });
+  const ctrl = new AbortController();
+  abortCtrl = ctrl;
+
+  // Buffered independently of currentRun, since a silent run never enters the
+  // running state but still needs its output for history and for a failure.
+  const lines: RunLine[] = [];
+  // Stale once the user closed the modal (which aborts) or another run took over.
+  const live = () => abortCtrl === ctrl;
 
   const append = (stream: 'stdout' | 'stderr', text: string) => {
-    currentRun.update((s) => {
-      if (s.kind !== 'running') return s;
-      return { ...s, lines: [...s.lines, { stream, text }] };
-    });
+    lines.push({ stream, text });
+    currentRun.update((s) => (s.kind === 'running' ? { ...s, lines: [...lines] } : s));
   };
 
   try {
     await run({
-      signal: abortCtrl.signal,
+      signal: ctrl.signal,
       onStdout: (l) => append('stdout', l),
       onStderr: (l) => append('stderr', l),
       onDone: ({ exit, durationMs, url }) => {
-        currentRun.update((s) => {
-          if (s.kind !== 'running') return s;
-          const done = { kind: 'done' as const, domain, cmd, lines: s.lines, exit, durationMs, url };
-          saveHistory(domain, cmd.name, done);
-          maybeNotifyDone(cmd, domain, exit, durationMs);
-          return done;
-        });
+        if (!live()) return;
+        const done = { kind: 'done' as const, domain, cmd, lines, exit, durationMs, url };
+        saveHistory(domain, cmd.name, done);
+        maybeNotifyDone(cmd, domain, exit, durationMs);
+        // A silent command that worked stays out of the way. A failure is the
+        // one case where its output is the only thing that explains itself, so
+        // the modal opens after all.
+        if (cmd.output === 'silent' && exit === 0) {
+          setToast((cmd.label || cmd.name) + ' finished');
+          return;
+        }
+        currentRun.set(done);
       },
       onTerminal: () => {
         setToast('Opened ' + (cmd.label || cmd.name) + ' in terminal');
       },
       onError: (msg) => {
-        currentRun.update((s) => {
-          if (s.kind === 'running') {
-            return {
-              kind: 'done',
-              domain,
-              cmd,
-              lines: [...s.lines, { stream: 'meta', text: '[error] ' + msg }],
-              exit: -1,
-              durationMs: Date.now() - started
-            };
-          }
+        if (!live()) return;
+        if (cmd.output === 'terminal') {
           setToast('Error: ' + msg, 3000);
-          return s;
-        });
+          return;
+        }
+        lines.push({ stream: 'meta', text: '[error] ' + msg });
+        currentRun.set({ kind: 'done', domain, cmd, lines, exit: -1, durationMs: Date.now() - started });
       }
     });
   } finally {
     runningName.set(null);
-    abortCtrl = null;
+    if (abortCtrl === ctrl) abortCtrl = null;
   }
+}
+
+// runSettled resolves once nothing is pending: no confirmation waiting on the
+// user and no run in flight. It lets a caller launch through the confirm gate
+// (rather than bypassing it) and still act once the command really finished,
+// which a plain await can't do while the run is parked at a prompt. Resolves
+// straight away if the user cancels.
+export function runSettled(): Promise<void> {
+  const settled = () => get(currentRun).kind !== 'confirm' && get(runningName) === null;
+  if (settled()) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const unsubs: Array<() => void> = [];
+    const check = () => {
+      if (done || !settled()) return;
+      done = true;
+      // Deferred: a subscriber fires during subscribe(), before unsubs is filled.
+      queueMicrotask(() => unsubs.forEach((u) => u()));
+      resolve();
+    };
+    unsubs.push(currentRun.subscribe(check), runningName.subscribe(check));
+  });
 }
 
 export function closeRun() {
