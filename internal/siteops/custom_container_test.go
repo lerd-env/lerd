@@ -166,7 +166,10 @@ func TestCustomContainer_NestJS_NamingConventions(t *testing.T) {
 func TestCustomContainer_NestJS_QuadletGeneration(t *testing.T) {
 	projectDir, _ := setupCustomContainerEnv(t)
 
-	content := podman.GenerateCustomContainerQuadlet("nestjs-app", projectDir, 3000)
+	content, err := podman.GenerateCustomContainerQuadlet("nestjs-app", projectDir, 3000)
+	if err != nil {
+		t.Fatalf("GenerateCustomContainerQuadlet: %v", err)
+	}
 
 	checks := []struct {
 		label, substr string

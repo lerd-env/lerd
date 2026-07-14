@@ -115,6 +115,9 @@ func runPark(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
+	if absDir == "/" {
+		return fmt.Errorf("refusing to park the filesystem root; lerd would bind-mount / into every container and shadow its rootfs")
+	}
 
 	cfg, err := config.LoadGlobal()
 	if err != nil {

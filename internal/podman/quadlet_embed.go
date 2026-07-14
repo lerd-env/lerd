@@ -246,13 +246,17 @@ func InjectPodmanArgs(content, arg string) string {
 // InjectExtraVolumes adds Volume= lines for paths that are not already covered
 // by the %h:%h mount. Each path is bind-mounted read-write at the same location
 // inside the container. Existing Volume= lines for the same host path are not
-// duplicated.
+// duplicated. Paths that cannot be bind-mounted are skipped: this is the one
+// place that formats a Volume=path:path line, so the guard belongs here (#884).
 func InjectExtraVolumes(content string, paths []string) string {
 	if len(paths) == 0 {
 		return content
 	}
 	var extra []string
 	for _, p := range paths {
+		if !bindMountable(p) {
+			continue
+		}
 		// Check if this path is already mounted (with any flags).
 		prefix := fmt.Sprintf("Volume=%s:%s:", p, p)
 		if strings.Contains(content, prefix) {

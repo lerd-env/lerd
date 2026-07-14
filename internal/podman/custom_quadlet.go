@@ -11,7 +11,14 @@ import (
 // per-project custom container. The container joins the lerd network so it
 // can reach services (lerd-mysql, lerd-redis, etc.) and is reachable by
 // nginx via its container name.
-func GenerateCustomContainerQuadlet(siteName, projectPath string, port int) string {
+//
+// A project path that cannot be bind-mounted is refused rather than rendered
+// without its Volume= line, which would leave the container with a --workdir
+// pointing at nothing (#884).
+func GenerateCustomContainerQuadlet(siteName, projectPath string, port int) (string, error) {
+	if !bindMountable(projectPath) {
+		return "", fmt.Errorf("invalid project path %q for site %s: cannot be bind-mounted into a container", projectPath, siteName)
+	}
 	containerName := CustomContainerName(siteName)
 	imageName := CustomImageName(siteName)
 
@@ -35,13 +42,16 @@ func GenerateCustomContainerQuadlet(siteName, projectPath string, port int) stri
 	b.WriteString("\n[Install]\n")
 	b.WriteString("WantedBy=default.target\n")
 
-	return b.String()
+	return b.String(), nil
 }
 
 // WriteCustomContainerQuadlet writes the quadlet for a custom container site.
 func WriteCustomContainerQuadlet(siteName, projectPath string, port int) error {
-	content := GenerateCustomContainerQuadlet(siteName, projectPath, port)
-	_, err := WriteQuadletDiff(CustomContainerName(siteName), content)
+	content, err := GenerateCustomContainerQuadlet(siteName, projectPath, port)
+	if err != nil {
+		return err
+	}
+	_, err = WriteQuadletDiff(CustomContainerName(siteName), content)
 	return err
 }
 

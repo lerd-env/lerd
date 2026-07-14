@@ -37,7 +37,10 @@ func TestFrankenPHPImage(t *testing.T) {
 func TestGenerateFrankenPHPQuadlet(t *testing.T) {
 	entry := []string{"php", "artisan", "octane:start", "--server=frankenphp"}
 	env := map[string]string{"FRANKENPHP_CONFIG": "worker ./public/index.php"}
-	content := GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", entry, env)
+	content, err := GenerateFrankenPHPQuadlet("myapp", "/home/user/myapp", "8.4", entry, env)
+	if err != nil {
+		t.Fatalf("GenerateFrankenPHPQuadlet: %v", err)
+	}
 
 	mustContain := []string{
 		"ContainerName=lerd-fp-myapp",

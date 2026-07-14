@@ -6,7 +6,10 @@ import (
 )
 
 func TestGenerateCustomContainerQuadlet(t *testing.T) {
-	content := GenerateCustomContainerQuadlet("nestapp", "/home/user/projects/nestapp", 3000)
+	content, err := GenerateCustomContainerQuadlet("nestapp", "/home/user/projects/nestapp", 3000)
+	if err != nil {
+		t.Fatalf("GenerateCustomContainerQuadlet: %v", err)
+	}
 
 	checks := []struct {
 		label    string
@@ -32,7 +35,10 @@ func TestGenerateCustomContainerQuadlet(t *testing.T) {
 }
 
 func TestGenerateCustomContainerQuadlet_DifferentSite(t *testing.T) {
-	content := GenerateCustomContainerQuadlet("goapp", "/var/www/goapp", 8080)
+	content, err := GenerateCustomContainerQuadlet("goapp", "/var/www/goapp", 8080)
+	if err != nil {
+		t.Fatalf("GenerateCustomContainerQuadlet: %v", err)
+	}
 
 	if !strings.Contains(content, "Image=lerd-custom-goapp:local") {
 		t.Error("wrong image name")
