@@ -59,7 +59,18 @@ func toolList() []mcpTool {
 		diagTool(),
 		logsTool(),
 		worktreeTool(),
+		workspaceTool(),
 	}
+}
+
+// ToolActions maps each tool name to the actions it advertises, so the docs-drift
+// test can assert every action reaches the reference every client reads.
+func ToolActions() map[string][]string {
+	out := make(map[string][]string, len(toolList()))
+	for _, t := range toolList() {
+		out[t.Name] = t.InputSchema.Properties["action"].Enum
+	}
+	return out
 }
 
 // dispatch maps group name → action → handler. Built once at init from the
@@ -217,6 +228,14 @@ var groupDispatch = map[string]map[string]handlerFn{
 	"logs": {
 		"sources": execLogsSources,
 		"fetch":   execLogsFetch,
+	},
+	"workspace": {
+		"list":   func(a map[string]any) (any, *rpcError) { return execWorkspaceList(a) },
+		"create": execWorkspaceCreate,
+		"rename": execWorkspaceRename,
+		"delete": execWorkspaceDelete,
+		"assign": execWorkspaceAssign,
+		"move":   execWorkspaceMove,
 	},
 }
 
@@ -468,7 +487,7 @@ func execTool() mcpTool {
 func frameworkTool() mcpTool {
 	return mcpTool{
 		Name:        "framework",
-		Description: "Framework definitions and scaffolding. action: list, add (name=laravel merges into built-in), remove (force=true overrides in-use guard), prune (remove unused defs), search (store), install, project_new (scaffold), setup (post-install steps, MANDATORY after env setup).",
+		Description: "Framework definitions and scaffolding. action: list, add (name=laravel merges into built-in), remove (force=true overrides in-use guard), prune (remove unused defs), search (store), update (fetch a definition from the store), project_new (scaffold), setup (post-install steps, MANDATORY after env setup).",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{

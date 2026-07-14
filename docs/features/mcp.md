@@ -116,12 +116,12 @@ Commands the `exec` MCP tool runs (`artisan`, `composer`, `vendor_run` for Pest/
 
 ## Available MCP tools
 
-The MCP surface is **eleven grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **twelve grouped tools**, each driven by an `action` argument. Always pass `action`; start by calling `site` with `action: "list"` to discover sites.
 
 | Tool | Actions |
 |---|---|
 | `site` | `list` (discover sites — call first), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `tls_renew`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark` |
-| `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_install`, `check_updates` |
+| `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_search`, `preset_install`, `check_updates` |
 | `db` | `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete` |
 | `env` | `setup`, `check`, `override` |
 | `runtime` | `versions`, `node_install`, `node_uninstall`, `php_list`, `ext_list`, `ext_add`, `ext_remove`, `ports_list`, `ports_add`, `ports_remove` |
@@ -131,8 +131,21 @@ The MCP surface is **eleven grouped tools**, each driven by an `action` argument
 | `diag` | `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |
 | `worktree` | `list`, `add`, `remove`, `db_isolate`, `db_share` |
+| `workspace` | `list`, `create`, `rename`, `delete`, `assign`, `move` |
 
 The injected context files document each action's arguments and the key conventions in full.
+
+### Workspaces are not site groups
+
+The two are easy to confuse and an assistant reaching for the wrong one does the wrong thing.
+
+A **workspace** (the `workspace` tool) is a display-only bucket that organises the site list in the dashboard sidebar and the TUI. It never touches nginx, domains, certificates or `.env`. Use it when someone wants their sites sorted by client or by project.
+
+A **site group** (the `site` tool's `group_*` actions) nests a real site under another site's subdomain, at `<label>.<main>.test`, and regenerates vhosts and certificates to serve it. Use it when a site should actually be reachable at that address.
+
+### Service presets carry their own discovery metadata
+
+`preset_list` returns each preset's `category`, `icon` and `admin_for`. `admin_for` names the services a preset's admin UI administers, and it is **not** `depends_on`: phpMyAdmin depends on mysql but administers mariadb too, and RedisInsight administers valkey without depending on it. To answer "which dashboard administers this database", read `admin_for`.
 
 ### Reading logs
 

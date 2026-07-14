@@ -1,16 +1,16 @@
-## Lerd — Laravel Local Dev Environment
+## Lerd, a local PHP development environment
 
-This project runs on **lerd**, a Podman-based Laravel development environment. The `lerd` MCP server is available — use it to manage the environment without leaving the chat.
+This project runs on **lerd**, a Podman-based PHP development environment. It is framework-agnostic: Laravel, Symfony, WordPress, Drupal, Magento, CakePHP and any custom framework are all driven by a framework definition (YAML), never by lerd hardcoding a framework's name. The `lerd` MCP server is available — use it to manage the environment without leaving the chat.
 
-The MCP surface is **eleven grouped tools**, each driven by an `action` argument: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `worktree`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start by calling `site` with `action: "list"` to discover sites.
+The MCP surface is **twelve grouped tools**, each driven by an `action` argument: `site`, `service`, `db`, `env`, `runtime`, `worker`, `exec`, `framework`, `diag`, `logs`, `worktree`, `workspace`. Always pass `action`. Most actions also accept an optional `path` that defaults to the directory the assistant was opened in (then `LERD_SITE_PATH` if set), so you can usually omit it. Start by calling `site` with `action: "list"` to discover sites.
 
 ### Architecture
 
 - PHP runs in Podman containers named `lerd-php<version>-fpm` (e.g. `lerd-php84-fpm`); each container includes composer and node/npm; the PHP version is resolved from `.lerd.yaml` → `.php-version` → `composer.json` `require.php` constraint (matched against installed versions) → global default
 - Nginx routes `*.test` domains to the correct PHP-FPM container
 - Services (MySQL, Redis, PostgreSQL, etc.) and custom services run as Podman containers via systemd quadlets
-- Node.js versions are managed by fnm; per-project version is set via a `.node-version` file
-- Framework workers (queue, schedule, reverb, horizon, messenger, vite, etc.) run as systemd user services named `lerd-<worker>-<sitename>`; commands are defined per-framework in YAML; Laravel Horizon is auto-detected from `composer.json` and replaces the queue toggle when installed; Laravel ships with a `vite` host worker that runs `npm run dev` on the host via fnm for HMR (it runs `bun run dev` instead when the project uses bun or Node is unmanaged and bun is installed); workers and setup commands support optional `check` (`file` or `composer`) for conditional visibility; workers with `conflicts_with` auto-stop conflicting workers on start. Per-worker flags: `host: true` (run on host via fnm instead of in FPM container — HMR-sensitive Node tools), `per_worktree: true` (worker runs independently per worktree under `lerd-<worker>-<site>-<branch>`), `replaces_build: true` (worker provides asset manifest while running, so a worktree add skips the static `npm run build` step when this worker is opted in)
+- Node.js versions are managed by fnm; per-project version is set via a `.node-version` file. The **package manager** is the project's, not lerd's: a `packageManager` pin in `package.json` wins, then the lockfile (`pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lock*` → bun, else npm). pnpm and yarn run through corepack, and installs use the manager's frozen-lockfile mode (`pnpm install --frozen-lockfile`, `yarn install --immutable`, `npm ci`). Never assume `npm run dev`/`npm ci` — the worker command and the setup steps follow the detected manager
+- Framework workers (queue, schedule, reverb, horizon, messenger, vite, etc.) run as systemd user services named `lerd-<worker>-<sitename>`; commands are defined per-framework in YAML; Laravel Horizon is auto-detected from `composer.json` and replaces the queue toggle when installed; Laravel ships with a `vite` host worker that runs the project's dev script on the host via fnm for HMR, through whichever package manager the project pins (npm, pnpm and yarn via corepack, or bun when the project is a bun project or Node is unmanaged and bun is installed); workers and setup commands support optional `check` (`file` or `composer`) for conditional visibility; workers with `conflicts_with` auto-stop conflicting workers on start. Per-worker flags: `host: true` (run on host via fnm instead of in FPM container — HMR-sensitive Node tools), `per_worktree: true` (worker runs independently per worktree under `lerd-<worker>-<site>-<branch>`), `replaces_build: true` (worker provides asset manifest while running, so a worktree add skips the static `npm run build` step when this worker is opted in)
 - Custom workers can be added per-project (`.lerd.yaml` `custom_workers`) or globally (`~/.config/lerd/frameworks/<name>.yaml`); use the `worker` tool's `add`/`remove` actions — both survive framework store updates
 - Framework setup commands (one-off bootstrap steps like migrations, storage links) are defined in the framework YAML and shown by `framework` `action: "setup"`; Laravel has built-in storage:link/migrate/db:seed; custom frameworks can define their own
 - Service version placeholders (`{{mysql_version}}`, `{{postgres_version}}`, `{{redis_version}}`, `{{meilisearch_version}}`) are available in framework env vars and resolved from the service image tag at env-setup time
@@ -28,24 +28,26 @@ Read `diag` `action: "status"` for `dns.tld` and `dns.enabled` instead of assumi
 
 ### MCP tools
 
-Eleven grouped tools, each selecting behaviour via `action`.
+Twelve grouped tools, each selecting behaviour via `action`.
 
 #### `site` — sites and their configuration
-Actions: `list` (discover sites — CALL FIRST), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark`.
+Actions: `list` (discover sites — CALL FIRST), `link`, `unlink`, `domain_add`, `domain_remove`, `group_assign`, `group_unassign`, `group_label`, `group_db`, `group_list`, `tls_enable`, `tls_disable`, `tls_renew`, `php`, `node`, `pause`, `unpause`, `restart`, `rebuild`, `runtime`, `nginx_read`, `nginx_write`, `nginx_reset`, `park`, `unpark`.
 - `link` registers a directory; non-PHP sites need `.lerd.yaml` `container.port` + a Containerfile first, or they register as PHP (wrong)
 - `domain_*` take a domain without the `.test` TLD; you can't remove the last domain
 - `group_*` nest a secondary site under a main's subdomain (one level deep): they identify the secondary by `path` (defaults to cwd), not by `site`; `group_assign` with `main` + `label` (+ optional `share_db`), `group_db` = share|separate
 - a group secondary follows its main's HTTPS: `group_assign` under a secured main secures the secondary, `tls_enable` on a main secures its secondaries too, and `tls_disable` on a secondary is refused while its main is secured (the main's `*.<main>` wildcard would answer the subdomain and serve the main's app). Disable the main's TLS first
+- certificates renew themselves before they expire; `tls_renew` forces it by hand for one site
 - `php`/`node` take `version`; pass `branch` to pin the override on a worktree's checkout
 - `runtime` switches `fpm` ↔ `frankenphp` (`worker: true` enables frankenphp worker mode)
 - `nginx_write` saves a custom override (runs `nginx -t`, backs up, reloads); `branch` targets a worktree
 - `park` registers a parent dir and auto-registers every PHP project under it; `unpark` reverses it (project files kept)
 
 #### `service` — built-in & custom services
-Actions: `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_install`, `check_updates`.
+Actions: `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_search`, `preset_install`, `check_updates`.
 - `update` pulls a newer image (safe, in-strategy); `migrate` dumps + restores across a cross-strategy upgrade; `reinstall` with `reset_data: true` wipes data and reprovisions; `remove` with `remove_data: true` renames the data dir aside
 - `stop` marks the service paused — `lerd start` skips it until started again; `pin` keeps it always running
 - `add` registers a custom OCI service (`depends_on` wires dependencies, `init: true` for mysql/mariadb); prefer `preset_install` for anything in `preset_list` (phpmyadmin, pgadmin, mongo, mongo-express, selenium, stripe-mock, mysql, mariadb…)
+- `preset_list` returns the installable presets with the metadata each one declares: `category` (the discovery heading), `icon`, and `admin_for` — the services this preset's admin UI administers, which is **not** `depends_on`. phpMyAdmin depends on mysql but administers mariadb too, and RedisInsight administers valkey without depending on it. To answer "which dashboard administers this database", read `admin_for`, not `depends_on`. `preset_search` queries the store by `name` for presets that are not bundled locally
 - `env` returns the recommended `.env` connection keys; `expose` publishes an extra `host:container` port
 - `port` moves the service's primary published host port (`published_port`, or `reset: true` for the default); it stays bound to 127.0.0.1, the container-internal port is unchanged, and a host-proxy site that points at the old port is realigned automatically
 - `config_*` read/write/restore/reset a service's runtime tuning override
@@ -76,7 +78,8 @@ Actions: `list` (CALL FIRST), `start`, `stop`, `add`, `remove`, `health`, `heal`
 - call `list` to discover a site's workers before `start`; pass `branch` to target a per-worktree unit
 - use `horizon_*` instead of `queue_*` when laravel/horizon is installed (mutually exclusive); `queue_start` needs Redis running when `QUEUE_CONNECTION=redis`
 - `add` saves a custom worker to `.lerd.yaml` (or the user overlay with `global: true`); does not auto-start
-- `health` lists failed units (read-only); `heal` resets and restarts them (`unit` for one, omit for all); `mode_get` reports the macOS worker runtime, `mode_set` switches it (`mode`: exec|container)
+- `health` reports unhealthy units (read-only); `heal` resets and restarts them (`unit` for one, omit for all); `mode_get` reports the macOS worker runtime, `mode_set` switches it (`mode`: exec|container)
+- a worker's health `state` is one of `failed` (the unit died), `expected-but-stopped` (it should be running and isn't), or `unreachable` — the unit is happily active but the server it publishes no longer accepts connections, a dev server that wedged without exiting. All three are heal-able; `heal` restarts the unit. Per-worktree units (`lerd-<worker>-<site>-<branch>`) are covered by the same pass, so a dead per-worktree Vite heals like any other. A worker with a `schedule` is a oneshot driven by a timer and is idle between ticks by design, which is healthy
 - Stripe secret is read from `.env` (STRIPE_SECRET / STRIPE_SECRET_KEY / STRIPE_API_KEY); `stripe_config` sets webhook_path / secret_env_key in `.lerd.yaml`
 - **Auto-reload (CLI-only)**: `lerd horizon:reload [on|off]` and `lerd octane:reload [on|off]` (FrankenPHP worker mode) restart workers on file changes; both need the project's `chokidar` npm package
 - **Idle-suspend (CLI-only)**: `lerd idle on/off` toggles activity-driven suspension globally; suspended workers stop after the idle timeout (`lerd idle timeout <dur>`) and resume on the next request/CLI/MCP/file-save. `lerd idle pin/unpin <site>` exempts a site; `lerd idle status` reports policy and last-active. A worker shown as suspended is healthy, not failed, so do not `heal` it
@@ -99,7 +102,7 @@ Actions: `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `s
 #### `diag` — diagnostics & observability
 Actions: `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
 - `status` (DNS/nginx/FPM/watcher health) and `doctor` (full JSON diagnostic) are the first stops when something is broken; `dns_diagnose` walks the DNS chain
-- `site_doctor` runs framework-agnostic app-level checks for one site (env file, env drift, app key, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP range, a `slow_routes` warning for routes whose p95 runs well above the site's typical response time or over a second in absolute terms, plus the framework's own checks); pass `site` (name or domain) or `path`, defaults to cwd. Every action that takes a `site` now accepts either the site name or a domain `slow_routes` reads the watcher's request-timing snapshot and has no command fix; the remedy is to profile the route (`profiler_toggle`)
+- `site_doctor` runs framework-agnostic app-level checks for one site (env file, env drift, app key, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP range, a `slow_routes` warning for routes whose p95 runs well above the site's typical response time or over a second in absolute terms, plus the framework's own checks); pass `site` (name or domain) or `path`, defaults to cwd. A failing check carries a `severity` and, when one applies, a `fix` naming the command that resolves it — run that yourself (`exec`, or the named lerd command); site_doctor itself is read-only. `slow_routes` is the exception: it reads the watcher's request-timing snapshot and has no command fix, the remedy is to profile the route (`profiler_toggle`)
 - reading logs lives in the `logs` tool (below), not here
 - `which` shows resolved PHP/Node/docroot/nginx for a site; `check` validates `.lerd.yaml`
 - debug bridge loop: `dumps_toggle` (enable) → `dumps_clear` → hit the page → `analyze_queries` (N+1 / slow-query report with file:line) or `dumps_recent` (filter by site/branch/ctx/kind/since/limit)
@@ -120,8 +123,16 @@ Actions: `sources`, `fetch`. Debug without opening files by hand.
 
 #### `worktree` — git worktrees
 Actions: `list`, `add`, `remove`, `db_isolate`, `db_share`.
-- `add` installs deps and offers an asset-worker / npm-build prompt; secured sites get `*.<branch>.<site>.test` wildcard cert SANs + nginx `server_name` automatically
+- `add` installs deps and offers an asset-worker / build-step prompt; secured sites get `*.<branch>.<site>.test` wildcard cert SANs + nginx `server_name` automatically
 - `db_isolate` gives a worktree its own database (seed via `source`: empty|main|<branch>); `db_share` points it back at the main; `remove` keeps an isolated DB unless `keep_db: false`
+- a framework definition can declare what its worktrees need (an isolated database, what it is cloned from, console commands to run once it is in place), so `add` does that work rather than leaving it to be run by hand
+- request timing is recorded per worktree; pass `branch` to `route_timing`, `optimize_route` and `dumps_recent` to read one branch's traffic
+
+#### `workspace` — group sites for display
+Actions: `list`, `create`, `rename`, `delete`, `assign`, `move`.
+- a workspace is a **display-only** bucket of sites, shown in the dashboard sidebar and the TUI. It never touches nginx, domains, certificates or `.env`. This is not the same thing as the `site` tool's `group_*` actions, which nest a real site under another's subdomain and regenerate vhosts and certs — reach for `group_*` when a site should be served at `<label>.<main>.test`, and for `workspace` when the user just wants their site list organised
+- `assign` takes `sites` (names or domains) and a `workspace`, creating it if new; `workspace: "none"` ungroups them. `move` reorders a workspace with a zero-based `position`
+- `delete` drops the workspace and ungroups its members; no site is touched
 
 ### Key conventions
 

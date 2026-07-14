@@ -25,6 +25,20 @@ func TestEveryMCPToolIsDocumented(t *testing.T) {
 	}
 }
 
+// TestEveryMCPActionIsDocumented is the same guard one level down. Tool names
+// alone drifted clean while `tls_renew` and `preset_search` shipped documented
+// nowhere, so an assistant reading the reference could not know they existed.
+// Actions are matched backtick-wrapped, the form the reference lists them in.
+func TestEveryMCPActionIsDocumented(t *testing.T) {
+	for tool, actions := range mcp.ToolActions() {
+		for _, action := range actions {
+			if !strings.Contains(lerdReference, "`"+action+"`") {
+				t.Errorf("action %q of tool %q is missing from aidocs/lerd-reference.md", action, tool)
+			}
+		}
+	}
+}
+
 func TestWriteGlobalAISkills_writesAllThreeFiles(t *testing.T) {
 	home := t.TempDir()
 
@@ -183,7 +197,7 @@ func TestWriteGlobalAISkills_replacesExistingLerdBlock(t *testing.T) {
 	if strings.Contains(string(got), "stale lerd content") {
 		t.Errorf("stale lerd block was not replaced")
 	}
-	if !strings.Contains(string(got), "Lerd — Laravel Local Dev Environment") {
+	if !strings.Contains(string(got), "Lerd, a local PHP development environment") {
 		t.Errorf("fresh lerd block not written")
 	}
 }
@@ -560,9 +574,11 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // globally for every client, so drift upward gets expensive fast. Raise the
 // ceiling only when adding content that justifies the bytes. Unifying the three
 // former per-client constants onto this one leaner reference dropped the prior
-// 57000-byte SKILL.md ceiling to this.
+// 57000-byte SKILL.md ceiling to 26000; bumped to this for the `workspace` tool
+// group and for the package-manager, worker-state and preset-metadata rules an
+// assistant was previously getting wrong.
 func TestLerdReference_underSizeCeiling(t *testing.T) {
-	const ceiling = 26000
+	const ceiling = 28500
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}
