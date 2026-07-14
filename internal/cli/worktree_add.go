@@ -84,8 +84,21 @@ func newWorktreeAddCmd() *cobra.Command {
 			}
 			ApplyWorktreeBuildChoice(site, worktreePath, promptWorktreeBuild(site, worktreePath), os.Stdout)
 
-			if err := promptDBIsolation(site, branch); err != nil {
+			fw, hasFramework := config.GetFrameworkForDir(site.Framework, site.Path)
+
+			// A framework whose deployment state lives in the database cannot share
+			// the parent's, so its definition picks the choice instead of prompting.
+			if forced := requiredWorktreeDBChoice(fw); hasFramework && forced != "" {
+				feedback.Note(site.Framework + " worktrees need their own database; using " + forced)
+				if err := ApplyWorktreeDBChoice(site, branch, forced, os.Stdout); err != nil {
+					feedback.Warn("DB setup failed: %v", err)
+				}
+			} else if err := promptDBIsolation(site, branch); err != nil {
 				feedback.Warn("DB setup skipped: %v", err)
+			}
+
+			if hasFramework {
+				runWorktreeSetupCommands(fw, worktreePath, os.Stdout)
 			}
 
 			scheme := "http"

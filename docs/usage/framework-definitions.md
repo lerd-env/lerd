@@ -222,7 +222,16 @@ nginx:
     location /static/ {
       try_files $uri $uri/ /static.php?$args;
     }
+
+# What a new worktree needs once its env file is seeded (optional)
+worktree:
+  db_isolation: required              # required | (unset, which prompts as usual)
+  db_source: main                     # what an isolated database starts from: empty | main
+  commands:                           # console commands run once env and database are ready
+    - app:config:import
 ```
+
+An app that keeps deployment state in its database cannot share the parent's. Magento hashes its file config and stores the hash in the database, so seeding a worktree's own base URL into `env.php` makes the store refuse to serve until `app:config:import` re-syncs it, and running that import against a shared database would rewrite the hash out from under the parent site. `db_isolation: required` therefore skips the prompt and isolates, `db_source: main` clones the parent's data (an empty schema is useless to a store that cannot bootstrap itself), and `commands` run afterwards, in the worktree, through the framework's own `console` binary.
 
 ## Site placeholders
 
