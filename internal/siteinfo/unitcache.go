@@ -1,7 +1,6 @@
 package siteinfo
 
 import (
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -62,41 +61,33 @@ func defaultUnitCacheList() (string, error) {
 	return string(out), err
 }
 
-// defaultUnitShow batches one `systemctl show` over the discovered unit names to
-// read the two properties the reachability probe needs. Mirrors the pattern in
-// stats.showProps.
+// defaultUnitShow batches one `systemctl show` over the discovered unit names to read
+// the properties the reachability probe needs. It asks for the realtime
+// ActiveEnterTimestamp: systemd's monotonic clock stops during suspend, so pairing it
+// with a boot instant from /proc/uptime (which keeps counting) dates every unit
+// started after a resume hours into the past.
 func defaultUnitShow(units []string) (string, error) {
 	if len(units) == 0 {
 		return "", nil
 	}
-	args := append([]string{"--user", "show", "-p", "Id", "-p", "ActiveEnterTimestampMonotonic", "-p", "WorkingDirectory"}, units...)
+	args := append([]string{"--user", "show", "--timestamp=unix", "-p", "Id", "-p", "ActiveEnterTimestamp", "-p", "WorkingDirectory"}, units...)
 	out, err := exec.Command("systemctl", args...).Output()
+	if err == nil {
+		return string(out), nil
+	}
+	// --timestamp=unix predates every systemd that can run a quadlet, but if it is
+	// ever rejected, fall back to the properties that always parse rather than lose
+	// WorkingDirectory (which pins a worktree's worker) along with the timestamp.
+	args = append([]string{"--user", "show", "-p", "Id", "-p", "WorkingDirectory"}, units...)
+	out, err = exec.Command("systemctl", args...).Output()
 	return string(out), err
 }
 
-// systemBootTime derives the wall-clock time the machine booted from
-// /proc/uptime, used to turn systemd's monotonic ActiveEnter into a wall-clock
-// timestamp comparable to a file mtime. ok is false when uptime is unreadable.
-func systemBootTime() (time.Time, bool) {
-	data, err := os.ReadFile("/proc/uptime")
-	if err != nil {
-		return time.Time{}, false
-	}
-	fields := strings.Fields(string(data))
-	if len(fields) == 0 {
-		return time.Time{}, false
-	}
-	sec, err := strconv.ParseFloat(fields[0], 64)
-	if err != nil {
-		return time.Time{}, false
-	}
-	return time.Now().Add(-time.Duration(sec * float64(time.Second))), true
-}
-
 // parseUnitMeta turns `systemctl show` output (blank-line-separated per-unit
-// blocks keyed by Id) into a unit→UnitMeta map. Monotonic 0 or bootOK false
-// leaves ActiveEnter zero, so the gate that reads it simply doesn't fire.
-func parseUnitMeta(raw string, boot time.Time, bootOK bool) map[string]UnitMeta {
+// blocks keyed by Id) into a unit→UnitMeta map. A unit that has never been active
+// reports an empty timestamp, leaving ActiveEnter zero so the gate that reads it
+// simply doesn't fire.
+func parseUnitMeta(raw string) map[string]UnitMeta {
 	out := make(map[string]UnitMeta)
 	var id string
 	var m UnitMeta
@@ -124,11 +115,10 @@ func parseUnitMeta(raw string, boot time.Time, bootOK bool) map[string]UnitMeta 
 			id = val
 		case "WorkingDirectory":
 			m.WorkingDir = val
-		case "ActiveEnterTimestampMonotonic":
-			if bootOK {
-				if usec, err := strconv.ParseUint(val, 10, 64); err == nil && usec > 0 {
-					m.ActiveEnter = boot.Add(time.Duration(usec) * time.Microsecond)
-				}
+		case "ActiveEnterTimestamp":
+			// `--timestamp=unix` renders it as @<epoch seconds>.
+			if sec, err := strconv.ParseInt(strings.TrimPrefix(val, "@"), 10, 64); err == nil && sec > 0 {
+				m.ActiveEnter = time.Unix(sec, 0)
 			}
 		}
 	}
@@ -273,8 +263,7 @@ func (c *unitCache) refreshLocked() error {
 	// back to process-only behaviour, so the state path above is never affected.
 	c.meta = map[string]UnitMeta{}
 	if raw, err := unitShowFn(serviceNames); err == nil {
-		boot, bootOK := systemBootTime()
-		c.meta = parseUnitMeta(raw, boot, bootOK)
+		c.meta = parseUnitMeta(raw)
 	}
 
 	c.at = time.Now()

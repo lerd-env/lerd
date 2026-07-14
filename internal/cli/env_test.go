@@ -388,3 +388,443 @@ func TestRewriteEnvForHostProxy_usesPresetPorts(t *testing.T) {
 		t.Errorf("ports changed unexpectedly: %+v", updates)
 	}
 }
+
+// magentoLikeFramework mirrors the shape of a framework whose env file is not
+// dotenv: it maps mysql/redis under its own nested keys.
+func magentoLikeFramework() *config.Framework {
+	return &config.Framework{
+		Name: "magento",
+		Env: config.FrameworkEnvConf{
+			File:   "app/etc/env.php",
+			Format: "php-array",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{
+					"db.connection.default.host=lerd-mysql",
+					"db.connection.default.dbname={{site}}",
+					"db.connection.default.username=root",
+					"db.connection.default.password=lerd",
+				}},
+				"redis": {Vars: []string{
+					`cache.frontend.default.backend=Magento\Framework\Cache\Backend\Redis`,
+					"cache.frontend.default.backend_options.server=lerd-redis",
+					"cache.frontend.default.backend_options.port=6379",
+				}},
+				"opensearch": {Vars: []string{
+					"system.default.catalog.search.opensearch_server_hostname=lerd-opensearch",
+				}},
+			},
+		},
+	}
+}
+
+func TestFrameworkServiceRole(t *testing.T) {
+	fw := magentoLikeFramework()
+	for _, tc := range []struct {
+		name     string
+		svc      *config.CustomService
+		wantRole string
+		wantOK   bool
+	}{
+		{"exact name", &config.CustomService{Name: "mysql"}, "mysql", true},
+		{"declared drop-in", &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"}, "mysql", true},
+		{"drop-in across families", &config.CustomService{Name: "valkey", Family: "valkey", EnvRole: "redis"}, "redis", true},
+		{"same family alternate", &config.CustomService{Name: "mysql-5-7", Family: "mysql"}, "mysql", true},
+		{"versioned alternate of the mapped preset", &config.CustomService{Name: "opensearch-2-19", Preset: "opensearch"}, "opensearch", true},
+		{"unmapped service", &config.CustomService{Name: "typesense", Family: "typesense"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			role, ok := frameworkServiceRole(fw, tc.svc)
+			if role != tc.wantRole || ok != tc.wantOK {
+				t.Errorf("got %q/%v, want %q/%v", role, ok, tc.wantRole, tc.wantOK)
+			}
+		})
+	}
+}
+
+// symfonyLikeFramework is a dotenv framework whose keys are NOT the preset's
+// Laravel-shaped DB_* ones, so its own mapping has to win over them.
+func symfonyLikeFramework() *config.Framework {
+	return &config.Framework{
+		Name: "symfony",
+		Env: config.FrameworkEnvConf{
+			File:   ".env.local",
+			Format: "dotenv",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}"}},
+			},
+		},
+	}
+}
+
+// mariadb and valkey must resolve their role even on an install whose service
+// store predates env_role, or the alternate would silently go unwired.
+func TestFrameworkServiceRole_ResolvesWithoutTheStoreField(t *testing.T) {
+	fw := magentoLikeFramework()
+	for _, tc := range []struct {
+		name string
+		svc  *config.CustomService
+		want string
+	}{
+		{"mariadb without env_role", &config.CustomService{Name: "mariadb-11-8", Family: "mariadb"}, "mysql"},
+		{"valkey without env_role", &config.CustomService{Name: "valkey", Family: "valkey"}, "redis"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			role, ok := frameworkServiceRole(fw, tc.svc)
+			if !ok || role != tc.want {
+				t.Errorf("got %q/%v, want %q/true", role, ok, tc.want)
+			}
+		})
+	}
+}
+
+// A drop-in is protocol-compatible with the service it replaces, so re-pointing the
+// framework's wiring at it is a container swap and nothing else.
+func TestFrameworkVarsForAlternate_SwapsTheContainerOnly(t *testing.T) {
+	mariadb := &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"}
+	got := frameworkVarsForAlternate(magentoLikeFramework(), "mysql", mariadb)
+	want := []string{
+		"db.connection.default.host=lerd-mariadb-11-8",
+		"db.connection.default.dbname={{site}}",
+		"db.connection.default.username=root",
+		"db.connection.default.password=lerd",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// No dotenv key leaks into the php-array key space.
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "DB_") {
+			t.Errorf("dotenv key %q must never reach a php-array env file", kv)
+		}
+	}
+}
+
+// The redis role's container name must not bite into an unrelated value that merely
+// contains the word "redis" (Magento names a PHP class there).
+func TestFrameworkVarsForAlternate_LeavesUnrelatedValuesAlone(t *testing.T) {
+	valkey := &config.CustomService{Name: "valkey", Family: "valkey", EnvRole: "redis"}
+	got := frameworkVarsForAlternate(magentoLikeFramework(), "redis", valkey)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "backend_options.server=lerd-valkey") {
+		t.Errorf("the redis container was not swapped: %s", joined)
+	}
+	if !strings.Contains(joined, `backend=Magento\Framework\Cache\Backend\Redis`) {
+		t.Errorf("an unrelated value was rewritten: %s", joined)
+	}
+	if !strings.Contains(joined, "backend_options.port=6379") {
+		t.Errorf("the port must not move for a drop-in: %s", joined)
+	}
+}
+
+// A framework may leave keys to the preset: Laravel's redis block sets the host but
+// not the cache, session and queue drivers valkey switches on, and wiring valkey
+// through that block must not drop them. Laravel knows all three: they are the keys
+// its own redis detect rules watch.
+func TestPresetVarsBeyond(t *testing.T) {
+	frameworkVars := []string{"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD="}
+	presetVars := []string{
+		"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD=null",
+		"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis",
+	}
+	known := map[string]bool{
+		"REDIS_HOST": true, "REDIS_PORT": true, "REDIS_PASSWORD": true,
+		"CACHE_STORE": true, "SESSION_DRIVER": true, "QUEUE_CONNECTION": true,
+	}
+	got := presetVarsBeyond(presetVars, frameworkVars, known)
+	want := []string{"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// A key the framework declares stays the framework's, so REDIS_PASSWORD keeps the
+	// value Laravel uses for its own redis rather than the preset's.
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "REDIS_PASSWORD") {
+			t.Errorf("a framework-declared key must not be overridden by the preset: %q", kv)
+		}
+	}
+}
+
+// A preset publishes its connection under Laravel's key names. Spilling those onto a
+// framework that never names them writes keys the app cannot read: this is what put
+// six DB_* keys in a Symfony .env beside the DATABASE_URL it actually reads.
+func TestPresetVarsBeyond_DropsKeysTheFrameworkNeverNames(t *testing.T) {
+	known := frameworkKnownKeys(symfonyLikeFramework()) // DATABASE_URL only
+	got := presetVarsBeyond(
+		[]string{"DB_CONNECTION=mysql", "DB_HOST=lerd-mariadb-11-8", "DB_DATABASE=lerd"},
+		[]string{"DATABASE_URL=mysql://root:lerd@lerd-mariadb-11-8:3306/{{site}}"},
+		known,
+	)
+	if len(got) != 0 {
+		t.Errorf("Laravel-shaped keys leaked into a framework that never names them: %v", got)
+	}
+}
+
+// The vocabulary is the whole definition, not just the role being wired: Laravel names
+// the redis drivers in its detect rules, never in its vars.
+func TestFrameworkKnownKeys_CoversVarsAndDetectRules(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Services: map[string]config.FrameworkServiceDef{
+			"redis": {
+				Detect: []config.FrameworkServiceDetect{{Key: "CACHE_STORE", ValuePrefix: "redis"}},
+				Vars:   []string{"REDIS_HOST=lerd-redis"},
+			},
+		},
+	}}
+	known := frameworkKnownKeys(fw)
+	for _, k := range []string{"REDIS_HOST", "CACHE_STORE"} {
+		if !known[k] {
+			t.Errorf("%q must be in the framework's vocabulary", k)
+		}
+	}
+	if known["DB_CONNECTION"] {
+		t.Error("a key the definition never names must not be known")
+	}
+}
+
+// A drop-in on a framework whose keys are not Laravel-shaped gets the framework's
+// own mapping, re-pointed at its container. Drupal is the shape that matters: its
+// keys are flat, so nothing but the mapping tells them apart from a preset's.
+func TestFrameworkVarsForAlternate_NonLaravelDotenvFramework(t *testing.T) {
+	drupal := &config.Framework{
+		Name: "drupal",
+		Env: config.FrameworkEnvConf{File: ".env", Format: "dotenv",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{
+					"DB_DRIVER=mysql", "DB_HOST=lerd-mysql", "DB_PORT=3306",
+					"DB_NAME={{site}}", "DB_USER=root", "DB_PASSWORD=lerd",
+				}},
+			}},
+	}
+	got := frameworkVarsForAlternate(drupal, "mysql", &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"})
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "DB_HOST=lerd-mariadb-11-8") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+	for _, key := range []string{"DB_DRIVER=", "DB_NAME=", "DB_USER="} {
+		if !strings.Contains(joined, key) {
+			t.Errorf("the framework's own key %q must survive: %s", key, joined)
+		}
+	}
+}
+
+// A drop-in on a framework whose keys are its own gets that framework's mapping and
+// nothing else. Symfony reads DATABASE_URL; the preset's six Laravel-shaped DB_* keys
+// are ones it cannot read, and writing them beside DATABASE_URL is the noise this
+// whole path exists to stop.
+func TestWiredVarsFor_DropInGetsOnlyWhatTheFrameworkReads(t *testing.T) {
+	fw := symfonyLikeFramework()
+	mariadb := &config.CustomService{
+		Name: "mariadb-11-8", EnvRole: "mysql",
+		EnvVars: []string{
+			"DB_CONNECTION=mysql", "DB_HOST=lerd-mariadb-11-8", "DB_PORT=3306",
+			"DB_DATABASE=lerd", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+		},
+	}
+	got := wiredVarsFor(fw, mariadb, "mysql", frameworkKnownKeys(fw), true, false, false)
+	want := []string{"DATABASE_URL=mysql://root:lerd@lerd-mariadb-11-8:3306/{{site}}"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// The same drop-in on Laravel keeps every key, because Laravel's mapping names them
+// all itself. The rule must not cost a Laravel project anything.
+func TestWiredVarsFor_LaravelDropInKeepsItsMapping(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Format: "dotenv",
+		Services: map[string]config.FrameworkServiceDef{
+			"mysql": {Vars: []string{
+				"DB_CONNECTION=mysql", "DB_HOST=lerd-mysql", "DB_PORT=3306",
+				"DB_DATABASE={{site}}", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+			}},
+		},
+	}}
+	mariadb := &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"}
+	got := wiredVarsFor(fw, mariadb, "mysql", frameworkKnownKeys(fw), true, false, false)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "DB_HOST=lerd-mariadb-11-8") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+	for _, k := range []string{"DB_CONNECTION=", "DB_DATABASE=", "DB_USERNAME=", "DB_PASSWORD="} {
+		if !strings.Contains(joined, k) {
+			t.Errorf("Laravel's own key %q must survive: %s", k, joined)
+		}
+	}
+}
+
+// Valkey on Laravel is the case the spillover exists for: the redis block sets the
+// host but not the drivers, and Laravel names all three in its detect rules.
+func TestWiredVarsFor_ValkeyKeepsTheDriversLaravelKnows(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Format: "dotenv",
+		Services: map[string]config.FrameworkServiceDef{
+			"redis": {
+				Detect: []config.FrameworkServiceDetect{
+					{Key: "CACHE_STORE", ValuePrefix: "redis"},
+					{Key: "SESSION_DRIVER", ValuePrefix: "redis"},
+					{Key: "QUEUE_CONNECTION", ValuePrefix: "redis"},
+				},
+				Vars: []string{"REDIS_HOST=lerd-redis", "REDIS_PORT=6379", "REDIS_PASSWORD="},
+			},
+		},
+	}}
+	valkey := &config.CustomService{
+		Name: "valkey", Family: "valkey", EnvRole: "redis",
+		EnvVars: []string{
+			"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD=null",
+			"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis",
+		},
+	}
+	joined := strings.Join(wiredVarsFor(fw, valkey, "redis", frameworkKnownKeys(fw), true, false, false), "\n")
+	if !strings.Contains(joined, "REDIS_HOST=lerd-valkey") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+	for _, k := range []string{"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis"} {
+		if !strings.Contains(joined, k) {
+			t.Errorf("valkey switches %q on and Laravel reads it, so it must survive: %s", k, joined)
+		}
+	}
+}
+
+// The same valkey on Symfony, whose redis block is a single REDIS_URL: the Laravel
+// drivers are keys Symfony never names, so none of them may land.
+func TestWiredVarsFor_ValkeyDropsTheDriversSymfonyCannotRead(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Format: "dotenv",
+		Services: map[string]config.FrameworkServiceDef{
+			"redis": {
+				Detect: []config.FrameworkServiceDetect{{Key: "REDIS_URL"}},
+				Vars:   []string{"REDIS_URL=redis://lerd-redis:6379"},
+			},
+		},
+	}}
+	valkey := &config.CustomService{
+		Name: "valkey", Family: "valkey", EnvRole: "redis",
+		EnvVars: []string{
+			"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD=null",
+			"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis",
+		},
+	}
+	got := wiredVarsFor(fw, valkey, "redis", frameworkKnownKeys(fw), true, false, false)
+	want := []string{"REDIS_URL=redis://lerd-valkey:6379"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// A php-array framework never takes a preset's flat keys, mapped or not.
+func TestWiredVarsFor_PhpArrayNeverTakesPresetKeys(t *testing.T) {
+	fw := magentoLikeFramework()
+	typesense := &config.CustomService{
+		Name: "typesense", Family: "typesense",
+		EnvVars: []string{"TYPESENSE_HOST=lerd-typesense"},
+	}
+	if got := wiredVarsFor(fw, typesense, "", frameworkKnownKeys(fw), false, false, true); len(got) != 0 {
+		t.Errorf("an unmapped service on a dotted env writes nothing, got %v", got)
+	}
+	mariadb := &config.CustomService{
+		Name: "mariadb-11-8", EnvRole: "mysql",
+		EnvVars: []string{"DB_HOST=lerd-mariadb-11-8", "DB_DATABASE=lerd"},
+	}
+	for _, kv := range wiredVarsFor(fw, mariadb, "mysql", frameworkKnownKeys(fw), true, false, true) {
+		if strings.HasPrefix(kv, "DB_") {
+			t.Errorf("a dotenv key reached a php-array env file: %q", kv)
+		}
+	}
+}
+
+// The framework loop must not wire a role a drop-in has taken over: left to itself it
+// writes the replaced service's container into the env file and boots it alongside the
+// one the project actually uses.
+func TestReplacedFrameworkRoles(t *testing.T) {
+	fw := magentoLikeFramework() // maps mysql, redis, opensearch
+	roles := replacedFrameworkRoles(fw, []*config.CustomService{
+		{Name: "mariadb-11-8", Family: "mariadb"},
+		{Name: "valkey", Family: "valkey", EnvRole: "redis"},
+		{Name: "typesense", Family: "typesense"},
+	})
+	for _, want := range []string{"mysql", "redis"} {
+		if !roles[want] {
+			t.Errorf("role %q was taken over by a drop-in and must be skipped", want)
+		}
+	}
+	if roles["opensearch"] {
+		t.Error("no drop-in stands in for opensearch, so the framework still wires it")
+	}
+	// A service the framework maps under its own name is not a stand-in for anything.
+	if got := replacedFrameworkRoles(fw, []*config.CustomService{{Name: "opensearch"}}); len(got) != 0 {
+		t.Errorf("a service mapped by its own name replaces no role, got %v", got)
+	}
+}
+
+// externalMariadb is the preset as the store publishes it: Laravel-shaped keys, and a
+// literal database name rather than a {{site}} handle.
+func externalMariadb() *config.CustomService {
+	return &config.CustomService{
+		Name: "mariadb-11-8", Family: "mariadb",
+		EnvVars: []string{
+			"DB_CONNECTION=mysql", "DB_HOST=lerd-mariadb-11-8", "DB_PORT=3306",
+			"DB_DATABASE=lerd", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+		},
+	}
+}
+
+// Externally managed means lerd does not start or provision the service. It does not
+// mean the app reads different keys: what lerd writes is what .env.lerd_override then
+// overrides, so it still has to be the framework's own mapping. Symfony reads a
+// DATABASE_URL, and writing six DB_* keys it cannot read instead leaves the site with
+// no database wiring at all and an override file pointed at nothing.
+func TestWiredVarsFor_ExternalDropInIsWiredThroughTheFramework(t *testing.T) {
+	fw := symfonyLikeFramework()
+	got := wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, false)
+	want := []string{"DATABASE_URL=mysql://root:lerd@lerd-mariadb-11-8:3306/{{site}}"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// The preset names the database `lerd`, the framework names it {{site}}. Wiring an
+// external drop-in through the preset dropped the project's own database on the floor,
+// since the DB_DATABASE pin is skipped precisely when the mapping was used.
+func TestWiredVarsFor_ExternalDropInKeepsTheProjectDatabase(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Format: "dotenv",
+		Services: map[string]config.FrameworkServiceDef{
+			"mysql": {Vars: []string{
+				"DB_CONNECTION=mysql", "DB_HOST=lerd-mysql", "DB_PORT=3306",
+				"DB_DATABASE={{site}}", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+			}},
+		},
+	}}
+	joined := strings.Join(wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, false), "\n")
+	if !strings.Contains(joined, "DB_DATABASE={{site}}") {
+		t.Errorf("the project's database was replaced by the preset's literal: %s", joined)
+	}
+	if !strings.Contains(joined, "DB_HOST=lerd-mariadb-11-8") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+}
+
+// A php-array env takes nothing for an external service: the override file is dotenv,
+// so it cannot address a dotted path, and there is no key lerd can write that the user
+// could then point at their own instance.
+func TestWiredVarsFor_ExternalOnDottedEnvWritesNothing(t *testing.T) {
+	fw := magentoLikeFramework()
+	if got := wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, true); len(got) != 0 {
+		t.Errorf("an external service on a dotted env writes nothing, got %v", got)
+	}
+}
+
+// An external service the framework maps nothing for still falls back to the preset's
+// own keys, which is all lerd knows about it.
+func TestWiredVarsFor_ExternalUnmappedKeepsThePresetKeys(t *testing.T) {
+	fw := symfonyLikeFramework()
+	typesense := &config.CustomService{
+		Name: "typesense", Family: "typesense",
+		EnvVars: []string{"TYPESENSE_HOST=lerd-typesense"},
+	}
+	got := wiredVarsFor(fw, typesense, "", frameworkKnownKeys(fw), false, true, false)
+	if strings.Join(got, "\n") != "TYPESENSE_HOST=lerd-typesense" {
+		t.Errorf("got %v, want the preset's own keys", got)
+	}
+}

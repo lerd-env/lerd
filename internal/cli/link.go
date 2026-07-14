@@ -393,6 +393,7 @@ func runLink(args []string) error {
 	reconcileStaleRuntimeQuadlets(site)
 
 	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
+	_ = config.SyncProjectFrameworkVersion(framework, cwd)
 
 	// Fold in the framework's required services before any runtime path applies
 	// them, so a custom-FPM or FrankenPHP site gets them too, not only the
@@ -587,7 +588,7 @@ func ensureRequiredServices(cwd string, proj *config.ProjectConfig, fw *config.F
 	for _, s := range proj.Services {
 		have[s.Name] = true
 	}
-	added := false
+	var added []config.ProjectService
 	for _, name := range fw.Requires {
 		if have[name] {
 			continue
@@ -602,12 +603,13 @@ func ensureRequiredServices(cwd string, proj *config.ProjectConfig, fw *config.F
 		}
 		proj.Services = append(proj.Services, svc)
 		have[name] = true
-		added = true
+		added = append(added, svc)
 	}
-	if added {
-		if err := config.SaveProjectConfig(cwd, proj); err != nil {
-			feedback.Warn("could not save .lerd.yaml: %v", err)
-		}
+	// Append through a fresh read-modify-write: proj was loaded before this
+	// command wrote the domains and the framework version, so saving it whole
+	// would roll both back.
+	if err := config.AddProjectServices(cwd, added); err != nil {
+		feedback.Warn("could not save .lerd.yaml: %v", err)
 	}
 	return proj
 }

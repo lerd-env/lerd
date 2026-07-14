@@ -142,7 +142,10 @@ CREATE TABLE IF NOT EXISTS requests (
   uri    TEXT    NOT NULL,
   cold   INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_requests_site_at ON requests(site, at_ms);`
+CREATE INDEX IF NOT EXISTS idx_requests_site_at ON requests(site, at_ms);
+-- The site-first index cannot serve a bare at_ms range, which is what every
+-- whole-window reader (UsageBySite, the prune) asks for.
+CREATE INDEX IF NOT EXISTS idx_requests_at ON requests(at_ms);`
 
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
@@ -218,12 +221,13 @@ type SiteUsage struct {
 // UsageBySite aggregates the app requests each site served in [since, until), so
 // the sites list can order by real traffic. It filters through the same predicate
 // as the timing view, so an asset pipeline or a long-lived WebSocket can't make a
-// site look busy. The static-asset test is on the URI's extension, which SQL
-// can't express, so the window is aggregated in Go.
+// site look busy. The two predicates SQL can express are pushed down; the
+// static-asset test is on the URI's extension, so those rows are dropped in Go.
 func (s *Store) UsageBySite(since, until time.Time) (map[string]SiteUsage, error) {
 	rows, err := s.db.Query(
-		`SELECT site, at_ms, status, ms, uri FROM requests WHERE at_ms >= ? AND at_ms < ?`,
-		since.UnixMilli(), until.UnixMilli())
+		`SELECT site, at_ms, uri FROM requests
+		 WHERE at_ms >= ? AND at_ms < ? AND status <> ? AND ms > 0`,
+		since.UnixMilli(), until.UnixMilli(), statusSwitchingProtocols)
 	if err != nil {
 		return nil, err
 	}
@@ -232,12 +236,10 @@ func (s *Store) UsageBySite(since, until time.Time) (map[string]SiteUsage, error
 	for rows.Next() {
 		var site, uri string
 		var atMs int64
-		var status int
-		var ms float64
-		if err := rows.Scan(&site, &atMs, &status, &ms, &uri); err != nil {
+		if err := rows.Scan(&site, &atMs, &uri); err != nil {
 			return nil, err
 		}
-		if !IsAppRequest(status, uri, ms) {
+		if IsStaticAsset(uri) {
 			continue
 		}
 		u := out[site]

@@ -76,7 +76,19 @@ env:
 | `php-const` | `define('KEY', 'value')` calls, as in WordPress's `wp-config.php` | `DB_HOST` |
 | `php-array` | a PHP file that `return`s a nested array, as in Magento's `app/etc/env.php` | dotted path, `db.connection.default.host` |
 
-The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento.
+The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento. A rewrite that would not change anything is skipped, so a file already holding every value lerd wants keeps its mtime.
+
+### Drop-in services
+
+A service preset publishes its connection under Laravel's key names (`DB_HOST`, `REDIS_HOST`), because that is what most projects read. Your framework may not: Drupal reads `DB_NAME` and `DB_USER`, Symfony and CakePHP read a `DATABASE_URL`, Magento addresses its config by dotted path. Those keys are the ones you declare under `env.services`, and they are what lerd writes.
+
+So when a project picks a drop-in for a service you map, lerd wires it up through your mapping rather than the preset's keys, swapping in the drop-in's container. A Drupal site on MariaDB gets `DB_HOST=lerd-mariadb-11-8` alongside the `DB_DRIVER` and `DB_NAME` it actually reads, and a Magento site gets `db.connection.default.host: lerd-mariadb-11-8`. A drop-in is protocol-compatible with the service it stands in for, so the container is the only thing that moves; the port, credentials and driver name in your mapping still hold.
+
+A key the preset sets that your mapping leaves unset is written too, as long as your definition names it somewhere: Laravel's `redis` block sets the host but not the cache, session and queue drivers Valkey switches on, and its `detect` rules name all three, so those still land. Your definition is your whole vocabulary, so a key it never names is a key your app cannot read, and lerd will not write it. That is what keeps the preset's Laravel-shaped `DB_*` keys out of a Symfony `.env`, where `DATABASE_URL` is the only key that means anything.
+
+The drop-in is matched to the mapped service by its family, or by the [`env_role`](/usage/custom-services#yaml-schema) the preset declares when the relationship crosses families (MariaDB for MySQL, Valkey for Redis). On a `php-array` framework a picked service you map nothing for is started but left unwired, since a preset's flat keys are meaningless as dotted paths and lerd will not guess where they belong.
+
+Do not pin a database version your framework passes to its ORM. Doctrine picks its platform from `serverVersion` when it is set, and that string cannot be spelled for a drop-in: a MariaDB server given `11.8` is read as MySQL. Left out, Doctrine asks the server and is right for every database and version, which is why Symfony's `DATABASE_URL` carries no `serverVersion`.
 
 ## YAML schema
 

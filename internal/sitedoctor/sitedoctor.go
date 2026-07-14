@@ -217,18 +217,31 @@ func checkRequiredServices(fw *config.Framework) (Check, bool) {
 		return Check{
 			Name:   "required_services",
 			Status: StatusFail,
-			Detail: fmt.Sprintf("%s cannot run without %s. Install it with 'lerd service preset %s'.",
-				frameworkLabel(fw), strings.Join(missing, ", "), missing[0]),
+			Detail: fmt.Sprintf("%s cannot run without %s. Install %s with %s.",
+				frameworkLabel(fw), strings.Join(missing, ", "), plural(len(missing), "it", "them"),
+				serviceCommands("lerd service preset", missing)),
 		}, true
 	case len(stopped) > 0:
 		return Check{
 			Name:   "required_services",
 			Status: StatusWarn,
-			Detail: fmt.Sprintf("%s is required but not running. Start it with 'lerd service start %s'.",
-				strings.Join(stopped, ", "), stopped[0]),
+			Detail: fmt.Sprintf("%s %s required but not running. Start %s with %s.",
+				strings.Join(stopped, ", "), plural(len(stopped), "is", "are"),
+				plural(len(stopped), "it", "them"),
+				serviceCommands("lerd service start", stopped)),
 		}, true
 	}
 	return Check{Name: "required_services", Status: StatusOK}, true
+}
+
+// serviceCommands renders the command to run for every named service, not just
+// the first: the suggested fix has to actually resolve the check.
+func serviceCommands(base string, names []string) string {
+	quoted := make([]string, 0, len(names))
+	for _, n := range names {
+		quoted = append(quoted, "'"+base+" "+n+"'")
+	}
+	return strings.Join(quoted, " and ")
 }
 
 // frameworkLabel prefers the display label, falling back to the slug.

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 const magentoEnvPHP = `<?php
@@ -301,5 +302,46 @@ func TestReaderDispatchesOnFormat(t *testing.T) {
 	// A missing file must not panic or error out the caller.
 	if got := Reader(filepath.Join(t.TempDir(), "nope.php"), "php-array")("x"); got != "" {
 		t.Errorf("missing file: %q", got)
+	}
+}
+
+func TestApplyPhpArrayUpdates_NoOpWhenUnchanged(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "env.php")
+
+	if err := ApplyPhpArrayUpdates(path, map[string]string{"db.host": "lerd-mysql"}); err != nil {
+		t.Fatalf("first write: %v", err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(path)
+
+	// Re-applying the values the file already holds must not touch it: the writer
+	// reprints the whole file, so a rewrite would churn a Magento deployment config
+	// on every worktree sync.
+	time.Sleep(10 * time.Millisecond)
+	if err := ApplyPhpArrayUpdates(path, map[string]string{"db.host": "lerd-mysql"}); err != nil {
+		t.Fatalf("second write: %v", err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("unchanged content rewrote the file: mtime %v -> %v", before.ModTime(), after.ModTime())
+	}
+	if now, _ := os.ReadFile(path); string(now) != string(body) {
+		t.Errorf("content changed on a no-op write")
+	}
+
+	// A real change still lands.
+	if err := ApplyPhpArrayUpdates(path, map[string]string{"db.host": "lerd-mariadb-11-8"}); err != nil {
+		t.Fatalf("third write: %v", err)
+	}
+	got, _ := ReadPhpArray(path)
+	if got["db.host"] != "lerd-mariadb-11-8" {
+		t.Errorf("db.host = %q, want lerd-mariadb-11-8", got["db.host"])
 	}
 }

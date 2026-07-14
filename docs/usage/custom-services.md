@@ -155,6 +155,13 @@ depends_on:
 # preset YAML; hand-rolled custom services can opt in by setting the field.
 family: mysql
 
+# EnvRole names the service this one is a drop-in for, so a framework that wires up
+# `mysql` wires this service up too, pointed at its own container. Only needed when
+# the relationship crosses families (mariadb -> mysql, valkey -> redis); a service in
+# the same family as the one the framework maps is matched on that alone. It is read
+# on frameworks whose env file is not dotenv, where only the framework knows the keys.
+env_role: mysql
+
 # Tuning exposes the Config tab + `lerd service config` for this service.
 # Only target is required; template seeds the first-edit body, command sets
 # the container Exec when the image needs to be told to read the file

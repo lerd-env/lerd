@@ -18,7 +18,15 @@ func names(proj *config.ProjectConfig) []string {
 
 func TestEnsureRequiredServicesAddsMissingPreset(t *testing.T) {
 	dir := t.TempDir()
-	proj := &config.ProjectConfig{Services: []config.ProjectService{{Name: "mysql"}}}
+	// runLink hands over the config it loaded from disk, so seed both.
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"),
+		[]byte("services:\n    - mysql\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proj, err := config.LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
 	fw := &config.Framework{Label: "Magento", Requires: []string{"opensearch"}}
 
 	got := ensureRequiredServices(dir, proj, fw, func(string) bool { return true })
@@ -30,13 +38,46 @@ func TestEnsureRequiredServicesAddsMissingPreset(t *testing.T) {
 	if added.Name != "opensearch" || added.Preset != "opensearch" {
 		t.Fatalf("added = %+v, want a preset reference", added)
 	}
-	// Persisted, so a teammate cloning the repo gets the same service.
+	// Persisted alongside what was already there, so a teammate cloning the repo
+	// gets the same services.
 	reloaded, err := config.LoadProjectConfig(dir)
 	if err != nil {
 		t.Fatalf("project config not saved: %v", err)
 	}
 	if len(reloaded.Services) != 2 {
 		t.Fatalf("saved services = %v", names(reloaded))
+	}
+}
+
+// The domains lerd wrote moments earlier in the same command must survive the
+// required-service append: it used to save the snapshot it was handed, rolling
+// the file back to the state it had before the link started.
+func TestEnsureRequiredServicesKeepsDomainsWrittenEarlier(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"),
+		[]byte("domains:\n    - old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	proj, err := config.LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// What runLink does between loading proj and folding in required services.
+	if err := config.SyncProjectDomains(dir, []string{"old.test", "new.test"}, "test"); err != nil {
+		t.Fatal(err)
+	}
+
+	ensureRequiredServices(dir, proj, &config.Framework{Requires: []string{"opensearch"}}, func(string) bool { return true })
+
+	reloaded, err := config.LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(reloaded.Domains) != 2 {
+		t.Errorf("domains = %v, want both: the service append rolled back the domain sync", reloaded.Domains)
+	}
+	if len(reloaded.Services) != 1 || reloaded.Services[0].Name != "opensearch" {
+		t.Errorf("services = %v, want opensearch", names(reloaded))
 	}
 }
 

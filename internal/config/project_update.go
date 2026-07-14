@@ -220,6 +220,55 @@ func SetProjectFrameworkVersion(dir string, version string) error {
 	})
 }
 
+// SyncProjectFrameworkVersion repins framework_version to the version composer
+// actually reports. Call it from the commands that own .lerd.yaml: resolving a
+// framework must not write to the project, or every vhost render and dashboard
+// poll would rewrite a file the user has committed.
+func SyncProjectFrameworkVersion(name, dir string) error {
+	detected := DetectMajorVersion(dir, name)
+	if detected == "" {
+		return nil
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil || cfg == nil || cfg.FrameworkVersion == "" || cfg.FrameworkVersion == detected {
+		return nil
+	}
+	return SetProjectFrameworkVersion(dir, detected)
+}
+
+// AddProjectServices appends the services not already listed to .lerd.yaml,
+// creating the file when it is missing. Read-modify-write, so it cannot clobber
+// the fields another writer persisted earlier in the same command.
+func AddProjectServices(dir string, svcs []ProjectService) error {
+	if len(svcs) == 0 {
+		return nil
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		return err
+	}
+	if cfg == nil {
+		cfg = &ProjectConfig{}
+	}
+	have := make(map[string]bool, len(cfg.Services))
+	for _, s := range cfg.Services {
+		have[s.Name] = true
+	}
+	added := false
+	for _, s := range svcs {
+		if have[s.Name] {
+			continue
+		}
+		cfg.Services = append(cfg.Services, s)
+		have[s.Name] = true
+		added = true
+	}
+	if !added {
+		return nil
+	}
+	return SaveProjectConfig(dir, cfg)
+}
+
 // SetProjectFrameworkDef replaces the embedded framework definition.
 // No-op if .lerd.yaml does not exist.
 func SetProjectFrameworkDef(dir string, def *Framework) error {

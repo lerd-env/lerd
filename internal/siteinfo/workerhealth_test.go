@@ -104,19 +104,21 @@ func TestWorkerServerReachable_StaleFileGate(t *testing.T) {
 	}
 }
 
-func TestWorkerServerReachable_GraceNoFile(t *testing.T) {
+func TestWorkerServerReachable_NoFileIsNeverAFailure(t *testing.T) {
 	dir := t.TempDir() // no public/hot written
 	h := &config.WorkerHealth{URLFile: "public/hot"}
 
-	// Active past the grace window with no url_file: never bound -> unreachable.
-	old := time.Now().Add(-healthGraceWindow - time.Minute)
-	if reachable, probed := WorkerServerReachable(dir, h, old); reachable || !probed {
-		t.Errorf("no file past grace: got reachable=%v probed=%v, want false/true (unreachable)", reachable, probed)
-	}
-
-	// Recently active with no url_file yet: still starting -> not probeable.
-	recent := time.Now().Add(-time.Second)
-	if reachable, probed := WorkerServerReachable(dir, h, recent); reachable || probed {
-		t.Errorf("no file within grace: got reachable=%v probed=%v, want false/false", reachable, probed)
+	// A worker that never writes the file (custom vite hotFile, build --watch, a
+	// project that cleans public/) is healthy: absence is not-probeable, however
+	// long the unit has been up, so the heal never restarts a working dev server.
+	for _, activeEnter := range []time.Time{
+		{},
+		time.Now().Add(-time.Second),
+		time.Now().Add(-24 * time.Hour),
+	} {
+		if reachable, probed := WorkerServerReachable(dir, h, activeEnter); reachable || probed {
+			t.Errorf("no url_file (activeEnter=%v): got reachable=%v probed=%v, want false/false",
+				activeEnter, reachable, probed)
+		}
 	}
 }

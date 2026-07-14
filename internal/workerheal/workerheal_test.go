@@ -475,13 +475,11 @@ func TestDetect_UnreachableActiveWorkerFlagged(t *testing.T) {
 }
 
 func TestResolveWorkerUnit(t *testing.T) {
-	sites := map[string]bool{"ws": true, "feat": true, "app": true}
+	sites := map[string]string{"ws": "/home/u/ws", "feat": "/home/u/feat", "app": "/home/u/app"}
 
 	if s, w, p := resolveWorkerUnit("vite-app", sites, ""); s != "app" || w != "vite" || p != "" {
 		t.Errorf("parent: got %q/%q/%q, want app/vite/empty", s, w, p)
 	}
-	// WorkingDirectory pins the site to "ws" even though "feat" is a longer
-	// candidate that a plain longest-match would pick.
 	if s, w, p := resolveWorkerUnit("vite-ws-feat-x", sites, "/home/u/wt/feat-x"); s != "ws" || w != "vite" || p != "/home/u/wt/feat-x" {
 		t.Errorf("worktree: got %q/%q/%q, want ws/vite//home/u/wt/feat-x", s, w, p)
 	}
@@ -489,6 +487,26 @@ func TestResolveWorkerUnit(t *testing.T) {
 	// rather than mis-parsed.
 	if s, _, _ := resolveWorkerUnit("vite-ws-feat-x", sites, ""); s != "" {
 		t.Errorf("no workingdir: got site %q, want empty", s)
+	}
+	// A worktree of "app" checked out into a directory named after the registered
+	// site "feat": the unit ends with "-feat", so a suffix match would hand it to
+	// feat as a worker named "vite-app". WorkingDirectory settles it.
+	if s, w, p := resolveWorkerUnit("vite-app-feat", sites, "/home/u/wt/feat"); s != "app" || w != "vite" || p != "/home/u/wt/feat" {
+		t.Errorf("colliding worktree dir: got %q/%q/%q, want app/vite//home/u/wt/feat", s, w, p)
+	}
+	// A parent host worker's WorkingDirectory is its own checkout, which must not be
+	// read as a worktree slug: here the worker name itself ends with another site's
+	// name, so treating the checkout as a worktree would resolve site "feat".
+	if s, w, p := resolveWorkerUnit("queue-feat-app", sites, "/home/u/app"); s != "app" || w != "queue-feat" || p != "" {
+		t.Errorf("parent whose worker name ends in a site name: got %q/%q/%q, want app/queue-feat/empty", s, w, p)
+	}
+	if s, w, p := resolveWorkerUnit("vite-app", sites, "/home/u/app"); s != "app" || w != "vite" || p != "" {
+		t.Errorf("parent with workingdir: got %q/%q/%q, want app/vite/empty", s, w, p)
+	}
+	// A container worker sets no WorkingDirectory, so systemd reports the inherited
+	// home with a "!" marker. It is not a checkout and must not resolve as one.
+	if s, w, p := resolveWorkerUnit("cron-app", sites, "!/home/app"); s != "app" || w != "cron" || p != "" {
+		t.Errorf("inherited workingdir: got %q/%q/%q, want app/cron/empty", s, w, p)
 	}
 }
 

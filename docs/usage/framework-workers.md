@@ -59,7 +59,9 @@ workers:
       url_file: public/hot   # a file the server writes on boot, holding its URL
 ```
 
-`url_file` names a file the dev server writes when it binds (Vite's `public/hot` holds a URL like `http://[::1]:5173`). While the process is up, lerd reads that file and makes a short TCP dial to its host and port; if nothing is accepting, the worker reports **unreachable** instead of running and [worker-heal](/usage/worker-heal) restarts it. A worker with no `health` block keeps the process-only liveness check. A missing `url_file` is treated as not-probeable, so idle-suspend clearing `public/hot` never trips a false alarm.
+`url_file` names a file the dev server writes when it binds (Vite's `public/hot` holds a URL like `http://[::1]:5173`). While the process is up, lerd reads that file and makes a short TCP dial to its host and port; if nothing is accepting, the worker reports **unreachable** instead of running and [worker-heal](/usage/worker-heal) restarts it. A worker with no `health` block keeps the process-only liveness check.
+
+A missing `url_file` is never itself a failure, only a signal lerd cannot use: the worker keeps the process-only check. Plenty of healthy setups never write one, from a Vite config with a custom `hotFile` to `vite build --watch`, and idle-suspend clears `public/hot` while the unit is briefly still up. The failure the probe exists to catch is a *stale* file whose advertised port refuses a connection, which is what a dev server that died behind a live unit leaves behind. A file older than the unit's last activation is a leftover from a previous run and is not dialled.
 
 **Host workers**: Workers that need to run on the host instead of inside the PHP-FPM container set `host: true`. The command runs via fnm at the project's pinned Node.js version. This is used for tools like Vite that need direct filesystem access for HMR:
 

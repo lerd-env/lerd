@@ -101,6 +101,11 @@ type CustomService struct {
 	// member. e.g. the mysql preset declares family: mysql, and phpMyAdmin
 	// uses dynamic_env to read all family members at quadlet generation time.
 	Family string `yaml:"family,omitempty"`
+	// EnvRole names the service this preset is a drop-in for, so a framework that
+	// wires up `mysql` also wires up mariadb. Only needed when the substitution
+	// crosses families (mariadb -> mysql, valkey -> redis); a preset in the same
+	// family as the one the framework maps is matched on that.
+	EnvRole string `yaml:"env_role,omitempty"`
 	// Tuning, when set, exposes a user-editable runtime config override
 	// for this service via the web UI's Config tab and the
 	// `lerd service config` CLI. Custom services declare their own
@@ -332,6 +337,24 @@ func FamilyOfName(name string) string {
 		return FamilyOf(svc)
 	}
 	return InferFamily(name)
+}
+
+// EnvRoleOf returns the service this one is a drop-in for, or "" when it stands
+// on its own. It falls back to the preset the service was installed from, so a
+// service installed before the field existed still resolves its role.
+func EnvRoleOf(svc *CustomService) string {
+	if svc == nil {
+		return ""
+	}
+	if svc.EnvRole != "" {
+		return svc.EnvRole
+	}
+	if svc.Preset != "" {
+		if p, err := LoadPreset(svc.Preset); err == nil {
+			return p.EnvRole
+		}
+	}
+	return ""
 }
 
 // ResolveDynamicEnv applies any dynamic_env directives on svc, writing the

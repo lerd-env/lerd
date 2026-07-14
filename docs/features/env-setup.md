@@ -100,6 +100,8 @@ Use `host.containers.internal` for the host rather than `127.0.0.1`. The overrid
 
 The value is comma or space separated, so `LERD_EXTERNAL_SERVICES=postgres, redis` opts both out. The reserved key is consumed by lerd and is never written into `.env`.
 
+The variables lerd writes for an external service are the ones your framework reads, since they are what the override file then overrides. An external MariaDB on Symfony gets the `DATABASE_URL` Doctrine reads, not the Laravel-shaped `DB_*` keys Symfony has no use for. A framework whose env file is a returned PHP array, as Magento's `app/etc/env.php` is, cannot take an override at all: its keys are dotted paths and `.env.lerd_override` is dotenv, so there is no key lerd could write that you would then point at your own instance. lerd writes nothing for it, tells you so, and leaves the connection in `env.php` to you.
+
 Example output with an override file present:
 
 ```

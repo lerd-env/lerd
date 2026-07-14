@@ -85,35 +85,57 @@ func defaultWorkerReachable(sitePath string, fw *config.Framework, worker string
 	return siteinfo.WorkerServerReachable(sitePath, w.Health, activeEnter)
 }
 
-// resolveWorkerUnit maps a unit body to site, worker, and probe path. Parents
-// resolve by longest site suffix; a worktree ("<worker>-<site>-<wtslug>") is pinned
-// by its WorkingDirectory's base slug. probePath is the worktree checkout, else "".
-func resolveWorkerUnit(body string, siteSet map[string]bool, workingDir string) (site, worker, probePath string) {
-	for s := range siteSet {
+// resolveWorkerUnit maps a unit body to site, worker, and probe path (the worktree
+// checkout, else ""). A unit running in a site's own checkout is that site's worker,
+// so only a working directory that is not a site path can be a worktree's — and that
+// has to be settled before the suffix match, which cannot tell a worktree directory
+// named after another registered site from that site's own worker.
+func resolveWorkerUnit(body string, sitePaths map[string]string, workingDir string) (site, worker, probePath string) {
+	// A container worker sets no WorkingDirectory, so systemd reports the inherited
+	// home with a "!" prefix. That is not a checkout.
+	if strings.HasPrefix(workingDir, "!") {
+		workingDir = ""
+	}
+	if workingDir != "" && !isSiteCheckout(sitePaths, workingDir) {
+		if s, w := resolveWorktreeUnit(body, sitePaths, workingDir); s != "" {
+			return s, w, workingDir
+		}
+	}
+	for s := range sitePaths {
 		if strings.HasSuffix(body, "-"+s) && len(s) > len(site) {
 			site, worker = s, strings.TrimSuffix(body, "-"+s)
 		}
 	}
-	if site != "" {
-		return site, worker, ""
+	return site, worker, ""
+}
+
+func isSiteCheckout(sitePaths map[string]string, dir string) bool {
+	dir = filepath.Clean(dir)
+	for _, p := range sitePaths {
+		if p != "" && filepath.Clean(p) == dir {
+			return true
+		}
 	}
-	if workingDir == "" {
-		return "", "", ""
-	}
+	return false
+}
+
+// resolveWorktreeUnit resolves a unit against its checkout directory, returning
+// empty when the unit is not a worktree's.
+func resolveWorktreeUnit(body string, sitePaths map[string]string, workingDir string) (site, worker string) {
 	slug := config.WorktreeUnitSlug(filepath.Base(workingDir))
 	if slug == "" || !strings.HasSuffix(body, "-"+slug) {
-		return "", "", ""
+		return "", ""
 	}
 	core := strings.TrimSuffix(body, "-"+slug)
-	for s := range siteSet {
+	for s := range sitePaths {
 		if strings.HasSuffix(core, "-"+s) && len(s) > len(site) {
 			site, worker = s, strings.TrimSuffix(core, "-"+s)
 		}
 	}
-	if site == "" || worker == "" {
-		return "", "", ""
+	if worker == "" {
+		return "", ""
 	}
-	return site, worker, workingDir
+	return site, worker
 }
 
 // HumanState renders an UnhealthyWorker.State for end-user copy. The machine
@@ -215,7 +237,9 @@ func Detect() ([]UnhealthyWorker, error) {
 	if err != nil {
 		return nil, err
 	}
-	siteSet := make(map[string]bool, len(reg.Sites))
+	// Every active site's checkout, so a unit's WorkingDirectory can be told apart
+	// from a worktree's.
+	sitePaths := make(map[string]string, len(reg.Sites))
 	// path + framework per site, for resolving a health-probed worker's block.
 	type siteMeta struct{ path, framework string }
 	meta := make(map[string]siteMeta, len(reg.Sites))
@@ -228,7 +252,7 @@ func Detect() ([]UnhealthyWorker, error) {
 		if s.Paused || s.Ignored {
 			continue
 		}
-		siteSet[s.Name] = true
+		sitePaths[s.Name] = s.Path
 		meta[s.Name] = siteMeta{path: s.Path, framework: s.Framework}
 		if len(s.IdleSuspendedWorkers) > 0 {
 			set := make(map[string]bool, len(s.IdleSuspendedWorkers))
@@ -238,7 +262,7 @@ func Detect() ([]UnhealthyWorker, error) {
 			suspended[s.Name] = set
 		}
 	}
-	if len(siteSet) == 0 {
+	if len(sitePaths) == 0 {
 		return nil, nil
 	}
 
@@ -272,7 +296,7 @@ func Detect() ([]UnhealthyWorker, error) {
 		// Resolve site + worker (longest site suffix for parents; the unit's
 		// WorkingDirectory disambiguates worktree units). probePath is the
 		// worktree checkout for a worktree unit, else "" (use the site path).
-		site, worker, probePath := resolveWorkerUnit(body, siteSet, unitMeta[unit].WorkingDir)
+		site, worker, probePath := resolveWorkerUnit(body, sitePaths, unitMeta[unit].WorkingDir)
 		if site == "" || worker == "" {
 			continue
 		}
