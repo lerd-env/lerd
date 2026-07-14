@@ -135,6 +135,13 @@ lerd new /path/to/myapp                 # create at an absolute path
 lerd new myapp -- --no-interaction      # pass extra flags to the scaffold command
 ```
 
+`--framework` works before or after the name. Flags belong to lerd wherever they
+appear on the line, so anything meant for the scaffold command itself goes after
+`--`. An absolute target outside your home directory is fine: lerd creates the
+parent directory and mounts it into the PHP container before scaffolding.
+Temporary system directories (`/tmp`, `/var/tmp`, `/run`) are never mounted, so
+scaffolding into one is refused unless you [park](/usage/sites) its parent first.
+
 After creation:
 ```bash
 cd myapp
