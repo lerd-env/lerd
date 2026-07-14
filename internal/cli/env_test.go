@@ -788,3 +788,75 @@ func TestReplacedFrameworkRoles(t *testing.T) {
 		t.Errorf("a service mapped by its own name replaces no role, got %v", got)
 	}
 }
+
+// externalMariadb is the preset as the store publishes it: Laravel-shaped keys, and a
+// literal database name rather than a {{site}} handle.
+func externalMariadb() *config.CustomService {
+	return &config.CustomService{
+		Name: "mariadb-11-8", Family: "mariadb",
+		EnvVars: []string{
+			"DB_CONNECTION=mysql", "DB_HOST=lerd-mariadb-11-8", "DB_PORT=3306",
+			"DB_DATABASE=lerd", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+		},
+	}
+}
+
+// Externally managed means lerd does not start or provision the service. It does not
+// mean the app reads different keys: what lerd writes is what .env.lerd_override then
+// overrides, so it still has to be the framework's own mapping. Symfony reads a
+// DATABASE_URL, and writing six DB_* keys it cannot read instead leaves the site with
+// no database wiring at all and an override file pointed at nothing.
+func TestWiredVarsFor_ExternalDropInIsWiredThroughTheFramework(t *testing.T) {
+	fw := symfonyLikeFramework()
+	got := wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, false)
+	want := []string{"DATABASE_URL=mysql://root:lerd@lerd-mariadb-11-8:3306/{{site}}"}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+}
+
+// The preset names the database `lerd`, the framework names it {{site}}. Wiring an
+// external drop-in through the preset dropped the project's own database on the floor,
+// since the DB_DATABASE pin is skipped precisely when the mapping was used.
+func TestWiredVarsFor_ExternalDropInKeepsTheProjectDatabase(t *testing.T) {
+	fw := &config.Framework{Env: config.FrameworkEnvConf{
+		Format: "dotenv",
+		Services: map[string]config.FrameworkServiceDef{
+			"mysql": {Vars: []string{
+				"DB_CONNECTION=mysql", "DB_HOST=lerd-mysql", "DB_PORT=3306",
+				"DB_DATABASE={{site}}", "DB_USERNAME=root", "DB_PASSWORD=lerd",
+			}},
+		},
+	}}
+	joined := strings.Join(wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, false), "\n")
+	if !strings.Contains(joined, "DB_DATABASE={{site}}") {
+		t.Errorf("the project's database was replaced by the preset's literal: %s", joined)
+	}
+	if !strings.Contains(joined, "DB_HOST=lerd-mariadb-11-8") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+}
+
+// A php-array env takes nothing for an external service: the override file is dotenv,
+// so it cannot address a dotted path, and there is no key lerd can write that the user
+// could then point at their own instance.
+func TestWiredVarsFor_ExternalOnDottedEnvWritesNothing(t *testing.T) {
+	fw := magentoLikeFramework()
+	if got := wiredVarsFor(fw, externalMariadb(), "mysql", frameworkKnownKeys(fw), true, true, true); len(got) != 0 {
+		t.Errorf("an external service on a dotted env writes nothing, got %v", got)
+	}
+}
+
+// An external service the framework maps nothing for still falls back to the preset's
+// own keys, which is all lerd knows about it.
+func TestWiredVarsFor_ExternalUnmappedKeepsThePresetKeys(t *testing.T) {
+	fw := symfonyLikeFramework()
+	typesense := &config.CustomService{
+		Name: "typesense", Family: "typesense",
+		EnvVars: []string{"TYPESENSE_HOST=lerd-typesense"},
+	}
+	got := wiredVarsFor(fw, typesense, "", frameworkKnownKeys(fw), false, true, false)
+	if strings.Join(got, "\n") != "TYPESENSE_HOST=lerd-typesense" {
+		t.Errorf("got %v, want the preset's own keys", got)
+	}
+}

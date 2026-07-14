@@ -290,16 +290,15 @@ func frameworkVarsForAlternate(fw *config.Framework, role string, svc *config.Cu
 // key that mapping leaves unset but the framework still knows. The preset's own keys
 // stand alone only where the framework maps nothing. dottedEnv marks a php-array env
 // file, whose keys are dotted paths a preset's flat env_vars cannot address.
+//
+// An externally managed service is wired through the same mapping. The keys lerd
+// writes are the ones .env.lerd_override overrides, so they have to be the keys the
+// app reads, and a dotted env takes none of them: the override file is dotenv, so it
+// cannot address a dotted path either, and that connection is left to the user.
 func wiredVarsFor(fw *config.Framework, svc *config.CustomService, role string, known map[string]bool, mapped, external, dottedEnv bool) []string {
 	switch {
-	case external:
-		// The user owns this connection, so they get the preset's own keys to point at
-		// their instance from .env.lerd_override. A dotted env takes none of them: a
-		// preset's flat keys cannot address a dotted path.
-		if dottedEnv {
-			return nil
-		}
-		return svc.EnvVars
+	case dottedEnv && external:
+		return nil
 	case mapped:
 		vars := frameworkVarsForAlternate(fw, role, svc)
 		if dottedEnv {
@@ -930,7 +929,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		// through that mapping, re-pointed at its own container.
 		external := extServices[svc.Name]
 		vars := wiredVarsFor(fw, svc, role, knownEnvKeys, mapped, external, dottedEnv)
-		if dottedEnv && !mapped && !external {
+		switch {
+		case dottedEnv && external:
+			envInfo("  %s is externally managed — set its connection in %s yourself\n",
+				svc.Name, envRelPath)
+		case dottedEnv && !mapped:
 			envInfo("  %s has no %s wiring — set it in %s yourself\n",
 				frameworkLabelOf(fw), svc.Name, envRelPath)
 		}
