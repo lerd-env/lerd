@@ -201,6 +201,24 @@ func builtinEnvRole(family string) string {
 // the service it replaces (same port, same credentials, same driver name), so the
 // container it runs in is the only thing that moves: lerd-mysql becomes
 // lerd-mariadb-11-8, and the rest of the framework's wiring stands.
+// presetVarsBeyond returns the preset's vars whose key the framework's mapping does
+// not declare, so wiring a drop-in through that mapping cannot drop a key the app
+// still reads.
+func presetVarsBeyond(presetVars, frameworkVars []string) []string {
+	declared := make(map[string]bool, len(frameworkVars))
+	for _, kv := range frameworkVars {
+		k, _, _ := strings.Cut(kv, "=")
+		declared[k] = true
+	}
+	var out []string
+	for _, kv := range presetVars {
+		if k, _, _ := strings.Cut(kv, "="); !declared[k] {
+			out = append(out, kv)
+		}
+	}
+	return out
+}
+
 func frameworkVarsForAlternate(fw *config.Framework, role string, svc *config.CustomService) []string {
 	def := fw.Env.Services[role]
 	from, to := "lerd-"+role, "lerd-"+svc.Name
@@ -817,19 +835,28 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			continue
 		}
 
+		// A preset publishes its connection under Laravel's key names, which is only
+		// what the app reads on a Laravel-shaped framework. Everywhere else the keys
+		// the app reads are the ones the framework declares, so a drop-in is wired up
+		// through that mapping, re-pointed at its own container.
 		vars := svc.EnvVars
-		if dottedEnv {
-			vars = nil
-			switch {
-			case externalManaged(svc.Name, extServices):
-				// The user owns this connection; never point it at a lerd container.
-			case mapped:
-				// The framework's own mapping owns the keys, re-pointed at this container.
-				vars = frameworkVarsForAlternate(fw, role, svc)
-			default:
-				envInfo("  %s has no %s wiring — set it in %s yourself\n",
-					frameworkLabelOf(fw), svc.Name, envRelPath)
+		switch {
+		case externalManaged(svc.Name, extServices):
+			// The user owns this connection; never point it at a lerd container.
+			if dottedEnv {
+				vars = nil
 			}
+		case mapped:
+			vars = frameworkVarsForAlternate(fw, role, svc)
+			if !dottedEnv {
+				// The framework may leave keys to the preset: Laravel's redis block sets
+				// the host but not the cache, session and queue drivers valkey switches on.
+				vars = append(vars, presetVarsBeyond(svc.EnvVars, vars)...)
+			}
+		case dottedEnv:
+			envInfo("  %s has no %s wiring — set it in %s yourself\n",
+				frameworkLabelOf(fw), svc.Name, envRelPath)
+			vars = nil
 		}
 
 		if len(vars) > 0 {

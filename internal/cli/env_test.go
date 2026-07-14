@@ -547,3 +547,52 @@ func TestFrameworkVarsForAlternate_LeavesUnrelatedValuesAlone(t *testing.T) {
 		t.Errorf("the port must not move for a drop-in: %s", joined)
 	}
 }
+
+// A framework may leave keys to the preset: Laravel's redis block sets the host but
+// not the cache, session and queue drivers valkey switches on, and wiring valkey
+// through that block must not drop them.
+func TestPresetVarsBeyond(t *testing.T) {
+	frameworkVars := []string{"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD="}
+	presetVars := []string{
+		"REDIS_HOST=lerd-valkey", "REDIS_PORT=6379", "REDIS_PASSWORD=null",
+		"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis",
+	}
+	got := presetVarsBeyond(presetVars, frameworkVars)
+	want := []string{"CACHE_STORE=redis", "SESSION_DRIVER=redis", "QUEUE_CONNECTION=redis"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("got %v, want %v", got, want)
+	}
+	// A key the framework declares stays the framework's, so REDIS_PASSWORD keeps the
+	// value Laravel uses for its own redis rather than the preset's.
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "REDIS_PASSWORD") {
+			t.Errorf("a framework-declared key must not be overridden by the preset: %q", kv)
+		}
+	}
+}
+
+// A drop-in on a framework whose keys are not Laravel-shaped gets the framework's
+// own mapping, re-pointed at its container. Drupal is the shape that matters: its
+// keys are flat, so nothing but the mapping tells them apart from a preset's.
+func TestFrameworkVarsForAlternate_NonLaravelDotenvFramework(t *testing.T) {
+	drupal := &config.Framework{
+		Name: "drupal",
+		Env: config.FrameworkEnvConf{File: ".env", Format: "dotenv",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{
+					"DB_DRIVER=mysql", "DB_HOST=lerd-mysql", "DB_PORT=3306",
+					"DB_NAME={{site}}", "DB_USER=root", "DB_PASSWORD=lerd",
+				}},
+			}},
+	}
+	got := frameworkVarsForAlternate(drupal, "mysql", &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"})
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "DB_HOST=lerd-mariadb-11-8") {
+		t.Errorf("the container was not swapped: %s", joined)
+	}
+	for _, key := range []string{"DB_DRIVER=", "DB_NAME=", "DB_USER="} {
+		if !strings.Contains(joined, key) {
+			t.Errorf("the framework's own key %q must survive: %s", key, joined)
+		}
+	}
+}
