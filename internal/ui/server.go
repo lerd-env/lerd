@@ -3614,6 +3614,14 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "unsupported PHP version: " + version})
 			return
 		}
+		// Clamp to the framework's range, as link and the watcher do. Without this
+		// the watcher clamps the registry back on the next pass and .php-version is
+		// left pinning a version the site never runs.
+		if site.Framework != "" {
+			if fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path); fwOK {
+				version = phpPkg.ClampToRange(version, fw.PHP.Min, fw.PHP.Max)
+			}
+		}
 		if branch := r.URL.Query().Get("branch"); branch != "" {
 			if err := setWorktreePHPVersion(site, branch, version); err != nil {
 				writeJSON(w, SiteActionResponse{Error: err.Error()})
