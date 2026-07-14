@@ -57,6 +57,8 @@ type Framework struct {
 	NPM        string                     `yaml:"npm,omitempty"`      // auto | true | false
 	Workers    map[string]FrameworkWorker `yaml:"workers,omitempty"`
 	Setup      []FrameworkSetupCmd        `yaml:"setup,omitempty"`
+	// Worktree declares what a worktree needs beyond the seeded env file.
+	Worktree *FrameworkWorktree `yaml:"worktree,omitempty"`
 	// Commands are on-demand actions surfaced in the dashboard "Run command"
 	// dropdown. See FrameworkCommand for the schema. Projects extend or
 	// override this list in .lerd.yaml; use ResolveCommands to merge.
@@ -246,6 +248,21 @@ type FrameworkLogSource struct {
 }
 
 // FrameworkSetupCmd describes a one-off bootstrap command run during project setup.
+// FrameworkWorktree declares what a new worktree needs once its env file is
+// seeded. An app that keeps deployment state in the database (Magento hashes its
+// config there and refuses to serve when the file no longer matches) cannot come
+// up on a copy of the parent's env alone.
+type FrameworkWorktree struct {
+	// DBIsolation "required" forces an isolated database instead of prompting:
+	// the worktree's own config cannot be applied to a database it shares.
+	DBIsolation string `yaml:"db_isolation,omitempty"`
+	// DBSource is what an isolated database starts from, "empty" or "main".
+	DBSource string `yaml:"db_source,omitempty"`
+	// Commands are console commands run in the worktree once its env file and
+	// database are in place, e.g. Magento's app:config:import.
+	Commands []string `yaml:"commands,omitempty"`
+}
+
 type FrameworkSetupCmd struct {
 	Label   string         `yaml:"label"`
 	Command string         `yaml:"command"`
