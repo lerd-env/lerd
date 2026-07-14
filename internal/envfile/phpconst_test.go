@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func writePhpConfig(t *testing.T, content string) string {
@@ -166,4 +167,40 @@ func indexOf(s, substr string) int {
 		}
 	}
 	return -1
+}
+
+func TestApplyPhpConstUpdates_NoOpWhenUnchanged(t *testing.T) {
+	path := writePhpConfig(t, "<?php\ndefine( 'DB_HOST', 'lerd-mysql' );\n")
+
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := os.ReadFile(path)
+
+	// Re-applying the value the file already holds must not touch it: wp-config.php
+	// is rewritten on every worktree sync otherwise.
+	time.Sleep(10 * time.Millisecond)
+	if err := ApplyPhpConstUpdates(path, map[string]string{"DB_HOST": "lerd-mysql"}); err != nil {
+		t.Fatalf("no-op write: %v", err)
+	}
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("unchanged content rewrote the file: mtime %v -> %v", before.ModTime(), after.ModTime())
+	}
+	if now, _ := os.ReadFile(path); string(now) != string(body) {
+		t.Errorf("content changed on a no-op write")
+	}
+
+	// A real change still lands.
+	if err := ApplyPhpConstUpdates(path, map[string]string{"DB_HOST": "lerd-mariadb-11-8"}); err != nil {
+		t.Fatalf("real write: %v", err)
+	}
+	got, _ := ReadPhpConst(path)
+	if got["DB_HOST"] != "lerd-mariadb-11-8" {
+		t.Errorf("DB_HOST = %q, want lerd-mariadb-11-8", got["DB_HOST"])
+	}
 }

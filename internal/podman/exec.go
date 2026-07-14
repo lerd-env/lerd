@@ -218,7 +218,10 @@ func ServiceImage(quadletName string) string {
 // redis:7-alpine → "7", meilisearch:v1.7 → "1.7".
 // Returns "" if the version cannot be determined.
 func ServiceVersion(quadletName string) string {
-	image := ServiceImage(quadletName)
+	return versionFromImage(ServiceImage(quadletName))
+}
+
+func versionFromImage(image string) string {
 	if image == "" {
 		return ""
 	}

@@ -388,3 +388,162 @@ func TestRewriteEnvForHostProxy_usesPresetPorts(t *testing.T) {
 		t.Errorf("ports changed unexpectedly: %+v", updates)
 	}
 }
+
+// magentoLikeFramework mirrors the shape of a framework whose env file is not
+// dotenv: it maps mysql/redis under its own nested keys.
+func magentoLikeFramework() *config.Framework {
+	return &config.Framework{
+		Name: "magento",
+		Env: config.FrameworkEnvConf{
+			File:   "app/etc/env.php",
+			Format: "php-array",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{
+					"db.connection.default.host=lerd-mysql",
+					"db.connection.default.dbname={{site}}",
+					"db.connection.default.username=root",
+					"db.connection.default.password=lerd",
+				}},
+				"redis": {Vars: []string{
+					`cache.frontend.default.backend=Magento\Framework\Cache\Backend\Redis`,
+					"cache.frontend.default.backend_options.server=lerd-redis",
+					"cache.frontend.default.backend_options.port=6379",
+				}},
+				"opensearch": {Vars: []string{
+					"system.default.catalog.search.opensearch_server_hostname=lerd-opensearch",
+				}},
+			},
+		},
+	}
+}
+
+func TestFrameworkServiceRole(t *testing.T) {
+	fw := magentoLikeFramework()
+	for _, tc := range []struct {
+		name     string
+		svc      *config.CustomService
+		wantRole string
+		wantOK   bool
+	}{
+		{"exact name", &config.CustomService{Name: "mysql"}, "mysql", true},
+		{"declared drop-in", &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"}, "mysql", true},
+		{"drop-in across families", &config.CustomService{Name: "valkey", Family: "valkey", EnvRole: "redis"}, "redis", true},
+		{"same family alternate", &config.CustomService{Name: "mysql-5-7", Family: "mysql"}, "mysql", true},
+		{"versioned alternate of the mapped preset", &config.CustomService{Name: "opensearch-2-19", Preset: "opensearch"}, "opensearch", true},
+		{"unmapped service", &config.CustomService{Name: "typesense", Family: "typesense"}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			role, ok := frameworkServiceRole(fw, tc.svc)
+			if role != tc.wantRole || ok != tc.wantOK {
+				t.Errorf("got %q/%v, want %q/%v", role, ok, tc.wantRole, tc.wantOK)
+			}
+		})
+	}
+}
+
+func TestFrameworkVarsForAlternate_RepointsTheEndpoint(t *testing.T) {
+	fw := magentoLikeFramework()
+	mariadb := &config.CustomService{
+		Name:    "mariadb-11-8",
+		EnvRole: "mysql",
+		EnvVars: []string{
+			"DB_CONNECTION=mysql",
+			"DB_HOST=lerd-mariadb-11-8",
+			"DB_PORT=3306",
+			"DB_DATABASE=lerd",
+			"DB_USERNAME=root",
+			"DB_PASSWORD=lerd",
+		},
+	}
+	got := frameworkVarsForAlternate(fw, "mysql", mariadb)
+	want := []string{
+		"db.connection.default.host=lerd-mariadb-11-8",
+		"db.connection.default.dbname={{site}}",
+		"db.connection.default.username=root",
+		"db.connection.default.password=lerd",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// No dotenv key leaks into the php-array key space.
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "DB_") {
+			t.Errorf("dotenv key %q must never reach a php-array env file", kv)
+		}
+	}
+}
+
+// symfonyLikeFramework is a dotenv framework whose keys are NOT the preset's
+// Laravel-shaped DB_* ones, so its own mapping has to win over them.
+func symfonyLikeFramework() *config.Framework {
+	return &config.Framework{
+		Name: "symfony",
+		Env: config.FrameworkEnvConf{
+			File:   ".env.local",
+			Format: "dotenv",
+			Services: map[string]config.FrameworkServiceDef{
+				"mysql": {Vars: []string{"DATABASE_URL=mysql://root:lerd@lerd-mysql:3306/{{site}}"}},
+			},
+		},
+	}
+}
+
+// mariadb and valkey must resolve their role even on an install whose service
+// store predates env_role, or the alternate would silently go unwired.
+func TestFrameworkServiceRole_ResolvesWithoutTheStoreField(t *testing.T) {
+	fw := magentoLikeFramework()
+	for _, tc := range []struct {
+		name string
+		svc  *config.CustomService
+		want string
+	}{
+		{"mariadb without env_role", &config.CustomService{Name: "mariadb-11-8", Family: "mariadb"}, "mysql"},
+		{"valkey without env_role", &config.CustomService{Name: "valkey", Family: "valkey"}, "redis"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			role, ok := frameworkServiceRole(fw, tc.svc)
+			if !ok || role != tc.want {
+				t.Errorf("got %q/%v, want %q/true", role, ok, tc.want)
+			}
+		})
+	}
+}
+
+// A drop-in is protocol-compatible with the service it replaces, so re-pointing the
+// framework's wiring at it is a container swap and nothing else.
+func TestFrameworkVarsForAlternate_SwapsTheContainerOnly(t *testing.T) {
+	mariadb := &config.CustomService{Name: "mariadb-11-8", EnvRole: "mysql"}
+	got := frameworkVarsForAlternate(magentoLikeFramework(), "mysql", mariadb)
+	want := []string{
+		"db.connection.default.host=lerd-mariadb-11-8",
+		"db.connection.default.dbname={{site}}",
+		"db.connection.default.username=root",
+		"db.connection.default.password=lerd",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("got:\n%s\nwant:\n%s", strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+	// No dotenv key leaks into the php-array key space.
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "DB_") {
+			t.Errorf("dotenv key %q must never reach a php-array env file", kv)
+		}
+	}
+}
+
+// The redis role's container name must not bite into an unrelated value that merely
+// contains the word "redis" (Magento names a PHP class there).
+func TestFrameworkVarsForAlternate_LeavesUnrelatedValuesAlone(t *testing.T) {
+	valkey := &config.CustomService{Name: "valkey", Family: "valkey", EnvRole: "redis"}
+	got := frameworkVarsForAlternate(magentoLikeFramework(), "redis", valkey)
+	joined := strings.Join(got, "\n")
+	if !strings.Contains(joined, "backend_options.server=lerd-valkey") {
+		t.Errorf("the redis container was not swapped: %s", joined)
+	}
+	if !strings.Contains(joined, `backend=Magento\Framework\Cache\Backend\Redis`) {
+		t.Errorf("an unrelated value was rewritten: %s", joined)
+	}
+	if !strings.Contains(joined, "backend_options.port=6379") {
+		t.Errorf("the port must not move for a drop-in: %s", joined)
+	}
+}

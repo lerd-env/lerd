@@ -75,5 +75,8 @@ func ApplyPhpConstUpdates(path string, updates map[string]string) error {
 		}
 	}
 
+	if content == string(data) {
+		return nil
+	}
 	return os.WriteFile(path, []byte(content), 0644)
 }

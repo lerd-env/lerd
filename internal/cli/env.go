@@ -164,6 +164,54 @@ func frameworkMapsService(fw *config.Framework, name string) bool {
 	return ok
 }
 
+// frameworkServiceRole resolves the framework env.services entry svc is served by,
+// most specific first: itself, its preset (opensearch-2-19 -> opensearch), the
+// service it declares itself a drop-in for (mariadb -> mysql), then its family.
+// Empty when the framework wires up nothing this service can fill.
+func frameworkServiceRole(fw *config.Framework, svc *config.CustomService) (string, bool) {
+	if fw == nil || svc == nil {
+		return "", false
+	}
+	family := config.FamilyOf(svc)
+	for _, name := range []string{svc.Name, svc.Preset, config.EnvRoleOf(svc), family, builtinEnvRole(family)} {
+		if name != "" && frameworkMapsService(fw, name) {
+			return name, true
+		}
+	}
+	return "", false
+}
+
+// builtinEnvRole is the drop-in relationship lerd knows without being told, so an
+// install whose service store predates the preset's own env_role still wires an
+// alternate onto the framework's keys rather than writing the wrong ones.
+func builtinEnvRole(family string) string {
+	switch family {
+	case "mysql", "mariadb":
+		return "mysql"
+	case "postgres":
+		return "postgres"
+	case "redis", "valkey":
+		return "redis"
+	}
+	return ""
+}
+
+// frameworkVarsForAlternate returns the framework's vars for the mapped service,
+// re-pointed at the alternate actually picked. A drop-in is protocol-compatible with
+// the service it replaces (same port, same credentials, same driver name), so the
+// container it runs in is the only thing that moves: lerd-mysql becomes
+// lerd-mariadb-11-8, and the rest of the framework's wiring stands.
+func frameworkVarsForAlternate(fw *config.Framework, role string, svc *config.CustomService) []string {
+	def := fw.Env.Services[role]
+	from, to := "lerd-"+role, "lerd-"+svc.Name
+	out := make([]string, 0, len(def.Vars))
+	for _, kv := range def.Vars {
+		k, v, _ := strings.Cut(kv, "=")
+		out = append(out, k+"="+strings.ReplaceAll(v, from, to))
+	}
+	return out
+}
+
 // emptyEnvFile returns the seed contents for a freshly created env file. A PHP
 // format needs a parseable skeleton so the app can require() it before lerd has
 // written any keys into it.
@@ -740,10 +788,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		if !pickedFromYAML && !detectedFromEnv {
 			continue
 		}
-		// The framework's own mapping for this service wins. A preset's env_vars
-		// are dotenv keys (OPENSEARCH_HOST=...), meaningless in a php-array env
-		// file, and they would sit alongside the keys the framework just wrote.
-		if frameworkMapsService(fw, svc.Name) {
+		// The framework's own mapping for this service wins: the framework loop
+		// above already wrote its keys, so the preset's must not land beside them.
+		role, mapped := frameworkServiceRole(fw, svc)
+		if mapped && role == svc.Name {
 			if !extServices[svc.Name] {
 				if err := ensureServiceRunning(svc.Name); err != nil {
 					feedback.Warn("could not start %s: %v", svc.Name, err)
@@ -751,25 +799,50 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 			continue
 		}
-		if len(svc.EnvVars) == 0 {
-			// Nothing to write — still ensure the container is up so the
-			// project can reach it once running, unless it's externally managed.
-			if !extServices[svc.Name] {
-				if err := ensureServiceRunning(svc.Name); err != nil {
-					feedback.Warn("could not start %s: %v", svc.Name, err)
-				}
-			}
-			continue
-		}
-		envApplyLine(svc.Name, !pickedFromYAML)
-		for _, kv := range svc.EnvVars {
-			k, v, _ := strings.Cut(kv, "=")
-			updates[k] = applySiteHandle(v, tplCtx)
-		}
+
 		family := config.FamilyOf(svc)
 		isDB := family == "mysql" || family == "mariadb" || family == "postgres"
-		if isDB {
-			updates["DB_DATABASE"] = dbName
+		// Only php-array addresses its keys by dotted path, so it alone cannot take a
+		// preset's env_vars. A php-const file's keys are flat and dotenv-shaped, so
+		// they land there as they always have.
+		dottedEnv := envFormat == "php-array"
+
+		// A service with nothing to wire (an admin dashboard) is only ever started.
+		if len(svc.EnvVars) == 0 {
+			if !extServices[svc.Name] {
+				if err := ensureServiceRunning(svc.Name); err != nil {
+					feedback.Warn("could not start %s: %v", svc.Name, err)
+				}
+			}
+			continue
+		}
+
+		vars := svc.EnvVars
+		if dottedEnv {
+			vars = nil
+			switch {
+			case externalManaged(svc.Name, extServices):
+				// The user owns this connection; never point it at a lerd container.
+			case mapped:
+				// The framework's own mapping owns the keys, re-pointed at this container.
+				vars = frameworkVarsForAlternate(fw, role, svc)
+			default:
+				envInfo("  %s has no %s wiring — set it in %s yourself\n",
+					frameworkLabelOf(fw), svc.Name, envRelPath)
+			}
+		}
+
+		if len(vars) > 0 {
+			envApplyLine(svc.Name, !pickedFromYAML)
+			for _, kv := range vars {
+				k, v, _ := strings.Cut(kv, "=")
+				updates[k] = applySiteHandle(v, tplCtx)
+			}
+			// DB_DATABASE is one of the preset's own Laravel-shaped keys; a framework's
+			// mapping names the database itself, via {{site}}.
+			if isDB && !dottedEnv {
+				updates["DB_DATABASE"] = dbName
+			}
 		}
 		if externalManaged(svc.Name, extServices) {
 			continue
@@ -923,7 +996,6 @@ var worktreeDBConnectionKeys = []string{"DB_CONNECTION", "DB_HOST", "DB_PORT", "
 // effort: a worktree without an env file yet is skipped (it'll be seeded on its
 // next sync), and ApplyUpdates no-ops when nothing changed.
 //
-// Scoped to the dotenv format: the connection keys are Laravel-style and
 // Scoped to the dotenv format: the connection keys are Laravel-style, and the
 // php-const / php-array formats use a different writer and key set, so they are
 // left to their own env detection. envRelPath is the framework-resolved env file

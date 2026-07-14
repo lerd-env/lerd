@@ -76,7 +76,15 @@ env:
 | `php-const` | `define('KEY', 'value')` calls, as in WordPress's `wp-config.php` | `DB_HOST` |
 | `php-array` | a PHP file that `return`s a nested array, as in Magento's `app/etc/env.php` | dotted path, `db.connection.default.host` |
 
-The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento.
+The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento. A rewrite that would not change anything is skipped, so a file already holding every value lerd wants keeps its mtime.
+
+### Services on a non-dotenv framework
+
+A service preset's own `env_vars` are dotenv keys (`DB_HOST=…`), so on a `php-const` or `php-array` framework they mean nothing: there, the keys are whatever the framework declares under `env.services`. When a project picks a drop-in for a service the framework maps, lerd applies the framework's own mapping and swaps in the drop-in's container, so a Magento site on MariaDB gets `db.connection.default.host: lerd-mariadb-11-8` rather than a stray `DB_HOST` entry that Magento never reads. A drop-in is protocol-compatible with the service it stands in for, so the container is the only thing that moves; the port, credentials and driver name in the framework's mapping still hold.
+
+The drop-in is matched to the mapped service by its family, or by the [`env_role`](/usage/custom-services#yaml-schema) the preset declares when the relationship crosses families (MariaDB for MySQL, Valkey for Redis). A picked service the framework maps nothing for is started but left unwired, with a warning: lerd will not guess where it belongs in the file.
+
+On a `dotenv` framework the preset's own `env_vars` are written as before, since they are already in the right shape.
 
 ## YAML schema
 

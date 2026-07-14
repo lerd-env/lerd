@@ -15,11 +15,6 @@ import (
 // stall the snapshot. Short because the server is on the same host.
 const healthDialTimeout = 300 * time.Millisecond
 
-// healthGraceWindow is how long a unit may be active with no url_file before it
-// counts as unreachable: a dev server writes the file within a second of binding,
-// so well past this with none means it never bound. Below it, not-probeable.
-const healthGraceWindow = 60 * time.Second
-
 // dialProbe opens and closes a TCP connection; a var so tests probe without a
 // real socket.
 var dialProbe = func(address string) error {
@@ -38,9 +33,10 @@ var dialProbe = func(address string) error {
 // vite's public/hot while the unit is briefly still up, and the real failure the
 // block catches is a stale file whose advertised port is refused. When probed is
 // true, reachable is the result of a short TCP dial.
-// activeEnter (when non-zero) gates two false positives: a url_file older than
-// the activation is stale (not dialed), and a unit active past healthGraceWindow
-// with no file never bound (unreachable). Zero disables both, keeping prior behaviour.
+// activeEnter (when non-zero) suppresses a false positive: a url_file older than
+// the activation is a stale leftover, so it is not dialed. Plenty of healthy
+// setups never write the file at all (a custom vite hotFile, vite build --watch,
+// a project that cleans public/), so its absence is never itself a failure.
 func WorkerServerReachable(sitePath string, h *config.WorkerHealth, activeEnter time.Time) (reachable, probed bool) {
 	if h == nil || h.URLFile == "" {
 		return false, false
@@ -48,12 +44,6 @@ func WorkerServerReachable(sitePath string, h *config.WorkerHealth, activeEnter 
 	path := filepath.Join(sitePath, h.URLFile)
 	info, statErr := os.Stat(path)
 	if statErr != nil {
-		// No url_file. If the unit has been active well past the grace window it
-		// never bound (never wrote the file), which is unreachable; otherwise it
-		// may just be starting or idle-suspended, so leave it not-probeable.
-		if !activeEnter.IsZero() && time.Since(activeEnter) > healthGraceWindow {
-			return false, true
-		}
 		return false, false
 	}
 	// A url_file older than this activation is a stale leftover from before a

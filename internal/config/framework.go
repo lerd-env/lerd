@@ -991,6 +991,10 @@ func mergeUserOverlay(base *Framework) *Framework {
 // it is preferred over an unversioned one. User overlay workers are always merged.
 // When a version is detected but no local definition exists, it attempts to fetch
 // the definition from the store automatically.
+//
+// It is a read-only resolver. Rendering a vhost, drawing a TUI row, or serving a
+// dashboard poll all land here, so it must never write to the project: use
+// SyncProjectFrameworkVersion from the commands that own .lerd.yaml.
 func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 	if name == "" {
 		return nil, false
@@ -998,11 +1002,9 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 
 	// 1. Resolve version from composer.lock (source of truth) or .lerd.yaml (fallback).
 	version := DetectMajorVersion(projectDir, name)
-	if proj, err := LoadProjectConfig(projectDir); err == nil {
-		if version == "" && proj.FrameworkVersion != "" {
+	if version == "" {
+		if proj, err := LoadProjectConfig(projectDir); err == nil {
 			version = proj.FrameworkVersion
-		} else if version != "" && proj.FrameworkVersion != "" && version != proj.FrameworkVersion {
-			_ = SetProjectFrameworkVersion(projectDir, version)
 		}
 	}
 

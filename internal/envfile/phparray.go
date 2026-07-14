@@ -73,6 +73,7 @@ func ApplyPhpArrayUpdates(path string, updates map[string]string) error {
 	case !os.IsNotExist(err):
 		return err
 	}
+	original := string(data)
 	if root == nil || root.kind != phpArray {
 		root = &phpValue{kind: phpArray}
 	}
@@ -92,6 +93,12 @@ func ApplyPhpArrayUpdates(path string, updates map[string]string) error {
 	printValue(&b, root, 0)
 	b.WriteString(";\n")
 
+	// A rewrite reprints the whole file, so without this an env already holding
+	// every target value still gets its mtime bumped and its formatting churned
+	// on every call — and EnsureWorktreeEnv is called on every worktree sync.
+	if b.String() == original {
+		return nil
+	}
 	if dir := filepath.Dir(path); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err

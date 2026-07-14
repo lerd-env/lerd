@@ -1,6 +1,7 @@
 package siteinfo
 
 import (
+	"strconv"
 	"testing"
 	"time"
 )
@@ -143,11 +144,11 @@ func TestUnitStatusCachedSystemctlFailure(t *testing.T) {
 }
 
 func TestParseUnitMeta(t *testing.T) {
-	boot := time.Date(2026, 7, 10, 9, 0, 0, 0, time.UTC)
-	raw := "Id=lerd-vite-app.service\nActiveEnterTimestampMonotonic=5000000\nWorkingDirectory=/home/u/app\n\n" +
-		"Id=lerd-queue-app.service\nActiveEnterTimestampMonotonic=0\nWorkingDirectory=\n"
+	activated := time.Date(2026, 7, 10, 9, 0, 5, 0, time.UTC)
+	raw := "Id=lerd-vite-app.service\nActiveEnterTimestamp=@" + strconv.FormatInt(activated.Unix(), 10) + "\nWorkingDirectory=/home/u/app\n\n" +
+		"Id=lerd-queue-app.service\nActiveEnterTimestamp=\nWorkingDirectory=\n"
 
-	m := parseUnitMeta(raw, boot, true)
+	m := parseUnitMeta(raw)
 
 	v, ok := m["lerd-vite-app"] // .service suffix aliased
 	if !ok {
@@ -156,16 +157,12 @@ func TestParseUnitMeta(t *testing.T) {
 	if v.WorkingDir != "/home/u/app" {
 		t.Errorf("WorkingDir = %q, want /home/u/app", v.WorkingDir)
 	}
-	if want := boot.Add(5 * time.Second); !v.ActiveEnter.Equal(want) { // 5_000_000 usec
-		t.Errorf("ActiveEnter = %v, want %v", v.ActiveEnter, want)
+	if !v.ActiveEnter.Equal(activated) {
+		t.Errorf("ActiveEnter = %v, want %v", v.ActiveEnter, activated)
 	}
-	// Monotonic 0 (never active) leaves ActiveEnter zero.
+	// A unit that has never been active reports an empty stamp: ActiveEnter stays zero.
 	if q := m["lerd-queue-app"]; !q.ActiveEnter.IsZero() {
-		t.Errorf("zero-monotonic ActiveEnter = %v, want zero", q.ActiveEnter)
-	}
-	// Unreadable boot time leaves ActiveEnter zero even with a monotonic value.
-	if got := parseUnitMeta(raw, time.Time{}, false)["lerd-vite-app"]; !got.ActiveEnter.IsZero() {
-		t.Error("bootOK=false should leave ActiveEnter zero")
+		t.Errorf("never-active ActiveEnter = %v, want zero", q.ActiveEnter)
 	}
 }
 

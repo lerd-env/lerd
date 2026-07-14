@@ -58,6 +58,33 @@ func TestRequiredServicesWarnsWhenStopped(t *testing.T) {
 	}
 }
 
+// With several services down the remedy must cover all of them: naming only the
+// first sends the user round the loop, running a command that leaves the check
+// failing with nothing to say which service is still left.
+func TestRequiredServicesRemedyCoversEveryService(t *testing.T) {
+	withStubs(t,
+		map[string]bool{"lerd-opensearch": true, "lerd-redis": true},
+		map[string]string{"lerd-opensearch": "inactive", "lerd-redis": "inactive"},
+	)
+	c, _ := checkRequiredServices(&config.Framework{Requires: []string{"opensearch", "redis"}})
+	if c.Status != StatusWarn {
+		t.Fatalf("got %s, want warn: %+v", c.Status, c)
+	}
+	for _, want := range []string{"lerd service start opensearch", "lerd service start redis", "are required"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("detail %q must contain %q", c.Detail, want)
+		}
+	}
+
+	withStubs(t, nil, nil)
+	c, _ = checkRequiredServices(&config.Framework{Label: "Magento", Requires: []string{"opensearch", "redis"}})
+	for _, want := range []string{"lerd service preset opensearch", "lerd service preset redis"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("detail %q must contain %q", c.Detail, want)
+		}
+	}
+}
+
 // A missing service outranks a stopped one, since it is the more severe finding.
 func TestRequiredServicesMissingOutranksStopped(t *testing.T) {
 	withStubs(t,

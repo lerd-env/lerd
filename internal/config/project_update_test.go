@@ -618,3 +618,104 @@ func TestSetProjectWorkerReload_Toggle(t *testing.T) {
 		t.Errorf("unrelated fields should survive the toggle, got domains %v", cfg.Domains)
 	}
 }
+
+// GetFrameworkForDir is reached from every vhost render, dashboard poll and TUI
+// row, so it must not write to the project. It used to repin framework_version on
+// the way past, which rewrote a worktree's committed .lerd.yaml under the user.
+func TestGetFrameworkForDirDoesNotWriteTheProject(t *testing.T) {
+	dir := t.TempDir()
+	body := "framework: laravel\nframework_version: \"11\"\n"
+	path := filepath.Join(dir, ".lerd.yaml")
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// composer.json disagreeing with the pinned version is what used to trigger
+	// the drive-by rewrite.
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"laravel/framework":"^12.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	GetFrameworkForDir("laravel", dir)
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != body {
+		t.Errorf("resolving a framework rewrote .lerd.yaml:\ngot:  %q\nwant: %q", got, body)
+	}
+}
+
+// SyncProjectFrameworkVersion is the explicit repin the commands that own
+// .lerd.yaml call instead.
+func TestSyncProjectFrameworkVersion(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"),
+		[]byte("framework: laravel\nframework_version: \"11\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"laravel/framework":"^12.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncProjectFrameworkVersion("laravel", dir); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.FrameworkVersion != "12" {
+		t.Errorf("framework_version = %q, want 12", cfg.FrameworkVersion)
+	}
+}
+
+// AddProjectServices re-reads before it writes, so it cannot roll back the fields
+// another writer persisted earlier in the same command (lerd link writes the
+// domains, then folds in the framework's required services).
+func TestAddProjectServicesDoesNotClobberEarlierWrites(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"),
+		[]byte("domains:\n    - old\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// A snapshot taken before the domain sync, as runLink holds.
+	if _, err := LoadProjectConfig(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := SyncProjectDomains(dir, []string{"old.test", "new.test"}, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddProjectServices(dir, []ProjectService{{Name: "opensearch"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Domains) != 2 {
+		t.Errorf("domains = %v, want both kept: the service append rolled back the domain sync", cfg.Domains)
+	}
+	if len(cfg.Services) != 1 || cfg.Services[0].Name != "opensearch" {
+		t.Errorf("services = %+v, want opensearch appended", cfg.Services)
+	}
+}
+
+func TestAddProjectServicesCreatesTheFileAndSkipsDuplicates(t *testing.T) {
+	dir := t.TempDir()
+	if err := AddProjectServices(dir, []ProjectService{{Name: "opensearch"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := AddProjectServices(dir, []ProjectService{{Name: "opensearch"}}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Services) != 1 {
+		t.Errorf("services = %+v, want a single opensearch entry", cfg.Services)
+	}
+}
