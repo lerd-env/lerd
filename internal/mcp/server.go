@@ -177,7 +177,7 @@ func dispatch(req *rpcRequest) (any, *rpcError) {
 		return map[string]any{
 			"protocolVersion": protocolVersion,
 			"capabilities":    map[string]any{"tools": map[string]any{}},
-			"serverInfo":      map[string]any{"name": "lerd", "version": "1.0"},
+			"serverInfo":      map[string]any{"name": "lerd", "version": version.Version},
 		}, nil
 	case "tools/list":
 		return map[string]any{"tools": toolList()}, nil
@@ -1860,37 +1860,53 @@ func execServiceConfigReset(args map[string]any) (any, *rpcError) {
 	return toolOK(out), nil
 }
 
+type presetVersionEntry struct {
+	Tag       string `json:"tag"`
+	Label     string `json:"label,omitempty"`
+	Image     string `json:"image"`
+	Installed bool   `json:"installed"`
+}
+
+// presetEntry is the preset as an assistant sees it. Category, Icon and AdminFor
+// are what a preset declares about itself for discovery: AdminFor names the
+// services this preset's UI administers, which is not DependsOn (phpMyAdmin
+// starts after mysql but administers mariadb too).
+type presetEntry struct {
+	Name           string               `json:"name"`
+	Description    string               `json:"description,omitempty"`
+	Image          string               `json:"image,omitempty"`
+	Category       string               `json:"category,omitempty"`
+	Icon           string               `json:"icon,omitempty"`
+	Dashboard      string               `json:"dashboard,omitempty"`
+	AdminFor       []string             `json:"admin_for,omitempty"`
+	DependsOn      []string             `json:"depends_on,omitempty"`
+	Installed      bool                 `json:"installed"`
+	DefaultVersion string               `json:"default_version,omitempty"`
+	Versions       []presetVersionEntry `json:"versions,omitempty"`
+}
+
+func newPresetEntry(p config.PresetMeta) presetEntry {
+	return presetEntry{
+		Name:           p.Name,
+		Description:    p.Description,
+		Image:          p.Image,
+		Category:       p.Category,
+		Icon:           p.Icon,
+		Dashboard:      p.Dashboard,
+		AdminFor:       p.AdminFor,
+		DependsOn:      p.DependsOn,
+		DefaultVersion: p.DefaultVersion,
+	}
+}
+
 func execServicePresetList(_ map[string]any) (any, *rpcError) {
 	presets, err := config.ListPresets()
 	if err != nil {
 		return toolErr("listing presets: " + err.Error()), nil
 	}
-	type versionEntry struct {
-		Tag       string `json:"tag"`
-		Label     string `json:"label,omitempty"`
-		Image     string `json:"image"`
-		Installed bool   `json:"installed"`
-	}
-	type entry struct {
-		Name           string         `json:"name"`
-		Description    string         `json:"description,omitempty"`
-		Image          string         `json:"image,omitempty"`
-		Dashboard      string         `json:"dashboard,omitempty"`
-		DependsOn      []string       `json:"depends_on,omitempty"`
-		Installed      bool           `json:"installed"`
-		DefaultVersion string         `json:"default_version,omitempty"`
-		Versions       []versionEntry `json:"versions,omitempty"`
-	}
-	out := make([]entry, 0, len(presets))
+	out := make([]presetEntry, 0, len(presets))
 	for _, p := range presets {
-		e := entry{
-			Name:           p.Name,
-			Description:    p.Description,
-			Image:          p.Image,
-			Dashboard:      p.Dashboard,
-			DependsOn:      p.DependsOn,
-			DefaultVersion: p.DefaultVersion,
-		}
+		e := newPresetEntry(p)
 		if len(p.Versions) == 0 {
 			if serviceops.ServiceInstalled(p.Name) {
 				e.Installed = true
@@ -1898,7 +1914,7 @@ func execServicePresetList(_ map[string]any) (any, *rpcError) {
 		} else {
 			anyInstalled := false
 			for _, v := range p.Versions {
-				vi := versionEntry{
+				vi := presetVersionEntry{
 					Tag:       v.Tag,
 					Label:     v.Label,
 					Image:     v.Image,

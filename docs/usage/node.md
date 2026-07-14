@@ -30,6 +30,33 @@ npx tsc --init
 
 ---
 
+## Package manager
+
+The package manager is the project's choice, not lerd's. lerd detects it and routes every install, dev and build through it, so a pnpm project is never quietly installed with npm.
+
+Detection runs in this order:
+
+1. A `packageManager` field in `package.json` (`"pnpm@9.1.0"`, `"yarn@4.2.0"`, `"npm@10"`, `"bun@1.1"`), the Corepack convention and the most explicit signal
+2. The lockfile: `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb` / `bun.lock` → bun, `package-lock.json` → npm
+3. npm, as the fallback
+
+pnpm and yarn run through [Corepack](https://nodejs.org/api/corepack.html), which ships with the fnm-managed Node lerd installs, so neither needs a separate global install. Corepack is enabled on demand the first time a project needs it.
+
+Installs use each manager's frozen-lockfile mode, so a lerd install never silently rewrites your lockfile:
+
+| Manager | Install | Dev | Build |
+|---|---|---|---|
+| npm | `npm ci` | `npm run dev` | `npm run build` |
+| pnpm | `pnpm install --frozen-lockfile` | `pnpm run dev` | `pnpm run build` |
+| yarn | `yarn install --immutable` | `yarn dev` | `yarn build` |
+| bun | `bun install` | `bun run dev` | `bun run build` |
+
+This is what the project-setup wizard runs, what a `lerd worktree add` runs when it installs a new checkout's dependencies, and what the Vite host worker runs for HMR. The wizard's step labels follow the detected manager, so a pnpm project shows **pnpm install** rather than **npm ci**.
+
+Nothing needs configuring. If you want to change the manager, change the project's `packageManager` field or its lockfile and lerd follows.
+
+---
+
 ## Version resolution
 
 1. `.lerd.yaml`: `node_version` field (explicit lerd override, highest priority)

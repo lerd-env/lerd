@@ -79,7 +79,7 @@ cd ~/Projects/my-app
 lerd setup
 ```
 
-After the wizard, a checkbox list appears with all available steps pre-selected based on the current project state. Worker steps are pre-selected based on the `.lerd.yaml` workers list:
+After the wizard, a checkbox list appears with all available steps pre-selected based on the current project state. Worker steps are pre-selected based on the `.lerd.yaml` workers list. The JavaScript steps are labelled with the [package manager the project pins](/usage/node), so a pnpm project shows `pnpm install --frozen-lockfile` and `pnpm run build` where the npm project below shows `npm ci` and `npm run build`:
 
 ```
 ? Select setup steps to run:
@@ -133,13 +133,13 @@ No hooks or per-project setup needed; it works for every linked site out of the 
 | Step | Default | Condition |
 |---|---|---|
 | `composer install` | - [x] on | only if `vendor/` is missing; runs inside the project's PHP-FPM container to match the `composer.json` PHP constraint |
-| `npm ci` | - [x] on | only if `node_modules/` is missing and `package.json` exists |
+| install JS deps | - [x] on | only if `node_modules/` is missing and `package.json` exists; runs `npm ci`, `pnpm install --frozen-lockfile`, `yarn install --immutable` or `bun install` to match the [detected package manager](/usage/node) |
 | `lerd env` | - [x] on | always |
 | `lerd mcp:inject` | - [ ] off | opt-in |
 | `php artisan migrate` | - [x] on | always |
 | `php artisan db:seed` | - [ ] off | opt-in |
 | `php artisan storage:link` | - [x] on | only if `storage/app/public` is not yet symlinked |
-| `npm run build` | - [x] on | only if `package.json` exists |
+| build assets | - [x] on | only if `package.json` exists; runs the build script through the [detected package manager](/usage/node) |
 | `lerd secure` | - [ ] off | opt-in |
 | `queue:start` | - [x] on | only if `QUEUE_CONNECTION=redis` is set in `.env` or `.env.example` |
 | `lerd open` | - [x] on | always |

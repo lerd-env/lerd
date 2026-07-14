@@ -58,7 +58,7 @@ func TestWorkerModeActions_split(t *testing.T) {
 
 // TestToolList_groups is a guardrail on the consolidated surface.
 func TestToolList_groups(t *testing.T) {
-	want := []string{"db", "diag", "env", "exec", "framework", "logs", "runtime", "service", "site", "worker", "worktree"}
+	want := []string{"db", "diag", "env", "exec", "framework", "logs", "runtime", "service", "site", "worker", "workspace", "worktree"}
 	got := make([]string, 0, len(toolList()))
 	for _, tool := range toolList() {
 		got = append(got, tool.Name)

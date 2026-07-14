@@ -19,6 +19,18 @@ A worker can keep its process alive after its server has died: a Vite dev server
 
 A worker that declares a [`health` block](/usage/framework-workers) is probed for reachability instead. While its process is up, lerd reads the URL file the server writes on boot (Vite's `public/hot`) and dials its host and port; if nothing is accepting, the worker is reported **unreachable** and heal restarts it (a plain start is a no-op on a still-running unit). Workers with no `health` block keep the process-only check.
 
+Per-worktree workers are covered by the same pass. A `per_worktree` worker runs under its own `lerd-<worker>-<site>-<branch>` unit, so a Vite dev server that died on a branch checkout is found and healed exactly like the main site's.
+
+The probe is deliberately conservative about what it treats as a failure, because a false positive restarts a server that was working:
+
+- The URL file is read against the unit's activation time. A file older than the unit's current run is a leftover from the previous one, not a live address, so it is not dialled.
+- A missing URL file is not a failure. A Vite config with its own `hotFile`, a worker that only watches and never serves, or a project that cleans `public/` on build all legitimately have no file to read. Absence is a signal lerd cannot use, so the probe stands down rather than restarting a healthy worker forever.
+- A worker still inside its startup grace window is left alone, so a server that is simply slow to bind is not killed while it comes up.
+
+What the probe does catch is the case it exists for: a URL file written by the current run, pointing at a port that refuses a connection.
+
+A worker with a `schedule` is not probed at all. It is a oneshot unit driven by a systemd timer, so it is inactive between ticks by design; its liveness is the timer's state, and a failing last run still surfaces from the service.
+
 ## CLI
 
 ```sh
