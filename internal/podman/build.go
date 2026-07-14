@@ -1036,16 +1036,61 @@ var (
 
 const pathMountDebounce = 60 * time.Second
 
+// PathAutoMountable reports whether EnsurePathMounted would bind-mount the
+// given path on demand. The filesystem root is refused (issue #884) and so are
+// the ephemeral system trees above; callers that need such a path inside a
+// container have to say so explicitly, by parking it.
+func PathAutoMountable(path string) bool {
+	if !bindMountable(path) {
+		return false
+	}
+	for _, p := range ephemeralPathPrefixes {
+		if strings.HasPrefix(path, p) {
+			return false
+		}
+	}
+	return true
+}
+
+// PathVisible reports whether a path can already be reached inside the PHP-FPM
+// container for the given version, either because it lives under $HOME or
+// because a Volume line (its own, or an ancestor's) already covers it.
+func PathVisible(path, phpVersion string) bool {
+	if !bindMountable(path) {
+		return false
+	}
+	if home, _ := os.UserHomeDir(); home != "" && (path == home || strings.HasPrefix(path, strings.TrimSuffix(home, "/")+"/")) {
+		return true
+	}
+	short := strings.ReplaceAll(phpVersion, ".", "")
+	content, err := os.ReadFile(filepath.Join(config.QuadletDir(), "lerd-php"+short+"-fpm.container"))
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(content), "\n") {
+		spec, ok := strings.CutPrefix(strings.TrimSpace(line), "Volume=")
+		if !ok {
+			continue
+		}
+		src, _, found := strings.Cut(spec, ":")
+		if !found || !filepath.IsAbs(src) {
+			continue
+		}
+		if path == src || strings.HasPrefix(path, strings.TrimSuffix(src, "/")+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // EnsurePathMounted checks whether the given path is accessible inside the
 // PHP-FPM and nginx containers. If the path is outside $HOME and not already
 // volume-mounted, the quadlets are updated and containers restarted
 // transparently before returning.
 func EnsurePathMounted(path, phpVersion string) {
-	// Never bind-mount the filesystem root (or an empty/relative path): it would
-	// inject Volume=/:/:rw into the nginx and FPM quadlets and restart them into
-	// a crun exit 127 (issue #884). This path is reached from `lerd php`, console,
-	// tinker, shell and setup, so a command run from / must not brick nginx.
-	if !bindMountable(path) {
+	// Reached from `lerd php`, console, tinker, shell, setup and new, so a
+	// command run from / or from a temp dir must not rewrite the quadlets.
+	if !PathAutoMountable(path) {
 		return
 	}
 	home, _ := os.UserHomeDir()
@@ -1058,11 +1103,6 @@ func EnsurePathMounted(path, phpVersion string) {
 	}
 	if path == home || strings.HasPrefix(path, homePrefix) {
 		return
-	}
-	for _, p := range ephemeralPathPrefixes {
-		if strings.HasPrefix(path, p) {
-			return // ephemeral system dir, never bind-mount
-		}
 	}
 
 	pathMountAttemptsMu.Lock()
