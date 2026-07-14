@@ -1652,5 +1652,9 @@ func RewriteNginxQuadlet() (changed bool, err error) {
 	if err != nil {
 		return false, fmt.Errorf("reading bundled nginx quadlet template: %w", err)
 	}
+	// The template carries only the lerd-owned mounts, so a site or parked
+	// directory outside $HOME must have its Volume= line re-injected here, the
+	// same way RewriteFPMQuadlets does, or nginx restarts without the docroot.
+	content = podman.InjectExtraVolumes(content, podman.ExtraVolumePaths())
 	return podman.WriteQuadletDiff("lerd-nginx", content)
 }
