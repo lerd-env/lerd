@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/cleanup"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
@@ -99,6 +100,18 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 			}
 		} else {
 			ok("systemd user session")
+		}
+
+		// mkcert can only trust .test in the browser when certutil (nss-tools) is
+		// present. Without it lerd's mkcert step installs the CA to the system
+		// store only, so curl and PHP trust it but Firefox and Chrome warn, and
+		// the mkcert warning is swallowed. Only relevant when DNS/HTTPS is managed.
+		if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg != nil && cfg.DNS.Enabled {
+			if certs.BrowserTrustAvailable() {
+				ok("browser HTTPS trust (certutil)")
+			} else {
+				warn("browser HTTPS trust (certutil)", browserTrustGuidance(ostreeBootedFn()))
+			}
 		}
 
 		currentUser := os.Getenv("USER")

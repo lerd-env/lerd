@@ -87,9 +87,61 @@ teardown() {
 @test "distro_family returns unknown for unrecognised distro" {
   function detect_distro() { echo "slackware"; }
   export -f detect_distro
+  function detect_distro_like() { echo ""; }
+  export -f detect_distro_like
 
   run distro_family
   [ "$output" = "unknown" ]
+}
+
+@test "distro_family falls back to ID_LIKE for derivatives (bazzite -> fedora)" {
+  function detect_distro() { echo "bazzite"; }
+  export -f detect_distro
+  function detect_distro_like() { echo "fedora"; }
+  export -f detect_distro_like
+
+  run distro_family
+  [ "$output" = "fedora" ]
+}
+
+@test "distro_family reads a multi-value ID_LIKE" {
+  function detect_distro() { echo "somespin"; }
+  export -f detect_distro
+  function detect_distro_like() { echo "rhel fedora"; }
+  export -f detect_distro_like
+
+  run distro_family
+  [ "$output" = "fedora" ]
+}
+
+# ── check_certutil ────────────────────────────────────────────────────────────
+
+@test "check_certutil guides without queuing nss-tools on atomic images" {
+  function command() { if [ "$1" = "-v" ] && [ "$2" = "certutil" ]; then return 1; fi; builtin command "$@"; }
+  export -f command
+  function distro_family() { echo "fedora"; }
+  export -f distro_family
+  function is_atomic() { return 0; }
+  export -f is_atomic
+
+  MISSING_PKGS=()
+  check_certutil >"$BATS_TMPDIR/cc-$$.out" 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 0 ]
+  grep -q "rpm-ostree install nss-tools" "$BATS_TMPDIR/cc-$$.out"
+}
+
+@test "check_certutil queues nss-tools on ordinary distros" {
+  function command() { if [ "$1" = "-v" ] && [ "$2" = "certutil" ]; then return 1; fi; builtin command "$@"; }
+  export -f command
+  function distro_family() { echo "fedora"; }
+  export -f distro_family
+  function is_atomic() { return 1; }
+  export -f is_atomic
+
+  MISSING_PKGS=()
+  check_certutil >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 1 ]
+  [ "${MISSING_PKGS[0]}" = "nss-tools" ]
 }
 
 # ── _download_tool ────────────────────────────────────────────────────────────

@@ -393,6 +393,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 		mkcertCmd.Run() //nolint:errcheck
 
+		// mkcert only adds the CA to the browser NSS stores when certutil is
+		// present, and it exits 0 with a warning otherwise (which the discard
+		// path above hides). Surface it ourselves so the user knows .test HTTPS
+		// works for tooling but not the browser, and how to fix or side-step it.
+		if !certs.BrowserTrustAvailable() {
+			feedback.Note(browserTrustGuidance(ostreeBootedFn()))
+		}
+
 		// 5. DNS config + sudoers
 		step("Writing DNS configuration")
 		dnsConfPath := filepath.Join(config.DnsmasqDir(), "lerd.conf")
