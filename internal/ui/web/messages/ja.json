@@ -727,6 +727,7 @@
   "queries_show_workers": "ワーカーのクエリを表示",
   "queries_filter_allWorkers": "すべてのワーカー",
   "queries_worker_badge": "ワーカー",
+  "queries_copySql": "実行可能な SQL をコピー",
   "tinker_mode_tinkerTitle": "artisan tinker 経由で Laravel をブートストラップ",
   "tinker_mode_phpTitle": "プレーンな PHP ランタイム",
   "tinker_clearTitle": "エディタと出力をクリア",

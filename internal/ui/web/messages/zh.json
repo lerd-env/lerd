@@ -727,6 +727,7 @@
   "queries_show_workers": "显示 worker 查询",
   "queries_filter_allWorkers": "所有 workers",
   "queries_worker_badge": "worker",
+  "queries_copySql": "复制可执行的 SQL",
   "tinker_mode_tinkerTitle": "通过 artisan tinker 引导 Laravel",
   "tinker_mode_phpTitle": "纯 PHP 运行时",
   "tinker_clearTitle": "清空编辑器和输出",

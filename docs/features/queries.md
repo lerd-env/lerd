@@ -21,6 +21,7 @@ Events ship over the **same** Unix socket (Linux) or TCP loopback (macOS) the de
 - **N+1 detection.** Queries whose SQL normalizes to the same fingerprint (literals collapsed) are flagged as duplicates; a request with three or more repeats of one shape is flagged **N+1**.
 - **Slow-query tagging.** Any single query at or over 100ms is tagged **slow**.
 - **Caller, bindings, connection.** Expand a row for the originating `file:line`, the bound parameters, and (when a framework adapter is present) the connection name and read/write type.
+- **Copy runnable SQL.** A copy button next to each query's duration copies the statement with its bindings resolved: positional `?` placeholders are replaced with properly escaped SQL literals (strings quoted, single quotes doubled, `NULL` for nulls, `1`/`0` for booleans), while question marks inside quoted strings are left untouched. Queries with no bindings copy verbatim. Paste it straight into a SQL editor without hand-substituting each parameter.
 
 ## Wire format
 

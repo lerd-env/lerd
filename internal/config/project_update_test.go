@@ -422,11 +422,12 @@ func TestReplaceProjectDBService_ReplacesExisting(t *testing.T) {
 	if len(cfg.Services) != 2 {
 		t.Fatalf("expected 2 services, got %d: %v", len(cfg.Services), cfg.Services)
 	}
-	if cfg.Services[0].Name != "redis" {
-		t.Errorf("Services[0] = %q, want redis", cfg.Services[0].Name)
+	// Services persist sorted: postgres replaced mysql, redis is preserved.
+	if cfg.Services[0].Name != "postgres" {
+		t.Errorf("Services[0] = %q, want postgres", cfg.Services[0].Name)
 	}
-	if cfg.Services[1].Name != "postgres" {
-		t.Errorf("Services[1] = %q, want postgres", cfg.Services[1].Name)
+	if cfg.Services[1].Name != "redis" {
+		t.Errorf("Services[1] = %q, want redis", cfg.Services[1].Name)
 	}
 }
 

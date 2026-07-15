@@ -266,8 +266,9 @@ func TestAppendLostSuspended(t *testing.T) {
 	unitStatesOKFn = func() (map[string]string, bool) { return present, true }
 
 	// All declared+resumable units removed -> all re-marked; the orphan is skipped.
-	if got := appendLostSuspended(site, nil); !slices.Equal(got, []string{"queue", "horizon", "stripe"}) {
-		t.Errorf("all-removed: got %v, want [queue horizon stripe]", got)
+	// Workers persist sorted, so the re-marked list comes back in that order.
+	if got := appendLostSuspended(site, nil); !slices.Equal(got, []string{"horizon", "queue", "stripe"}) {
+		t.Errorf("all-removed: got %v, want [horizon queue stripe]", got)
 	}
 	// A worker whose unit still exists (e.g. crashed/failed) is not re-marked, so
 	// worker-healing still sees it instead of it being masked as sleeping.

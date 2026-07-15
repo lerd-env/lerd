@@ -76,6 +76,7 @@ describe('SiteRequestTiming Recent list', () => {
 describe('SiteRequestTiming on a worktree', () => {
   const site = {
     domain: 'whitewaters.test',
+    tls: true,
     worktrees: [{ branch: 'feature-x', domain: 'feature-x.whitewaters.test' }]
   };
 
@@ -100,6 +101,25 @@ describe('SiteRequestTiming on a worktree', () => {
     await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
     await waitFor(() => {
       expect(opened.location.href).toBe('https://feature-x.whitewaters.test/reports/7');
+    });
+  });
+});
+
+// A localhost site is served over plain HTTP (no mkcert cert), so profiling a
+// route must open http://, not https:// which throws a certificate error.
+describe('SiteRequestTiming on a localhost site', () => {
+  const site = { domain: 'whitewaters.localhost' };
+
+  it('profiles routes over http on an unsecured localhost site', async () => {
+    loadSiteAnalytics.mockClear();
+    const opened = { location: { href: '' } };
+    vi.stubGlobal('open', vi.fn(() => opened));
+
+    const { findByRole } = render(SiteRequestTiming, { props: { site } });
+
+    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+    await waitFor(() => {
+      expect(opened.location.href).toBe('http://whitewaters.localhost/reports/7');
     });
   });
 });

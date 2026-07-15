@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -73,8 +74,14 @@ func SetProjectWorkers(dir string, workers []string) error {
 }
 
 // AddProjectWorker appends name to the workers list if not already present.
-// No-op if .lerd.yaml does not exist.
+// No-op if .lerd.yaml does not exist. A whitespace-bearing name is rejected so a
+// mangled value like "horizon - schedule - vite - stripe" can never land as a
+// single worker entry; real worker names map to systemd units and have none.
 func AddProjectWorker(dir, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" || strings.ContainsAny(name, " \t\n\r") {
+		return fmt.Errorf("invalid worker name %q", name)
+	}
 	return updateProjectConfig(dir, func(cfg *ProjectConfig) {
 		for _, w := range cfg.Workers {
 			if w == name {
