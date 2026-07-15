@@ -111,7 +111,7 @@ func runCheck(_ *cobra.Command, _ []string) error {
 		if cfg.Container != nil {
 			// Custom container site: workers must be defined in custom_workers.
 			for _, w := range cfg.Workers {
-				if _, ok := cfg.CustomWorkers[w]; ok {
+				if _, ok := cfg.CustomWorkers[w]; ok || config.IsBuiltinWorker(w) {
 					ckOK("worker: %s\n", w)
 				} else {
 					ckFail("worker: %q is not defined in custom_workers\n", w)
@@ -130,6 +130,13 @@ func runCheck(_ *cobra.Command, _ []string) error {
 				}
 				if w == "horizon" {
 					hasHorizon = true
+				}
+
+				// Stripe and the host-proxy app worker are lerd built-ins, run
+				// through their own units and never declared by a framework.
+				if config.IsBuiltinWorker(w) {
+					ckOK("worker: %s\n", w)
+					continue
 				}
 
 				if !hasFw || fw.Workers == nil {
