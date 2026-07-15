@@ -47,6 +47,7 @@ type Snapshot struct {
 	LANExposed           bool   // lerd lan expose state — drives the LAN toggle item
 	DumpsEnabled         bool   // lerd dump on/off state — drives the dump toggle item
 	NotificationsEnabled bool   // lerd notify on/off state — drives the notifications toggle item
+	HighContrastIcon     bool   // lerd tray icon high-contrast state — green running icon on any panel
 	LatestVersion        string // non-empty (e.g. "v0.8.5") when a newer version is available
 }
 
@@ -195,7 +196,7 @@ func onReady(mono bool) {
 	// SetTitle would show text next to the icon in the macOS menu bar — skip it.
 	systray.SetTooltip("Lerd — local dev environment")
 
-	menu := buildMenu()
+	menu := buildMenu(mono)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -233,6 +234,9 @@ func onReady(mono bool) {
 	}
 	go handleDumps(menu.mDumps, refresh)
 	go handleNotifications(menu.mNotifications, refresh)
+	if menu.mIconStyle != nil {
+		go handleIconStyle(menu.mIconStyle, refresh)
+	}
 	go handleUpdate(menu.mUpdate)
 	go handleQuit(menu.mQuit, cancel)
 }
@@ -308,6 +312,7 @@ func fetchSnapshot() *Snapshot {
 		snap.LANExposed = cfg.LAN.Exposed
 		snap.DumpsEnabled = cfg.IsDumpsEnabled()
 		snap.NotificationsEnabled = cfg.IsNotificationsEnabled()
+		snap.HighContrastIcon = cfg.IsHighContrastTrayIcon()
 	}
 
 	// /api/services — only real services (exclude queue/schedule/stripe per-site workers)
@@ -342,16 +347,21 @@ const (
 	iconKindStopped      iconKind = iota // red L, any panel
 	iconKindRunningDark                  // white L, dark panel
 	iconKindRunningLight                 // dark L, light panel
+	iconKindRunningHiC                   // green L, any panel (high-contrast opt-in)
 )
 
-// pickColorIcon chooses the color-mode icon from the running state and whether
-// the desktop panel is light. The running indicator is white on a dark panel
-// and dark on a light panel so it stays visible either way; the stopped icon is
-// red and reads on both.
-func pickColorIcon(running, light bool) (iconKind, []byte) {
+// pickColorIcon chooses the color-mode icon from the running state, the desktop
+// panel's light/dark preference, and the high-contrast opt-in. With high
+// contrast on, the running indicator is a single green L that reads on any
+// panel, sidestepping the panel-color guess that goes wrong on mixed themes
+// like KDE Breeze Twilight. Otherwise it is white on a dark panel and dark on a
+// light one; the stopped icon is red and reads on both regardless.
+func pickColorIcon(running, light, highContrast bool) (iconKind, []byte) {
 	switch {
 	case !running:
 		return iconKindStopped, iconPNG
+	case highContrast:
+		return iconKindRunningHiC, iconGreenPNG
 	case light:
 		return iconKindRunningLight, iconDarkPNG
 	default:
@@ -364,10 +374,11 @@ func pickColorIcon(running, light bool) (iconKind, []byte) {
 // two input goroutines (poller and appearance watcher) and skips redundant
 // SetIcon calls.
 type iconState struct {
-	mu      sync.Mutex
-	running bool
-	light   bool
-	last    iconKind
+	mu           sync.Mutex
+	running      bool
+	light        bool
+	highContrast bool
+	last         iconKind
 	// apply performs the actual icon swap; overridable in tests so the logic
 	// can be exercised without a live systray.
 	apply func([]byte)
@@ -392,6 +403,13 @@ func (s *iconState) setLight(light bool) {
 	s.refresh()
 }
 
+func (s *iconState) setHighContrast(highContrast bool) {
+	s.mu.Lock()
+	s.highContrast = highContrast
+	s.mu.Unlock()
+	s.refresh()
+}
+
 func (s *iconState) refresh() {
 	// Hold the lock across apply so the decision and the swap are atomic:
 	// otherwise two concurrent updates (poller + theme watcher) can run their
@@ -399,7 +417,7 @@ func (s *iconState) refresh() {
 	// s.last. SetIcon never re-enters iconState, so there's no deadlock.
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	kind, icon := pickColorIcon(s.running, s.light)
+	kind, icon := pickColorIcon(s.running, s.light, s.highContrast)
 	if kind == s.last {
 		return
 	}
@@ -413,6 +431,7 @@ func applyLoop(menu *menuState, updateCh <-chan *Snapshot, mono bool, icons *ico
 		// In color mode the icon doubles as a status indicator. In mono mode
 		// the OS recolors the template icon, so we leave it alone.
 		if !mono && icons != nil {
+			icons.setHighContrast(snap != nil && snap.HighContrastIcon)
 			icons.setRunning(snap != nil && snap.Running)
 		}
 	}
@@ -520,6 +539,20 @@ func handleNotifications(item *systray.MenuItem, refresh func()) {
 			enabled = cfg.IsNotificationsEnabled()
 		}
 		runAndRefresh(lerdCmd("notify", offOn(enabled)), refresh)
+	}
+}
+
+func handleIconStyle(item *systray.MenuItem, refresh func()) {
+	for range item.ClickedCh {
+		highContrast := false
+		if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+			highContrast = cfg.IsHighContrastTrayIcon()
+		}
+		style := "high-contrast"
+		if highContrast {
+			style = "default"
+		}
+		runAndRefresh(lerdCmd("tray", "icon", style), refresh)
 	}
 }
 

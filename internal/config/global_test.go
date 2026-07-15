@@ -660,6 +660,49 @@ func TestNotifications_RoundTripsThroughYAML(t *testing.T) {
 	}
 }
 
+// ── Tray icon ─────────────────────────────────────────────────────────────────
+
+func TestTrayIcon_DefaultThemeAdaptive(t *testing.T) {
+	cfg := &GlobalConfig{}
+	if cfg.IsHighContrastTrayIcon() {
+		t.Error("zero-value config should report the theme-adaptive tray icon")
+	}
+}
+
+func TestTrayIcon_Toggle(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.SetHighContrastTrayIcon(true)
+	if !cfg.IsHighContrastTrayIcon() {
+		t.Error("after SetHighContrastTrayIcon(true), IsHighContrastTrayIcon should be true")
+	}
+	cfg.SetHighContrastTrayIcon(false)
+	if cfg.IsHighContrastTrayIcon() {
+		t.Error("after SetHighContrastTrayIcon(false), IsHighContrastTrayIcon should be false")
+	}
+}
+
+func TestTrayIcon_RoundTripsThroughYAML(t *testing.T) {
+	setConfigDir(t)
+	invalidateGlobalCache()
+	t.Cleanup(invalidateGlobalCache)
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.SetHighContrastTrayIcon(true)
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	got, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	if !got.IsHighContrastTrayIcon() {
+		t.Error("high-contrast tray icon should persist across a YAML round trip")
+	}
+}
+
 func TestDNSManaged(t *testing.T) {
 	var nilCfg *GlobalConfig
 	if !nilCfg.DNSManaged() {
