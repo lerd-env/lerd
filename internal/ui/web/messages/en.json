@@ -735,6 +735,7 @@
   "queries_show_workers": "Show worker queries",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
+  "queries_copySql": "Copy runnable SQL",
   "tinker_mode_tinkerTitle": "Bootstraps Laravel via artisan tinker",
   "tinker_mode_phpTitle": "Plain PHP runtime",
   "tinker_clearTitle": "Clear editor and output",
