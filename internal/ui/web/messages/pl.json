@@ -727,6 +727,7 @@
   "queries_show_workers": "Pokaż zapytania workerów",
   "queries_filter_allWorkers": "Wszystkie workery",
   "queries_worker_badge": "worker",
+  "queries_copySql": "Kopiuj wykonywalny SQL",
   "tinker_mode_tinkerTitle": "Inicjalizuje Laravel przez artisan tinker",
   "tinker_mode_phpTitle": "Zwykłe środowisko PHP",
   "tinker_clearTitle": "Wyczyść edytor i wynik",
