@@ -11,6 +11,7 @@ export const LOGOS = {
   wordpress:{ ch: 'W', c: '#38bdf8' },
   drupal:   { ch: 'D', c: '#60a5fa' },
   cake:     { ch: 'C', c: '#f87171' },
+  magento:  { ch: 'M', c: '#f46f25' },
   statamic: { ch: 'S', c: '#a78bfa' },
   codeigniter: { ch: 'C', c: '#f97316' },
   tempest:  { ch: 'T', c: '#22d3ee' },

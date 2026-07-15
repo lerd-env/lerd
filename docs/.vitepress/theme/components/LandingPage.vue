@@ -343,14 +343,17 @@ onBeforeUnmount(() => {
       <div class="strip">
         <div class="wrap strip-inner">
           <span class="strip-label">Auto-detected on lerd link</span>
-          <span class="strip-item"><span class="gl" data-logo="laravel"></span> Laravel</span>
-          <span class="strip-item"><span class="gl" data-logo="symfony"></span> Symfony</span>
-          <span class="strip-item"><span class="gl" data-logo="wordpress"></span> WordPress</span>
-          <span class="strip-item"><span class="gl" data-logo="drupal"></span> Drupal</span>
-          <span class="strip-item"><span class="gl" data-logo="cake"></span> CakePHP</span>
-          <span class="strip-item"><span class="gl" data-logo="statamic"></span> Statamic</span>
-          <span class="strip-item"><span class="gl" data-logo="codeigniter"></span> CodeIgniter</span>
-          <span class="strip-item"><span class="gl" data-logo="tempest"></span> Tempest</span>
+          <div class="strip-items">
+            <span class="strip-item"><span class="gl" data-logo="laravel"></span> Laravel</span>
+            <span class="strip-item"><span class="gl" data-logo="symfony"></span> Symfony</span>
+            <span class="strip-item"><span class="gl" data-logo="wordpress"></span> WordPress</span>
+            <span class="strip-item"><span class="gl" data-logo="drupal"></span> Drupal</span>
+            <span class="strip-item"><span class="gl" data-logo="magento"></span> Magento</span>
+            <span class="strip-item"><span class="gl" data-logo="cake"></span> CakePHP</span>
+            <span class="strip-item"><span class="gl" data-logo="statamic"></span> Statamic</span>
+            <span class="strip-item"><span class="gl" data-logo="codeigniter"></span> CodeIgniter</span>
+            <span class="strip-item"><span class="gl" data-logo="tempest"></span> Tempest</span>
+          </div>
         </div>
       </div>
 
@@ -521,11 +524,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.28.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.29.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.28.0 dev digest</span>
-            <span class="digest-sub">Request-timing analytics per site, an external service store, AI slow-site diagnosis from real traffic, auto-renewing TLS, and a mobile-ready dashboard.</span>
+            <span class="digest-title">v1.29.0 dev digest</span>
+            <span class="digest-sub">Framework definitions that declare their own nginx, env and worktrees, sites grouped into workspaces, and first-class support for Fedora Silverblue and other atomic images.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
