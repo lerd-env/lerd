@@ -17,6 +17,7 @@ import (
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/wsl"
@@ -99,6 +100,16 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 			}
 		} else {
 			ok("systemd user session")
+		}
+
+		// Podman orders every rootless quadlet after its network-online wait
+		// unit. Where network-online.target is never pulled in (Fedora
+		// Silverblue and other atomic images) that unit can only time out, and
+		// every container start, plus the boot, pays the 90s.
+		if lerdSystemd.NetworkWaitStalls() {
+			warn("podman network-online wait", "network-online.target never activates here, so every container start stalls 90s — fix: lerd start")
+		} else {
+			ok("podman network-online wait")
 		}
 
 		currentUser := os.Getenv("USER")
