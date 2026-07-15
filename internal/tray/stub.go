@@ -5,7 +5,6 @@ package tray
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
 	"syscall"
 )
 
@@ -13,11 +12,10 @@ import (
 // If the helper is absent or its shared library is missing the error is
 // silently swallowed — the rest of lerd keeps working without a tray.
 func Run(mono bool) error {
-	exe, err := os.Executable()
-	if err != nil {
+	helper := HelperPath()
+	if helper == "" {
 		return nil
 	}
-	helper := filepath.Join(filepath.Dir(exe), "lerd-tray")
 	if _, err := os.Stat(helper); err != nil {
 		return nil // helper not installed
 	}

@@ -22,6 +22,7 @@ import (
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
 	"github.com/geodro/lerd/internal/shims"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
 )
 
@@ -498,6 +499,16 @@ func runStart(_ *cobra.Command, _ []string) error {
 	}
 	migrateExecWorkerPlists()
 	healMachineRestartIfNeeded(preEnsureLastUp)
+
+	// Podman orders every rootless quadlet after its network-online wait unit.
+	// Where network-online.target never activates (Fedora Silverblue and other
+	// atomic images) that unit only ever times out, so each container start,
+	// and the boot itself, stalls for 90s. Override it before starting anything.
+	if applied, err := lerdSystemd.EnsureNoNetworkWaitStall(); err != nil {
+		fmt.Printf("  WARN: skip podman network-online wait: %v\n", err)
+	} else if applied {
+		fmt.Println("  Skipping podman's network-online wait (this host never reaches that target)")
+	}
 
 	// Self-heal a podman upgrade before touching the network or starting
 	// containers. A major-version or backend change since the last run
