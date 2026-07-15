@@ -67,15 +67,41 @@ detect_distro() {
   fi
 }
 
+# detect_distro_like returns the ID_LIKE field from /etc/os-release, the space
+# separated list of parent distros a derivative declares (e.g. bazzite -> fedora).
+detect_distro_like() {
+  if [ -f /etc/os-release ]; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    echo "${ID_LIKE:-}"
+  fi
+}
+
+# is_atomic reports whether this host booted from an ostree image (Fedora
+# Silverblue, Bazzite, Kinoite, CoreOS). On these, packages are layered with
+# rpm-ostree and a reboot, not installed into the running system.
+is_atomic() {
+  [ -f /run/ostree-booted ]
+}
+
 distro_family() {
   local distro; distro="$(detect_distro)"
   case "$distro" in
-    arch|manjaro|endeavouros|garuda) echo "arch" ;;
-    debian|ubuntu|pop|linuxmint|elementary|zorin) echo "debian" ;;
-    fedora|rhel|centos|rocky|alma) echo "fedora" ;;
-    opensuse*|sles) echo "suse" ;;
-    *) echo "unknown" ;;
+    arch|manjaro|endeavouros|garuda) echo "arch"; return ;;
+    debian|ubuntu|pop|linuxmint|elementary|zorin) echo "debian"; return ;;
+    fedora|rhel|centos|rocky|alma) echo "fedora"; return ;;
+    opensuse*|sles) echo "suse"; return ;;
   esac
+  # A derivative not listed above (bazzite, nobara, cachyos, ...) still declares
+  # its parents in ID_LIKE, so fall back to that before giving up as unknown.
+  local like; like=" $(detect_distro_like) "
+  case "$like" in
+    *" arch "*)                           echo "arch"; return ;;
+    *" debian "*|*" ubuntu "*)            echo "debian"; return ;;
+    *" fedora "*|*" rhel "*|*" centos "*) echo "fedora"; return ;;
+    *" suse "*|*" opensuse "*)            echo "suse"; return ;;
+  esac
+  echo "unknown"
 }
 
 # ── Prerequisite checks ──────────────────────────────────────────────────────
@@ -153,6 +179,15 @@ check_certutil() {
     suse)   pkg="mozilla-nss-tools" ;;
     *)      pkg="nss-tools" ;;
   esac
+  if is_atomic; then
+    # nss-tools can't be layered inline (rpm-ostree needs a reboot), so don't
+    # queue it for the package installer, which would die or fail on ostree.
+    # Guide instead, and leave localhost as the no-package alternative.
+    warn "certutil not found — mkcert can't trust HTTPS certs in Chrome/Firefox on this atomic image"
+    info "For browser trust: rpm-ostree install $pkg, reboot, then run 'lerd dns:repair'"
+    info "Or re-run and choose localhost DNS to serve plain http with no certificates"
+    return
+  fi
   warn "certutil not found — mkcert won't be able to trust HTTPS certs in Chrome/Firefox"
   MISSING_PKGS+=("$pkg")
 }
@@ -253,6 +288,12 @@ install_packages() {
   fi
 
   local family; family="$(distro_family)"
+
+  if is_atomic; then
+    warn "atomic image detected — packages are layered with rpm-ostree, not installed into the running system"
+    info "Run:  rpm-ostree install ${pkgs[*]}  then reboot and re-run the installer"
+    return
+  fi
 
   case "$family" in
     arch)
