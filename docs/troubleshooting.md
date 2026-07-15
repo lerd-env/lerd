@@ -77,6 +77,14 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"diag","arg
 The response includes a `steps` array with a `status` (`ok` / `fail` / `warn` / `skip`) and `hint` per rung, plus a `first_failure` index so an LLM can jump straight to the broken layer.
 :::
 
+::: details `.test` domains stop resolving when offline (no internet)
+On NetworkManager plus systemd-resolved systems, `.test` used to be routed to lerd-dns per interface (`resolvectl domain <iface> ~test`). That route lives on the physical NIC, so pulling the cable or dropping Wi-Fi took it down with the interface. Worse, systemd-resolved refuses to resolve anything at all, over both `resolvectl` and the glibc/NSS path a browser uses, once no real link is routable, so a fresh `.test` lookup failed even though lerd-dns kept answering on `127.0.0.1:5300`. A common symptom was a page that still worked while the browser stayed open (cached DNS) but failed the moment you closed and reopened it.
+
+Lerd now installs an always-up dummy interface, `lerd0`, as a NetworkManager connection (`/etc/NetworkManager/system-connections/lerd-dns.nmconnection`) that carries the `~test` route. Because that link never goes down, systemd-resolved keeps forwarding `.test` to lerd-dns with no network connection at all. NetworkManager brings `lerd0` up on every boot and the dispatcher applies its route, so the fix survives reboots and applies automatically on the next `lerd start` or `lerd update`, nothing to run by hand. You will see a `lerd0` device in `ip link` and NetworkManager; that is expected.
+
+If you also saw a roughly five second stall on `.test` while offline, that was an AAAA (IPv6) lookup: a v4-only `address=/.test/127.0.0.1` rule leaves dnsmasq forwarding the AAAA query to your upstream, which times out once that upstream is unreachable. The dnsmasq config now always carries the matching `address=/.test/::1` record, so AAAA is answered locally and returns instantly.
+:::
+
 ::: details DNS shows "Degraded" while connected to a VPN
 VPN clients such as Cisco AnyConnect, ProtonVPN, Mullvad, and WireGuard take over the system resolver when they connect, rewriting systemd-resolved so `.test` no longer routes to lerd-dns through the normal path. lerd-dns itself keeps running and answering, so the dashboard shows a yellow **Degraded** pill rather than a red **Failed** one, and `lerd doctor` reports the `system DNS lookup` rung as a warning instead of a failure. Sites still resolve, because lerd-dns answers directly on `127.0.0.1:5300`.
 

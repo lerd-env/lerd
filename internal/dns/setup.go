@@ -26,6 +26,36 @@ DNS=127.0.0.1:5300
 Domains=~test
 `
 
+// lerd0 is an always-up dummy interface that keeps .test resolving when every
+// real link is down. systemd-resolved refuses to resolve anything (returns
+// "Network is down" to NSS and resolvectl alike) once no link is routable, and
+// it will not consult a global-scope loopback server in that state. A dummy link
+// is always up, so carrying the ~test route on it keeps resolved willing to
+// forward .test to lerd-dns on 127.0.0.1:5300 with no network connection at all.
+// NetworkManager owns its lifecycle via a keyfile connection (autoconnect on
+// boot); the dispatcher applies the resolvectl route when NM activates it.
+const (
+	lerdDummyConn    = "lerd-dns"
+	lerdDummyIface   = "lerd0"
+	lerdDummyKeyfile = "/etc/NetworkManager/system-connections/lerd-dns.nmconnection"
+)
+
+const lerdDummyKeyfileContent = `[connection]
+id=lerd-dns
+type=dummy
+interface-name=lerd0
+autoconnect=true
+
+[dummy]
+
+[ipv4]
+method=manual
+address1=10.123.45.1/32
+
+[ipv6]
+method=disabled
+`
+
 // nmDispatcherScript is installed at /etc/NetworkManager/dispatcher.d/99-lerd-dns.
 // On systems with NetworkManager + systemd-resolved, NM manages resolved via DBus and
 // overrides global resolved.conf drop-ins. Per-interface DNS set via resolvectl is
@@ -41,6 +71,23 @@ const nmDispatcherScript = `#!/bin/sh
 IFACE="$1"
 ACTION="$2"
 LERD_DNS=""
+
+# Refresh the always-up dummy link (lerd0) on any up-ish event, whichever interface
+# triggered it. Carry only ~test (never ~.), so offline non-.test DNS is not
+# funnelled through lerd-dns into a then-unreachable upstream. Applying this from the
+# physical interface's boot "up" (which fires after systemd-resolved is ready) closes
+# the race where lerd0's own early activation runs before resolved accepts the route,
+# which would otherwise leave .test unresolvable offline until the next network event.
+case "$ACTION" in
+    up|dhcp4-change|dhcp6-change)
+        resolvectl dns lerd0 127.0.0.1:5300 2>/dev/null || true
+        resolvectl domain lerd0 ~test 2>/dev/null || true ;;
+esac
+
+# lerd0 itself has no upstream DNS to sync, so nothing further to do for its events.
+if [ "$IFACE" = "lerd0" ]; then
+    exit 0
+fi
 
 if [ "$ACTION" = "up" ] || [ "$ACTION" = "dhcp4-change" ] || [ "$ACTION" = "dhcp6-change" ]; then
     LERD_DNS=$(nmcli -g IP4.DNS device show "$IFACE" 2>/dev/null | tr '|' '\n' | grep -v '^$' | tr '\n' ' ')
@@ -99,6 +146,7 @@ for uid_dir in /run/user/[0-9]*/; do
             printf 'server=%s\n' "$dns_ip"
         done
         printf 'address=/.%s/127.0.0.1\n' "$tld"
+        printf 'address=/.%s/::1\n' "$tld"
     } | $as_user tee "$config_file" >/dev/null
     $as_user systemctl --user restart lerd-dns 2>/dev/null || true
 done
@@ -325,9 +373,10 @@ func ConfigureResolver() error {
 }
 
 // setupNMWithResolved handles Ubuntu-style: NM manages systemd-resolved via DBUS.
-// NM overrides global DNS set in resolved.conf drop-ins, so we use an NM dispatcher
-// script that applies per-interface DNS via resolvectl on each "up" event, then
-// applies it immediately to the current default interface.
+// NM overrides per-interface DNS, so an NM dispatcher script applies the interface
+// route via resolvectl on each "up" event and immediately to the current default
+// interface. That per-link route dies when the interface goes down, so an always-up
+// dummy link (lerd0) also carries the ~test route to keep .test resolving offline.
 func setupNMWithResolved() error {
 	dispatcherScript := "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
 
@@ -339,15 +388,31 @@ func setupNMWithResolved() error {
 		}
 	}
 
-	// Remove stale resolved drop-in if present (it doesn't work with NM)
-	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
-	if _, err := os.Stat(dropin); err == nil {
-		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
-		rmCmd.Stdin = os.Stdin
-		rmCmd.Stdout = os.Stdout
-		rmCmd.Stderr = os.Stderr
-		rmCmd.Run() //nolint:errcheck
+	// Install the always-up dummy link so .test resolves with no network at all.
+	// systemd-resolved will not resolve anything (NSS included) once every real
+	// link is down, and it ignores a global loopback server in that state. lerd0
+	// is always up, so the ~test route on it keeps resolved forwarding .test to
+	// lerd-dns while offline. NetworkManager auto-activates it on boot from the
+	// keyfile; the dispatcher applies the resolvectl route when it comes up.
+	if !isFileContent(lerdDummyKeyfile, []byte(lerdDummyKeyfileContent)) {
+		feedback.Sudo("Configuring an always-up link so .test resolves offline")
+		if err := sudoWriteFile(lerdDummyKeyfile, []byte(lerdDummyKeyfileContent), 0600); err != nil {
+			return fmt.Errorf("writing lerd-dns keyfile: %w", err)
+		}
+		exec.Command("sudo", "nmcli", "connection", "reload").Run() //nolint:errcheck
+		// Activate it now rather than waiting for a reconnect. On later starts the
+		// keyfile is unchanged and autoconnect keeps lerd0 up, so this is skipped.
+		upCmd := exec.Command("sudo", "nmcli", "connection", "up", lerdDummyConn)
+		upCmd.Stdin = os.Stdin
+		upCmd.Stdout = os.Stdout
+		upCmd.Stderr = os.Stderr
+		upCmd.Run() //nolint:errcheck
 	}
+	// Reapply the ~test route to lerd0 (idempotent; the dispatcher also does this on
+	// NM events and boot). Only ~test (never ~.), so offline non-.test DNS is not
+	// funnelled through lerd-dns into an unreachable upstream.
+	exec.Command("sudo", "resolvectl", "dns", lerdDummyIface, "127.0.0.1:5300").Run() //nolint:errcheck
+	exec.Command("sudo", "resolvectl", "domain", lerdDummyIface, "~test").Run()       //nolint:errcheck
 
 	// Apply immediately to the current default interface.
 	// Include DHCP-assigned upstream DNS servers alongside lerd's so internet
@@ -470,10 +535,26 @@ func Teardown() {
 		rmCmd.Run() //nolint:errcheck
 	}
 
-	// systemd-resolved drop-in
+	// systemd-resolved drop-in (only present on installs that predate the dummy-link
+	// approach; harmless to remove either way)
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
 	if _, err := os.Stat(dropin); err == nil {
 		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
+		rmCmd.Stdin = os.Stdin
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		rmCmd.Run() //nolint:errcheck
+	}
+
+	// The always-up dummy link. Deleting the NM connection removes lerd0 and its
+	// keyfile; rm covers a keyfile left behind if the connection is already gone.
+	delCmd := exec.Command("sudo", "nmcli", "connection", "delete", lerdDummyConn)
+	delCmd.Stdin = os.Stdin
+	delCmd.Stdout = os.Stdout
+	delCmd.Stderr = os.Stderr
+	delCmd.Run() //nolint:errcheck
+	if _, err := os.Stat(lerdDummyKeyfile); err == nil {
+		rmCmd := exec.Command("sudo", "rm", "-f", lerdDummyKeyfile)
 		rmCmd.Stdin = os.Stdin
 		rmCmd.Stdout = os.Stdout
 		rmCmd.Stderr = os.Stderr
@@ -585,7 +666,12 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n",
-		user, user, user, user, user, user, user, user,
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/system-connections\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 600 /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection reload\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection up lerd-dns\n",
+		user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }

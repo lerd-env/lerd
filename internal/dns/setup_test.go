@@ -208,6 +208,50 @@ func TestNMDispatcherScript_filtersUpstreamEntries(t *testing.T) {
 	assertContains(t, nmDispatcherScript, "*[!0-9A-Fa-f:.#]*) continue")
 }
 
+// When the dispatcher rewrites lerd.conf it must emit the AAAA (::1) record
+// beside the A record. A v4-only address rule leaves dnsmasq forwarding .test
+// AAAA queries to the upstream, which stalls ~5s once that upstream is
+// unreachable (offline).
+func TestNMDispatcherScript_emitsV6AddressRecord(t *testing.T) {
+	assertContains(t, nmDispatcherScript, `printf 'address=/.%s/127.0.0.1\n' "$tld"`)
+	assertContains(t, nmDispatcherScript, `printf 'address=/.%s/::1\n' "$tld"`)
+}
+
+// The dummy link lerd0 keeps .test resolving offline. On it the dispatcher must
+// set only ~test, never ~test ~.: with ~. every non-.test query offline would be
+// funnelled through lerd-dns into a then-unreachable upstream and stall.
+func TestNMDispatcherScript_dummyLinkGetsTestDomainOnly(t *testing.T) {
+	assertContains(t, nmDispatcherScript, `if [ "$IFACE" = "lerd0" ]; then`)
+	assertContains(t, nmDispatcherScript, "resolvectl domain lerd0 ~test 2>/dev/null")
+	if strings.Contains(nmDispatcherScript, "resolvectl domain lerd0 ~test ~.") {
+		t.Error("dummy link lerd0 must carry ~test only, never ~. (would funnel all DNS through lerd-dns offline)")
+	}
+}
+
+// The dummy link is provisioned as an NM keyfile so NetworkManager owns its
+// lifecycle and auto-activates it on boot. It must be a dummy device on lerd0
+// that autoconnects.
+func TestLerdDummyKeyfile_shape(t *testing.T) {
+	assertContains(t, lerdDummyKeyfileContent, "type=dummy")
+	assertContains(t, lerdDummyKeyfileContent, "interface-name=lerd0")
+	assertContains(t, lerdDummyKeyfileContent, "autoconnect=true")
+}
+
+// Upgrades reapply DNS config non-interactively, so the sudoers drop-in must
+// grant the keyfile write and the nmcli activation passwordless, mirroring the
+// existing dispatcher grants.
+func TestLinuxSudoers_grantsDummyLinkOps(t *testing.T) {
+	content := renderLinuxSudoers("alice")
+	for _, want := range []string{
+		"/usr/bin/tee /etc/NetworkManager/system-connections/lerd-dns.nmconnection",
+		"/usr/bin/chmod 600 /etc/NetworkManager/system-connections/lerd-dns.nmconnection",
+		"/usr/bin/nmcli connection reload",
+		"/usr/bin/nmcli connection up lerd-dns",
+	} {
+		assertContains(t, content, want)
+	}
+}
+
 // --- WriteDnsmasqConfigFor ---
 
 func TestWriteDnsmasqConfigFor_customTarget(t *testing.T) {
