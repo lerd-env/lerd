@@ -137,6 +137,19 @@ func (s *Site) IsHostProxy() bool {
 // dev server. There is exactly one per site.
 const HostProxyWorkerName = "app"
 
+// StripeWorkerName is the Stripe webhook listener, run through its own unit
+// (lerd-stripe-<site>) rather than declared by any framework.
+const StripeWorkerName = "stripe"
+
+// IsBuiltinWorker reports whether name is a lerd-managed worker that lives
+// outside a framework's worker definitions: the Stripe listener and the
+// host-proxy dev server. A validator checking a site's workers against its
+// framework must treat these as valid rather than undefined, the same way the
+// running-worker collector and the orphan scan already special-case them.
+func IsBuiltinWorker(name string) bool {
+	return name == StripeWorkerName || name == HostProxyWorkerName
+}
+
 // HostProxyWorkerUnit returns the worker unit name for a host-proxy site's dev
 // server (lerd-app-<site>). Single source of truth for the cli (which starts
 // and stops it) and siteinfo (which reports its health).
