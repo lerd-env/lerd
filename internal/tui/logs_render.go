@@ -26,7 +26,7 @@ var (
 var (
 	logErrorStyle  = lipgloss.NewStyle().Foreground(colFailing)
 	logWarnStyle   = lipgloss.NewStyle().Foreground(colPaused)
-	logMatchStyle  = lipgloss.NewStyle().Background(colAccent).Foreground(lipgloss.Color("#000000"))
+	logMatchStyle  = lipgloss.NewStyle().Background(colAccent).Foreground(onAccent)
 	logDimNonMatch = lipgloss.NewStyle().Foreground(colDim)
 )
 

@@ -17,6 +17,11 @@ var (
 	colPaused   = feedback.ColPaused
 	colAccent   = feedback.ColAccent
 	colSelected = feedback.ColTitle
+	// onAccent is the foreground for a label sitting on an accent-filled
+	// background (active tab pill, key chip, log search match). It follows the
+	// terminal's light/dark mode so the text stays legible on the themed accent
+	// instead of assuming a bright one, which black text would need.
+	onAccent = lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#0b0b0b"}
 )
 
 var (
@@ -52,7 +57,7 @@ var (
 // stands out as the current screen; inactive tabs sit dim until hovered or
 // clicked. Both keep the same padding so the bar's hit regions line up.
 var (
-	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#0b0b0b")).Background(colAccent).Padding(0, 2)
+	tabActiveStyle   = lipgloss.NewStyle().Bold(true).Foreground(onAccent).Background(colAccent).Padding(0, 2)
 	tabInactiveStyle = lipgloss.NewStyle().Foreground(colDim).Padding(0, 2)
 	// A blank row above the tabs keeps the active pill off the terminal's own
 	// top chrome (tmux/term tab line) instead of butting right against it.
@@ -80,7 +85,7 @@ const (
 var (
 	keyChipStyle = lipgloss.NewStyle().
 			Background(colAccent).
-			Foreground(lipgloss.Color("#0b0b0b")).
+			Foreground(onAccent).
 			Bold(true).
 			Padding(0, 1)
 	keyChipLabelStyle = lipgloss.NewStyle().Foreground(colDim)

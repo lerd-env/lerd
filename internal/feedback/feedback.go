@@ -19,20 +19,29 @@ import (
 	"golang.org/x/term"
 )
 
-// Canonical lerd palette (Tailwind hex values). The TUI theme aliases these so
-// CLI feedback and the dashboard share one set of colours.
+// Canonical lerd palette. The TUI theme aliases these so CLI feedback and the
+// dashboard share one set of colours. The signal colours are ANSI 16-colour
+// codes rather than fixed hex, so the CLI and TUI follow the user's terminal
+// theme (like `php artisan about`) instead of hardcoding a look. This also keeps
+// the accent off red, which reads as an error, and off the brand red the web UI
+// still owns. Greys stay hex because ANSI's single grey can't express the
+// two-tone dim-vs-divider hierarchy, but they are adaptive so they invert on a
+// light terminal (a hairline divider stays light on light, dark on dark)
+// instead of assuming a dark background. Dark values are unchanged from the
+// fixed palette so a dark terminal looks exactly as before.
 var (
-	ColTitle   = lipgloss.Color("#FF2D20") // lerd red (Laravel brand)
-	ColDim     = lipgloss.Color("#6b7280") // gray-500
-	ColDivider = lipgloss.Color("#374151") // gray-700
-	ColRunning = lipgloss.Color("#10b981") // emerald-500
-	ColStopped = lipgloss.Color("#6b7280") // gray-500
-	ColFailing = lipgloss.Color("#ef4444") // red-500
-	ColPaused  = lipgloss.Color("#f59e0b") // amber-500
-	ColGold    = lipgloss.Color("#fbbf24") // amber-400 (brighter gold for sudo prompts)
-	// Interactive accent is the brand red so the TUI, CLI feedback, and the web
-	// UI all share one accent rather than diverging on a separate hue.
-	ColAccent = lipgloss.Color("#FF2D20") // lerd red
+	ColTitle   = lipgloss.Color("2")                                       // terminal green
+	ColDim     = lipgloss.AdaptiveColor{Light: "#4b5563", Dark: "#6b7280"} // gray-600 / gray-500
+	ColDivider = lipgloss.AdaptiveColor{Light: "#d1d5db", Dark: "#374151"} // gray-300 / gray-700
+	ColRunning = lipgloss.Color("2")                                       // terminal green
+	ColStopped = lipgloss.AdaptiveColor{Light: "#4b5563", Dark: "#6b7280"} // gray-600 / gray-500
+	ColFailing = lipgloss.Color("1")                                       // terminal red
+	ColPaused  = lipgloss.Color("3")                                       // terminal yellow
+	ColGold    = lipgloss.Color("11")                                      // terminal bright yellow (sudo prompts)
+	// Accent shares the terminal green with titles and running status so borders,
+	// tabs, key chips, the spinner, and value fragments all read as the same
+	// theme colour rather than as an error.
+	ColAccent = lipgloss.Color("2") // terminal green
 )
 
 var (
@@ -57,7 +66,7 @@ const (
 	GlyphLock = "🔒"
 )
 
-// Title styles a fragment as the bold lerd-red wordmark colour.
+// Title styles a fragment as the bold accent (terminal-green) title colour.
 func Title(s string) string { return paint(titleStyle, s) }
 
 // Green, Red, Amber, and Dim colour a one-off fragment for status reports,
@@ -184,7 +193,8 @@ func paintIf(on bool, st lipgloss.Style, s string) string {
 	return paint(st, s)
 }
 
-// Val styles a value fragment (violet) for embedding inside a step or summary.
+// Val styles a value fragment in the accent colour for embedding inside a step
+// or summary.
 func Val(s string) string { return paint(valueStyle, s) }
 
 // Begin prints a single blank line to separate a feedback block from whatever
@@ -637,7 +647,7 @@ func Success(msg string, d time.Duration) {
 
 // Confirm prints a styled yes/no prompt (preceded by a blank line) and reads
 // the answer from stdin, returning defaultYes on an empty response. The prompt
-// matches the step styling: a violet "?" lead-in and a dim "[Y/n]" hint.
+// matches the step styling: an accent "?" lead-in and a dim "[Y/n]" hint.
 func Confirm(question string, defaultYes bool) bool {
 	hint := "[Y/n]"
 	if !defaultYes {
@@ -656,7 +666,7 @@ func Confirm(question string, defaultYes bool) bool {
 	return answer[0] == 'y'
 }
 
-// Prompt renders a styled yes/no question (violet "?", dim "[Y/n]" hint),
+// Prompt renders a styled yes/no question (accent "?", dim "[Y/n]" hint),
 // preceded by a blank line, WITHOUT reading the answer — for callers that read
 // from a custom source (e.g. /dev/tty so `curl … | bash` prompts still work)
 // instead of stdin. Mirrors Confirm's styling so every prompt looks the same.
