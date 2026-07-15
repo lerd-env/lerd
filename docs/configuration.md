@@ -275,7 +275,7 @@ The config is applied whenever `lerd link` or `lerd init` runs in the project ro
 - **`lerd link`**: framework definition restored, `.node-version` written, PHP version applied, HTTPS toggled, services registered and started.
 - **`lerd init`**: installs PHP FPM if needed, then runs `lerd link` (which applies everything above). Re-runs the wizard if `--fresh` is passed.
 
-Commit `.lerd.yaml` to the repository. On a fresh machine, `lerd link` is sufficient to reproduce the full local environment.
+Commit `.lerd.yaml` to the repository. On a fresh machine, `lerd link` is sufficient to reproduce the full local environment. Lerd writes the file through a temp file and a rename so a crash or two concurrent writers can never leave it half-written, and it normalises the output (two-space indentation, `services` and `workers` sorted), so a worker starting or stopping produces a minimal, stable git diff rather than a reshuffled block.
 
 The Lerd watcher also monitors `.lerd.yaml` for changes. When you switch branches with a different config the PHP and Node versions are re-detected and applied automatically, no manual `lerd link` or `lerd init` needed. See [Automatic version switching](./features/project-setup.md#automatic-version-switching) for details.
 

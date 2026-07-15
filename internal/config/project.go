@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 
@@ -451,15 +453,37 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 	return &out
 }
 
-// SaveProjectConfig writes cfg to .lerd.yaml in dir.
+// SaveProjectConfig writes cfg to .lerd.yaml in dir. The write goes through a
+// temp file and a rename so a crash, a restart mid-write, or a second concurrent
+// writer can never leave the file half-written; the output is two-space indented
+// to match the store YAML and its lists are sorted for stable git diffs.
 func SaveProjectConfig(dir string, cfg *ProjectConfig) error {
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
+	normalizeProjectConfig(cfg)
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(cfg); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), data, 0644); err != nil {
+	if err := enc.Close(); err != nil {
+		return err
+	}
+	if err := writeFileAtomic(filepath.Join(dir, ".lerd.yaml"), buf.Bytes(), 0644); err != nil {
 		return err
 	}
 	invalidateProjectConfigCache(dir)
 	return nil
+}
+
+// normalizeProjectConfig sorts the churn-prone lists into a canonical order so a
+// worker waking or sleeping rewrites .lerd.yaml with a minimal diff instead of a
+// reshuffled block. Order is behaviourally irrelevant here: workers are
+// independent units and each service preset owns a distinct env namespace.
+func normalizeProjectConfig(cfg *ProjectConfig) {
+	if cfg == nil {
+		return
+	}
+	sort.Slice(cfg.Services, func(i, j int) bool { return cfg.Services[i].Name < cfg.Services[j].Name })
+	sort.Strings(cfg.Workers)
+	sort.Strings(cfg.ReloadWorkers)
 }
