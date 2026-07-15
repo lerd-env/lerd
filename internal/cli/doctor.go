@@ -106,7 +106,7 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 		// present. Without it lerd's mkcert step installs the CA to the system
 		// store only, so curl and PHP trust it but Firefox and Chrome warn, and
 		// the mkcert warning is swallowed. Only relevant when DNS/HTTPS is managed.
-		if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg != nil && cfg.DNS.Enabled {
+		if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg.DNSManaged() {
 			if certs.BrowserTrustAvailable() {
 				ok("browser HTTPS trust (certutil)")
 			} else {
