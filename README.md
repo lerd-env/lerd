@@ -21,7 +21,7 @@ is live at `project.test` with HTTPS.
 
 ## Built for Linux PHP developers
 
-If you're a PHP developer on Linux and want frictionless local development — automatic `.test` domains, per-project PHP versions, one-click HTTPS, zero Docker — Lerd is built for you. Works with Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic, and any custom PHP framework.
+If you're a PHP developer on Linux and want frictionless local development — automatic `.test` domains, per-project PHP versions, one-click HTTPS, zero Docker — Lerd is built for you. Works with Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic, and any custom PHP framework.
 
 ## Features
 
@@ -46,7 +46,7 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
 - 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly
-- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic with versioned auto-detection
+- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic with versioned auto-detection
 - ⚡ **Framework-agnostic** workers, env setup, and nginx proxy — driven by YAML definitions, not hardcoded
 
 ## AI Integration (MCP)

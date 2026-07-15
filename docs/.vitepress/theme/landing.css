@@ -345,8 +345,9 @@
    LOGO / framework strip
    =========================================================== */
 .lerd-landing .strip { padding: 40px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--bg-2); }
-.lerd-landing .strip-inner { display: flex; align-items: center; gap: clamp(12px, 1.8vw, 22px); flex-wrap: wrap; justify-content: center; }
-.lerd-landing .strip-label { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin-right: 4px; }
+.lerd-landing .strip-inner { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+.lerd-landing .strip-items { display: flex; align-items: center; gap: clamp(12px, 1.8vw, 22px); flex-wrap: wrap; justify-content: center; }
+.lerd-landing .strip-label { font-family: var(--mono); font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
 .lerd-landing .strip-item { display: flex; align-items: center; gap: 8px; color: var(--ink-2); font-weight: 500; font-size: 14.5px; white-space: nowrap; opacity: .82; transition: opacity .2s, color .2s; }
 .lerd-landing .strip-item:hover { opacity: 1; color: var(--ink); }
 .lerd-landing .strip-item svg, .lerd-landing .strip-item .gl { width: 19px; height: 19px; }
