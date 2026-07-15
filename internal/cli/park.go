@@ -209,8 +209,8 @@ func freeSiteName(desired, path string) string {
 		if err != nil || existing == nil {
 			return candidate // name is free
 		}
-		if existing.Path == path {
-			return candidate // same site being re-registered
+		if config.CanonicalPath(existing.Path) == config.CanonicalPath(path) {
+			return candidate // same site being re-registered (symlink spellings included, #930)
 		}
 	}
 }
