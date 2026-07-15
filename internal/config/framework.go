@@ -1683,14 +1683,24 @@ func GetTinkerForDir(projectDir string) *FrameworkTinker {
 // the framework detected in projectDir. It checks the site registry first, then
 // falls back to auto-detection. For Laravel the default is "artisan".
 func GetConsoleCommand(projectDir string) (string, error) {
-	site, err := FindSiteByPath(projectDir)
-	if err != nil || site.Framework == "" {
+	frameworkName := ""
+	if site, err := FindSiteByPath(projectDir); err == nil {
+		frameworkName = site.Framework
+	}
+	if frameworkName == "" {
+		// Worktree checkouts aren't registered as their own site; inherit the
+		// parent site's framework so console commands run inside them too.
+		if parent, ok := ParentSiteForWorktreeDir(projectDir); ok {
+			frameworkName = parent.Framework
+		}
+	}
+	if frameworkName == "" {
 		return "", fmt.Errorf("no framework assigned — run 'lerd link' first")
 	}
 
-	fw, ok := GetFrameworkForDir(site.Framework, projectDir)
+	fw, ok := GetFrameworkForDir(frameworkName, projectDir)
 	if !ok {
-		return "", fmt.Errorf("framework %q not found", site.Framework)
+		return "", fmt.Errorf("framework %q not found", frameworkName)
 	}
 
 	if fw.Console == "" {

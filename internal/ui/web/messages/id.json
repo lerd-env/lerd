@@ -990,6 +990,7 @@
   "queries_show_workers": "Show worker queries",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
+  "queries_copySql": "Salin SQL yang dapat dijalankan",
   "queries_trace": "stack trace",
   "queries_details": "Details",
   "queries_hideTrace": "Hide trace",
