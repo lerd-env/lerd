@@ -214,6 +214,14 @@ type GlobalConfig struct {
 		// installs on. Toggled via `lerd notify on/off` and the tray.
 		Disabled bool `yaml:"disabled,omitempty" mapstructure:"disabled"`
 	} `yaml:"notifications,omitempty" mapstructure:"notifications"`
+	Tray struct {
+		// HighContrastIcon swaps the running tray icon for a single green glyph
+		// that reads on any panel, instead of the light/dark swap that guesses
+		// wrong on mixed themes like KDE Breeze Twilight. Off by default so the
+		// zero value keeps the theme-adaptive icon; toggled via `lerd tray icon`
+		// and the tray menu.
+		HighContrastIcon bool `yaml:"high_contrast_icon,omitempty" mapstructure:"high_contrast_icon"`
+	} `yaml:"tray,omitempty" mapstructure:"tray"`
 	HostProxy struct {
 		// Disabled refuses to set up or start any host-proxy dev-server unit,
 		// for users who never want lerd supervising a process on the host.
@@ -1009,6 +1017,18 @@ func (c *GlobalConfig) IsNotificationsEnabled() bool {
 // SaveGlobal; dispatchNotification re-reads the flag on every event.
 func (c *GlobalConfig) SetNotificationsEnabled(enabled bool) {
 	c.Notifications.Disabled = !enabled
+}
+
+// IsHighContrastTrayIcon reports whether the tray should show the always-visible
+// green running icon instead of the theme-adaptive light/dark one.
+func (c *GlobalConfig) IsHighContrastTrayIcon() bool {
+	return c.Tray.HighContrastIcon
+}
+
+// SetHighContrastTrayIcon flips the tray running-icon style. Persist via
+// SaveGlobal; the tray re-reads it on every poll.
+func (c *GlobalConfig) SetHighContrastTrayIcon(enabled bool) {
+	c.Tray.HighContrastIcon = enabled
 }
 
 // NodeManagedPref returns the persisted Node-management choice. set is false

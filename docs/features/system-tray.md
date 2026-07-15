@@ -33,6 +33,7 @@ Autostart at login: ✔ On   ← click to toggle (enables/disables every lerd un
 Expose to LAN: Off         ← click to toggle (Linux only)
 Debug bridge: Off           ← click to toggle `lerd dump on/off`
 Notifications: ✔ On        ← click to toggle `lerd notify on/off`
+High-contrast icon: Off     ← click to toggle `lerd tray icon default/high-contrast`
 ⬆ Update to v0.8.3         ← shown when an update is cached; click to open terminal
 Stop Lerd & Quit     ← runs lerd stop then exits the tray
 ```
@@ -53,7 +54,23 @@ In the default colour mode the icon doubles as a status light: a red **L** when 
 
 The preference comes from the cross-desktop XDG desktop portal (`org.freedesktop.appearance` `color-scheme`), so it works the same on GNOME, KDE Plasma, and anything else that implements the portal. On a setup without a portal the tray keeps the white running icon, which is the right default for the common dark panel.
 
-The red stopped icon is left as-is since it reads on both light and dark panels. If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves (this mode does not change with lerd state).
+The red stopped icon is left as-is since it reads on both light and dark panels.
+
+### High-contrast icon
+
+The light/dark switch relies on the portal reporting a preference that matches the panel. On mixed themes that pairing breaks: KDE's Breeze Twilight uses light application colours with a dark Plasma panel, so the portal reports "light", the tray hands over the dark running icon, and it vanishes against the dark panel. There is no portable way to read the panel's real colour, so no amount of detection fixes this case.
+
+For that, turn on the high-contrast icon. It replaces the theme-adaptive running icon with a single green **L** that reads on any panel, the same way the red stopped icon already does, and stops depending on the panel colour entirely.
+
+```bash
+lerd tray icon high-contrast   # always-visible green running icon
+lerd tray icon default         # back to the theme-adaptive white/dark icon
+lerd tray icon                 # print the current style
+```
+
+You can also toggle it from the **High-contrast icon** item in the tray menu. It is off by default and persisted to `config.yaml`.
+
+If you would rather the OS own the colouring entirely, use `lerd tray --mono`, which registers a monochrome template icon that GNOME and KDE recolour to match the panel themselves (this mode does not change with lerd state).
 
 ---
 

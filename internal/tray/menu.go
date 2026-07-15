@@ -39,11 +39,12 @@ type menuState struct {
 	mLAN           *systray.MenuItem
 	mDumps         *systray.MenuItem
 	mNotifications *systray.MenuItem
+	mIconStyle     *systray.MenuItem
 	mUpdate        *systray.MenuItem
 	mQuit          *systray.MenuItem
 }
 
-func buildMenu() *menuState {
+func buildMenu(mono bool) *menuState {
 	m := &menuState{}
 
 	m.mStatus = systray.AddMenuItem("⏳ Checking...", "")
@@ -86,6 +87,11 @@ func buildMenu() *menuState {
 	}
 	m.mDumps = systray.AddMenuItem("Debug bridge: Off", "Capture dump() / dd() into the lerd dashboard")
 	m.mNotifications = systray.AddMenuItem("Notifications: On", "Globally enable or disable lerd notifications")
+	// The high-contrast icon toggle only makes sense for the colour icon; in
+	// mono mode the OS recolors the template icon to match the panel itself.
+	if !mono {
+		m.mIconStyle = systray.AddMenuItem("High-contrast icon: Off", "Show an always-visible green running icon instead of the theme-adaptive one")
+	}
 	m.mUpdate = systray.AddMenuItem("Check for update...", "Check for a newer version of Lerd")
 	m.mQuit = systray.AddMenuItem("Quit Lerd", "Stop all Lerd processes and containers")
 
@@ -200,6 +206,14 @@ func (m *menuState) apply(snap *Snapshot) {
 		m.mNotifications.SetTitle("Notifications: ✔ On")
 	} else {
 		m.mNotifications.SetTitle("Notifications: Off")
+	}
+
+	if m.mIconStyle != nil {
+		if snap.HighContrastIcon {
+			m.mIconStyle.SetTitle("High-contrast icon: ✔ On")
+		} else {
+			m.mIconStyle.SetTitle("High-contrast icon: Off")
+		}
 	}
 
 	// Update availability
