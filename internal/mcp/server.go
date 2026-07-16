@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -4030,91 +4031,38 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 	if version == "" {
 		return toolErr("version is required"), nil
 	}
-	if !config.IsSupportedPHPVersion(version) {
-		return toolErr(fmt.Sprintf("unsupported PHP version %q — supported: %s", version, strings.Join(config.SupportedPHPVersions, ", "))), nil
-	}
-
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return toolErr(fmt.Sprintf("site %q not found — run sites to list registered sites", siteName)), nil
 	}
-	if site.IsCustomContainer() {
-		return toolErr("custom container sites do not use PHP versions — the container defines its own runtime"), nil
-	}
-	if site.IsHostProxy() {
-		return toolErr("host-proxy sites do not use PHP versions — they run your dev command on the host"), nil
+
+	res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Branch: strArg(args, "branch")})
+	if err != nil {
+		return toolErr(err.Error()), nil
 	}
 
-	if branch := strArg(args, "branch"); branch != "" {
-		cwd, errResp := resolveWorkerCwd(site, branch)
-		if errResp != nil {
-			return errResp, nil
-		}
-		out, runErr := runIn(cwd, "lerd", "isolate", version)
-		if runErr != nil {
-			msg := strings.TrimSpace(out)
-			if msg == "" {
-				msg = runErr.Error()
-			}
-			return toolErr(fmt.Sprintf("isolate PHP %s on %s: %s", version, branch, msg)), nil
-		}
-		return toolOK(out), nil
+	msg := fmt.Sprintf("PHP version for %s set to %s.", siteName, res.Version)
+	if res.Clamped {
+		msg = fmt.Sprintf("PHP version for %s set to %s: %s is outside the range its framework supports.", siteName, res.Version, res.Requested)
 	}
-
-	// Write .php-version pin file (keeps CLI php and other tools in sync).
-	phpVersionFile := filepath.Join(site.Path, ".php-version")
-	if err := os.WriteFile(phpVersionFile, []byte(version+"\n"), 0644); err != nil {
-		return toolErr("writing .php-version: " + err.Error()), nil
+	// The image gap is the whole reason a version switch loses an extension, so
+	// it is reported before the runtime-specific tail.
+	switch {
+	case res.NotInstalled:
+		msg += fmt.Sprintf(" PHP %s has no image yet — run php_rebuild(version: \"%s\") to build it.", res.Version, res.Version)
+	case res.Stale:
+		msg += fmt.Sprintf(" Its image predates your custom extensions and packages — run php_rebuild(version: \"%s\") to bring it up to date.", res.Version)
+	case len(res.Missing) > 0:
+		msg += fmt.Sprintf(" It cannot load: %s. They did not build on this version, and a rebuild will not change that.",
+			strings.Join(res.Missing, ", "))
 	}
-	_ = config.SetProjectPHPVersion(site.Path, version)
-
-	// Update the site registry so later steps see the new version.
-	site.PHPVersion = version
-	if err := config.AddSite(*site); err != nil {
-		return toolErr("updating site registry: " + err.Error()), nil
+	if res.Demoted {
+		return toolOK(msg + " FrankenPHP has no image for it, so the site was switched to FPM."), nil
 	}
-
-	// FrankenPHP sites get a different image per PHP version; rewrite the
-	// per-site quadlet (with restart-on-change) via the shared link helper
-	// instead of touching FPM state or the FPM vhost.
 	if site.IsFrankenPHP() {
-		// FrankenPHP only publishes images for PHP >= 8.2; building below that
-		// normalizes the version up and silently runs a different PHP than the
-		// site reports. Match the CLI and fall back to FPM rather than upgrade.
-		if !config.IsFrankenPHPVersion(version) {
-			if err := siteops.DemoteFrankenPHPToFPM(site); err != nil {
-				return toolErr(err.Error()), nil
-			}
-			return toolOK(fmt.Sprintf("PHP version for %s set to %s; FrankenPHP has no image for it, so the site was switched to FPM.", siteName, version)), nil
-		}
-		if err := siteops.FinishFrankenPHPLink(*site); err != nil {
-			return toolErr("re-linking FrankenPHP site: " + err.Error()), nil
-		}
-		return toolOK(fmt.Sprintf("PHP version for %s set to %s (FrankenPHP image updated).", siteName, version)), nil
+		return toolOK(msg + " (FrankenPHP image updated)"), nil
 	}
-
-	// Ensure the FPM quadlet and xdebug ini exist for this version.
-	if err := podman.WriteFPMQuadlet(version); err != nil {
-		return toolErr("writing FPM quadlet: " + err.Error()), nil
-	}
-	_ = podman.EnsureXdebugIni(version) // non-fatal if version not yet built
-
-	// Regenerate the nginx vhost (SSL or plain).
-	if site.Secured {
-		if err := certs.SecureSite(*site); err != nil {
-			return toolErr("regenerating SSL vhost: " + err.Error()), nil
-		}
-	} else {
-		if err := nginx.GenerateVhost(*site, version); err != nil {
-			return toolErr("regenerating vhost: " + err.Error()), nil
-		}
-	}
-
-	if err := nginx.Reload(); err != nil {
-		return toolErr("reloading nginx: " + err.Error()), nil
-	}
-
-	return toolOK(fmt.Sprintf("PHP version for %s set to %s. The FPM container for PHP %s must be running — use service_start(name: \"php%s\") if it isn't.", siteName, version, version, version)), nil
+	return toolOK(msg + fmt.Sprintf(" The FPM container for PHP %s must be running — use service_start(name: \"php%s\") if it isn't.", res.Version, res.Version)), nil
 }
 
 func execSiteNode(args map[string]any) (any, *rpcError) {
@@ -4653,15 +4601,23 @@ func execPHPExtList(args map[string]any) (any, *rpcError) {
 		return toolErr("loading config: " + err.Error()), nil
 	}
 
-	exts := cfg.GetExtensions(version)
+	exts := cfg.GetExtensions()
 	if len(exts) == 0 {
-		return toolOK(fmt.Sprintf("No custom extensions configured for PHP %s.", version)), nil
+		return toolOK("No custom extensions configured."), nil
 	}
 
-	data, _ := json.MarshalIndent(map[string]any{
-		"version":    version,
-		"extensions": exts,
-	}, "", "  ")
+	// Declared is what the user asked for everywhere. A stale image's realised
+	// record describes an older set, so its gaps are reported as "rebuild this"
+	// rather than as extensions the version cannot have.
+	out := map[string]any{"version": version, "declared": exts}
+	if podman.FPMImageStale(version) {
+		out["stale"] = true
+		out["note"] = fmt.Sprintf("the PHP %s image predates this set; run php_rebuild(version: %q) to bring it up to date", version, version)
+	} else if missing := cfg.MissingFromImage(version, exts); len(missing) > 0 {
+		out["cannot_load"] = missing
+		out["note"] = "these did not build on this version; a rebuild will not change that"
+	}
+	data, _ := json.MarshalIndent(out, "", "  ")
 	return toolOK(string(data)), nil
 }
 
@@ -4681,16 +4637,16 @@ func execPHPExtAdd(args map[string]any) (any, *rpcError) {
 		return toolErr(err.Error()), nil
 	}
 
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return toolErr("loading config: " + err.Error()), nil
-	}
-
-	cfg.AddExtension(version, ext)
-	if len(deps) > 0 {
-		cfg.SetExtApkDeps(ext, deps)
-	}
-	if err := config.SaveGlobal(cfg); err != nil {
+	// Re-adding an already-declared extension must not let a failed verify
+	// remove the working one on the way out.
+	alreadyDeclared := false
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+		alreadyDeclared = slices.Contains(c.GetExtensions(), ext)
+		c.AddExtension(ext)
+		if len(deps) > 0 {
+			c.SetExtApkDeps(ext, deps)
+		}
+	}); err != nil {
 		return toolErr("saving config: " + err.Error()), nil
 	}
 
@@ -4699,9 +4655,13 @@ func execPHPExtAdd(args map[string]any) (any, *rpcError) {
 		return toolErr(fmt.Sprintf("rebuilding PHP %s image (%v):\n%s", version, err, out.String())), nil
 	}
 
+	// The build records what this version realised, so the revert re-reads
+	// rather than saving a copy loaded before the build.
 	if err := podman.VerifyExtensionLoaded(version, ext); err != nil {
-		cfg.RemoveExtension(version, ext)
-		_ = config.SaveGlobal(cfg)
+		if alreadyDeclared {
+			return toolErr(fmt.Sprintf("extension %q did not load on PHP %s: %v", ext, version, err)), nil
+		}
+		_ = config.UpdateGlobal(func(c *config.GlobalConfig) { c.RemoveExtension(ext) })
 		return toolErr(fmt.Sprintf("extension %q was not installed for PHP %s (config reverted): %v", ext, version, err)), nil
 	}
 
@@ -4724,13 +4684,7 @@ func execPHPExtRemove(args map[string]any) (any, *rpcError) {
 		return toolErr(err.Error()), nil
 	}
 
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return toolErr("loading config: " + err.Error()), nil
-	}
-
-	cfg.RemoveExtension(version, ext)
-	if err := config.SaveGlobal(cfg); err != nil {
+	if err := config.UpdateGlobal(func(c *config.GlobalConfig) { c.RemoveExtension(ext) }); err != nil {
 		return toolErr("saving config: " + err.Error()), nil
 	}
 

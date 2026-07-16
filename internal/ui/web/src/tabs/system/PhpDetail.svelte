@@ -5,6 +5,7 @@
   import LogViewer from '$components/LogViewer.svelte';
   import PhpIniTab from './PhpIniTab.svelte';
   import PhpPortsTab from './PhpPortsTab.svelte';
+  import PhpExtensionsTab from './PhpExtensionsTab.svelte';
   import { status, loadStatus } from '$stores/status';
   import { setDefaultPhp, startPhp, stopPhp } from '$stores/phpVersions';
   import { sites, sitesByPhp } from '$stores/sites';
@@ -64,13 +65,14 @@
     };
   });
 
-  type TabId = 'logs' | 'sites' | 'config' | 'ports';
+  type TabId = 'logs' | 'sites' | 'config' | 'ports' | 'extensions';
   let active = $state<TabId>('logs');
   const tabs = $derived<TabItem<TabId>[]>([
     { id: 'logs', label: m.services_tabs_logs(), hidden: !running },
     { id: 'sites', label: m.system_php_sites() },
     { id: 'config', label: m.system_php_iniTab() },
-    { id: 'ports', label: m.system_php_portsTab() }
+    { id: 'ports', label: m.system_php_portsTab() },
+    { id: 'extensions', label: m.system_php_extensionsTab() }
   ]);
 
   $effect(() => {
@@ -275,4 +277,6 @@
   <PhpIniTab {version} />
 {:else if active === 'ports'}
   <PhpPortsTab {version} />
+{:else if active === 'extensions'}
+  <PhpExtensionsTab {version} />
 {/if}

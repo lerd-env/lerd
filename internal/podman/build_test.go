@@ -79,8 +79,10 @@ func TestBuildCustomPackagesBlock(t *testing.T) {
 	// Valid packages are deduped; invalid names (shell metachars) are dropped so
 	// they can't break out of the apk command.
 	block := buildCustomPackagesBlock([]string{"htop", "vim", "htop", "bad;rm -rf"})
-	if !strings.Contains(block, "RUN apk add --no-cache htop vim &&") {
-		t.Errorf("block must apk add the valid deduped packages:\n%s", block)
+	// Each package installs on its own and tolerantly, so one name the version
+	// does not have cannot fail the whole image (see the legacy Alpine 3.16 tier).
+	if !strings.Contains(block, "RUN for p in htop vim; do apk add --no-cache \"$p\" || true; done") {
+		t.Errorf("block must tolerantly apk add the valid deduped packages:\n%s", block)
 	}
 	if strings.Contains(block, "bad") {
 		t.Errorf("invalid package name must be dropped:\n%s", block)
@@ -475,7 +477,7 @@ func TestFPMImageName(t *testing.T) {
 }
 
 func TestFPMBuildArgs_ContainsHashLabel(t *testing.T) {
-	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", false)
+	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", false)
 	if !sliceContainsPair(args, "--label", fpmContainerfileHashLabel+"=abc123") {
 		t.Errorf("build args missing the containerfile-hash label\nargs: %v", args)
 	}
@@ -485,7 +487,7 @@ func TestFPMBuildArgs_ContainsHashLabel(t *testing.T) {
 }
 
 func TestFPMBuildArgs_ForceAddsNoCache(t *testing.T) {
-	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", true)
+	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", true)
 	if !sliceContains(args, "--no-cache") {
 		t.Errorf("force=true should add --no-cache, got: %v", args)
 	}
@@ -496,8 +498,19 @@ func TestFPMBuildArgs_ForceAddsNoCache(t *testing.T) {
 	}
 }
 
+// Both labels have to be stamped: the custom-set label is the only thing that
+// can tell a later build that this image predates a newly declared extension.
+func TestFPMBuildArgs_ContainsCustomSetLabel(t *testing.T) {
+	for _, force := range []bool{false, true} {
+		args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", force)
+		if !sliceContainsPair(args, "--label", fpmCustomSetHashLabel+"=cust1") {
+			t.Errorf("force=%v: build args missing the custom-set label\nargs: %v", force, args)
+		}
+	}
+}
+
 func TestFPMBuildArgs_TagsImageName(t *testing.T) {
-	args := fpmBuildArgs("lerd-php85-fpm:local", "h", false)
+	args := fpmBuildArgs("lerd-php85-fpm:local", "h", "", false)
 	if !sliceContainsPair(args, "-t", "lerd-php85-fpm:local") {
 		t.Errorf("missing -t <image> pair\nargs: %v", args)
 	}

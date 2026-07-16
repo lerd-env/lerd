@@ -76,13 +76,24 @@ dumps:
                         # effect (`systemctl --user restart lerd-php<ver>-fpm` or
                         # `lerd restart`).
 php:
+  extensions: [mongodb] # custom PHP extensions (`lerd php:ext`). One declared set,
+                        # applied to every PHP image lerd builds: extensions belong
+                        # to you, not to a version, so a site that changes version
+                        # keeps them.
+  packages: [chromium]  # extra Alpine packages (`lerd php:pkg`), same model.
   ext_apk_deps:         # extra Alpine packages required at build time by
                         # `lerd php:ext add <ext> --apk-deps <pkgs>` invocations.
-                        # Keyed by `<php_version>.<ext_name>`, value is a list
-                        # of apk package names. The PHP-FPM Containerfile reads
-                        # this block on rebuild so the extra build deps
-                        # reattach to the layer automatically (e.g.
-                        # `8.4.gd: [libwebp-dev, libpng-dev]`).
+                        # Keyed by extension name (build deps don't vary by PHP
+                        # version), value is a list of apk package names, e.g.
+                        # `gd: [libwebp-dev, libpng-dev]`. The PHP-FPM
+                        # Containerfile reads this block on rebuild so the extra
+                        # build deps reattach to the layer automatically.
+  realised:             # what each version's image actually loaded, verified
+                        # after its build. Managed by lerd, not hand-edited.
+    "7.4":              # the declared set can't always be honoured (mongodb needs
+      packages: []      # 8.1+; the 7.4/8.0 images are Alpine 3.16), so lerd records
+      extensions: []    # the truth per version and never advertises what an image
+                        # does not have.
 ```
 
 ---

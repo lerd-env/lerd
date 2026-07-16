@@ -1,4 +1,4 @@
-package cli
+package siteops
 
 import (
 	"os"
@@ -7,18 +7,18 @@ import (
 	"time"
 )
 
-// TestSyncPHPVersionFile_WritesTheResolvedVersion covers the clamp case: the
+// TestPinPHPVersionFile_WritesTheResolvedVersion covers the clamp case: the
 // project asks for 8.1, the framework forces 8.5, and the file must end up saying
 // what actually runs instead of leaving a stale pin for other tools to trust.
-func TestSyncPHPVersionFile_WritesTheResolvedVersion(t *testing.T) {
+func TestPinPHPVersionFile_WritesTheResolvedVersion(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".php-version")
 	if err := os.WriteFile(path, []byte("8.1\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
-	if err := syncPHPVersionFile(dir, "8.5"); err != nil {
-		t.Fatalf("syncPHPVersionFile: %v", err)
+	if err := PinPHPVersionFile(dir, "8.5"); err != nil {
+		t.Fatalf("PinPHPVersionFile: %v", err)
 	}
 
 	got, err := os.ReadFile(path)
@@ -30,13 +30,13 @@ func TestSyncPHPVersionFile_WritesTheResolvedVersion(t *testing.T) {
 	}
 }
 
-// TestSyncPHPVersionFile_CreatesTheFile pins that a project with no pin gets one,
+// TestPinPHPVersionFile_CreatesTheFile pins that a project with no pin gets one,
 // so the version lerd resolved is visible to the repo and to other tooling.
-func TestSyncPHPVersionFile_CreatesTheFile(t *testing.T) {
+func TestPinPHPVersionFile_CreatesTheFile(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := syncPHPVersionFile(dir, "8.4"); err != nil {
-		t.Fatalf("syncPHPVersionFile: %v", err)
+	if err := PinPHPVersionFile(dir, "8.4"); err != nil {
+		t.Fatalf("PinPHPVersionFile: %v", err)
 	}
 
 	got, err := os.ReadFile(filepath.Join(dir, ".php-version"))
@@ -48,10 +48,10 @@ func TestSyncPHPVersionFile_CreatesTheFile(t *testing.T) {
 	}
 }
 
-// TestSyncPHPVersionFile_LeavesAMatchingFileAlone keeps a re-link from rewriting
+// TestPinPHPVersionFile_LeavesAMatchingFileAlone keeps a re-link from rewriting
 // an unchanged file: the write would wake the watcher and trigger a pointless
 // queue:restart on every link.
-func TestSyncPHPVersionFile_LeavesAMatchingFileAlone(t *testing.T) {
+func TestPinPHPVersionFile_LeavesAMatchingFileAlone(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".php-version")
 	if err := os.WriteFile(path, []byte("8.4\n"), 0644); err != nil {
@@ -62,8 +62,8 @@ func TestSyncPHPVersionFile_LeavesAMatchingFileAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncPHPVersionFile(dir, "8.4"); err != nil {
-		t.Fatalf("syncPHPVersionFile: %v", err)
+	if err := PinPHPVersionFile(dir, "8.4"); err != nil {
+		t.Fatalf("PinPHPVersionFile: %v", err)
 	}
 
 	info, err := os.Stat(path)
@@ -71,20 +71,20 @@ func TestSyncPHPVersionFile_LeavesAMatchingFileAlone(t *testing.T) {
 		t.Fatal(err)
 	}
 	if !info.ModTime().Equal(old) {
-		t.Error("syncPHPVersionFile rewrote a file that already held the resolved version")
+		t.Error("PinPHPVersionFile rewrote a file that already held the resolved version")
 	}
 }
 
-// TestSyncPHPVersionFile_SkipsSitesWithoutAPHPVersion guards host-proxy and custom
+// TestPinPHPVersionFile_SkipsSitesWithoutAPHPVersion guards host-proxy and custom
 // container sites, which have no lerd-managed PHP version to pin.
-func TestSyncPHPVersionFile_SkipsSitesWithoutAPHPVersion(t *testing.T) {
+func TestPinPHPVersionFile_SkipsSitesWithoutAPHPVersion(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := syncPHPVersionFile(dir, ""); err != nil {
-		t.Fatalf("syncPHPVersionFile: %v", err)
+	if err := PinPHPVersionFile(dir, ""); err != nil {
+		t.Fatalf("PinPHPVersionFile: %v", err)
 	}
 
 	if _, err := os.Stat(filepath.Join(dir, ".php-version")); !os.IsNotExist(err) {
-		t.Error("syncPHPVersionFile created a .php-version for a site with no PHP version")
+		t.Error("PinPHPVersionFile created a .php-version for a site with no PHP version")
 	}
 }

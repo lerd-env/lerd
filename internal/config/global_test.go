@@ -48,7 +48,7 @@ func TestLoadGlobal_PackagesNotAliasedWithCache(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
-	seed.AddPackage("8.4", "vim")
+	seed.AddPackage("vim")
 	if err := SaveGlobal(seed); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
@@ -58,13 +58,13 @@ func TestLoadGlobal_PackagesNotAliasedWithCache(t *testing.T) {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
 	// Mutate the loaded copy without saving — must not reach the cache.
-	loaded.AddPackage("8.4", "htop")
+	loaded.AddPackage("htop")
 
 	again, err := LoadGlobal()
 	if err != nil {
 		t.Fatalf("LoadGlobal: %v", err)
 	}
-	got := again.GetPackages("8.4")
+	got := again.GetPackages()
 	if len(got) != 1 || got[0] != "vim" {
 		t.Errorf("cache corrupted by an unsaved mutation: GetPackages = %v, want [vim]", got)
 	}
@@ -333,28 +333,8 @@ func TestXdebug_SetXdebugDefaultsToDebugMode(t *testing.T) {
 }
 
 // ── Extensions ────────────────────────────────────────────────────────────────
-
-func TestExtensions_AddRemoveGet(t *testing.T) {
-	cfg := &GlobalConfig{}
-
-	if exts := cfg.GetExtensions("8.3"); exts != nil {
-		t.Errorf("expected nil extensions, got %v", exts)
-	}
-
-	cfg.AddExtension("8.3", "redis")
-	cfg.AddExtension("8.3", "imagick")
-
-	exts := cfg.GetExtensions("8.3")
-	if len(exts) != 2 {
-		t.Fatalf("expected 2 extensions, got %d: %v", len(exts), exts)
-	}
-
-	cfg.RemoveExtension("8.3", "redis")
-	exts = cfg.GetExtensions("8.3")
-	if len(exts) != 1 || exts[0] != "imagick" {
-		t.Errorf("expected [imagick] after remove, got %v", exts)
-	}
-}
+// Add/remove/get of the declared sets is covered by TestPHPSetAccessors in
+// php_sets_test.go, alongside the migration that produces them.
 
 func TestExtApkDeps_SetGetClear(t *testing.T) {
 	cfg := &GlobalConfig{}
@@ -380,20 +360,12 @@ func TestExtApkDeps_SetGetClear(t *testing.T) {
 
 func TestExtApkDeps_DroppedWhenExtensionRemoved(t *testing.T) {
 	cfg := &GlobalConfig{}
-	cfg.AddExtension("8.4", "ssh2")
-	cfg.AddExtension("8.5", "ssh2")
+	cfg.AddExtension("ssh2")
 	cfg.SetExtApkDeps("ssh2", []string{"libssh2-dev"})
 
-	// Still used by 8.5, so deps stay.
-	cfg.RemoveExtension("8.4", "ssh2")
-	if cfg.GetExtApkDeps("ssh2") == nil {
-		t.Error("deps should remain while another version still uses the extension")
-	}
-
-	// No version uses it anymore, so deps go too.
-	cfg.RemoveExtension("8.5", "ssh2")
+	cfg.RemoveExtension("ssh2")
 	if cfg.GetExtApkDeps("ssh2") != nil {
-		t.Error("deps should be dropped once no version uses the extension")
+		t.Error("deps should be dropped once the extension is no longer declared")
 	}
 }
 
@@ -425,20 +397,20 @@ func TestCloneGlobalConfig_PublishedPortsDeepCopied(t *testing.T) {
 
 func TestExtensions_AddIdempotent(t *testing.T) {
 	cfg := &GlobalConfig{}
-	cfg.AddExtension("8.3", "redis")
-	cfg.AddExtension("8.3", "redis")
+	cfg.AddExtension("redis")
+	cfg.AddExtension("redis")
 
-	if len(cfg.GetExtensions("8.3")) != 1 {
+	if len(cfg.GetExtensions()) != 1 {
 		t.Error("duplicate add should be a no-op")
 	}
 }
 
-func TestExtensions_RemoveLastCleansMap(t *testing.T) {
+func TestExtensions_RemoveLastCleansSet(t *testing.T) {
 	cfg := &GlobalConfig{}
-	cfg.AddExtension("8.3", "redis")
-	cfg.RemoveExtension("8.3", "redis")
+	cfg.AddExtension("redis")
+	cfg.RemoveExtension("redis")
 
-	if exts := cfg.GetExtensions("8.3"); len(exts) != 0 {
+	if exts := cfg.GetExtensions(); len(exts) != 0 {
 		t.Errorf("expected empty after removing last ext, got %v", exts)
 	}
 }
@@ -446,20 +418,7 @@ func TestExtensions_RemoveLastCleansMap(t *testing.T) {
 func TestExtensions_RemoveNonExistent(t *testing.T) {
 	cfg := &GlobalConfig{}
 	// Should not panic
-	cfg.RemoveExtension("8.3", "nonexistent")
-}
-
-func TestExtensions_IndependentVersions(t *testing.T) {
-	cfg := &GlobalConfig{}
-	cfg.AddExtension("8.3", "redis")
-	cfg.AddExtension("8.4", "imagick")
-
-	if exts := cfg.GetExtensions("8.3"); len(exts) != 1 || exts[0] != "redis" {
-		t.Errorf("8.3 extensions wrong: %v", exts)
-	}
-	if exts := cfg.GetExtensions("8.4"); len(exts) != 1 || exts[0] != "imagick" {
-		t.Errorf("8.4 extensions wrong: %v", exts)
-	}
+	cfg.RemoveExtension("nonexistent")
 }
 
 // Pre-existing configs from before the dns.enabled field was introduced have

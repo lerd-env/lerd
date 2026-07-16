@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Deze images kunnen worden verwijderd om ongeveer {size} vrij te maken:",
   "dashboard_disk_modalDeepNote": "Deze grondige opschoning verwijdert ook ongetagde losse images van andere podman-workloads op deze machine. Benoemde datavolumes worden nooit aangeraakt.",
   "dashboard_disk_modalConfirm": "Vrijmaken",
-  "dashboard_disk_cleaning": "Bezig met vrijmaken…"
+  "dashboard_disk_cleaning": "Bezig met vrijmaken…",
+  "system_php_extensionsTab": "Extensies",
+  "system_php_ext_declared": "Jouw extensies",
+  "system_php_ext_packages": "Jouw pakketten",
+  "system_php_ext_modules": "Modules die PHP laadt ({count})",
+  "system_php_ext_modulesHelp": "Gerapporteerd door php -m in de PHP {version}-image.",
+  "system_php_ext_notBuilt": "PHP {version} heeft nog geen image. Voer 'lerd php:rebuild {version}' uit om er een te bouwen.",
+  "system_php_ext_needsRebuild": "Deze image is ouder dan je extensies en pakketten. Voer 'lerd php:rebuild {version}' uit om hem bij te werken.",
+  "system_php_ext_cannot": "kon niet worden gebouwd op PHP {version}; opnieuw bouwen verandert dat niet",
+  "system_php_ext_none": "Je hebt geen eigen extensies of pakketten toegevoegd.",
+  "system_php_ext_manageHelp": "Beheer ze met lerd php:ext en lerd php:pkg. Ze gelden voor elke PHP-versie."
 }

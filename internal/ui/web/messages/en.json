@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "These images can be removed to free about {size}:",
   "dashboard_disk_modalDeepNote": "This deep clean also removes dangling untagged images left by other podman workloads on this machine. It never touches named data volumes.",
   "dashboard_disk_modalConfirm": "Reclaim",
-  "dashboard_disk_cleaning": "Reclaiming…"
+  "dashboard_disk_cleaning": "Reclaiming…",
+  "system_php_extensionsTab": "Extensions",
+  "system_php_ext_declared": "Your extensions",
+  "system_php_ext_packages": "Your packages",
+  "system_php_ext_modules": "Modules PHP loads ({count})",
+  "system_php_ext_modulesHelp": "Reported by php -m inside the PHP {version} image.",
+  "system_php_ext_notBuilt": "PHP {version} has no image yet. Run 'lerd php:rebuild {version}' to build it.",
+  "system_php_ext_needsRebuild": "This image predates your extensions and packages. Run 'lerd php:rebuild {version}' to bring it up to date.",
+  "system_php_ext_cannot": "did not build on PHP {version}; a rebuild will not change that",
+  "system_php_ext_none": "You have not added any custom extensions or packages.",
+  "system_php_ext_manageHelp": "Manage these with lerd php:ext and lerd php:pkg. They apply to every PHP version."
 }

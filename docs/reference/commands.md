@@ -130,12 +130,12 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, and the fro
 | `lerd xdebug off [version]` | Disable Xdebug |
 | `lerd xdebug status` | Show Xdebug enabled/disabled state and active mode for all installed PHP versions |
 | `lerd xdebug pause [site] [--list] [--pid PID]` | (experimental, PHP-FPM sites only) Break the IDE debugger into a running worker/CLI process via Xdebug's control socket (`xdebugctl`). `--list` shows candidate processes, `--pid` targets one |
-| `lerd php:ext add <ext> [version] [--apk-deps PKG[,PKG]]` | Add a custom PHP extension and rebuild the FPM image. `--apk-deps` accepts additional Alpine packages that the extension needs at build time (e.g. `--apk-deps libwebp-dev,libpng-dev` for `gd` with WebP support); the package list is persisted in `~/.config/lerd/config.yaml` so future rebuilds reapply it |
-| `lerd php:ext remove <ext> [version]` | Remove a custom PHP extension and rebuild |
-| `lerd php:ext list [version]` | List custom extensions for a PHP version |
-| `lerd php:pkg add <package...> [--php VERSION]` | Add extra Alpine packages to the FPM image and rebuild; the list is persisted so future rebuilds reapply it |
-| `lerd php:pkg remove <package...> [--php VERSION]` | Remove extra Alpine packages and rebuild |
-| `lerd php:pkg list [--php VERSION]` | List the extra Alpine packages configured for a PHP version |
+| `lerd php:ext add <ext> [--apk-deps PKG[,PKG]]` | Add a custom PHP extension to every PHP image and rebuild the current version. `--apk-deps` accepts additional Alpine packages that the extension needs at build time (e.g. `--apk-deps libwebp-dev,libpng-dev` for `gd` with WebP support); the package list is persisted in `~/.config/lerd/config.yaml` so future rebuilds reapply it |
+| `lerd php:ext remove <ext>` | Remove a custom PHP extension from every PHP image and rebuild |
+| `lerd php:ext list` | List your declared extensions, and what each PHP version's image actually loaded |
+| `lerd php:pkg add <package...>` | Add extra Alpine packages to every FPM image and rebuild the current version; the list is persisted so future rebuilds reapply it |
+| `lerd php:pkg remove <package...>` | Remove extra Alpine packages from every FPM image and rebuild |
+| `lerd php:pkg list` | List your declared Alpine packages, and what each PHP version's image actually installed |
 | `lerd php:ports add <host:container...> [--php VERSION]` | Publish extra host ports on the version's shell (FPM) container so a process in `lerd shell` is reachable at `localhost:PORT`; a bare number publishes straight through, and a busy host port shifts to the next free one |
 | `lerd php:ports remove <host...> [--php VERSION]` | Unpublish host ports from the version's shell container |
 | `lerd php:ports list [--php VERSION]` | List the extra host ports published for a PHP version |

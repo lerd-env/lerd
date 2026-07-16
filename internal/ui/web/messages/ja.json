@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "これらのイメージを削除すると約 {size} を解放できます:",
   "dashboard_disk_modalDeepNote": "このディープクリーンは、このマシン上の他の podman ワークロードが残した未タグのダングリングイメージも削除します。名前付きデータボリュームには一切触れません。",
   "dashboard_disk_modalConfirm": "回収",
-  "dashboard_disk_cleaning": "回収中…"
+  "dashboard_disk_cleaning": "回収中…",
+  "system_php_extensionsTab": "拡張機能",
+  "system_php_ext_declared": "あなたの拡張機能",
+  "system_php_ext_packages": "あなたのパッケージ",
+  "system_php_ext_modules": "PHP が読み込んでいるモジュール ({count})",
+  "system_php_ext_modulesHelp": "PHP {version} イメージ内の php -m による報告です。",
+  "system_php_ext_notBuilt": "PHP {version} のイメージはまだありません。'lerd php:rebuild {version}' を実行して構築してください。",
+  "system_php_ext_needsRebuild": "このイメージは現在の拡張機能とパッケージより古い状態です。'lerd php:rebuild {version}' を実行して更新してください。",
+  "system_php_ext_cannot": "は PHP {version} でビルドできませんでした。再ビルドしても変わりません",
+  "system_php_ext_none": "カスタム拡張機能もパッケージも追加されていません。",
+  "system_php_ext_manageHelp": "lerd php:ext と lerd php:pkg で管理します。すべての PHP バージョンに適用されます。"
 }
