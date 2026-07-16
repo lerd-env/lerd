@@ -137,6 +137,19 @@ func (s *Site) IsHostProxy() bool {
 // dev server. There is exactly one per site.
 const HostProxyWorkerName = "app"
 
+// StripeWorkerName is the Stripe webhook listener, run through its own unit
+// (lerd-stripe-<site>) rather than declared by any framework.
+const StripeWorkerName = "stripe"
+
+// IsBuiltinWorker reports whether name is a lerd-managed worker that lives
+// outside a framework's worker definitions: the Stripe listener and the
+// host-proxy dev server. A validator checking a site's workers against its
+// framework must treat these as valid rather than undefined, the same way the
+// running-worker collector and the orphan scan already special-case them.
+func IsBuiltinWorker(name string) bool {
+	return name == StripeWorkerName || name == HostProxyWorkerName
+}
+
 // HostProxyWorkerUnit returns the worker unit name for a host-proxy site's dev
 // server (lerd-app-<site>). Single source of truth for the cli (which starts
 // and stops it) and siteinfo (which reports its health).
@@ -434,6 +447,10 @@ func AddSite(site Site) error {
 	if ContainsUnitInjectionChars(site.Name) || strings.ContainsRune(site.Name, '/') {
 		return fmt.Errorf("invalid site name %q: must not contain newline, NUL, or slash", site.Name)
 	}
+	// Store the resolved path so two spellings of one directory (on ostree hosts
+	// /home is a symlink to /var/home, and os.Getwd can return either) register
+	// and de-duplicate as a single site rather than two (#930).
+	site.Path = CanonicalPath(site.Path)
 	// The filesystem root can never be a site: lerd bind-mounts a site's path into
 	// its containers, and mounting / over a container's own rootfs shadows its
 	// entrypoint so it cannot start (issue #884).
@@ -702,13 +719,29 @@ func FindSiteByPath(path string) (*Site, error) {
 		return nil, err
 	}
 
+	target := CanonicalPath(path)
 	for _, s := range reg.Sites {
-		if s.Path == path {
+		if CanonicalPath(s.Path) == target {
 			s := s
 			return &s, nil
 		}
 	}
 	return nil, fmt.Errorf("site with path %q not found", path)
+}
+
+// CanonicalPath resolves symlinks in p so two spellings of the same directory
+// compare equal. On ostree hosts /home is a symlink to /var/home, so os.Getwd
+// can hand back either form for one project, which otherwise registers and
+// lists twice (#930). Falls back to a cleaned path when the target can't be
+// resolved, e.g. it no longer exists, so callers always get a usable value.
+func CanonicalPath(p string) string {
+	if p == "" {
+		return p
+	}
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return filepath.Clean(p)
 }
 
 // FindSiteByDomain returns the site that has the given domain (checks all domains),

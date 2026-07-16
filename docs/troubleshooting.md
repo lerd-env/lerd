@@ -382,6 +382,42 @@ cat "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/containers/networks/aardvark-dns/ler
 ```
 :::
 
+::: details Every container takes 90 seconds to start (Fedora Silverblue and other atomic images)
+Symptom: `lerd start` sits there for a minute and a half per container, and after a reboot nothing is serving until well over a minute in. `systemctl --user list-units --state=failed` shows `podman-user-wait-network-online.service` failed with a timeout, and `lerd doctor` reports the `podman network-online wait` check as a warning.
+
+Cause: podman's quadlet generator makes every rootless container `Wants=` and `After=podman-user-wait-network-online.service`, a unit that polls the system's `network-online.target` until it gives up after 90 seconds. That target is only reached when some unit pulls it in, and on atomic images (Silverblue, Kinoite, Bazzite, CoreOS) nothing does, so the wait can never succeed. Every container start, and the boot itself, pays the full timeout.
+
+Lerd detects this on `lerd start` and `lerd install` and writes a drop-in that turns the wait into a no-op, since lerd publishes on loopback and needs no routable network:
+
+```bash
+lerd start   # writes ~/.config/systemd/user/podman-user-wait-network-online.service.d/10-lerd-no-network-wait.conf
+```
+
+The override only lands on hosts where `network-online.target` is genuinely inactive; on an ordinary distro the wait is left alone. To confirm the target is the one at fault:
+
+```bash
+systemctl is-active network-online.target   # "inactive" here means every quadlet start pays 90s
+```
+
+To go back to podman's stock behaviour, delete the drop-in and run `systemctl --user daemon-reload`.
+:::
+
+::: details System tray missing on Fedora Silverblue and other atomic images
+Symptom: no tray icon, and `systemctl --user is-system-running` reports `degraded` because `lerd-tray.service` failed with status 127.
+
+Cause: `lerd-tray` links `libayatana-appindicator3.so.1`, which these images don't ship, and an immutable OS can't just install it into `/usr` on demand.
+
+Lerd checks the helper's libraries at install time and leaves the tray unit stopped and disabled when one is missing, so the failure no longer drags the systemd user session into `degraded`. Everything else (CLI, dashboard, watcher, containers) is unaffected, the tray is the only thing you lose.
+
+To get the tray back, layer the package and reboot, then re-enable the unit:
+
+```bash
+rpm-ostree install libayatana-appindicator-gtk3
+systemctl reboot
+lerd install   # re-enables the tray now that the library resolves
+```
+:::
+
 ::: details Podman Machine overlay-storage error (macOS)
 Symptom: on macOS, `lerd start` fails and **every** container start reports a graph-driver / overlay error:
 

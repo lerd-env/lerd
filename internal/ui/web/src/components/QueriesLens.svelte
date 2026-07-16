@@ -19,6 +19,8 @@
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import { inlineBindings } from '$lib/sqlInline';
+  import type { QueryRow } from '$stores/queries';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -41,7 +43,10 @@
     // timing view's Inspect queries seeds; mirror it into the input on open.
     if (scoped) textInput = get(debugSearch);
   });
-  onDestroy(() => stopDumpsStream());
+  onDestroy(() => {
+    stopDumpsStream();
+    for (const t of Object.values(copyTimers)) clearTimeout(t);
+  });
 
   const groups = $derived(
     buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
@@ -91,6 +96,21 @@
   }
   let expanded = $state<Record<string, boolean>>({});
   const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
+
+  // Copy the query with its bindings inlined so it pastes straight into a SQL
+  // editor. Feedback is per-row (keyed by event id) and clears after 1.5s.
+  let copied = $state<Record<string, boolean>>({});
+  const copyTimers: Record<string, ReturnType<typeof setTimeout>> = {};
+  async function copyRow(row: QueryRow) {
+    try {
+      await navigator.clipboard.writeText(inlineBindings(row.data.sql, row.data.bindings));
+      copied[row.event.id] = true;
+      if (copyTimers[row.event.id]) clearTimeout(copyTimers[row.event.id]);
+      copyTimers[row.event.id] = setTimeout(() => (copied[row.event.id] = false), 1500);
+    } catch {
+      /* clipboard unavailable; leave the row untouched */
+    }
+  }
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
@@ -197,21 +217,36 @@
                 ? 'border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/10'
                 : 'border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card'}"
             >
-              <button
-                type="button"
-                class="w-full text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5"
-                onclick={() => toggleRow(row.event.id)}
-              >
-                <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{row.data.sql}</code>
-                <span class="flex items-center gap-1 shrink-0">
-                  {#if row.duplicate}
-                    <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title="duplicate query in this request">{m.queries_dup_badge({ count: row.dupCount })}</span>
+              <div class="flex items-stretch">
+                <button
+                  type="button"
+                  class="flex-1 min-w-0 text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5"
+                  onclick={() => toggleRow(row.event.id)}
+                >
+                  <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{row.data.sql}</code>
+                  <span class="flex items-center gap-1 shrink-0">
+                    {#if row.duplicate}
+                      <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title="duplicate query in this request">{m.queries_dup_badge({ count: row.dupCount })}</span>
+                    {/if}
+                    <span
+                      class="text-[11px] tabular-nums rounded-sm px-1 py-0.5 {row.slow ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'text-gray-400'}"
+                    >{fmtMs(row.data.time_ms)} ms{#if row.slow}&nbsp;{m.queries_slow_badge()}{/if}</span>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  class="shrink-0 px-2 flex items-center text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 border-l border-gray-100 dark:border-lerd-border/50 {copied[row.event.id] ? 'text-emerald-600 dark:text-emerald-500' : ''}"
+                  onclick={() => copyRow(row)}
+                  title={m.queries_copySql()}
+                  aria-label={m.queries_copySql()}
+                >
+                  {#if copied[row.event.id]}
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5" /></svg>
+                  {:else}
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></svg>
                   {/if}
-                  <span
-                    class="text-[11px] tabular-nums rounded-sm px-1 py-0.5 {row.slow ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'text-gray-400'}"
-                  >{fmtMs(row.data.time_ms)} ms{#if row.slow}&nbsp;{m.queries_slow_badge()}{/if}</span>
-                </span>
-              </button>
+                </button>
+              </div>
               {#if expanded[row.event.id]}
                 <div class="px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-lerd-border/50 text-[11px] space-y-1.5">
                   {#if row.data.connection}

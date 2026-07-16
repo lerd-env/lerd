@@ -273,7 +273,7 @@ An app that keeps deployment state in its database cannot share the parent's. Ma
 
 ## Site placeholders
 
-The `{{site}}`, `{{site_testing}}`, `{{bucket}}`, `{{domain}}`, `{{scheme}}`, and `{{<service>_version}}` placeholders listed above are expanded in three places: the `env.services` vars, every `setup:` command, and every `commands:` entry. They resolve against the registered site the command runs for. A git worktree is not a registered site, so a command run against one resolves `{{site}}` but leaves `{{domain}}` and `{{scheme}}` alone.
+The <code v-pre>{{site}}</code>, <code v-pre>{{site_testing}}</code>, <code v-pre>{{bucket}}</code>, <code v-pre>{{domain}}</code>, <code v-pre>{{scheme}}</code>, and <code v-pre>{{&lt;service&gt;_version}}</code> placeholders listed above are expanded in three places: the `env.services` vars, every `setup:` command, and every `commands:` entry. They resolve against the registered site the command runs for. A git worktree is not a registered site, so a command run against one resolves <code v-pre>{{site}}</code> but leaves <code v-pre>{{domain}}</code> and <code v-pre>{{scheme}}</code> alone.
 
 This is what lets a framework whose bootstrap needs to know where the site lives declare that step as data. Magento 2.4 removed its web installer, so a fresh store is installed with `bin/magento setup:install --base-url=… --db-name=…`; the definition can now express exactly that. A step that creates schema should carry `default: false` so it is opt-in rather than running on every `lerd setup`.
 

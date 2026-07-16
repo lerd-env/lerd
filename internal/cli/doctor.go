@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/cleanup"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
@@ -17,6 +18,7 @@ import (
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/wsl"
@@ -99,6 +101,28 @@ func RunDoctorTo(w io.Writer, useColor bool) (fails, warns int, err error) {
 			}
 		} else {
 			ok("systemd user session")
+		}
+
+		// mkcert can only trust .test in the browser when certutil (nss-tools) is
+		// present. Without it lerd's mkcert step installs the CA to the system
+		// store only, so curl and PHP trust it but Firefox and Chrome warn, and
+		// the mkcert warning is swallowed. Only relevant when DNS/HTTPS is managed.
+		if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg.DNSManaged() {
+			if certs.BrowserTrustAvailable() {
+				ok("browser HTTPS trust (certutil)")
+			} else {
+				warn("browser HTTPS trust (certutil)", browserTrustGuidance(ostreeBootedFn()))
+			}
+		}
+
+		// Podman orders every rootless quadlet after its network-online wait
+		// unit. Where network-online.target is never pulled in (Fedora
+		// Silverblue and other atomic images) that unit can only time out, and
+		// every container start, plus the boot, pays the 90s.
+		if lerdSystemd.NetworkWaitStalls() {
+			warn("podman network-online wait", "network-online.target never activates here, so every container start stalls 90s — fix: lerd start")
+		} else {
+			ok("podman network-online wait")
 		}
 
 		currentUser := os.Getenv("USER")

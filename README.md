@@ -10,7 +10,7 @@
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20WSL2%20(beta)-lightgrey)]()
 [![Docs](https://img.shields.io/badge/docs-lerd.sh-blue)](https://lerd.sh)
 [![Reddit](https://img.shields.io/badge/Reddit-r%2Flerd-ff2d20?logo=reddit)](https://reddit.com/r/lerd)
-[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/ej33c5N9s)
+[![Discord](https://img.shields.io/badge/Discord-Join-5865F2?logo=discord&logoColor=white)](https://discord.gg/5JK54s7xCC)
 
 ![Lerd dashboard tour](docs/assets/screenshots/tour.gif)
 
@@ -21,7 +21,7 @@ is live at `project.test` with HTTPS.
 
 ## Built for Linux PHP developers
 
-If you're a PHP developer on Linux and want frictionless local development — automatic `.test` domains, per-project PHP versions, one-click HTTPS, zero Docker — Lerd is built for you. Works with Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic, and any custom PHP framework.
+If you're a PHP developer on Linux and want frictionless local development — automatic `.test` domains, per-project PHP versions, one-click HTTPS, zero Docker — Lerd is built for you. Works with Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic, and any custom PHP framework.
 
 ## Features
 
@@ -46,7 +46,7 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
 - 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly
-- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, CakePHP, Statamic with versioned auto-detection
+- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic with versioned auto-detection
 - ⚡ **Framework-agnostic** workers, env setup, and nginx proxy — driven by YAML definitions, not hardcoded
 
 ## AI Integration (MCP)

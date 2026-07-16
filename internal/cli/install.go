@@ -25,8 +25,19 @@ import (
 	"github.com/geodro/lerd/internal/shims"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tray"
 	"github.com/spf13/cobra"
 )
+
+// disableTrayUnit stops the tray and takes it out of the autostart set, then
+// clears any failure it already recorded. A tray whose library is missing exits
+// 127 on every start, and the leftover failed unit is what tips the systemd
+// user session into "degraded".
+func disableTrayUnit() {
+	_ = services.Mgr.Stop("lerd-tray")
+	_ = services.Mgr.Disable("lerd-tray")
+	_ = exec.Command("systemctl", "--user", "reset-failed", "lerd-tray.service").Run()
+}
 
 // healPodmanUpgrade runs the podman-upgrade self-heal, renders its progress,
 // and returns the containers it tore down so the caller can restart them. Both
@@ -199,6 +210,16 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// failure (#635). Runs before the network step since it recreates it; any
 	// containers it tears down join the unconditional restart loop below.
 	migrated = append(migrated, healPodmanUpgrade(desiredDNS)...)
+
+	// 2b. Podman orders every rootless quadlet after its network-online wait
+	// unit, which can only time out on hosts where network-online.target is
+	// never pulled in (Fedora Silverblue and other atomic images). Left alone
+	// it stalls every container start, and the boot, by 90s.
+	if applied, err := lerdSystemd.EnsureNoNetworkWaitStall(); err != nil {
+		feedback.Note(fmt.Sprintf("could not skip podman's network-online wait: %v", err))
+	} else if applied {
+		feedback.Note("skipping podman's network-online wait (this host never reaches that target)")
+	}
 
 	step("Creating lerd podman network")
 	if err := podman.EnsureNetwork("lerd", desiredDNS); err != nil {
@@ -392,6 +413,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			mkcertCmd.Stderr = os.Stderr
 		}
 		mkcertCmd.Run() //nolint:errcheck
+
+		// mkcert only adds the CA to the browser NSS stores when certutil is
+		// present, and it exits 0 with a warning otherwise (which the discard
+		// path above hides). Surface it ourselves so the user knows .test HTTPS
+		// works for tooling but not the browser, and how to fix or side-step it.
+		if !certs.BrowserTrustAvailable() {
+			feedback.Note(browserTrustGuidance(ostreeBootedFn()))
+		}
 
 		// 5. DNS config + sudoers
 		step("Writing DNS configuration")
@@ -875,7 +904,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		if err := writeUserServiceWithReload("lerd-tray", content); err != nil {
 			return err
 		}
-		if autostartOn {
+		// The helper dies on every start when its appindicator library is
+		// absent, which an immutable image can't install without layering a
+		// package and rebooting. Leave the unit on disk but don't run it, or
+		// the failures drag the whole systemd user session to "degraded".
+		if missing := tray.MissingLibs(tray.HelperPath()); len(missing) > 0 {
+			disableTrayUnit()
+			feedback.Note("system tray unavailable: this host has no " + strings.Join(missing, ", "))
+		} else if autostartOn {
 			if err := services.Mgr.Enable("lerd-tray"); err != nil {
 				fmt.Printf("    WARN: %v\n", err)
 			}

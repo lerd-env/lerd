@@ -138,7 +138,7 @@
   let arming = $state(false);
   function routeUrl(r: RouteStat): string {
     if (r.method !== 'GET' || !r.example) return '';
-    return `https://${targetDomain}${r.example}`;
+    return `${site.tls ? 'https' : 'http'}://${targetDomain}${r.example}`;
   }
   async function profileRoute(r: RouteStat) {
     if (arming) return;
