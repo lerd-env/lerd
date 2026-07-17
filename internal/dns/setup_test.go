@@ -686,16 +686,23 @@ func TestSetupPaths_treatTheLinkAsAnEnhancementNotAPrecondition(t *testing.T) {
 	assertContains(t, nm, "WARN: offline")
 
 	res := section(t, body, "func setupSystemdResolved() error {", "// setupNetworkManager")
-	// The baseline must be written before the link is attempted.
-	dropinAt := strings.Index(res, "sudoWriteFile(dropin")
-	linkAt := strings.Index(res, "setupDummyLink(false, tld)")
-	if dropinAt < 0 || linkAt < 0 {
-		t.Fatal("expected setupSystemdResolved to write the baseline drop-in and then try the link")
+	// A healthy link short-circuits before touching the drop-in, so the setup is
+	// idempotent: without this it rewrote-then-removed the drop-in every run.
+	shortCircuit := strings.Index(res, "if dummyLinkHealthy(tld) {")
+	writeAt := strings.Index(res, "sudoWriteFile(dropin")
+	if shortCircuit < 0 || shortCircuit > writeAt {
+		t.Error("setupSystemdResolved must short-circuit on a healthy link before writing the baseline, or it restarts systemd-resolved twice on every start")
 	}
-	if dropinAt > linkAt {
-		t.Error("the baseline drop-in must be written before the link is attempted, or a fresh host with no link has no hookup at all")
+	// The baseline is written before the link that would supersede it is attempted,
+	// so a host that cannot build the link keeps a working hookup.
+	linkAt := strings.Index(res, "if err := setupDummyLink(false, tld); err != nil {")
+	if writeAt < 0 || linkAt < 0 {
+		t.Fatal("expected setupSystemdResolved to write the baseline and then try the link")
 	}
-	// And removed only after the link is proven.
+	if writeAt > linkAt {
+		t.Error("the baseline drop-in must be written before the superseding link is attempted, or a fresh host with no link has no hookup at all")
+	}
+	// And removed only after that link attempt, i.e. once it is confirmed.
 	rmAt := strings.Index(res, `"rm", "-f", dropin`)
 	if rmAt < 0 || rmAt < linkAt {
 		t.Error("the drop-in may only be removed after the link is confirmed carrying the route")
@@ -748,5 +755,30 @@ func TestEnsureDummyLinkRunning_failsWhenTheUnitIsNotEnabled(t *testing.T) {
 
 	if err := ensureDummyLinkRunning("test"); err == nil {
 		t.Error("a healthy link with a unit that is not enabled must be reported: it is gone after the next reboot")
+	}
+}
+
+// Every privileged command any setup or teardown path runs must be granted, or
+// it becomes a silent password prompt in the headless lerd-ui watcher. This
+// caught the regression where the baseline drop-in's tee/chmod grants were
+// dropped while the code still wrote it, and the teardown removals that lerd0
+// added but never granted.
+func TestLinuxSudoers_grantsEveryPrivilegedCommandTheCodeRuns(t *testing.T) {
+	grants := renderLinuxSudoers("alice")
+	for _, want := range []string{
+		// baseline drop-in write (setupSystemdResolved)
+		"/usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf",
+		"/usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf",
+		// teardown removals: FallbackDNS restore + the link and its files
+		"/usr/bin/systemctl disable --now lerd-dns-link.service",
+		"/usr/bin/ip link del lerd0",
+		"/usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf",
+		"/usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service",
+		"/usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf",
+		"/usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns",
+	} {
+		if !strings.Contains(grants, want) {
+			t.Errorf("missing NOPASSWD grant, headless watcher would prompt: %s", want)
+		}
 	}
 }

@@ -5,6 +5,7 @@ package dns
 import (
 	"bytes"
 	"fmt"
+	"github.com/geodro/lerd/internal/config"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,13 @@ func defaultUpstreamFallback() []string { return nil }
 // the lerd-dns dnsmasq container on port 5300. macOS checks /etc/resolver/<tld>
 // automatically for per-TLD DNS overrides — no daemon restart required.
 func ConfigureResolver() error {
+	// Nothing when the user opted out, mirroring the Linux guard: disable flips the
+	// TLD to localhost and stops lerd-dns, so writing /etc/resolver here would point
+	// *.localhost at a resolver that is deliberately not running.
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && !cfg.DNS.Enabled {
+		return nil
+	}
+
 	// ConfiguredTLD rejects anything that is not a DNS label. The TLD lands in
 	// /etc/resolver/<tld> and, via the sudoers grant below, in a NOPASSWD tee
 	// target, so a raw value could traverse out of /etc/resolver or inject a

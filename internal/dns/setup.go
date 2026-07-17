@@ -665,12 +665,19 @@ func setupNMWithResolved() error {
 func setupSystemdResolved() error {
 	tld := ConfiguredTLD()
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
-	want := resolvedDropinFor(tld)
 
-	// The baseline goes in first. It resolves .tld whenever a link is up, which is
-	// what lerd promised before lerd0 existed, so the host is never left worse than
-	// it was: not on a fresh install where there is nothing to fall back to, and
-	// not on a host where the link cannot be built at all.
+	// Steady state: lerd0 already carries the route, so the baseline drop-in is
+	// neither present nor wanted. Just keep the link enabled and healthy, writing
+	// nothing. Without this short circuit every start rewrote the baseline only to
+	// remove it again, restarting systemd-resolved twice each time.
+	if dummyLinkHealthy(tld) {
+		return setupDummyLink(false, tld)
+	}
+
+	// lerd0 is not up. Write the baseline first so .tld resolves whenever a link is
+	// up, which is what lerd promised before lerd0 existed. A fresh host has nothing
+	// to fall back to otherwise, and a host that can never build the link keeps this.
+	want := resolvedDropinFor(tld)
 	if !isFileContent(dropin, []byte(want)) {
 		feedback.Sudo("Configuring systemd-resolved for ." + tld + " DNS resolution")
 		if err := sudoWriteFile(dropin, []byte(want), 0644); err != nil {
@@ -691,7 +698,10 @@ func setupSystemdResolved() error {
 
 	// lerd0 carries the route now, which makes the drop-in not merely redundant but
 	// harmful: as a global server it is a catch-all, so offline every ordinary name
-	// goes to lerd-dns and out to an upstream that is not there, hanging ~20s.
+	// goes to lerd-dns and out to an upstream that is not there, hanging ~20s. Remove
+	// it, then immediately put the route back on lerd0, which the restart flushed. If
+	// that reapply fails the next start finds lerd0 unhealthy and rewrites the
+	// baseline, so the host is never stranded for longer than one watcher tick.
 	feedback.Sudo("Removing the superseded systemd-resolved drop-in")
 	if err := exec.Command("sudo", "rm", "-f", dropin).Run(); err != nil {
 		return fmt.Errorf("removing superseded resolved drop-in: %w", err)
@@ -699,7 +709,6 @@ func setupSystemdResolved() error {
 	if err := exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run(); err != nil {
 		return fmt.Errorf("restarting systemd-resolved after removing the drop-in: %w", err)
 	}
-	// That restart drops per-link config, so put the route back on lerd0.
 	if err := ensureDummyLinkRunning(tld); err != nil {
 		return fmt.Errorf("reapplying the .%s route after restarting resolved: %w", tld, err)
 	}
@@ -907,6 +916,8 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 755 /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
@@ -922,8 +933,13 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart lerd-dns-link.service\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl reload NetworkManager\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection delete lerd-dns\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n",
-		user, user, user, user, user, user, user, user, user, user, user,
-		user, user, user, user, user, user, user, user, user, user,
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl disable --now lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/ip link del lerd0\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n",
+		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }
