@@ -17,6 +17,12 @@ import (
 func phpVersionTestSite(t *testing.T, tweak func(*config.Site)) *config.Site {
 	t.Helper()
 	tmp := t.TempDir()
+	// HOME too, not just XDG: the launchd/systemd unit for the fpm service is
+	// written under os.UserHomeDir() (~/Library/LaunchAgents on macOS), which
+	// reads $HOME rather than the XDG dirs. Without this the version switch
+	// clobbers the real service files with a fake-podman path from this temp
+	// tree, breaking the developer's own lerd install once the tree is cleaned up.
+	t.Setenv("HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	fakePodmanOnPath(t)
