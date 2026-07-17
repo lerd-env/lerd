@@ -198,11 +198,21 @@ A route on your machine (usually a VPN) overlaps Podman's default `10.x` pool. C
 Symptom: nothing resolves (`Could not resolve host: cache.nixos.org`), often right after a lerd command or reboot, and possibly blocking `nixos-rebuild`. This is lerd's imperative DNS setup. Recover at runtime:
 
 ```bash
-# Remove lerd's resolver hooks
-sudo rm -f /etc/systemd/resolved.conf.d/lerd.conf \
+# Take down lerd's .test link (it carries the ~test route)
+sudo systemctl disable --now lerd-dns-link.service
+sudo ip link del lerd0 2>/dev/null
+
+# Remove lerd's resolver hooks. lerd-fallback.conf matters most here: it turns off
+# systemd-resolved's fallback servers, so leaving it behind keeps you with no
+# safety net while you are trying to recover.
+sudo rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf \
+           /etc/systemd/resolved.conf.d/lerd.conf \
+           /etc/systemd/system/lerd-dns-link.service \
+           /etc/NetworkManager/conf.d/lerd-dns-link.conf \
            /etc/NetworkManager/conf.d/lerd.conf \
            /etc/NetworkManager/dnsmasq.d/lerd.conf \
            /etc/NetworkManager/dispatcher.d/99-lerd-dns
+sudo systemctl daemon-reload
 
 # Reset and restart whichever resolver you run
 sudo resolvectl revert <iface>          # e.g. enp6s0; ignore errors if resolved is off

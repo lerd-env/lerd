@@ -24,6 +24,7 @@ import (
 	"github.com/geodro/lerd/internal/shims"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // quadletImage reads the Image= value from an installed quadlet file.
@@ -691,12 +692,19 @@ func runStart(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  WARN: %v\n", err)
 	}
 
-	// Refresh the sudoers drop-in before reapplying DNS config. A release that
-	// adds a privileged step ships new grants, and only InstallSudoers writes
-	// them, so a host that upgraded the binary without re-running install would
-	// otherwise reach ConfigureResolver without them. Content-hashed, so this is
-	// a silent no-op unless the grants actually changed.
-	dns.InstallSudoers() //nolint:errcheck
+	// Refresh the sudoers drop-in before reapplying DNS config, but only where a
+	// password prompt can be answered. A release that adds a privileged step ships
+	// new grants, and writing /etc/sudoers.d/lerd needs a real authentication:
+	// granting `tee` on sudoers.d would itself be an escalation, so it can never be
+	// passwordless. Headless (lerd-ui driving a start), sudo has no tty and the
+	// write just fails, so we skip it and let ConfigureResolver report what is
+	// missing rather than burying a prompt no one can see. Content-hashed, so on an
+	// unchanged drop-in this is a no-op either way.
+	if stdinIsInteractive() {
+		if err := dns.InstallSudoers(); err != nil {
+			fmt.Printf("  WARN: refreshing DNS sudoers rule: %v\n", err)
+		}
+	}
 
 	// Re-apply DNS routing so .test resolves via lerd-dns on every start.
 	// resolvectl settings are ephemeral and reset on reboot; the NM dispatcher
@@ -1331,4 +1339,12 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	stopPodmanMachine()
 
 	return nil
+}
+
+// stdinIsInteractive reports whether a password prompt could actually be
+// answered. term.IsTerminal rather than a ModeCharDevice test: /dev/null is a
+// character device too, so the cheaper check calls a systemd service's stdin
+// interactive and would have us prompt into the void.
+func stdinIsInteractive() bool {
+	return term.IsTerminal(int(os.Stdin.Fd()))
 }

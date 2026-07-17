@@ -57,7 +57,7 @@ type probeFns struct {
 	dnsmasqAnswer    func(tld string) (answer string, err error)
 	resolverHookup   func() (kind string, exists bool, path string)
 	interfaceRouting func(tld string) (interfaceName string, has5300 bool, hasTLD bool, err error)
-	dummyLinkRouting func() (present bool, routed bool)
+	dummyLinkRouting func(tld string) (present bool, routed bool)
 	systemLookup     func(tld string) (addrs []string, err error)
 	vpnActive        func() bool
 }
@@ -66,16 +66,17 @@ type probeFns struct {
 // NetworkManager's own dnsmasq resolves .test without resolved and needs no link,
 // and macOS routes .test through /etc/resolver.
 const (
-	nmDispatcherKind = "NetworkManager dispatcher"
-	resolvedLinkKind = "systemd-resolved link"
-	nmDnsmasqKind    = "NetworkManager dnsmasq"
-	macOSKind        = "macOS native dnsmasq"
+	nmDispatcherKind   = "NetworkManager dispatcher"
+	resolvedLinkKind   = "systemd-resolved link"
+	resolvedDropinKind = "systemd-resolved drop-in"
+	nmDnsmasqKind      = "NetworkManager dnsmasq"
+	macOSKind          = "macOS native dnsmasq"
 )
 
 // usesDummyLink reports whether a resolver hookup relies on lerd0 for offline
 // .test resolution.
 func usesDummyLink(kind string) bool {
-	return kind == nmDispatcherKind || kind == resolvedLinkKind
+	return kind == nmDispatcherKind || kind == resolvedLinkKind || kind == resolvedDropinKind
 }
 
 // Diagnose walks the DNS chain top to bottom and returns a structured
@@ -245,7 +246,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	// why it's worth saying out loud here rather than leaving them to find it on a
 	// train.
 	if runtime.GOOS == "linux" && usesDummyLink(kind) && p.dummyLinkRouting != nil {
-		switch present, routed := p.dummyLinkRouting(); {
+		switch present, routed := p.dummyLinkRouting(tld); {
 		case !present:
 			d.Steps = append(d.Steps, Step{
 				Name:   "offline ." + tld + " route",
@@ -356,12 +357,12 @@ func defaultProbes() probeFns {
 
 // defaultDummyLinkRouting reports whether lerd0 exists and still carries the
 // .test route to lerd-dns.
-func defaultDummyLinkRouting() (bool, bool) {
+func defaultDummyLinkRouting(tld string) (bool, bool) {
 	out, err := exec.Command("resolvectl", "status", lerdDummyIface).Output()
 	if err != nil {
 		return false, false
 	}
-	return parseDummyLinkRouting(string(out))
+	return parseDummyLinkRouting(string(out), tld)
 }
 
 // parseDummyLinkRouting reads `resolvectl status lerd0` output. Presence comes
@@ -370,11 +371,11 @@ func defaultDummyLinkRouting() (bool, bool) {
 // report a deleted link as present-but-unrouted and send the user chasing a
 // routing problem on an interface that isn't there. A known link always prints a
 // "Link N (lerd0)" header; a missing one prints nothing at all.
-func parseDummyLinkRouting(output string) (present bool, routed bool) {
+func parseDummyLinkRouting(output, tld string) (present bool, routed bool) {
 	if !strings.Contains(output, "("+lerdDummyIface+")") {
 		return false, false
 	}
-	return true, strings.Contains(output, "127.0.0.1:5300") && strings.Contains(output, "~test")
+	return true, strings.Contains(output, "127.0.0.1:5300") && strings.Contains(output, "~"+tld)
 }
 
 // serviceActive reports whether the lerd-dns service unit is active. It is a
@@ -465,8 +466,11 @@ func defaultResolverHookup() (string, bool, string) {
 	for _, h := range []struct{ kind, path string }{
 		{nmDispatcherKind, "/etc/NetworkManager/dispatcher.d/99-lerd-dns"},
 		{nmDnsmasqKind, "/etc/NetworkManager/dnsmasq.d/lerd.conf"},
-		// No NetworkManager: lerd0 alone carries .test, so its unit is the hookup.
+		// No NetworkManager: lerd0 alone carries .tld, so its unit is the hookup.
 		{resolvedLinkKind, lerdLinkUnit},
+		// Last: a host that has not re-run setup since the link landed still
+		// resolves through this, and reporting "no hookup" at it would be a lie.
+		{resolvedDropinKind, "/etc/systemd/resolved.conf.d/lerd.conf"},
 	} {
 		if _, err := os.Stat(h.path); err == nil {
 			return h.kind, true, h.path

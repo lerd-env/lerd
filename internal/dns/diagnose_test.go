@@ -18,7 +18,7 @@ func fakeProbes() probeFns {
 		dnsmasqAnswer:    func(string) (string, error) { return "127.0.0.1", nil },
 		resolverHookup:   func() (string, bool, string) { return "drop-in", true, "/etc/x" },
 		interfaceRouting: func(string) (string, bool, bool, error) { return "eth0", true, true, nil },
-		dummyLinkRouting: func() (bool, bool) { return true, true },
+		dummyLinkRouting: func(string) (bool, bool) { return true, true },
 		systemLookup:     func(string) ([]string, error) { return []string{"127.0.0.1"}, nil },
 		vpnActive:        func() bool { return false },
 	}
@@ -320,7 +320,7 @@ func TestDiagnose_dummyLinkMissingWarnsAndContinues(t *testing.T) {
 		t.Skip("lerd0 is provisioned on Linux only")
 	}
 	p := nmProbes()
-	p.dummyLinkRouting = func() (bool, bool) { return false, false }
+	p.dummyLinkRouting = func(string) (bool, bool) { return false, false }
 	d := diagnose("test", p)
 
 	step := findStep(d, "offline .test route")
@@ -348,7 +348,7 @@ func TestDiagnose_dummyLinkPresentButUnroutedWarns(t *testing.T) {
 		t.Skip("lerd0 is provisioned on Linux only")
 	}
 	p := nmProbes()
-	p.dummyLinkRouting = func() (bool, bool) { return true, false }
+	p.dummyLinkRouting = func(string) (bool, bool) { return true, false }
 	d := diagnose("test", p)
 
 	step := findStep(d, "offline .test route")
@@ -368,7 +368,7 @@ func TestDiagnose_dummyLinkPresentButUnroutedWarns(t *testing.T) {
 func TestDiagnose_dummyLinkRungSkippedOffNMPath(t *testing.T) {
 	p := fakeProbes() // resolverHookup returns "drop-in", not the NM dispatcher
 	called := false
-	p.dummyLinkRouting = func() (bool, bool) { called = true; return false, false }
+	p.dummyLinkRouting = func(string) (bool, bool) { called = true; return false, false }
 	d := diagnose("test", p)
 
 	if called {
@@ -417,7 +417,7 @@ func TestDefaultDummyLinkRouting_parsesPresenceFromStdout(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			present, routed := parseDummyLinkRouting(tc.stdout)
+			present, routed := parseDummyLinkRouting(tc.stdout, "test")
 			if present != tc.present || routed != tc.routed {
 				t.Errorf("got (present=%v routed=%v), want (present=%v routed=%v)",
 					present, routed, tc.present, tc.routed)
@@ -435,6 +435,7 @@ func TestUsesDummyLink_bothResolvedPaths(t *testing.T) {
 	for kind, want := range map[string]bool{
 		"NetworkManager dispatcher": true,
 		"systemd-resolved link":     true,
+		"systemd-resolved drop-in":  true,
 		"NetworkManager dnsmasq":    false,
 		"macOS native dnsmasq":      false,
 		"":                          false,
@@ -455,7 +456,7 @@ func TestDiagnose_dummyLinkRungRunsOnResolvedLinkPath(t *testing.T) {
 	p.resolverHookup = func() (string, bool, string) {
 		return resolvedLinkKind, true, "/etc/systemd/system/lerd-dns-link.service"
 	}
-	p.dummyLinkRouting = func() (bool, bool) { return false, false }
+	p.dummyLinkRouting = func(string) (bool, bool) { return false, false }
 	d := diagnose("test", p)
 
 	step := findStep(d, "offline .test route")

@@ -98,7 +98,7 @@ If it ever goes missing, `lerd doctor` reports it under the `offline .test route
 sudo systemctl restart lerd-dns-link.service
 ```
 
-`lerd uninstall` removes the interface, its service, and the NetworkManager rule. To remove it without uninstalling lerd, use `lerd dns disable`, which turns off lerd's DNS management entirely.
+`lerd uninstall` removes the interface, its service, and the NetworkManager rule. To remove it without uninstalling lerd, use `lerd dns:disable`, which turns off lerd's DNS management entirely.
 :::
 
 ::: details DNS shows "Degraded" while connected to a VPN

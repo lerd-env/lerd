@@ -80,24 +80,26 @@ FallbackDNS=
 // local route it installs cannot shadow a host the user actually needs to reach.
 const lerdDummyAddr = "192.0.2.1/32"
 
-// lerdLinkUnitContent creates lerd0 and puts the .test route on it. Ordering
-// after systemd-resolved means the resolvectl calls land on a resolved that is
-// ready to keep them. Commands run through /bin/sh so PATH resolves ip and
-// resolvectl wherever the distro puts them.
-const lerdLinkUnitContent = `[Unit]
-Description=lerd .test DNS link
+// lerdLinkUnitContentFor renders the unit that creates lerd0 and puts the .tld
+// route on it. Ordering after systemd-resolved means the resolvectl calls land on
+// a resolved that is ready to keep them. Commands run through /bin/sh so PATH
+// resolves ip and resolvectl wherever the distro puts them.
+func lerdLinkUnitContentFor(tld string) string {
+	return fmt.Sprintf(`[Unit]
+Description=lerd .%[1]s DNS link
 After=systemd-resolved.service
 Wants=systemd-resolved.service
 
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/sh -c 'ip link show lerd0 >/dev/null 2>&1 || ip link add lerd0 type dummy; ip addr replace 192.0.2.1/32 dev lerd0; ip link set lerd0 up; resolvectl dns lerd0 127.0.0.1:5300; resolvectl domain lerd0 ~test'
-ExecStop=/bin/sh -c 'ip link del lerd0 2>/dev/null || true'
+ExecStart=/bin/sh -c 'ip link show %[2]s >/dev/null 2>&1 || ip link add %[2]s type dummy; ip addr replace %[3]s dev %[2]s; ip link set %[2]s up; resolvectl dns %[2]s 127.0.0.1:5300; resolvectl domain %[2]s ~%[1]s'
+ExecStop=/bin/sh -c 'ip link del %[2]s 2>/dev/null || true'
 
 [Install]
 WantedBy=multi-user.target
-`
+`, tld, lerdDummyIface, lerdDummyAddr)
+}
 
 // nmDispatcherScript is installed at /etc/NetworkManager/dispatcher.d/99-lerd-dns.
 // On systems with NetworkManager + systemd-resolved, NM manages resolved via DBus and
@@ -415,8 +417,8 @@ func ConfigureResolver() error {
 // resolved keeps per-link config across its own restarts (it stashes it under
 // /run/systemd/resolve/netif) but not across a reboot, and nothing stops a user
 // deleting the link by hand, so this is checked on every start rather than assumed.
-var dummyLinkHealthy = func() bool {
-	present, routed := defaultDummyLinkRouting()
+var dummyLinkHealthy = func(tld string) bool {
+	present, routed := defaultDummyLinkRouting(tld)
 	return present && routed
 }
 
@@ -427,17 +429,17 @@ var dummyLinkUnitEnabled = func() bool {
 	return exec.Command("systemctl", "is-enabled", "--quiet", lerdLinkUnitName).Run() == nil
 }
 
-// dummyLinkGrantsLive reports whether the sudoers drop-in already grants the
-// commands setupDummyLink needs, without prompting for anything.
+// dummyLinkGrantsLive reports whether the drop-in grants what setupDummyLink
+// needs, passwordless, without prompting for anything.
 //
-// This exists for the upgrade case. The drop-in is only rewritten by
-// InstallSudoers, so a host that took a new binary without re-running install
-// still has the old grants, and the watcher reapplies DNS config headless where
-// a sudo password prompt has no one to answer it. Probing first turns that hang
-// into a skip. `lerd start` refreshes the drop-in before it gets here, so the
-// normal upgrade path is granted by the time this runs.
+// It runs a granted command rather than asking `sudo -l` whether the user may run
+// one. `sudo -n -l <cmd>` answers "may george run this at all", which is yes for
+// any user in the sudo/wheel group even with no lerd grants whatsoever, so it can
+// never fail on a normal desktop. Running `mkdir -p` on a directory that already
+// exists is granted, idempotent, and answers the question that matters: does this
+// go through without a password.
 var dummyLinkGrantsLive = func() bool {
-	return exec.Command("sudo", "-n", "-l", "/usr/bin/systemctl", "restart", lerdLinkUnitName).Run() == nil
+	return exec.Command("sudo", "-n", "mkdir", "-p", "/etc/systemd/system").Run() == nil
 }
 
 // dummyLinkNMRuleNeeded reports whether the NetworkManager unmanaged rule has to
@@ -457,12 +459,9 @@ func dummyLinkNMRuleNeeded(withNM bool) bool {
 // withNM keeps NetworkManager out of the link's way. It is false when NM isn't
 // running, where writing the rule would mean creating an /etc/NetworkManager
 // tree on a host that has no NetworkManager at all.
-func setupDummyLink(withNM bool) error {
+func setupDummyLink(withNM bool, tld string) error {
 	if !dummyLinkGrantsLive() {
-		// Online .test still works via the per-interface route, so this is a
-		// degradation, not a failure: warn and carry on rather than fail the start.
-		feedback.Line("WARN: skipping offline .test link setup, sudoers rule is out of date. Run `lerd install` to refresh it.")
-		return nil
+		return fmt.Errorf("sudoers drop-in is out of date, run `lerd install` to refresh it")
 	}
 	// Migrate hosts that got lerd0 as an NM keyfile connection from a pre-release
 	// build. Deleting the connection drops the link; the unit below recreates it.
@@ -471,11 +470,12 @@ func setupDummyLink(withNM bool) error {
 		exec.Command("sudo", "rm", "-f", lerdDummyKeyfile).Run()                   //nolint:errcheck
 	}
 
-	unitChanged := !isFileContent(lerdLinkUnit, []byte(lerdLinkUnitContent))
+	unitContent := lerdLinkUnitContentFor(tld)
+	unitChanged := !isFileContent(lerdLinkUnit, []byte(unitContent))
 	nmChanged := dummyLinkNMRuleNeeded(withNM)
 	fallbackChanged := !isFileContent(lerdFallbackDropin, []byte(lerdFallbackDropinContent))
 	if unitChanged || nmChanged || fallbackChanged {
-		feedback.Sudo("Configuring an always-up link so .test resolves offline")
+		feedback.Sudo("Configuring an always-up link so ." + tld + " resolves offline")
 	}
 	if nmChanged {
 		if err := sudoWriteFile(lerdNMUnmanaged, []byte(lerdNMUnmanagedContent), 0644); err != nil {
@@ -484,7 +484,7 @@ func setupDummyLink(withNM bool) error {
 		exec.Command("sudo", "systemctl", "reload", "NetworkManager").Run() //nolint:errcheck
 	}
 	if unitChanged {
-		if err := sudoWriteFile(lerdLinkUnit, []byte(lerdLinkUnitContent), 0644); err != nil {
+		if err := sudoWriteFile(lerdLinkUnit, []byte(unitContent), 0644); err != nil {
 			return fmt.Errorf("writing lerd-dns-link unit: %w", err)
 		}
 		exec.Command("sudo", "systemctl", "daemon-reload").Run() //nolint:errcheck
@@ -504,24 +504,30 @@ func setupDummyLink(withNM bool) error {
 	// identical, and that is exactly when the link may be missing (fresh boot, or
 	// someone removed it). Gating on a config change would leave lerd0 down with no
 	// way back short of a reboot.
-	ensureDummyLinkRunning()
-	return nil
+	return ensureDummyLinkRunning(tld)
 }
 
 // ensureDummyLinkRunning enables the link unit for the next boot and starts it if
-// lerd0 isn't currently carrying the route.
+// lerd0 isn't currently carrying the route. It reports whether lerd0 ended up
+// actually carrying it: callers rely on the link before removing the older
+// hookups it replaces, so a silent failure here would strand a host with neither.
 //
 // Enablement is checked separately from health rather than folded into one
 // `enable --now`: enabled is what brings lerd0 back after a reboot, so a link
 // that merely happens to be up right now must not stop us enabling the unit, or
 // it survives until the next boot and then silently disappears.
-func ensureDummyLinkRunning() {
+func ensureDummyLinkRunning(tld string) error {
 	if !dummyLinkUnitEnabled() {
 		exec.Command("sudo", "systemctl", "enable", "--now", lerdLinkUnitName).Run() //nolint:errcheck
 	}
-	if !dummyLinkHealthy() {
+	if !dummyLinkHealthy(tld) {
 		exec.Command("sudo", "systemctl", "restart", lerdLinkUnitName).Run() //nolint:errcheck
 	}
+	if !dummyLinkHealthy(tld) {
+		return fmt.Errorf("%s is not carrying the ~%s route (check: systemctl status %s)",
+			lerdDummyIface, tld, lerdLinkUnitName)
+	}
+	return nil
 }
 
 // setupNMWithResolved handles Ubuntu-style: NM manages systemd-resolved via DBUS.
@@ -552,7 +558,7 @@ func setupNMWithResolved() error {
 		rmCmd.Run() //nolint:errcheck
 	}
 
-	if err := setupDummyLink(true); err != nil {
+	if err := setupDummyLink(true, ConfiguredTLD()); err != nil {
 		return err
 	}
 
@@ -622,19 +628,27 @@ func setupNMWithResolved() error {
 // of failing at once. lerd0 carries the same route scoped to ~test only, which
 // fixes both, so the drop-in is removed rather than written.
 func setupSystemdResolved() error {
-	// Remove the global drop-in from installs that predate lerd0.
-	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
-	if _, err := os.Stat(dropin); err == nil {
-		feedback.Sudo("Configuring systemd-resolved for .test DNS resolution")
-		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
-		rmCmd.Stdin = os.Stdin
-		rmCmd.Stdout = os.Stdout
-		rmCmd.Stderr = os.Stderr
-		rmCmd.Run()                                                            //nolint:errcheck
-		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+	tld := ConfiguredTLD()
+
+	// Provision the link first, and only drop the legacy global drop-in once lerd0
+	// demonstrably carries the route. Removing first and creating second leaves a
+	// host with neither whenever provisioning fails, and the drop-in it supersedes
+	// at least resolves .tld while a link is up.
+	if err := setupDummyLink(false, tld); err != nil {
+		return err
 	}
 
-	return setupDummyLink(false)
+	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
+	if _, err := os.Stat(dropin); err != nil {
+		return nil
+	}
+	feedback.Sudo("Removing the superseded systemd-resolved drop-in")
+	if err := exec.Command("sudo", "rm", "-f", dropin).Run(); err != nil {
+		return fmt.Errorf("removing superseded resolved drop-in: %w", err)
+	}
+	exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+	// That restart drops per-link config, so put the route back on lerd0.
+	return ensureDummyLinkRunning(tld)
 }
 
 // setupNetworkManager configures NetworkManager's embedded dnsmasq.
@@ -699,7 +713,11 @@ func Teardown() {
 		disableCmd.Stderr = os.Stderr
 		disableCmd.Run() //nolint:errcheck
 	}
-	exec.Command("sudo", "ip", "link", "del", lerdDummyIface).Run() //nolint:errcheck
+	// Guarded: unguarded this prompts for a password to delete an interface that
+	// was never there, on every host that used a different resolver path.
+	if exec.Command("ip", "link", "show", lerdDummyIface).Run() == nil {
+		exec.Command("sudo", "ip", "link", "del", lerdDummyIface).Run() //nolint:errcheck
+	}
 
 	// The NM keyfile connection from a pre-release build, if this host ever ran one.
 	if _, err := os.Stat(lerdDummyKeyfile); err == nil {

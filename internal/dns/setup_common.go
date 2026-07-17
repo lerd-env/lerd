@@ -238,6 +238,20 @@ func sudoWriteFile(path string, content []byte, mode os.FileMode) error {
 	return nil
 }
 
+// DefaultTLD is what lerd serves when the config names no TLD.
+const DefaultTLD = "test"
+
+// ConfiguredTLD returns the TLD lerd serves. Everything that writes or reads a
+// .tld route has to agree on this: the dnsmasq address records, the lerd0 link
+// and the diagnostic that checks them. Hardcoding "test" in any one of them
+// silently breaks every user on a custom TLD.
+func ConfiguredTLD() string {
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.DNS.TLD != "" {
+		return cfg.DNS.TLD
+	}
+	return DefaultTLD
+}
+
 // WriteDnsmasqConfig writes the lerd dnsmasq config to the given directory,
 // auto-detecting the right target based on whether `lerd lan:expose` is on.
 //
@@ -368,9 +382,10 @@ func WriteDnsmasqConfigDual(dir, v4Target, v6Target string) error {
 			fmt.Fprintf(&sb, "server=%s\n", ip)
 		}
 	}
-	fmt.Fprintf(&sb, "address=/.test/%s\n", v4Target)
+	tld := ConfiguredTLD()
+	fmt.Fprintf(&sb, "address=/.%s/%s\n", tld, v4Target)
 	if v6Target != "" {
-		fmt.Fprintf(&sb, "address=/.test/%s\n", v6Target)
+		fmt.Fprintf(&sb, "address=/.%s/%s\n", tld, v6Target)
 	}
 
 	return os.WriteFile(filepath.Join(dir, "lerd.conf"), []byte(sb.String()), 0644)

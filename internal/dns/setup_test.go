@@ -249,11 +249,11 @@ func TestNMDispatcherScript_ignoresDummyLink(t *testing.T) {
 // menu, where switching it off silently breaks offline .test resolution.
 func TestLerdLinkUnit_shape(t *testing.T) {
 	assertContains(t, lerdNMUnmanagedContent, "unmanaged-devices=interface-name:lerd0")
-	assertContains(t, lerdLinkUnitContent, "ip link add lerd0 type dummy")
-	assertContains(t, lerdLinkUnitContent, "resolvectl domain lerd0 ~test")
-	assertContains(t, lerdLinkUnitContent, "After=systemd-resolved.service")
-	assertContains(t, lerdLinkUnitContent, "WantedBy=multi-user.target")
-	assertContains(t, lerdLinkUnitContent, "ip link del lerd0")
+	assertContains(t, lerdLinkUnitContentFor("test"), "ip link add lerd0 type dummy")
+	assertContains(t, lerdLinkUnitContentFor("test"), "resolvectl domain lerd0 ~test")
+	assertContains(t, lerdLinkUnitContentFor("test"), "After=systemd-resolved.service")
+	assertContains(t, lerdLinkUnitContentFor("test"), "WantedBy=multi-user.target")
+	assertContains(t, lerdLinkUnitContentFor("test"), "ip link del lerd0")
 }
 
 // systemd-resolved only gives a link a DNS scope once it carries a routable
@@ -263,7 +263,7 @@ func TestLerdLinkUnit_shape(t *testing.T) {
 // /32 local route can't shadow a host the user needs to reach: RFC 5737
 // TEST-NET-1 (192.0.2.0/24) is reserved for documentation and fits exactly.
 func TestLerdLinkUnit_carriesReservedAddress(t *testing.T) {
-	assertContains(t, lerdLinkUnitContent, "ip addr replace "+lerdDummyAddr+" dev lerd0")
+	assertContains(t, lerdLinkUnitContentFor("test"), "ip addr replace "+lerdDummyAddr+" dev lerd0")
 	if !strings.HasPrefix(lerdDummyAddr, "192.0.2.") {
 		t.Errorf("lerd0 address %q must come from RFC 5737 TEST-NET-1, which never appears on a real network", lerdDummyAddr)
 	}
@@ -275,7 +275,7 @@ func TestLerdLinkUnit_carriesReservedAddress(t *testing.T) {
 // lerd0 must carry ~test only, never ~.: with ~. every non-.test query offline
 // would be funnelled through lerd-dns into a then-unreachable upstream and stall.
 func TestLerdLinkUnit_routesTestDomainOnly(t *testing.T) {
-	if strings.Contains(lerdLinkUnitContent, "~test ~.") {
+	if strings.Contains(lerdLinkUnitContentFor("test"), "~test ~.") {
 		t.Error("lerd0 must carry ~test only (~. would funnel all DNS through lerd-dns offline)")
 	}
 }
@@ -522,8 +522,8 @@ func TestSetupDummyLink_skipsWhenSudoersGrantsAreStale(t *testing.T) {
 	probed := false
 	dummyLinkGrantsLive = func() bool { probed = true; return false }
 
-	if err := setupDummyLink(true); err != nil {
-		t.Fatalf("setupDummyLink() = %v, want nil: a stale drop-in is a warning, not a start failure", err)
+	if err := setupDummyLink(true, "test"); err == nil {
+		t.Fatal("setupDummyLink must report an error when the grants are stale, or callers remove the hookup it was meant to replace")
 	}
 	if !probed {
 		t.Error("setupDummyLink must probe the sudoers grants before running any privileged step")
@@ -547,12 +547,12 @@ func TestEnsureDummyLinkRunning_checksEnablementEvenWhenLinkAlreadyUp(t *testing
 	origHealthy, origEnabled := dummyLinkHealthy, dummyLinkUnitEnabled
 	t.Cleanup(func() { dummyLinkHealthy, dummyLinkUnitEnabled = origHealthy, origEnabled })
 
-	dummyLinkHealthy = func() bool { return true } // link is up right now
+	dummyLinkHealthy = func(string) bool { return true } // link is up right now
 	askedEnabled := false
 	// Report enabled so no privileged command runs during the test.
 	dummyLinkUnitEnabled = func() bool { askedEnabled = true; return true }
 
-	ensureDummyLinkRunning()
+	ensureDummyLinkRunning("test")
 
 	if !askedEnabled {
 		t.Error("enablement must be checked even when the link is already healthy, or lerd0 is gone after the next reboot")
@@ -598,4 +598,40 @@ func TestTeardown_removesFallbackDropin(t *testing.T) {
 	if !strings.Contains(teardown, "lerdFallbackDropin") {
 		t.Error("Teardown must remove the fallback drop-in, or uninstalling lerd leaves the system's fallback DNS off for good")
 	}
+}
+
+// The link and everything that reads it must agree on the TLD. lerd supports a
+// custom dns.tld, and hardcoding "test" in the unit means lerd0 carries a route
+// for a domain the user does not use: offline .tld resolution silently does
+// nothing for them, and the diagnostic that checks it warns forever.
+func TestLerdLinkUnit_usesTheConfiguredTLD(t *testing.T) {
+	unit := lerdLinkUnitContentFor("dev")
+	assertContains(t, unit, "resolvectl domain lerd0 ~dev")
+	assertContains(t, unit, "Description=lerd .dev DNS link")
+	if strings.Contains(unit, "~test") {
+		t.Error("the unit must carry the configured TLD, not a hardcoded ~test")
+	}
+}
+
+// The grants probe must answer "does this go through without a password", not
+// "is george allowed to sudo at all". `sudo -n -l <cmd>` answers the second, and
+// on any normal desktop (george ALL=(ALL) ALL) it succeeds even with no lerd
+// grants at all, so the guard could never fire where it was needed.
+func TestDummyLinkGrantsLive_runsAGrantedCommandRatherThanAskingSudoL(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	body, _, found := strings.Cut(string(src), "// dummyLinkNMRuleNeeded")
+	if !found {
+		t.Fatal("could not isolate the probe")
+	}
+	_, probe, found := strings.Cut(body, "var dummyLinkGrantsLive")
+	if !found {
+		t.Fatal("dummyLinkGrantsLive not found")
+	}
+	if strings.Contains(probe, `"-l"`) {
+		t.Error(`the probe must not use "sudo -n -l": that reports whether the user MAY run the command, which is true for any sudoer regardless of the NOPASSWD grants`)
+	}
+	assertContains(t, probe, `"sudo", "-n"`)
 }
