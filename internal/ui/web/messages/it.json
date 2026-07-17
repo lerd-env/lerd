@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Queste immagini possono essere rimosse per liberare circa {size}:",
   "dashboard_disk_modalDeepNote": "Questa pulizia profonda rimuove anche le immagini penzolanti senza tag lasciate da altri carichi di lavoro podman su questa macchina. Non tocca mai i volumi di dati denominati.",
   "dashboard_disk_modalConfirm": "Recupera",
-  "dashboard_disk_cleaning": "Recupero in corso…"
+  "dashboard_disk_cleaning": "Recupero in corso…",
+  "system_php_extensionsTab": "Estensioni",
+  "system_php_ext_declared": "Le tue estensioni",
+  "system_php_ext_packages": "I tuoi pacchetti",
+  "system_php_ext_modules": "Moduli caricati da PHP ({count})",
+  "system_php_ext_modulesHelp": "Riportato da php -m nell'immagine PHP {version}.",
+  "system_php_ext_notBuilt": "PHP {version} non ha ancora un'immagine. Esegui 'lerd php:rebuild {version}' per costruirla.",
+  "system_php_ext_needsRebuild": "Questa immagine è precedente alle tue estensioni e pacchetti. Esegui 'lerd php:rebuild {version}' per aggiornarla.",
+  "system_php_ext_cannot": "non è stato costruito su PHP {version}; una ricostruzione non cambierà nulla",
+  "system_php_ext_none": "Non hai aggiunto estensioni o pacchetti personalizzati.",
+  "system_php_ext_manageHelp": "Gestiscili con lerd php:ext e lerd php:pkg. Si applicano a ogni versione di PHP."
 }

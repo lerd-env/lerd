@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -48,118 +49,152 @@ func phpPkgVersion(flagVer string) (string, error) {
 func newPhpPkgAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <package...>",
-		Short: "Add Alpine packages to the FPM image and rebuild",
-		Args:  cobra.MinimumNArgs(1),
+		Short: "Add Alpine packages to every PHP-FPM image",
+		Long: "Adds packages to your declared set, which applies to every PHP image lerd builds.\n" +
+			"The version you are on is rebuilt now; other versions rebuild the next time they are used.",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			pkgs, err := podman.ParseApkDeps(strings.Join(args, " "))
 			if err != nil {
 				return err
 			}
-			flagVer, _ := cmd.Flags().GetString("php")
-			version, err := phpPkgVersion(flagVer)
+			if err := rejectPerVersionFlag(cmd); err != nil {
+				return err
+			}
+			version, err := phpPkgVersion("")
 			if err != nil {
 				return err
 			}
 
-			cfg, err := config.LoadGlobal()
-			if err != nil {
-				return err
-			}
-			for _, p := range pkgs {
-				cfg.AddPackage(version, p)
-			}
-			if err := config.SaveGlobal(cfg); err != nil {
+			// Only what this command actually added is reverted on failure, so a
+			// bad name in the list cannot rip out a package that was already
+			// declared and working.
+			var added []string
+			if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+				for _, p := range pkgs {
+					if !slices.Contains(c.GetPackages(), p) {
+						c.AddPackage(p)
+						added = append(added, p)
+					}
+				}
+			}); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
 			feedback.Begin()
-			feedback.Line("adding packages to PHP " + version + ": " + feedback.Val(strings.Join(pkgs, " ")))
-			if err := podman.RebuildFPMImage(version, false); err != nil {
-				// A bad package name fails the build; revert so a broken entry
-				// doesn't linger in config and poison future rebuilds.
-				for _, p := range pkgs {
-					cfg.RemovePackage(version, p)
+			feedback.Line("adding packages to every PHP version: " + feedback.Val(strings.Join(pkgs, " ")))
+			// Re-reads rather than saving the pre-build copy: the rebuild below
+			// records what each version realised while this command waits.
+			revert := func() {
+				if len(added) == 0 {
+					return
 				}
-				if saveErr := config.SaveGlobal(cfg); saveErr != nil {
+				if saveErr := config.UpdateGlobal(func(c *config.GlobalConfig) {
+					for _, p := range added {
+						c.RemovePackage(p)
+					}
+				}); saveErr != nil {
 					feedback.Warn("reverting config: %v", saveErr)
 				}
+			}
+			if err := podman.RebuildFPMImage(version, false); err != nil {
+				revert()
 				return fmt.Errorf("rebuild failed (config reverted): %w", err)
+			}
+			// The build installs packages tolerantly so the legacy images survive
+			// a name they do not have, so a typo would otherwise report success.
+			missing, err := podman.VerifyPackagesInstalled(version, pkgs)
+			if err != nil {
+				return err
+			}
+			if len(missing) > 0 {
+				revert()
+				return fmt.Errorf("packages not installed on PHP %s (config reverted): %s\ncheck the names exist in Alpine's repositories", version, strings.Join(missing, ", "))
 			}
 
 			applyPHPImageChange(version)
 			feedback.Done("packages installed for PHP " + version)
+			reportOtherVersionsStale(version)
 			return nil
 		},
 	}
-	cmd.Flags().String("php", "", "PHP version (defaults to the current project or global default)")
+	cmd.Flags().String("php", "", "deprecated: packages now apply to every PHP version")
+	_ = cmd.Flags().MarkDeprecated("php", "packages now apply to every PHP version")
 	return cmd
 }
 
 func newPhpPkgRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <package...>",
-		Short: "Remove extra Alpine packages and rebuild",
+		Short: "Remove extra Alpine packages from every PHP-FPM image",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			flagVer, _ := cmd.Flags().GetString("php")
-			version, err := phpPkgVersion(flagVer)
+			if err := rejectPerVersionFlag(cmd); err != nil {
+				return err
+			}
+			version, err := phpPkgVersion("")
 			if err != nil {
 				return err
 			}
-			cfg, err := config.LoadGlobal()
-			if err != nil {
-				return err
-			}
-			for _, p := range args {
-				cfg.RemovePackage(version, p)
-			}
-			if err := config.SaveGlobal(cfg); err != nil {
+			if err := config.UpdateGlobal(func(c *config.GlobalConfig) {
+				for _, p := range args {
+					c.RemovePackage(p)
+				}
+			}); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
 
 			feedback.Begin()
-			feedback.Line("removing packages from PHP " + version + ": " + feedback.Val(strings.Join(args, " ")))
+			feedback.Line("removing packages from every PHP version: " + feedback.Val(strings.Join(args, " ")))
 			if err := podman.RebuildFPMImage(version, false); err != nil {
 				return err
 			}
 			applyPHPImageChange(version)
 			feedback.Done("packages removed for PHP " + version)
+			reportOtherVersionsStale(version)
 			return nil
 		},
 	}
-	cmd.Flags().String("php", "", "PHP version (defaults to the current project or global default)")
+	cmd.Flags().String("php", "", "deprecated: packages now apply to every PHP version")
+	_ = cmd.Flags().MarkDeprecated("php", "packages now apply to every PHP version")
 	return cmd
 }
 
 func newPhpPkgListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "List extra Alpine packages configured for a PHP version",
+		Short: "List your extra Alpine packages and where they did not install",
 		Args:  cobra.NoArgs,
-		RunE: func(cmd *cobra.Command, _ []string) error {
-			flagVer, _ := cmd.Flags().GetString("php")
-			version, err := phpPkgVersion(flagVer)
-			if err != nil {
-				return err
-			}
+		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, err := config.LoadGlobal()
 			if err != nil {
 				return err
 			}
-			pkgs := cfg.GetPackages(version)
+			pkgs := cfg.GetPackages()
 			if len(pkgs) == 0 {
-				fmt.Printf("No extra packages configured for PHP %s.\n", version)
+				fmt.Println("No extra packages configured.")
 				return nil
 			}
-			fmt.Printf("Extra packages for PHP %s:\n", version)
+			fmt.Println("Declared, for every PHP version:")
 			for _, p := range pkgs {
 				fmt.Printf("  - %s\n", p)
 			}
+			printPerVersionStatus(cfg, packagesOf)
 			return nil
 		},
 	}
-	cmd.Flags().String("php", "", "PHP version (defaults to the current project or global default)")
 	return cmd
+}
+
+// rejectPerVersionFlag turns the old --php form into a teachable error, for the
+// same reason php:ext rejects its positional version.
+func rejectPerVersionFlag(cmd *cobra.Command) error {
+	v, _ := cmd.Flags().GetString("php")
+	if v == "" {
+		return nil
+	}
+	return fmt.Errorf("packages now apply to every PHP version, so --php is gone.\n"+
+		"Drop the flag, then run 'lerd php:rebuild %s' if you want that image rebuilt right away", v)
 }
 
 // restartFPMUnit restarts the FPM container for a PHP version after an image

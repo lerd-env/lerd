@@ -101,7 +101,7 @@ lerd npm install playwright
 lerd pest:browser install
 ```
 
-This adds `chromium` to that PHP version's shared FPM image (the same package mechanism as `lerd php:pkg`, so the container is not split off onto its own image), rebuilds it, downloads the Playwright browser registry into a persistent volume, and shims Playwright's glibc browser to the musl Chromium with `--no-sandbox`. It is safe to re-run, and you should re-run it after bumping the Playwright version in your project.
+This adds `chromium` to your declared package set (the same mechanism as `lerd php:pkg`, so it applies to every PHP image and the container is not split off onto its own image), rebuilds the current version, downloads the Playwright browser registry into a persistent volume, and shims Playwright's glibc browser to the musl Chromium with `--no-sandbox`. It is safe to re-run, and you should re-run it after bumping the Playwright version in your project.
 
 Check the setup at any time with `lerd pest:browser doctor`, and tear it back down with `lerd pest:browser remove` (un-bakes chromium and rebuilds; the cache volume is left intact):
 

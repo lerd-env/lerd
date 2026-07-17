@@ -224,6 +224,20 @@ func NeedsFPMRebuild(activeVersions []string) bool {
 	return false
 }
 
+// fpmImageCurrent reports whether an existing image was built from both the
+// current recipe and the current declared extension/package set. Existence
+// alone used to be enough, which is why a version's image could sit stale
+// forever: nothing rebuilt it when the user declared a new extension, and the
+// site that moved onto that version silently lost it. Mirrors the equivalent
+// check FrankenPHP already makes.
+func fpmImageCurrent(imageName, containerfileHash, customHash string) bool {
+	if execCommand(PodmanBin(), "image", "exists", imageName).Run() != nil {
+		return false
+	}
+	return imageLabelFn(imageName, fpmContainerfileHashLabel) == containerfileHash &&
+		imageLabelFn(imageName, fpmCustomSetHashLabel) == customHash
+}
+
 // imageLabel reads a single label from a local image. Returns "" on any
 // error (image missing, podman unreachable, label absent) so callers
 // treat that as "doesn't match" and fall back to a rebuild.
@@ -245,11 +259,12 @@ func imageLabel(image, key string) string {
 // fpmBuildArgs returns the `podman build` flags shared by both build
 // paths in buildFPMImage, before either appends the `-f <ctx>` tail.
 // Extracted so the load-bearing `--label` arg has unit-test coverage.
-func fpmBuildArgs(imageName, containerfileHash string, force bool) []string {
+func fpmBuildArgs(imageName, containerfileHash, customHash string, force bool) []string {
 	args := []string{
 		"build",
 		"-t", imageName,
 		"--label", fpmContainerfileHashLabel + "=" + containerfileHash,
+		"--label", fpmCustomSetHashLabel + "=" + customHash,
 	}
 	if force {
 		// Bypass layer cache so changes are fully applied. The old image
@@ -282,7 +297,7 @@ func BuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), cfg.GetPackages(version), os.Stdout)
+	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
 }
 
 // BuildFPMImageTo builds the PHP-FPM image writing output to w.
@@ -292,7 +307,7 @@ func BuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), cfg.GetPackages(version), w)
+	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
 }
 
 // RebuildFPMImage force-removes and rebuilds the PHP-FPM image for the given version.
@@ -302,7 +317,7 @@ func RebuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), cfg.GetPackages(version), os.Stdout)
+	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
 }
 
 // RebuildFPMImageTo force-rebuilds the PHP-FPM image writing output to w.
@@ -312,7 +327,7 @@ func RebuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(version), cfg.AllExtApkDeps(), cfg.GetPackages(version), w)
+	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
 }
 
 // baseContainerfileHash returns a 12-character SHA-256 prefix of the Containerfile
@@ -420,11 +435,17 @@ func pullErrLine(s string) string {
 func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) error {
 	imageName := FPMImageName(version)
 
-	if !force {
-		// Skip if image already exists
-		if execCommand(PodmanBin(), "image", "exists", imageName).Run() == nil {
-			return nil
-		}
+	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
+	// can detect drift even when the on-disk cache file is stale (the
+	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
+	canonicalHash, hashErr := ContainerfileHash()
+	if hashErr != nil {
+		return fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
+	}
+	customHash := customSetHash(customExts, extDeps, packages)
+
+	if !force && fpmImageCurrent(imageName, canonicalHash, customHash) {
+		return nil
 	}
 
 	fmt.Fprintf(w, "\n  Building PHP %s image...\n", version)
@@ -435,16 +456,8 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	}
 	defer os.RemoveAll(tmp)
 
-	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
-	// can detect drift even when the on-disk cache file is stale (the
-	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
-	canonicalHash, hashErr := ContainerfileHash()
-	if hashErr != nil {
-		return fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
-	}
-
 	var containerfile string
-	buildArgs := fpmBuildArgs(imageName, canonicalHash, force)
+	buildArgs := fpmBuildArgs(imageName, canonicalHash, customHash, force)
 
 	// Fast path: pull pre-built base and layer just mkcert CA + custom extensions on top.
 	if !local {
@@ -498,6 +511,7 @@ build:
 	if err := StoreFPMHash(); err != nil {
 		fmt.Fprintf(w, "  WARN: storing PHP-FPM image hash: %v\n", err)
 	}
+	RecordRealisedSet(version, customExts, packages)
 
 	fmt.Fprintf(w, "  PHP %s image built successfully.\n", version)
 	if OnImageRebuilt != nil {
@@ -608,6 +622,14 @@ func buildCustomExtBlock(exts []string, userDeps map[string][]string) string {
 // extra Alpine packages (lerd php:pkg) into the runtime stage, deduped and in a
 // stable order. Names are validated so a bad entry can't break out of the apk
 // command; invalid ones are dropped. Empty when there are no packages.
+//
+// Each package installs tolerantly, for the same reason the custom extension
+// block ends in "|| true": one declared set now reaches every version, and a
+// package that exists on the current images may not exist on the Alpine 3.16
+// legacy tier (7.4, 8.0). A single apk add of the whole list would fail those
+// builds entirely over one unavailable name. What actually landed is read back
+// off the built image afterwards (VerifyPackagesInstalled, RecordRealisedSet),
+// so tolerance here never becomes a silent success.
 func buildCustomPackagesBlock(packages []string) string {
 	seen := map[string]bool{}
 	var valid []string
@@ -622,8 +644,9 @@ func buildCustomPackagesBlock(packages []string) string {
 	if len(valid) == 0 {
 		return ""
 	}
-	block := "# User-requested extra packages (lerd php:pkg)\nRUN apk add --no-cache " +
-		strings.Join(valid, " ") + " && rm -rf /var/cache/apk/*\n"
+	block := "# User-requested extra packages (lerd php:pkg)\nRUN for p in " +
+		strings.Join(valid, " ") + "; do apk add --no-cache \"$p\" || true; done \\\n" +
+		"    && rm -rf /var/cache/apk/*\n"
 	// When chromium is present (the package lerd pest:browser install adds), pin
 	// Playwright's browser path to the persistent cache volume. `lerd test`/`lerd
 	// pest` exec with the host HOME, so without this Playwright would look under
@@ -638,17 +661,14 @@ func buildCustomPackagesBlock(packages []string) string {
 }
 
 // phpExtensionLoaded reports whether ext appears in `php -m` output (case-insensitive).
+// phpExtensionLoaded reports whether php -m lists ext. Both sides are
+// canonicalised because php -m prints display names: the extension installed as
+// "opcache" reports itself as "Zend OPcache", and a raw match failed it.
 func phpExtensionLoaded(moduleOutput, ext string) bool {
-	want := strings.ToLower(strings.TrimSpace(ext))
-	if want == "" {
+	if strings.TrimSpace(ext) == "" {
 		return false
 	}
-	for _, line := range strings.Split(moduleOutput, "\n") {
-		if strings.ToLower(strings.TrimSpace(line)) == want {
-			return true
-		}
-	}
-	return false
+	return phpModules(moduleOutput)[CanonicalExtension(ext)]
 }
 
 // VerifyExtensionLoaded checks that the freshly built FPM image for the given

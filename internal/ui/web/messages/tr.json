@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Bu görüntüler yaklaşık {size} boşaltmak için kaldırılabilir:",
   "dashboard_disk_modalDeepNote": "Bu derin temizlik, bu makinedeki diğer podman iş yüklerinden kalan etiketsiz sarkan görüntüleri de kaldırır. Adlandırılmış veri birimlerine asla dokunmaz.",
   "dashboard_disk_modalConfirm": "Geri kazan",
-  "dashboard_disk_cleaning": "Geri kazanılıyor…"
+  "dashboard_disk_cleaning": "Geri kazanılıyor…",
+  "system_php_extensionsTab": "Uzantılar",
+  "system_php_ext_declared": "Uzantılarınız",
+  "system_php_ext_packages": "Paketleriniz",
+  "system_php_ext_modules": "PHP'nin yüklediği modüller ({count})",
+  "system_php_ext_modulesHelp": "PHP {version} imajı içindeki php -m tarafından bildirildi.",
+  "system_php_ext_notBuilt": "PHP {version} için henüz bir imaj yok. Oluşturmak için 'lerd php:rebuild {version}' çalıştırın.",
+  "system_php_ext_needsRebuild": "Bu imaj, uzantı ve paketlerinizden daha eski. Güncellemek için 'lerd php:rebuild {version}' çalıştırın.",
+  "system_php_ext_cannot": "PHP {version} üzerinde derlenemedi; yeniden oluşturmak bunu değiştirmez",
+  "system_php_ext_none": "Henüz özel bir uzantı veya paket eklemediniz.",
+  "system_php_ext_manageHelp": "lerd php:ext ve lerd php:pkg ile yönetin. Her PHP sürümü için geçerlidir."
 }

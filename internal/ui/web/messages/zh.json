@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "删除这些镜像可释放约 {size}：",
   "dashboard_disk_modalDeepNote": "此深度清理还会删除本机上其他 podman 工作负载遗留的未标记悬空镜像。它绝不会触及命名数据卷。",
   "dashboard_disk_modalConfirm": "回收",
-  "dashboard_disk_cleaning": "正在回收…"
+  "dashboard_disk_cleaning": "正在回收…",
+  "system_php_extensionsTab": "扩展",
+  "system_php_ext_declared": "你的扩展",
+  "system_php_ext_packages": "你的软件包",
+  "system_php_ext_modules": "PHP 已加载的模块（{count}）",
+  "system_php_ext_modulesHelp": "由 PHP {version} 镜像内的 php -m 报告。",
+  "system_php_ext_notBuilt": "PHP {version} 还没有镜像。运行 'lerd php:rebuild {version}' 来构建它。",
+  "system_php_ext_needsRebuild": "该镜像早于你当前的扩展和软件包。运行 'lerd php:rebuild {version}' 以更新它。",
+  "system_php_ext_cannot": "无法在 PHP {version} 上构建；重新构建也不会改变这一点",
+  "system_php_ext_none": "你还没有添加任何自定义扩展或软件包。",
+  "system_php_ext_manageHelp": "使用 lerd php:ext 和 lerd php:pkg 管理。它们适用于每个 PHP 版本。"
 }

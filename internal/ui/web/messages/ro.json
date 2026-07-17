@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Aceste imagini pot fi șterse pentru a elibera aproximativ {size}:",
   "dashboard_disk_modalDeepNote": "Această curățare profundă șterge și imaginile fără etichetă rămase de la alte sarcini podman de pe această mașină. Nu atinge niciodată volumele de date denumite.",
   "dashboard_disk_modalConfirm": "Recuperează",
-  "dashboard_disk_cleaning": "Se recuperează…"
+  "dashboard_disk_cleaning": "Se recuperează…",
+  "system_php_extensionsTab": "Extensii",
+  "system_php_ext_declared": "Extensiile tale",
+  "system_php_ext_packages": "Pachetele tale",
+  "system_php_ext_modules": "Module încărcate de PHP ({count})",
+  "system_php_ext_modulesHelp": "Raportat de php -m în imaginea PHP {version}.",
+  "system_php_ext_notBuilt": "PHP {version} nu are încă o imagine. Rulează 'lerd php:rebuild {version}' pentru a o construi.",
+  "system_php_ext_needsRebuild": "Această imagine este mai veche decât extensiile și pachetele tale. Rulează 'lerd php:rebuild {version}' pentru a o actualiza.",
+  "system_php_ext_cannot": "nu s-a putut construi pe PHP {version}; o reconstruire nu va schimba asta",
+  "system_php_ext_none": "Nu ai adăugat extensii sau pachete personalizate.",
+  "system_php_ext_manageHelp": "Gestionează-le cu lerd php:ext și lerd php:pkg. Se aplică fiecărei versiuni de PHP."
 }

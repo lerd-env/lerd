@@ -42,6 +42,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/phpsets"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/reqstats"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -3466,6 +3467,56 @@ const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 type SiteActionResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
+	// Warning carries a change the user should know about but that did not fail
+	// the action: a PHP version clamped to the framework's range, or a target
+	// image that never built part of the declared extension set.
+	Warning string `json:"warning,omitempty"`
+}
+
+// handlePHPExtensions reports what a PHP version's image actually carries: its
+// own `php -m`, plus the declared extension/package sets measured against it.
+// Reading php -m starts a container, so it is cached against the image ID in
+// phpsets and only paid for when someone opens the tab.
+func handlePHPExtensions(w http.ResponseWriter, r *http.Request, version string) {
+	if r.Method != http.MethodGet {
+		http.NotFound(w, r)
+		return
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	report, err := phpsets.ModulesReport(cfg, version)
+	if err != nil {
+		// The sets are still worth reporting when only php -m failed.
+		writeJSON(w, map[string]any{"ok": true, "report": report, "modules_error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "report": report})
+}
+
+// phpSwitchWarning renders what the dashboard should tell the user about a PHP
+// switch that succeeded but did not do exactly what they asked, so the dropdown
+// never silently lands a site on an image missing its extensions.
+func phpSwitchWarning(res siteops.PHPVersionResult) string {
+	var parts []string
+	if res.Clamped {
+		parts = append(parts, fmt.Sprintf("PHP %s is outside the range this framework supports, so %s was used instead.", res.Requested, res.Version))
+	}
+	if res.Demoted {
+		parts = append(parts, fmt.Sprintf("FrankenPHP has no image for PHP %s, so the site was switched to FPM.", res.Version))
+	}
+	switch {
+	case res.NotInstalled:
+		parts = append(parts, fmt.Sprintf("PHP %s has no image yet. Run 'lerd php:rebuild %s' to build it.", res.Version, res.Version))
+	case res.Stale:
+		parts = append(parts, fmt.Sprintf("The PHP %s image predates your custom extensions and packages. Run 'lerd php:rebuild %s' to bring it up to date.", res.Version, res.Version))
+	case len(res.Missing) > 0:
+		parts = append(parts, fmt.Sprintf("PHP %s cannot load: %s. They did not build on this version, and a rebuild will not change that.",
+			res.Version, strings.Join(res.Missing, ", ")))
+	}
+	return strings.Join(parts, " ")
 }
 
 func handleSiteAction(w http.ResponseWriter, r *http.Request) {
@@ -3610,75 +3661,16 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, SiteActionResponse{Error: "version parameter required"})
 			return
 		}
-		if !config.IsSupportedPHPVersion(version) {
-			writeJSON(w, SiteActionResponse{Error: "unsupported PHP version: " + version})
+		// Funnel through the shared helper so the clamp, the .php-version and
+		// .lerd.yaml pins, the FrankenPHP fallback, the quadlet and the vhost all
+		// stay in sync with the CLI and MCP paths. It reloads nginx itself.
+		res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Branch: r.URL.Query().Get("branch")})
+		if err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
-		// Clamp to the framework's range, as link and the watcher do. Without this
-		// the watcher clamps the registry back on the next pass and .php-version is
-		// left pinning a version the site never runs.
-		if site.Framework != "" {
-			if fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path); fwOK {
-				version = phpPkg.ClampToRange(version, fw.PHP.Min, fw.PHP.Max)
-			}
-		}
-		if branch := r.URL.Query().Get("branch"); branch != "" {
-			if err := setWorktreePHPVersion(site, branch, version); err != nil {
-				writeJSON(w, SiteActionResponse{Error: err.Error()})
-				return
-			}
-			needsReload = true
-			break
-		}
-		// Write .php-version into project directory (keeps CLI php and other tools in sync).
-		if err := os.WriteFile(filepath.Join(site.Path, ".php-version"), []byte(version+"\n"), 0644); err != nil {
-			writeJSON(w, SiteActionResponse{Error: "writing .php-version: " + err.Error()})
-			return
-		}
-		if site.IsCustomContainer() {
-			writeJSON(w, SiteActionResponse{Error: "custom container sites do not use PHP versions"})
-			return
-		}
-		if site.IsHostProxy() {
-			writeJSON(w, SiteActionResponse{Error: "host-proxy sites do not use PHP versions"})
-			return
-		}
-		_ = config.SetProjectPHPVersion(site.Path, version)
-		site.PHPVersion = version
-		if site.IsFrankenPHP() {
-			// FrankenPHP only publishes images for PHP >= 8.2; building below that
-			// normalizes the version up and silently runs a different PHP than the
-			// site reports. Match the CLI and fall back to FPM rather than upgrade.
-			if !config.IsFrankenPHPVersion(version) {
-				if err := siteops.DemoteFrankenPHPToFPM(site); err != nil {
-					writeJSON(w, SiteActionResponse{Error: err.Error()})
-					return
-				}
-				needsReload = true
-				break
-			}
-			if err := config.AddSite(*site); err != nil {
-				writeJSON(w, SiteActionResponse{Error: "updating site registry: " + err.Error()})
-				return
-			}
-			if err := siteops.FinishFrankenPHPLink(*site); err != nil {
-				writeJSON(w, SiteActionResponse{Error: "re-linking FrankenPHP site: " + err.Error()})
-				return
-			}
-			break
-		}
-		if site.Secured {
-			if err := certs.SecureSite(*site); err != nil {
-				writeJSON(w, SiteActionResponse{Error: "regenerating SSL vhost: " + err.Error()})
-				return
-			}
-		} else {
-			if err := nginx.GenerateVhost(*site, version); err != nil {
-				writeJSON(w, SiteActionResponse{Error: "regenerating vhost: " + err.Error()})
-				return
-			}
-		}
-		needsReload = true
+		writeJSON(w, SiteActionResponse{OK: true, Warning: phpSwitchWarning(res)})
+		return
 	case "node":
 		version := r.URL.Query().Get("version")
 		if version == "" {
@@ -4428,6 +4420,12 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		http.NotFound(w, r)
+		return
+	}
+
+	// A read, so it sits above the POST-only gate below, as `config` does.
+	if action == "extensions" && len(parts) == 2 {
+		handlePHPExtensions(w, r, version)
 		return
 	}
 
@@ -5296,36 +5294,6 @@ func handleWatcherLogs(w http.ResponseWriter, r *http.Request) {
 // implementation in cli is also used by `lerd db:isolate`.
 func setWorktreeDBIsolated(site *config.Site, branch string, isolated bool, source string) error {
 	return cli.SetWorktreeDBIsolated(site, branch, isolated, source)
-}
-
-// setWorktreePHPVersion writes the override to the worktree's .lerd.yaml and
-// .php-version, then regenerates its nginx vhost so the next request lands on
-// the new PHP-FPM upstream.
-func setWorktreePHPVersion(site *config.Site, branch, version string) error {
-	wtPath := resolveSitePath(site, branch)
-	if wtPath == "" {
-		return fmt.Errorf("unknown worktree branch")
-	}
-	if err := os.WriteFile(filepath.Join(wtPath, ".php-version"), []byte(version+"\n"), 0644); err != nil {
-		return fmt.Errorf("writing .php-version: %w", err)
-	}
-	if err := config.SetWorktreePHPVersion(wtPath, version); err != nil {
-		return fmt.Errorf("updating .lerd.yaml: %w", err)
-	}
-	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
-	if err != nil {
-		return fmt.Errorf("detecting worktrees: %w", err)
-	}
-	for _, wt := range worktrees {
-		if wt.Branch != branch {
-			continue
-		}
-		if site.Secured {
-			return nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, version, site.PrimaryDomain(), site.Name, wt.Branch)
-		}
-		return nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, version, site.Name, wt.Branch)
-	}
-	return fmt.Errorf("worktree %s not found", branch)
 }
 
 // ensureWorktreeEnvIfBranch materialises the worktree's .env when the request

@@ -795,6 +795,11 @@ func searchString(s, substr string) bool {
 
 func TestApproveSiteCommand_RoundTrip(t *testing.T) {
 	setDataDir(t)
+	// HostCommandAllowed reads the global config, so the config dir needs
+	// isolating too or the test reads (and can migrate) the real one.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	invalidateGlobalCache()
+	t.Cleanup(invalidateGlobalCache)
 	if err := AddSite(Site{Name: "acme", Domains: []string{"acme.test"}, Path: "/srv/acme"}); err != nil {
 		t.Fatalf("AddSite: %v", err)
 	}

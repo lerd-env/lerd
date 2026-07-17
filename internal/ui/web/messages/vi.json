@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Có thể xóa các image này để giải phóng khoảng {size}:",
   "dashboard_disk_modalDeepNote": "Việc dọn dẹp sâu này cũng xóa các image lơ lửng không gắn thẻ do các tải công việc podman khác trên máy này để lại. Nó không bao giờ đụng đến các volume dữ liệu có tên.",
   "dashboard_disk_modalConfirm": "Thu hồi",
-  "dashboard_disk_cleaning": "Đang thu hồi…"
+  "dashboard_disk_cleaning": "Đang thu hồi…",
+  "system_php_extensionsTab": "Tiện ích mở rộng",
+  "system_php_ext_declared": "Tiện ích của bạn",
+  "system_php_ext_packages": "Gói của bạn",
+  "system_php_ext_modules": "Các module PHP đang nạp ({count})",
+  "system_php_ext_modulesHelp": "Được báo cáo bởi php -m bên trong image PHP {version}.",
+  "system_php_ext_notBuilt": "PHP {version} chưa có image. Chạy 'lerd php:rebuild {version}' để dựng nó.",
+  "system_php_ext_needsRebuild": "Image này cũ hơn các tiện ích và gói của bạn. Chạy 'lerd php:rebuild {version}' để cập nhật.",
+  "system_php_ext_cannot": "không dựng được trên PHP {version}; dựng lại cũng không thay đổi điều đó",
+  "system_php_ext_none": "Bạn chưa thêm tiện ích hay gói tùy chỉnh nào.",
+  "system_php_ext_manageHelp": "Quản lý bằng lerd php:ext và lerd php:pkg. Chúng áp dụng cho mọi phiên bản PHP."
 }

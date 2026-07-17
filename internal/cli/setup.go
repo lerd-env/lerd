@@ -296,7 +296,7 @@ func runSetup(allSteps, skipOpen bool) error {
 		config.ComposerHasPackage(cwd, "pestphp/pest-plugin-browser") {
 		alreadyBaked := false
 		if gcfg, err := config.LoadGlobal(); err == nil {
-			alreadyBaked = slices.Contains(gcfg.GetPackages(bunPHPVersion), pestBrowserPkg)
+			alreadyBaked = slices.Contains(gcfg.GetPackages(), pestBrowserPkg)
 		}
 		if !alreadyBaked {
 			steps = append(steps, setupStep{
