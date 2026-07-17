@@ -66,6 +66,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd link [name]` | Register the current directory as a site. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
 | `lerd unlink [name]` | Stop serving the site |
+| `lerd apply [file]` | Reconcile sites and services against a declarative `lerdstead.yml` (default `~/.config/lerd/lerdstead.yml`); `--yes` also unlinks sites removed from the file without asking. See [Declarative Sites](../usage/lerdstead.md) |
 | `lerd sites` | Table view of all registered sites |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected) |

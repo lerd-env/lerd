@@ -106,6 +106,7 @@ func main() {
 	root.AddCommand(cli.NewInitCmd())
 	root.AddCommand(cli.NewLinkCmd())
 	root.AddCommand(cli.NewUnlinkCmd())
+	root.AddCommand(cli.NewApplyCmd())
 	root.AddCommand(cli.NewRestartCmd())
 	root.AddCommand(cli.NewRebuildCmd())
 	root.AddCommand(cli.NewUnparkCmd())
