@@ -767,31 +767,42 @@ func TestEnsureDummyLinkRunning_failsWhenTheUnitIsNotEnabled(t *testing.T) {
 	}
 }
 
-// Every privileged command any setup or teardown path runs must be granted, or
-// it becomes a silent password prompt in the headless lerd-ui watcher. This
-// caught the regression where the baseline drop-in's tee/chmod grants were
-// dropped while the code still wrote it, and the teardown removals that lerd0
-// added but never granted.
+// Every file lerd removes in Teardown must have an rm grant, or the headless
+// watcher prompts and teardown silently leaves the resolver hijacked. Derived
+// from resolverArtifacts, the same canonical list ResolverConfigured and Teardown
+// use, so a file added there without a grant fails here rather than in the field.
+// The hand-listed variant this replaced was green while two NM teardown paths were
+// ungranted, which is exactly the gap this enumeration closes.
+func TestLinuxSudoers_grantsEveryFileTeardownRemoves(t *testing.T) {
+	grants := renderLinuxSudoers("alice")
+	for _, path := range resolverArtifacts {
+		if !strings.Contains(grants, "/usr/bin/rm -f "+path) {
+			t.Errorf("Teardown removes %s but there is no NOPASSWD rm grant for it", path)
+		}
+	}
+}
+
+// The write and control commands the setup paths run must be granted too, since a
+// mismatch is a silent prompt in the headless lerd-ui watcher.
 func TestLinuxSudoers_grantsEveryPrivilegedCommandTheCodeRuns(t *testing.T) {
 	grants := renderLinuxSudoers("alice")
 	for _, want := range []string{
-		// baseline drop-in write (setupSystemdResolved)
+		// systemd-resolved drop-in write (setupSystemdResolved)
 		"/usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf",
 		"/usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf",
-		// teardown removals: FallbackDNS restore + the link and its files
+		// the link unit, unmanaged rule, fallback drop-in
+		"/usr/bin/tee /etc/systemd/system/lerd-dns-link.service",
+		"/usr/bin/tee /etc/NetworkManager/conf.d/lerd-dns-link.conf",
+		"/usr/bin/tee /etc/systemd/resolved.conf.d/lerd-fallback.conf",
+		// NetworkManager embedded-dnsmasq path
+		"/usr/bin/tee /etc/NetworkManager/conf.d/lerd.conf",
+		"/usr/bin/tee /etc/NetworkManager/dnsmasq.d/lerd.conf",
+		"/usr/bin/mkdir -p /etc/NetworkManager/dnsmasq.d",
+		"/usr/bin/systemctl restart NetworkManager",
+		// link control
+		"/usr/bin/systemctl enable --now lerd-dns-link.service",
 		"/usr/bin/systemctl disable --now lerd-dns-link.service",
 		"/usr/bin/ip link del lerd0",
-		"/usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf",
-		"/usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service",
-		"/usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf",
-		"/usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns",
-		// NetworkManager embedded-dnsmasq path (no systemd-resolved)
-		"/usr/bin/tee /etc/NetworkManager/conf.d/lerd.conf",
-		"/usr/bin/chmod 644 /etc/NetworkManager/conf.d/lerd.conf",
-		"/usr/bin/mkdir -p /etc/NetworkManager/dnsmasq.d",
-		"/usr/bin/tee /etc/NetworkManager/dnsmasq.d/lerd.conf",
-		"/usr/bin/chmod 644 /etc/NetworkManager/dnsmasq.d/lerd.conf",
-		"/usr/bin/systemctl restart NetworkManager",
 	} {
 		if !strings.Contains(grants, want) {
 			t.Errorf("missing NOPASSWD grant, headless watcher would prompt: %s", want)

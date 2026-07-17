@@ -700,7 +700,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// write just fails, so we skip it and let ConfigureResolver report what is
 	// missing rather than burying a prompt no one can see. Content-hashed, so on an
 	// unchanged drop-in this is a no-op either way.
-	if canPromptForPassword() {
+	if dnsEnabled() && canPromptForPassword() {
 		if err := dns.InstallSudoers(); err != nil {
 			fmt.Printf("  WARN: refreshing DNS sudoers rule: %v\n", err)
 		}
@@ -1355,4 +1355,11 @@ func canPromptForPassword() bool {
 	}
 	tty.Close()
 	return true
+}
+
+// dnsEnabled reports whether the user has lerd manage DNS. When off, start must
+// not install DNS sudoers grants or touch any resolver state.
+func dnsEnabled() bool {
+	cfg, err := config.LoadGlobal()
+	return err == nil && cfg != nil && cfg.DNS.Enabled
 }

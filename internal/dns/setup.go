@@ -512,21 +512,28 @@ func setupDummyLink(withNM bool, tld string) error {
 		exec.Command("sudo", "systemctl", "daemon-reload").Run() //nolint:errcheck
 	}
 
-	// Before the link is brought up, not after: this restarts resolved, and the
-	// route lerd0 carries is applied by the unit below. Doing it the other way
-	// round would lean on resolved restoring per-link config across a restart.
+	// Outside the changed-check above: on every start after the first the files are
+	// identical, and that is exactly when the link may be missing (fresh boot, or
+	// someone removed it). Gating on a config change would leave lerd0 down with no
+	// way back short of a reboot.
+	if err := ensureDummyLinkRunning(tld); err != nil {
+		return err
+	}
+
+	// Only now, with lerd0 confirmed carrying the route, turn off resolved's
+	// fallbacks. Disabling them is the price of lerd0 (offline it would otherwise
+	// chase unreachable public resolvers), so a host that could not build the link
+	// must not pay it: leaving FallbackDNS empty with no lerd0 is strictly worse
+	// than origin/main, which never touched it.
 	if fallbackChanged {
 		if err := sudoWriteFile(lerdFallbackDropin, []byte(lerdFallbackDropinContent), 0644); err != nil {
 			return fmt.Errorf("writing resolved fallback drop-in: %w", err)
 		}
 		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+		// That restart flushed lerd0's per-link route; put it back.
+		return ensureDummyLinkRunning(tld)
 	}
-
-	// Outside the changed-check above: on every start after the first the files are
-	// identical, and that is exactly when the link may be missing (fresh boot, or
-	// someone removed it). Gating on a config change would leave lerd0 down with no
-	// way back short of a reboot.
-	return ensureDummyLinkRunning(tld)
+	return nil
 }
 
 // ensureDummyLinkRunning enables the link unit for the next boot and starts it if
@@ -699,7 +706,11 @@ func setupSystemdResolved() error {
 func writeResolvedDropin(dropin, tld string) error {
 	want := resolvedDropinFor(tld)
 	if isFileContent(dropin, []byte(want)) {
-		return nil
+		// Content matches; repair drifted perms (resolved skips a non-0644 drop-in)
+		// then done, matching origin/main which healed perms on a content match.
+		if info, err := os.Stat(dropin); err == nil && info.Mode().Perm() == 0644 {
+			return nil
+		}
 	}
 	feedback.Sudo("Configuring systemd-resolved for ." + tld + " DNS resolution")
 	if err := sudoWriteFile(dropin, []byte(want), 0644); err != nil {
@@ -966,7 +977,9 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dnsmasq.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n",
-		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
+		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }
