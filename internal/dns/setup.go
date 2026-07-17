@@ -18,8 +18,18 @@ const nmDnsConf = `[main]
 dns=dnsmasq
 `
 
-const nmDnsmasqConf = `server=/test/127.0.0.1#5300
-`
+// nmDnsmasqConfFor is NetworkManager's own dnsmasq path (no systemd-resolved).
+func nmDnsmasqConfFor(tld string) string {
+	return "server=/" + tld + "/127.0.0.1#5300\n"
+}
+
+// resolvedDropinFor is the baseline hookup on hosts with systemd-resolved and no
+// NetworkManager. It resolves .tld whenever a link is up, which is everything
+// lerd promised before lerd0 existed, so it is written first and only removed
+// once lerd0 demonstrably supersedes it.
+func resolvedDropinFor(tld string) string {
+	return "[Resolve]\nDNS=127.0.0.1:5300\nDomains=~" + tld + "\n"
+}
 
 // lerd0 is an always-up dummy interface that keeps .test resolving when every
 // real link is down. systemd-resolved refuses to resolve anything (returns
@@ -111,8 +121,14 @@ WantedBy=multi-user.target
 // When the network changes (LAN↔WiFi, switching networks), the script also rewrites
 // the lerd dnsmasq config and restarts lerd-dns so the new upstream DNS is picked up
 // immediately without requiring a manual lerd restart.
-const nmDispatcherScript = `#!/bin/sh
-# Lerd DNS: route .test queries through local dnsmasq on port 5300
+func nmDispatcherScriptFor(tld string) string {
+	return strings.ReplaceAll(nmDispatcherTemplate, "@TLD@", tld)
+}
+
+// nmDispatcherTemplate carries @TLD@ placeholders rather than %s verbs: the script
+// is full of shell printf formats that fmt would try to consume.
+const nmDispatcherTemplate = `#!/bin/sh
+# Lerd DNS: route .@TLD@ queries through local dnsmasq on port 5300
 IFACE="$1"
 ACTION="$2"
 LERD_DNS=""
@@ -126,7 +142,7 @@ fi
 if [ "$ACTION" = "up" ] || [ "$ACTION" = "dhcp4-change" ] || [ "$ACTION" = "dhcp6-change" ]; then
     LERD_DNS=$(nmcli -g IP4.DNS device show "$IFACE" 2>/dev/null | tr '|' '\n' | grep -v '^$' | tr '\n' ' ')
     resolvectl dns "$IFACE" 127.0.0.1:5300 $LERD_DNS 2>/dev/null || true
-    resolvectl domain "$IFACE" ~test ~. 2>/dev/null || true
+    resolvectl domain "$IFACE" ~@TLD@ ~. 2>/dev/null || true
 elif [ "$ACTION" = "down" ]; then
     # Interface went down: switch lerd-dns to the remaining default interface's DNS
     # so upstream resolution keeps working (e.g. closing wired while on WiFi).
@@ -404,6 +420,12 @@ func Setup() error {
 // lerd-dns dnsmasq container on port 5300. Call this after lerd-dns is running so
 // that any immediate resolvectl changes don't break DNS before dnsmasq is up.
 func ConfigureResolver() error {
+	// Nothing at all when the user opted out. dns:disable flips the TLD to
+	// localhost, so carrying on here would prompt for a password and point a
+	// ~localhost route at a lerd-dns that is deliberately not running.
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && !cfg.DNS.Enabled {
+		return nil
+	}
 	if isSystemdResolvedActive() {
 		if isNetworkManagerActive() {
 			return setupNMWithResolved()
@@ -534,14 +556,16 @@ func ensureDummyLinkRunning(tld string) error {
 // NM overrides per-interface DNS, so an NM dispatcher script applies the interface
 // route via resolvectl on each "up" event and immediately to the current default
 // interface. That per-link route dies with the interface, so an always-up unmanaged
-// dummy link (lerd0) carries the ~test route to keep .test resolving offline.
+// dummy link (lerd0) carries the ~tld route to keep .tld resolving offline.
 func setupNMWithResolved() error {
+	tld := ConfiguredTLD()
 	dispatcherScript := "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
 
-	if !isFileContent(dispatcherScript, []byte(nmDispatcherScript)) {
-		feedback.Sudo("Configuring NetworkManager dispatcher for .test DNS resolution")
+	script := nmDispatcherScriptFor(tld)
+	if !isFileContent(dispatcherScript, []byte(script)) {
+		feedback.Sudo("Configuring NetworkManager dispatcher for ." + tld + " DNS resolution")
 
-		if err := sudoWriteFile(dispatcherScript, []byte(nmDispatcherScript), 0755); err != nil {
+		if err := sudoWriteFile(dispatcherScript, []byte(script), 0755); err != nil {
 			return fmt.Errorf("writing NM dispatcher script: %w", err)
 		}
 	}
@@ -558,8 +582,12 @@ func setupNMWithResolved() error {
 		rmCmd.Run() //nolint:errcheck
 	}
 
-	if err := setupDummyLink(true, ConfiguredTLD()); err != nil {
-		return err
+	// Best effort: a host that cannot build the link (no dummy module, as on the
+	// stock WSL2 kernel) still needs the per-interface route applied below, which
+	// is what makes .tld resolve at all. Losing offline resolution is a
+	// degradation; losing .tld entirely would be a regression.
+	if err := setupDummyLink(true, tld); err != nil {
+		feedback.Line("WARN: offline ." + tld + " resolution unavailable: " + err.Error())
 	}
 
 	// Apply immediately to the current default interface.
@@ -591,7 +619,7 @@ func setupNMWithResolved() error {
 		return fmt.Errorf("applying DNS to %s: %w", iface, err)
 	}
 
-	domainCmd := exec.Command("sudo", "resolvectl", "domain", iface, "~test", "~.")
+	domainCmd := exec.Command("sudo", "resolvectl", "domain", iface, "~"+tld, "~.")
 	domainCmd.Stdin = os.Stdin
 	domainCmd.Stdout = os.Stdout
 	domainCmd.Stderr = os.Stderr
@@ -629,26 +657,46 @@ func setupNMWithResolved() error {
 // fixes both, so the drop-in is removed rather than written.
 func setupSystemdResolved() error {
 	tld := ConfiguredTLD()
+	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
+	want := resolvedDropinFor(tld)
 
-	// Provision the link first, and only drop the legacy global drop-in once lerd0
-	// demonstrably carries the route. Removing first and creating second leaves a
-	// host with neither whenever provisioning fails, and the drop-in it supersedes
-	// at least resolves .tld while a link is up.
-	if err := setupDummyLink(false, tld); err != nil {
-		return err
+	// The baseline goes in first. It resolves .tld whenever a link is up, which is
+	// what lerd promised before lerd0 existed, so the host is never left worse than
+	// it was: not on a fresh install where there is nothing to fall back to, and
+	// not on a host where the link cannot be built at all.
+	if !isFileContent(dropin, []byte(want)) {
+		feedback.Sudo("Configuring systemd-resolved for ." + tld + " DNS resolution")
+		if err := sudoWriteFile(dropin, []byte(want), 0644); err != nil {
+			return fmt.Errorf("writing resolved drop-in: %w", err)
+		}
+		if err := exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run(); err != nil {
+			return fmt.Errorf("restarting systemd-resolved: %w", err)
+		}
 	}
 
-	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
-	if _, err := os.Stat(dropin); err != nil {
+	// lerd0 is the offline enhancement, not a precondition. A host without the
+	// dummy module, or with grants lerd cannot use, keeps the baseline and loses
+	// only offline resolution, which is exactly what it had before this existed.
+	if err := setupDummyLink(false, tld); err != nil {
+		feedback.Line("WARN: offline ." + tld + " resolution unavailable: " + err.Error())
 		return nil
 	}
+
+	// lerd0 carries the route now, which makes the drop-in not merely redundant but
+	// harmful: as a global server it is a catch-all, so offline every ordinary name
+	// goes to lerd-dns and out to an upstream that is not there, hanging ~20s.
 	feedback.Sudo("Removing the superseded systemd-resolved drop-in")
 	if err := exec.Command("sudo", "rm", "-f", dropin).Run(); err != nil {
 		return fmt.Errorf("removing superseded resolved drop-in: %w", err)
 	}
-	exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+	if err := exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run(); err != nil {
+		return fmt.Errorf("restarting systemd-resolved after removing the drop-in: %w", err)
+	}
 	// That restart drops per-link config, so put the route back on lerd0.
-	return ensureDummyLinkRunning(tld)
+	if err := ensureDummyLinkRunning(tld); err != nil {
+		return fmt.Errorf("reapplying the .%s route after restarting resolved: %w", tld, err)
+	}
+	return nil
 }
 
 // setupNetworkManager configures NetworkManager's embedded dnsmasq.
@@ -656,7 +704,8 @@ func setupNetworkManager() error {
 	nmConfFile := "/etc/NetworkManager/conf.d/lerd.conf"
 	nmDnsmasqFile := "/etc/NetworkManager/dnsmasq.d/lerd.conf"
 
-	if isFileContent(nmConfFile, []byte(nmDnsConf)) && isFileContent(nmDnsmasqFile, []byte(nmDnsmasqConf)) {
+	dnsmasqConf := nmDnsmasqConfFor(ConfiguredTLD())
+	if isFileContent(nmConfFile, []byte(nmDnsConf)) && isFileContent(nmDnsmasqFile, []byte(dnsmasqConf)) {
 		return nil
 	}
 
@@ -666,7 +715,7 @@ func setupNetworkManager() error {
 		return fmt.Errorf("writing NetworkManager conf: %w", err)
 	}
 
-	if err := sudoWriteFile(nmDnsmasqFile, []byte(nmDnsmasqConf), 0644); err != nil {
+	if err := sudoWriteFile(nmDnsmasqFile, []byte(dnsmasqConf), 0644); err != nil {
 		return fmt.Errorf("writing NetworkManager dnsmasq conf: %w", err)
 	}
 
