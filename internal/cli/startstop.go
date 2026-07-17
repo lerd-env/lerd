@@ -700,7 +700,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// write just fails, so we skip it and let ConfigureResolver report what is
 	// missing rather than burying a prompt no one can see. Content-hashed, so on an
 	// unchanged drop-in this is a no-op either way.
-	if stdinIsInteractive() {
+	if canPromptForPassword() {
 		if err := dns.InstallSudoers(); err != nil {
 			fmt.Printf("  WARN: refreshing DNS sudoers rule: %v\n", err)
 		}
@@ -1341,10 +1341,18 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-// stdinIsInteractive reports whether a password prompt could actually be
-// answered. term.IsTerminal rather than a ModeCharDevice test: /dev/null is a
-// character device too, so the cheaper check calls a systemd service's stdin
-// interactive and would have us prompt into the void.
-func stdinIsInteractive() bool {
-	return term.IsTerminal(int(os.Stdin.Fd()))
+// canPromptForPassword reports whether sudo would have someone to ask. sudo reads
+// the password from the controlling terminal, not from stdin, so /dev/tty is the
+// signal: `lerd start < /dev/null` in a terminal can still prompt, and a systemd
+// service with neither cannot. term.IsTerminal on stdin alone gets both wrong.
+func canPromptForPassword() bool {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return true
+	}
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return false
+	}
+	tty.Close()
+	return true
 }

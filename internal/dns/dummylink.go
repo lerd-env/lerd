@@ -27,8 +27,9 @@ func ResolverConfigured() bool {
 	return false
 }
 
-// resolverArtifacts is every path lerd's resolver setup writes, across all
-// platforms and both Linux resolver paths.
+// resolverArtifacts is every path lerd's resolver setup writes on Linux, across
+// all three resolver paths. macOS writes /etc/resolver/<tld> instead and tears
+// its own files down in install_dns_darwin.go, so it never consults this.
 var resolverArtifacts = []string{
 	"/etc/NetworkManager/dispatcher.d/99-lerd-dns",
 	"/etc/NetworkManager/conf.d/lerd.conf",

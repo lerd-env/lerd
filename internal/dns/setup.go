@@ -549,6 +549,13 @@ func ensureDummyLinkRunning(tld string) error {
 		return fmt.Errorf("%s is not carrying the ~%s route (check: systemctl status %s)",
 			lerdDummyIface, tld, lerdLinkUnitName)
 	}
+	// Checked, not assumed: a link that is up right now but whose unit never
+	// enabled is gone at the next boot, which is the one property this function
+	// exists to guarantee and the one a health check cannot see.
+	if !dummyLinkUnitEnabled() {
+		return fmt.Errorf("%s is not enabled, so %s will not come back after a reboot (check: systemctl status %s)",
+			lerdLinkUnitName, lerdDummyIface, lerdLinkUnitName)
+	}
 	return nil
 }
 

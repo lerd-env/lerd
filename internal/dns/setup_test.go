@@ -732,3 +732,21 @@ func section(t *testing.T, body, from, to string) string {
 	}
 	return rest[:j]
 }
+
+// A link that is up but whose unit never enabled disappears at the next boot,
+// which is precisely the property the link exists to provide and the one a health
+// check cannot see. Reporting success there hides it until the user reboots.
+func TestEnsureDummyLinkRunning_failsWhenTheUnitIsNotEnabled(t *testing.T) {
+	origHealthy, origEnabled := dummyLinkHealthy, dummyLinkUnitEnabled
+	t.Cleanup(func() { dummyLinkHealthy, dummyLinkUnitEnabled = origHealthy, origEnabled })
+
+	dummyLinkHealthy = func(string) bool { return true } // carrying the route now
+	// Report enabled once (so no privileged command runs) and never again, i.e.
+	// the enable did not take.
+	calls := 0
+	dummyLinkUnitEnabled = func() bool { calls++; return calls == 1 }
+
+	if err := ensureDummyLinkRunning("test"); err == nil {
+		t.Error("a healthy link with a unit that is not enabled must be reported: it is gone after the next reboot")
+	}
+}
