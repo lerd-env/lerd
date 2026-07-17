@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,40 @@ func TestStaleResolverFiles(t *testing.T) {
 func TestStaleResolverFilesMissingDir(t *testing.T) {
 	if got := staleResolverFiles(filepath.Join(t.TempDir(), "does-not-exist")); got != nil {
 		t.Fatalf("expected nil for a missing dir, got %v", got)
+	}
+}
+
+// On macOS the TLD lands in /etc/resolver/<tld> and, through the sudoers grant,
+// in a NOPASSWD `tee` target. A raw config value could traverse out of
+// /etc/resolver or inject a sudoers line, so both must go through ConfiguredTLD,
+// which rejects anything that is not a DNS label. This pins the wiring: a
+// reintroduced raw cfg.DNS.TLD read for either sink would fail here.
+func TestDarwinResolver_routesTheTLDThroughTheValidator(t *testing.T) {
+	src, err := os.ReadFile("setup_darwin.go")
+	if err != nil {
+		t.Fatalf("reading setup_darwin.go: %v", err)
+	}
+	s := string(src)
+	if strings.Contains(s, "cfg.DNS.TLD") {
+		t.Error("setup_darwin.go reads cfg.DNS.TLD raw; the resolver path and sudoers target must come from ConfiguredTLD")
+	}
+	if !strings.Contains(s, "ConfiguredTLD()") {
+		t.Error("setup_darwin.go must derive the TLD from ConfiguredTLD")
+	}
+}
+
+// A traversal or injection payload must never produce a resolver path outside
+// /etc/resolver nor a sudoers target that escapes it.
+func TestDarwinSudoers_tldCannotEscapeTheResolverDir(t *testing.T) {
+	for _, bad := range []string{"../../etc/cron.d/x", "a/b", "x\nEXTRA"} {
+		tld := DefaultTLD
+		if tldPattern.MatchString(bad) {
+			tld = bad
+		}
+		grant := renderDarwinSudoers("alice", tld)
+		if strings.Contains(grant, "..") || strings.Contains(grant, "/etc/resolver/a/") ||
+			strings.Contains(grant, "EXTRA") {
+			t.Errorf("payload %q reached the sudoers grant", bad)
+		}
 	}
 }

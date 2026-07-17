@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 )
 
@@ -42,14 +41,11 @@ func defaultUpstreamFallback() []string { return nil }
 // the lerd-dns dnsmasq container on port 5300. macOS checks /etc/resolver/<tld>
 // automatically for per-TLD DNS overrides — no daemon restart required.
 func ConfigureResolver() error {
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		return err
-	}
-	tld := cfg.DNS.TLD
-	if tld == "" {
-		tld = "test"
-	}
+	// ConfiguredTLD rejects anything that is not a DNS label. The TLD lands in
+	// /etc/resolver/<tld> and, via the sudoers grant below, in a NOPASSWD tee
+	// target, so a raw value could traverse out of /etc/resolver or inject a
+	// sudoers line: it must be validated before either.
+	tld := ConfiguredTLD()
 
 	resolverFile := filepath.Join(resolverDir, tld)
 	content := resolverContent
@@ -112,13 +108,7 @@ func InstallSudoers() error {
 		return fmt.Errorf("cannot determine current user")
 	}
 
-	cfg, _ := config.LoadGlobal()
-	tld := "test"
-	if cfg != nil && cfg.DNS.TLD != "" {
-		tld = cfg.DNS.TLD
-	}
-
-	content := renderDarwinSudoers(user, tld)
+	content := renderDarwinSudoers(user, ConfiguredTLD())
 
 	const sudoersPath = "/etc/sudoers.d/lerd"
 	if sudoersInstalled([]byte(content)) {
