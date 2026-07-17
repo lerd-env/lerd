@@ -375,7 +375,16 @@ func parseDummyLinkRouting(output, tld string) (present bool, routed bool) {
 	if !strings.Contains(output, "("+lerdDummyIface+")") {
 		return false, false
 	}
-	return true, strings.Contains(output, "127.0.0.1:5300") && strings.Contains(output, "~"+tld)
+	// Match ~tld as a whole routing domain, not a substring: an unanchored
+	// contains would treat "~testbed" as carrying the "test" route.
+	hasDomain := false
+	for _, f := range strings.Fields(output) {
+		if f == "~"+tld {
+			hasDomain = true
+			break
+		}
+	}
+	return true, strings.Contains(output, "127.0.0.1:5300") && hasDomain
 }
 
 // serviceActive reports whether the lerd-dns service unit is active. It is a

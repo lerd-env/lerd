@@ -685,16 +685,11 @@ func TestSetupPaths_treatTheLinkAsAnEnhancementNotAPrecondition(t *testing.T) {
 	}
 	assertContains(t, nm, "WARN: offline")
 
-	res := section(t, body, "func setupSystemdResolved() error {", "// setupNetworkManager")
-	// A healthy link short-circuits before touching the drop-in, so the setup is
-	// idempotent: without this it rewrote-then-removed the drop-in every run.
-	shortCircuit := strings.Index(res, "if dummyLinkHealthy(tld) {")
-	writeAt := strings.Index(res, "sudoWriteFile(dropin")
-	if shortCircuit < 0 || shortCircuit > writeAt {
-		t.Error("setupSystemdResolved must short-circuit on a healthy link before writing the baseline, or it restarts systemd-resolved twice on every start")
-	}
-	// The baseline is written before the link that would supersede it is attempted,
-	// so a host that cannot build the link keeps a working hookup.
+	res := section(t, body, "func setupSystemdResolved() error {", "// writeResolvedDropin")
+	// The baseline is written (only when the link is not already up) before the
+	// superseding link is attempted, so a host that cannot build the link keeps a
+	// working hookup.
+	writeAt := strings.Index(res, "writeResolvedDropin(dropin, tld)")
 	linkAt := strings.Index(res, "if err := setupDummyLink(false, tld); err != nil {")
 	if writeAt < 0 || linkAt < 0 {
 		t.Fatal("expected setupSystemdResolved to write the baseline and then try the link")
@@ -702,11 +697,25 @@ func TestSetupPaths_treatTheLinkAsAnEnhancementNotAPrecondition(t *testing.T) {
 	if writeAt > linkAt {
 		t.Error("the baseline drop-in must be written before the superseding link is attempted, or a fresh host with no link has no hookup at all")
 	}
-	// And removed only after that link attempt, i.e. once it is confirmed.
-	rmAt := strings.Index(res, `"rm", "-f", dropin`)
-	if rmAt < 0 || rmAt < linkAt {
-		t.Error("the drop-in may only be removed after the link is confirmed carrying the route")
+	// The link is best effort here too: a failure warns and returns, leaving the
+	// baseline in place rather than aborting.
+	assertContains(t, res, "WARN: offline")
+	if strings.Contains(res, "setupDummyLink(false, tld); err != nil {\n\t\treturn err") {
+		t.Error("setupSystemdResolved must not abort on a link failure; the baseline still resolves .tld while a link is up")
 	}
+
+	// The removal is idempotent: guarded by a stat so it retries a once-failed
+	// removal on a later run instead of skipping it forever, and only after the
+	// link is confirmed.
+	rem := section(t, body, "func removeSupersededResolvedDropin(", "\n}")
+	assertContains(t, rem, "os.Stat(dropin)")
+	rmAt := strings.Index(rem, `"rm", "-f", dropin`)
+	reapplyAt := strings.Index(rem, "ensureDummyLinkRunning(tld)")
+	if rmAt < 0 || reapplyAt < 0 || rmAt > reapplyAt {
+		t.Error("removeSupersededResolvedDropin must remove then reapply the route")
+	}
+	// On a reapply failure it restores the baseline rather than leaving the host bare.
+	assertContains(t, rem, "writeResolvedDropin(dropin, tld)")
 }
 
 // dns:disable flips the TLD to localhost and stops lerd-dns. Carrying on into
@@ -776,6 +785,13 @@ func TestLinuxSudoers_grantsEveryPrivilegedCommandTheCodeRuns(t *testing.T) {
 		"/usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service",
 		"/usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf",
 		"/usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns",
+		// NetworkManager embedded-dnsmasq path (no systemd-resolved)
+		"/usr/bin/tee /etc/NetworkManager/conf.d/lerd.conf",
+		"/usr/bin/chmod 644 /etc/NetworkManager/conf.d/lerd.conf",
+		"/usr/bin/mkdir -p /etc/NetworkManager/dnsmasq.d",
+		"/usr/bin/tee /etc/NetworkManager/dnsmasq.d/lerd.conf",
+		"/usr/bin/chmod 644 /etc/NetworkManager/dnsmasq.d/lerd.conf",
+		"/usr/bin/systemctl restart NetworkManager",
 	} {
 		if !strings.Contains(grants, want) {
 			t.Errorf("missing NOPASSWD grant, headless watcher would prompt: %s", want)

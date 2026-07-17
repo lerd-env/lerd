@@ -467,3 +467,16 @@ func TestDiagnose_dummyLinkRungRunsOnResolvedLinkPath(t *testing.T) {
 		t.Errorf("status = %s, want warn", step.Status)
 	}
 }
+
+// The ~tld route match must be a whole-token match: an unanchored substring
+// treats a link carrying "~testbed" as carrying the "test" route, so a broken
+// link reports healthy and the diagnostic goes green while offline .test fails.
+func TestParseDummyLinkRouting_matchesTheDomainAsAWholeToken(t *testing.T) {
+	withServer := "Link 6 (lerd0)\n    Current Scopes: DNS\n       DNS Servers: 127.0.0.1:5300\n"
+	if _, routed := parseDummyLinkRouting(withServer+"        DNS Domain: ~testbed\n", "test"); routed {
+		t.Error("~testbed must not satisfy the ~test route")
+	}
+	if _, routed := parseDummyLinkRouting(withServer+"        DNS Domain: ~test\n", "test"); !routed {
+		t.Error("~test must satisfy the ~test route")
+	}
+}

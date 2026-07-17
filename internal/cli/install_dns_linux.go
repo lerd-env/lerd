@@ -90,9 +90,9 @@ func teardownDNS() {
 	if !dnsResolverConfigured() {
 		return
 	}
-	// Announced because it prompts: the removals need root and are not granted in
-	// the sudoers drop-in, so the lock glyph tells the user the prompt is expected
-	// rather than a hung command.
+	// Announced with the lock glyph: the removals run as root. They are granted in
+	// the sudoers drop-in so they do not prompt, but the header keeps the teardown
+	// visible in the output.
 	feedback.Sudo("Removing DNS configuration")
 	dnsTeardown()
 }

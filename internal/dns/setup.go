@@ -666,42 +666,60 @@ func setupSystemdResolved() error {
 	tld := ConfiguredTLD()
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
 
-	// Steady state: lerd0 already carries the route, so the baseline drop-in is
-	// neither present nor wanted. Just keep the link enabled and healthy, writing
-	// nothing. Without this short circuit every start rewrote the baseline only to
-	// remove it again, restarting systemd-resolved twice each time.
-	if dummyLinkHealthy(tld) {
-		return setupDummyLink(false, tld)
-	}
+	linkUp := dummyLinkHealthy(tld)
 
-	// lerd0 is not up. Write the baseline first so .tld resolves whenever a link is
-	// up, which is what lerd promised before lerd0 existed. A fresh host has nothing
-	// to fall back to otherwise, and a host that can never build the link keeps this.
-	want := resolvedDropinFor(tld)
-	if !isFileContent(dropin, []byte(want)) {
-		feedback.Sudo("Configuring systemd-resolved for ." + tld + " DNS resolution")
-		if err := sudoWriteFile(dropin, []byte(want), 0644); err != nil {
-			return fmt.Errorf("writing resolved drop-in: %w", err)
-		}
-		if err := exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run(); err != nil {
-			return fmt.Errorf("restarting systemd-resolved: %w", err)
+	// Bring up lerd0 (best effort on both branches): a host that cannot build the
+	// link keeps the baseline below and loses only offline resolution. On the
+	// steady-state path the files already match, so this writes nothing.
+	if !linkUp {
+		// Write the baseline first so .tld resolves whenever a link is up, which is
+		// what lerd promised before lerd0 existed. A fresh host has nothing else to
+		// fall back to, and a host that can never build the link keeps this.
+		if err := writeResolvedDropin(dropin, tld); err != nil {
+			return err
 		}
 	}
-
-	// lerd0 is the offline enhancement, not a precondition. A host without the
-	// dummy module, or with grants lerd cannot use, keeps the baseline and loses
-	// only offline resolution, which is exactly what it had before this existed.
 	if err := setupDummyLink(false, tld); err != nil {
 		feedback.Line("WARN: offline ." + tld + " resolution unavailable: " + err.Error())
+		// The link is the only thing that could not be set up; the baseline (or a
+		// pre-existing healthy link) still resolves .tld while a link is up.
 		return nil
 	}
 
-	// lerd0 carries the route now, which makes the drop-in not merely redundant but
-	// harmful: as a global server it is a catch-all, so offline every ordinary name
-	// goes to lerd-dns and out to an upstream that is not there, hanging ~20s. Remove
-	// it, then immediately put the route back on lerd0, which the restart flushed. If
-	// that reapply fails the next start finds lerd0 unhealthy and rewrites the
-	// baseline, so the host is never stranded for longer than one watcher tick.
+	// lerd0 carries the route, which makes the global drop-in not merely redundant
+	// but harmful: resolved will still send ordinary names to it, so offline every
+	// non-.tld lookup goes to lerd-dns and out to an upstream that is not there,
+	// hanging ~20s. Remove it whenever it is present, not only on the transition, so
+	// a removal that failed once on an earlier run is retried rather than stranded.
+	return removeSupersededResolvedDropin(dropin, tld)
+}
+
+// writeResolvedDropin writes the baseline global drop-in and restarts resolved,
+// only when the on-disk content differs.
+func writeResolvedDropin(dropin, tld string) error {
+	want := resolvedDropinFor(tld)
+	if isFileContent(dropin, []byte(want)) {
+		return nil
+	}
+	feedback.Sudo("Configuring systemd-resolved for ." + tld + " DNS resolution")
+	if err := sudoWriteFile(dropin, []byte(want), 0644); err != nil {
+		return fmt.Errorf("writing resolved drop-in: %w", err)
+	}
+	if err := exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run(); err != nil {
+		return fmt.Errorf("restarting systemd-resolved: %w", err)
+	}
+	return nil
+}
+
+// removeSupersededResolvedDropin removes the global drop-in once lerd0 carries the
+// route, then puts the route back (the resolved restart flushes per-link config).
+// A no-op when the drop-in is already gone, so it is safe to call on every start.
+// If the reapply fails it restores the baseline rather than leaving the host with
+// no hookup at all, so a plain `lerd start` with no watcher is never left bare.
+func removeSupersededResolvedDropin(dropin, tld string) error {
+	if _, err := os.Stat(dropin); err != nil {
+		return nil
+	}
 	feedback.Sudo("Removing the superseded systemd-resolved drop-in")
 	if err := exec.Command("sudo", "rm", "-f", dropin).Run(); err != nil {
 		return fmt.Errorf("removing superseded resolved drop-in: %w", err)
@@ -710,7 +728,10 @@ func setupSystemdResolved() error {
 		return fmt.Errorf("restarting systemd-resolved after removing the drop-in: %w", err)
 	}
 	if err := ensureDummyLinkRunning(tld); err != nil {
-		return fmt.Errorf("reapplying the .%s route after restarting resolved: %w", tld, err)
+		if rerr := writeResolvedDropin(dropin, tld); rerr != nil {
+			return fmt.Errorf("reapplying .%s route failed (%v) and restoring the drop-in failed: %w", tld, err, rerr)
+		}
+		return fmt.Errorf("reapplying the .%s route after restarting resolved (baseline restored): %w", tld, err)
 	}
 	return nil
 }
@@ -915,6 +936,12 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/dispatcher.d\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 755 /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/NetworkManager/conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/dnsmasq.d\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/dnsmasq.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/NetworkManager/dnsmasq.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart NetworkManager\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
@@ -940,6 +967,6 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n",
-		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
+		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }

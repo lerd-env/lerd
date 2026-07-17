@@ -44,8 +44,14 @@ func defaultUpstreamFallback() []string { return nil }
 func ConfigureResolver() error {
 	// Nothing when the user opted out, mirroring the Linux guard: disable flips the
 	// TLD to localhost and stops lerd-dns, so writing /etc/resolver here would point
-	// *.localhost at a resolver that is deliberately not running.
-	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil && !cfg.DNS.Enabled {
+	// *.localhost at a resolver that is deliberately not running. A config that fails
+	// to load is surfaced, not defaulted: silently falling through to the "test"
+	// default would write /etc/resolver/test and report success on a broken config.
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	if cfg != nil && !cfg.DNS.Enabled {
 		return nil
 	}
 
