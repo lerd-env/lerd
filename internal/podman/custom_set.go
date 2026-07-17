@@ -163,7 +163,9 @@ func RecordRealisedSet(version string, declaredExts, declaredPkgs []string) {
 	if err != nil {
 		return
 	}
-	cfg.SetRealised(version, realisedSet(declaredExts, declaredPkgs, string(modules), string(apkInfo)))
+	set := realisedSet(declaredExts, declaredPkgs, string(modules), string(apkInfo))
+	set.Hash = customSetHash(declaredExts, cfg.AllExtApkDeps(), declaredPkgs)
+	cfg.SetRealised(version, set)
 	_ = config.SaveGlobal(cfg)
 }
 

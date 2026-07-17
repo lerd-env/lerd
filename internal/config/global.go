@@ -654,6 +654,7 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 		out.PHP.Realised = make(map[string]RealisedPHPSet, len(in.PHP.Realised))
 		for k, v := range in.PHP.Realised {
 			out.PHP.Realised[k] = RealisedPHPSet{
+				Hash:       v.Hash,
 				Extensions: slices.Clone(v.Extensions),
 				Packages:   slices.Clone(v.Packages),
 			}

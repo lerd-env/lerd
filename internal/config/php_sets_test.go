@@ -265,3 +265,40 @@ func TestRealisedSetRoundTrips(t *testing.T) {
 		t.Errorf("MissingFromImage on an unbuilt version = %v, want none", missing)
 	}
 }
+
+// A version whose image loaded nothing of the declared set (mongodb on the
+// Alpine 3.16 8.0 image) records an otherwise empty realised entry. It must
+// survive a save/load round-trip through viper, which drops an empty-map entry.
+// When it was dropped the version read back as "no record" and was reported as
+// carrying the whole declared set it could not build, the false success #950
+// exists to prevent.
+func TestRealisedSet_emptyRecordSurvivesRoundTrip(t *testing.T) {
+	writeGlobalConfig(t, `
+php:
+  extensions: [mongodb]
+`)
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	// The build succeeded but mongodb did not load, so Extensions and Packages
+	// are both empty. The always-emitted hash key (even zero-valued here) is the
+	// leaf that keeps the whole record from serializing as an empty map.
+	cfg.SetRealised("8.0", RealisedPHPSet{})
+	if err := SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	invalidateGlobalCache()
+	reloaded, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal (reload): %v", err)
+	}
+	if _, ok := reloaded.PHP.Realised["8.0"]; !ok {
+		t.Fatal("empty realised record for 8.0 was dropped on load")
+	}
+	if missing := reloaded.MissingFromImage("8.0", []string{"mongodb"}); !reflect.DeepEqual(missing, []string{"mongodb"}) {
+		t.Errorf("MissingFromImage(8.0) = %v, want [mongodb]: an image that loaded nothing must report the declared set as missing", missing)
+	}
+}
