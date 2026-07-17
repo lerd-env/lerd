@@ -21,39 +21,82 @@ dns=dnsmasq
 const nmDnsmasqConf = `server=/test/127.0.0.1#5300
 `
 
-const resolvedDropin = `[Resolve]
-DNS=127.0.0.1:5300
-Domains=~test
-`
-
 // lerd0 is an always-up dummy interface that keeps .test resolving when every
 // real link is down. systemd-resolved refuses to resolve anything (returns
 // "Network is down" to NSS and resolvectl alike) once no link is routable, and
 // it will not consult a global-scope loopback server in that state. A dummy link
 // is always up, so carrying the ~test route on it keeps resolved willing to
 // forward .test to lerd-dns on 127.0.0.1:5300 with no network connection at all.
-// NetworkManager owns its lifecycle via a keyfile connection (autoconnect on
-// boot); the dispatcher applies the resolvectl route when NM activates it.
+//
+// lerd owns the link through a system unit and tells NetworkManager to leave it
+// alone. An NM-managed connection would show up as a togglable network in the
+// desktop's network menu, where switching it off silently breaks offline .test
+// with no symptom until the user next loses the network. Unmanaged also means NM
+// never re-pushes DNS over the link, so the resolvectl route it carries stays put.
+const lerdNMUnmanaged = "/etc/NetworkManager/conf.d/lerd-dns-link.conf"
+
+// Pre-1.30 builds shipped lerd0 as an NM keyfile connection. Kept so setup can
+// migrate those hosts off it and Teardown can clean it up.
 const (
 	lerdDummyConn    = "lerd-dns"
-	lerdDummyIface   = "lerd0"
 	lerdDummyKeyfile = "/etc/NetworkManager/system-connections/lerd-dns.nmconnection"
 )
 
-const lerdDummyKeyfileContent = `[connection]
-id=lerd-dns
-type=dummy
-interface-name=lerd0
-autoconnect=true
+// lerdNMUnmanagedContent keeps NetworkManager's hands off lerd0: no entry in the
+// desktop network menu, and no DNS re-push over the link.
+const lerdNMUnmanagedContent = `[keyfile]
+unmanaged-devices=interface-name:lerd0
+`
 
-[dummy]
+// lerdFallbackDropin turns off systemd-resolved's fallback DNS servers, and is
+// the price of lerd0.
+//
+// Offline, resolved normally answers everything with "Network is down" instantly.
+// lerd0 is what stops it doing that, which is the whole point for .test, but the
+// same switch also makes resolved willing to chase names it cannot reach: it then
+// works through its fallback servers (quad9, Cloudflare, Google) one by one, none
+// of which answer with no network, so every offline lookup of a non-.test name
+// hangs for 20s or more instead of failing at once. That is not something lerd0
+// can dodge; the willingness to serve .test and the willingness to try the
+// internet are one and the same flag inside resolved.
+//
+// Written unconditionally rather than gated on a distro: Debian, Ubuntu and
+// Fedora already ship FallbackDNS empty, which is exactly why they never showed
+// this, so there it changes nothing. It only bites where the fallbacks are on
+// (Arch and its derivatives), and there it aligns them with what the other
+// distros already do. The cost is that a broken upstream DNS now fails instead of
+// silently routing your queries to a public resolver.
+const lerdFallbackDropin = "/etc/systemd/resolved.conf.d/lerd-fallback.conf"
 
-[ipv4]
-method=manual
-address1=10.123.45.1/32
+const lerdFallbackDropinContent = `[Resolve]
+FallbackDNS=
+`
 
-[ipv6]
-method=disabled
+// lerdDummyAddr is lerd0's address. systemd-resolved only gives a link a DNS
+// scope once it carries a routable address: with a link-local address alone the
+// link reports "Current Scopes: none" and .test does not resolve offline, which
+// is the whole point of the link. It is taken from RFC 5737 TEST-NET-1, reserved
+// for documentation and required never to appear on a real network, so the /32
+// local route it installs cannot shadow a host the user actually needs to reach.
+const lerdDummyAddr = "192.0.2.1/32"
+
+// lerdLinkUnitContent creates lerd0 and puts the .test route on it. Ordering
+// after systemd-resolved means the resolvectl calls land on a resolved that is
+// ready to keep them. Commands run through /bin/sh so PATH resolves ip and
+// resolvectl wherever the distro puts them.
+const lerdLinkUnitContent = `[Unit]
+Description=lerd .test DNS link
+After=systemd-resolved.service
+Wants=systemd-resolved.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/sh -c 'ip link show lerd0 >/dev/null 2>&1 || ip link add lerd0 type dummy; ip addr replace 192.0.2.1/32 dev lerd0; ip link set lerd0 up; resolvectl dns lerd0 127.0.0.1:5300; resolvectl domain lerd0 ~test'
+ExecStop=/bin/sh -c 'ip link del lerd0 2>/dev/null || true'
+
+[Install]
+WantedBy=multi-user.target
 `
 
 // nmDispatcherScript is installed at /etc/NetworkManager/dispatcher.d/99-lerd-dns.
@@ -72,19 +115,8 @@ IFACE="$1"
 ACTION="$2"
 LERD_DNS=""
 
-# Refresh the always-up dummy link (lerd0) on any up-ish event, whichever interface
-# triggered it. Carry only ~test (never ~.), so offline non-.test DNS is not
-# funnelled through lerd-dns into a then-unreachable upstream. Applying this from the
-# physical interface's boot "up" (which fires after systemd-resolved is ready) closes
-# the race where lerd0's own early activation runs before resolved accepts the route,
-# which would otherwise leave .test unresolvable offline until the next network event.
-case "$ACTION" in
-    up|dhcp4-change|dhcp6-change)
-        resolvectl dns lerd0 127.0.0.1:5300 2>/dev/null || true
-        resolvectl domain lerd0 ~test 2>/dev/null || true ;;
-esac
-
-# lerd0 itself has no upstream DNS to sync, so nothing further to do for its events.
+# lerd0 is unmanaged, so NM never dispatches for it and never re-pushes DNS over
+# it. Its route is set by lerd-dns-link.service and stays put; nothing to do here.
 if [ "$IFACE" = "lerd0" ]; then
     exit 0
 fi
@@ -134,6 +166,14 @@ for uid_dir in /run/user/[0-9]*/; do
     dns_servers="$LERD_DNS"
     [ -n "$upstream" ] && dns_servers="$upstream"
     [ -n "$dns_servers" ] || continue
+    # Carry lerd's existing address records over untouched. They are lerd policy,
+    # loopback normally and the host's LAN IP under lan:expose, and only the Go
+    # side knows which applies; regenerating them here clobbered lan:expose back to
+    # loopback and dropped the AAAA record, which cost ~20s on every offline .test
+    # lookup once the upstream went away. Read before the pipeline: tee truncates
+    # config_file as soon as it opens it.
+    addr_records=$(grep '^address=/' "$config_file" 2>/dev/null)
+    [ -n "$addr_records" ] || addr_records=$(printf 'address=/.%s/127.0.0.1\naddress=/.%s/::1' "$tld" "$tld")
     {
         printf '# Lerd DNS configuration\nport=5300\nno-resolv\n'
         for dns_ip in $dns_servers; do
@@ -145,8 +185,7 @@ for uid_dir in /run/user/[0-9]*/; do
             esac
             printf 'server=%s\n' "$dns_ip"
         done
-        printf 'address=/.%s/127.0.0.1\n' "$tld"
-        printf 'address=/.%s/::1\n' "$tld"
+        printf '%s\n' "$addr_records"
     } | $as_user tee "$config_file" >/dev/null
     $as_user systemctl --user restart lerd-dns 2>/dev/null || true
 done
@@ -372,11 +411,124 @@ func ConfigureResolver() error {
 	return setupNetworkManager()
 }
 
+// dummyLinkHealthy reports whether lerd0 exists and still carries the .test route.
+// resolved keeps per-link config across its own restarts (it stashes it under
+// /run/systemd/resolve/netif) but not across a reboot, and nothing stops a user
+// deleting the link by hand, so this is checked on every start rather than assumed.
+var dummyLinkHealthy = func() bool {
+	present, routed := defaultDummyLinkRouting()
+	return present && routed
+}
+
+// dummyLinkUnitEnabled reports whether the link unit is wired to start at boot.
+// Separate from dummyLinkHealthy: the link being up right now says nothing about
+// whether it will come back after a reboot. No sudo needed to ask.
+var dummyLinkUnitEnabled = func() bool {
+	return exec.Command("systemctl", "is-enabled", "--quiet", lerdLinkUnitName).Run() == nil
+}
+
+// dummyLinkGrantsLive reports whether the sudoers drop-in already grants the
+// commands setupDummyLink needs, without prompting for anything.
+//
+// This exists for the upgrade case. The drop-in is only rewritten by
+// InstallSudoers, so a host that took a new binary without re-running install
+// still has the old grants, and the watcher reapplies DNS config headless where
+// a sudo password prompt has no one to answer it. Probing first turns that hang
+// into a skip. `lerd start` refreshes the drop-in before it gets here, so the
+// normal upgrade path is granted by the time this runs.
+var dummyLinkGrantsLive = func() bool {
+	return exec.Command("sudo", "-n", "-l", "/usr/bin/systemctl", "restart", lerdLinkUnitName).Run() == nil
+}
+
+// dummyLinkNMRuleNeeded reports whether the NetworkManager unmanaged rule has to
+// be written. Without NetworkManager running there is nothing to keep off the
+// link, and writing it would create an /etc/NetworkManager tree on a host that
+// has no NetworkManager installed.
+func dummyLinkNMRuleNeeded(withNM bool) bool {
+	return withNM && !isFileContent(lerdNMUnmanaged, []byte(lerdNMUnmanagedContent))
+}
+
+// setupDummyLink provisions lerd0: a dummy link carrying the ~test route so
+// .test still resolves when every real interface is down. Both resolved paths
+// need it: resolved refuses a loopback DNS server once no link is routable
+// whether that server is per-link or global, so the NetworkManager-less case
+// (Arch without NM, omarchy) fails offline exactly like the NM one.
+//
+// withNM keeps NetworkManager out of the link's way. It is false when NM isn't
+// running, where writing the rule would mean creating an /etc/NetworkManager
+// tree on a host that has no NetworkManager at all.
+func setupDummyLink(withNM bool) error {
+	if !dummyLinkGrantsLive() {
+		// Online .test still works via the per-interface route, so this is a
+		// degradation, not a failure: warn and carry on rather than fail the start.
+		feedback.Line("WARN: skipping offline .test link setup, sudoers rule is out of date. Run `lerd install` to refresh it.")
+		return nil
+	}
+	// Migrate hosts that got lerd0 as an NM keyfile connection from a pre-release
+	// build. Deleting the connection drops the link; the unit below recreates it.
+	if _, err := os.Stat(lerdDummyKeyfile); err == nil {
+		exec.Command("sudo", "nmcli", "connection", "delete", lerdDummyConn).Run() //nolint:errcheck
+		exec.Command("sudo", "rm", "-f", lerdDummyKeyfile).Run()                   //nolint:errcheck
+	}
+
+	unitChanged := !isFileContent(lerdLinkUnit, []byte(lerdLinkUnitContent))
+	nmChanged := dummyLinkNMRuleNeeded(withNM)
+	fallbackChanged := !isFileContent(lerdFallbackDropin, []byte(lerdFallbackDropinContent))
+	if unitChanged || nmChanged || fallbackChanged {
+		feedback.Sudo("Configuring an always-up link so .test resolves offline")
+	}
+	if nmChanged {
+		if err := sudoWriteFile(lerdNMUnmanaged, []byte(lerdNMUnmanagedContent), 0644); err != nil {
+			return fmt.Errorf("writing NetworkManager unmanaged rule: %w", err)
+		}
+		exec.Command("sudo", "systemctl", "reload", "NetworkManager").Run() //nolint:errcheck
+	}
+	if unitChanged {
+		if err := sudoWriteFile(lerdLinkUnit, []byte(lerdLinkUnitContent), 0644); err != nil {
+			return fmt.Errorf("writing lerd-dns-link unit: %w", err)
+		}
+		exec.Command("sudo", "systemctl", "daemon-reload").Run() //nolint:errcheck
+	}
+
+	// Before the link is brought up, not after: this restarts resolved, and the
+	// route lerd0 carries is applied by the unit below. Doing it the other way
+	// round would lean on resolved restoring per-link config across a restart.
+	if fallbackChanged {
+		if err := sudoWriteFile(lerdFallbackDropin, []byte(lerdFallbackDropinContent), 0644); err != nil {
+			return fmt.Errorf("writing resolved fallback drop-in: %w", err)
+		}
+		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+	}
+
+	// Outside the changed-check above: on every start after the first the files are
+	// identical, and that is exactly when the link may be missing (fresh boot, or
+	// someone removed it). Gating on a config change would leave lerd0 down with no
+	// way back short of a reboot.
+	ensureDummyLinkRunning()
+	return nil
+}
+
+// ensureDummyLinkRunning enables the link unit for the next boot and starts it if
+// lerd0 isn't currently carrying the route.
+//
+// Enablement is checked separately from health rather than folded into one
+// `enable --now`: enabled is what brings lerd0 back after a reboot, so a link
+// that merely happens to be up right now must not stop us enabling the unit, or
+// it survives until the next boot and then silently disappears.
+func ensureDummyLinkRunning() {
+	if !dummyLinkUnitEnabled() {
+		exec.Command("sudo", "systemctl", "enable", "--now", lerdLinkUnitName).Run() //nolint:errcheck
+	}
+	if !dummyLinkHealthy() {
+		exec.Command("sudo", "systemctl", "restart", lerdLinkUnitName).Run() //nolint:errcheck
+	}
+}
+
 // setupNMWithResolved handles Ubuntu-style: NM manages systemd-resolved via DBUS.
 // NM overrides per-interface DNS, so an NM dispatcher script applies the interface
 // route via resolvectl on each "up" event and immediately to the current default
-// interface. That per-link route dies when the interface goes down, so an always-up
-// dummy link (lerd0) also carries the ~test route to keep .test resolving offline.
+// interface. That per-link route dies with the interface, so an always-up unmanaged
+// dummy link (lerd0) carries the ~test route to keep .test resolving offline.
 func setupNMWithResolved() error {
 	dispatcherScript := "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
 
@@ -388,31 +540,21 @@ func setupNMWithResolved() error {
 		}
 	}
 
-	// Install the always-up dummy link so .test resolves with no network at all.
-	// systemd-resolved will not resolve anything (NSS included) once every real
-	// link is down, and it ignores a global loopback server in that state. lerd0
-	// is always up, so the ~test route on it keeps resolved forwarding .test to
-	// lerd-dns while offline. NetworkManager auto-activates it on boot from the
-	// keyfile; the dispatcher applies the resolvectl route when it comes up.
-	if !isFileContent(lerdDummyKeyfile, []byte(lerdDummyKeyfileContent)) {
-		feedback.Sudo("Configuring an always-up link so .test resolves offline")
-		if err := sudoWriteFile(lerdDummyKeyfile, []byte(lerdDummyKeyfileContent), 0600); err != nil {
-			return fmt.Errorf("writing lerd-dns keyfile: %w", err)
-		}
-		exec.Command("sudo", "nmcli", "connection", "reload").Run() //nolint:errcheck
-		// Activate it now rather than waiting for a reconnect. On later starts the
-		// keyfile is unchanged and autoconnect keeps lerd0 up, so this is skipped.
-		upCmd := exec.Command("sudo", "nmcli", "connection", "up", lerdDummyConn)
-		upCmd.Stdin = os.Stdin
-		upCmd.Stdout = os.Stdout
-		upCmd.Stderr = os.Stderr
-		upCmd.Run() //nolint:errcheck
+	// Remove a stale resolved drop-in from an install that predates the dispatcher.
+	// It doesn't work under NM, which overrides global DNS, and leaving it behind
+	// makes `lerd dns:diagnose` report the wrong resolver hookup.
+	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
+	if _, err := os.Stat(dropin); err == nil {
+		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
+		rmCmd.Stdin = os.Stdin
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		rmCmd.Run() //nolint:errcheck
 	}
-	// Reapply the ~test route to lerd0 (idempotent; the dispatcher also does this on
-	// NM events and boot). Only ~test (never ~.), so offline non-.test DNS is not
-	// funnelled through lerd-dns into an unreachable upstream.
-	exec.Command("sudo", "resolvectl", "dns", lerdDummyIface, "127.0.0.1:5300").Run() //nolint:errcheck
-	exec.Command("sudo", "resolvectl", "domain", lerdDummyIface, "~test").Run()       //nolint:errcheck
+
+	if err := setupDummyLink(true); err != nil {
+		return err
+	}
 
 	// Apply immediately to the current default interface.
 	// Include DHCP-assigned upstream DNS servers alongside lerd's so internet
@@ -467,31 +609,32 @@ func setupNMWithResolved() error {
 	return nil
 }
 
-// setupSystemdResolved configures systemd-resolved to forward .test to port 5300.
-// Used only when systemd-resolved is active without NetworkManager managing it.
+// setupSystemdResolved points .test at lerd-dns when systemd-resolved runs
+// without NetworkManager (Arch, omarchy).
+//
+// lerd0 is the whole mechanism here. lerd used to declare the resolver globally
+// instead, in /etc/systemd/resolved.conf.d/lerd.conf, but that drop-in was both
+// insufficient and harmful. Insufficient because resolved refuses a global
+// loopback server once no link is routable, exactly as it refuses a per-link one,
+// so .test died offline anyway. Harmful because a global DNS server is a
+// catch-all: every ordinary name went to lerd-dns too, and offline dnsmasq
+// forwarded it to an upstream that wasn't there, so each lookup hung ~20s instead
+// of failing at once. lerd0 carries the same route scoped to ~test only, which
+// fixes both, so the drop-in is removed rather than written.
 func setupSystemdResolved() error {
+	// Remove the global drop-in from installs that predate lerd0.
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
-
-	if isFileContent(dropin, []byte(resolvedDropin)) {
-		if info, err := os.Stat(dropin); err == nil && info.Mode().Perm() == 0644 {
-			return nil
-		}
+	if _, err := os.Stat(dropin); err == nil {
+		feedback.Sudo("Configuring systemd-resolved for .test DNS resolution")
+		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
+		rmCmd.Stdin = os.Stdin
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		rmCmd.Run()                                                            //nolint:errcheck
+		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
 	}
 
-	feedback.Sudo("Configuring systemd-resolved for .test DNS resolution")
-
-	if err := sudoWriteFile(dropin, []byte(resolvedDropin), 0644); err != nil {
-		return fmt.Errorf("writing resolved drop-in: %w", err)
-	}
-
-	cmd := exec.Command("sudo", "systemctl", "restart", "systemd-resolved")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("restarting systemd-resolved: %w", err)
-	}
-	return nil
+	return setupDummyLink(false)
 }
 
 // setupNetworkManager configures NetworkManager's embedded dnsmasq.
@@ -535,8 +678,8 @@ func Teardown() {
 		rmCmd.Run() //nolint:errcheck
 	}
 
-	// systemd-resolved drop-in (only present on installs that predate the dummy-link
-	// approach; harmless to remove either way)
+	// The global resolved drop-in. lerd stopped writing it once lerd0 took over the
+	// .test route, so this only finds it on installs that predate the link.
 	dropin := "/etc/systemd/resolved.conf.d/lerd.conf"
 	if _, err := os.Stat(dropin); err == nil {
 		rmCmd := exec.Command("sudo", "rm", "-f", dropin)
@@ -546,14 +689,25 @@ func Teardown() {
 		rmCmd.Run() //nolint:errcheck
 	}
 
-	// The always-up dummy link. Deleting the NM connection removes lerd0 and its
-	// keyfile; rm covers a keyfile left behind if the connection is already gone.
-	delCmd := exec.Command("sudo", "nmcli", "connection", "delete", lerdDummyConn)
-	delCmd.Stdin = os.Stdin
-	delCmd.Stdout = os.Stdout
-	delCmd.Stderr = os.Stderr
-	delCmd.Run() //nolint:errcheck
+	// The always-up dummy link. Disabling the unit runs its ExecStop, which deletes
+	// lerd0; the explicit link delete covers a host where the unit file is already
+	// gone but the link is still up.
+	if _, err := os.Stat(lerdLinkUnit); err == nil {
+		disableCmd := exec.Command("sudo", "systemctl", "disable", "--now", lerdLinkUnitName)
+		disableCmd.Stdin = os.Stdin
+		disableCmd.Stdout = os.Stdout
+		disableCmd.Stderr = os.Stderr
+		disableCmd.Run() //nolint:errcheck
+	}
+	exec.Command("sudo", "ip", "link", "del", lerdDummyIface).Run() //nolint:errcheck
+
+	// The NM keyfile connection from a pre-release build, if this host ever ran one.
 	if _, err := os.Stat(lerdDummyKeyfile); err == nil {
+		delCmd := exec.Command("sudo", "nmcli", "connection", "delete", lerdDummyConn)
+		delCmd.Stdin = os.Stdin
+		delCmd.Stdout = os.Stdout
+		delCmd.Stderr = os.Stderr
+		delCmd.Run() //nolint:errcheck
 		rmCmd := exec.Command("sudo", "rm", "-f", lerdDummyKeyfile)
 		rmCmd.Stdin = os.Stdin
 		rmCmd.Stdout = os.Stdout
@@ -561,10 +715,24 @@ func Teardown() {
 		rmCmd.Run() //nolint:errcheck
 	}
 
+	// Give the system its fallback DNS servers back: they were only turned off to
+	// stop lerd0 making offline lookups hang, and with lerd0 gone that reason goes
+	// with it. resolved is restarted below.
+	if _, err := os.Stat(lerdFallbackDropin); err == nil {
+		rmCmd := exec.Command("sudo", "rm", "-f", lerdFallbackDropin)
+		rmCmd.Stdin = os.Stdin
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		rmCmd.Run()                                                            //nolint:errcheck
+		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
+	}
+
 	// NetworkManager conf and dnsmasq conf
 	for _, f := range []string{
 		"/etc/NetworkManager/conf.d/lerd.conf",
 		"/etc/NetworkManager/dnsmasq.d/lerd.conf",
+		lerdNMUnmanaged,
+		lerdLinkUnit,
 	} {
 		if _, err := os.Stat(f); err == nil {
 			rmCmd := exec.Command("sudo", "rm", "-f", f)
@@ -574,6 +742,7 @@ func Teardown() {
 			rmCmd.Run() //nolint:errcheck
 		}
 	}
+	exec.Command("sudo", "systemctl", "daemon-reload").Run() //nolint:errcheck
 
 	// Revert ALL interfaces that have lerd DNS (127.0.0.1:5300) configured.
 	// The dispatcher script applies DNS to every interface on "up", not just
@@ -664,14 +833,23 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 755 /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/resolved.conf.d\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd.conf\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart systemd-resolved\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/system-connections\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 600 /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection reload\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection up lerd-dns\n",
-		user, user, user, user, user, user, user, user, user, user, user, user, user,
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/systemd/system\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/systemd/system/lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/systemd/system/lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/mkdir -p /etc/NetworkManager/conf.d\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/tee /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/chmod 644 /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl daemon-reload\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl enable --now lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl restart lerd-dns-link.service\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl reload NetworkManager\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection delete lerd-dns\n"+
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n",
+		user, user, user, user, user, user, user, user, user, user, user,
+		user, user, user, user, user, user, user, user, user, user,
 	)
 }

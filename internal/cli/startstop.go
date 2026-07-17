@@ -691,6 +691,13 @@ func runStart(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  WARN: %v\n", err)
 	}
 
+	// Refresh the sudoers drop-in before reapplying DNS config. A release that
+	// adds a privileged step ships new grants, and only InstallSudoers writes
+	// them, so a host that upgraded the binary without re-running install would
+	// otherwise reach ConfigureResolver without them. Content-hashed, so this is
+	// a silent no-op unless the grants actually changed.
+	dns.InstallSudoers() //nolint:errcheck
+
 	// Re-apply DNS routing so .test resolves via lerd-dns on every start.
 	// resolvectl settings are ephemeral and reset on reboot; the NM dispatcher
 	// script fires on interface "up" but that event precedes lerd-dns starting.

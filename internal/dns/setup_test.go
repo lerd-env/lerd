@@ -208,47 +208,111 @@ func TestNMDispatcherScript_filtersUpstreamEntries(t *testing.T) {
 	assertContains(t, nmDispatcherScript, "*[!0-9A-Fa-f:.#]*) continue")
 }
 
-// When the dispatcher rewrites lerd.conf it must emit the AAAA (::1) record
-// beside the A record. A v4-only address rule leaves dnsmasq forwarding .test
-// AAAA queries to the upstream, which stalls ~5s once that upstream is
-// unreachable (offline).
-func TestNMDispatcherScript_emitsV6AddressRecord(t *testing.T) {
-	assertContains(t, nmDispatcherScript, `printf 'address=/.%s/127.0.0.1\n' "$tld"`)
-	assertContains(t, nmDispatcherScript, `printf 'address=/.%s/::1\n' "$tld"`)
-}
-
-// The dummy link lerd0 keeps .test resolving offline. On it the dispatcher must
-// set only ~test, never ~test ~.: with ~. every non-.test query offline would be
-// funnelled through lerd-dns into a then-unreachable upstream and stall.
-func TestNMDispatcherScript_dummyLinkGetsTestDomainOnly(t *testing.T) {
-	assertContains(t, nmDispatcherScript, `if [ "$IFACE" = "lerd0" ]; then`)
-	assertContains(t, nmDispatcherScript, "resolvectl domain lerd0 ~test 2>/dev/null")
-	if strings.Contains(nmDispatcherScript, "resolvectl domain lerd0 ~test ~.") {
-		t.Error("dummy link lerd0 must carry ~test only, never ~. (would funnel all DNS through lerd-dns offline)")
+// The address records are lerd policy: loopback normally, the host's LAN IP
+// under lan:expose, and only the Go side knows which. The dispatcher used to
+// regenerate them from a hardcoded template on every interface "up", which
+// clobbered lan:expose back to loopback and dropped the AAAA record (costing
+// ~20s per offline .test lookup). It must carry the existing records over.
+func TestNMDispatcherScript_preservesAddressRecords(t *testing.T) {
+	assertContains(t, nmDispatcherScript, `addr_records=$(grep '^address=/' "$config_file"`)
+	assertContains(t, nmDispatcherScript, `printf '%s\n' "$addr_records"`)
+	if strings.Contains(nmDispatcherScript, `printf 'address=/.%s/127.0.0.1\n' "$tld"`) {
+		t.Error("dispatcher must not regenerate address records; it clobbers lan:expose and drops the AAAA record")
 	}
 }
 
-// The dummy link is provisioned as an NM keyfile so NetworkManager owns its
-// lifecycle and auto-activates it on boot. It must be a dummy device on lerd0
-// that autoconnects.
-func TestLerdDummyKeyfile_shape(t *testing.T) {
-	assertContains(t, lerdDummyKeyfileContent, "type=dummy")
-	assertContains(t, lerdDummyKeyfileContent, "interface-name=lerd0")
-	assertContains(t, lerdDummyKeyfileContent, "autoconnect=true")
+// The address records must be read before the rewrite pipeline runs: tee
+// truncates config_file the moment it opens it, so a grep inside the pipeline
+// races against an already-empty file and would silently drop the records.
+func TestNMDispatcherScript_readsAddressRecordsBeforePipeline(t *testing.T) {
+	grepAt := strings.Index(nmDispatcherScript, `addr_records=$(grep '^address=/'`)
+	teeAt := strings.Index(nmDispatcherScript, `} | $as_user tee "$config_file"`)
+	if grepAt < 0 || teeAt < 0 {
+		t.Fatal("dispatcher is missing the address-record read or the tee pipeline")
+	}
+	if grepAt > teeAt {
+		t.Error("address records must be read before the tee pipeline truncates the file")
+	}
 }
 
-// Upgrades reapply DNS config non-interactively, so the sudoers drop-in must
-// grant the keyfile write and the nmcli activation passwordless, mirroring the
-// existing dispatcher grants.
+// lerd0 is unmanaged, so NM never dispatches for it. The script should bail out
+// early rather than trying to read upstream DNS off a link that has none.
+func TestNMDispatcherScript_ignoresDummyLink(t *testing.T) {
+	assertContains(t, nmDispatcherScript, `if [ "$IFACE" = "lerd0" ]; then`)
+	if strings.Contains(nmDispatcherScript, "resolvectl dns lerd0") {
+		t.Error("lerd-dns-link.service owns lerd0's route; the dispatcher must not set it")
+	}
+}
+
+// lerd owns lerd0 through a system unit and tells NM to leave it alone. An
+// NM-managed connection appears as a togglable network in the desktop's network
+// menu, where switching it off silently breaks offline .test resolution.
+func TestLerdLinkUnit_shape(t *testing.T) {
+	assertContains(t, lerdNMUnmanagedContent, "unmanaged-devices=interface-name:lerd0")
+	assertContains(t, lerdLinkUnitContent, "ip link add lerd0 type dummy")
+	assertContains(t, lerdLinkUnitContent, "resolvectl domain lerd0 ~test")
+	assertContains(t, lerdLinkUnitContent, "After=systemd-resolved.service")
+	assertContains(t, lerdLinkUnitContent, "WantedBy=multi-user.target")
+	assertContains(t, lerdLinkUnitContent, "ip link del lerd0")
+}
+
+// systemd-resolved only gives a link a DNS scope once it carries a routable
+// address. With a link-local address alone lerd0 reports "Current Scopes: none"
+// and .test does not resolve offline at all, which defeats the link's purpose.
+// The address must come from a range that cannot exist on a real network, so the
+// /32 local route can't shadow a host the user needs to reach: RFC 5737
+// TEST-NET-1 (192.0.2.0/24) is reserved for documentation and fits exactly.
+func TestLerdLinkUnit_carriesReservedAddress(t *testing.T) {
+	assertContains(t, lerdLinkUnitContent, "ip addr replace "+lerdDummyAddr+" dev lerd0")
+	if !strings.HasPrefix(lerdDummyAddr, "192.0.2.") {
+		t.Errorf("lerd0 address %q must come from RFC 5737 TEST-NET-1, which never appears on a real network", lerdDummyAddr)
+	}
+	if !strings.HasSuffix(lerdDummyAddr, "/32") {
+		t.Errorf("lerd0 address %q must be a /32 so it claims exactly one address", lerdDummyAddr)
+	}
+}
+
+// lerd0 must carry ~test only, never ~.: with ~. every non-.test query offline
+// would be funnelled through lerd-dns into a then-unreachable upstream and stall.
+func TestLerdLinkUnit_routesTestDomainOnly(t *testing.T) {
+	if strings.Contains(lerdLinkUnitContent, "~test ~.") {
+		t.Error("lerd0 must carry ~test only (~. would funnel all DNS through lerd-dns offline)")
+	}
+}
+
+// The watcher reapplies DNS config headless, so every privileged step must be
+// granted passwordless or it blocks on a prompt no one can answer.
 func TestLinuxSudoers_grantsDummyLinkOps(t *testing.T) {
 	content := renderLinuxSudoers("alice")
 	for _, want := range []string{
-		"/usr/bin/tee /etc/NetworkManager/system-connections/lerd-dns.nmconnection",
-		"/usr/bin/chmod 600 /etc/NetworkManager/system-connections/lerd-dns.nmconnection",
-		"/usr/bin/nmcli connection reload",
-		"/usr/bin/nmcli connection up lerd-dns",
+		"/usr/bin/tee /etc/systemd/system/lerd-dns-link.service",
+		"/usr/bin/chmod 644 /etc/systemd/system/lerd-dns-link.service",
+		"/usr/bin/tee /etc/NetworkManager/conf.d/lerd-dns-link.conf",
+		"/usr/bin/chmod 644 /etc/NetworkManager/conf.d/lerd-dns-link.conf",
+		"/usr/bin/systemctl daemon-reload",
+		"/usr/bin/systemctl enable --now lerd-dns-link.service",
+		"/usr/bin/systemctl restart lerd-dns-link.service",
+		"/usr/bin/systemctl reload NetworkManager",
+		"/usr/bin/nmcli connection delete lerd-dns",
 	} {
 		assertContains(t, content, want)
+	}
+}
+
+// A sudoers drop-in with no %s substituted for the user parses as a rule for a
+// literal "%s" user and grants nothing, so guard the format-arg count.
+func TestLinuxSudoers_everyRuleNamesTheUser(t *testing.T) {
+	content := renderLinuxSudoers("alice")
+	if strings.Contains(content, "%!s(MISSING)") || strings.Contains(content, "%!(EXTRA") {
+		t.Fatalf("sudoers format args mismatch:\n%s", content)
+	}
+	for _, line := range strings.Split(content, "\n") {
+		if !strings.Contains(line, "NOPASSWD") {
+			continue
+		}
+		if !strings.HasPrefix(line, "alice ALL=(root) NOPASSWD: /") {
+			t.Errorf("malformed sudoers rule: %q", line)
+		}
 	}
 }
 
@@ -444,4 +508,94 @@ func readFile(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+// A host that upgraded the binary without re-running install still has the old
+// sudoers grants, and the watcher reapplies DNS config headless where a password
+// prompt would hang forever. The grants are probed before any privileged step,
+// and a stale drop-in downgrades to a warning rather than failing the start:
+// online .test still resolves over the per-interface route either way.
+func TestSetupDummyLink_skipsWhenSudoersGrantsAreStale(t *testing.T) {
+	orig := dummyLinkGrantsLive
+	t.Cleanup(func() { dummyLinkGrantsLive = orig })
+
+	probed := false
+	dummyLinkGrantsLive = func() bool { probed = true; return false }
+
+	if err := setupDummyLink(true); err != nil {
+		t.Fatalf("setupDummyLink() = %v, want nil: a stale drop-in is a warning, not a start failure", err)
+	}
+	if !probed {
+		t.Error("setupDummyLink must probe the sudoers grants before running any privileged step")
+	}
+}
+
+// On a host with no NetworkManager (Arch/omarchy: resolved + networkd + iwd),
+// the unmanaged rule is pointless, and writing it would create an
+// /etc/NetworkManager tree on a machine that has no NetworkManager at all.
+func TestDummyLinkNMRuleNeeded_neverWithoutNetworkManager(t *testing.T) {
+	if dummyLinkNMRuleNeeded(false) {
+		t.Error("must not write the NetworkManager rule on a host without NetworkManager")
+	}
+}
+
+// Enablement and health are different questions, and conflating them loses lerd0
+// at the next boot: a link that happens to be up right now (left over, or made by
+// hand) must not stop the unit being enabled, because enabled is the only thing
+// that brings it back after a reboot.
+func TestEnsureDummyLinkRunning_checksEnablementEvenWhenLinkAlreadyUp(t *testing.T) {
+	origHealthy, origEnabled := dummyLinkHealthy, dummyLinkUnitEnabled
+	t.Cleanup(func() { dummyLinkHealthy, dummyLinkUnitEnabled = origHealthy, origEnabled })
+
+	dummyLinkHealthy = func() bool { return true } // link is up right now
+	askedEnabled := false
+	// Report enabled so no privileged command runs during the test.
+	dummyLinkUnitEnabled = func() bool { askedEnabled = true; return true }
+
+	ensureDummyLinkRunning()
+
+	if !askedEnabled {
+		t.Error("enablement must be checked even when the link is already healthy, or lerd0 is gone after the next reboot")
+	}
+}
+
+// lerd0 is what stops resolved answering "Network is down" instantly while
+// offline, which is the point for .test, but the same flag makes resolved chase
+// unreachable fallback servers for every other name, hanging each offline lookup
+// for 20s+. Turning the fallbacks off is the only lever that removes the hang,
+// and it is a no-op on Debian, Ubuntu and Fedora, which ship them off already.
+func TestLerdFallbackDropin_disablesFallbackServers(t *testing.T) {
+	assertContains(t, lerdFallbackDropinContent, "[Resolve]")
+	assertContains(t, lerdFallbackDropinContent, "FallbackDNS=")
+	// A value here would set fallbacks rather than clear them.
+	for _, line := range strings.Split(lerdFallbackDropinContent, "\n") {
+		if strings.HasPrefix(line, "FallbackDNS=") && strings.TrimSpace(line) != "FallbackDNS=" {
+			t.Errorf("FallbackDNS must be cleared, not assigned: %q", line)
+		}
+	}
+	if !strings.HasSuffix(lerdFallbackDropin, ".conf") || !strings.Contains(lerdFallbackDropin, "/etc/systemd/resolved.conf.d/") {
+		t.Errorf("fallback drop-in %q must live in resolved.conf.d", lerdFallbackDropin)
+	}
+	// Must not collide with the drop-in the no-NetworkManager path writes, which
+	// setupNMWithResolved deletes as a stale artefact.
+	if lerdFallbackDropin == "/etc/systemd/resolved.conf.d/lerd.conf" {
+		t.Error("fallback drop-in must not reuse the resolver drop-in's path; the NM path deletes that file")
+	}
+}
+
+// Turning the fallbacks off is lerd's doing and only justified while lerd0 is
+// there. Leaving the drop-in behind on uninstall would silently keep the user's
+// DNS changed forever, so Teardown has to take it back out.
+func TestTeardown_removesFallbackDropin(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	_, teardown, found := strings.Cut(string(src), "func Teardown()")
+	if !found {
+		t.Fatal("Teardown not found in setup.go")
+	}
+	if !strings.Contains(teardown, "lerdFallbackDropin") {
+		t.Error("Teardown must remove the fallback drop-in, or uninstalling lerd leaves the system's fallback DNS off for good")
+	}
 }

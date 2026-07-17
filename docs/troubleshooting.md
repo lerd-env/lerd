@@ -78,11 +78,27 @@ The response includes a `steps` array with a `status` (`ok` / `fail` / `warn` / 
 :::
 
 ::: details `.test` domains stop resolving when offline (no internet)
-On NetworkManager plus systemd-resolved systems, `.test` used to be routed to lerd-dns per interface (`resolvectl domain <iface> ~test`). That route lives on the physical NIC, so pulling the cable or dropping Wi-Fi took it down with the interface. Worse, systemd-resolved refuses to resolve anything at all, over both `resolvectl` and the glibc/NSS path a browser uses, once no real link is routable, so a fresh `.test` lookup failed even though lerd-dns kept answering on `127.0.0.1:5300`. A common symptom was a page that still worked while the browser stayed open (cached DNS) but failed the moment you closed and reopened it.
+On systemd-resolved systems, `.test` used to reach lerd-dns only through a route that depended on your real network being up: per interface (`resolvectl domain <iface> ~test`) when NetworkManager manages resolved, or a global drop-in otherwise. Either way, systemd-resolved refuses to resolve anything at all, over both `resolvectl` and the glibc/NSS path a browser uses, once no real link is routable, so a fresh `.test` lookup failed even though lerd-dns kept answering on `127.0.0.1:5300`. A common symptom was a page that still worked while the browser stayed open (cached DNS) but failed the moment you closed and reopened it.
 
-Lerd now installs an always-up dummy interface, `lerd0`, as a NetworkManager connection (`/etc/NetworkManager/system-connections/lerd-dns.nmconnection`) that carries the `~test` route. Because that link never goes down, systemd-resolved keeps forwarding `.test` to lerd-dns with no network connection at all. NetworkManager brings `lerd0` up on every boot and the dispatcher applies its route, so the fix survives reboots and applies automatically on the next `lerd start` or `lerd update`, nothing to run by hand. You will see a `lerd0` device in `ip link` and NetworkManager; that is expected.
+Lerd now keeps an always-up dummy interface, `lerd0`, that carries the `~test` route. Because that link never goes down, systemd-resolved keeps forwarding `.test` to lerd-dns with no network connection at all. It is created by a small system service, `lerd-dns-link.service`, which starts on every boot, so the fix survives reboots and applies automatically on your next `lerd start`, nothing to run by hand. This applies to both systemd-resolved setups: with NetworkManager (Ubuntu, Fedora, CachyOS) and without it (Arch, omarchy).
 
-If you also saw a roughly five second stall on `.test` while offline, that was an AAAA (IPv6) lookup: a v4-only `address=/.test/127.0.0.1` rule leaves dnsmasq forwarding the AAAA query to your upstream, which times out once that upstream is unreachable. The dnsmasq config now always carries the matching `address=/.test/::1` record, so AAAA is answered locally and returns instantly.
+If you also saw a stall of up to twenty seconds on `.test` while offline, that was an AAAA (IPv6) lookup. lerd's dnsmasq config answers both `address=/.test/127.0.0.1` and `address=/.test/::1`, but the NetworkManager dispatcher used to regenerate that file from a v4-only template whenever an interface came up, dropping the AAAA record. dnsmasq then forwarded `.test` AAAA queries to your upstream, which times out once that upstream is unreachable. The dispatcher now leaves the address records alone, so AAAA is answered locally and returns instantly.
+:::
+
+::: details What is the `lerd0` network interface?
+`lerd0` is a dummy (virtual) network interface lerd creates on Linux so that `.test` domains keep resolving when you have no network at all. It carries no traffic and connects to nothing; it exists purely to give systemd-resolved a link that is always up to hang the `.test` route on. See the offline entry above for why that is necessary.
+
+It is deliberately marked unmanaged in NetworkManager (`/etc/NetworkManager/conf.d/lerd-dns-link.conf`), so it does not appear as a connection in your desktop's network menu and cannot be switched off by accident. Its only address is `192.0.2.1/32`, from the range RFC 5737 reserves for documentation and which never appears on a real network, so it cannot conflict with anything you connect to.
+
+Alongside it, lerd turns off systemd-resolved's fallback DNS servers (`/etc/systemd/resolved.conf.d/lerd-fallback.conf`). This is the price of `lerd0`: it stops resolved refusing every lookup when you are offline, which is the point for `.test`, but the same switch makes resolved willing to try names it cannot reach, so it works through its fallback servers (Quad9, Cloudflare, Google) one at a time and every offline lookup of an ordinary domain hangs for 20 seconds or more instead of failing at once. Debian, Ubuntu and Fedora already ship these fallbacks off, so nothing changes there; on Arch and its derivatives this aligns them with the others. The trade is that if your own DNS server breaks, lookups now fail instead of quietly going to a public resolver. `lerd uninstall` puts the fallbacks back.
+
+If it ever goes missing, `lerd doctor` reports it under the `offline .test route` check and the next `lerd start` recreates it. To recreate it by hand:
+
+```bash
+sudo systemctl restart lerd-dns-link.service
+```
+
+`lerd uninstall` removes the interface, its service, and the NetworkManager rule. To remove it without uninstalling lerd, use `lerd dns disable`, which turns off lerd's DNS management entirely.
 :::
 
 ::: details DNS shows "Degraded" while connected to a VPN

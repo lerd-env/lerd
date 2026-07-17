@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
@@ -80,4 +81,13 @@ func teardownDNS() {
 	_ = services.Mgr.Stop("lerd-dns")
 	_ = services.Mgr.RemoveContainerUnit("lerd-dns")
 	_ = services.Mgr.DaemonReload()
+	// Remove the resolver plumbing lerd wrote (dispatcher, interface routes, and
+	// the lerd0 offline link) so a disabled setup doesn't leave a resolver
+	// pointing at the dnsmasq we just tore down, or an interface lerd no longer
+	// maintains. Mirrors the macOS path, which removes its /etc/resolver files.
+	dnsTeardown()
 }
+
+// dnsTeardown is a seam so tests can assert the disable path removes the
+// resolver plumbing without shelling out to sudo.
+var dnsTeardown = dns.Teardown

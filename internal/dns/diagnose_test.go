@@ -2,6 +2,7 @@ package dns
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -17,9 +18,30 @@ func fakeProbes() probeFns {
 		dnsmasqAnswer:    func(string) (string, error) { return "127.0.0.1", nil },
 		resolverHookup:   func() (string, bool, string) { return "drop-in", true, "/etc/x" },
 		interfaceRouting: func(string) (string, bool, bool, error) { return "eth0", true, true, nil },
+		dummyLinkRouting: func() (bool, bool) { return true, true },
 		systemLookup:     func(string) ([]string, error) { return []string{"127.0.0.1"}, nil },
 		vpnActive:        func() bool { return false },
 	}
+}
+
+// nmProbes is fakeProbes on the NetworkManager + systemd-resolved path, the only
+// one that provisions lerd0 and so the only one the offline-route rung runs on.
+func nmProbes() probeFns {
+	p := fakeProbes()
+	p.resolverHookup = func() (string, bool, string) {
+		return nmDispatcherKind, true, "/etc/NetworkManager/dispatcher.d/99-lerd-dns"
+	}
+	return p
+}
+
+// findStep returns the step whose name contains sub, or nil.
+func findStep(d Diagnostic, sub string) *Step {
+	for i := range d.Steps {
+		if strings.Contains(d.Steps[i].Name, sub) {
+			return &d.Steps[i]
+		}
+	}
+	return nil
 }
 
 func TestDiagnose_allOK(t *testing.T) {
@@ -285,5 +307,162 @@ func TestParseInterfaceRouting_no5300(t *testing.T) {
 	_, has5300, _ := parseInterfaceRouting(out, "test")
 	if has5300 {
 		t.Error("expected has5300 = false")
+	}
+}
+
+// --- offline .test route (lerd0) ---
+
+// A missing lerd0 is a warning, not a failure: .test still resolves while a real
+// link is up, and only breaks once the user goes offline. The chain must keep
+// walking so the end-to-end rung still reports.
+func TestDiagnose_dummyLinkMissingWarnsAndContinues(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("lerd0 is provisioned on Linux only")
+	}
+	p := nmProbes()
+	p.dummyLinkRouting = func() (bool, bool) { return false, false }
+	d := diagnose("test", p)
+
+	step := findStep(d, "offline .test route")
+	if step == nil {
+		t.Fatal("expected an offline .test route step")
+	}
+	if step.Status != StepWarn {
+		t.Errorf("status = %s, want warn (online resolution is unaffected)", step.Status)
+	}
+	if !strings.Contains(step.Detail, "lerd0") {
+		t.Errorf("detail %q should name the link", step.Detail)
+	}
+	if d.FirstFailure != -1 {
+		t.Errorf("FirstFailure = %d, want -1: a warning must not stop the chain", d.FirstFailure)
+	}
+	if findStep(d, "system DNS lookup") == nil {
+		t.Error("chain should continue to the end-to-end rung after a warning")
+	}
+}
+
+// lerd0 present but with no ~test route is its own failure mode: the link is up
+// so it looks fine, but resolved has nothing to forward .test over when offline.
+func TestDiagnose_dummyLinkPresentButUnroutedWarns(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("lerd0 is provisioned on Linux only")
+	}
+	p := nmProbes()
+	p.dummyLinkRouting = func() (bool, bool) { return true, false }
+	d := diagnose("test", p)
+
+	step := findStep(d, "offline .test route")
+	if step == nil {
+		t.Fatal("expected an offline .test route step")
+	}
+	if step.Status != StepWarn {
+		t.Errorf("status = %s, want warn", step.Status)
+	}
+	if !strings.Contains(step.Hint, lerdLinkUnitName) {
+		t.Errorf("hint %q should point at the unit that owns the route", step.Hint)
+	}
+}
+
+// Only the NM + systemd-resolved path provisions lerd0. On a pure resolved
+// drop-in or macOS host the link never exists and reporting on it would be noise.
+func TestDiagnose_dummyLinkRungSkippedOffNMPath(t *testing.T) {
+	p := fakeProbes() // resolverHookup returns "drop-in", not the NM dispatcher
+	called := false
+	p.dummyLinkRouting = func() (bool, bool) { called = true; return false, false }
+	d := diagnose("test", p)
+
+	if called {
+		t.Error("lerd0 must not be probed on a non-NetworkManager resolver path")
+	}
+	if findStep(d, "offline .test route") != nil {
+		t.Error("no offline .test route step should appear off the NM path")
+	}
+}
+
+// resolvectl exits 0 even for a link it doesn't know, printing "No such device"
+// to stderr and nothing to stdout. Presence must therefore be read off stdout:
+// an exit-code check reports a deleted lerd0 as present-but-unrouted, which sends
+// the user chasing a routing problem on an interface that isn't there.
+func TestDefaultDummyLinkRouting_parsesPresenceFromStdout(t *testing.T) {
+	cases := []struct {
+		name            string
+		stdout          string
+		present, routed bool
+	}{
+		{
+			name:   "missing link prints nothing on stdout",
+			stdout: "",
+		},
+		{
+			name: "present and routed",
+			stdout: "Link 6 (lerd0)\n" +
+				"    Current Scopes: DNS\n" +
+				"Current DNS Server: 127.0.0.1:5300\n" +
+				"       DNS Servers: 127.0.0.1:5300\n" +
+				"        DNS Domain: ~test\n",
+			present: true, routed: true,
+		},
+		{
+			name: "present but carrying no route",
+			stdout: "Link 6 (lerd0)\n" +
+				"    Current Scopes: none\n",
+			present: true,
+		},
+		{
+			name: "present with a server but no ~test domain",
+			stdout: "Link 6 (lerd0)\n" +
+				"       DNS Servers: 127.0.0.1:5300\n",
+			present: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			present, routed := parseDummyLinkRouting(tc.stdout)
+			if present != tc.present || routed != tc.routed {
+				t.Errorf("got (present=%v routed=%v), want (present=%v routed=%v)",
+					present, routed, tc.present, tc.routed)
+			}
+		})
+	}
+}
+
+// Both systemd-resolved paths depend on lerd0 for offline .test: resolved
+// refuses a loopback DNS server once no link is routable whether that server is
+// per-link (NetworkManager dispatcher) or global (the drop-in used on Arch and
+// omarchy, which run resolved without NetworkManager). NetworkManager's own
+// dnsmasq resolves .test without resolved and needs no link.
+func TestUsesDummyLink_bothResolvedPaths(t *testing.T) {
+	for kind, want := range map[string]bool{
+		"NetworkManager dispatcher": true,
+		"systemd-resolved link":     true,
+		"NetworkManager dnsmasq":    false,
+		"macOS native dnsmasq":      false,
+		"":                          false,
+	} {
+		if got := usesDummyLink(kind); got != want {
+			t.Errorf("usesDummyLink(%q) = %v, want %v", kind, got, want)
+		}
+	}
+}
+
+// The offline-route rung must report on the no-NetworkManager resolved path too;
+// there lerd0 is the entire hookup, so a missing link is the whole failure.
+func TestDiagnose_dummyLinkRungRunsOnResolvedLinkPath(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("lerd0 is provisioned on Linux only")
+	}
+	p := fakeProbes()
+	p.resolverHookup = func() (string, bool, string) {
+		return resolvedLinkKind, true, "/etc/systemd/system/lerd-dns-link.service"
+	}
+	p.dummyLinkRouting = func() (bool, bool) { return false, false }
+	d := diagnose("test", p)
+
+	step := findStep(d, "offline .test route")
+	if step == nil {
+		t.Fatal("expected the offline route rung to run on the no-NetworkManager resolved path")
+	}
+	if step.Status != StepWarn {
+		t.Errorf("status = %s, want warn", step.Status)
 	}
 }
