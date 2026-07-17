@@ -13,16 +13,16 @@
 | `lerd xdebug off [version]` | Disable Xdebug and restart the FPM container |
 | `lerd xdebug status` | Show Xdebug enabled/disabled state and active mode for all installed PHP versions |
 | `lerd xdebug pause [site] [--list] [--pid PID]` | Break the IDE debugger into a running worker/CLI process via Xdebug's control socket. `--list` shows candidate processes |
-| `lerd php:ext add <ext> [version] [--apk-deps "pkg ..."]` | Add a custom PHP extension to the FPM image and rebuild; `--apk-deps` lists extra Alpine packages the extension needs to build |
-| `lerd php:ext remove <ext> [version]` | Remove a custom PHP extension and rebuild |
-| `lerd php:ext list [version]` | List custom extensions configured for a PHP version |
+| `lerd php:ext add <ext> [--apk-deps "pkg ..."]` | Add a custom PHP extension to every PHP image and rebuild the current version; `--apk-deps` lists extra Alpine packages the extension needs to build |
+| `lerd php:ext remove <ext>` | Remove a custom PHP extension from every PHP image and rebuild |
+| `lerd php:ext list` | List your declared extensions, and what each PHP version's image actually loaded |
 | `lerd php:bun install [version]` | Install a musl bun inside the PHP-FPM container, into a persistent volume |
 | `lerd php:bun remove` | Remove the in-container bun and clear its shared persistent volume |
 | `lerd php:bun update [version]` | Update the container's bun in place (`bun upgrade`) |
 | `lerd php:bun version [version]` | Show the bun version installed in the container |
-| `lerd php:pkg add <package...> [--php version]` | Install extra Alpine packages into the FPM image and rebuild |
-| `lerd php:pkg remove <package...> [--php version]` | Remove extra Alpine packages and rebuild |
-| `lerd php:pkg list [--php version]` | List the extra packages configured for a PHP version |
+| `lerd php:pkg add <package...>` | Install extra Alpine packages into every FPM image and rebuild the current version |
+| `lerd php:pkg remove <package...>` | Remove extra Alpine packages from every FPM image and rebuild |
+| `lerd php:pkg list` | List your declared packages, and what each PHP version's image actually installed |
 | `lerd php:ports add <host:container...> [--php version]` | Publish a host port on the version's shell container; a bare number publishes the same port straight through, and a busy host port shifts to the next free one |
 | `lerd php:ports remove <host...> [--php version]` | Unpublish a host port from the version's shell container |
 | `lerd php:ports list [--php version]` | List the extra host ports published for a PHP version |
@@ -252,13 +252,49 @@ Two of those names are version-gated, because the image genuinely cannot build t
 To add an extension that isn't in the bundle:
 
 ```bash
-lerd php:ext add swoole          # uses detected/default PHP version
-lerd php:ext add swoole 8.3      # explicit version
+lerd php:ext add swoole
 ```
 
-This rebuilds the FPM image with the extension installed and restarts the container. Extensions are persisted in `~/.config/lerd/config.yaml` so they survive `lerd php:rebuild`.
+Extensions belong to you, not to a PHP version. One declared set applies to every PHP image lerd builds, so a site that changes version keeps them. The version you are on is rebuilt and verified straight away; other installed versions carry the old set until they are rebuilt, and lerd says which ones those are.
+
+Extensions are persisted in `~/.config/lerd/config.yaml` under `php.extensions`, so they survive `lerd php:rebuild`.
 
 After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there.
+
+#### What each version actually loaded
+
+A declared set cannot always be honoured. `mongodb` does not build below 8.1, and the legacy 7.4 and 8.0 images are Alpine 3.16, where some packages do not exist. lerd records what each version's image really loaded, verified after its build, and never advertises what an image does not have:
+
+```bash
+lerd php:ext list
+```
+
+```
+Declared, for every PHP version:
+  - mongodb
+  - swoole
+
+Per version:
+  PHP 7.4  swoole (cannot load: mongodb)
+  PHP 8.1  image predates this set, run 'lerd php:rebuild 8.1'
+  PHP 8.4  mongodb, swoole
+  PHP 8.5  mongodb, swoole
+```
+
+The three states are different problems. An image that **predates the set** was built before you declared something, and a rebuild fixes it. Something an image **cannot load** did not build on that version, and a rebuild will not change that. A version with no image at all is not listed. Nothing is reported as present unless that image really has it.
+
+The dashboard shows the same thing, plus every module the image loads, under **System → PHP → Extensions**. The module list is `php -m` read from the image itself, so it is what your code will actually see; it is fetched when you open the tab and cached against the image, so a rebuild refreshes it and nothing else pays for it. The TUI's System view carries a shorter `Extras · PHP <version>` line per version, from the same recorded data.
+
+Changing a site's PHP version is exactly when it would silently lose an extension, so lerd checks the target image at that moment. An image built before you declared something can be brought up to date with a rebuild:
+
+```
+$ lerd isolate 8.3
+ ✓ PHP pinned to 8.3
+ ⚠ PHP 8.3's image predates your custom extensions and packages
+       run 'lerd php:rebuild 8.3' to bring it up to date
+```
+
+An extension that genuinely cannot build on that version is reported differently, because no rebuild will fix it.
 
 Some extensions need extra Alpine packages to compile. lerd already knows the ones for `imap` (`imap-dev krb5-dev openssl-dev c-client`); for anything else, pass them with `--apk-deps`:
 
@@ -270,8 +306,8 @@ lerd php:ext add imap                                  # deps known to lerd, no 
 The packages are saved alongside the extension in `~/.config/lerd/config.yaml` (under `php.ext_apk_deps`), so they reapply on every `lerd php:rebuild`.
 
 ```bash
-lerd php:ext list                # show custom extensions (and their apk deps) for current version
-lerd php:ext remove swoole       # remove and rebuild
+lerd php:ext list                # show your custom extensions and their apk deps
+lerd php:ext remove swoole       # remove from every version and rebuild
 ```
 
 ### php.ini settings
@@ -369,7 +405,7 @@ What you get inside the container:
 
 If you want extra packages in the image (additional CLI tools, language toolchains, etc.), use `lerd php:ext` for PHP extensions, or fork the Containerfile at `internal/podman/quadlets/lerd-php-fpm.Containerfile`.
 
-For other tools and runtime libraries, `lerd php:pkg add <packages>` installs Alpine packages into the FPM image's runtime stage and rebuilds, for example `lerd php:pkg add htop vim`. The packages are saved in `~/.config/lerd/config.yaml` (under `php.packages`, keyed by version) and re-applied on every rebuild, so they survive `php:rebuild` and base image updates, exactly like custom extensions. They are layered onto the shared image rather than baked into the published base, so they only affect your local build. A non-existent package name fails the rebuild and the change is reverted.
+For other tools and runtime libraries, `lerd php:pkg add <packages>` installs Alpine packages into the FPM image's runtime stage and rebuilds, for example `lerd php:pkg add htop vim`. The packages are saved in `~/.config/lerd/config.yaml` (under `php.packages`) and re-applied on every rebuild, so they survive `php:rebuild` and base image updates, exactly like custom extensions. Like extensions, one declared set applies to every PHP version. They are layered onto the shared image rather than baked into the published base, so they only affect your local build. A non-existent package name fails the rebuild and the change is reverted.
 
 For [bun](https://bun.sh) specifically, run `lerd php:bun install` to drop a musl bun into the container's persistent `/root/.bun` volume (so `lerd shell` has it without rebuilding the image). See [bun](node#bun) for the full host and container story.
 

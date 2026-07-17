@@ -402,12 +402,12 @@ func envTool() mcpTool {
 func runtimeTool() mcpTool {
 	return mcpTool{
 		Name:        "runtime",
-		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove. ext_add/ext_remove rebuild the FPM image (slow). ports_* publish host ports on a version's shell container; a busy port shifts to the next free one.",
+		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove. ext_add/ext_remove apply to EVERY PHP version (one declared set, kept across a version change) and rebuild one version's image now (slow); others rebuild on next use. ports_* publish host ports on a version's shell container; a busy port shifts to the next free one.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
 				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove"}},
-				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ext_*/ports_*: PHP version."},
+				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ports_*: PHP version. ext_*: which version to rebuild/report on now (the set itself applies to all)."},
 				"extension": {Type: "string", Description: "ext_add/ext_remove: extension name (imagick, redis, swoole)."},
 				"apk_deps":  {Type: "string", Description: "ext_add: extra Alpine build packages, space-separated."},
 				"host":      {Type: "integer", Description: "ports_add/remove: host port."},

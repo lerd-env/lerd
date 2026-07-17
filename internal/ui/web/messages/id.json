@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Image ini dapat dihapus untuk membebaskan sekitar {size}:",
   "dashboard_disk_modalDeepNote": "Pembersihan mendalam ini juga menghapus image menggantung tanpa tag milik beban kerja podman lain di mesin ini. Volume data bernama tidak pernah disentuh.",
   "dashboard_disk_modalConfirm": "Reklamasi",
-  "dashboard_disk_cleaning": "Mereklamasi…"
+  "dashboard_disk_cleaning": "Mereklamasi…",
+  "system_php_extensionsTab": "Ekstensi",
+  "system_php_ext_declared": "Ekstensi Anda",
+  "system_php_ext_packages": "Paket Anda",
+  "system_php_ext_modules": "Modul yang dimuat PHP ({count})",
+  "system_php_ext_modulesHelp": "Dilaporkan oleh php -m di dalam image PHP {version}.",
+  "system_php_ext_notBuilt": "PHP {version} belum punya image. Jalankan 'lerd php:rebuild {version}' untuk membangunnya.",
+  "system_php_ext_needsRebuild": "Image ini lebih lama dari ekstensi dan paket Anda. Jalankan 'lerd php:rebuild {version}' untuk memperbaruinya.",
+  "system_php_ext_cannot": "tidak dapat dibangun di PHP {version}; membangun ulang tidak akan mengubahnya",
+  "system_php_ext_none": "Anda belum menambahkan ekstensi atau paket kustom.",
+  "system_php_ext_manageHelp": "Kelola dengan lerd php:ext dan lerd php:pkg. Berlaku untuk setiap versi PHP."
 }

@@ -159,8 +159,8 @@ func installPestBrowser(version string, w io.Writer) error {
 		return err
 	}
 	added := false
-	if !slices.Contains(cfg.GetPackages(version), pestBrowserPkg) {
-		cfg.AddPackage(version, pestBrowserPkg)
+	if !slices.Contains(cfg.GetPackages(), pestBrowserPkg) {
+		cfg.AddPackage(pestBrowserPkg)
 		if err := config.SaveGlobal(cfg); err != nil {
 			return fmt.Errorf("saving config: %w", err)
 		}
@@ -182,11 +182,15 @@ func installPestBrowser(version string, w io.Writer) error {
 		fmt.Fprintf(w, "Baking chromium into the PHP %s image...\n", version)
 		if err := podman.RebuildFPMImageTo(version, false, w); err != nil {
 			if added {
-				cfg.RemovePackage(version, pestBrowserPkg)
+				cfg.RemovePackage(pestBrowserPkg)
 				_ = config.SaveGlobal(cfg)
 			}
 			return fmt.Errorf("rebuild failed: %w", err)
 		}
+		// chromium is an ordinary entry in the declared package set, so it has
+		// to reach Octane sites too. This step restarts the FPM container
+		// itself below, which is why only the FrankenPHP half runs here.
+		rebuildFrankenPHPForVersion(version)
 	}
 	if needRebuild || !playwrightVolumeMounted(container) {
 		fmt.Fprintf(w, "Restarting the PHP %s container...\n", version)
@@ -246,11 +250,11 @@ func removePestBrowser(version string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if !slices.Contains(cfg.GetPackages(version), pestBrowserPkg) {
+	if !slices.Contains(cfg.GetPackages(), pestBrowserPkg) {
 		fmt.Fprintf(w, "Pest browser testing is not enabled for PHP %s — nothing to remove.\n", version)
 		return nil
 	}
-	cfg.RemovePackage(version, pestBrowserPkg)
+	cfg.RemovePackage(pestBrowserPkg)
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
@@ -259,7 +263,7 @@ func removePestBrowser(version string, w io.Writer) error {
 	if err := podman.RebuildFPMImageTo(version, false, w); err != nil {
 		// Restore config so it doesn't claim chromium is gone while the live
 		// image still carries it (mirrors installPestBrowser's revert).
-		cfg.AddPackage(version, pestBrowserPkg)
+		cfg.AddPackage(pestBrowserPkg)
 		_ = config.SaveGlobal(cfg)
 		return fmt.Errorf("rebuild failed (config restored): %w", err)
 	}
@@ -313,7 +317,7 @@ func doctorPestBrowser(version string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	check(slices.Contains(cfg.GetPackages(version), pestBrowserPkg),
+	check(slices.Contains(cfg.GetPackages(), pestBrowserPkg),
 		"chromium baked into the FPM image", "lerd pest:browser install")
 
 	running, _ := podman.ContainerRunning(container)

@@ -385,7 +385,7 @@ func runLink(args []string) error {
 	// Custom-FPM takes its version from the Containerfile and host-proxy sites have
 	// none, so neither has a version the file should pin.
 	if !site.IsCustomContainer() && !site.IsHostProxy() {
-		_ = syncPHPVersionFile(cwd, site.PHPVersion)
+		_ = siteops.PinPHPVersionFile(cwd, site.PHPVersion)
 	}
 
 	// A re-link of a site that dropped its frankenphp or custom-FPM runtime

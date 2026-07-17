@@ -231,3 +231,38 @@ export async function restorePhpIni(v: string, name: string = ''): Promise<Resto
     return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
   }
 }
+
+export interface PhpSetState {
+  declared: string[];
+  has: string[] | null;
+  cannot: string[] | null;
+}
+
+export interface PhpExtensionsReport {
+  version: string;
+  built: boolean;
+  needs_rebuild: boolean;
+  extensions: PhpSetState;
+  packages: PhpSetState;
+  modules?: string[];
+}
+
+export interface PhpExtensionsResult {
+  ok: boolean;
+  error?: string;
+  report?: PhpExtensionsReport;
+  modules_error?: string;
+}
+
+// fetchPhpExtensions reads what a version's image actually carries. Reading
+// `php -m` starts a container, so this is only called when the tab is opened;
+// the backend caches the result against the image ID.
+export async function fetchPhpExtensions(v: string): Promise<PhpExtensionsResult> {
+  try {
+    const res = await apiFetch('/api/php-versions/' + encodeURIComponent(v) + '/extensions');
+    const data = await decodeJSONResult<PhpExtensionsResult>(res);
+    return { ok: Boolean(data.ok), error: data.error, report: data.report, modules_error: data.modules_error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+  }
+}

@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Diese Images können entfernt werden, um etwa {size} freizugeben:",
   "dashboard_disk_modalDeepNote": "Diese gründliche Bereinigung entfernt auch ungetaggte, verwaiste Images anderer Podman-Workloads auf diesem Rechner. Benannte Datenvolumes werden nie angetastet.",
   "dashboard_disk_modalConfirm": "Freigeben",
-  "dashboard_disk_cleaning": "Wird freigegeben…"
+  "dashboard_disk_cleaning": "Wird freigegeben…",
+  "system_php_extensionsTab": "Erweiterungen",
+  "system_php_ext_declared": "Deine Erweiterungen",
+  "system_php_ext_packages": "Deine Pakete",
+  "system_php_ext_modules": "Von PHP geladene Module ({count})",
+  "system_php_ext_modulesHelp": "Gemeldet von php -m im PHP-{version}-Image.",
+  "system_php_ext_notBuilt": "Für PHP {version} gibt es noch kein Image. Führe 'lerd php:rebuild {version}' aus, um es zu bauen.",
+  "system_php_ext_needsRebuild": "Dieses Image ist älter als deine Erweiterungen und Pakete. Führe 'lerd php:rebuild {version}' aus, um es zu aktualisieren.",
+  "system_php_ext_cannot": "ließ sich auf PHP {version} nicht bauen; ein Rebuild ändert daran nichts",
+  "system_php_ext_none": "Du hast keine eigenen Erweiterungen oder Pakete hinzugefügt.",
+  "system_php_ext_manageHelp": "Verwalte sie mit lerd php:ext und lerd php:pkg. Sie gelten für jede PHP-Version."
 }

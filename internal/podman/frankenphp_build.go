@@ -82,8 +82,8 @@ func frankenPHPContainerfileHash(customExts, packages []string) (string, error) 
 // (each custom extension's apk build deps folded in) baked into the derived image
 // for a version, so the build and the staleness check hash the same inputs.
 func frankenPHPBuildInputs(cfg *config.GlobalConfig, version string) (exts, packages []string) {
-	exts = cfg.GetExtensions(version)
-	packages = cfg.GetPackages(version)
+	exts = cfg.GetExtensions()
+	packages = cfg.GetPackages()
 	for _, ext := range exts {
 		packages = append(packages, cfg.GetExtApkDeps(ext)...)
 	}

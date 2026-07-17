@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -64,16 +65,25 @@ type GlobalConfig struct {
 		// (yes | trigger | no). Absent means the default "yes" (connect on every
 		// request). "trigger"/"no" support on-demand debugging via the control
 		// socket without flooding the IDE from every request and worker.
-		XdebugStart map[string]string   `yaml:"xdebug_start,omitempty" mapstructure:"xdebug_start"`
-		Extensions  map[string][]string `yaml:"extensions"      mapstructure:"extensions"`
+		XdebugStart map[string]string `yaml:"xdebug_start,omitempty" mapstructure:"xdebug_start"`
+		// Extensions is the custom extension set (lerd php:ext), applied to every
+		// PHP image lerd builds. Extensions belong to the user, not to a version:
+		// keying them per version made a site lose them on a version switch.
+		Extensions []string `yaml:"extensions"      mapstructure:"extensions"`
 		// ExtApkDeps maps a custom extension name to extra Alpine packages its
 		// build needs. Keyed by extension (deps don't vary by PHP version).
 		// lerd already knows the deps for some extensions; this is for the rest.
 		ExtApkDeps map[string][]string `yaml:"ext_apk_deps,omitempty" mapstructure:"ext_apk_deps"`
-		// Packages maps a PHP version to extra Alpine packages to install in the
-		// FPM image's runtime stage (lerd php:pkg). For CLI tools and runtime
-		// libraries users want available in the container; re-applied on rebuild.
-		Packages map[string][]string `yaml:"packages,omitempty" mapstructure:"packages"`
+		// Packages is the extra Alpine package set (lerd php:pkg) installed in
+		// every FPM image's runtime stage, for CLI tools and runtime libraries
+		// users want in the container; re-applied on rebuild.
+		Packages []string `yaml:"packages,omitempty" mapstructure:"packages"`
+		// Realised records what each version's image actually loaded, verified
+		// after its build. The declared set above is what the user asked for; not
+		// every version can honour all of it (mongodb needs 8.1+, the 7.4/8.0
+		// images are Alpine 3.16), and lerd must never advertise what an image
+		// does not have.
+		Realised map[string]RealisedPHPSet `yaml:"realised,omitempty" mapstructure:"realised"`
 		// FPMPorts maps a PHP version to extra host ports published on that
 		// version's shared FPM container, so a process bound inside `lerd shell`
 		// (a Vite dev server, a websocket, an ad-hoc listener) is reachable at
@@ -596,6 +606,10 @@ func LoadGlobal() (*GlobalConfig, error) {
 		return nil, err
 	}
 
+	// Runs before Unmarshal: the legacy per-version shape is a map where the
+	// current one is a list, so decoding an old config would fail outright.
+	migrateUnifiedPHPSets(v)
+
 	cfg := defaultConfig()
 	if err := v.Unmarshal(cfg); err != nil {
 		return nil, err
@@ -634,12 +648,15 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			out.PHP.XdebugStart[k] = v
 		}
 	}
-	if in.PHP.Extensions != nil {
-		out.PHP.Extensions = make(map[string][]string, len(in.PHP.Extensions))
-		for k, v := range in.PHP.Extensions {
-			cp := make([]string, len(v))
-			copy(cp, v)
-			out.PHP.Extensions[k] = cp
+	out.PHP.Extensions = slices.Clone(in.PHP.Extensions)
+	out.PHP.Packages = slices.Clone(in.PHP.Packages)
+	if in.PHP.Realised != nil {
+		out.PHP.Realised = make(map[string]RealisedPHPSet, len(in.PHP.Realised))
+		for k, v := range in.PHP.Realised {
+			out.PHP.Realised[k] = RealisedPHPSet{
+				Extensions: slices.Clone(v.Extensions),
+				Packages:   slices.Clone(v.Packages),
+			}
 		}
 	}
 	if in.PHP.ExtApkDeps != nil {
@@ -648,14 +665,6 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 			cp := make([]string, len(v))
 			copy(cp, v)
 			out.PHP.ExtApkDeps[k] = cp
-		}
-	}
-	if in.PHP.Packages != nil {
-		out.PHP.Packages = make(map[string][]string, len(in.PHP.Packages))
-		for k, v := range in.PHP.Packages {
-			cp := make([]string, len(v))
-			copy(cp, v)
-			out.PHP.Packages[k] = cp
 		}
 	}
 	if in.PHP.FPMPorts != nil {
@@ -836,100 +845,75 @@ func (c *GlobalConfig) SetXdebugStart(version, value string) {
 	c.PHP.XdebugStart[version] = value
 }
 
-// GetExtensions returns the custom extensions configured for the given PHP version.
-func (c *GlobalConfig) GetExtensions(version string) []string {
-	if c.PHP.Extensions == nil {
+// GetExtensions returns the declared custom extension set, applied to every PHP image.
+func (c *GlobalConfig) GetExtensions() []string {
+	return c.PHP.Extensions
+}
+
+// AddExtension adds ext to the declared set (no-op if already present).
+func (c *GlobalConfig) AddExtension(ext string) {
+	if !slices.Contains(c.PHP.Extensions, ext) {
+		c.PHP.Extensions = append(c.PHP.Extensions, ext)
+	}
+}
+
+// RemoveExtension drops ext from the declared set, along with any extra apk
+// deps recorded for it, which are dead weight once nothing declares it.
+func (c *GlobalConfig) RemoveExtension(ext string) {
+	c.PHP.Extensions = slices.DeleteFunc(c.PHP.Extensions, func(e string) bool { return e == ext })
+	delete(c.PHP.ExtApkDeps, ext)
+	if len(c.PHP.ExtApkDeps) == 0 {
+		c.PHP.ExtApkDeps = nil
+	}
+}
+
+// GetPackages returns the declared extra Alpine package set.
+func (c *GlobalConfig) GetPackages() []string {
+	return c.PHP.Packages
+}
+
+// AddPackage adds pkg to the declared set (no-op if already present).
+func (c *GlobalConfig) AddPackage(pkg string) {
+	if !slices.Contains(c.PHP.Packages, pkg) {
+		c.PHP.Packages = append(c.PHP.Packages, pkg)
+	}
+}
+
+// RemovePackage drops pkg from the declared set.
+func (c *GlobalConfig) RemovePackage(pkg string) {
+	c.PHP.Packages = slices.DeleteFunc(c.PHP.Packages, func(p string) bool { return p == pkg })
+}
+
+// GetRealised returns what the given version's image actually loaded at its
+// last build. A zero value means lerd has not built that version yet.
+func (c *GlobalConfig) GetRealised(version string) RealisedPHPSet {
+	return c.PHP.Realised[version]
+}
+
+// SetRealised records what a version's image loaded, verified after its build.
+func (c *GlobalConfig) SetRealised(version string, set RealisedPHPSet) {
+	if c.PHP.Realised == nil {
+		c.PHP.Realised = map[string]RealisedPHPSet{}
+	}
+	c.PHP.Realised[version] = set
+}
+
+// MissingFromImage returns the declared entries that the given version's image
+// did not load. A version with no recorded build returns nothing: lerd knows
+// nothing about it yet, and reporting everything as missing would be a lie in
+// the opposite direction.
+func (c *GlobalConfig) MissingFromImage(version string, declared []string) []string {
+	realised, ok := c.PHP.Realised[version]
+	if !ok {
 		return nil
 	}
-	return c.PHP.Extensions[version]
-}
-
-// AddExtension adds ext to the custom extension list for version (no-op if already present).
-func (c *GlobalConfig) AddExtension(version, ext string) {
-	if c.PHP.Extensions == nil {
-		c.PHP.Extensions = map[string][]string{}
-	}
-	for _, e := range c.PHP.Extensions[version] {
-		if e == ext {
-			return
+	var missing []string
+	for _, d := range declared {
+		if !slices.Contains(realised.Extensions, d) && !slices.Contains(realised.Packages, d) {
+			missing = append(missing, d)
 		}
 	}
-	c.PHP.Extensions[version] = append(c.PHP.Extensions[version], ext)
-}
-
-// RemoveExtension removes ext from the custom extension list for version, and
-// drops any extra apk deps recorded for it once no version still uses it.
-func (c *GlobalConfig) RemoveExtension(version, ext string) {
-	if c.PHP.Extensions == nil {
-		return
-	}
-	exts := c.PHP.Extensions[version]
-	filtered := exts[:0]
-	for _, e := range exts {
-		if e != ext {
-			filtered = append(filtered, e)
-		}
-	}
-	if len(filtered) == 0 {
-		delete(c.PHP.Extensions, version)
-	} else {
-		c.PHP.Extensions[version] = filtered
-	}
-	stillUsed := false
-	for _, list := range c.PHP.Extensions {
-		for _, e := range list {
-			if e == ext {
-				stillUsed = true
-			}
-		}
-	}
-	if !stillUsed {
-		delete(c.PHP.ExtApkDeps, ext)
-		if len(c.PHP.ExtApkDeps) == 0 {
-			c.PHP.ExtApkDeps = nil
-		}
-	}
-}
-
-// GetPackages returns the extra Alpine packages configured for the given PHP
-// version's FPM image.
-func (c *GlobalConfig) GetPackages(version string) []string {
-	if c.PHP.Packages == nil {
-		return nil
-	}
-	return c.PHP.Packages[version]
-}
-
-// AddPackage adds pkg to the extra-packages list for version (no-op if present).
-func (c *GlobalConfig) AddPackage(version, pkg string) {
-	if c.PHP.Packages == nil {
-		c.PHP.Packages = map[string][]string{}
-	}
-	for _, p := range c.PHP.Packages[version] {
-		if p == pkg {
-			return
-		}
-	}
-	c.PHP.Packages[version] = append(c.PHP.Packages[version], pkg)
-}
-
-// RemovePackage removes pkg from the extra-packages list for version.
-func (c *GlobalConfig) RemovePackage(version, pkg string) {
-	if c.PHP.Packages == nil {
-		return
-	}
-	pkgs := c.PHP.Packages[version]
-	filtered := pkgs[:0]
-	for _, p := range pkgs {
-		if p != pkg {
-			filtered = append(filtered, p)
-		}
-	}
-	if len(filtered) == 0 {
-		delete(c.PHP.Packages, version)
-	} else {
-		c.PHP.Packages[version] = filtered
-	}
+	return missing
 }
 
 // GetExtApkDeps returns the user-configured extra Alpine packages for ext.

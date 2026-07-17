@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -64,6 +65,21 @@ func checkExtensions(detected, bundled, installed []string) ([]string, []extUnav
 	return missing, unavailable, misnamed
 }
 
+// customExtensionsOn returns the declared extensions this version's image
+// actually loaded. The declared set applies to every version, but a version
+// cannot always honour it (mongodb needs 8.1+), and treating a declared-but-
+// unbuildable extension as present would silence the very warning a site
+// requiring it needs. Versions with no recorded build fall back to the declared
+// set, which is the most that is known about them.
+func customExtensionsOn(cfg *config.GlobalConfig, phpVersion string) []string {
+	declared := cfg.GetExtensions()
+	missing := cfg.MissingFromImage(phpVersion, declared)
+	if len(missing) == 0 {
+		return declared
+	}
+	return slices.DeleteFunc(slices.Clone(declared), func(e string) bool { return slices.Contains(missing, e) })
+}
+
 // warnMissingExtensions checks composer.json for ext-* requirements and warns if any are
 // not covered by the bundled image or the user's custom extension list.
 func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfig) {
@@ -71,7 +87,7 @@ func warnMissingExtensions(dir, name, phpVersion string, cfg *config.GlobalConfi
 	if len(detected) == 0 {
 		return
 	}
-	missing, unavailable, misnamed := checkExtensions(detected, podman.BundledExtensions(phpVersion), cfg.GetExtensions(phpVersion))
+	missing, unavailable, misnamed := checkExtensions(detected, podman.BundledExtensions(phpVersion), customExtensionsOn(cfg, phpVersion))
 
 	if len(missing) > 0 {
 		fmt.Printf("  [!] %s requires PHP extensions not in the image: %s\n", name, strings.Join(missing, ", "))

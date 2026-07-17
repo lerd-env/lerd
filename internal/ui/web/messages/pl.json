@@ -1067,5 +1067,15 @@
   "dashboard_disk_modalBody": "Te obrazy można usunąć, aby zwolnić około {size}:",
   "dashboard_disk_modalDeepNote": "To głębokie czyszczenie usuwa również nieoznaczone wiszące obrazy pozostawione przez inne zadania podman na tej maszynie. Nigdy nie narusza nazwanych woluminów danych.",
   "dashboard_disk_modalConfirm": "Odzyskaj",
-  "dashboard_disk_cleaning": "Odzyskiwanie…"
+  "dashboard_disk_cleaning": "Odzyskiwanie…",
+  "system_php_extensionsTab": "Rozszerzenia",
+  "system_php_ext_declared": "Twoje rozszerzenia",
+  "system_php_ext_packages": "Twoje pakiety",
+  "system_php_ext_modules": "Moduły ładowane przez PHP ({count})",
+  "system_php_ext_modulesHelp": "Zgłoszone przez php -m w obrazie PHP {version}.",
+  "system_php_ext_notBuilt": "PHP {version} nie ma jeszcze obrazu. Uruchom 'lerd php:rebuild {version}', aby go zbudować.",
+  "system_php_ext_needsRebuild": "Ten obraz jest starszy niż Twoje rozszerzenia i pakiety. Uruchom 'lerd php:rebuild {version}', aby go zaktualizować.",
+  "system_php_ext_cannot": "nie zbudowało się na PHP {version}; przebudowa tego nie zmieni",
+  "system_php_ext_none": "Nie dodałeś żadnych własnych rozszerzeń ani pakietów.",
+  "system_php_ext_manageHelp": "Zarządzaj nimi przez lerd php:ext i lerd php:pkg. Dotyczą każdej wersji PHP."
 }
