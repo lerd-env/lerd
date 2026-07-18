@@ -55,6 +55,35 @@ func TestStaleResolverFilesMissingDir(t *testing.T) {
 	}
 }
 
+// codeOnly strips // line comments so a source scan asserts against code, not
+// prose: a comment mentioning the token it forbids must not trip the check.
+func codeOnly(src string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(src, "\n") {
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = line[:i]
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
+// ruleLines drops the sudoers header comment (which legitimately contains an
+// ellipsis like /var/folders/.../lerd-sudo-*) so a traversal scan sees only the
+// actual NOPASSWD rules.
+func ruleLines(grant string) string {
+	var b strings.Builder
+	for _, line := range strings.Split(grant, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "#") {
+			continue
+		}
+		b.WriteString(line)
+		b.WriteByte('\n')
+	}
+	return b.String()
+}
+
 // On macOS the TLD lands in /etc/resolver/<tld> and, through the sudoers grant,
 // in a NOPASSWD `tee` target. A raw config value could traverse out of
 // /etc/resolver or inject a sudoers line, so both must go through ConfiguredTLD,
@@ -65,11 +94,11 @@ func TestDarwinResolver_routesTheTLDThroughTheValidator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reading setup_darwin.go: %v", err)
 	}
-	s := string(src)
-	if strings.Contains(s, "cfg.DNS.TLD") {
+	code := codeOnly(string(src))
+	if strings.Contains(code, "cfg.DNS.TLD") {
 		t.Error("setup_darwin.go reads cfg.DNS.TLD raw; the resolver path and sudoers target must come from ConfiguredTLD")
 	}
-	if !strings.Contains(s, "ConfiguredTLD()") {
+	if !strings.Contains(code, "ConfiguredTLD()") {
 		t.Error("setup_darwin.go must derive the TLD from ConfiguredTLD")
 	}
 }
@@ -82,9 +111,9 @@ func TestDarwinSudoers_tldCannotEscapeTheResolverDir(t *testing.T) {
 		if tldPattern.MatchString(bad) {
 			tld = bad
 		}
-		grant := renderDarwinSudoers("alice", tld)
-		if strings.Contains(grant, "..") || strings.Contains(grant, "/etc/resolver/a/") ||
-			strings.Contains(grant, "EXTRA") {
+		rules := ruleLines(renderDarwinSudoers("alice", tld))
+		if strings.Contains(rules, "..") || strings.Contains(rules, "/etc/resolver/a/") ||
+			strings.Contains(rules, "EXTRA") {
 			t.Errorf("payload %q reached the sudoers grant", bad)
 		}
 	}
