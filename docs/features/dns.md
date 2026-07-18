@@ -58,13 +58,15 @@ The DNS question is asked once, at your first `lerd install`, and then remembere
 
 The round trip is lossless for HTTPS. Disabling flips a site to plain `http` because there is no trusted CA on `*.localhost`, but the project's committed HTTPS intent in `.lerd.yaml` is left untouched. Re-enabling reads that intent back and re-secures every site that wanted HTTPS, reissuing the cert and syncing `.env` back to `https://`, so a site served over HTTPS before a `dns:disable` comes back to HTTPS on `dns:enable`. Sites you deliberately kept on plain HTTP stay that way.
 
-The lerd-dns service itself is torn down on the disable transition, `systemctl stop` plus quadlet remove on Linux, `launchctl bootout` plus plist remove on macOS. NetworkManager / `/etc/resolver` entries from the previous run are left in place because removing them needs sudo and they are inert when dnsmasq is no longer running. Run `lerd-cleanup` (macOS) or remove the dropins manually if you want a fully clean system. Running `dns:enable` while DNS is already on simply repairs the setup, the same as `dns:repair`.
+The lerd-dns service itself is torn down on the disable transition, `systemctl stop` plus quadlet remove on Linux, `launchctl bootout` plus plist remove on macOS. The resolver hooks go with it on both platforms: the NetworkManager dispatcher, the `lerd0` link and its service, the `FallbackDNS` drop-in and the per-interface routing on Linux, the `/etc/resolver` files on macOS. That takes sudo, so expect a prompt. Running `dns:enable` while DNS is already on simply repairs the setup, the same as `dns:repair`.
 
 Custom TLDs (anything other than `test` or `localhost`) are preserved across toggles, lerd only flips the canonical defaults.
 
 ## Pinning the upstream DNS
 
-For everything that is not `*.test`, the lerd-dns dnsmasq forwards queries to your system's upstream DNS servers. lerd auto-detects those from `systemd-resolved`, `/etc/resolv.conf`, or NetworkManager. On some setups the detection runs before DHCP has handed out the real resolver and captures the `systemd-resolved` fallback servers instead (`9.9.9.9`, `1.1.1.1`, `8.8.8.8`), so internal hostnames served by your LAN resolver stop resolving.
+For everything that is not `*.test`, the lerd-dns dnsmasq forwards queries to your system's upstream DNS servers. lerd auto-detects those from `systemd-resolved`, `/etc/resolv.conf`, or NetworkManager, which means it follows whatever DNS your connection is actually using: the servers your router hands out over DHCP, or the ones you set yourself on the connection, since NetworkManager already resolves that conflict in your favour.
+
+Pinning matters more than it used to. lerd turns off systemd-resolved's fallback servers (see below), so a wrong or unreachable upstream now fails instead of quietly falling through to a public resolver. On some setups the detection also runs before DHCP has handed out the real resolver, so internal hostnames served by your LAN resolver stop resolving.
 
 When that happens, pin the upstream yourself under the `dns` key:
 
@@ -82,7 +84,9 @@ Entries are plain IPs; an optional `#port` suffix is supported (e.g. `192.168.10
 
 lerd reacts to host network changes on its own, so the resolver and any LAN exposure keep working when you switch Wi-Fi, dock, or get a new DHCP lease without you re-running anything.
 
-- **Upstream re-detection (Linux).** A NetworkManager dispatcher hook re-resolves the upstream DNS servers and rewrites the dnsmasq config after a connection comes up. A pinned `dns.upstream` always wins over what it detects.
+- **Upstream re-detection (Linux).** A NetworkManager dispatcher hook re-resolves the upstream DNS servers and rewrites the dnsmasq config after a connection comes up. A pinned `dns.upstream` always wins over what it detects. The hook only touches the upstream `server=` lines; the `address=` records that map `*.test` are lerd's own and are carried across untouched, so a `lan:expose` mapping survives a network change.
+- **Working offline (Linux, systemd-resolved).** systemd-resolved refuses to resolve anything once no link is routable, which used to take `.test` down with your Wi-Fi even though lerd-dns was still answering. lerd keeps a dummy link, `lerd0`, whose only job is to carry the `~test` route so resolved still forwards `.test` to lerd-dns with no network at all. It is created by `lerd-dns-link.service` at boot, marked unmanaged so it never appears in your desktop's network menu, and carries no address you could collide with. See [Troubleshooting](../troubleshooting.md) for the detail.
+- **Fallback DNS is disabled (Linux).** Keeping resolved willing to answer `.test` offline is the same switch that makes it chase ordinary names it cannot reach, so lerd writes `FallbackDNS=` empty in `/etc/systemd/resolved.conf.d/lerd-fallback.conf`. Without it every offline lookup of a non-`.test` name hangs for twenty seconds or more instead of failing immediately. Debian, Ubuntu and Fedora already ship these fallbacks off, so this only changes anything on Arch and its derivatives, and `lerd uninstall` puts them back.
 - **LAN-IP healing.** When you expose a site to the LAN (see [LAN sharing](../usage/lan-sharing.md)) and the host's LAN IP later changes, `lerd-watcher` notices the drift, re-renders the `lan:expose` mapping to the current IP, and restarts `lerd-dns` so the exposed hostnames keep pointing at the right address. This runs even while lerd is otherwise idle.
 - **macOS network watcher.** On macOS the watcher subscribes to the kernel's `PF_ROUTE` socket and triggers the same healing the moment an interface or route changes, rather than waiting for the next poll.
 

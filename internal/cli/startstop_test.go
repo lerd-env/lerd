@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -221,5 +222,18 @@ func TestQuitProcessUnits_FullTeardown(t *testing.T) {
 	}
 	if watcher > dns {
 		t.Errorf("lerd-watcher (%d) must be stopped before lerd-dns (%d) so the watcher can't restart dns", watcher, dns)
+	}
+}
+
+// A user who disabled DNS must not get the DNS sudoers drop-in written (or a sudo
+// prompt) on start: ConfigureResolver already returns early when disabled, and the
+// sibling InstallSudoers must respect the same opt-out.
+func TestRunStart_skipsSudoersRefreshWhenDNSDisabled(t *testing.T) {
+	src, err := os.ReadFile("startstop.go")
+	if err != nil {
+		t.Fatalf("reading startstop.go: %v", err)
+	}
+	if !strings.Contains(string(src), "if dnsEnabled() && canPromptForPassword() {") {
+		t.Error("the sudoers refresh must be gated on dnsEnabled(), or a disabled-DNS host still installs DNS grants on start")
 	}
 }
