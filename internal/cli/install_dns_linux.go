@@ -6,6 +6,8 @@ import (
 	"io"
 	"strings"
 
+	"github.com/geodro/lerd/internal/dns"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
@@ -80,4 +82,24 @@ func teardownDNS() {
 	_ = services.Mgr.Stop("lerd-dns")
 	_ = services.Mgr.RemoveContainerUnit("lerd-dns")
 	_ = services.Mgr.DaemonReload()
+
+	// Only when lerd actually wrote resolver config. install.go calls this on
+	// every run where DNS is off, not just on a true->false flip, so an
+	// unconditional teardown would revert interfaces and restart NetworkManager on
+	// every `lerd install` for someone who never let lerd near their resolver.
+	if !dnsResolverConfigured() {
+		return
+	}
+	// Announced with the lock glyph: the removals run as root. They are granted in
+	// the sudoers drop-in so they do not prompt, but the header keeps the teardown
+	// visible in the output.
+	feedback.Sudo("Removing DNS configuration")
+	dnsTeardown()
 }
+
+// Seams so tests can drive the disable path without shelling out to sudo or
+// depending on what the test host happens to have installed.
+var (
+	dnsTeardown           = dns.Teardown
+	dnsResolverConfigured = dns.ResolverConfigured
+)

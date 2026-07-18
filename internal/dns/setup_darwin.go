@@ -5,11 +5,11 @@ package dns
 import (
 	"bytes"
 	"fmt"
+	"github.com/geodro/lerd/internal/config"
 	"os"
 	"os/exec"
 	"path/filepath"
 
-	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 )
 
@@ -42,14 +42,24 @@ func defaultUpstreamFallback() []string { return nil }
 // the lerd-dns dnsmasq container on port 5300. macOS checks /etc/resolver/<tld>
 // automatically for per-TLD DNS overrides — no daemon restart required.
 func ConfigureResolver() error {
+	// Nothing when the user opted out, mirroring the Linux guard: disable flips the
+	// TLD to localhost and stops lerd-dns, so writing /etc/resolver here would point
+	// *.localhost at a resolver that is deliberately not running. A config that fails
+	// to load is surfaced, not defaulted: silently falling through to the "test"
+	// default would write /etc/resolver/test and report success on a broken config.
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return err
 	}
-	tld := cfg.DNS.TLD
-	if tld == "" {
-		tld = "test"
+	if cfg != nil && !cfg.DNS.Enabled {
+		return nil
 	}
+
+	// ConfiguredTLD rejects anything that is not a DNS label. The TLD lands in
+	// /etc/resolver/<tld> and, via the sudoers grant below, in a NOPASSWD tee
+	// target, so a raw value could traverse out of /etc/resolver or inject a
+	// sudoers line: it must be validated before either.
+	tld := ConfiguredTLD()
 
 	resolverFile := filepath.Join(resolverDir, tld)
 	content := resolverContent
@@ -112,13 +122,7 @@ func InstallSudoers() error {
 		return fmt.Errorf("cannot determine current user")
 	}
 
-	cfg, _ := config.LoadGlobal()
-	tld := "test"
-	if cfg != nil && cfg.DNS.TLD != "" {
-		tld = cfg.DNS.TLD
-	}
-
-	content := renderDarwinSudoers(user, tld)
+	content := renderDarwinSudoers(user, ConfiguredTLD())
 
 	const sudoersPath = "/etc/sudoers.d/lerd"
 	if sudoersInstalled([]byte(content)) {
