@@ -24,6 +24,7 @@ import (
 	"github.com/geodro/lerd/internal/shims"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
+	"golang.org/x/term"
 )
 
 // quadletImage reads the Image= value from an installed quadlet file.
@@ -691,6 +692,20 @@ func runStart(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  WARN: %v\n", err)
 	}
 
+	// Refresh the sudoers drop-in before reapplying DNS config, but only where a
+	// password prompt can be answered. A release that adds a privileged step ships
+	// new grants, and writing /etc/sudoers.d/lerd needs a real authentication:
+	// granting `tee` on sudoers.d would itself be an escalation, so it can never be
+	// passwordless. Headless (lerd-ui driving a start), sudo has no tty and the
+	// write just fails, so we skip it and let ConfigureResolver report what is
+	// missing rather than burying a prompt no one can see. Content-hashed, so on an
+	// unchanged drop-in this is a no-op either way.
+	if dnsEnabled() && canPromptForPassword() {
+		if err := dns.InstallSudoers(); err != nil {
+			fmt.Printf("  WARN: refreshing DNS sudoers rule: %v\n", err)
+		}
+	}
+
 	// Re-apply DNS routing so .test resolves via lerd-dns on every start.
 	// resolvectl settings are ephemeral and reset on reboot; the NM dispatcher
 	// script fires on interface "up" but that event precedes lerd-dns starting.
@@ -1324,4 +1339,27 @@ func runQuit(_ *cobra.Command, _ []string) error {
 	stopPodmanMachine()
 
 	return nil
+}
+
+// canPromptForPassword reports whether sudo would have someone to ask. sudo reads
+// the password from the controlling terminal, not from stdin, so /dev/tty is the
+// signal: `lerd start < /dev/null` in a terminal can still prompt, and a systemd
+// service with neither cannot. term.IsTerminal on stdin alone gets both wrong.
+func canPromptForPassword() bool {
+	if term.IsTerminal(int(os.Stdin.Fd())) {
+		return true
+	}
+	tty, err := os.Open("/dev/tty")
+	if err != nil {
+		return false
+	}
+	tty.Close()
+	return true
+}
+
+// dnsEnabled reports whether the user has lerd manage DNS. When off, start must
+// not install DNS sudoers grants or touch any resolver state.
+func dnsEnabled() bool {
+	cfg, err := config.LoadGlobal()
+	return err == nil && cfg != nil && cfg.DNS.Enabled
 }

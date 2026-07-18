@@ -57,8 +57,26 @@ type probeFns struct {
 	dnsmasqAnswer    func(tld string) (answer string, err error)
 	resolverHookup   func() (kind string, exists bool, path string)
 	interfaceRouting func(tld string) (interfaceName string, has5300 bool, hasTLD bool, err error)
+	dummyLinkRouting func(tld string) (present bool, routed bool)
 	systemLookup     func(tld string) (addrs []string, err error)
 	vpnActive        func() bool
+}
+
+// resolverHookup kinds. Both systemd-resolved paths rely on the lerd0 link;
+// NetworkManager's own dnsmasq resolves .test without resolved and needs no link,
+// and macOS routes .test through /etc/resolver.
+const (
+	nmDispatcherKind   = "NetworkManager dispatcher"
+	resolvedLinkKind   = "systemd-resolved link"
+	resolvedDropinKind = "systemd-resolved drop-in"
+	nmDnsmasqKind      = "NetworkManager dnsmasq"
+	macOSKind          = "macOS native dnsmasq"
+)
+
+// usesDummyLink reports whether a resolver hookup relies on lerd0 for offline
+// .test resolution.
+func usesDummyLink(kind string) bool {
+	return kind == nmDispatcherKind || kind == resolvedLinkKind || kind == resolvedDropinKind
 }
 
 // Diagnose walks the DNS chain top to bottom and returns a structured
@@ -183,7 +201,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		d.Steps = append(d.Steps, Step{
 			Name:   "resolver hookup",
 			Status: StepFail,
-			Detail: "no NetworkManager dispatcher or systemd-resolved drop-in installed",
+			Detail: "no NetworkManager dispatcher, NetworkManager dnsmasq config, or lerd .test link installed",
 			Hint:   "rerun: lerd install",
 		})
 		return finalize(d)
@@ -218,6 +236,37 @@ func diagnose(tld string, p probeFns) Diagnostic {
 			return finalize(d)
 		default:
 			d.Steps = append(d.Steps, Step{Name: "interface routes ." + tld + " to 5300", Status: StepOK, Detail: iface})
+		}
+	}
+
+	// Rung 6b — the offline .test route. Both systemd-resolved paths rely on lerd0;
+	// NetworkManager's own dnsmasq and macOS resolve .test with no network already.
+	// These are warnings, not failures: with a link up .test resolves fine either
+	// way, and the damage only shows once the user goes offline, which is exactly
+	// why it's worth saying out loud here rather than leaving them to find it on a
+	// train.
+	if runtime.GOOS == "linux" && usesDummyLink(kind) && p.dummyLinkRouting != nil {
+		switch present, routed := p.dummyLinkRouting(tld); {
+		case !present:
+			d.Steps = append(d.Steps, Step{
+				Name:   "offline ." + tld + " route",
+				Status: StepWarn,
+				Detail: lerdDummyIface + " is missing; ." + tld + " resolves now but will stop once every network link is down",
+				Hint:   "lerd start  (or: sudo systemctl restart " + lerdLinkUnitName + ")",
+			})
+		case !routed:
+			d.Steps = append(d.Steps, Step{
+				Name:   "offline ." + tld + " route",
+				Status: StepWarn,
+				Detail: lerdDummyIface + " is up but carries no ~" + tld + " route to 127.0.0.1:5300",
+				Hint:   "sudo systemctl restart " + lerdLinkUnitName,
+			})
+		default:
+			d.Steps = append(d.Steps, Step{
+				Name:   "offline ." + tld + " route",
+				Status: StepOK,
+				Detail: lerdDummyIface,
+			})
 		}
 	}
 
@@ -300,9 +349,42 @@ func defaultProbes() probeFns {
 		dnsmasqAnswer:    defaultDnsmasqAnswer,
 		resolverHookup:   defaultResolverHookup,
 		interfaceRouting: defaultInterfaceRouting,
+		dummyLinkRouting: defaultDummyLinkRouting,
 		systemLookup:     defaultSystemLookup,
 		vpnActive:        VPNActive,
 	}
+}
+
+// defaultDummyLinkRouting reports whether lerd0 exists and still carries the
+// .test route to lerd-dns.
+func defaultDummyLinkRouting(tld string) (bool, bool) {
+	out, err := exec.Command("resolvectl", "status", lerdDummyIface).Output()
+	if err != nil {
+		return false, false
+	}
+	return parseDummyLinkRouting(string(out), tld)
+}
+
+// parseDummyLinkRouting reads `resolvectl status lerd0` output. Presence comes
+// off stdout rather than the exit code: resolvectl still exits 0 for a link it
+// doesn't know, printing "No such device" to stderr, so an exit-code check would
+// report a deleted link as present-but-unrouted and send the user chasing a
+// routing problem on an interface that isn't there. A known link always prints a
+// "Link N (lerd0)" header; a missing one prints nothing at all.
+func parseDummyLinkRouting(output, tld string) (present bool, routed bool) {
+	if !strings.Contains(output, "("+lerdDummyIface+")") {
+		return false, false
+	}
+	// Match ~tld as a whole routing domain, not a substring: an unanchored
+	// contains would treat "~testbed" as carrying the "test" route.
+	hasDomain := false
+	for _, f := range strings.Fields(output) {
+		if f == "~"+tld {
+			hasDomain = true
+			break
+		}
+	}
+	return true, strings.Contains(output, "127.0.0.1:5300") && hasDomain
 }
 
 // serviceActive reports whether the lerd-dns service unit is active. It is a
@@ -381,17 +463,26 @@ func defaultDnsmasqAnswer(tld string) (string, error) {
 	return ips[0].String(), nil
 }
 
+// defaultResolverHookup reports how .test is wired into the system resolver.
+//
+// Ordered, not a map: the NetworkManager path installs both the dispatcher and
+// the lerd0 link unit, so a map's random iteration would report either one at
+// random from run to run. First match wins, most specific first.
 func defaultResolverHookup() (string, bool, string) {
 	if runtime.GOOS != "linux" {
-		return "macOS native dnsmasq", true, "/usr/local/etc/dnsmasq.d/lerd.conf"
+		return macOSKind, true, "/usr/local/etc/dnsmasq.d/lerd.conf"
 	}
-	for kind, path := range map[string]string{
-		"NetworkManager dispatcher": "/etc/NetworkManager/dispatcher.d/99-lerd-dns",
-		"systemd-resolved drop-in":  "/etc/systemd/resolved.conf.d/lerd.conf",
-		"NetworkManager dnsmasq":    "/etc/NetworkManager/dnsmasq.d/lerd.conf",
+	for _, h := range []struct{ kind, path string }{
+		{nmDispatcherKind, "/etc/NetworkManager/dispatcher.d/99-lerd-dns"},
+		{nmDnsmasqKind, "/etc/NetworkManager/dnsmasq.d/lerd.conf"},
+		// No NetworkManager: lerd0 alone carries .tld, so its unit is the hookup.
+		{resolvedLinkKind, lerdLinkUnit},
+		// Last: a host that has not re-run setup since the link landed still
+		// resolves through this, and reporting "no hookup" at it would be a lie.
+		{resolvedDropinKind, "/etc/systemd/resolved.conf.d/lerd.conf"},
 	} {
-		if _, err := os.Stat(path); err == nil {
-			return kind, true, path
+		if _, err := os.Stat(h.path); err == nil {
+			return h.kind, true, h.path
 		}
 	}
 	return "", false, ""
