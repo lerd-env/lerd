@@ -38,6 +38,14 @@ func UpdateGlobal(fn func(*GlobalConfig)) error {
 // names and availability differ. Recording the truth per version is what lets
 // lerd warn about a gap instead of advertising what an image does not have.
 type RealisedPHPSet struct {
+	// Hash is the declared-set fingerprint the image was measured against. It is
+	// always set, which is also what keeps a record from serializing as an empty
+	// map: a version that loaded nothing of the declared set (mongodb on the
+	// Alpine 3.16 8.0 image) records empty Extensions and Packages, and viper
+	// drops an empty-map entry on load. Without a leaf the "8.0" key vanishes,
+	// MissingFromImage reads it back as "no record", and the whole declared set
+	// is then reported as loaded, the false success this record exists to prevent.
+	Hash       string   `yaml:"hash" mapstructure:"hash"`
 	Extensions []string `yaml:"extensions,omitempty" mapstructure:"extensions"`
 	Packages   []string `yaml:"packages,omitempty" mapstructure:"packages"`
 }
