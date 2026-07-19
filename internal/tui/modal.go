@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/geodro/lerd/internal/eventbus"
 )
 
@@ -102,7 +102,7 @@ func (m *Model) closeConfirm() {
 // action; n or esc dismisses without running. We intentionally only honour
 // these three keys — anything else is a no-op so typos don't accidentally
 // confirm. ctrl+c still quits cleanly even with a confirm open.
-func (m *Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleConfirmKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "y", "Y":
 		action := m.confirmAction
@@ -126,7 +126,7 @@ func (m *Model) handleConfirmKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // while the picker stayed drawn, orphaning it. Now every key the picker
 // doesn't understand is a no-op so the user must explicitly cancel or
 // apply before any other action fires.
-func (m *Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handlePickerKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.closePicker()
@@ -168,7 +168,7 @@ func (m *Model) handlePickerKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // handleHelpModalKey scrolls the keybinding reference and dismisses on
 // `?` (toggle off) or esc. Mirrors the previous detailHelp pane-swap
 // behaviour but routed at the top level since the help is now an overlay.
-func (m *Model) handleHelpModalKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleHelpModalKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "?":
 		m.helpModalActive = false

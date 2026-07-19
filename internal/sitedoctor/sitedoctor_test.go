@@ -696,3 +696,82 @@ func TestDependencyCheckTasks_SkipsComposerAuditWithoutVendor(t *testing.T) {
 		}
 	})
 }
+
+// TestApplies covers the doctor's applicability gate: a host-proxy site with no
+// framework and no PHP/Node manifest has nothing to check and hides the button,
+// while anything with a framework definition or a composer.json/package.json to
+// inspect stays eligible.
+func TestApplies(t *testing.T) {
+	t.Run("no framework, no manifests: not applicable", func(t *testing.T) {
+		if Applies(t.TempDir(), nil) {
+			t.Error("a frameworkless site with nothing to check should not offer the doctor")
+		}
+	})
+
+	t.Run("composer.json alone: applicable", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, "composer.json", "{}")
+		if !Applies(dir, nil) {
+			t.Error("composer.json gives the composer checks something to inspect")
+		}
+	})
+
+	t.Run("composer disabled by framework: not from composer", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, "composer.json", "{}")
+		if Applies(dir, &config.Framework{Name: "static", Composer: "false"}) {
+			t.Error("a framework that opts out of composer must not be pulled in by composer.json")
+		}
+	})
+
+	t.Run("package.json alone: applicable", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, "package.json", "{}")
+		if !Applies(dir, nil) {
+			t.Error("package.json gives the node checks something to inspect")
+		}
+	})
+
+	t.Run("framework with env config: applicable", func(t *testing.T) {
+		if !Applies(t.TempDir(), laravelLikeFW()) {
+			t.Error("a framework that manages an env file always has env checks to run")
+		}
+	})
+
+	t.Run("framework with required services only: applicable", func(t *testing.T) {
+		if !Applies(t.TempDir(), &config.Framework{Name: "x", Requires: []string{"mysql"}}) {
+			t.Error("a required-service declaration is a check")
+		}
+	})
+
+	t.Run("framework with a php range only: applicable", func(t *testing.T) {
+		fw := &config.Framework{Name: "x"}
+		fw.PHP.Min = "8.2"
+		if !Applies(t.TempDir(), fw) {
+			t.Error("a declared PHP range drives the php_version check")
+		}
+	})
+
+	t.Run("framework with declared doctor checks only: applicable", func(t *testing.T) {
+		fw := &config.Framework{Name: "x", Doctor: &config.FrameworkDoctor{
+			Checks: []config.DoctorCheck{{Name: "c", Type: "env_key_set", EnvKey: "K"}},
+		}}
+		if !Applies(t.TempDir(), fw) {
+			t.Error("a framework's own declared checks make the doctor apply")
+		}
+	})
+
+	t.Run("frameworkless with a committed .env.example: applicable", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env.example", "APP_KEY=\n")
+		if !Applies(dir, nil) {
+			t.Error("a committed dotenv example drives the env_drift check without a framework")
+		}
+	})
+
+	t.Run("bare framework, no manifests: not applicable", func(t *testing.T) {
+		if Applies(t.TempDir(), &config.Framework{Name: "x"}) {
+			t.Error("a framework with no env, services, checks or range and no manifest has nothing to run")
+		}
+	})
+}

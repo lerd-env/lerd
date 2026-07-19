@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
@@ -47,7 +47,7 @@ func TestDomainActions_GatedToSitesTab(t *testing.T) {
 		t.Fatal("no remove-domain confirm should open off the Sites tab")
 	}
 
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+	next, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: string('a')})
 	m = next.(*Model)
 	if m.domainInputActive {
 		t.Fatal("the `a` add binding should not open input off the Sites tab")
@@ -75,7 +75,7 @@ func TestDomainActions_WorkOnSitesTab(t *testing.T) {
 		t.Fatal("removeFocusedDomain should open the confirm on the Sites tab")
 	}
 	if m := mkModel(); func() bool {
-		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}})
+		next, _ := m.Update(tea.KeyPressMsg{Code: 'a', Text: string('a')})
 		return next.(*Model).domainInputActive
 	}() == false {
 		t.Fatal("the `a` add binding should open the input on the Sites tab")

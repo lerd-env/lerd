@@ -5,11 +5,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/siteinfo"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // narrowWidth is the terminal width below which the TUI switches from the
@@ -18,7 +19,16 @@ import (
 const narrowWidth = 100
 
 // View implements tea.Model.
-func (m *Model) View() string {
+// View wraps the rendered frame in a tea.View, carrying the alt-screen and
+// mouse settings that bubbletea v2 moved off program options and onto the view.
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
+}
+
+func (m *Model) render() string {
 	if m.width < 60 || m.height < 12 {
 		return "terminal too small (need at least 60×12)\n"
 	}

@@ -6,6 +6,7 @@ package feedback
 import (
 	"errors"
 	"fmt"
+	"image/color"
 	"io"
 	"os"
 	"strings"
@@ -13,11 +14,35 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
+	"charm.land/lipgloss/v2"
+	"charm.land/lipgloss/v2/table"
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/term"
 )
+
+// lipgloss v2 dropped AdaptiveColor. darkBackground selects the dark palette by
+// default (the historical look on a dark terminal, unchanged), and adaptive
+// picks the light or dark variant of a two-tone grey.
+var darkBackground = true
+
+func adaptive(light, dark string) color.Color {
+	if darkBackground {
+		return lipgloss.Color(dark)
+	}
+	return lipgloss.Color(light)
+}
+
+// SetDarkBackground re-derives the two-tone greys for a detected terminal
+// background and rebuilds the one style that reads them. The TUI calls it once
+// bubbletea reports the background (lipgloss v2 dropped render-time adaptive
+// colours); until then the dark palette is used, unchanged on a dark terminal.
+func SetDarkBackground(dark bool) {
+	darkBackground = dark
+	ColDim = adaptive("#4b5563", "#6b7280")
+	ColDivider = adaptive("#d1d5db", "#374151")
+	ColStopped = adaptive("#4b5563", "#6b7280")
+	dimStyle = lipgloss.NewStyle().Foreground(ColDim)
+}
 
 // Canonical lerd palette. The TUI theme aliases these so CLI feedback and the
 // dashboard share one set of colours. The signal colours are ANSI 16-colour
@@ -30,14 +55,14 @@ import (
 // instead of assuming a dark background. Dark values are unchanged from the
 // fixed palette so a dark terminal looks exactly as before.
 var (
-	ColTitle   = lipgloss.Color("2")                                       // terminal green
-	ColDim     = lipgloss.AdaptiveColor{Light: "#4b5563", Dark: "#6b7280"} // gray-600 / gray-500
-	ColDivider = lipgloss.AdaptiveColor{Light: "#d1d5db", Dark: "#374151"} // gray-300 / gray-700
-	ColRunning = lipgloss.Color("2")                                       // terminal green
-	ColStopped = lipgloss.AdaptiveColor{Light: "#4b5563", Dark: "#6b7280"} // gray-600 / gray-500
-	ColFailing = lipgloss.Color("1")                                       // terminal red
-	ColPaused  = lipgloss.Color("3")                                       // terminal yellow
-	ColGold    = lipgloss.Color("11")                                      // terminal bright yellow (sudo prompts)
+	ColTitle   = lipgloss.Color("2")            // terminal green
+	ColDim     = adaptive("#4b5563", "#6b7280") // gray-600 / gray-500
+	ColDivider = adaptive("#d1d5db", "#374151") // gray-300 / gray-700
+	ColRunning = lipgloss.Color("2")            // terminal green
+	ColStopped = adaptive("#4b5563", "#6b7280") // gray-600 / gray-500
+	ColFailing = lipgloss.Color("1")            // terminal red
+	ColPaused  = lipgloss.Color("3")            // terminal yellow
+	ColGold    = lipgloss.Color("11")           // terminal bright yellow (sudo prompts)
 	// Accent shares the terminal green with titles and running status so borders,
 	// tabs, key chips, the spinner, and value fragments all read as the same
 	// theme colour rather than as an error.

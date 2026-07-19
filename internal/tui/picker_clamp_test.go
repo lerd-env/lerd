@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestPhpDisabledMask(t *testing.T) {
@@ -92,19 +92,19 @@ func TestPickerKeyNavSkipsDisabled(t *testing.T) {
 		pickerDisabled: []bool{false, true, true, false},
 		pickerCursor:   0,
 	}
-	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyDown})
+	m.handlePickerKey(tea.KeyPressMsg{Code: tea.KeyDown})
 	if m.pickerCursor != 3 {
 		t.Errorf("after down from 0, cursor = %d, want 3 (8.1 and 8.3 disabled)", m.pickerCursor)
 	}
-	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyUp})
+	m.handlePickerKey(tea.KeyPressMsg{Code: tea.KeyUp})
 	if m.pickerCursor != 0 {
 		t.Errorf("after up from 3, cursor = %d, want 0", m.pickerCursor)
 	}
-	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyEnd})
+	m.handlePickerKey(tea.KeyPressMsg{Code: tea.KeyEnd})
 	if m.pickerCursor != 3 {
 		t.Errorf("end cursor = %d, want 3 (last enabled)", m.pickerCursor)
 	}
-	m.handlePickerKey(tea.KeyMsg{Type: tea.KeyHome})
+	m.handlePickerKey(tea.KeyPressMsg{Code: tea.KeyHome})
 	if m.pickerCursor != 0 {
 		t.Errorf("home cursor = %d, want 0 (first enabled)", m.pickerCursor)
 	}

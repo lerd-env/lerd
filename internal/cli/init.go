@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
@@ -145,7 +145,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 				Title(title).
 				Options(huh.NewOptions(options...)...).
 				Value(&choice),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
 		switch choice {
@@ -337,7 +337,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 		))
 	}
 
-	if err := huh.NewForm(formGroups...).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	if err := huh.NewForm(formGroups...).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return nil, err
 	}
 
@@ -417,7 +417,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 					Value(&selectedWorkers),
 			),
 		}
-		if err := huh.NewForm(workerGroups...).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		if err := huh.NewForm(workerGroups...).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
 	}
@@ -573,7 +573,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 			Value(&containerfile),
 	}
 	containerFields = appendHTTPSField(containerFields, httpsAvailable, &secured)
-	if err := huh.NewForm(huh.NewGroup(containerFields...)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	if err := huh.NewForm(huh.NewGroup(containerFields...)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return nil, err
 	}
 
@@ -599,7 +599,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 				Title("Services").
 				Options(huh.NewOptions(serviceOptions...)...).
 				Value(&selectedServices),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
 	}
@@ -621,7 +621,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 				Description("Deselect to remove from .lerd.yaml").
 				Options(huh.NewOptions(customWorkerNames...)...).
 				Value(&keepCustomWorkers),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
 	}
@@ -790,7 +790,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 			}),
 	}
 	proxyFields = appendHTTPSField(proxyFields, httpsAvailable, &secured)
-	if err := huh.NewForm(huh.NewGroup(proxyFields...)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	if err := huh.NewForm(huh.NewGroup(proxyFields...)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return nil, err
 	}
 	port = 0
@@ -811,7 +811,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 				Title("Services").
 				Options(huh.NewOptions(serviceOptions...)...).
 				Value(&selectedServices),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
 	}
@@ -1092,7 +1092,7 @@ func maybeCreateContainerfile(cwd, containerfile string, port int) {
 			Title(fmt.Sprintf("%s doesn't exist yet. Create it and open your editor?", containerfile)).
 			Description("Lerd writes a starter image for your runtime; edit it to fit your app.").
 			Value(&create),
-	)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil || !create {
+	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil || !create {
 		return
 	}
 	if dir := filepath.Dir(path); dir != "" {

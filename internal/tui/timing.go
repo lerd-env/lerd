@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/reqstats"
 	"github.com/geodro/lerd/internal/siteinfo"

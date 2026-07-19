@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestRenderModal_CentersTitleAndFooter(t *testing.T) {
@@ -50,7 +50,7 @@ func TestHandleConfirmKey_YRunsAction(t *testing.T) {
 		ran = true
 		return nil
 	})
-	_, cmd := m.handleConfirmKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	_, cmd := m.handleConfirmKey(tea.KeyPressMsg{Code: 'y', Text: string('y')})
 	if cmd == nil {
 		t.Fatal("expected cmd to be the staged action")
 	}
@@ -70,7 +70,7 @@ func TestHandleConfirmKey_NDismissesWithoutRunning(t *testing.T) {
 		ran = true
 		return nil
 	})
-	_, cmd := m.handleConfirmKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'n'}})
+	_, cmd := m.handleConfirmKey(tea.KeyPressMsg{Code: 'n', Text: string('n')})
 	if cmd != nil {
 		t.Errorf("n should not return a command, got %v", cmd)
 	}
