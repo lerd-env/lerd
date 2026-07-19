@@ -142,6 +142,16 @@ The [`lerd-nixos`](https://github.com/lerd-env/lerd-nixos) flake packages the bi
 > [!NOTE]
 > See the [installation docs](https://lerd.sh/getting-started/installation) for details.
 
+### Desktop app (optional)
+
+Prefer a dedicated window to a browser tab? [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps the dashboard in a native app with native desktop notifications for captured mail, worker failures, and finished operations, no browser needed. Linux, shipped as a Flatpak:
+
+```bash
+flatpak install --user https://lerd.sh/lerd.flatpakref
+```
+
+Once it's installed, `lerd dashboard` opens the app instead of the browser.
+
 ## Quick Start
 
 ```bash
