@@ -29,6 +29,36 @@ describe('services store', () => {
     expect(groups.find((g) => g.key === 'schedule')).toBeUndefined();
   });
 
+  it('groups core services by category in CATEGORY_ORDER, sorted by name', async () => {
+    const { services, coreServiceGroups } = await import('./services');
+    services.set([
+      { name: 'valkey', status: 'active', site_count: 0, category: 'cache' },
+      { name: 'mariadb', status: 'active', site_count: 0, category: 'databases' },
+      { name: 'memcached', status: 'active', site_count: 0, category: 'cache' },
+      { name: 'mailpit', status: 'active', site_count: 0, category: 'mail' }
+    ]);
+    const groups = get(coreServiceGroups);
+    expect(groups.map((g) => g.key)).toEqual(['databases', 'cache', 'mail']);
+    expect(groups[1].items.map((s) => s.name)).toEqual(['memcached', 'valkey']);
+  });
+
+  it('excludes worker-lens services from the category groups', async () => {
+    const { services, coreServiceGroups } = await import('./services');
+    services.set([
+      { name: 'mariadb', status: 'active', site_count: 0, category: 'databases' },
+      { name: 'queue-blog', status: 'active', site_count: 0, category: 'other', queue_site: 'blog' }
+    ]);
+    const groups = get(coreServiceGroups);
+    expect(groups.map((g) => g.key)).toEqual(['databases']);
+    expect(groups.flatMap((g) => g.items.map((s) => s.name))).toEqual(['mariadb']);
+  });
+
+  it('buckets a service with no category into other', async () => {
+    const { services, coreServiceGroups } = await import('./services');
+    services.set([{ name: 'mystery', status: 'active', site_count: 0 }]);
+    expect(get(coreServiceGroups).map((g) => g.key)).toEqual(['other']);
+  });
+
   it('applies ws service frames', async () => {
     const { wsMessage } = await import('$lib/ws');
     const { services, servicesLoaded } = await import('./services');

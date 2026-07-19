@@ -69,21 +69,27 @@ export function categoryOf(preset: Pick<Preset, 'category'>): CategoryKey {
   return asCategory(preset.category);
 }
 
-export interface CategoryGroup {
+export interface CategoryGroup<T = Preset> {
   key: CategoryKey;
-  presets: Preset[];
+  items: T[];
 }
 
-export function groupByCategory(presets: Preset[]): CategoryGroup[] {
-  const buckets = new Map<CategoryKey, Preset[]>();
-  for (const p of presets) {
-    const k = categoryOf(p);
+// Bucket anything carrying a name and a category (presets in the discovery
+// grid, installed services in the list) into the shared category taxonomy,
+// keeping only non-empty categories in CATEGORY_ORDER and sorting each bucket
+// by name.
+export function groupByCategory<T extends { name: string; category?: string }>(
+  items: T[]
+): CategoryGroup<T>[] {
+  const buckets = new Map<CategoryKey, T[]>();
+  for (const it of items) {
+    const k = asCategory(it.category);
     const arr = buckets.get(k) || [];
-    arr.push(p);
+    arr.push(it);
     buckets.set(k, arr);
   }
   return CATEGORY_ORDER.filter((k) => buckets.has(k)).map((k) => ({
     key: k,
-    presets: buckets.get(k)!.slice().sort((a, b) => a.name.localeCompare(b.name))
+    items: buckets.get(k)!.slice().sort((a, b) => a.name.localeCompare(b.name))
   }));
 }
