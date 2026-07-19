@@ -14,6 +14,7 @@
     permissionState,
     autoSubscribeDisabled,
     detectBrowserFamily,
+    notifyDelivery,
     ALL_KINDS,
     type NotifyKind
   } from '$lib/notify';
@@ -69,6 +70,7 @@
         deliveryTarget = d.target === 'native' ? 'native' : 'browser';
         nativeSupported = !!d.native_supported;
         nativeKinds = d.kinds ?? {};
+        notifyDelivery.set(deliveryTarget);
       }
     } catch {
       /* keep browser default */
@@ -100,15 +102,20 @@
     if (target === 'native' && !nativeSupported) return;
     const prev = deliveryTarget;
     deliveryTarget = target;
+    notifyDelivery.set(target);
     try {
       const r = await apiFetch('/api/notifications/target', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ target })
       });
-      if (!r.ok) deliveryTarget = prev;
+      if (!r.ok) {
+        deliveryTarget = prev;
+        notifyDelivery.set(prev);
+      }
     } catch {
       deliveryTarget = prev;
+      notifyDelivery.set(prev);
     }
   }
 
@@ -229,41 +236,40 @@
 <DetailPanel>
   <DetailHeader title={m.notify_settings_title()} {trailing} />
 
-  <div class="p-3 shrink-0 border-b border-gray-100 dark:border-lerd-border">
-    <div class="flex items-start justify-between gap-4">
-      <div class="min-w-0">
-        <p class="text-sm text-gray-900 dark:text-white">{m.notify_settings_delivery_label()}</p>
-        <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-          {deliveryTarget === 'native'
-            ? m.notify_settings_delivery_native_hint()
-            : m.notify_settings_delivery_browser_hint()}
-        </p>
-      </div>
-      <div
-        class="flex rounded-md border border-gray-200 dark:border-lerd-border overflow-hidden text-xs shrink-0"
-      >
-        <button
-          class="px-3 py-1.5 font-medium transition-colors {deliveryTarget === 'browser'
-            ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-            : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
-          onclick={() => setDelivery('browser')}
+  {#if nativeSupported}
+    <div class="p-3 shrink-0 border-b border-gray-100 dark:border-lerd-border">
+      <div class="flex items-start justify-between gap-4">
+        <div class="min-w-0">
+          <p class="text-sm text-gray-900 dark:text-white">{m.notify_settings_delivery_label()}</p>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+            {deliveryTarget === 'native'
+              ? m.notify_settings_delivery_native_hint()
+              : m.notify_settings_delivery_browser_hint()}
+          </p>
+        </div>
+        <div
+          class="flex rounded-md border border-gray-200 dark:border-lerd-border overflow-hidden text-xs shrink-0"
         >
-          {m.notify_settings_delivery_browser()}
-        </button>
-        <button
-          class="px-3 py-1.5 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed {deliveryTarget ===
-          'native'
-            ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-            : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
-          disabled={!nativeSupported}
-          title={nativeSupported ? '' : m.notify_settings_delivery_native_unavailable()}
-          onclick={() => setDelivery('native')}
-        >
-          {m.notify_settings_delivery_native()}
-        </button>
+          <button
+            class="px-3 py-1.5 font-medium transition-colors {deliveryTarget === 'browser'
+              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
+              : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
+            onclick={() => setDelivery('browser')}
+          >
+            {m.notify_settings_delivery_browser()}
+          </button>
+          <button
+            class="px-3 py-1.5 font-medium transition-colors {deliveryTarget === 'native'
+              ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
+              : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
+            onclick={() => setDelivery('native')}
+          >
+            {m.notify_settings_delivery_native()}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
+  {/if}
 
   {#if deliveryTarget === 'browser' && $permissionState === 'default'}
     <div class="p-3 shrink-0">

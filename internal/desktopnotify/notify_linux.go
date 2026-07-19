@@ -3,6 +3,7 @@
 package desktopnotify
 
 import (
+	"bytes"
 	"os/exec"
 	"sync"
 
@@ -142,12 +143,23 @@ func startActionListener() {
 	}()
 }
 
-// openRoute focuses the desktop app via its lerd:// scheme when it is the
-// registered handler, otherwise opens the dashboard route in the browser.
+// openRoute sends the click to the best available target: the desktop app via
+// its lerd:// scheme, then an installed PWA via web+lerd://, then the dashboard
+// in the browser.
 func openRoute(route string) {
-	if out, err := exec.Command("xdg-mime", "query", "default", "x-scheme-handler/lerd").Output(); err == nil && len(out) > 0 {
+	switch {
+	case hasSchemeHandler("lerd"):
 		_ = exec.Command("xdg-open", appSchemeURL(route)).Run()
-		return
+	case hasSchemeHandler("web+lerd"):
+		_ = exec.Command("xdg-open", pwaSchemeURL(route)).Run()
+	default:
+		_ = exec.Command("xdg-open", browserURL(route)).Run()
 	}
-	_ = exec.Command("xdg-open", dashboardURL(route)).Run()
+}
+
+// hasSchemeHandler reports whether a default application is registered for the
+// given URL scheme.
+func hasSchemeHandler(scheme string) bool {
+	out, err := exec.Command("xdg-mime", "query", "default", "x-scheme-handler/"+scheme).Output()
+	return err == nil && len(bytes.TrimSpace(out)) > 0
 }

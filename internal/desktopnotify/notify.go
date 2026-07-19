@@ -68,10 +68,18 @@ func appSchemeURL(route string) string {
 	return "lerd://open/" + strings.TrimPrefix(route, "/")
 }
 
-// dashboardURL is the loopback dashboard URL a click falls back to when the
-// desktop app is not installed, opened in the default browser.
-func dashboardURL(route string) string {
-	return "http://127.0.0.1:7073/" + strings.TrimPrefix(route, "/")
+// pwaSchemeURL is the web+lerd:// deep link an installed PWA claims. The Web
+// Manifest spec forbids bare custom schemes, so a PWA registers the web+ prefix
+// where the desktop app uses lerd://.
+func pwaSchemeURL(route string) string {
+	return "web+lerd://open/" + strings.TrimPrefix(route, "/")
+}
+
+// browserURL is where a click falls back to when the desktop app is not
+// installed: the friendly nginx vhost the rest of lerd opens (lerd dashboard),
+// not the raw loopback address.
+func browserURL(route string) string {
+	return "http://lerd.localhost/" + strings.TrimPrefix(route, "/")
 }
 
 // UrgencyFromString maps lerd's notification urgency strings to the DBus hint.

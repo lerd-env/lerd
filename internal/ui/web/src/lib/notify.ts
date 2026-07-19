@@ -198,11 +198,43 @@ async function fireNotification(evt: NotificationEvent) {
   new Notification(title, opts);
 }
 
+// notifyDelivery mirrors the server's notification sink (browser | native) so
+// browser-only UI (the enable banner, permission prompts) can hide itself when
+// the daemon is delivering notifications natively.
+export const notifyDelivery = writable<'browser' | 'native'>('browser');
+
+export async function loadNotifyDelivery() {
+  try {
+    const r = await apiFetch('/api/notifications/target');
+    if (r.ok) {
+      const d = (await r.json()) as { target?: string };
+      notifyDelivery.set(d.target === 'native' ? 'native' : 'browser');
+    }
+  } catch {
+    /* keep browser default */
+  }
+}
+
+// handleProtocolLaunch routes a PWA opened via its web+lerd:// protocol handler.
+// The manifest maps the scheme to /?lerd=<full web+lerd:// url>; we extract the
+// route, navigate, and strip the query so a refresh doesn't re-trigger it.
+export function handleProtocolLaunch() {
+  if (typeof location === 'undefined') return;
+  const raw = new URLSearchParams(location.search).get('lerd');
+  if (!raw) return;
+  history.replaceState(null, '', location.pathname + location.hash);
+  const m = /^web\+lerd:\/\/open\/?(.*)$/.exec(raw);
+  const route = m ? m[1] : '';
+  if (route) openOverlayUrl(route.startsWith('#') ? route : '#' + route);
+}
+
 let initialized = false;
 
 export function initNotify() {
   if (initialized) return;
   initialized = true;
+  handleProtocolLaunch();
+  void loadNotifyDelivery();
   wsMessage.subscribe((msg) => {
     if (!msg?.notification) return;
     void fireNotification(msg.notification);

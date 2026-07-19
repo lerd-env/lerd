@@ -3,17 +3,20 @@ package desktopnotify
 import "testing"
 
 func TestClickURLs(t *testing.T) {
-	cases := []struct{ route, app, dash string }{
-		{"#system", "lerd://open/#system", "http://127.0.0.1:7073/#system"},
-		{"/sites/foo", "lerd://open/sites/foo", "http://127.0.0.1:7073/sites/foo"},
-		{"", "lerd://open/", "http://127.0.0.1:7073/"},
+	cases := []struct{ route, app, pwa, browser string }{
+		{"#system", "lerd://open/#system", "web+lerd://open/#system", "http://lerd.localhost/#system"},
+		{"/sites/foo", "lerd://open/sites/foo", "web+lerd://open/sites/foo", "http://lerd.localhost/sites/foo"},
+		{"", "lerd://open/", "web+lerd://open/", "http://lerd.localhost/"},
 	}
 	for _, tc := range cases {
 		if got := appSchemeURL(tc.route); got != tc.app {
 			t.Errorf("appSchemeURL(%q)=%q, want %q", tc.route, got, tc.app)
 		}
-		if got := dashboardURL(tc.route); got != tc.dash {
-			t.Errorf("dashboardURL(%q)=%q, want %q", tc.route, got, tc.dash)
+		if got := pwaSchemeURL(tc.route); got != tc.pwa {
+			t.Errorf("pwaSchemeURL(%q)=%q, want %q", tc.route, got, tc.pwa)
+		}
+		if got := browserURL(tc.route); got != tc.browser {
+			t.Errorf("browserURL(%q)=%q, want %q", tc.route, got, tc.browser)
 		}
 	}
 }
