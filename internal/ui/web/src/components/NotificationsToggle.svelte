@@ -4,6 +4,7 @@
     notifyPrefs,
     permissionState,
     autoSubscribeDisabled,
+    notifyDelivery,
     setNotifyMaster,
     enableNotifications
   } from '$lib/notify';
@@ -16,15 +17,20 @@
 
   let busy = $state(false);
 
+  const native = $derived($notifyDelivery === 'native');
+  // Native delivery is on and needs no browser permission, so the bell shows
+  // enabled and is never blocked in that mode.
   const enabled = $derived(
-    $permissionState === 'granted' && !$autoSubscribeDisabled && $notifyPrefs.enabled
+    native || ($permissionState === 'granted' && !$autoSubscribeDisabled && $notifyPrefs.enabled)
   );
-  const blocked = $derived($permissionState === 'denied' || $permissionState === 'unsupported');
+  const blocked = $derived(
+    !native && ($permissionState === 'denied' || $permissionState === 'unsupported')
+  );
 
   async function onclick(e: MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (busy || blocked) return;
+    if (busy || blocked || native) return;
     busy = true;
     try {
       // 'default' and a forgotten-but-granted browser both need the permission

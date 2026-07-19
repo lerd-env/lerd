@@ -21,8 +21,22 @@ On by default; toggle via ` + "`lerd notify on`" + ` and ` + "`lerd notify off`"
 	}
 	cmd.AddCommand(newNotifyOnCmd())
 	cmd.AddCommand(newNotifyOffCmd())
+	cmd.AddCommand(newNotifyTargetCmd())
 	cmd.AddCommand(newNotifyStatusCmd())
 	return cmd
+}
+
+func newNotifyTargetCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:       "target <browser|native>",
+		Short:     "Choose the notification delivery sink",
+		Long:      "Route notifications to the browser (WebSocket + Web Push) or to native desktop notifications posted by the daemon. Native is Linux only for now.",
+		Args:      cobra.ExactArgs(1),
+		ValidArgs: []string{config.NotifyTargetBrowser, config.NotifyTargetNative},
+		RunE: func(_ *cobra.Command, args []string) error {
+			return runNotifyTarget(args[0])
+		},
+	}
 }
 
 func newNotifyOnCmd() *cobra.Command {
@@ -75,6 +89,26 @@ func runNotifyToggle(enable bool) error {
 	return nil
 }
 
+func runNotifyTarget(target string) error {
+	if target != config.NotifyTargetBrowser && target != config.NotifyTargetNative {
+		return fmt.Errorf("target must be %q or %q", config.NotifyTargetBrowser, config.NotifyTargetNative)
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if cfg.NotificationTarget() == target {
+		fmt.Printf("Notification target already %s.\n", target)
+		return nil
+	}
+	cfg.SetNotificationTarget(target)
+	if err := config.SaveGlobal(cfg); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+	fmt.Printf("Notification target set to %s.\n", target)
+	return nil
+}
+
 func runNotifyStatus() error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -85,6 +119,7 @@ func runNotifyStatus() error {
 		state = feedback.Green("enabled")
 	}
 	fmt.Printf("Notifications: %s\n", state)
+	fmt.Printf("Delivery: %s\n", cfg.NotificationTarget())
 	return nil
 }
 
