@@ -37,6 +37,14 @@ and test against, but the pull request goes to **lerd-env/services**.
    dashboard depends on its database family; some presets mount a generated
    config file for auto-login). Copy the pattern from the matching existing preset.
 
+   For a **database engine**, also add an `introspect.list_databases` command so it
+   appears in the web UI's Databases tab. It runs via `sh -c` inside the container
+   and must print one `name<TAB>size_bytes` row per user database, filtering the
+   engine's own system databases. Copy the block from `mariadb.yaml` (MySQL family),
+   `postgres-pgvector.yaml` (Postgres), or `mongo.yaml` (Mongo). lerd passes the
+   `lerd` admin password via the exec env, so no inline credentials are needed for
+   MySQL/Postgres.
+
 5. **Update the store README table** in the lerd-env/services `README.md` so the
    new service is listed.
 

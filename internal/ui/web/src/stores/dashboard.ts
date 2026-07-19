@@ -1,5 +1,6 @@
 import { writable, derived, get } from 'svelte/store';
 import { services, serviceAction, type Service } from './services';
+import { adminServiceFor } from './presetSuggestions';
 
 export interface DashboardRef {
   name: string;
@@ -82,6 +83,45 @@ export function openMailpitMessage(id: string) {
   location.hash = 'service/mailpit/view/' + safeId;
 }
 
+// DB_DEEP_LINK maps an admin tool to the URL suffix that opens a specific
+// database inside it, keyed by the preset the admin service was installed from.
+// Only tools with a stable single-database URL are listed; pgAdmin has none, so
+// its databases open the tool at its root via the engine header button instead.
+const DB_DEEP_LINK: Record<string, (db: string) => string> = {
+  phpmyadmin: (db) => `?db=${encodeURIComponent(db)}`,
+  adminer: (db) => `?db=${encodeURIComponent(db)}`,
+  'mongo-express': (db) => `/db/${encodeURIComponent(db)}`
+};
+
+function dbDeepLinker(admin: Service): ((db: string) => string) | undefined {
+  return DB_DEEP_LINK[admin.preset || admin.name];
+}
+
+// databaseAdminFor returns the installed admin tool for the named engine, or
+// null when none is installed. Tools with a database URL (phpMyAdmin, Adminer,
+// Mongo Express) open on the database; pgAdmin, which has no per-database URL,
+// opens at its root.
+export function databaseAdminFor(engineName: string): Service | null {
+  const list = get(services);
+  const engine = list.find((s) => s.name === engineName);
+  if (!engine) return null;
+  const admin = adminServiceFor(engine, list);
+  return admin?.dashboard ? admin : null;
+}
+
+// openDatabaseAdmin opens the engine's admin tool, deep-linked to one database
+// when the tool supports it, starting it first when stopped. The database is
+// encoded into the route hash (service/<admin>/db/<name>) so a later re-hydrate
+// keeps the deep-link instead of snapping the iframe back to the tool's root.
+export async function openDatabaseAdmin(engineName: string, database: string) {
+  const admin = databaseAdminFor(engineName);
+  if (!admin) return;
+  if (admin.status !== 'active' && !(await serviceAction(admin.name, 'start'))) return;
+  location.hash = dbDeepLinker(admin)
+    ? `service/${admin.name}/db/${encodeURIComponent(database)}`
+    : `service/${admin.name}`;
+}
+
 export function openDocs() {
   const cur = get(dashboardOpen);
   if (cur && cur.name === 'docs') {
@@ -131,6 +171,21 @@ function refFromHash(): DashboardRef | null {
           dashboard: mp.dashboard,
           icon: mp.icon,
           extraPath: '/view/' + mpDeep[1]
+        };
+      }
+    }
+    // service/<admin>/db/<database> deep-links an admin tool to one database.
+    const dbDeep = rest.match(/^(.+?)\/db\/(.+)$/);
+    if (dbDeep) {
+      const admin = get(services).find((x) => x.name === dbDeep[1]);
+      const linker = admin ? dbDeepLinker(admin) : undefined;
+      if (admin?.dashboard && linker) {
+        return {
+          name: admin.name,
+          label: admin.name,
+          dashboard: admin.dashboard,
+          icon: admin.icon,
+          extraPath: linker(decodeURIComponent(dbDeep[2]))
         };
       }
     }

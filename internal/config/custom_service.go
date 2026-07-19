@@ -39,6 +39,17 @@ type SiteInit struct {
 	Exec string `yaml:"exec"`
 }
 
+// Introspect declares engine-specific commands the databases UI runs inside
+// the service container. lerd stays framework-agnostic by executing the
+// declared command and parsing its plain output, so no Go code branches on the
+// engine name.
+type Introspect struct {
+	// ListDatabases is run via sh -c inside the container and must print one
+	// "name<TAB>size_bytes" row per user database. lerd parses the tab-separated
+	// output; the whole query, including any system-database filtering, lives here.
+	ListDatabases string `yaml:"list_databases,omitempty" json:"list_databases,omitempty"`
+}
+
 // FileMount is a single file rendered to disk on the host and bind-mounted
 // into a custom service container. It exists so presets can ship config files
 // (e.g. pgAdmin's servers.json, a pgpass) without requiring the user to manage
@@ -166,6 +177,9 @@ type CustomService struct {
 	// (mysqldump, pg_dump, psql…) so host tools and IDEs can run them against
 	// external databases. Empty for services with nothing to expose.
 	ClientShims []ClientShim `yaml:"client_shims,omitempty" json:"client_shims,omitempty"`
+	// Introspect, when set, lets the databases UI enumerate the databases inside
+	// this engine and read their sizes. Only database-engine presets declare it.
+	Introspect *Introspect `yaml:"introspect,omitempty" json:"introspect,omitempty"`
 }
 
 // ClientShim declares a service client tool that lerd exposes as a host shim.

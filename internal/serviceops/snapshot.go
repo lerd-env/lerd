@@ -276,6 +276,11 @@ func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(P
 		name = "snapshot-" + timestamped()
 	} else if hint, reserved := reservedSnapshotName(name); reserved {
 		return nil, fmt.Errorf("%q is not a valid snapshot name — %s", strings.TrimSpace(name), hint)
+	} else {
+		// Stamp a user-provided name with the same UTC timestamp an auto-generated
+		// one carries, so repeated snapshots of one name never collide and each
+		// snapshot's time can be read straight off its name.
+		name = strings.TrimSpace(name) + "-" + timestamped()
 	}
 	clean, err := sanitizeSnapshotName(name)
 	if err != nil {

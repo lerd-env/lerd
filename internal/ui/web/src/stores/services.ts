@@ -36,6 +36,9 @@ export interface Service {
   // optional). Drives the ports modal's extra-ports affordance.
   preset_owned?: boolean;
   tunable?: boolean;
+  // True for a database engine (mysql/mariadb/postgres/mongo), so the detail
+  // view shows its Databases tab.
+  is_database?: boolean;
   site_count: number;
   site_domains?: string[];
   pinned?: boolean;
