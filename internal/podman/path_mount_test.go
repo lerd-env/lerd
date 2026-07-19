@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // resetPathMountAttempts clears the debounce cache so tests can drive the
@@ -90,6 +92,42 @@ func TestPathVisible(t *testing.T) {
 
 	if PathVisible("/srv/apps/shop", "8.1") {
 		t.Error("PathVisible should report false when the version's quadlet does not exist")
+	}
+}
+
+// A path listed under config `mounts:` is auto-mountable even though it lives
+// under an ephemeral prefix the denylist would otherwise refuse, and it flows
+// into ExtraVolumePaths so a quadlet rebuild picks it up (issue #949).
+func TestConfiguredMountOverridesEphemeralDenylist(t *testing.T) {
+	home := t.TempDir()
+	cfgHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+
+	cfg := &config.GlobalConfig{Mounts: []string{"/tmp/claude"}}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+
+	if !PathAutoMountable("/tmp/claude/session-123") {
+		t.Error("a path under a configured mount should be auto-mountable despite /tmp")
+	}
+	if PathAutoMountable("/tmp/other/session") {
+		t.Error("an unconfigured /tmp path must stay refused")
+	}
+	if root, ok := configuredMountRoot("/tmp/claude/session-123"); !ok || root != "/tmp/claude" {
+		t.Errorf("configuredMountRoot = %q,%v; want /tmp/claude,true", root, ok)
+	}
+
+	got := ExtraVolumePaths()
+	found := false
+	for _, p := range got {
+		if p == "/tmp/claude" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("ExtraVolumePaths() = %v; want it to include /tmp/claude", got)
 	}
 }
 
