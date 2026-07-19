@@ -576,9 +576,10 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // former per-client constants onto this one leaner reference dropped the prior
 // 57000-byte SKILL.md ceiling to 26000; bumped to this for the `workspace` tool
 // group and for the package-manager, worker-state and preset-metadata rules an
-// assistant was previously getting wrong.
+// assistant was previously getting wrong. Bumped 28500 → 28700 for the `diag`
+// `doctor_fix` action.
 func TestLerdReference_underSizeCeiling(t *testing.T) {
-	const ceiling = 28500
+	const ceiling = 28700
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

@@ -101,8 +101,9 @@ Actions: `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `s
 - `setup` runs the framework's post-install steps (migrations, storage:link…) — MANDATORY after `env setup` on new/cloned projects; idempotent
 
 #### `diag` — diagnostics & observability
-Actions: `status`, `doctor`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
-- `status` (DNS/nginx/FPM/watcher health) and `doctor` (full JSON diagnostic) are the first stops when something is broken; `dns_diagnose` walks the DNS chain
+Actions: `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status`.
+- `status` (DNS/nginx/FPM/watcher health) and `doctor` (JSON findings, each tagged with a fix tier) are the first stops when something is broken; `dns_diagnose` walks the DNS chain
+- `doctor_fix` applies the safe (non-heavy, non-sudo) automatic repairs for environment findings; package installs, `lerd install`, and `lerd cleanup` stay manual
 - `site_doctor` runs framework-agnostic app-level checks for one site (env file, env drift, app key, composer/node dependency install + lock, `composer audit`/`npm audit`, PHP range, a `slow_routes` warning for routes whose p95 runs well above the site's typical response time or over a second in absolute terms, plus the framework's own checks); pass `site` (name or domain) or `path`, defaults to cwd. A failing check carries a `severity` and, when one applies, a `fix` naming the command that resolves it — run that yourself (`exec`, or the named lerd command); site_doctor itself is read-only. `slow_routes` is the exception: it reads the watcher's request-timing snapshot and has no command fix, the remedy is to profile the route (`profiler_toggle`)
 - reading logs lives in the `logs` tool (below), not here
 - `which` shows resolved PHP/Node/docroot/nginx for a site; `check` validates `.lerd.yaml`
