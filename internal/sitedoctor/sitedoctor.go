@@ -103,6 +103,46 @@ func RunForPath(ctx context.Context, path, fwName string) Response {
 	return Run(ctx, path, fw)
 }
 
+// AppliesForPath reports whether the doctor has any check to run for the project
+// at path, resolving the framework the same way RunForPath does so the dashboard,
+// CLI, and MCP share one applicability answer.
+func AppliesForPath(path, fwName string) bool {
+	if fwName == "" {
+		fwName, _ = config.DetectFrameworkForDir(path)
+	}
+	fw, _ := config.GetFrameworkForDir(fwName, path)
+	return Applies(path, fw)
+}
+
+// Applies reports whether Run would have anything to check, without touching the
+// container. It mirrors Run's gating from the cheap, config-and-manifest signals
+// so a site the report would leave empty (a host-proxy Python, Ruby, or Go dev
+// server: no framework, no composer.json, no package.json) can hide the doctor
+// button instead of opening a modal that finds nothing. A Node host-proxy keeps
+// it, since its package.json still drives the node checks.
+func Applies(path string, fw *config.Framework) bool {
+	if fw != nil {
+		if len(fw.Requires) > 0 || fw.HasEnvConfig() || len(frameworkChecks(fw)) > 0 {
+			return true
+		}
+		if fw.PHP.Min != "" || fw.PHP.Max != "" {
+			return true
+		}
+	}
+	if fileExists(filepath.Join(path, "composer.json")) && !composerDisabled(fw) {
+		return true
+	}
+	if fileExists(filepath.Join(path, "package.json")) {
+		return true
+	}
+	// A committed dotenv example drives the env_drift check even with no framework,
+	// so a bare proxy carrying one still has something to report.
+	if _, format, exampleFile := envSetup(fw, path); format == "dotenv" && fileExists(filepath.Join(path, exampleFile)) {
+		return true
+	}
+	return false
+}
+
 func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	resp := Response{Checks: []Check{}}
 	envFile, envFormat, exampleFile := envSetup(fw, path)
