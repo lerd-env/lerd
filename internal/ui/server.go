@@ -812,6 +812,11 @@ type SiteResponse struct {
 	HostProxy        bool     `json:"host_proxy,omitempty"`
 	HostPort         int      `json:"host_port,omitempty"`
 	HostHasDevServer bool     `json:"host_has_dev_server,omitempty"`
+	// DoctorApplicable is false when no doctor check can apply (a host-proxy
+	// Python/Ruby/Go site with no framework and no composer/package manifest), so
+	// the dashboard hides the button rather than opening an empty modal. Not
+	// omitempty: the dashboard keys on the explicit false to hide.
+	DoctorApplicable bool `json:"doctor_applicable"`
 	// Grouping — Group is the group key (main site's name); GroupSubdomain is the
 	// label a secondary occupies; GroupMainDomain is the group main's base domain.
 	// MultiTenant flags a main whose project declares env_overrides (wildcard
@@ -1025,6 +1030,7 @@ func buildSites() []SiteResponse {
 			HostProxy:            e.HostPort > 0,
 			HostPort:             e.HostPort,
 			HostHasDevServer:     e.HostPort > 0 && e.HostCommand != "",
+			DoctorApplicable:     sitedoctor.AppliesForPath(e.Path, e.FrameworkName),
 			Group:                e.Group,
 			GroupSubdomain:       e.GroupSubdomain,
 			GroupMainDomain:      groupMainDomain[e.Group],

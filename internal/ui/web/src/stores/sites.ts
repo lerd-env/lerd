@@ -48,6 +48,9 @@ export interface Site {
   host_proxy?: boolean;
   host_port?: number;
   host_has_dev_server?: boolean;
+  // False when no doctor check can apply (a host-proxy Python/Ruby/Go site with
+  // no framework and no composer/package manifest), so the button stays hidden.
+  doctor_applicable?: boolean;
   group?: string;
   group_subdomain?: string;
   group_main_domain?: string;

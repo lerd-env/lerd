@@ -88,9 +88,10 @@
 
   // The doctor lives behind an on-demand button next to Commands rather than a
   // permanent tab: its checks (command and audit execs) only run when the modal
-  // is opened, so a healthy site carries no extra weight. Framework-agnostic, so
-  // every site can run it.
-  const canDoctor = true;
+  // is opened, so a healthy site carries no extra weight. Hidden when no check
+  // can apply (a host-proxy Python/Ruby/Go site with nothing to inspect); a
+  // missing flag defaults to showing it so older snapshots aren't caught out.
+  const canDoctor = $derived(site.doctor_applicable !== false);
   let doctorOpen = $state(false);
 
   function onDBIsolatedChange() {
