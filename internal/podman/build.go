@@ -51,6 +51,7 @@ func ExtraVolumePaths() []string {
 	var candidates []string
 	if cfg, err := config.LoadGlobal(); err == nil {
 		candidates = append(candidates, cfg.ParkedDirectories...)
+		candidates = append(candidates, cfg.Mounts...)
 	}
 	if reg, err := config.LoadSites(); err == nil {
 		for _, site := range reg.Sites {
@@ -1056,13 +1057,37 @@ var (
 
 const pathMountDebounce = 60 * time.Second
 
+// configuredMountRoot returns the config `mounts:` entry that covers path (the
+// path itself or an ancestor), if any. It is the user's explicit opt-in to
+// bind-mount a tree the ephemeral denylist would otherwise withhold.
+func configuredMountRoot(path string) (string, bool) {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return "", false
+	}
+	for _, m := range cfg.Mounts {
+		if !bindMountable(m) {
+			continue
+		}
+		m = filepath.Clean(m)
+		if path == m || strings.HasPrefix(path, strings.TrimSuffix(m, "/")+"/") {
+			return m, true
+		}
+	}
+	return "", false
+}
+
 // PathAutoMountable reports whether EnsurePathMounted would bind-mount the
 // given path on demand. The filesystem root is refused (issue #884) and so are
 // the ephemeral system trees above; callers that need such a path inside a
-// container have to say so explicitly, by parking it.
+// container have to say so explicitly, by parking it or listing it under
+// `mounts:` in config.yaml (which overrides the ephemeral denylist).
 func PathAutoMountable(path string) bool {
 	if !bindMountable(path) {
 		return false
+	}
+	if _, ok := configuredMountRoot(path); ok {
+		return true
 	}
 	for _, p := range ephemeralPathPrefixes {
 		if strings.HasPrefix(path, p) {
@@ -1112,6 +1137,12 @@ func EnsurePathMounted(path, phpVersion string) {
 	// command run from / or from a temp dir must not rewrite the quadlets.
 	if !PathAutoMountable(path) {
 		return
+	}
+	// A cwd under a configured mount mounts the mount root, not the deep
+	// (often session-scoped) subdirectory, so the quadlet gains one stable line
+	// instead of churning a new one per scratch path.
+	if root, ok := configuredMountRoot(path); ok {
+		path = root
 	}
 	home, _ := os.UserHomeDir()
 	if home == "" {

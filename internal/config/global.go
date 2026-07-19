@@ -267,9 +267,17 @@ type GlobalConfig struct {
 	// AutoCleanup lets the watcher periodically reclaim orphaned lerd images
 	// (safe tier only, never service images). On by default; set false to turn
 	// off the daily sweep. Read it via AutoCleanupEnabled for nil-safety.
-	AutoCleanup       bool                     `yaml:"auto_cleanup"       mapstructure:"auto_cleanup"`
-	ParkedDirectories []string                 `yaml:"parked_directories" mapstructure:"parked_directories"`
-	Services          map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
+	AutoCleanup       bool     `yaml:"auto_cleanup"       mapstructure:"auto_cleanup"`
+	ParkedDirectories []string `yaml:"parked_directories" mapstructure:"parked_directories"`
+	// Mounts are extra host paths the user opts in to bind-mounting into the
+	// PHP-FPM and nginx containers at the same location, on top of $HOME and the
+	// parked/linked-site paths. Unlike those, a mount may point at a normally
+	// excluded system tree (e.g. a scratch root under /tmp for agent workflows):
+	// listing it here is the explicit "yes, mount this" the ephemeral denylist
+	// otherwise withholds. Same-location only, so an in-container path matches its
+	// host path and `lerd php` can chdir into it.
+	Mounts   []string                 `yaml:"mounts,omitempty"   mapstructure:"mounts"`
+	Services map[string]ServiceConfig `yaml:"services"           mapstructure:"services"`
 	// Workspaces group sites for display only, in the web UI and the TUI. See
 	// workspaces.go; they never affect how a site is served.
 	Workspaces []Workspace `yaml:"workspaces,omitempty" mapstructure:"workspaces"`
@@ -678,6 +686,9 @@ func cloneGlobalConfig(in *GlobalConfig) *GlobalConfig {
 	}
 	if in.ParkedDirectories != nil {
 		out.ParkedDirectories = append([]string(nil), in.ParkedDirectories...)
+	}
+	if in.Mounts != nil {
+		out.Mounts = append([]string(nil), in.Mounts...)
 	}
 	if in.DNS.Upstream != nil {
 		out.DNS.Upstream = append([]string(nil), in.DNS.Upstream...)

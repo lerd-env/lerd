@@ -5,6 +5,31 @@ import (
 	"testing"
 )
 
+func TestPhpScriptArgIndex(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want int
+	}{
+		{"bare script", []string{"artisan", "migrate"}, 0},
+		{"absolute script", []string{"/tmp/ide-phpinfo.php"}, 0},
+		{"glued -d before script", []string{"-dmemory_limit=-1", "/tmp/x.php"}, 1},
+		{"separated -d before script", []string{"-d", "memory_limit=-1", "script.php"}, 2},
+		{"script then data file arg", []string{"check.php", "/tmp/input.xml"}, 0},
+		{"-r runs no file", []string{"-r", "echo 1;"}, -1},
+		{"-v runs no file", []string{"-v"}, -1},
+		{"-f names the script", []string{"-f", "/tmp/x.php"}, 1},
+		{"empty", nil, -1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := phpScriptArgIndex(tt.args); got != tt.want {
+				t.Errorf("phpScriptArgIndex(%v) = %d, want %d", tt.args, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSpxPassthroughEnv(t *testing.T) {
 	tests := []struct {
 		name    string

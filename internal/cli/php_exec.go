@@ -126,22 +126,31 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 	composerBin := filepath.Join(composerHome, "vendor", "bin")
 	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
 
+	// A cwd the container can't reach (an ephemeral /tmp path, not parked and not
+	// listed under mounts:) makes `podman exec -w <cwd>` fail with an opaque crun
+	// chdir error. Refuse with a clear message instead (issue #949).
+	if !podman.PathVisible(cwd, version) && !podman.PathAutoMountable(cwd) {
+		return 0, fmt.Errorf("cannot run php from %s: lerd does not mount temporary system directories (/tmp, /var/tmp, /run) into the PHP container. Run from a path under your home directory or a parked directory, or add the path to mounts: in %s", cwd, config.GlobalConfigFile())
+	}
+
 	podman.EnsurePathMounted(cwd, version)
 	ensureServicesForCwd(cwd)
 
-	// If any positional arg is an absolute path to a file that exists on the
-	// host but outside $HOME (e.g. /tmp/ide-phpinfo.php written by PhpStorm),
-	// the container won't be able to read it since only $HOME is volume-mounted.
-	// Stream the file through stdin and replace the arg with /dev/stdin.
+	// PHP runs the first non-option operand as its script. When that script is an
+	// absolute path the container can't read (e.g. /tmp/ide-phpinfo.php written by
+	// an IDE), stream it through stdin as /dev/stdin. Only the script is eligible:
+	// a later path is the script's own argument (a data file), and rewriting that
+	// to /dev/stdin silently breaks is_file() checks and any script taking more
+	// than one file (issue #949).
 	var stdinReader io.Reader = os.Stdin
 	useTTY := term.IsTerminal(int(os.Stdin.Fd()))
-	for i, arg := range args {
-		if filepath.IsAbs(arg) && !strings.HasPrefix(arg, home+"/") && arg != home {
+	if i := phpScriptArgIndex(args); i >= 0 && i < len(args) {
+		arg := args[i]
+		if filepath.IsAbs(arg) && !strings.HasPrefix(arg, home+"/") && arg != home && !podman.PathVisible(arg, version) {
 			if data, err := os.ReadFile(arg); err == nil {
 				args[i] = "/dev/stdin"
 				stdinReader = bytes.NewReader(data)
 				useTTY = false
-				break
 			}
 		}
 	}
@@ -188,6 +197,34 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 		return 0, err
 	}
 	return 0, nil
+}
+
+// phpScriptArgIndex returns the index of the script operand in a `php` argument
+// list — the first token that is not an option (nor an option's separate value),
+// which is the file PHP executes. Returns -1 when the invocation runs no file
+// (php -r '...', php -v). Flag parsing is disabled on the php command, so this
+// mirrors just enough of PHP's CLI getopt to tell a script path from a flag.
+func phpScriptArgIndex(args []string) int {
+	// Single-letter options that consume the following token as their value; the
+	// glued forms (-dfoo=bar) carry their own value and pass through as one token.
+	valueFlags := map[string]bool{
+		"-c": true, "-d": true, "-r": true, "-B": true, "-R": true,
+		"-F": true, "-E": true, "-S": true, "-t": true, "-z": true,
+	}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		if a == "-f" {
+			return i + 1 // php -f <file>: the value is the script
+		}
+		if strings.HasPrefix(a, "-") {
+			if valueFlags[a] {
+				i++ // skip its separate value token
+			}
+			continue
+		}
+		return i
+	}
+	return -1
 }
 
 // spxPassthroughEnv picks the SPX_* profiler vars out of environ. When SPX is
