@@ -1,4 +1,4 @@
-import { writable } from 'svelte/store';
+import { get, writable } from 'svelte/store';
 
 export type Theme = 'light' | 'dark' | 'auto';
 
@@ -25,7 +25,10 @@ export function initTheme() {
     localStorage.setItem(KEY, t);
     apply(t);
   });
+  // On a system light/dark change, re-apply the current theme so 'auto' follows
+  // live. Re-applying directly (not theme.update) because setting the store to
+  // its current value is a no-op that never notifies subscribers.
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-    theme.update((t) => t);
+    apply(get(theme));
   });
 }
