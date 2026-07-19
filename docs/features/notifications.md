@@ -23,10 +23,10 @@ On a fresh Linux install the installer asks whether you want the [Lerd desktop a
 
 ## The desktop app
 
-Lerd has an optional desktop app: a dedicated window around the dashboard that pairs with the native sink. It installs into `~/.local` with no root, registers the `lerd://` scheme so clicking a native notification focuses it at the right view, and is distributed as an AppImage:
+Lerd has an optional desktop app: a dedicated window around the dashboard that pairs with the native sink. It is distributed as a Flatpak (heading to Flathub), sandboxed, and registers the `lerd://` scheme so clicking a native notification focuses it at the right view:
 
 ```bash
-curl -fsSL https://lerd.sh/desktop.sh | bash
+flatpak install --user https://lerd.sh/lerd.flatpakref
 ```
 
 Native notifications work with or without it, since the daemon posts them directly; the app just gives them a home to click into and a browser-free window for the dashboard.

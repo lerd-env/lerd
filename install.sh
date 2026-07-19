@@ -14,8 +14,9 @@ set -euo pipefail
 REPO="${LERD_REPO:-lerd-env/lerd}"
 BINARY="lerd"
 # Command shown to install the optional Lerd desktop app (a dedicated window
-# with native desktop notifications). Overridable so the URL can move.
-DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-curl -fsSL https://lerd.sh/desktop.sh | bash}"
+# with native desktop notifications), distributed as a Flatpak. Overridable so
+# the ref URL can move.
+DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://lerd.sh/lerd.flatpakref}"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
 LERD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd"
