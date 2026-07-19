@@ -46,7 +46,7 @@ describe('groupByCategory', () => {
       p('mailpit', 'mail')
     ]);
     expect(groups.map((g) => g.key)).toEqual(['databases', 'cache', 'mail']);
-    expect(groups[0].presets.map((x) => x.name)).toEqual(['mongo', 'mysql']);
+    expect(groups[0].items.map((x) => x.name)).toEqual(['mongo', 'mysql']);
   });
 
   it('sorts presets alphabetically within a category', () => {
@@ -55,7 +55,7 @@ describe('groupByCategory', () => {
       p('memcached', 'cache'),
       p('redis', 'cache')
     ]);
-    expect(groups[0].presets.map((x) => x.name)).toEqual(['memcached', 'redis', 'valkey']);
+    expect(groups[0].items.map((x) => x.name)).toEqual(['memcached', 'redis', 'valkey']);
   });
 
   it('keeps the global category order regardless of input order', () => {

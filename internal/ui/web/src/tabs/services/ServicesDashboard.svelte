@@ -64,7 +64,7 @@
           <div class="space-y-4">
             {#each groups as group (group.key)}
               <DashboardSection label={CATEGORY_LABELS[group.key]()} sub>
-                {#each group.presets as preset (preset.name)}
+                {#each group.items as preset (preset.name)}
                   <PresetCard {preset} category={group.key} />
                 {/each}
               </DashboardSection>

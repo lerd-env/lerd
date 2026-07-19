@@ -127,7 +127,7 @@ Selecting a site opens the detail panel with:
 
 ![Services tab](/assets/screenshots/services-list.png)
 
-The middle panel lists core infrastructure services (MySQL, Redis, PostgreSQL, Meilisearch, RustFS, Mailpit), any installed preset alternates (e.g. MySQL 5.7, MariaDB 11, MongoDB) and admin UIs (phpMyAdmin, pgAdmin, Mongo Express), plus grouped per-site workers (Queues, Horizon, Schedules, Workers, Stripe, Reverb).
+The middle panel lists core infrastructure services (MySQL, Redis, PostgreSQL, Meilisearch, RustFS, Mailpit), any installed preset alternates (e.g. MySQL 5.7, MariaDB 11, MongoDB) and admin UIs (phpMyAdmin, pgAdmin, Mongo Express), grouped by service type under labelled sections (Databases, Cache, Messaging, Search, Mail & PDF, Admin UIs, Storage, Testing) in the same order the discovery grid uses, plus grouped per-site workers (Queues, Horizon, Schedules, Workers, Stripe, Reverb) below them.
 
 The header has a **+** button that opens the **preset picker modal**: a one-click installer for the bundled service presets. A search box at the top filters the list by name, description, or image as you type. Multi-version presets like `mysql` and `mariadb` show a version dropdown next to the **Add** button. Already-installed entries are filtered out.
 

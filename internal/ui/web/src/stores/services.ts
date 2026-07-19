@@ -2,6 +2,7 @@ import { writable, derived, get } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 import { sites } from './sites';
+import { groupByCategory, type CategoryGroup } from '$lib/presetCategories';
 
 // One published port of a service: its container-internal port, its preset
 // default host port, and the current host override (0/undefined = on default).
@@ -139,6 +140,14 @@ function isWorker(s: Service): boolean {
 }
 
 export const coreServices = derived(services, ($s) => $s.filter((x) => !isWorker(x)));
+
+// The core services list bucketed by the service's category (databases, cache,
+// messaging…) so the middle panel shows one labelled section per type instead
+// of a flat list. Reuses the same taxonomy the discovery grid groups by.
+export const coreServiceGroups = derived(
+  coreServices,
+  ($core): CategoryGroup<Service>[] => groupByCategory($core)
+);
 
 export interface WorkerGroup {
   key: string;
