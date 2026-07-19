@@ -8,6 +8,11 @@ vi.mock('$stores/dashboard', () => ({
   openServiceDashboard: (s: unknown) => openServiceDashboard(s)
 }));
 
+const openServiceInstallModal = vi.fn();
+vi.mock('$stores/modals', () => ({
+  openServiceInstallModal: (n: string) => openServiceInstallModal(n)
+}));
+
 const phpmyadmin = {
   name: 'phpmyadmin',
   status: 'active',
@@ -38,9 +43,16 @@ describe('SiteServiceCard', () => {
     expect(getByText('Stopped')).toBeTruthy();
   });
 
-  it('treats an unknown service as stopped', () => {
-    const { getByText } = render(SiteServiceCard, { props: { name: 'redis' } });
-    expect(getByText('Stopped')).toBeTruthy();
+  it('marks a service that is not installed as such rather than stopped', () => {
+    const { getByText, queryByText } = render(SiteServiceCard, { props: { name: 'mongo' } });
+    expect(getByText('Not installed')).toBeTruthy();
+    expect(queryByText('Stopped')).toBeNull();
+  });
+
+  it('opens the install modal when an uninstalled service card is clicked', () => {
+    const { getByText } = render(SiteServiceCard, { props: { name: 'mongo' } });
+    getByText('MongoDB').click();
+    expect(openServiceInstallModal).toHaveBeenCalledWith('mongo');
   });
 
   it('offers a dashboard button when an active service has one', () => {

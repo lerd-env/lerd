@@ -29,6 +29,7 @@ export type ModalKind =
   | 'tuningReset'
   | 'workspaceDelete'
   | 'siteUnlink'
+  | 'serviceInstall'
   | null;
 
 export type LANAction = 'expose' | 'unexpose';
@@ -129,6 +130,10 @@ export interface SiteUnlinkTarget {
   domain: string;
 }
 
+export interface ServiceInstallTarget {
+  name: string;
+}
+
 export interface TuningSaveTarget {
   name: string;
   content: string;
@@ -175,6 +180,7 @@ export interface ModalState {
   tuningReset?: TuningResetTarget;
   workspaceDelete?: WorkspaceDeleteTarget;
   siteUnlink?: SiteUnlinkTarget;
+  serviceInstall?: ServiceInstallTarget;
 }
 
 export const modal = writable<ModalState>({ kind: null });
@@ -185,6 +191,10 @@ export function openWorkspaceDeleteModal(target: WorkspaceDeleteTarget) {
 
 export function openSiteUnlinkModal(target: SiteUnlinkTarget) {
   modal.set({ kind: 'siteUnlink', siteUnlink: target });
+}
+
+export function openServiceInstallModal(name: string) {
+  modal.set({ kind: 'serviceInstall', serviceInstall: { name } });
 }
 
 export function openDomainModal(site: Site) {

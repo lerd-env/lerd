@@ -27,6 +27,7 @@
   import ConfirmTuningRestoreModal from './ConfirmTuningRestoreModal.svelte';
   import ConfirmTuningResetModal from './ConfirmTuningResetModal.svelte';
   import ConfirmSiteUnlinkModal from './ConfirmSiteUnlinkModal.svelte';
+  import ConfirmServiceInstallModal from './ConfirmServiceInstallModal.svelte';
 </script>
 
 {#if $modal.kind === 'domain' && $modal.site}
@@ -83,4 +84,6 @@
   <ConfirmWorkspaceDeleteModal />
 {:else if $modal.kind === 'siteUnlink' && $modal.siteUnlink}
   <ConfirmSiteUnlinkModal />
+{:else if $modal.kind === 'serviceInstall' && $modal.serviceInstall}
+  <ConfirmServiceInstallModal />
 {/if}
