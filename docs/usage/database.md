@@ -34,7 +34,26 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `--force` | `-f` | Skip the `db:restore` confirmation prompt |
 | `--all` | | List snapshots across every database on the service (`db:snapshots`) |
 
+A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to its name, e.g. `nightly-20260719-135558`, so taking the same name twice never collides. Reference the full stamped name shown by `db:snapshots` when restoring or removing it.
+
 ---
+
+## Databases tab (web UI)
+
+Each database engine's detail page in the web UI (Services → pick MySQL, MariaDB, PostgreSQL or MongoDB) opens on a **Databases** tab that shows the databases inside that engine as a grid of cards, each with its on-disk size. It surfaces the same operations as the CLI without leaving the browser:
+
+- **Create** a database inline from the field above the grid.
+- **Export** a database to a `.sql` dump, or **import** a dump into one, from the card.
+- **Snapshots** are managed on the card of the database they belong to: take a snapshot, restore one (with a confirmation, since a restore overwrites the current data), delete one (also confirmed), or download one as a plain `.sql` dump. A snapshot is keyed on the engine and database it was taken from, never on a site, so it lives with the database rather than on the site page. A named snapshot gets a UTC timestamp appended (`nightly-20260719-135558`), so repeated snapshots of one name never collide; the list shows the parsed time and sorts newest first.
+- **Copy connection string** builds a ready-to-paste DSN for that specific database, which works whether or not an admin UI is installed.
+- **Open in the admin UI** appears on the card when an admin tool is installed for the engine, and opens it straight to this database when the tool supports a per-database URL (phpMyAdmin and Adminer for MySQL/MariaDB, Mongo Express for MongoDB). pgAdmin has no such URL, so it opens at its root.
+- **The linked site**, when a site owns the database, is shown as a link on the card that jumps to that site. A `<name>_testing` database links to the same site as `<name>`.
+
+The same "open in the admin tool" affordance is on the database service card in a site's own overview (a database-icon button), so from a site you can jump straight into that site's database in phpMyAdmin, Adminer or Mongo Express.
+
+Document engines like MongoDB list their databases and expose the connection string and admin link, but the SQL-only operations (create, export, import, snapshots) are hidden for them since those act through SQL clients. A stopped engine shows a prompt to start it rather than an empty grid.
+
+Which databases an engine advertises, and their sizes, comes from an `introspect.list_databases` command declared in the engine's [service preset](service-presets.md), so a newly added engine works here as soon as its preset ships that query, with no lerd release.
 
 ## Service and database resolution
 

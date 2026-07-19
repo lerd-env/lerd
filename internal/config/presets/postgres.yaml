@@ -41,3 +41,8 @@ client_shims:
   - pg_restore
 category: databases
 icon: elephant
+introspect:
+  list_databases: >
+    psql -U postgres -tAc
+    "SELECT datname || chr(9) || pg_database_size(datname) FROM pg_database
+    WHERE datistemplate = false AND datname <> 'postgres' ORDER BY datname"

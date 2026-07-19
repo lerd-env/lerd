@@ -51,3 +51,11 @@ files:
       loose-restrict-fk-on-non-standard-key=OFF
 category: databases
 icon: database
+introspect:
+  list_databases: >
+    $(command -v mysql || command -v mariadb) -uroot -sN -e
+    "SELECT s.SCHEMA_NAME, COALESCE(SUM(t.DATA_LENGTH + t.INDEX_LENGTH), 0)
+    FROM information_schema.SCHEMATA s
+    LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = s.SCHEMA_NAME
+    WHERE s.SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
+    GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME"

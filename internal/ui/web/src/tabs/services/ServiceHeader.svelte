@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onDestroy, type Snippet } from 'svelte';
   import StatusPill from '$components/StatusPill.svelte';
+  import Icon from '$components/Icon.svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
   import ServiceDependencies from './ServiceDependencies.svelte';
   import ServiceDeleteModal from './ServiceDeleteModal.svelte';
@@ -18,6 +19,7 @@
   } from '$stores/services';
   import { adminServiceFor } from '$stores/presetSuggestions';
   import { openDashboard, openServiceDashboard } from '$stores/dashboard';
+  import { databases } from '$stores/databases';
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
@@ -43,6 +45,14 @@
   let { svc }: Props = $props();
 
   const admin = $derived(adminServiceFor(svc, $allServices));
+
+  // The database engine's database count, loaded by its Databases tab. Null
+  // until loaded (or for non-database services), so nothing renders early.
+  const dbCount = $derived.by(() => {
+    if (!svc.is_database) return null;
+    const engine = $databases.find((e) => e.service === svc.name);
+    return engine ? engine.databases.length : null;
+  });
 
   async function openAdmin() {
     if (!admin) return;
@@ -355,6 +365,15 @@
           title={pillTitle}
           onclick={exposedPort ? copyExposedAddr : undefined}
         />
+        {#if dbCount !== null}
+          <span
+            class="inline-flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400"
+            title={m.databases_count({ count: dbCount })}
+          >
+            <Icon name="database" class="w-3.5 h-3.5" />
+            {dbCount}
+          </span>
+        {/if}
         {#if portConflicts.length > 0}
           <span
             class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/30"

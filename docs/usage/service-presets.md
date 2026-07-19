@@ -284,6 +284,31 @@ natively. Right-click "Copy link" works.
 `mongo` declares its own `connection_url:` (see [YAML schema](custom-services.md#yaml-schema)
 in the custom services reference) so it gets the same treatment as the built-in databases.
 
+### Listing databases in the Databases tab
+
+A database-engine preset can declare an `introspect.list_databases` command so the
+web UI's [Databases tab](database.md#databases-tab-web-ui) can enumerate the
+databases inside the running engine and read their sizes:
+
+```yaml
+introspect:
+  list_databases: >
+    $(command -v mysql || command -v mariadb) -uroot -sN -e
+    "SELECT s.SCHEMA_NAME, COALESCE(SUM(t.DATA_LENGTH + t.INDEX_LENGTH), 0)
+    FROM information_schema.SCHEMATA s
+    LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = s.SCHEMA_NAME
+    WHERE s.SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
+    GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME"
+```
+
+The command runs via `sh -c` inside the `lerd-<service>` container and must print
+one `name<TAB>size_bytes` row per user database, filtering out the engine's own
+system databases. lerd parses the tab-separated output and never branches on the
+engine name, so a new engine appears in the tab as soon as its preset ships this
+query, with no lerd release. The fixed `lerd` admin password is passed through the
+exec environment (`MYSQL_PWD` / `PGPASSWORD`), so the query needs no inline
+credentials for MySQL and PostgreSQL.
+
 ## Removing and reinstalling presets
 
 Default presets can be removed: `lerd service remove postgres` (or any other) stops the unit, deletes the quadlet, and frees the slot. The preset itself stays available in `lerd service preset list` as not-installed, so a future `lerd service preset postgres` brings it back. Pass `--purge` to also rename the data dir aside.

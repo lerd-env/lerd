@@ -31,7 +31,7 @@
       {@render sectionTitle(m.services_title())}
       <div class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
         {#each svcNames as name (name)}
-          <SiteServiceCard {name} />
+          <SiteServiceCard {name} database={site.db_database} />
         {/each}
       </div>
     </section>

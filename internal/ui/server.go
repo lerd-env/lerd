@@ -209,6 +209,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/services/presets", withCORS(handleServicePresets))
 	mux.HandleFunc("/api/services/presets/", withCORS(publishAfter(handleServicePresetInstall, eventbus.KindServices, eventbus.KindStatus)))
 	mux.HandleFunc("/api/services/", withCORS(publishAfter(handleServiceAction, eventbus.KindServices, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/databases", withCORS(handleDatabases))
+	mux.HandleFunc("/api/databases/", withCORS(handleDatabaseAction))
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
@@ -802,17 +804,20 @@ type SiteResponse struct {
 	// Services lists the service names this site uses, sourced from the
 	// project's .lerd.yaml. Used by the dashboard to render service badges
 	// on the site detail panel.
-	Services         []string `json:"services,omitempty"`
-	LANPort          int      `json:"lan_port,omitempty"`
-	LANShareURL      string   `json:"lan_share_url,omitempty"`
-	CustomContainer  bool     `json:"custom_container,omitempty"`
-	ContainerPort    int      `json:"container_port,omitempty"`
-	ContainerImage   string   `json:"container_image,omitempty"`
-	Runtime          string   `json:"runtime,omitempty"`
-	RuntimeWorker    bool     `json:"runtime_worker,omitempty"`
-	HostProxy        bool     `json:"host_proxy,omitempty"`
-	HostPort         int      `json:"host_port,omitempty"`
-	HostHasDevServer bool     `json:"host_has_dev_server,omitempty"`
+	Services []string `json:"services,omitempty"`
+	// DBDatabase is the site's DB_DATABASE, so the overview's database card can
+	// open the admin tool straight to this site's database.
+	DBDatabase       string `json:"db_database,omitempty"`
+	LANPort          int    `json:"lan_port,omitempty"`
+	LANShareURL      string `json:"lan_share_url,omitempty"`
+	CustomContainer  bool   `json:"custom_container,omitempty"`
+	ContainerPort    int    `json:"container_port,omitempty"`
+	ContainerImage   string `json:"container_image,omitempty"`
+	Runtime          string `json:"runtime,omitempty"`
+	RuntimeWorker    bool   `json:"runtime_worker,omitempty"`
+	HostProxy        bool   `json:"host_proxy,omitempty"`
+	HostPort         int    `json:"host_port,omitempty"`
+	HostHasDevServer bool   `json:"host_has_dev_server,omitempty"`
 	// DoctorApplicable is false when no doctor check can apply (a host-proxy
 	// Python/Ruby/Go site with no framework and no composer/package manifest), so
 	// the dashboard hides the button rather than opening an empty modal. Not
@@ -1021,6 +1026,7 @@ func buildSites() []SiteResponse {
 			Branch:               e.Branch,
 			Worktrees:            worktreeResponses,
 			Services:             e.Services,
+			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
 			LANShareURL:          cli.LANShareURL(e.LANPort),
 			CustomContainer:      e.ContainerPort > 0,
@@ -1114,7 +1120,11 @@ type ServiceResponse struct {
 	PresetOwned bool `json:"preset_owned,omitempty"`
 	// Tunable is true when the service exposes a user-editable runtime config
 	// override (see config.ServiceTuningMount), so the UI can show a Tuning tab.
-	Tunable            bool     `json:"tunable,omitempty"`
+	Tunable bool `json:"tunable,omitempty"`
+	// IsDatabase is true for a database engine (mysql/mariadb/postgres/mongo),
+	// so the detail view can show its Databases tab. Excludes sqlite and admin
+	// UIs, which are not queryable engines.
+	IsDatabase         bool     `json:"is_database,omitempty"`
 	SiteCount          int      `json:"site_count"`
 	SiteDomains        []string `json:"site_domains,omitempty"`
 	Pinned             bool     `json:"pinned"`
@@ -1333,6 +1343,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Pinned:            config.ServiceIsPinned(name),
 		Paused:            config.ServiceIsPaused(name),
 		IsDefault:         isDefault,
+		IsDatabase:        name != "sqlite" && config.IsDBServiceName(name),
 		Custom:            custom != nil,
 		PresetOwned:       config.PresetExists(name),
 		DefaultPort:       defaultPort,

@@ -42,6 +42,7 @@ export interface Site {
   idle?: boolean;
   idle_suspended_workers?: string[];
   services?: string[];
+  db_database?: string;
   custom_container?: boolean;
   container_image?: string;
   container_port?: number;
