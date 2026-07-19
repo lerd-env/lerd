@@ -17,7 +17,12 @@
   import { profilerEnabled, loadProfilerStatus } from '$stores/profiler';
   import { serviceLabel } from '$stores/services';
   import { accessMode } from '$stores/accessMode';
+  import { desktopAppInstalled, insideDesktopApp, openInDesktopApp } from '$lib/notify';
   import { m } from '../paraglide/messages.js';
+
+  // "Open in app" shows only in a browser when the desktop app is installed.
+  const inDesktopApp = insideDesktopApp();
+  const showOpenInApp = $derived($desktopAppInstalled && !inDesktopApp);
 
   onMount(() => {
     void loadProfilerStatus();
@@ -93,6 +98,21 @@
   {/if}
 
   <div class="mt-auto flex flex-col items-center gap-2">
+    {#if showOpenInApp}
+      <IconButton title={m.nav_open_in_app()} onclick={openInDesktopApp}>
+        <svg
+          class="w-5 h-5"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="1.75"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          viewBox="0 0 24 24"
+        >
+          <path d="M14 3h7v7m0-7L10 14M19 14v5a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h5" />
+        </svg>
+      </IconButton>
+    {/if}
     <IconButton
       title={m.nav_documentation()}
       active={$dashboardOpen?.name === 'docs'}

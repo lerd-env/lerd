@@ -163,3 +163,15 @@ func hasSchemeHandler(scheme string) bool {
 	out, err := exec.Command("xdg-mime", "query", "default", "x-scheme-handler/"+scheme).Output()
 	return err == nil && len(bytes.TrimSpace(out)) > 0
 }
+
+// AppInstalled reports whether the Lerd desktop app is registered as the lerd://
+// scheme handler, so callers can prefer it over a browser.
+func AppInstalled() bool {
+	return hasSchemeHandler("lerd")
+}
+
+// OpenApp focuses (or launches) the desktop app at the given dashboard route via
+// its lerd:// scheme.
+func OpenApp(route string) error {
+	return exec.Command("xdg-open", appSchemeURL(route)).Run()
+}

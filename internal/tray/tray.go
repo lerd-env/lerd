@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/desktopnotify"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
@@ -439,6 +440,12 @@ func applyLoop(menu *menuState, updateCh <-chan *Snapshot, mono bool, icons *ico
 
 func handleDash(item *systray.MenuItem) {
 	for range item.ClickedCh {
+		// Prefer the desktop app when it's the registered lerd:// handler.
+		if desktopnotify.AppInstalled() {
+			if err := desktopnotify.OpenApp(""); err == nil {
+				continue
+			}
+		}
 		openURL(dashboardURL)
 	}
 }

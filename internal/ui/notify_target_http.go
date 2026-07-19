@@ -12,7 +12,21 @@ import (
 type notifyTargetResponse struct {
 	Target          string          `json:"target"`
 	NativeSupported bool            `json:"native_supported"`
+	AppInstalled    bool            `json:"app_installed"`
 	Kinds           map[string]bool `json:"kinds"`
+}
+
+func newNotifyTargetResponse(cfg *config.GlobalConfig) notifyTargetResponse {
+	r := notifyTargetResponse{
+		Target:          config.NotifyTargetBrowser,
+		NativeSupported: desktopnotify.Supported(),
+		AppInstalled:    desktopnotify.AppInstalled(),
+	}
+	if cfg != nil {
+		r.Target = cfg.NotificationTarget()
+		r.Kinds = cfg.EffectiveNativeKinds()
+	}
+	return r
 }
 
 // handleNotifyTarget reads or sets the notification delivery sink. The response
@@ -21,13 +35,8 @@ type notifyTargetResponse struct {
 func handleNotifyTarget(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		target := config.NotifyTargetBrowser
-		var kinds map[string]bool
-		if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
-			target = cfg.NotificationTarget()
-			kinds = cfg.EffectiveNativeKinds()
-		}
-		writeJSON(w, notifyTargetResponse{Target: target, NativeSupported: desktopnotify.Supported(), Kinds: kinds})
+		cfg, _ := config.LoadGlobal()
+		writeJSON(w, newNotifyTargetResponse(cfg))
 	case http.MethodPost:
 		if !isLoopbackRequest(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -54,7 +63,7 @@ func handleNotifyTarget(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		writeJSON(w, notifyTargetResponse{Target: cfg.NotificationTarget(), NativeSupported: desktopnotify.Supported(), Kinds: cfg.EffectiveNativeKinds()})
+		writeJSON(w, newNotifyTargetResponse(cfg))
 	default:
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 	}
@@ -93,5 +102,5 @@ func handleNotifyKinds(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, notifyTargetResponse{Target: cfg.NotificationTarget(), NativeSupported: desktopnotify.Supported(), Kinds: cfg.EffectiveNativeKinds()})
+	writeJSON(w, newNotifyTargetResponse(cfg))
 }

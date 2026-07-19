@@ -203,16 +203,35 @@ async function fireNotification(evt: NotificationEvent) {
 // the daemon is delivering notifications natively.
 export const notifyDelivery = writable<'browser' | 'native'>('browser');
 
+// desktopAppInstalled mirrors whether the daemon sees the Lerd desktop app as
+// the lerd:// handler, so the web UI can offer "Open in app".
+export const desktopAppInstalled = writable<boolean>(false);
+
 export async function loadNotifyDelivery() {
   try {
     const r = await apiFetch('/api/notifications/target');
     if (r.ok) {
-      const d = (await r.json()) as { target?: string };
+      const d = (await r.json()) as { target?: string; app_installed?: boolean };
       notifyDelivery.set(d.target === 'native' ? 'native' : 'browser');
+      desktopAppInstalled.set(!!d.app_installed);
     }
   } catch {
     /* keep browser default */
   }
+}
+
+// insideDesktopApp is true when the dashboard is running inside the Lerd desktop
+// app (its preload exposes window.lerd), so "Open in app" hides there.
+export function insideDesktopApp(): boolean {
+  return typeof window !== 'undefined' && typeof (window as { lerd?: unknown }).lerd !== 'undefined';
+}
+
+// openInDesktopApp hands off to the desktop app at the current route via its
+// lerd:// scheme.
+export function openInDesktopApp() {
+  if (typeof location === 'undefined') return;
+  const route = location.hash || '/';
+  location.href = 'lerd://open/' + route;
 }
 
 // handleProtocolLaunch routes a PWA opened via its web+lerd:// protocol handler.

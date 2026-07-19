@@ -187,6 +187,7 @@
   "nav_system": "System",
   "nav_apps": "Apps",
   "nav_documentation": "Dokumentation",
+  "nav_open_in_app": "In der Lerd-App öffnen",
   "nav_profiler": "Profiler",
   "profiler_arm": "Profiling starten",
   "profiler_disarm": "Profiling stoppen",
