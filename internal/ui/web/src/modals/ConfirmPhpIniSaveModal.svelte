@@ -47,7 +47,7 @@
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.common_loading()}</p>
     {:else}
       <p class="text-sm text-gray-700 dark:text-gray-300">
-        {m.phpIniEditor_confirmBody({ version: target.version })}
+        {m.phpIniEditor_confirmBody({ scope: target.label })}
       </p>
 
       {#if target.exists}

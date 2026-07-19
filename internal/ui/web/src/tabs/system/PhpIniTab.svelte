@@ -1,6 +1,7 @@
 <script lang="ts">
   import TuningEditor from '$components/TuningEditor.svelte';
   import ConfigToolbar from '$components/ConfigToolbar.svelte';
+  import Dropdown from '$components/Dropdown.svelte';
   import {
     getPhpIni,
     loadPhpIniBackups,
@@ -40,12 +41,32 @@
   const canReset = $derived(exists && !loading && !error);
   const canSave = $derived(dirty && !loading && !error);
 
-  // Pin the loader's reactive input to the version string so any unrelated
-  // store push that re-renders the parent does not clobber unsaved edits.
-  const currentVersion = $derived(version);
+  // The php.ini scope: this version's own file, or the shared file applied to
+  // every version. The API keys on this token ("shared" or a bare version).
+  let iniScope = $state<'version' | 'shared'>('version');
+  const scope = $derived(iniScope === 'shared' ? 'shared' : version);
+
+  const scopeOptions = $derived([
+    { value: 'version', label: 'PHP ' + version, description: m.system_php_iniScopeVersion() },
+    { value: 'shared', label: m.system_php_iniScopeSharedLabel(), description: m.system_php_iniScopeSharedDesc() }
+  ]);
+
+  // Reset to the version's own file whenever the selected version changes, so
+  // switching version cards never leaves a stale "shared" selection behind.
+  $effect(() => {
+    version;
+    iniScope = 'version';
+  });
+
+  // Pin the loader's reactive input to the active scope so an unrelated store
+  // push can't clobber unsaved edits, and switching scope reloads the file.
+  const currentScope = $derived(scope);
+
+  // Human-readable scope for the confirm modals.
+  const scopeLabel = $derived(iniScope === 'shared' ? m.system_php_sharedScopeLabel() : 'PHP ' + version);
 
   $effect(() => {
-    const v = currentVersion;
+    const v = currentScope;
     loading = true;
     error = '';
     actionError = '';
@@ -59,7 +80,7 @@
     // we still want the user able to Restore.
     Promise.allSettled([getPhpIni(v), loadPhpIniBackups(v)])
       .then(([cfgRes, listRes]) => {
-        if (currentVersion !== v) return;
+        if (currentScope !== v) return;
         if (cfgRes.status === 'fulfilled') {
           original = cfgRes.value.content;
           text = cfgRes.value.content;
@@ -79,7 +100,7 @@
         }
       })
       .finally(() => {
-        if (currentVersion === v) loading = false;
+        if (currentScope === v) loading = false;
       });
   });
 
@@ -92,7 +113,7 @@
   async function refreshAfterAction(v: string) {
     try {
       const [cfgRes, listRes] = await Promise.allSettled([getPhpIni(v), loadPhpIniBackups(v)]);
-      if (currentVersion !== v) return;
+      if (currentScope !== v) return;
       if (cfgRes.status === 'fulfilled') {
         original = cfgRes.value.content;
         text = cfgRes.value.content;
@@ -112,7 +133,7 @@
         backupsError = listRes.reason instanceof Error ? listRes.reason.message : String(listRes.reason);
       }
     } catch (e: unknown) {
-      if (currentVersion !== v) return;
+      if (currentScope !== v) return;
       actionError = e instanceof Error ? e.message : String(e);
     }
   }
@@ -133,19 +154,19 @@
     restoring = true;
     actionError = '';
     try {
-      const v = currentVersion;
+      const v = currentScope;
       const name = latestBackup.name;
       const backupContent = await loadPhpIniBackupContent(v, name);
       openPhpIniRestoreModal(
-        { version: v, current: original, backupName: name, backup: backupContent },
+        { version: v, label: scopeLabel, current: original, backupName: name, backup: backupContent },
         async () => {
-          if (currentVersion !== v) return;
+          if (currentScope !== v) return;
           original = backupContent;
           text = backupContent;
           exists = true;
           try {
             const listRes = await loadPhpIniBackups(v);
-            if (currentVersion !== v) return;
+            if (currentScope !== v) return;
             if (listRes.ok) {
               backups = listRes.list;
               backupsError = '';
@@ -153,7 +174,7 @@
               backupsError = listRes.error || 'Could not load backups';
             }
           } catch (e: unknown) {
-            if (currentVersion !== v) return;
+            if (currentScope !== v) return;
             actionError = e instanceof Error ? e.message : String(e);
           }
         }
@@ -170,17 +191,24 @@
   }
 
   function reset() {
-    const v = currentVersion;
-    openPhpIniResetModal({ version: v, path }, () => refreshAfterAction(v));
+    const v = currentScope;
+    openPhpIniResetModal({ version: v, label: scopeLabel, path }, () => refreshAfterAction(v));
   }
 
   function save() {
-    const v = currentVersion;
-    openPhpIniSaveModal({ version: v, content: text, original, exists }, () => refreshAfterAction(v));
+    const v = currentScope;
+    openPhpIniSaveModal(
+      { version: v, label: scopeLabel, content: text, original, exists },
+      () => refreshAfterAction(v)
+    );
   }
 </script>
 
 <div class="flex flex-col h-full">
+  <div class="flex items-center gap-2.5 px-3 sm:px-5 py-2 border-b border-gray-100 dark:border-lerd-border shrink-0">
+    <span class="text-[11px] uppercase tracking-wide font-semibold text-gray-400 dark:text-gray-500">{m.system_php_iniEditing()}</span>
+    <Dropdown value={iniScope} options={scopeOptions} onchange={(v) => (iniScope = v as 'version' | 'shared')} minMenuWidth={230} />
+  </div>
   <ConfigToolbar
     {path}
     {dirty}

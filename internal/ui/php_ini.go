@@ -2,98 +2,29 @@ package ui
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"os"
-	"slices"
-	"strings"
 	"time"
 
 	"github.com/geodro/lerd/internal/cfgedit"
-	"github.com/geodro/lerd/internal/config"
-	phpPkg "github.com/geodro/lerd/internal/php"
-	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/phpini"
 )
 
-// phpIniFile is the cfgedit.File for a version's user php.ini override. Backups
-// and write-staging live in the version's ini.bkp/ dir, kept off the scan
-// directory's top-level *.ini glob that FPM loads.
-func phpIniFile(version string) cfgedit.File {
-	return cfgedit.File{
-		Path:     config.PHPUserIniFile(version),
-		BkpDir:   config.PHPUserIniBkpDir(version),
-		BkpName:  "98-user.ini",
-		Template: phpUserIniTemplate,
-	}
-}
+// phpIniValid reports whether a php.ini editor scope is valid: "shared", a bare
+// installed PHP version, or "site:<name>" for an existing FrankenPHP site.
+func phpIniValid(scope string) bool { return phpini.Valid(scope) }
 
-// phpIniSiteName decodes a "site:<name>" editor scope, returning the site name
-// and true; a bare PHP version returns ("", false).
-func phpIniSiteName(scope string) (string, bool) {
-	return strings.CutPrefix(scope, "site:")
-}
+// phpIniScopeFile returns the cfgedit.File for a scope: the shared file, the
+// per-version file, or a FrankenPHP site's own per-site file.
+func phpIniScopeFile(scope string) cfgedit.File { return phpini.ScopeFile(scope) }
 
-// phpIniValid reports whether a php.ini editor scope is valid: a bare installed
-// PHP version, or "site:<name>" for an existing FrankenPHP site (which has its
-// own per-site ini).
-func phpIniValid(scope string) bool {
-	if name, ok := phpIniSiteName(scope); ok {
-		s, err := config.FindSite(name)
-		return err == nil && s != nil && s.IsFrankenPHP()
-	}
-	installed, _ := phpPkg.ListInstalled()
-	return slices.Contains(installed, scope)
-}
+// phpIniRestart applies a scope's ini change by restarting the containers that
+// mount it (shared → every version, version → its FPM, site → its container).
+func phpIniRestart(scope string) error { return phpini.Restart(scope) }
 
-// phpIniScopeFile returns the cfgedit.File for a scope: the per-version file, or
-// a FrankenPHP site's own per-site file.
-func phpIniScopeFile(scope string) cfgedit.File {
-	if name, ok := phpIniSiteName(scope); ok {
-		return cfgedit.File{
-			Path:     config.SitePHPUserIniFile(name),
-			BkpDir:   config.SitePHPUserIniBkpDir(name),
-			BkpName:  "98-user.ini",
-			Template: phpUserIniTemplate,
-		}
-	}
-	return phpIniFile(scope)
-}
-
-// phpIniRestart applies a scope's ini change: for a version, the shared FPM plus
-// per-site containers on it; for a site, just that FrankenPHP container (after
-// refreshing its quadlet so the mount is current).
-func phpIniRestart(scope string) error {
-	name, ok := phpIniSiteName(scope)
-	if !ok {
-		return fpmRestartForVersion(scope)
-	}
-	site, err := config.FindSite(name)
-	if err != nil {
-		return err
-	}
-	entrypoint, env := site.FrankenPHPQuadletSpec()
-	if err := podman.WriteFrankenPHPQuadlet(site.Name, site.Path, site.PHPVersion, entrypoint, env); err != nil {
-		return fmt.Errorf("updating FrankenPHP quadlet: %w", err)
-	}
-	return podman.RestartUnit(podman.FrankenPHPContainerName(site.Name))
-}
-
-// phpIniRestartNoSeed restarts a scope's container(s) after a reset. For a
-// version it does not re-seed (the shared FPM tolerates a missing per-version
-// ini). For a FrankenPHP site, whose container mounts only this one file, it
-// re-seeds the defaults first so the bind-mount source stays a regular file and
-// podman can't auto-create a directory at the conf.d mount path.
-func phpIniRestartNoSeed(scope string) error {
-	if name, ok := phpIniSiteName(scope); ok {
-		site, err := config.FindSite(name)
-		if err != nil {
-			return err
-		}
-		_ = podman.EnsureSitePHPUserIni(name)
-		return podman.RestartUnit(podman.FrankenPHPContainerName(site.Name))
-	}
-	return restartFPMUnit(scope)
-}
+// phpIniRestartNoSeed restarts a scope's container(s) after a reset without
+// re-seeding a per-version/shared file.
+func phpIniRestartNoSeed(scope string) error { return phpini.RestartNoSeed(scope) }
 
 // PhpIniReadResponse mirrors SiteNginxReadResponse. Exists distinguishes a
 // real saved override from the seeded template the handler hands back when
@@ -135,43 +66,6 @@ type PhpIniRestoreResponse struct {
 	Restored string `json:"restored,omitempty"`
 	Content  string `json:"content,omitempty"`
 }
-
-// fpmRestartForVersion encapsulates the quadlet+restart dance the ini-saving
-// flow needs after touching disk. WriteFPMQuadlet internally seeds the user ini
-// via EnsureUserIni, which is why the reset path uses restartFPMUnit instead.
-func fpmRestartForVersion(version string) error {
-	if err := podman.WriteFPMQuadlet(version); err != nil {
-		return fmt.Errorf("updating php quadlet: %w", err)
-	}
-	if err := restartFPMUnit(version); err != nil {
-		return err
-	}
-	// Per-site containers (FrankenPHP, custom-FPM) on this version mount the same
-	// per-version inis; restart them so the php.ini edit reaches them too.
-	podman.RestartSiteContainersForVersion(version)
-	return nil
-}
-
-// restartFPMUnit restarts the FPM container without touching the on-disk user
-// ini. Used by the reset path, which has just deleted the file and would
-// otherwise see it re-seeded by WriteFPMQuadlet → EnsureUserIni.
-func restartFPMUnit(version string) error {
-	short := strings.ReplaceAll(version, ".", "")
-	return podman.RestartUnit("lerd-php" + short + "-fpm")
-}
-
-// phpUserIniTemplate seeds the GET handler when the user-ini does not exist
-// yet. Matches the stub EnsureUserIni would write so the editor shows the same
-// guidance.
-const phpUserIniTemplate = `; Lerd per-version PHP settings.
-;
-; Edit this file, then click Save to write it and restart FPM.
-;
-; memory_limit = 512M
-; opcache.memory_consumption = 256
-; realpath_cache_size = 4096k
-; realpath_cache_ttl = 600
-`
 
 // handlePhpIniConfig reads (GET) or saves (POST) a version's user php.ini.
 // The save is bespoke: php.ini has no clean pre-flight, so we write, restart
@@ -296,9 +190,9 @@ func handlePhpIniReset(w http.ResponseWriter, r *http.Request, version string) {
 		http.NotFound(w, r)
 		return
 	}
-	// Restart via restartFPMUnit, not fpmRestartForVersion: the latter routes
-	// through WriteFPMQuadlet → EnsureUserIni, which would re-seed the file we
-	// just deleted. cfgedit.Reset skips the restart when nothing was removed.
+	// RestartNoSeed, not Restart: the latter re-seeds via EnsureUserIni, which
+	// would recreate the file we just deleted. cfgedit.Reset skips the restart
+	// when nothing was removed.
 	if err := phpIniScopeFile(version).Reset(func() error { return phpIniRestartNoSeed(version) }); err != nil {
 		writeJSON(w, PhpIniResetResponse{OK: false, Error: "removed, but FPM restart failed: " + err.Error()})
 		return

@@ -34,6 +34,9 @@ func WriteCustomFPMQuadlet(siteName, version string) error {
 	if err := EnsureUserIni(version); err != nil {
 		return fmt.Errorf("creating user ini: %w", err)
 	}
+	if err := EnsureSharedIni(); err != nil {
+		return fmt.Errorf("creating shared ini: %w", err)
+	}
 	if err := EnsureXdebugIni(version); err != nil {
 		return fmt.Errorf("creating xdebug ini: %w", err)
 	}

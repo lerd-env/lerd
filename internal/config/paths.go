@@ -160,6 +160,21 @@ func PHPUserIniFile(version string) string {
 	return filepath.Join(DataDir(), "php", version, "98-user.ini")
 }
 
+// SharedIniFile returns the host path for the version-agnostic shared php.ini.
+// A single copy is bind-mounted into every PHP container below the per-version
+// 98-user.ini, so a setting placed here applies to all versions while any
+// per-version file still overrides it (conf.d loads alphabetically, last wins).
+func SharedIniFile() string {
+	return filepath.Join(DataDir(), "php", "shared", "95-shared.ini")
+}
+
+// SharedIniBkpDir holds timestamped backups of the shared ini produced by the
+// editor, next to (not inside) the shared dir so no FPM container's conf.d scan
+// loads a backup as live config.
+func SharedIniBkpDir() string {
+	return filepath.Join(DataDir(), "php", "shared", "ini.bkp")
+}
+
 // SitePHPUserIniFile is the per-site user php.ini for a runtime site that runs
 // its own container (FrankenPHP). Unlike PHPUserIniFile (shared by every site on
 // a PHP version), this is scoped to one site so its php.ini is independent.

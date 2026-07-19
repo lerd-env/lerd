@@ -52,7 +52,7 @@
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.common_loading()}</p>
     {:else}
       <p class="text-sm text-gray-700 dark:text-gray-300">
-        {m.phpIniEditor_restoreBody({ version: target.version, name: target.backupName })}
+        {m.phpIniEditor_restoreBody({ scope: target.label, name: target.backupName })}
       </p>
 
       <div class="border border-gray-200 dark:border-lerd-border rounded-sm bg-gray-50 dark:bg-black/40 overflow-auto max-h-96">

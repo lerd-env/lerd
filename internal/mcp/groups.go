@@ -156,6 +156,9 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"ports_list":     execPHPPortsList,
 		"ports_add":      execPHPPortsAdd,
 		"ports_remove":   execPHPPortsRemove,
+		"ini_read":       execPHPIniRead,
+		"ini_write":      execPHPIniWrite,
+		"ini_reset":      execPHPIniReset,
 	},
 	"worker": {
 		"start":  execWorkerStart,
@@ -403,16 +406,18 @@ func envTool() mcpTool {
 func runtimeTool() mcpTool {
 	return mcpTool{
 		Name:        "runtime",
-		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove. ext_add/ext_remove apply to EVERY PHP version (one declared set, kept across a version change) and rebuild one version's image now (slow); others rebuild on next use. ports_* publish host ports on a version's shell container; a busy port shifts to the next free one.",
+		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove, ini_read, ini_write, ini_reset. ext_add/ext_remove apply to EVERY PHP version (one declared set, kept across a version change) and rebuild one version's image now (slow); others rebuild on next use. ports_* publish host ports on a version's shell container; a busy port shifts to the next free one. ini_* edit php.ini: a per-version file (version=8.4) or the shared file (shared=true) applied to every version, with a per-version key still winning; prefer shared so a version change never drops a setting.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove"}},
-				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ports_*: PHP version. ext_*: which version to rebuild/report on now (the set itself applies to all)."},
+				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove", "ini_read", "ini_write", "ini_reset"}},
+				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ports_*: PHP version. ext_*: which version to rebuild/report on now (the set applies to all). ini_*: PHP version (omit or set shared=true for the shared file)."},
 				"extension": {Type: "string", Description: "ext_add/ext_remove: extension name (imagick, redis, swoole)."},
 				"apk_deps":  {Type: "string", Description: "ext_add: extra Alpine build packages, space-separated."},
 				"host":      {Type: "integer", Description: "ports_add/remove: host port."},
 				"container": {Type: "integer", Description: "ports_add: container port."},
+				"shared":    {Type: "boolean", Description: "ini_*: target the shared file (all versions)."},
+				"content":   {Type: "string", Description: "ini_write: full php.ini contents."},
 			},
 			Required: []string{"action"},
 		},

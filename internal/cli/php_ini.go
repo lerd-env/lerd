@@ -2,63 +2,62 @@ package cli
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/phpini"
 	"github.com/spf13/cobra"
 )
 
 // NewPhpIniCmd returns the php:ini command.
 func NewPhpIniCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "php:ini [version]",
-		Short: "Edit the user php.ini for a PHP version",
-		Args:  cobra.MaximumNArgs(1),
-		RunE:  runPhpIni,
+		Use:   "php:ini [version|shared]",
+		Short: "Edit the user php.ini for a PHP version, or the shared file (php:ini shared)",
+		Long: "Edit a PHP version's php.ini, or the shared file applied to every version.\n\n" +
+			"  lerd php:ini            detected/default version\n" +
+			"  lerd php:ini 8.4        an explicit version\n" +
+			"  lerd php:ini shared     the shared file (all versions; a per-version key still wins)",
+		Args: cobra.MaximumNArgs(1),
+		RunE: runPhpIni,
 	}
 }
 
 func runPhpIni(_ *cobra.Command, args []string) error {
-	version, err := phpExtVersion(args)
-	if err != nil {
-		return err
+	scope := phpini.SharedScope
+	if len(args) != 1 || args[0] != phpini.SharedScope {
+		v, err := phpExtVersion(args)
+		if err != nil {
+			return err
+		}
+		scope = v
 	}
 
-	if err := podman.EnsureUserIni(version); err != nil {
-		return fmt.Errorf("creating user ini: %w", err)
+	if err := phpini.Ensure(scope); err != nil {
+		return fmt.Errorf("creating ini: %w", err)
 	}
 
-	path := config.PHPUserIniFile(version)
+	path := phpini.ScopeFile(scope).Path
 	launched, err := launchEditor(path)
 	if err != nil {
 		return err
 	}
 	if !launched {
 		feedback.Begin()
-		feedback.Line("user ini file: " + feedback.Val(path))
+		feedback.Line("ini file: " + feedback.Val(path))
 		feedback.Note("set $EDITOR to open it automatically")
 		return nil
 	}
 
-	// Ensure the quadlet has the user ini volume mount (may be missing on
-	// installations predating the user ini feature).
-	if err := podman.WriteFPMQuadlet(version); err != nil {
-		return fmt.Errorf("updating quadlet: %w", err)
-	}
-
-	short := strings.ReplaceAll(version, ".", "")
-	unit := "lerd-php" + short + "-fpm"
 	feedback.Begin()
-	step := feedback.Start("restarting " + unit)
-	if err := podman.RestartUnit(unit); err != nil {
-		step.Fail(err)
-		return fmt.Errorf("restarting %s: %w", unit, err)
+	label := scope
+	if scope == phpini.SharedScope {
+		label = "shared (all versions)"
 	}
-	// Per-site containers (FrankenPHP, custom-FPM) on this version mount the same
-	// user ini; restart them so the edit applies there too.
-	podman.RestartSiteContainersForVersion(version)
+	step := feedback.Start("applying " + label)
+	if err := phpini.Restart(scope); err != nil {
+		step.Fail(err)
+		return fmt.Errorf("applying ini change: %w", err)
+	}
 	step.OK("")
 	return nil
 }

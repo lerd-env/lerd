@@ -186,12 +186,12 @@ func writeWorkerContainerUnit(unitName, siteName, sitePath, phpVersion, command,
 	if site, _ := config.FindSite(siteName); site != nil && site.IsCustomContainer() {
 		// Build the custom-container unit and substitute the placeholder
 		// image name the builder emits.
-		unit = buildDarwinContainerWorkerUnit(unitName, "", sitePath, home, "", "", command, restart, true)
+		unit = buildDarwinContainerWorkerUnit(unitName, "", sitePath, home, "", "", "", command, restart, true)
 		unit = strings.Replace(unit, "<custom-image>", podman.CustomImageName(siteName), 1)
 	} else {
 		unit = buildDarwinContainerWorkerUnit(
 			unitName, phpVersion, sitePath, home,
-			config.PHPConfFile(phpVersion), config.PHPUserIniFile(phpVersion),
+			config.PHPConfFile(phpVersion), config.PHPUserIniFile(phpVersion), config.SharedIniFile(),
 			command, restart, false,
 		)
 	}
