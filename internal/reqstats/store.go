@@ -185,6 +185,17 @@ func (s *Store) Prune(before time.Time) (int64, error) {
 	return res.RowsAffected()
 }
 
+// DeleteSite removes every stored request for a site, covering both its bare key
+// and its "<site>/<branch>" worktree rows, so an unlinked site leaves no traffic
+// behind in the durable store. Returns how many rows were removed.
+func (s *Store) DeleteSite(site string) (int64, error) {
+	res, err := s.db.Exec(`DELETE FROM requests WHERE site = ? OR instr(site, ?) = 1`, site, site+"/")
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // LastSeenBySite returns the most recent request time for every site in the
 // store, so the watcher can seed its cold-start clock on startup. Without it a
 // daemon restart forgets the last request and judges the next wake as warm,

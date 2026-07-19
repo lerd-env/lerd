@@ -122,9 +122,52 @@ func TestSeed_doesNotOverwriteNewer(t *testing.T) {
 func TestForget(t *testing.T) {
 	tr := NewTracker(nil)
 	tr.TouchSite("a", time.Unix(1, 0))
+	tr.TouchSite("a/feature-x", time.Unix(1, 0)) // a worktree of the removed site
+	tr.TouchSite("ab", time.Unix(1, 0))          // shares a prefix, different site
 	tr.Forget("a")
 	if _, ok := tr.LastActive("a"); ok {
 		t.Error("Forget must drop the record")
+	}
+	if _, ok := tr.LastActive("a/feature-x"); ok {
+		t.Error("Forget must drop the site's worktree records too")
+	}
+	if _, ok := tr.LastActive("ab"); !ok {
+		t.Error("Forget must not drop a prefix-sharing site")
+	}
+}
+
+func TestRemoveActivity(t *testing.T) {
+	tr := NewTracker(nil)
+	tr.TouchSite("keep", time.Unix(1000, 0))
+	tr.TouchSite("gone", time.Unix(1000, 0))
+	tr.TouchSite("gone/feature-x", time.Unix(1000, 0))
+	tr.TouchSite("gone-ish", time.Unix(1000, 0))
+
+	path := filepath.Join(t.TempDir(), "idle-activity.json")
+	if err := tr.Save(path); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if err := RemoveActivity(path, "gone"); err != nil {
+		t.Fatalf("RemoveActivity: %v", err)
+	}
+	m := LoadActivity(path)
+	if _, ok := m["gone"]; ok {
+		t.Error("RemoveActivity left the site behind")
+	}
+	if _, ok := m["gone/feature-x"]; ok {
+		t.Error("RemoveActivity left the site's worktree behind")
+	}
+	if _, ok := m["keep"]; !ok {
+		t.Error("RemoveActivity dropped an unrelated site")
+	}
+	if _, ok := m["gone-ish"]; !ok {
+		t.Error("RemoveActivity dropped a prefix-sharing site")
+	}
+}
+
+func TestRemoveActivityMissingFile(t *testing.T) {
+	if err := RemoveActivity(filepath.Join(t.TempDir(), "nope.json"), "x"); err != nil {
+		t.Errorf("RemoveActivity on a missing file must be a no-op, got %v", err)
 	}
 }
 

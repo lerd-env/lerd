@@ -285,6 +285,8 @@ For **HTTPS** the catch-all uses `ssl_reject_handshake on;`, so the browser sees
 
 When you unlink a site that lives inside a parked directory, the vhost is removed but the registry entry is kept and marked as *ignored*; the watcher will not re-register it on its next scan. Running `lerd link` in that directory clears the ignored flag and restores the site.
 
+Either way, unlinking also drops the site's per-site request-timing and idle state: its rows in the durable request store, its entries in the persisted request-timing and idle-activity snapshots, and the running watcher's in-memory copy, so an unlinked site leaves no stale traffic history behind. A site's git worktrees are covered too.
+
 ---
 
 ## Pausing sites

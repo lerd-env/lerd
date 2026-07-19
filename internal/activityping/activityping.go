@@ -19,6 +19,16 @@ func Site(name string) {
 	send("activity " + name)
 }
 
+// Forget tells the watcher a site was unlinked, so it drops the site's in-memory
+// request-timing and idle-activity state and stops re-emitting it into the state
+// files a later save tick would otherwise rewrite. No-op on an empty name.
+func Forget(name string) {
+	if name == "" {
+		return
+	}
+	send("forget " + name)
+}
+
 // Enable tells the watcher idle-suspend was turned on, so it spins up the engine,
 // access feed, and source watcher at once rather than on the next boot.
 func Enable() {

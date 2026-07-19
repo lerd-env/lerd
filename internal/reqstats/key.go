@@ -23,3 +23,10 @@ func SplitKey(key string) (site, branch string) {
 	}
 	return key, ""
 }
+
+// KeyBelongsTo reports whether a stored key is the site's own key or one of its
+// "<site>/<branch>" worktree keys, so a site's removal can sweep its worktree
+// rows too. A site name can't contain "/", so the prefix test is unambiguous.
+func KeyBelongsTo(key, site string) bool {
+	return key == site || strings.HasPrefix(key, site+"/")
+}
