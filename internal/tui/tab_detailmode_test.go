@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // TestSwitchTab_ResetsDetailMode guards against the Settings/System/Debug pane
@@ -19,7 +19,7 @@ func TestSwitchTab_ResetsDetailMode(t *testing.T) {
 		m := NewModel("test")
 		m.snap = fakeSnap()
 		m.switchTab(tabSites)
-		next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{mode.key}})
+		next, _ := m.Update(tea.KeyPressMsg{Code: mode.key, Text: string(mode.key)})
 		m = next.(*Model)
 		if m.detailMode != mode.want {
 			t.Fatalf("%c on Sites should enter mode %d, got %d", mode.key, mode.want, m.detailMode)
@@ -30,7 +30,7 @@ func TestSwitchTab_ResetsDetailMode(t *testing.T) {
 		}
 		// And switching to the Dashboard must also clear it.
 		m.switchTab(tabSites)
-		next, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{mode.key}})
+		next, _ = m.Update(tea.KeyPressMsg{Code: mode.key, Text: string(mode.key)})
 		m = next.(*Model)
 		m.switchTab(tabDashboard)
 		if m.detailMode != detailSite {
@@ -69,7 +69,7 @@ func TestDashboardActions_NoSiteTarget(t *testing.T) {
 // it must not fall through to detailToggleSelected against the carried-over site
 // (which would silently flip a worker / HTTPS / LAN share or open a picker modal).
 func TestDashboardEnter_NoSiteToggle(t *testing.T) {
-	for _, key := range []tea.KeyMsg{{Type: tea.KeyEnter}, {Type: tea.KeyRunes, Runes: []rune{' '}}} {
+	for _, key := range []tea.KeyPressMsg{{Code: tea.KeyEnter}, {Code: ' ', Text: string(' ')}} {
 		m := NewModel("test")
 		m.snap = fakeSnap()
 		m.switchTab(tabDashboard)

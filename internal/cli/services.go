@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	phpPkg "github.com/geodro/lerd/internal/php"
@@ -657,7 +657,7 @@ func promptPresetVersion(p *config.Preset) (string, error) {
 			Title(fmt.Sprintf("Which %s version do you want to install?", p.Name)).
 			Options(options...).
 			Value(&picked),
-	)).WithTheme(huh.ThemeCatppuccin())
+	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin))
 	if err := form.Run(); err != nil {
 		return "", err
 	}

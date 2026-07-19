@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/siteinfo"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // TestMain initialises the global bubblezone manager so View() (which marks
@@ -89,13 +89,13 @@ func TestMouseClick_SwitchesTab(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.View() // register zones
+	_ = m.render() // register zones
 
 	z := waitZone("tab:" + tabServices.label())
 	if z.IsZero() {
 		t.Fatalf("services tab zone not registered after render")
 	}
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab != tabServices {
@@ -109,13 +109,13 @@ func TestMouseClick_SelectsSiteRow(t *testing.T) {
 	m.activeTab = tabSites
 	m.focus = paneSites
 	m.width, m.height = 150, 40
-	_ = m.View()
+	_ = m.render()
 
 	z := waitZone("site:1")
 	if z.IsZero() {
 		t.Fatalf("second site row zone not registered after render")
 	}
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.siteCursor != 1 {
@@ -127,10 +127,10 @@ func TestMouseClick_IgnoresNonLeftPress(t *testing.T) {
 	m := NewModel("test")
 	m.snap = fakeSnap()
 	m.width, m.height = 150, 40
-	_ = m.View()
+	_ = m.render()
 	z := zone.Get("tab:" + tabServices.label())
 	// Motion (not a press) must not switch tabs.
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft}
+	msg := tea.MouseMotionMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab == tabServices {
@@ -154,13 +154,13 @@ func TestDashboardClick_JumpsToSiteTab(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.View() // register dashboard row zones
+	_ = m.render() // register dashboard row zones
 
 	z := waitZone("dashsite:1")
 	if z.IsZero() {
 		t.Fatalf("dashsite row zone not registered after render")
 	}
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.activeTab != tabSites {
@@ -176,7 +176,7 @@ func TestDashboardTab_CyclesCardFocus(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
 	m.dashFocus = 0
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
 	if m.dashFocus != 1 {
 		t.Fatalf("tab on dashboard should advance card focus, got %d", m.dashFocus)
@@ -280,7 +280,7 @@ func TestLKey_SelectsLogsTabOnSites(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabSites
 
-	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if m.siteTab != tabSiteLogs {
 		t.Fatalf("l on the Sites tab should select the Logs tab, got %v", m.siteTab)
 	}
@@ -298,7 +298,7 @@ func TestLKey_ClosesAnOverlayCarriedInFromAnotherTab(t *testing.T) {
 	// `l` on the Services tab sets showLogs, though the pane stays hidden behind
 	// the service detail's own tail. Walking onto the Sites tab then reveals it.
 	m.activeTab = tabServices
-	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if !m.showLogs {
 		t.Fatal("l on the Services tab should set showLogs")
 	}
@@ -306,11 +306,11 @@ func TestLKey_ClosesAnOverlayCarriedInFromAnotherTab(t *testing.T) {
 
 	// l must close the pane rather than select the tab underneath it, or the
 	// overlay would be stuck open with no key that dismisses it.
-	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if m.showLogs {
 		t.Fatal("l on the Sites tab should close an overlay carried in from another tab")
 	}
-	m.handleMainKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("l")})
+	m.handleMainKey(tea.KeyPressMsg{Code: 'l', Text: "l"})
 	if m.siteTab != tabSiteLogs {
 		t.Fatal("with no overlay open, l should select the Logs tab")
 	}
@@ -383,13 +383,13 @@ func TestWheel_ScrollsSitesPaneNotSelection(t *testing.T) {
 	m.snap = Snapshot{Sites: sites}
 	m.switchTab(tabSites)
 	m.width, m.height = 150, 20
-	_ = m.View()
+	_ = m.render()
 
 	z := waitZone("pane:sites")
 	if z.IsZero() {
 		t.Fatalf("sites pane zone not registered after render")
 	}
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown}
+	msg := tea.MouseWheelMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseWheelDown}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 	if m.siteScroll == 0 {
@@ -406,7 +406,7 @@ func TestView_RendersEachTab(t *testing.T) {
 		m.snap = fakeSnap()
 		m.width, m.height = 150, 40
 		m.activeTab = tab
-		out := m.View()
+		out := m.render()
 		// The tab bar labels are always present regardless of the active tab.
 		for _, label := range []string{"Dashboard", "Sites", "Services"} {
 			if !strings.Contains(out, label) {

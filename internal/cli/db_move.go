@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
@@ -355,7 +355,7 @@ func dbMoveWizard(reg *config.SiteRegistry, from, to string) (string, string, []
 				Title("Move databases from which service?").
 				Options(opts...).
 				Value(&from),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return "", "", nil, err
 		}
 	}
@@ -377,7 +377,7 @@ func dbMoveWizard(reg *config.SiteRegistry, from, to string) (string, string, []
 				Title("Move to which service?").
 				Options(huh.NewOptions(targets...)...).
 				Value(&to),
-		)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return "", "", nil, err
 		}
 	}
@@ -396,7 +396,7 @@ func dbMoveWizard(reg *config.SiteRegistry, from, to string) (string, string, []
 			Description("All selected by default; deselect any you want to leave behind.").
 			Options(huh.NewOptions(siteOpts...)...).
 			Value(&selected),
-	)).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return "", "", nil, err
 	}
 	if len(selected) == 0 {

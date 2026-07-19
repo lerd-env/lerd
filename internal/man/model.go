@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 var (
@@ -117,7 +117,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		switch m.state {
 		case stateList:
 			return m.updateList(msg)
@@ -140,7 +140,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateList(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q", "esc":
 		return m, tea.Quit
@@ -191,8 +191,8 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	default:
-		if len(msg.Runes) > 0 {
-			m.filter += string(msg.Runes)
+		if msg.Text != "" {
+			m.filter += msg.Text
 			m.filtered = FilterPages(m.allPages, m.filter)
 			m.cursor = 0
 		}
@@ -200,7 +200,7 @@ func (m Model) updateList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m Model) updateDetail(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	vh := m.visibleHeight()
 	maxScroll := max(0, len(m.rendered)-vh)
 
@@ -232,14 +232,17 @@ func (m Model) updateDetail(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 // View implements tea.Model.
-func (m Model) View() string {
+func (m Model) View() tea.View {
+	var s string
 	switch m.state {
 	case stateList:
-		return m.viewList()
+		s = m.viewList()
 	case stateDetail:
-		return m.viewDetail()
+		s = m.viewDetail()
 	}
-	return ""
+	v := tea.NewView(s)
+	v.AltScreen = true
+	return v
 }
 
 func (m Model) visibleHeight() int {

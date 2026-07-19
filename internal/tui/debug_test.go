@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 )
@@ -206,10 +206,10 @@ func TestBracketKey_SwitchesLensInDebugView(t *testing.T) {
 		t.Fatalf("expected to start on the Dumps lens, got %d", m.debugLens)
 	}
 	// `]` advances to the next lens even with the log pane irrelevant here.
-	if _, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("]")}); m.debugLens != 1 {
+	if _, _ = m.Update(tea.KeyPressMsg{Code: ']', Text: "]"}); m.debugLens != 1 {
 		t.Errorf("] should advance to lens 1 (Queries), got %d", m.debugLens)
 	}
-	if _, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("[")}); m.debugLens != 0 {
+	if _, _ = m.Update(tea.KeyPressMsg{Code: '[', Text: "["}); m.debugLens != 0 {
 		t.Errorf("[ should move back to lens 0 (Dumps), got %d", m.debugLens)
 	}
 }

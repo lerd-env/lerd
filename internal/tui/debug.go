@@ -8,11 +8,11 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/devtoolsops"
 	lerddumps "github.com/geodro/lerd/internal/dumps"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // debugLenses are the Debug view's switchable lenses, in tab order, mirroring

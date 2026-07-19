@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/huh"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/huh/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/pmezard/go-difflib/difflib"
 	"gopkg.in/yaml.v3"
 )
@@ -81,7 +81,7 @@ func confirmReplace(kind, name string, existing, replacement interface{}) (repla
 				).
 				Value(&choice),
 		),
-	).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+	).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return replaceSkip, err
 	}
 

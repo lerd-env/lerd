@@ -1,9 +1,22 @@
 package tui
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
 	"github.com/geodro/lerd/internal/feedback"
 )
+
+// lipgloss v2 dropped AdaptiveColor; default to the dark variant (unchanged look
+// on a dark terminal) and pick the light one only when the background is light.
+var darkBackground = true
+
+func adaptive(light, dark string) color.Color {
+	if darkBackground {
+		return lipgloss.Color(dark)
+	}
+	return lipgloss.Color(light)
+}
 
 // Palette is shared with the CLI feedback package so the TUI and the
 // command-line progress output stay in lockstep.
@@ -21,7 +34,7 @@ var (
 	// background (active tab pill, key chip, log search match). It follows the
 	// terminal's light/dark mode so the text stays legible on the themed accent
 	// instead of assuming a bright one, which black text would need.
-	onAccent = lipgloss.AdaptiveColor{Light: "#f5f5f5", Dark: "#0b0b0b"}
+	onAccent = adaptive("#f5f5f5", "#0b0b0b")
 )
 
 var (
@@ -96,3 +109,35 @@ var (
 // tickCmd — every snapshotMsg also bumps the spinner phase indirectly via
 // time.Now sampling in renderSpinner.
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
+// applyBackground re-derives the adaptive palette (the two-tone greys and the
+// on-accent foreground) and every style built from it, for the given terminal
+// background. lipgloss v2 has no render-time adaptive colour, so the TUI calls
+// this once bubbletea reports the background; the package defaults to the dark
+// palette above, so a dark terminal never needs it. It must mirror the adaptive
+// style definitions here and in modal.go / logs_render.go.
+func applyBackground(dark bool) {
+	darkBackground = dark
+	feedback.SetDarkBackground(dark)
+	colDim = feedback.ColDim
+	colDivider = feedback.ColDivider
+	colStopped = feedback.ColStopped
+	onAccent = adaptive("#f5f5f5", "#0b0b0b")
+
+	sectionStyle = lipgloss.NewStyle().Bold(true).Foreground(colDim)
+	dimStyle = lipgloss.NewStyle().Foreground(colDim)
+	unfocusedPane = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
+	stoppedStyle = lipgloss.NewStyle().Foreground(colStopped)
+	helpStyle = lipgloss.NewStyle().Foreground(colDim)
+	footLabelStyle = lipgloss.NewStyle().Foreground(colDim)
+	tabActiveStyle = lipgloss.NewStyle().Bold(true).Foreground(onAccent).Background(colAccent).Padding(0, 2)
+	tabInactiveStyle = lipgloss.NewStyle().Foreground(colDim).Padding(0, 2)
+	cardStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(colDivider).Padding(0, 1)
+	keyChipStyle = lipgloss.NewStyle().Background(colAccent).Foreground(onAccent).Bold(true).Padding(0, 1)
+	keyChipLabelStyle = lipgloss.NewStyle().Foreground(colDim)
+
+	// Adaptive styles that live next to their features rather than in the palette.
+	modalFooterStyle = lipgloss.NewStyle().Foreground(colDim)
+	logMatchStyle = lipgloss.NewStyle().Background(colAccent).Foreground(onAccent)
+	logDimNonMatch = lipgloss.NewStyle().Foreground(colDim)
+}

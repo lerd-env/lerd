@@ -6,7 +6,7 @@ import (
 	"os/exec"
 	"sync"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/podman"
 )
 

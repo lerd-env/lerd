@@ -3,7 +3,7 @@ package man
 import (
 	"strings"
 
-	"github.com/charmbracelet/glamour"
+	"charm.land/glamour/v2"
 )
 
 // RenderMarkdown renders markdown content to ANSI-formatted terminal output.

@@ -3,7 +3,7 @@ package tui
 import (
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // A click while a modal overlay is open must be swallowed: View() stops
@@ -15,7 +15,7 @@ func TestMouseClick_IgnoredWhileModalOpen(t *testing.T) {
 	m.snap = fakeSnap()
 	m.activeTab = tabDashboard
 	m.width, m.height = 150, 40
-	_ = m.View() // register the base-frame zones, including the Services tab
+	_ = m.render() // register the base-frame zones, including the Services tab
 
 	z := waitZone("tab:" + tabServices.label())
 	if z.IsZero() {
@@ -24,7 +24,7 @@ func TestMouseClick_IgnoredWhileModalOpen(t *testing.T) {
 
 	// Open a modal, then click where the Services tab used to be.
 	m.paletteActive = true
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 
@@ -44,7 +44,7 @@ func TestMouseClick_DoesNotDismissOpenPicker(t *testing.T) {
 	m.activeTab = tabSites
 	m.focus = paneSites
 	m.width, m.height = 150, 40
-	_ = m.View()
+	_ = m.render()
 
 	z := waitZone("tab:" + tabServices.label())
 	if z.IsZero() {
@@ -55,7 +55,7 @@ func TestMouseClick_DoesNotDismissOpenPicker(t *testing.T) {
 	if !m.modalActive() {
 		t.Fatalf("setting pickerKind should make a modal active")
 	}
-	msg := tea.MouseMsg{X: z.StartX, Y: z.StartY, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+	msg := tea.MouseClickMsg{X: z.StartX, Y: z.StartY, Button: tea.MouseLeft}
 	next, _ := m.Update(msg)
 	m = next.(*Model)
 
