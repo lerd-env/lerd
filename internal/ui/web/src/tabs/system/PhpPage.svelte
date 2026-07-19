@@ -1,8 +1,10 @@
 <script lang="ts">
   import DetailPanel from '$components/DetailPanel.svelte';
   import PhpDetail from './PhpDetail.svelte';
+  import PhpVersionCard from './PhpVersionCard.svelte';
   import { phpVersions } from '$stores/phpVersions';
   import { status } from '$stores/status';
+  import { sitesByPhp } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
   import { openPhpAddModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
@@ -13,6 +15,21 @@
   let { initialVersion = '' }: Props = $props();
 
   const phpDefault = $derived($status.php_default || '');
+
+  // Default version first, then most sites (what you reach for most), then the
+  // newest version. Keeps the busiest, most-relevant versions at the front.
+  const ordered = $derived.by(() => {
+    const counts = $sitesByPhp;
+    return [...$phpVersions].sort((a, b) => {
+      const ad = a === phpDefault ? 1 : 0;
+      const bd = b === phpDefault ? 1 : 0;
+      if (ad !== bd) return bd - ad;
+      const ca = counts.get(a) ?? 0;
+      const cb = counts.get(b) ?? 0;
+      if (cb !== ca) return cb - ca;
+      return parseFloat(b) - parseFloat(a);
+    });
+  });
 
   function pickInitial(): string {
     if (initialVersion && $phpVersions.includes(initialVersion)) return initialVersion;
@@ -43,8 +60,6 @@
         goToTab('system', 'php-' + next);
       } else if (!next) {
         active = '';
-        // No versions left: drop the stale php-<removed> hash so a reload or
-        // shared link doesn't point at a version that no longer exists.
         if ($routeRest.startsWith('php-')) goToTab('system', '');
       }
     }
@@ -55,47 +70,34 @@
     active = v;
     goToTab('system', 'php-' + v);
   }
+
+  const fpmFor = (v: string) => $status.php_fpms.find((f) => f.version === v);
 </script>
 
 <DetailPanel>
-  <div class="flex items-end bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-lerd-border shrink-0">
-    <div class="flex items-center gap-0.5 px-3 pt-3 overflow-x-auto flex-1 min-w-0">
-      {#each $phpVersions as v (v)}
-        {@const isActive = v === active}
-        {@const isDefault = v === phpDefault}
-        {@const running = ($status.php_fpms.find((f) => f.version === v)?.running) ?? false}
-        <button
-          type="button"
-          onclick={() => pickVersion(v)}
-          title={'PHP ' + v + (isDefault ? ' (default)' : '')}
-          class="group flex items-center gap-1.5 pl-3 pr-3 py-2.5 text-xs rounded-t-md border-t border-l border-r transition-colors max-w-56 shrink-0 {isActive
-            ? 'bg-white dark:bg-lerd-bg border-gray-200 dark:border-lerd-border text-gray-800 dark:text-gray-100 font-medium'
-            : 'bg-transparent border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 hover:bg-gray-100/60 dark:hover:bg-white/5'}"
-        >
-          <span class="w-1.5 h-1.5 rounded-full shrink-0 {running ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-600'}"></span>
-          <span class="font-mono leading-none">PHP {v}</span>
-          {#if isDefault}
-            <svg
-              class="w-3 h-3 shrink-0 {isActive ? 'text-lerd-red' : 'text-amber-400 dark:text-amber-500'}"
-              fill="currentColor"
-              viewBox="0 0 20 20"
-              aria-label={m.common_default()}
-            >
-              <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78L1.58 7.62l5.82-.85L10 1.5z" />
-            </svg>
-          {/if}
-        </button>
+  <div class="bg-gray-50/60 dark:bg-white/[0.02] border-b border-gray-100 dark:border-lerd-border shrink-0">
+    <div class="flex items-stretch gap-3 px-3 py-3 overflow-x-auto snap-x">
+      {#each ordered as v (v)}
+        <PhpVersionCard
+          version={v}
+          patch={fpmFor(v)?.patch}
+          running={fpmFor(v)?.running ?? false}
+          isDefault={v === phpDefault}
+          selected={v === active}
+          onselect={() => pickVersion(v)}
+        />
       {/each}
       <button
         type="button"
         onclick={() => openPhpAddModal()}
-        class="ml-1 mb-0.5 w-6 h-6 flex items-center justify-center rounded-md text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors shrink-0"
+        class="shrink-0 w-24 snap-start flex flex-col items-center justify-center gap-1.5 rounded-2xl border border-dashed border-gray-200 dark:border-lerd-border text-gray-400 hover:text-lerd-red hover:border-lerd-red hover:bg-lerd-red/5 transition-colors"
         title={m.system_php_add()}
         aria-label={m.system_php_add()}
       >
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
         </svg>
+        <span class="text-xs font-medium">{m.system_php_add()}</span>
       </button>
     </div>
   </div>

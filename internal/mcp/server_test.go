@@ -249,8 +249,10 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// `args` property, then 19100 → 19500 for the runtime `ports_list`, `ports_add`,
 	// `ports_remove` actions and their `host`/`container` properties, then
 	// 19500 → 20600 for the `workspace` group (justified content additions, kept
-	// terse). 20600 → 20650 for the `diag` `doctor_fix` action.
-	const ceiling = 20650
+	// terse), then 20600 → 20650 for the `diag` `doctor_fix` action, then
+	// 20650 → 21150 for the runtime `ini_read`/`ini_write`/`ini_reset` actions
+	// and their `shared`/`content` properties.
+	const ceiling = 21150
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

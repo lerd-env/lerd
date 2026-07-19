@@ -99,6 +99,9 @@ export interface NginxGlobalResetTarget {
 
 export interface PhpIniSaveTarget {
   version: string;
+  // Human-readable scope for the confirm copy, e.g. "PHP 8.4" or "the shared
+  // file (all versions)". The API still keys on `version`.
+  label: string;
   content: string;
   original: string;
   exists: boolean;
@@ -106,6 +109,7 @@ export interface PhpIniSaveTarget {
 
 export interface PhpIniRestoreTarget {
   version: string;
+  label: string;
   current: string;
   backupName: string;
   backup: string;
@@ -113,6 +117,7 @@ export interface PhpIniRestoreTarget {
 
 export interface PhpIniResetTarget {
   version: string;
+  label: string;
   path: string;
 }
 

@@ -133,6 +133,24 @@ func TestPHPUserIniFile_ContainsVersion(t *testing.T) {
 	}
 }
 
+func TestSharedIniFile_IsVersionAgnosticAndSortsBelowUserIni(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	got := SharedIniFile()
+	if !strings.HasSuffix(got, filepath.Join("php", "shared", "95-shared.ini")) {
+		t.Errorf("SharedIniFile() = %q, expected suffix php/shared/95-shared.ini", got)
+	}
+	// The shared file must load before the per-version 98-user.ini so the
+	// per-version value wins on a conflicting key. conf.d loads alphabetically,
+	// so the basename must sort earlier.
+	shared := filepath.Base(SharedIniFile())
+	perVersion := filepath.Base(PHPUserIniFile("8.4"))
+	if !(shared < perVersion) {
+		t.Errorf("shared ini basename %q must sort before per-version %q", shared, perVersion)
+	}
+}
+
 func TestDataSubDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)

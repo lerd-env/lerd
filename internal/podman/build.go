@@ -824,6 +824,9 @@ func WriteFPMQuadlet(version string) error {
 	if err := EnsureUserIni(version); err != nil {
 		return fmt.Errorf("creating user ini: %w", err)
 	}
+	if err := EnsureSharedIni(); err != nil {
+		return fmt.Errorf("creating shared ini: %w", err)
+	}
 	if err := EnsureXdebugIni(version); err != nil {
 		return fmt.Errorf("creating xdebug ini: %w", err)
 	}
@@ -883,6 +886,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.VersionShort}}", short)
 	content = strings.ReplaceAll(content, "{{.XdebugIniPath}}", config.PHPConfFile(version))
 	content = strings.ReplaceAll(content, "{{.UserIniPath}}", config.PHPUserIniFile(version))
+	content = strings.ReplaceAll(content, "{{.SharedIniPath}}", config.SharedIniFile())
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
@@ -1231,6 +1235,35 @@ func EnsureUserIni(version string) error {
 	content := "; Lerd per-version PHP settings for PHP " + version + "\n" +
 		"; Edit this file, then restart: systemctl --user restart lerd-php" +
 		strings.ReplaceAll(version, ".", "") + "-fpm\n" +
+		";\n" +
+		"; memory_limit = 512M\n" +
+		"; upload_max_filesize = 64M\n" +
+		"; post_max_size = 64M\n" +
+		"; max_execution_time = 60\n"
+	return os.WriteFile(path, []byte(content), 0644)
+}
+
+// EnsureSharedIni creates the version-agnostic shared php.ini with a commented
+// template if it doesn't exist. A single copy is mounted into every PHP
+// container, so it heals a stale podman-auto-created directory at the bind-mount
+// path the same way EnsureUserIni does for the per-version file.
+func EnsureSharedIni() error {
+	path := config.SharedIniFile()
+	if info, err := os.Stat(path); err == nil {
+		if !info.IsDir() {
+			return nil // already a regular file
+		}
+		if rmErr := os.Remove(path); rmErr != nil {
+			return fmt.Errorf("removing stale shared ini directory: %w", rmErr)
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	content := "; Lerd shared PHP settings, applied to every PHP version.\n" +
+		"; A per-version file (php:ini <version>) overrides any key set here.\n" +
+		"; Edit, then restart FPM. Unknown keys on a given version are ignored,\n" +
+		"; not fatal, so a version-specific setting never breaks the others.\n" +
 		";\n" +
 		"; memory_limit = 512M\n" +
 		"; upload_max_filesize = 64M\n" +

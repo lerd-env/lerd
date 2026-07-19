@@ -576,10 +576,11 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // former per-client constants onto this one leaner reference dropped the prior
 // 57000-byte SKILL.md ceiling to 26000; bumped to this for the `workspace` tool
 // group and for the package-manager, worker-state and preset-metadata rules an
-// assistant was previously getting wrong. Bumped 28500 → 28700 for the `diag`
-// `doctor_fix` action.
+// assistant was previously getting wrong, then 28500 → 28700 for the `diag`
+// `doctor_fix` action, then 28700 → 29400 for the runtime `ini_*` php.ini
+// actions and the shared-vs-per-version guidance.
 func TestLerdReference_underSizeCeiling(t *testing.T) {
-	const ceiling = 28700
+	const ceiling = 29400
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

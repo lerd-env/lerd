@@ -255,6 +255,59 @@ func TestEnsureUserIni_noopWhenRegularFileExists(t *testing.T) {
 	}
 }
 
+// ── EnsureSharedIni (version-agnostic, same race surface) ────────────────────
+
+func TestEnsureSharedIni_createsWhenMissing(t *testing.T) {
+	setupConfigHome(t)
+	if err := EnsureSharedIni(); err != nil {
+		t.Fatalf("EnsureSharedIni: %v", err)
+	}
+	info, err := os.Stat(config.SharedIniFile())
+	if err != nil {
+		t.Fatalf("file not created: %v", err)
+	}
+	if info.IsDir() {
+		t.Errorf("expected regular file, got directory")
+	}
+}
+
+func TestEnsureSharedIni_noopWhenRegularFileExists(t *testing.T) {
+	setupConfigHome(t)
+	path := config.SharedIniFile()
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		t.Fatal(err)
+	}
+	custom := []byte("memory_limit = 1G\n")
+	if err := os.WriteFile(path, custom, 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureSharedIni(); err != nil {
+		t.Fatalf("EnsureSharedIni: %v", err)
+	}
+	got, _ := os.ReadFile(path)
+	if string(got) != string(custom) {
+		t.Errorf("shared ini was rewritten:\ngot:  %s\nwant: %s", got, custom)
+	}
+}
+
+func TestEnsureSharedIni_healsStaleDirectory(t *testing.T) {
+	setupConfigHome(t)
+	path := config.SharedIniFile()
+	if err := os.MkdirAll(path, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := EnsureSharedIni(); err != nil {
+		t.Fatalf("EnsureSharedIni: %v", err)
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if info.IsDir() {
+		t.Errorf("stale directory not healed into a file")
+	}
+}
+
 // ── ensureFPMHostsFile (third bind-mount source on the FPM quadlet) ──────────
 
 func TestEnsureFPMHostsFile_writesWhenMissing(t *testing.T) {

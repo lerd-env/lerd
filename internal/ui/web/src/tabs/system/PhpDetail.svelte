@@ -22,6 +22,7 @@
   const isDefault = $derived($status.php_default === version);
   const siteCount = $derived($sitesByPhp.get(version) ?? 0);
   const fpm = $derived($status.php_fpms.find((f) => f.version === version));
+  const patch = $derived(fpm?.patch || version);
   const running = $derived(Boolean(fpm?.running));
   const xdebugEnabled = $derived(Boolean(fpm?.xdebug_enabled));
   const xdebugMode = $derived<XdebugMode>((fpm?.xdebug_mode as XdebugMode) || 'debug');
@@ -186,6 +187,14 @@
   class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 border-b border-gray-100 dark:border-lerd-border shrink-0"
 >
   <div class="flex items-center gap-3 flex-wrap">
+    <span class="flex items-center gap-1.5">
+      <span class="font-mono text-lg font-semibold tabular-nums tracking-tight text-gray-900 dark:text-gray-100">PHP {patch}</span>
+      {#if isDefault}
+        <svg class="w-4 h-4 text-lerd-red" fill="currentColor" viewBox="0 0 20 20" aria-label={m.common_default()}>
+          <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78L1.58 7.62l5.82-.85L10 1.5z" />
+        </svg>
+      {/if}
+    </span>
     <StatusPill tone={running ? 'ok' : 'muted'} label={running ? m.common_running() : m.common_stopped()} />
   </div>
   <div class="flex items-center gap-2 flex-wrap">

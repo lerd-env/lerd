@@ -93,7 +93,7 @@ cd '%s' || exit 1
 // Kept as an explicit builder to match buildDarwinExecWorkerService so
 // tests cover both branches uniformly.
 func buildDarwinContainerWorkerUnit(
-	unitName, phpVersion, sitePath, homeDir, phpConfFile, phpUserIniFile, command, restart string,
+	unitName, phpVersion, sitePath, homeDir, phpConfFile, phpUserIniFile, phpSharedIniFile, command, restart string,
 	customContainer bool,
 ) string {
 	if customContainer {
@@ -133,6 +133,7 @@ Volume=%s/.local/share/lerd/hosts:/etc/hosts:ro
 Volume=%s:%s:rw
 Volume=%s:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume=%s:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
+Volume=%s:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro
 PodmanArgs=--security-opt=label=disable
 WorkingDir=%s
 Exec=%s
@@ -146,6 +147,7 @@ Restart=%s
 		sitePath, sitePath,
 		phpConfFile,
 		phpUserIniFile,
+		phpSharedIniFile,
 		sitePath,
 		command,
 		restart,

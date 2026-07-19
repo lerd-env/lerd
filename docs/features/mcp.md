@@ -124,7 +124,7 @@ The MCP surface is **twelve grouped tools**, each driven by an `action` argument
 | `service` | `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migrate`, `remove`, `reinstall`, `add`, `expose`, `port`, `env`, `config_read`, `config_write`, `config_restore`, `config_reset`, `config_list_backups`, `preset_list`, `preset_search`, `preset_install`, `check_updates` |
 | `db` | `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete` |
 | `env` | `setup`, `check`, `override` |
-| `runtime` | `versions`, `node_install`, `node_uninstall`, `php_list`, `ext_list`, `ext_add`, `ext_remove`, `ports_list`, `ports_add`, `ports_remove` |
+| `runtime` | `versions`, `node_install`, `node_uninstall`, `php_list`, `ext_list`, `ext_add`, `ext_remove`, `ports_list`, `ports_add`, `ports_remove`, `ini_read`, `ini_write`, `ini_reset` |
 | `worker` | `list` (call first), `start`, `stop`, `add`, `remove`, `health`, `heal`, `mode_get`, `mode_set`, `queue_start`, `queue_stop`, `horizon_start`, `horizon_stop`, `reverb_start`, `reverb_stop`, `schedule_start`, `schedule_stop`, `stripe_start`, `stripe_stop`, `stripe_config` |
 | `exec` | `artisan`, `console`, `composer`, `vendor_bins`, `vendor_run`, `commands_list`, `commands_run`, `command_add`, `command_remove` |
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |

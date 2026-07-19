@@ -46,7 +46,7 @@
       <p class="text-sm text-gray-500 dark:text-gray-400">{m.common_loading()}</p>
     {:else}
       <p class="text-sm text-gray-700 dark:text-gray-300">
-        {m.phpIniEditor_resetBody({ version: target.version })}
+        {m.phpIniEditor_resetBody({ scope: target.label })}
       </p>
       <p class="text-[10px] text-gray-400 dark:text-gray-600 font-mono break-all">{target.path}</p>
 

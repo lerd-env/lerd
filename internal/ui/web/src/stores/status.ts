@@ -5,6 +5,9 @@ import { version } from './version';
 
 export interface PHPStatus {
   version: string;
+  // Full build (e.g. "8.5.8"), filled in asynchronously by the backend. Falls
+  // back to the minor `version` until the probe lands.
+  patch?: string;
   running: boolean;
   xdebug_enabled: boolean;
   xdebug_mode?: string;

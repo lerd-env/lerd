@@ -64,12 +64,13 @@ func TestBuildDarwinExecWorkerGuardScript_WrapsPodmanExec(t *testing.T) {
 
 func TestBuildDarwinContainerWorkerUnit_UsesFPMImage(t *testing.T) {
 	unit := buildDarwinContainerWorkerUnit(
-		"lerd-queue-alpha",   // unitName
-		"8.4",                // phpVersion
-		"/Users/u/alpha",     // sitePath
-		"/Users/u/home",      // homeDir
-		"/lerd/php.conf",     // phpConfFile
-		"/lerd/php-user.ini", // phpUserIniFile
+		"lerd-queue-alpha",     // unitName
+		"8.4",                  // phpVersion
+		"/Users/u/alpha",       // sitePath
+		"/Users/u/home",        // homeDir
+		"/lerd/php.conf",       // phpConfFile
+		"/lerd/php-user.ini",   // phpUserIniFile
+		"/lerd/php-shared.ini", // phpSharedIniFile
 		"php artisan queue:work",
 		"always",
 		false, // custom container
@@ -81,6 +82,7 @@ func TestBuildDarwinContainerWorkerUnit_UsesFPMImage(t *testing.T) {
 		"WorkingDir=/Users/u/alpha",
 		"Exec=php artisan queue:work",
 		"Restart=always",
+		"Volume=/lerd/php-shared.ini:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro",
 	} {
 		if !strings.Contains(unit, want) {
 			t.Errorf("container unit missing %q:\n%s", want, unit)
@@ -94,7 +96,7 @@ func TestBuildDarwinContainerWorkerUnit_CustomContainerUsesSiteImage(t *testing.
 		"",
 		"/Users/u/alpha",
 		"/Users/u/home",
-		"", "",
+		"", "", "",
 		"node worker.js",
 		"always",
 		true, // custom container = true, image comes from caller

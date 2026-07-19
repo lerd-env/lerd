@@ -57,6 +57,7 @@ func TestGenerateFrankenPHPQuadlet(t *testing.T) {
 		"/usr/local/etc/php/conf.d/96-lerd-devtools.ini:ro",
 		"/usr/local/etc/php/conf.d/99-xdebug.ini:ro",
 		"/usr/local/etc/php/conf.d/98-lerd-user.ini:ro",
+		"/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro",
 		":/usr/local/etc/lerd:ro",
 	}
 	for _, s := range mustContain {

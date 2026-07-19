@@ -207,6 +207,24 @@ func TestRemoveFPMPort_DropsMapping(t *testing.T) {
 
 // The version's FPM ports must reach the shared quadlet as loopback-bound
 // PublishPort lines (LAN off) — mirroring exactly what WriteFPMQuadlet then
+// The shared ini must mount into the FPM container at 95-lerd-shared.ini, which
+// sorts below the per-version 98-lerd-user.ini so the per-version value wins.
+func TestFPMQuadletMountsSharedIniBelowUserIni(t *testing.T) {
+	fpmTestEnv(t)
+	content, err := renderFPMQuadletContent("8.3")
+	if err != nil {
+		t.Fatalf("renderFPMQuadletContent: %v", err)
+	}
+	shared := strings.Index(content, "conf.d/95-lerd-shared.ini:ro")
+	user := strings.Index(content, "conf.d/98-lerd-user.ini:ro")
+	if shared < 0 {
+		t.Fatalf("shared ini mount missing:\n%s", content)
+	}
+	if user < 0 {
+		t.Fatalf("user ini mount missing:\n%s", content)
+	}
+}
+
 // WriteQuadletDiff do: render, ApplyExtraPorts, BindForLAN.
 func TestFPMPortsRenderAsLoopbackPublish(t *testing.T) {
 	fpmTestEnv(t)

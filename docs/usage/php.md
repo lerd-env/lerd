@@ -319,13 +319,26 @@ lerd php:ini          # detected/default version
 lerd php:ini 8.3      # explicit version
 ```
 
-This opens the file in `$EDITOR` (falls back to `nano`/`vim`). After saving, restart FPM to apply:
-
-```bash
-systemctl --user restart lerd-php84-fpm
-```
+This opens the file in `$EDITOR` (falls back to `nano`/`vim`). Saving restarts the affected FPM containers automatically, so the change applies straight away.
 
 The file is created automatically with commented-out examples when lerd first sets up the PHP version.
+
+#### Shared settings across versions
+
+A setting placed in a per-version file only applies to that version, so a site that changes PHP version silently loses it. For a setting you want everywhere, edit the shared file instead:
+
+```bash
+lerd php:ini shared   # applies to every PHP version
+```
+
+The shared file lives at `~/.local/share/lerd/php/shared/95-lerd-shared.ini` and is mounted into every PHP container (FPM, custom-image FPM, and FrankenPHP) below the per-version `98-lerd-user.ini`. Because `conf.d` loads alphabetically and the last file wins, layering happens for free:
+
+- A key set only in the shared file applies to all versions.
+- A key set in both files takes the per-version value on that version, and the shared value everywhere else.
+
+Nothing is merged and nothing is migrated: your existing per-version files keep working and keep winning. A key becomes shared only when you put it in the shared file. An unknown or removed directive on a given version is ignored (a startup notice, not a fatal), so a version-specific setting never breaks the others.
+
+In the web UI, open **System → PHP**, pick a version, and use the **Editing** dropdown at the top of its php.ini tab to switch to the shared file. Over MCP it is reachable through `runtime` with `ini_read` / `ini_write` / `ini_reset` (pass `shared: true`).
 
 ### Locales and internationalisation
 

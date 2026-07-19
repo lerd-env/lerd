@@ -605,6 +605,7 @@ type ServiceCheck struct {
 
 type PHPStatus struct {
 	Version       string   `json:"version"`
+	Patch         string   `json:"patch,omitempty"`
 	Running       bool     `json:"running"`
 	XdebugEnabled bool     `json:"xdebug_enabled"`
 	XdebugMode    string   `json:"xdebug_mode,omitempty"`
@@ -640,7 +641,7 @@ func buildStatus() StatusResponse {
 			xdebugMode = cfg.GetXdebugMode(v)
 			ports = cfg.PHP.FPMPorts[v]
 		}
-		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports})
+		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: podman.FPMPHPVersion(v), Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports})
 	}
 
 	phpDefault := ""
@@ -4393,13 +4394,14 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 	}
 	version, action := parts[0], parts[1]
 	// The php.ini editor (config) also accepts a "site:<name>" scope for a
-	// FrankenPHP site's own per-site ini; every other action is version-only.
-	isSiteScope := strings.HasPrefix(version, "site:")
-	if isSiteScope && action != "config" {
+	// FrankenPHP site's own per-site ini and a "shared" scope for the
+	// version-agnostic file; every other action is version-only.
+	isIniScope := strings.HasPrefix(version, "site:") || version == "shared"
+	if isIniScope && action != "config" {
 		http.NotFound(w, r)
 		return
 	}
-	if !isSiteScope && !validVersion.MatchString(version) {
+	if !isIniScope && !validVersion.MatchString(version) {
 		http.NotFound(w, r)
 		return
 	}
