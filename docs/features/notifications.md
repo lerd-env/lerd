@@ -19,7 +19,17 @@ lerd notify target browser    # WebSocket + Web Push
 lerd notify status            # shows the current sink
 ```
 
-Defaults are chosen so nothing changes for existing installs. An unset target resolves to **browser**, so every upgrade and every non-Linux install is unchanged. A **fresh Linux install seeds `native`**, so new Linux users get desktop notifications out of the box with no permission prompt. The native sink is offered only when a notification daemon is present (GNOME, KDE, Hyprland/mako, XFCE, dunst, …); on a host without one the option is disabled and lerd stays on the browser sink.
+On a fresh Linux install the installer asks whether you want the [Lerd desktop app](#the-desktop-app) (which selects the native sink) or the browser, and remembers the answer. An unset target resolves to **browser**, so every upgrade, every non-interactive install, and every non-Linux install stays on the browser sink unchanged. The switcher and the native sink are offered only when a notification daemon is present (GNOME, KDE, Hyprland/mako, XFCE, dunst, …); on macOS or a host without one, only browser delivery is shown.
+
+## The desktop app
+
+Lerd has an optional desktop app: a dedicated window around the dashboard that pairs with the native sink. It installs into `~/.local` with no root, registers the `lerd://` scheme so clicking a native notification focuses it at the right view, and is distributed as an AppImage:
+
+```bash
+curl -fsSL https://lerd.sh/desktop.sh | bash
+```
+
+Native notifications work with or without it, since the daemon posts them directly; the app just gives them a home to click into and a browser-free window for the dashboard.
 
 In native mode, clicking a notification opens the [Lerd desktop app](https://lerd.sh) at the relevant view when it's installed (via its `lerd://` scheme), or the dashboard in your browser otherwise. Category toggles work the same, stored server-side under `notifications.kinds` in `config.yaml` since there's no browser device to hold them.
 
