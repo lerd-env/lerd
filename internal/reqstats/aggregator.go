@@ -181,6 +181,19 @@ func (a *Aggregator) Snapshot() []SiteStats {
 	return out
 }
 
+// Forget drops a site's rolling windows, covering its bare key and any
+// "<site>/<branch>" worktree keys, so an unlinked site stops being re-emitted
+// into the persisted snapshot on the next save tick. No-op if absent.
+func (a *Aggregator) Forget(site string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for key := range a.sites {
+		if KeyBelongsTo(key, site) {
+			delete(a.sites, key)
+		}
+	}
+}
+
 func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 	cutoff := a.now().Add(-recentWindow).UnixNano()
 	base := median(sa.overall.values(cutoff))

@@ -56,3 +56,23 @@ func LoadSite(path, site string) (SiteStats, bool) {
 	}
 	return SiteStats{}, false
 }
+
+// RemoveSite drops a site's snapshot from the persisted file, covering both the
+// bare site key and its "<site>/<branch>" worktree keys, so an unlinked site
+// stops lingering in the stats file. A missing file is a no-op.
+func RemoveSite(path, site string) error {
+	snap := Load(path)
+	if snap == nil {
+		return nil
+	}
+	kept := snap[:0]
+	for _, s := range snap {
+		if !KeyBelongsTo(s.Site, site) {
+			kept = append(kept, s)
+		}
+	}
+	if len(kept) == len(snap) {
+		return nil
+	}
+	return SaveSnapshot(kept, path)
+}

@@ -100,10 +100,15 @@ func (t *Tracker) Seed(sites []string, at time.Time) {
 	}
 }
 
-// Forget drops a site's record, e.g. when a site is removed. No-op if absent.
+// Forget drops a site's record when the site is removed, covering both the bare
+// site key and its "<site>/<branch>" worktree keys. No-op if absent.
 func (t *Tracker) Forget(site string) {
 	t.mu.Lock()
-	delete(t.last, site)
+	for key := range t.last {
+		if keyBelongsTo(key, site) {
+			delete(t.last, key)
+		}
+	}
 	t.mu.Unlock()
 }
 
@@ -139,6 +144,43 @@ func LoadActivity(path string) map[string]int64 {
 		return nil
 	}
 	return m
+}
+
+// RemoveActivity drops a site's last-active entries from the persisted file,
+// covering both the bare site key and its "<site>/<branch>" worktree keys, so an
+// unlinked site stops lingering in the idle-activity file. A missing file is a
+// no-op. Written atomically via a temp file + rename, matching Save.
+func RemoveActivity(path, site string) error {
+	m := LoadActivity(path)
+	if m == nil {
+		return nil
+	}
+	changed := false
+	for key := range m {
+		if keyBelongsTo(key, site) {
+			delete(m, key)
+			changed = true
+		}
+	}
+	if !changed {
+		return nil
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
+}
+
+// keyBelongsTo reports whether an activity key is the site's own key or one of
+// its "<site>/<branch>" worktree keys. A site name can't contain "/", so the
+// prefix test is unambiguous.
+func keyBelongsTo(key, site string) bool {
+	return key == site || strings.HasPrefix(key, site+"/")
 }
 
 // normalizeHost strips a :port suffix and lowercases, so "Myapp.test:443" and

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/reqstats"
 )
 
 // startControlSocket binds the idle-suspend control datagram socket and serves
@@ -34,6 +35,24 @@ func dispatchControl(msg string) {
 			// the read loop.
 			publishSitesChanged()
 		}
+	case "forget":
+		if arg != "" {
+			forgetSiteState(arg)
+		}
+	}
+}
+
+// forgetSiteState drops an unlinked site's in-memory request-timing and idle
+// state and re-persists both files, so the running watcher stops re-emitting the
+// site into the state files after the unlink path has already cleared them.
+func forgetSiteState(site string) {
+	if reqAggregator != nil {
+		reqAggregator.Forget(site)
+		_ = reqstats.SaveSnapshot(reqAggregator.Snapshot(), config.RequestStatsFile())
+	}
+	if activityTracker != nil {
+		activityTracker.Forget(site)
+		_ = activityTracker.Save(config.IdleActivityFile())
 	}
 }
 
