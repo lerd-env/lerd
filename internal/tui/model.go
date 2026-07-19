@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/geodro/lerd/internal/config"
 	lerddumps "github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/eventbus"
@@ -20,7 +20,7 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/stats"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // focusPane identifies which pane currently owns keyboard focus. Detail sits
@@ -298,6 +298,9 @@ func (m *Model) Init() tea.Cmd {
 		busCmd(m.sub),
 		updateCheckCmd(m.version),
 		spinnerTickCmd(),
+		// lipgloss v2 has no render-time adaptive colour, so ask the terminal
+		// for its background and adapt the greys once it answers.
+		tea.RequestBackgroundColor,
 	)
 }
 
@@ -336,7 +339,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.BackgroundColorMsg:
+		applyBackground(msg.IsDark())
+		return m, nil
+
+	case tea.KeyPressMsg:
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
@@ -418,11 +425,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	return m.handleMainKey(msg)
 }
 
-func (m *Model) handleMainKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// Confirmation prompt sits above every other input mode so y / n always
 	// resolve the guard rail rather than firing the underlying pane action.
 	if m.confirmActive {
@@ -928,7 +935,7 @@ func (m *Model) editFocusedDomain() (handled bool) {
 // enter (running `lerd domain add <short>` from the site dir), cancels on
 // esc. Unlike filter input we're not narrowing a list in real time, so no
 // refresh is needed until the subprocess exits.
-func (m *Model) handleDomainInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleDomainInputKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.domainInputActive = false
@@ -969,8 +976,8 @@ func (m *Model) handleDomainInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.domainInput = string(r[:len(r)-1])
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.domainInput += string(msg.Runes)
+		if msg.Text != "" {
+			m.domainInput += msg.Text
 		}
 	}
 	return m, nil
@@ -981,7 +988,7 @@ func (m *Model) handleDomainInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // + exits, backspace removes, runes append. Live filtering is cheap because
 // styleLogLine runs per visible row only — typing doesn't re-process the
 // entire ring buffer.
-func (m *Model) handleLogFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleLogFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.logFilter = ""
@@ -997,8 +1004,8 @@ func (m *Model) handleLogFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.logFilter = string(r[:len(r)-1])
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.logFilter += string(msg.Runes)
+		if msg.Text != "" {
+			m.logFilter += msg.Text
 		}
 	}
 	return m, nil
@@ -1009,7 +1016,7 @@ func (m *Model) handleLogFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // backspace removes, enter commits and exits, esc clears + exits. The
 // filter is applied live by dumpsContentLines so the visible list narrows
 // as the user types.
-func (m *Model) handleDumpsFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleDumpsFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.dumpsFilter = ""
@@ -1029,8 +1036,8 @@ func (m *Model) handleDumpsFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.dumpsScroll = 0
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.dumpsFilter += string(msg.Runes)
+		if msg.Text != "" {
+			m.dumpsFilter += msg.Text
 			m.dumpsCursor = 0
 			m.dumpsScroll = 0
 		}
@@ -1043,7 +1050,7 @@ func (m *Model) handleDumpsFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 // the last rune; enter and esc exit input mode (esc also clears the
 // filter). Actions, tab, navigation are all suppressed while filter mode
 // is active so the user can type freely.
-func (m *Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleFilterKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	target := m.filterTarget()
 	switch msg.String() {
 	case "esc":
@@ -1062,8 +1069,8 @@ func (m *Model) handleFilterKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.resetFilteredCursor()
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			*target += string(msg.Runes)
+		if msg.Text != "" {
+			*target += msg.Text
 			m.resetFilteredCursor()
 		}
 	}
@@ -1181,10 +1188,12 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 	if m.modalActive() {
 		return m, nil
 	}
-	if msg.Button == tea.MouseButtonWheelUp || msg.Button == tea.MouseButtonWheelDown {
+	if _, ok := msg.(tea.MouseWheelMsg); ok {
 		return m.handleWheel(msg)
 	}
-	if msg.Action != tea.MouseActionPress || msg.Button != tea.MouseButtonLeft {
+	// bubbletea v2 delivers a press as its own MouseClickMsg; only left clicks
+	// drive the hit-testing below.
+	if _, ok := msg.(tea.MouseClickMsg); !ok || msg.Mouse().Button != tea.MouseLeft {
 		return m, nil
 	}
 	for _, t := range orderedTabs {
@@ -1264,7 +1273,7 @@ func (m *Model) handleMouse(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
 // pane is a bubblezone region laid down during render; if the wheel isn't over
 // any known pane it falls back to scrolling the currently focused one.
 func (m *Model) handleWheel(msg tea.MouseMsg) (tea.Model, tea.Cmd) {
-	up := msg.Button == tea.MouseButtonWheelUp
+	up := msg.Mouse().Button == tea.MouseWheelUp
 	delta := 3
 	if up {
 		delta = -3
@@ -1952,7 +1961,7 @@ func Run(version string) error {
 	podman.Cache.Start(context.Background())
 	zone.NewGlobal()
 	m := NewModel(version)
-	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
+	p := tea.NewProgram(m)
 
 	// Wire the cache's change callback into the program so an external
 	// state change (CLI mutation in another process, container crash,

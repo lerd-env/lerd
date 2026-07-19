@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
@@ -72,12 +72,12 @@ func TestTabCyclesFocus(t *testing.T) {
 	}
 	// On the Sites tab, focus cycles sites → detail → sites. Services now
 	// live on their own tab, so they're no longer in the cycle.
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
 	if m.focus != paneDetail {
 		t.Fatalf("first tab should move focus to detail, got %d", m.focus)
 	}
-	next, _ = m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ = m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
 	if m.focus != paneSites {
 		t.Fatalf("second tab should wrap back to sites, got %d", m.focus)
@@ -89,7 +89,7 @@ func TestTabSkipsDetailWhenNoSite(t *testing.T) {
 	m.snap = Snapshot{} // no sites
 	m.switchTab(tabSites)
 	// With no site selected there is no detail pane, so tab stays on the list.
-	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	next, _ := m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	m = next.(*Model)
 	if m.focus != paneSites {
 		t.Fatalf("tab with no sites should stay on the sites pane, got %d", m.focus)
@@ -119,7 +119,7 @@ func TestViewRendersCoreContent(t *testing.T) {
 	m.switchTab(tabSites)
 
 	// Sites tab: tab-bar labels plus the sites list and detail.
-	out := m.View()
+	out := m.render()
 	for _, want := range []string{"Dashboard", "Sites", "Services", "alpha", "beta"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("sites view missing %q\n---\n%s", want, out)
@@ -127,7 +127,7 @@ func TestViewRendersCoreContent(t *testing.T) {
 	}
 	// Services tab renders the services list.
 	m.switchTab(tabServices)
-	out = m.View()
+	out = m.render()
 	for _, want := range []string{"mysql", "redis"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("services view missing %q\n---\n%s", want, out)
@@ -139,7 +139,7 @@ func TestViewTooSmall(t *testing.T) {
 	m := NewModel("v1.0.0")
 	m.snap = fakeSnap()
 	m.width, m.height = 40, 10
-	out := m.View()
+	out := m.render()
 	if !strings.Contains(out, "too small") {
 		t.Fatalf("expected too-small banner, got: %s", out)
 	}

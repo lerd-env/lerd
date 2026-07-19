@@ -2,10 +2,11 @@ package tui
 
 import (
 	"fmt"
+	"image/color"
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Toast notifications: lightweight right-aligned banners stacked above the
@@ -193,7 +194,7 @@ func toastDot(k toastKind) string {
 	}
 }
 
-func toastBorderColor(k toastKind) lipgloss.Color {
+func toastBorderColor(k toastKind) color.Color {
 	switch k {
 	case toastFail:
 		return colFailing

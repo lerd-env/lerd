@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
@@ -474,7 +474,7 @@ func runSetup(allSteps, skipOpen bool) error {
 					Options(huh.NewOptions(options...)...).
 					Value(&selected),
 			),
-		).WithTheme(huh.ThemeCatppuccin()).Run(); err != nil {
+		).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return err
 		}
 	}

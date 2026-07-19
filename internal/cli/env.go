@@ -16,7 +16,7 @@ import (
 
 	neturl "net/url"
 
-	"github.com/charmbracelet/huh"
+	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
@@ -659,7 +659,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 					Description(envRelPath + " uses SQLite. Use a lerd-managed database service instead?").
 					Options(options...).
 					Value(&dbChoice),
-			)).WithTheme(huh.ThemeCatppuccin())
+			)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin))
 			var formErr error
 			envInterrupt(func() { formErr = dbForm.Run() })
 			if formErr != nil {

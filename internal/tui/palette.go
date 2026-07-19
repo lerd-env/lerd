@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Command palette: press `:` (vim-style) anywhere to open an inline prompt
@@ -136,7 +136,7 @@ func (m *Model) openPalette() {
 // the shape of the other modal-key handlers (handleFilterKey,
 // handleDomainInputKey) so adding a future history (`↑` / `↓`) only
 // touches this one function.
-func (m *Model) handlePaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc":
 		m.paletteActive = false
@@ -166,8 +166,8 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.paletteInput = string(r[:len(r)-1])
 		}
 	default:
-		if len(msg.Runes) > 0 {
-			m.paletteInput += string(msg.Runes)
+		if msg.Text != "" {
+			m.paletteInput += msg.Text
 		}
 	}
 	return m, nil

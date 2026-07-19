@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	lerddumps "github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/siteinfo"
-	zone "github.com/lrstanley/bubblezone"
+	zone "github.com/lrstanley/bubblezone/v2"
 )
 
 // siteTab identifies which sub-view of Site detail is showing. Tabs let the
