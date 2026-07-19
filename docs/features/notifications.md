@@ -2,7 +2,26 @@
 
 The dashboard can pop OS-level notifications for events you'd otherwise have to keep an eye on a tab to catch: a captured email, a worker that just crashed, a long-running service operation that finished, a new image tag available for a service, or a `ray()`/`dump()` arriving from a site you're debugging. Notifications fire even when the dashboard tab is minimised, in the background, or fully closed — they're delivered via Web Push, which wakes the registered service worker through your browser vendor's push infrastructure (FCM for Chrome/Brave/Edge, Mozilla autopush for Firefox).
 
-Lerd ships notifications **off by default**. The first time you open the dashboard a small banner offers to enable them; clicking *Enable* prompts your browser for permission once. Granting it is sticky — the dashboard re-uses the permission across sessions and re-registers the push subscription on every page load so the server's subscription list stays in sync after browser resets or sub expiry.
+The first time you open the dashboard a small banner offers to enable browser notifications; clicking *Enable* prompts your browser for permission once. Granting it is sticky — the dashboard re-uses the permission across sessions and re-registers the push subscription on every page load so the server's subscription list stays in sync after browser resets or sub expiry.
+
+## Delivery: browser or native desktop
+
+Notifications have a single delivery **sink**, chosen per install and mutually exclusive so you never get the same alert twice:
+
+- **Browser** — the WebSocket fan-out to open dashboards plus Web Push to subscribed browsers (the paths described under [How it works](#how-it-works)). Needs a browser permission grant, works cross-machine over the LAN, and delivers to a closed PWA.
+- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode. Linux only for now; macOS follows later.
+
+Switch under **System → Notifications** with the *Delivery* control, or from the CLI:
+
+```bash
+lerd notify target native     # daemon-posted desktop notifications
+lerd notify target browser    # WebSocket + Web Push
+lerd notify status            # shows the current sink
+```
+
+Defaults are chosen so nothing changes for existing installs. An unset target resolves to **browser**, so every upgrade and every non-Linux install is unchanged. A **fresh Linux install seeds `native`**, so new Linux users get desktop notifications out of the box with no permission prompt. The native sink is offered only when a notification daemon is present (GNOME, KDE, Hyprland/mako, XFCE, dunst, …); on a host without one the option is disabled and lerd stays on the browser sink.
+
+In native mode, clicking a notification opens the [Lerd desktop app](https://lerd.sh) at the relevant view when it's installed (via its `lerd://` scheme), or the dashboard in your browser otherwise. Category toggles work the same, stored server-side under `notifications.kinds` in `config.yaml` since there's no browser device to hold them.
 
 ## Notification categories
 
@@ -24,7 +43,7 @@ Clicking a notification focuses the dashboard (or launches the PWA if closed) an
 
 ## How it works
 
-Two delivery paths run in parallel:
+With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`. With the **browser** sink (the default), two delivery paths run in parallel:
 
 1. **WebSocket fan-out** (open tabs). Every notification rides the existing `/api/ws` channel as a `notification` frame. Open dashboard tabs route it through `lib/notify.ts`, which resolves the i18n key with Paraglide and calls `registration.showNotification(...)` so the toast lands in the OS notification center with a persistent click target.
 2. **Web Push** (closed tabs / installed PWA). When permission is granted, the page subscribes via `pushManager.subscribe()` using the install's VAPID public key. The server stores the subscription endpoint plus the user's per-category preferences and, on every notification, sends an encrypted Web Push (RFC 8291) to each allow-listed subscription. The browser wakes the service worker, the SW shows the notification with the same payload shape it received over the WS.
@@ -62,6 +81,9 @@ Subscriptions that the push service retires (HTTP 410 Gone, 404 Not Found) are p
 | `POST` | `/api/push/unsubscribe` | Removes a subscription by endpoint. |
 | `GET` | `/api/push/devices` | Lists subscribed devices (sanitised; never returns the p256dh/auth secrets). |
 | `POST` | `/api/push/test` | Dispatches a hard-coded test notification through the central notifier. |
+| `GET` | `/api/notifications/target` | Returns the delivery sink, whether native is supported on this host, and the resolved native category prefs. |
+| `POST` | `/api/notifications/target` | Sets the delivery sink to `browser` or `native`. |
+| `POST` | `/api/notifications/kinds` | Toggles one native category (`{kind, enabled}`). |
 
 All endpoints sit behind the standard `withRemoteControlGate` (loopback-only by default). The mailpit webhook at `/api/webhooks/mailpit` has its own explicit bypass — the threat surface is bounded (a LAN attacker could spoof fake mail notifications) and lerd is a local-dev tool.
 

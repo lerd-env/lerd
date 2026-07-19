@@ -191,6 +191,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/push/unsubscribe", withCORS(handlePushUnsubscribe))
 	mux.HandleFunc("/api/push/devices", withCORS(handlePushDevices))
 	mux.HandleFunc("/api/push/test", withCORS(handlePushTest))
+	mux.HandleFunc("/api/notifications/target", withCORS(handleNotifyTarget))
+	mux.HandleFunc("/api/notifications/kinds", withCORS(handleNotifyKinds))
 	mux.HandleFunc("/api/lan-qr/", withCORS(handleLANQR))
 	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
 

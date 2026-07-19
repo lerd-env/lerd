@@ -841,6 +841,19 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// First install on Linux defaults notifications to the native desktop sink
+	// (no browser, no permission prompt). configExisted was sampled before any
+	// step wrote config, so this only fires on a genuinely fresh install;
+	// upgrades keep their saved target and an unset value resolves to browser.
+	if !configExisted && runtime.GOOS == "linux" {
+		if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+			cfg.SetNotificationTarget(config.NotifyTargetNative)
+			if err := config.SaveGlobal(cfg); err != nil {
+				feedback.Warn("could not seed native notifications: %s", err.Error())
+			}
+		}
+	}
+
 	// Read the autostart flag once. When disabled (set explicitly via
 	// `lerd autostart disable`), install must not enable or start any
 	// service that the user has chosen to keep off — otherwise running
