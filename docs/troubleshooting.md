@@ -9,6 +9,18 @@ lerd status   # quick health snapshot of all running services
 
 `lerd doctor` reports OK/FAIL/WARN for each check with a hint for every failure.
 
+## Repairing findings automatically
+
+`lerd doctor --fix` runs the same diagnostic and then offers to repair the findings it safely can. It confirms each fix before applying it, so you can pick and choose:
+
+```bash
+lerd doctor --fix             # confirm each repair
+lerd doctor --fix --yes       # apply without prompting (heavy fixes still confirm)
+lerd doctor --fix --dry-run   # list what would be repaired, change nothing
+```
+
+The fixes fall into three groups. lerd applies the safe ones itself, creating a missing data or config directory, enabling linger so services survive logout, installing the network-online drop-in, rebuilding a missing PHP image, repairing the DNS resolver wiring, and, after you confirm the heavier ones, reinstalling the services or reclaiming podman disk. Anything that needs `sudo`, installing podman, crun, fuse-overlayfs, the rootless network helpers, or adding a subuid range, lerd never runs for you; it prints the exact command to copy. Findings that are external state, a foreign process already holding port 80, a config file with a syntax error, are left untouched with their hint. The same safe, non-heavy repairs are available to AI assistants through the MCP `diag` tool's `doctor_fix` action.
+
 ## Filing a bug report
 
 If you need help on the [issue tracker](https://github.com/lerd-env/lerd/issues), run:
