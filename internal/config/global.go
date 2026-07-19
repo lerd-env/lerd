@@ -223,6 +223,16 @@ type GlobalConfig struct {
 		// Push fanout). Inverted form so the zero value keeps existing
 		// installs on. Toggled via `lerd notify on/off` and the tray.
 		Disabled bool `yaml:"disabled,omitempty" mapstructure:"disabled"`
+		// Target selects the delivery sink: "browser" (WebSocket + Web
+		// Push) or "native" (the daemon posts to org.freedesktop.Notifications
+		// and Web Push is suppressed). Empty resolves to browser so upgrades
+		// are unchanged; fresh Linux installs seed "native".
+		Target string `yaml:"target,omitempty" mapstructure:"target"`
+		// Kinds is the per-category on/off for the native sink. Browser prefs
+		// live per-device in the page; native has no device, so the daemon
+		// reads category filtering from here. Absent keys use the built-in
+		// default (everything on except the noisy dump kind).
+		Kinds map[string]bool `yaml:"kinds,omitempty" mapstructure:"kinds"`
 	} `yaml:"notifications,omitempty" mapstructure:"notifications"`
 	Tray struct {
 		// HighContrastIcon swaps the running tray icon for a single green glyph
@@ -1013,6 +1023,66 @@ func (c *GlobalConfig) IsNotificationsEnabled() bool {
 // SaveGlobal; dispatchNotification re-reads the flag on every event.
 func (c *GlobalConfig) SetNotificationsEnabled(enabled bool) {
 	c.Notifications.Disabled = !enabled
+}
+
+// Notification delivery sinks. Browser is the WebSocket + Web Push path;
+// Native posts straight to the desktop notification daemon.
+const (
+	NotifyTargetBrowser = "browser"
+	NotifyTargetNative  = "native"
+)
+
+// NotificationTarget resolves the delivery sink. Any unrecognised or empty
+// value falls back to browser so existing installs and future values stay safe.
+func (c *GlobalConfig) NotificationTarget() string {
+	if c.Notifications.Target == NotifyTargetNative {
+		return NotifyTargetNative
+	}
+	return NotifyTargetBrowser
+}
+
+// SetNotificationTarget stores the delivery sink. Persist via SaveGlobal.
+func (c *GlobalConfig) SetNotificationTarget(target string) {
+	c.Notifications.Target = target
+}
+
+// NotifyKinds is the canonical set of notification categories, mirroring the
+// web UI's ALL_KINDS, in display order.
+var NotifyKinds = []string{
+	"mail", "worker_failed", "op_done", "update_available", "nplusone", "slow_route", "dump",
+}
+
+// nativeKindDefault is the built-in on/off for a category the user has not set.
+// Mirrors the web defaults: everything on except the noisy dump kind.
+func nativeKindDefault(kind string) bool {
+	return kind != "dump"
+}
+
+// NativeKindEnabled reports whether a category fires on the native sink.
+func (c *GlobalConfig) NativeKindEnabled(kind string) bool {
+	if c.Notifications.Kinds != nil {
+		if v, ok := c.Notifications.Kinds[kind]; ok {
+			return v
+		}
+	}
+	return nativeKindDefault(kind)
+}
+
+// SetNativeKind sets a category's native on/off. Persist via SaveGlobal.
+func (c *GlobalConfig) SetNativeKind(kind string, on bool) {
+	if c.Notifications.Kinds == nil {
+		c.Notifications.Kinds = map[string]bool{}
+	}
+	c.Notifications.Kinds[kind] = on
+}
+
+// EffectiveNativeKinds resolves the on/off for every known category.
+func (c *GlobalConfig) EffectiveNativeKinds() map[string]bool {
+	out := make(map[string]bool, len(NotifyKinds))
+	for _, k := range NotifyKinds {
+		out[k] = c.NativeKindEnabled(k)
+	}
+	return out
 }
 
 // IsHighContrastTrayIcon reports whether the tray should show the always-visible

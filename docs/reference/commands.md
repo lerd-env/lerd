@@ -160,7 +160,8 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, and the fro
 | `lerd profile clear` | Delete all captured SPX profile reports |
 | `lerd notify on` | Enable lerd notifications globally (dashboard banners + Web Push fanout) |
 | `lerd notify off` | Globally mute lerd notifications; bypasses per-device prefs |
-| `lerd notify status` | Show whether notifications are globally enabled |
+| `lerd notify target <browser\|native>` | Choose the delivery sink: browser (WebSocket + Web Push) or native desktop notifications (Linux) |
+| `lerd notify status` | Show whether notifications are globally enabled and the current delivery sink |
 
 ## Runtime
 

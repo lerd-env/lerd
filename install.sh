@@ -13,6 +13,10 @@ set -euo pipefail
 # LERD_REPO so a future org move needs no installer change.
 REPO="${LERD_REPO:-lerd-env/lerd}"
 BINARY="lerd"
+# Command shown to install the optional Lerd desktop app (a dedicated window
+# with native desktop notifications), distributed as a Flatpak. Overridable so
+# the ref URL can move.
+DESKTOP_INSTALL_CMD="${LERD_DESKTOP_INSTALL_CMD:-flatpak install --user https://lerd.sh/lerd.flatpakref}"
 INSTALL_DIR="${LERD_INSTALL_DIR:-$HOME/.local/bin}"
 LERD_CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lerd"
 LERD_DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/lerd"
@@ -498,6 +502,10 @@ cmd_install() {
   local local_binary="${1:-}"
   header "Installing Lerd"
 
+  # Sampled before anything installs: empty means a genuinely fresh install,
+  # the only time we offer the desktop app.
+  local was_installed; was_installed="$(installed_version)"
+
   # Validate local binary path before running any checks so the error is clear.
   if [ -n "$local_binary" ]; then
     [ -f "$local_binary" ] || die "File not found: $local_binary"
@@ -554,7 +562,34 @@ cmd_install() {
   else
     "${INSTALL_DIR}/${BINARY}" install --dns "$DNS_MODE"
   fi
+
+  # Offer the desktop app on a fresh Linux install. Its own installer does the
+  # download; here we only record the notification sink the user prefers.
+  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && [ -r /dev/tty ]; then
+    offer_desktop_app
+  fi
+
   star_note
+}
+
+# offer_desktop_app asks whether to use the Lerd desktop app (which delivers
+# native desktop notifications) or stay on the browser, records the choice via
+# `lerd notify target`, and always prints the command to install the app.
+offer_desktop_app() {
+  header "Desktop app"
+  info "Lerd has a desktop app: a dedicated window with native desktop notifications,"
+  info "no browser tab needed. The app installs separately with one command."
+  echo ""
+  if ask "Use the Lerd desktop app? (choose native notifications)"; then
+    "${INSTALL_DIR}/${BINARY}" notify target native >/dev/null 2>&1 || true
+    success "Native desktop notifications enabled"
+    info "Install the desktop app with:"
+  else
+    "${INSTALL_DIR}/${BINARY}" notify target browser >/dev/null 2>&1 || true
+    success "Using browser notifications"
+    info "Prefer a dedicated app later? Install it anytime with:"
+  fi
+  echo -e "     ${CYAN}${DESKTOP_INSTALL_CMD}${RESET}"
 }
 
 # ── Update ───────────────────────────────────────────────────────────────────

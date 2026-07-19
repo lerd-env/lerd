@@ -420,3 +420,37 @@ teardown() {
   run check_prerequisites
   [[ "$output" == *"certutil not found"* ]]
 }
+
+# ── offer_desktop_app ─────────────────────────────────────────────────────────
+
+_fake_lerd_dir() {
+  local d="$BATS_TMPDIR/fakebin-$$"
+  mkdir -p "$d"
+  cat > "$d/lerd" <<EOF
+#!/usr/bin/env bash
+echo "\$@" >> "$d/calls"
+EOF
+  chmod +x "$d/lerd"
+  rm -f "$d/calls"
+  echo "$d"
+}
+
+@test "offer_desktop_app yes enables native and prints the install command" {
+  local d; d="$(_fake_lerd_dir)"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  ask() { return 0; }
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$DESKTOP_INSTALL_CMD"* ]]
+  grep -q "notify target native" "$d/calls"
+}
+
+@test "offer_desktop_app no selects browser and still prints the install command" {
+  local d; d="$(_fake_lerd_dir)"
+  INSTALL_DIR="$d"; BINARY="lerd"
+  ask() { return 1; }
+  run offer_desktop_app
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"$DESKTOP_INSTALL_CMD"* ]]
+  grep -q "notify target browser" "$d/calls"
+}
