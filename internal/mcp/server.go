@@ -32,7 +32,6 @@ import (
 	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
-	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
@@ -1184,167 +1183,30 @@ func execStatus() (any, *rpcError) {
 }
 
 func execDoctor() (any, *rpcError) {
-	type checkResult struct {
-		Name   string `json:"name"`
-		Status string `json:"status"`
-		Detail string `json:"detail,omitempty"`
-	}
-	type doctorResult struct {
-		Version      string        `json:"version"`
-		Checks       []checkResult `json:"checks"`
-		Failures     int           `json:"failures"`
-		Warnings     int           `json:"warnings"`
-		UpdateAvail  string        `json:"update_available,omitempty"`
-		PHPInstalled []string      `json:"php_installed"`
-		PHPDefault   string        `json:"php_default,omitempty"`
-		NodeDefault  string        `json:"node_default,omitempty"`
-	}
-
-	var r doctorResult
-	r.Version = version.String()
-	var checks []checkResult
-
-	add := func(name, status, detail string) {
-		checks = append(checks, checkResult{Name: name, Status: status, Detail: detail})
-	}
-
-	// Prerequisites
-	if _, err := exec.LookPath("podman"); err != nil {
-		add("podman", "fail", "not found in PATH")
-	} else if err := podman.RunSilent("info"); err != nil {
-		add("podman", "fail", "podman info failed — daemon not running?")
-	} else {
-		add("podman", "ok", "")
-	}
-
-	if out, err := exec.Command("systemctl", "--user", "is-system-running").Output(); err != nil {
-		state := strings.TrimSpace(string(out))
-		if state == "degraded" {
-			add("systemd_user_session", "warn", "degraded — some units have failed")
-		} else {
-			add("systemd_user_session", "fail", "state="+state)
-		}
-	} else {
-		add("systemd_user_session", "ok", "")
-	}
-
-	currentUser := os.Getenv("USER")
-	if currentUser == "" {
-		currentUser = os.Getenv("LOGNAME")
-	}
-	if currentUser != "" {
-		out, err := exec.Command("loginctl", "show-user", currentUser).Output()
-		if err != nil || !strings.Contains(string(out), "Linger=yes") {
-			add("systemd_linger", "warn", "services won't survive logout")
-		} else {
-			add("systemd_linger", "ok", "")
-		}
-	}
-
-	quadletDir := config.QuadletDir()
-	if err := dirWritable(quadletDir); err != nil {
-		add("quadlet_dir", "fail", err.Error())
-	} else {
-		add("quadlet_dir", "ok", "")
-	}
-
-	dataDir := config.DataDir()
-	if err := dirWritable(dataDir); err != nil {
-		add("data_dir", "fail", err.Error())
-	} else {
-		add("data_dir", "ok", "")
-	}
-
-	// Configuration
-	cfg, cfgErr := config.LoadGlobal()
-	if cfgErr != nil {
-		add("config", "fail", cfgErr.Error())
-		cfg = nil
-	} else {
-		add("config", "ok", "")
-	}
-
-	if cfg != nil {
-		if cfg.PHP.DefaultVersion == "" {
-			add("php_default_version", "warn", "not set")
-		} else {
-			add("php_default_version", "ok", cfg.PHP.DefaultVersion)
-			r.PHPDefault = cfg.PHP.DefaultVersion
-		}
-		r.NodeDefault = cfg.Node.DefaultVersion
-
-		if cfg.Nginx.HTTPPort <= 0 || cfg.Nginx.HTTPSPort <= 0 {
-			add("nginx_ports", "fail", fmt.Sprintf("http=%d https=%d", cfg.Nginx.HTTPPort, cfg.Nginx.HTTPSPort))
-		} else {
-			add("nginx_ports", "ok", fmt.Sprintf("%d/%d", cfg.Nginx.HTTPPort, cfg.Nginx.HTTPSPort))
-		}
-	}
-
-	// DNS
-	tld := "test"
-	if cfg != nil && cfg.DNS.TLD != "" {
-		tld = cfg.DNS.TLD
-	}
-	if resolved, _ := dns.Check(tld); resolved {
-		add("dns_resolution", "ok", "."+tld)
-	} else {
-		add("dns_resolution", "fail", "."+tld+" not resolving")
-	}
-
-	// Ports
-	nginxRunning, _ := podman.ContainerRunning("lerd-nginx")
-	if nginxRunning {
-		add("nginx", "ok", "running")
-	} else {
-		add("nginx", "warn", "not running")
-	}
-
-	// PHP images
-	phpVersions, _ := phpDet.ListInstalled()
-	r.PHPInstalled = phpVersions
-	if r.PHPInstalled == nil {
-		r.PHPInstalled = []string{}
-	}
-	for _, v := range phpVersions {
-		short := strings.ReplaceAll(v, ".", "")
-		image := "lerd-php" + short + "-fpm:local"
-		if !podman.ImageExists(image) {
-			add("php_"+v+"_image", "fail", "missing")
-		} else {
-			add("php_"+v+"_image", "ok", "")
-		}
-	}
-
-	// Update check
-	if updateInfo, _ := lerdUpdate.CachedUpdateCheck(version.Version); updateInfo != nil {
-		r.UpdateAvail = updateInfo.LatestVersion
-	}
-
-	r.Checks = checks
-	for _, c := range checks {
-		switch c.Status {
-		case "fail":
-			r.Failures++
-		case "warn":
-			r.Warnings++
-		}
-	}
-
-	data, _ := json.MarshalIndent(r, "", "  ")
-	return toolOK(string(data)), nil
-}
-
-func dirWritable(dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("cannot create: %v", err)
-	}
-	tmp, err := os.CreateTemp(dir, ".lerd-mcp-*")
+	self, err := os.Executable()
 	if err != nil {
-		return fmt.Errorf("not writable: %v", err)
+		return toolErr("could not resolve lerd executable: " + err.Error()), nil
 	}
-	tmp.Close()
-	os.Remove(tmp.Name())
-	return nil
+
+	// Reuse the CLI's structured diagnostic so the check set and its fix tiers
+	// stay single-sourced, then wrap it with instructions the assistant can act on.
+	var out bytes.Buffer
+	cmd := exec.Command(self, "doctor", "--json")
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	if runErr := cmd.Run(); runErr != nil {
+		return toolErr(fmt.Sprintf("doctor failed (%v):\n%s", runErr, stripANSI(out.String()))), nil
+	}
+
+	var report map[string]any
+	if jsonErr := json.Unmarshal(out.Bytes(), &report); jsonErr != nil {
+		return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	}
+
+	report["how_to_fix"] = "Each finding carries fix.tier. 'auto': call diag action doctor_fix to apply the safe repairs (it runs the non-sudo fixes and re-checks), then call doctor again to confirm. 'manual': the repair needs sudo, so give the user the finding's hint as the exact command to run, never run sudo yourself. 'none': external state (a foreign process on a port, a config syntax error) to explain to the user. If a finding is unclear or cannot be fixed here, offer to file it on GitHub with diag action bug_report (an anonymised report to attach to a new issue at https://github.com/lerd-env/lerd/issues)."
+
+	data, _ := json.MarshalIndent(report, "", "  ")
+	return toolOK(string(data)), nil
 }
 
 func execWhich(args map[string]any) (any, *rpcError) {
@@ -1366,6 +1228,23 @@ func execWhich(args map[string]any) (any, *rpcError) {
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("which failed (%v):\n%s", err, stripANSI(out.String()))), nil
 	}
+	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+}
+
+func execDoctorFix() (any, *rpcError) {
+	self, err := os.Executable()
+	if err != nil {
+		return toolErr("could not resolve lerd executable: " + err.Error()), nil
+	}
+
+	// Reuse the CLI fix path. With no tty the confirm prompts read EOF and fall
+	// back to their default, so only the safe (non-heavy) automatic fixes run;
+	// install and cleanup are left for the user to run interactively.
+	var out bytes.Buffer
+	cmd := exec.Command(self, "doctor", "--fix", "--yes")
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	_ = cmd.Run()
 	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
 }
 
