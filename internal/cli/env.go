@@ -1243,6 +1243,9 @@ func ensureServiceRunning(name string) error {
 	} else {
 		svc, err := config.LoadCustomService(name)
 		if err != nil {
+			if config.PresetExists(name) {
+				return fmt.Errorf("service %q is not installed; install it with 'lerd service preset %s'", name, name)
+			}
 			return fmt.Errorf("custom service %q not found: %w", name, err)
 		}
 		for _, dep := range svc.DependsOn {

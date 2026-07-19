@@ -397,8 +397,12 @@ func resolvePresetForInstall(name, version string) (*config.CustomService, error
 	if err != nil {
 		return nil, err
 	}
+	// A resolved built-in name (the canonical version of a default preset, e.g. a
+	// removed redis being reinstalled) is recreated through its default quadlet by
+	// registerPreset rather than saved as a custom service that would shadow the
+	// built-in; a fully-installed one is idempotently re-materialised.
 	if IsBuiltin(svc.Name) {
-		return nil, fmt.Errorf("%q collides with the built-in service of the same name", svc.Name)
+		return svc, nil
 	}
 	// Only a fully-installed service (YAML and unit both present) blocks install.
 	// A partial remnant (YAML-only after an interrupted install, or a quadlet-only
@@ -416,6 +420,12 @@ func resolvePresetForInstall(name, version string) (*config.CustomService, error
 // the quadlet, and regenerates family consumers. Run only after any required
 // image pull has succeeded.
 func registerPreset(svc *config.CustomService) error {
+	// A canonical built-in is a removed default preset being reinstalled: recreate
+	// its default quadlet instead of persisting a custom-service YAML that would
+	// collide with the built-in of the same name.
+	if IsBuiltin(svc.Name) {
+		return EnsureDefaultPresetQuadlet(svc.Name)
+	}
 	if err := config.SaveCustomService(svc); err != nil {
 		return fmt.Errorf("saving service config: %w", err)
 	}
@@ -764,6 +774,9 @@ func EnsureServiceRunning(name string) error {
 	if !IsBuiltin(name) {
 		svc, err := config.LoadCustomService(name)
 		if err != nil {
+			if config.PresetExists(name) {
+				return fmt.Errorf("service %q is not installed; install it with 'lerd service preset %s'", name, name)
+			}
 			return fmt.Errorf("custom service %q not found: %w", name, err)
 		}
 		for _, dep := range svc.DependsOn {
