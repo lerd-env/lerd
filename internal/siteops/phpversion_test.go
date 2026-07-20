@@ -4,10 +4,12 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -352,5 +354,59 @@ func TestSetSitePHPVersion_keepsFrankenPHPOnSupportedVersion(t *testing.T) {
 	}
 	if site.Runtime != "frankenphp" {
 		t.Errorf("site.Runtime = %q, want frankenphp", site.Runtime)
+	}
+}
+
+// A worktree switch generates a vhost pointing at the target version's FPM
+// container, so it has to write that version's quadlet and notify open
+// dashboards exactly like the site path does. Without it the vhost can point at
+// a container that was never created on this machine.
+func TestSetSitePHPVersion_worktreeDoesTheSameRuntimeSetup(t *testing.T) {
+	site := phpVersionTestSite(t, asFPM)
+	stubPHPVersionDeps(t, "", "")
+
+	wtPath := filepath.Join(site.Path, "wt", "feature")
+	if err := os.MkdirAll(wtPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	origDetect := detectWorktreesFn
+	origDR := podman.DaemonReloadFn
+	origNotify := podman.AfterUnitChange
+	t.Cleanup(func() {
+		detectWorktreesFn = origDetect
+		podman.DaemonReloadFn = origDR
+		podman.AfterUnitChange = origNotify
+	})
+
+	detectWorktreesFn = func(string, string) ([]gitpkg.Worktree, error) {
+		return []gitpkg.Worktree{{Name: "feature", Branch: "feature", Path: wtPath, Domain: "feature.app.test"}}, nil
+	}
+	reloaded := 0
+	podman.DaemonReloadFn = func() error { reloaded++; return nil }
+	var notified []string
+	podman.AfterUnitChange = func(name string) { notified = append(notified, name) }
+
+	if _, err := SetSitePHPVersion(site, "8.3", PHPVersionOpts{Branch: "feature"}); err != nil {
+		t.Fatalf("SetSitePHPVersion: %v", err)
+	}
+
+	if reloaded == 0 {
+		t.Error("worktree switch did not write the target version's FPM quadlet")
+	}
+	if !slices.Contains(notified, "site:app") {
+		t.Errorf("AfterUnitChange notifications = %v, want one for site:app", notified)
+	}
+
+	// The parent site keeps its own version; the override travels with the branch.
+	stored, err := config.FindSite("app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.PHPVersion != "8.4" {
+		t.Errorf("parent site PHPVersion = %q, want 8.4 (unchanged)", stored.PHPVersion)
+	}
+	if got := config.WorktreePHPVersion(wtPath, stored.PHPVersion); got != "8.3" {
+		t.Errorf("worktree version = %q, want 8.3", got)
 	}
 }

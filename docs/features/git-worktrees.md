@@ -159,7 +159,7 @@ php_version: "8.4"
 node_version: "24"
 ```
 
-The override is honoured wherever lerd materialises worktree state on disk: vhost generation on add, rename, pause/unpause, and `lerd secure`/`lerd unsecure`. Worktrees with no override inherit the parent's pinned version (not the highest-installed satisfier of `composer.json`/`package.json` constraints — that detection only kicks in for unregistered directories).
+The override is honoured wherever lerd materialises worktree state on disk: vhost generation on add, rename, pause/unpause, and `lerd secure`/`lerd unsecure`. The commands that run PHP in a container follow it too, so `lerd php` and `lerd composer` from inside the checkout use the worktree's version rather than the parent's, whether the worktree sits beside the project or inside it. Switching a worktree's version writes the target version's FPM quadlet the same way a site switch does, so the vhost it generates always has a container behind it. Worktrees with no override inherit the parent's pinned version (not the highest-installed satisfier of `composer.json`/`package.json` constraints — that detection only kicks in for unregistered directories).
 
 Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), workers, and any custom container settings.
 

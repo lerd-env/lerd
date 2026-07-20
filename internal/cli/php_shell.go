@@ -3,10 +3,8 @@ package cli
 import (
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
-	"github.com/geodro/lerd/internal/config"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -41,7 +39,7 @@ func runPhpShell(_ *cobra.Command, _ []string) error {
 
 	// Use the registered site root as the working directory if cwd is inside one,
 	// otherwise fall back to cwd.
-	workDir := siteRootFor(cwd)
+	workDir := phpDet.SiteRootFor(cwd)
 
 	podman.EnsurePathMounted(workDir, version)
 	ensureServicesForCwd(workDir)
@@ -60,30 +58,4 @@ func runPhpShell(_ *cobra.Command, _ []string) error {
 		return err
 	}
 	return nil
-}
-
-// siteRootFor returns the registered site path that contains dir, or dir itself
-// if no registered site matches.
-func siteRootFor(dir string) string {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return dir
-	}
-	// Normalise to clean absolute path for prefix matching.
-	dir = filepath.Clean(dir)
-	best := ""
-	for _, s := range reg.Sites {
-		sitePath := filepath.Clean(s.Path)
-		// dir == sitePath or dir is underneath sitePath
-		if dir == sitePath || strings.HasPrefix(dir, sitePath+string(filepath.Separator)) {
-			// Prefer the longest (most-specific) match.
-			if len(sitePath) > len(best) {
-				best = sitePath
-			}
-		}
-	}
-	if best != "" {
-		return best
-	}
-	return dir
 }

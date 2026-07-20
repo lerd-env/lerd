@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -129,7 +130,7 @@ func bunFPMSite() *config.Site {
 	if err != nil {
 		return nil
 	}
-	s, err := config.FindSiteByPath(siteRootFor(cwd))
+	s, err := config.FindSiteByPath(phpDet.SiteRootFor(cwd))
 	if err != nil || s == nil || !s.IsCustomFPM() {
 		return nil
 	}

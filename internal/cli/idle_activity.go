@@ -7,6 +7,7 @@ import (
 	"github.com/geodro/lerd/internal/activityping"
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	phpDet "github.com/geodro/lerd/internal/php"
 )
 
 // recordCwdActivity tells lerd-ui that the site containing dir is being worked
@@ -18,7 +19,7 @@ func recordCwdActivity(dir string) {
 	if dir == "" {
 		return
 	}
-	site, _ := config.FindSiteByPath(siteRootFor(dir))
+	site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir))
 	if site == nil {
 		return
 	}

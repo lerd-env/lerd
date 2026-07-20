@@ -207,7 +207,7 @@ func otherInstalledVersions(exclude string) []string {
 // composer's constraint. Best-effort: a write failure or a higher-priority
 // .lerd.yaml override only warns, since the switch still applies to this run.
 func persistPHPVersion(cwd, version string) {
-	root := siteRootFor(cwd)
+	root := phpDet.SiteRootFor(cwd)
 	path := root + "/.php-version"
 	if err := os.WriteFile(path, []byte(version+"\n"), 0o644); err != nil {
 		feedback.Warn("could not pin PHP %s (%s): %v", version, path, err)

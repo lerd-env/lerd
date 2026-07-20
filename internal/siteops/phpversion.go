@@ -21,6 +21,7 @@ var (
 	imageGapFn         = imageGap
 	imageStaleFn       = podman.FPMImageStale
 	imageExistsFn      = podman.FPMImageExists
+	detectWorktreesFn  = gitpkg.DetectWorktrees
 
 	frameworkPHPRange = func(site *config.Site) (string, string) {
 		if site.Framework == "" {
@@ -209,7 +210,7 @@ func regenerateSiteVhost(site *config.Site, version string) error {
 // just that worktree's vhost, so the next request lands on the new FPM upstream.
 // The parent site's own version is untouched.
 func setWorktreePHPVersion(site *config.Site, branch, version string) error {
-	worktrees, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	worktrees, err := detectWorktreesFn(site.Path, site.PrimaryDomain())
 	if err != nil {
 		return fmt.Errorf("detecting worktrees: %w", err)
 	}
@@ -223,6 +224,12 @@ func setWorktreePHPVersion(site *config.Site, branch, version string) error {
 		if err := config.SetWorktreePHPVersion(wt.Path, version); err != nil {
 			return fmt.Errorf("updating .lerd.yaml: %w", err)
 		}
+		// Same runtime setup the site path does: the vhost below points at the
+		// version's FPM container, which need not exist on this machine yet.
+		if err := podman.WriteFPMQuadlet(version); err == nil {
+			_ = podman.DaemonReloadFn()
+		}
+		_ = podman.EnsureXdebugIni(version)
 		if site.Secured {
 			err = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, version, site.PrimaryDomain(), site.Name, wt.Branch)
 		} else {
@@ -231,8 +238,13 @@ func setWorktreePHPVersion(site *config.Site, branch, version string) error {
 		if err != nil {
 			return fmt.Errorf("regenerating worktree vhost: %w", err)
 		}
+		_ = podman.RewriteFPMQuadlets()
+		_ = podman.WriteContainerHosts()
 		if err := nginxReloadFn(); err != nil {
 			return fmt.Errorf("reloading nginx: %w", err)
+		}
+		if podman.AfterUnitChange != nil {
+			podman.AfterUnitChange("site:" + site.Name)
 		}
 		return nil
 	}
