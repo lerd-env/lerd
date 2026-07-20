@@ -4302,6 +4302,26 @@ func execDBSnapshots(args map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+func execDBList(args map[string]any) (any, *rpcError) {
+	target, err := mcpSnapshotTarget(args)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	command := serviceops.IntrospectCommand(target.Service)
+	if command == "" {
+		return toolOK(fmt.Sprintf("%s declares no database introspection, so its databases cannot be listed", target.Service)), nil
+	}
+	dbs, err := serviceops.ListDatabases(target.Service, command)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	if len(dbs) == 0 {
+		return toolOK(fmt.Sprintf("%s holds no user databases", target.Service)), nil
+	}
+	data, _ := json.MarshalIndent(dbs, "", "  ")
+	return toolOK(string(data)), nil
+}
+
 func execDBRestore(args map[string]any) (any, *rpcError) {
 	name := strArg(args, "name")
 	if name == "" {
