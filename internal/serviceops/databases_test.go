@@ -1,6 +1,10 @@
 package serviceops
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseDatabaseRows(t *testing.T) {
 	out := "laravel_app\t25690112\nwordpress\t18979224\nempty\t0\n"
@@ -38,6 +42,44 @@ func TestParseDatabaseRowsNameOnly(t *testing.T) {
 	got := parseDatabaseRows([]byte("analytics\nmetrics\n"))
 	if len(got) != 2 || got[0].Name != "analytics" || got[0].SizeBytes != 0 {
 		t.Fatalf("unexpected parse: %+v", got)
+	}
+}
+
+// writeCustomService drops a service YAML into an isolated config dir so
+// introspect resolution can be exercised without touching the real install.
+func writeCustomService(t *testing.T, name, body string) {
+	t.Helper()
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "lerd", "services")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte(body), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+}
+
+func TestIntrospectCommandFromCustomService(t *testing.T) {
+	writeCustomService(t, "myengine", "name: myengine\nimage: example/engine:1\nintrospect:\n  list_databases: echo hi\n")
+	if got := IntrospectCommand("myengine"); got != "echo hi" {
+		t.Fatalf("got %q, want %q", got, "echo hi")
+	}
+}
+
+func TestIntrospectCommandFallsBackToPreset(t *testing.T) {
+	// An engine installed before the introspect field existed carries no
+	// introspect block of its own, so the preset it came from supplies it.
+	writeCustomService(t, "mysql", "name: mysql\nimage: docker.io/library/mysql:8\npreset: mysql\n")
+	if IntrospectCommand("mysql") == "" {
+		t.Fatal("want the bundled mysql preset command, got none")
+	}
+}
+
+func TestIntrospectCommandUnknownEngine(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := IntrospectCommand("nosuchengine"); got != "" {
+		t.Fatalf("want empty, got %q", got)
 	}
 }
 
