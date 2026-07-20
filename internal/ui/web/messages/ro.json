@@ -1116,6 +1116,9 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "Aplicație",
+  "databases_targetTesting": "Testare",
+  "databases_targetLabel": "Pe care bază de date acționează aceste comenzi",
   "databases_deleteConfirm": "Confirm delete",
   "databases_count": "{count} databases"
 }
