@@ -32,8 +32,8 @@
   );
 </script>
 
-<div class="flex-1 overflow-y-auto">
-  <div class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 border-b border-gray-100 dark:border-lerd-border">
+<div class="flex-1 min-h-0 flex flex-col overflow-y-auto">
+  <div class="shrink-0 flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 border-b border-gray-100 dark:border-lerd-border">
     <div class="min-w-0">
       <h1 class="font-semibold text-gray-900 dark:text-white text-xl tracking-tight">{m.dashboard_title()}</h1>
       {#if everythingHealthy}
@@ -62,12 +62,12 @@
     </button>
   </div>
 
-  <div class="p-3 space-y-3">
+  <div class="p-3 space-y-3 xl:flex-1 xl:min-h-0 xl:flex xl:flex-col">
     <OnboardingPanel />
     {#if !everythingHealthy}
       <HeroStatus />
     {/if}
-    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+    <div class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-3 xl:flex-1 xl:min-h-0 xl:auto-rows-fr">
       <SitesWidget />
       <ServicesWidget />
       <WorkersWidget />
