@@ -94,10 +94,14 @@ func realReferencedImages(candidates map[string]bool) map[string]bool {
 // behind after upgrading, while the protected set keeps the live image and the
 // one-back rollback target, and an image carrying any non-catalog tag (one the
 // user added themselves) is left entirely alone.
-func deepTargets(imgs []image, repos, protected, pulled map[string]bool) []Target {
+// ignoreLedger drops the "lerd recorded pulling this" requirement, so the deep
+// tier can recover catalog images pulled outside lerd's explicit pull path
+// (podman auto-pulls a quadlet's Image= on first start, which the ledger never
+// sees). The managed and safe tiers keep the ledger gate.
+func deepTargets(imgs []image, repos, protected, pulled map[string]bool, ignoreLedger bool) []Target {
 	var out []Target
 	for _, img := range imgs {
-		refs := removableServiceRefs(img, repos, protected, pulled)
+		refs := removableServiceRefs(img, repos, protected, pulled, ignoreLedger)
 		// Remove every owned tag so the image actually frees on the last one;
 		// credit the reclaimable bytes once (on that last removal), since
 		// untagging the earlier aliases frees nothing on its own.
@@ -118,7 +122,7 @@ func deepTargets(imgs []image, repos, protected, pulled map[string]bool) []Targe
 // tag (current image or rollback target), a non-catalog tag the user added, or an
 // image lerd never pulled all mean "leave this whole image alone", so cleanup
 // never untags an image the user owns or that something else still relies on.
-func removableServiceRefs(img image, repos, protected, pulled map[string]bool) []string {
+func removableServiceRefs(img image, repos, protected, pulled map[string]bool, ignoreLedger bool) []string {
 	// An image a container still holds can't be removed by podman, so keep it even
 	// when no service config references it (a container running a catalog image the
 	// config no longer names would otherwise be listed forever).
@@ -136,7 +140,7 @@ func removableServiceRefs(img image, repos, protected, pulled map[string]bool) [
 		}
 		refs = append(refs, n)
 	}
-	if !lerdPulled {
+	if !ignoreLedger && !lerdPulled {
 		return nil
 	}
 	return refs

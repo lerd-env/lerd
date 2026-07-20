@@ -220,7 +220,7 @@ func Inspect(scope Scope) (Plan, error) {
 		repos, repoErr := serviceRepos()
 		prot, protErr := protectedImages()
 		if repoErr == nil && protErr == nil {
-			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled())...)
+			p.Targets = append(p.Targets, deepTargets(imgs, repos, prot, canonPulled(), reapAllDangling)...)
 		}
 	}
 	// podman lists a multi-tag image once per tag, so dedupe by ref/ID to avoid

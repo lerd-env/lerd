@@ -23,7 +23,7 @@ func TestDeepTargets_ReapsUnusedServiceImagesKeepsProtected(t *testing.T) {
 	}
 	pulled := map[string]bool{"docker.io/library/mysql:5.7": true}
 
-	got := deepTargets(imgs, repos, protected, pulled)
+	got := deepTargets(imgs, repos, protected, pulled, false)
 
 	if len(got) != 1 || got[0].ID != "docker.io/library/mysql:5.7" {
 		t.Fatalf("want only mysql:5.7 reaped, got %+v", got)
@@ -47,7 +47,7 @@ func TestDeepTargets_MultiTagRemovesAllTagsCreditsOnce(t *testing.T) {
 	protected := map[string]bool{}
 	pulled := map[string]bool{"docker.io/library/mysql:5.7": true}
 
-	got := deepTargets(imgs, repos, protected, pulled)
+	got := deepTargets(imgs, repos, protected, pulled, false)
 
 	removed := map[string]int64{}
 	for _, tg := range got {
@@ -78,25 +78,48 @@ func TestDeepTargets_KeepsInUseServiceImage(t *testing.T) {
 	}
 	repos := map[string]bool{"docker.io/library/redis": true}
 
-	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{})
+	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{}, false)
 
 	if len(got) != 0 {
 		t.Fatalf("an in-use service image must be kept, got %+v", got)
 	}
 }
 
-// An unused catalog image lerd never recorded pulling is kept even by the deep
-// tier: the ledger, not the repo name, is what marks an image as lerd's to reap.
+// With the ledger gate on (managed tier), an unused catalog image lerd never
+// recorded pulling is kept: the ledger, not the repo name, marks it as lerd's.
 func TestDeepTargets_KeepsCatalogImageLerdNeverPulled(t *testing.T) {
 	imgs := []image{
 		{Names: []string{"docker.io/library/redis:6"}, Size: 300},
 	}
 	repos := map[string]bool{"docker.io/library/redis": true}
 
-	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{})
+	got := deepTargets(imgs, repos, map[string]bool{}, map[string]bool{}, false)
 
 	if len(got) != 0 {
 		t.Fatalf("a catalog image lerd never pulled must be kept, got %+v", got)
+	}
+}
+
+// With ignoreLedger on (the deep tier), an unused catalog image is reaped even
+// with no ledger entry: this recovers images podman auto-pulled on container
+// start, which the ledger never recorded. Protection and repo scoping still hold.
+func TestDeepTargets_DeepReapsCatalogImageWithoutLedger(t *testing.T) {
+	imgs := []image{
+		{Names: []string{"docker.io/library/mysql:8.0"}, Size: 800},             // unused, no ledger → reap
+		{Names: []string{"docker.io/library/mysql:8.4"}, Size: 500},             // protected → keep
+		{Names: []string{"ubuntu:22.04"}, Size: 700},                            // non-catalog → keep
+		{Names: []string{"docker.io/library/redis:7"}, Size: 40, Containers: 1}, // in use → keep
+	}
+	repos := map[string]bool{"docker.io/library/mysql": true, "docker.io/library/redis": true}
+	protected := map[string]bool{"docker.io/library/mysql:8.4": true}
+
+	got := deepTargets(imgs, repos, protected, map[string]bool{}, true)
+
+	if len(got) != 1 || got[0].ID != "docker.io/library/mysql:8.0" {
+		t.Fatalf("want only mysql:8.0 reaped without ledger, got %+v", got)
+	}
+	if got[0].Bytes != 800 {
+		t.Errorf("bytes = %d, want 800", got[0].Bytes)
 	}
 }
 
