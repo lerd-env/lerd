@@ -2,24 +2,37 @@ package cli
 
 import (
 	"io"
+	"path/filepath"
 	"reflect"
 	"testing"
-
-	"github.com/geodro/lerd/internal/podman"
 )
+
+// stubEnsurePath isolates lerd state and replaces every step of the ensure path
+// that shells out to podman, so these exercise the start/restart decision and
+// nothing else. Without the stubs the path really does invoke podman, which
+// builds a container storage tree under the test's temp dir to get there.
+func stubEnsurePath(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, "data"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
+
+	origWrite, origBuild := writeFPMQuadlet, buildFPMImageTo
+	origXdebug, origStart, origRestart := ensureXdebugIni, startUnitFn, restartUnitFn
+	t.Cleanup(func() {
+		writeFPMQuadlet, buildFPMImageTo = origWrite, origBuild
+		ensureXdebugIni, startUnitFn, restartUnitFn = origXdebug, origStart, origRestart
+	})
+	writeFPMQuadlet = func(string) error { return nil }
+	ensureXdebugIni = func(string) error { return nil }
+}
 
 // A version whose image ensureFPMQuadletTo just rebuilt must have its container
 // bounced onto it. StartUnit is a no-op on an active unit, so before this the
 // deferred half of a php:ext / php:pkg change left the container serving the
 // image it had superseded while every status surface reported the new set.
 func TestEnsureFPMQuadletTo_restartsOnlyWhenTheImageWasRebuilt(t *testing.T) {
-	origBuild, origStart, origRestart := buildFPMImageTo, startUnitFn, restartUnitFn
-	origWrite := podman.WriteContainerUnitFn
-	t.Cleanup(func() {
-		buildFPMImageTo, startUnitFn, restartUnitFn = origBuild, origStart, origRestart
-		podman.WriteContainerUnitFn = origWrite
-	})
-	podman.WriteContainerUnitFn = func(_, _ string) error { return nil }
+	stubEnsurePath(t)
 
 	var started, restarted []string
 	startUnitFn = func(name string) error { started = append(started, name); return nil }
@@ -53,13 +66,7 @@ func TestEnsureFPMQuadletTo_restartsOnlyWhenTheImageWasRebuilt(t *testing.T) {
 
 // A build that fails never reaches the unit at all.
 func TestEnsureFPMQuadletTo_failedBuildTouchesNoUnit(t *testing.T) {
-	origBuild, origStart, origRestart := buildFPMImageTo, startUnitFn, restartUnitFn
-	origWrite := podman.WriteContainerUnitFn
-	t.Cleanup(func() {
-		buildFPMImageTo, startUnitFn, restartUnitFn = origBuild, origStart, origRestart
-		podman.WriteContainerUnitFn = origWrite
-	})
-	podman.WriteContainerUnitFn = func(_, _ string) error { return nil }
+	stubEnsurePath(t)
 
 	touched := 0
 	startUnitFn = func(string) error { touched++; return nil }
