@@ -9,6 +9,7 @@ import (
 
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/shims"
 	"github.com/spf13/cobra"
@@ -196,7 +197,7 @@ func siteServiceForTool(cwd, tool string) string {
 	if !isSQLTool(tool) {
 		return ""
 	}
-	host := envfile.ReadKey(filepath.Join(siteRootFor(cwd), ".env"), "DB_HOST")
+	host := envfile.ReadKey(filepath.Join(phpDet.SiteRootFor(cwd), ".env"), "DB_HOST")
 	svc, ok := strings.CutPrefix(host, "lerd-")
 	if !ok || svc == "" {
 		return ""

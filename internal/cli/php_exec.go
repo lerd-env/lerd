@@ -62,22 +62,9 @@ func RunPHPCapture(cwd string, args []string) (int, error) {
 }
 
 // phpVersionForDir resolves the PHP version a directory's commands must run on.
-// A registered site's version wins: lerd link clamps to the framework's supported
-// range, so re-detecting here would run composer, console and php:shell on a
-// different PHP than the FPM container serving the site.
+// The rules live in internal/php so the CLI and the MCP server cannot drift.
 func phpVersionForDir(dir string) (string, error) {
-	if site, _ := config.FindSiteByPath(siteRootFor(dir)); site != nil && site.PHPVersion != "" {
-		return site.PHPVersion, nil
-	}
-	version, err := phpDet.DetectVersion(dir)
-	if err == nil {
-		return version, nil
-	}
-	cfg, cfgErr := config.LoadGlobal()
-	if cfgErr != nil {
-		return "", fmt.Errorf("cannot detect PHP version: %w", err)
-	}
-	return cfg.PHP.DefaultVersion, nil
+	return phpDet.VersionForDir(dir)
 }
 
 // fpmContainerForDir resolves the FPM container an exec in dir should target:
@@ -87,7 +74,7 @@ func phpVersionForDir(dir string) (string, error) {
 // also walks up), otherwise a custom-FPM exec from a subdir would wrongly hit
 // the shared container.
 func fpmContainerForDir(dir, version string) string {
-	if site, _ := config.FindSiteByPath(siteRootFor(dir)); site != nil {
+	if site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir)); site != nil {
 		return podman.FPMContainerName(*site, version)
 	}
 	return "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"

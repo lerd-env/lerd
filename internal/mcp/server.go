@@ -4640,7 +4640,7 @@ func resolvePHPVersion(args map[string]any) (string, error) {
 		return v, nil
 	}
 	if defaultSitePath != "" {
-		if v, err := phpDet.DetectVersion(defaultSitePath); err == nil {
+		if v, err := phpDet.VersionForDir(defaultSitePath); err == nil {
 			return v, nil
 		}
 	}

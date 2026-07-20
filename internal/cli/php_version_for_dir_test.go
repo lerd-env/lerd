@@ -37,6 +37,107 @@ func TestPHPVersionForDir_PrefersTheRegisteredSite(t *testing.T) {
 	}
 }
 
+// makeWorktree wires up the .git bookkeeping git itself writes for a worktree:
+// a .git file in the checkout and a gitdir pointer under the parent's
+// .git/worktrees, which is what ParentSiteForWorktreeDir reads.
+func makeWorktree(t *testing.T, sitePath, wtPath, branch string) {
+	t.Helper()
+	book := filepath.Join(sitePath, ".git", "worktrees", branch)
+	if err := os.MkdirAll(book, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(wtPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(book, "gitdir"), []byte(filepath.Join(wtPath, ".git")+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtPath, ".git"), []byte("gitdir: "+book+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestPHPVersionForDir_NestedWorktreeOverride covers a worktree checked out inside
+// its parent site's directory. The site path matches by prefix, so without the
+// worktree check the parent's registry version wins and the CLI runs a different
+// PHP than the worktree's own vhost points at.
+func TestPHPVersionForDir_NestedWorktreeOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	site := filepath.Join(t.TempDir(), "app")
+	wt := filepath.Join(site, "wt", "feature")
+	makeWorktree(t, site, wt, "feature")
+
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePHPVersion(wt, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := phpVersionForDir(wt)
+	if err != nil {
+		t.Fatalf("phpVersionForDir: %v", err)
+	}
+	if got != "8.3" {
+		t.Errorf("phpVersionForDir = %q, want %q (the worktree's own pin)", got, "8.3")
+	}
+}
+
+// TestPHPVersionForDir_WorktreeSubdirOverride resolves from a directory inside the
+// worktree, since commands run from anywhere in the checkout.
+func TestPHPVersionForDir_WorktreeSubdirOverride(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	site := filepath.Join(t.TempDir(), "app")
+	wt := filepath.Join(site, "wt", "feature")
+	makeWorktree(t, site, wt, "feature")
+
+	sub := filepath.Join(wt, "app", "Http")
+	if err := os.MkdirAll(sub, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SetWorktreePHPVersion(wt, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := phpVersionForDir(sub)
+	if err != nil {
+		t.Fatalf("phpVersionForDir: %v", err)
+	}
+	if got != "8.3" {
+		t.Errorf("phpVersionForDir = %q, want %q (the worktree's own pin)", got, "8.3")
+	}
+}
+
+// TestPHPVersionForDir_WorktreeInheritsParent keeps inherit-by-default working: a
+// worktree with no override of its own runs the parent site's version.
+func TestPHPVersionForDir_WorktreeInheritsParent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	site := filepath.Join(t.TempDir(), "app")
+	wt := filepath.Join(site, "wt", "feature")
+	makeWorktree(t, site, wt, "feature")
+
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.5"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := phpVersionForDir(wt)
+	if err != nil {
+		t.Fatalf("phpVersionForDir: %v", err)
+	}
+	if got != "8.5" {
+		t.Errorf("phpVersionForDir = %q, want %q (inherited from the parent site)", got, "8.5")
+	}
+}
+
 // TestPHPVersionForDir_FallsBackToDetection keeps the unlinked case working: a
 // directory that is not a registered site still resolves from the project itself.
 func TestPHPVersionForDir_FallsBackToDetection(t *testing.T) {
