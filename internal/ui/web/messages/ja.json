@@ -1116,6 +1116,9 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "アプリ",
+  "databases_targetTesting": "テスト",
+  "databases_targetLabel": "これらの操作の対象となるデータベース",
   "databases_deleteConfirm": "Confirm delete",
   "databases_count": "{count} databases"
 }
