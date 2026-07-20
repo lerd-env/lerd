@@ -66,6 +66,8 @@ func NewInstallCmd() *cobra.Command {
 		"Preselect the DNS mode and skip the prompt: 'managed' (.test + HTTPS) or 'localhost' (.localhost, plain HTTP)")
 	cmd.Flags().Bool("from-update", false, "")
 	_ = cmd.Flags().MarkHidden("from-update")
+	cmd.Flags().Bool("unattended", false,
+		"Run non-interactively for package installs: no prompts, and skip the sudo-gated system steps that `lerd bootstrap` handles")
 	return cmd
 }
 
@@ -140,6 +142,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		noIPv6 = true
 	}
 	fromUpdate, _ := cmd.Flags().GetBool("from-update")
+	unattended, _ := cmd.Flags().GetBool("unattended")
 	dnsFlag, _ := cmd.Flags().GetString("dns")
 	// Captured before any step writes config: a missing file means this is a
 	// first install, the only time the DNS question is asked. Every later run
@@ -147,6 +150,14 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// dns:disable rather than by re-prompting.
 	_, cfgStatErr := os.Stat(config.GlobalConfigFile())
 	configExisted := cfgStatErr == nil
+	// Unattended runs are driven by a package maintainer script: reuse the
+	// non-interactive update path for prompts. The sudo-gated system steps are
+	// skipped here because `lerd bootstrap --system` performs them as root
+	// beforehand, and the mkcert CA's system-trust is done afterward by
+	// `lerd bootstrap --trust-ca`, so managed .test DNS works with no prompts.
+	if unattended {
+		fromUpdate = true
+	}
 	if noIPv6 {
 		podman.MarkIPv6Disabled("lerd")
 		feedback.Line("IPv6 disabled by user, lerd network will be v4-only")
@@ -163,8 +174,13 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	ensurePortsAvailable()
 
-	if err := ensureUnprivilegedPorts(); err != nil {
-		return err
+	// Skipped under --unattended: these prompt for sudo, which a package
+	// maintainer script cannot answer. `lerd bootstrap --system` set the
+	// unprivileged-port sysctl and enabled linger as root beforehand.
+	if !unattended {
+		if err := ensureUnprivilegedPorts(); err != nil {
+			return err
+		}
 	}
 	if err := ensurePortForwarding(); err != nil {
 		return err
@@ -194,8 +210,10 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// the session goes inactive and lerd appears to "stop working" until
 	// the next manual `lerd install`. This is the single biggest source of
 	// "DNS just stopped" issues reported in the wild — see #153.
-	if err := ensureSystemdLinger(); err != nil {
-		fmt.Printf("    WARN: %v\n", err)
+	if !unattended {
+		if err := ensureSystemdLinger(); err != nil {
+			fmt.Printf("    WARN: %v\n", err)
+		}
 	}
 
 	// 2. Podman network
@@ -403,10 +421,18 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// gold sudo header and swallow its "already installed" banner. Only a
 		// genuine first install announces the sudo step and runs interactively.
 		mkcertCmd := exec.Command(certs.MkcertPath(), "-install")
-		if certs.CATrusted() {
+		switch {
+		case unattended:
+			// No sudo available: generate the CA and trust it only in the user's
+			// NSS store (TRUST_STORES=nss skips the system store). The system
+			// store is handled afterward by `lerd bootstrap --trust-ca` as root.
+			mkcertCmd.Env = append(os.Environ(), "TRUST_STORES=nss")
 			mkcertCmd.Stdout = io.Discard
 			mkcertCmd.Stderr = io.Discard
-		} else {
+		case certs.CATrusted():
+			mkcertCmd.Stdout = io.Discard
+			mkcertCmd.Stderr = io.Discard
+		default:
 			feedback.Sudo("Installing mkcert CA")
 			mkcertCmd.Stdin = os.Stdin
 			mkcertCmd.Stdout = os.Stdout
@@ -436,7 +462,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 		// InstallSudoers prints its own gold "🔒 Installing DNS sudoers rule"
 		// line when it actually writes the drop-in, so no header is printed here.
-		dns.InstallSudoers() //nolint:errcheck
+		// Skipped under --unattended: `lerd bootstrap --system` already wrote the
+		// rule as root, and InstallSudoers would prompt for a password here.
+		if !unattended {
+			dns.InstallSudoers() //nolint:errcheck
+		}
 	} else {
 		feedback.Line("DNS disabled, skipping mkcert CA, dnsmasq and sudoers")
 	}
