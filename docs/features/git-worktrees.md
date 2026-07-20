@@ -163,6 +163,8 @@ The override is honoured wherever lerd materialises worktree state on disk: vhos
 
 Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), workers, and any custom container settings.
 
+On a site running its own per-site image (`runtime: fpm-custom`, built from a project Containerfile), a worktree is served from that image rather than the shared per-version container, and `lerd php` and `lerd composer` inside the checkout exec into it too. Whatever the Containerfile adds is therefore present on the branch exactly as it is on the parent, wherever the checkout lives.
+
 ### Per-worktree database
 
 By default every worktree shares the parent site's database. The dashboard's **Isolated DB** toggle and the `lerd worktree add` prompt opt the worktree into its own schema, named `<parent_db>_<sanitized_branch>` in the same service the parent uses (mysql, mariadb, or postgres). The worktree's env file is rewritten so its database-name key points at the new schema, and `db_isolated: true` is persisted to the worktree's `.lerd.yaml` so the choice travels with the branch. The env file, its format and the host/name keys are resolved from the framework definition, so Laravel's `DB_DATABASE` in `.env` and Magento's `db.connection.default.dbname` in `app/etc/env.php` are rewritten the same way.
