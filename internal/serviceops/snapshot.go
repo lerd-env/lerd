@@ -247,6 +247,11 @@ func ListSnapshots(service, database string, includeAll bool) ([]Snapshot, error
 // DeleteSnapshot removes a stored snapshot, erroring when it does not exist so
 // callers can report the miss clearly.
 func DeleteSnapshot(service, database, name string, allDatabases bool) error {
+	if !allDatabases {
+		if err := ValidateDatabaseName(database); err != nil {
+			return err
+		}
+	}
 	clean, err := sanitizeSnapshotName(name)
 	if err != nil {
 		return err
@@ -267,6 +272,11 @@ func DeleteSnapshot(service, database, name string, allDatabases bool) error {
 func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(PhaseEvent)) (*Snapshot, error) {
 	if emit == nil {
 		emit = func(PhaseEvent) {}
+	}
+	if !t.AllDatabases {
+		if err := ValidateDatabaseName(t.Database); err != nil {
+			return nil, err
+		}
 	}
 	dumpCmd, err := snapshotDumpCommand(t)
 	if err != nil {
@@ -345,6 +355,11 @@ func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(P
 func RestoreSnapshot(t SnapshotTarget, name string, emit func(PhaseEvent)) error {
 	if emit == nil {
 		emit = func(PhaseEvent) {}
+	}
+	if !t.AllDatabases {
+		if err := ValidateDatabaseName(t.Database); err != nil {
+			return err
+		}
 	}
 	restoreCmd, err := snapshotRestoreCommand(t)
 	if err != nil {

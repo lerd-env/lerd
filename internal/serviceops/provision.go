@@ -3,6 +3,7 @@ package serviceops
 import (
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 
@@ -18,6 +19,39 @@ import (
 func escapeIdentBacktick(name string) string { return strings.ReplaceAll(name, "`", "``") }
 func escapeIdentDQuote(name string) string   { return strings.ReplaceAll(name, `"`, `""`) }
 func escapeSQLLiteral(v string) string       { return strings.ReplaceAll(v, "'", "''") }
+
+// escapeMySQLLiteral is escapeSQLLiteral for MySQL and MariaDB, which treat a
+// backslash as an escape character unless NO_BACKSLASH_ESCAPES is set. Doubling
+// the backslash first stops `\'` from escaping the doubled quote and ending the
+// literal. PostgreSQL keeps escapeSQLLiteral: standard_conforming_strings makes
+// a backslash ordinary, so doubling it there would corrupt the value.
+func escapeMySQLLiteral(v string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), "'", "''")
+}
+
+// databaseNamePattern is the strict shape a database name must have to reach a
+// path or SQL sink: it must start with a letter, digit or underscore and carry
+// only those plus dashes, which covers every name lerd generates while excluding
+// path separators, dot segments and every SQL metacharacter.
+var databaseNamePattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]*$`)
+
+// maxDatabaseNameLen is MySQL's identifier limit, the tighter of the two engines.
+const maxDatabaseNameLen = 64
+
+// ValidateDatabaseName guards the sinks that assume a slugged name: the snapshot
+// paths built with filepath.Join and the information_schema lookups built by
+// string interpolation.
+func ValidateDatabaseName(name string) error {
+	switch {
+	case name == "":
+		return fmt.Errorf("a database name is required")
+	case len(name) > maxDatabaseNameLen:
+		return fmt.Errorf("database name is longer than %d characters", maxDatabaseNameLen)
+	case !databaseNamePattern.MatchString(name):
+		return fmt.Errorf("invalid database name %q: use letters, digits, underscores and dashes only", name)
+	}
+	return nil
+}
 
 // CreateDatabase creates dbName inside the named service container if it does
 // not already exist. svc is the service name (e.g. "mysql", "mysql-5-6",
@@ -40,7 +74,7 @@ func CreateDatabase(svc, name string) (bool, error) {
 		var lastErr error
 		for _, bin := range binaries {
 			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
-				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeSQLLiteral(name)))
+				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeMySQLLiteral(name)))
 			out, err := check.Output()
 			if err != nil {
 				lastErr = err
@@ -95,7 +129,7 @@ func DropDatabase(svc, name string) (bool, error) {
 		var lastErr error
 		for _, bin := range binaries {
 			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
-				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeSQLLiteral(name)))
+				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeMySQLLiteral(name)))
 			out, err := check.Output()
 			if err != nil {
 				lastErr = err
