@@ -3,7 +3,8 @@ import {
   lspWorkspaceEditToMonaco,
   isBlankCompletionPrefix,
   stripSyntheticHeader,
-  withImportBlankLine
+  withImportBlankLine,
+  lspSemanticTokensToMonaco
 } from '$lib/lsp';
 
 // Mirrors the production fromLspRange: LSP 0-based -> Monaco 1-based, line 0
@@ -128,5 +129,48 @@ describe('stripSyntheticHeader', () => {
 
   it('leaves headerless text untouched', () => {
     expect(stripSyntheticHeader('$x = 1;\n')).toBe('$x = 1;\n');
+  });
+});
+
+describe('lspSemanticTokensToMonaco', () => {
+  // Decode a Monaco token stream back to absolute [line, char, len, type, mods]
+  // tuples so assertions read in editor coordinates, not deltas.
+  const decode = (data: Uint32Array) => {
+    const out: number[][] = [];
+    let line = 0, char = 0;
+    for (let i = 0; i + 4 < data.length; i += 5) {
+      if (data[i] === 0) char += data[i + 1];
+      else { line += data[i]; char = data[i + 1]; }
+      out.push([line, char, data[i + 2], data[i + 3], data[i + 4]]);
+    }
+    return out;
+  };
+
+  it('returns an empty array for missing or short data', () => {
+    expect(lspSemanticTokensToMonaco(undefined)).toEqual(new Uint32Array(0));
+    expect(lspSemanticTokensToMonaco([])).toEqual(new Uint32Array(0));
+    expect(lspSemanticTokensToMonaco([0, 1, 2, 3])).toEqual(new Uint32Array(0));
+  });
+
+  it('shifts every token up one line out of synthetic-header space', () => {
+    // One token on LSP line 1 (the user's first line), char 4, len 3.
+    const out = lspSemanticTokensToMonaco([1, 4, 3, 8, 0]);
+    expect(decode(out)).toEqual([[0, 4, 3, 8, 0]]);
+  });
+
+  it('drops tokens the server pins to the synthetic <?php line (LSP line 0)', () => {
+    // First token on line 0 (synthetic), second on line 2 at char 6.
+    const out = lspSemanticTokensToMonaco([0, 0, 5, 15, 0, 2, 6, 3, 8, 0]);
+    expect(decode(out)).toEqual([[1, 6, 3, 8, 0]]);
+  });
+
+  it('preserves same-line char deltas and re-bases across lines', () => {
+    // LSP: line 1 char 0 (len 3), line 1 char 8 (len 4), line 3 char 2 (len 5).
+    const out = lspSemanticTokensToMonaco([1, 0, 3, 8, 0, 0, 8, 4, 8, 0, 2, 2, 5, 8, 0]);
+    expect(decode(out)).toEqual([
+      [0, 0, 3, 8, 0],
+      [0, 8, 4, 8, 0],
+      [2, 2, 5, 8, 0]
+    ]);
   });
 });
