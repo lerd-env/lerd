@@ -130,6 +130,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"check_updates":       execServiceCheckUpdates,
 	},
 	"db": {
+		"list":            execDBList,
 		"set":             execDbSet,
 		"move":            execDbMove,
 		"create":          execDBCreate,
@@ -365,11 +366,11 @@ func serviceTool() mcpTool {
 func dbTool() mcpTool {
 	return mcpTool{
 		Name:        "db",
-		Description: "Database operations. action: set (pick sqlite/mysql/postgres/family alternate), move (between same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete.",
+		Description: "Database operations. action: list (an engine's databases), set (pick sqlite/mysql/postgres/family alternate), move (between same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":        {Type: "string", Enum: []string{"set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete"}},
+				"action":        {Type: "string", Enum: []string{"list", "set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete"}},
 				"path":          {Type: "string", Description: "Project root. Defaults to cwd."},
 				"database":      {Type: "string", Description: "set: target db engine. Others: db name (defaults DB_DATABASE)."},
 				"from":          {Type: "string", Description: "move: source service."},
@@ -379,7 +380,7 @@ func dbTool() mcpTool {
 				"file":          {Type: "string", Description: "import: SQL dump path."},
 				"output":        {Type: "string", Description: "export: output file (default <database>.sql)."},
 				"name":          {Type: "string", Description: "snapshot/restore/snapshot_delete: snapshot name. create: db name."},
-				"service":       {Type: "string", Description: "snapshot ops: DB service override."},
+				"service":       {Type: "string", Description: "list/snapshot: DB service override."},
 				"all_databases": {Type: "boolean", Description: "snapshot ops: cover whole service."},
 			},
 			Required: []string{"action"},

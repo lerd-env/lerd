@@ -131,7 +131,7 @@ func databaseEngine(name string) dbEngineResponse {
 	if base.Status != "active" {
 		return eng
 	}
-	command := introspectCommand(name)
+	command := serviceops.IntrospectCommand(name)
 	if command == "" {
 		return eng
 	}
@@ -156,26 +156,6 @@ func databaseEngine(name string) dbEngineResponse {
 		eng.Databases = append(eng.Databases, entry)
 	}
 	return eng
-}
-
-// introspectCommand resolves the engine's list-databases query, preferring the
-// preset it was installed from so an engine installed before the introspect
-// field existed still gets it from the current preset. Falls back to the stored
-// definition for a genuinely user-defined engine.
-func introspectCommand(name string) string {
-	presetName := name
-	if custom, err := config.LoadCustomService(name); err == nil {
-		if custom.Introspect != nil {
-			return custom.Introspect.ListDatabases
-		}
-		if custom.Preset != "" {
-			presetName = custom.Preset
-		}
-	}
-	if p, err := config.LoadPreset(presetName); err == nil && p.Introspect != nil {
-		return p.Introspect.ListDatabases
-	}
-	return ""
 }
 
 // handleDatabases lists every installed database engine and its databases.

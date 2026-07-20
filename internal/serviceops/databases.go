@@ -31,6 +31,26 @@ type DatabaseInfo struct {
 // picks whichever variable applies and ignores the rest.
 func introspectEnv() []string { return []string{"MYSQL_PWD=lerd", "PGPASSWORD=lerd"} }
 
+// IntrospectCommand resolves an engine's list-databases query, preferring the
+// preset it was installed from so an engine installed before the introspect
+// field existed still gets it from the current preset. Falls back to the stored
+// definition for a genuinely user-defined engine.
+func IntrospectCommand(service string) string {
+	presetName := service
+	if custom, err := config.LoadCustomService(service); err == nil {
+		if custom.Introspect != nil {
+			return custom.Introspect.ListDatabases
+		}
+		if custom.Preset != "" {
+			presetName = custom.Preset
+		}
+	}
+	if p, err := config.LoadPreset(presetName); err == nil && p.Introspect != nil {
+		return p.Introspect.ListDatabases
+	}
+	return ""
+}
+
 // ListDatabases runs the preset-declared introspection command inside the
 // service container and parses its "name<TAB>size_bytes" rows. The command is
 // engine-specific and lives in the service store, so this stays framework
