@@ -298,15 +298,19 @@ func BuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	_, err = buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	return err
 }
 
-// BuildFPMImageTo builds the PHP-FPM image writing output to w.
+// BuildFPMImageTo builds the PHP-FPM image writing output to w, reporting
+// whether an image was actually produced. Callers need that answer: a rebuild
+// leaves any container already running on the old image, and starting an active
+// unit is a no-op, so only a caller that knows the image changed can bounce it.
 // When local is false, it attempts to pull a pre-built base image from ghcr.io first.
-func BuildFPMImageTo(version string, local bool, w io.Writer) error {
+func BuildFPMImageTo(version string, local bool, w io.Writer) (bool, error) {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
-		return err
+		return false, err
 	}
 	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
 }
@@ -318,7 +322,8 @@ func RebuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	_, err = buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	return err
 }
 
 // RebuildFPMImageTo force-rebuilds the PHP-FPM image writing output to w.
@@ -328,7 +333,8 @@ func RebuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
+	_, err = buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
+	return err
 }
 
 // baseContainerfileHash returns a 12-character SHA-256 prefix of the Containerfile
@@ -433,7 +439,7 @@ func pullErrLine(s string) string {
 	return last
 }
 
-func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) error {
+func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) (bool, error) {
 	imageName := FPMImageName(version)
 
 	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
@@ -441,19 +447,19 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
 	canonicalHash, hashErr := ContainerfileHash()
 	if hashErr != nil {
-		return fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
+		return false, fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
 	}
 	customHash := customSetHash(customExts, extDeps, packages)
 
 	if !force && fpmImageCurrent(imageName, canonicalHash, customHash) {
-		return nil
+		return false, nil
 	}
 
 	fmt.Fprintf(w, "\n  Building PHP %s image...\n", version)
 
 	tmp, err := os.MkdirTemp("", "lerd-php-build-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer os.RemoveAll(tmp)
 
@@ -479,11 +485,11 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	// doesn't need it).
 	{
 		if err := writeDevtoolsSource(tmp); err != nil {
-			return fmt.Errorf("staging devtools source: %w", err)
+			return false, fmt.Errorf("staging devtools source: %w", err)
 		}
 		tmpl, tmplErr := GetQuadletTemplate("lerd-php-fpm.Containerfile")
 		if tmplErr != nil {
-			return tmplErr
+			return false, tmplErr
 		}
 		containerfile = strings.ReplaceAll(tmpl, "{{.Version}}", version)
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
@@ -495,7 +501,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 build:
 	cfPath := filepath.Join(tmp, "Containerfile")
 	if err := os.WriteFile(cfPath, []byte(containerfile), 0644); err != nil {
-		return err
+		return false, err
 	}
 
 	buildArgs = append(buildArgs, "-f", cfPath, tmp)
@@ -503,7 +509,7 @@ build:
 	cmd.Stdout = w
 	cmd.Stderr = w
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("building PHP %s image: %w", version, err)
+		return false, fmt.Errorf("building PHP %s image: %w", version, err)
 	}
 
 	// Stamp the hash only after a real build — callers that no-op when the
@@ -518,7 +524,7 @@ build:
 	if OnImageRebuilt != nil {
 		OnImageRebuilt()
 	}
-	return nil
+	return true, nil
 }
 
 // extApkDeps maps a custom PHP extension to the Alpine packages its build needs.

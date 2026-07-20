@@ -336,6 +336,17 @@ func ensureFPMQuadlet(phpVersion string) error {
 	return ensureFPMQuadletTo(phpVersion, os.Stdout)
 }
 
+// Seams for the ensure path, swappable in tests. Every step shells out to
+// podman or writes real state, so a test of the start/restart decision alone
+// would otherwise build a container storage tree to reach it.
+var (
+	writeFPMQuadlet = podman.WriteFPMQuadlet
+	buildFPMImageTo = podman.BuildFPMImageTo
+	ensureXdebugIni = podman.EnsureXdebugIni
+	startUnitFn     = podman.StartUnit
+	restartUnitFn   = podman.RestartUnit
+)
+
 // ensureFPMQuadletTo is like ensureFPMQuadlet but writes build output to w.
 func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	versionShort := strings.ReplaceAll(phpVersion, ".", "")
@@ -343,15 +354,22 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 
 	// Write the unit file first so the version is registered in lerd status even
 	// if the image build fails — lerd start will rebuild the image on the next run.
-	if err := podman.WriteFPMQuadlet(phpVersion); err != nil {
+	if err := writeFPMQuadlet(phpVersion); err != nil {
 		return err
 	}
 
-	if err := podman.BuildFPMImageTo(phpVersion, false, w); err != nil {
+	rebuilt, err := buildFPMImageTo(phpVersion, false, w)
+	if err != nil {
 		return fmt.Errorf("building FPM image for PHP %s: %w", phpVersion, err)
 	}
 
-	_ = podman.EnsureXdebugIni(phpVersion)
+	_ = ensureXdebugIni(phpVersion)
 
-	return podman.StartUnit(unitName)
+	// A start is a no-op on an already-active unit, so a version whose image was
+	// just rebuilt here (the deferred half of a php:ext / php:pkg change) would
+	// keep serving the old image while every status surface reported the new set.
+	if rebuilt {
+		return restartUnitFn(unitName)
+	}
+	return startUnitFn(unitName)
 }

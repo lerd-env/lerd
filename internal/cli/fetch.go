@@ -3,6 +3,8 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -72,18 +74,47 @@ func runFetch(cmd *cobra.Command, args []string) error {
 		versions = SupportedPHPVersions
 	}
 
+	var rebuiltMu sync.Mutex
+	var rebuilt []string
 	jobs := make([]BuildJob, len(versions))
 	for i, v := range versions {
 		ver := v
 		jobs[i] = BuildJob{
 			Label: "PHP " + ver,
-			Run:   func(w io.Writer) error { return podman.BuildFPMImageTo(ver, local, w) },
+			Run: func(w io.Writer) error {
+				changed, err := podman.BuildFPMImageTo(ver, local, w)
+				if changed {
+					rebuiltMu.Lock()
+					rebuilt = append(rebuilt, ver)
+					rebuiltMu.Unlock()
+				}
+				return err
+			},
 		}
 	}
 
 	if err := RunParallel(jobs); err != nil {
 		feedback.Warn("some images failed to build: %v", err)
 	}
+	restartRebuiltFPMUnits(rebuilt)
 	feedback.Done("all requested PHP images ready")
 	return nil
+}
+
+// restartRebuiltFPMUnits bounces the containers of versions whose image this run
+// replaced, so a fetch that quietly rebuilt a stale image doesn't leave the
+// running container on the image it superseded. Versions that aren't up are left
+// alone: fetch pre-builds images and is not a reason to start anything.
+func restartRebuiltFPMUnits(versions []string) {
+	for _, v := range versions {
+		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
+		if running, _ := fpmContainerRunning(unit); !running {
+			continue
+		}
+		if err := restartUnitFn(unit); err != nil {
+			feedback.Warn("restart %s: %v", unit, err)
+		} else {
+			feedback.Note("restarted " + unit)
+		}
+	}
 }

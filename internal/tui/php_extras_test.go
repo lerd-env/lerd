@@ -39,4 +39,12 @@ func TestPHPExtrasSummary(t *testing.T) {
 	if got := phpExtrasSummary(cfg, "7.4"); got != "chromium · not in this image: mongodb" {
 		t.Errorf("partial version = %q, want the gap named without a cause", got)
 	}
+
+	// A version that was measured and carried none of the set is not the same
+	// as one that was never measured. It has been rebuilt already, so pointing
+	// at php:rebuild sends the user round a loop that cannot change the answer.
+	cfg.SetRealised("8.0", config.RealisedPHPSet{Hash: "measured"})
+	if got := phpExtrasSummary(cfg, "8.0"); got != "none of the declared set is in this image" {
+		t.Errorf("measured-but-empty version = %q, want no rebuild hint", got)
+	}
 }

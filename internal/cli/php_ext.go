@@ -16,6 +16,10 @@ import (
 
 var validExtNameRe = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+// rebuildFPMImage is a seam so the add path's revert-on-failure can be tested
+// without building an image.
+var rebuildFPMImage = podman.RebuildFPMImage
+
 // NewPhpExtCmd returns the php:ext parent command.
 func NewPhpExtCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -71,19 +75,33 @@ func newPhpExtAddCmd() *cobra.Command {
 			if len(deps) > 0 {
 				feedback.Note("alpine packages: " + strings.Join(deps, " "))
 			}
-			if err := podman.RebuildFPMImage(version, false); err != nil {
-				return err
-			}
-
 			// The build records what this version realised, so the revert
 			// re-reads rather than saving a copy loaded before the build.
+			revert := func() {
+				if saveErr := config.UpdateGlobal(func(c *config.GlobalConfig) {
+					c.RemoveExtension(ext)
+					c.SetExtApkDeps(ext, nil)
+				}); saveErr != nil {
+					feedback.Warn("reverting config: %v", saveErr)
+				}
+			}
+
+			// A failed rebuild has to revert too, or the extension stays declared,
+			// every version's image reads as stale, and the build that cannot
+			// succeed is retried on every command that follows.
+			if err := rebuildFPMImage(version, false); err != nil {
+				if alreadyDeclared {
+					return err
+				}
+				revert()
+				return fmt.Errorf("rebuild failed (config reverted): %w", err)
+			}
+
 			if err := podman.VerifyExtensionLoaded(version, ext); err != nil {
 				if alreadyDeclared {
 					return fmt.Errorf("extension %q did not load on PHP %s: %w", ext, version, err)
 				}
-				if saveErr := config.UpdateGlobal(func(c *config.GlobalConfig) { c.RemoveExtension(ext) }); saveErr != nil {
-					feedback.Warn("reverting config: %v", saveErr)
-				}
+				revert()
 				return fmt.Errorf("extension %q was not installed (config reverted): %w", ext, err)
 			}
 
