@@ -92,6 +92,24 @@ func (r *DoctorReport) AutoFixes() []Finding {
 	return out
 }
 
+// RequiredAutoFixes returns the automatic fixes attached to a real problem, and
+// OptionalAutoFixes those hanging off an informational finding. An info finding
+// is a standing offer, never a repair the user still owes.
+func (r *DoctorReport) RequiredAutoFixes() []Finding { return r.autoFixes(false) }
+
+// OptionalAutoFixes returns the automatic fixes attached to info findings.
+func (r *DoctorReport) OptionalAutoFixes() []Finding { return r.autoFixes(true) }
+
+func (r *DoctorReport) autoFixes(info bool) []Finding {
+	var out []Finding
+	for _, f := range r.AutoFixes() {
+		if (f.Status == "info") == info {
+			out = append(out, f)
+		}
+	}
+	return out
+}
+
 // ManualFixes returns the findings whose repair needs sudo, so the CLI can list
 // their commands for the user to run.
 func (r *DoctorReport) ManualFixes() []Finding {

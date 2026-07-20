@@ -106,10 +106,55 @@ func TestRunDoctorFixAppliesAndReChecks(t *testing.T) {
 	if !strings.Contains(out, "Applied 1 fix") {
 		t.Fatalf("expected applied summary, got: %q", out)
 	}
-	if !strings.Contains(out, "no automatic fixes remain") {
+	if !strings.Contains(out, "nothing left to repair") {
 		t.Fatalf("expected clean re-check, got: %q", out)
 	}
 	if !strings.Contains(out, "sudo apt install netavark") {
 		t.Fatalf("manual fixes should still be listed, got: %q", out)
+	}
+}
+
+func TestRunDoctorFixListsInfoFindingsAsOptional(t *testing.T) {
+	var buf bytes.Buffer
+	rep := reportWith(
+		Finding{Name: "data dir", Status: "fail", Fix: autoFix(fixMkdir, "/x", "create the data directory")},
+		Finding{Name: "Reclaimable disk", Status: "info", Fix: autoFix(fixCleanup, "", "reclaim disk space (lerd cleanup)")},
+	)
+	if err := runDoctorFix(&buf, rep, false, true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	req := strings.Index(out, "create the data directory")
+	opt := strings.Index(out, "Optional")
+	disk := strings.Index(out, "reclaim disk space")
+	if req < 0 || opt < 0 || disk < 0 {
+		t.Fatalf("expected required and optional sections, got: %q", out)
+	}
+	if !(req < opt && opt < disk) {
+		t.Fatalf("optional fixes should come after the required ones, got: %q", out)
+	}
+}
+
+func TestRunDoctorFixReCheckIgnoresOptionalFixes(t *testing.T) {
+	// A leftover info finding is not a repair the user still owes, so the
+	// re-check must not report it as outstanding on every run.
+	orig := reCheckReport
+	reCheckReport = func() (DoctorReport, error) {
+		return reportWith(Finding{Name: "Reclaimable disk", Status: "info", Fix: autoFix(fixCleanup, "", "reclaim disk space")}), nil
+	}
+	defer func() { reCheckReport = orig }()
+
+	dir := filepath.Join(t.TempDir(), "quadlets")
+	var buf bytes.Buffer
+	rep := reportWith(Finding{Name: "service config dir", Status: "fail", Fix: autoFix(fixMkdir, dir, "create the service config directory")})
+	if err := runDoctorFix(&buf, rep, true, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+	if strings.Contains(out, "still needed") {
+		t.Fatalf("info finding must not count as an outstanding fix, got: %q", out)
+	}
+	if !strings.Contains(out, "nothing left to repair") {
+		t.Fatalf("expected a clean re-check, got: %q", out)
 	}
 }

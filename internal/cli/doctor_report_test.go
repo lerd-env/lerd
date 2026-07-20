@@ -108,6 +108,23 @@ func TestDoctorReportPartitionsFixesByTier(t *testing.T) {
 	}
 }
 
+func TestDoctorReportSplitsRequiredFromOptionalAutoFixes(t *testing.T) {
+	rep := &DoctorReport{}
+	rep.add(Finding{Name: "data dir", Status: "fail"})
+	rep.fixLast(autoFix(fixMkdir, "/x", "create the data directory"))
+	rep.add(Finding{Name: "Reclaimable disk", Status: "info"})
+	rep.fixLast(autoFix(fixCleanup, "", "reclaim disk space (lerd cleanup)"))
+
+	req := rep.RequiredAutoFixes()
+	if len(req) != 1 || req[0].Name != "data dir" {
+		t.Fatalf("RequiredAutoFixes returned %+v, want only data dir", req)
+	}
+	opt := rep.OptionalAutoFixes()
+	if len(opt) != 1 || opt[0].Name != "Reclaimable disk" {
+		t.Fatalf("OptionalAutoFixes returned %+v, want only Reclaimable disk", opt)
+	}
+}
+
 func TestManualFixTier(t *testing.T) {
 	if manualFix.Tier != FixManual {
 		t.Fatalf("manualFix tier = %d, want FixManual", manualFix.Tier)
