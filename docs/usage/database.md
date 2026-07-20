@@ -42,7 +42,7 @@ A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to i
 
 Each database engine's detail page in the web UI (Services → pick MySQL, MariaDB, PostgreSQL or MongoDB) opens on a **Databases** tab that shows the databases inside that engine as a grid of cards, each with its on-disk size. It surfaces the same operations as the CLI without leaving the browser:
 
-- **Create** a database inline from the field above the grid.
+- **Create** a database inline from the field above the grid. Names accepted here are limited to letters, digits, underscores and dashes, up to 64 characters, which covers every name lerd generates and keeps the value safe to use as both a path segment and a SQL identifier.
 - **Export** a database to a `.sql` dump, or **import** a dump into one, from the card.
 - **Snapshots** are managed on the card of the database they belong to: take a snapshot, restore one (with a confirmation, since a restore overwrites the current data), delete one (also confirmed), or download one as a plain `.sql` dump. A snapshot is keyed on the engine and database it was taken from, never on a site, so it lives with the database rather than on the site page. A named snapshot gets a UTC timestamp appended (`nightly-20260719-135558`), so repeated snapshots of one name never collide; the list shows the parsed time and sorts newest first.
 - **Copy connection string** builds a ready-to-paste DSN for that specific database, which works whether or not an admin UI is installed.

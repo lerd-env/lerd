@@ -250,10 +250,19 @@ func decodeDBBody(r *http.Request) (database, name string, ok bool) {
 	return strings.TrimSpace(body.Database), strings.TrimSpace(body.Name), true
 }
 
+// requireDatabaseName rejects a database name that could escape its snapshot
+// path or its SQL quoting, so nothing unvalidated reaches serviceops.
+func requireDatabaseName(w http.ResponseWriter, database string) bool {
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		writeDBError(w, err.Error())
+		return false
+	}
+	return true
+}
+
 func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string) {
 	_, name, ok := decodeDBBody(r)
-	if !ok || name == "" {
-		writeDBError(w, "a database name is required")
+	if !ok || !requireDatabaseName(w, name) {
 		return
 	}
 	created, err := serviceops.CreateDatabase(service, name)
@@ -270,8 +279,7 @@ func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string
 
 func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) {
 	_, name, ok := decodeDBBody(r)
-	if !ok || name == "" {
-		writeDBError(w, "a database name is required")
+	if !ok || !requireDatabaseName(w, name) {
 		return
 	}
 	if _, err := serviceops.DropDatabase(service, name); err != nil {
@@ -283,8 +291,7 @@ func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) 
 
 func handleSnapshotCreate(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" {
-		writeDBError(w, "a database is required")
+	if !ok || !requireDatabaseName(w, database) {
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
@@ -297,8 +304,11 @@ func handleSnapshotCreate(w http.ResponseWriter, r *http.Request, service string
 
 func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" || name == "" {
+	if !ok || name == "" {
 		writeDBError(w, "a database and snapshot name are required")
+		return
+	}
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
@@ -311,8 +321,11 @@ func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service strin
 
 func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" || name == "" {
+	if !ok || name == "" {
 		writeDBError(w, "a database and snapshot name are required")
+		return
+	}
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	if err := serviceops.DeleteSnapshot(service, database, name, false); err != nil {
@@ -326,8 +339,8 @@ func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string
 // downloadable file.
 func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
-	if database == "" {
-		http.Error(w, "a database is required", http.StatusBadRequest)
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
@@ -347,8 +360,12 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
-	if database == "" || name == "" {
+	if name == "" {
 		http.Error(w, "a database and snapshot name are required", http.StatusBadRequest)
+		return
+	}
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.Header().Set("Content-Type", "application/sql")
@@ -362,8 +379,7 @@ func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string
 // upload is streamed into the engine, so a large dump never buffers on disk.
 func handleDatabaseImport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.FormValue("database"))
-	if database == "" {
-		writeDBError(w, "a database is required")
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	file, _, err := r.FormFile("file")

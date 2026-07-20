@@ -152,10 +152,17 @@ func ExportDatabase(service, database string, w io.Writer) error {
 // ExportSnapshot streams a snapshot's stored dump to w, decompressed, so it
 // downloads as a plain .sql the same as a live export rather than a .gz.
 func ExportSnapshot(service, database, name string, w io.Writer) error {
-	dumpPath := filepath.Join(snapshotDir(service, database, name, false), snapshotDumpFile)
-	f, err := os.Open(dumpPath)
+	if err := ValidateDatabaseName(database); err != nil {
+		return err
+	}
+	clean, err := sanitizeSnapshotName(name)
 	if err != nil {
-		return fmt.Errorf("opening snapshot: %w", err)
+		return err
+	}
+	dumpPath := filepath.Join(snapshotDir(service, database, clean, false), snapshotDumpFile)
+	f, openErr := os.Open(dumpPath)
+	if openErr != nil {
+		return fmt.Errorf("opening snapshot: %w", openErr)
 	}
 	defer f.Close()
 	gz, err := gzip.NewReader(f)
