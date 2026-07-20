@@ -143,8 +143,9 @@ const (
 	// references any more (upgrade leftovers). Still lerd-scoped, so it is safe to
 	// run unattended; this is the daily watcher's tier.
 	ScopeManaged
-	// ScopeDeep additionally reclaims every remaining dangling image on the host,
-	// foreign ones included. Interactive only (`lerd cleanup --deep`).
+	// ScopeDeep additionally reclaims every remaining dangling image on the host
+	// and every unreferenced catalog image regardless of who pulled it, foreign
+	// ones included. Interactive only, and the default for `lerd cleanup`.
 	ScopeDeep
 )
 

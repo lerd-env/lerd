@@ -27,9 +27,9 @@ var (
 	// candidate, so the per-quadlet image reads are skipped) is assertable.
 	installedServiceImages = realInstalledServiceImages
 
-	// loadPulledImages is the seam onto lerd's pull ledger: the catalog reap only
-	// removes a tagged image whose ref lerd recorded pulling, so a user's own copy
-	// of a catalog image lerd never touched is left alone.
+	// loadPulledImages is the seam onto lerd's pull ledger. The managed tier gates
+	// the catalog reap on it; the deep tier passes ignoreLedger and reaps any
+	// unreferenced catalog image, a user's own copy included.
 	loadPulledImages = imgledger.Load
 )
 
