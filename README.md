@@ -14,7 +14,7 @@
 
 ![Lerd dashboard tour](docs/assets/screenshots/tour.gif)
 
-Lerd runs Nginx, PHP-FPM, and your services as rootless Podman containers,
+Lerd runs Nginx, PHP-FPM, and your services as rootless [Podman](https://podman.io) containers,
 designed for PHP developers on Linux and macOS, and on Windows through WSL2 (beta).
 No Docker. No sudo. No system pollution. Just `lerd link` and your project
 is live at `project.test` with HTTPS.
@@ -33,7 +33,7 @@ If you're a PHP developer on Linux and want frictionless local development — a
 - ✏️ **Edit config in the browser** — per-site and global nginx, per-version `php.ini`, `.env` files, and database/service runtime tuning, each validated (`nginx -t` where it applies), with timestamped backups and one-click restore
 - 🧪 **Tinker tab** - in-browser PHP REPL per site with project-aware autocomplete, hover, diagnostics and semantic highlighting powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp) (your models, relationships and Builder chains resolve alongside composer helpers and PHP built-ins), plus a collapsible tree view for `dump()` output. Works on Laravel (`artisan tinker`), Symfony, and any composer-based PHP project
 - 🛰️ **Debug window** that intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI (`D` key), MCP, and `lerd dump tail`, scoped per site and per worktree branch, with the original response left clean unless you flip passthrough on. The same window captures SQL queries with N+1 and slow-query detection, plus outgoing mail, rendered views, dispatched events, queued jobs, and outgoing HTTP, across both Laravel and Symfony, with optional opt-in capture of queue-worker activity
-- 🔥 **SPX profiler** with one-click on/off, every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard. No FPM restart, no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command
+- 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off, every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard. No FPM restart, no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command
 - 📈 **Request timing analytics** per site, a durable view of typical and p95 response times, throughput, error rate, and the slowest routes ranked by recent p95 with one-click profiling, surfaced as a site-doctor warning and an opt-in slow-route push notification, all read from real traffic. Agents get the same signal over MCP with `route_timing` and `optimize_route`, which joins a slow route to the N+1 queries and CPU hotspots behind it
 - 🩺 **Site doctor** — framework-agnostic health checks (env file and drift, application key, composer/node install and lockfile state, security audits, database presence, PHP version range) plus each framework's own store-declared checks, from the web UI, the TUI, `lerd site:doctor`, and MCP, with one-click fixes for dependency and audit findings
 - 💻 **Terminal dashboard** (`lerd tui`) - btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort — the same operations surface as the web UI, for tmux and SSH workflows
@@ -203,6 +203,18 @@ lerd service preset pgadmin             # install a store-only preset
 - [Frameworks](https://lerd.sh/usage/frameworks)
 - [Services](https://lerd.sh/usage/services)
 - [Command Reference](https://lerd.sh/reference/commands)
+
+## Built on
+
+Lerd stands on a set of excellent open-source projects it bundles or fetches to power the experience:
+
+- [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp) - the PHP language server behind tinker autocomplete, diagnostics and semantic highlighting
+- [Monaco](https://github.com/microsoft/monaco-editor) - the editor engine for every in-browser editing surface
+- [php-spx](https://github.com/NoiseByNorthwest/php-spx) - the profiler behind the SPX flame graphs
+- [mkcert](https://github.com/FiloSottile/mkcert) - the local CA that backs `.test` HTTPS
+- [fnm](https://github.com/Schniz/fnm) - the per-project Node version manager
+- [Composer](https://getcomposer.org) - fetched on the host for dependency operations
+- [Starship](https://starship.rs) - the prompt in the container shell drop-in
 
 ## License
 
