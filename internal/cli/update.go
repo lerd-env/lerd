@@ -98,6 +98,13 @@ func runUpdate(currentVersion string, beta bool) error {
 		}
 	}
 
+	// A deb/rpm install lives under /usr and is owned by the package manager;
+	// self-replacing it would fight apt/dnf, so defer to them.
+	if self, err := selfPath(); err == nil && isSystemPackageManaged(self) {
+		fmt.Printf("\nThis lerd is managed by your system package manager (%s).\nUpdate it with:\n\n  sudo apt upgrade\n\n", self)
+		return nil
+	}
+
 	// Ask for confirmation.
 	if !feedback.Confirm("Update to v"+lat+"?", true) {
 		feedback.Line("update cancelled")
@@ -485,6 +492,14 @@ func downloadArchive(ver, filename, archive string) error {
 // than self-replacing files brew owns.
 func isHomebrewManaged(path string) bool {
 	return strings.Contains(path, "/Cellar/")
+}
+
+// isSystemPackageManaged reports whether the binary lives under a system prefix
+// owned by a package manager. lerd's own installers use ~/.local/bin, so a
+// binary under /usr came from the deb/rpm and must be updated with apt/dnf, not
+// by self-replacing files the package manager owns.
+func isSystemPackageManaged(path string) bool {
+	return strings.HasPrefix(path, "/usr/")
 }
 
 func selfPath() (string, error) {

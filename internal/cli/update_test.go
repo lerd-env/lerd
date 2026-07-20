@@ -13,6 +13,26 @@ import (
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 )
 
+// ── package-managed detection ─────────────────────────────────────────────────
+
+func TestIsSystemPackageManaged(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/usr/bin/lerd", true},
+		{"/usr/local/bin/lerd", true},
+		{"/home/george/.local/bin/lerd", false},
+		{"/opt/lerd/lerd", false},
+		{"/tmp/lerd", false},
+	}
+	for _, c := range cases {
+		if got := isSystemPackageManaged(c.path); got != c.want {
+			t.Errorf("isSystemPackageManaged(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}
+
 // ── stripV ───────────────────────────────────────────────────────────────────
 
 func TestStripV(t *testing.T) {
