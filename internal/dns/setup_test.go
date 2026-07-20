@@ -299,6 +299,21 @@ func TestLinuxSudoers_grantsDummyLinkOps(t *testing.T) {
 	}
 }
 
+// sudo matches a rule against the literal path secure_path resolves the command
+// to, without following symlinks: on Ubuntu that is /usr/sbin/ip, which the
+// /usr/bin rule did not match even though it is a symlink to exactly that file,
+// so Teardown's link delete prompted for a password instead of running granted.
+func TestLinuxSudoers_grantsIpFromEveryLocationItShipsIn(t *testing.T) {
+	content := renderLinuxSudoers("alice")
+	for _, want := range []string{
+		"/usr/bin/ip link del lerd0",  // Arch, Fedora
+		"/usr/sbin/ip link del lerd0", // Debian, Ubuntu
+		"/sbin/ip link del lerd0",
+	} {
+		assertContains(t, content, want)
+	}
+}
+
 // A sudoers drop-in with no %s substituted for the user parses as a rule for a
 // literal "%s" user and grants nothing, so guard the format-arg count.
 func TestLinuxSudoers_everyRuleNamesTheUser(t *testing.T) {
@@ -595,9 +610,45 @@ func TestTeardown_removesFallbackDropin(t *testing.T) {
 	if !found {
 		t.Fatal("Teardown not found in setup.go")
 	}
-	if !strings.Contains(teardown, "lerdFallbackDropin") {
+	if !strings.Contains(teardown, "restoreResolvedFallbacks()") {
 		t.Error("Teardown must remove the fallback drop-in, or uninstalling lerd leaves the system's fallback DNS off for good")
 	}
+}
+
+// The write is guarded on the link coming up, but nothing ever walked it back. A
+// host that had lerd0 and lost it (dummy module dropped by a kernel update, unit
+// removed by hand) keeps the drop-in from the run that worked, and is left with
+// resolved's fallbacks off and no lerd0: exactly the state the guard exists to
+// prevent, and strictly worse than never having touched the fallbacks at all.
+func TestSetupDummyLink_handsTheFallbacksBackWhenTheLinkStopsWorking(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	body := string(src)
+
+	fn := section(t, body, "func setupDummyLink(", "// restoreResolvedFallbacks")
+	restoreAt := strings.Index(fn, "restoreResolvedFallbacks()")
+	writeAt := strings.Index(fn, "if fallbackChanged {")
+	if restoreAt < 0 {
+		t.Fatal("setupDummyLink must restore the fallbacks when the link cannot be brought up")
+	}
+	if writeAt < 0 || restoreAt > writeAt {
+		t.Error("the restore belongs on the ensureDummyLinkRunning failure path, before the drop-in is written")
+	}
+
+	restore := section(t, body, "func restoreResolvedFallbacks() {", "\n}")
+	// Unguarded this prompts for a password on every host that never had the
+	// drop-in, which is most of them.
+	assertContains(t, restore, "os.Stat(lerdFallbackDropin)")
+	assertContains(t, restore, `"restart", "systemd-resolved"`)
+
+	// It used to run only from an interactive `lerd uninstall`; on the start path
+	// the watcher runs it headless, where an ungranted command is a prompt nobody
+	// can answer and the start hangs forever.
+	sudoers := renderLinuxSudoers("alice")
+	assertContains(t, sudoers, "/usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf")
+	assertContains(t, sudoers, "/usr/bin/systemctl restart systemd-resolved")
 }
 
 // The link and everything that reads it must agree on the TLD. lerd supports a
