@@ -18,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/freeport"
+	"github.com/geodro/lerd/internal/imgledger"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/registry"
 )
@@ -756,6 +757,13 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	changed, err := podman.WriteQuadletDiff(quadletName, content)
 	if err != nil {
 		return fmt.Errorf("writing unit for %s: %w", svc.Name, err)
+	}
+	// Record the image lerd is installing so cleanup can reclaim it later even
+	// though podman, not lerd, pulls the bytes when the quadlet first starts.
+	// Without this the pull ledger only sees images pulled through lerd's own
+	// pull path, and cleanup's managed tier cannot tell this is lerd's to reap.
+	if svc.Image != "" {
+		imgledger.Record(svc.Image)
 	}
 	return podman.DaemonReloadIfNeeded(changed)
 }
