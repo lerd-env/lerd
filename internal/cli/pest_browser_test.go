@@ -38,6 +38,86 @@ func TestPestBrowserInstall_PrefersLocalPlaywright(t *testing.T) {
 	}
 }
 
+// dryRunPlan is real `playwright install --dry-run chromium` output, ffmpeg
+// duplication included.
+const dryRunPlan = `browser: chromium version 141.0.7390.37
+  Install location:    /root/.cache/ms-playwright/chromium-1194
+  Download url:        https://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-linux-arm64.zip
+
+browser: ffmpeg
+  Install location:    /root/.cache/ms-playwright/ffmpeg-1011
+  Download url:        https://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+
+browser: chromium-headless-shell version 141.0.7390.37
+  Install location:    /root/.cache/ms-playwright/chromium_headless_shell-1194
+  Download url:        https://cdn.playwright.dev/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip
+
+browser: ffmpeg
+  Install location:    /root/.cache/ms-playwright/ffmpeg-1011
+  Download url:        https://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+`
+
+// The plan parser drives the whole install: one line per component, the primary
+// URL only (never a fallback), and ffmpeg listed once even though Playwright
+// repeats it per browser.
+func TestPestBrowserPlanAwk_ParsesDryRun(t *testing.T) {
+	cmd := exec.Command("awk", pestBrowserPlanAwk)
+	cmd.Stdin = strings.NewReader(dryRunPlan)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("awk: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	want := []string{
+		"/root/.cache/ms-playwright/chromium-1194\thttps://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip",
+		"/root/.cache/ms-playwright/ffmpeg-1011\thttps://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip",
+		"/root/.cache/ms-playwright/chromium_headless_shell-1194\thttps://cdn.playwright.dev/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parsed %d lines, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// The deadlock in #1006 is Playwright's Node extractor writing into the
+// bind-mounted cache, so the install must fetch and unzip the archives itself
+// and mark each directory installed the way the registry expects.
+func TestPestBrowserInstall_ExtractsWithoutPlaywright(t *testing.T) {
+	for _, want := range []string{"--dry-run", "curl -fsSL", "unzip -q -o", "INSTALLATION_COMPLETE"} {
+		if !strings.Contains(pestBrowserInstall, want) {
+			t.Errorf("install script missing %q:\n%s", want, pestBrowserInstall)
+		}
+	}
+	if !strings.Contains(pestBrowserInstall, "--speed-time") {
+		t.Error("a stalled download must abort rather than hang forever")
+	}
+}
+
+// An aborted run must not leave the container wedged: the orphaned installer and
+// the lock it holds are what make every retry hang instantly with no output.
+func TestPestBrowserCleanup_ClearsLockAndOrphans(t *testing.T) {
+	for _, want := range []string{"__dirlock", "oopDownloadBrowserMai[n]", "/tmp/playwright-download-*"} {
+		if !strings.Contains(pestBrowserCleanup, want) {
+			t.Errorf("cleanup script missing %q:\n%s", want, pestBrowserCleanup)
+		}
+	}
+	// A pattern that matches the cleanup's own command line would kill it before
+	// it reaps anything.
+	for _, pat := range []string{"oopDownloadBrowserMain", "playwright install"} {
+		if strings.Contains(pestBrowserCleanup, pat) {
+			t.Errorf("pkill pattern %q matches the cleanup script itself", pat)
+		}
+	}
+}
+
 func TestPestBrowserPkgIsChromium(t *testing.T) {
 	if pestBrowserPkg != "chromium" {
 		t.Errorf("pest:browser must bake the Alpine chromium package, got %q", pestBrowserPkg)

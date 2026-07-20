@@ -103,6 +103,8 @@ lerd pest:browser install
 
 This adds `chromium` to your declared package set (the same mechanism as `lerd php:pkg`, so it applies to every PHP image and the container is not split off onto its own image), rebuilds the current version, downloads the Playwright browser registry into a persistent volume, and shims Playwright's glibc browser to the musl Chromium with `--no-sandbox`. It is safe to re-run, and you should re-run it after bumping the Playwright version in your project.
 
+The registry download is driven by your project's own Playwright (it decides which components and revisions are needed), but lerd fetches and unpacks the archives itself with `curl` and `unzip` inside the container. Playwright's Node extractor deadlocks partway through writing into the bind-mounted cache on some hosts, which used to leave the install hanging silently with no output. A stalled download now aborts with an error instead, and interrupting the command cleans up the in-container downloader and its install lock so a retry starts clean.
+
 Check the setup at any time with `lerd pest:browser doctor`, and tear it back down with `lerd pest:browser remove` (un-bakes chromium and rebuilds; the cache volume is left intact):
 
 ```bash
