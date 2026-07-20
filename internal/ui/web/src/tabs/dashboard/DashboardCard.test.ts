@@ -51,4 +51,23 @@ describe('DashboardCard', () => {
     const root = container.querySelector('div');
     expect(root!.className).not.toMatch(/border-l-4/);
   });
+
+  it('caps height on narrow layouts but stretches to fill the row at xl', () => {
+    const { container } = render(Harness, { props: { title: 'Sites' } });
+    const root = container.querySelector('div');
+    // Narrow layouts stack into many rows, so the cap stays; at xl the card
+    // fills its share instead of leaving dead space.
+    expect(root!.className).toMatch(/max-h-\[340px\]/);
+    expect(root!.className).toMatch(/xl:max-h-none/);
+  });
+
+  it('keeps a height floor below xl and drops it where it stretches', () => {
+    const { container } = render(Harness, { props: { title: 'Sites' } });
+    const root = container.querySelector('div');
+    // Narrow layouts stack and scroll, so a floor keeps each card readable.
+    // At xl the floor would push the rows past a short viewport and clip
+    // them, so the card shrinks with its row and its body scrolls instead.
+    expect(root!.className).toMatch(/min-h-\[280px\]/);
+    expect(root!.className).toMatch(/xl:min-h-0/);
+  });
 });
