@@ -31,8 +31,31 @@ func TestNotifySink(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := notifySink(tc.cfg, tc.supported); got != tc.want {
+			if got := notifySink(tc.cfg, func() bool { return tc.supported }); got != tc.want {
 				t.Fatalf("notifySink()=%d, want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+// The probe talks to D-Bus, so it must not run for a sink that will never
+// deliver natively — notifications off, or the browser target.
+func TestNotifySinkProbesOnlyForNativeTarget(t *testing.T) {
+	cases := []struct {
+		name string
+		cfg  *config.GlobalConfig
+	}{
+		{"nil config", nil},
+		{"globally disabled", cfgWith(true, config.NotifyTargetNative)},
+		{"browser target", cfgWith(false, config.NotifyTargetBrowser)},
+		{"unset target", cfgWith(false, "")},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			probed := false
+			notifySink(tc.cfg, func() bool { probed = true; return true })
+			if probed {
+				t.Fatal("native support probe ran for a non-native sink")
 			}
 		})
 	}

@@ -21,12 +21,15 @@ const (
 
 // notifySink resolves where a notification goes. Native is only chosen when the
 // config selects it and a daemon is actually present, so an unsupported host
-// transparently falls back to the browser sink instead of dropping alerts.
-func notifySink(cfg *config.GlobalConfig, nativeSupported bool) sink {
+// transparently falls back to the browser sink instead of dropping alerts. The
+// support probe is a function because it costs a D-Bus round trip: an eagerly
+// evaluated argument would run it for every delivery, including notifications
+// switched off entirely and the browser sink that never touches the bus.
+func notifySink(cfg *config.GlobalConfig, nativeSupported func() bool) sink {
 	if cfg == nil || !cfg.IsNotificationsEnabled() {
 		return sinkOff
 	}
-	if cfg.NotificationTarget() == config.NotifyTargetNative && nativeSupported {
+	if cfg.NotificationTarget() == config.NotifyTargetNative && nativeSupported() {
 		return sinkNative
 	}
 	return sinkBrowser
@@ -54,7 +57,7 @@ func dispatchNotification(n push.Notification) {
 	if err != nil {
 		return
 	}
-	switch notifySink(cfg, desktopnotify.Supported()) {
+	switch notifySink(cfg, desktopnotify.Supported) {
 	case sinkOff:
 		return
 	case sinkNative:
