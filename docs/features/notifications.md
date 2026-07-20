@@ -51,6 +51,8 @@ The dashboard's System health card also carries a bell toggle, next to the debug
 
 Clicking a notification focuses the dashboard (or launches the PWA if closed) and deep-links to the relevant view: the captured email in the Mailpit overlay, the failing worker's site detail, the finished service's tile, the Dumps tab.
 
+`worker_failed` waits before it speaks. Worker units restart themselves five seconds after a crash, so most failures clear on their own, and a notification sent the moment one is spotted usually describes a worker that is running again by the time you reach the dashboard. Instead the watcher holds new failures for thirty seconds, groups anything else that trips in that window into one notification, then re-checks health and drops the workers that recovered. You only hear about a worker that is still down after systemd has had several attempts at it, and the notification reflects its state at that point rather than when it first tripped. The dashboard banner is unaffected and still appears immediately, clearing itself when the worker comes back.
+
 ## How it works
 
 With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`. With the **browser** sink (the default), two delivery paths run in parallel:
