@@ -138,23 +138,23 @@ func FPMImageStale(version string) bool {
 var realisedSetMu sync.Mutex
 
 // RecordRealisedSet asks a freshly built image what it actually carries and
-// records it against the version. Best-effort: a version whose image can't be
-// inspected simply has no record, which callers read as "nothing known yet"
-// rather than "nothing installed".
+// records it against the version.
+//
+// A build that cannot be inspected still records, as an empty set. The build
+// has already stamped the current declared-set label on the image, so it reads
+// as fresh from that moment on; leaving no record would have MissingFromImage
+// return nothing for it and the whole declared set be reported as present. That
+// is the #952 false success reached through the absent record instead of the
+// empty one, so the two are closed the same way: erring towards "not in this
+// image" is a warning, erring the other way advertises what isn't there.
 func RecordRealisedSet(version string, declaredExts, declaredPkgs []string) {
 	if len(declaredExts) == 0 && len(declaredPkgs) == 0 {
 		clearRealisedSet(version)
 		return
 	}
-	image := FPMImageName(version)
-	modules, err := execCommand(PodmanBin(), "run", "--rm", image, "php", "-m").Output()
-	if err != nil {
-		return
-	}
-	// `apk info` needs no network: it reads the image's own installed database.
-	apkInfo, err := execCommand(PodmanBin(), "run", "--rm", image, "apk", "info").Output()
-	if err != nil {
-		return
+	var set config.RealisedPHPSet
+	if modules, apkInfo, err := inspectFPMImageSets(version); err == nil {
+		set = realisedSet(declaredExts, declaredPkgs, modules, apkInfo)
 	}
 
 	realisedSetMu.Lock()
@@ -163,10 +163,24 @@ func RecordRealisedSet(version string, declaredExts, declaredPkgs []string) {
 	if err != nil {
 		return
 	}
-	set := realisedSet(declaredExts, declaredPkgs, string(modules), string(apkInfo))
 	set.Hash = customSetHash(declaredExts, cfg.AllExtApkDeps(), declaredPkgs)
 	cfg.SetRealised(version, set)
 	_ = config.SaveGlobal(cfg)
+}
+
+// inspectFPMImageSets reads a version's image for what it loaded and installed.
+// `apk info` needs no network: it reads the image's own installed database.
+func inspectFPMImageSets(version string) (modules, apkInfo string, err error) {
+	image := FPMImageName(version)
+	mods, err := execCommand(PodmanBin(), "run", "--rm", image, "php", "-m").Output()
+	if err != nil {
+		return "", "", fmt.Errorf("reading modules from %s: %w", image, err)
+	}
+	pkgs, err := execCommand(PodmanBin(), "run", "--rm", image, "apk", "info").Output()
+	if err != nil {
+		return "", "", fmt.Errorf("reading packages from %s: %w", image, err)
+	}
+	return string(mods), string(pkgs), nil
 }
 
 // clearRealisedSet drops a version's record once nothing is declared, so a

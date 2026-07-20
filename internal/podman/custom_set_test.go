@@ -5,6 +5,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // The declared set is what drives a version's image content, so its fingerprint
@@ -168,5 +170,54 @@ func TestFPMImageCurrent(t *testing.T) {
 	}
 	if fpmImageCurrent("img", "recipe1", "cust1") {
 		t.Error("an unlabelled image must rebuild once something is declared")
+	}
+}
+
+// The build stamps the current declared-set label on the image before this
+// runs, so the image reads as fresh from that moment. Returning without a
+// record then had MissingFromImage answer "nothing missing" for a version that
+// was never measured, reporting the whole declared set as present — the #952
+// false success reached through the absent record instead of the empty one.
+func TestRecordRealisedSet_recordsAnEmptySetWhenTheImageCannotBeInspected(t *testing.T) {
+	withTempXDG(t)
+	origExec := execCommand
+	t.Cleanup(func() { execCommand = origExec })
+	execCommand = func(string, ...string) *exec.Cmd { return exec.Command("false") }
+
+	RecordRealisedSet("8.0", []string{"mongodb"}, []string{"chromium"})
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	missing := cfg.MissingFromImage("8.0", []string{"mongodb", "chromium"})
+	if !reflect.DeepEqual(missing, []string{"mongodb", "chromium"}) {
+		t.Errorf("MissingFromImage = %v, want [mongodb chromium]: an uninspectable build must not read as carrying the declared set", missing)
+	}
+	if cfg.GetRealised("8.0").Hash == "" {
+		t.Error("the record must carry its hash, or it serializes away and reads back as no record at all")
+	}
+}
+
+// The normal path still records exactly what the image reported.
+func TestRecordRealisedSet_recordsWhatTheImageReports(t *testing.T) {
+	withTempXDG(t)
+	origExec := execCommand
+	t.Cleanup(func() { execCommand = origExec })
+	execCommand = func(_ string, arg ...string) *exec.Cmd {
+		if len(arg) > 0 && arg[len(arg)-1] == "-m" {
+			return exec.Command("printf", "%s\\n", "mongodb")
+		}
+		return exec.Command("printf", "%s\\n", "chromium")
+	}
+
+	RecordRealisedSet("8.4", []string{"mongodb", "imagick"}, []string{"chromium"})
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if missing := cfg.MissingFromImage("8.4", []string{"mongodb", "imagick", "chromium"}); !reflect.DeepEqual(missing, []string{"imagick"}) {
+		t.Errorf("MissingFromImage = %v, want [imagick]", missing)
 	}
 }

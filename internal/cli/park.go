@@ -336,6 +336,13 @@ func ensureFPMQuadlet(phpVersion string) error {
 	return ensureFPMQuadletTo(phpVersion, os.Stdout)
 }
 
+// Seams for the ensure path's unit lifecycle, swappable in tests.
+var (
+	buildFPMImageTo = podman.BuildFPMImageTo
+	startUnitFn     = podman.StartUnit
+	restartUnitFn   = podman.RestartUnit
+)
+
 // ensureFPMQuadletTo is like ensureFPMQuadlet but writes build output to w.
 func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 	versionShort := strings.ReplaceAll(phpVersion, ".", "")
@@ -347,11 +354,18 @@ func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
 		return err
 	}
 
-	if err := podman.BuildFPMImageTo(phpVersion, false, w); err != nil {
+	rebuilt, err := buildFPMImageTo(phpVersion, false, w)
+	if err != nil {
 		return fmt.Errorf("building FPM image for PHP %s: %w", phpVersion, err)
 	}
 
 	_ = podman.EnsureXdebugIni(phpVersion)
 
-	return podman.StartUnit(unitName)
+	// A start is a no-op on an already-active unit, so a version whose image was
+	// just rebuilt here (the deferred half of a php:ext / php:pkg change) would
+	// keep serving the old image while every status surface reported the new set.
+	if rebuilt {
+		return restartUnitFn(unitName)
+	}
+	return startUnitFn(unitName)
 }
