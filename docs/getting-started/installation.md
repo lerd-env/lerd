@@ -193,3 +193,15 @@ There is no native Windows build. Lerd runs on Windows through WSL2, where the s
 ## NixOS
 
 NixOS's declarative model doesn't fit the one-line installer's imperative DNS and self-install steps, so the community [`lerd-nixos`](https://github.com/lerd-env/lerd-nixos) flake packages the `lerd` binary and provides the `configuration.nix` blocks the stack needs (rootless Podman, `*.test`-only DNS routing, the mkcert CA, and the systemd fixes for `lerd-ui` / `lerd-watcher`). See the [NixOS guide](./nixos) for the complete runbook from a fresh install.
+
+## Desktop app (optional)
+
+The dashboard runs in any browser, but [Lerd Desktop](https://github.com/lerd-env/lerd-desktop) wraps it in a dedicated window with [native desktop notifications](../features/notifications) for captured mail, worker failures and finished operations. It is optional and entirely separate from the lerd install itself, which keeps working unchanged without it.
+
+It ships for Linux as a Flatpak:
+
+```bash
+flatpak install --user https://lerd.sh/lerd.flatpakref
+```
+
+Update it with `flatpak update`. Once it is installed, `lerd dashboard` and the tray's **Open Dashboard** open the app instead of a browser tab, and clicking a native notification opens it through its `lerd://` scheme. The one-line installer also offers to set it up for you on Linux.
