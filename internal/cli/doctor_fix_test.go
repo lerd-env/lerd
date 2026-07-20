@@ -46,6 +46,19 @@ func TestApplyDoctorFixMkdirEmptyArg(t *testing.T) {
 	}
 }
 
+// TestApplyDoctorFixRejectsPrivilegedKeys pins the auto-tier contract: a fix
+// that shells into a command running sudo must not be dispatchable, so
+// re-adding one to the auto tier fails here rather than silently letting
+// `doctor --fix --yes` and the MCP diag tool elevate unattended.
+func TestApplyDoctorFixRejectsPrivilegedKeys(t *testing.T) {
+	for _, key := range []string{fixDNSRepair, fixWSLSetup} {
+		var buf bytes.Buffer
+		if err := ApplyDoctorFix(&DoctorFix{Tier: FixAuto, Key: key}, &buf); err == nil {
+			t.Errorf("%q is dispatchable from the auto tier but it runs sudo", key)
+		}
+	}
+}
+
 func TestHeavyFixClassification(t *testing.T) {
 	if !IsHeavyFix(autoFix(fixCleanup, "", "")) || !IsHeavyFix(autoFix(fixInstall, "", "")) {
 		t.Fatal("cleanup and install should be heavy")
