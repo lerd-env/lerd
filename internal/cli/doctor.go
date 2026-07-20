@@ -285,7 +285,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			ok("podman events_logger journald")
 		} else {
 			warn("podman events_logger journald", "log views fail with --follow on WSL, run lerd wsl:setup")
-			rep.fixLast(autoFix(fixWSLSetup, "", "apply the WSL podman and tray fixes (lerd wsl:setup)"))
+			rep.fixLast(manualFixWith("run `lerd wsl:setup` (it needs sudo to write the podman config)"))
 		}
 
 		out, _ := exec.Command("systemctl", "--user", "is-enabled", "lerd-tray.service").Output()
@@ -293,7 +293,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			ok("lerd-tray masked (no WSL tray host)")
 		} else {
 			warn("lerd-tray on WSL", "no tray host on WSL2 so the unit fails, run lerd wsl:setup")
-			rep.fixLast(autoFix(fixWSLSetup, "", "apply the WSL podman and tray fixes (lerd wsl:setup)"))
+			rep.fixLast(manualFixWith("run `lerd wsl:setup` (it needs sudo to write the podman config)"))
 		}
 
 		if reg, regErr := config.LoadSites(); regErr == nil {
@@ -387,7 +387,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 			case dns.StepFail:
 				fail(label, s.Detail, s.Hint)
 				if dnsRepairable {
-					rep.fixLast(autoFix(fixDNSRepair, tld, "repair the DNS resolver wiring (lerd dns:repair)"))
+					rep.fixLast(manualFixWith("run `lerd dns:repair` (it needs sudo to rewrite the resolver config)"))
 				}
 			case dns.StepWarn:
 				warn(label, s.Detail)

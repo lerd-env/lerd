@@ -75,13 +75,19 @@ func (r *DoctorReport) fixLast(fx *DoctorFix) {
 }
 
 // AutoFixes returns the findings carrying an applicable automatic fix, in report
-// order. Callers filter further (heavy fixes always re-confirm).
+// order, one per distinct key. Several failing findings can attach the same
+// repair (a broken DNS chain fails at more than one rung), and running that
+// repair once per finding would repeat the whole sequence. Callers filter
+// further (heavy fixes always re-confirm).
 func (r *DoctorReport) AutoFixes() []Finding {
 	var out []Finding
+	seen := map[string]bool{}
 	for _, f := range r.Findings {
-		if f.Fix != nil && f.Fix.Tier == FixAuto {
-			out = append(out, f)
+		if f.Fix == nil || f.Fix.Tier != FixAuto || seen[f.Fix.Key] {
+			continue
 		}
+		seen[f.Fix.Key] = true
+		out = append(out, f)
 	}
 	return out
 }
@@ -103,3 +109,9 @@ func autoFix(key, arg, label string) *DoctorFix {
 }
 
 var manualFix = &DoctorFix{Tier: FixManual}
+
+// manualFixWith is manualFix carrying the command to run, for repairs lerd
+// knows the fix for but will not run itself because it needs sudo.
+func manualFixWith(label string) *DoctorFix {
+	return &DoctorFix{Tier: FixManual, Label: label}
+}

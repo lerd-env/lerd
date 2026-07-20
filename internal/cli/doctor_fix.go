@@ -18,9 +18,16 @@ const (
 	fixPhpRebuild   = "php-rebuild"
 	fixStart        = "start"
 	fixInstall      = "install"
-	fixWSLSetup     = "wsl-setup"
-	fixDNSRepair    = "dns-repair"
 	fixCleanup      = "cleanup"
+)
+
+// Repairs that need elevated privilege. They are named so the auto tier can be
+// tested against them, but they are deliberately absent from ApplyDoctorFix:
+// both shell into subcommands that run sudo, which the auto tier promises not
+// to do, so the doctor reports them as manual for the user to run.
+const (
+	fixWSLSetup  = "wsl-setup"
+	fixDNSRepair = "dns-repair"
 )
 
 // heavyFixKeys are auto fixes that rebuild images, reinstall units, or delete
@@ -116,8 +123,12 @@ func printManualFixes(w io.Writer, manuals []Finding) {
 	}
 	fmt.Fprintln(w, "\nThese need elevated privileges, run them yourself:")
 	for _, f := range manuals {
-		// warn-level findings carry their guidance in Message, fail-level in Hint.
-		guidance := f.Hint
+		// A fix label names the exact command; otherwise warn-level findings
+		// carry their guidance in Message and fail-level in Hint.
+		guidance := f.Fix.Label
+		if guidance == "" {
+			guidance = f.Hint
+		}
 		if guidance == "" {
 			guidance = f.Message
 		}
@@ -152,10 +163,6 @@ func ApplyDoctorFix(fix *DoctorFix, out io.Writer) error {
 		return runSelf(out, "start")
 	case fixInstall:
 		return runSelf(out, "install")
-	case fixWSLSetup:
-		return runSelf(out, "wsl:setup")
-	case fixDNSRepair:
-		return runSelf(out, "dns:repair")
 	case fixCleanup:
 		return runSelf(out, "cleanup", "--yes")
 	default:

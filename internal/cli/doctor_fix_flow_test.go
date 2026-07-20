@@ -50,6 +50,40 @@ func TestRunDoctorFixDryRunChangesNothing(t *testing.T) {
 	}
 }
 
+// TestRunDoctorFixLeavesPrivilegedRepairsToTheUser is the end-to-end shape of
+// the fix: under --yes, which is exactly how the MCP diag tool invokes it, a
+// repair needing sudo is listed for the user and never applied.
+func TestRunDoctorFixLeavesPrivilegedRepairsToTheUser(t *testing.T) {
+	orig := reCheckReport
+	reCheckReport = func() (DoctorReport, error) { return DoctorReport{}, nil }
+	defer func() { reCheckReport = orig }()
+
+	var buf bytes.Buffer
+	rep := reportWith(
+		Finding{Name: "resolver hookup", Status: "fail",
+			Fix: manualFixWith("run `lerd dns:repair` (it needs sudo to rewrite the resolver config)")},
+		Finding{Name: "podman events_logger journald", Status: "warn",
+			Fix: manualFixWith("run `lerd wsl:setup` (it needs sudo to write the podman config)")},
+	)
+	if err := runDoctorFix(&buf, rep, true, false); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	out := buf.String()
+
+	if !strings.Contains(out, "These need elevated privileges") {
+		t.Errorf("privileged repairs were not listed for the user: %q", out)
+	}
+	if !strings.Contains(out, "lerd dns:repair") || !strings.Contains(out, "lerd wsl:setup") {
+		t.Errorf("guidance should name the exact command: %q", out)
+	}
+	if strings.Contains(out, "Applied 1 fix") || strings.Contains(out, "Applied 2 fix") {
+		t.Errorf("nothing should have been applied: %q", out)
+	}
+	if !strings.Contains(out, "Nothing to fix automatically") && !strings.Contains(out, "Applied 0 fix") {
+		t.Errorf("expected an empty auto tier: %q", out)
+	}
+}
+
 func TestRunDoctorFixAppliesAndReChecks(t *testing.T) {
 	// Auto-apply (yes=true) a non-heavy mkdir fix, stub the re-check clean.
 	orig := reCheckReport
