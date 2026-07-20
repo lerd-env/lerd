@@ -69,11 +69,13 @@ func phpVersionForDir(dir string) (string, error) {
 
 // fpmContainerForDir resolves the FPM container an exec in dir should target:
 // the per-site container for custom-FPM sites, otherwise the shared
-// lerd-php<version>-fpm container. dir may be a subdirectory of the project, so
-// it resolves the containing site root first (matching version detection, which
-// also walks up), otherwise a custom-FPM exec from a subdir would wrongly hit
-// the shared container.
+// lerd-php<version>-fpm container. It resolves the site the same way version
+// detection does, so a worktree beside its project reaches the parent's custom
+// image rather than falling through to the shared container its vhost never uses.
 func fpmContainerForDir(dir, version string) string {
+	if _, parent, ok := phpDet.WorktreeRootFor(dir); ok {
+		return podman.FPMContainerName(*parent, version)
+	}
 	if site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir)); site != nil {
 		return podman.FPMContainerName(*site, version)
 	}

@@ -160,3 +160,47 @@ func TestPHPVersionForDir_FallsBackToDetection(t *testing.T) {
 		t.Errorf("phpVersionForDir = %q, want %q", got, "8.1")
 	}
 }
+
+// TestFPMContainerForDir_SiblingWorktreeOfCustomFPMSite covers a worktree checked
+// out beside its project rather than inside it. It matches no registered site
+// path, so without resolving the worktree's parent the exec falls back to the
+// shared container and loses the per-site image the site is actually served from.
+func TestFPMContainerForDir_SiblingWorktreeOfCustomFPMSite(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	root := t.TempDir()
+	site := filepath.Join(root, "app")
+	wt := filepath.Join(root, "app-feature")
+	makeWorktree(t, site, wt, "feature")
+
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.4", Runtime: "fpm-custom"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := fpmContainerForDir(wt, "8.4")
+	if want := "lerd-cfpm-app"; got != want {
+		t.Errorf("fpmContainerForDir = %q, want %q (the site's own image, which its vhost uses)", got, want)
+	}
+}
+
+// TestFPMContainerForDir_SiblingWorktreeOfSharedFPMSite keeps the ordinary case
+// on the shared per-version container.
+func TestFPMContainerForDir_SiblingWorktreeOfSharedFPMSite(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	root := t.TempDir()
+	site := filepath.Join(root, "app")
+	wt := filepath.Join(root, "app-feature")
+	makeWorktree(t, site, wt, "feature")
+
+	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.4"}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := fpmContainerForDir(wt, "8.4")
+	if want := "lerd-php84-fpm"; got != want {
+		t.Errorf("fpmContainerForDir = %q, want %q", got, want)
+	}
+}
