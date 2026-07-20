@@ -17,7 +17,7 @@ func NewCleanupCmd() *cobra.Command {
 		Use:   "cleanup",
 		Short: "Reclaim podman disk from orphaned lerd images, unused service images, and dangling leftovers",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			return runCleanup(dryRun, yes, !safe)
+			return runCleanup(dryRun, yes, safe)
 		},
 	}
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Show what would be reclaimed without removing anything")
@@ -93,12 +93,18 @@ func autoStateWord(enabled bool) string {
 	return "disabled"
 }
 
-func runCleanup(dryRun, yes, deep bool) error {
-	scope := cleanup.ScopeSafe
-	if deep {
-		scope = cleanup.ScopeDeep
+// cleanupScope maps the --safe flag to the scope the reclaim runs at. The doctor
+// sizes its reclaimable-disk finding through the same helper, so the estimate it
+// shows is the one its fix acts on.
+func cleanupScope(safe bool) cleanup.Scope {
+	if safe {
+		return cleanup.ScopeSafe
 	}
-	plan, err := cleanup.Inspect(scope)
+	return cleanup.ScopeDeep
+}
+
+func runCleanup(dryRun, yes, safe bool) error {
+	plan, err := cleanup.Inspect(cleanupScope(safe))
 	if err != nil {
 		return err
 	}
