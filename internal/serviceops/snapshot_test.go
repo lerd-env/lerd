@@ -214,6 +214,31 @@ func TestDeleteSnapshot(t *testing.T) {
 	}
 }
 
+// TestDeleteSnapshotRejectsTraversalDatabase pins the path-traversal fix: the
+// database segment is joined straight into the snapshot path, so a traversing
+// value would resolve outside the snapshot root and hand a real project
+// directory to os.RemoveAll.
+func TestDeleteSnapshotRejectsTraversalDatabase(t *testing.T) {
+	data := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+
+	victim := filepath.Join(data, "precious")
+	if err := os.MkdirAll(filepath.Join(victim, "src"), 0o755); err != nil {
+		t.Fatalf("seed victim: %v", err)
+	}
+
+	rel, err := filepath.Rel(filepath.Join(config.SnapshotsDir(), "postgres", "databases"), victim)
+	if err != nil {
+		t.Fatalf("rel: %v", err)
+	}
+	if err := DeleteSnapshot("postgres", rel, "src", false); err == nil {
+		t.Error("traversing database name was accepted")
+	}
+	if _, err := os.Stat(filepath.Join(victim, "src")); err != nil {
+		t.Errorf("victim directory was removed: %v", err)
+	}
+}
+
 func TestSnapshotDumpCommand(t *testing.T) {
 	tests := []struct {
 		name   string
