@@ -1116,6 +1116,9 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "App",
+  "databases_targetTesting": "Testes",
+  "databases_targetLabel": "Sobre qual base de dados estas ações atuam",
   "databases_deleteConfirm": "Confirm delete",
   "databases_count": "{count} databases"
 }

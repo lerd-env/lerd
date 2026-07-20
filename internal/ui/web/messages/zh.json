@@ -1116,6 +1116,9 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "应用",
+  "databases_targetTesting": "测试",
+  "databases_targetLabel": "这些操作作用于哪个数据库",
   "databases_deleteConfirm": "Confirm delete",
   "databases_count": "{count} databases"
 }
