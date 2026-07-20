@@ -27,6 +27,21 @@ const LSP_COMPLETION_KIND = [
   'Constant', 'Struct', 'Event', 'Operator', 'TypeParameter'
 ] as const;
 
+// The standard LSP 3.16 semantic token legend we advertise. phpantom returns
+// its own legend in the initialize response, which we forward to Monaco
+// verbatim; these just declare which types/modifiers we understand so the
+// server doesn't withhold tokens.
+const SEMANTIC_TOKEN_TYPES = [
+  'namespace', 'type', 'class', 'enum', 'interface', 'struct', 'typeParameter',
+  'parameter', 'variable', 'property', 'enumMember', 'event', 'function',
+  'method', 'macro', 'keyword', 'modifier', 'comment', 'string', 'number',
+  'regexp', 'operator', 'decorator'
+];
+const SEMANTIC_TOKEN_MODIFIERS = [
+  'declaration', 'definition', 'readonly', 'static', 'deprecated', 'abstract',
+  'async', 'modification', 'documentation', 'defaultLibrary'
+];
+
 export interface PhpLspHandle {
   dispose(): void;
 }
@@ -102,6 +117,31 @@ export function stripSyntheticHeader(text: string): string {
   if (lines.length && lines[0].trim() === '<?php') lines.shift();
   if (lines.length && lines[0].trim() === '') lines.shift();
   return lines.join('\n');
+}
+
+// Re-base an LSP semantic-token stream into the headerless tinker buffer.
+// The data is a flat run of 5-tuples [deltaLine, deltaStartChar, length,
+// tokenType, tokenModifiers], delta-encoded against the previous token with
+// the first relative to line 0. Our document carries a synthetic `<?php` on
+// LSP line 0, so every token sits one line below where Monaco should paint it:
+// we decode to absolute positions, drop anything on the synthetic header line,
+// shift the rest up one line, and re-encode the deltas Monaco expects.
+export function lspSemanticTokensToMonaco(data: readonly number[] | undefined): Uint32Array {
+  if (!data || data.length < 5) return new Uint32Array(0);
+  const out: number[] = [];
+  let absLine = 0, absChar = 0;
+  let lastLine = 0, lastChar = 0;
+  for (let i = 0; i + 4 < data.length; i += 5) {
+    if (data[i] === 0) absChar += data[i + 1];
+    else { absLine += data[i]; absChar = data[i + 1]; }
+    if (absLine < 1) continue; // synthetic <?php header (LSP line 0)
+    const line = absLine - 1;
+    const deltaLine = line - lastLine;
+    out.push(deltaLine, deltaLine === 0 ? absChar - lastChar : absChar, data[i + 2], data[i + 3], data[i + 4]);
+    lastLine = line;
+    lastChar = absChar;
+  }
+  return new Uint32Array(out);
 }
 
 interface Pending {
@@ -507,9 +547,43 @@ export function attachPhpLsp(opts: {
       }
     })
   );
-  // Format-on-paste leans on the range provider above. Scoped to this editor,
-  // which is only ever the tinker surface.
-  editor.updateOptions({ formatOnPaste: true });
+  // Format-on-paste leans on the range provider above; semantic highlighting
+  // turns on the project-aware colouring our token provider feeds. Both are
+  // scoped to this editor, which is only ever the tinker surface.
+  editor.updateOptions({ formatOnPaste: true, 'semanticHighlighting.enabled': true });
+
+  // ---- semantic highlighting ----
+  // Registered only after initialize, once we have the server's token legend.
+  // Monaco re-requests on every model change; each response is re-based out of
+  // synthetic-header space before Monaco paints it.
+  function registerSemanticTokens(provider: any) {
+    const legend = provider && typeof provider === 'object' ? provider.legend : undefined;
+    const supportsFull =
+      provider && (provider.full === true || (provider.full && typeof provider.full === 'object'));
+    if (disposed || !legend?.tokenTypes || !supportsFull) return;
+    disposables.push(
+      monaco.languages.registerDocumentSemanticTokensProvider('php', {
+        getLegend: () => ({
+          tokenTypes: legend.tokenTypes,
+          tokenModifiers: legend.tokenModifiers ?? []
+        }),
+        async provideDocumentSemanticTokens(model) {
+          if (!isOurModel(model)) return null;
+          let res: any;
+          try {
+            res = await request('textDocument/semanticTokens/full', {
+              textDocument: { uri: documentUri }
+            });
+          } catch {
+            return null;
+          }
+          if (!res?.data) return null;
+          return { data: lspSemanticTokensToMonaco(res.data), resultId: res.resultId };
+        },
+        releaseDocumentSemanticTokens() {}
+      })
+    );
+  }
 
   // ---- handshake + initialize ----
   void (async () => {
@@ -517,8 +591,9 @@ export function attachPhpLsp(opts: {
     if (disposed) return;
     const rootUri = 'file://' + root.split('/').map(encodeURIComponent).join('/');
     documentUri = `${rootUri}/.lerd-tinker.php`;
+    let initResult: any;
     try {
-      await request('initialize', {
+      initResult = await request('initialize', {
         processId: null,
         rootUri,
         workspaceFolders: [{ uri: rootUri, name: 'tinker' }],
@@ -539,6 +614,13 @@ export function attachPhpLsp(opts: {
               resolveSupport: { properties: ['edit'] }
             },
             formatting: { dynamicRegistration: false },
+            semanticTokens: {
+              dynamicRegistration: false,
+              requests: { full: true },
+              tokenTypes: SEMANTIC_TOKEN_TYPES,
+              tokenModifiers: SEMANTIC_TOKEN_MODIFIERS,
+              formats: ['relative']
+            },
             publishDiagnostics: {}
           }
         }
@@ -548,6 +630,7 @@ export function attachPhpLsp(opts: {
       return;
     }
     if (disposed) return;
+    registerSemanticTokens(initResult?.capabilities?.semanticTokensProvider);
     notify('initialized', {});
     notify('textDocument/didOpen', {
       textDocument: { uri: documentUri, languageId: 'php', version: docVersion, text: fullText() }
