@@ -736,6 +736,8 @@
   "queries_hideTrace": "Ẩn trace",
   "queries_openInEditor": "Mở trong trình soạn thảo",
   "queries_show_workers": "Hiện truy vấn của worker",
+  "debug_show_tests": "Hiện lần chạy kiểm thử",
+  "debug_tests_hidden": "(ẩn {count})",
   "queries_filter_allWorkers": "Tất cả workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Sao chép SQL có thể chạy",

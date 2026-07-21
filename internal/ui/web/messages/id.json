@@ -1005,6 +1005,8 @@
   "queries_dup_badge": "×{count}",
   "queries_bindings": "bindings",
   "queries_show_workers": "Show worker queries",
+  "debug_show_tests": "Tampilkan proses pengujian",
+  "debug_tests_hidden": "({count} disembunyikan)",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Salin SQL yang dapat dijalankan",

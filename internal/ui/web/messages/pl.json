@@ -736,6 +736,8 @@
   "queries_hideTrace": "Ukryj ślad",
   "queries_openInEditor": "Otwórz w edytorze",
   "queries_show_workers": "Pokaż zapytania workerów",
+  "debug_show_tests": "Pokaż uruchomienia testów",
+  "debug_tests_hidden": "(ukryto {count})",
   "queries_filter_allWorkers": "Wszystkie workery",
   "queries_worker_badge": "worker",
   "queries_copySql": "Kopiuj wykonywalny SQL",

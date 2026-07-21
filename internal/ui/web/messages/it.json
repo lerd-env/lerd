@@ -736,6 +736,8 @@
   "queries_hideTrace": "Nascondi trace",
   "queries_openInEditor": "Apri nell'editor",
   "queries_show_workers": "Mostra query dei worker",
+  "debug_show_tests": "Mostra esecuzioni dei test",
+  "debug_tests_hidden": "({count} nascosti)",
   "queries_filter_allWorkers": "Tutti i worker",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copia l'SQL eseguibile",

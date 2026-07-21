@@ -13,8 +13,7 @@
   import { refreshDevtoolsStatus, debugCaptureEnabled, setDebugCapture } from '$stores/queries';
   import { debugLens, type DebugLens } from '$stores/debugLens';
   import { sites } from '$stores/sites';
-  import { dumps } from '$stores/dumps';
-  import { countKinds } from '$stores/debugEvents';
+  import { countKinds, debugEvents } from '$stores/debugEvents';
   import { m } from '../../paraglide/messages.js';
 
   // The global view aggregates every site; Cache comes solely from the Laravel
@@ -23,7 +22,7 @@
   // HttpClient seams).
   const anyLaravel = $derived($sites.some((s) => (s.framework ?? '').toLowerCase() === 'laravel'));
   const laravelOnly: DebugLens[] = ['cache'];
-  const counts = $derived(countKinds($dumps));
+  const counts = $derived(countKinds($debugEvents));
 
   type Lens = DebugLens;
   const tabs = $derived<TabItem<Lens>[]>([
