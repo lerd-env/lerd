@@ -337,6 +337,21 @@ func abortMigrate(unit, name, backup string, snapshot *serviceConfigSnapshot, ca
 
 // ---- mysql / mariadb -------------------------------------------------------
 
+// The three in-container commands a mysql-family migrate runs. They resolve the
+// client binary at runtime because the mariadb images carry only the mariadb
+// names, and a literal `mysqldump` aborts the migrate before it dumps anything.
+func mysqlMigrateDumpCommand() string {
+	return mysqlDumpBin + " -h 127.0.0.1 -uroot --all-databases " + mysqldumpFlags
+}
+
+func mysqlMigrateProbeCommand() string {
+	return mysqlClientBin + " -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null 2>&1"
+}
+
+func mysqlMigrateRestoreCommand() string {
+	return mysqlClientBin + " --max-allowed-packet=" + config.MySQLImportMaxPacket + " -h 127.0.0.1 -uroot 2>&1"
+}
+
 func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	unit := "lerd-" + name
 	snapshot, err := captureServiceConfig(name)
@@ -347,8 +362,7 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	rootEnv := []string{"MYSQL_PWD=lerd"}
 
 	emit(PhaseEvent{Phase: "dumping_data", Message: "mysqldump → " + dump})
-	dumpCmd := "mysqldump -h 127.0.0.1 -uroot --all-databases --single-transaction --routines --triggers --events --quick"
-	if err := dumpToHost(unit, dumpCmd, rootEnv, dump, dumpRestoreTimeout); err != nil {
+	if err := dumpToHost(unit, mysqlMigrateDumpCommand(), rootEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("mysqldump: %w", err)
 	}
 
@@ -375,15 +389,12 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	}
 
 	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
-	probe := "mysql -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null 2>&1 || mariadb -h 127.0.0.1 -uroot -e 'SELECT 1' >/dev/null 2>&1"
-	if err := waitContainerReady(unit, probe, rootEnv, 90*time.Second); err != nil {
+	if err := waitContainerReady(unit, mysqlMigrateProbeCommand(), rootEnv, 90*time.Second); err != nil {
 		return fmt.Errorf("%w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
-	packet := "--max-allowed-packet=" + config.MySQLImportMaxPacket
-	restoreCmd := "mysql " + packet + " -h 127.0.0.1 -uroot 2>&1 || mariadb " + packet + " -h 127.0.0.1 -uroot 2>&1"
-	if err := restoreFromHost(unit, restoreCmd, rootEnv, dump, dumpRestoreTimeout); err != nil {
+	if err := restoreFromHost(unit, mysqlMigrateRestoreCommand(), rootEnv, dump, dumpRestoreTimeout); err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
