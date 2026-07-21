@@ -84,7 +84,9 @@
 </script>
 
 <div class="flex h-full flex-col rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3 transition duration-150 hover:border-gray-300 dark:hover:border-white/15 hover:shadow-sm">
-  <div class="flex items-start gap-2">
+  <!-- mb-2 keeps the meta line off the divider on the tallest card in a row,
+       where mt-auto has no slack left to space them apart. -->
+  <div class="flex items-start gap-2 mb-2">
     <Icon name="database" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
