@@ -306,6 +306,8 @@ Supported families: mysql, mariadb, postgres.`,
 					feedback.Line("waiting for the new container to be ready")
 				case "restoring_data":
 					feedback.Line("restoring " + ev.Message)
+				case "restore_warnings":
+					feedback.Warn("%s", ev.Message)
 				case "done":
 					if ev.Message != "" {
 						feedback.Note(ev.Message)

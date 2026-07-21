@@ -9,6 +9,7 @@
     exportUrl,
     dropDatabase,
     importDatabase,
+    type ImportIssue,
     type DatabaseEngine,
     type DatabaseEntry
   } from '$stores/databases';
@@ -16,6 +17,8 @@
   import { databaseAdminFor, openDatabaseAdmin } from '$stores/dashboard';
   import { goToTab } from '$stores/route';
   import DatabaseSnapshotsModal from './DatabaseSnapshotsModal.svelte';
+  import DatabaseOpStatus from './DatabaseOpStatus.svelte';
+  import ImportIssuesModal from './ImportIssuesModal.svelte';
   import SegmentedControl from '$components/SegmentedControl.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -37,8 +40,37 @@
   let showDrop = $state(false);
   let dropBusy = $state(false);
   let dropError = $state('');
-  let importBusy = $state(false);
   let fileInput = $state<HTMLInputElement | null>(null);
+  // The dump being imported, from the first byte uploaded to the confirmation
+  // or the engine's error; null whenever no import has run on this card.
+  let importOp = $state<{
+    tone: 'busy' | 'done' | 'warn' | 'error';
+    file: string;
+    percent: number | null;
+    error?: string;
+    errors?: number;
+    issues?: ImportIssue[];
+    omitted?: number;
+  } | null>(null);
+  const importBusy = $derived(importOp?.tone === 'busy');
+  // The engine's complaints open over the page rather than inside the card,
+  // which has no room for a list and belongs to one database in a grid.
+  let showIssues = $state(false);
+  let clearDone: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(clearDone));
+  const importMessage = $derived.by(() => {
+    if (!importOp) return '';
+    if (importOp.tone === 'error') return m.databases_importFailed({ error: importOp.error ?? '' });
+    if (importOp.tone === 'warn')
+      return m.databases_importedWithErrors({ file: importOp.file, count: importOp.errors ?? 0 });
+    if (importOp.tone === 'done') return m.databases_imported({ file: importOp.file });
+    return importOp.percent === null
+      ? m.databases_importing({ file: importOp.file })
+      : m.databases_importingPercent({
+          file: importOp.file,
+          percent: Math.round(importOp.percent * 100)
+        });
+  });
 
   const sqlOps = $derived(engine.supports_snapshot);
   // A worktree's isolated database is shown under the branch's own domain, so it
@@ -65,9 +97,36 @@
     const file = input.files?.[0];
     input.value = '';
     if (!file) return;
-    importBusy = true;
-    await importDatabase(engine.service, active.name, file);
-    importBusy = false;
+    importOp = { tone: 'busy', file: file.name, percent: 0 };
+    const res = await importDatabase(engine.service, active.name, file, (p) => {
+      if (importOp?.tone !== 'busy') return;
+      // Once the last byte is out the engine is still replaying the dump, and
+      // there is nothing left to measure, so the bar gives way to a spinner.
+      importOp = { ...importOp, percent: p.uploaded ? null : p.percent };
+    });
+    if (!res.ok) {
+      importOp = { tone: 'error', file: file.name, percent: null, error: res.error || m.common_failed() };
+      return;
+    }
+    // A load the engine only half swallowed still returns ok, so the counted
+    // complaints are the only thing standing between that and a false all-clear.
+    if (res.errors) {
+      importOp = {
+        tone: 'warn',
+        file: file.name,
+        percent: null,
+        errors: res.errors,
+        issues: res.issues,
+        omitted: res.omitted
+      };
+      showIssues = (res.issues ?? []).length > 0;
+      return;
+    }
+    importOp = { tone: 'done', file: file.name, percent: null };
+    clearTimeout(clearDone);
+    clearDone = setTimeout(() => {
+      if (importOp?.tone === 'done') importOp = null;
+    }, 4000);
   }
 
   async function confirmDrop() {
@@ -157,6 +216,7 @@
         use:tooltip={m.databases_import()}
         aria-label={m.databases_import()}
         onclick={() => fileInput?.click()}
+        disabled={importBusy}
         class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
@@ -189,7 +249,30 @@
       </button>
     {/if}
   </div>
+
+  {#if importOp}
+    <div class="mt-2">
+      <DatabaseOpStatus tone={importOp.tone} message={importMessage} percent={importOp.percent}>
+        {#if importOp.tone === 'warn' && (importOp.issues ?? []).length > 0}
+          <button
+            type="button"
+            onclick={() => (showIssues = true)}
+            class="text-xs underline text-amber-600 dark:text-amber-400 hover:no-underline"
+          >{m.databases_importIssuesLink()}</button>
+        {/if}
+      </DatabaseOpStatus>
+    </div>
+  {/if}
 </div>
+
+{#if showIssues && importOp?.issues}
+  <ImportIssuesModal
+    title={importMessage}
+    issues={importOp.issues}
+    omitted={importOp.omitted}
+    onclose={() => (showIssues = false)}
+  />
+{/if}
 
 {#if showSnapshots}
   <DatabaseSnapshotsModal {engine} entry={active} onclose={() => (showSnapshots = false)} />

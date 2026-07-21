@@ -4337,8 +4337,12 @@ func execDBRestore(args map[string]any) (any, *rpcError) {
 	if !target.AllDatabases && target.Database == "" {
 		return toolErr("database is required — pass database, or all_databases:true"), nil
 	}
-	if err := serviceops.RestoreSnapshot(target, name, nil); err != nil {
+	rep, err := serviceops.RestoreSnapshot(target, name, nil)
+	if err != nil {
 		return toolErr(err.Error()), nil
+	}
+	if rep.Errors > 0 {
+		return toolOK(fmt.Sprintf("Restored snapshot %q, but %s", name, rep.Summary())), nil
 	}
 	return toolOK(fmt.Sprintf("Restored snapshot %q", name)), nil
 }
