@@ -5,8 +5,13 @@
     tabs: TabItem<string>[];
     active: string;
     onchange: (id: string) => void;
+    withActions?: boolean;
   }
-  let { tabs, active, onchange }: Props = $props();
+  let { tabs, active, onchange, withActions = false }: Props = $props();
 </script>
 
-<DetailTabs {tabs} {active} {onchange} />
+{#snippet demoActions()}
+  <button type="button">Toggle</button>
+{/snippet}
+
+<DetailTabs {tabs} {active} {onchange} actions={withActions ? demoActions : undefined} />
