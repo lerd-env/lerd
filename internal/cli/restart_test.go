@@ -3,7 +3,6 @@ package cli
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -157,7 +156,6 @@ func TestRestartSite_HostProxyWaitsForPortRelease(t *testing.T) {
 	defer func() { podman.UnitLifecycle = nil }()
 
 	probes := 0
-	startedAfter := -1
 	prevProbe, prevPoll := devServerPortInUse, hostProxyStopPoll
 	devServerPortInUse = func(port int) bool {
 		probes++
@@ -169,13 +167,8 @@ func TestRestartSite_HostProxyWaitsForPortRelease(t *testing.T) {
 	if err := RestartSite("nuxtapp"); err != nil {
 		t.Fatalf("RestartSite: %v", err)
 	}
-	for i, op := range fake.ops {
-		if strings.HasPrefix(op, "start ") {
-			startedAfter = i
-		}
-	}
 	want := []string{"stop lerd-app-nuxtapp", "start lerd-app-nuxtapp"}
-	if len(fake.ops) != len(want) || fake.ops[0] != want[0] || fake.ops[startedAfter] != want[1] {
+	if len(fake.ops) != len(want) || fake.ops[0] != want[0] || fake.ops[1] != want[1] {
 		t.Fatalf("ops = %v, want %v", fake.ops, want)
 	}
 	if probes < 3 {
@@ -183,7 +176,11 @@ func TestRestartSite_HostProxyWaitsForPortRelease(t *testing.T) {
 	}
 }
 
-func TestRestartSite_HostProxyPortStillHeld(t *testing.T) {
+// A port that never frees is usually something else holding it, and the dev
+// server is the site's only runtime, so it is started regardless: the unit
+// retries until the port comes back, where refusing would leave the site down
+// with nothing to bring it up again.
+func TestRestartSite_HostProxyStartsWhenPortNeverFrees(t *testing.T) {
 	addHostProxySite(t, "stuckapp")
 
 	fake := &devServerLifecycle{}
@@ -197,17 +194,40 @@ func TestRestartSite_HostProxyPortStillHeld(t *testing.T) {
 		devServerPortInUse, hostProxyStopPoll, hostProxyStopTimeout = prevProbe, prevPoll, prevTimeout
 	}()
 
-	err := RestartSite("stuckapp")
-	if err == nil {
-		t.Fatal("expected an error when the port is never released")
+	if err := RestartSite("stuckapp"); err != nil {
+		t.Fatalf("RestartSite: %v", err)
 	}
-	if !strings.Contains(err.Error(), "5173") {
-		t.Errorf("error = %v, want it to name the port", err)
+	want := []string{"stop lerd-app-stuckapp", "start lerd-app-stuckapp"}
+	if len(fake.ops) != len(want) || fake.ops[0] != want[0] || fake.ops[1] != want[1] {
+		t.Fatalf("ops = %v, want %v", fake.ops, want)
 	}
-	for _, op := range fake.ops {
-		if strings.HasPrefix(op, "start ") {
-			t.Errorf("ops = %v, want no start while the port is held", fake.ops)
-		}
+}
+
+// The gateway rebind runs unattended over every host-proxy site, so it waits
+// far less than an explicit restart before giving up on the port.
+func TestRebindWaitIsShorterThanRestartWait(t *testing.T) {
+	if hostProxyRebindTimeout >= hostProxyStopTimeout {
+		t.Fatalf("rebind wait %s, restart wait %s, want the rebind to be shorter",
+			hostProxyRebindTimeout, hostProxyStopTimeout)
+	}
+}
+
+func TestRestartDevServerHonoursItsWait(t *testing.T) {
+	fake := &devServerLifecycle{}
+	podman.UnitLifecycle = fake
+	defer func() { podman.UnitLifecycle = nil }()
+
+	prevProbe, prevPoll := devServerPortInUse, hostProxyStopPoll
+	devServerPortInUse = func(port int) bool { return true }
+	hostProxyStopPoll = time.Millisecond
+	defer func() { devServerPortInUse, hostProxyStopPoll = prevProbe, prevPoll }()
+
+	start := time.Now()
+	if err := restartDevServer("lerd-app-rebound", 5173, 20*time.Millisecond); err != nil {
+		t.Fatalf("restartDevServer: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("waited %s on a 20ms budget", elapsed)
 	}
 }
 

@@ -48,6 +48,8 @@
     try {
       const r = await clearAppLogs(site.domain, branch);
       if (!r.ok) {
+        // The confirmation closes first, or the failure stacks on top of it.
+        confirmOpen = false;
         openErrorModal(m.sites_appLogs_clearFailed({ error: r.error || '' }));
         return;
       }

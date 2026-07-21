@@ -119,7 +119,7 @@ func rebindHostProxyDevServer(proxy *config.ProxyConfig, siteName, sitePath stri
 	if err := podman.DaemonReloadFn(); err != nil {
 		feedback.Warn("daemon-reload for %s: %v", siteName, err)
 	}
-	if err := restartDevServer(unitName, proxy.Port); err != nil {
+	if err := restartDevServer(unitName, proxy.Port, hostProxyRebindTimeout); err != nil {
 		feedback.Warn("restarting dev server for %s: %v", siteName, err)
 	}
 }
