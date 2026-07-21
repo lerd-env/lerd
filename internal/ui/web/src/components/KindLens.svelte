@@ -17,6 +17,8 @@
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { openInEditor } from '$lib/editor';
   import { m } from '../paraglide/messages.js';
 
@@ -54,6 +56,16 @@
   const groups = $derived(
     buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
+
+  // Only the newest LENS_PAGE rows render; the rest arrive as the user
+  // reaches the end. Changing a filter or tab starts the window over.
+  let limit = $state(LENS_PAGE);
+  const win = $derived(windowGroups(groups, (g) => g.events, limit));
+  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}`);
+  $effect(() => {
+    filterKey;
+    limit = LENS_PAGE;
+  });
 
   let enabling = $state(false);
   async function onEnable() {
@@ -155,15 +167,16 @@
         </EmptyState>
       {/if}
     {:else}
-      {#each groups as group (group.key)}
+      {#each win.pages as page (page.group.key)}
+        {@const group = page.group}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
             {#if group.worker}<span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>{/if}
             <span class="text-sm truncate">{group.label}</span>
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
-            <span class="text-xs text-gray-400 whitespace-nowrap">{group.events.length}</span>
+            <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
           </header>
-          {#each group.events as ev (ev.id)}
+          {#each page.rows as ev (ev.id)}
             {@const d = (ev.data ?? {}) as Record<string, any>}
             <div class="rounded-sm border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card mb-1.5 overflow-hidden">
               <button type="button" class="w-full text-left px-2.5 py-1.5 flex items-start gap-2 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => toggleRow(ev.id)}>
@@ -208,6 +221,7 @@
           {/each}
         </section>
       {/each}
+      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
     {/if}
   </div>
 </div>

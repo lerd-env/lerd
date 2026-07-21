@@ -1023,6 +1023,7 @@
   "debug_enable": "Enable capture",
   "debug_waiting_title": "Waiting…",
   "debug_waiting_body": "Trigger some activity in your app and it will appear here.",
+  "debug_loadMore": "Muat lebih banyak · {shown} dari {total}",
   "views_data": "data",
   "debug_tab_http": "HTTP",
   "http_sent": "terkirim",
