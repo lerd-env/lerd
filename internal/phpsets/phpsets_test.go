@@ -152,3 +152,33 @@ func TestModules_unbuiltVersion(t *testing.T) {
 		t.Errorf("Modules = %v, want empty for an unbuilt version", got)
 	}
 }
+
+// An entry that landed nowhere is a broken build environment, not a version
+// boundary, and the realised set already holds what tells those apart.
+func TestNowhereBuilt(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.AddExtension("mongodb")
+	cfg.AddExtension("yaml")
+	cfg.SetRealised("8.5", config.RealisedPHPSet{Extensions: []string{"mongodb"}})
+	cfg.SetRealised("7.4", config.RealisedPHPSet{})
+	stubImages(t, func(v string) bool { return v == "8.5" || v == "7.4" }, func(string) bool { return false })
+
+	reports := StatusAll(cfg, []string{"8.5", "8.1", "7.4"})
+	got := NowhereBuilt(reports, func(r Report) SetState { return r.Extensions })
+	if !reflect.DeepEqual(got, []string{"yaml"}) {
+		t.Errorf("NowhereBuilt = %v, want [yaml]: mongodb built on 8.5, yaml built nowhere", got)
+	}
+}
+
+// With no current image anywhere there is nothing to conclude, so nothing is
+// claimed: an unbuilt version is not evidence that an entry failed.
+func TestNowhereBuilt_noJudgeableImage(t *testing.T) {
+	cfg := testConfig(t)
+	cfg.AddExtension("yaml")
+	stubImages(t, func(string) bool { return true }, func(string) bool { return true })
+
+	reports := StatusAll(cfg, []string{"8.5", "8.4"})
+	if got := NowhereBuilt(reports, func(r Report) SetState { return r.Extensions }); got != nil {
+		t.Errorf("NowhereBuilt = %v, want nil when every image is stale", got)
+	}
+}

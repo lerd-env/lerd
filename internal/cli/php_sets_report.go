@@ -16,7 +16,8 @@ import (
 // advertised what those images do not load, which is what #856 exists to
 // prevent. The three states are kept apart because the answer to each differs:
 // rebuild, give up, or nothing to do.
-func printPerVersionStatus(cfg *config.GlobalConfig, pick func(phpsets.Report) phpsets.SetState) {
+func printPerVersionStatus(cfg *config.GlobalConfig, kind declaredKind) {
+	pick := kind.pick
 	reports := phpsets.StatusAll(cfg, config.SupportedPHPVersions)
 
 	var lines []string
@@ -52,8 +53,30 @@ func printPerVersionStatus(cfg *config.GlobalConfig, pick func(phpsets.Report) p
 	if unbuildable {
 		fmt.Println("\nWhat an image cannot load did not build on that version; a rebuild will not change that.")
 	}
+	// Landing on no version at all is a different problem from a version
+	// boundary: nowhere to build is usually the build environment, not the
+	// versions, and saying so is what would have surfaced #1013 without
+	// anyone reading a build log.
+	if nowhere := phpsets.NowhereBuilt(reports, pick); len(nowhere) > 0 {
+		fmt.Printf("\n%s built on no version at all, which usually means the build failed rather than\nthe versions cannot have it.%s\n", strings.Join(nowhere, ", "), kind.nowhereHint(nowhere[0]))
+	}
 }
 
-// extensionsOf and packagesOf name which declared set a report line is about.
-func extensionsOf(r phpsets.Report) phpsets.SetState { return r.Extensions }
-func packagesOf(r phpsets.Report) phpsets.SetState   { return r.Packages }
+// declaredKind names which declared set a report is about, along with what to
+// suggest when an entry of that kind landed on no version.
+type declaredKind struct {
+	pick        func(phpsets.Report) phpsets.SetState
+	nowhereHint func(entry string) string
+}
+
+var extensionsOf = declaredKind{
+	pick: func(r phpsets.Report) phpsets.SetState { return r.Extensions },
+	nowhereHint: func(e string) string {
+		return " Re-add it with the Alpine packages its\nbuild needs: lerd php:ext add " + e + " --apk-deps \"<pkg>-dev\""
+	},
+}
+
+var packagesOf = declaredKind{
+	pick:        func(r phpsets.Report) phpsets.SetState { return r.Packages },
+	nowhereHint: func(e string) string { return " Check the package name exists on Alpine." },
+}
