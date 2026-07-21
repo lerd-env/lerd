@@ -1,43 +1,62 @@
 <script lang="ts">
+  import Icon, { type IconName } from '$components/Icon.svelte';
+  import Popover from '$components/Popover.svelte';
   import { theme, type Theme } from '$stores/theme';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
     size?: 'sm' | 'md';
+    align?: 'left' | 'right';
   }
-  let { size = 'sm' }: Props = $props();
+  let { size = 'sm', align = 'left' }: Props = $props();
 
-  const modes: Theme[] = ['light', 'auto', 'dark'];
+  const modes: Theme[] = ['light', 'dark', 'auto'];
+  const icons: Record<Theme, IconName> = { light: 'sun', dark: 'moon', auto: 'contrast' };
 
   const labels = $derived<Record<Theme, string>>({
     light: m.theme_light(),
-    auto: m.theme_auto(),
-    dark: m.theme_dark()
+    dark: m.theme_dark(),
+    auto: m.theme_auto()
   });
 
-  const containerClass = $derived(
-    size === 'sm'
-      ? 'flex flex-col rounded-md border border-gray-200 dark:border-lerd-border overflow-hidden'
-      : 'flex flex-row rounded-md border border-gray-200 dark:border-lerd-border overflow-hidden text-xs'
+  // The rail icon shows the mode in effect and the tooltip names it. For auto it
+  // also names what the system resolved to, since the icon alone cannot tell the
+  // user whether they are currently on light or dark.
+  const systemDark = $derived(
+    typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches
   );
-
-  const cellClass = $derived(
-    size === 'sm'
-      ? 'px-2 py-1.5 text-[10px] font-medium transition-colors'
-      : 'px-2 py-1 capitalize transition-colors'
+  const triggerLabel = $derived(
+    $theme === 'auto' ? `${labels.auto} (${systemDark ? labels.dark : labels.light})` : labels[$theme]
   );
 </script>
 
-<div class={containerClass}>
-  {#each modes as mode (mode)}
-    <button
-      title={labels[mode]}
-      class="{cellClass} {$theme === mode
-        ? 'bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white'
-        : 'text-gray-400 dark:text-gray-500 hover:bg-gray-100 dark:hover:bg-white/5'}"
-      onclick={() => theme.set(mode)}
-    >
-      {mode[0].toUpperCase()}
-    </button>
-  {/each}
-</div>
+<Popover label={triggerLabel} {size} {align} width={180}>
+  {#snippet trigger()}
+    <Icon name={icons[$theme]} class="w-5 h-5" />
+  {/snippet}
+  {#snippet children(close: () => void)}
+    <ul class="py-1">
+      {#each modes as mode (mode)}
+        <li>
+          <button
+            type="button"
+            onclick={() => {
+              theme.set(mode);
+              close();
+            }}
+            class="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-xs capitalize transition-colors hover:bg-gray-50 dark:hover:bg-white/5 {$theme ===
+            mode
+              ? 'text-gray-900 dark:text-white'
+              : 'text-gray-500 dark:text-gray-400'}"
+          >
+            <Icon name={icons[mode]} class="w-3.5 h-3.5 shrink-0" />
+            <span class="flex-1">{labels[mode]}</span>
+            {#if $theme === mode}
+              <Icon name="check" class="w-3.5 h-3.5 shrink-0 text-lerd-red" />
+            {/if}
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/snippet}
+</Popover>
