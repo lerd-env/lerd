@@ -6,6 +6,7 @@
     unreadNotifications,
     markNotificationsRead,
     clearNotificationHistory,
+    notificationSeverity,
     type NotificationRecord
   } from '$lib/notify';
   import { m } from '../paraglide/messages.js';
@@ -63,6 +64,7 @@
     {:else}
       <ul class="max-h-[60vh] overflow-y-auto divide-y divide-gray-100 dark:divide-lerd-border/60">
         {#each $notificationHistory as n (n.id)}
+          {@const severity = notificationSeverity(n.kind, n.failed)}
           <li>
             <button
               type="button"
@@ -70,10 +72,12 @@
               class="flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
             >
               <Icon
-                name={n.failed ? 'alert' : 'check'}
-                class="mt-0.5 h-3.5 w-3.5 shrink-0 {n.failed
+                name={severity === 'info' ? 'check' : 'alert'}
+                class="mt-0.5 h-3.5 w-3.5 shrink-0 {severity === 'failure'
                   ? 'text-red-500'
-                  : 'text-gray-300 dark:text-gray-600'}"
+                  : severity === 'warning'
+                    ? 'text-amber-500'
+                    : 'text-gray-300 dark:text-gray-600'}"
               />
               <span class="min-w-0 flex-1">
                 <span class="block truncate text-xs font-medium text-gray-800 dark:text-gray-100"

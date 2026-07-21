@@ -65,12 +65,16 @@ func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.No
 	if r.Multiplier > 0 {
 		body = fmt.Sprintf("%s is %gx slower than usual (%gms)", r.Route, r.Multiplier, r.P95Millis)
 	}
+	url := "#sites"
+	if domain != "" {
+		url = "#sites/" + domain + "/dumps"
+	}
 	return push.Notification{
 		Kind:    "slow_route",
 		Title:   "Slow route on " + site,
 		Body:    body,
 		Tag:     "lerd-slowroute-" + site + "-" + r.Route,
-		URL:     "#sites/" + domain + "/dumps",
+		URL:     url,
 		Data:    map[string]string{"site": site, "route": r.Route},
 		Urgency: "normal",
 		TTL:     120,
@@ -78,13 +82,14 @@ func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.No
 }
 
 // siteDomainResolver loads the site registry once and returns a key->domain
-// lookup, falling back to the key when it has no domain. A worktree key resolves
-// to the worktree's own domain, so the notification deep-links to the branch that
-// went slow rather than to its parent.
+// lookup, returning "" when the key has no domain so the caller can fall back to
+// the sites list rather than deep-link a route that resolves to nothing. A
+// worktree key resolves to the worktree's own domain, so the notification
+// deep-links to the branch that went slow rather than to its parent.
 func siteDomainResolver() func(string) string {
 	reg, err := config.LoadSites()
 	if err != nil {
-		return func(s string) string { return s }
+		return func(string) string { return "" }
 	}
 	m := make(map[string]string, len(reg.Sites))
 	for _, s := range reg.Sites {
@@ -99,9 +104,6 @@ func siteDomainResolver() func(string) string {
 				return d
 			}
 		}
-		if d, ok := m[site]; ok {
-			return d
-		}
-		return key
+		return m[site]
 	}
 }

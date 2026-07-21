@@ -95,3 +95,12 @@ func TestNotificationForSlowRoute_zeroMultiplierUsesAbsolute(t *testing.T) {
 		t.Errorf("with a real multiplier the body should use the slower-than-usual phrasing, got %q", body)
 	}
 }
+
+// An unresolvable site key must land on the sites list, not on a deep link that
+// resolves to no site at all (#1005).
+func TestNotificationForSlowRoute_unresolvedDomainFallsBackToSitesList(t *testing.T) {
+	r := reqstats.RouteStat{Route: "GET /export", Method: "GET", P95Millis: 1200, Multiplier: 5}
+	if url := notificationForSlowRoute("acme", "", r).URL; url != "#sites" {
+		t.Errorf("URL = %q, want #sites", url)
+	}
+}

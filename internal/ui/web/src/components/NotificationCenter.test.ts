@@ -48,3 +48,18 @@ describe('NotificationCenter', () => {
     expect(get(notificationHistory)).toHaveLength(0);
   });
 });
+
+describe('NotificationCenter severity', () => {
+  beforeEach(() => {
+    notificationHistory.set([]);
+  });
+
+  it('marks a detected problem as a warning in the list', async () => {
+    notificationHistory.set([
+      rec({ kind: 'nplusone', title: 'Possible N+1 query on acme', failed: false })
+    ]);
+    const { getByLabelText, container } = render(NotificationCenter);
+    await fireEvent.click(getByLabelText('Notifications'));
+    expect(container.querySelector('.text-amber-500')).toBeTruthy();
+  });
+});

@@ -1,6 +1,11 @@
 <script lang="ts">
   import Icon from '$components/Icon.svelte';
-  import { inAppNotifications, dismissInApp, type InAppNotification } from '$lib/notify';
+  import {
+    inAppNotifications,
+    dismissInApp,
+    notificationSeverity,
+    type InAppNotification
+  } from '$lib/notify';
   import { m } from '../paraglide/messages.js';
 
   // A failure stays until it is dismissed; anything else is informational and
@@ -34,18 +39,24 @@
 {#if $inAppNotifications.length > 0}
   <div class="fixed bottom-3 right-3 z-60 flex w-[min(92vw,380px)] flex-col gap-2">
     {#each $inAppNotifications as n (n.id)}
+      {@const severity = notificationSeverity(n.kind, n.failed)}
       <div
-        role={n.failed ? 'alert' : 'status'}
-        class="rounded-lg border border-l-4 bg-white/90 dark:bg-lerd-card/90 backdrop-blur-md shadow-2xl {n.failed
+        role={severity === 'info' ? 'status' : 'alert'}
+        class="rounded-lg border border-l-4 bg-white/90 dark:bg-lerd-card/90 backdrop-blur-md shadow-2xl {severity ===
+        'failure'
           ? 'border-red-300 dark:border-red-500/40 border-l-red-500'
-          : 'border-gray-200 dark:border-lerd-border border-l-sky-500'}"
+          : severity === 'warning'
+            ? 'border-amber-300 dark:border-amber-500/40 border-l-amber-500'
+            : 'border-gray-200 dark:border-lerd-border border-l-sky-500'}"
       >
         <div class="flex items-start gap-2.5 px-3 py-2.5">
           <Icon
-            name={n.failed ? 'alert' : 'check'}
-            class="mt-0.5 h-4 w-4 shrink-0 {n.failed
+            name={severity === 'info' ? 'check' : 'alert'}
+            class="mt-0.5 h-4 w-4 shrink-0 {severity === 'failure'
               ? 'text-red-500'
-              : 'text-sky-600 dark:text-sky-400'}"
+              : severity === 'warning'
+                ? 'text-amber-500'
+                : 'text-sky-600 dark:text-sky-400'}"
           />
           <div class="min-w-0 flex-1">
             <p class="text-xs font-semibold text-gray-800 dark:text-gray-100">{n.title}</p>

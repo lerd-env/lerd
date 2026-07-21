@@ -47,3 +47,20 @@ describe('NotificationToasts', () => {
     expect(get(inAppNotifications)).toHaveLength(0);
   });
 });
+
+describe('NotificationToasts severity', () => {
+  beforeEach(() => {
+    inAppNotifications.set([]);
+    vi.useRealTimers();
+  });
+
+  it('draws a detected problem as a warning rather than a completed action', async () => {
+    const { getByRole, container } = render(NotificationToasts);
+    push({ kind: 'nplusone', title: 'Possible N+1 query on acme', body: 'GET /users ran a similar query 3x' });
+    await tick();
+
+    expect(getByRole('alert')).toHaveTextContent('Possible N+1 query on acme');
+    expect(container.querySelector('.text-amber-500')).toBeTruthy();
+    expect(container.querySelector('.text-sky-600')).toBeNull();
+  });
+});
