@@ -21,8 +21,8 @@ const engine: DatabaseEngine = {
   databases: []
 };
 
-function db(name: string, size = 0, site?: string): DatabaseEntry {
-  return { name, size_bytes: size, site, snapshots: [] };
+function db(name: string, size = 0, site?: string, branch?: string): DatabaseEntry {
+  return { name, size_bytes: size, site, branch, snapshots: [] };
 }
 
 const parent = db('havenly', 4096, 'havenly.test');
@@ -70,6 +70,13 @@ describe('DatabaseCard', () => {
     const confirm = getAllByRole('button', { name: 'Drop' }).at(-1)!;
     await fireEvent.click(confirm);
     expect(dropDatabase).toHaveBeenCalledWith('mysql', 'havenly_testing');
+  });
+
+  it('labels a worktree database with the branch domain it belongs to', () => {
+    const { getByRole } = render(DatabaseCard, {
+      props: { engine, entry: db('havenly_staging', 2048, 'havenly.test', 'staging') }
+    });
+    expect(getByRole('button', { name: 'staging.havenly.test' })).toBeInTheDocument();
   });
 
   it('points export at the selected half', async () => {

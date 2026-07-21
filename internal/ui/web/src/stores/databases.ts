@@ -13,6 +13,8 @@ export interface DatabaseEntry {
   size_bytes: number;
   // Domain of the linked site that owns this database, when one does.
   site?: string;
+  // Worktree branch this database is the isolated one for, when it is.
+  branch?: string;
   snapshots: Snapshot[];
 }
 
