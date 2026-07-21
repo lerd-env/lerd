@@ -283,3 +283,86 @@ func TestConcurrentPollAndRead(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// While lerd is intentionally stopped its containers are meant to be down, and
+// workerheal.Detect already suppresses itself, so nothing in the process needs
+// fresh container state. The timer must stop spending a podman round trip on
+// it, and must pick straight back up once `lerd start` clears the marker.
+func TestLoopStopsPollingWhileLerdIsStopped(t *testing.T) {
+	var mu sync.Mutex
+	polls := 0
+	c := newTestCache(func() (string, error) {
+		mu.Lock()
+		polls++
+		mu.Unlock()
+		return "", nil
+	})
+
+	stopped := true
+	prev := stoppedFn
+	stoppedFn = func() bool { return stopped }
+	t.Cleanup(func() { stoppedFn = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c.mu.Lock()
+	c.started = true
+	c.mu.Unlock()
+	c.interval = 20 * time.Millisecond
+	go c.loop(ctx)
+
+	time.Sleep(250 * time.Millisecond)
+	mu.Lock()
+	whileStopped := polls
+	mu.Unlock()
+
+	// One poll is allowed on the transition into stopped, so the map reflects
+	// containers that went down after the marker was written.
+	if whileStopped > 1 {
+		t.Errorf("polled %d times while stopped, want at most the single transition poll", whileStopped)
+	}
+
+	stopped = false
+	time.Sleep(150 * time.Millisecond)
+	mu.Lock()
+	afterStart := polls
+	mu.Unlock()
+
+	if afterStart <= whileStopped {
+		t.Errorf("polling did not resume after the stop marker cleared (%d -> %d)", whileStopped, afterStart)
+	}
+}
+
+// An explicit refresh is a caller saying it needs state now, so it is honoured
+// even while stopped: `lerd start` publishes through this path.
+func TestRefreshPollsEvenWhileStopped(t *testing.T) {
+	polled := make(chan struct{}, 10)
+	c := newTestCache(func() (string, error) {
+		polled <- struct{}{}
+		return "", nil
+	})
+
+	prev := stoppedFn
+	stoppedFn = func() bool { return true }
+	t.Cleanup(func() { stoppedFn = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	c.mu.Lock()
+	c.started = true
+	c.mu.Unlock()
+	// Long interval so the timer branch never fires: the only poll that can
+	// arrive is the one Refresh asks for.
+	c.interval = 10 * time.Minute
+	go c.loop(ctx)
+
+	c.Refresh()
+
+	select {
+	case <-polled:
+	case <-time.After(2 * time.Second):
+		t.Error("explicit Refresh() must poll even while lerd is stopped")
+	}
+}

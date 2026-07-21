@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // ContainerCache polls podman for container states on a configurable interval
@@ -48,6 +50,10 @@ func (c *ContainerCache) SetOnChange(fn func()) {
 	c.onChange = fn
 	c.onChangeMu.Unlock()
 }
+
+// stoppedFn reports whether lerd was intentionally stopped. A var so the loop
+// test can drive the transition without touching the real marker file.
+var stoppedFn = config.IsStopped
 
 // pollTimeout bounds the non-started fallback podman calls so a stalled VM
 // (macOS post-sleep) yields a fast empty snapshot instead of hanging the caller.
@@ -180,6 +186,9 @@ func (c *ContainerCache) Pause()  { atomic.AddInt32(&c.pauseCount, 1) }
 func (c *ContainerCache) Resume() { atomic.AddInt32(&c.pauseCount, -1) }
 
 func (c *ContainerCache) loop(ctx context.Context) {
+	// polledWhileStopped records that the map has already been brought up to
+	// date since lerd was stopped, so the quiet period costs nothing further.
+	polledWhileStopped := false
 	for {
 		c.intervalMu.Lock()
 		d := c.interval
@@ -192,11 +201,30 @@ func (c *ContainerCache) loop(ctx context.Context) {
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
+			// While lerd is intentionally stopped its containers are meant to
+			// be down and workerheal.Detect suppresses itself, so no consumer
+			// needs fresh state and the podman round trip is pure waste. One
+			// poll still runs on the way in: `lerd stop` writes the marker
+			// before the containers have finished going down, so the map would
+			// otherwise keep reporting them as running. The timer keeps ticking
+			// (a stat, not a subprocess) so polling resumes on its own once
+			// `lerd start` clears the marker.
+			if stoppedFn() {
+				if !polledWhileStopped {
+					polledWhileStopped = true
+					c.poll()
+				}
+				continue
+			}
+			polledWhileStopped = false
 			c.poll()
 		case <-c.refresh:
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
+			// An explicit refresh is a caller stating it needs state now, so
+			// it is honoured regardless: `lerd start` publishes through here.
+			polledWhileStopped = false
 			c.poll()
 		}
 	}
