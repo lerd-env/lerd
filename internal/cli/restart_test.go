@@ -3,7 +3,9 @@ package cli
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
@@ -102,6 +104,110 @@ func TestRestartSite_StaticSiteRefused(t *testing.T) {
 	}
 	if fake.restartedUnit != "" {
 		t.Errorf("restarted unit = %q, want none for a static site", fake.restartedUnit)
+	}
+}
+
+// devServerLifecycle records the unit ops in order and reports the unit gone
+// once it has been stopped, the way launchd/systemd do.
+type devServerLifecycle struct {
+	ops     []string
+	stopped bool
+}
+
+func (f *devServerLifecycle) Start(name string) error {
+	f.ops = append(f.ops, "start "+name)
+	return nil
+}
+func (f *devServerLifecycle) Restart(name string) error {
+	f.ops = append(f.ops, "restart "+name)
+	return nil
+}
+func (f *devServerLifecycle) Stop(name string) error {
+	f.ops = append(f.ops, "stop "+name)
+	f.stopped = true
+	return nil
+}
+func (f *devServerLifecycle) UnitStatus(name string) (string, error) {
+	if f.stopped {
+		return "inactive", nil
+	}
+	return "active", nil
+}
+func (f *devServerLifecycle) AllUnitStates() map[string]string { return nil }
+
+func addHostProxySite(t *testing.T, name string) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	config.AddSite(config.Site{
+		Name:        name,
+		Domains:     []string{name + ".test"},
+		Path:        t.TempDir(),
+		HostPort:    5173,
+		HostCommand: "npm run dev",
+	})
+}
+
+// A dev server that drains its queues on SIGTERM keeps the port for a moment
+// after the unit reports stopped, so the start has to wait for the port.
+func TestRestartSite_HostProxyWaitsForPortRelease(t *testing.T) {
+	addHostProxySite(t, "nuxtapp")
+
+	fake := &devServerLifecycle{}
+	podman.UnitLifecycle = fake
+	defer func() { podman.UnitLifecycle = nil }()
+
+	probes := 0
+	startedAfter := -1
+	prevProbe, prevPoll := devServerPortInUse, hostProxyStopPoll
+	devServerPortInUse = func(port int) bool {
+		probes++
+		return probes < 3
+	}
+	hostProxyStopPoll = time.Millisecond
+	defer func() { devServerPortInUse, hostProxyStopPoll = prevProbe, prevPoll }()
+
+	if err := RestartSite("nuxtapp"); err != nil {
+		t.Fatalf("RestartSite: %v", err)
+	}
+	for i, op := range fake.ops {
+		if strings.HasPrefix(op, "start ") {
+			startedAfter = i
+		}
+	}
+	want := []string{"stop lerd-app-nuxtapp", "start lerd-app-nuxtapp"}
+	if len(fake.ops) != len(want) || fake.ops[0] != want[0] || fake.ops[startedAfter] != want[1] {
+		t.Fatalf("ops = %v, want %v", fake.ops, want)
+	}
+	if probes < 3 {
+		t.Errorf("port probed %d times, want the start held until the port was free", probes)
+	}
+}
+
+func TestRestartSite_HostProxyPortStillHeld(t *testing.T) {
+	addHostProxySite(t, "stuckapp")
+
+	fake := &devServerLifecycle{}
+	podman.UnitLifecycle = fake
+	defer func() { podman.UnitLifecycle = nil }()
+
+	prevProbe, prevPoll, prevTimeout := devServerPortInUse, hostProxyStopPoll, hostProxyStopTimeout
+	devServerPortInUse = func(port int) bool { return true }
+	hostProxyStopPoll, hostProxyStopTimeout = time.Millisecond, 10*time.Millisecond
+	defer func() {
+		devServerPortInUse, hostProxyStopPoll, hostProxyStopTimeout = prevProbe, prevPoll, prevTimeout
+	}()
+
+	err := RestartSite("stuckapp")
+	if err == nil {
+		t.Fatal("expected an error when the port is never released")
+	}
+	if !strings.Contains(err.Error(), "5173") {
+		t.Errorf("error = %v, want it to name the port", err)
+	}
+	for _, op := range fake.ops {
+		if strings.HasPrefix(op, "start ") {
+			t.Errorf("ops = %v, want no start while the port is held", fake.ops)
+		}
 	}
 }
 

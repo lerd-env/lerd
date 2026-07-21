@@ -76,12 +76,12 @@ The dev server is the site's main process, not a togglable worker. Its health dr
 
 - `lerd link` and `lerd unpause` start it.
 - `lerd pause` stops it (and replaces the vhost with a landing page).
-- `lerd restart` restarts it.
+- `lerd restart` restarts it. Dev servers that drain queues on shutdown hold their port for a moment after the process is asked to stop, so the restart stops the server, waits for the port to actually come free, and only then starts it again. If something is still on the port after 30 seconds it says so instead of starting a server that would die with "address already in use".
 - `lerd unlink` stops it and removes its unit.
 
 If it dies it is restarted automatically (`Restart=always`), and lerd's worker-heal pass recovers it if it ever gets stuck, while leaving paused sites alone. Because pause already stops it, there is deliberately no separate start/stop toggle for the dev server in the dashboard.
 
-The dashboard shows a **Proxy** badge with the port (mirroring the container badge custom-container sites get), and the dev server's journal is available under a read-only **Dev Server** logs tab. From the CLI:
+The dashboard shows a **Proxy** badge with the port (mirroring the container badge custom-container sites get), and the dev server's journal is available under a read-only **Dev Server** logs tab. The site header carries a reload button that restarts the dev server, the same thing `lerd restart` does; proxy-only sites, which have no command for lerd to run, do not get it. From the CLI:
 
 ```bash
 journalctl --user -u lerd-app-<site> -f

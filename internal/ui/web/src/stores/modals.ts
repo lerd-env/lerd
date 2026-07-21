@@ -30,6 +30,7 @@ export type ModalKind =
   | 'workspaceDelete'
   | 'siteUnlink'
   | 'serviceInstall'
+  | 'error'
   | null;
 
 export type LANAction = 'expose' | 'unexpose';
@@ -161,6 +162,12 @@ export interface TuningResetTarget {
   path: string;
 }
 
+export interface ErrorTarget {
+  message: string;
+  /** Overrides the generic "Something went wrong" heading. */
+  title?: string;
+}
+
 export interface ModalState {
   kind: ModalKind;
   site?: Site;
@@ -186,9 +193,16 @@ export interface ModalState {
   workspaceDelete?: WorkspaceDeleteTarget;
   siteUnlink?: SiteUnlinkTarget;
   serviceInstall?: ServiceInstallTarget;
+  error?: ErrorTarget;
 }
 
 export const modal = writable<ModalState>({ kind: null });
+
+// The dashboard reports failures in a modal rather than a native alert(), which
+// browsers block, style inconsistently, and freeze the page on.
+export function openErrorModal(message: string, title?: string) {
+  modal.set({ kind: 'error', error: { message, title } });
+}
 
 export function openWorkspaceDeleteModal(target: WorkspaceDeleteTarget) {
   modal.set({ kind: 'workspaceDelete', workspaceDelete: target });

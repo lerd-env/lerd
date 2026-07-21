@@ -18,6 +18,7 @@
   } from '$stores/sites';
   import {
     openDomainModal,
+    openErrorModal,
     openGroupModal,
     openSiteUnlinkModal,
     openWorktreeAddModal,
@@ -127,6 +128,13 @@
   const lanDomain = $derived(activeWorktree ? activeWorktree.domain ?? site.domain : site.domain);
   const lanOn = $derived(Boolean(lanPort));
 
+  // A host-proxy site's dev server is its only runtime, and restarting it is the
+  // routine fix when it wedges, so it gets a first-class header button rather
+  // than an overflow entry. Proxy-only sites have no process lerd can bounce.
+  const showDevServerRestart = $derived(
+    Boolean(site.host_has_dev_server) && !site.paused && !activeWorktreeBranch
+  );
+
   const useTLS = $derived(Boolean(site.tls));
   const scheme = $derived(useTLS ? 'https://' : 'http://');
 
@@ -156,7 +164,7 @@
     restartBusy = true;
     try {
       const res = await restartSite(site.domain);
-      if (!res.ok) alert(m.sites_restartFailed({ error: res.error || '' }));
+      if (!res.ok) openErrorModal(m.sites_restartFailed({ error: res.error || '' }));
     } finally {
       restartBusy = false;
     }
@@ -490,6 +498,26 @@
         </button>
       {/if}
 
+      {#if showDevServerRestart}
+        <button
+          type="button"
+          onclick={restart}
+          disabled={restartBusy}
+          aria-label={m.sites_restartDevServer()}
+          use:tooltip={m.sites_restartDevServer()}
+          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
+        >
+          <svg class="w-4 h-4 {restartBusy ? 'animate-spin' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+        </button>
+      {/if}
+
       {#if !activeWorktreeBranch && !site.host_proxy}
         <button
           type="button"
@@ -597,7 +625,7 @@
             role="menu"
             class="absolute right-0 top-full mt-1 min-w-[12rem] rounded-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-bg shadow-lg z-30 py-1"
           >
-            {#if !site.paused && (site.uses_php || site.custom_container)}
+            {#if !site.paused && !site.host_proxy && (site.uses_php || site.custom_container)}
               <button
                 type="button"
                 role="menuitem"
