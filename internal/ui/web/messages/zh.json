@@ -713,6 +713,7 @@
   "debug_enable": "启用捕获",
   "debug_waiting_title": "等待中…",
   "debug_waiting_body": "在你的应用中触发一些活动，它就会显示在这里。",
+  "debug_loadMore": "加载更多 · 共 {total} 条，已显示 {shown} 条",
   "views_data": "数据",
   "views_template": "模板",
   "queries_searchPlaceholder": "搜索 SQL、路径或文件…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "隐藏跟踪",
   "queries_openInEditor": "在编辑器中打开",
   "queries_show_workers": "显示 worker 查询",
+  "debug_show_tests": "显示测试运行",
+  "debug_tests_hidden": "(已隐藏 {count})",
   "queries_filter_allWorkers": "所有 workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "复制可执行的 SQL",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "应用",
+  "databases_targetTesting": "测试",
+  "databases_targetLabel": "这些操作作用于哪个数据库",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "通知",
+  "notify_center_empty": "暂无内容。已完成的操作、失败和捕获的邮件会显示在这里。",
+  "nav_notifications": "通知"
 }

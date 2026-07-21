@@ -117,6 +117,8 @@ To answer yes to every prompt without interaction:
 lerd uninstall --force
 ```
 
+The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, and the drop-in that empties `FallbackDNS`. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
+
 ---
 
 ### Check prerequisites only

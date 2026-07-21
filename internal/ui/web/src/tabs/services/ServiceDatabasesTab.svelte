@@ -3,6 +3,7 @@
   import DetailButton from '$components/DetailButton.svelte';
   import { databases, loadEngine, createDatabase } from '$stores/databases';
   import type { Service } from '$stores/services';
+  import { pairDatabases } from '$lib/databasePairs';
   import DatabaseCard from '../databases/DatabaseCard.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -19,6 +20,7 @@
 
   const engine = $derived($databases.find((e) => e.service === svc.name));
   const active = $derived(engine?.status === 'active');
+  const pairs = $derived(pairDatabases(engine?.databases ?? []));
 
   let newName = $state('');
   let creating = $state(false);
@@ -68,8 +70,8 @@
       <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noDatabases()}</p>
     {:else}
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {#each engine.databases as entry (entry.name)}
-          <DatabaseCard {engine} {entry} />
+        {#each pairs as pair (pair.entry.name)}
+          <DatabaseCard {engine} entry={pair.entry} testing={pair.testing} />
         {/each}
       </div>
     {/if}

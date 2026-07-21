@@ -713,6 +713,7 @@
   "debug_enable": "キャプチャを有効化",
   "debug_waiting_title": "待機中…",
   "debug_waiting_body": "アプリで何らかのアクティビティを発生させるとここに表示されます。",
+  "debug_loadMore": "さらに読み込む · {total} 件中 {shown} 件",
   "views_data": "データ",
   "views_template": "テンプレート",
   "queries_searchPlaceholder": "SQL、パス、ファイルを検索…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "トレースを隠す",
   "queries_openInEditor": "エディタで開く",
   "queries_show_workers": "ワーカーのクエリを表示",
+  "debug_show_tests": "テスト実行を表示",
+  "debug_tests_hidden": "({count} 件非表示)",
   "queries_filter_allWorkers": "すべてのワーカー",
   "queries_worker_badge": "ワーカー",
   "queries_copySql": "実行可能な SQL をコピー",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "アプリ",
+  "databases_targetTesting": "テスト",
+  "databases_targetLabel": "これらの操作の対象となるデータベース",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "通知",
+  "notify_center_empty": "まだ何もありません。完了した操作、失敗、キャプチャしたメールがここに表示されます。",
+  "nav_notifications": "通知"
 }

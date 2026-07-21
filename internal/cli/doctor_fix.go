@@ -18,9 +18,16 @@ const (
 	fixPhpRebuild   = "php-rebuild"
 	fixStart        = "start"
 	fixInstall      = "install"
-	fixWSLSetup     = "wsl-setup"
-	fixDNSRepair    = "dns-repair"
 	fixCleanup      = "cleanup"
+)
+
+// Repairs that need elevated privilege. They are named so the auto tier can be
+// tested against them, but they are deliberately absent from ApplyDoctorFix:
+// both shell into subcommands that run sudo, which the auto tier promises not
+// to do, so the doctor reports them as manual for the user to run.
+const (
+	fixWSLSetup  = "wsl-setup"
+	fixDNSRepair = "dns-repair"
 )
 
 // heavyFixKeys are auto fixes that rebuild images, reinstall units, or delete
@@ -43,7 +50,9 @@ func IsHeavyFix(fix *DoctorFix) bool {
 // each automatic fix (confirming per fix, heavy ones even under yes), lists the
 // sudo commands the user must run themselves, then re-checks.
 func runDoctorFix(w io.Writer, rep DoctorReport, yes, dryRun bool) error {
-	autos := rep.AutoFixes()
+	required := rep.RequiredAutoFixes()
+	optional := rep.OptionalAutoFixes()
+	autos := append(append([]Finding{}, required...), optional...)
 	manuals := rep.ManualFixes()
 
 	if len(autos) == 0 && len(manuals) == 0 {
@@ -51,12 +60,8 @@ func runDoctorFix(w io.Writer, rep DoctorReport, yes, dryRun bool) error {
 		return nil
 	}
 
-	if len(autos) > 0 {
-		fmt.Fprintln(w, "\nAutomatic fixes available:")
-		for _, f := range autos {
-			fmt.Fprintf(w, "  • %s: %s\n", f.Name, f.Fix.Label)
-		}
-	}
+	listFixes(w, "Automatic fixes available:", required)
+	listFixes(w, "Optional, nothing is wrong with these:", optional)
 
 	if dryRun {
 		printManualFixes(w, manuals)
@@ -100,8 +105,8 @@ func runDoctorFix(w io.Writer, rep DoctorReport, yes, dryRun bool) error {
 
 	if applied > 0 {
 		if after, err := reCheckReport(); err == nil {
-			if remaining := len(after.AutoFixes()); remaining == 0 {
-				fmt.Fprintln(w, "Re-checked: no automatic fixes remain.")
+			if remaining := len(after.RequiredAutoFixes()); remaining == 0 {
+				fmt.Fprintln(w, "Re-checked: nothing left to repair.")
 			} else {
 				fmt.Fprintf(w, "Re-checked: %d automatic fix(es) still needed, run `lerd doctor --fix` again.\n", remaining)
 			}
@@ -116,8 +121,12 @@ func printManualFixes(w io.Writer, manuals []Finding) {
 	}
 	fmt.Fprintln(w, "\nThese need elevated privileges, run them yourself:")
 	for _, f := range manuals {
-		// warn-level findings carry their guidance in Message, fail-level in Hint.
-		guidance := f.Hint
+		// A fix label names the exact command; otherwise warn-level findings
+		// carry their guidance in Message and fail-level in Hint.
+		guidance := f.Fix.Label
+		if guidance == "" {
+			guidance = f.Hint
+		}
 		if guidance == "" {
 			guidance = f.Message
 		}
@@ -152,14 +161,20 @@ func ApplyDoctorFix(fix *DoctorFix, out io.Writer) error {
 		return runSelf(out, "start")
 	case fixInstall:
 		return runSelf(out, "install")
-	case fixWSLSetup:
-		return runSelf(out, "wsl:setup")
-	case fixDNSRepair:
-		return runSelf(out, "dns:repair")
 	case fixCleanup:
 		return runSelf(out, "cleanup", "--yes")
 	default:
 		return fmt.Errorf("unknown fix %q", fix.Key)
+	}
+}
+
+func listFixes(w io.Writer, heading string, fs []Finding) {
+	if len(fs) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n%s\n", heading)
+	for _, f := range fs {
+		fmt.Fprintf(w, "  • %s: %s\n", f.Name, f.Fix.Label)
 	}
 }
 

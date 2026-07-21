@@ -713,6 +713,7 @@
   "debug_enable": "Bật bắt giữ",
   "debug_waiting_title": "Đang chờ…",
   "debug_waiting_body": "Kích hoạt một số hoạt động trong ứng dụng của bạn và nó sẽ xuất hiện ở đây.",
+  "debug_loadMore": "Tải thêm · {shown} trên {total}",
   "views_data": "dữ liệu",
   "views_template": "mẫu",
   "queries_searchPlaceholder": "Tìm SQL, đường dẫn hoặc tệp…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "Ẩn trace",
   "queries_openInEditor": "Mở trong trình soạn thảo",
   "queries_show_workers": "Hiện truy vấn của worker",
+  "debug_show_tests": "Hiện lần chạy kiểm thử",
+  "debug_tests_hidden": "(ẩn {count})",
   "queries_filter_allWorkers": "Tất cả workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Sao chép SQL có thể chạy",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "Ứng dụng",
+  "databases_targetTesting": "Kiểm thử",
+  "databases_targetLabel": "Các thao tác này áp dụng cho cơ sở dữ liệu nào",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Thông báo",
+  "notify_center_empty": "Chưa có gì. Các thao tác đã hoàn tất, lỗi và email đã bắt sẽ xuất hiện ở đây.",
+  "nav_notifications": "Thông báo"
 }

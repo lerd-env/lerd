@@ -124,16 +124,12 @@ func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 	if where != "" {
 		body = fmt.Sprintf("%s ran a similar query %d×", where, count)
 	}
-	url := "#system/dump-bridge"
-	if ev.Ctx.Site != "" {
-		url = "#sites/" + siteDomainForRoute(ev.Ctx.Site) + "/dumps"
-	}
 	return push.Notification{
 		Kind:  "nplusone",
 		Title: "Possible N+1 query on " + site,
 		Body:  body,
 		Tag:   "lerd-nplusone-" + routeKeyForQuery(ev),
-		URL:   url,
+		URL:   debugRouteForContext(ev.Ctx),
 		Data: map[string]string{
 			"site":   ev.Ctx.Site,
 			"worker": ev.Ctx.Worker,

@@ -330,6 +330,21 @@ static void detect_worker(void)
 	}
 }
 
+/* PHPUnit's own bootstrap defines PHPUNIT_COMPOSER_INSTALL on every run, and
+ * Pest runs on PHPUnit, so this tags test traffic without naming a framework.
+ * Sticky: the constant lands after RINIT and a run never leaves test mode. */
+static zend_bool lerd_in_test(void)
+{
+	if (LERD_G(is_test)) {
+		return 1;
+	}
+	if (zend_hash_str_exists(EG(zend_constants), "PHPUNIT_COMPOSER_INSTALL", sizeof("PHPUNIT_COMPOSER_INSTALL") - 1)
+		|| zend_hash_str_exists(EG(class_table), "phpunit\\framework\\testcase", sizeof("phpunit\\framework\\testcase") - 1)) {
+		LERD_G(is_test) = 1;
+	}
+	return LERD_G(is_test);
+}
+
 /* event ids increase with wall-clock so the ring's SinceID cursor stays sane.
  * Not a real ULID; just monotonic-enough hex plus a per-process counter. */
 static unsigned long lerd_seq = 0;
@@ -619,6 +634,9 @@ static void lerd_obs_end(zend_execute_data *execute_data, zval *retval)
 	if (lerd_is_worker && lerd_worker_cmd[0]) {
 		smart_str_appendc(&buf, ',');
 		append_json_kv_str(&buf, "worker", lerd_worker_cmd, strlen(lerd_worker_cmd));
+	}
+	if (lerd_in_test()) {
+		smart_str_appendl(&buf, ",\"test\":true", 12);
 	}
 	smart_str_appendl(&buf, "},\"src\":{", 9);
 	smart_str_appendl(&buf, "\"file\":", 7);
@@ -1006,6 +1024,7 @@ PHP_RINIT_FUNCTION(lerd_devtools)
 	LERD_G(tstack_len) = 0;
 	LERD_G(collector_loaded) = 0;
 	LERD_G(bind_buf_init) = 0;
+	LERD_G(is_test) = 0;
 	/* Reset per request: FPM reuses the worker process across requests with a
 	 * fresh app each time, so the adapter must be re-loaded (and the PDO
 	 * suppression re-armed) on every request, not just the first. */

@@ -45,6 +45,17 @@ describe('sites store', () => {
     expect(activeWorktreeDomain(s, 'mystery')).toBe('acme.test');
   });
 
+  it('siteDomainForName maps a site name back to its domain', async () => {
+    const { siteDomainForName } = await import('./sites');
+    const list = [
+      { domain: 'acme.test', name: 'acme' },
+      { domain: 'admin-astrolov.test', name: 'admin-astrolov' }
+    ];
+    expect(siteDomainForName(list, 'admin-astrolov')).toBe('admin-astrolov.test');
+    expect(siteDomainForName(list, 'mystery')).toBe('');
+    expect(siteDomainForName(list, '')).toBe('');
+  });
+
   it('saveSiteEnv PUTs JSON body to the site env endpoint', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ ok: true, backup_path: '.env.20260528-103045' }), {

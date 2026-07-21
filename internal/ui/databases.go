@@ -33,39 +33,51 @@ type dbEngineResponse struct {
 }
 
 // dbEntryResponse is a single database and the snapshots taken of it. Site is
-// the domain of the linked site that owns the database, when one does.
+// the domain of the linked site that owns the database, when one does, and
+// Branch names the worktree when the database is that branch's isolated one.
 type dbEntryResponse struct {
 	Name      string                `json:"name"`
 	SizeBytes int64                 `json:"size_bytes"`
 	Site      string                `json:"site,omitempty"`
+	Branch    string                `json:"branch,omitempty"`
 	Snapshots []serviceops.Snapshot `json:"snapshots"`
 }
 
-// databaseSiteIndex maps each database name in the given engine to the domain of
-// the site that owns it, read from sites' .env DB_DATABASE. A "<db>_testing"
-// database maps to the same site as "<db>", so both link to the same place.
-// When a group shares one database across a main site and its secondaries, the
-// database belongs to the group main, so a secondary that merely shares it never
-// wins over the main.
-func databaseSiteIndex(service string) map[string]string {
+// dbOwner is the site a database belongs to: the parent site's domain, plus the
+// worktree branch when the database is that branch's isolated one. The branch is
+// what turns "astrolov_staging" into staging.astrolov.test in the UI.
+type dbOwner struct {
+	domain string
+	branch string
+}
+
+// databaseSiteIndex maps each database name in the given engine to the site that
+// owns it, read from sites' .env DB_DATABASE and from the isolated databases
+// worktrees have registered. A "<db>_testing" database maps to the same owner as
+// "<db>", so both link to the same place. When a group shares one database across
+// a main site and its secondaries, the database belongs to the group main, so a
+// secondary that merely shares it never wins over the main.
+func databaseSiteIndex(service string) map[string]dbOwner {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return nil
 	}
-	idx := map[string]string{}
+	idx := map[string]dbOwner{}
 	// authoritative[db] is true once db is claimed by a site that owns it rather
 	// than a secondary sharing the group's database.
 	authoritative := map[string]bool{}
-	claim := func(db, domain string, owns bool) {
+	claim := func(db string, owner dbOwner, owns bool) {
 		if _, seen := idx[db]; !seen || (!authoritative[db] && owns) {
-			idx[db] = domain
+			idx[db] = owner
 			authoritative[db] = owns
 		}
 	}
+	domains := map[string]string{}
 	for _, s := range reg.Sites {
 		if s.Ignored {
 			continue
 		}
+		domains[s.Name] = s.PrimaryDomain()
 		envPath := filepath.Join(s.Path, ".env")
 		host := strings.TrimSpace(envfile.ReadKey(envPath, "DB_HOST"))
 		if strings.TrimPrefix(host, "lerd-") != service {
@@ -76,9 +88,22 @@ func databaseSiteIndex(service string) map[string]string {
 			continue
 		}
 		owns := !(s.IsGroupSecondary() && s.GroupSharedDB)
-		domain := s.PrimaryDomain()
-		claim(db, domain, owns)
-		claim(db+"_testing", domain, owns)
+		owner := dbOwner{domain: s.PrimaryDomain()}
+		claim(db, owner, owns)
+		claim(db+"_testing", owner, owns)
+	}
+	entries, err := config.LoadWorktreeDBRegistry()
+	if err != nil {
+		return idx
+	}
+	for _, e := range entries {
+		domain := domains[e.Site]
+		if e.Service != service || e.DBName == "" || domain == "" {
+			continue
+		}
+		owner := dbOwner{domain: domain, branch: e.Branch}
+		claim(e.DBName, owner, true)
+		claim(e.DBName+"_testing", owner, true)
 	}
 	return idx
 }
@@ -142,10 +167,12 @@ func databaseEngine(name string) dbEngineResponse {
 	}
 	siteIndex := databaseSiteIndex(name)
 	for _, db := range dbs {
+		owner := siteIndex[db.Name]
 		entry := dbEntryResponse{
 			Name:      db.Name,
 			SizeBytes: db.SizeBytes,
-			Site:      siteIndex[db.Name],
+			Site:      owner.domain,
+			Branch:    owner.branch,
 			Snapshots: []serviceops.Snapshot{},
 		}
 		if sqlOps {
@@ -250,10 +277,19 @@ func decodeDBBody(r *http.Request) (database, name string, ok bool) {
 	return strings.TrimSpace(body.Database), strings.TrimSpace(body.Name), true
 }
 
+// requireDatabaseName rejects a database name that could escape its snapshot
+// path or its SQL quoting, so nothing unvalidated reaches serviceops.
+func requireDatabaseName(w http.ResponseWriter, database string) bool {
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		writeDBError(w, err.Error())
+		return false
+	}
+	return true
+}
+
 func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string) {
 	_, name, ok := decodeDBBody(r)
-	if !ok || name == "" {
-		writeDBError(w, "a database name is required")
+	if !ok || !requireDatabaseName(w, name) {
 		return
 	}
 	created, err := serviceops.CreateDatabase(service, name)
@@ -270,8 +306,7 @@ func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string
 
 func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) {
 	_, name, ok := decodeDBBody(r)
-	if !ok || name == "" {
-		writeDBError(w, "a database name is required")
+	if !ok || !requireDatabaseName(w, name) {
 		return
 	}
 	if _, err := serviceops.DropDatabase(service, name); err != nil {
@@ -283,8 +318,7 @@ func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) 
 
 func handleSnapshotCreate(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" {
-		writeDBError(w, "a database is required")
+	if !ok || !requireDatabaseName(w, database) {
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
@@ -297,8 +331,11 @@ func handleSnapshotCreate(w http.ResponseWriter, r *http.Request, service string
 
 func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" || name == "" {
+	if !ok || name == "" {
 		writeDBError(w, "a database and snapshot name are required")
+		return
+	}
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
@@ -311,8 +348,11 @@ func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service strin
 
 func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string) {
 	database, name, ok := decodeDBBody(r)
-	if !ok || database == "" || name == "" {
+	if !ok || name == "" {
 		writeDBError(w, "a database and snapshot name are required")
+		return
+	}
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	if err := serviceops.DeleteSnapshot(service, database, name, false); err != nil {
@@ -326,8 +366,8 @@ func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string
 // downloadable file.
 func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
-	if database == "" {
-		http.Error(w, "a database is required", http.StatusBadRequest)
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
@@ -347,8 +387,12 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
-	if database == "" || name == "" {
+	if name == "" {
 		http.Error(w, "a database and snapshot name are required", http.StatusBadRequest)
+		return
+	}
+	if err := serviceops.ValidateDatabaseName(database); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	w.Header().Set("Content-Type", "application/sql")
@@ -362,8 +406,7 @@ func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string
 // upload is streamed into the engine, so a large dump never buffers on disk.
 func handleDatabaseImport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.FormValue("database"))
-	if database == "" {
-		writeDBError(w, "a database is required")
+	if !requireDatabaseName(w, database) {
 		return
 	}
 	file, _, err := r.FormFile("file")

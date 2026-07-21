@@ -66,7 +66,7 @@ Beyond queries, the same adapter feeds additional Debug sub-tabs:
 - **Events** *(Laravel)* — application and package events dispatched (framework-internal `Illuminate\*` events are filtered out).
 - **HTTP** *(Laravel)* — outgoing requests made via Laravel's HTTP client (method, URL, status), so third-party API calls are visible the way queries are.
 
-Each lens groups per request/job, shows the originating app frame with the stack trace and editor links, and is filterable by site and worker command.
+Each lens groups per request/job, shows the originating app frame with the stack trace and editor links, and is filterable by site and worker command. All of them render the newest 100 rows and load the next 100 as you reach the end, so a worker that has been running all afternoon doesn't put thousands of rows on screen at once.
 
 ## Framework coverage (agnostic seams)
 
@@ -88,6 +88,14 @@ Long-running queue and scheduler workers (`queue:work`, `horizon`, `schedule:wor
 Turn it on with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens: Queries, Jobs, Views, Mail, Cache, Events, HTTP). Checking it arms worker capture by writing the `devtools-workers.flag` sentinel; from then on each worker invocation is captured and grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together.
 
 Unchecking **Show worker queries** does two things: it stops capturing worker output going forward, and it immediately hides the worker rows already buffered in the view, so the lenses fall back to web and CLI activity without waiting for a buffer clear. The toggle is independent of the main Debug on/off switch.
+
+## Test runs (hidden by default)
+
+A test suite is the other kind of flood: it is CLI, high volume, and a feature suite fires hundreds of simulated requests, so one run can clear the buffer of everything you were looking at. Every event captured inside a PHPUnit or Pest run therefore carries `ctx.test`, and the Debug lenses hide those events by default.
+
+Unlike worker capture this is a view filter, not a capture switch: the events are still recorded, because a dump or a query you are inspecting from inside a failing test is exactly the case that matters. The **Show test runs** checkbox in each lens toolbar reveals them, and reports how many are currently hidden so nothing disappears without a reason on screen. The tab counters follow the same filter, so a lens never advertises rows it isn't showing.
+
+The signal is PHPUnit's own `PHPUNIT_COMPOSER_INSTALL` bootstrap constant, which Pest inherits, so it is ecosystem-level rather than tied to a framework. Filtering on `ctx.type` would not do: artisan, tinker and queue workers are all CLI too.
 
 ## N+1 warnings
 

@@ -179,3 +179,35 @@ func TestServiceConfigSnapshot_RevertsImage(t *testing.T) {
 		t.Errorf("PreviousImage = %q, want cleared", entry.PreviousImage)
 	}
 }
+
+// The mariadb images drop the mysql-named client binaries, so a migrate that
+// spells the tools literally fails with "mysqldump: not found" before it has
+// dumped anything. Every mysql-family command must resolve the binary at runtime.
+func TestMysqlMigrateCommands_ResolveMariadbBinaries(t *testing.T) {
+	for name, cmd := range map[string]string{
+		"dump":    mysqlMigrateDumpCommand(),
+		"probe":   mysqlMigrateProbeCommand(),
+		"restore": mysqlMigrateRestoreCommand(),
+	} {
+		if !strings.Contains(cmd, "command -v") {
+			t.Errorf("%s command does not resolve its binary: %s", name, cmd)
+		}
+		if !strings.Contains(cmd, "mariadb") {
+			t.Errorf("%s command has no mariadb fallback: %s", name, cmd)
+		}
+	}
+}
+
+// A service that was auto-stopped for being unused is the normal state to start
+// a migrate from, so every migratable family needs a readiness probe to bring
+// its engine up before the dump. Without one the dump execs into no container.
+func TestMigrateProbe_CoversEveryMigratableFamily(t *testing.T) {
+	for family := range migrators {
+		if migrateProbe(family) == "" {
+			t.Errorf("family %q has a migrator but no readiness probe", family)
+		}
+	}
+	if migrateProbe("mongo") != "" {
+		t.Error("a family with no migrator should have no probe")
+	}
+}

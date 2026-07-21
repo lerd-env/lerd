@@ -7,9 +7,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/siteops"
 	"golang.org/x/term"
 )
 
@@ -207,6 +209,10 @@ func otherInstalledVersions(exclude string) []string {
 // composer's constraint. Best-effort: a write failure or a higher-priority
 // .lerd.yaml override only warns, since the switch still applies to this run.
 func persistPHPVersion(cwd, version string) {
+	if wt, _, ok := phpDet.WorktreeRootFor(cwd); ok {
+		persistWorktreePHPVersion(wt, version)
+		return
+	}
 	root := phpDet.SiteRootFor(cwd)
 	path := root + "/.php-version"
 	if err := os.WriteFile(path, []byte(version+"\n"), 0o644); err != nil {
@@ -217,6 +223,21 @@ func persistPHPVersion(cwd, version string) {
 	if got, err := phpDet.DetectVersion(root); err == nil && got != version {
 		feedback.Warn(".lerd.yaml pins PHP %s, which overrides the .php-version file", got)
 	}
+}
+
+// persistWorktreePHPVersion pins a switch made inside a worktree on the checkout
+// itself, leaving the parent site alone. It writes the same pair a branch-scoped
+// version switch does: the .php-version file for other tooling, and the .lerd.yaml
+// override the worktree's effective version actually comes from.
+func persistWorktreePHPVersion(worktree, version string) {
+	if err := siteops.PinPHPVersionFile(worktree, version); err != nil {
+		feedback.Warn("could not pin PHP %s (%s): %v", version, worktree+"/.php-version", err)
+	}
+	if err := config.SetWorktreePHPVersion(worktree, version); err != nil {
+		feedback.Warn("could not pin PHP %s for this worktree: %v", version, err)
+		return
+	}
+	feedback.Note(fmt.Sprintf("Pinned PHP %s for this worktree (%s)", version, worktree))
 }
 
 // notInstalledErr builds the error returned when a version isn't installed and

@@ -65,6 +65,30 @@ func TestDoctorReportFixLastNoFindingsIsNoop(t *testing.T) {
 	}
 }
 
+// TestAutoFixesDedupesByKey covers the repeated-repair case: dns.Diagnose can
+// fail several steps that each attach the same repair, and without deduping the
+// whole sequence would run once per failing step.
+func TestAutoFixesDedupesByKey(t *testing.T) {
+	rep := &DoctorReport{}
+	for _, name := range []string{"resolver hookup", "interface routing", "system lookup"} {
+		rep.add(Finding{Name: name, Status: "fail"})
+		rep.fixLast(autoFix(fixStart, "", "start the stack"))
+	}
+	rep.add(Finding{Name: "data dir", Status: "fail"})
+	rep.fixLast(autoFix(fixMkdir, "/x", "create it"))
+
+	autos := rep.AutoFixes()
+	if len(autos) != 2 {
+		t.Fatalf("got %d auto fixes, want 2 (one per distinct key): %+v", len(autos), autos)
+	}
+	if autos[0].Fix.Key != fixStart || autos[1].Fix.Key != fixMkdir {
+		t.Errorf("report order not preserved: %q then %q", autos[0].Fix.Key, autos[1].Fix.Key)
+	}
+	if autos[0].Name != "resolver hookup" {
+		t.Errorf("first occurrence should win, got %q", autos[0].Name)
+	}
+}
+
 func TestDoctorReportPartitionsFixesByTier(t *testing.T) {
 	rep := &DoctorReport{}
 	rep.add(Finding{Name: "ok-check", Status: "ok"})
@@ -81,6 +105,23 @@ func TestDoctorReportPartitionsFixesByTier(t *testing.T) {
 	manual := rep.ManualFixes()
 	if len(manual) != 1 || manual[0].Name != "manual-check" {
 		t.Fatalf("ManualFixes returned %+v, want only manual-check", manual)
+	}
+}
+
+func TestDoctorReportSplitsRequiredFromOptionalAutoFixes(t *testing.T) {
+	rep := &DoctorReport{}
+	rep.add(Finding{Name: "data dir", Status: "fail"})
+	rep.fixLast(autoFix(fixMkdir, "/x", "create the data directory"))
+	rep.add(Finding{Name: "Reclaimable disk", Status: "info"})
+	rep.fixLast(autoFix(fixCleanup, "", "reclaim disk space (lerd cleanup)"))
+
+	req := rep.RequiredAutoFixes()
+	if len(req) != 1 || req[0].Name != "data dir" {
+		t.Fatalf("RequiredAutoFixes returned %+v, want only data dir", req)
+	}
+	opt := rep.OptionalAutoFixes()
+	if len(opt) != 1 || opt[0].Name != "Reclaimable disk" {
+		t.Fatalf("OptionalAutoFixes returned %+v, want only Reclaimable disk", opt)
 	}
 }
 

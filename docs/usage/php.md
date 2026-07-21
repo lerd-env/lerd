@@ -37,6 +37,8 @@ Inside a linked site, the commands that run PHP in a container (`lerd php`, `ler
 
 A git worktree resolves ahead of the site it belongs to. A worktree inherits its parent site's version until you pin one with `lerd isolate` from inside the checkout, and from then on the whole toolchain follows that pin: the worktree's own vhost, `lerd php`, `lerd composer`, and everything else that runs PHP in a container. This holds wherever the checkout lives, including inside the parent site's own directory, so a worktree on 8.3 under a site on 8.5 runs composer on 8.3 rather than picking up the parent's version.
 
+When a command needs a version that is not installed and you decline the install, lerd offers to switch to one you already have and pins the choice. Inside a worktree that pin is written on the checkout itself, so the switch travels with the branch and the parent site keeps the version it was on.
+
 So that the project agrees with what actually runs, `lerd link` pins the resolved version into `.php-version`, the same file `lerd isolate` and the dashboard's PHP dropdown write. A pin the framework does not support is rewritten to the version lerd runs, and a version outside the framework's range is clamped rather than accepted, so the file, the site registry and the container can never drift apart. Sites with no lerd-managed PHP version (host-proxy, and custom containers whose version comes from their Containerfile) are left untouched.
 
 ---
@@ -259,9 +261,11 @@ lerd php:ext add swoole
 
 Extensions belong to you, not to a PHP version. One declared set applies to every PHP image lerd builds, so a site that changes version keeps them. The version you are on is rebuilt and verified straight away; other installed versions carry the old set until they are rebuilt, and lerd says which ones those are.
 
+Those deferred versions are rebuilt by the next command that touches them, which is usually `lerd use`, `lerd link`, `lerd fetch`, `lerd unpause` or `lerd start`. When that happens to a version whose container is already running, lerd restarts the container onto the image it just built, so the running PHP always matches what `lerd php:ext list` and the dashboard report for it.
+
 Extensions are persisted in `~/.config/lerd/config.yaml` under `php.extensions`, so they survive `lerd php:rebuild`.
 
-After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there.
+After the rebuild, lerd checks that the extension actually loaded (`php -m`); if the PECL build failed, `lerd php:ext add` exits with an error and removes the extension from the config again, rather than reporting success for an extension that isn't there. A rebuild that fails outright is reverted the same way, so a name that cannot build is not left declared and retried by every command after it.
 
 #### What each version actually loaded
 
@@ -297,6 +301,8 @@ $ lerd isolate 8.3
 ```
 
 An extension that genuinely cannot build on that version is reported differently, because no rebuild will fix it.
+
+One that loaded on **no version at all** is reported differently again. A version boundary shows up on some versions and not others, so an extension missing from every one of them is usually the build failing rather than the versions refusing it, and `lerd php:ext list` says so instead of reading it as a capability gap.
 
 Some extensions need extra Alpine packages to compile. lerd already knows the ones for `imap` (`imap-dev krb5-dev openssl-dev c-client`); for anything else, pass them with `--apk-deps`:
 

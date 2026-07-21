@@ -713,6 +713,7 @@
   "debug_enable": "Abilita cattura",
   "debug_waiting_title": "In attesa…",
   "debug_waiting_body": "Attiva qualche attività nella tua app e comparirà qui.",
+  "debug_loadMore": "Carica altri · {shown} di {total}",
   "views_data": "dati",
   "views_template": "template",
   "queries_searchPlaceholder": "Cerca SQL, percorso o file…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "Nascondi trace",
   "queries_openInEditor": "Apri nell'editor",
   "queries_show_workers": "Mostra query dei worker",
+  "debug_show_tests": "Mostra esecuzioni dei test",
+  "debug_tests_hidden": "({count} nascosti)",
   "queries_filter_allWorkers": "Tutti i worker",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copia l'SQL eseguibile",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "App",
+  "databases_targetTesting": "Test",
+  "databases_targetLabel": "Su quale database agiscono questi controlli",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Notifiche",
+  "notify_center_empty": "Ancora niente. Operazioni completate, errori e email catturate compaiono qui.",
+  "nav_notifications": "Notifiche"
 }

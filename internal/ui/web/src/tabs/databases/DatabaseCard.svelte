@@ -16,13 +16,21 @@
   import { databaseAdminFor, openDatabaseAdmin } from '$stores/dashboard';
   import { goToTab } from '$stores/route';
   import DatabaseSnapshotsModal from './DatabaseSnapshotsModal.svelte';
+  import SegmentedControl from '$components/SegmentedControl.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
     engine: DatabaseEngine;
     entry: DatabaseEntry;
+    // The entry's "<name>_testing" sibling, folded into this card when it exists.
+    testing?: DatabaseEntry;
   }
-  let { engine, entry }: Props = $props();
+  let { engine, entry, testing }: Props = $props();
+
+  let target = $state<'app' | 'testing'>('app');
+  // Everything below acts on the half the segment points at, and falls back to
+  // the parent so dropping the testing database can't leave the card orphaned.
+  const active = $derived(target === 'testing' && testing ? testing : entry);
 
   let copied = $state(false);
   let showSnapshots = $state(false);
@@ -33,7 +41,10 @@
   let fileInput = $state<HTMLInputElement | null>(null);
 
   const sqlOps = $derived(engine.supports_snapshot);
-  const snapshotCount = $derived(entry.snapshots?.length ?? 0);
+  // A worktree's isolated database is shown under the branch's own domain, so it
+  // reads as staging's data rather than as another database of the parent site.
+  const ownerDomain = $derived(active.branch ? `${active.branch}.${active.site}` : active.site);
+  const snapshotCount = $derived(active.snapshots?.length ?? 0);
   // The installed admin tool that can open this specific database (phpMyAdmin,
   // Adminer, Mongo Express); null when none is installed or can't deep-link.
   const admin = $derived.by(() => {
@@ -42,7 +53,7 @@
   });
 
   async function copyDsn() {
-    const dsn = dsnFor(engine, entry.name);
+    const dsn = dsnFor(engine, active.name);
     if (!dsn) return;
     await navigator.clipboard.writeText(dsn);
     copied = true;
@@ -55,14 +66,14 @@
     input.value = '';
     if (!file) return;
     importBusy = true;
-    await importDatabase(engine.service, entry.name, file);
+    await importDatabase(engine.service, active.name, file);
     importBusy = false;
   }
 
   async function confirmDrop() {
     dropBusy = true;
     dropError = '';
-    const res = await dropDatabase(engine.service, entry.name);
+    const res = await dropDatabase(engine.service, active.name);
     dropBusy = false;
     if (!res.ok) {
       dropError = res.error || m.common_failed();
@@ -72,33 +83,50 @@
   }
 </script>
 
-<div class="flex flex-col rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3 transition duration-150 hover:border-gray-300 dark:hover:border-white/15 hover:shadow-sm">
-  <div class="flex items-start gap-2">
+<div class="flex h-full flex-col rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3 transition duration-150 hover:border-gray-300 dark:hover:border-white/15 hover:shadow-sm">
+  <!-- mb-2 keeps the meta line off the divider on the tallest card in a row,
+       where mt-auto has no slack left to space them apart. -->
+  <div class="flex items-start gap-2 mb-2">
     <Icon name="database" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
-      <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={entry.name}>{entry.name}</p>
-      <p class="flex items-center gap-1.5 text-xs text-gray-400 dark:text-gray-500">
-        <span class="tabular-nums">{formatBytes(entry.size_bytes)}</span>
-        {#if entry.site}
-          <span aria-hidden="true">·</span>
-          <button
-            type="button"
-            onclick={() => goToTab('sites', entry.site ?? '')}
-            class="min-w-0 truncate text-sky-600 dark:text-sky-400 hover:underline"
-            title={entry.site}
-          >{entry.site}</button>
+      <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
+      <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
+        <span class="shrink-0 tabular-nums">{formatBytes(active.size_bytes)}</span>
+        {#if active.site}
+          <!-- The separator travels with the domain so it never strands at the
+               end of the size line when the two wrap onto separate rows. -->
+          <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+            <span class="shrink-0" aria-hidden="true">·</span>
+            <button
+              type="button"
+              onclick={() => goToTab('sites', active.site ?? '')}
+              class="min-w-0 truncate text-sky-600 dark:text-sky-400 hover:underline"
+              title={ownerDomain}
+            >{ownerDomain}</button>
+          </span>
         {/if}
       </p>
     </div>
+    {#if testing}
+      <SegmentedControl
+        label={m.databases_targetLabel()}
+        value={target}
+        options={[
+          { value: 'app', label: m.databases_targetApp(), title: entry.name },
+          { value: 'testing', label: m.databases_targetTesting(), title: testing.name }
+        ]}
+        onchange={(v) => (target = v)}
+      />
+    {/if}
   </div>
 
-  <div class="flex items-center gap-0.5 mt-2 pt-2 border-t border-gray-100 dark:border-lerd-border/60">
+  <div class="flex items-center gap-0.5 mt-auto pt-2 border-t border-gray-100 dark:border-lerd-border/60">
     {#if admin}
       <button
         type="button"
         use:tooltip={m.databases_openIn({ name: serviceLabel(admin.name) })}
         aria-label={m.databases_openIn({ name: serviceLabel(admin.name) })}
-        onclick={() => openDatabaseAdmin(engine.service, entry.name)}
+        onclick={() => openDatabaseAdmin(engine.service, active.name)}
         class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
       >
         <Icon name="external" class="w-3.5 h-3.5" />
@@ -116,7 +144,7 @@
 
     {#if sqlOps}
       <a
-        href={exportUrl(engine.service, entry.name)}
+        href={exportUrl(engine.service, active.name)}
         use:tooltip={m.databases_export()}
         aria-label={m.databases_export()}
         class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
@@ -164,11 +192,11 @@
 </div>
 
 {#if showSnapshots}
-  <DatabaseSnapshotsModal {engine} {entry} onclose={() => (showSnapshots = false)} />
+  <DatabaseSnapshotsModal {engine} entry={active} onclose={() => (showSnapshots = false)} />
 {/if}
 
 {#if showDrop}
-  <Modal open title={m.databases_dropTitle({ name: entry.name })} onclose={() => !dropBusy && (showDrop = false)} size="sm">
+  <Modal open title={m.databases_dropTitle({ name: active.name })} onclose={() => !dropBusy && (showDrop = false)} size="sm">
     <div class="px-5 py-4 space-y-2">
       <p class="text-sm text-gray-700 dark:text-gray-300">{m.databases_dropBody()}</p>
       {#if dropError}

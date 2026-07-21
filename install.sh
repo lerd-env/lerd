@@ -704,8 +704,63 @@ cmd_uninstall_macos() {
   success "Lerd uninstalled"
 }
 
+# The root-owned files lerd's managed DNS writes. None of them live under $HOME
+# and only the binary can take them back out, so the uninstaller uses this list
+# both to detect the setup and to tell the user how to clear it by hand.
+LERD_DNS_FILES=(
+  /etc/systemd/system/lerd-dns-link.service
+  /etc/systemd/resolved.conf.d/lerd-fallback.conf
+  /etc/systemd/resolved.conf.d/lerd.conf
+  /etc/NetworkManager/conf.d/lerd-dns-link.conf
+  /etc/NetworkManager/conf.d/lerd.conf
+  /etc/NetworkManager/dnsmasq.d/lerd.conf
+  /etc/NetworkManager/dispatcher.d/99-lerd-dns
+)
+
+lerd_dns_config_present() {
+  local f
+  for f in "${LERD_DNS_FILES[@]}"; do
+    [ -e "$f" ] && return 0
+  done
+  return 1
+}
+
+lerd_dns_cleanup_hint() {
+  warn "Lerd's DNS configuration is still on this system and only root can remove it:"
+  info "sudo systemctl disable --now lerd-dns-link.service"
+  info "sudo rm -f ${LERD_DNS_FILES[*]}"
+  info "sudo systemctl daemon-reload && sudo systemctl restart systemd-resolved"
+  info "If the interface is still up: sudo ip link del lerd0"
+}
+
+# Left in place, the link unit recreates lerd0 at every boot pointing .test at a
+# dnsmasq that no longer exists, and the fallback drop-in keeps systemd-resolved's
+# fallback servers switched off for good. The binary is removed further down and
+# it is the only thing that can undo any of it, so offer the teardown here.
+uninstall_linux_dns() {
+  lerd_dns_config_present || return 0
+
+  if ! command -v lerd &>/dev/null; then
+    lerd_dns_cleanup_hint
+    return 0
+  fi
+
+  warn "The system DNS setup (the lerd0 link, its root unit, the NetworkManager rules and systemd-resolved's fallback servers) is removed only by lerd itself."
+  info "Nothing on this machine can undo it once the binary is gone."
+  if ask "Remove the DNS setup now? (runs 'lerd dns:disable', needs sudo)"; then
+    if lerd dns:disable; then
+      success "Removed lerd DNS configuration"
+      return 0
+    fi
+    warn "'lerd dns:disable' did not complete."
+  fi
+  lerd_dns_cleanup_hint
+}
+
 cmd_uninstall_linux() {
   header "Uninstalling Lerd"
+
+  uninstall_linux_dns
 
   # Stop and remove systemd units — discover from quadlet files on disk
   local quadlet_dir="${XDG_CONFIG_HOME:-$HOME/.config}/containers/systemd"

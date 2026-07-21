@@ -713,6 +713,7 @@
   "debug_enable": "Activează captura",
   "debug_waiting_title": "Se așteaptă…",
   "debug_waiting_body": "Declanșează ceva activitate în aplicația ta și va apărea aici.",
+  "debug_loadMore": "Încarcă mai multe · {shown} din {total}",
   "views_data": "date",
   "views_template": "șablon",
   "queries_searchPlaceholder": "Caută SQL, cale sau fișier…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "Ascunde urma",
   "queries_openInEditor": "Deschide în editor",
   "queries_show_workers": "Afișează interogările workerilor",
+  "debug_show_tests": "Arată rulările de teste",
+  "debug_tests_hidden": "({count} ascunse)",
   "queries_filter_allWorkers": "Toți workerii",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copiază SQL-ul executabil",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "Aplicație",
+  "databases_targetTesting": "Testare",
+  "databases_targetLabel": "Pe care bază de date acționează aceste comenzi",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Notificări",
+  "notify_center_empty": "Încă nimic. Operațiunile finalizate, erorile și e-mailurile capturate apar aici.",
+  "nav_notifications": "Notificări"
 }

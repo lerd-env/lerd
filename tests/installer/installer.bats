@@ -454,3 +454,69 @@ EOF
   [[ "$output" == *"$DESKTOP_INSTALL_CMD"* ]]
   grep -q "notify target browser" "$d/calls"
 }
+
+# ── uninstall_linux_dns ───────────────────────────────────────────────────────
+
+_stub_dns_files() {
+  local d="$BATS_TMPDIR/dnsconf-$$"
+  mkdir -p "$d"
+  : > "$d/lerd-dns-link.service"
+  LERD_DNS_FILES=("$d/lerd-dns-link.service")
+}
+
+@test "uninstall_linux_dns runs the teardown when accepted" {
+  local d; d="$(_fake_lerd_dir)"
+  PATH="$d:$PATH"
+  _stub_dns_files
+  ask() { return 0; }
+  run uninstall_linux_dns
+  [ "$status" -eq 0 ]
+  grep -q "dns:disable" "$d/calls"
+}
+
+@test "uninstall_linux_dns prints the manual removal when declined" {
+  local d; d="$(_fake_lerd_dir)"
+  PATH="$d:$PATH"
+  _stub_dns_files
+  ask() { return 1; }
+  run uninstall_linux_dns
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"lerd-dns-link.service"* ]]
+  [[ "$output" == *"systemd-resolved"* ]]
+  [ ! -f "$d/calls" ]
+}
+
+@test "uninstall_linux_dns falls back to the manual removal when the binary is gone" {
+  function command() {
+    case "$2" in
+      lerd) return 1 ;;
+      *) builtin command "$@" ;;
+    esac
+  }
+  export -f command
+  _stub_dns_files
+  ask() { return 0; }
+  run uninstall_linux_dns
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"only root can remove it"* ]]
+}
+
+@test "uninstall_linux_dns stays quiet when lerd never configured DNS" {
+  local d; d="$(_fake_lerd_dir)"
+  PATH="$d:$PATH"
+  LERD_DNS_FILES=("$BATS_TMPDIR/nope-$$/lerd-dns-link.service")
+  ask() { return 0; }
+  run uninstall_linux_dns
+  [ "$status" -eq 0 ]
+  [ "$output" = "" ]
+  [ ! -f "$d/calls" ]
+}
+
+@test "cmd_uninstall_linux tears the DNS down before removing the binary" {
+  local body; body="$(declare -f cmd_uninstall_linux)"
+  local dns_at; dns_at="$(echo "$body" | grep -n 'uninstall_linux_dns' | head -1 | cut -d: -f1)"
+  local bin_at; bin_at="$(echo "$body" | grep -n 'INSTALL_DIR' | head -1 | cut -d: -f1)"
+  [ -n "$dns_at" ]
+  [ -n "$bin_at" ]
+  [ "$dns_at" -lt "$bin_at" ]
+}

@@ -93,7 +93,10 @@ func ensureImages() {
 			v := ver
 			jobs = append(jobs, BuildJob{
 				Label: "PHP " + v,
-				Run:   func(w io.Writer) error { return podman.BuildFPMImageTo(v, false, w) },
+				Run: func(w io.Writer) error {
+					_, err := podman.BuildFPMImageTo(v, false, w)
+					return err
+				},
 			})
 
 		case strings.HasPrefix(img, "localhost/lerd-frankenphp") && strings.HasSuffix(img, ":local"):

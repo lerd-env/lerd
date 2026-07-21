@@ -27,17 +27,37 @@ export function groupKey(ev: DumpEvent): string {
   return `cli:${site}:${branch}:${ev.ctx.pid ?? ''}:${bucket}`;
 }
 
-// sitePrefix renders the bracketed chunk that leads a group label. With both
-// site and branch it reads `[site@branch] `; plain site is `[site] `.
-// hideSitePrefix drops the site name (the surrounding UI already establishes
-// it) but keeps the branch as `[branch] `, since within one site the branch is
-// the only thing telling worktree events apart from the parent.
-export function sitePrefix(ev: DumpEvent, hideSitePrefix: boolean): string {
-  const branch = ev.ctx.branch ?? '';
-  if (hideSitePrefix) {
-    return branch ? `[${branch}] ` : '';
-  }
-  const site = ev.ctx.site ?? '';
-  if (!site) return '';
-  return branch ? `[${site}@${branch}] ` : `[${site}] `;
+// GroupLabel is a group header split into its parts rather than one string,
+// so the renderer can turn the site name into a link to that site's Debug tab
+// while the rest stays plain text. site is empty when the surrounding UI
+// already establishes it, or when the event carried no site at all.
+export interface GroupLabel {
+  site: string;
+  branch: string;
+  text: string;
+}
+
+// groupLabel describes the header of one request group. The bracketed chunk
+// reads `[site@branch]`, or `[site]`, or `[branch]` alone when hideSitePrefix
+// drops the site (within one site the branch is the only thing telling
+// worktree events apart from the parent).
+export function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): GroupLabel {
+  return {
+    site: hideSitePrefix ? '' : (ev.ctx.site ?? ''),
+    branch: ev.ctx.branch ?? '',
+    text: labelText(ev)
+  };
+}
+
+function labelText(ev: DumpEvent): string {
+  if (ev.ctx.worker) return ev.ctx.worker;
+  if (ev.ctx.type === 'fpm') return ev.ctx.request || '(request)';
+  return `cli (pid ${ev.ctx.pid ?? '?'})`;
+}
+
+// labelString flattens a GroupLabel back to the single-string form, for
+// callers that need one string rather than the rendered parts.
+export function labelString(l: GroupLabel): string {
+  const inner = l.site ? (l.branch ? `${l.site}@${l.branch}` : l.site) : l.branch;
+  return inner ? `[${inner}] ${l.text}` : l.text;
 }

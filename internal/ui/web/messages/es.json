@@ -1005,6 +1005,8 @@
   "queries_dup_badge": "×{count}",
   "queries_bindings": "bindings",
   "queries_show_workers": "Show worker queries",
+  "debug_show_tests": "Mostrar ejecuciones de tests",
+  "debug_tests_hidden": "({count} ocultos)",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copiar SQL ejecutable",
@@ -1023,6 +1025,7 @@
   "debug_enable": "Enable capture",
   "debug_waiting_title": "Waiting…",
   "debug_waiting_body": "Trigger some activity in your app and it will appear here.",
+  "debug_loadMore": "Cargar más · {shown} de {total}",
   "views_data": "data",
   "debug_tab_http": "HTTP",
   "http_sent": "enviado",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "App",
+  "databases_targetTesting": "Pruebas",
+  "databases_targetLabel": "Sobre qué base de datos actúan estos controles",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Notificaciones",
+  "notify_center_empty": "Nada por ahora. Las operaciones terminadas, los fallos y el correo capturado aparecen aquí.",
+  "nav_notifications": "Notificaciones"
 }

@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
-  import { dumps, startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
+  import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import {
     buildQueryGroups,
     queryFilterText,
@@ -16,9 +16,15 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
+  import { debugEvents } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
+  import LensToggle from '$components/LensToggle.svelte';
+  import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensGroupLabel from '$components/LensGroupLabel.svelte';
+  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { inlineBindings } from '$lib/sqlInline';
   import type { QueryRow } from '$stores/queries';
   import { m } from '../paraglide/messages.js';
@@ -49,15 +55,27 @@
   });
 
   const groups = $derived(
-    buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildQueryGroups($debugEvents, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
+  // Only the newest LENS_PAGE rows render; the rest arrive as the user
+  // reaches the end. Changing a filter starts the window over.
+  let limit = $state(LENS_PAGE);
+  const win = $derived(windowGroups(groups, (g) => g.rows, limit));
+  const filterKey = $derived(
+    `${scoped ? siteScope : $queryFilterSite}|${scoped ? $debugSearch : $queryFilterText}|${$queryFilterWorker}`
+  );
+  $effect(() => {
+    filterKey;
+    limit = LENS_PAGE;
+  });
+
   let togglingWorkers = $state(false);
-  async function onToggleWorkers(e: Event) {
+  async function onToggleWorkers(checked: boolean) {
     if (togglingWorkers) return;
     togglingWorkers = true;
     try {
-      await toggleDevtoolsWorkers((e.currentTarget as HTMLInputElement).checked);
+      await toggleDevtoolsWorkers(checked);
       await refreshDevtoolsStatus();
     } finally {
       togglingWorkers = false;
@@ -153,16 +171,13 @@
         onchange={(v) => queryFilterWorker.set(v)}
       />
     {/if}
-    <label class="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap">
-      <input
-        type="checkbox"
-        class="rounded-sm border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card text-lerd-red focus:ring-lerd-red"
-        checked={Boolean($devtoolsStatus?.workers)}
-        disabled={togglingWorkers}
-        onchange={onToggleWorkers}
-      />
-      {m.queries_show_workers()}
-    </label>
+    <LensToggle
+      label={m.queries_show_workers()}
+      checked={Boolean($devtoolsStatus?.workers)}
+      disabled={togglingWorkers}
+      onchange={onToggleWorkers}
+    />
+    <TestEventsToggle />
     <button
       type="button"
       class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5"
@@ -196,13 +211,14 @@
         </EmptyState>
       {/if}
     {:else}
-      {#each groups as group (group.key)}
+      {#each win.pages as page (page.group.key)}
+        {@const group = page.group}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
             {#if group.worker}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>
             {/if}
-            <span class="text-sm truncate">{group.label}</span>
+            <LensGroupLabel label={group.label} />
             {#if group.nPlusOne}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{m.queries_nplusone_badge()}</span>
             {/if}
@@ -211,7 +227,7 @@
               {m.queries_rollup({ count: group.count, ms: fmtMs(group.totalMs) })}
             </span>
           </header>
-          {#each group.rows as row (row.event.id)}
+          {#each page.rows as row (row.event.id)}
             <div
               class="rounded-sm border mb-1.5 overflow-hidden {row.duplicate
                 ? 'border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/10'
@@ -265,6 +281,7 @@
           {/each}
         </section>
       {/each}
+      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
     {/if}
   </div>
 </div>

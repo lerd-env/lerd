@@ -83,6 +83,13 @@ function ts(): string
     return gmdate('Y-m-d\TH:i:s.', (int) $now) . sprintf('%03dZ', $ms);
 }
 
+// in_test mirrors the collector's signal: PHPUnit's bootstrap defines
+// PHPUNIT_COMPOSER_INSTALL on every run, Pest included.
+function in_test(): bool
+{
+    return defined('PHPUNIT_COMPOSER_INSTALL') || class_exists('PHPUnit\\Framework\\TestCase', false);
+}
+
 function context(): array
 {
     $ctx = [
@@ -100,6 +107,9 @@ function context(): array
     $worker = defined('LERD_DEVTOOLS_WORKER') ? (string) \LERD_DEVTOOLS_WORKER : '';
     if ($worker !== '') {
         $ctx['worker'] = $worker;
+    }
+    if (in_test()) {
+        $ctx['test'] = true;
     }
     return array_filter($ctx, static fn ($v) => $v !== '' && $v !== null);
 }

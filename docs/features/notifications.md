@@ -9,7 +9,7 @@ The first time you open the dashboard a small banner offers to enable browser no
 Notifications have a single delivery **sink**, chosen per install and mutually exclusive so you never get the same alert twice:
 
 - **Browser** — the WebSocket fan-out to open dashboards plus Web Push to subscribed browsers (the paths described under [How it works](#how-it-works)). Needs a browser permission grant, works cross-machine over the LAN, and delivers to a closed PWA.
-- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode. Linux only for now; macOS follows later.
+- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode, and so is the popup an open dashboard would otherwise raise itself, so the daemon's is the only copy and clicking it opens the desktop app. Linux only for now; macOS follows later.
 
 Switch under **System → Notifications** with the *Delivery* control, or from the CLI:
 
@@ -45,15 +45,27 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `update_available` | The registry has a newer image tag for an installed service | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
+The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.
+
+Clicking a debug notification (`dump`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.
+
 Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription — closed-PWA push respects the toggles even when the dashboard isn't running.
 
 The dashboard's System health card also carries a bell toggle, next to the debug bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
 
 Clicking a notification focuses the dashboard (or launches the PWA if closed) and deep-links to the relevant view: the captured email in the Mailpit overlay, the failing worker's site detail, the finished service's tile, the Dumps tab.
 
+`worker_failed` waits before it speaks. Worker units restart themselves five seconds after a crash, so most failures clear on their own, and a notification sent the moment one is spotted usually describes a worker that is running again by the time you reach the dashboard. Instead the watcher holds new failures for thirty seconds, groups anything else that trips in that window into one notification, then re-checks health and drops the workers that recovered. You only hear about a worker that is still down after systemd has had several attempts at it, and the notification reflects its state at that point rather than when it first tripped. The dashboard banner is unaffected and still appears immediately, clearing itself when the worker comes back.
+
 ## How it works
 
-With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`. With the **browser** sink (the default), two delivery paths run in parallel:
+With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`, unless a dashboard window has focus. A desktop popup for something you are already looking at is noise, so while the app or a dashboard tab is focused nothing is raised on the desktop, on either sink: the event still rides the websocket to the page, Web Push is skipped since there is a live page to receive it, and delivery resumes the moment you switch away. Each connection reports its own focus, so a second window left in the background never suppresses anything.
+
+Nothing is lost when the desktop is skipped: the dashboard shows the event in the page as a toast in the bottom-right corner. Informational ones clear themselves after a few seconds; a failed operation stays until you dismiss it, carries a link to the thing that failed, and is shown even when notifications are muted or the desktop popup already fired.
+
+Toasts are the passing surface; the bell in the sidebar is the permanent one. It keeps the last 50 notifications with an unread count, survives a reload, and each entry links to whatever it was about, so a migration that fails while you are on another page, or a popup you dismissed without reading, is still there to be found. Opening the panel marks the list read, and Clear empties it.
+
+With the **browser** sink (the default), two delivery paths run in parallel:
 
 1. **WebSocket fan-out** (open tabs). Every notification rides the existing `/api/ws` channel as a `notification` frame. Open dashboard tabs route it through `lib/notify.ts`, which resolves the i18n key with Paraglide and calls `registration.showNotification(...)` so the toast lands in the OS notification center with a persistent click target.
 2. **Web Push** (closed tabs / installed PWA). When permission is granted, the page subscribes via `pushManager.subscribe()` using the install's VAPID public key. The server stores the subscription endpoint plus the user's per-category preferences and, on every notification, sends an encrypted Web Push (RFC 8291) to each allow-listed subscription. The browser wakes the service worker, the SW shows the notification with the same payload shape it received over the WS.

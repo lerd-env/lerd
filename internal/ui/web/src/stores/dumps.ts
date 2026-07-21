@@ -1,7 +1,8 @@
 import { derived, writable, get, type Readable } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import { createDumpsStream, type DumpEvent } from '$lib/dumpsStream';
-import { groupKey, sitePrefix } from '$lib/eventGroup';
+import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
+import { dumpHaystack } from '$lib/eventSearch';
 import { wsMessage } from '$lib/ws';
 
 export interface DumpsStatus {
@@ -28,7 +29,7 @@ export const filterText = writable<string>('');
 // Web tab can render one card per group.
 export interface DumpGroup {
   key: string;
-  label: string;
+  label: GroupLabel;
   events: DumpEvent[];
   ts: string;
 }
@@ -54,12 +55,7 @@ export function buildDumpGroups(
     if (ev.kind !== 'dump') return false;
     if (site && ev.ctx.site !== site) return false;
     if (ctx && ev.ctx.type !== ctx) return false;
-    if (needle) {
-      const haystack = [ev.label ?? '', ev.text ?? '', ev.ctx.request ?? '', ev.src.file ?? '', ev.ctx.branch ?? '']
-        .join(' ')
-        .toLowerCase();
-      if (!haystack.includes(needle)) return false;
-    }
+    if (needle && !dumpHaystack(ev).includes(needle)) return false;
     return true;
   });
   const groups = new Map<string, DumpGroup>();
@@ -94,14 +90,6 @@ export const dumpGroups: Readable<DumpGroup[]> = derived(
   [dumps, filterSite, filterCtx, filterText],
   ([$dumps, $site, $ctx, $text]) => buildDumpGroups($dumps, $site, $ctx, $text)
 );
-
-function groupLabel(ev: DumpEvent, hideSitePrefix = false): string {
-  const prefix = sitePrefix(ev, hideSitePrefix);
-  if (ev.ctx.type === 'fpm') {
-    return prefix + (ev.ctx.request || '(request)');
-  }
-  return `${prefix}cli (pid ${ev.ctx.pid ?? '?'})`;
-}
 
 // lastFlashId tracks the most recent event arriving over the live socket
 // (post-initial-replay) so DumpEntry can paint a one-shot highlight ring

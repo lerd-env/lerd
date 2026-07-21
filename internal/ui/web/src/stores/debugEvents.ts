@@ -1,24 +1,19 @@
 import { derived, type Readable } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
-import { groupKey, sitePrefix } from '$lib/eventGroup';
+import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
+import { kindHaystack } from '$lib/eventSearch';
 import { dumps } from '$stores/dumps';
+import { showTests } from '$stores/debugLens';
 
 // Generic per-request grouping shared by the non-dump/non-query Debug lenses
 // (jobs, views, mail, cache, events). Mirrors the query grouping: prefer the
 // per-request id, then method+path+pid, then a 5s CLI bucket.
 export interface DebugGroup {
   key: string;
-  label: string;
+  label: GroupLabel;
   ts: string;
   events: DumpEvent[];
   worker: string;
-}
-
-function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): string {
-  const prefix = sitePrefix(ev, hideSitePrefix);
-  if (ev.ctx.worker) return prefix + ev.ctx.worker;
-  if (ev.ctx.type === 'fpm') return prefix + (ev.ctx.request || '(request)');
-  return `${prefix}cli (pid ${ev.ctx.pid ?? '?'})`;
 }
 
 // buildKindGroups filters the shared event stream to one kind and groups it by
@@ -41,18 +36,7 @@ export function buildKindGroups(
     // not just future capture, matching buildQueryGroups.
     if (!showWorkers && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
-    if (needle) {
-      const hay = (
-        JSON.stringify(ev.data ?? {}) +
-        ' ' +
-        (ev.ctx.request ?? '') +
-        ' ' +
-        (ev.ctx.worker ?? '') +
-        ' ' +
-        (ev.ctx.branch ?? '')
-      ).toLowerCase();
-      if (!hay.includes(needle)) continue;
-    }
+    if (needle && !kindHaystack(ev).includes(needle)) continue;
     const key = groupKey(ev);
     let g = groups.get(key);
     if (!g) {
@@ -84,3 +68,17 @@ export const knownDebugSites: Readable<string[]> = derived(dumps, ($dumps) => {
   for (const ev of $dumps) set.add(ev.ctx.site || '');
   return Array.from(set).sort();
 });
+
+// debugEvents is what every lens renders: the captured stream minus test-run
+// events unless the user asks for them. Filtering here rather than in each
+// build* keeps the tab counters and the lists agreeing on what is visible.
+export const debugEvents: Readable<DumpEvent[]> = derived(
+  [dumps, showTests],
+  ([$dumps, $showTests]) => ($showTests ? $dumps : $dumps.filter((ev) => !ev.ctx.test))
+);
+
+// hiddenTestCount drives the "N hidden" hint next to the toggle, so a dump
+// added inside a test that never appears has a visible explanation.
+export const hiddenTestCount: Readable<number> = derived([dumps, showTests], ([$dumps, $showTests]) =>
+  $showTests ? 0 : $dumps.reduce((n, ev) => (ev.ctx.test ? n + 1 : n), 0)
+);

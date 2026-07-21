@@ -3,7 +3,6 @@
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
   import {
-    dumps,
     status,
     filterSite,
     filterCtx,
@@ -16,9 +15,14 @@
     toggleDumps,
     buildDumpGroups
   } from '$stores/dumps';
+  import { debugEvents } from '$stores/debugEvents';
   import DumpEntry from '$components/DumpEntry.svelte';
+  import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
+  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensGroupLabel from '$components/LensGroupLabel.svelte';
+  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { m } from '../paraglide/messages.js';
 
   interface Props {
@@ -43,8 +47,18 @@
   const effectiveText = $derived(scoped ? $debugSearch : $filterText);
 
   const groups = $derived(
-    buildDumpGroups($dumps, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
+    buildDumpGroups($debugEvents, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
   );
+
+  // Only the newest LENS_PAGE rows render; the rest arrive as the user
+  // reaches the end. Changing a filter starts the window over.
+  let limit = $state(LENS_PAGE);
+  const win = $derived(windowGroups(groups, (g) => g.events, limit));
+  const filterKey = $derived(`${scoped ? siteScope : $filterSite}|${effectiveCtx}|${effectiveText}`);
+  $effect(() => {
+    filterKey;
+    limit = LENS_PAGE;
+  });
 
   let textInput = $state('');
 
@@ -126,6 +140,7 @@
         onchange={(v) => filterCtx.set(v as '' | 'fpm' | 'cli')}
       />
     {/if}
+    <TestEventsToggle />
     <button
       type="button"
       class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5"
@@ -160,17 +175,18 @@
         </EmptyState>
       {/if}
     {:else}
-      {#each groups as group (group.key)}
+      {#each win.pages as page (page.group.key)}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            <span class="text-sm">{group.label}</span>
-            <span class="text-xs text-gray-400 ml-auto">{m.dumps_groupCount({ count: group.events.length })}</span>
+            <LensGroupLabel label={page.group.label} />
+            <span class="text-xs text-gray-400 ml-auto">{m.dumps_groupCount({ count: page.total })}</span>
           </header>
-          {#each group.events as ev (ev.id)}
+          {#each page.rows as ev (ev.id)}
             <DumpEntry event={ev} />
           {/each}
         </section>
       {/each}
+      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
     {/if}
   </div>
 </div>

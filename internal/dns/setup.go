@@ -517,6 +517,11 @@ func setupDummyLink(withNM bool, tld string) error {
 	// someone removed it). Gating on a config change would leave lerd0 down with no
 	// way back short of a reboot.
 	if err := ensureDummyLinkRunning(tld); err != nil {
+		// A host that had the link and lost it (dummy module gone after a kernel
+		// update, unit removed by hand) still carries the drop-in from the run that
+		// worked. Fallbacks off with no lerd0 is the state the guard below exists to
+		// prevent, so hand them back on the way out rather than only on the first run.
+		restoreResolvedFallbacks()
 		return err
 	}
 
@@ -534,6 +539,22 @@ func setupDummyLink(withNM bool, tld string) error {
 		return ensureDummyLinkRunning(tld)
 	}
 	return nil
+}
+
+// restoreResolvedFallbacks gives the system its fallback DNS servers back. They
+// are only ever turned off to pay for lerd0, so whenever the link is gone the
+// drop-in has to go with it. Stat-guarded: unguarded it would prompt for a
+// password on every host that never had the drop-in written.
+func restoreResolvedFallbacks() {
+	if _, err := os.Stat(lerdFallbackDropin); err != nil {
+		return
+	}
+	rmCmd := exec.Command("sudo", "rm", "-f", lerdFallbackDropin)
+	rmCmd.Stdin = os.Stdin
+	rmCmd.Stdout = os.Stdout
+	rmCmd.Stderr = os.Stderr
+	rmCmd.Run()                                                            //nolint:errcheck
+	exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
 }
 
 // ensureDummyLinkRunning enables the link unit for the next boot and starts it if
@@ -832,15 +853,8 @@ func Teardown() {
 
 	// Give the system its fallback DNS servers back: they were only turned off to
 	// stop lerd0 making offline lookups hang, and with lerd0 gone that reason goes
-	// with it. resolved is restarted below.
-	if _, err := os.Stat(lerdFallbackDropin); err == nil {
-		rmCmd := exec.Command("sudo", "rm", "-f", lerdFallbackDropin)
-		rmCmd.Stdin = os.Stdin
-		rmCmd.Stdout = os.Stdout
-		rmCmd.Stderr = os.Stderr
-		rmCmd.Run()                                                            //nolint:errcheck
-		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
-	}
+	// with it.
+	restoreResolvedFallbacks()
 
 	// NetworkManager conf and dnsmasq conf
 	for _, f := range []string{
@@ -973,13 +987,18 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/nmcli connection delete lerd-dns\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/system-connections/lerd-dns.nmconnection\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/systemctl disable --now lerd-dns-link.service\n"+
+			// Every location ip ships in. sudo compares the literal resolved path and
+			// does not follow symlinks, so on Ubuntu, where it resolves /usr/sbin/ip,
+			// the /usr/bin rule never matched and the delete prompted for a password.
 			"%s ALL=(root) NOPASSWD: /usr/bin/ip link del lerd0\n"+
+			"%s ALL=(root) NOPASSWD: /usr/sbin/ip link del lerd0\n"+
+			"%s ALL=(root) NOPASSWD: /sbin/ip link del lerd0\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/systemd/system/lerd-dns-link.service\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dnsmasq.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n",
-		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
+		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }

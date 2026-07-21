@@ -75,11 +75,35 @@ func (r *DoctorReport) fixLast(fx *DoctorFix) {
 }
 
 // AutoFixes returns the findings carrying an applicable automatic fix, in report
-// order. Callers filter further (heavy fixes always re-confirm).
+// order, one per distinct key. Several failing findings can attach the same
+// repair (a broken DNS chain fails at more than one rung), and running that
+// repair once per finding would repeat the whole sequence. Callers filter
+// further (heavy fixes always re-confirm).
 func (r *DoctorReport) AutoFixes() []Finding {
 	var out []Finding
+	seen := map[string]bool{}
 	for _, f := range r.Findings {
-		if f.Fix != nil && f.Fix.Tier == FixAuto {
+		if f.Fix == nil || f.Fix.Tier != FixAuto || seen[f.Fix.Key] {
+			continue
+		}
+		seen[f.Fix.Key] = true
+		out = append(out, f)
+	}
+	return out
+}
+
+// RequiredAutoFixes returns the automatic fixes attached to a real problem, and
+// OptionalAutoFixes those hanging off an informational finding. An info finding
+// is a standing offer, never a repair the user still owes.
+func (r *DoctorReport) RequiredAutoFixes() []Finding { return r.autoFixes(false) }
+
+// OptionalAutoFixes returns the automatic fixes attached to info findings.
+func (r *DoctorReport) OptionalAutoFixes() []Finding { return r.autoFixes(true) }
+
+func (r *DoctorReport) autoFixes(info bool) []Finding {
+	var out []Finding
+	for _, f := range r.AutoFixes() {
+		if (f.Status == "info") == info {
 			out = append(out, f)
 		}
 	}
@@ -103,3 +127,9 @@ func autoFix(key, arg, label string) *DoctorFix {
 }
 
 var manualFix = &DoctorFix{Tier: FixManual}
+
+// manualFixWith is manualFix carrying the command to run, for repairs lerd
+// knows the fix for but will not run itself because it needs sudo.
+func manualFixWith(label string) *DoctorFix {
+	return &DoctorFix{Tier: FixManual, Label: label}
+}

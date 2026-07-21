@@ -57,6 +57,7 @@ describe('createDumpsStream', () => {
     s.connect();
     MockEventSource.instances[0].fire('message', { data: payload('a') });
     MockEventSource.instances[0].fire('message', { data: payload('b') });
+    s.flush();
     const list = get(s.events);
     expect(list.map((e) => e.id)).toEqual(['a', 'b']);
     expect(list[0].ctx.site).toBe('acme');
@@ -68,6 +69,7 @@ describe('createDumpsStream', () => {
     s.connect();
     MockEventSource.instances[0].fire('message', { data: payload('a') });
     MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.flush();
     expect(get(s.events).length).toBe(1);
   });
 
@@ -78,6 +80,7 @@ describe('createDumpsStream', () => {
     for (let i = 0; i < 5; i++) {
       MockEventSource.instances[0].fire('message', { data: payload('e' + i) });
     }
+    s.flush();
     expect(get(s.events).map((e) => e.id)).toEqual(['e2', 'e3', 'e4']);
   });
 
@@ -87,6 +90,7 @@ describe('createDumpsStream', () => {
     s.connect();
     MockEventSource.instances[0].fire('message', { data: '{not valid json' });
     MockEventSource.instances[0].fire('message', { data: payload('ok') });
+    s.flush();
     expect(get(s.events).map((e) => e.id)).toEqual(['ok']);
   });
 
@@ -103,6 +107,7 @@ describe('createDumpsStream', () => {
     const s = createDumpsStream();
     s.connect();
     MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.flush();
     s.clear();
     expect(get(s.events)).toEqual([]);
   });
@@ -143,8 +148,54 @@ describe('createDumpsStream', () => {
     for (let i = 0; i < 600; i++) {
       MockEventSource.instances[0].fire('message', { data: payload('e' + i) });
     }
+    s.flush();
     expect(get(s.events).length).toBe(600);
     expect(get(s.events)[0].id).toBe('e0');
+  });
+
+  it('coalesces a burst into a single store write', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    let writes = 0;
+    const stop = s.events.subscribe(() => writes++);
+    writes = 0;
+    for (let i = 0; i < 50; i++) {
+      MockEventSource.instances[0].fire('message', { data: payload('e' + i) });
+    }
+    expect(writes).toBe(0);
+    s.flush();
+    expect(writes).toBe(1);
+    expect(get(s.events).length).toBe(50);
+    stop();
+  });
+
+  it('flushes buffered events on the next frame without a manual flush', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    MockEventSource.instances[0].fire('message', { data: payload('a') });
+    await new Promise((r) => requestAnimationFrame(() => r(null)));
+    expect(get(s.events).map((e) => e.id)).toEqual(['a']);
+  });
+
+  it('clear discards events buffered but not yet flushed', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.clear();
+    s.flush();
+    expect(get(s.events)).toEqual([]);
+  });
+
+  it('close flushes what is still buffered', async () => {
+    const { createDumpsStream } = await import('./dumpsStream');
+    const s = createDumpsStream();
+    s.connect();
+    MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.close();
+    expect(get(s.events).map((e) => e.id)).toEqual(['a']);
   });
 
   it('clear resets the de-dup set so a replayed id is welcome again', async () => {
@@ -152,8 +203,10 @@ describe('createDumpsStream', () => {
     const s = createDumpsStream();
     s.connect();
     MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.flush();
     s.clear();
     MockEventSource.instances[0].fire('message', { data: payload('a') });
+    s.flush();
     expect(get(s.events).map((e) => e.id)).toEqual(['a']);
   });
 });

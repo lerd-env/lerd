@@ -713,6 +713,7 @@
   "debug_enable": "Włącz przechwytywanie",
   "debug_waiting_title": "Oczekiwanie…",
   "debug_waiting_body": "Wywołaj jakąś aktywność w swojej aplikacji, a pojawi się tutaj.",
+  "debug_loadMore": "Załaduj więcej · {shown} z {total}",
   "views_data": "dane",
   "views_template": "szablon",
   "queries_searchPlaceholder": "Szukaj SQL, ścieżki lub pliku…",
@@ -735,6 +736,8 @@
   "queries_hideTrace": "Ukryj ślad",
   "queries_openInEditor": "Otwórz w edytorze",
   "queries_show_workers": "Pokaż zapytania workerów",
+  "debug_show_tests": "Pokaż uruchomienia testów",
+  "debug_tests_hidden": "(ukryto {count})",
   "queries_filter_allWorkers": "Wszystkie workery",
   "queries_worker_badge": "worker",
   "queries_copySql": "Kopiuj wykonywalny SQL",
@@ -1116,6 +1119,12 @@
   "databases_delete": "Delete",
   "databases_noSnapshots": "No snapshots yet.",
   "databases_openIn": "Open in {name}",
+  "databases_targetApp": "Aplikacja",
+  "databases_targetTesting": "Testowa",
+  "databases_targetLabel": "Na której bazie danych działają te akcje",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Powiadomienia",
+  "notify_center_empty": "Jeszcze nic. Zakończone operacje, błędy i przechwycone wiadomości pojawią się tutaj.",
+  "nav_notifications": "Powiadomienia"
 }

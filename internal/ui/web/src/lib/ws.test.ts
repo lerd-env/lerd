@@ -92,3 +92,36 @@ describe('ws client', () => {
     disconnectWs();
   });
 });
+
+describe('ws focus reporting', () => {
+  const realWS = globalThis.WebSocket;
+
+  beforeEach(() => {
+    MockWebSocket.instances = [];
+    // @ts-expect-error test double
+    globalThis.WebSocket = MockWebSocket;
+    vi.useFakeTimers();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    globalThis.WebSocket = realWS;
+    vi.useRealTimers();
+  });
+
+  it('reports focus on open and on every focus change', async () => {
+    const { connectWs, disconnectWs } = await import('./ws');
+    connectWs();
+    const sock = MockWebSocket.instances[0];
+    sock.readyState = MockWebSocket.OPEN;
+    sock.fire('open', {});
+    expect(sock.sent).toContain(JSON.stringify({ type: 'focus', focused: false }));
+
+    window.dispatchEvent(new Event('focus'));
+    expect(sock.sent.at(-1)).toBe(JSON.stringify({ type: 'focus', focused: true }));
+
+    window.dispatchEvent(new Event('blur'));
+    expect(sock.sent.at(-1)).toBe(JSON.stringify({ type: 'focus', focused: false }));
+    disconnectWs();
+  });
+});

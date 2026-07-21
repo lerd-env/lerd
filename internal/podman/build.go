@@ -298,15 +298,19 @@ func BuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	_, err = buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	return err
 }
 
-// BuildFPMImageTo builds the PHP-FPM image writing output to w.
+// BuildFPMImageTo builds the PHP-FPM image writing output to w, reporting
+// whether an image was actually produced. Callers need that answer: a rebuild
+// leaves any container already running on the old image, and starting an active
+// unit is a no-op, so only a caller that knows the image changed can bounce it.
 // When local is false, it attempts to pull a pre-built base image from ghcr.io first.
-func BuildFPMImageTo(version string, local bool, w io.Writer) error {
+func BuildFPMImageTo(version string, local bool, w io.Writer) (bool, error) {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
-		return err
+		return false, err
 	}
 	return buildFPMImage(version, false, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
 }
@@ -318,7 +322,8 @@ func RebuildFPMImage(version string, local bool) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	_, err = buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), os.Stdout)
+	return err
 }
 
 // RebuildFPMImageTo force-rebuilds the PHP-FPM image writing output to w.
@@ -328,7 +333,8 @@ func RebuildFPMImageTo(version string, local bool, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
+	_, err = buildFPMImage(version, true, local, cfg.GetExtensions(), cfg.AllExtApkDeps(), cfg.GetPackages(), w)
+	return err
 }
 
 // baseContainerfileHash returns a 12-character SHA-256 prefix of the Containerfile
@@ -433,7 +439,7 @@ func pullErrLine(s string) string {
 	return last
 }
 
-func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) error {
+func buildFPMImage(version string, force, local bool, customExts []string, extDeps map[string][]string, packages []string, w io.Writer) (bool, error) {
 	imageName := FPMImageName(version)
 
 	// Stamp the Containerfile hash as an image label so NeedsFPMRebuild
@@ -441,19 +447,19 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	// pre-v1.22.0 poisoning bug). Both build paths inherit the same args.
 	canonicalHash, hashErr := ContainerfileHash()
 	if hashErr != nil {
-		return fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
+		return false, fmt.Errorf("computing Containerfile hash for label: %w", hashErr)
 	}
 	customHash := customSetHash(customExts, extDeps, packages)
 
 	if !force && fpmImageCurrent(imageName, canonicalHash, customHash) {
-		return nil
+		return false, nil
 	}
 
 	fmt.Fprintf(w, "\n  Building PHP %s image...\n", version)
 
 	tmp, err := os.MkdirTemp("", "lerd-php-build-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer os.RemoveAll(tmp)
 
@@ -465,7 +471,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 		if baseRef := tryPullBaseImage(version, w); baseRef != "" {
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
-				buildCustomExtBlock(customExts, extDeps) +
+				buildCustomExtBlockWithToolchain(customExts, extDeps) +
 				buildCustomPackagesBlock(packages) +
 				mkcertCABlock(tmp)
 			goto build
@@ -479,11 +485,11 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	// doesn't need it).
 	{
 		if err := writeDevtoolsSource(tmp); err != nil {
-			return fmt.Errorf("staging devtools source: %w", err)
+			return false, fmt.Errorf("staging devtools source: %w", err)
 		}
 		tmpl, tmplErr := GetQuadletTemplate("lerd-php-fpm.Containerfile")
 		if tmplErr != nil {
-			return tmplErr
+			return false, tmplErr
 		}
 		containerfile = strings.ReplaceAll(tmpl, "{{.Version}}", version)
 		containerfile = strings.ReplaceAll(containerfile, "{{.CustomExtensions}}", buildCustomExtBlock(customExts, extDeps))
@@ -495,7 +501,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 build:
 	cfPath := filepath.Join(tmp, "Containerfile")
 	if err := os.WriteFile(cfPath, []byte(containerfile), 0644); err != nil {
-		return err
+		return false, err
 	}
 
 	buildArgs = append(buildArgs, "-f", cfPath, tmp)
@@ -503,7 +509,7 @@ build:
 	cmd.Stdout = w
 	cmd.Stderr = w
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("building PHP %s image: %w", version, err)
+		return false, fmt.Errorf("building PHP %s image: %w", version, err)
 	}
 
 	// Stamp the hash only after a real build — callers that no-op when the
@@ -518,7 +524,7 @@ build:
 	if OnImageRebuilt != nil {
 		OnImageRebuilt()
 	}
-	return nil
+	return true, nil
 }
 
 // extApkDeps maps a custom PHP extension to the Alpine packages its build needs.
@@ -596,24 +602,48 @@ func buildCustomExtRuntimeDeps(exts []string, userDeps map[string][]string) stri
 	return "RUN apk add --no-cache " + strings.Join(deps, " ") + " && rm -rf /var/cache/apk/*\n"
 }
 
+// phpizeToolchain is what a PECL build needs beyond the runtime image: the same
+// compilers the Containerfile's builder stage apk-adds. Without them `pecl
+// install` stops at phpize ("Cannot find autoconf").
+var phpizeToolchain = []string{"autoconf", "make", "g++", "linux-headers"}
+
 // buildCustomExtBlock generates Dockerfile RUN blocks for user-configured
 // extensions, apk-adding any extra build deps (built-in map ∪ userDeps) first.
+// This is the builder stage's block, which already has a toolchain to build in.
 func buildCustomExtBlock(exts []string, userDeps map[string][]string) string {
+	return customExtBlock(exts, userDeps, false)
+}
+
+// buildCustomExtBlockWithToolchain is the same block for the fast path, which
+// layers straight onto the pre-built runtime image and so has no toolchain to
+// build against. It installs one virtually and purges it inside the same layer,
+// leaving the runtime image the size it was.
+func buildCustomExtBlockWithToolchain(exts []string, userDeps map[string][]string) string {
+	return customExtBlock(exts, userDeps, true)
+}
+
+func customExtBlock(exts []string, userDeps map[string][]string, withToolchain bool) string {
 	if len(exts) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	sb.WriteString("# User-configured extensions\n")
 	for _, ext := range exts {
-		prefix := ""
+		prefix, purge := "", ""
+		if withToolchain {
+			prefix = "apk add --no-cache --virtual .lerd-ext-build " + strings.Join(phpizeToolchain, " ") + " && "
+			purge = " \\\n    && { apk del .lerd-ext-build 2>/dev/null || true; }"
+		}
+		// The extension's own deps outlive the purge: the compiled .so dlopens
+		// against them at runtime, the way the local path's runtime block does.
 		if deps := apkDepsForExt(ext, userDeps); len(deps) > 0 {
-			prefix = "apk add --no-cache " + strings.Join(deps, " ") + " && "
+			prefix += "apk add --no-cache " + strings.Join(deps, " ") + " && "
 		}
 		// `yes ''` feeds default answers to interactive PECL prompts (imap asks
 		// for kerberos / c-client paths); harmless for extensions that don't ask.
 		sb.WriteString(fmt.Sprintf(
-			"RUN { %s(yes '' | pecl install %s && docker-php-ext-enable %s) || docker-php-ext-install %s || true; } \\\n    && rm -rf /tmp/pear /var/cache/apk/*\n",
-			prefix, ext, ext, ext,
+			"RUN { %s(yes '' | pecl install %s && docker-php-ext-enable %s) || docker-php-ext-install %s || true; }%s \\\n    && rm -rf /tmp/pear /var/cache/apk/*\n",
+			prefix, ext, ext, ext, purge,
 		))
 	}
 	return sb.String()
@@ -921,7 +951,10 @@ func RewriteFPMQuadlets() error {
 		if writeErr != nil {
 			continue
 		}
-		if changed {
+		// An unchanged file is not proof the container has the mounts: an
+		// earlier writer in the same run may have written them without ever
+		// restarting the unit (#914).
+		if changed || UnitMissingMounts(unitName, extraPaths) {
 			changedUnits = append(changedUnits, unitName)
 		}
 	}
@@ -929,8 +962,10 @@ func RewriteFPMQuadlets() error {
 	// Also rewrite nginx quadlet with the same extra volumes.
 	if nginxContent, err := GetQuadletTemplate("lerd-nginx.container"); err == nil {
 		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)
-		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil && changed {
-			changedUnits = append(changedUnits, "lerd-nginx")
+		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil {
+			if changed || UnitMissingMounts("lerd-nginx", extraPaths) {
+				changedUnits = append(changedUnits, "lerd-nginx")
+			}
 		}
 	}
 
@@ -1182,6 +1217,17 @@ func EnsurePathMounted(path, phpVersion string) {
 		quadlets = append(quadlets, quadletInfo{unitName, filepath.Join(config.QuadletDir(), unitName+".container")})
 	}
 	quadlets = append(quadlets, quadletInfo{"lerd-nginx", filepath.Join(config.QuadletDir(), "lerd-nginx.container")})
+	// Custom-FPM sites serve from their own container, so an out-of-home path
+	// has to reach that quadlet too, not just the shared per-version ones.
+	if reg, regErr := config.LoadSites(); regErr == nil {
+		for i := range reg.Sites {
+			if !reg.Sites[i].IsCustomFPM() {
+				continue
+			}
+			unitName := CustomFPMContainerName(reg.Sites[i].Name)
+			quadlets = append(quadlets, quadletInfo{unitName, filepath.Join(config.QuadletDir(), unitName+".container")})
+		}
+	}
 
 	var changedUnits []string
 	for _, q := range quadlets {
@@ -1192,6 +1238,12 @@ func EnsurePathMounted(path, phpVersion string) {
 
 		volumePrefix := fmt.Sprintf("Volume=%s:%s:", path, path)
 		if strings.Contains(string(existing), volumePrefix) {
+			// The quadlet is already right, but writing one never touches a
+			// running container: whoever wrote this line may have left the
+			// container running without the mount (#914).
+			if UnitMissingMounts(q.unitName, []string{path}) {
+				changedUnits = append(changedUnits, q.unitName)
+			}
 			continue
 		}
 

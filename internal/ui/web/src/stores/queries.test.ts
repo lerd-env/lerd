@@ -101,7 +101,7 @@ describe('buildQueryGroups', () => {
     const all = buildQueryGroups(events);
     const wq = all.find((g) => g.rows[0].event.id === 'w1');
     expect(wq?.worker).toBe('queue:work');
-    expect(wq?.label).toContain('queue:work');
+    expect(wq?.label.text).toBe('queue:work');
 
     // Filter to one worker command.
     const onlyScrape = buildQueryGroups(events, '', '', false, 'scrape:rtb-data');
