@@ -87,13 +87,17 @@ export function ansiToHtml(text: string): string {
   cleaned = cleaned.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '').replace(/\x1b[()][\dA-Za-z]/g, '');
   // Carriage returns rewrite the line in a terminal, which is how progress
   // bars (composer, npm) animate. Keep only what a terminal would be left
-  // showing instead of concatenating every frame.
+  // showing instead of concatenating every frame. The escapes from the
+  // overwritten frames carry forward, since a terminal processed them before
+  // the text they styled was painted over.
   cleaned = cleaned
     .split('\n')
     .map((l) => {
       const trimmed = l.replace(/\r+$/, '');
       const cr = trimmed.lastIndexOf('\r');
-      return cr === -1 ? trimmed : trimmed.slice(cr + 1);
+      if (cr === -1) return trimmed;
+      const carried = trimmed.slice(0, cr).match(/\x1b\[[\d;]*m/g)?.join('') ?? '';
+      return carried + trimmed.slice(cr + 1);
     })
     .join('\n');
 

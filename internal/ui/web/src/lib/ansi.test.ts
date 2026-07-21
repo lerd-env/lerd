@@ -99,6 +99,15 @@ describe('ansiToHtml', () => {
     expect(ansiToHtml('a\nb\rc')).toBe('a\nc');
   });
 
+  it('carries color across collapsed progress frames', () => {
+    // The green was set on a frame that got painted over, but a terminal had
+    // already processed it, so the surviving frame stays green.
+    const html = ansiToHtml('\x1b[32m10%\r50%');
+    expect(html).toContain('color:');
+    expect(html).toContain('50%');
+    expect(html).not.toContain('10%');
+  });
+
   it('handles back-to-back color changes without nesting spans', () => {
     const html = ansiToHtml('\x1b[31mred\x1b[32mgreen\x1b[0m');
     // We should never have a <span> inside a <span> — closing the previous

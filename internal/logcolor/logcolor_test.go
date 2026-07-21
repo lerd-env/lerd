@@ -5,7 +5,15 @@ import (
 	"testing"
 )
 
+// colourOn clears NO_COLOR for the duration of a test so the colour-on
+// assertions hold on a machine or CI runner that exports it.
+func colourOn(t *testing.T) {
+	t.Helper()
+	t.Setenv("NO_COLOR", "")
+}
+
 func TestVars(t *testing.T) {
+	colourOn(t)
 	got := strings.Join(Vars(), " ")
 	for _, want := range []string{"FORCE_COLOR=1", "CLICOLOR_FORCE=1", "TERM=xterm-256color"} {
 		if !strings.Contains(got, want) {
@@ -31,6 +39,7 @@ func TestNoColorWins(t *testing.T) {
 }
 
 func TestPodmanExecArgs(t *testing.T) {
+	colourOn(t)
 	args := PodmanExecArgs()
 	if len(args) != len(Vars()) {
 		t.Fatalf("PodmanExecArgs() = %v, want one flag per var", args)
@@ -43,6 +52,7 @@ func TestPodmanExecArgs(t *testing.T) {
 }
 
 func TestQuadletEnvLines(t *testing.T) {
+	colourOn(t)
 	out := QuadletEnvLines()
 	if !strings.HasSuffix(out, "\n") {
 		t.Errorf("QuadletEnvLines() = %q, want trailing newline", out)
@@ -56,6 +66,7 @@ func TestQuadletEnvLines(t *testing.T) {
 }
 
 func TestShellExports(t *testing.T) {
+	colourOn(t)
 	out := ShellExports()
 	if !strings.Contains(out, "export FORCE_COLOR=1\n") {
 		t.Errorf("ShellExports() = %q, want export lines", out)
@@ -66,6 +77,7 @@ func TestShellExports(t *testing.T) {
 }
 
 func TestEnviron(t *testing.T) {
+	colourOn(t)
 	base := []string{"PATH=/bin"}
 	got := Environ(base)
 	if len(got) != len(base)+len(Vars()) {

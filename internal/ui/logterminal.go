@@ -6,10 +6,14 @@ import (
 	"strings"
 )
 
-// unitForLogPath maps a log stream path the UI is subscribed to back to the
-// unit behind it, so "follow in terminal" can reuse whatever the log pane is
-// already showing without every caller having to know its own unit name. The
-// mapping mirrors the stream handlers in server.go.
+// siteWorkerLogKinds are the /api/{kind}/{site}/logs stream routes. The kind
+// doubles as the unit-name infix, so a new worker route is one entry here plus
+// its mux registration.
+var siteWorkerLogKinds = []string{"queue", "horizon", "schedule", "reverb", "stripe"}
+
+// unitForLogPath maps a log stream path back to the unit behind it. Both the
+// stream handlers and "follow in terminal" resolve through here, so the two can
+// never disagree about which unit a pane is showing.
 func unitForLogPath(path string) (string, bool) {
 	if path == "/api/watcher/logs" {
 		return "lerd-watcher", true
@@ -20,8 +24,7 @@ func unitForLogPath(path string) (string, bool) {
 		}
 		return rest, true
 	}
-	// /api/{kind}/{site}/logs and /api/worker/{site}/{worker}/logs
-	for _, kind := range []string{"queue", "horizon", "schedule", "reverb", "stripe"} {
+	for _, kind := range siteWorkerLogKinds {
 		if rest, ok := strings.CutPrefix(path, "/api/"+kind+"/"); ok {
 			parts := strings.Split(rest, "/")
 			if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
@@ -30,6 +33,7 @@ func unitForLogPath(path string) (string, bool) {
 			return "lerd-" + kind + "-" + parts[0], true
 		}
 	}
+	// /api/worker/{site}/{worker}/logs — unit: lerd-{worker}-{site}
 	if rest, ok := strings.CutPrefix(path, "/api/worker/"); ok {
 		parts := strings.Split(rest, "/")
 		if len(parts) != 3 || parts[2] != "logs" ||
@@ -41,8 +45,24 @@ func unitForLogPath(path string) (string, bool) {
 	return "", false
 }
 
+// handleUnitLogStream serves every per-site worker log stream, resolving the
+// request path to its unit through unitForLogPath.
+func handleUnitLogStream(w http.ResponseWriter, r *http.Request) {
+	unit, ok := unitForLogPath(r.URL.Path)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	streamUnitLogs(w, r, unit)
+}
+
+// openTerminal is the seam tests replace so the handler can be exercised
+// without launching a real emulator.
+var openTerminal = openTerminalCommand
+
 // handleLogTerminal opens the user's terminal emulator tailing the same unit
 // the given log stream path shows, so a long-running tail can outlive the tab.
+// Loopback-only, see loopbackOnlyRoutes.
 func handleLogTerminal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -60,7 +80,7 @@ func handleLogTerminal(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "unknown log stream", http.StatusNotFound)
 		return
 	}
-	if err := openTerminalCommand(logFollowScript(unit)); err != nil {
+	if err := openTerminal(logFollowScript(unit)); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

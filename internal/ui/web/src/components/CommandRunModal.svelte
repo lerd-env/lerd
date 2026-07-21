@@ -33,13 +33,17 @@
   // gets a soft red prefix, meta (lerd's own [error] / [aborted] markers)
   // gets a yellow prefix. The ANSI renderer handles the inline escapes
   // alongside any colors the command itself emitted.
+  // An SGR that sets something, so a line ending in a bare reset still counts
+  // as uncolored and keeps the stderr tint.
+  const styledRe = /\x1b\[[\d;]*[1-9][\d;]*m/;
+
   function renderLines(lines: RunLine[]): string {
     return lines
       .map((l) => {
-        // A line that already carries its own escapes keeps them; tinting it
-        // red on top would flatten the tool's own colors.
+        // A line that already colors itself keeps its own escapes; tinting it
+        // red on top would flatten the tool's palette.
         if (l.stream === 'stderr')
-          return l.text.includes('\x1b[') ? l.text : '\x1b[31m' + l.text + '\x1b[0m';
+          return styledRe.test(l.text) ? l.text : '\x1b[31m' + l.text + '\x1b[0m';
         if (l.stream === 'meta') return '\x1b[33m' + l.text + '\x1b[0m';
         return l.text;
       })

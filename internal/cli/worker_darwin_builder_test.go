@@ -186,6 +186,7 @@ func findLine(body, prefix string) string {
 }
 
 func TestWorkerBuilders_ForceColour(t *testing.T) {
+	t.Setenv("NO_COLOR", "") // the assertions below are the colour-on path
 	unit := buildDarwinContainerWorkerUnit(
 		"lerd-queue-alpha", "8.4", "/Users/u/alpha", "/Users/u/home",
 		"/lerd/php.conf", "/lerd/php-user.ini", "/lerd/php-shared.ini",
