@@ -31,6 +31,13 @@ var loopbackOnlyRoutes = []string{
 	"/api/push/test",            // fires notifications onto subscribed devices
 }
 
+// loopbackOnlyRoutePrefixes are endpoint subtrees restricted to loopback in
+// full, so a new subresource cannot escape by failing to be listed. Databases
+// read out, drop and overwrite the data the "/env" gate already protects.
+var loopbackOnlyRoutePrefixes = []string{
+	"/api/databases",
+}
+
 // loopbackOnlySiteSubactions are the per-site actions (under
 // /api/sites/{domain}/) whose entire subtree is restricted to loopback.
 // A subaction "/env" gates /api/sites/{d}/env and every nested route
@@ -93,6 +100,11 @@ func fromHost(r *http.Request) bool {
 func isLoopbackOnlyPath(path string) bool {
 	for _, p := range loopbackOnlyRoutes {
 		if path == p {
+			return true
+		}
+	}
+	for _, p := range loopbackOnlyRoutePrefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
 			return true
 		}
 	}

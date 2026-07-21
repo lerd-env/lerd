@@ -144,7 +144,7 @@ export async function setFpmPorts(
       ports?: string[];
     };
     if (res.ok && data.ok) return { ok: true, ports: data.ports };
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
