@@ -1120,5 +1120,8 @@
   "databases_targetTesting": "Test",
   "databases_targetLabel": "Auf welche Datenbank sich diese Aktionen beziehen",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Benachrichtigungen",
+  "notify_center_empty": "Noch nichts. Abgeschlossene Vorgänge, Fehler und abgefangene E-Mails erscheinen hier.",
+  "nav_notifications": "Benachrichtigungen"
 }

@@ -57,6 +57,10 @@ Clicking a notification focuses the dashboard (or launches the PWA if closed) an
 
 With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`, unless a dashboard window has focus. A desktop popup for something you are already looking at is noise, so while the app or a dashboard tab is focused nothing is raised on the desktop, on either sink: the event still rides the websocket to the page, Web Push is skipped since there is a live page to receive it, and delivery resumes the moment you switch away. Each connection reports its own focus, so a second window left in the background never suppresses anything.
 
+Nothing is lost when the desktop is skipped: the dashboard shows the event in the page as a toast in the bottom-right corner. Informational ones clear themselves after a few seconds; a failed operation stays until you dismiss it, carries a link to the thing that failed, and is shown even when notifications are muted or the desktop popup already fired.
+
+Toasts are the passing surface; the bell in the sidebar is the permanent one. It keeps the last 50 notifications with an unread count, survives a reload, and each entry links to whatever it was about, so a migration that fails while you are on another page, or a popup you dismissed without reading, is still there to be found. Opening the panel marks the list read, and Clear empties it.
+
 With the **browser** sink (the default), two delivery paths run in parallel:
 
 1. **WebSocket fan-out** (open tabs). Every notification rides the existing `/api/ws` channel as a `notification` frame. Open dashboard tabs route it through `lib/notify.ts`, which resolves the i18n key with Paraglide and calls `registration.showNotification(...)` so the toast lands in the OS notification center with a persistent click target.

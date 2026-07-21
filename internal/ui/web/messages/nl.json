@@ -1120,5 +1120,8 @@
   "databases_targetTesting": "Test",
   "databases_targetLabel": "Op welke database deze acties werken",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Meldingen",
+  "notify_center_empty": "Nog niets. Voltooide bewerkingen, fouten en opgevangen e-mail verschijnen hier.",
+  "nav_notifications": "Meldingen"
 }

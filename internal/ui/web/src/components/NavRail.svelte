@@ -5,6 +5,7 @@
   import Icon, { type IconName } from './Icon.svelte';
   import RailLogo from './RailLogo.svelte';
   import ThemeSwitcher from './ThemeSwitcher.svelte';
+  import NotificationCenter from './NotificationCenter.svelte';
   import VersionLabel from './VersionLabel.svelte';
   import {
     dashboardServices,
@@ -120,6 +121,7 @@
     >
       <Icon name="docs" />
     </IconButton>
+    <NotificationCenter size="sm" />
     <ThemeSwitcher size="sm" />
     <VersionLabel />
   </div>

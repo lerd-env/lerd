@@ -1120,5 +1120,8 @@
   "databases_targetTesting": "Testare",
   "databases_targetLabel": "Pe care bază de date acționează aceste comenzi",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Notificări",
+  "notify_center_empty": "Încă nimic. Operațiunile finalizate, erorile și e-mailurile capturate apar aici.",
+  "nav_notifications": "Notificări"
 }

@@ -59,16 +59,21 @@ func dispatchNotification(n push.Notification) {
 	}
 	// A dashboard window with focus is already showing the user whatever the
 	// notification would tell them, so nothing is raised on the desktop while
-	// one is open. The event still rides the websocket to the page.
-	focused := uiWindowFocused()
+	// one is open. The event still rides the websocket to the page. The test
+	// notification is the exception: its whole job is to prove the desktop path
+	// works, and it is always sent from the settings panel, which has focus.
+	focused := uiWindowFocused() && n.Kind != "test"
 	switch notifySink(cfg, desktopnotify.Supported) {
 	case sinkOff:
 		return
 	case sinkNative:
+		// Every open page gets the event either way, so the notification centre
+		// holds what the desktop showed while the user was away as well as what
+		// it was asked not to show.
+		if payload, err := n.Payload(); err == nil {
+			broker.broadcastNotification(payload)
+		}
 		if focused {
-			if payload, err := n.Payload(); err == nil {
-				broker.broadcastNotification(payload)
-			}
 			return
 		}
 		// The test notification is a manual action, not a real category, so it

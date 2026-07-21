@@ -440,3 +440,244 @@ describe('detectBrowserFamily', () => {
     expect(detectBrowserFamily('SomeCustomBot/1.0')).toBe('other');
   });
 });
+
+describe('in-app notifications', () => {
+  beforeEach(() => {
+    MockNotification.instances = [];
+    MockNotification.permission = 'granted';
+    swShows.length = 0;
+    // @ts-expect-error test double
+    globalThis.Notification = MockNotification;
+    localStorage.clear();
+    installSWMock();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    // @ts-expect-error reset
+    delete globalThis.Notification;
+    removeSWMock();
+  });
+
+  it('shows the event in the page while the window has focus', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { initNotify, inAppNotifications, dismissInApp } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'New email', body: 'From alice' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const list = get(inAppNotifications);
+    expect(list).toHaveLength(1);
+    expect(list[0].title).toBe('New email');
+    expect(list[0].failed).toBe(false);
+    expect(swShows).toHaveLength(0);
+
+    dismissInApp(list[0].id);
+    expect(get(inAppNotifications)).toHaveLength(0);
+    hasFocus.mockRestore();
+  });
+
+  it('records a failure in the page even when the desktop popup also fires', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const { initNotify, inAppNotifications } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'op_failed', title: 'Migrate failed: mariadb', body: 'exit 127' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(get(inAppNotifications)[0].failed).toBe(true);
+    expect(swShows).toHaveLength(1);
+    hasFocus.mockRestore();
+  });
+
+  it('reports a failure even with notifications muted', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { initNotify, setNotifyMaster, inAppNotifications } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    setNotifyMaster(false);
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'op_failed', title: 'Install failed: PHP 8.5', body: 'boom' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(get(inAppNotifications)).toHaveLength(1);
+    hasFocus.mockRestore();
+  });
+});
+
+describe('notification centre', () => {
+  beforeEach(() => {
+    MockNotification.instances = [];
+    MockNotification.permission = 'granted';
+    swShows.length = 0;
+    // @ts-expect-error test double
+    globalThis.Notification = MockNotification;
+    localStorage.clear();
+    installSWMock();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    // @ts-expect-error reset
+    delete globalThis.Notification;
+    removeSWMock();
+  });
+
+  it('keeps every delivered notification, unread, and survives a reload', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const first = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    first.initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'op_failed', title: 'Migrate failed: mariadb', body: 'exit 127' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(get(first.unreadNotifications)).toBe(1);
+
+    // A reload re-reads the persisted list rather than starting empty.
+    vi.resetModules();
+    const reloaded = await import('./notify');
+    expect(get(reloaded.notificationHistory)).toHaveLength(1);
+    expect(get(reloaded.unreadNotifications)).toBe(1);
+
+    reloaded.markNotificationsRead();
+    expect(get(reloaded.unreadNotifications)).toBe(0);
+
+    reloaded.clearNotificationHistory();
+    expect(get(reloaded.notificationHistory)).toHaveLength(0);
+    hasFocus.mockRestore();
+  });
+});
+
+describe('test notification', () => {
+  beforeEach(() => {
+    MockNotification.instances = [];
+    MockNotification.permission = 'granted';
+    swShows.length = 0;
+    // @ts-expect-error test double
+    globalThis.Notification = MockNotification;
+    localStorage.clear();
+    installSWMock();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    // @ts-expect-error reset
+    delete globalThis.Notification;
+    removeSWMock();
+  });
+
+  // Send test is pressed from the settings panel, so the window always has
+  // focus; suppressing it there would make the button look broken.
+  it('reaches the desktop even with the dashboard focused, and is not filed in the centre', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { initNotify, notificationHistory, inAppNotifications } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'test', title: 'lerd notifications test' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(swShows).toHaveLength(1);
+    expect(get(notificationHistory)).toHaveLength(0);
+    expect(get(inAppNotifications)).toHaveLength(0);
+    hasFocus.mockRestore();
+  });
+});
+
+describe('notification ids', () => {
+  beforeEach(() => {
+    MockNotification.instances = [];
+    MockNotification.permission = 'granted';
+    swShows.length = 0;
+    // @ts-expect-error test double
+    globalThis.Notification = MockNotification;
+    localStorage.clear();
+    installSWMock();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    // @ts-expect-error reset
+    delete globalThis.Notification;
+    removeSWMock();
+  });
+
+  // A repeated id makes the keyed list throw each_key_duplicate, which takes
+  // the whole dashboard down, so ids have to outlive the page that made them.
+  // The stored list is renumbered on load for the same reason: a payload
+  // written by an older build can already carry repeats.
+  it('stay unique across a reload', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const first = await import('./notify');
+    const { wsMessage } = await import('./ws');
+    first.initNotify();
+    wsMessage.set({ type: 'notification', notification: { kind: 'op_done', title: 'one' } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    vi.resetModules();
+    const reloaded = await import('./notify');
+    const ws2 = await import('./ws');
+    reloaded.initNotify();
+    ws2.wsMessage.set({ type: 'notification', notification: { kind: 'op_done', title: 'two' } });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    const ids = get(reloaded.notificationHistory).map((r) => r.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+    hasFocus.mockRestore();
+  });
+});
+
+describe('stored notification history', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('renumbers a stored list that repeats an id', async () => {
+    localStorage.setItem(
+      'lerd:notify:history',
+      JSON.stringify([
+        { id: 1, kind: 'op_failed', title: 'Migrate failed', body: '', url: '', failed: true, at: 1, read: false },
+        { id: 1, kind: 'op_done', title: 'Update finished', body: '', url: '', failed: false, at: 2, read: true }
+      ])
+    );
+
+    const { notificationHistory } = await import('./notify');
+    const ids = get(notificationHistory).map((r) => r.id);
+    expect(ids).toHaveLength(2);
+    expect(new Set(ids).size).toBe(2);
+  });
+
+  it('drops junk rather than rendering it', async () => {
+    localStorage.setItem('lerd:notify:history', JSON.stringify([null, 7, { id: 3 }]));
+    const { notificationHistory } = await import('./notify');
+    expect(get(notificationHistory)).toHaveLength(0);
+  });
+});

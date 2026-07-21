@@ -1120,5 +1120,8 @@
   "databases_targetTesting": "Kiểm thử",
   "databases_targetLabel": "Các thao tác này áp dụng cho cơ sở dữ liệu nào",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Thông báo",
+  "notify_center_empty": "Chưa có gì. Các thao tác đã hoàn tất, lỗi và email đã bắt sẽ xuất hiện ở đây.",
+  "nav_notifications": "Thông báo"
 }
