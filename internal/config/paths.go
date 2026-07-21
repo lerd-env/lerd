@@ -555,6 +555,21 @@ func IsStopped() bool {
 	return err == nil
 }
 
+// PprofMarkerPath is the sentinel that unlocks lerd-ui's profiling endpoints.
+// Exported so the CLI and docs can name the exact file a user has to create.
+func PprofMarkerPath() string {
+	return filepath.Join(RunDir(), "pprof.enabled")
+}
+
+// PprofEnabled reports whether profiling has been unlocked. Deliberately read
+// per request rather than at startup: a daemon that is burning CPU right now
+// has to be profilable without a restart, since restarting it discards the
+// very state worth capturing.
+func PprofEnabled() bool {
+	_, err := os.Stat(PprofMarkerPath())
+	return err == nil
+}
+
 // ContainerHostsFile returns the path to the shared hosts file mounted into PHP containers.
 func ContainerHostsFile() string {
 	return filepath.Join(DataDir(), "hosts")

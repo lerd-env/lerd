@@ -79,7 +79,7 @@ func registerSite(t *testing.T, name, path string) {
 // worktree suffix when sitePath equals the registered site path.
 func TestWorkerUnitName_parentPath(t *testing.T) {
 	registerSite(t, "ws", "/p/ws")
-	got := workerUnitName("ws", "/p/ws", "vite")
+	got := WorkerUnitName("ws", "/p/ws", "vite")
 	if got != "lerd-vite-ws" {
 		t.Errorf("got %q, want %q", got, "lerd-vite-ws")
 	}
@@ -89,7 +89,7 @@ func TestWorkerUnitName_parentPath(t *testing.T) {
 // suffixed unit name format used by per-worktree worker units.
 func TestWorkerUnitName_worktreePath(t *testing.T) {
 	registerSite(t, "ws", "/p/ws")
-	got := workerUnitName("ws", "/p/ws/feat-x", "vite")
+	got := WorkerUnitName("ws", "/p/ws/feat-x", "vite")
 	if got != "lerd-vite-ws-feat-x" {
 		t.Errorf("got %q, want %q", got, "lerd-vite-ws-feat-x")
 	}
@@ -99,7 +99,7 @@ func TestWorkerUnitName_worktreePath(t *testing.T) {
 // know the path get the parent unit name, matching pre-refactor behaviour.
 func TestWorkerUnitName_emptyPath(t *testing.T) {
 	registerSite(t, "ws", "/p/ws")
-	got := workerUnitName("ws", "", "vite")
+	got := WorkerUnitName("ws", "", "vite")
 	if got != "lerd-vite-ws" {
 		t.Errorf("got %q, want %q", got, "lerd-vite-ws")
 	}

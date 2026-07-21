@@ -1060,7 +1060,7 @@ func restoreSiteInfrastructure() {
 				if worktreeWorkerIdleSuspended(&s, wt.Path, w) {
 					continue
 				}
-				if services.Mgr.IsEnabled(workerUnitName(s.Name, wt.Path, w)) {
+				if services.Mgr.IsEnabled(WorkerUnitName(s.Name, wt.Path, w)) {
 					continue
 				}
 				wtPHP := config.WorktreePHPVersion(wt.Path, phpVersion)

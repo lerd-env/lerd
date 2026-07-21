@@ -220,6 +220,7 @@
   "common_live": "live",
   "common_disconnected": "disconnesso",
   "common_terminal": "Terminale",
+  "common_followInTerminal": "Segui nel terminale",
   "common_edit": "Modifica",
   "common_remove": "Rimuovi",
   "common_add": "Aggiungi",

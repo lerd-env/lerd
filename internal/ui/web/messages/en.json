@@ -210,6 +210,7 @@
   "common_live": "live",
   "common_disconnected": "disconnected",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Follow in terminal",
   "common_edit": "Edit",
   "common_remove": "Remove",
   "common_add": "Add",

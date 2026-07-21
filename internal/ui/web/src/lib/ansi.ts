@@ -2,8 +2,8 @@
 // sequences from CLI tools into safe HTML span tags. Handles:
 //   - foreground 30-37 / bright 90-97 / default 39
 //   - background 40-47 / bright 100-107 / default 49
-//   - bold (1) and reset (0 / 22)
-//   - 256-color foreground (38;5;N) — falls back to closest 8-color
+//   - bold (1), dim (2), italic (3), underline (4) and their resets
+//   - 256-color and 24-bit true color, foreground and background
 //
 // Skips cursor positioning, line clear, and other non-SGR sequences (they're
 // noise in a non-interactive replay). Strips them rather than letting them
@@ -28,6 +28,24 @@ const FG: Record<number, string> = {
   97: 'var(--ansi-bright-white, #ffffff)'
 };
 
+// The xterm 256-color cube and grayscale ramp. Indexes 0-15 reuse the named
+// palette above so a theme override still applies to them.
+const CUBE = [0, 95, 135, 175, 215, 255];
+
+function color256(idx: number): string | undefined {
+  if (idx < 8) return FG[30 + idx];
+  if (idx < 16) return FG[90 + (idx - 8)];
+  if (idx < 232) {
+    const n = idx - 16;
+    return `rgb(${CUBE[Math.floor(n / 36) % 6]},${CUBE[Math.floor(n / 6) % 6]},${CUBE[n % 6]})`;
+  }
+  if (idx < 256) {
+    const v = 8 + (idx - 232) * 10;
+    return `rgb(${v},${v},${v})`;
+  }
+  return undefined;
+}
+
 function htmlEscape(s: string): string {
   return s
     .replace(/&/g, '&amp;')
@@ -39,13 +57,21 @@ function htmlEscape(s: string): string {
 
 interface SpanState {
   fg?: string;
+  bg?: string;
   bold?: boolean;
+  dim?: boolean;
+  italic?: boolean;
+  underline?: boolean;
 }
 
 function spanStyle(s: SpanState): string {
   const parts: string[] = [];
   if (s.fg) parts.push('color:' + s.fg);
+  if (s.bg) parts.push('background-color:' + s.bg);
   if (s.bold) parts.push('font-weight:600');
+  if (s.dim) parts.push('opacity:0.65');
+  if (s.italic) parts.push('font-style:italic');
+  if (s.underline) parts.push('text-decoration:underline');
   return parts.join(';');
 }
 
@@ -59,6 +85,21 @@ export function ansiToHtml(text: string): string {
   let cleaned = text.replace(otherEscRe, (m) => (m.endsWith('m') ? m : ''));
   // Also drop other common ESC sequences we don't model: ESC] OSC, ESC( charset.
   cleaned = cleaned.replace(/\x1b\][^\x07\x1b]*(\x07|\x1b\\)/g, '').replace(/\x1b[()][\dA-Za-z]/g, '');
+  // Carriage returns rewrite the line in a terminal, which is how progress
+  // bars (composer, npm) animate. Keep only what a terminal would be left
+  // showing instead of concatenating every frame. The escapes from the
+  // overwritten frames carry forward, since a terminal processed them before
+  // the text they styled was painted over.
+  cleaned = cleaned
+    .split('\n')
+    .map((l) => {
+      const trimmed = l.replace(/\r+$/, '');
+      const cr = trimmed.lastIndexOf('\r');
+      if (cr === -1) return trimmed;
+      const carried = trimmed.slice(0, cr).match(/\x1b\[[\d;]*m/g)?.join('') ?? '';
+      return carried + trimmed.slice(cr + 1);
+    })
+    .join('\n');
 
   let out = '';
   let last = 0;
@@ -88,6 +129,17 @@ export function ansiToHtml(text: string): string {
     }
   };
 
+  // Reads an extended color at params[i] (38 or 48) and returns the CSS color
+  // plus how many extra params it consumed.
+  const extended = (params: number[], i: number): [string | undefined, number] => {
+    if (params[i + 1] === 5) return [color256(params[i + 2] ?? 0), 2];
+    if (params[i + 1] === 2) {
+      const [r, g, b] = [params[i + 2] ?? 0, params[i + 3] ?? 0, params[i + 4] ?? 0];
+      return [`rgb(${r},${g},${b})`, 4];
+    }
+    return [undefined, 1];
+  };
+
   let m: RegExpExecArray | null;
   while ((m = sgrRe.exec(cleaned)) !== null) {
     writeChunk(cleaned.slice(last, m.index));
@@ -98,31 +150,37 @@ export function ansiToHtml(text: string): string {
 
     for (let i = 0; i < params.length; i++) {
       const p = params[i];
+      closeSpan();
       if (p === 0) {
-        closeSpan();
         state.fg = undefined;
+        state.bg = undefined;
         state.bold = false;
-      } else if (p === 1) {
-        closeSpan();
-        state.bold = true;
-      } else if (p === 22) {
-        closeSpan();
+        state.dim = false;
+        state.italic = false;
+        state.underline = false;
+      } else if (p === 1) state.bold = true;
+      else if (p === 2) state.dim = true;
+      else if (p === 3) state.italic = true;
+      else if (p === 4) state.underline = true;
+      else if (p === 22) {
         state.bold = false;
-      } else if (p === 39) {
-        closeSpan();
-        state.fg = undefined;
-      } else if (FG[p]) {
-        closeSpan();
-        state.fg = FG[p];
-      } else if (p === 38 && params[i + 1] === 5) {
-        // 256-color: round to nearest 8-color base; good enough for readability.
-        const idx = params[i + 2] ?? 0;
-        const base = idx >= 8 && idx <= 15 ? 90 + (idx - 8) : 30 + (idx % 8);
-        closeSpan();
-        state.fg = FG[base];
-        i += 2;
+        state.dim = false;
+      } else if (p === 23) state.italic = false;
+      else if (p === 24) state.underline = false;
+      else if (p === 39) state.fg = undefined;
+      else if (p === 49) state.bg = undefined;
+      else if (FG[p]) state.fg = FG[p];
+      else if (p >= 40 && p <= 47) state.bg = FG[p - 10];
+      else if (p >= 100 && p <= 107) state.bg = FG[p - 10];
+      else if (p === 38 || p === 48) {
+        const [color, used] = extended(params, i);
+        if (color) {
+          if (p === 38) state.fg = color;
+          else state.bg = color;
+        }
+        i += used;
       }
-      // Ignore unrecognized codes (background, underline, italic, etc.) silently.
+      // Unrecognized codes (inverse, blink, …) are dropped silently.
     }
   }
   writeChunk(cleaned.slice(last));

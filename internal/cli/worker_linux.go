@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/logcolor"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -51,8 +52,8 @@ BindsTo=%s.service
 
 [Service]
 Type=oneshot
-ExecStart=%s exec -w %s --env=LERD_SITE=%s %s %s
-`, label, siteName, fpmUnit, fpmUnit, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, container, command)
+ExecStart=%s exec -w %s --env=LERD_SITE=%s %s%s %s
+`, label, siteName, fpmUnit, fpmUnit, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, workerColorArgs(), container, command)
 
 		timerUnit := fmt.Sprintf(`[Unit]
 Description=Lerd %s timer (%s)
@@ -87,11 +88,11 @@ Type=simple
 Restart=%s
 RestartSec=5
 SuccessExitStatus=1 130 143
-ExecStart=%s exec -w %s --env=LERD_SITE=%s %s %s
+ExecStart=%s exec -w %s --env=LERD_SITE=%s%s %s%s %s
 
 [Install]
 WantedBy=default.target
-`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, container, command)
+`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, workerExecEnvFlags(sitePath), workerColorArgs(), container, command)
 
 	// A previous run may have written a sibling .timer for this unit
 	// (e.g. before the framework yaml dropped its `schedule:` field).
@@ -162,12 +163,12 @@ Restart=%s
 RestartSec=5
 WorkingDirectory=%s
 Environment=PATH=%s
-SuccessExitStatus=1 130 143
+%sSuccessExitStatus=1 130 143
 ExecStart=/bin/sh -c '%s'
 
 [Install]
 WantedBy=default.target
-`, label, siteName, fpmOrder, restart, sitePath, envPath, escaped)
+`, label, siteName, fpmOrder, restart, sitePath, envPath, logcolor.QuadletEnvLines(), escaped)
 
 	_ = services.Mgr.RemoveTimerUnit(unitName)
 	return services.Mgr.WriteServiceUnitIfChanged(unitName, unit)

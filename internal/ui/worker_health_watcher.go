@@ -12,11 +12,49 @@ import (
 	"github.com/geodro/lerd/internal/workerheal"
 )
 
-// healthWatchInterval is how often the watcher re-runs the cached detector
-// when at least one UI tab is open. Each tick is one map walk over the
-// existing 3-second-TTL unit-state cache plus a string compare; no
-// subprocess, no file read. Idle tabs drop to no work at all.
-const healthWatchInterval = 5 * time.Second
+// healthWatchInterval is how often the watcher re-runs the detector while a
+// UI tab is visible. healthWatchIdleInterval is the cadence with no tab open,
+// where the only consumer is the failure push notification.
+//
+// The detector is not free on darwin: siteinfo.AllUnitStates shells out to
+// `launchctl print` once per lerd-*.plist, so a 25-worker install pays 25
+// forks per uncached tick. The visible cadence stays above the 3s unit-state
+// cache TTL so back-to-back dashboard renders share one sweep, and the idle
+// cadence keeps an unattended machine off the CPU without going silent.
+const (
+	healthWatchInterval     = 5 * time.Second
+	healthWatchIdleInterval = 60 * time.Second
+)
+
+// workerHealthDeps is the injection surface for tickWorkerHealth so the
+// detect-diff-publish logic can be tested without launchd or the event bus.
+type workerHealthDeps struct {
+	detect  func() ([]workerheal.UnhealthyWorker, error)
+	visible func() bool
+	notify  func([]workerheal.UnhealthyWorker)
+	publish func()
+}
+
+// defaultWorkerHealthDeps wires the production detector, bus, and batcher.
+func defaultWorkerHealthDeps() workerHealthDeps {
+	return workerHealthDeps{
+		detect:  workerheal.Detect,
+		visible: func() bool { return visibleClients.Load() > 0 },
+		notify:  queueWorkerFailureNotifications,
+		publish: func() { eventbus.Default.Publish(eventbus.KindSites) },
+	}
+}
+
+// chooseHealthInterval picks the cadence for the next tick. Detection cannot
+// be gated on visibility outright: the push notification exists precisely for
+// the user whose dashboard is closed, so a hidden watcher slows down rather
+// than stopping.
+func chooseHealthInterval(visible bool) time.Duration {
+	if visible {
+		return healthWatchInterval
+	}
+	return healthWatchIdleInterval
+}
 
 // lastHealthSig is the last unhealthy-set signature seen by the watcher.
 // Stored as an unsafe pointer through atomic so the watcher and broker
@@ -37,15 +75,10 @@ var healthWatcherInitialized atomic.Bool
 
 // runWorkerHealthWatcher closes the gap between systemd's internal state
 // transitions (start-limit-hit, external `systemctl stop`, anything that
-// happens without lerd-ui's involvement) and the dashboard banner. Each
-// tick:
+// happens without lerd-ui's involvement) and the dashboard banner.
 //
-//  1. If no tab is visible, skip — the next tab open does an initial fetch
-//     anyway, and idle tabs shouldn't burn CPU.
-//  2. Read the unhealthy set from the existing cached detector. Cheap.
-//  3. Compare to the last seen signature. If unchanged, do nothing.
-//  4. If changed, publish KindSites — the snapshot path then rebuilds the
-//     unhealthy_workers JSON and the broker pushes it to every tab.
+// The cadence is re-chosen after every tick so a dashboard opening or closing
+// takes effect on the next round rather than at process restart.
 //
 // The watcher does NOT run the heal itself; it only surfaces drift.
 func runWorkerHealthWatcher() {
@@ -56,28 +89,40 @@ func runWorkerHealthWatcher() {
 	// keeps running.
 	_ = config.ClearStopped()
 	seedHealthState()
-	ticker := time.NewTicker(healthWatchInterval)
-	defer ticker.Stop()
-	for range ticker.C {
-		unhealthy, err := workerheal.Detect()
-		if err != nil {
-			continue
-		}
-		sig := healthSignature(unhealthy)
-		prev, _ := lastHealthSig.Load().(string)
-		if sig == prev {
-			continue
-		}
-		lastHealthSig.Store(sig)
-		queueWorkerFailureNotifications(diffNewFailuresAndCommit(unhealthy))
-		// Skip the eventbus publish when no tab is open; the snapshot
-		// rebuild would just rebuild bytes nobody reads. Notifications
-		// above still fire so closed-PWA users get the push.
-		if visibleClients.Load() == 0 {
-			continue
-		}
-		eventbus.Default.Publish(eventbus.KindSites)
+	deps := defaultWorkerHealthDeps()
+	for {
+		time.Sleep(chooseHealthInterval(deps.visible()))
+		tickWorkerHealth(deps)
 	}
+}
+
+// tickWorkerHealth runs one detection and publishes on a changed unhealthy
+// set. Each tick:
+//
+//  1. Read the unhealthy set from the cached detector.
+//  2. Compare to the last seen signature. If unchanged, do nothing.
+//  3. Queue notifications for units that just entered failure. This runs
+//     whether or not a tab is open, so a closed PWA still gets the push.
+//  4. If a tab is visible, publish KindSites so the snapshot path rebuilds
+//     the unhealthy_workers JSON and the broker pushes it to every tab.
+func tickWorkerHealth(d workerHealthDeps) {
+	unhealthy, err := d.detect()
+	if err != nil {
+		return
+	}
+	sig := healthSignature(unhealthy)
+	prev, _ := lastHealthSig.Load().(string)
+	if sig == prev {
+		return
+	}
+	lastHealthSig.Store(sig)
+	d.notify(diffNewFailuresAndCommit(unhealthy))
+	// Skip the eventbus publish when no tab is open; the snapshot rebuild
+	// would just rebuild bytes nobody reads.
+	if !d.visible() {
+		return
+	}
+	d.publish()
 }
 
 // seedHealthState records the baseline at process start so a launchd

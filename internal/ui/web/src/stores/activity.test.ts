@@ -1,9 +1,10 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import {
   diffSitesEvents,
   diffServicesEvents,
   diffUnhealthyEvents,
   diffDNSEvents,
+  now,
   type DNSSnapshot
 } from './activity';
 import type { Site } from './sites';
@@ -232,5 +233,62 @@ describe('diffUnhealthyEvents', () => {
     const prev = new Set<string>(['lerd-queue-foo']);
     const events = diffUnhealthyEvents(prev, [unhealthy('lerd-queue-foo', 'foo.test', 'queue')]);
     expect(events).toEqual([]);
+  });
+});
+
+describe('now clock', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The clock only exists to re-render relative timestamps in the activity
+  // list. With no subscriber there is nothing on screen to re-render, so the
+  // interval must be armed on first subscribe and cleared on last unsubscribe.
+  // Armed at module scope instead, it runs for the life of the page whichever
+  // view is open, and nothing can ever stop it.
+  it('arms the interval on subscribe and clears it on unsubscribe', () => {
+    vi.useFakeTimers();
+    const idle = vi.getTimerCount();
+
+    const unsub = now.subscribe(() => {});
+    expect(vi.getTimerCount()).toBe(idle + 1);
+
+    unsub();
+    expect(vi.getTimerCount()).toBe(idle);
+  });
+
+  it('ticks while subscribed and stops once the last subscriber leaves', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(1_000_000));
+
+    const seen: number[] = [];
+    const unsub = now.subscribe((v) => seen.push(v));
+    const initial = seen.length;
+
+    vi.setSystemTime(new Date(1_060_000));
+    vi.advanceTimersByTime(60_000);
+    expect(seen.length).toBeGreaterThan(initial);
+
+    unsub();
+    const afterUnsub = seen.length;
+    vi.setSystemTime(new Date(1_200_000));
+    vi.advanceTimersByTime(120_000);
+    expect(seen.length).toBe(afterUnsub);
+  });
+
+  // The dashboard tab unmounts when another tab is open, so the clock stops
+  // and holds whatever it read last. Without a read on subscribe the list
+  // renders against that frozen value for up to 30s on the way back, ageing
+  // every event by however long the user was away.
+  it('reads the wall clock on subscribe, not the value it froze at', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(1_000_000));
+    now.subscribe(() => {})();
+
+    vi.setSystemTime(new Date(1_000_000 + 20 * 60_000));
+    let seen = 0;
+    now.subscribe((v) => (seen = v))();
+
+    expect(seen).toBe(Date.now());
   });
 });

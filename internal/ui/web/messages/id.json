@@ -235,6 +235,7 @@
   "common_live": "langsung",
   "common_disconnected": "terputus",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Ikuti di terminal",
   "common_edit": "Ubah",
   "common_remove": "Hapus",
   "common_add": "Tambah",

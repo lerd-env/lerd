@@ -110,3 +110,13 @@ func stripANSI(s string) string {
 	}
 	return b.String()
 }
+
+// The TUI shares lerd-ui's stats cache, so a poll at or above the TTL doesn't
+// just cost the TUI a miss, it keeps the ~2s `podman stats` stream running for
+// the web dashboard too.
+func TestStatsPollStaysUnderCacheTTL(t *testing.T) {
+	if statsPollInterval >= stats.CacheTTL {
+		t.Fatalf("TUI polls every %v against a %v cache TTL, so every tick is a miss",
+			statsPollInterval, stats.CacheTTL)
+	}
+}
