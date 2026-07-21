@@ -82,6 +82,21 @@ func fpmContainerForDir(dir, version string) string {
 	return "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
 }
 
+// debugSiteEnvArgs returns the LERD_SITE exec flag for a CLI run in dir, so the
+// debug bridge and the devtools extension tag every event with the registered
+// site name. Without it the bridge falls back to the directory basename and the
+// extension emits no site at all, which strands the notification (#1005). A
+// worktree checkout reports its parent site, like tinker and the worktree vhost.
+func debugSiteEnvArgs(dir string) []string {
+	if _, parent, ok := phpDet.WorktreeRootFor(dir); ok && parent != nil && parent.Name != "" {
+		return []string{"--env", "LERD_SITE=" + parent.Name}
+	}
+	if site, _ := config.FindSiteByPath(phpDet.SiteRootFor(dir)); site != nil && site.Name != "" {
+		return []string{"--env", "LERD_SITE=" + site.Name}
+	}
+	return nil
+}
+
 // RunPHPCaptureEnv is RunPHPCapture with extra KEY=VALUE environment entries
 // injected into the container exec — used by `lerd profile run` to set
 // SPX_ENABLED so a CLI command is profiled.
@@ -154,6 +169,7 @@ func RunPHPCaptureEnv(cwd string, args []string, extraEnv []string) (int, error)
 		"--env", "COMPOSER_HOME="+composerHome,
 		"--env", "PATH="+projectVendorBin+":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"+composerBin,
 	)
+	cmdArgs = append(cmdArgs, debugSiteEnvArgs(cwd)...)
 	// Forward SPX_* profiler vars from the host so `SPX_ENABLED=1 php ...` (or
 	// any shim'd tool like composer) reaches SPX inside the container. extraEnv
 	// is applied after, so an explicit caller like `lerd profile run` wins.

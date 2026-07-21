@@ -165,6 +165,18 @@ export interface InAppNotification {
 
 export const inAppNotifications = writable<InAppNotification[]>([]);
 
+// Severity drives how a notification is drawn on the in-page surfaces. The
+// diagnostic kinds report a problem lerd found in the user's app, so they read
+// as warnings rather than as a completed action.
+export type NotifySeverity = 'failure' | 'warning' | 'info';
+
+const WARNING_KINDS = new Set<string>(['nplusone', 'slow_route']);
+
+export function notificationSeverity(kind: string, failed: boolean): NotifySeverity {
+  if (failed) return 'failure';
+  return WARNING_KINDS.has(kind) ? 'warning' : 'info';
+}
+
 // HISTORY_KEY holds the notification centre's list. It is persisted because the
 // point of the centre is catching up on what happened while the user was
 // elsewhere, including before a reload.
@@ -174,6 +186,13 @@ const historyLimit = 50;
 export interface NotificationRecord extends InAppNotification {
   at: number;
   read: boolean;
+}
+
+// Debug notifications used to open the global bridge view, which says nothing
+// about the event that was clicked. Stored entries outlive the build that wrote
+// them, so an old one is retargeted at the sites list on load.
+function retargetStoredURL(url: string): string {
+  return url === '#system/dump-bridge' ? '#sites' : (url ?? '');
 }
 
 // Stored ids are renumbered on the way in. The list outlives the code that
@@ -188,7 +207,7 @@ function loadHistory(): NotificationRecord[] {
     return list
       .filter((r) => r && typeof r === 'object' && typeof r.title === 'string')
       .slice(0, historyLimit)
-      .map((r, i) => ({ ...r, id: i + 1 }));
+      .map((r, i) => ({ ...r, id: i + 1, url: retargetStoredURL(r.url) }));
   } catch {
     return [];
   }

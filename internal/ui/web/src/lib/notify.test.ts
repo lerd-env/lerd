@@ -680,4 +680,34 @@ describe('stored notification history', () => {
     const { notificationHistory } = await import('./notify');
     expect(get(notificationHistory)).toHaveLength(0);
   });
+
+  // Entries written before debug notifications learned to open the site they
+  // came from still point at the global bridge view, and the list outlives the
+  // build that wrote it, so the stale route is rewritten on load (#1005).
+  it('retargets a stored debug notification away from the bridge view', async () => {
+    localStorage.setItem(
+      'lerd:notify:history',
+      JSON.stringify([
+        { id: 1, kind: 'nplusone', title: 'Possible N+1 query on acme', body: '', url: '#system/dump-bridge', failed: false, at: 1, read: false },
+        { id: 2, kind: 'op_done', title: 'Update finished', body: '', url: '#services/mysql', failed: false, at: 2, read: true }
+      ])
+    );
+
+    const { notificationHistory } = await import('./notify');
+    const urls = get(notificationHistory).map((r) => r.url);
+    expect(urls).toEqual(['#sites', '#services/mysql']);
+  });
+});
+
+describe('notification severity', () => {
+  it('reads a detected problem as a warning, not a completed action', async () => {
+    const { notificationSeverity } = await import('./notify');
+    expect(notificationSeverity('nplusone', false)).toBe('warning');
+    expect(notificationSeverity('slow_route', false)).toBe('warning');
+    expect(notificationSeverity('op_done', false)).toBe('info');
+    expect(notificationSeverity('mail', false)).toBe('info');
+    expect(notificationSeverity('op_failed', true)).toBe('failure');
+    // A failed operation outranks its category.
+    expect(notificationSeverity('nplusone', true)).toBe('failure');
+  });
 });

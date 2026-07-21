@@ -45,6 +45,10 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `update_available` | The registry has a newer image tag for an installed service | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
+The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.
+
+Clicking a debug notification (`dump`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.
+
 Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription — closed-PWA push respects the toggles even when the dashboard isn't running.
 
 The dashboard's System health card also carries a bell toggle, next to the debug bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
