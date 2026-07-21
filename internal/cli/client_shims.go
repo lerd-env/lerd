@@ -197,12 +197,24 @@ func siteServiceForTool(cwd, tool string) string {
 	if !isSQLTool(tool) {
 		return ""
 	}
-	host := envfile.ReadKey(filepath.Join(phpDet.SiteRootFor(cwd), ".env"), "DB_HOST")
+	host := envfile.ReadKey(filepath.Join(dbEnvRootFor(cwd), ".env"), "DB_HOST")
 	svc, ok := strings.CutPrefix(host, "lerd-")
 	if !ok || svc == "" {
 		return ""
 	}
 	return svc
+}
+
+// dbEnvRootFor returns the directory whose .env describes the database a command
+// run from cwd talks to. A worktree nested inside its parent site matches that
+// site by path, so reading the site root would route a branch at the parent's DB.
+func dbEnvRootFor(cwd string) string {
+	if wt, _, ok := phpDet.WorktreeRootFor(cwd); ok {
+		if _, err := os.Stat(filepath.Join(wt, ".env")); err == nil {
+			return wt
+		}
+	}
+	return phpDet.SiteRootFor(cwd)
 }
 
 // pathUnder reports whether path is base or nested under it, so a cwd already
