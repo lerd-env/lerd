@@ -26,7 +26,7 @@ func TestGenerateSSHAgentQuadlet(t *testing.T) {
 		"ContainerName=" + SSHAgentContainer,
 		"Volume=" + SSHAgentVolume + ":" + SSHAgentMountDir,
 		"Volume=%h/.ssh:%h/.ssh:ro",
-		"Exec=ssh-agent -D -a " + SSHAgentSocket,
+		`Exec=sh -c "rm -f ` + SSHAgentSocket + ` && exec ssh-agent -D -a ` + SSHAgentSocket + `"`,
 		"Restart=always",
 	} {
 		if !strings.Contains(content, want) {
