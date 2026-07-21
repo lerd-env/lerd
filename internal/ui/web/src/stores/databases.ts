@@ -62,7 +62,15 @@ export interface ImportIssue {
   count: number;
 }
 
-type Result = { ok: boolean; error?: string; errors?: number; issues?: ImportIssue[] };
+type Result = {
+  ok: boolean;
+  error?: string;
+  errors?: number;
+  issues?: ImportIssue[];
+  // Distinct complaints dropped past the cap, so a trimmed list never reads as
+  // the whole of what went wrong.
+  omitted?: number;
+};
 
 async function post(service: string, path: string, body: unknown): Promise<Result> {
   try {
@@ -123,6 +131,8 @@ export function importDatabase(
   onProgress?: (p: ImportProgress) => void
 ): Promise<Result> {
   const form = new FormData();
+  // The database field goes first because the daemon walks the parts in order
+  // and streams the file straight into the engine without buffering the body.
   form.append('database', database);
   form.append('file', file);
   return new Promise<Result>((resolve) => {
@@ -137,7 +147,8 @@ export function importDatabase(
       if (!onProgress || !e.lengthComputable || !e.total) return;
       onProgress({ percent: e.loaded / e.total, uploaded: e.loaded >= e.total });
     };
-    xhr.onload = () => void finish(decodeJSONText<Result>(xhr.responseText, String(xhr.status)));
+    xhr.onload = () =>
+      void finish(decodeJSONText<Result>(xhr.responseText, `${xhr.status} ${xhr.statusText}`.trim()));
     xhr.onerror = () => resolve({ ok: false, error: `${service} import request failed` });
     xhr.send(form);
   });

@@ -338,6 +338,8 @@ function phaseLabel(phase: string): string {
       return 'Dumping data…';
     case 'restoring_data':
       return 'Restoring data…';
+    case 'restore_warnings':
+      return 'Restored with errors';
     case 'swapping_data_dir':
       return 'Swapping data dir…';
     case 'starting_deps':
@@ -395,6 +397,9 @@ export async function streamServiceAction(
     const decoder = new TextDecoder();
     let buf = '';
     let finalError: string | undefined;
+    // A restore the engine complained about is the last thing worth reading, so
+    // it outlives the phase that follows it instead of being wiped on success.
+    let finalWarning: string | undefined;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -416,6 +421,7 @@ export async function streamServiceAction(
           continue;
         }
         if (evt.phase === 'done') continue;
+        if (evt.phase === 'restore_warnings') finalWarning = evt.message || phaseLabel(evt.phase);
         const message =
           evt.phase === 'pulling_image' && evt.image
             ? 'Pulling ' + evt.image
@@ -425,6 +431,9 @@ export async function streamServiceAction(
     }
     if (finalError) {
       setTimeout(() => setProgress(name, null), 5000);
+    } else if (finalWarning) {
+      setProgress(name, { phase: 'restore_warnings', message: finalWarning, error: true });
+      setTimeout(() => setProgress(name, null), 15000);
     } else {
       setProgress(name, null);
     }

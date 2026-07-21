@@ -406,9 +406,8 @@ func RestoreSnapshot(t SnapshotTarget, name string, emit func(PhaseEvent)) (Impo
 	if err != nil {
 		return rep, fmt.Errorf("restoring snapshot %q: %w", name, err)
 	}
-	if rep.Errors > 0 {
-		emit(PhaseEvent{Phase: "restore_warnings", Message: rep.Summary()})
-	}
+	// The complaints ride back on the report rather than the phase stream, since
+	// every caller here has the return value and would print them twice.
 	emit(PhaseEvent{Phase: "done", Message: "snapshot " + clean + " restored"})
 	return rep, nil
 }

@@ -323,8 +323,8 @@ func runDbImport(file, service, database string) error {
 	// its way to the terminal and the result reported at the end.
 	var tally serviceops.ImportTally
 	cmd.Stdin = f
-	cmd.Stdout = io.MultiWriter(os.Stdout, &tally)
-	cmd.Stderr = io.MultiWriter(os.Stderr, &tally)
+	cmd.Stdout = io.MultiWriter(os.Stdout, tally.Stream())
+	cmd.Stderr = io.MultiWriter(os.Stderr, tally.Stream())
 
 	feedback.Begin()
 	feedback.Line("importing " + file + " into " + feedback.Val(env.database) + " (" + env.connection + ")")

@@ -7,9 +7,12 @@
   interface Props {
     title: string;
     issues: ImportIssue[];
+    // Distinct complaints dropped past the cap, so a trimmed list never reads
+    // as the whole of what went wrong.
+    omitted?: number;
     onclose: () => void;
   }
-  let { title, issues, onclose }: Props = $props();
+  let { title, issues, omitted = 0, onclose }: Props = $props();
 </script>
 
 <Modal open {title} {onclose} size="md">
@@ -23,6 +26,11 @@
         </li>
       {/each}
     </ul>
+    {#if omitted > 0}
+      <p class="text-xs text-gray-500 dark:text-gray-400">
+        {m.databases_importIssuesMore({ count: omitted })}
+      </p>
+    {/if}
   </div>
 
   {#snippet footer()}

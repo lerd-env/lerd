@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
@@ -189,9 +190,12 @@ type ImportIssue struct {
 	Count   int    `json:"count"`
 }
 
+// Omitted is how many further distinct complaints were dropped past the cap, so
+// a truncated list never reads as the whole of what went wrong.
 type ImportReport struct {
-	Errors int           `json:"errors"`
-	Issues []ImportIssue `json:"issues,omitempty"`
+	Errors  int           `json:"errors"`
+	Issues  []ImportIssue `json:"issues,omitempty"`
+	Omitted int           `json:"omitted,omitempty"`
 }
 
 // Summary renders the report as one line for the CLI and the phase stream.
@@ -199,9 +203,12 @@ func (r ImportReport) Summary() string {
 	if r.Errors == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(r.Issues))
+	parts := make([]string, 0, len(r.Issues)+1)
 	for _, issue := range r.Issues {
 		parts = append(parts, fmt.Sprintf("%d× %s", issue.Count, issue.Message))
+	}
+	if r.Omitted > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", r.Omitted))
 	}
 	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
 }
@@ -211,22 +218,50 @@ func (r ImportReport) Summary() string {
 // the end. It counts psql and mysql error lines, plus psql's "invalid command"
 // lines, which are what a COPY block turns into once its table failed to exist.
 type ImportTally struct {
-	partial string
+	mu      sync.Mutex
+	streams []*tallyStream
 	seen    map[string]int
 	order   []string
 	errors  int
 }
 
-func (t *ImportTally) Write(p []byte) (int, error) {
-	text := t.partial + string(p)
+// maxPartialLine bounds the unterminated tail a stream carries between writes,
+// so output that never sends a newline cannot grow it without limit.
+const maxPartialLine = 64 << 10
+
+// Stream returns a writer for one of a command's output streams. Each stream
+// keeps its own unterminated tail, because os/exec copies stdout and stderr on
+// a goroutine each and one shared tail would splice fragments of one line onto
+// the other.
+func (t *ImportTally) Stream() io.Writer {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	s := &tallyStream{tally: t}
+	t.streams = append(t.streams, s)
+	return s
+}
+
+type tallyStream struct {
+	tally   *ImportTally
+	partial string
+}
+
+func (s *tallyStream) Write(p []byte) (int, error) {
+	s.tally.mu.Lock()
+	defer s.tally.mu.Unlock()
+	text := s.partial + string(p)
 	lines := strings.Split(text, "\n")
-	t.partial = lines[len(lines)-1]
+	s.partial = lines[len(lines)-1]
+	if len(s.partial) > maxPartialLine {
+		s.partial = s.partial[:maxPartialLine]
+	}
 	for _, line := range lines[:len(lines)-1] {
-		t.add(line)
+		s.tally.add(line)
 	}
 	return len(p), nil
 }
 
+// add records one complete line. The caller holds the tally's lock.
 func (t *ImportTally) add(line string) {
 	line = trimImportPrefix(strings.TrimRight(line, "\r "))
 	if !isImportErrorLine(line) {
@@ -248,20 +283,31 @@ func (t *ImportTally) add(line string) {
 // follows a missing table is folded into a single loudest line so it cannot
 // crowd the cause out of the list.
 func (t *ImportTally) Report() ImportReport {
-	if t.partial != "" {
-		t.add(t.partial)
-		t.partial = ""
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	for _, s := range t.streams {
+		if s.partial != "" {
+			t.add(s.partial)
+			s.partial = ""
+		}
 	}
-	rep := ImportReport{Errors: t.errors}
 	loudestNoise := ""
 	for _, msg := range t.order {
+		if strings.HasPrefix(msg, "invalid command") && (loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise]) {
+			loudestNoise = msg
+		}
+	}
+	room := maxImportIssues
+	if loudestNoise != "" {
+		room--
+	}
+	rep := ImportReport{Errors: t.errors}
+	for _, msg := range t.order {
 		if strings.HasPrefix(msg, "invalid command") {
-			if loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise] {
-				loudestNoise = msg
-			}
 			continue
 		}
-		if len(rep.Issues) == maxImportIssues-1 {
+		if len(rep.Issues) == room {
+			rep.Omitted++
 			continue
 		}
 		rep.Issues = append(rep.Issues, ImportIssue{Message: msg, Count: t.seen[msg]})
@@ -274,7 +320,7 @@ func (t *ImportTally) Report() ImportReport {
 
 func parseImportOutput(out string) ImportReport {
 	var tally ImportTally
-	_, _ = tally.Write([]byte(out))
+	_, _ = tally.Stream().Write([]byte(out))
 	return tally.Report()
 }
 

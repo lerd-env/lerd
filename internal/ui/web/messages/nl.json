@@ -1138,6 +1138,7 @@
   "databases_restoredWithErrors": "Restored {name}, but the engine reported {count} errors",
   "databases_importIssuesLink": "See what the engine reported",
   "databases_importIssuesBody": "The dump loaded, but the engine rejected these statements. Anything the dump expected to exist first, an extension or a role, shows up here.",
+  "databases_importIssuesMore": "and {count} more distinct errors not shown",
   "notify_center_title": "Meldingen",
   "notify_center_empty": "Nog niets. Voltooide bewerkingen, fouten en opgevangen e-mail verschijnen hier.",
   "nav_notifications": "Meldingen"

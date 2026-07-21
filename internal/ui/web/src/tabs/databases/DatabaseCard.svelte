@@ -50,11 +50,14 @@
     error?: string;
     errors?: number;
     issues?: ImportIssue[];
+    omitted?: number;
   } | null>(null);
   const importBusy = $derived(importOp?.tone === 'busy');
   // The engine's complaints open over the page rather than inside the card,
   // which has no room for a list and belongs to one database in a grid.
   let showIssues = $state(false);
+  let clearDone: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(clearDone));
   const importMessage = $derived.by(() => {
     if (!importOp) return '';
     if (importOp.tone === 'error') return m.databases_importFailed({ error: importOp.error ?? '' });
@@ -113,13 +116,15 @@
         file: file.name,
         percent: null,
         errors: res.errors,
-        issues: res.issues
+        issues: res.issues,
+        omitted: res.omitted
       };
       showIssues = (res.issues ?? []).length > 0;
       return;
     }
     importOp = { tone: 'done', file: file.name, percent: null };
-    setTimeout(() => {
+    clearTimeout(clearDone);
+    clearDone = setTimeout(() => {
       if (importOp?.tone === 'done') importOp = null;
     }, 4000);
   }
@@ -264,6 +269,7 @@
   <ImportIssuesModal
     title={importMessage}
     issues={importOp.issues}
+    omitted={importOp.omitted}
     onclose={() => (showIssues = false)}
   />
 {/if}

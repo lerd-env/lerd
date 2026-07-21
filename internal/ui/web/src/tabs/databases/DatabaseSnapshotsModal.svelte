@@ -17,7 +17,13 @@
   import ImportIssuesModal from './ImportIssuesModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
-  type Result = { ok: boolean; error?: string; errors?: number; issues?: ImportIssue[] };
+  type Result = {
+    ok: boolean;
+    error?: string;
+    errors?: number;
+    issues?: ImportIssue[];
+    omitted?: number;
+  };
 
   interface Props {
     engine: DatabaseEngine;
@@ -34,8 +40,11 @@
     tone: 'busy' | 'done' | 'warn' | 'error';
     message: string;
     issues?: ImportIssue[];
+    omitted?: number;
   } | null>(null);
   let showIssues = $state(false);
+  let clearDone: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(clearDone));
   // The snapshot + action pending confirmation. Restore overwrites data and
   // delete is irreversible, so each takes a second click.
   let confirmName = $state('');
@@ -87,12 +96,13 @@
     // A load the engine only half swallowed still comes back ok, so its counted
     // complaints are what stands between that and a false all-clear.
     if (res.errors && warned) {
-      status = { tone: 'warn', message: warned(res.errors), issues: res.issues };
+      status = { tone: 'warn', message: warned(res.errors), issues: res.issues, omitted: res.omitted };
       showIssues = (res.issues ?? []).length > 0;
       return true;
     }
     status = { tone: 'done', message: done };
-    setTimeout(() => {
+    clearTimeout(clearDone);
+    clearDone = setTimeout(() => {
       if (status?.tone === 'done' && status.message === done) status = null;
     }, 4000);
     return true;
@@ -222,6 +232,7 @@
   <ImportIssuesModal
     title={status.message}
     issues={status.issues}
+    omitted={status.omitted}
     onclose={() => (showIssues = false)}
   />
 {/if}

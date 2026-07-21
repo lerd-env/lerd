@@ -1,6 +1,10 @@
 package serviceops
 
-import "testing"
+import (
+	"io"
+	"os/exec"
+	"testing"
+)
 
 func TestParseImportOutputClean(t *testing.T) {
 	rep := parseImportOutput("SET\nCREATE TABLE\nCOPY 12\n")
@@ -44,17 +48,23 @@ func TestParseImportOutputCountsMySQLErrors(t *testing.T) {
 	}
 }
 
-func TestParseImportOutputKeepsPsqlLinePrefix(t *testing.T) {
-	rep := parseImportOutput("psql:<stdin>:412: ERROR:  relation \"public.audit_log\" does not exist\n")
-	if rep.Errors != 1 {
-		t.Fatalf("errors = %d, want 1", rep.Errors)
+func TestParseImportOutputStripsPsqlLinePrefix(t *testing.T) {
+	const want = `ERROR:  relation "public.audit_log" does not exist`
+	rep := parseImportOutput("psql:<stdin>:412: " + want + "\npsql:<stdin>:998: " + want + "\n")
+	if rep.Errors != 2 {
+		t.Fatalf("errors = %d, want 2", rep.Errors)
+	}
+	// The same complaint from two lines of the dump counts as one issue.
+	if len(rep.Issues) != 1 || rep.Issues[0].Message != want || rep.Issues[0].Count != 2 {
+		t.Fatalf("issues = %+v", rep.Issues)
 	}
 }
 
 func TestImportTallyCountsAcrossWrites(t *testing.T) {
 	var tally ImportTally
-	tally.Write([]byte("ERROR:  role \"root\" does not exi"))
-	tally.Write([]byte("st\nCREATE TABLE\ninvalid command \\N"))
+	out := tally.Stream()
+	out.Write([]byte("ERROR:  role \"root\" does not exi"))
+	out.Write([]byte("st\nCREATE TABLE\ninvalid command \\N"))
 	rep := tally.Report()
 	if rep.Errors != 2 {
 		t.Fatalf("errors = %d, want 2", rep.Errors)
@@ -64,17 +74,77 @@ func TestImportTallyCountsAcrossWrites(t *testing.T) {
 	}
 }
 
+// A command's stdout and stderr are copied by a goroutine each, so the tally is
+// written from two goroutines at once and must hold a line from one stream
+// apart from a line from the other.
+func TestImportTallyAcrossConcurrentStreams(t *testing.T) {
+	var tally ImportTally
+	cmd := exec.Command("sh", "-c", `for i in $(seq 1 200); do echo "ERROR:  stdout boom"; echo "ERROR:  stderr boom" >&2; done`)
+	cmd.Stdout = io.MultiWriter(io.Discard, tally.Stream())
+	cmd.Stderr = io.MultiWriter(io.Discard, tally.Stream())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("running: %v", err)
+	}
+	rep := tally.Report()
+	if rep.Errors != 400 {
+		t.Fatalf("errors = %d, want 400", rep.Errors)
+	}
+	if len(rep.Issues) != 2 {
+		t.Fatalf("issues = %+v", rep.Issues)
+	}
+	for _, issue := range rep.Issues {
+		if issue.Count != 200 {
+			t.Fatalf("issue %q counted %d, want 200", issue.Message, issue.Count)
+		}
+	}
+}
+
 func TestParseImportOutputCapsIssues(t *testing.T) {
 	out := ""
 	for i := 0; i < maxImportIssues+3; i++ {
 		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
 	}
 	rep := parseImportOutput(out)
-	// One slot is held back for the COPY cascade, which this output has none of.
-	if len(rep.Issues) != maxImportIssues-1 {
-		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues-1)
+	// Nothing is held back when the output carries no COPY cascade to hold it for.
+	if len(rep.Issues) != maxImportIssues {
+		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
+	}
+	if rep.Omitted != 3 {
+		t.Fatalf("omitted = %d, want 3", rep.Omitted)
 	}
 	if rep.Errors != maxImportIssues+3 {
 		t.Fatalf("errors = %d, want %d", rep.Errors, maxImportIssues+3)
+	}
+}
+
+// The COPY cascade gets its slot only when there is one, and it never crowds
+// out the failure that caused it.
+func TestParseImportOutputReservesNoiseSlot(t *testing.T) {
+	out := ""
+	for i := 0; i < maxImportIssues+1; i++ {
+		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
+	}
+	out += "invalid command \\N\ninvalid command \\N\n"
+	rep := parseImportOutput(out)
+	if len(rep.Issues) != maxImportIssues {
+		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
+	}
+	last := rep.Issues[len(rep.Issues)-1]
+	if last.Message != `invalid command \N` || last.Count != 2 {
+		t.Fatalf("last issue = %+v", last)
+	}
+	if rep.Omitted != 2 {
+		t.Fatalf("omitted = %d, want 2", rep.Omitted)
+	}
+}
+
+func TestImportTallyBoundsPartialLine(t *testing.T) {
+	var tally ImportTally
+	out := tally.Stream()
+	for i := 0; i < 40; i++ {
+		out.Write(make([]byte, 8<<10))
+	}
+	if got := len(tally.streams[0].partial); got > maxPartialLine {
+		t.Fatalf("partial = %d bytes, want at most %d", got, maxPartialLine)
 	}
 }

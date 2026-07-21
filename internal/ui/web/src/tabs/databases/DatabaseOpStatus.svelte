@@ -1,20 +1,17 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import Icon from '$components/Icon.svelte';
-  import type { ImportIssue } from '$stores/databases';
 
   interface Props {
     tone: 'busy' | 'done' | 'warn' | 'error';
     message: string;
     // 0..1 while a measurable operation runs; omitted for one that isn't.
     percent?: number | null;
-    // What the engine complained about, when it complained but carried on.
-    issues?: ImportIssue[];
     // Anything the caller hangs off the status line, such as a link to the
     // engine's complaints in full.
     children?: Snippet;
   }
-  let { tone, message, percent = null, issues = [], children }: Props = $props();
+  let { tone, message, percent = null, children }: Props = $props();
 
   const icon = $derived(tone === 'busy' ? 'spinner' : tone === 'done' ? 'check' : 'warn');
   const color = $derived(
@@ -43,12 +40,5 @@
   {/if}
   {#if children}
     <div class="pl-5">{@render children()}</div>
-  {/if}
-  {#if issues.length > 0}
-    <ul class="pl-5 space-y-0.5 text-[11px] text-gray-500 dark:text-gray-400">
-      {#each issues as issue (issue.message)}
-        <li class="break-words tabular-nums">{issue.count}× {issue.message}</li>
-      {/each}
-    </ul>
   {/if}
 </div>
