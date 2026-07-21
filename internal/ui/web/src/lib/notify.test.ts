@@ -102,6 +102,23 @@ describe('notify dispatcher', () => {
     expect((swShows[0].opts?.data as { kind?: string })?.kind).toBe('mail');
   });
 
+  it('raises nothing on the desktop while the dashboard window has focus', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(true);
+    const { initNotify } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'already on screen' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(swShows).toHaveLength(0);
+    hasFocus.mockRestore();
+  });
+
   it('suppresses notifications for kinds the user has disabled', async () => {
     const { initNotify, setNotifyPref } = await import('./notify');
     const { wsMessage } = await import('./ws');

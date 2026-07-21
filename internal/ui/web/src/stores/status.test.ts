@@ -116,3 +116,32 @@ describe('status store', () => {
     expect(dnsState({ ...base, dns: { ok: false, enabled: false, tld: 'test' } })).toBe('ok');
   });
 });
+
+describe('server restart reload', () => {
+  beforeEach(() => {
+    vi.resetModules();
+  });
+
+  it('reloads once the server reports a different instance', async () => {
+    const reload = vi.fn();
+    const { applyStatus } = await import('./status');
+
+    applyStatus({ instance: 'first' }, reload);
+    expect(reload).not.toHaveBeenCalled();
+
+    applyStatus({ instance: 'first' }, reload);
+    expect(reload).not.toHaveBeenCalled();
+
+    applyStatus({ instance: 'second' }, reload);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores a payload with no instance, so an older server never loops', async () => {
+    const reload = vi.fn();
+    const { applyStatus } = await import('./status');
+
+    applyStatus({ instance: 'first' }, reload);
+    applyStatus({}, reload);
+    expect(reload).not.toHaveBeenCalled();
+  });
+});

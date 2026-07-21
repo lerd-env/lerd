@@ -37,6 +37,38 @@ let socket: WebSocket | null = null;
 let backoff = 1000;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+// The server routes notifications to the page instead of the desktop while a
+// dashboard window has focus, so it needs the window's focus state, not just the
+// tab visibility the poll cadence runs on. A hidden tab is never focused.
+function windowFocused(): boolean {
+  if (typeof document === 'undefined') return false;
+  return !document.hidden && document.hasFocus();
+}
+
+let lastFocus: boolean | null = null;
+
+function sendFocus(focused: boolean) {
+  if (!socket || socket.readyState !== WebSocket.OPEN || focused === lastFocus) return;
+  try {
+    socket.send(JSON.stringify({ type: 'focus', focused }));
+    lastFocus = focused;
+  } catch {
+    /* non-fatal */
+  }
+}
+
+function watchFocus() {
+  if (focusWatched || typeof window === 'undefined') return;
+  focusWatched = true;
+  // The events are the source of truth once they start arriving: hasFocus() is
+  // only consulted for the state we start from and when a tab is revealed.
+  window.addEventListener('focus', () => sendFocus(true));
+  window.addEventListener('blur', () => sendFocus(false));
+  document.addEventListener('visibilitychange', () => sendFocus(windowFocused()));
+}
+
+let focusWatched = false;
+
 export function connectWs() {
   if (socket && (socket.readyState === WebSocket.OPEN || socket.readyState === WebSocket.CONNECTING)) {
     return;
@@ -52,6 +84,9 @@ export function connectWs() {
       } catch {
         /* non-fatal */
       }
+      watchFocus();
+      lastFocus = null;
+      sendFocus(windowFocused());
     });
     ws.addEventListener('message', (e) => {
       try {
@@ -63,6 +98,7 @@ export function connectWs() {
     });
     ws.addEventListener('close', () => {
       socket = null;
+      lastFocus = null;
       wsConnected.set(false);
       const delay = Math.min(30000, backoff);
       backoff = Math.min(30000, backoff * 2);
@@ -85,4 +121,5 @@ export function disconnectWs() {
     socket.close();
     socket = null;
   }
+  lastFocus = null;
 }

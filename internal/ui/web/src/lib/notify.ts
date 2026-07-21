@@ -158,9 +158,17 @@ function localize(
 const dedupeWindowMs = 2000;
 const recentTags = new Map<string, number>();
 
+// A focused dashboard is already showing whatever the notification announces,
+// so the event is left to the page rather than raised on the desktop.
+function windowFocused(): boolean {
+  if (typeof document === 'undefined') return false;
+  return !document.hidden && document.hasFocus();
+}
+
 async function fireNotification(evt: NotificationEvent) {
   if (typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
+  if (windowFocused()) return;
   const prefs = get(notifyPrefs);
   if (!prefs.enabled) return;
   if (prefs.kinds[evt.kind as NotifyKind] === false) return;

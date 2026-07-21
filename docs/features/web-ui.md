@@ -10,7 +10,7 @@ The `.localhost` TLD resolves to `127.0.0.1` natively on all modern systems, no 
 
 ## Real-time updates
 
-The dashboard opens a single WebSocket to `/api/ws` on load and receives state changes as they happen. No polling, no stale panels. Every surface that mutates lerd state (browser actions, `lerd` CLI commands, the MCP server, the file watcher) pushes a fresh snapshot to every connected tab within about 200 ms. If the WebSocket ever drops (e.g. `lerd-ui` restart), the dashboard falls back to a 5 s polling loop and reconnects in the background with exponential backoff, so a restart is transparent.
+The dashboard opens a single WebSocket to `/api/ws` on load and receives state changes as they happen. No polling, no stale panels. Every surface that mutates lerd state (browser actions, `lerd` CLI commands, the MCP server, the file watcher) pushes a fresh snapshot to every connected tab within about 200 ms. If the WebSocket ever drops (e.g. `lerd-ui` restart), the dashboard falls back to a 5 s polling loop and reconnects in the background with exponential backoff, so a restart is transparent. Each status payload carries the id of the process that answered, so a dashboard that reconnects to a restarted lerd-ui reloads itself onto the assets that server now ships rather than running the previous build's page against it.
 
 Behind the scenes a background container poll runs every 15 s when at least one tab is visible and the desktop session is active, and drops to 60 s otherwise (every tab hidden, or the session reported idle or locked by systemd-logind). Battery-aware: a focused tab on a locked laptop still falls back to the slow cadence.
 

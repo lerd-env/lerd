@@ -16,6 +16,7 @@ import (
 
 var (
 	visibleClients atomic.Int32
+	focusedClients atomic.Int32
 	sessionIdle    atomic.Bool
 )
 
@@ -54,6 +55,21 @@ func chooseInterval(visible int32, idle bool) time.Duration {
 func recomputeInterval() {
 	podman.Cache.SetInterval(chooseInterval(visibleClients.Load(), sessionIdle.Load()))
 }
+
+// noteFocus tracks how many dashboard windows currently have focus. It is kept
+// apart from the visibility counter, which drives the poll cadence: a window
+// left open beside another app is still worth polling for, but is not somewhere
+// the user is looking.
+func noteFocus(focused bool) {
+	if focused {
+		focusedClients.Add(1)
+	} else if focusedClients.Add(-1) < 0 {
+		focusedClients.Store(0)
+	}
+}
+
+// uiWindowFocused reports whether any dashboard window has focus right now.
+func uiWindowFocused() bool { return focusedClients.Load() > 0 }
 
 func noteVisibility(visible bool) {
 	if visible {
@@ -158,9 +174,16 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	// <-done branch), so there is no data race.
 	connVisible := true
 	noteVisibility(true)
+	// Focus starts false: a freshly opened connection has not told us yet, and
+	// assuming focus would silence desktop notifications for a window that is
+	// merely open. The client sends its state right after the socket opens.
+	connFocused := false
 	defer func() {
 		if connVisible {
 			noteVisibility(false)
+		}
+		if connFocused {
+			noteFocus(false)
 		}
 	}()
 
@@ -193,10 +216,18 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 				var msg struct {
 					Type    string `json:"type"`
 					Visible bool   `json:"visible"`
+					Focused bool   `json:"focused"`
 				}
-				if json.Unmarshal(payload, &msg) == nil && msg.Type == "visibility" && msg.Visible != connVisible {
+				if json.Unmarshal(payload, &msg) != nil {
+					continue
+				}
+				switch {
+				case msg.Type == "visibility" && msg.Visible != connVisible:
 					noteVisibility(msg.Visible)
 					connVisible = msg.Visible
+				case msg.Type == "focus" && msg.Focused != connFocused:
+					noteFocus(msg.Focused)
+					connFocused = msg.Focused
 				}
 			}
 		}
