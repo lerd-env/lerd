@@ -220,6 +220,7 @@
   "common_live": "trực tiếp",
   "common_disconnected": "đã ngắt kết nối",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Theo dõi trong terminal",
   "common_edit": "Sửa",
   "common_remove": "Gỡ",
   "common_add": "Thêm",

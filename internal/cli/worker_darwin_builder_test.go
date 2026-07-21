@@ -184,3 +184,46 @@ func findLine(body, prefix string) string {
 	}
 	return ""
 }
+
+func TestWorkerBuilders_ForceColour(t *testing.T) {
+	unit := buildDarwinContainerWorkerUnit(
+		"lerd-queue-alpha", "8.4", "/Users/u/alpha", "/Users/u/home",
+		"/lerd/php.conf", "/lerd/php-user.ini", "/lerd/php-shared.ini",
+		"php artisan queue:work", "always", false,
+	)
+	if !strings.Contains(unit, `Environment="FORCE_COLOR=1"`) {
+		t.Errorf("container worker unit should force colour:\n%s", unit)
+	}
+
+	custom := buildDarwinContainerWorkerUnit(
+		"lerd-custom-alpha", "", "/Users/u/alpha", "/Users/u/home",
+		"", "", "", "node worker.js", "always", true,
+	)
+	if !strings.Contains(custom, `Environment="FORCE_COLOR=1"`) {
+		t.Errorf("custom container worker unit should force colour:\n%s", custom)
+	}
+
+	guard := buildDarwinHostWorkerGuardScript("/bin/fnm", "/lerd/bin", "22", "/site", "npm run dev", "")
+	if !strings.Contains(guard, "export FORCE_COLOR=1") {
+		t.Errorf("host worker guard should export the colour vars:\n%s", guard)
+	}
+
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work")
+	if !strings.Contains(exec, "--env=FORCE_COLOR=1") {
+		t.Errorf("exec worker command should pass the colour vars:\n%s", exec)
+	}
+	if !strings.HasSuffix(exec, "lerd-php84-fpm php artisan queue:work") {
+		t.Errorf("exec worker command should end with container and command:\n%s", exec)
+	}
+}
+
+func TestWorkerBuilders_RespectNoColor(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	guard := buildDarwinHostWorkerGuardScript("/bin/fnm", "/lerd/bin", "22", "/site", "npm run dev", "")
+	if strings.Contains(guard, "FORCE_COLOR") {
+		t.Errorf("NO_COLOR should suppress the colour exports:\n%s", guard)
+	}
+	if got := workerColorArgs(); got != "" {
+		t.Errorf("workerColorArgs() = %q, want empty under NO_COLOR", got)
+	}
+}

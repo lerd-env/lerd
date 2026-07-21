@@ -220,6 +220,7 @@
   "common_live": "în direct",
   "common_disconnected": "deconectat",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Urmărește în terminal",
   "common_edit": "Editează",
   "common_remove": "Elimină",
   "common_add": "Adaugă",

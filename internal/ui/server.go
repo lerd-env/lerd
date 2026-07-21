@@ -235,6 +235,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/workspaces", withCORS(publishAfter(handleWorkspaces, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/workspaces/", withCORS(publishAfter(handleWorkspaceRoutes, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/", withCORS(publishAfter(handleSiteAction, eventbus.KindSites, eventbus.KindServices)))
+	mux.HandleFunc("/api/logs/terminal", withCORS(handleLogTerminal))
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
 	mux.HandleFunc("/api/queries/analyze", withCORS(handleQueriesAnalyze))

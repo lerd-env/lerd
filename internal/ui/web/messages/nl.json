@@ -235,6 +235,7 @@
   "common_live": "live",
   "common_disconnected": "verbinding verbroken",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Volgen in terminal",
   "common_edit": "Bewerken",
   "common_remove": "Verwijderen",
   "common_add": "Toevoegen",

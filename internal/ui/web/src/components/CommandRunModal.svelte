@@ -36,7 +36,10 @@
   function renderLines(lines: RunLine[]): string {
     return lines
       .map((l) => {
-        if (l.stream === 'stderr') return '\x1b[31m' + l.text + '\x1b[0m';
+        // A line that already carries its own escapes keeps them; tinting it
+        // red on top would flatten the tool's own colors.
+        if (l.stream === 'stderr')
+          return l.text.includes('\x1b[') ? l.text : '\x1b[31m' + l.text + '\x1b[0m';
         if (l.stream === 'meta') return '\x1b[33m' + l.text + '\x1b[0m';
         return l.text;
       })
