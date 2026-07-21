@@ -186,7 +186,14 @@ grep Volume ~/.config/containers/systemd/lerd-nginx.container
 grep Volume ~/.config/containers/systemd/lerd-php*-fpm.container
 ```
 
-You should see your project path listed alongside the `%h:%h` mount.
+You should see your project path listed alongside the `%h:%h` mount. The quadlet is only half the answer though, a container keeps the mounts it booted with, so check the running one too:
+
+```bash
+podman inspect lerd-php84-fpm --format '{{range .Mounts}}{{.Source}}
+{{end}}'
+```
+
+If the path is in the quadlet but not in that output, `lerd restart` picks it up.
 :::
 
 ::: details Permission denied on port 80/443
