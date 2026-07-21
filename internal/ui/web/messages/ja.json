@@ -713,6 +713,7 @@
   "debug_enable": "キャプチャを有効化",
   "debug_waiting_title": "待機中…",
   "debug_waiting_body": "アプリで何らかのアクティビティを発生させるとここに表示されます。",
+  "debug_loadMore": "さらに読み込む · {total} 件中 {shown} 件",
   "views_data": "データ",
   "views_template": "テンプレート",
   "queries_searchPlaceholder": "SQL、パス、ファイルを検索…",

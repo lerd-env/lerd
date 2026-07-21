@@ -19,6 +19,8 @@
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
+  import LensLoadMore from '$components/LensLoadMore.svelte';
+  import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { inlineBindings } from '$lib/sqlInline';
   import type { QueryRow } from '$stores/queries';
   import { m } from '../paraglide/messages.js';
@@ -51,6 +53,18 @@
   const groups = $derived(
     buildQueryGroups($dumps, scoped ? siteScope : $queryFilterSite, scoped ? $debugSearch : $queryFilterText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
+
+  // Only the newest LENS_PAGE rows render; the rest arrive as the user
+  // reaches the end. Changing a filter starts the window over.
+  let limit = $state(LENS_PAGE);
+  const win = $derived(windowGroups(groups, (g) => g.rows, limit));
+  const filterKey = $derived(
+    `${scoped ? siteScope : $queryFilterSite}|${scoped ? $debugSearch : $queryFilterText}|${$queryFilterWorker}`
+  );
+  $effect(() => {
+    filterKey;
+    limit = LENS_PAGE;
+  });
 
   let togglingWorkers = $state(false);
   async function onToggleWorkers(e: Event) {
@@ -196,7 +210,8 @@
         </EmptyState>
       {/if}
     {:else}
-      {#each groups as group (group.key)}
+      {#each win.pages as page (page.group.key)}
+        {@const group = page.group}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
             {#if group.worker}
@@ -211,7 +226,7 @@
               {m.queries_rollup({ count: group.count, ms: fmtMs(group.totalMs) })}
             </span>
           </header>
-          {#each group.rows as row (row.event.id)}
+          {#each page.rows as row (row.event.id)}
             <div
               class="rounded-sm border mb-1.5 overflow-hidden {row.duplicate
                 ? 'border-amber-300 dark:border-amber-700/50 bg-amber-50 dark:bg-amber-900/10'
@@ -265,6 +280,7 @@
           {/each}
         </section>
       {/each}
+      <LensLoadMore shown={win.shown} total={win.total} onmore={() => (limit += LENS_PAGE)} />
     {/if}
   </div>
 </div>

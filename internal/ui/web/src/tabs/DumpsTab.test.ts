@@ -9,6 +9,7 @@ import {
   filterText,
   status
 } from '../stores/dumps';
+import { debugSearch } from '../stores/debugLens';
 import type { DumpEvent } from '../lib/dumpsStream';
 
 function ev(over: Partial<DumpEvent> & { id: string }): DumpEvent {
@@ -49,6 +50,7 @@ describe('DumpsTab', () => {
     filterSite.set('');
     filterCtx.set('');
     filterText.set('');
+    debugSearch.set('');
     status.set({
       enabled: true,
       passthrough: false,
@@ -118,6 +120,41 @@ describe('DumpsTab', () => {
       expect(container.textContent).toMatch(/Enable debug bridge/);
     });
     expect(container.textContent).toMatch(/Debug bridge is disabled/);
+  });
+
+  it('renders only the first page of rows and grows on load more', async () => {
+    dumps.set(
+      Array.from({ length: 250 }, (_, i) =>
+        ev({
+          id: `e${i}`,
+          ts: `2026-05-10T12:00:${String(i % 60).padStart(2, '0')}.000Z`,
+          ctx: { type: 'fpm', site: 'whitewaters', request: `GET /r${i}`, rid: `r${i}` }
+        })
+      )
+    );
+    const { container, getByRole } = render(DumpsTab, { siteScope: 'whitewaters' });
+    await waitFor(() => {
+      expect(container.querySelectorAll('section').length).toBe(100);
+    });
+    getByRole('button', { name: /Load more/ }).click();
+    await waitFor(() => {
+      expect(container.querySelectorAll('section').length).toBe(200);
+    });
+  });
+
+  it('resets the window when the search filter changes', async () => {
+    dumps.set(
+      Array.from({ length: 150 }, (_, i) =>
+        ev({ id: `e${i}`, ctx: { type: 'fpm', site: 'whitewaters', request: `GET /r${i}`, rid: `r${i}` } })
+      )
+    );
+    const { container, getByRole } = render(DumpsTab, { siteScope: 'whitewaters' });
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(100));
+    getByRole('button', { name: /Load more/ }).click();
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(150));
+
+    debugSearch.set('GET /r');
+    await waitFor(() => expect(container.querySelectorAll('section').length).toBe(100));
   });
 
   it('reacts to new events pushed into the dumps store', async () => {
