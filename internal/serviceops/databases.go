@@ -104,7 +104,7 @@ func exportShellCommand(family, database string) (string, bool) {
 	q := podman.ShellQuote(database)
 	switch family {
 	case "mysql", "mariadb":
-		return "$(command -v mysqldump || command -v mariadb-dump) -uroot " + q, true
+		return mysqlDumpBin + " -uroot " + q, true
 	case "postgres":
 		return "pg_dump -U postgres " + q, true
 	default:
@@ -116,7 +116,7 @@ func importShellCommand(family, database string) (string, bool) {
 	q := podman.ShellQuote(database)
 	switch family {
 	case "mysql", "mariadb":
-		return "$(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot " + q, true
+		return mysqlClientBin + " --max-allowed-packet=1G -uroot " + q, true
 	case "postgres":
 		return "psql -U postgres -d " + q, true
 	default:
