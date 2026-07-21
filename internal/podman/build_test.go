@@ -157,6 +157,45 @@ func TestBuildCustomExtBlock_UserDepsUnionedWithBuiltin(t *testing.T) {
 	}
 }
 
+func TestBuildCustomExtBlockWithToolchain(t *testing.T) {
+	if got := buildCustomExtBlockWithToolchain(nil, nil); got != "" {
+		t.Errorf("expected empty block for no extensions, got:\n%s", got)
+	}
+	// The prebuilt base is the runtime image, so phpize has no toolchain there.
+	block := buildCustomExtBlockWithToolchain([]string{"yaml"}, map[string][]string{"yaml": {"yaml-dev"}})
+	for _, pkg := range phpizeToolchain {
+		if !strings.Contains(block, pkg) {
+			t.Errorf("fast-path block must install %q for phpize:\n%s", pkg, block)
+		}
+	}
+	if !strings.Contains(block, "--virtual .lerd-ext-build") {
+		t.Errorf("toolchain must install as a virtual package so it can be purged:\n%s", block)
+	}
+	if !strings.Contains(block, "apk del .lerd-ext-build") {
+		t.Errorf("toolchain must be purged in the same layer so the runtime image does not grow:\n%s", block)
+	}
+	// The extension's own deps still install, and outlive the purge: the
+	// compiled .so dlopens against them at runtime.
+	if !strings.Contains(block, "apk add --no-cache yaml-dev && ") {
+		t.Errorf("extension deps must still install:\n%s", block)
+	}
+	if strings.Count(block, "\nRUN ") > 1 {
+		t.Errorf("one extension should produce one RUN layer:\n%s", block)
+	}
+	if !strings.Contains(block, "|| true; }") {
+		t.Errorf("block must keep the `|| true` resilience guard:\n%s", block)
+	}
+}
+
+// The builder stage already carries the toolchain, so the local path must not
+// install or purge it: purging there would take the stage's own compilers out.
+func TestBuildCustomExtBlock_NoToolchainOnLocalPath(t *testing.T) {
+	block := buildCustomExtBlock([]string{"yaml"}, nil)
+	if strings.Contains(block, ".lerd-ext-build") {
+		t.Errorf("builder-stage block must not manage the toolchain:\n%s", block)
+	}
+}
+
 func TestBuildCustomExtRuntimeDeps_Empty(t *testing.T) {
 	if got := buildCustomExtRuntimeDeps(nil, nil); got != "" {
 		t.Errorf("empty input should produce empty runtime block, got: %q", got)
