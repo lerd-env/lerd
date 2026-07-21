@@ -65,7 +65,7 @@ This opens `http://profiler.localhost/?SPX_UI_URI=/`, the same UI the Profiler v
 
 ## Scope and limits
 
-- **PHP-FPM sites only.** FrankenPHP and custom-container sites run images that don't carry the SPX extension, so their requests are not profiled.
+- **PHP-FPM sites only.** FrankenPHP and custom-container sites run images that don't carry the SPX extension, so their requests are not profiled. Their site panel still ranks the slowest routes, it just doesn't offer to profile one, and neither do host-proxy or static sites.
 - **Sampling, not exact counts.** SPX is a tracing profiler that records wall and CPU time accurately. It is built for "where did the time go", not for exact call counts.
 - **Local only.** The profiler is never reachable through tunnels or LAN shares.
 - **Reports accumulate** in `~/.local/share/lerd/spx/`. Clear them all at once with the **Clear data** button in the Profiler view header, `lerd profile clear`, or `profiler_clear` via MCP; the SPX UI can also delete reports individually.
