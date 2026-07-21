@@ -149,6 +149,10 @@ func handleNginxConfigReset(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, NginxConfigResetResponse{OK: false, Error: err.Error()})
 		return
 	}
+	if err := nginx.EnsureNginxConfig(); err != nil {
+		writeJSON(w, NginxConfigResetResponse{OK: false, Error: "removed, but re-rendering nginx.conf failed: " + err.Error()})
+		return
+	}
 	if err := siteops.NginxReloadFn(); err != nil {
 		writeJSON(w, NginxConfigResetResponse{OK: false, Error: "removed, but nginx reload failed: " + err.Error()})
 		return
@@ -173,7 +177,12 @@ func handleNginxConfigRestore(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, NginxConfigRestoreResponse{OK: false, Error: "invalid backup name"})
 		return
 	}
-	res, err := f.Restore(req.Name, func() error { return siteops.NginxReloadFn() })
+	res, err := f.Restore(req.Name, func() error {
+		if err := nginx.EnsureNginxConfig(); err != nil {
+			return err
+		}
+		return siteops.NginxReloadFn()
+	})
 	if err != nil {
 		writeJSON(w, NginxConfigRestoreResponse{OK: false, Error: err.Error()})
 		return
@@ -245,6 +254,18 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Re-render with the new override in place: a directive the user now sets
+	// also lives in lerd's http{} defaults, and nginx fails on the duplicate
+	// unless the default steps aside.
+	if err := nginx.EnsureNginxConfig(); err != nil {
+		_ = cfgedit.RestoreSnapshot(f.Path, snap)
+		if backupPath != "" {
+			_ = os.Remove(backupPath)
+		}
+		writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "re-rendering nginx.conf: " + err.Error()})
+		return
+	}
+
 	if quadletChanged {
 		_ = podman.DaemonReloadFn()
 		restartErr := podman.RestartUnit("lerd-nginx")
@@ -274,6 +295,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx restart failed and rollback failed: " + rbErr.Error() + " (restart error: " + restartErr.Error() + ")", BackupName: backupName, Content: req.Content, Exists: true})
 				return
 			}
+			_ = nginx.EnsureNginxConfig()
 			if rb2Err := podman.RestartUnit("lerd-nginx"); rb2Err != nil {
 				writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx config invalid and rollback restart failed: " + rb2Err.Error() + " (original: " + restartErr.Error() + ")"})
 				return
@@ -298,6 +320,7 @@ func handleNginxConfig(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "nginx config invalid and rollback failed: " + rbErr.Error(), ValidationOutput: output})
 			return
 		}
+		_ = nginx.EnsureNginxConfig()
 		writeJSON(w, NginxConfigWriteResponse{OK: false, Error: "config invalid, rolled back to previous contents", ValidationOutput: output})
 		return
 	}

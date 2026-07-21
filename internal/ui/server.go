@@ -3477,11 +3477,13 @@ func handleSiteNginxRestore(w http.ResponseWriter, r *http.Request, domain strin
 }
 
 // nginxHttpTemplate seeds the global http-level override editor when no file
-// exists yet. Loaded inside http{} after lerd's defaults, so user values win.
+// exists yet. Loaded inside http{}; a lerd default of the same name is
+// commented out of nginx.conf on save so nginx sees no duplicate.
 const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 #
-# Loaded inside the http { } block, after lerd's defaults, so your values win.
-# Lerd never overwrites this file; saving reloads nginx.
+# Loaded inside the http { } block. Anything you set here replaces lerd's own
+# default for that directive. Lerd never overwrites this file; saving reloads
+# nginx. Note client_max_body_size already defaults to 0 (unlimited).
 
 # client_max_body_size 100m;
 # gzip on;
