@@ -179,3 +179,21 @@ func TestServiceConfigSnapshot_RevertsImage(t *testing.T) {
 		t.Errorf("PreviousImage = %q, want cleared", entry.PreviousImage)
 	}
 }
+
+// The mariadb images drop the mysql-named client binaries, so a migrate that
+// spells the tools literally fails with "mysqldump: not found" before it has
+// dumped anything. Every mysql-family command must resolve the binary at runtime.
+func TestMysqlMigrateCommands_ResolveMariadbBinaries(t *testing.T) {
+	for name, cmd := range map[string]string{
+		"dump":    mysqlMigrateDumpCommand(),
+		"probe":   mysqlMigrateProbeCommand(),
+		"restore": mysqlMigrateRestoreCommand(),
+	} {
+		if !strings.Contains(cmd, "command -v") {
+			t.Errorf("%s command does not resolve its binary: %s", name, cmd)
+		}
+		if !strings.Contains(cmd, "mariadb") {
+			t.Errorf("%s command has no mariadb fallback: %s", name, cmd)
+		}
+	}
+}
