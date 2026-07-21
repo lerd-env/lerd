@@ -89,6 +89,14 @@ function ts(): string
     return gmdate('Y-m-d\TH:i:s.', (int) $now) . sprintf('%03dZ', $ms);
 }
 
+// in_test reports whether this process is a test run. PHPUnit's own bootstrap
+// defines PHPUNIT_COMPOSER_INSTALL and Pest runs on PHPUnit, so the signal is
+// ecosystem-level rather than tied to any framework.
+function in_test(): bool
+{
+    return defined('PHPUNIT_COMPOSER_INSTALL') || class_exists('PHPUnit\\Framework\\TestCase', false);
+}
+
 // detect_site names the site an event belongs to: the lerd-injected LERD_SITE
 // wins, then the working-directory basename for CLI, then the parent of the
 // document root for web requests that didn't get the param.
@@ -126,6 +134,9 @@ function context(): array
     $worker = defined('LERD_DEVTOOLS_WORKER') ? (string) \LERD_DEVTOOLS_WORKER : '';
     if ($worker !== '') {
         $ctx['worker'] = $worker;
+    }
+    if (in_test()) {
+        $ctx['test'] = true;
     }
     return array_filter($ctx, static function ($v) {
         return $v !== '' && $v !== null;

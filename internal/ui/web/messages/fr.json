@@ -1005,6 +1005,8 @@
   "queries_dup_badge": "×{count}",
   "queries_bindings": "bindings",
   "queries_show_workers": "Show worker queries",
+  "debug_show_tests": "Afficher les exécutions de tests",
+  "debug_tests_hidden": "({count} masqués)",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copier le SQL exécutable",

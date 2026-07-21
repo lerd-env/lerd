@@ -736,6 +736,8 @@
   "queries_hideTrace": "トレースを隠す",
   "queries_openInEditor": "エディタで開く",
   "queries_show_workers": "ワーカーのクエリを表示",
+  "debug_show_tests": "テスト実行を表示",
+  "debug_tests_hidden": "({count} 件非表示)",
   "queries_filter_allWorkers": "すべてのワーカー",
   "queries_worker_badge": "ワーカー",
   "queries_copySql": "実行可能な SQL をコピー",

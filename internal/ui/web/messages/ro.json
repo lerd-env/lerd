@@ -736,6 +736,8 @@
   "queries_hideTrace": "Ascunde urma",
   "queries_openInEditor": "Deschide în editor",
   "queries_show_workers": "Afișează interogările workerilor",
+  "debug_show_tests": "Arată rulările de teste",
+  "debug_tests_hidden": "({count} ascunse)",
   "queries_filter_allWorkers": "Toți workerii",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copiază SQL-ul executabil",

@@ -89,6 +89,14 @@ Turn it on with the **Show worker queries** checkbox in the Debug window toolbar
 
 Unchecking **Show worker queries** does two things: it stops capturing worker output going forward, and it immediately hides the worker rows already buffered in the view, so the lenses fall back to web and CLI activity without waiting for a buffer clear. The toggle is independent of the main Debug on/off switch.
 
+## Test runs (hidden by default)
+
+A test suite is the other kind of flood: it is CLI, high volume, and a feature suite fires hundreds of simulated requests, so one run can clear the buffer of everything you were looking at. Every event captured inside a PHPUnit or Pest run therefore carries `ctx.test`, and the Debug lenses hide those events by default.
+
+Unlike worker capture this is a view filter, not a capture switch: the events are still recorded, because a dump or a query you are inspecting from inside a failing test is exactly the case that matters. The **Show test runs** checkbox in each lens toolbar reveals them, and reports how many are currently hidden so nothing disappears without a reason on screen. The tab counters follow the same filter, so a lens never advertises rows it isn't showing.
+
+The signal is PHPUnit's own `PHPUNIT_COMPOSER_INSTALL` bootstrap constant, which Pest inherits, so it is ecosystem-level rather than tied to a framework. Filtering on `ctx.type` would not do: artisan, tinker and queue workers are all CLI too.
+
 ## N+1 warnings
 
 When a query shape repeats past a threshold (3×) within a single request or worker invocation, lerd fires one OS notification — **once per route/script per session** — so it warns you without nagging on every subsequent hit of the same endpoint. The dashboard also flags the request group with an **N+1** badge and tints the duplicate rows. Notifications respect the global `lerd notify` toggle.

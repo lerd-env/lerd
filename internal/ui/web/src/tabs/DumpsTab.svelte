@@ -3,7 +3,6 @@
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
   import {
-    dumps,
     status,
     filterSite,
     filterCtx,
@@ -16,7 +15,9 @@
     toggleDumps,
     buildDumpGroups
   } from '$stores/dumps';
+  import { debugEvents } from '$stores/debugEvents';
   import DumpEntry from '$components/DumpEntry.svelte';
+  import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
@@ -46,7 +47,7 @@
   const effectiveText = $derived(scoped ? $debugSearch : $filterText);
 
   const groups = $derived(
-    buildDumpGroups($dumps, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
+    buildDumpGroups($debugEvents, scoped ? siteScope : $filterSite, effectiveCtx, effectiveText, scoped)
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
@@ -139,6 +140,7 @@
         onchange={(v) => filterCtx.set(v as '' | 'fpm' | 'cli')}
       />
     {/if}
+    <TestEventsToggle />
     <button
       type="button"
       class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5"
