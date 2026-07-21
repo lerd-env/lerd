@@ -235,6 +235,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/workspaces", withCORS(publishAfter(handleWorkspaces, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/workspaces/", withCORS(publishAfter(handleWorkspaceRoutes, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/", withCORS(publishAfter(handleSiteAction, eventbus.KindSites, eventbus.KindServices)))
+	mux.HandleFunc("/api/logs/terminal", withCORS(handleLogTerminal))
 	mux.HandleFunc("/api/logs/", withCORS(handleLogs))
 	mux.HandleFunc("/api/dumps", withCORS(handleDumpsList))
 	mux.HandleFunc("/api/queries/analyze", withCORS(handleQueriesAnalyze))
@@ -255,14 +256,14 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)
-	mux.HandleFunc("/api/queue/", withCORS(handleQueueLogs))
-	mux.HandleFunc("/api/horizon/", withCORS(handleHorizonLogs))
-	mux.HandleFunc("/api/stripe/", withCORS(handleStripeLogs))
-	mux.HandleFunc("/api/schedule/", withCORS(handleScheduleLogs))
-	mux.HandleFunc("/api/reverb/", withCORS(handleReverbLogs))
-	mux.HandleFunc("/api/worker/", withCORS(handleWorkerLogs))
+	mux.HandleFunc("/api/queue/", withCORS(handleUnitLogStream))
+	mux.HandleFunc("/api/horizon/", withCORS(handleUnitLogStream))
+	mux.HandleFunc("/api/stripe/", withCORS(handleUnitLogStream))
+	mux.HandleFunc("/api/schedule/", withCORS(handleUnitLogStream))
+	mux.HandleFunc("/api/reverb/", withCORS(handleUnitLogStream))
+	mux.HandleFunc("/api/worker/", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/app-logs/", withCORS(handleAppLogs))
-	mux.HandleFunc("/api/watcher/logs", withCORS(handleWatcherLogs))
+	mux.HandleFunc("/api/watcher/logs", withCORS(handleUnitLogStream))
 	mux.HandleFunc("/api/watcher/start", withCORS(handleWatcherStart))
 	mux.HandleFunc("/api/settings", withCORS(handleSettings))
 	mux.HandleFunc("/api/settings/autostart", withCORS(handleSettingsAutostart))
@@ -3486,11 +3487,13 @@ func handleSiteNginxRestore(w http.ResponseWriter, r *http.Request, domain strin
 }
 
 // nginxHttpTemplate seeds the global http-level override editor when no file
-// exists yet. Loaded inside http{} after lerd's defaults, so user values win.
+// exists yet. Loaded inside http{}; a lerd default of the same name is
+// commented out of nginx.conf on save so nginx sees no duplicate.
 const nginxHttpTemplate = `# Lerd global nginx http-level overrides.
 #
-# Loaded inside the http { } block, after lerd's defaults, so your values win.
-# Lerd never overwrites this file; saving reloads nginx.
+# Loaded inside the http { } block. Anything you set here replaces lerd's own
+# default for that directive. Lerd never overwrites this file; saving reloads
+# nginx. Note client_max_body_size already defaults to 0 (unlimited).
 
 # client_max_body_size 100m;
 # gzip on;
@@ -4870,26 +4873,6 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 
 var allowedQueueUnit = regexp.MustCompile(`^[a-z0-9-]+$`)
 
-func handleHorizonLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/horizon/<sitename>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/horizon/"), "/")
-	if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
-		http.NotFound(w, r)
-		return
-	}
-	streamUnitLogs(w, r, "lerd-horizon-"+parts[0])
-}
-
-func handleQueueLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/queue/<sitename>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/queue/"), "/")
-	if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
-		http.NotFound(w, r)
-		return
-	}
-	streamUnitLogs(w, r, "lerd-queue-"+parts[0])
-}
-
 // SettingsResponse is the response for GET /api/settings.
 type SettingsResponse struct {
 	AutostartOnLogin          bool     `json:"autostart_on_login"`
@@ -5175,20 +5158,25 @@ func openTerminalCommand(script string) error {
 		args []string
 	}
 	combined := "sh -c " + podman.ShellQuote(script)
-	candidates := []termCmd{
-		{"kitty", []string{"sh", "-c", script}},
-		{"foot", []string{"sh", "-c", script}},
-		{"alacritty", []string{"-e", "sh", "-c", script}},
-		{"wezterm", []string{"start", "--", "sh", "-c", script}},
-		{"ghostty", []string{"-e", combined}},
-		{"ptyxis", []string{"--", "sh", "-c", script}},
-		{"konsole", []string{"--separate", "-e", "sh", "-c", script}},
-		{"gnome-terminal", []string{"--", "sh", "-c", script}},
-		{"xfce4-terminal", []string{"-e", combined}},
-		{"tilix", []string{"-e", combined}},
-		{"terminator", []string{"-e", combined}},
-		{"xterm", []string{"-e", "sh", "-c", script}},
+	candidates := []termCmd{}
+	// $TERMINAL leads, matching openTerminalAt and the error message below.
+	if t := os.Getenv("TERMINAL"); t != "" {
+		candidates = append(candidates, termCmd{t, []string{"-e", "sh", "-c", script}})
 	}
+	candidates = append(candidates,
+		termCmd{"kitty", []string{"sh", "-c", script}},
+		termCmd{"foot", []string{"sh", "-c", script}},
+		termCmd{"alacritty", []string{"-e", "sh", "-c", script}},
+		termCmd{"wezterm", []string{"start", "--", "sh", "-c", script}},
+		termCmd{"ghostty", []string{"-e", combined}},
+		termCmd{"ptyxis", []string{"--", "sh", "-c", script}},
+		termCmd{"konsole", []string{"--separate", "-e", "sh", "-c", script}},
+		termCmd{"gnome-terminal", []string{"--", "sh", "-c", script}},
+		termCmd{"xfce4-terminal", []string{"-e", combined}},
+		termCmd{"tilix", []string{"-e", combined}},
+		termCmd{"terminator", []string{"-e", combined}},
+		termCmd{"xterm", []string{"-e", "sh", "-c", script}},
+	)
 
 	if runtime.GOOS == "darwin" {
 		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
@@ -5270,47 +5258,6 @@ func handleXdebugAction(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"ok": true, "xdebug_enabled": res.Enabled, "xdebug_mode": res.Mode})
 }
 
-func handleScheduleLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/schedule/<sitename>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/schedule/"), "/")
-	if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
-		http.NotFound(w, r)
-		return
-	}
-	streamUnitLogs(w, r, "lerd-schedule-"+parts[0])
-}
-
-func handleReverbLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/reverb/<sitename>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/reverb/"), "/")
-	if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
-		http.NotFound(w, r)
-		return
-	}
-	streamUnitLogs(w, r, "lerd-reverb-"+parts[0])
-}
-
-func handleWorkerLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/worker/<sitename>/<workername>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/worker/"), "/")
-	if len(parts) != 3 || parts[2] != "logs" || !allowedQueueUnit.MatchString(parts[0]) || !allowedQueueUnit.MatchString(parts[1]) {
-		http.NotFound(w, r)
-		return
-	}
-	// unit: lerd-{workerName}-{siteName}
-	streamUnitLogs(w, r, "lerd-"+parts[1]+"-"+parts[0])
-}
-
-func handleStripeLogs(w http.ResponseWriter, r *http.Request) {
-	// path: /api/stripe/<sitename>/logs
-	parts := strings.Split(strings.TrimPrefix(r.URL.Path, "/api/stripe/"), "/")
-	if len(parts) != 2 || parts[1] != "logs" || !allowedQueueUnit.MatchString(parts[0]) {
-		http.NotFound(w, r)
-		return
-	}
-	streamUnitLogs(w, r, "lerd-stripe-"+parts[0])
-}
-
 func handleWatcherStart(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -5321,10 +5268,6 @@ func handleWatcherStart(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
-}
-
-func handleWatcherLogs(w http.ResponseWriter, r *http.Request) {
-	streamUnitLogs(w, r, "lerd-watcher")
 }
 
 // setWorktreeDBIsolated forwards to cli.SetWorktreeDBIsolated; the shared

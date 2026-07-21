@@ -1535,8 +1535,9 @@ func EnsureNginxConfig() error {
 	}); err != nil {
 		return fmt.Errorf("rendering nginx.conf: %w", err)
 	}
+	rendered := dropOverriddenDefaults(buf.String(), httpOverrideNames())
 	config.GuardRealWrite(destPath)
-	return os.WriteFile(destPath, buf.Bytes(), 0644)
+	return os.WriteFile(destPath, []byte(rendered), 0644)
 }
 
 // forwardedConf declares $real_forwarded_host / $real_forwarded_proto /

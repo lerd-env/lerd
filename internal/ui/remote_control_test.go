@@ -297,6 +297,8 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 	}{
 		{"/api/lerd/stop", true},
 		{"/api/lerd/quit", true},
+		{"/api/logs/terminal", true},
+		{"/api/logs/lerd-nginx", false},
 		{"/api/sites/link", true},
 		{"/api/browse", true},
 		{"/api/sites/myapp.test/terminal", true},
@@ -332,6 +334,8 @@ func TestRemoteControlGate_loopbackOnlyRoutesBlockedFromLAN(t *testing.T) {
 
 	cases := []string{
 		"/api/lerd/stop",
+		"/api/lerd/update-terminal",
+		"/api/logs/terminal",
 		"/api/sites/link",
 		"/api/sites/myapp.test/terminal",
 		"/api/sites/myapp.test/env",
