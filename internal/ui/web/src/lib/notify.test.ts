@@ -119,6 +119,43 @@ describe('notify dispatcher', () => {
     hasFocus.mockRestore();
   });
 
+  // With the native sink the daemon posts its own desktop popup, so a page
+  // raising a second one duplicates it and steals the click from the desktop
+  // app (#1042). The bell still records the event.
+  it('leaves the desktop to the daemon when delivery is native', async () => {
+    const { initNotify, notifyDelivery, notificationHistory } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    notifyDelivery.set('native');
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'New email: Welcome' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(swShows).toHaveLength(0);
+    expect(MockNotification.instances).toHaveLength(0);
+    expect(get(notificationHistory)).toHaveLength(1);
+  });
+
+  it('still raises it on the desktop under the browser sink', async () => {
+    const { initNotify, notifyDelivery } = await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    notifyDelivery.set('browser');
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'New email: Welcome' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(swShows).toHaveLength(1);
+  });
+
   it('suppresses notifications for kinds the user has disabled', async () => {
     const { initNotify, setNotifyPref } = await import('./notify');
     const { wsMessage } = await import('./ws');
