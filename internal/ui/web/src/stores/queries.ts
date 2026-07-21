@@ -2,6 +2,7 @@ import { derived, writable, type Readable } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import type { DumpEvent, QueryData } from '$lib/dumpsStream';
 import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
+import { queryHaystack } from '$lib/eventSearch';
 import { dumps, toggleDumps, status as dumpsStatus, type DumpsStatus } from '$stores/dumps';
 import { wsMessage } from '$lib/ws';
 
@@ -63,6 +64,18 @@ export function normalizeSql(sql: string): string {
     .toLowerCase();
 }
 
+// Fingerprints are cached by event identity: the same SQL was otherwise
+// re-normalised (five regex passes) on every rebuild of every lens.
+const fpCache = new WeakMap<DumpEvent, string>();
+
+function fingerprint(ev: DumpEvent, sql: string): string {
+  const hit = fpCache.get(ev);
+  if (hit !== undefined) return hit;
+  const fp = normalizeSql(sql);
+  fpCache.set(ev, fp);
+  return fp;
+}
+
 function queryData(ev: DumpEvent): QueryData | null {
   const d = ev.data as QueryData | undefined;
   if (!d || typeof d !== 'object' || typeof d.sql !== 'string') return null;
@@ -85,18 +98,7 @@ export function buildQueryGroups(events: DumpEvent[], site = '', text = '', hide
     if (worker && ev.ctx.worker !== worker) continue;
     const data = queryData(ev);
     if (!data) continue;
-    if (
-      needle &&
-      !(
-        data.sql.toLowerCase().includes(needle) ||
-        (ev.ctx.request ?? '').toLowerCase().includes(needle) ||
-        (ev.src.file ?? '').toLowerCase().includes(needle) ||
-        (ev.ctx.worker ?? '').toLowerCase().includes(needle) ||
-        (ev.ctx.branch ?? '').toLowerCase().includes(needle)
-      )
-    ) {
-      continue;
-    }
+    if (needle && !queryHaystack(ev, data).includes(needle)) continue;
     const key = groupKey(ev);
     let g = groups.get(key);
     if (!g) {
@@ -114,17 +116,19 @@ export function buildQueryGroups(events: DumpEvent[], site = '', text = '', hide
   // Second pass per group: fingerprint counts drive duplicate/N+1 flags.
   for (const g of groups.values()) {
     const counts = new Map<string, number>();
+    const fps: string[] = [];
     for (const row of g.rows) {
-      const fp = normalizeSql(row.data.sql);
+      const fp = fingerprint(row.event, row.data.sql);
+      fps.push(fp);
       counts.set(fp, (counts.get(fp) ?? 0) + 1);
     }
     let maxDup = 1;
-    for (const row of g.rows) {
-      const c = counts.get(normalizeSql(row.data.sql)) ?? 1;
+    g.rows.forEach((row, i) => {
+      const c = counts.get(fps[i]) ?? 1;
       row.dupCount = c;
       row.duplicate = c >= DUPLICATE_AT;
       if (c > maxDup) maxDup = c;
-    }
+    });
     g.nPlusOne = maxDup >= NPLUSONE_AT;
     // Newest query at the top of each request card.
     g.rows.reverse();

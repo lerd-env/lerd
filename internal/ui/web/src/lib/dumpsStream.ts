@@ -71,6 +71,10 @@ export interface DumpsStream {
   connect: () => void;
   close: () => void;
   clear: () => void;
+  // flush applies any events buffered since the last frame right now. The
+  // stream flushes itself once per frame; callers only need this to observe
+  // an arrival synchronously.
+  flush: () => void;
 }
 
 // The receiver ring is shared across every kind (dump, query, mail, view,
@@ -91,16 +95,60 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
   // every push/evict so reconnect replays never double-add an event we already
   // show, no matter how large the list grows.
   const seen = new Set<string>();
+  // Events wait here until the next frame. One PHP request emits ~7 events and
+  // a burst arrives in milliseconds, so writing the store per event would make
+  // every lens re-derive its groups hundreds of times for one visible update.
+  let pending: DumpEvent[] = [];
+  let frame: number | null = null;
+
+  // A frame is the natural batch boundary in a browser; the timer is the
+  // fallback for a non-DOM host (SSR, a worker) where rAF doesn't exist.
+  const hasRaf = typeof requestAnimationFrame === 'function';
+
+  function schedule() {
+    if (frame !== null) return;
+    const run = () => {
+      frame = null;
+      flush();
+    };
+    frame = hasRaf ? requestAnimationFrame(run) : (setTimeout(run, 16) as unknown as number);
+  }
+
+  function unschedule() {
+    if (frame === null) return;
+    if (hasRaf) cancelAnimationFrame(frame);
+    else clearTimeout(frame);
+    frame = null;
+  }
+
+  function flush() {
+    unschedule();
+    if (pending.length === 0) return;
+    const batch = pending;
+    pending = [];
+    events.update((list) => {
+      const next = list.concat(batch);
+      if (next.length > maxEvents) {
+        const drop = next.length - maxEvents;
+        for (let i = 0; i < drop; i++) seen.delete(next[i].id);
+        return next.slice(drop);
+      }
+      return next;
+    });
+  }
 
   function close() {
     if (source) {
       source.close();
       source = null;
     }
+    flush();
     connected.set(false);
   }
 
   function clear() {
+    unschedule();
+    pending = [];
     events.set([]);
     seen.clear();
   }
@@ -119,19 +167,9 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
     // path resends the server ring, so without this a reconnect would re-add
     // events the dashboard already shows.
     if (seen.has(ev.id)) return;
-    events.update((list) => {
-      let next: DumpEvent[];
-      if (list.length >= maxEvents) {
-        const drop = list.length - maxEvents + 1;
-        for (let i = 0; i < drop; i++) seen.delete(list[i].id);
-        next = list.slice(drop);
-      } else {
-        next = list.slice();
-      }
-      seen.add(ev.id);
-      next.push(ev);
-      return next;
-    });
+    seen.add(ev.id);
+    pending.push(ev);
+    schedule();
   }
 
   function connect() {
@@ -156,5 +194,5 @@ export function createDumpsStream(query: Record<string, string> = {}, maxEvents 
     }
   }
 
-  return { events, connected, connect, close, clear };
+  return { events, connected, connect, close, clear, flush };
 }
