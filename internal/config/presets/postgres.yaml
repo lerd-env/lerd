@@ -44,5 +44,6 @@ icon: elephant
 introspect:
   list_databases: >
     psql -U postgres -tAc
-    "SELECT datname || chr(9) || pg_database_size(datname) FROM pg_database
+    "SELECT datname || chr(9) || GREATEST(pg_database_size(datname)
+    - (SELECT pg_database_size('template1')), 0) FROM pg_database
     WHERE datistemplate = false AND datname <> 'postgres' ORDER BY datname"

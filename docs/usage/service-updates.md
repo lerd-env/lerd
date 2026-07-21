@@ -29,6 +29,7 @@ Cross-major boundaries (e.g. mysql 8 → 9, postgres 16 → 17) are not surfaced
 For mysql, mariadb, and postgres, the violet **Migrate → \<tag\>** button runs the full SQL migration:
 
 ```
+0. Start the engine if it is not running (a service no site uses is auto-stopped)
 1. Dump current data via the running container's native tool
    (mysqldump --all-databases / pg_dumpall) → ~/.local/share/lerd/backups/<svc>-<ts>.sql
 2. Stop the unit

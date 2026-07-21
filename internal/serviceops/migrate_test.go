@@ -197,3 +197,17 @@ func TestMysqlMigrateCommands_ResolveMariadbBinaries(t *testing.T) {
 		}
 	}
 }
+
+// A service that was auto-stopped for being unused is the normal state to start
+// a migrate from, so every migratable family needs a readiness probe to bring
+// its engine up before the dump. Without one the dump execs into no container.
+func TestMigrateProbe_CoversEveryMigratableFamily(t *testing.T) {
+	for family := range migrators {
+		if migrateProbe(family) == "" {
+			t.Errorf("family %q has a migrator but no readiness probe", family)
+		}
+	}
+	if migrateProbe("mongo") != "" {
+		t.Error("a family with no migrator should have no probe")
+	}
+}
