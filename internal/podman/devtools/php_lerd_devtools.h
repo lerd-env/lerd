@@ -32,6 +32,7 @@ ZEND_BEGIN_MODULE_GLOBALS(lerd_devtools)
 	HashTable bind_buf;       /* PDOStatement obj-handle -> array of bound values */
 	zend_bool bind_buf_init;  /* whether bind_buf is initialised this request    */
 	zend_bool collector_loaded; /* agnostic PHP collector included this request   */
+	zend_bool is_test;          /* PHPUnit/Pest run detected (sticky per request) */
 ZEND_END_MODULE_GLOBALS(lerd_devtools)
 
 #if defined(ZTS) && defined(COMPILE_DL_LERD_DEVTOOLS)

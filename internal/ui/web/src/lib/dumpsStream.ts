@@ -22,6 +22,9 @@ export interface DumpContext {
   // worker names the queue/scheduler command an event came from (e.g.
   // "queue:work", "scrape:rtb-data"). Set only for worker-process events.
   worker?: string;
+  // test marks an event captured inside a PHPUnit/Pest run. The Debug lenses
+  // hide these by default so a suite can't bury genuine dumps.
+  test?: boolean;
 }
 
 export interface DumpEvent {

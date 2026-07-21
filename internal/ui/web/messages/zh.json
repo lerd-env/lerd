@@ -736,6 +736,8 @@
   "queries_hideTrace": "隐藏跟踪",
   "queries_openInEditor": "在编辑器中打开",
   "queries_show_workers": "显示 worker 查询",
+  "debug_show_tests": "显示测试运行",
+  "debug_tests_hidden": "(已隐藏 {count})",
   "queries_filter_allWorkers": "所有 workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "复制可执行的 SQL",

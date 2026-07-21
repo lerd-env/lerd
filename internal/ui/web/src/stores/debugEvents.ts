@@ -2,6 +2,7 @@ import { derived, type Readable } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
 import { dumps } from '$stores/dumps';
+import { showTests } from '$stores/debugLens';
 
 // Generic per-request grouping shared by the non-dump/non-query Debug lenses
 // (jobs, views, mail, cache, events). Mirrors the query grouping: prefer the
@@ -77,3 +78,17 @@ export const knownDebugSites: Readable<string[]> = derived(dumps, ($dumps) => {
   for (const ev of $dumps) set.add(ev.ctx.site || '');
   return Array.from(set).sort();
 });
+
+// debugEvents is what every lens renders: the captured stream minus test-run
+// events unless the user asks for them. Filtering here rather than in each
+// build* keeps the tab counters and the lists agreeing on what is visible.
+export const debugEvents: Readable<DumpEvent[]> = derived(
+  [dumps, showTests],
+  ([$dumps, $showTests]) => ($showTests ? $dumps : $dumps.filter((ev) => !ev.ctx.test))
+);
+
+// hiddenTestCount drives the "N hidden" hint next to the toggle, so a dump
+// added inside a test that never appears has a visible explanation.
+export const hiddenTestCount: Readable<number> = derived([dumps, showTests], ([$dumps, $showTests]) =>
+  $showTests ? 0 : $dumps.reduce((n, ev) => (ev.ctx.test ? n + 1 : n), 0)
+);

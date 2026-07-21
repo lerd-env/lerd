@@ -18,7 +18,14 @@ import (
 // filter/extract logic (event noise filter, Messenger Envelope unwrap, http
 // method+url) is covered without a Laravel/Symfony app. Skipped where php isn't
 // installed (e.g. minimal CI images).
-func TestCollectorPHP_FiltersAndExtracts(t *testing.T) {
+// runCollectorPHP writes the real devtools-collector.php next to a probe
+// script, runs it under the host php, and returns every JSON line the script
+// shipped over the capture socket. `body` is spliced into the probe after the
+// collector is required; COLLECTOR is replaced with the collector's path.
+// Skipped where php isn't installed or can't reach host files (e.g. lerd's own
+// container wrapper on a dev box).
+func runCollectorPHP(t *testing.T, body string) []string {
+	t.Helper()
 	php, err := exec.LookPath("php")
 	if err != nil {
 		t.Skip("php not installed")
@@ -71,20 +78,7 @@ func TestCollectorPHP_FiltersAndExtracts(t *testing.T) {
 		}
 	}()
 
-	// A Messenger Envelope stub so the unwrap branch (Envelope -> inner message
-	// class) is exercised, plus an app message class.
-	script := `<?php
-namespace Symfony\Component\Messenger { class Envelope { private $m; function __construct($m){ $this->m = $m; } function getMessage(){ return $this->m; } } }
-namespace App\Message { class SendInvoice {} }
-namespace {
-    require ` + phpQuote(collectorPath) + `;
-    \Lerd\Collector\event(new \stdClass(), 'kernel.request');                 // framework noise -> dropped
-    \Lerd\Collector\event(new \stdClass(), 'App\\Domain\\OrderPlaced');       // app event -> emitted
-    \Lerd\Collector\http('GET', 'https://api.test/widgets');                  // emitted
-    \Lerd\Collector\job(new \stdClass());                                     // raw message -> class stdClass
-    \Lerd\Collector\job(new \Symfony\Component\Messenger\Envelope(new \App\Message\SendInvoice())); // unwrap to inner class
-}
-`
+	script := strings.ReplaceAll(body, "COLLECTOR", phpQuote(collectorPath))
 	scriptPath := filepath.Join(dir, "probe.php")
 	if err := os.WriteFile(scriptPath, []byte(script), 0o644); err != nil {
 		t.Fatalf("write script: %v", err)
@@ -98,8 +92,29 @@ namespace {
 	time.Sleep(200 * time.Millisecond) // let the accept loop drain
 
 	mu.Lock()
-	got := append([]string(nil), lines...)
-	mu.Unlock()
+	defer mu.Unlock()
+	return append([]string(nil), lines...)
+}
+
+// TestCollectorPHP_FiltersAndExtracts runs the real devtools-collector.php under
+// the host php and captures what it ships over the socket, so the pure-PHP
+// filter/extract logic (event noise filter, Messenger Envelope unwrap, http
+// method+url) is covered without a Laravel/Symfony app.
+func TestCollectorPHP_FiltersAndExtracts(t *testing.T) {
+	// A Messenger Envelope stub so the unwrap branch (Envelope -> inner message
+	// class) is exercised, plus an app message class.
+	got := runCollectorPHP(t, `<?php
+namespace Symfony\Component\Messenger { class Envelope { private $m; function __construct($m){ $this->m = $m; } function getMessage(){ return $this->m; } } }
+namespace App\Message { class SendInvoice {} }
+namespace {
+    require COLLECTOR;
+    \Lerd\Collector\event(new \stdClass(), 'kernel.request');                 // framework noise -> dropped
+    \Lerd\Collector\event(new \stdClass(), 'App\\Domain\\OrderPlaced');       // app event -> emitted
+    \Lerd\Collector\http('GET', 'https://api.test/widgets');                  // emitted
+    \Lerd\Collector\job(new \stdClass());                                     // raw message -> class stdClass
+    \Lerd\Collector\job(new \Symfony\Component\Messenger\Envelope(new \App\Message\SendInvoice())); // unwrap to inner class
+}
+`)
 
 	type ev struct {
 		Kind string `json:"kind"`
@@ -151,4 +166,47 @@ namespace {
 // phpQuote single-quotes a path for embedding in a PHP require.
 func phpQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "\\'") + "'"
+}
+
+// TestCollectorPHP_TagsTestRuns covers the ctx.test signal: PHPUnit's bootstrap
+// constant is the only thing that separates a test run from any other CLI
+// invocation, and the Debug lenses hide tagged events by default.
+func TestCollectorPHP_TagsTestRuns(t *testing.T) {
+	type ev struct {
+		Ctx struct {
+			Type string `json:"type"`
+			Test bool   `json:"test"`
+		} `json:"ctx"`
+	}
+	decode := func(t *testing.T, lines []string) ev {
+		t.Helper()
+		if len(lines) != 1 {
+			t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+		}
+		var e ev
+		if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", lines[0], err)
+		}
+		return e
+	}
+
+	underTest := decode(t, runCollectorPHP(t, `<?php
+define('PHPUNIT_COMPOSER_INSTALL', '/app/vendor/autoload.php');
+require COLLECTOR;
+\Lerd\Collector\http('GET', 'https://api.test/widgets');
+`))
+	if !underTest.Ctx.Test {
+		t.Errorf("ctx.test = false under a PHPUnit run, want true")
+	}
+	if underTest.Ctx.Type != "cli" {
+		t.Errorf("ctx.type = %q, want cli — the test flag must not replace the SAPI", underTest.Ctx.Type)
+	}
+
+	plain := decode(t, runCollectorPHP(t, `<?php
+require COLLECTOR;
+\Lerd\Collector\http('GET', 'https://api.test/widgets');
+`))
+	if plain.Ctx.Test {
+		t.Errorf("ctx.test = true for a plain CLI invocation, want false")
+	}
 }

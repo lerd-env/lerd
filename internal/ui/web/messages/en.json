@@ -744,6 +744,8 @@
   "queries_hideTrace": "Hide trace",
   "queries_openInEditor": "Open in editor",
   "queries_show_workers": "Show worker queries",
+  "debug_show_tests": "Show test runs",
+  "debug_tests_hidden": "({count} hidden)",
   "queries_filter_allWorkers": "All workers",
   "queries_worker_badge": "worker",
   "queries_copySql": "Copy runnable SQL",

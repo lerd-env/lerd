@@ -2,7 +2,7 @@
   import { onMount, onDestroy } from 'svelte';
   import { get } from 'svelte/store';
   import { debugSearch } from '$stores/debugLens';
-  import { dumps, startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
+  import { startDumpsStream, stopDumpsStream, clearDumps } from '$stores/dumps';
   import {
     queryFilterSite,
     queryFilterWorker,
@@ -13,9 +13,11 @@
     setDebugCapture,
     toggleDevtoolsWorkers
   } from '$stores/queries';
-  import { buildKindGroups, knownDebugSites } from '$stores/debugEvents';
+  import { buildKindGroups, knownDebugSites, debugEvents } from '$stores/debugEvents';
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
+  import LensToggle from '$components/LensToggle.svelte';
+  import TestEventsToggle from '$components/TestEventsToggle.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
   import LensGroupLabel from '$components/LensGroupLabel.svelte';
@@ -55,7 +57,7 @@
   // Debug tabs; unscoped keeps a local search.
   const effectiveText = $derived(scoped ? $debugSearch : localText);
   const groups = $derived(
-    buildKindGroups($dumps, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
@@ -80,11 +82,11 @@
   }
 
   let togglingWorkers = $state(false);
-  async function onToggleWorkers(e: Event) {
+  async function onToggleWorkers(checked: boolean) {
     if (togglingWorkers) return;
     togglingWorkers = true;
     try {
-      await toggleDevtoolsWorkers((e.currentTarget as HTMLInputElement).checked);
+      await toggleDevtoolsWorkers(checked);
       await refreshDevtoolsStatus();
     } finally {
       togglingWorkers = false;
@@ -145,10 +147,13 @@
         onchange={(v) => queryFilterWorker.set(v)}
       />
     {/if}
-    <label class="inline-flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400 cursor-pointer select-none whitespace-nowrap">
-      <input type="checkbox" class="rounded-sm border-gray-300 dark:border-lerd-border bg-white dark:bg-lerd-card text-lerd-red focus:ring-lerd-red" checked={Boolean($devtoolsStatus?.workers)} disabled={togglingWorkers} onchange={onToggleWorkers} />
-      {m.queries_show_workers()}
-    </label>
+    <LensToggle
+      label={m.queries_show_workers()}
+      checked={Boolean($devtoolsStatus?.workers)}
+      disabled={togglingWorkers}
+      onchange={onToggleWorkers}
+    />
+    <TestEventsToggle />
     <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps()}>{m.common_clear()}</button>
   </div>
 
