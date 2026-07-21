@@ -1,5 +1,5 @@
 import { writable } from 'svelte/store';
-import { apiFetch, apiJson, apiUrl, decodeJSONResult } from '$lib/api';
+import { apiFetch, apiJson, apiUrl, decodeJSONResult, decodeJSONText } from '$lib/api';
 
 export interface Snapshot {
   name: string;
@@ -54,7 +54,15 @@ export async function loadEngine(service: string): Promise<void> {
   }
 }
 
-type Result = { ok: boolean; error?: string };
+// ImportIssue is one complaint the engine made while swallowing a dump, with
+// how often it made it. A load can come back ok and still carry these, since
+// psql exits clean even when every statement in a dump failed.
+export interface ImportIssue {
+  message: string;
+  count: number;
+}
+
+type Result = { ok: boolean; error?: string; errors?: number; issues?: ImportIssue[] };
 
 async function post(service: string, path: string, body: unknown): Promise<Result> {
   try {
@@ -97,21 +105,42 @@ export function deleteSnapshot(service: string, database: string, name: string):
   });
 }
 
-export async function importDatabase(service: string, database: string, file: File): Promise<Result> {
-  try {
-    const form = new FormData();
-    form.append('database', database);
-    form.append('file', file);
-    const res = await apiFetch(`/api/databases/${encodeURIComponent(service)}/import`, {
-      method: 'POST',
-      body: form
-    });
-    const out = await decodeJSONResult<Result>(res);
-    if (out.ok) await loadEngine(service);
-    return out;
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
-  }
+// ImportProgress tracks a dump on its way into the engine. The daemon streams
+// the request body straight into the container, so the bytes the browser has
+// handed over are the bytes the engine has taken.
+export interface ImportProgress {
+  percent: number;
+  uploaded: boolean;
+}
+
+// importDatabase uploads over XHR rather than fetch because only XHR reports
+// how much of the dump has gone out, which is the whole of the progress the UI
+// can show for an import.
+export function importDatabase(
+  service: string,
+  database: string,
+  file: File,
+  onProgress?: (p: ImportProgress) => void
+): Promise<Result> {
+  const form = new FormData();
+  form.append('database', database);
+  form.append('file', file);
+  return new Promise<Result>((resolve) => {
+    const finish = async (out: Result) => {
+      if (out.ok) await loadEngine(service);
+      resolve(out);
+    };
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', apiUrl(`/api/databases/${encodeURIComponent(service)}/import`));
+    xhr.setRequestHeader('X-Lerd-CSRF', '1');
+    xhr.upload.onprogress = (e) => {
+      if (!onProgress || !e.lengthComputable || !e.total) return;
+      onProgress({ percent: e.loaded / e.total, uploaded: e.loaded >= e.total });
+    };
+    xhr.onload = () => void finish(decodeJSONText<Result>(xhr.responseText, String(xhr.status)));
+    xhr.onerror = () => resolve({ ok: false, error: `${service} import request failed` });
+    xhr.send(form);
+  });
 }
 
 // exportUrl points the browser at the streaming dump endpoint so the file is

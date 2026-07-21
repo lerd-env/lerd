@@ -194,7 +194,7 @@ func runDbRestore(name, service, database string, allDatabases, force bool) erro
 	if err := ensureServiceRunning(env.service); err != nil {
 		return fmt.Errorf("could not start %s: %w", env.service, err)
 	}
-	if err := serviceops.RestoreSnapshot(target, name, snapshotEmit()); err != nil {
+	if _, err := serviceops.RestoreSnapshot(target, name, snapshotEmit()); err != nil {
 		return err
 	}
 	feedback.Begin()

@@ -176,13 +176,135 @@ func ExportSnapshot(service, database, name string, w io.Writer) error {
 	return nil
 }
 
+// maxImportIssues caps the distinct complaints kept from a load, enough to show
+// the shape of the failure without carrying a 27k-line psql transcript around.
+const maxImportIssues = 5
+
+// ImportIssue is one distinct complaint the engine made, and how often it made
+// it. ImportReport summarises a load: psql exits 0 even when every statement in
+// a dump fails, so without counting its output a dump can half land and still
+// look like a clean import.
+type ImportIssue struct {
+	Message string `json:"message"`
+	Count   int    `json:"count"`
+}
+
+type ImportReport struct {
+	Errors int           `json:"errors"`
+	Issues []ImportIssue `json:"issues,omitempty"`
+}
+
+// Summary renders the report as one line for the CLI and the phase stream.
+func (r ImportReport) Summary() string {
+	if r.Errors == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Issues))
+	for _, issue := range r.Issues {
+		parts = append(parts, fmt.Sprintf("%d× %s", issue.Count, issue.Message))
+	}
+	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
+}
+
+// ImportTally counts an engine's complaints as its output streams past, so a
+// caller can hand the output straight to a terminal and still summarise it at
+// the end. It counts psql and mysql error lines, plus psql's "invalid command"
+// lines, which are what a COPY block turns into once its table failed to exist.
+type ImportTally struct {
+	partial string
+	seen    map[string]int
+	order   []string
+	errors  int
+}
+
+func (t *ImportTally) Write(p []byte) (int, error) {
+	text := t.partial + string(p)
+	lines := strings.Split(text, "\n")
+	t.partial = lines[len(lines)-1]
+	for _, line := range lines[:len(lines)-1] {
+		t.add(line)
+	}
+	return len(p), nil
+}
+
+func (t *ImportTally) add(line string) {
+	line = trimImportPrefix(strings.TrimRight(line, "\r "))
+	if !isImportErrorLine(line) {
+		return
+	}
+	if t.seen == nil {
+		t.seen = map[string]int{}
+	}
+	if _, ok := t.seen[line]; !ok {
+		t.order = append(t.order, line)
+	}
+	t.seen[line]++
+	t.errors++
+}
+
+// Report closes off whatever line was still in flight and returns the summary.
+// Errors are kept in the order the engine hit them, because the first failures
+// are what caused the later ones, and the cascade of unparsed COPY data that
+// follows a missing table is folded into a single loudest line so it cannot
+// crowd the cause out of the list.
+func (t *ImportTally) Report() ImportReport {
+	if t.partial != "" {
+		t.add(t.partial)
+		t.partial = ""
+	}
+	rep := ImportReport{Errors: t.errors}
+	loudestNoise := ""
+	for _, msg := range t.order {
+		if strings.HasPrefix(msg, "invalid command") {
+			if loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise] {
+				loudestNoise = msg
+			}
+			continue
+		}
+		if len(rep.Issues) == maxImportIssues-1 {
+			continue
+		}
+		rep.Issues = append(rep.Issues, ImportIssue{Message: msg, Count: t.seen[msg]})
+	}
+	if loudestNoise != "" {
+		rep.Issues = append(rep.Issues, ImportIssue{Message: loudestNoise, Count: t.seen[loudestNoise]})
+	}
+	return rep
+}
+
+func parseImportOutput(out string) ImportReport {
+	var tally ImportTally
+	_, _ = tally.Write([]byte(out))
+	return tally.Report()
+}
+
+// trimImportPrefix drops psql's "psql:<stdin>:412: " location prefix so the same
+// complaint from different lines of a dump counts as one issue.
+func trimImportPrefix(line string) string {
+	if !strings.HasPrefix(line, "psql:") {
+		return line
+	}
+	for _, marker := range []string{": ERROR", ": invalid command"} {
+		if i := strings.Index(line, marker); i >= 0 {
+			return line[i+2:]
+		}
+	}
+	return line
+}
+
+func isImportErrorLine(line string) bool {
+	return strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "invalid command")
+}
+
 // ImportDatabase streams a SQL dump from r into database on the service
-// container. The database must already exist.
-func ImportDatabase(service, database string, r io.Reader) error {
+// container. The database must already exist. The report carries what the
+// engine complained about, which is the only sign of a partial load when the
+// client still exits clean.
+func ImportDatabase(service, database string, r io.Reader) (ImportReport, error) {
 	family := config.FamilyOfName(service)
 	shellCmd, ok := importShellCommand(family, database)
 	if !ok {
-		return fmt.Errorf("importing into %s databases is not supported", service)
+		return ImportReport{}, fmt.Errorf("importing into %s databases is not supported", service)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
@@ -193,8 +315,9 @@ func ImportDatabase(service, database string, r io.Reader) error {
 	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
 	cmd := podman.CmdContext(ctx, args...)
 	cmd.Stdin = r
-	if out, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
-	return nil
+	return parseImportOutput(string(out)), nil
 }

@@ -254,12 +254,20 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // dbActionResponse is the shared {ok,error} envelope the databases store reads.
+// A load that the engine only half swallowed still comes back ok, carrying what
+// it complained about, since psql exits clean either way.
 type dbActionResponse struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK     bool                     `json:"ok"`
+	Error  string                   `json:"error,omitempty"`
+	Errors int                      `json:"errors,omitempty"`
+	Issues []serviceops.ImportIssue `json:"issues,omitempty"`
 }
 
 func writeDBOK(w http.ResponseWriter) { writeJSON(w, dbActionResponse{OK: true}) }
+
+func writeDBReport(w http.ResponseWriter, rep serviceops.ImportReport) {
+	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues})
+}
 func writeDBError(w http.ResponseWriter, m string) {
 	writeJSON(w, dbActionResponse{OK: false, Error: m})
 }
@@ -339,11 +347,12 @@ func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service strin
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
-	if err := serviceops.RestoreSnapshot(target, name, nil); err != nil {
+	rep, err := serviceops.RestoreSnapshot(target, name, nil)
+	if err != nil {
 		writeDBError(w, err.Error())
 		return
 	}
-	writeDBOK(w)
+	writeDBReport(w, rep)
 }
 
 func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string) {
@@ -415,9 +424,10 @@ func handleDatabaseImport(w http.ResponseWriter, r *http.Request, service string
 		return
 	}
 	defer file.Close()
-	if err := serviceops.ImportDatabase(service, database, file); err != nil {
+	rep, err := serviceops.ImportDatabase(service, database, file)
+	if err != nil {
 		writeDBError(w, err.Error())
 		return
 	}
-	writeDBOK(w)
+	writeDBReport(w, rep)
 }
