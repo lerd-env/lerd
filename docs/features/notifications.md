@@ -9,7 +9,7 @@ The first time you open the dashboard a small banner offers to enable browser no
 Notifications have a single delivery **sink**, chosen per install and mutually exclusive so you never get the same alert twice:
 
 - **Browser** — the WebSocket fan-out to open dashboards plus Web Push to subscribed browsers (the paths described under [How it works](#how-it-works)). Needs a browser permission grant, works cross-machine over the LAN, and delivers to a closed PWA.
-- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode. Linux only for now; macOS follows later.
+- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode, and so is the popup an open dashboard would otherwise raise itself, so the daemon's is the only copy and clicking it opens the desktop app. Linux only for now; macOS follows later.
 
 Switch under **System → Notifications** with the *Delivery* control, or from the CLI:
 

@@ -316,6 +316,10 @@ async function fireNotification(evt: NotificationEvent) {
       pushInApp(entry);
     }
     if (windowFocused()) return;
+    // Under the native sink the daemon has already posted this to the desktop.
+    // A second popup from the page duplicates it and takes the click away from
+    // the desktop app, which the daemon's copy opens through lerd://.
+    if (get(notifyDelivery) === 'native') return;
   }
   if (typeof Notification === 'undefined') return;
   if (Notification.permission !== 'granted') return;
