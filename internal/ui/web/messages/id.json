@@ -1121,5 +1121,8 @@
   "databases_targetTesting": "Pengujian",
   "databases_targetLabel": "Basis data yang dikenai kontrol ini",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Notifikasi",
+  "notify_center_empty": "Belum ada. Operasi yang selesai, kegagalan, dan email yang ditangkap muncul di sini.",
+  "nav_notifications": "Notifikasi"
 }

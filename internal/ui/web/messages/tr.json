@@ -1121,5 +1121,8 @@
   "databases_targetTesting": "Test",
   "databases_targetLabel": "Bu denetimlerin etkilediği veritabanı",
   "databases_deleteConfirm": "Confirm delete",
-  "databases_count": "{count} databases"
+  "databases_count": "{count} databases",
+  "notify_center_title": "Bildirimler",
+  "notify_center_empty": "Henüz bir şey yok. Tamamlanan işlemler, hatalar ve yakalanan e-postalar burada görünür.",
+  "nav_notifications": "Bildirimler"
 }
