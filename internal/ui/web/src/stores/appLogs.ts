@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { apiJson, apiFetch } from '$lib/api';
 
 export interface AppLogFile {
@@ -56,7 +57,7 @@ export async function clearAppLogs(domain: string, branch?: string): Promise<Cle
       error: data.error
     };
   } catch (e) {
-    return { ok: false, filesCleared: 0, bytesCleared: 0, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, filesCleared: 0, bytesCleared: 0, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 

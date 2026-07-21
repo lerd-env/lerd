@@ -392,7 +392,10 @@
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
         {#if $status.dns?.enabled === false}
-          DNS is disabled, so the dashboard is the only thing remote devices can use lerd for. Enable to set HTTP Basic credentials and bind the dashboard at <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">{$lan.lanIP || '<lan-ip>'}:7073</code>. Sites need per-site <code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd lan:share</code> to be reachable.
+          {@html m.system_remote_descriptionNoDns({
+            addr: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + ($lan.lanIP || '&lt;lan-ip&gt;') + ':7073</code>',
+            cmd: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd lan:share</code>'
+          })}
         {:else}
           {@html m.system_remote_description({ loop4: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">127.0.0.1</code>', loop6: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">::1</code>' })}
         {/if}

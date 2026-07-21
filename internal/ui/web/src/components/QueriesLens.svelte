@@ -242,7 +242,7 @@
                   <code class="text-xs flex-1 break-all text-gray-800 dark:text-gray-200">{row.data.sql}</code>
                   <span class="flex items-center gap-1 shrink-0">
                     {#if row.duplicate}
-                      <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title="duplicate query in this request">{m.queries_dup_badge({ count: row.dupCount })}</span>
+                      <span class="text-[10px] rounded-sm px-1 py-0.5 bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300" title={m.queries_dup_title()}>{m.queries_dup_badge({ count: row.dupCount })}</span>
                     {/if}
                     <span
                       class="text-[11px] tabular-nums rounded-sm px-1 py-0.5 {row.slow ? 'bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300' : 'text-gray-400'}"

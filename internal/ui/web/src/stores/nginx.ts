@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
 import type { SiteNginxBackup, LoadNginxBackupsResult, ResetNginxResult, SaveNginxResult, RestoreNginxResult } from './sites';
 
@@ -35,7 +36,7 @@ export async function saveNginxConfig(content: string, backup: boolean = false):
       exists: data.exists
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -43,18 +44,18 @@ export async function loadNginxConfigBackups(): Promise<LoadNginxBackupsResult> 
   try {
     const res = await apiFetch('/api/nginx/backups');
     if (!res.ok) {
-      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+      return { ok: false, list: [], error: m.common_backupsLoadFailed({ status: res.status }) };
     }
     const list = (await res.json()) as SiteNginxBackup[];
     return { ok: true, list: Array.isArray(list) ? list : [] };
   } catch (e) {
-    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, list: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
 export async function loadNginxConfigBackupContent(name: string): Promise<string> {
   const res = await apiFetch('/api/nginx/backups/' + encodeURIComponent(name));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -64,7 +65,7 @@ export async function resetNginxConfig(): Promise<ResetNginxResult> {
     const data = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -78,6 +79,6 @@ export async function restoreNginxConfig(name: string = ''): Promise<RestoreNgin
     const data = await decodeJSONResult<{ ok?: boolean; error?: string; restored?: string; content?: string }>(res);
     return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }

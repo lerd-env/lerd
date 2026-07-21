@@ -1144,5 +1144,18 @@
   "databases_importIssuesMore": "and {count} more distinct errors not shown",
   "notify_center_title": "Notifications",
   "notify_center_empty": "Nothing yet. Finished operations, failures and captured mail land here.",
-  "nav_notifications": "Notifications"
+  "nav_notifications": "Notifications",
+  "common_requestFailed": "Request failed",
+  "common_loadFailed": "Failed to load",
+  "common_backupsLoadFailed": "Failed to load backups ({status})",
+  "common_backupLoadFailed": "Failed to load backup ({status})",
+  "sites_envProposalLoadFailed": "Failed to load env proposal ({status})",
+  "sites_fileLoadFailed": "Failed to load {file} ({status})",
+  "sites_tls_on": "TLS enabled",
+  "sites_tls_off": "TLS not enabled",
+  "queries_dup_title": "duplicate query in this request",
+  "system_remote_loadFailed": "Failed to load remote-control state",
+  "system_lan_toggleFailed": "Failed to toggle LAN exposure",
+  "system_remote_descriptionNoDns": "DNS is disabled, so the dashboard is the only thing remote devices can use lerd for. Enable to set HTTP Basic credentials and bind the dashboard at {addr}. Sites need per-site {cmd} to be reachable.",
+  "system_dns_disabledHint": "lerd-dns is disabled. Sites resolve through the system resolver via {tld} (RFC 6761). HTTPS is unavailable in this mode. To re-enable, set {setting} in {file} and run {cmd}."
 }

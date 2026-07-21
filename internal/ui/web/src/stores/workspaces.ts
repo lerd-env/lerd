@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
 import { apiFetch } from '$lib/api';
 
@@ -27,7 +28,7 @@ async function send(path: string, method: 'POST' | 'PUT', body: unknown): Promis
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
