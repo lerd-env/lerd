@@ -209,9 +209,26 @@ func TestWorkerBuilders_ForceColour(t *testing.T) {
 		t.Errorf("host worker guard should export the colour vars:\n%s", guard)
 	}
 
-	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work")
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work", nil)
 	if !strings.Contains(exec, "--env=FORCE_COLOR=1") {
 		t.Errorf("exec worker command should pass the colour vars:\n%s", exec)
+	}
+	if !strings.HasSuffix(exec, "lerd-php84-fpm php artisan queue:work") {
+		t.Errorf("exec worker command should end with container and command:\n%s", exec)
+	}
+}
+
+// The worker's own env has to land before the container name, or podman reads
+// it as part of the command instead of as a flag.
+func TestBuildWorkerExecCommand_EnvArgsPrecedeContainer(t *testing.T) {
+	exec := buildWorkerExecCommand("/usr/bin/podman", "/site", "lerd-php84-fpm", "php artisan queue:work",
+		[]string{"--env=CHOKIDAR_INTERVAL=2000"})
+
+	if !strings.Contains(exec, "--env=CHOKIDAR_INTERVAL=2000") {
+		t.Fatalf("exec worker command should carry the env args:\n%s", exec)
+	}
+	if strings.Index(exec, "--env=CHOKIDAR_INTERVAL=2000") > strings.Index(exec, "lerd-php84-fpm") {
+		t.Errorf("env args must come before the container name:\n%s", exec)
 	}
 	if !strings.HasSuffix(exec, "lerd-php84-fpm php artisan queue:work") {
 		t.Errorf("exec worker command should end with container and command:\n%s", exec)

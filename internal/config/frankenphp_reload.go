@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
+	"github.com/geodro/lerd/internal/power"
 	"github.com/geodro/lerd/internal/wsl"
 )
 
@@ -20,6 +22,50 @@ func WatcherNeedsPolling(sitePath string) bool {
 		return true
 	}
 	return wsl.IsWSL() && strings.HasPrefix(sitePath, "/mnt/")
+}
+
+// watcherPollIntervalMS is how often a polling reload watcher re-stats each
+// watched file while the machine is plugged in. chokidar's own default is
+// 100ms, which is fine on a local disk and ruinous on a shared one: every
+// watched file becomes ten host round trips a second. On macOS that traffic
+// crosses virtiofs and is served by the VM process, which is where the cost
+// lands (measured at roughly 280 virtiofs requests per second for a single
+// site, holding the VM process near 30% CPU on an otherwise idle machine). A
+// second between passes keeps reload feeling immediate for a worker that takes
+// longer than that to restart anyway.
+const watcherPollIntervalMS = 1000
+
+// watcherPollIntervalFor scales the base interval by how much the host has
+// asked lerd to hold back. Waking the disk to stat a few hundred files is
+// exactly the kind of background work a laptop on battery can do without, and
+// Low Power Mode is an explicit request for less of it, so it backs off twice
+// as far again.
+func watcherPollIntervalFor(state power.State) int {
+	switch state {
+	case power.LowPower:
+		return watcherPollIntervalMS * 4
+	case power.Battery:
+		return watcherPollIntervalMS * 2
+	default:
+		return watcherPollIntervalMS
+	}
+}
+
+// WatcherPollEnv returns the KEY=VALUE environment assignment that loosens a
+// polling reload watcher, or an empty string when the watcher is not polling
+// and the default event-driven path applies. chokidar honours CHOKIDAR_INTERVAL
+// as a global override no matter how polling was switched on, so this tunes the
+// vendored Octane and Horizon watcher scripts without patching them.
+//
+// The value is resolved when the worker's unit is written, so a machine that
+// changes power state picks up the new cadence on the next worker start rather
+// than immediately: the interval is baked into the running watcher's
+// environment and chokidar reads it only once, at startup.
+func WatcherPollEnv(sitePath string) string {
+	if !WatcherNeedsPolling(sitePath) {
+		return ""
+	}
+	return "CHOKIDAR_INTERVAL=" + strconv.Itoa(watcherPollIntervalFor(power.Current()))
 }
 
 // ProjectHasChokidar reports whether the chokidar npm package, required by the

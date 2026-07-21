@@ -264,6 +264,30 @@ func watcherNeedsPolling(sitePath string) bool {
 	return config.WatcherNeedsPolling(sitePath)
 }
 
+// workerExecEnvArgs returns the `--env=` flags a worker's `podman exec` needs.
+// Currently that is the reload watcher's poll interval, which only applies where
+// the watcher has to poll; everywhere else this is empty and the command is
+// unchanged. Setting it unconditionally on the polling hosts is harmless for
+// workers that run no watcher, since nothing else reads the variable.
+func workerExecEnvArgs(sitePath string) []string {
+	env := config.WatcherPollEnv(sitePath)
+	if env == "" {
+		return nil
+	}
+	return []string{"--env=" + env}
+}
+
+// workerExecEnvFlags is workerExecEnvArgs rendered for the unit templates, with
+// a leading space so it can be interpolated straight into the command. Mirrors
+// workerColorArgs, which splices the same way for the colour flags.
+func workerExecEnvFlags(sitePath string) string {
+	args := workerExecEnvArgs(sitePath)
+	if len(args) == 0 {
+		return ""
+	}
+	return " " + strings.Join(args, " ")
+}
+
 // projectHasChokidar reports whether the chokidar package, required by the
 // reload command's file watcher, is installed in the project. Delegates to
 // config.ProjectHasChokidar.
