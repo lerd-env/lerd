@@ -713,6 +713,7 @@
   "debug_enable": "启用捕获",
   "debug_waiting_title": "等待中…",
   "debug_waiting_body": "在你的应用中触发一些活动，它就会显示在这里。",
+  "debug_loadMore": "加载更多 · 共 {total} 条，已显示 {shown} 条",
   "views_data": "数据",
   "views_template": "模板",
   "queries_searchPlaceholder": "搜索 SQL、路径或文件…",

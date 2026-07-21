@@ -713,6 +713,7 @@
   "debug_enable": "Włącz przechwytywanie",
   "debug_waiting_title": "Oczekiwanie…",
   "debug_waiting_body": "Wywołaj jakąś aktywność w swojej aplikacji, a pojawi się tutaj.",
+  "debug_loadMore": "Załaduj więcej · {shown} z {total}",
   "views_data": "dane",
   "views_template": "szablon",
   "queries_searchPlaceholder": "Szukaj SQL, ścieżki lub pliku…",

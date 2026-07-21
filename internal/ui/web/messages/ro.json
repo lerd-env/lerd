@@ -713,6 +713,7 @@
   "debug_enable": "Activează captura",
   "debug_waiting_title": "Se așteaptă…",
   "debug_waiting_body": "Declanșează ceva activitate în aplicația ta și va apărea aici.",
+  "debug_loadMore": "Încarcă mai multe · {shown} din {total}",
   "views_data": "date",
   "views_template": "șablon",
   "queries_searchPlaceholder": "Caută SQL, cale sau fișier…",

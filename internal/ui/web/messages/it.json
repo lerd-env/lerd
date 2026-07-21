@@ -713,6 +713,7 @@
   "debug_enable": "Abilita cattura",
   "debug_waiting_title": "In attesa…",
   "debug_waiting_body": "Attiva qualche attività nella tua app e comparirà qui.",
+  "debug_loadMore": "Carica altri · {shown} di {total}",
   "views_data": "dati",
   "views_template": "template",
   "queries_searchPlaceholder": "Cerca SQL, percorso o file…",

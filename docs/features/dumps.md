@@ -21,7 +21,7 @@ The receiver's transport depends on the host:
 - **Linux** — a per-user Unix socket bound by `lerd-ui` at `~/.local/share/lerd/run/lerd-dumps.sock`. PHP-FPM containers reach it via the existing `%h:%h` bind mount. No host TCP listener, no LAN exposure.
 - **macOS** — TCP loopback `127.0.0.1:9913`. Unix sockets don't traverse the podman-machine virtio-fs boundary as functional sockets, so FPM senders inside the VM reach `lerd-ui` on the host via `host.containers.internal:9913` (gvproxy forwards that upstream).
 
-`lerd-ui` keeps a 500-event in-memory ring as the receiver buffer and replays it to each newly-connecting client; the open dashboard then accumulates the full session on top of that replay, so events stay visible until you refresh the page rather than scrolling out as new traffic arrives. Events fan out to four surfaces:
+`lerd-ui` keeps a 500-event in-memory ring as the receiver buffer and replays it to each newly-connecting client; the open dashboard then accumulates the full session on top of that replay, so events stay visible until you refresh the page rather than scrolling out as new traffic arrives. Because that buffer grows well past what any browser wants to paint at once, every Debug lens renders the newest 100 rows and loads the next 100 as you reach the end of the list, automatically on scroll or via the button at the bottom. Group headers keep reporting the request's real size even when its rows are still partly windowed, and changing a filter or search starts the window over. Events fan out to four surfaces:
 
 - **Web dashboard** — three places:
   - Each site detail pane has a **Dumps** tab next to Overview and Tinker, pre-filtered to that site.

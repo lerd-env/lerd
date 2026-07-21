@@ -713,6 +713,7 @@
   "debug_enable": "Bật bắt giữ",
   "debug_waiting_title": "Đang chờ…",
   "debug_waiting_body": "Kích hoạt một số hoạt động trong ứng dụng của bạn và nó sẽ xuất hiện ở đây.",
+  "debug_loadMore": "Tải thêm · {shown} trên {total}",
   "views_data": "dữ liệu",
   "views_template": "mẫu",
   "queries_searchPlaceholder": "Tìm SQL, đường dẫn hoặc tệp…",

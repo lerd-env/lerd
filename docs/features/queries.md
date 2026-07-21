@@ -66,7 +66,7 @@ Beyond queries, the same adapter feeds additional Debug sub-tabs:
 - **Events** *(Laravel)* — application and package events dispatched (framework-internal `Illuminate\*` events are filtered out).
 - **HTTP** *(Laravel)* — outgoing requests made via Laravel's HTTP client (method, URL, status), so third-party API calls are visible the way queries are.
 
-Each lens groups per request/job, shows the originating app frame with the stack trace and editor links, and is filterable by site and worker command.
+Each lens groups per request/job, shows the originating app frame with the stack trace and editor links, and is filterable by site and worker command. All of them render the newest 100 rows and load the next 100 as you reach the end, so a worker that has been running all afternoon doesn't put thousands of rows on screen at once.
 
 ## Framework coverage (agnostic seams)
 
