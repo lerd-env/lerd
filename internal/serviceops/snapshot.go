@@ -52,6 +52,14 @@ const (
 	mysqldumpFlags   = "--single-transaction --quick --no-tablespaces --routines --triggers --events"
 )
 
+// The mariadb images ship mariadb/mariadb-dump and no mysql-named binaries, so
+// every mysql-family command resolves its tool in the container rather than
+// spelling one of the two names.
+const (
+	mysqlDumpBin   = "$(command -v mysqldump || command -v mariadb-dump)"
+	mysqlClientBin = "$(command -v mysql || command -v mariadb)"
+)
+
 // reservedSnapshotName flags snapshot names that collide with command verbs,
 // catching mistakes like `lerd db snapshot list` (which would otherwise create
 // a snapshot literally named "list" instead of listing).
@@ -135,7 +143,7 @@ func snapshotEnv(family string) []string {
 func snapshotDumpCommand(t SnapshotTarget) (string, error) {
 	switch t.Family {
 	case "mysql", "mariadb":
-		bin := "$(command -v mysqldump || command -v mariadb-dump)"
+		bin := mysqlDumpBin
 		args := "-uroot " + mysqldumpFlags
 		if t.AllDatabases {
 			// --add-drop-database makes the dump self-cleaning so an
@@ -160,7 +168,7 @@ func snapshotDumpCommand(t SnapshotTarget) (string, error) {
 func snapshotRestoreCommand(t SnapshotTarget) (string, error) {
 	switch t.Family {
 	case "mysql", "mariadb":
-		bin := "$(command -v mysql || command -v mariadb) --max-allowed-packet=" + config.MySQLImportMaxPacket
+		bin := mysqlClientBin + " --max-allowed-packet=" + config.MySQLImportMaxPacket
 		if t.AllDatabases {
 			return "gunzip -c | " + bin + " -uroot", nil
 		}

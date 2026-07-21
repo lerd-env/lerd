@@ -33,39 +33,51 @@ type dbEngineResponse struct {
 }
 
 // dbEntryResponse is a single database and the snapshots taken of it. Site is
-// the domain of the linked site that owns the database, when one does.
+// the domain of the linked site that owns the database, when one does, and
+// Branch names the worktree when the database is that branch's isolated one.
 type dbEntryResponse struct {
 	Name      string                `json:"name"`
 	SizeBytes int64                 `json:"size_bytes"`
 	Site      string                `json:"site,omitempty"`
+	Branch    string                `json:"branch,omitempty"`
 	Snapshots []serviceops.Snapshot `json:"snapshots"`
 }
 
-// databaseSiteIndex maps each database name in the given engine to the domain of
-// the site that owns it, read from sites' .env DB_DATABASE. A "<db>_testing"
-// database maps to the same site as "<db>", so both link to the same place.
-// When a group shares one database across a main site and its secondaries, the
-// database belongs to the group main, so a secondary that merely shares it never
-// wins over the main.
-func databaseSiteIndex(service string) map[string]string {
+// dbOwner is the site a database belongs to: the parent site's domain, plus the
+// worktree branch when the database is that branch's isolated one. The branch is
+// what turns "astrolov_staging" into staging.astrolov.test in the UI.
+type dbOwner struct {
+	domain string
+	branch string
+}
+
+// databaseSiteIndex maps each database name in the given engine to the site that
+// owns it, read from sites' .env DB_DATABASE and from the isolated databases
+// worktrees have registered. A "<db>_testing" database maps to the same owner as
+// "<db>", so both link to the same place. When a group shares one database across
+// a main site and its secondaries, the database belongs to the group main, so a
+// secondary that merely shares it never wins over the main.
+func databaseSiteIndex(service string) map[string]dbOwner {
 	reg, err := config.LoadSites()
 	if err != nil {
 		return nil
 	}
-	idx := map[string]string{}
+	idx := map[string]dbOwner{}
 	// authoritative[db] is true once db is claimed by a site that owns it rather
 	// than a secondary sharing the group's database.
 	authoritative := map[string]bool{}
-	claim := func(db, domain string, owns bool) {
+	claim := func(db string, owner dbOwner, owns bool) {
 		if _, seen := idx[db]; !seen || (!authoritative[db] && owns) {
-			idx[db] = domain
+			idx[db] = owner
 			authoritative[db] = owns
 		}
 	}
+	domains := map[string]string{}
 	for _, s := range reg.Sites {
 		if s.Ignored {
 			continue
 		}
+		domains[s.Name] = s.PrimaryDomain()
 		envPath := filepath.Join(s.Path, ".env")
 		host := strings.TrimSpace(envfile.ReadKey(envPath, "DB_HOST"))
 		if strings.TrimPrefix(host, "lerd-") != service {
@@ -76,9 +88,22 @@ func databaseSiteIndex(service string) map[string]string {
 			continue
 		}
 		owns := !(s.IsGroupSecondary() && s.GroupSharedDB)
-		domain := s.PrimaryDomain()
-		claim(db, domain, owns)
-		claim(db+"_testing", domain, owns)
+		owner := dbOwner{domain: s.PrimaryDomain()}
+		claim(db, owner, owns)
+		claim(db+"_testing", owner, owns)
+	}
+	entries, err := config.LoadWorktreeDBRegistry()
+	if err != nil {
+		return idx
+	}
+	for _, e := range entries {
+		domain := domains[e.Site]
+		if e.Service != service || e.DBName == "" || domain == "" {
+			continue
+		}
+		owner := dbOwner{domain: domain, branch: e.Branch}
+		claim(e.DBName, owner, true)
+		claim(e.DBName+"_testing", owner, true)
 	}
 	return idx
 }
@@ -142,10 +167,12 @@ func databaseEngine(name string) dbEngineResponse {
 	}
 	siteIndex := databaseSiteIndex(name)
 	for _, db := range dbs {
+		owner := siteIndex[db.Name]
 		entry := dbEntryResponse{
 			Name:      db.Name,
 			SizeBytes: db.SizeBytes,
-			Site:      siteIndex[db.Name],
+			Site:      owner.domain,
+			Branch:    owner.branch,
 			Snapshots: []serviceops.Snapshot{},
 		}
 		if sqlOps {
