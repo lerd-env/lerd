@@ -593,7 +593,13 @@ type StatusResponse struct {
 	// Workspaces are the configured workspace names in display order, empty
 	// ones included, so the sidebar can render a section the user just created.
 	Workspaces []string `json:"workspaces"`
+	// Instance identifies this lerd-ui process. An open dashboard reloads when
+	// it changes, so a restarted server never leaves a stale page behind.
+	Instance string `json:"instance"`
 }
+
+// serverInstance identifies this lerd-ui process for the lifetime of the run.
+var serverInstance = strconv.FormatInt(time.Now().UnixNano(), 36)
 
 type DNSStatus struct {
 	OK      bool   `json:"ok"`
@@ -682,6 +688,7 @@ func buildStatus() StatusResponse {
 		FrankenPHPVersions: config.FrankenPHPVersions(),
 		Home:               homeDir,
 		Workspaces:         workspaces,
+		Instance:           serverInstance,
 	}
 }
 
