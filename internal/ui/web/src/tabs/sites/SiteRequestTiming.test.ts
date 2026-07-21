@@ -56,7 +56,7 @@ import { m } from '../../paraglide/messages.js';
 describe('SiteRequestTiming Recent list', () => {
   it('renders same-millisecond, same-URI rows without a duplicate-key crash', async () => {
     const { getByRole, findByText, getAllByText } = render(SiteRequestTiming, {
-      props: { site: { domain: 'whitewaters' } }
+      props: { site: { domain: 'whitewaters', can_profile: true } }
     });
 
     // Wait for the loaded view, then switch to the Recent tab.
@@ -77,6 +77,7 @@ describe('SiteRequestTiming on a worktree', () => {
   const site = {
     domain: 'whitewaters.test',
     tls: true,
+    can_profile: true,
     worktrees: [{ branch: 'feature-x', domain: 'feature-x.whitewaters.test' }]
   };
 
@@ -108,7 +109,7 @@ describe('SiteRequestTiming on a worktree', () => {
 // A localhost site is served over plain HTTP (no mkcert cert), so profiling a
 // route must open http://, not https:// which throws a certificate error.
 describe('SiteRequestTiming on a localhost site', () => {
-  const site = { domain: 'whitewaters.localhost' };
+  const site = { domain: 'whitewaters.localhost', can_profile: true };
 
   it('profiles routes over http on an unsecured localhost site', async () => {
     loadSiteAnalytics.mockClear();
@@ -121,5 +122,19 @@ describe('SiteRequestTiming on a localhost site', () => {
     await waitFor(() => {
       expect(opened.location.href).toBe('http://whitewaters.localhost/reports/7');
     });
+  });
+});
+
+// SPX lives in the FPM image, so a site served by FrankenPHP, a custom container
+// or a host-proxy dev server has nothing to profile. The slow routes still read,
+// they just aren't a profile trigger.
+describe('SiteRequestTiming on a site SPX cannot profile', () => {
+  it('lists the slow route without making it clickable', async () => {
+    const { findAllByText, queryByRole } = render(SiteRequestTiming, {
+      props: { site: { domain: 'nuxtapp.test', can_profile: false } }
+    });
+
+    await findAllByText('/reports/:id');
+    expect(queryByRole('button', { name: /GET.*\/reports\/:id/ })).toBeNull();
   });
 });

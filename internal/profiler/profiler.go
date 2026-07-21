@@ -12,6 +12,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
+	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteops"
 )
 
@@ -76,6 +77,27 @@ func ClearData() (int, error) {
 	return removed, nil
 }
 
+// Profilable reports whether a site's requests can be profiled at all: SPX
+// lives in the FPM image, so it takes a PHP site served by FPM. FrankenPHP
+// serves PHP from its own image without the extension, and custom-container
+// and host-proxy sites run no PHP of lerd's. The dashboard gates its
+// profile-this-route action on the same rule the vhost rewrite uses.
+func Profilable(s config.Site) bool {
+	return ProfilableSite(s, phpPkg.SiteUsesPHP(s))
+}
+
+// ProfilableSite is Profilable for callers that already know whether the site
+// is a PHP project, so the detection isn't repeated against the disk.
+func ProfilableSite(s config.Site, usesPHP bool) bool {
+	return servedByFPM(s) && usesPHP
+}
+
+// servedByFPM reports whether a site's requests go through an FPM vhost, the
+// one place the SPX cookie can be injected.
+func servedByFPM(s config.Site) bool {
+	return !s.IsCustomContainer() && !s.IsFrankenPHP() && !s.IsHostProxy()
+}
+
 // regenerateVhosts rewrites the vhost of every active PHP-FPM site so the
 // SPX_ENABLED injection reflects the current toggle. Paused, ignored,
 // custom-container and FrankenPHP sites are skipped: they have no FPM vhost
@@ -87,7 +109,7 @@ func regenerateVhosts() error {
 	}
 	for i := range reg.Sites {
 		s := reg.Sites[i]
-		if s.Ignored || s.Paused || s.IsCustomContainer() || s.IsFrankenPHP() || s.IsHostProxy() {
+		if s.Ignored || s.Paused || !servedByFPM(s) {
 			continue
 		}
 		if err := siteops.RegenerateSiteVhost(&s, s.PrimaryDomain()); err != nil {

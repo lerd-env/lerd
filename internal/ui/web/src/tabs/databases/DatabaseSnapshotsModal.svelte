@@ -5,7 +5,7 @@
   import { tooltip } from '$lib/tooltip';
   import { formatBytes } from '$lib/bytes';
   import { parseSnapshotTimestamp, snapshotBaseName } from '$lib/snapshots';
-  import { snapshotExportUrl, type Snapshot } from '$stores/databases';
+  import { snapshotExportUrl, type ImportIssue, type Snapshot } from '$stores/databases';
   import {
     takeSnapshot,
     restoreSnapshot,
@@ -13,7 +13,17 @@
     type DatabaseEngine,
     type DatabaseEntry
   } from '$stores/databases';
+  import DatabaseOpStatus from './DatabaseOpStatus.svelte';
+  import ImportIssuesModal from './ImportIssuesModal.svelte';
   import { m } from '../../paraglide/messages.js';
+
+  type Result = {
+    ok: boolean;
+    error?: string;
+    errors?: number;
+    issues?: ImportIssue[];
+    omitted?: number;
+  };
 
   interface Props {
     engine: DatabaseEngine;
@@ -24,7 +34,17 @@
 
   let name = $state('');
   let busy = $state('');
-  let error = $state('');
+  // The running or last-finished operation, so a restore that takes a while
+  // says what it is doing instead of only spinning on its button.
+  let status = $state<{
+    tone: 'busy' | 'done' | 'warn' | 'error';
+    message: string;
+    issues?: ImportIssue[];
+    omitted?: number;
+  } | null>(null);
+  let showIssues = $state(false);
+  let clearDone: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(clearDone));
   // The snapshot + action pending confirmation. Restore overwrites data and
   // delete is irreversible, so each takes a second click.
   let confirmName = $state('');
@@ -55,36 +75,71 @@
     onclose();
   }
 
-  async function take() {
-    busy = 'take';
-    error = '';
-    const res = await takeSnapshot(engine.service, entry.name, name.trim());
+  // run drives every snapshot operation through the same status line: running
+  // while it works, the engine's error when it fails, a confirmation when it
+  // lands that clears itself a few seconds later.
+  async function run(
+    key: string,
+    running: string,
+    done: string,
+    op: () => Promise<Result>,
+    warned?: (count: number) => string
+  ): Promise<boolean> {
+    busy = key;
+    status = { tone: 'busy', message: running };
+    const res = await op();
     busy = '';
     if (!res.ok) {
-      error = res.error || m.common_failed();
-      return;
+      status = { tone: 'error', message: res.error || m.common_failed() };
+      return false;
     }
-    name = '';
+    // A load the engine only half swallowed still comes back ok, so its counted
+    // complaints are what stands between that and a false all-clear.
+    if (res.errors && warned) {
+      status = { tone: 'warn', message: warned(res.errors), issues: res.issues, omitted: res.omitted };
+      showIssues = (res.issues ?? []).length > 0;
+      return true;
+    }
+    status = { tone: 'done', message: done };
+    clearTimeout(clearDone);
+    clearDone = setTimeout(() => {
+      if (status?.tone === 'done' && status.message === done) status = null;
+    }, 4000);
+    return true;
+  }
+
+  async function take() {
+    const label = name.trim();
+    const ok = await run(
+      'take',
+      m.databases_takingSnapshot({ name: entry.name }),
+      m.databases_snapshotTaken(),
+      () => takeSnapshot(engine.service, entry.name, label)
+    );
+    if (ok) name = '';
   }
 
   async function restore(snapshot: string) {
-    busy = snapshot;
-    error = '';
-    const res = await restoreSnapshot(engine.service, entry.name, snapshot);
-    busy = '';
+    await run(
+      snapshot,
+      m.databases_restoring({ name: snapshotBaseName(snapshot) }),
+      m.databases_restored({ name: snapshotBaseName(snapshot) }),
+      () => restoreSnapshot(engine.service, entry.name, snapshot),
+      (count) => m.databases_restoredWithErrors({ name: snapshotBaseName(snapshot), count })
+    );
     confirmName = '';
     confirmAction = '';
-    if (!res.ok) error = res.error || m.common_failed();
   }
 
   async function remove(snapshot: string) {
-    busy = snapshot;
-    error = '';
-    const res = await deleteSnapshot(engine.service, entry.name, snapshot);
-    busy = '';
+    await run(
+      snapshot,
+      m.databases_deletingSnapshot({ name: snapshotBaseName(snapshot) }),
+      m.databases_snapshotDeleted({ name: snapshotBaseName(snapshot) }),
+      () => deleteSnapshot(engine.service, entry.name, snapshot)
+    );
     confirmName = '';
     confirmAction = '';
-    if (!res.ok) error = res.error || m.common_failed();
   }
 </script>
 
@@ -101,8 +156,16 @@
       </DetailButton>
     </div>
 
-    {#if error}
-      <p class="text-xs text-red-500">{error}</p>
+    {#if status}
+      <DatabaseOpStatus tone={status.tone} message={status.message}>
+        {#if status.tone === 'warn' && (status.issues ?? []).length > 0}
+          <button
+            type="button"
+            onclick={() => (showIssues = true)}
+            class="text-xs underline text-amber-600 dark:text-amber-400 hover:no-underline"
+          >{m.databases_importIssuesLink()}</button>
+        {/if}
+      </DatabaseOpStatus>
     {/if}
 
     {#if snapshots.length === 0}
@@ -164,3 +227,12 @@
     <DetailButton onclick={safeClose} disabled={Boolean(busy)}>{m.common_cancel()}</DetailButton>
   {/snippet}
 </Modal>
+
+{#if showIssues && status?.issues}
+  <ImportIssuesModal
+    title={status.message}
+    issues={status.issues}
+    omitted={status.omitted}
+    onclose={() => (showIssues = false)}
+  />
+{/if}

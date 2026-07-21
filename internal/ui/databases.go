@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"path/filepath"
 	"sort"
@@ -254,12 +255,21 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 }
 
 // dbActionResponse is the shared {ok,error} envelope the databases store reads.
+// A load that the engine only half swallowed still comes back ok, carrying what
+// it complained about, since psql exits clean either way.
 type dbActionResponse struct {
-	OK    bool   `json:"ok"`
-	Error string `json:"error,omitempty"`
+	OK      bool                     `json:"ok"`
+	Error   string                   `json:"error,omitempty"`
+	Errors  int                      `json:"errors,omitempty"`
+	Issues  []serviceops.ImportIssue `json:"issues,omitempty"`
+	Omitted int                      `json:"omitted,omitempty"`
 }
 
 func writeDBOK(w http.ResponseWriter) { writeJSON(w, dbActionResponse{OK: true}) }
+
+func writeDBReport(w http.ResponseWriter, rep serviceops.ImportReport) {
+	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues, Omitted: rep.Omitted})
+}
 func writeDBError(w http.ResponseWriter, m string) {
 	writeJSON(w, dbActionResponse{OK: false, Error: m})
 }
@@ -339,11 +349,12 @@ func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service strin
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
-	if err := serviceops.RestoreSnapshot(target, name, nil); err != nil {
+	rep, err := serviceops.RestoreSnapshot(target, name, nil)
+	if err != nil {
 		writeDBError(w, err.Error())
 		return
 	}
-	writeDBOK(w)
+	writeDBReport(w, rep)
 }
 
 func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string) {
@@ -402,22 +413,52 @@ func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string
 	}
 }
 
-// handleDatabaseImport loads an uploaded SQL dump into ?database=<name>. The
-// upload is streamed into the engine, so a large dump never buffers on disk.
+// handleDatabaseImport loads an uploaded SQL dump into the database named by the
+// form. The parts are walked by hand rather than through ParseMultipartForm,
+// which would read the whole request first and spill a large dump to a temp
+// file; here the body is read only as fast as the engine swallows it, which is
+// what makes the browser's upload progress the progress of the load itself.
 func handleDatabaseImport(w http.ResponseWriter, r *http.Request, service string) {
-	database := strings.TrimSpace(r.FormValue("database"))
-	if !requireDatabaseName(w, database) {
-		return
-	}
-	file, _, err := r.FormFile("file")
+	parts, err := r.MultipartReader()
 	if err != nil {
 		writeDBError(w, "a dump file is required")
 		return
 	}
-	defer file.Close()
-	if err := serviceops.ImportDatabase(service, database, file); err != nil {
-		writeDBError(w, err.Error())
+	database := ""
+	for {
+		part, err := parts.NextPart()
+		if err != nil {
+			writeDBError(w, "a dump file is required")
+			return
+		}
+		if part.FormName() == "database" {
+			name, err := io.ReadAll(io.LimitReader(part, 1024))
+			part.Close()
+			if err != nil {
+				writeDBError(w, "a database name is required")
+				return
+			}
+			database = strings.TrimSpace(string(name))
+			continue
+		}
+		if part.FormName() != "file" {
+			part.Close()
+			continue
+		}
+		if !requireDatabaseName(w, database) {
+			part.Close()
+			return
+		}
+		rep, err := serviceops.ImportDatabase(service, database, part)
+		// Whatever the engine left unread is drained so the client still gets the
+		// response instead of a reset connection.
+		_, _ = io.Copy(io.Discard, part)
+		part.Close()
+		if err != nil {
+			writeDBError(w, err.Error())
+			return
+		}
+		writeDBReport(w, rep)
 		return
 	}
-	writeDBOK(w)
 }

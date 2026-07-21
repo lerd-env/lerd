@@ -951,7 +951,10 @@ func RewriteFPMQuadlets() error {
 		if writeErr != nil {
 			continue
 		}
-		if changed {
+		// An unchanged file is not proof the container has the mounts: an
+		// earlier writer in the same run may have written them without ever
+		// restarting the unit (#914).
+		if changed || UnitMissingMounts(unitName, extraPaths) {
 			changedUnits = append(changedUnits, unitName)
 		}
 	}
@@ -959,8 +962,10 @@ func RewriteFPMQuadlets() error {
 	// Also rewrite nginx quadlet with the same extra volumes.
 	if nginxContent, err := GetQuadletTemplate("lerd-nginx.container"); err == nil {
 		nginxContent = InjectExtraVolumes(nginxContent, extraPaths)
-		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil && changed {
-			changedUnits = append(changedUnits, "lerd-nginx")
+		if changed, err := WriteQuadletDiff("lerd-nginx", nginxContent); err == nil {
+			if changed || UnitMissingMounts("lerd-nginx", extraPaths) {
+				changedUnits = append(changedUnits, "lerd-nginx")
+			}
 		}
 	}
 
@@ -1212,6 +1217,17 @@ func EnsurePathMounted(path, phpVersion string) {
 		quadlets = append(quadlets, quadletInfo{unitName, filepath.Join(config.QuadletDir(), unitName+".container")})
 	}
 	quadlets = append(quadlets, quadletInfo{"lerd-nginx", filepath.Join(config.QuadletDir(), "lerd-nginx.container")})
+	// Custom-FPM sites serve from their own container, so an out-of-home path
+	// has to reach that quadlet too, not just the shared per-version ones.
+	if reg, regErr := config.LoadSites(); regErr == nil {
+		for i := range reg.Sites {
+			if !reg.Sites[i].IsCustomFPM() {
+				continue
+			}
+			unitName := CustomFPMContainerName(reg.Sites[i].Name)
+			quadlets = append(quadlets, quadletInfo{unitName, filepath.Join(config.QuadletDir(), unitName+".container")})
+		}
+	}
 
 	var changedUnits []string
 	for _, q := range quadlets {
@@ -1222,6 +1238,12 @@ func EnsurePathMounted(path, phpVersion string) {
 
 		volumePrefix := fmt.Sprintf("Volume=%s:%s:", path, path)
 		if strings.Contains(string(existing), volumePrefix) {
+			// The quadlet is already right, but writing one never touches a
+			// running container: whoever wrote this line may have left the
+			// container running without the mount (#914).
+			if UnitMissingMounts(q.unitName, []string{path}) {
+				changedUnits = append(changedUnits, q.unitName)
+			}
 			continue
 		}
 

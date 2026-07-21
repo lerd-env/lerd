@@ -31,6 +31,7 @@
   import Dropdown from '$components/Dropdown.svelte';
   import ToggleButton from '$components/ToggleButton.svelte';
   import { tooltip } from '$lib/tooltip';
+  import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -107,7 +108,7 @@
     dbBusy = true;
     try {
       const res = await setWorktreeDBIsolated(site.domain, activeWorktreeBranch, false);
-      if (!res.ok) alert(m.sites_controls_dbToggleFailed({ error: res.error || '' }));
+      if (!res.ok) openErrorModal(m.sites_controls_dbToggleFailed({ error: res.error || '' }));
       await loadSites();
     } finally {
       dbBusy = false;
@@ -118,7 +119,7 @@
     dbBusy = true;
     try {
       const res = await setWorktreeDBIsolated(site.domain, activeWorktreeBranch, true, source);
-      if (!res.ok) alert(m.sites_controls_dbIsolateFailed({ error: res.error || '' }));
+      if (!res.ok) openErrorModal(m.sites_controls_dbIsolateFailed({ error: res.error || '' }));
       await loadSites();
     } finally {
       dbBusy = false;
@@ -211,7 +212,7 @@
     try {
       const r = await setHorizonReload(site, desired);
       if (!r.ok) {
-        alert(m.sites_controls_horizonReloadFailed({ error: r.error || '' }));
+        openErrorModal(m.sites_controls_horizonReloadFailed({ error: r.error || '' }));
         return;
       }
       await Promise.all([loadSites(), loadServices()]);
@@ -247,7 +248,7 @@
     try {
       const r = await setOctaneReload(site, desired);
       if (!r.ok) {
-        alert(m.sites_controls_octaneReloadFailed({ error: r.error || '' }));
+        openErrorModal(m.sites_controls_octaneReloadFailed({ error: r.error || '' }));
         return;
       }
       await Promise.all([loadSites(), loadServices()]);
@@ -270,7 +271,7 @@
     versionBusy = true;
     try {
       const r = await setSiteVersion(site, 'php', v, activeWorktreeBranch);
-      if (!r.ok) alert(m.sites_controls_versionChangeFailed({ error: r.error || '' }));
+      if (!r.ok) openErrorModal(m.sites_controls_versionChangeFailed({ error: r.error || '' }));
       await loadSites();
     } finally {
       versionBusy = false;
@@ -282,7 +283,7 @@
     versionBusy = true;
     try {
       const r = await setSiteVersion(site, 'node', v, activeWorktreeBranch);
-      if (!r.ok) alert(m.sites_controls_versionChangeFailed({ error: r.error || '' }));
+      if (!r.ok) openErrorModal(m.sites_controls_versionChangeFailed({ error: r.error || '' }));
       await loadSites();
     } finally {
       versionBusy = false;
