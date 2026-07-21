@@ -49,9 +49,11 @@ export const activity = writable<ActivityEvent[]>([]);
 // `now` ticks every 30s so relative timestamps re-render without per-event
 // timers. The interval is armed by the first subscriber and cleared when the
 // last one goes away, so it runs only while a view showing relative times is
-// mounted rather than for the lifetime of the page.
+// mounted rather than for the lifetime of the page. Each subscriber reads the
+// wall clock on arrival, since the store holds a stale value while stopped.
 export const now = writable<number>(Date.now(), (set) => {
   if (typeof window === 'undefined') return;
+  set(Date.now());
   const id = setInterval(() => set(Date.now()), 30000);
   return () => clearInterval(id);
 });

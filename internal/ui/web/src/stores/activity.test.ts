@@ -275,4 +275,20 @@ describe('now clock', () => {
     vi.advanceTimersByTime(120_000);
     expect(seen.length).toBe(afterUnsub);
   });
+
+  // The dashboard tab unmounts when another tab is open, so the clock stops
+  // and holds whatever it read last. Without a read on subscribe the list
+  // renders against that frozen value for up to 30s on the way back, ageing
+  // every event by however long the user was away.
+  it('reads the wall clock on subscribe, not the value it froze at', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(1_000_000));
+    now.subscribe(() => {})();
+
+    vi.setSystemTime(new Date(1_000_000 + 20 * 60_000));
+    let seen = 0;
+    now.subscribe((v) => (seen = v))();
+
+    expect(seen).toBe(Date.now());
+  });
 });
