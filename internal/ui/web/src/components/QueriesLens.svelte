@@ -20,6 +20,7 @@
   import Dropdown from '$components/Dropdown.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensGroupLabel from '$components/LensGroupLabel.svelte';
   import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { inlineBindings } from '$lib/sqlInline';
   import type { QueryRow } from '$stores/queries';
@@ -217,7 +218,7 @@
             {#if group.worker}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>
             {/if}
-            <span class="text-sm truncate">{group.label}</span>
+            <LensGroupLabel label={group.label} />
             {#if group.nPlusOne}
               <span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300">{m.queries_nplusone_badge()}</span>
             {/if}

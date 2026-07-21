@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { groupKey, sitePrefix } from './eventGroup';
+import { groupKey, groupLabel, labelString } from './eventGroup';
 import type { DumpEvent } from '$lib/dumpsStream';
 
 function ev(over: Partial<DumpEvent['ctx']> & { ts?: string } = {}): DumpEvent {
@@ -41,17 +41,35 @@ describe('groupKey', () => {
   });
 });
 
-describe('sitePrefix', () => {
-  it('tags the branch alongside the site', () => {
-    expect(sitePrefix(ev({ branch: 'feature-x' }), false)).toBe('[acme@feature-x] ');
+describe('groupLabel', () => {
+  it('returns site and branch as separate parts', () => {
+    expect(groupLabel(ev({ branch: 'feature-x' }), false)).toEqual({
+      site: 'acme',
+      branch: 'feature-x',
+      text: 'GET /checkout'
+    });
   });
 
-  it('is plain [site] with no branch', () => {
-    expect(sitePrefix(ev({ branch: '' }), false)).toBe('[acme] ');
+  it('drops the site but keeps the branch when the site prefix is hidden', () => {
+    expect(groupLabel(ev({ branch: 'feature-x' }), true)).toEqual({
+      site: '',
+      branch: 'feature-x',
+      text: 'GET /checkout'
+    });
   });
 
-  it('keeps the branch but drops the site when the site prefix is hidden', () => {
-    expect(sitePrefix(ev({ branch: 'feature-x' }), true)).toBe('[feature-x] ');
-    expect(sitePrefix(ev({ branch: '' }), true)).toBe('');
+  it('names the worker command when the event came from a worker process', () => {
+    expect(groupLabel(ev({ worker: 'queue:work' }), false).text).toBe('queue:work');
+  });
+
+  it('falls back to the pid for cli invocations', () => {
+    expect(groupLabel(ev({ type: 'cli', request: '' }), false).text).toBe('cli (pid 7)');
+  });
+
+  it('flattens back to the bracketed single-string form', () => {
+    expect(labelString(groupLabel(ev({ branch: 'feature-x' }), false))).toBe('[acme@feature-x] GET /checkout');
+    expect(labelString(groupLabel(ev({ branch: '' }), false))).toBe('[acme] GET /checkout');
+    expect(labelString(groupLabel(ev({ branch: 'feature-x' }), true))).toBe('[feature-x] GET /checkout');
+    expect(labelString(groupLabel(ev({ branch: '', site: '' }), false))).toBe('GET /checkout');
   });
 });

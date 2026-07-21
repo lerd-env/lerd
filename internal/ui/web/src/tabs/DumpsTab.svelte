@@ -20,6 +20,7 @@
   import EmptyState from '$components/EmptyState.svelte';
   import Dropdown from '$components/Dropdown.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensGroupLabel from '$components/LensGroupLabel.svelte';
   import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { m } from '../paraglide/messages.js';
 
@@ -175,7 +176,7 @@
       {#each win.pages as page (page.group.key)}
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
-            <span class="text-sm">{page.group.label}</span>
+            <LensGroupLabel label={page.group.label} />
             <span class="text-xs text-gray-400 ml-auto">{m.dumps_groupCount({ count: page.total })}</span>
           </header>
           {#each page.rows as ev (ev.id)}

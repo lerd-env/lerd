@@ -155,6 +155,15 @@ export function findSite(domain: string): Site | undefined {
   return get(sites).find((s) => s.domain === domain);
 }
 
+// siteDomainForName resolves a registered site name to the domain the hash
+// router keys sites by, mirroring siteDomainForRoute on the backend. Returns
+// '' when nothing matches, so callers can fall back to plain text instead of
+// linking to a route that doesn't exist.
+export function siteDomainForName(list: Site[], name: string): string {
+  if (!name) return '';
+  return list.find((s) => s.name === name)?.domain ?? '';
+}
+
 export function isGroupSecondary(s: Site): boolean {
   return Boolean(s.group) && Boolean(s.group_subdomain);
 }
