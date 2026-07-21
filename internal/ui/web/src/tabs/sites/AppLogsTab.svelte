@@ -10,6 +10,7 @@
   } from '$stores/appLogs';
   import Dropdown from '$components/Dropdown.svelte';
   import ClearAppLogsModal from './ClearAppLogsModal.svelte';
+  import { openErrorModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -47,7 +48,9 @@
     try {
       const r = await clearAppLogs(site.domain, branch);
       if (!r.ok) {
-        alert(m.sites_appLogs_clearFailed({ error: r.error || '' }));
+        // The confirmation closes first, or the failure stacks on top of it.
+        confirmOpen = false;
+        openErrorModal(m.sites_appLogs_clearFailed({ error: r.error || '' }));
         return;
       }
       await loadFiles();

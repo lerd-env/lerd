@@ -17,7 +17,34 @@ const worktreeSite = {
   worktrees: [{ branch: 'feat', domain: 'feat.app.test', path: '/home/u/Code/app-feat' }]
 } as unknown as Site;
 
+const hostProxySite = {
+  ...site,
+  php_version: '',
+  host_proxy: true,
+  host_port: 5173,
+  host_has_dev_server: true
+} as unknown as Site;
+
 describe('SiteHeader', () => {
+  it('offers a restart action for a host-proxy site running a dev server', () => {
+    const { getByLabelText } = render(Harness, { props: { site: hostProxySite } });
+
+    expect(getByLabelText('Restart dev server')).toBeInTheDocument();
+  });
+
+  it('has no dev-server restart action for a proxy-only site', () => {
+    const proxyOnly = { ...hostProxySite, host_has_dev_server: false } as unknown as Site;
+    const { queryByLabelText } = render(Harness, { props: { site: proxyOnly } });
+
+    expect(queryByLabelText('Restart dev server')).not.toBeInTheDocument();
+  });
+
+  it('has no dev-server restart action on a plain PHP site', () => {
+    const { queryByLabelText } = render(Harness, { props: { site } });
+
+    expect(queryByLabelText('Restart dev server')).not.toBeInTheDocument();
+  });
+
   it('puts the path on the tab row, to the right of the tabs', () => {
     const { getByText } = render(Harness, { props: { site } });
 

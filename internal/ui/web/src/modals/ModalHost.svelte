@@ -28,6 +28,7 @@
   import ConfirmTuningResetModal from './ConfirmTuningResetModal.svelte';
   import ConfirmSiteUnlinkModal from './ConfirmSiteUnlinkModal.svelte';
   import ConfirmServiceInstallModal from './ConfirmServiceInstallModal.svelte';
+  import ErrorModal from './ErrorModal.svelte';
 </script>
 
 {#if $modal.kind === 'domain' && $modal.site}
@@ -86,4 +87,6 @@
   <ConfirmSiteUnlinkModal />
 {:else if $modal.kind === 'serviceInstall' && $modal.serviceInstall}
   <ConfirmServiceInstallModal />
+{:else if $modal.kind === 'error' && $modal.error}
+  <ErrorModal />
 {/if}
