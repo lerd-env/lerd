@@ -1,5 +1,4 @@
 <script lang="ts">
-  import StatusPill from '$components/StatusPill.svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import LogViewer from '$components/LogViewer.svelte';
@@ -22,7 +21,6 @@
   const isDefault = $derived($status.php_default === version);
   const siteCount = $derived($sitesByPhp.get(version) ?? 0);
   const fpm = $derived($status.php_fpms.find((f) => f.version === version));
-  const patch = $derived(fpm?.patch || version);
   const running = $derived(Boolean(fpm?.running));
   const xdebugEnabled = $derived(Boolean(fpm?.xdebug_enabled));
   const xdebugMode = $derived<XdebugMode>((fpm?.xdebug_mode as XdebugMode) || 'debug');
@@ -126,9 +124,9 @@
     }
   }
 
-  const headerBusy = $derived(fpmBusy || defaultBusy);
+  const versionBusy = $derived(fpmBusy || defaultBusy);
 
-  const headerActions = $derived.by<ButtonMenuAction[]>(() => {
+  const versionActions = $derived.by<ButtonMenuAction[]>(() => {
     if (isDefault) return [];
     const acts: ButtonMenuAction[] = [];
     if (running) {
@@ -183,85 +181,70 @@
   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
 {/snippet}
 
-<div
-  class="flex flex-wrap items-center justify-between gap-y-2 px-3 py-3 border-b border-gray-100 dark:border-lerd-border shrink-0"
->
-  <div class="flex items-center gap-3 flex-wrap">
-    <span class="flex items-center gap-1.5">
-      <span class="font-mono text-lg font-semibold tabular-nums tracking-tight text-gray-900 dark:text-gray-100">PHP {patch}</span>
-      {#if isDefault}
-        <svg class="w-4 h-4 text-lerd-red" fill="currentColor" viewBox="0 0 20 20" aria-label={m.common_default()}>
-          <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78L1.58 7.62l5.82-.85L10 1.5z" />
+{#snippet detailActions()}
+  <div bind:this={xdebugRootEl} class="relative inline-flex">
+    <button
+      type="button"
+      onclick={onToggleXdebug}
+      disabled={xdebugBusy}
+      aria-pressed={xdebugEnabled}
+      title={xdebugEnabled ? 'Disable Xdebug' : 'Enable Xdebug'}
+      class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 {xdebugEnabled
+        ? 'rounded-l-lg border-r-0 bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25'
+        : 'rounded-lg bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5'}"
+    >
+      {#if xdebugBusy}
+        <svg class="w-2.5 h-2.5 animate-spin text-amber-500" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
         </svg>
+      {:else}
+        <span class="shrink-0 w-2 h-2 rounded-full {xdebugEnabled ? 'bg-emerald-500' : 'border border-gray-300 dark:border-gray-600 bg-transparent'}"></span>
       {/if}
-    </span>
-    <StatusPill tone={running ? 'ok' : 'muted'} label={running ? m.common_running() : m.common_stopped()} />
-  </div>
-  <div class="flex items-center gap-2 flex-wrap">
-    <div bind:this={xdebugRootEl} class="relative inline-flex">
+      <span>{m.system_php_xdebug()}</span>
+    </button>
+    {#if xdebugEnabled}
       <button
         type="button"
-        onclick={onToggleXdebug}
+        onclick={() => (xdebugMenuOpen = !xdebugMenuOpen)}
         disabled={xdebugBusy}
-        aria-pressed={xdebugEnabled}
-        title={xdebugEnabled ? 'Disable Xdebug' : 'Enable Xdebug'}
-        class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 {xdebugEnabled
-          ? 'rounded-l-lg border-r-0 bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25'
-          : 'rounded-lg bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5'}"
+        aria-haspopup="menu"
+        aria-expanded={xdebugMenuOpen}
+        title={m.system_php_xdebugModeTitle()}
+        class="inline-flex items-center gap-1 px-3 py-1.5 rounded-r-lg border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25 disabled:opacity-50"
       >
-        {#if xdebugBusy}
-          <svg class="w-2.5 h-2.5 animate-spin text-amber-500" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-90" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
-        {:else}
-          <span class="shrink-0 w-2 h-2 rounded-full {xdebugEnabled ? 'bg-emerald-500' : 'border border-gray-300 dark:border-gray-600 bg-transparent'}"></span>
-        {/if}
-        <span>{m.system_php_xdebug()}</span>
+        <span class="font-mono">{xdebugMode}</span>
+        <svg class="w-3 h-3 transition-transform {xdebugMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
       </button>
-      {#if xdebugEnabled}
-        <button
-          type="button"
-          onclick={() => (xdebugMenuOpen = !xdebugMenuOpen)}
-          disabled={xdebugBusy}
-          aria-haspopup="menu"
-          aria-expanded={xdebugMenuOpen}
-          title={m.system_php_xdebugModeTitle()}
-          class="inline-flex items-center gap-1 px-3 py-1.5 rounded-r-lg border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25 disabled:opacity-50"
+      {#if xdebugMenuOpen}
+        <div
+          role="menu"
+          class="absolute right-0 top-full mt-1 z-50 min-w-40 rounded-xl bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border shadow-xl py-1"
         >
-          <span class="font-mono">{xdebugMode}</span>
-          <svg class="w-3 h-3 transition-transform {xdebugMenuOpen ? 'rotate-180' : ''}" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"/>
-          </svg>
-        </button>
-        {#if xdebugMenuOpen}
-          <div
-            role="menu"
-            class="absolute right-0 top-full mt-1 z-50 min-w-40 rounded-xl bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border shadow-xl py-1"
-          >
-            {#each XDEBUG_MODES as mode (mode)}
-              {@const selected = mode === xdebugMode}
-              <button
-                type="button"
-                role="menuitem"
-                onclick={() => {
-                  xdebugMenuOpen = false;
-                  onSetXdebugMode({ target: { value: mode } } as unknown as Event);
-                }}
-                class="w-full text-left px-3 py-1.5 text-xs font-mono hover:bg-gray-50 dark:hover:bg-white/5 transition-colors {selected ? 'text-lerd-red font-semibold' : 'text-gray-700 dark:text-gray-200'}"
-              >
-                {mode}
-              </button>
-            {/each}
-          </div>
-        {/if}
+          {#each XDEBUG_MODES as mode (mode)}
+            {@const selected = mode === xdebugMode}
+            <button
+              type="button"
+              role="menuitem"
+              onclick={() => {
+                xdebugMenuOpen = false;
+                onSetXdebugMode({ target: { value: mode } } as unknown as Event);
+              }}
+              class="w-full text-left px-3 py-1.5 text-xs font-mono hover:bg-gray-50 dark:hover:bg-white/5 transition-colors {selected ? 'text-lerd-red font-semibold' : 'text-gray-700 dark:text-gray-200'}"
+            >
+              {mode}
+            </button>
+          {/each}
+        </div>
       {/if}
-    </div>
-    <ButtonMenu actions={headerActions} busy={headerBusy} />
+    {/if}
   </div>
-</div>
+  <ButtonMenu actions={versionActions} busy={versionBusy} />
+{/snippet}
 
-<DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
+<DetailTabs {tabs} {active} onchange={(id) => (active = id)} actions={detailActions} />
 {#if active === 'logs' && running}
   <LogViewer path={'/api/logs/' + container} />
 {:else if active === 'sites'}

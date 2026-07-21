@@ -34,6 +34,31 @@ describe('DetailTabs', () => {
     expect(screen.queryByText('Solo')).not.toBeInTheDocument();
   });
 
+  it('renders the actions snippet alongside the tabs', () => {
+    render(Harness, {
+      props: {
+        active: 'a',
+        tabs: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }],
+        onchange: () => {},
+        withActions: true
+      }
+    });
+    expect(screen.getByText('Toggle')).toBeInTheDocument();
+  });
+
+  it('keeps the bar when a single tab is visible but actions are given', () => {
+    render(Harness, {
+      props: {
+        active: 'a',
+        tabs: [{ id: 'a', label: 'Solo' }],
+        onchange: () => {},
+        withActions: true
+      }
+    });
+    expect(screen.queryByText('Solo')).not.toBeInTheDocument();
+    expect(screen.getByText('Toggle')).toBeInTheDocument();
+  });
+
   it('marks the active tab with the accent border', () => {
     render(Harness, {
       props: { active: 'b', tabs: [{ id: 'a', label: 'A' }, { id: 'b', label: 'B' }], onchange: () => {} }
