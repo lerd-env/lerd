@@ -30,6 +30,9 @@ const empty: StatsResponse = {
 export const stats = writable<StatsResponse>(empty);
 export const statsLoaded = writable<boolean>(false);
 
+// Must stay below statsCacheTTL in internal/ui/stats.go. The endpoint is
+// backed by a ~2s streaming podman stats, so polling slower than the server's
+// TTL makes every request a cache miss and runs that stream continuously.
 const POLL_INTERVAL_MS = 5000;
 
 let pollTimer: ReturnType<typeof setInterval> | null = null;
