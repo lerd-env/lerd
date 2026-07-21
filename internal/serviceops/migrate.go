@@ -58,7 +58,37 @@ func MigrateService(name, targetImage string, emit func(PhaseEvent)) error {
 	if err := os.MkdirAll(config.BackupsDir(), 0700); err != nil {
 		return fmt.Errorf("creating backups dir: %w", err)
 	}
+	if err := startEngineForMigrate(name, fam, emit); err != nil {
+		return err
+	}
 	return fn(name, targetImage, emit)
+}
+
+// migrateProbe returns the in-container command that answers once the family's
+// engine is accepting connections.
+func migrateProbe(family string) string {
+	switch family {
+	case "mysql", "mariadb":
+		return mysqlMigrateProbeCommand()
+	case "postgres":
+		return pgMigrateProbeCommand()
+	}
+	return ""
+}
+
+// startEngineForMigrate brings the engine up before the dump. A service that no
+// site uses is auto-stopped, and the dump execs into its container, so migrating
+// one in that state failed on "no such container" before anything had run.
+func startEngineForMigrate(name, family string, emit func(PhaseEvent)) error {
+	unit := "lerd-" + name
+	if status, _ := podman.UnitStatus(unit); status == "active" {
+		return nil
+	}
+	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit, Message: "starting the engine to dump from"})
+	if err := podman.StartUnit(unit); err != nil {
+		return fmt.Errorf("starting %s to dump from: %w", unit, err)
+	}
+	return waitContainerReady(unit, migrateProbe(family), snapshotEnv(family), 90*time.Second)
 }
 
 // familyOf returns the service family for a default preset or installed
@@ -407,6 +437,10 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 
 // ---- postgres --------------------------------------------------------------
 
+func pgMigrateProbeCommand() string {
+	return "psql -h 127.0.0.1 -U postgres -c 'SELECT 1' >/dev/null 2>&1"
+}
+
 func migratePostgres(name, targetImage string, emit func(PhaseEvent)) error {
 	unit := "lerd-" + name
 	snapshot, err := captureServiceConfig(name)
@@ -445,8 +479,7 @@ func migratePostgres(name, targetImage string, emit func(PhaseEvent)) error {
 	}
 
 	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
-	probe := "psql -h 127.0.0.1 -U postgres -c 'SELECT 1' >/dev/null 2>&1"
-	if err := waitContainerReady(unit, probe, pgEnv, 90*time.Second); err != nil {
+	if err := waitContainerReady(unit, pgMigrateProbeCommand(), pgEnv, 90*time.Second); err != nil {
 		return fmt.Errorf("%w. Dump preserved at %s; old data dir at %s", err, dump, backup)
 	}
 
