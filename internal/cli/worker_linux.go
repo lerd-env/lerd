@@ -88,11 +88,11 @@ Type=simple
 Restart=%s
 RestartSec=5
 SuccessExitStatus=1 130 143
-ExecStart=%s exec -w %s --env=LERD_SITE=%s %s%s %s
+ExecStart=%s exec -w %s --env=LERD_SITE=%s%s %s%s %s
 
 [Install]
 WantedBy=default.target
-`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, workerColorArgs(), container, command)
+`, label, siteName, fpmUnit, fpmUnit, restart, podman.PodmanBin(), podman.ShellQuote(sitePath), siteName, workerExecEnvFlags(sitePath), workerColorArgs(), container, command)
 
 	// A previous run may have written a sibling .timer for this unit
 	// (e.g. before the framework yaml dropped its `schedule:` field).

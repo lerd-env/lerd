@@ -3,8 +3,11 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/power"
 )
 
 // fwWithOctane builds a minimal Laravel-like framework with a FrankenPHP worker
@@ -145,4 +148,63 @@ func TestAppendPollFlag(t *testing.T) {
 			t.Fatalf("got %v", got)
 		}
 	})
+}
+
+// chokidar's own default is 100ms, which is what made a polling watcher stat
+// every watched file ten times a second across the VM boundary. The point of
+// the override is to be materially slower than that.
+func TestWatcherPollEnv_TracksPollingDecision(t *testing.T) {
+	dir := t.TempDir()
+	got := WatcherPollEnv(dir)
+
+	if !WatcherNeedsPolling(dir) {
+		if got != "" {
+			t.Fatalf("no polling on this host, want no env override, got %q", got)
+		}
+		return
+	}
+
+	const prefix = "CHOKIDAR_INTERVAL="
+	if !strings.HasPrefix(got, prefix) {
+		t.Fatalf("polling host must set the interval override, got %q", got)
+	}
+	ms, err := strconv.Atoi(strings.TrimPrefix(got, prefix))
+	if err != nil {
+		t.Fatalf("interval must be a plain integer of milliseconds, got %q", got)
+	}
+	if ms <= 100 {
+		t.Errorf("interval %dms is not looser than chokidar's 100ms default", ms)
+	}
+}
+
+// The host gate exists to let cadence upkeep stand down, so it may only be
+// false where no site path polls either. A host that says it never polls while
+// some path does would silently strand those watchers on a stale interval.
+func TestHostCanPollWatchers_NeverSuppressesAPollingPath(t *testing.T) {
+	if HostCanPollWatchers() {
+		return
+	}
+	for _, path := range []string{"/mnt/c/Users/dev/app", "/home/dev/Code/app", t.TempDir()} {
+		if WatcherNeedsPolling(path) {
+			t.Errorf("host reports no polling, but %s polls", path)
+		}
+	}
+}
+
+// The ladder: a laptop on battery backs off, and Low Power Mode, an explicit
+// request for less background work, backs off twice as far again.
+func TestWatcherPollIntervalFor(t *testing.T) {
+	mains := watcherPollIntervalFor(power.Mains)
+	battery := watcherPollIntervalFor(power.Battery)
+	low := watcherPollIntervalFor(power.LowPower)
+
+	if battery != mains*2 {
+		t.Errorf("battery interval = %d, want double mains (%d)", battery, mains*2)
+	}
+	if low != mains*4 {
+		t.Errorf("low power interval = %d, want quadruple mains (%d)", low, mains*4)
+	}
+	if mains <= 100 {
+		t.Errorf("mains interval %dms is not looser than chokidar's 100ms default", mains)
+	}
 }

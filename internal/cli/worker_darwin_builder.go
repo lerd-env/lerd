@@ -46,9 +46,11 @@ func buildDarwinExecWorkerGuardScript(pidFile, podmanBin, container, sitePath, w
 
 // buildWorkerExecCommand renders the `podman exec` invocation an exec-mode
 // worker runs. The colour vars are passed through so the worker's output keeps
-// its ANSI escapes on the way to the launchd log file.
-func buildWorkerExecCommand(podmanBin, sitePath, container, command string) string {
+// its ANSI escapes on the way to the launchd log file, and envArgs carries any
+// `--env=` the worker itself needs (the reload watcher's poll interval).
+func buildWorkerExecCommand(podmanBin, sitePath, container, command string, envArgs []string) string {
 	parts := []string{podmanBin, "exec", "-w", sitePath}
+	parts = append(parts, envArgs...)
 	parts = append(parts, logcolor.PodmanExecArgs()...)
 	parts = append(parts, container, command)
 	return strings.Join(parts, " ")
