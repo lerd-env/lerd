@@ -1,6 +1,7 @@
 import { derived, type Readable } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
 import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
+import { kindHaystack } from '$lib/eventSearch';
 import { dumps } from '$stores/dumps';
 import { showTests } from '$stores/debugLens';
 
@@ -35,18 +36,7 @@ export function buildKindGroups(
     // not just future capture, matching buildQueryGroups.
     if (!showWorkers && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
-    if (needle) {
-      const hay = (
-        JSON.stringify(ev.data ?? {}) +
-        ' ' +
-        (ev.ctx.request ?? '') +
-        ' ' +
-        (ev.ctx.worker ?? '') +
-        ' ' +
-        (ev.ctx.branch ?? '')
-      ).toLowerCase();
-      if (!hay.includes(needle)) continue;
-    }
+    if (needle && !kindHaystack(ev).includes(needle)) continue;
     const key = groupKey(ev);
     let g = groups.get(key);
     if (!g) {

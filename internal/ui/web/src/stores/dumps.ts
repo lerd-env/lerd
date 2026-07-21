@@ -2,6 +2,7 @@ import { derived, writable, get, type Readable } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import { createDumpsStream, type DumpEvent } from '$lib/dumpsStream';
 import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
+import { dumpHaystack } from '$lib/eventSearch';
 import { wsMessage } from '$lib/ws';
 
 export interface DumpsStatus {
@@ -54,12 +55,7 @@ export function buildDumpGroups(
     if (ev.kind !== 'dump') return false;
     if (site && ev.ctx.site !== site) return false;
     if (ctx && ev.ctx.type !== ctx) return false;
-    if (needle) {
-      const haystack = [ev.label ?? '', ev.text ?? '', ev.ctx.request ?? '', ev.src.file ?? '', ev.ctx.branch ?? '']
-        .join(' ')
-        .toLowerCase();
-      if (!haystack.includes(needle)) return false;
-    }
+    if (needle && !dumpHaystack(ev).includes(needle)) return false;
     return true;
   });
   const groups = new Map<string, DumpGroup>();
