@@ -44,6 +44,16 @@ func logStreamCmd(ctx context.Context, unit string) *exec.Cmd {
 	return exec.CommandContext(ctx, "/bin/sh", "-c", script)
 }
 
+// logFollowScript returns the shell command a spawned terminal runs to follow
+// a unit's logs. Same two sources as streamUnitLogs: `podman logs -f` for
+// container units, a tail of the launchd log file for native ones.
+func logFollowScript(unit string) string {
+	if isContainerUnit(unit) {
+		return podman.PodmanBin() + " logs -f --tail 100 " + unit
+	}
+	return `tail -f -n 100 "` + lerdLogPath(unit) + `"`
+}
+
 // streamUnitLogs streams logs for a unit as SSE.
 // Container units (workers, PHP-FPM, services) use `podman logs -f`.
 // Native service units (dns, watcher, ui) tail the launchd log file.

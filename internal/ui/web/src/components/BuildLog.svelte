@@ -1,5 +1,6 @@
 <script lang="ts">
   import { m } from '../paraglide/messages.js';
+  import { ansiToHtml } from '$lib/ansi';
 
   interface Props {
     logs: string[];
@@ -24,7 +25,7 @@
   class="bg-gray-50 dark:bg-black/30 rounded-lg p-3 max-h-72 overflow-y-auto font-mono text-xs text-gray-600 dark:text-gray-400 space-y-0.5"
 >
   {#each logs as line, i (i)}
-    <div>{line}</div>
+    <div class="whitespace-pre-wrap break-all">{@html ansiToHtml(line)}</div>
   {/each}
   {#if logs.length === 0}
     <div class="text-gray-400 dark:text-gray-500">{m.link_waitingOutput()}</div>
