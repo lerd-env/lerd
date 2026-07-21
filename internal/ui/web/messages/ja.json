@@ -220,6 +220,7 @@
   "common_live": "ライブ",
   "common_disconnected": "切断",
   "common_terminal": "ターミナル",
+  "common_followInTerminal": "ターミナルで追跡",
   "common_edit": "編集",
   "common_remove": "削除",
   "common_add": "追加",

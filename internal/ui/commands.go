@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/logcolor"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/sitetpl"
 )
@@ -264,7 +265,10 @@ func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell strin
 	if existing := os.Getenv("PATH"); existing != "" {
 		path += string(os.PathListSeparator) + existing
 	}
-	cmd.Env = append(os.Environ(), "PATH="+path)
+	// Force colour on: the command runs against a pipe, so composer, artisan
+	// and friends would otherwise strip their ANSI escapes and the run modal
+	// would show a wall of grey.
+	cmd.Env = logcolor.Environ(append(os.Environ(), "PATH="+path))
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

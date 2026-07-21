@@ -1,6 +1,22 @@
 package cli
 
-import "github.com/geodro/lerd/internal/config"
+import (
+	"strings"
+
+	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/logcolor"
+)
+
+// workerColorArgs returns the `podman exec` colour flags with a trailing space
+// so unit templates can splice them in front of the container name, or an empty
+// string when colour is off.
+func workerColorArgs() string {
+	args := logcolor.PodmanExecArgs()
+	if len(args) == 0 {
+		return ""
+	}
+	return strings.Join(args, " ") + " "
+}
 
 // WorkerSupportedOnPlatform is the exported entry point to the platform
 // support gate. External packages (the watcher's exec_workers loop, future

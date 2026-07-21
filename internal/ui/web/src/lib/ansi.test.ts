@@ -49,6 +49,65 @@ describe('ansiToHtml', () => {
     expect(ansiToHtml('one\ntwo')).toBe('one\ntwo');
   });
 
+  it('renders a real `artisan about` line', () => {
+    const html = ansiToHtml('  \x1b[32;1mEnvironment\x1b[39;22m \x1b[90m......\x1b[39m');
+    expect(html).toContain('font-weight:600');
+    expect(html).toContain('Environment</span>');
+    expect(html).toContain('......');
+  });
+
+  it('renders background colors', () => {
+    const html = ansiToHtml('\x1b[41mred-bg\x1b[49m plain');
+    expect(html).toContain('background-color:');
+    expect(html).toContain('red-bg');
+    expect(html).toContain('plain');
+  });
+
+  it('renders italic, underline and dim', () => {
+    expect(ansiToHtml('\x1b[3mi\x1b[23m')).toContain('font-style:italic');
+    expect(ansiToHtml('\x1b[4mu\x1b[24m')).toContain('text-decoration:underline');
+    expect(ansiToHtml('\x1b[2md\x1b[22m')).toContain('opacity:');
+  });
+
+  it('clears an attribute when its reset code arrives', () => {
+    const html = ansiToHtml('\x1b[4munder\x1b[24mplain');
+    expect(html).toContain('>under');
+    expect(html.endsWith('plain')).toBe(true);
+  });
+
+  it('renders the 256-color cube and grayscale ramp as rgb', () => {
+    expect(ansiToHtml('\x1b[38;5;196mred\x1b[0m')).toContain('color:rgb(255,0,0)');
+    expect(ansiToHtml('\x1b[38;5;244mgrey\x1b[0m')).toContain('color:rgb(128,128,128)');
+  });
+
+  it('renders 24-bit true color for foreground and background', () => {
+    expect(ansiToHtml('\x1b[38;2;10;20;30mfg\x1b[0m')).toContain('color:rgb(10,20,30)');
+    expect(ansiToHtml('\x1b[48;2;10;20;30mbg\x1b[0m')).toContain('background-color:rgb(10,20,30)');
+  });
+
+  it('does not let true-color params leak in as separate codes', () => {
+    // 38;2;1;31;7 must consume all five params — a naive parser would read the
+    // trailing 31 as "red" and 7 as inverse.
+    const html = ansiToHtml('\x1b[38;2;1;31;7mtext');
+    expect(html).toContain('color:rgb(1,31,7)');
+    expect(html.match(/<span/g)).toHaveLength(1);
+  });
+
+  it('collapses carriage-return progress frames to the final one', () => {
+    expect(ansiToHtml('10%\r50%\r100%')).toBe('100%');
+    expect(ansiToHtml('done\r')).toBe('done');
+    expect(ansiToHtml('a\nb\rc')).toBe('a\nc');
+  });
+
+  it('carries color across collapsed progress frames', () => {
+    // The green was set on a frame that got painted over, but a terminal had
+    // already processed it, so the surviving frame stays green.
+    const html = ansiToHtml('\x1b[32m10%\r50%');
+    expect(html).toContain('color:');
+    expect(html).toContain('50%');
+    expect(html).not.toContain('10%');
+  });
+
   it('handles back-to-back color changes without nesting spans', () => {
     const html = ansiToHtml('\x1b[31mred\x1b[32mgreen\x1b[0m');
     // We should never have a <span> inside a <span> — closing the previous
