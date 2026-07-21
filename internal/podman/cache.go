@@ -2,6 +2,7 @@ package podman
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -186,9 +187,11 @@ func (c *ContainerCache) Pause()  { atomic.AddInt32(&c.pauseCount, 1) }
 func (c *ContainerCache) Resume() { atomic.AddInt32(&c.pauseCount, -1) }
 
 func (c *ContainerCache) loop(ctx context.Context) {
-	// polledWhileStopped records that the map has already been brought up to
-	// date since lerd was stopped, so the quiet period costs nothing further.
-	polledWhileStopped := false
+	// settledWhileStopped records that the map has stopped moving since lerd was
+	// stopped, so the quiet period costs nothing further. lastStopped is the
+	// previous poll it is judged against.
+	settledWhileStopped := false
+	var lastStopped map[string]bool
 	for {
 		c.intervalMu.Lock()
 		d := c.interval
@@ -201,30 +204,33 @@ func (c *ContainerCache) loop(ctx context.Context) {
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
-			// While lerd is intentionally stopped its containers are meant to
-			// be down and workerheal.Detect suppresses itself, so no consumer
-			// needs fresh state and the podman round trip is pure waste. One
-			// poll still runs on the way in: `lerd stop` writes the marker
-			// before the containers have finished going down, so the map would
-			// otherwise keep reporting them as running. The timer keeps ticking
-			// (a stat, not a subprocess) so polling resumes on its own once
-			// `lerd start` clears the marker.
+			// While lerd is stopped its containers are meant to be down and
+			// workerheal.Detect suppresses itself, so nothing needs fresh state
+			// and the podman round trip is waste. The timer keeps ticking (a
+			// stat, not a subprocess) so polling resumes once the marker clears.
 			if stoppedFn() {
-				if !polledWhileStopped {
-					polledWhileStopped = true
-					c.poll()
+				if settledWhileStopped {
+					continue
 				}
+				c.poll()
+				cur := c.Snapshot()
+				// Two polls must agree, and never a poll against the map it
+				// replaced: `lerd stop` marks before tearing down, so a tick
+				// landing mid-teardown reads back what the map already held.
+				settledWhileStopped = lastStopped != nil && maps.Equal(lastStopped, cur)
+				lastStopped = cur
 				continue
 			}
-			polledWhileStopped = false
+			settledWhileStopped = false
+			lastStopped = nil
 			c.poll()
 		case <-c.refresh:
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
-			// An explicit refresh is a caller stating it needs state now, so
-			// it is honoured regardless: `lerd start` publishes through here.
-			polledWhileStopped = false
+			// An explicit refresh is a caller stating it needs state now, so it
+			// is honoured regardless of the marker.
+			settledWhileStopped = false
 			c.poll()
 		}
 	}

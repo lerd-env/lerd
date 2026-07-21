@@ -4,9 +4,33 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+// startLoop runs the cache loop and returns a stop func that cancels it and
+// waits for it to exit, also running at test end if the test never calls it.
+// The waiting is the point: a bare cancel returns while the goroutine may still
+// be inside pollFn, live under whatever the test touches next.
+func startLoop(t *testing.T, c *ContainerCache) (stop func()) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		c.loop(ctx)
+		close(done)
+	}()
+	var once sync.Once
+	stop = func() {
+		once.Do(func() {
+			cancel()
+			<-done
+		})
+	}
+	t.Cleanup(stop)
+	return stop
+}
 
 // newTestCache returns a fresh ContainerCache with a custom poll function.
 func newTestCache(pollFn func() (string, error)) *ContainerCache {
@@ -183,18 +207,15 @@ func TestSetIntervalTakeEffect(t *testing.T) {
 		return "", nil
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	c.mu.Lock()
 	c.started = true
 	c.mu.Unlock()
 
 	c.interval = 50 * time.Millisecond
-	go c.loop(ctx)
+	stop := startLoop(t, c)
 
 	time.Sleep(200 * time.Millisecond)
-	cancel()
+	stop()
 
 	mu.Lock()
 	count := polled
@@ -206,17 +227,17 @@ func TestSetIntervalTakeEffect(t *testing.T) {
 	}
 
 	// Now verify SetInterval slows things down.
+	mu.Lock()
 	polled = 0
-	ctx2, cancel2 := context.WithCancel(context.Background())
-	defer cancel2()
+	mu.Unlock()
 	c.SetInterval(10 * time.Second)
 	c.mu.Lock()
 	c.started = true
 	c.mu.Unlock()
-	go c.loop(ctx2)
+	stop2 := startLoop(t, c)
 
 	time.Sleep(200 * time.Millisecond)
-	cancel2()
+	stop2()
 
 	mu.Lock()
 	count2 := polled
@@ -298,32 +319,31 @@ func TestLoopStopsPollingWhileLerdIsStopped(t *testing.T) {
 		return "", nil
 	})
 
-	stopped := true
+	var stopped atomic.Bool
+	stopped.Store(true)
 	prev := stoppedFn
-	stoppedFn = func() bool { return stopped }
+	stoppedFn = stopped.Load
 	t.Cleanup(func() { stoppedFn = prev })
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	c.mu.Lock()
 	c.started = true
 	c.mu.Unlock()
 	c.interval = 20 * time.Millisecond
-	go c.loop(ctx)
+	startLoop(t, c)
 
 	time.Sleep(250 * time.Millisecond)
 	mu.Lock()
 	whileStopped := polls
 	mu.Unlock()
 
-	// One poll is allowed on the transition into stopped, so the map reflects
-	// containers that went down after the marker was written.
-	if whileStopped > 1 {
-		t.Errorf("polled %d times while stopped, want at most the single transition poll", whileStopped)
+	// Polling settles once two polls agree. With a pollFn whose answer never
+	// changes that is the second one, so anything beyond it is the waste this
+	// is meant to remove.
+	if whileStopped > 2 {
+		t.Errorf("polled %d times while stopped, want no more than the settling polls", whileStopped)
 	}
 
-	stopped = false
+	stopped.Store(false)
 	time.Sleep(150 * time.Millisecond)
 	mu.Lock()
 	afterStart := polls
@@ -334,8 +354,57 @@ func TestLoopStopsPollingWhileLerdIsStopped(t *testing.T) {
 	}
 }
 
+// `lerd stop` writes the marker before it tears anything down, so a tick can
+// land while containers are still on their way out. Going quiet after that one
+// poll would leave the map reporting them as running for the whole stopped
+// period, which is worse than the polling this saves.
+func TestLoopKeepsPollingUntilTeardownSettles(t *testing.T) {
+	var mu sync.Mutex
+	polls := 0
+	// Mirrors a teardown in progress: still running on the first poll, gone by
+	// the second. lerd-dns stays up throughout, as it does in a real stop.
+	c := newTestCache(func() (string, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		polls++
+		if polls == 1 {
+			return "lerd-dns\trunning\nlerd-fp-demo\trunning", nil
+		}
+		return "lerd-dns\trunning\nlerd-fp-demo\texited", nil
+	})
+
+	prev := stoppedFn
+	stoppedFn = func() bool { return true }
+	t.Cleanup(func() { stoppedFn = prev })
+
+	c.mu.Lock()
+	c.started = true
+	c.mu.Unlock()
+	c.interval = 20 * time.Millisecond
+	startLoop(t, c)
+
+	time.Sleep(250 * time.Millisecond)
+
+	if c.Running("lerd-fp-demo") {
+		t.Error("map still reports a container that went down during the teardown")
+	}
+	if !c.Running("lerd-dns") {
+		t.Error("lerd-dns stays up through a stop and must still read as running")
+	}
+
+	mu.Lock()
+	got := polls
+	mu.Unlock()
+	// One poll catching the teardown mid-flight, one seeing it finished, one
+	// agreeing with that, then quiet.
+	if got != 3 {
+		t.Errorf("polled %d times, want the three it takes to settle here", got)
+	}
+}
+
 // An explicit refresh is a caller saying it needs state now, so it is honoured
-// even while stopped: `lerd start` publishes through this path.
+// even while stopped. Nothing on the start path uses it today; the loop noticing
+// the cleared marker is what resumes polling.
 func TestRefreshPollsEvenWhileStopped(t *testing.T) {
 	polled := make(chan struct{}, 10)
 	c := newTestCache(func() (string, error) {
@@ -347,16 +416,13 @@ func TestRefreshPollsEvenWhileStopped(t *testing.T) {
 	stoppedFn = func() bool { return true }
 	t.Cleanup(func() { stoppedFn = prev })
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	c.mu.Lock()
 	c.started = true
 	c.mu.Unlock()
 	// Long interval so the timer branch never fires: the only poll that can
 	// arrive is the one Refresh asks for.
 	c.interval = 10 * time.Minute
-	go c.loop(ctx)
+	startLoop(t, c)
 
 	c.Refresh()
 
