@@ -83,6 +83,37 @@ func StatusAll(cfg *config.GlobalConfig, versions []string) []Report {
 	return out
 }
 
+// NowhereBuilt returns the declared entries that no built, current image
+// carries. A version-specific capability gap shows up on some versions and not
+// others; an entry missing from every one of them points at the build
+// environment instead, which is a different problem with a different answer.
+// Empty when no version has a current image to judge from.
+func NowhereBuilt(reports []Report, pick func(Report) SetState) []string {
+	var judged []Report
+	for _, r := range reports {
+		if r.Built && !r.NeedsRebuild {
+			judged = append(judged, r)
+		}
+	}
+	if len(judged) == 0 {
+		return nil
+	}
+	var out []string
+	for _, e := range pick(judged[0]).Declared {
+		missing := true
+		for _, r := range judged {
+			if slices.Contains(pick(r).Has, e) {
+				missing = false
+				break
+			}
+		}
+		if missing {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 // split partitions the declared set into what the image has and what it could
 // not load, from the record written when it was built.
 func split(cfg *config.GlobalConfig, version string, declared []string) (has, cannot []string) {

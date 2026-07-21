@@ -471,7 +471,7 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 		if baseRef := tryPullBaseImage(version, w); baseRef != "" {
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
-				buildCustomExtBlock(customExts, extDeps) +
+				buildCustomExtBlockWithToolchain(customExts, extDeps) +
 				buildCustomPackagesBlock(packages) +
 				mkcertCABlock(tmp)
 			goto build
@@ -602,24 +602,48 @@ func buildCustomExtRuntimeDeps(exts []string, userDeps map[string][]string) stri
 	return "RUN apk add --no-cache " + strings.Join(deps, " ") + " && rm -rf /var/cache/apk/*\n"
 }
 
+// phpizeToolchain is what a PECL build needs beyond the runtime image: the same
+// compilers the Containerfile's builder stage apk-adds. Without them `pecl
+// install` stops at phpize ("Cannot find autoconf").
+var phpizeToolchain = []string{"autoconf", "make", "g++", "linux-headers"}
+
 // buildCustomExtBlock generates Dockerfile RUN blocks for user-configured
 // extensions, apk-adding any extra build deps (built-in map ∪ userDeps) first.
+// This is the builder stage's block, which already has a toolchain to build in.
 func buildCustomExtBlock(exts []string, userDeps map[string][]string) string {
+	return customExtBlock(exts, userDeps, false)
+}
+
+// buildCustomExtBlockWithToolchain is the same block for the fast path, which
+// layers straight onto the pre-built runtime image and so has no toolchain to
+// build against. It installs one virtually and purges it inside the same layer,
+// leaving the runtime image the size it was.
+func buildCustomExtBlockWithToolchain(exts []string, userDeps map[string][]string) string {
+	return customExtBlock(exts, userDeps, true)
+}
+
+func customExtBlock(exts []string, userDeps map[string][]string, withToolchain bool) string {
 	if len(exts) == 0 {
 		return ""
 	}
 	var sb strings.Builder
 	sb.WriteString("# User-configured extensions\n")
 	for _, ext := range exts {
-		prefix := ""
+		prefix, purge := "", ""
+		if withToolchain {
+			prefix = "apk add --no-cache --virtual .lerd-ext-build " + strings.Join(phpizeToolchain, " ") + " && "
+			purge = " \\\n    && { apk del .lerd-ext-build 2>/dev/null || true; }"
+		}
+		// The extension's own deps outlive the purge: the compiled .so dlopens
+		// against them at runtime, the way the local path's runtime block does.
 		if deps := apkDepsForExt(ext, userDeps); len(deps) > 0 {
-			prefix = "apk add --no-cache " + strings.Join(deps, " ") + " && "
+			prefix += "apk add --no-cache " + strings.Join(deps, " ") + " && "
 		}
 		// `yes ''` feeds default answers to interactive PECL prompts (imap asks
 		// for kerberos / c-client paths); harmless for extensions that don't ask.
 		sb.WriteString(fmt.Sprintf(
-			"RUN { %s(yes '' | pecl install %s && docker-php-ext-enable %s) || docker-php-ext-install %s || true; } \\\n    && rm -rf /tmp/pear /var/cache/apk/*\n",
-			prefix, ext, ext, ext,
+			"RUN { %s(yes '' | pecl install %s && docker-php-ext-enable %s) || docker-php-ext-install %s || true; }%s \\\n    && rm -rf /tmp/pear /var/cache/apk/*\n",
+			prefix, ext, ext, ext, purge,
 		))
 	}
 	return sb.String()

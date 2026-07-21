@@ -302,6 +302,8 @@ $ lerd isolate 8.3
 
 An extension that genuinely cannot build on that version is reported differently, because no rebuild will fix it.
 
+One that loaded on **no version at all** is reported differently again. A version boundary shows up on some versions and not others, so an extension missing from every one of them is usually the build failing rather than the versions refusing it, and `lerd php:ext list` says so instead of reading it as a capability gap.
+
 Some extensions need extra Alpine packages to compile. lerd already knows the ones for `imap` (`imap-dev krb5-dev openssl-dev c-client`); for anything else, pass them with `--apk-deps`:
 
 ```bash
