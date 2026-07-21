@@ -99,3 +99,27 @@ func TestClearData_MissingDirIsNotAnError(t *testing.T) {
 		t.Errorf("removed = %d, want 0", n)
 	}
 }
+
+func TestProfilable(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name string
+		site config.Site
+		want bool
+	}{
+		{"php fpm site", config.Site{Path: dir, PHPVersion: "8.4"}, true},
+		{"custom per-site fpm image", config.Site{Path: dir, PHPVersion: "8.4", Runtime: "fpm-custom"}, true},
+		{"frankenphp site", config.Site{Path: dir, PHPVersion: "8.4", Runtime: "frankenphp"}, false},
+		{"host-proxy site", config.Site{Path: dir, HostPort: 5173}, false},
+		{"custom container site", config.Site{Path: dir, ContainerPort: 3000}, false},
+		{"static site", config.Site{Path: t.TempDir()}, false},
+	}
+	for _, tc := range cases {
+		if got := Profilable(tc.site); got != tc.want {
+			t.Errorf("Profilable(%s) = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}

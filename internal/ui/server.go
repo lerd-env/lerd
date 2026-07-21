@@ -44,6 +44,7 @@ import (
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/phpsets"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/profiler"
 	"github.com/geodro/lerd/internal/reqstats"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/services"
@@ -832,6 +833,11 @@ type SiteResponse struct {
 	// the dashboard hides the button rather than opening an empty modal. Not
 	// omitempty: the dashboard keys on the explicit false to hide.
 	DoctorApplicable bool `json:"doctor_applicable"`
+	// CanProfile is false when SPX cannot profile the site's requests (no PHP,
+	// or PHP served by something other than FPM), so the dashboard's timing
+	// panel offers no profile action. Not omitempty: the dashboard keys on the
+	// explicit false.
+	CanProfile bool `json:"can_profile"`
 	// Grouping — Group is the group key (main site's name); GroupSubdomain is the
 	// label a secondary occupies; GroupMainDomain is the group main's base domain.
 	// MultiTenant flags a main whose project declares env_overrides (wildcard
@@ -1047,12 +1053,15 @@ func buildSites() []SiteResponse {
 			HostPort:             e.HostPort,
 			HostHasDevServer:     e.HostPort > 0 && e.HostCommand != "",
 			DoctorApplicable:     sitedoctor.AppliesForPath(e.Path, e.FrameworkName),
-			Group:                e.Group,
-			GroupSubdomain:       e.GroupSubdomain,
-			GroupMainDomain:      groupMainDomain[e.Group],
-			GroupSharedDB:        e.GroupSharedDB,
-			MultiTenant:          e.Group != "" && e.GroupSubdomain == "" && siteHasEnvOverrides(e.Path),
-			Workspace:            resolveSiteWorkspace(e, groupMainName, siteWorkspace),
+			CanProfile: profiler.ProfilableSite(config.Site{
+				Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort,
+			}, e.UsesPHP),
+			Group:           e.Group,
+			GroupSubdomain:  e.GroupSubdomain,
+			GroupMainDomain: groupMainDomain[e.Group],
+			GroupSharedDB:   e.GroupSharedDB,
+			MultiTenant:     e.Group != "" && e.GroupSubdomain == "" && siteHasEnvOverrides(e.Path),
+			Workspace:       resolveSiteWorkspace(e, groupMainName, siteWorkspace),
 		})
 	}
 	return sites
