@@ -25,7 +25,7 @@ The receiver's transport depends on the host:
 
 - **Web dashboard** — three places:
   - Each site detail pane has a **Dumps** tab next to Overview and Tinker, pre-filtered to that site.
-  - **System > Debug bridge** opens a global view with the listener address, the buffered count, an Enable/Disable button, and every dump across every project.
+  - **System > Debug bridge** opens a global view with the listener address, the buffered count, an Enable/Disable button, and every dump across every project. The site name that leads each group header links to that site's own Debug tab, so an event you spot in the global view takes you straight to where it came from; a name that matches no linked site stays plain text.
 
     ![System Debug bridge detail](/assets/screenshots/system-dump-bridge.png)
 
@@ -59,7 +59,7 @@ Each event is one line of JSON. The shape is stable from v1 of the protocol:
 }
 ```
 
-`ctx.branch` is set when the dump came from a worktree, so a request to `feat-a.acme.test` carries `branch: "feat-a"` alongside the parent `site: "acme"`. It is plumbed end-to-end via the `LERD_SITE` and `LERD_BRANCH` fastcgi params on the worktree vhost. Because every worktree shares the parent's `site`, the branch is what separates a worktree's events from the parent's: request grouping keys on it (a worktree request never merges into the parent's group), every group is labelled `[site@branch]` in the dashboard and the TUI, the CLI tail prints `site@branch` in each event header, and the search box matches the branch name. To isolate a single worktree, filter by branch: `lerd dump tail --branch feat-a`, the `branch` query param on `/api/dumps`, or the `branch` argument to the `dumps_recent` MCP tool. Parent-site requests leave the field empty and render as plain `[site]`.
+`ctx.branch` is set when the dump came from a worktree, so a request to `feat-a.acme.test` carries `branch: "feat-a"` alongside the parent `site: "acme"`. It is plumbed end-to-end via the `LERD_SITE` and `LERD_BRANCH` fastcgi params on the worktree vhost. Because every worktree shares the parent's `site`, the branch is what separates a worktree's events from the parent's: request grouping keys on it (a worktree request never merges into the parent's group), every group is labelled `[site@branch]` in the dashboard and the TUI, the CLI tail prints `site@branch` in each event header, and the search box matches the branch name. To isolate a single worktree, filter by branch: `lerd dump tail --branch feat-a`, the `branch` query param on `/api/dumps`, or the `branch` argument to the `dumps_recent` MCP tool. Parent-site requests leave the field empty and render as plain `[site]`. Inside a site's own Debug tab the site name is dropped and only `[branch]` is shown, unlinked, since you are already on that site.
 
 `ctx.site` is set on terminal runs too: `lerd php` (and everything shimmed through it, `artisan` included) passes `LERD_SITE` into the container, so an event from an artisan command carries the registered site name rather than the directory it happened to run in, and a run inside a worktree checkout reports the parent site.
 

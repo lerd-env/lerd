@@ -1,7 +1,7 @@
 import { derived, writable, type Readable } from 'svelte/store';
 import { apiFetch, apiJson } from '$lib/api';
 import type { DumpEvent, QueryData } from '$lib/dumpsStream';
-import { groupKey, sitePrefix } from '$lib/eventGroup';
+import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
 import { dumps, toggleDumps, status as dumpsStatus, type DumpsStatus } from '$stores/dumps';
 import { wsMessage } from '$lib/ws';
 
@@ -37,7 +37,7 @@ export interface QueryRow {
 
 export interface QueryGroup {
   key: string;
-  label: string;
+  label: GroupLabel;
   ts: string;
   rows: QueryRow[];
   count: number;
@@ -61,15 +61,6 @@ export function normalizeSql(sql: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .toLowerCase();
-}
-
-function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): string {
-  const prefix = sitePrefix(ev, hideSitePrefix);
-  if (ev.ctx.worker) return prefix + ev.ctx.worker;
-  if (ev.ctx.type === 'fpm') {
-    return prefix + (ev.ctx.request || '(request)');
-  }
-  return `${prefix}cli (pid ${ev.ctx.pid ?? '?'})`;
 }
 
 function queryData(ev: DumpEvent): QueryData | null {

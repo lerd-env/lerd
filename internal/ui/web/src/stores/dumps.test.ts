@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { get } from 'svelte/store';
 import { dumpGroups, dumps, filterSite, filterCtx, filterText, buildDumpGroups, status } from './dumps';
+import { labelString } from '$lib/eventGroup';
 import { wsMessage } from '$lib/ws';
 import type { DumpEvent } from '$lib/dumpsStream';
 
@@ -35,7 +36,7 @@ describe('dumpGroups', () => {
       ev({ id: 'c', ts: '2026-05-10T12:00:10.000Z', ctx: { type: 'fpm', site: 's', request: 'GET /a' } })
     ]);
     const groups = get(dumpGroups);
-    expect(groups.map((g) => g.label)).toEqual(['[s] GET /a', '[s] GET /b']);
+    expect(groups.map((g) => labelString(g.label))).toEqual(['[s] GET /a', '[s] GET /b']);
   });
 
   it('excludes non-dump kinds (queries share the same ring)', () => {
@@ -96,7 +97,7 @@ describe('dumpGroups', () => {
     ]);
     const groups = get(dumpGroups);
     expect(groups.length).toBe(2);
-    const labels = groups.map((g) => g.label);
+    const labels = groups.map((g) => labelString(g.label));
     expect(labels).toContain('[acme] GET /checkout');
     expect(labels).toContain('[acme@feature-x] GET /checkout');
   });
@@ -122,8 +123,8 @@ describe('dumpGroups', () => {
       '',
       true
     );
-    expect(groups[0].label).toBe('GET /x');
-    expect(groups[0].label).not.toContain('whitewaters');
+    expect(groups[0].label.site).toBe('');
+    expect(labelString(groups[0].label)).toBe('GET /x');
   });
 
   it('keeps [site] prefix when hideSitePrefix is false', () => {
@@ -134,7 +135,7 @@ describe('dumpGroups', () => {
       '',
       false
     );
-    expect(groups[0].label).toContain('[whitewaters]');
+    expect(groups[0].label.site).toBe('whitewaters');
   });
 
   it('applies free-text search across label, text, file', () => {

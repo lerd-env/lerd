@@ -1,6 +1,6 @@
 import { derived, type Readable } from 'svelte/store';
 import type { DumpEvent } from '$lib/dumpsStream';
-import { groupKey, sitePrefix } from '$lib/eventGroup';
+import { groupKey, groupLabel, type GroupLabel } from '$lib/eventGroup';
 import { dumps } from '$stores/dumps';
 
 // Generic per-request grouping shared by the non-dump/non-query Debug lenses
@@ -8,17 +8,10 @@ import { dumps } from '$stores/dumps';
 // per-request id, then method+path+pid, then a 5s CLI bucket.
 export interface DebugGroup {
   key: string;
-  label: string;
+  label: GroupLabel;
   ts: string;
   events: DumpEvent[];
   worker: string;
-}
-
-function groupLabel(ev: DumpEvent, hideSitePrefix: boolean): string {
-  const prefix = sitePrefix(ev, hideSitePrefix);
-  if (ev.ctx.worker) return prefix + ev.ctx.worker;
-  if (ev.ctx.type === 'fpm') return prefix + (ev.ctx.request || '(request)');
-  return `${prefix}cli (pid ${ev.ctx.pid ?? '?'})`;
 }
 
 // buildKindGroups filters the shared event stream to one kind and groups it by

@@ -18,6 +18,7 @@
   import Dropdown from '$components/Dropdown.svelte';
   import TraceBlock from '$components/TraceBlock.svelte';
   import LensLoadMore from '$components/LensLoadMore.svelte';
+  import LensGroupLabel from '$components/LensGroupLabel.svelte';
   import { windowGroups, LENS_PAGE } from '$lib/lensWindow';
   import { openInEditor } from '$lib/editor';
   import { m } from '../paraglide/messages.js';
@@ -172,7 +173,7 @@
         <section class="mb-4">
           <header class="flex items-center gap-2 mb-1 sticky top-0 bg-gray-50 dark:bg-lerd-bg py-1 -mx-3 px-3 z-1">
             {#if group.worker}<span class="text-[10px] font-semibold uppercase tracking-wide rounded-sm px-1.5 py-0.5 bg-violet-100 dark:bg-violet-900/40 text-violet-700 dark:text-violet-300 shrink-0">{m.queries_worker_badge()}</span>{/if}
-            <span class="text-sm truncate">{group.label}</span>
+            <LensGroupLabel label={group.label} />
             <span class="text-xs text-gray-400 ml-auto whitespace-nowrap font-mono">{localTime(group.ts)}</span>
             <span class="text-xs text-gray-400 whitespace-nowrap">{page.total}</span>
           </header>
