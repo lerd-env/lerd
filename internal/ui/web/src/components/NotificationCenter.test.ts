@@ -58,8 +58,8 @@ describe('NotificationCenter severity', () => {
     notificationHistory.set([
       rec({ kind: 'nplusone', title: 'Possible N+1 query on acme', failed: false })
     ]);
-    const { getByLabelText, container } = render(NotificationCenter);
+    const { getByLabelText } = render(NotificationCenter);
     await fireEvent.click(getByLabelText('Notifications'));
-    expect(container.querySelector('.text-amber-500')).toBeTruthy();
+    expect(document.body.querySelector('.text-amber-500')).toBeTruthy();
   });
 });

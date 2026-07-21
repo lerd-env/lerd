@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
   import IconButton from '$components/IconButton.svelte';
+  import { portal } from '$lib/portal';
 
   interface Props {
     label: string;
@@ -64,9 +65,10 @@
 
   {#if open}
     <!-- Click-away backdrop; the panel sits above it. -->
-    <button type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-70 cursor-default" onclick={close}
+    <button use:portal type="button" tabindex="-1" aria-hidden="true" class="fixed inset-0 z-70 cursor-default" onclick={close}
     ></button>
     <div
+      use:portal
       class="z-80 rounded-xl border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card shadow-2xl"
       style="position: fixed; left: {pos.left}px; width: {pos.width}px; {align === 'right'
         ? `top: ${pos.top}px`
