@@ -181,6 +181,10 @@ func Start(currentVersion string) error {
 
 	mux := http.NewServeMux()
 
+	// Gated inside the handler (marker file plus loopback), so a daemon
+	// without profiling turned on answers as if the route did not exist.
+	mux.HandleFunc("/debug/pprof/", handlePprof)
+
 	mux.HandleFunc("/api/status", withCORS(handleStatus))
 	mux.HandleFunc("/api/sites", withCORS(handleSites))
 	mux.HandleFunc("/api/services", withCORS(handleServices))
