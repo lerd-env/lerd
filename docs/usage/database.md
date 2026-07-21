@@ -54,7 +54,7 @@ The same "open in the admin tool" affordance is on the database service card in 
 
 Document engines like MongoDB list their databases and expose the connection string and admin link, but the SQL-only operations (create, export, import, snapshots) are hidden for them since those act through SQL clients. A stopped engine shows a prompt to start it rather than an empty grid.
 
-Which databases an engine advertises, and their sizes, comes from an `introspect.list_databases` command declared in the engine's [service preset](service-presets.md), so a newly added engine works here as soon as its preset ships that query, with no lerd release.
+Which databases an engine advertises, and their sizes, comes from an `introspect.list_databases` command declared in the engine's [service preset](service-presets.md), so a newly added engine works here as soon as its preset ships that query, with no lerd release. The size is the data you put there, not the engine's own overhead: every postgres database inherits roughly 7.5 MB of system catalogs from `template1`, so that baseline is netted off and an empty database reads as empty, the same as it does on MySQL.
 
 ## Service and database resolution
 
