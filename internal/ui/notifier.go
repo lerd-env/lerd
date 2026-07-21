@@ -57,10 +57,20 @@ func dispatchNotification(n push.Notification) {
 	if err != nil {
 		return
 	}
+	// A dashboard window with focus is already showing the user whatever the
+	// notification would tell them, so nothing is raised on the desktop while
+	// one is open. The event still rides the websocket to the page.
+	focused := uiWindowFocused()
 	switch notifySink(cfg, desktopnotify.Supported) {
 	case sinkOff:
 		return
 	case sinkNative:
+		if focused {
+			if payload, err := n.Payload(); err == nil {
+				broker.broadcastNotification(payload)
+			}
+			return
+		}
 		// The test notification is a manual action, not a real category, so it
 		// always fires; real categories honour the server-side kind prefs.
 		if n.Kind != "test" && !cfg.NativeKindEnabled(n.Kind) {
@@ -75,6 +85,11 @@ func dispatchNotification(n push.Notification) {
 			return
 		}
 		broker.broadcastNotification(payload)
+		if focused {
+			// Web Push exists to reach a page that isn't there to listen; a
+			// focused one just received the frame above.
+			return
+		}
 		go func() {
 			if err := push.Send(n); err != nil {
 				fmt.Printf("[notifier] push send failed: %v\n", err)

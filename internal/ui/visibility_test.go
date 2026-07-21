@@ -62,3 +62,29 @@ func TestNoteVisibilityMultipleConnections(t *testing.T) {
 		t.Errorf("expected 0 after B disconnects, got %d", v)
 	}
 }
+
+// Focus is counted per connection and never goes negative, so a window that
+// blurs and then disconnects cannot leave the count stuck below zero and
+// silently re-enable desktop popups for a window that is still focused.
+func TestNoteFocusCounter(t *testing.T) {
+	focusedClients.Store(0)
+	t.Cleanup(func() { focusedClients.Store(0) })
+
+	if uiWindowFocused() {
+		t.Error("no connection has reported focus yet")
+	}
+	noteFocus(true)
+	noteFocus(true)
+	if !uiWindowFocused() {
+		t.Error("two focused windows should report focused")
+	}
+	noteFocus(false)
+	if !uiWindowFocused() {
+		t.Error("one window still has focus")
+	}
+	noteFocus(false)
+	noteFocus(false)
+	if v := focusedClients.Load(); v != 0 {
+		t.Errorf("counter should not go below 0, got %d", v)
+	}
+}

@@ -55,7 +55,9 @@ Clicking a notification focuses the dashboard (or launches the PWA if closed) an
 
 ## How it works
 
-With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`. With the **browser** sink (the default), two delivery paths run in parallel:
+With the **native** sink selected the daemon skips everything below and posts once to `org.freedesktop.Notifications`, unless a dashboard window has focus. A desktop popup for something you are already looking at is noise, so while the app or a dashboard tab is focused nothing is raised on the desktop, on either sink: the event still rides the websocket to the page, Web Push is skipped since there is a live page to receive it, and delivery resumes the moment you switch away. Each connection reports its own focus, so a second window left in the background never suppresses anything.
+
+With the **browser** sink (the default), two delivery paths run in parallel:
 
 1. **WebSocket fan-out** (open tabs). Every notification rides the existing `/api/ws` channel as a `notification` frame. Open dashboard tabs route it through `lib/notify.ts`, which resolves the i18n key with Paraglide and calls `registration.showNotification(...)` so the toast lands in the OS notification center with a persistent click target.
 2. **Web Push** (closed tabs / installed PWA). When permission is granted, the page subscribes via `pushManager.subscribe()` using the install's VAPID public key. The server stores the subscription endpoint plus the user's per-category preferences and, on every notification, sends an encrypted Web Push (RFC 8291) to each allow-listed subscription. The browser wakes the service worker, the SW shows the notification with the same payload shape it received over the WS.
