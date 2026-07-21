@@ -258,6 +258,31 @@ func TestSSHAgentQuadletExecSurvivesTranslation(t *testing.T) {
 	}
 }
 
+// Container units are started by reading the argv back out of the plist, so an
+// arg holding XML-special characters (any `sh -c` script with && or a
+// redirection) has to survive the escape/unescape round trip verbatim.
+func TestPlistArgsRoundTripsXMLSpecials(t *testing.T) {
+	script := "rm -f /ssh-agent/agent.sock && exec ssh-agent -D -a /ssh-agent/agent.sock 2>/dev/null"
+	want := []string{"podman", "run", "sh", "-c", script}
+	dir := t.TempDir()
+	p := filepath.Join(dir, "unit.plist")
+	if err := os.WriteFile(p, []byte(buildPlist("com.lerd.unit", want, false, keepAliveAlways, "", "")), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := plistArgs(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != len(want) {
+		t.Fatalf("plistArgs = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("arg[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 func TestParseSectionMultipleValues(t *testing.T) {
 	content := `[Container]
 Volume=/home:/home:z
