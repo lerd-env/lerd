@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable, derived, get } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 import { wsMessage } from '$lib/ws';
@@ -592,7 +593,7 @@ export async function saveServiceConfig(
       rolledBack: data.rolled_back
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
   // No finally { loadServices() } — the publishAfter middleware on
   // the services route already broadcasts a sites/services WS frame
@@ -605,18 +606,18 @@ export async function loadServiceTuningBackups(name: string): Promise<LoadTuning
   try {
     const res = await apiFetch(tuningURL(name) + '/backups');
     if (!res.ok) {
-      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+      return { ok: false, list: [], error: m.common_backupsLoadFailed({ status: res.status }) };
     }
     const list = (await res.json()) as ServiceTuningBackup[];
     return { ok: true, list: Array.isArray(list) ? list : [] };
   } catch (e) {
-    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, list: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
 export async function loadServiceTuningBackupContent(name: string, backupName: string): Promise<string> {
   const res = await apiFetch(tuningURL(name) + '/backups/' + encodeURIComponent(backupName));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -648,7 +649,7 @@ export async function restoreServiceTuning(
       rolledBack: data.rolled_back
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
   // No finally { loadServices() } — the publishAfter(KindServices)
   // middleware on /api/services/ already triggers a WS broadcast that
@@ -680,7 +681,7 @@ export async function resetServiceTuning(name: string): Promise<ResetTuningResul
       exists: data.exists
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
