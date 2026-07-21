@@ -36,7 +36,15 @@ export async function apiJson<T>(path: string, init?: RequestInit): Promise<T> {
 export async function decodeJSONResult<T extends { ok?: boolean; error?: string }>(
   res: Response
 ): Promise<T> {
-  const text = await res.text();
+  return decodeJSONText<T>(await res.text(), `${res.status} ${res.statusText}`);
+}
+
+// decodeJSONText is the body half of decodeJSONResult, split out for callers
+// that hold the text without a Response, such as an XHR upload.
+export function decodeJSONText<T extends { ok?: boolean; error?: string }>(
+  text: string,
+  status: string
+): T {
   if (text) {
     try {
       return JSON.parse(text) as T;
@@ -44,10 +52,7 @@ export async function decodeJSONResult<T extends { ok?: boolean; error?: string 
       /* fall through to text-body envelope */
     }
   }
-  const fallback: { ok: boolean; error: string } = {
-    ok: false,
-    error: text.trim() || `${res.status} ${res.statusText}`
-  };
+  const fallback: { ok: boolean; error: string } = { ok: false, error: text.trim() || status };
   return fallback as T;
 }
 

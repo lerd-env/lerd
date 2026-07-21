@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -12,6 +13,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/spf13/cobra"
 )
 
@@ -317,14 +319,21 @@ func runDbImport(file, service, database string) error {
 	if err != nil {
 		return err
 	}
+	// psql exits 0 even when every statement failed, so the output is tallied on
+	// its way to the terminal and the result reported at the end.
+	var tally serviceops.ImportTally
 	cmd.Stdin = f
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = io.MultiWriter(os.Stdout, tally.Stream())
+	cmd.Stderr = io.MultiWriter(os.Stderr, tally.Stream())
 
 	feedback.Begin()
 	feedback.Line("importing " + file + " into " + feedback.Val(env.database) + " (" + env.connection + ")")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("import failed: %w", err)
+	}
+	if rep := tally.Report(); rep.Errors > 0 {
+		feedback.Warn("import finished but %s", rep.Summary())
+		return nil
 	}
 	feedback.Done("import complete")
 	return nil
