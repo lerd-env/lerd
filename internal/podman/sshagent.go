@@ -45,7 +45,10 @@ func GenerateSSHAgentQuadlet(image string) string {
 	fmt.Fprintln(&b, "Volume=%h/.ssh:%h/.ssh:ro")
 	fmt.Fprintf(&b, "Environment=SSH_AUTH_SOCK=%s\n", SSHAgentSocket)
 	fmt.Fprintln(&b, "PodmanArgs=--security-opt=label=disable")
-	fmt.Fprintf(&b, "Exec=ssh-agent -D -a %s\n", SSHAgentSocket)
+	// ssh-agent refuses to bind an existing socket path, and it only unlinks the
+	// socket on SIGINT/SIGTERM/SIGHUP, not on the php image's SIGQUIT stop signal.
+	// Clearing the stale socket first keeps restarts from crash-looping.
+	fmt.Fprintf(&b, "Exec=sh -c \"rm -f %s && exec ssh-agent -D -a %s\"\n", SSHAgentSocket, SSHAgentSocket)
 	fmt.Fprintln(&b)
 	fmt.Fprintln(&b, "[Service]")
 	fmt.Fprintln(&b, "Restart=always")
