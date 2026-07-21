@@ -14,10 +14,9 @@ import (
 	zone "github.com/lrstanley/bubblezone/v2"
 )
 
-// statsPollInterval is how often the background poller refreshes resource
-// stats. Matches lerd-ui's handleStats cache TTL so the two surfaces show
-// the same data at the same cadence; a faster TUI poll would just churn
-// `podman stats` without users noticing.
+// statsPollInterval is how often the background poller asks for stats. It has
+// to stay below stats.CacheTTL: the cache is shared with lerd-ui, so a tick at
+// or above the TTL would miss every time and keep the ~2s stream running.
 const statsPollInterval = 3 * time.Second
 
 // statsMsg delivers a fresh stats snapshot from the background goroutine to
@@ -28,21 +27,20 @@ type statsMsg struct{ snap stats.Snapshot }
 // runStatsPoller fetches a snapshot via stats.Cached on every tick and
 // forwards it to the program. Going through Cached (rather than Read
 // directly) means the TUI shares lerd-ui's cached snapshot when both are
-// running, halving the `podman stats` invocations for the typical
-// "dashboard open + TUI open" workflow. Cancelled by ctx so the loop
-// exits cleanly on quit.
+// running, so the two surfaces together pay for one refresh per TTL.
+// Cancelled by ctx so the loop exits cleanly on quit.
 func runStatsPoller(ctx context.Context, p *tea.Program) {
 	ticker := time.NewTicker(statsPollInterval)
 	defer ticker.Stop()
 	// First read happens immediately so the user doesn't see "no stats"
 	// for a full tick after entering the dashboard.
-	p.Send(statsMsg{snap: stats.Cached(statsPollInterval)})
+	p.Send(statsMsg{snap: stats.Cached(stats.CacheTTL)})
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			p.Send(statsMsg{snap: stats.Cached(statsPollInterval)})
+			p.Send(statsMsg{snap: stats.Cached(stats.CacheTTL)})
 		}
 	}
 }

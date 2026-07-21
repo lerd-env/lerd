@@ -79,7 +79,7 @@ func plistArgs(path string) ([]string, error) {
 		if open < 0 || close < 0 {
 			break
 		}
-		args = append(args, block[open+len("<string>"):close])
+		args = append(args, xmlUnescStr(block[open+len("<string>"):close]))
 		block = block[close+len("</string>"):]
 	}
 	return args, nil
@@ -150,6 +150,15 @@ func xmlEscStr(s string) string {
 		}
 	}
 	return buf.String()
+}
+
+// xmlUnescStr reverses xmlEscStr, so args read back out of a plist reach podman
+// as they were written. &amp; is decoded last, otherwise an escaped "&amp;lt;"
+// would collapse into a literal "<".
+func xmlUnescStr(s string) string {
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	return strings.ReplaceAll(s, "&amp;", "&")
 }
 
 // keepAlivePolicy mirrors the subset of systemd Restart= values we care

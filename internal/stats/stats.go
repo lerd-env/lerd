@@ -52,9 +52,13 @@ var numCPU = runtime.NumCPU
 
 const readTimeout = 6 * time.Second
 
-// Read returns a fresh snapshot. Callers that need caching wrap this with
-// their own TTL (lerd-ui caches for 3s in handleStats; the TUI dashboard
-// holds the last snapshot between frames).
+// CacheTTL is how often Cached pays for a refresh. Read streams
+// `podman stats --interval 1` and costs ~2s, so every surface polling this
+// package must tick faster than the TTL or it misses the cache every time.
+const CacheTTL = 10 * time.Second
+
+// Read returns a fresh snapshot. Callers that need caching go through Cached,
+// which shares one refresh between lerd-ui and the TUI.
 func Read() Snapshot {
 	out := Snapshot{
 		Containers: []ContainerStat{},

@@ -220,6 +220,7 @@
   "common_live": "实时",
   "common_disconnected": "已断开",
   "common_terminal": "终端",
+  "common_followInTerminal": "在终端中跟踪",
   "common_edit": "编辑",
   "common_remove": "移除",
   "common_add": "添加",

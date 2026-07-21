@@ -235,6 +235,7 @@
   "common_live": "canlı",
   "common_disconnected": "bağlantı kesildi",
   "common_terminal": "Terminal",
+  "common_followInTerminal": "Terminalde izle",
   "common_edit": "Düzenle",
   "common_remove": "Kaldır",
   "common_add": "Ekle",
