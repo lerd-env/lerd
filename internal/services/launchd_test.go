@@ -241,6 +241,23 @@ Exec=sh -c "install-php-extensions pcntl >/dev/null && exec php artisan octane:s
 	}
 }
 
+// The ssh-agent quadlet clears its stale socket via `sh -c` before exec'ing the
+// agent; that script must reach podman as one argv element on macOS too.
+func TestSSHAgentQuadletExecSurvivesTranslation(t *testing.T) {
+	args, err := containerToPodmanArgs(parseSection(podman.GenerateSSHAgentQuadlet("lerd-php85-fpm:local"), "Container"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gotTail := args[len(args)-3:]
+	wantTail := []string{"sh", "-c",
+		"rm -f " + podman.SSHAgentSocket + " && exec ssh-agent -D -a " + podman.SSHAgentSocket}
+	for i := range wantTail {
+		if gotTail[i] != wantTail[i] {
+			t.Fatalf("tail arg[%d] = %q, want %q (full: %v)", i, gotTail[i], wantTail[i], args)
+		}
+	}
+}
+
 func TestParseSectionMultipleValues(t *testing.T) {
 	content := `[Container]
 Volume=/home:/home:z
