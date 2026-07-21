@@ -61,6 +61,35 @@ func TestPowerWatchState_SuppressedTransitionIsRetried(t *testing.T) {
 	}
 }
 
+// A host where no watcher can poll has no cadence to maintain, so the loop must
+// not start at all: it would probe the power state forever and log transitions
+// that restart nothing.
+func TestWatchPower_StandsDownWhereNothingPolls(t *testing.T) {
+	prevHost, prevCurrent := hostCanPollFn, powerCurrentFn
+	probes := 0
+	hostCanPollFn = func() bool { return false }
+	powerCurrentFn = func() power.State {
+		probes++
+		return power.Mains
+	}
+	t.Cleanup(func() { hostCanPollFn, powerCurrentFn = prevHost, prevCurrent })
+
+	done := make(chan struct{})
+	go func() {
+		WatchPower(time.Millisecond)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("WatchPower kept ticking on a host that never polls")
+	}
+	if probes != 0 {
+		t.Errorf("probed the power state %d times with nothing to maintain, want 0", probes)
+	}
+}
+
 // Every state carries a distinct interval, so each transition is worth acting
 // on rather than being collapsed.
 func TestPowerWatchState_LowPowerIsItsOwnTransition(t *testing.T) {

@@ -575,7 +575,7 @@ func newWorkerRemoveCmd() *cobra.Command {
 				}
 			}
 			for _, p := range paths {
-				unit := workerUnitName(site.Name, p, name)
+				unit := WorkerUnitName(site.Name, p, name)
 				if isServiceActiveOrRestarting(unit) {
 					_ = WorkerStopForSite(site.Name, p, name)
 				}
@@ -645,9 +645,10 @@ func workerNames(siteName, sitePath, workerName string) (unit, display string) {
 	return unit + "-" + config.WorktreeUnitSlug(wtBase), display + "/" + wtBase
 }
 
-// workerUnitName is a thin wrapper around workerNames for callers that only
-// need the unit name (legacy callers, mostly).
-func workerUnitName(siteName, sitePath, workerName string) string {
+// WorkerUnitName is a thin wrapper around workerNames for callers that only
+// need the unit name, including callers outside this package, so the naming
+// rule (and its worktree suffix) is never re-spelled by hand.
+func WorkerUnitName(siteName, sitePath, workerName string) string {
 	unit, _ := workerNames(siteName, sitePath, workerName)
 	return unit
 }

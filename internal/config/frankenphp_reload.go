@@ -24,6 +24,15 @@ func WatcherNeedsPolling(sitePath string) bool {
 	return wsl.IsWSL() && strings.HasPrefix(sitePath, "/mnt/")
 }
 
+// HostCanPollWatchers reports whether any site on this host could need a
+// polling watcher, which is the host half of WatcherNeedsPolling with the path
+// test dropped. Native Linux never polls whatever the site path, so background
+// work that exists only to maintain the poll cadence can stand down entirely
+// rather than waking to find nothing to do.
+func HostCanPollWatchers() bool {
+	return runtime.GOOS == "darwin" || wsl.IsWSL()
+}
+
 // watcherPollIntervalMS is how often a polling reload watcher re-stats each
 // watched file while the machine is plugged in. chokidar's own default is
 // 100ms, which is fine on a local disk and ruinous on a shared one: every

@@ -177,6 +177,20 @@ func TestWatcherPollEnv_TracksPollingDecision(t *testing.T) {
 	}
 }
 
+// The host gate exists to let cadence upkeep stand down, so it may only be
+// false where no site path polls either. A host that says it never polls while
+// some path does would silently strand those watchers on a stale interval.
+func TestHostCanPollWatchers_NeverSuppressesAPollingPath(t *testing.T) {
+	if HostCanPollWatchers() {
+		return
+	}
+	for _, path := range []string{"/mnt/c/Users/dev/app", "/home/dev/Code/app", t.TempDir()} {
+		if WatcherNeedsPolling(path) {
+			t.Errorf("host reports no polling, but %s polls", path)
+		}
+	}
+}
+
 // The ladder: a laptop on battery backs off, and Low Power Mode, an explicit
 // request for less background work, backs off twice as far again.
 func TestWatcherPollIntervalFor(t *testing.T) {

@@ -45,6 +45,7 @@ func (s *powerWatchState) shouldRestart(cur power.State, now time.Time) bool {
 var (
 	powerCurrentFn = power.Current
 	powerRestartFn = restartPollingReloadWorkers
+	hostCanPollFn  = config.HostCanPollWatchers
 )
 
 // WatchPower re-applies the reload watcher's poll interval when the machine's
@@ -52,7 +53,14 @@ var (
 // written and chokidar reads it once at startup, so without this an unplugged
 // laptop would keep polling at the mains cadence until something else happened
 // to restart the worker.
+//
+// Hosts where no watcher can ever poll return immediately: there would be no
+// interval to re-apply, and ticking anyway costs a probe every interval and
+// logs a power transition that changed nothing.
 func WatchPower(interval time.Duration) {
+	if !hostCanPollFn() {
+		return
+	}
 	state := &powerWatchState{last: powerCurrentFn(), cooldown: powerRestartCooldown}
 
 	ticker := time.NewTicker(interval)
@@ -124,7 +132,7 @@ func restartPollingReloadWorkers(state power.State) {
 			if supported, _ := cli.WorkerSupportedOnPlatform(def); !supported {
 				continue
 			}
-			unit := "lerd-" + name + "-" + s.Name
+			unit := cli.WorkerUnitName(s.Name, s.Path, name)
 			if status, _ := podman.UnitStatus(unit); status != "active" {
 				continue
 			}
