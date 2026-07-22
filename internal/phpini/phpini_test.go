@@ -40,6 +40,15 @@ func TestScopeFile_VersionMapsToPerVersionIni(t *testing.T) {
 // containers restart — every PHP container mounts it and a missing bind-mount
 // source makes them all fail to start on podman that does not auto-create it.
 func TestRestartNoSeed_SharedReseedsFile(t *testing.T) {
+	// The no-op restart loop this asserts only holds with no PHP versions
+	// installed. On a dev machine that has some, RestartNoSeed iterates them and
+	// drives real podman, which the isolated env below cannot reach (wiping
+	// XDG_CONFIG_HOME loses the podman-machine connection on macOS). Read the
+	// real state before the env is isolated, and skip rather than fail there.
+	if len(installedVersions()) > 0 {
+		t.Skip("PHP versions installed; RestartNoSeed would drive real podman")
+	}
+
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
