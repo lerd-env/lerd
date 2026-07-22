@@ -73,6 +73,8 @@ func TestLinuxRemoveServiceUnit(t *testing.T) {
 }
 
 func TestLinuxRemoveServiceUnitNotExists(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
 	mgr := &linuxServiceManager{}
 	if err := mgr.RemoveServiceUnit("lerd-nonexistent"); err != nil {
 		t.Fatalf("RemoveServiceUnit of nonexistent unit should not error: %v", err)

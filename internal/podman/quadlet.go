@@ -139,6 +139,7 @@ func ListManagedServiceNames() []string {
 // callers don't leave an orphan agent in ~/Library/LaunchAgents/.
 func RemoveQuadlet(name string) error {
 	path := filepath.Join(config.QuadletDir(), name+".container")
+	config.GuardRealWrite(path)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

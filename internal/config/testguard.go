@@ -28,12 +28,14 @@ var underTest = func() bool {
 	return false
 }()
 
-// GuardRealWrite is guardRealWrite for writers in other packages.
+// GuardRealWrite is guardRealWrite for writers and removers in other packages.
 func GuardRealWrite(path string) { guardRealWrite(path) }
 
-// guardRealWrite stops a test writing the state of the developer running it. A
-// test that never isolated XDG_DATA_HOME has emptied a real sites.yaml, so make
-// that a loud failure at the write rather than silent data loss.
+// guardRealWrite stops a test writing or deleting the state of the developer
+// running it. A test that never isolated XDG_DATA_HOME has emptied a real
+// sites.yaml, and another deleted a real quadlet, leaving its container running
+// under a unit systemd no longer had a definition for. Make either a loud failure
+// rather than silent damage.
 func guardRealWrite(path string) {
 	if !underTest {
 		return
@@ -49,7 +51,7 @@ func guardRealWrite(path string) {
 		}
 		real = resolveLinks(real)
 		if abs == real || strings.HasPrefix(abs, real+string(os.PathSeparator)) {
-			panic(fmt.Sprintf("test wrote to the real lerd state at %s: isolate it with "+
+			panic(fmt.Sprintf("test wrote to or removed the real lerd state at %s: isolate it with "+
 				`t.Setenv("XDG_DATA_HOME", t.TempDir())`+" and "+`t.Setenv("XDG_CONFIG_HOME", t.TempDir())`, abs))
 		}
 	}
