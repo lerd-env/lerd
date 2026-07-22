@@ -7,6 +7,7 @@ import (
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/feedback"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
 
 // Automatic fix keys. Each is attached to a finding by the doctor and dispatched
@@ -16,7 +17,7 @@ const (
 	fixMkdir        = "mkdir"
 	fixEnableLinger = "enable-linger"
 	fixPhpRebuild   = "php-rebuild"
-	fixStart        = "start"
+	fixNetworkWait  = "network-wait"
 	fixInstall      = "install"
 	fixCleanup      = "cleanup"
 )
@@ -40,6 +41,11 @@ var heavyFixKeys = map[string]bool{
 // reCheckReport re-runs the diagnosis after fixes are applied; a package var so
 // tests can stub it instead of probing the live system.
 var reCheckReport = RunDoctorReport
+
+// ensureNoNetworkWaitStallFn installs the podman network-online drop-in; a seam
+// tests override so the network-wait fix can be exercised without touching the
+// host's systemd, and to prove it routes here rather than into `lerd start`.
+var ensureNoNetworkWaitStallFn = lerdSystemd.EnsureNoNetworkWaitStall
 
 // IsHeavyFix reports whether a fix always warrants an extra confirmation.
 func IsHeavyFix(fix *DoctorFix) bool {
@@ -157,8 +163,13 @@ func ApplyDoctorFix(fix *DoctorFix, out io.Writer) error {
 			return fmt.Errorf("php-rebuild fix: no version")
 		}
 		return runSelf(out, "php:rebuild", fix.Arg)
-	case fixStart:
-		return runSelf(out, "start")
+	case fixNetworkWait:
+		// A user-level drop-in and `systemctl --user` only; deliberately not
+		// `lerd start`, which would drag the privileged resolver reconfiguration
+		// into the auto tier that promises never to touch sudo.
+		fmt.Fprintln(out, "installing the podman network-online drop-in")
+		_, err := ensureNoNetworkWaitStallFn()
+		return err
 	case fixInstall:
 		return runSelf(out, "install")
 	case fixCleanup:

@@ -501,6 +501,14 @@ _stub_dns_files() {
   [[ "$output" == *"only root can remove it"* ]]
 }
 
+@test "lerd_dns_cleanup_hint lists the sudoers grant for hand removal" {
+  # The passwordless DNS grant is a root-owned file the setup writes; left
+  # behind it is a standing NOPASSWD root grant for a tool being removed.
+  [[ " ${LERD_DNS_FILES[*]} " == *" /etc/sudoers.d/lerd "* ]]
+  run lerd_dns_cleanup_hint
+  [[ "$output" == *"/etc/sudoers.d/lerd"* ]]
+}
+
 @test "uninstall_linux_dns stays quiet when lerd never configured DNS" {
   local d; d="$(_fake_lerd_dir)"
   PATH="$d:$PATH"

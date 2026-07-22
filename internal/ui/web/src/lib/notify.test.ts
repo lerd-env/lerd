@@ -140,6 +140,49 @@ describe('notify dispatcher', () => {
     expect(get(notificationHistory)).toHaveLength(1);
   });
 
+  // Under the native sink the browser prefs have no UI, so they must not gate
+  // the bell: a kind the browser prefs default off (or the user turned off
+  // before switching to native) still reaches the notification centre when the
+  // daemon delivers it natively (#968 regression).
+  it('records to the bell under the native sink even when browser prefs are off', async () => {
+    const { initNotify, notifyDelivery, notifyNativeKinds, setNotifyPref, notificationHistory } =
+      await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    notifyDelivery.set('native');
+    notifyNativeKinds.set({ mail: true });
+    setNotifyPref('mail', false); // browser pref off, unreachable in native mode
+
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'mail', title: 'New email: Welcome' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(get(notificationHistory)).toHaveLength(1);
+  });
+
+  it('drops a kind the daemon suppresses natively', async () => {
+    const { initNotify, notifyDelivery, notifyNativeKinds, notificationHistory } =
+      await import('./notify');
+    const { wsMessage } = await import('./ws');
+
+    initNotify();
+    notifyDelivery.set('native');
+    notifyNativeKinds.set({ dump: false });
+
+    wsMessage.set({
+      type: 'notification',
+      notification: { kind: 'dump', title: 'ray()' }
+    });
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(get(notificationHistory)).toHaveLength(0);
+  });
+
   it('still raises it on the desktop under the browser sink', async () => {
     const { initNotify, notifyDelivery } = await import('./notify');
     const { wsMessage } = await import('./ws');

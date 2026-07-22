@@ -708,6 +708,7 @@ cmd_uninstall_macos() {
 # and only the binary can take them back out, so the uninstaller uses this list
 # both to detect the setup and to tell the user how to clear it by hand.
 LERD_DNS_FILES=(
+  /etc/sudoers.d/lerd
   /etc/systemd/system/lerd-dns-link.service
   /etc/systemd/resolved.conf.d/lerd-fallback.conf
   /etc/systemd/resolved.conf.d/lerd.conf

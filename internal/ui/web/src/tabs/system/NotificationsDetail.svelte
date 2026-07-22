@@ -15,6 +15,7 @@
     autoSubscribeDisabled,
     detectBrowserFamily,
     notifyDelivery,
+    notifyNativeKinds,
     ALL_KINDS,
     type NotifyKind
   } from '$lib/notify';
@@ -71,6 +72,7 @@
         nativeSupported = !!d.native_supported;
         nativeKinds = d.kinds ?? {};
         notifyDelivery.set(deliveryTarget);
+        notifyNativeKinds.set(nativeKinds);
       }
     } catch {
       /* keep browser default */
@@ -95,6 +97,7 @@
     } catch {
       nativeKinds = { ...nativeKinds, [kind]: prev };
     }
+    notifyNativeKinds.set(nativeKinds);
   }
 
   async function setDelivery(target: 'browser' | 'native') {

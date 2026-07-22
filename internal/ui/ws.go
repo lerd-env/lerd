@@ -112,7 +112,9 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	defer ws.Close()
+	// The socket is closed by the reader-coordinating cleanup below, once the
+	// reader goroutine exists; until then there is no return path that leaves it
+	// open, so there is nothing to defer here.
 
 	// All frame writes funnel through these helpers: the reader goroutine
 	// writes pong/close frames while the main loop writes snapshots and pings,
@@ -152,45 +154,22 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 	snapshots.Invalidate(eventbus.KindServices)
 	snapshots.Invalidate(eventbus.KindStatus)
 
-	// Initial snapshot: assemble one JSON object containing all kinds.
-	initial := assembleSnapshot(
-		snapshots.Sites(),
-		snapshots.Services(),
-		snapshots.Status(),
-		snapshots.UnhealthyWorkers(),
-		buildDumpsStatusJSON(),
-		buildDevtoolsStatusJSON(),
-		buildProfilerStatusJSON(),
-		nil,
-		[]string{"snapshot"},
-	)
-	if err := sendText(initial); err != nil {
-		return
-	}
-
 	// connVisible tracks whether THIS connection is currently counted as
-	// visible. Only the reader goroutine writes it; the deferred cleanup
-	// reads it after the reader has exited (close(done) happens-before the
-	// <-done branch), so there is no data race.
+	// visible. Only the reader goroutine writes connVisible/connFocused; the
+	// cleanup below reads them only after closing the socket and waiting for the
+	// reader to exit, so there is no data race and no lost decrement.
 	connVisible := true
 	noteVisibility(true)
 	// Focus starts false: a freshly opened connection has not told us yet, and
 	// assuming focus would silence desktop notifications for a window that is
 	// merely open. The client sends its state right after the socket opens.
 	connFocused := false
-	defer func() {
-		if connVisible {
-			noteVisibility(false)
-		}
-		if connFocused {
-			noteFocus(false)
-		}
-	}()
 
 	// Reader goroutine: handle ping/pong/close/visibility frames. The read
 	// deadline is reset before every frame; if the client falls silent
 	// (suspended tab, half-open TCP), ReadFrame returns a timeout error and
-	// the goroutine exits, which triggers the deferred cleanup below.
+	// the goroutine exits, which triggers the deferred cleanup below. Started
+	// before the initial snapshot so every return path can join it.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -232,6 +211,38 @@ func handleWS(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}()
+
+	// Close the socket to unblock the reader's ReadFrame, wait for it to exit,
+	// then decrement. Closing first is what guarantees the reader is done
+	// touching connVisible/connFocused before this reads them, on every return
+	// path (broker channel closed, a failed write, a ping error), not only the
+	// main loop's done branch.
+	defer func() {
+		ws.Close()
+		<-done
+		if connVisible {
+			noteVisibility(false)
+		}
+		if connFocused {
+			noteFocus(false)
+		}
+	}()
+
+	// Initial snapshot: assemble one JSON object containing all kinds.
+	initial := assembleSnapshot(
+		snapshots.Sites(),
+		snapshots.Services(),
+		snapshots.Status(),
+		snapshots.UnhealthyWorkers(),
+		buildDumpsStatusJSON(),
+		buildDevtoolsStatusJSON(),
+		buildProfilerStatusJSON(),
+		nil,
+		[]string{"snapshot"},
+	)
+	if err := sendText(initial); err != nil {
+		return
+	}
 
 	pingTicker := time.NewTicker(wsPingInterval)
 	defer pingTicker.Stop()

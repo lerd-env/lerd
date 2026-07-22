@@ -174,6 +174,33 @@ func TestFileChangedBy(t *testing.T) {
 	}
 }
 
+// An upgrade that only refreshes quadlets must rewrite a custom-FPM site's
+// quadlet too, or additions to the shared FPM template (the shared php.ini
+// mount from #944) never back-fill and `php:ini shared` silently no-ops for it.
+func TestRefreshUnreferencedCustomQuadlets_RoutesCustomFPM(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	var got []string
+	orig := writeCustomFPMQuadletFn
+	writeCustomFPMQuadletFn = func(name, version string) error {
+		got = append(got, name+"@"+version)
+		return nil
+	}
+	t.Cleanup(func() { writeCustomFPMQuadletFn = orig })
+
+	reg := &config.SiteRegistry{Sites: []config.Site{
+		{Name: "shop", Path: t.TempDir(), Runtime: "fpm-custom", PHPVersion: "8.4"},
+		{Name: "paused", Path: t.TempDir(), Runtime: "fpm-custom", PHPVersion: "8.4", Paused: true},
+	}}
+
+	refreshUnreferencedCustomQuadlets(map[string]bool{}, reg)
+
+	if len(got) != 1 || got[0] != "shop@8.4" {
+		t.Errorf("custom-FPM refresh routing = %v, want only [shop@8.4]", got)
+	}
+}
+
 func TestInstallAutostart(t *testing.T) {
 	installAutostart()
 }

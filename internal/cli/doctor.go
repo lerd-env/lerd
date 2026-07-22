@@ -169,7 +169,7 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		// every container start, plus the boot, pays the 90s.
 		if lerdSystemd.NetworkWaitStalls() {
 			warn("podman network-online wait", "network-online.target never activates here, so every container start stalls 90s — fix: lerd start")
-			rep.fixLast(autoFix(fixStart, "", "install the network-online drop-in and restart (lerd start)"))
+			rep.fixLast(autoFix(fixNetworkWait, "", "install the podman network-online drop-in"))
 		} else {
 			ok("podman network-online wait")
 		}

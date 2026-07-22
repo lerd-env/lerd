@@ -615,6 +615,34 @@ func TestTeardown_removesFallbackDropin(t *testing.T) {
 	}
 }
 
+// Left behind, /etc/sudoers.d/lerd is a standing NOPASSWD root grant (resolvectl,
+// a root-run NM dispatcher script, restarting NetworkManager) for a tool being
+// removed, so Teardown must delete it. It has to go last, once nothing above
+// still depends on the grants it provides.
+func TestTeardown_removesTheSudoersGrant(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	_, teardown, found := strings.Cut(string(src), "func Teardown()")
+	if !found {
+		t.Fatal("Teardown not found in setup.go")
+	}
+	if !strings.Contains(teardown, "lerdSudoersPath") {
+		t.Fatal("Teardown must remove /etc/sudoers.d/lerd, or uninstalling lerd leaves a passwordless root grant behind")
+	}
+	sudoersAt := strings.Index(teardown, "lerdSudoersPath")
+	resolverAt := strings.LastIndex(teardown, `"restart", "systemd-resolved"`)
+	nmAt := strings.LastIndex(teardown, `"restart", "NetworkManager"`)
+	last := resolverAt
+	if nmAt > last {
+		last = nmAt
+	}
+	if last >= 0 && sudoersAt < last {
+		t.Error("the sudoers removal must come after the granted resolver/NetworkManager restarts, or it revokes the grants those steps still need")
+	}
+}
+
 // The write is guarded on the link coming up, but nothing ever walked it back. A
 // host that had lerd0 and lost it (dummy module dropped by a kernel update, unit
 // removed by hand) keeps the drop-in from the run that worked, and is left with
@@ -649,6 +677,26 @@ func TestSetupDummyLink_handsTheFallbacksBackWhenTheLinkStopsWorking(t *testing.
 	sudoers := renderLinuxSudoers("alice")
 	assertContains(t, sudoers, "/usr/bin/rm -f /etc/systemd/resolved.conf.d/lerd-fallback.conf")
 	assertContains(t, sudoers, "/usr/bin/systemctl restart systemd-resolved")
+}
+
+// The grants-out-of-date early return must hand the fallbacks back too. An
+// upgrade that adds a required grant lands here until `lerd install` runs, and a
+// host that already had lerd0 still carries the fallback drop-in, so bailing
+// without restoring leaves resolved's fallbacks off with no lerd0, hanging every
+// offline lookup, with no later run repairing it because each takes the same
+// early return.
+func TestSetupDummyLink_handsTheFallbacksBackWhenTheGrantsAreStale(t *testing.T) {
+	src, err := os.ReadFile("setup.go")
+	if err != nil {
+		t.Fatalf("reading setup.go: %v", err)
+	}
+	guard := section(t, string(src), "if !dummyLinkGrantsLive() {", "// Migrate hosts")
+	assertContains(t, guard, "restoreResolvedFallbacks()")
+	restoreAt := strings.Index(guard, "restoreResolvedFallbacks()")
+	returnAt := strings.Index(guard, "return fmt.Errorf")
+	if returnAt < 0 || restoreAt > returnAt {
+		t.Error("the restore must run before the early return, not after it")
+	}
 }
 
 // The link and everything that reads it must agree on the TLD. lerd supports a
