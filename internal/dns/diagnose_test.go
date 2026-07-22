@@ -21,6 +21,7 @@ func fakeProbes() probeFns {
 		dummyLinkRouting: func(string) (bool, bool) { return true, true },
 		systemLookup:     func(string) ([]string, error) { return []string{"127.0.0.1"}, nil },
 		vpnActive:        func() bool { return false },
+		lanExposedIP:     func() string { return "" },
 	}
 }
 
@@ -171,6 +172,38 @@ func TestDiagnose_wrongAnswerSurfaceConfigDrift(t *testing.T) {
 	}
 	if !strings.Contains(d.Steps[3].Detail, "1.2.3.4") {
 		t.Errorf("detail should include the wrong answer, got %q", d.Steps[3].Detail)
+	}
+}
+
+// Under lan:expose dnsmasq answers the host LAN IP, not loopback, and the
+// system resolver returns it too. The doctor must accept that as healthy
+// instead of red-flagging a working setup.
+func TestDiagnose_lanExposedAcceptsLANIP(t *testing.T) {
+	const lanIP = "192.168.1.50"
+	p := fakeProbes()
+	p.lanExposedIP = func() string { return lanIP }
+	p.dnsmasqAnswer = func(string) (string, error) { return lanIP, nil }
+	p.systemLookup = func(string) ([]string, error) { return []string{lanIP}, nil }
+	d := diagnose("test", p)
+	if d.FirstFailure != -1 {
+		t.Errorf("FirstFailure = %d, want -1 (LAN IP is valid under lan:expose)", d.FirstFailure)
+	}
+	if got := d.Steps[3].Detail; got != lanIP {
+		t.Errorf("dig rung detail = %q, want the LAN IP %q", got, lanIP)
+	}
+}
+
+// The dig-rung hint must point at a cross-platform command. systemctl is
+// Linux-only and used to leak into the hint shown on macOS.
+func TestDiagnose_digHintUsesDnsRepairNotSystemctl(t *testing.T) {
+	p := fakeProbes()
+	p.dnsmasqAnswer = func(string) (string, error) { return "1.2.3.4", nil }
+	hint := diagnose("test", p).Steps[3].Hint
+	if !strings.Contains(hint, "lerd dns:repair") {
+		t.Errorf("hint %q should suggest `lerd dns:repair`", hint)
+	}
+	if strings.Contains(hint, "systemctl") {
+		t.Errorf("hint %q must not suggest systemctl (Linux-only)", hint)
 	}
 }
 
