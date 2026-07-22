@@ -196,7 +196,10 @@ func restartFPMUnit(version string) error {
 	return podman.RestartUnit("lerd-php" + short + "-fpm")
 }
 
-func installedVersions() []string {
+// A var so tests can pin the version list. The real one reads the host's
+// launchd plists on macOS, which no amount of XDG isolation hides, so a test
+// that left it live would drive the developer's own podman.
+var installedVersions = func() []string {
 	v, _ := phpPkg.ListInstalled()
 	return v
 }
