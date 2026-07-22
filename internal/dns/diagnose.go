@@ -60,6 +60,35 @@ type probeFns struct {
 	dummyLinkRouting func(tld string) (present bool, routed bool)
 	systemLookup     func(tld string) (addrs []string, err error)
 	vpnActive        func() bool
+	// lanExposedIP is the LAN IP dnsmasq hands out under lan:expose, or "" when
+	// off, so the answer checks accept it as legitimate (see probe.go Check).
+	lanExposedIP func() string
+}
+
+// exposedIP is the LAN IP dnsmasq publishes under lan:expose, or "" when the
+// probe left the hook unset (older callers and tests predating the field).
+func (p probeFns) exposedIP() string {
+	if p.lanExposedIP == nil {
+		return ""
+	}
+	return p.lanExposedIP()
+}
+
+// answerAccepted reports whether a DNS answer is one lerd would legitimately
+// return: loopback always, plus the host LAN IP when lan:expose is on.
+func answerAccepted(answer, lanIP string) bool {
+	return answer == "127.0.0.1" || (lanIP != "" && answer == lanIP)
+}
+
+// acceptedAnswer returns the first address in addrs that lerd would legitimately
+// hand out, or "" if none qualifies.
+func acceptedAnswer(addrs []string, lanIP string) string {
+	for _, a := range addrs {
+		if answerAccepted(a, lanIP) {
+			return a
+		}
+	}
+	return ""
 }
 
 // resolverHookup kinds. Both systemd-resolved paths rely on the lerd0 link;
@@ -170,23 +199,30 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		return finalize(d)
 	}
 
-	// Rung 4 — direct DNS query at port 5300.
+	// Rung 4 — direct DNS query at port 5300. Under lan:expose dnsmasq answers
+	// the host LAN IP, not loopback, so accept that too rather than red-flag a
+	// healthy exposed setup.
 	answer, err := p.dnsmasqAnswer(tld)
+	lanIP := p.exposedIP()
+	want := "127.0.0.1"
+	if lanIP != "" {
+		want += " or " + lanIP
+	}
 	switch {
 	case err != nil:
 		d.Steps = append(d.Steps, Step{
 			Name:   "dig @127.0.0.1 -p 5300",
 			Status: StepFail,
 			Detail: err.Error(),
-			Hint:   "lerd-dns config probably stale, restart with: systemctl --user restart lerd-dns",
+			Hint:   "lerd-dns config probably stale, repair with: lerd dns:repair",
 		})
 		return finalize(d)
-	case answer != "127.0.0.1":
+	case !answerAccepted(answer, lanIP):
 		d.Steps = append(d.Steps, Step{
 			Name:   "dig @127.0.0.1 -p 5300",
 			Status: StepFail,
-			Detail: fmt.Sprintf("got %q, want 127.0.0.1", answer),
-			Hint:   "lerd-dns address rule missing, restart with: systemctl --user restart lerd-dns",
+			Detail: fmt.Sprintf("got %q, want %s", answer, want),
+			Hint:   "lerd-dns address rule missing, repair with: lerd dns:repair",
 		})
 		return finalize(d)
 	default:
@@ -273,14 +309,15 @@ func diagnose(tld string, p probeFns) Diagnostic {
 	// Rung 7 — end to end resolution at port 53.
 	addrs, err := p.systemLookup(tld)
 	vpn := p.vpnActive != nil && p.vpnActive()
+	accepted := acceptedAnswer(addrs, lanIP)
 	switch {
 	case err != nil:
 		d.Steps = append(d.Steps, systemLookupFailStep(err.Error(), vpn))
-	case !contains(addrs, "127.0.0.1"):
+	case accepted == "":
 		d.Steps = append(d.Steps, systemLookupFailStep(
-			fmt.Sprintf("got %v, want one entry to be 127.0.0.1", addrs), vpn))
+			fmt.Sprintf("got %v, want one entry to be %s", addrs, want), vpn))
 	default:
-		d.Steps = append(d.Steps, Step{Name: "system DNS lookup", Status: StepOK, Detail: "127.0.0.1"})
+		d.Steps = append(d.Steps, Step{Name: "system DNS lookup", Status: StepOK, Detail: accepted})
 	}
 
 	return finalize(d)
@@ -321,15 +358,6 @@ func finalize(d Diagnostic) Diagnostic {
 	return d
 }
 
-func contains(haystack []string, needle string) bool {
-	for _, h := range haystack {
-		if h == needle {
-			return true
-		}
-	}
-	return false
-}
-
 // findListenerCmd returns the shell command the user can run to identify
 // the process bound to a TCP port. macOS lacks ss(8), so we point users at
 // lsof which ships with the OS; everywhere else we assume iproute2 ss.
@@ -352,7 +380,19 @@ func defaultProbes() probeFns {
 		dummyLinkRouting: defaultDummyLinkRouting,
 		systemLookup:     defaultSystemLookup,
 		vpnActive:        VPNActive,
+		lanExposedIP:     defaultLanExposedIP,
 	}
+}
+
+// defaultLanExposedIP returns the host's primary LAN IP when lan:expose is on,
+// or "" otherwise. Mirrors probe.go's Check so the doctor accepts the same
+// answers the resolver legitimately hands out.
+func defaultLanExposedIP() string {
+	cfg, _ := config.LoadGlobal()
+	if cfg != nil && cfg.LAN.Exposed {
+		return primaryLANIP()
+	}
+	return ""
 }
 
 // defaultDummyLinkRouting reports whether lerd0 exists and still carries the
