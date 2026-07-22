@@ -7,6 +7,7 @@
   import LogViewer from '$components/LogViewer.svelte';
   import DnsConfigTab from './DnsConfigTab.svelte';
   import { status, dnsState } from '$stores/status';
+  import { escapeHtml } from '$lib/html';
   import { m } from '../../paraglide/messages.js';
 
   const logsEnabled = $derived($status.dns?.enabled !== false);
@@ -21,7 +22,7 @@
 
 {#snippet pill()}
   {#if $status.dns?.enabled === false}
-    <StatusPill tone="muted" label="disabled" />
+    <StatusPill tone="muted" label={m.common_disabled()} />
   {:else}
     {@const dns = dnsState($status)}
     <StatusPill
@@ -42,7 +43,12 @@
       <InfoRow label={m.system_tld()} value={'.' + $status.dns.tld} />
       {#if $status.dns?.enabled === false}
         <p class="text-xs text-gray-400">
-          lerd-dns is disabled. Sites resolve through the system resolver via *.{$status.dns.tld} (RFC 6761). HTTPS is unavailable in this mode. To re-enable, set <code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">dns.enabled: true</code> in <code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">~/.config/lerd/config.yaml</code> and run <code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd install</code>.
+          {@html m.system_dns_disabledHint({
+            tld: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">*.' + escapeHtml($status.dns.tld) + '</code>',
+            setting: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">dns.enabled: true</code>',
+            file: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">~/.config/lerd/config.yaml</code>',
+            cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd install</code>'
+          })}
         </p>
       {:else if dnsState($status) === 'degraded'}
         <p class="text-xs text-gray-400">{m.system_dns_degradedHint()}</p>

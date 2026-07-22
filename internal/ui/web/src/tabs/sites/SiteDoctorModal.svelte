@@ -101,7 +101,7 @@
       report = r;
       commands = cmds;
     } catch (e) {
-      if (site.domain === domain && branch === b) error = e instanceof Error ? e.message : 'Failed to load';
+      if (site.domain === domain && branch === b) error = e instanceof Error ? e.message : m.common_loadFailed();
     } finally {
       if (site.domain === domain && branch === b) loading = false;
     }

@@ -59,7 +59,7 @@
           {#if svc.status !== 'active' && svc.port_conflicts && svc.port_conflicts.length > 0}
             <span
               class="shrink-0 text-amber-500 dark:text-amber-400"
-              title={'Port ' + svc.port_conflicts.map((c) => c.port).join(', ') + ' already in use on the host. Start may fail until you stop the conflicting process.'}
+              title={m.services_portConflictTitle({ ports: svc.port_conflicts.map((c) => c.port).join(', ') })}
               aria-label={m.services_ariaPortConflict()}
             >
               <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

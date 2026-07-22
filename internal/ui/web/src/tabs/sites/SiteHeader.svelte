@@ -341,7 +341,7 @@
           {/if}
         </button>
       {:else if useTLS}
-        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-emerald-500" aria-label="TLS">
+        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-emerald-500" aria-label={m.sites_tls_on()}>
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"
@@ -367,7 +367,7 @@
           </svg>
         </span>
       {:else}
-        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-400 dark:text-gray-500" aria-label="No TLS">
+        <span class="shrink-0 -ml-1 p-1 inline-flex items-center text-gray-400 dark:text-gray-500" aria-label={m.sites_tls_off()}>
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path
               stroke-linecap="round"

@@ -206,7 +206,7 @@ export async function installPreset(p: Preset): Promise<InstallResult> {
     }));
     return { ok: true, name: finalEvent.name || p.name };
   } catch (e) {
-    const err = e instanceof Error ? e.message : 'Request failed';
+    const err = e instanceof Error ? e.message : m.common_requestFailed();
     updatePreset(p.name, (x) => ({ ...x, installing: false, error: err }));
     return { ok: false, error: err };
   }

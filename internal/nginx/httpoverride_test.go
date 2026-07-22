@@ -79,6 +79,36 @@ func TestEnsureNginxConfig_dropsOverriddenDefaults(t *testing.T) {
 	}
 }
 
+// log_format and access_log may repeat in the same context, so a user
+// declaring either must not retire lerd's own: nginx then fails to start
+// with "unknown log format lerd_access" and every site goes down.
+func TestEnsureNginxConfig_keepsRepeatableLogDirectives(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	writeHTTPOverride(t, tmp, "log_format main '$remote_addr $status';\naccess_log /var/log/nginx/access.log main;\n")
+	if err := EnsureNginxConfig(); err != nil {
+		t.Fatalf("EnsureNginxConfig: %v", err)
+	}
+	body := readRenderedConf(t, tmp)
+	if !hasActiveDirective(body, "log_format lerd_access ") {
+		t.Errorf("lerd's log_format must survive a user log_format, got:\n%s", body)
+	}
+	if !hasActiveDirective(body, "access_log syslog:") {
+		t.Errorf("lerd's access_log feeds idle-suspend and request stats, got:\n%s", body)
+	}
+}
+
+// hasActiveDirective reports whether the conf carries prefix as a live
+// directive rather than one the filter commented out.
+func hasActiveDirective(conf, prefix string) bool {
+	for _, line := range strings.Split(conf, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // The filter only applies to lerd's own http{} defaults. A user directive that
 // happens to share a name with something in another block (events{}, or the
 // nested location blocks of a vhost) must not disturb it.

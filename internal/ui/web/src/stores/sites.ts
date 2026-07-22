@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable, derived, get } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 import { wsMessage } from '$lib/ws';
@@ -257,7 +258,7 @@ async function postAction(path: string): Promise<{ ok: boolean; error?: string }
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -289,7 +290,7 @@ export async function loadSiteEnvFiles(domain: string, branch: string = ''): Pro
 
 export async function loadSiteEnv(domain: string, branch: string = '', file: string = ''): Promise<string> {
   const res = await apiFetch(site(domain, 'env') + envQS(branch, file));
-  if (!res.ok) throw new Error(`Failed to load ${file} (${res.status})`);
+  if (!res.ok) throw new Error(m.sites_fileLoadFailed({ file, status: res.status }));
   return await res.text();
 }
 
@@ -334,7 +335,7 @@ export async function proposeSiteEnv(
   else if (includeOptional) params.set('optional', '1');
   const qs = params.toString();
   const res = await apiFetch(site(domain, 'env') + '/propose' + (qs ? '?' + qs : ''));
-  if (!res.ok) throw new Error(`Failed to load env proposal (${res.status})`);
+  if (!res.ok) throw new Error(m.sites_envProposalLoadFailed({ status: res.status }));
   return (await res.json()) as SiteEnvProposal;
 }
 
@@ -364,7 +365,7 @@ export async function loadSiteEnvBackupContent(
   file: string = ''
 ): Promise<string> {
   const res = await apiFetch(site(domain, 'env') + '/backups/' + encodeURIComponent(name) + envQS(branch, file));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -390,7 +391,7 @@ export async function restoreSiteEnv(
     const data = (await res.json()) as { ok?: boolean; error?: string; restored?: string; content?: string };
     return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -410,7 +411,7 @@ export async function saveSiteEnv(
     const data = (await res.json()) as { ok?: boolean; error?: string; backup_path?: string };
     return { ok: Boolean(data.ok), error: data.error, backupPath: data.backup_path };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -487,7 +488,7 @@ export async function saveSiteNginx(
       exists: data.exists
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -495,18 +496,18 @@ export async function loadSiteNginxBackups(domain: string): Promise<LoadNginxBac
   try {
     const res = await apiFetch(site(domain, 'nginx') + '/backups');
     if (!res.ok) {
-      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+      return { ok: false, list: [], error: m.common_backupsLoadFailed({ status: res.status }) };
     }
     const list = (await res.json()) as SiteNginxBackup[];
     return { ok: true, list: Array.isArray(list) ? list : [] };
   } catch (e) {
-    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, list: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
 export async function loadSiteNginxBackupContent(domain: string, name: string): Promise<string> {
   const res = await apiFetch(site(domain, 'nginx') + '/backups/' + encodeURIComponent(name));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -521,7 +522,7 @@ export async function resetSiteNginx(domain: string): Promise<ResetNginxResult> 
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -538,7 +539,7 @@ export async function restoreSiteNginx(
     const data = (await res.json()) as { ok?: boolean; error?: string; restored?: string; content?: string };
     return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -640,7 +641,7 @@ export async function runTinker(
       exit_code: -1,
       duration_ms: 0,
       mode: 'php',
-      error: e instanceof Error ? e.message : 'Request failed'
+      error: e instanceof Error ? e.message : m.common_requestFailed()
     };
   }
 }
@@ -660,7 +661,7 @@ export async function setSiteVersion(
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 

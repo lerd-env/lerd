@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
+import { m } from '../paraglide/messages.js';
 
 export type WorkerExecMode = 'exec' | 'container';
 
@@ -85,7 +86,7 @@ export async function setWorkerMode(
           continue;
         }
         if (evt.phase === 'error') {
-          finalError = evt.error || 'failed';
+          finalError = evt.error || m.common_failed();
           workerModeProgress.set({ phase: 'error', message: finalError });
           continue;
         }

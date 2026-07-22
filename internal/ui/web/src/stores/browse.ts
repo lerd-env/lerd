@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { apiJson } from '$lib/api';
 
 export interface BrowseResult {
@@ -11,6 +12,6 @@ export async function browseDir(dir: string): Promise<BrowseResult> {
     const res = await apiJson<BrowseResult>('/api/browse?dir=' + encodeURIComponent(dir));
     return { current: res.current ?? '', dirs: res.dirs ?? [], error: res.error };
   } catch (e) {
-    return { current: '', dirs: [], error: e instanceof Error ? e.message : 'Browse failed' };
+    return { current: '', dirs: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }

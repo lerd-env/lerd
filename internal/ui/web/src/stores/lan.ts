@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 
@@ -117,7 +118,7 @@ export async function toggleLAN(action: 'expose' | 'unexpose') {
       setupError: action === 'unexpose' ? '' : (undefined as unknown as string)
     });
   } catch (e) {
-    patch({ loading: false, error: e instanceof Error ? e.message : 'Failed to toggle LAN exposure' });
+    patch({ loading: false, error: e instanceof Error ? e.message : m.system_lan_toggleFailed() });
   }
 }
 
@@ -138,7 +139,7 @@ export async function generateRemoteSetupCode() {
       setupExpiresIn: data.expires_in || ''
     });
   } catch (e) {
-    patch({ setupLoading: false, setupError: e instanceof Error ? e.message : 'Request failed' });
+    patch({ setupLoading: false, setupError: e instanceof Error ? e.message : m.common_requestFailed() });
   }
 }
 

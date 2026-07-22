@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
 import { readSSE } from '$lib/sse';
@@ -143,9 +144,9 @@ export async function setFpmPorts(
       ports?: string[];
     };
     if (res.ok && data.ok) return { ok: true, ports: data.ports };
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -185,7 +186,7 @@ export async function savePhpIni(v: string, content: string, backup: boolean = f
       exists: data.exists
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -193,18 +194,18 @@ export async function loadPhpIniBackups(v: string): Promise<LoadNginxBackupsResu
   try {
     const res = await apiFetch(phpConfigUrl(v, 'backups'));
     if (!res.ok) {
-      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+      return { ok: false, list: [], error: m.common_backupsLoadFailed({ status: res.status }) };
     }
     const list = (await res.json()) as SiteNginxBackup[];
     return { ok: true, list: Array.isArray(list) ? list : [] };
   } catch (e) {
-    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, list: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
 export async function loadPhpIniBackupContent(v: string, name: string): Promise<string> {
   const res = await apiFetch(phpConfigUrl(v, 'backups/' + encodeURIComponent(name)));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -214,7 +215,7 @@ export async function resetPhpIni(v: string): Promise<ResetNginxResult> {
     const data = await decodeJSONResult<{ ok?: boolean; error?: string }>(res);
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -228,7 +229,7 @@ export async function restorePhpIni(v: string, name: string = ''): Promise<Resto
     const data = await decodeJSONResult<{ ok?: boolean; error?: string; restored?: string; content?: string }>(res);
     return { ok: Boolean(data.ok), error: data.error, restored: data.restored, content: data.content };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
@@ -263,6 +264,6 @@ export async function fetchPhpExtensions(v: string): Promise<PhpExtensionsResult
     const data = await decodeJSONResult<PhpExtensionsResult>(res);
     return { ok: Boolean(data.ok), error: data.error, report: data.report, modules_error: data.modules_error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
