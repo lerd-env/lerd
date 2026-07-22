@@ -1,7 +1,10 @@
+import { readdirSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
 const SITE_URL = 'https://lerd.sh'
 const OG_IMAGE = `${SITE_URL}/assets/social-preview.png`
+const DIGEST_DIR = fileURLToPath(new URL('../public/digest', import.meta.url))
 
 export default defineConfig({
   title: 'Lerd',
@@ -13,12 +16,11 @@ export default defineConfig({
   sitemap: {
     hostname: SITE_URL,
     transformItems(items) {
-      // Static digest pages live in public/ and aren't page-derived, so add them by hand.
-      items.push({ url: 'digest/v1.28.0.html' })
-      items.push({ url: 'digest/v1.27.0.html' })
-      items.push({ url: 'digest/v1.26.0.html' })
-      items.push({ url: 'digest/v1.25.0.html' })
-      items.push({ url: 'digest/v1.24.0.html' })
+      // Static digest pages live in public/ and aren't page-derived. Read the
+      // directory rather than listing them, so a new release is never missed.
+      for (const file of readdirSync(DIGEST_DIR).filter((f) => f.endsWith('.html')).sort().reverse()) {
+        items.push({ url: `digest/${file}` })
+      }
       return items
     },
   },

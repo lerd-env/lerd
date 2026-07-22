@@ -54,7 +54,7 @@ The same "open in the admin tool" affordance is on the database service card in 
 
 Document engines like MongoDB list their databases and expose the connection string and admin link, but the SQL-only operations (create, export, import, snapshots) are hidden for them since those act through SQL clients. A stopped engine shows a prompt to start it rather than an empty grid.
 
-The whole tab is loopback only. Reaching the dashboard over the LAN, even as a remote-control client with valid credentials, gets a 403 from every database endpoint, because this surface both reads a database out in full and drops or overwrites it, and the raw `.env` view is already held to the same rule for carrying the credentials to it. Drive databases from the machine lerd runs on.
+The whole tab is loopback only. Reaching the dashboard over the LAN, even as a remote-control client with valid credentials, the tab is not offered at all and every database endpoint behind it answers 403, because this surface both reads a database out in full and drops or overwrites it, and the raw `.env` view is already held to the same rule for carrying the credentials to it. Drive databases from the machine lerd runs on.
 
 Which databases an engine advertises, and their sizes, comes from an `introspect.list_databases` command declared in the engine's [service preset](service-presets.md), so a newly added engine works here as soon as its preset ships that query, with no lerd release. The size is the data you put there, not the engine's own overhead: every postgres database inherits roughly 7.5 MB of system catalogs from `template1`, so that baseline is netted off and an empty database reads as empty, the same as it does on MySQL.
 

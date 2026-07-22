@@ -1,0 +1,76 @@
+{
+  "mysql": {
+    "service": "mysql",
+    "family": "mysql",
+    "status": "active",
+    "port": 3306,
+    "connection_url": "mysql://lerd:lerd@127.0.0.1:3306",
+    "supports_create": true,
+    "supports_snapshot": true,
+    "databases": [
+      {
+        "name": "acme",
+        "size_bytes": 48234496,
+        "site": "acme.test",
+        "snapshots": [
+          { "name": "before-migrate", "created": "2026-07-21T09:14:02Z", "database": "acme", "size_bytes": 12058624 },
+          { "name": "20260718-101133", "created": "2026-07-18T10:11:33Z", "database": "acme", "size_bytes": 11403264 }
+        ]
+      },
+      { "name": "acme_testing", "size_bytes": 1310720, "site": "acme.test", "snapshots": [] },
+      {
+        "name": "acme_staging",
+        "size_bytes": 44040192,
+        "site": "acme.test",
+        "branch": "staging",
+        "snapshots": []
+      },
+      { "name": "shopfront", "size_bytes": 187170816, "site": "shopfront.test", "snapshots": [] },
+      { "name": "checkout", "size_bytes": 9437184, "site": "checkout.test", "snapshots": [] },
+      {
+        "name": "orbit",
+        "size_bytes": 73400320,
+        "site": "orbit.test",
+        "snapshots": [
+          { "name": "seed", "created": "2026-07-12T16:48:20Z", "database": "orbit", "size_bytes": 18874368 }
+        ]
+      },
+      { "name": "talent", "size_bytes": 6291456, "site": "talent.test", "snapshots": [] },
+      { "name": "scratch", "size_bytes": 0, "snapshots": [] }
+    ]
+  },
+  "postgres": {
+    "service": "postgres",
+    "family": "postgres",
+    "status": "active",
+    "port": 5432,
+    "connection_url": "postgresql://lerd:lerd@127.0.0.1:5432",
+    "supports_create": true,
+    "supports_snapshot": true,
+    "databases": [
+      {
+        "name": "ledger",
+        "size_bytes": 132120576,
+        "site": "ledger.test",
+        "snapshots": [
+          { "name": "pre-reconcile", "created": "2026-07-20T13:02:57Z", "database": "ledger", "size_bytes": 33554432 }
+        ]
+      },
+      { "name": "ledger_testing", "size_bytes": 524288, "site": "ledger.test", "snapshots": [] },
+      { "name": "almanac", "size_bytes": 15728640, "site": "almanac.test", "snapshots": [] },
+      { "name": "workshop", "size_bytes": 2097152, "site": "workshop.test", "snapshots": [] }
+    ]
+  },
+  "mariadb-11": {
+    "service": "mariadb-11",
+    "family": "mysql",
+    "status": "active",
+    "port": 3411,
+    "connection_url": "mysql://lerd:lerd@127.0.0.1:3411",
+    "supports_create": true,
+    "supports_snapshot": true,
+    "databases": [
+      { "name": "notebook", "size_bytes": 3145728, "site": "notebook.test", "snapshots": [] }
+    ]
+  }
+}

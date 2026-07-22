@@ -17,6 +17,7 @@ import dumpsStatus from './fixtures/dumps_status.json';
 import profilerStatus from './fixtures/profiler_status.json';
 import stats from './fixtures/stats.json';
 import workersHealth from './fixtures/workers_health.json';
+import databasesFixture from './fixtures/databases.json';
 
 // Demo follows the system theme (auto). Reset any stale value a previous demo
 // session may have pinned, so it isn't stuck on a forced light/dark.
@@ -523,6 +524,24 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (path === '/api/sites') return jsonResponse(sites);
   if (path === '/api/services') return jsonResponse(services);
   if (path === '/api/services/presets') return jsonResponse(presets);
+
+  // An engine's databases. An engine with no fixture reports none rather than
+  // falling through to the empty catch-all, which the tab reads as an error.
+  const engine = path.match(/^\/api\/databases\/([^/]+)$/);
+  if (engine && method === 'GET') {
+    const name = decodeURIComponent(engine[1]);
+    const known = (databasesFixture as Record<string, unknown>)[name];
+    return jsonResponse(
+      known ?? {
+        service: name,
+        family: '',
+        status: 'active',
+        supports_create: false,
+        supports_snapshot: false,
+        databases: [],
+      },
+    );
+  }
 
   // Installing a preset streams progress; anything under presets/<name>.
   const presetInstall = path.match(/^\/api\/services\/presets\/([^/]+)$/);

@@ -39,7 +39,7 @@ The installer will:
 - Automatically run `lerd install` to complete environment setup
 
 ::: info DNS setup requires sudo
-`lerd install` writes to `/etc/NetworkManager/dnsmasq.d/` and `/etc/NetworkManager/conf.d/` and restarts NetworkManager. This is the only step that requires `sudo`. It also installs a passwordless sudoers rule for the DNS resolver operations, so this is a one-time prompt: reinstalling for an update or a test reuses the existing rule and does not ask again.
+`lerd install` writes to `/etc/NetworkManager/dnsmasq.d/` and `/etc/NetworkManager/conf.d/` and restarts NetworkManager. This is the only step that requires `sudo`. It also installs a passwordless sudoers rule for the DNS resolver operations, so this is a one-time prompt: reinstalling for an update or a test reuses the existing rule and does not ask again. Uninstalling takes the rule back out, so the grant lasts exactly as long as lerd does.
 :::
 
 After install, reload your shell or open a new terminal so `PATH` takes effect.
@@ -117,7 +117,7 @@ To answer yes to every prompt without interaction:
 lerd uninstall --force
 ```
 
-The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, and the drop-in that empties `FallbackDNS`. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
+The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, the drop-in that empties `FallbackDNS`, and the passwordless sudoers rule the DNS operations run under. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
 
 ---
 

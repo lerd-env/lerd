@@ -524,11 +524,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.29.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.30.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.29.0 dev digest</span>
-            <span class="digest-sub">Framework definitions that declare their own nginx, env and worktrees, sites grouped into workspaces, and first-class support for Fedora Silverblue and other atomic images.</span>
+            <span class="digest-title">v1.30.0 dev digest</span>
+            <span class="digest-sub">One declared extension set applied to every PHP image, an engine's databases managed from the dashboard with snapshots and imports, and a doctor that repairs what it safely can.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
