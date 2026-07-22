@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { apiFetch, apiJson } from '$lib/api';
 import { readSSE } from '$lib/sse';
 
@@ -44,7 +45,7 @@ export async function removeWorktree(
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 

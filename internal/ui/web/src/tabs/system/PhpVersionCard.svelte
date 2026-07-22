@@ -24,7 +24,7 @@
 <button
   type="button"
   onclick={onselect}
-  title={'PHP ' + display + (running ? ' — running' : ' — stopped') + (isDefault ? ' · default' : '')}
+  title={'PHP ' + display + ' — ' + (running ? m.common_running() : m.common_stopped()) + (isDefault ? ' · ' + m.common_default() : '')}
   class="shrink-0 w-[9.5rem] snap-start text-left flex flex-col gap-2.5 rounded-2xl border p-3 transition-colors {selected
     ? 'border-lerd-red bg-white dark:bg-lerd-card ring-1 ring-lerd-red'
     : 'border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-gray-300 dark:hover:border-gray-600'}"

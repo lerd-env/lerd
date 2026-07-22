@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { apiJson, apiFetch, decodeJSONResult } from '$lib/api';
 
 export interface DnsUpstreamSettings {
@@ -70,6 +71,6 @@ export async function saveDnsUpstream(
     const data = await decodeJSONResult<{ ok?: boolean; error?: string; upstream?: string[] }>(res);
     return { ok: Boolean(data.ok), error: data.error, upstream: data.upstream };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }

@@ -297,6 +297,8 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 	}{
 		{"/api/lerd/stop", true},
 		{"/api/lerd/quit", true},
+		{"/api/logs/terminal", true},
+		{"/api/logs/lerd-nginx", false},
 		{"/api/sites/link", true},
 		{"/api/browse", true},
 		{"/api/sites/myapp.test/terminal", true},
@@ -307,6 +309,12 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		{"/api/sites/myapp.test/env/backups/.env.bkp.20260528-103045", true},
 		{"/api/sites/myapp.test/env/restore", true},
 		{"/api/sites/myapp.test/terminal/anything", true},
+		{"/api/databases", true},
+		{"/api/databases/mysql", true},
+		{"/api/databases/mysql/drop", true},
+		{"/api/databases/mysql/export", true},
+		{"/api/databases/postgres/snapshots/nightly", true},
+		{"/api/databases-overview", false},
 		{"/api/sites", false},
 		{"/api/sites/myapp.test", false},
 		{"/api/sites/myapp.test/secure", false},
@@ -332,11 +340,17 @@ func TestRemoteControlGate_loopbackOnlyRoutesBlockedFromLAN(t *testing.T) {
 
 	cases := []string{
 		"/api/lerd/stop",
+		"/api/lerd/update-terminal",
+		"/api/logs/terminal",
 		"/api/sites/link",
 		"/api/sites/myapp.test/terminal",
 		"/api/sites/myapp.test/env",
 		"/api/browse",
 		"/api/push/test",
+		"/api/databases",
+		"/api/databases/mysql/drop",
+		"/api/databases/mysql/export",
+		"/api/databases/postgres/snapshots/nightly",
 	}
 	for _, path := range cases {
 		t.Run(path, func(t *testing.T) {

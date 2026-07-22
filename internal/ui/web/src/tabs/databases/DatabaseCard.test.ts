@@ -3,13 +3,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import DatabaseCard from './DatabaseCard.svelte';
 import type { DatabaseEngine, DatabaseEntry } from '$stores/databases';
 
-const { dropDatabase, exportUrl } = vi.hoisted(() => ({
+const { dropDatabase, exportUrl, importDatabase } = vi.hoisted(() => ({
   dropDatabase: vi.fn(async () => ({ ok: true })),
-  exportUrl: vi.fn((service: string, database: string) => `/api/${service}/export?database=${database}`)
+  exportUrl: vi.fn((service: string, database: string) => `/api/${service}/export?database=${database}`),
+  importDatabase: vi.fn(
+    async (
+      _service: string,
+      _database: string,
+      _file: File,
+      _onProgress?: (p: { percent: number; uploaded: boolean }) => void
+    ): Promise<{
+      ok: boolean;
+      error?: string;
+      errors?: number;
+      issues?: { message: string; count: number }[];
+    }> => ({ ok: true })
+  )
 }));
 vi.mock('$stores/databases', async (orig) => {
   const actual = (await orig()) as object;
-  return { ...actual, dropDatabase, exportUrl };
+  return { ...actual, dropDatabase, exportUrl, importDatabase };
 });
 
 const engine: DatabaseEngine = {
@@ -28,10 +41,18 @@ function db(name: string, size = 0, site?: string, branch?: string): DatabaseEnt
 const parent = db('havenly', 4096, 'havenly.test');
 const testing = db('havenly_testing', 0, 'havenly.test');
 
+// pickDump drives the hidden file input the import button clicks.
+async function pickDump(container: HTMLElement, name = 'shop.sql') {
+  const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  Object.defineProperty(input, 'files', { value: [new File(['dump'], name)], configurable: true });
+  await fireEvent.change(input);
+}
+
 describe('DatabaseCard', () => {
   beforeEach(() => {
     dropDatabase.mockClear();
     exportUrl.mockClear();
+    importDatabase.mockClear();
   });
 
   it('shows no segment when the entry has no testing sibling', () => {
@@ -77,6 +98,53 @@ describe('DatabaseCard', () => {
       props: { engine, entry: db('havenly_staging', 2048, 'havenly.test', 'staging') }
     });
     expect(getByRole('button', { name: 'staging.havenly.test' })).toBeInTheDocument();
+  });
+
+  it('reports the import as it progresses and confirms it when it lands', async () => {
+    let report: ((p: { percent: number; uploaded: boolean }) => void) | null = null;
+    let settle: ((r: { ok: boolean; error?: string }) => void) | null = null;
+    importDatabase.mockImplementationOnce(
+      (_s: string, _d: string, _f: File, onProgress?: (p: { percent: number; uploaded: boolean }) => void) => {
+        report = onProgress ?? null;
+        return new Promise((resolve) => (settle = resolve));
+      }
+    );
+    const { container, findByText } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container);
+    report!({ percent: 0.4, uploaded: false });
+    expect(await findByText('Importing shop.sql… 40%')).toBeInTheDocument();
+    report!({ percent: 1, uploaded: true });
+    expect(await findByText('Importing shop.sql…')).toBeInTheDocument();
+    settle!({ ok: true });
+    expect(await findByText('Imported shop.sql')).toBeInTheDocument();
+  });
+
+  it('warns when the engine swallowed the dump but complained', async () => {
+    importDatabase.mockResolvedValueOnce({
+      ok: true,
+      errors: 27458,
+      issues: [
+        { message: 'invalid command \\N', count: 27331 },
+        { message: 'ERROR:  function public.uuid_generate_v4() does not exist', count: 6 }
+      ]
+    });
+    const { container, findAllByText, getByText } = render(DatabaseCard, {
+      props: { engine, entry: parent }
+    });
+    await pickDump(container);
+    // The summary shows on the card, the list itself opens over the page.
+    expect(
+      await findAllByText('Imported shop.sql, but the engine reported 27458 errors')
+    ).not.toHaveLength(0);
+    expect(getByText('27331×')).toBeInTheDocument();
+    expect(getByText(/invalid command/)).toBeInTheDocument();
+  });
+
+  it('surfaces the engine error when an import fails', async () => {
+    importDatabase.mockResolvedValueOnce({ ok: false, error: 'import failed: syntax error' });
+    const { container, findByText } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container);
+    expect(await findByText(/import failed: syntax error/)).toBeInTheDocument();
   });
 
   it('points export at the selected half', async () => {

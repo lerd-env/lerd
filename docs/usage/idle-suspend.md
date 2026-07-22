@@ -45,6 +45,10 @@ A suspended worker's unit is removed entirely, so the only record that it is asl
 
 A pinned site is excluded from idle-suspend: its workers stay running even while the feature is on. Pin from the CLI (`lerd idle pin <site>`) or from a site's overflow menu in the dashboard (the Pin item only appears while idle-suspend is enabled). Pinning a site that's currently asleep wakes it immediately.
 
+## Proxy-only sites
+
+A [proxy-only site](/usage/host-proxy) — one where nginx forwards to a dev server you start yourself, with no command for lerd to supervise — is excluded too. There is no process lerd could stop, so suspending it would only put the waking page in front of an app that is still serving. Such a site never shows as sleeping in the dashboard. A host-proxy site whose command lerd does supervise sleeps like any other.
+
 ## Worktrees
 
 Each git worktree idles on its **own** timer, independent of the main checkout and of the other worktrees. Working on `feature.myapp.test` keeps that worktree's workers alive while the main site and other worktrees can sleep on their own schedules. Only workers a framework marks `per_worktree: true` run per worktree — for Laravel that's Vite — so suspending a worktree stops its `lerd-vite-<site>-<branch>` unit (with the same build-on-suspend handling) and resumes it on the worktree's own traffic.

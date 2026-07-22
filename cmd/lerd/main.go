@@ -528,6 +528,13 @@ func newWatchCmd() *cobra.Command {
 			// migration or sleep/wake bridge churn. No-op on Linux.
 			go watcher.WatchExecWorkers(60 * time.Second)
 
+			// Re-apply the reload watcher's poll cadence when the machine is
+			// plugged in or unplugged. The interval is baked into a worker's
+			// unit and read once at watcher startup, so an unplugged laptop
+			// would otherwise keep polling at the mains rate. No-op where the
+			// reload watcher doesn't have to poll.
+			go watcher.WatchPower(30 * time.Second)
+
 			// Reclaim orphaned lerd images (safe tier) on a slow daily cadence,
 			// so rebuild leftovers and stale base images don't pile up. Gated by
 			// the auto_cleanup config; never touches service images (--deep).

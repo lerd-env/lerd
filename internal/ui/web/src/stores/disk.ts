@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 
@@ -110,7 +111,7 @@ export async function runCleanup(): Promise<CleanupResult> {
       ok: false,
       removed: 0,
       reclaimedBytes: 0,
-      error: e instanceof Error ? e.message : 'Request failed'
+      error: e instanceof Error ? e.message : m.common_requestFailed()
     };
   }
 }

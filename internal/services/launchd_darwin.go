@@ -79,7 +79,7 @@ func plistArgs(path string) ([]string, error) {
 		if open < 0 || close < 0 {
 			break
 		}
-		args = append(args, block[open+len("<string>"):close])
+		args = append(args, xmlUnescStr(block[open+len("<string>"):close]))
 		block = block[close+len("</string>"):]
 	}
 	return args, nil
@@ -92,6 +92,26 @@ type darwinServiceManager struct{}
 func launchAgentsDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, "Library", "LaunchAgents")
+}
+
+// launchAgentsDirFn and containerSnapshotFn are the seams the whole-sweep path
+// uses, so tests can point it at a fixture directory and count how many times
+// container state is queried.
+var (
+	launchAgentsDirFn   = launchAgentsDir
+	containerSnapshotFn = func() map[string]bool { return podman.Cache.Snapshot() }
+)
+
+// containerRunning answers "is this unit's container up?" from a snapshot taken
+// once for a whole sweep, falling back to a per-unit lookup when no snapshot was
+// prefetched. In a process without the container cache running (every CLI
+// invocation, and the MCP server) the per-unit path is a `podman inspect`
+// subprocess, which on macOS is a round trip into the podman VM.
+func containerRunning(name string, snapshot map[string]bool) bool {
+	if snapshot != nil {
+		return snapshot[name]
+	}
+	return podman.Cache.Running(name)
 }
 
 func lerdLogsDir() string {
@@ -130,6 +150,15 @@ func xmlEscStr(s string) string {
 		}
 	}
 	return buf.String()
+}
+
+// xmlUnescStr reverses xmlEscStr, so args read back out of a plist reach podman
+// as they were written. &amp; is decoded last, otherwise an escaped "&amp;lt;"
+// would collapse into a literal "<".
+func xmlUnescStr(s string) string {
+	s = strings.ReplaceAll(s, "&lt;", "<")
+	s = strings.ReplaceAll(s, "&gt;", ">")
+	return strings.ReplaceAll(s, "&amp;", "&")
 }
 
 // keepAlivePolicy mirrors the subset of systemd Restart= values we care
@@ -834,12 +863,19 @@ func (m *darwinServiceManager) IsEnabled(name string) bool {
 // container is detached, so we fall back to checking whether the container
 // is actually running rather than trusting launchd's "state = waiting/exited".
 func (m *darwinServiceManager) UnitStatus(name string) (string, error) {
+	return m.unitStatus(name, nil)
+}
+
+// unitStatus is UnitStatus with an optional prefetched container snapshot, so a
+// whole-directory sweep resolves every unit's container state from one query
+// instead of one per unit.
+func (m *darwinServiceManager) unitStatus(name string, snapshot map[string]bool) (string, error) {
 	domain := uidDomain()
 	label := plistLabel(name)
 	out, err := launchctl("print", domain+"/"+label)
 	if err != nil {
 		// Not loaded at all — check container directly before giving up.
-		if podman.Cache.Running(name) {
+		if containerRunning(name, snapshot) {
 			return "active", nil
 		}
 		if _, statErr := os.Stat(plistPath(name)); statErr == nil {
@@ -853,7 +889,7 @@ func (m *darwinServiceManager) UnitStatus(name string) (string, error) {
 	}
 	// For exited-0 or waiting: the job may be a container launcher that
 	// succeeded (-d detach). Check the actual container state.
-	if podman.Cache.Running(name) {
+	if containerRunning(name, snapshot) {
 		return "active", nil
 	}
 	// Universal failure signal: an explicit non-zero last exit code is
@@ -926,10 +962,18 @@ func isContainerPlist(out []byte) bool {
 // This is the launchd analogue of `systemctl --user list-units lerd-*` and
 // is wired onto siteinfo.AllUnitStates from siteinfo/unitcache_darwin.go.
 func (m *darwinServiceManager) AllUnitStates() map[string]string {
-	pattern := filepath.Join(launchAgentsDir(), "lerd-*.plist")
+	pattern := filepath.Join(launchAgentsDirFn(), "lerd-*.plist")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return map[string]string{}
+	}
+	// One container query for the whole sweep. Resolving liveness per unit
+	// instead costs a `podman inspect` each in any process without the cache
+	// running, which is what made a single MCP worker health call take about a
+	// second on a 25 worker install.
+	snapshot := containerSnapshotFn()
+	if snapshot == nil {
+		snapshot = map[string]bool{}
 	}
 	out := make(map[string]string, len(matches)*2)
 	for _, path := range matches {
@@ -937,7 +981,7 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 		if !strings.HasPrefix(name, "lerd-") {
 			continue
 		}
-		state, _ := m.UnitStatus(name)
+		state, _ := m.unitStatus(name, snapshot)
 		if state == "" || state == "unknown" {
 			continue
 		}

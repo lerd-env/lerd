@@ -51,6 +51,37 @@ lerd bug-report --output /tmp/report.txt --log-lines 500
 lerd bug-report --show-real-names
 ```
 
+## Profiling lerd-ui
+
+If lerd-ui itself is using more CPU or memory than it should, you can capture a Go profile from the running process and attach it to an issue. Profiling is off until you turn it on, and lerd-ui only serves it to the local machine.
+
+Create the marker, capture, then remove it:
+
+```bash
+touch ~/.local/share/lerd/run/pprof.enabled
+curl -o /tmp/lerd-cpu.prof 'http://127.0.0.1:7073/debug/pprof/profile?seconds=30'
+rm ~/.local/share/lerd/run/pprof.enabled
+```
+
+The marker is read on every request, so nothing needs restarting. That matters when you are chasing a daemon that is busy right now, because restarting it would throw away the state worth capturing. Drive the site or wait for the symptom while the thirty seconds are running, otherwise you profile an idle process.
+
+Other useful captures, once the marker is in place:
+
+```bash
+curl -o /tmp/lerd-heap.prof http://127.0.0.1:7073/debug/pprof/heap
+curl 'http://127.0.0.1:7073/debug/pprof/goroutine?debug=1' | head -50
+```
+
+Read a profile by passing the binary alongside it, or just attach the file to the issue:
+
+```bash
+go tool pprof -top ~/.local/bin/lerd /tmp/lerd-cpu.prof
+```
+
+Release binaries are stripped, so the plain-text views (`?debug=1`) print raw addresses rather than function names. Pass the binary as above and `go tool pprof` resolves them anyway, so a profile captured from an ordinary install is still readable.
+
+Remove the marker when you are done. While it exists, anyone who can reach the machine's loopback interface can read goroutine stacks, the process command line, and heap contents, and can start a profile that occupies a core for as long as they ask for.
+
 ---
 
 ::: details `.test` domains not resolving
@@ -194,6 +225,18 @@ podman inspect lerd-php84-fpm --format '{{range .Mounts}}{{.Source}}
 ```
 
 If the path is in the quadlet but not in that output, `lerd restart` picks it up.
+:::
+
+::: details nginx fails to start with "statfs /path: no such file or directory"
+Podman refuses to start a container whose bind-mount source is gone, so a directory outside `$HOME` that lerd mounted while it existed, and that has since disappeared, stops the container dead. A Git branch checkout that removes a project subdirectory is the usual cause, and because nginx serves every site, one missing directory takes the whole stack down.
+
+`lerd start` repairs this for you: it drops the stale mounts before starting anything and tells you which path and site was responsible.
+
+```
+WARN: /var/www/erp/Modules/Accounts no longer exists (site erp), removed from lerd-nginx
+```
+
+The mount comes back on its own once the directory is there again and you run any command from it, or after `lerd restart`.
 :::
 
 ::: details Permission denied on port 80/443

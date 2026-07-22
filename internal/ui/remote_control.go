@@ -25,9 +25,17 @@ var loopbackOnlyRoutes = []string{
 	"/api/lerd/stop",            // shuts down all lerd containers
 	"/api/lerd/quit",            // exits the dashboard process
 	"/api/lerd/update-terminal", // spawns a terminal emulator on the host
+	"/api/logs/terminal",        // spawns a terminal emulator on the host
 	"/api/sites/link",           // links arbitrary host filesystem paths
 	"/api/browse",               // browses host filesystem
 	"/api/push/test",            // fires notifications onto subscribed devices
+}
+
+// loopbackOnlyRoutePrefixes are endpoint subtrees restricted to loopback in
+// full, so a new subresource cannot escape by failing to be listed. Databases
+// read out, drop and overwrite the data the "/env" gate already protects.
+var loopbackOnlyRoutePrefixes = []string{
+	"/api/databases",
 }
 
 // loopbackOnlySiteSubactions are the per-site actions (under
@@ -92,6 +100,11 @@ func fromHost(r *http.Request) bool {
 func isLoopbackOnlyPath(path string) bool {
 	for _, p := range loopbackOnlyRoutes {
 		if path == p {
+			return true
+		}
+	}
+	for _, p := range loopbackOnlyRoutePrefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
 			return true
 		}
 	}

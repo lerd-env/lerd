@@ -2,10 +2,13 @@ package podman
 
 import (
 	"context"
+	"maps"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // ContainerCache polls podman for container states on a configurable interval
@@ -48,6 +51,10 @@ func (c *ContainerCache) SetOnChange(fn func()) {
 	c.onChange = fn
 	c.onChangeMu.Unlock()
 }
+
+// stoppedFn reports whether lerd was intentionally stopped. A var so the loop
+// test can drive the transition without touching the real marker file.
+var stoppedFn = config.IsStopped
 
 // pollTimeout bounds the non-started fallback podman calls so a stalled VM
 // (macOS post-sleep) yields a fast empty snapshot instead of hanging the caller.
@@ -180,6 +187,11 @@ func (c *ContainerCache) Pause()  { atomic.AddInt32(&c.pauseCount, 1) }
 func (c *ContainerCache) Resume() { atomic.AddInt32(&c.pauseCount, -1) }
 
 func (c *ContainerCache) loop(ctx context.Context) {
+	// settledWhileStopped records that the map has stopped moving since lerd was
+	// stopped, so the quiet period costs nothing further. lastStopped is the
+	// previous poll it is judged against.
+	settledWhileStopped := false
+	var lastStopped map[string]bool
 	for {
 		c.intervalMu.Lock()
 		d := c.interval
@@ -192,11 +204,33 @@ func (c *ContainerCache) loop(ctx context.Context) {
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
+			// While lerd is stopped its containers are meant to be down and
+			// workerheal.Detect suppresses itself, so nothing needs fresh state
+			// and the podman round trip is waste. The timer keeps ticking (a
+			// stat, not a subprocess) so polling resumes once the marker clears.
+			if stoppedFn() {
+				if settledWhileStopped {
+					continue
+				}
+				c.poll()
+				cur := c.Snapshot()
+				// Two polls must agree, and never a poll against the map it
+				// replaced: `lerd stop` marks before tearing down, so a tick
+				// landing mid-teardown reads back what the map already held.
+				settledWhileStopped = lastStopped != nil && maps.Equal(lastStopped, cur)
+				lastStopped = cur
+				continue
+			}
+			settledWhileStopped = false
+			lastStopped = nil
 			c.poll()
 		case <-c.refresh:
 			if atomic.LoadInt32(&c.pauseCount) > 0 {
 				continue
 			}
+			// An explicit refresh is a caller stating it needs state now, so it
+			// is honoured regardless of the marker.
+			settledWhileStopped = false
 			c.poll()
 		}
 	}

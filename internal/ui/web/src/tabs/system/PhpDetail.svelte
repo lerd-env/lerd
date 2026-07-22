@@ -188,7 +188,7 @@
       onclick={onToggleXdebug}
       disabled={xdebugBusy}
       aria-pressed={xdebugEnabled}
-      title={xdebugEnabled ? 'Disable Xdebug' : 'Enable Xdebug'}
+      title={(xdebugEnabled ? m.common_disable() : m.common_enable()) + ' ' + m.sites_badges_xdebug()}
       class="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-200 dark:border-lerd-border transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 {xdebugEnabled
         ? 'rounded-l-lg border-r-0 bg-emerald-50/60 dark:bg-emerald-900/15 hover:bg-emerald-50 dark:hover:bg-emerald-900/25'
         : 'rounded-lg bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5'}"

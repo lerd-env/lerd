@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 
@@ -30,7 +31,7 @@ export async function loadRemoteControl() {
   } catch (e) {
     remoteControl.update((v) => ({
       ...v,
-      error: e instanceof Error ? e.message : 'Failed to load remote-control state'
+      error: e instanceof Error ? e.message : m.system_remote_loadFailed()
     }));
   }
 }
@@ -53,10 +54,10 @@ export async function enableRemoteControl(username: string, password: string): P
       remoteControl.set({ enabled: true, username, loading: false, error: '' });
       return { ok: true };
     }
-    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || 'Failed' }));
+    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || m.common_failed() }));
     return { ok: false, error: data.error };
   } catch (e) {
-    const err = e instanceof Error ? e.message : 'Request failed';
+    const err = e instanceof Error ? e.message : m.common_requestFailed();
     remoteControl.update((v) => ({ ...v, loading: false, error: err }));
     return { ok: false, error: err };
   }
@@ -80,10 +81,10 @@ export async function disableRemoteControl(): Promise<boolean> {
       remoteControl.set({ enabled: false, username: '', loading: false, error: '' });
       return true;
     }
-    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || 'Failed' }));
+    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || m.common_failed() }));
     return false;
   } catch (e) {
-    remoteControl.update((v) => ({ ...v, loading: false, error: e instanceof Error ? e.message : 'Request failed' }));
+    remoteControl.update((v) => ({ ...v, loading: false, error: e instanceof Error ? e.message : m.common_requestFailed() }));
     return false;
   }
 }

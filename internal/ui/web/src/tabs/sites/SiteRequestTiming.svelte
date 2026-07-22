@@ -135,6 +135,12 @@
     return new Date(atMillis).toLocaleTimeString([], { hour12: false });
   }
 
+  // SPX ships in the FPM image, so only a PHP site served by FPM has anything to
+  // profile. Elsewhere the slow routes still read, they just don't arm anything.
+  const canProfile = $derived(Boolean(site.can_profile));
+  const slowRowClass =
+    'flex-1 min-w-0 grid grid-cols-[minmax(7rem,14rem)_1fr_auto] items-center gap-3';
+
   let arming = $state(false);
   function routeUrl(r: RouteStat): string {
     if (r.method !== 'GET' || !r.example) return '';
@@ -165,6 +171,17 @@
     </div>
     <div class="mt-1.5 text-[11px] text-gray-500 dark:text-gray-400 truncate">{meta}</div>
   </div>
+{/snippet}
+
+{#snippet slowRow(r: RouteStat, clickable: boolean)}
+  <span class="flex items-center gap-1.5 min-w-0">
+    <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
+    <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate {clickable ? 'group-hover:text-lerd-red' : ''}">{r.route.replace(r.method + ' ', '')}</span>
+  </span>
+  <span class="h-2 rounded-full bg-gray-100 dark:bg-white/5 overflow-hidden">
+    <span class="block h-full rounded-full {SEV_BG[sev(recentP95(r))]}" style="width:{(recentP95(r) / slowMax) * 100}%"></span>
+  </span>
+  <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
 {/snippet}
 
 {#snippet inspectBtn(routeKey: string)}
@@ -271,17 +288,14 @@
       <div class="flex flex-col gap-2">
         {#each slowest as r (r.method + r.route)}
           <div class="flex items-center gap-2">
-            <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
-              class="flex-1 min-w-0 grid grid-cols-[minmax(7rem,14rem)_1fr_auto] items-center gap-3 text-left group disabled:opacity-60">
-              <span class="flex items-center gap-1.5 min-w-0">
-                <span class="shrink-0 font-mono text-[9px] font-semibold px-1 py-0.5 rounded {methClass(r.method)}">{r.method}</span>
-                <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate group-hover:text-lerd-red">{r.route.replace(r.method + ' ', '')}</span>
-              </span>
-              <span class="h-2 rounded-full bg-gray-100 dark:bg-white/5 overflow-hidden">
-                <span class="block h-full rounded-full {SEV_BG[sev(recentP95(r))]}" style="width:{(recentP95(r) / slowMax) * 100}%"></span>
-              </span>
-              <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
-            </button>
+            {#if canProfile}
+              <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
+                class="{slowRowClass} text-left group disabled:opacity-60">
+                {@render slowRow(r, true)}
+              </button>
+            {:else}
+              <div class={slowRowClass}>{@render slowRow(r, false)}</div>
+            {/if}
             {@render inspectBtn(r.route)}
           </div>
         {/each}

@@ -192,6 +192,14 @@ func (e *idleEngine) run(ctx context.Context) {
 	}
 }
 
+// neverIdles reports whether a site is exempt from suspension: the user pinned
+// it, or it is proxy-only, meaning lerd supervises no process for it (nginx just
+// forwards to a dev server the user started) and suspending it would swap the
+// vhost to the waking page while the app is still serving.
+func neverIdles(s *config.Site) bool {
+	return s.Pinned || s.IsProxyOnly()
+}
+
 func (e *idleEngine) tick() {
 	defer recoverEngine("tick")
 	cfg, err := config.LoadGlobal()
@@ -243,8 +251,8 @@ func (e *idleEngine) tick() {
 			suspended = e.suspended[s.Name]
 			e.mu.Unlock()
 		}
-		if s.Pinned {
-			// Pinned sites never go idle. If one was pinned while already
+		if neverIdles(&s) {
+			// Exempt sites never go idle. If one was pinned while already
 			// suspended, wake it so the pin takes effect immediately. Still tick
 			// its worktrees: the pin covers them too (tickWorktrees resumes a
 			// suspended worktree and skips suspending), and the pass keeps their
@@ -309,7 +317,7 @@ func (e *idleEngine) tickWorktrees(s *config.Site, enabled bool, timeout time.Du
 			e.mu.Unlock()
 		}
 
-		if s.Pinned {
+		if neverIdles(s) {
 			if suspended {
 				e.resumeWorktree(s.Name, wtBase, wt.Path)
 			}

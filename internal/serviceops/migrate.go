@@ -204,10 +204,10 @@ func runStreaming(cmd *exec.Cmd, out *os.File) error {
 }
 
 // restoreFromHost streams a host file into a container command's stdin.
-func restoreFromHost(container, shellCmd string, envPairs []string, hostPath string, timeout time.Duration) error {
+func restoreFromHost(container, shellCmd string, envPairs []string, hostPath string, timeout time.Duration) (ImportReport, error) {
 	in, err := os.Open(hostPath)
 	if err != nil {
-		return fmt.Errorf("opening dump file %s: %w", hostPath, err)
+		return ImportReport{}, fmt.Errorf("opening dump file %s: %w", hostPath, err)
 	}
 	defer in.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -221,9 +221,9 @@ func restoreFromHost(container, shellCmd string, envPairs []string, hostPath str
 	cmd.Stdin = in
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("restore command failed: %w\n%s", err, string(out))
+		return ImportReport{}, fmt.Errorf("restore command failed: %w\n%s", err, string(out))
 	}
-	return nil
+	return parseImportOutput(string(out)), nil
 }
 
 // swapDataDirAside moves the current data dir to a timestamped backup name so
@@ -424,8 +424,12 @@ func migrateMysql(name, targetImage string, emit func(PhaseEvent)) error {
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
-	if err := restoreFromHost(unit, mysqlMigrateRestoreCommand(), rootEnv, dump, dumpRestoreTimeout); err != nil {
+	rep, err := restoreFromHost(unit, mysqlMigrateRestoreCommand(), rootEnv, dump, dumpRestoreTimeout)
+	if err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
+	}
+	if rep.Errors > 0 {
+		emit(PhaseEvent{Phase: "restore_warnings", Message: rep.Summary()})
 	}
 
 	if err := recordMigrateBackup(name, backup); err != nil {
@@ -485,8 +489,12 @@ func migratePostgres(name, targetImage string, emit func(PhaseEvent)) error {
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: dump})
 	restoreCmd := "psql -h 127.0.0.1 -U postgres -d postgres 2>&1"
-	if err := restoreFromHost(unit, restoreCmd, pgEnv, dump, dumpRestoreTimeout); err != nil {
+	rep, err := restoreFromHost(unit, restoreCmd, pgEnv, dump, dumpRestoreTimeout)
+	if err != nil {
 		return fmt.Errorf("restore: %w. Dump preserved at %s; old data dir at %s", err, dump, backup)
+	}
+	if rep.Errors > 0 {
+		emit(PhaseEvent{Phase: "restore_warnings", Message: rep.Summary()})
 	}
 
 	if err := recordMigrateBackup(name, backup); err != nil {

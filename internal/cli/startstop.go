@@ -584,6 +584,18 @@ func runStart(_ *cobra.Command, _ []string) error {
 		fmt.Printf("  WARN: container hosts file: %v\n", err)
 	}
 
+	// Pre-flight: drop bind mounts whose host directory has gone (a branch
+	// checkout that removed it, a deleted project). Podman refuses to start a
+	// container with a missing bind source, so one such path otherwise takes
+	// nginx and every site down with it (#1083).
+	for _, r := range podman.RepairMissingMounts() {
+		if r.Site != "" {
+			fmt.Printf("  WARN: %s no longer exists (site %s), removed from %s\n", r.Path, r.Site, r.Unit)
+		} else {
+			fmt.Printf("  WARN: %s no longer exists, removed from %s\n", r.Path, r.Unit)
+		}
+	}
+
 	// Pre-flight: repair SSL vhosts with missing cert files so nginx can start.
 	if repairs := nginx.RepairVhosts(); len(repairs) > 0 {
 		for _, r := range repairs {
@@ -1060,7 +1072,7 @@ func restoreSiteInfrastructure() {
 				if worktreeWorkerIdleSuspended(&s, wt.Path, w) {
 					continue
 				}
-				if services.Mgr.IsEnabled(workerUnitName(s.Name, wt.Path, w)) {
+				if services.Mgr.IsEnabled(WorkerUnitName(s.Name, wt.Path, w)) {
 					continue
 				}
 				wtPHP := config.WorktreePHPVersion(wt.Path, phpVersion)

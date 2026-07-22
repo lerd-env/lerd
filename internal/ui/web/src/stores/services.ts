@@ -1,3 +1,4 @@
+import { m } from '../paraglide/messages.js';
 import { writable, derived, get } from 'svelte/store';
 import { apiJson, apiFetch } from '$lib/api';
 import { wsMessage } from '$lib/ws';
@@ -237,7 +238,7 @@ export async function setServicePorts(
       await loadServices();
       return { ok: true };
     }
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -258,7 +259,7 @@ export async function setServiceShim(
       await loadServices();
       return { ok: true };
     }
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -338,6 +339,8 @@ function phaseLabel(phase: string): string {
       return 'Dumping data…';
     case 'restoring_data':
       return 'Restoring data…';
+    case 'restore_warnings':
+      return 'Restored with errors';
     case 'swapping_data_dir':
       return 'Swapping data dir…';
     case 'starting_deps':
@@ -395,6 +398,9 @@ export async function streamServiceAction(
     const decoder = new TextDecoder();
     let buf = '';
     let finalError: string | undefined;
+    // A restore the engine complained about is the last thing worth reading, so
+    // it outlives the phase that follows it instead of being wiped on success.
+    let finalWarning: string | undefined;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -411,11 +417,12 @@ export async function streamServiceAction(
           continue;
         }
         if (evt.phase === 'error') {
-          finalError = evt.error || 'failed';
+          finalError = evt.error || m.common_failed();
           setProgress(name, { phase: 'error', message: finalError, error: true });
           continue;
         }
         if (evt.phase === 'done') continue;
+        if (evt.phase === 'restore_warnings') finalWarning = evt.message || phaseLabel(evt.phase);
         const message =
           evt.phase === 'pulling_image' && evt.image
             ? 'Pulling ' + evt.image
@@ -425,6 +432,9 @@ export async function streamServiceAction(
     }
     if (finalError) {
       setTimeout(() => setProgress(name, null), 5000);
+    } else if (finalWarning) {
+      setProgress(name, { phase: 'restore_warnings', message: finalWarning, error: true });
+      setTimeout(() => setProgress(name, null), 15000);
     } else {
       setProgress(name, null);
     }
@@ -583,7 +593,7 @@ export async function saveServiceConfig(
       rolledBack: data.rolled_back
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
   // No finally { loadServices() } — the publishAfter middleware on
   // the services route already broadcasts a sites/services WS frame
@@ -596,18 +606,18 @@ export async function loadServiceTuningBackups(name: string): Promise<LoadTuning
   try {
     const res = await apiFetch(tuningURL(name) + '/backups');
     if (!res.ok) {
-      return { ok: false, list: [], error: `Failed to load backups (${res.status})` };
+      return { ok: false, list: [], error: m.common_backupsLoadFailed({ status: res.status }) };
     }
     const list = (await res.json()) as ServiceTuningBackup[];
     return { ok: true, list: Array.isArray(list) ? list : [] };
   } catch (e) {
-    return { ok: false, list: [], error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, list: [], error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
 export async function loadServiceTuningBackupContent(name: string, backupName: string): Promise<string> {
   const res = await apiFetch(tuningURL(name) + '/backups/' + encodeURIComponent(backupName));
-  if (!res.ok) throw new Error(`Failed to load backup (${res.status})`);
+  if (!res.ok) throw new Error(m.common_backupLoadFailed({ status: res.status }));
   return await res.text();
 }
 
@@ -639,7 +649,7 @@ export async function restoreServiceTuning(
       rolledBack: data.rolled_back
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
   // No finally { loadServices() } — the publishAfter(KindServices)
   // middleware on /api/services/ already triggers a WS broadcast that
@@ -671,7 +681,7 @@ export async function resetServiceTuning(name: string): Promise<ResetTuningResul
       exists: data.exists
     };
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : 'Request failed' };
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   }
 }
 
