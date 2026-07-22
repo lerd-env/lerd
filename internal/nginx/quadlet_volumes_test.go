@@ -28,7 +28,12 @@ func TestRewriteNginxQuadlet_keepsExtraVolumes(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A project parked outside $HOME: the case ExtraVolumePaths exists for.
-	const outside = "/srv/apps"
+	// The directory has to exist, missing sources are dropped so podman never
+	// meets a bind mount it would refuse to start (#1083).
+	outside := filepath.Join(sandbox, "apps")
+	if err := os.MkdirAll(outside, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	cfg := "parked_directories:\n    - " + outside + "\n"
 	if err := os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(cfg), 0o644); err != nil {
 		t.Fatal(err)

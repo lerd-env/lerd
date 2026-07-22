@@ -42,6 +42,9 @@ var OnImageRebuilt func()
 // PHP-FPM container because they are outside the user's home directory. It
 // collects parked directories and linked site paths, deduplicates them, and
 // returns only the top-level ancestors (so /var/www covers /var/www/app).
+// Candidates that no longer exist are dropped: podman refuses to start a
+// container whose bind source is missing, which would take every site down for
+// one deleted directory (#1083).
 func ExtraVolumePaths() []string {
 	home, _ := os.UserHomeDir()
 	if home == "" {
@@ -58,7 +61,13 @@ func ExtraVolumePaths() []string {
 			candidates = append(candidates, site.Path)
 		}
 	}
-	return extraVolumePaths(candidates, home)
+	var present []string
+	for _, p := range candidates {
+		if _, err := os.Stat(p); err == nil {
+			present = append(present, p)
+		}
+	}
+	return extraVolumePaths(present, home)
 }
 
 // bindMountable reports whether a host path is safe to bind-mount into a
