@@ -57,9 +57,9 @@ var sudoProbe = defaultSudoProbe
 
 // defaultSudoProbe asks sudo, without prompting, whether the invoking user may
 // run the granted command passwordless. Exit 0 means the grant is live (from the
-// drop-in or a broader rule); a "password is required" refusal means it is gone;
-// anything else (no sudo, an unsupported flag) is inconclusive and defers to the
-// content marker so a working setup is never needlessly reinstalled.
+// drop-in or a broader rule); a refusal that asks for credentials means it is
+// gone; anything else (no sudo, an unsupported flag) is inconclusive and defers
+// to the content marker so a working setup is never needlessly reinstalled.
 func defaultSudoProbe() (permitted, conclusive bool) {
 	var stderr bytes.Buffer
 	cmd := exec.Command("sudo", "-n", "-l", sudoersProbeCommand)
@@ -67,10 +67,22 @@ func defaultSudoProbe() (permitted, conclusive bool) {
 	if cmd.Run() == nil {
 		return true, true
 	}
-	if strings.Contains(strings.ToLower(stderr.String()), "password is required") {
+	if sudoRefusalIsConclusive(stderr.String()) {
 		return false, true
 	}
 	return false, false
+}
+
+// sudoRefusalIsConclusive reports whether sudo's refusal proves the passwordless
+// grant is gone, rather than merely failing to answer. The two implementations
+// word it differently: classic sudo asks for a password, while sudo-rs, which
+// Ubuntu 26.04 ships, asks for interactive authentication. Matching only the
+// former read every sudo-rs refusal as inconclusive, so the stale marker won and
+// a deleted drop-in was never rewritten.
+func sudoRefusalIsConclusive(stderr string) bool {
+	s := strings.ToLower(stderr)
+	return strings.Contains(s, "password is required") ||
+		strings.Contains(s, "authentication is required")
 }
 
 // ForgetSudoersMarker deletes the user-owned marker so the next InstallSudoers
