@@ -917,3 +917,95 @@ func TestTickDNS_stoppedTickDoesNothing(t *testing.T) {
 		t.Fatalf("stopped stack must do nothing: waits=%d restarts=%d", waits, restarts)
 	}
 }
+
+// dnsDownHarness is a tick harness where the end-to-end check fails, so every
+// test below exercises the broken-DNS branch and overrides only what it pins.
+type dnsDownHarness struct {
+	deps      dnsWatchDeps
+	answering bool
+	restarts  int
+	waits     int
+	resolvers int
+}
+
+func newDNSDownHarness() *dnsDownHarness {
+	h := &dnsDownHarness{}
+	h.deps = dnsWatchDeps{
+		check:              func(string) (bool, error) { return false, nil },
+		idleOrLocked:       func() bool { return false },
+		publishStatus:      func() {},
+		repairPossible:     func() bool { return true },
+		waitReady:          func(time.Duration) error { h.waits++; return nil },
+		configureResolver:  func() error { h.resolvers++; return nil },
+		dnsDaemonAnswering: func() bool { return h.answering },
+		repairDNS:          func() error { h.restarts++; return nil },
+		log:                func(string, string, ...any) {},
+	}
+	return h
+}
+
+// TestTickDNS_restartsDeadDNSDaemon: when the daemon itself is not answering,
+// the resolver repair alone can never recover it, so the unit is restarted first
+// and the resolver repair still runs behind it.
+func TestTickDNS_restartsDeadDNSDaemon(t *testing.T) {
+	h := newDNSDownHarness() // answering=false: lerd-dns is gone
+	tickDNS(h.deps, &dnsWatchState{}, "test", false)
+	if h.restarts != 1 {
+		t.Fatalf("a dead lerd-dns must be restarted, restarts=%d", h.restarts)
+	}
+	if h.waits != 1 || h.resolvers != 1 {
+		t.Fatalf("the resolver repair must still run: waits=%d resolvers=%d", h.waits, h.resolvers)
+	}
+}
+
+// TestTickDNS_answeringDaemonNotRestarted: a lerd-dns that answers directly is
+// healthy and only the system resolver is bypassed (the VPN case), so the unit
+// must be left alone.
+func TestTickDNS_answeringDaemonNotRestarted(t *testing.T) {
+	h := newDNSDownHarness()
+	h.answering = true
+	tickDNS(h.deps, &dnsWatchState{}, "test", false)
+	if h.restarts != 0 {
+		t.Fatalf("a healthy lerd-dns must not be restarted, restarts=%d", h.restarts)
+	}
+	if h.resolvers != 1 {
+		t.Fatalf("the resolver repair must still run, resolvers=%d", h.resolvers)
+	}
+}
+
+// TestTickDNS_restartsDeadDaemonWithoutResolverRepair: on a host where the
+// resolver repair is unavailable the tick returns early, but a dead lerd-dns must
+// still be restarted — that heal needs no privilege.
+func TestTickDNS_restartsDeadDaemonWithoutResolverRepair(t *testing.T) {
+	h := newDNSDownHarness()
+	h.deps.repairPossible = func() bool { return false }
+	tickDNS(h.deps, &dnsWatchState{}, "test", false)
+	if h.restarts != 1 {
+		t.Fatalf("a dead lerd-dns must be restarted even with no resolver repair, restarts=%d", h.restarts)
+	}
+	if h.resolvers != 0 {
+		t.Fatalf("the resolver repair must stay gated, resolvers=%d", h.resolvers)
+	}
+}
+
+// TestTickDNS_stoppedStackKeepsDNSDown: `lerd stop` must not be undone by the
+// daemon heal.
+func TestTickDNS_stoppedStackKeepsDNSDown(t *testing.T) {
+	h := newDNSDownHarness()
+	h.deps.isStopped = func() bool { return true }
+	tickDNS(h.deps, &dnsWatchState{}, "test", false)
+	if h.restarts != 0 {
+		t.Fatalf("a stopped stack must not restart lerd-dns, restarts=%d", h.restarts)
+	}
+}
+
+// TestTickDNS_daemonRestartErrorFallsThrough: a failed restart is logged and the
+// tick continues into the resolver repair instead of aborting.
+func TestTickDNS_daemonRestartErrorFallsThrough(t *testing.T) {
+	h := newDNSDownHarness()
+	h.deps.repairDNS = func() error { h.restarts++; return errors.New("boom") }
+	tickDNS(h.deps, &dnsWatchState{}, "test", false)
+	if h.restarts != 1 || h.resolvers != 1 {
+		t.Fatalf("a failed restart must not abort the tick: restarts=%d resolvers=%d", h.restarts, h.resolvers)
+	}
+}

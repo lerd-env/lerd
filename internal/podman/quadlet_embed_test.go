@@ -776,3 +776,17 @@ func TestPairIPv6Binds_skipsWhenNoNetworkDirective(t *testing.T) {
 		t.Errorf("expected no v6 pairs when Network= absent (pasta path); got:\n%s", out)
 	}
 }
+
+// TestDNSQuadletHasNoStartRateLimit: the NetworkManager dispatcher restarts
+// lerd-dns on every interface event, so a resume that brings several links back
+// at once can fire more restarts than systemd's default five-in-ten-seconds
+// allows and park the unit in failed for good (issue #1087).
+func TestDNSQuadletHasNoStartRateLimit(t *testing.T) {
+	tpl, err := GetQuadletTemplate("lerd-dns.container")
+	if err != nil {
+		t.Fatalf("GetQuadletTemplate: %v", err)
+	}
+	if !strings.Contains(tpl, "StartLimitIntervalSec=0") {
+		t.Errorf("lerd-dns must disable the start rate limit:\n%s", tpl)
+	}
+}

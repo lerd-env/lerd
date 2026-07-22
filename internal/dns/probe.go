@@ -86,6 +86,14 @@ func DnsmasqAnswer(tld string) (string, error) {
 	return defaultDnsmasqAnswer(tld)
 }
 
+// DaemonAnswering reports whether lerd's dnsmasq answers on its own port,
+// bypassing the system resolver. It separates a lerd-dns that is gone, which only
+// a unit restart recovers, from one that is alive behind a resolver that stopped
+// routing to it.
+func DaemonAnswering(tld string) bool {
+	return dnsmasqDirectOK(tld)
+}
+
 // dnsmasqDirectOK queries lerd's dnsmasq straight on 127.0.0.1:5300,
 // bypassing the system resolver entirely. It returns true when dnsmasq
 // answers with an address lerd would legitimately hand out, which is the

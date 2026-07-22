@@ -165,7 +165,9 @@ After a long suspend or hibernate, rootless podman networking can come back in a
 
 On Linux the watcher now restarts nginx automatically. It notices the host has resumed from a real wall-clock gap in its tick loop (the timer is frozen while the machine is suspended), and on that one tick it checks whether lerd-nginx is accepting on its HTTPS port and restarts it if the listener died. Keying off the resume event rather than a continuous poll means it acts exactly once and can never fight a `lerd start` you ran yourself, since a start does not suspend the machine. DNS resolution is repaired by the same watcher's existing path, so `.test` names come back on their own too.
 
-Two cases it leaves for `lerd start` rather than acting from a background timer: a host whose IPv6 support changed across the wake (the lerd network must be recreated, which rebuilds every container), and a lerd-dns container that a wake stopped outright. In either case run `lerd start` and it brings the stack back safely. The same applies in the rare case the watcher itself was not running at the moment of resume.
+A stopped lerd-dns is healed too. Whenever the watcher finds `.test` broken it now asks lerd's dnsmasq directly on port 5300 whether it is alive, and restarts the container when it is not, instead of only rewriting the host resolver config, which can never bring back a container that is gone. Waking is not the only way to lose it: the NetworkManager dispatcher restarts lerd-dns on every interface change, and a wake that brings wifi, ethernet and a VPN back at once used to fire enough restarts in a few seconds to exhaust systemd's start rate limit, which parks the unit in `failed` permanently. That limit is now lifted for lerd-dns, and the watcher clears any leftover failed state before it restarts.
+
+One case it still leaves for `lerd start` rather than acting from a background timer: a host whose IPv6 support changed across the wake, since the lerd network must be recreated and that rebuilds every container. The same applies in the rare case the watcher itself was not running at the moment of resume.
 :::
 
 ::: details Nginx not serving a site
