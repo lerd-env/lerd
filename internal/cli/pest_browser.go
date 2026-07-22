@@ -58,11 +58,16 @@ test "$n" -gt 0
 `, pestBrowserCachePath)
 
 // pestBrowserPlanAwk turns `playwright install --dry-run` output into one
-// "<install dir>\t<download url>" line per component, deduplicated (ffmpeg is
+// "<install dir>\t<url>\t<mirror>" line per component, deduplicated (ffmpeg is
 // listed once per browser). The dry run is the only supported way to learn the
-// exact cache layout and archive URLs for the project's pinned Playwright.
-const pestBrowserPlanAwk = `/Install location:/ { dir = $NF }
-/Download url:/ { if (dir != "" && !seen[dir]++) print dir "\t" $NF; dir = "" }`
+// exact cache layout and archive URLs for the project's pinned Playwright. Each
+// component is emitted when the next one starts, so a block that lists no
+// fallback still yields a line.
+const pestBrowserPlanAwk = `function flush() { if (dir != "" && url != "" && !seen[dir]++) print dir "\t" url "\t" mirror }
+/Install location:/ { flush(); dir = $NF; url = ""; mirror = "" }
+/Download url:/ { url = $NF }
+/Download fallback 1:/ { mirror = $NF }
+END { flush() }`
 
 // pestBrowserInstall populates the browser registry from the project's own
 // Playwright CLI, but does the fetching itself: it asks Playwright where each
@@ -72,7 +77,9 @@ const pestBrowserPlanAwk = `/Install location:/ { dir = $NF }
 // to the same path in seconds. curl's --speed-time guard turns a stalled
 // download into an error instead of another silent hang, and the
 // INSTALLATION_COMPLETE marker is what makes Playwright's registry accept the
-// result as a real install.
+// result as a real install. The .links entry is the other half of that bargain:
+// Playwright deletes any browser directory no link claims, so without it an
+// unrelated project's `playwright install` reaps these browsers as unused.
 var pestBrowserInstall = fmt.Sprintf(`set -e
 pw=./node_modules/.bin/playwright
 if [ ! -x "$pw" ]; then
@@ -88,7 +95,13 @@ if [ -z "$plan" ]; then
   exec "$pw" install chromium
 fi
 
-printf '%%s\n' "$plan" | while IFS="$(printf '\t')" read -r dir url; do
+core=$(node -e 'process.stdout.write(require("path").dirname(require.resolve("playwright-core/package.json", {paths: [process.cwd()]})))' 2>/dev/null || true)
+if [ -n "$core" ]; then
+  mkdir -p "$cache/.links"
+  printf '%%s' "$core" > "$cache/.links/$(printf '%%s' "$core" | sha1sum | cut -d' ' -f1)"
+fi
+
+printf '%%s\n' "$plan" | while IFS="$(printf '\t')" read -r dir url mirror; do
   name=$(basename "$dir")
   if [ -f "$dir/INSTALLATION_COMPLETE" ]; then
     echo "  $name is already installed"
@@ -97,7 +110,11 @@ printf '%%s\n' "$plan" | while IFS="$(printf '\t')" read -r dir url; do
   zip="/tmp/lerd-playwright-$name.zip"
   echo "  downloading $name..."
   rm -rf "$dir" "$zip"
-  curl -fsSL --retry 3 --speed-limit 1024 --speed-time 60 -o "$zip" "$url"
+  if ! curl -fsSL --retry 3 --speed-limit 1024 --speed-time 60 -o "$zip" "$url"; then
+    [ -n "$mirror" ] || exit 1
+    echo "  the download server did not answer, retrying from the mirror..."
+    curl -fsSL --retry 3 --speed-limit 1024 --speed-time 60 -o "$zip" "$mirror"
+  fi
   echo "  extracting $name..."
   mkdir -p "$dir"
   unzip -q -o "$zip" -d "$dir"
@@ -109,14 +126,17 @@ done
 `, pestBrowserCachePath, pestBrowserPlanAwk)
 
 // pestBrowserCleanup clears what an aborted install leaves inside the container.
-// Ctrl+C kills the host-side lerd process only, so the in-container installer
-// survives holding Playwright's __dirlock and every retry then blocks on it with
+// Ctrl+C kills the host-side lerd process only, so the in-container downloader
+// survives: our own curl and the shell driving it, or, on the fallback path,
+// Playwright's installer holding the __dirlock that makes every retry block with
 // no output at all. Half-downloaded archives are dropped here too, since nothing
 // else ever reclaims them. The bracketed characters keep each pattern from
-// matching this script's own command line, which would kill the cleanup itself.
+// matching this script's own command line, which would kill the cleanup itself,
+// and the rm glob is bracketed for the same reason rather than for globbing.
 var pestBrowserCleanup = fmt.Sprintf(`pkill -f "oopDownloadBrowserMai[n]" >/dev/null 2>&1
 pkill -f "playwright[ ]install" >/dev/null 2>&1
-rm -rf "${PLAYWRIGHT_BROWSERS_PATH:-%s}/__dirlock" /tmp/playwright-download-* /tmp/lerd-playwright-*.zip
+pkill -f "lerd-playwrigh[t]" >/dev/null 2>&1
+rm -rf "${PLAYWRIGHT_BROWSERS_PATH:-%s}/__dirlock" /tmp/playwright-download-* /tmp/lerd-playwrigh[t]-*.zip
 exit 0
 `, pestBrowserCachePath)
 
