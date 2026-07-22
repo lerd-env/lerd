@@ -108,10 +108,10 @@ The chain in order:
 | `lerd-dns container` | The dnsmasq container is running. | `lerd start` (or `podman logs lerd-dns` to see why it crashed). |
 | `dnsmasq config` | `~/.local/share/lerd/dnsmasq/lerd.conf` exists with `port=5300` and `address=/.<tld>/`. | `lerd start` regenerates the config from your registered TLD. |
 | `port 5300 listening` | TCP/UDP 5300 is reachable on 127.0.0.1. | Another process owns the port. Find it with `ss -tlnp sport = :5300` on Linux, or `lsof -nP -iTCP:5300 -sTCP:LISTEN` on macOS. |
-| `dig @127.0.0.1 -p 5300` | A direct query at port 5300 returns 127.0.0.1 for `lerd-probe.<tld>`. | dnsmasq is up but its config drifted. `systemctl --user restart lerd-dns`. |
+| `dig @127.0.0.1 -p 5300` | A direct query at port 5300 returns 127.0.0.1 for `lerd-probe.<tld>`, or the host's LAN IP when [`lan:expose`](usage/lan-sharing.md) is on. | dnsmasq is up but its config drifted. `lerd dns:repair`. |
 | `resolver hookup` | The NetworkManager dispatcher script or systemd-resolved drop-in is installed. | Rerun `lerd install`. |
 | `interface routes .test to 5300` | `resolvectl status` shows `127.0.0.1:5300` and `~<tld>` on the active interface. | `sudo systemctl restart NetworkManager`, or set the routing manually with `sudo resolvectl domain <iface> ~test ~.`. |
-| `system DNS lookup` | `host lerd-probe.test` (the system resolver) returns 127.0.0.1. | The drop-in is installed but resolved isn't honouring it. Check whether cloud-init or another tool wrote a higher-priority resolver config. Common on EC2 / cloud images. With a VPN connected this rung is reported as a warning rather than a failure, see the VPN section below. |
+| `system DNS lookup` | `host lerd-probe.test` (the system resolver) returns 127.0.0.1, or the host's LAN IP under `lan:expose`. | The drop-in is installed but resolved isn't honouring it. Check whether cloud-init or another tool wrote a higher-priority resolver config. Common on EC2 / cloud images. With a VPN connected this rung is reported as a warning rather than a failure, see the VPN section below. |
 
 You can also call this programmatically over MCP via the `diag` tool's `dns_diagnose` action, useful for AI-driven troubleshooting:
 
