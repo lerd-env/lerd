@@ -1095,6 +1095,10 @@ func startPerSiteContainers() {
 // refreshUnreferencedCustomQuadlets rewrites quadlets for globally installed
 // custom services, per-site custom containers, and per-site FrankenPHP
 // containers the earlier per-site walk would skip, so schema changes reach every managed container.
+// writeCustomFPMQuadletFn is the seam tests override to assert the refresh
+// routes a custom-FPM site to its writer without spawning podman.
+var writeCustomFPMQuadletFn = podman.WriteCustomFPMQuadlet
+
 func refreshUnreferencedCustomQuadlets(seenSvc map[string]bool, reg *config.SiteRegistry) {
 	if customs, err := config.ListCustomServices(); err == nil {
 		for _, svc := range customs {
@@ -1132,6 +1136,14 @@ func refreshUnreferencedCustomQuadlets(seenSvc map[string]bool, reg *config.Site
 			entrypoint, env := s.FrankenPHPQuadletSpec()
 			if err := podman.WriteFrankenPHPQuadlet(s.Name, s.Path, s.PHPVersion, entrypoint, env); err != nil {
 				fmt.Printf("  WARN: refreshing %s quadlet: %v\n", podman.FrankenPHPContainerName(s.Name), err)
+			}
+		case s.IsCustomFPM():
+			// Without this branch a custom-FPM site's quadlet is only rewritten on
+			// link, so an upgrade never back-fills additions to the FPM template
+			// (the shared php.ini mount from #944), and `php:ini shared` reports
+			// success while the setting silently never reaches the container.
+			if err := writeCustomFPMQuadletFn(s.Name, s.PHPVersion); err != nil {
+				fmt.Printf("  WARN: refreshing %s quadlet: %v\n", podman.CustomFPMContainerName(s.Name), err)
 			}
 		}
 	}

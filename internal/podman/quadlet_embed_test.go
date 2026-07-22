@@ -789,4 +789,11 @@ func TestDNSQuadletHasNoStartRateLimit(t *testing.T) {
 	if !strings.Contains(tpl, "StartLimitIntervalSec=0") {
 		t.Errorf("lerd-dns must disable the start rate limit:\n%s", tpl)
 	}
+	// The directive only works in [Unit]; systemd ignores it under [Service],
+	// which is exactly how #1087 shipped broken. Assert its section, not just
+	// its presence.
+	unit, _, found := strings.Cut(tpl, "[Container]")
+	if !found || !strings.Contains(unit, "StartLimitIntervalSec=0") {
+		t.Errorf("StartLimitIntervalSec must sit in [Unit], not a later section:\n%s", tpl)
+	}
 }

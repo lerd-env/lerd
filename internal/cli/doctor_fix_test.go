@@ -67,3 +67,32 @@ func TestHeavyFixClassification(t *testing.T) {
 		t.Fatal("mkdir should not be heavy")
 	}
 }
+
+// The network-online repair used to re-enter `lerd start`, which reconfigures
+// the resolver through sudo, elevating unattended under `doctor --fix --yes`.
+// It now installs a user-level drop-in in-process; assert it routes there and
+// never touches privilege, and that "start" is no longer a dispatchable key.
+func TestApplyDoctorFixNetworkWaitStaysUnprivileged(t *testing.T) {
+	called := false
+	orig := ensureNoNetworkWaitStallFn
+	ensureNoNetworkWaitStallFn = func() (bool, error) { called = true; return false, nil }
+	t.Cleanup(func() { ensureNoNetworkWaitStallFn = orig })
+
+	fix := autoFix(fixNetworkWait, "", "install the podman network-online drop-in")
+	var buf bytes.Buffer
+	if err := ApplyDoctorFix(fix, &buf); err != nil {
+		t.Fatalf("network-wait fix failed: %v", err)
+	}
+	if !called {
+		t.Error("network-wait fix did not route to the in-process drop-in installer")
+	}
+	if IsHeavyFix(fix) {
+		t.Error("network-wait fix should not be heavy")
+	}
+
+	// The privileged `start` fix is gone: a doctor that re-adds it lands in the
+	// unknown-key default rather than silently running sudo from the auto tier.
+	if err := ApplyDoctorFix(&DoctorFix{Tier: FixAuto, Key: "start"}, &buf); err == nil {
+		t.Error(`"start" is dispatchable from the auto tier again but it runs lerd start (sudo)`)
+	}
+}

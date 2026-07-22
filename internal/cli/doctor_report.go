@@ -75,18 +75,24 @@ func (r *DoctorReport) fixLast(fx *DoctorFix) {
 }
 
 // AutoFixes returns the findings carrying an applicable automatic fix, in report
-// order, one per distinct key. Several failing findings can attach the same
+// order, one per distinct fix. Several failing findings can attach the same
 // repair (a broken DNS chain fails at more than one rung), and running that
-// repair once per finding would repeat the whole sequence. Callers filter
-// further (heavy fixes always re-confirm).
+// repair once per finding would repeat the whole sequence. The identity is the
+// key plus its argument: mkdir and php-rebuild reuse one key across findings
+// that each target a different directory or PHP version, and those must all
+// survive. Callers filter further (heavy fixes always re-confirm).
 func (r *DoctorReport) AutoFixes() []Finding {
 	var out []Finding
 	seen := map[string]bool{}
 	for _, f := range r.Findings {
-		if f.Fix == nil || f.Fix.Tier != FixAuto || seen[f.Fix.Key] {
+		if f.Fix == nil || f.Fix.Tier != FixAuto {
 			continue
 		}
-		seen[f.Fix.Key] = true
+		id := f.Fix.Key + "\x00" + f.Fix.Arg
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
 		out = append(out, f)
 	}
 	return out
