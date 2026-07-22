@@ -7,6 +7,7 @@
   import LogViewer from '$components/LogViewer.svelte';
   import DnsConfigTab from './DnsConfigTab.svelte';
   import { status, dnsState } from '$stores/status';
+  import { escapeHtml } from '$lib/html';
   import { m } from '../../paraglide/messages.js';
 
   const logsEnabled = $derived($status.dns?.enabled !== false);
@@ -43,7 +44,7 @@
       {#if $status.dns?.enabled === false}
         <p class="text-xs text-gray-400">
           {@html m.system_dns_disabledHint({
-            tld: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">*.' + $status.dns.tld + '</code>',
+            tld: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">*.' + escapeHtml($status.dns.tld) + '</code>',
             setting: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">dns.enabled: true</code>',
             file: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">~/.config/lerd/config.yaml</code>',
             cmd: '<code class="bg-gray-100 dark:bg-white/5 px-1 rounded-sm">lerd install</code>'
