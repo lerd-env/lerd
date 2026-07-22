@@ -227,6 +227,18 @@ podman inspect lerd-php84-fpm --format '{{range .Mounts}}{{.Source}}
 If the path is in the quadlet but not in that output, `lerd restart` picks it up.
 :::
 
+::: details nginx fails to start with "statfs /path: no such file or directory"
+Podman refuses to start a container whose bind-mount source is gone, so a directory outside `$HOME` that lerd mounted while it existed, and that has since disappeared, stops the container dead. A Git branch checkout that removes a project subdirectory is the usual cause, and because nginx serves every site, one missing directory takes the whole stack down.
+
+`lerd start` repairs this for you: it drops the stale mounts before starting anything and tells you which path and site was responsible.
+
+```
+WARN: /var/www/erp/Modules/Accounts no longer exists (site erp), removed from lerd-nginx
+```
+
+The mount comes back on its own once the directory is there again and you run any command from it, or after `lerd restart`.
+:::
+
 ::: details Permission denied on port 80/443
 Rootless Podman cannot bind to ports below 1024 by default. Allow it:
 
