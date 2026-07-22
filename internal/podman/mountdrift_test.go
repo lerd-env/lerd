@@ -128,8 +128,12 @@ func TestRewriteFPMQuadletsRestartsDriftedContainer(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(quadlets, "lerd-php84-fpm.container"), []byte("[Container]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	sitePath := filepath.Join(t.TempDir(), "shop")
+	if err := os.MkdirAll(sitePath, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := config.SaveSites(&config.SiteRegistry{Sites: []config.Site{{
-		Name: "shop", Path: "/data/Projects/shop", PHPVersion: "8.4",
+		Name: "shop", Path: sitePath, PHPVersion: "8.4",
 	}}}); err != nil {
 		t.Fatal(err)
 	}
