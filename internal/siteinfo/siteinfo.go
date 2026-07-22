@@ -205,6 +205,12 @@ func (e *EnrichedSite) PrimaryDomain() string {
 	return ""
 }
 
+// IsProxyOnly mirrors config.Site.IsProxyOnly on the enriched view: a host-proxy
+// site with no supervised dev command, so lerd runs nothing for it.
+func (e *EnrichedSite) IsProxyOnly() bool {
+	return e.HostPort > 0 && e.HostCommand == ""
+}
+
 // KnownServices returns the built-in service names used for auto-detection.
 // Backed by config.DefaultPresetNames so adding/removing a default preset
 // flows through automatically.
