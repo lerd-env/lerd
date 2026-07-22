@@ -238,7 +238,7 @@ export async function setServicePorts(
       await loadServices();
       return { ok: true };
     }
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -259,7 +259,7 @@ export async function setServiceShim(
       await loadServices();
       return { ok: true };
     }
-    return { ok: false, error: data.error || 'failed' };
+    return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: String(e) };
   }
@@ -417,7 +417,7 @@ export async function streamServiceAction(
           continue;
         }
         if (evt.phase === 'error') {
-          finalError = evt.error || 'failed';
+          finalError = evt.error || m.common_failed();
           setProgress(name, { phase: 'error', message: finalError, error: true });
           continue;
         }

@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiFetch, apiJson, apiUrl, decodeJSONResult, decodeJSONText } from '$lib/api';
+import { m } from '../paraglide/messages.js';
 
 export interface Snapshot {
   name: string;
@@ -149,7 +150,7 @@ export function importDatabase(
     };
     xhr.onload = () =>
       void finish(decodeJSONText<Result>(xhr.responseText, `${xhr.status} ${xhr.statusText}`.trim()));
-    xhr.onerror = () => resolve({ ok: false, error: `${service} import request failed` });
+    xhr.onerror = () => resolve({ ok: false, error: m.common_requestFailed() });
     xhr.send(form);
   });
 }

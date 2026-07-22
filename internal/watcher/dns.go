@@ -41,6 +41,11 @@ type dnsWatchDeps struct {
 	// until a manual lerd restart. Both nil off the Linux rootless-podman path.
 	nginxHealthy func() bool
 	repairNginx  func() error
+	// dnsDaemonAnswering reports whether lerd's dnsmasq answers on its own port;
+	// repairDNS restarts the unit it runs under. Nil off the Linux rootless-podman
+	// path.
+	dnsDaemonAnswering func() bool
+	repairDNS          func() error
 	// healMachine restarts the shared podman machine VM if a host suspend left it
 	// stalled, healing the MCP/exec path on wake before the next call. macOS only
 	// (nil elsewhere: Linux has no machine VM).
@@ -191,6 +196,15 @@ func hasIPv6Loopback() bool {
 // no-op the next probe still sees as down, surfacing it for `lerd start`.
 func defaultRepairNginx() error {
 	return podman.RestartUnit("lerd-nginx")
+}
+
+// defaultRepairDNS brings lerd-dns back. The reset-failed first is the point:
+// systemd's start rate limit parks the unit in "failed" after a burst of restarts
+// (a resume firing several NetworkManager dispatcher events), and a plain restart
+// of a rate-limited unit is refused.
+func defaultRepairDNS() error {
+	podman.ResetFailedUnit("lerd-dns")
+	return podman.RestartUnit("lerd-dns")
 }
 
 // publishOnTransition sets *cur to next and fires pub when the value changed (or
@@ -382,6 +396,8 @@ func WatchDNS(interval time.Duration, tld string) {
 		// lerd restart (issue #665). DNS resolution is already repaired below.
 		deps.nginxHealthy = defaultNginxHealthy
 		deps.repairNginx = defaultRepairNginx
+		deps.dnsDaemonAnswering = func() bool { return dns.DaemonAnswering(tld) }
+		deps.repairDNS = defaultRepairDNS
 		deps.isStopped = config.IsStopped
 	}
 
@@ -572,6 +588,19 @@ func tickDNS(d dnsWatchDeps, s *dnsWatchState, tld string, linkTriggered bool) {
 				s.lastOK = &up
 				d.publishStatus()
 				return
+			}
+		}
+	}
+
+	// Everything below only rewrites the host resolver, which cannot recover a
+	// lerd-dns that is gone: the tick would just log "not ready" every interval
+	// while .test stays dark. Probe the daemon on its own port and restart the unit
+	// when it doesn't answer, before the privilege gate, since this heal needs none.
+	if d.dnsDaemonAnswering != nil && !d.dnsDaemonAnswering() {
+		d.log("warn", "lerd-dns not answering, restarting")
+		if d.repairDNS != nil {
+			if err := d.repairDNS(); err != nil {
+				d.log("error", "lerd-dns restart failed", "err", err)
 			}
 		}
 	}

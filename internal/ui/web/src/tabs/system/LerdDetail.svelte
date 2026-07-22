@@ -16,6 +16,7 @@
   import SettingsCard from '$components/SettingsCard.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
   import { apiFetch, apiBase } from '$lib/api';
+  import { escapeHtml } from '$lib/html';
   import { m } from '../../paraglide/messages.js';
 
   // The remote dashboard always binds :7073; when LAN-exposed we surface the
@@ -262,7 +263,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
         {#if $lan.exposed}
           {@html m.system_lan_exposedDescription({
-            ip: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + $lan.lanIP + '</code>',
+            ip: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + escapeHtml($lan.lanIP) + '</code>',
             pattern: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">*.test</code>',
             loop4: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">127.0.0.1</code>',
             loop6: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">::1</code>'
@@ -304,8 +305,8 @@
       {#if $lan.exposed && $accessMode.loopback}
         <div class="mt-3 space-y-3">
           <div class="text-xs text-gray-600 dark:text-gray-400 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg p-3 space-y-1">
-            <p>{@html m.system_lan_postExpose_resolver({ addr: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + $lan.lanIP + ':5300</code>', unit: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd-dns-forwarder.service</code>' })}</p>
-            <p>{@html m.system_lan_postExpose_dnsmasq({ pattern: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">*.test</code>', ip: $lan.lanIP })}</p>
+            <p>{@html m.system_lan_postExpose_resolver({ addr: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + escapeHtml($lan.lanIP) + ':5300</code>', unit: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd-dns-forwarder.service</code>' })}</p>
+            <p>{@html m.system_lan_postExpose_dnsmasq({ pattern: '<code class="bg-white/60 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">*.test</code>', ip: escapeHtml($lan.lanIP) })}</p>
             <p><strong>{m.system_lan_postExpose_firewall()}</strong></p>
           </div>
 
@@ -332,7 +333,7 @@
             {:else}
               <div class="space-y-2">
                 <div class="flex items-center justify-between gap-3 text-xs text-gray-600 dark:text-gray-400">
-                  <span>{@html m.system_lan_remote_codeLabel({ code: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono text-sm">' + $lan.setupCode + '</code>' })}</span>
+                  <span>{@html m.system_lan_remote_codeLabel({ code: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono text-sm">' + escapeHtml($lan.setupCode) + '</code>' })}</span>
                   {#if $lan.setupExpiresIn}<span>{m.system_lan_remote_expiresIn({ time: $lan.setupExpiresIn })}</span>{/if}
                 </div>
                 <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_lan_remote_runOnMachine()}</p>
@@ -393,7 +394,7 @@
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
         {#if $status.dns?.enabled === false}
           {@html m.system_remote_descriptionNoDns({
-            addr: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + ($lan.lanIP || '&lt;lan-ip&gt;') + ':7073</code>',
+            addr: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + ($lan.lanIP ? escapeHtml($lan.lanIP) : '&lt;lan-ip&gt;') + ':7073</code>',
             cmd: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd lan:share</code>'
           })}
         {:else}
@@ -413,7 +414,7 @@
             </div>
           {/if}
           <p class="text-xs text-gray-600 dark:text-gray-400">
-            {@html m.system_remote_usernameRow({ username: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + $remoteControl.username + '</code>' })}
+            {@html m.system_remote_usernameRow({ username: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">' + escapeHtml($remoteControl.username) + '</code>' })}
           </p>
           {#if !$lan.exposed && $status.dns?.enabled !== false}
             <p class="text-xs text-amber-600 dark:text-amber-400">

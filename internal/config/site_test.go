@@ -659,6 +659,25 @@ func TestIsHostProxy_False(t *testing.T) {
 	}
 }
 
+func TestIsProxyOnly(t *testing.T) {
+	cases := []struct {
+		name string
+		site Site
+		want bool
+	}{
+		{"proxy with no command", Site{HostPort: 3000}, true},
+		{"proxy with a supervised command", Site{HostPort: 3000, HostCommand: "npm run dev"}, false},
+		{"not a proxy site", Site{PHPVersion: "8.4"}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.site.IsProxyOnly(); got != tc.want {
+				t.Errorf("IsProxyOnly() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestSaveLoad_HostProxy_RoundTrip(t *testing.T) {
 	setDataDir(t)
 

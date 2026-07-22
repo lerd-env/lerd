@@ -945,6 +945,10 @@ func buildSites() []SiteResponse {
 
 		usage := siteUsage[e.Name]
 
+		// Pinned and proxy-only sites are exempt from suspension, so they never
+		// report idle either.
+		idleExempt := pinnedSites[e.Name] || e.IsProxyOnly()
+
 		var worktreeResponses []WorktreeResponse
 		for _, wt := range e.Worktrees {
 			lanPort := 0
@@ -986,7 +990,7 @@ func buildSites() []SiteResponse {
 				LANShareURL:          lanURL,
 				FrameworkWorkers:     wtWorkers,
 				LastActive:           idleActivity[wtKeyStr],
-				Idle:                 idleSiteIsIdle(idleActivity, wtKeyStr, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
+				Idle:                 idleSiteIsIdle(idleActivity, wtKeyStr, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
 				IdleSuspendedWorkers: wtSuspendedWorkers[wtKeyStr],
 			})
 		}
@@ -1040,7 +1044,7 @@ func buildSites() []SiteResponse {
 			LastRequestAt:        unixMilliOrZero(usage.LastAt),
 			RequestCount:         usage.Count,
 			IdleSuspended:        len(suspendedWorkers[e.Name]) > 0,
-			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, pinnedSites[e.Name], idleOn, idleTimeout, idleNow),
+			Idle:                 idleSiteIsIdle(idleActivity, e.Name, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
 			IdleSuspendedWorkers: suspendedWorkers[e.Name],
 			Pinned:               pinnedSites[e.Name],
 			Branch:               e.Branch,

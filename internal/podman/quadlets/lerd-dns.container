@@ -13,6 +13,10 @@ Exec=dnsmasq --no-daemon --conf-dir=/etc/dnsmasq.d
 [Service]
 Restart=always
 TimeoutStartSec=300
+# The NetworkManager dispatcher restarts this unit on every interface event, so a
+# resume that brings several links back at once outruns systemd's default start
+# rate limit and parks lerd-dns in failed until the user runs `lerd start`.
+StartLimitIntervalSec=0
 
 [Install]
 WantedBy=default.target

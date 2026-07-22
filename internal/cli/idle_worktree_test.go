@@ -52,6 +52,21 @@ func TestIdleTimingStatus(t *testing.T) {
 	}
 }
 
+// A proxy-only site is exempt from suspension, so its status reads that rather
+// than an "idle" it can never act on.
+func TestIdleSiteStatus_proxyOnly(t *testing.T) {
+	now := time.Unix(1_000_000, 0)
+	last := map[string]int64{"nestapp": now.Add(-2 * time.Hour).Unix()}
+	proxyOnly := config.Site{Name: "nestapp", HostPort: 3000}
+	if got := idleSiteStatus(proxyOnly, last, nil, time.Hour, now); got != "proxy only" {
+		t.Errorf("proxy-only site = %q, want proxy only", got)
+	}
+	supervised := config.Site{Name: "nestapp", HostPort: 3000, HostCommand: "npm run dev"}
+	if got := idleSiteStatus(supervised, last, nil, time.Hour, now); got != "idle 2h" {
+		t.Errorf("supervised host-proxy site = %q, want idle 2h", got)
+	}
+}
+
 func TestIdleWorktreeStatus_inheritsSitePauseAndPin(t *testing.T) {
 	now := time.Unix(1_000_000, 0)
 	wt := idleWtState{Branch: "dev", LastActive: now.Unix()}

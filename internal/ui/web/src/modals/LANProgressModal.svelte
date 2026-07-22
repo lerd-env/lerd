@@ -3,6 +3,7 @@
   import DetailButton from '$components/DetailButton.svelte';
   import { closeModal, modal } from '$stores/modals';
   import { lan } from '$stores/lan';
+  import { escapeHtml } from '$lib/html';
   import { m } from '../paraglide/messages.js';
 
   const action = $derived($modal.lanAction === 'unexpose' ? 'unexpose' : 'expose');
@@ -51,7 +52,7 @@
     {#if done && !error}
       <p class="text-xs text-emerald-600 dark:text-emerald-500 mt-3">
         {#if action === 'expose'}
-          {@html m.system_lan_progress_doneExposed({ ip: '<code class="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded-sm font-mono">' + $lan.lanIP + '</code>' })}
+          {@html m.system_lan_progress_doneExposed({ ip: '<code class="bg-gray-100 dark:bg-white/5 px-1.5 py-0.5 rounded-sm font-mono">' + escapeHtml($lan.lanIP) + '</code>' })}
         {:else}
           {m.system_lan_progress_doneHidden()}
         {/if}

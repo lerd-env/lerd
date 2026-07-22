@@ -104,30 +104,34 @@ func TestConfiguredMountOverridesEphemeralDenylist(t *testing.T) {
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", cfgHome)
 
-	cfg := &config.GlobalConfig{Mounts: []string{"/tmp/claude"}}
+	mount := filepath.Join(t.TempDir(), "claude")
+	if err := os.MkdirAll(mount, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := &config.GlobalConfig{Mounts: []string{mount}}
 	if err := config.SaveGlobal(cfg); err != nil {
 		t.Fatal(err)
 	}
 
-	if !PathAutoMountable("/tmp/claude/session-123") {
+	if !PathAutoMountable(mount + "/session-123") {
 		t.Error("a path under a configured mount should be auto-mountable despite /tmp")
 	}
 	if PathAutoMountable("/tmp/other/session") {
 		t.Error("an unconfigured /tmp path must stay refused")
 	}
-	if root, ok := configuredMountRoot("/tmp/claude/session-123"); !ok || root != "/tmp/claude" {
-		t.Errorf("configuredMountRoot = %q,%v; want /tmp/claude,true", root, ok)
+	if root, ok := configuredMountRoot(mount + "/session-123"); !ok || root != mount {
+		t.Errorf("configuredMountRoot = %q,%v; want %s,true", root, ok, mount)
 	}
 
 	got := ExtraVolumePaths()
 	found := false
 	for _, p := range got {
-		if p == "/tmp/claude" {
+		if p == mount {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("ExtraVolumePaths() = %v; want it to include /tmp/claude", got)
+		t.Errorf("ExtraVolumePaths() = %v; want it to include %s", got, mount)
 	}
 }
 

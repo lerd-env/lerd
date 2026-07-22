@@ -2,6 +2,8 @@ package cli
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"os/exec"
 	"strings"
 	"testing"
@@ -35,6 +37,151 @@ func TestPestBrowserInstall_PrefersLocalPlaywright(t *testing.T) {
 	}
 	if !strings.Contains(pestBrowserInstall, "lerd npm install playwright") {
 		t.Error("install script should hint how to install playwright when missing")
+	}
+}
+
+// dryRunPlan is real `playwright install --dry-run chromium` output, ffmpeg
+// duplication included.
+const dryRunPlan = `browser: chromium version 141.0.7390.37
+  Install location:    /root/.cache/ms-playwright/chromium-1194
+  Download url:        https://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-linux-arm64.zip
+
+browser: ffmpeg
+  Install location:    /root/.cache/ms-playwright/ffmpeg-1011
+  Download url:        https://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+
+browser: chromium-headless-shell version 141.0.7390.37
+  Install location:    /root/.cache/ms-playwright/chromium_headless_shell-1194
+  Download url:        https://cdn.playwright.dev/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip
+
+browser: ffmpeg
+  Install location:    /root/.cache/ms-playwright/ffmpeg-1011
+  Download url:        https://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+  Download fallback 1: https://playwright.download.prss.microsoft.com/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip
+`
+
+// The plan parser drives the whole install: one line per component carrying the
+// primary URL and the mirror Playwright falls back to when the CDN is
+// unreachable, with ffmpeg listed once even though Playwright repeats it per
+// browser.
+func TestPestBrowserPlanAwk_ParsesDryRun(t *testing.T) {
+	cmd := exec.Command("awk", pestBrowserPlanAwk)
+	cmd.Stdin = strings.NewReader(dryRunPlan)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("awk: %v", err)
+	}
+	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	want := []string{
+		"/root/.cache/ms-playwright/chromium-1194\thttps://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip\thttps://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-linux-arm64.zip",
+		"/root/.cache/ms-playwright/ffmpeg-1011\thttps://cdn.playwright.dev/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip\thttps://playwright.download.prss.microsoft.com/builds/ffmpeg/1011/ffmpeg-linux-arm64.zip",
+		"/root/.cache/ms-playwright/chromium_headless_shell-1194\thttps://cdn.playwright.dev/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip\thttps://playwright.download.prss.microsoft.com/builds/chromium/1194/chromium-headless-shell-linux-arm64.zip",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("parsed %d lines, want %d:\n%s", len(got), len(want), out)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("line %d = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+// Playwright only prints fallbacks for components it mirrors, so a block without
+// one still has to yield a usable line rather than dropping the component.
+func TestPestBrowserPlanAwk_HandlesMissingFallback(t *testing.T) {
+	plan := `browser: chromium version 141.0.7390.37
+  Install location:    /root/.cache/ms-playwright/chromium-1194
+  Download url:        https://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip
+`
+	cmd := exec.Command("awk", pestBrowserPlanAwk)
+	cmd.Stdin = strings.NewReader(plan)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("awk: %v", err)
+	}
+	want := "/root/.cache/ms-playwright/chromium-1194\thttps://cdn.playwright.dev/builds/chromium/1194/chromium-linux-arm64.zip\t"
+	if got := strings.TrimRight(string(out), "\n"); got != want {
+		t.Errorf("parsed %q, want %q", got, want)
+	}
+}
+
+// The deadlock in #1006 is Playwright's Node extractor writing into the
+// bind-mounted cache, so the install must fetch and unzip the archives itself
+// and mark each directory installed the way the registry expects.
+func TestPestBrowserInstall_ExtractsWithoutPlaywright(t *testing.T) {
+	for _, want := range []string{"--dry-run", "curl -fsSL", "unzip -q -o", "INSTALLATION_COMPLETE"} {
+		if !strings.Contains(pestBrowserInstall, want) {
+			t.Errorf("install script missing %q:\n%s", want, pestBrowserInstall)
+		}
+	}
+	if !strings.Contains(pestBrowserInstall, "--speed-time") {
+		t.Error("a stalled download must abort rather than hang forever")
+	}
+}
+
+// Playwright retries its own downloads against the Microsoft mirror when the CDN
+// is unreachable, which is the normal path on networks that block it. Fetching
+// the archives ourselves has to keep that second chance.
+func TestPestBrowserInstall_FallsBackToMirror(t *testing.T) {
+	for _, want := range []string{`"$url"`, `"$mirror"`} {
+		if !strings.Contains(pestBrowserInstall, want) {
+			t.Errorf("install script must download from %s:\n%s", want, pestBrowserInstall)
+		}
+	}
+}
+
+// Playwright garbage-collects any browser directory that no .links entry claims,
+// so an install that skips the link lets an unrelated project's `playwright
+// install` delete these browsers out from under the site that owns them.
+func TestPestBrowserInstall_WritesRegistryLink(t *testing.T) {
+	for _, want := range []string{".links", "sha1sum", "playwright-core"} {
+		if !strings.Contains(pestBrowserInstall, want) {
+			t.Errorf("install script missing %q, needed to claim the browsers:\n%s", want, pestBrowserInstall)
+		}
+	}
+}
+
+// The link filename is the sha1 of the playwright-core package path and the
+// contents are that same path; Playwright reads it back to resolve the pinned
+// revisions, so a different shape silently reads as a broken link.
+func TestPestBrowserInstall_LinkNamingMatchesPlaywright(t *testing.T) {
+	const pkgPath = "/home/dev/site/node_modules/playwright-core"
+	sum := sha1.Sum([]byte(pkgPath))
+	want := hex.EncodeToString(sum[:])
+
+	cmd := exec.Command("sh", "-c", `printf '%s' "$1" | sha1sum | cut -d" " -f1`, "sh", pkgPath)
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("sha1sum: %v", err)
+	}
+	if got := strings.TrimSpace(string(out)); got != want {
+		t.Errorf("link filename = %q, want sha1 of the package path %q", got, want)
+	}
+}
+
+// An aborted run must not leave the container wedged: the orphaned installer and
+// the lock it holds are what make every retry hang instantly with no output.
+func TestPestBrowserCleanup_ClearsLockAndOrphans(t *testing.T) {
+	for _, want := range []string{"__dirlock", "oopDownloadBrowserMai[n]", "/tmp/playwright-download-*"} {
+		if !strings.Contains(pestBrowserCleanup, want) {
+			t.Errorf("cleanup script missing %q:\n%s", want, pestBrowserCleanup)
+		}
+	}
+	// The orphan a Ctrl+C leaves behind is now our own curl and the shell driving
+	// it, neither of which runs under a Playwright process name.
+	if !strings.Contains(pestBrowserCleanup, "lerd-playwrigh[t]") {
+		t.Errorf("cleanup must reap lerd's own downloader:\n%s", pestBrowserCleanup)
+	}
+	// A pattern that matches the cleanup's own command line would kill it before
+	// it reaps anything.
+	for _, pat := range []string{"oopDownloadBrowserMain", "playwright install", "lerd-playwright"} {
+		if strings.Contains(pestBrowserCleanup, pat) {
+			t.Errorf("pkill pattern %q matches the cleanup script itself", pat)
+		}
 	}
 }
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -56,20 +57,88 @@ echo "  shimmed $n browser binary(ies) to system chromium"
 test "$n" -gt 0
 `, pestBrowserCachePath)
 
-// pestBrowserInstall runs the project's Playwright CLI to populate the browser
-// registry, preferring the locally installed binary so the downloaded revision
-// matches the project's pinned Playwright version. The download itself is mostly
-// wasted work (the glibc binaries it fetches are immediately overwritten by the
-// shim), but it is the canonical, version-proof way to create the exact cache
-// layout Playwright later looks for, so we accept the cost over reconstructing
-// that layout by hand.
-const pestBrowserInstall = `if [ -x ./node_modules/.bin/playwright ]; then
-  ./node_modules/.bin/playwright install chromium
-else
+// pestBrowserPlanAwk turns `playwright install --dry-run` output into one
+// "<install dir>\t<url>\t<mirror>" line per component, deduplicated (ffmpeg is
+// listed once per browser). The dry run is the only supported way to learn the
+// exact cache layout and archive URLs for the project's pinned Playwright. Each
+// component is emitted when the next one starts, so a block that lists no
+// fallback still yields a line.
+const pestBrowserPlanAwk = `function flush() { if (dir != "" && url != "" && !seen[dir]++) print dir "\t" url "\t" mirror }
+/Install location:/ { flush(); dir = $NF; url = ""; mirror = "" }
+/Download url:/ { url = $NF }
+/Download fallback 1:/ { mirror = $NF }
+END { flush() }`
+
+// pestBrowserInstall populates the browser registry from the project's own
+// Playwright CLI, but does the fetching itself: it asks Playwright where each
+// component belongs and what to download, then uses curl and the image's unzip.
+// Playwright's Node extractor deadlocks mid-write on the bind-mounted cache
+// (#1006), stalling forever with no output, while unzip writes the same archive
+// to the same path in seconds. curl's --speed-time guard turns a stalled
+// download into an error instead of another silent hang, and the
+// INSTALLATION_COMPLETE marker is what makes Playwright's registry accept the
+// result as a real install. The .links entry is the other half of that bargain:
+// Playwright deletes any browser directory no link claims, so without it an
+// unrelated project's `playwright install` reaps these browsers as unused.
+var pestBrowserInstall = fmt.Sprintf(`set -e
+pw=./node_modules/.bin/playwright
+if [ ! -x "$pw" ]; then
   echo "the 'playwright' npm package is not in node_modules — run: lerd npm install playwright" >&2
   exit 1
 fi
-`
+cache="${PLAYWRIGHT_BROWSERS_PATH:-%s}"
+mkdir -p "$cache"
+
+plan=$("$pw" install --dry-run chromium | awk '%s')
+if [ -z "$plan" ]; then
+  echo "could not read Playwright's install plan; falling back to its own installer" >&2
+  exec "$pw" install chromium
+fi
+
+core=$(node -e 'process.stdout.write(require("path").dirname(require.resolve("playwright-core/package.json", {paths: [process.cwd()]})))' 2>/dev/null || true)
+if [ -n "$core" ]; then
+  mkdir -p "$cache/.links"
+  printf '%%s' "$core" > "$cache/.links/$(printf '%%s' "$core" | sha1sum | cut -d' ' -f1)"
+fi
+
+printf '%%s\n' "$plan" | while IFS="$(printf '\t')" read -r dir url mirror; do
+  name=$(basename "$dir")
+  if [ -f "$dir/INSTALLATION_COMPLETE" ]; then
+    echo "  $name is already installed"
+    continue
+  fi
+  zip="/tmp/lerd-playwright-$name.zip"
+  echo "  downloading $name..."
+  rm -rf "$dir" "$zip"
+  if ! curl -fsSL --retry 3 --speed-limit 1024 --speed-time 60 -o "$zip" "$url"; then
+    [ -n "$mirror" ] || exit 1
+    echo "  the download server did not answer, retrying from the mirror..."
+    curl -fsSL --retry 3 --speed-limit 1024 --speed-time 60 -o "$zip" "$mirror"
+  fi
+  echo "  extracting $name..."
+  mkdir -p "$dir"
+  unzip -q -o "$zip" -d "$dir"
+  rm -f "$zip"
+  find "$dir" -type f \( -name 'chrome' -o -name 'chrome-headless-shell' -o -name 'chrome_sandbox' \
+    -o -name 'chrome_crashpad_handler' -o -name 'ffmpeg-linux' -o -name '*.sh' \) -exec chmod +x {} +
+  touch "$dir/INSTALLATION_COMPLETE"
+done
+`, pestBrowserCachePath, pestBrowserPlanAwk)
+
+// pestBrowserCleanup clears what an aborted install leaves inside the container.
+// Ctrl+C kills the host-side lerd process only, so the in-container downloader
+// survives: our own curl and the shell driving it, or, on the fallback path,
+// Playwright's installer holding the __dirlock that makes every retry block with
+// no output at all. Half-downloaded archives are dropped here too, since nothing
+// else ever reclaims them. The bracketed characters keep each pattern from
+// matching this script's own command line, which would kill the cleanup itself,
+// and the rm glob is bracketed for the same reason rather than for globbing.
+var pestBrowserCleanup = fmt.Sprintf(`pkill -f "oopDownloadBrowserMai[n]" >/dev/null 2>&1
+pkill -f "playwright[ ]install" >/dev/null 2>&1
+pkill -f "lerd-playwrigh[t]" >/dev/null 2>&1
+rm -rf "${PLAYWRIGHT_BROWSERS_PATH:-%s}/__dirlock" /tmp/playwright-download-* /tmp/lerd-playwrigh[t]-*.zip
+exit 0
+`, pestBrowserCachePath)
 
 // pestBrowserSupportedVersion rejects the frozen legacy PHP tier, whose base
 // image ships a Node too old for current Playwright (see docs). Returning early
@@ -207,10 +276,7 @@ func installPestBrowser(version string, w io.Writer) error {
 
 	browsersEnv := "PLAYWRIGHT_BROWSERS_PATH=" + pestBrowserCachePath
 	fmt.Fprintln(w, "Downloading the Playwright browser registry...")
-	inst := podman.Cmd("exec", "-w", cwd, "--env", browsersEnv, container, "sh", "-c", pestBrowserInstall)
-	inst.Stdout = w
-	inst.Stderr = w
-	if err := inst.Run(); err != nil {
+	if err := runPestBrowserInstall(container, cwd, browsersEnv, w); err != nil {
 		return fmt.Errorf("playwright install: %w", err)
 	}
 
@@ -223,6 +289,32 @@ func installPestBrowser(version string, w io.Writer) error {
 
 	fmt.Fprintf(w, "\nPest browser testing is ready for PHP %s. Run your suite with `lerd test` or `lerd pest`.\n", version)
 	return nil
+}
+
+// runPestBrowserInstall fetches the browser registry into the container, running
+// the cleanup both before (a previous abort may still hold the install lock) and
+// after a failed or interrupted run, so the state a user retries from is always
+// recoverable rather than silently wedged.
+func runPestBrowserInstall(container, cwd, browsersEnv string, w io.Writer) error {
+	cleanup := func() {
+		_ = podman.Cmd("exec", "--env", browsersEnv, container, "sh", "-c", pestBrowserCleanup).Run()
+	}
+	cleanup()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	inst := podman.CmdContext(ctx, "exec", "-w", cwd, "--env", browsersEnv, container, "sh", "-c", pestBrowserInstall)
+	inst.Stdout = w
+	inst.Stderr = w
+	err := inst.Run()
+	if err != nil {
+		cleanup()
+	}
+	if ctx.Err() != nil {
+		return fmt.Errorf("interrupted; the in-container download was stopped and its lock cleared")
+	}
+	return err
 }
 
 func newPestBrowserRemoveCmd() *cobra.Command {

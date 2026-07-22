@@ -44,6 +44,15 @@ func httpOverrideNames() map[string]bool {
 	return names
 }
 
+// repeatableDirectives may appear more than once in the same context, so a
+// user declaring one adds to lerd's rather than colliding with it. Dropping
+// lerd's log_format leaves access_log naming a format nginx no longer knows.
+var repeatableDirectives = map[string]bool{
+	"include":    true,
+	"log_format": true,
+	"access_log": true,
+}
+
 // dropOverriddenDefaults comments out every http{}-level directive of the
 // rendered nginx.conf whose name the user also declares in http.d. The line
 // stays as a comment so the shipped default is still discoverable on disk.
@@ -57,7 +66,7 @@ func dropOverriddenDefaults(conf string, names map[string]bool) string {
 		stmt := strings.TrimSpace(stripConfComment(line))
 		if inHTTP && depth == 1 && stmt != "" {
 			name := strings.Trim(strings.Fields(stmt)[0], "{};")
-			if name != "include" && names[name] {
+			if !repeatableDirectives[name] && names[name] {
 				indent := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
 				lines[i] = indent + "# " + strings.TrimSpace(line) + "  (overridden in http.d)"
 			}
