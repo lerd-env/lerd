@@ -196,8 +196,9 @@ func runIdleStatus() error {
 	return nil
 }
 
-// idleSiteStatus renders a single unambiguous state for a site: paused sites are
-// excluded from idle-suspend; a site whose workers are suspended, or that has
+// idleSiteStatus renders a single unambiguous state for a site: paused, pinned
+// and proxy-only sites are excluded from idle-suspend; a site whose workers are
+// suspended, or that has
 // gone past the timeout with nothing left to suspend, reads "idle"; anything
 // more recent reads "active".
 func idleSiteStatus(s config.Site, lastActive map[string]int64, uiErr error, timeout time.Duration, now time.Time) string {
@@ -206,6 +207,10 @@ func idleSiteStatus(s config.Site, lastActive map[string]int64, uiErr error, tim
 	}
 	if s.Pinned {
 		return "pinned"
+	}
+	// Nothing lerd supervises, so the engine never sleeps it.
+	if s.IsProxyOnly() {
+		return "proxy only"
 	}
 	if uiErr != nil {
 		return "(lerd-ui not running)"
@@ -222,6 +227,9 @@ func idleWorktreeStatus(s config.Site, wt idleWtState, uiErr error, timeout time
 	}
 	if s.Pinned {
 		return "pinned"
+	}
+	if s.IsProxyOnly() {
+		return "proxy only"
 	}
 	if uiErr != nil {
 		return "(lerd-ui not running)"

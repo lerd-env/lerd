@@ -72,6 +72,54 @@ func TestTick_pinnedSiteStillTicksWorktrees(t *testing.T) {
 	}
 }
 
+// A proxy-only site (nginx forwards to a dev server the user runs themselves)
+// has no lerd-supervised process, so idle-suspend must leave it alone rather than
+// swap its vhost to the waking page and make a live site look asleep.
+func TestTick_proxyOnlySiteIsNeverSuspended(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("load global: %v", err)
+	}
+	cfg.IdleSuspend.Enabled = true
+	cfg.IdleSuspend.Timeout = "1s"
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("save global: %v", err)
+	}
+
+	if err := config.AddSite(config.Site{
+		Name: "nestapp", Path: "/srv/nestapp", Domains: []string{"nestapp.test"},
+		HostPort: 3000,
+	}); err != nil {
+		t.Fatalf("seed site: %v", err)
+	}
+
+	prevDetect, prevSuspend := detectWorktrees, suspendWorkers
+	detectWorktrees = func(string, string) ([]gitpkg.Worktree, error) { return nil, nil }
+	suspended := false
+	suspendWorkers = func(*config.Site) []string {
+		suspended = true
+		return nil
+	}
+	t.Cleanup(func() { detectWorktrees, suspendWorkers = prevDetect, prevSuspend })
+
+	tr := idle.NewTracker(nil)
+	tr.TouchSite("nestapp", time.Now().Add(-time.Hour))
+
+	e := newIdleEngine(tr)
+	e.tick()
+	e.wait()
+
+	if suspended {
+		t.Error("proxy-only site was suspended; it has no supervised process to stop")
+	}
+	if e.suspended["nestapp"] {
+		t.Error("proxy-only site should never be marked suspended")
+	}
+}
+
 // TestPruneStaleWorktrees clears suspended state for a worktree that no longer
 // exists while leaving a still-present one untouched, so a removed worktree stops
 // showing as suspended forever.

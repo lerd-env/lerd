@@ -1,9 +1,12 @@
 package podman
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // bindMountable is the shared guard every Volume=path:path line goes through. It
@@ -52,6 +55,31 @@ func TestExtraVolumePaths_refusesFilesystemRoot(t *testing.T) {
 				t.Errorf("extraVolumePaths(%v) = %v, want %v", tc.candidates, got, tc.want)
 			}
 		})
+	}
+}
+
+// A site directory that has gone missing (a branch checkout that removed it, a
+// deleted project) must not reach a Volume= line: podman aborts the container
+// start with statfs and nginx takes every other site down with it (#1083).
+func TestExtraVolumePaths_dropsMissingPaths(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	outside := t.TempDir()
+	gone := filepath.Join(outside, "removed-by-checkout")
+	reg := config.SiteRegistry{Sites: []config.Site{
+		{Name: "present", Path: outside},
+		{Name: "gone", Path: gone},
+	}}
+	if err := config.SaveSites(&reg); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ExtraVolumePaths()
+
+	if !reflect.DeepEqual(got, []string{outside}) {
+		t.Errorf("ExtraVolumePaths() = %v, want [%s]", got, outside)
 	}
 }
 

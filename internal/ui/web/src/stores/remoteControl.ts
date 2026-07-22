@@ -54,7 +54,7 @@ export async function enableRemoteControl(username: string, password: string): P
       remoteControl.set({ enabled: true, username, loading: false, error: '' });
       return { ok: true };
     }
-    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || 'Failed' }));
+    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || m.common_failed() }));
     return { ok: false, error: data.error };
   } catch (e) {
     const err = e instanceof Error ? e.message : m.common_requestFailed();
@@ -81,7 +81,7 @@ export async function disableRemoteControl(): Promise<boolean> {
       remoteControl.set({ enabled: false, username: '', loading: false, error: '' });
       return true;
     }
-    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || 'Failed' }));
+    remoteControl.update((v) => ({ ...v, loading: false, error: data.error || m.common_failed() }));
     return false;
   } catch (e) {
     remoteControl.update((v) => ({ ...v, loading: false, error: e instanceof Error ? e.message : m.common_requestFailed() }));

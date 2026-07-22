@@ -133,6 +133,13 @@ func (s *Site) IsHostProxy() bool {
 	return s.HostPort > 0
 }
 
+// IsProxyOnly returns true when the site is a host-proxy site lerd runs nothing
+// for: nginx forwards to a dev server the user starts themselves, so there is no
+// supervised process to stop.
+func (s *Site) IsProxyOnly() bool {
+	return s.IsHostProxy() && s.HostCommand == ""
+}
+
 // HostProxyWorkerName is the worker name of a host-proxy site's supervised
 // dev server. There is exactly one per site.
 const HostProxyWorkerName = "app"
