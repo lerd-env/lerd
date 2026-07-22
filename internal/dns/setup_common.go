@@ -57,20 +57,61 @@ var sudoProbe = defaultSudoProbe
 
 // defaultSudoProbe asks sudo, without prompting, whether the invoking user may
 // run the granted command passwordless. Exit 0 means the grant is live (from the
-// drop-in or a broader rule); a "password is required" refusal means it is gone;
-// anything else (no sudo, an unsupported flag) is inconclusive and defers to the
-// content marker so a working setup is never needlessly reinstalled.
+// drop-in or a broader rule); a refusal that asks for credentials means it is
+// gone; anything else (no sudo, an unsupported flag) is inconclusive and defers
+// to the content marker so a working setup is never needlessly reinstalled.
 func defaultSudoProbe() (permitted, conclusive bool) {
 	var stderr bytes.Buffer
-	cmd := exec.Command("sudo", "-n", "-l", sudoersProbeCommand)
+	cmd := sudoProbeCmd()
 	cmd.Stderr = &stderr
 	if cmd.Run() == nil {
 		return true, true
 	}
-	if strings.Contains(strings.ToLower(stderr.String()), "password is required") {
+	if sudoRefusalIsConclusive(stderr.String()) {
 		return false, true
 	}
 	return false, false
+}
+
+// sudoProbeCmd builds the probe. It runs the granted command rather than listing
+// it with `sudo -l`, because listing reports whether the command is permitted at
+// all, which is true for anyone carrying a broader password-requiring rule like
+// ALL=(ALL) ALL, so the listing succeeded while running it still prompted.
+// Running the command is the only thing that answers the question being asked.
+// resolvectl --version touches nothing.
+func sudoProbeCmd() *exec.Cmd {
+	cmd := exec.Command("sudo", "-n", sudoersProbeCommand, "--version")
+	cmd.Env = cLocaleEnv(os.Environ())
+	return cmd
+}
+
+// cLocaleEnv returns environ with the locale pinned to C, so sudo's refusal is
+// the English text the parser expects rather than a translation. The inherited
+// locale variables are dropped rather than overridden, because glibc's getenv
+// returns the first match and an appended value would be shadowed by the one
+// already there.
+func cLocaleEnv(environ []string) []string {
+	out := make([]string, 0, len(environ)+2)
+	for _, kv := range environ {
+		name, _, ok := strings.Cut(kv, "=")
+		if ok && (name == "LANG" || name == "LANGUAGE" || strings.HasPrefix(name, "LC_")) {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, "LC_ALL=C", "LANG=C")
+}
+
+// sudoRefusalIsConclusive reports whether sudo's refusal proves the passwordless
+// grant is gone, rather than merely failing to answer. The two implementations
+// word it differently: classic sudo asks for a password, while sudo-rs, which
+// Ubuntu 26.04 ships, asks for interactive authentication. Matching only the
+// former read every sudo-rs refusal as inconclusive, so the stale marker won and
+// a deleted drop-in was never rewritten.
+func sudoRefusalIsConclusive(stderr string) bool {
+	s := strings.ToLower(stderr)
+	return strings.Contains(s, "password is required") ||
+		strings.Contains(s, "authentication is required")
 }
 
 // ForgetSudoersMarker deletes the user-owned marker so the next InstallSudoers

@@ -628,10 +628,10 @@ func TestTeardown_removesTheSudoersGrant(t *testing.T) {
 	if !found {
 		t.Fatal("Teardown not found in setup.go")
 	}
-	if !strings.Contains(teardown, "lerdSudoersPath") {
+	if !strings.Contains(teardown, "removeSudoersGrant()") {
 		t.Fatal("Teardown must remove /etc/sudoers.d/lerd, or uninstalling lerd leaves a passwordless root grant behind")
 	}
-	sudoersAt := strings.Index(teardown, "lerdSudoersPath")
+	sudoersAt := strings.Index(teardown, "removeSudoersGrant()")
 	resolverAt := strings.LastIndex(teardown, `"restart", "systemd-resolved"`)
 	nmAt := strings.LastIndex(teardown, `"restart", "NetworkManager"`)
 	last := resolverAt

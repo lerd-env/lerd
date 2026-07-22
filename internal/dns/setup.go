@@ -926,14 +926,34 @@ func Teardown() {
 	// Left behind, it is a standing NOPASSWD root grant (a root-run dispatcher
 	// script, resolvectl, NetworkManager restart) for a tool that is being
 	// removed, which is exactly what the teardown exists to undo.
-	if _, err := os.Stat(lerdSudoersPath); err == nil {
-		rmCmd := exec.Command("sudo", "rm", "-f", lerdSudoersPath)
-		rmCmd.Stdin = os.Stdin
-		rmCmd.Stdout = os.Stdout
-		rmCmd.Stderr = os.Stderr
-		rmCmd.Run() //nolint:errcheck
-		ForgetSudoersMarker()
+	removeSudoersGrant()
+}
+
+// runSudoersRemoval is the seam tests override.
+var runSudoersRemoval = defaultRunSudoersRemoval
+
+func defaultRunSudoersRemoval(path string) {
+	rmCmd := exec.Command("sudo", "rm", "-f", path)
+	rmCmd.Stdin = os.Stdin
+	rmCmd.Stdout = os.Stdout
+	rmCmd.Stderr = os.Stderr
+	rmCmd.Run() //nolint:errcheck
+}
+
+// removeSudoersGrant deletes the passwordless drop-in, reporting whether it
+// tried. It keys on the user-owned marker rather than stat'ing the drop-in:
+// /etc/sudoers.d is 0750 root-only on Fedora and Arch, so the stat fails with
+// EACCES there and the removal never ran. The marker is the same record
+// InstallSudoers already keeps for exactly this reason, and its absence means
+// lerd never installed a drop-in, so there is nothing to remove and no grant
+// that would make the sudo passwordless.
+func removeSudoersGrant() bool {
+	if _, err := os.Stat(sudoersMarkerPath()); err != nil {
+		return false
 	}
+	runSudoersRemoval(lerdSudoersPath)
+	ForgetSudoersMarker()
+	return true
 }
 
 // InstallSudoers writes a sudoers drop-in granting the current user passwordless
@@ -1020,7 +1040,10 @@ func renderLinuxSudoers(user string) string {
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd-dns-link.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/conf.d/lerd.conf\n"+
 			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dnsmasq.d/lerd.conf\n"+
-			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n",
-		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f /etc/NetworkManager/dispatcher.d/99-lerd-dns\n"+
+			// The drop-in permits its own removal, so teardown can revoke the
+			// grant without a password prompt an unattended uninstall cannot answer.
+			"%s ALL=(root) NOPASSWD: /usr/bin/rm -f "+lerdSudoersPath+"\n",
+		user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user, user,
 	)
 }
