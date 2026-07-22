@@ -56,6 +56,7 @@ func WriteTimerIfChanged(name, content string) (bool, error) {
 // RemoveTimer removes a systemd user timer unit file.
 func RemoveTimer(name string) error {
 	path := filepath.Join(config.SystemdUserDir(), name+".timer")
+	config.GuardRealWrite(path)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}

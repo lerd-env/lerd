@@ -4,12 +4,22 @@ package cli
 
 import "testing"
 
+// isolateState points the lerd state dirs at temp dirs for the duration of a
+// test. teardownDNS deletes the lerd-dns quadlet, which without this lands on the
+// developer's own install.
+func isolateState(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+}
+
 // Disabling DNS must remove the resolver plumbing, not just stop the container.
 // Leaving it behind pointed the dispatcher and the interface routes at a dnsmasq
 // that is no longer running, and stranded the lerd0 offline link on the host with
 // nothing maintaining it and no obvious way for the user to get rid of it. The
 // macOS path already tore its /etc/resolver files down here; Linux did not.
 func TestTeardownDNS_removesResolverPlumbing(t *testing.T) {
+	isolateState(t)
 	origTeardown, origConfigured := dnsTeardown, dnsResolverConfigured
 	t.Cleanup(func() { dnsTeardown, dnsResolverConfigured = origTeardown, origConfigured })
 
@@ -29,6 +39,7 @@ func TestTeardownDNS_removesResolverPlumbing(t *testing.T) {
 // NetworkManager on every `lerd install` for someone who never let lerd manage
 // DNS, so it has to be gated on lerd having actually written resolver config.
 func TestTeardownDNS_skipsWhenLerdNeverConfiguredTheResolver(t *testing.T) {
+	isolateState(t)
 	origTeardown, origConfigured := dnsTeardown, dnsResolverConfigured
 	t.Cleanup(func() { dnsTeardown, dnsResolverConfigured = origTeardown, origConfigured })
 

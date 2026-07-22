@@ -54,6 +54,7 @@ func (m *linuxServiceManager) ListTimerUnits(nameGlob string) []string {
 
 func (m *linuxServiceManager) RemoveServiceUnit(name string) error {
 	path := filepath.Join(config.SystemdUserDir(), name+".service")
+	config.GuardRealWrite(path)
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
