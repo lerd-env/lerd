@@ -84,10 +84,14 @@ func TestRepairMissingMounts(t *testing.T) {
 	}
 	stale := "[Container]\nVolume=%h:%h:ro\nVolume=" + missing + ":" + missing + ":rw\n"
 	healthy := "[Container]\nVolume=%h:%h:ro\nVolume=" + site + ":" + site + ":rw\n"
+	// A user's own quadlet in the shared directory carries a stale mount too; it
+	// is not lerd's to rewrite, so the sweep must leave it exactly as found.
+	foreign := "[Container]\nVolume=" + missing + ":" + missing + ":rw\n"
 	for name, content := range map[string]string{
 		"lerd-nginx.container":     stale,
 		"lerd-php85-fpm.container": stale,
 		"lerd-mysql.container":     healthy,
+		"backup.container":         foreign,
 	} {
 		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 			t.Fatal(err)
@@ -127,6 +131,13 @@ func TestRepairMissingMounts(t *testing.T) {
 	}
 	if string(got) != healthy {
 		t.Errorf("healthy quadlet was rewritten:\n%s", got)
+	}
+	gotForeign, err := os.ReadFile(filepath.Join(dir, "backup.container"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(gotForeign) != foreign {
+		t.Errorf("foreign quadlet was rewritten:\n%s", gotForeign)
 	}
 	if reloads != 1 {
 		t.Errorf("daemon reloads = %d, want 1", reloads)

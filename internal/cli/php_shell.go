@@ -19,6 +19,19 @@ func NewPhpShellCmd() *cobra.Command {
 	}
 }
 
+// shellWorkDir resolves the directory the shell opens in: the worktree checkout
+// when cwd is inside one, otherwise the registered site root, otherwise cwd. A
+// worktree nested under its parent path-prefix-matches the parent in
+// SiteRootFor, so without the worktree check the shell would open the parent
+// tree while running the worktree's own PHP version and FPM image, mixing two
+// sites in one session. It resolves the site the same way version detection does.
+func shellWorkDir(cwd string) string {
+	if wt, _, ok := phpDet.WorktreeRootFor(cwd); ok {
+		return wt
+	}
+	return phpDet.SiteRootFor(cwd)
+}
+
 func runPhpShell(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -37,9 +50,7 @@ func runPhpShell(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	// Use the registered site root as the working directory if cwd is inside one,
-	// otherwise fall back to cwd.
-	workDir := phpDet.SiteRootFor(cwd)
+	workDir := shellWorkDir(cwd)
 
 	podman.EnsurePathMounted(workDir, version)
 	ensureServicesForCwd(workDir)

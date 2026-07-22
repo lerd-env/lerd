@@ -60,10 +60,12 @@ func staleSelfMount(line string) (string, bool) {
 	return src, true
 }
 
-// RepairMissingMounts drops stale bind mounts from every quadlet on disk before
+// RepairMissingMounts drops stale bind mounts from lerd's own quadlets before
 // the units are started, and reports what was removed so the caller can name the
-// project responsible. Containers already running keep their mounts until their
-// next restart, which is when the quadlet is read again.
+// project responsible. Only lerd- prefixed units are touched: the quadlet
+// directory is shared with whatever else the user runs there, and a foreign
+// quadlet's mount is not lerd's to rewrite. Containers already running keep their
+// mounts until their next restart, which is when the quadlet is read again.
 func RepairMissingMounts() []MountRepair {
 	dir := config.QuadletDir()
 	entries, err := os.ReadDir(dir)
@@ -73,7 +75,7 @@ func RepairMissingMounts() []MountRepair {
 	var repairs []MountRepair
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".container") {
+		if e.IsDir() || !strings.HasPrefix(name, "lerd-") || !strings.HasSuffix(name, ".container") {
 			continue
 		}
 		path := filepath.Join(dir, name)

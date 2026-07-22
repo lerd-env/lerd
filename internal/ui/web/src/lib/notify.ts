@@ -284,9 +284,20 @@ function isFailure(evt: NotificationEvent): boolean {
 
 async function fireNotification(evt: NotificationEvent) {
   const prefs = get(notifyPrefs);
+  const native = get(notifyDelivery) === 'native';
   const failed = isFailure(evt);
-  if (!failed && !prefs.enabled) return;
-  if (!failed && prefs.kinds[evt.kind as NotifyKind] === false) return;
+  // A failure is always delivered. Otherwise the gate follows the active sink:
+  // under native the daemon's resolved per-kind prefs decide, and the browser
+  // prefs (which have no UI in native mode) must not act as a phantom filter
+  // that keeps the desktop popup but silently empties the bell.
+  if (!failed) {
+    if (native) {
+      if (get(notifyNativeKinds)[evt.kind] === false) return;
+    } else {
+      if (!prefs.enabled) return;
+      if (prefs.kinds[evt.kind as NotifyKind] === false) return;
+    }
+  }
   if (evt.tag) {
     const key = evt.kind + ' ' + evt.tag;
     const now = Date.now();
@@ -352,13 +363,24 @@ export const notifyDelivery = writable<'browser' | 'native'>('browser');
 // the lerd:// handler, so the web UI can offer "Open in app".
 export const desktopAppInstalled = writable<boolean>(false);
 
+// notifyNativeKinds mirrors the daemon's resolved per-kind native prefs. Under
+// the native sink the browser prefs are hidden, so the bell and toasts must
+// follow these instead: a kind the daemon posts to the desktop is one the bell
+// should keep, and one it suppresses is one the bell should drop.
+export const notifyNativeKinds = writable<Record<string, boolean>>({});
+
 export async function loadNotifyDelivery() {
   try {
     const r = await apiFetch('/api/notifications/target');
     if (r.ok) {
-      const d = (await r.json()) as { target?: string; app_installed?: boolean };
+      const d = (await r.json()) as {
+        target?: string;
+        app_installed?: boolean;
+        kinds?: Record<string, boolean>;
+      };
       notifyDelivery.set(d.target === 'native' ? 'native' : 'browser');
       desktopAppInstalled.set(!!d.app_installed);
+      notifyNativeKinds.set(d.kinds ?? {});
     }
   } catch {
     /* keep browser default */

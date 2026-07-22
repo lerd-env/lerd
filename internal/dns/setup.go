@@ -45,6 +45,10 @@ func resolvedDropinFor(tld string) string {
 // never re-pushes DNS over the link, so the resolvectl route it carries stays put.
 const lerdNMUnmanaged = "/etc/NetworkManager/conf.d/lerd-dns-link.conf"
 
+// lerdSudoersPath is the passwordless DNS grant lerd installs. Teardown removes
+// it, so this is a package const both sides share.
+const lerdSudoersPath = "/etc/sudoers.d/lerd"
+
 // Pre-1.30 builds shipped lerd0 as an NM keyfile connection. Kept so setup can
 // migrate those hosts off it and Teardown can clean it up.
 const (
@@ -483,6 +487,12 @@ func dummyLinkNMRuleNeeded(withNM bool) bool {
 // tree on a host that has no NetworkManager at all.
 func setupDummyLink(withNM bool, tld string) error {
 	if !dummyLinkGrantsLive() {
+		// Same reasoning as the ensureDummyLinkRunning failure below: a host that
+		// once set lerd0 up still carries the fallback drop-in, and lerd0 down with
+		// fallbacks off is the exact state the guard exists to prevent. An upgrade
+		// that adds a grant lands here until `lerd install` runs, so hand the
+		// fallbacks back rather than leaving offline lookups hanging every run.
+		restoreResolvedFallbacks()
 		return fmt.Errorf("sudoers drop-in is out of date, run `lerd install` to refresh it")
 	}
 	// Migrate hosts that got lerd0 as an NM keyfile connection from a pre-release
@@ -911,6 +921,19 @@ func Teardown() {
 	} else if isSystemdResolvedActive() {
 		exec.Command("sudo", "systemctl", "restart", "systemd-resolved").Run() //nolint:errcheck
 	}
+
+	// The passwordless grant goes last, once nothing above still depends on it.
+	// Left behind, it is a standing NOPASSWD root grant (a root-run dispatcher
+	// script, resolvectl, NetworkManager restart) for a tool that is being
+	// removed, which is exactly what the teardown exists to undo.
+	if _, err := os.Stat(lerdSudoersPath); err == nil {
+		rmCmd := exec.Command("sudo", "rm", "-f", lerdSudoersPath)
+		rmCmd.Stdin = os.Stdin
+		rmCmd.Stdout = os.Stdout
+		rmCmd.Stderr = os.Stderr
+		rmCmd.Run() //nolint:errcheck
+		ForgetSudoersMarker()
+	}
 }
 
 // InstallSudoers writes a sudoers drop-in granting the current user passwordless
@@ -927,13 +950,12 @@ func InstallSudoers() error {
 
 	content := renderLinuxSudoers(user)
 
-	const sudoersPath = "/etc/sudoers.d/lerd"
 	if sudoersInstalled([]byte(content)) {
 		return nil
 	}
 
 	feedback.Sudo("Installing DNS sudoers rule")
-	if err := sudoWriteFile(sudoersPath, []byte(content), 0440); err != nil {
+	if err := sudoWriteFile(lerdSudoersPath, []byte(content), 0440); err != nil {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
 	recordSudoersInstalled([]byte(content))

@@ -72,7 +72,7 @@ func TestAutoFixesDedupesByKey(t *testing.T) {
 	rep := &DoctorReport{}
 	for _, name := range []string{"resolver hookup", "interface routing", "system lookup"} {
 		rep.add(Finding{Name: name, Status: "fail"})
-		rep.fixLast(autoFix(fixStart, "", "start the stack"))
+		rep.fixLast(autoFix(fixNetworkWait, "", "install the drop-in"))
 	}
 	rep.add(Finding{Name: "data dir", Status: "fail"})
 	rep.fixLast(autoFix(fixMkdir, "/x", "create it"))
@@ -81,11 +81,40 @@ func TestAutoFixesDedupesByKey(t *testing.T) {
 	if len(autos) != 2 {
 		t.Fatalf("got %d auto fixes, want 2 (one per distinct key): %+v", len(autos), autos)
 	}
-	if autos[0].Fix.Key != fixStart || autos[1].Fix.Key != fixMkdir {
+	if autos[0].Fix.Key != fixNetworkWait || autos[1].Fix.Key != fixMkdir {
 		t.Errorf("report order not preserved: %q then %q", autos[0].Fix.Key, autos[1].Fix.Key)
 	}
 	if autos[0].Name != "resolver hookup" {
 		t.Errorf("first occurrence should win, got %q", autos[0].Name)
+	}
+}
+
+// mkdir and php-rebuild reuse one key across findings that each target a
+// different directory or version; those are distinct fixes and every one must
+// survive the dedupe, or --fix silently repairs only the first.
+func TestAutoFixesKeepsSameKeyWithDistinctArgs(t *testing.T) {
+	rep := &DoctorReport{}
+	for _, dir := range []string{"/a", "/b", "/c"} {
+		rep.add(Finding{Name: "parked dir: " + dir, Status: "warn"})
+		rep.fixLast(autoFix(fixMkdir, dir, "create the parked directory"))
+	}
+	for _, v := range []string{"8.3", "8.4"} {
+		rep.add(Finding{Name: "PHP " + v + " image", Status: "fail"})
+		rep.fixLast(autoFix(fixPhpRebuild, v, "rebuild the image"))
+	}
+
+	autos := rep.AutoFixes()
+	if len(autos) != 5 {
+		t.Fatalf("got %d auto fixes, want 5 (one per distinct arg): %+v", len(autos), autos)
+	}
+	args := map[string]bool{}
+	for _, f := range autos {
+		args[f.Fix.Key+" "+f.Fix.Arg] = true
+	}
+	for _, want := range []string{"mkdir /a", "mkdir /b", "mkdir /c", "php-rebuild 8.3", "php-rebuild 8.4"} {
+		if !args[want] {
+			t.Errorf("missing fix %q from %v", want, args)
+		}
 	}
 }
 

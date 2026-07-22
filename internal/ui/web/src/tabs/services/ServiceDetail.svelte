@@ -11,6 +11,7 @@
   import ServiceDatabasesTab from './ServiceDatabasesTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import { isServiceWorker, type Service } from '$stores/services';
+  import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -30,8 +31,12 @@
   const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
   // Workers publish nothing, so the ports tab tracks the header gear's old guard.
   const hasPorts = $derived(!isServiceWorker(svc));
+  // The whole databases surface (the /api/databases subtree) is loopback-only,
+  // so on a LAN-exposed dashboard the tab would report a running engine as
+  // stopped and silently 403 every action. Hide it off the lerd host entirely.
+  const hasDatabases = $derived(svc.is_database && $accessMode.loopback);
   const tabs = $derived<TabItem<TabId>[]>([
-    { id: 'databases', label: m.databases_title(), hidden: !svc.is_database },
+    { id: 'databases', label: m.databases_title(), hidden: !hasDatabases },
     { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
     { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable },
@@ -42,13 +47,13 @@
   // Selecting a different service resets to its default tab; within one service
   // the user's tab choice sticks, falling back off any tab hidden for it.
   $effect(() => {
-    const fallback: TabId = svc.is_database ? 'databases' : 'logs';
+    const fallback: TabId = hasDatabases ? 'databases' : 'logs';
     if (svc.name !== shownService) {
       shownService = svc.name;
       active = fallback;
       return;
     }
-    if (active === 'databases' && !svc.is_database) active = fallback;
+    if (active === 'databases' && !hasDatabases) active = fallback;
     if (active === 'env' && !hasEnv) active = fallback;
     if (active === 'config' && !svc.tunable) active = fallback;
     if (active === 'tools' && !hasTools) active = fallback;
