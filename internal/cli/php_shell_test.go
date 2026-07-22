@@ -8,13 +8,26 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+// canonicalTempDir returns a temp dir with symlinks resolved. On macOS /var is a
+// symlink to /private/var, and the site registry stores canonical paths, so a
+// raw t.TempDir() would not prefix-match the stored site path (the shape
+// os.Getwd already returns in production).
+func canonicalTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 // A worktree checked out inside its parent site path-prefix-matches the parent
 // in SiteRootFor, so the shell must resolve the worktree checkout itself, or it
 // opens the parent tree while running the worktree's own PHP and FPM.
 func TestShellWorkDir_NestedWorktreeOpensTheWorktree(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	site := filepath.Join(t.TempDir(), "app")
+	site := filepath.Join(canonicalTempDir(t), "app")
 	wt := filepath.Join(site, "wt", "feature")
 	makeWorktree(t, site, wt, "feature")
 	if err := config.AddSite(config.Site{Name: "app", Path: site, PHPVersion: "8.5"}); err != nil {
@@ -31,7 +44,7 @@ func TestShellWorkDir_NestedWorktreeOpensTheWorktree(t *testing.T) {
 func TestShellWorkDir_PlainSiteOpensTheSiteRoot(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
-	site := filepath.Join(t.TempDir(), "app")
+	site := filepath.Join(canonicalTempDir(t), "app")
 	sub := filepath.Join(site, "app", "Http")
 	if err := os.MkdirAll(sub, 0755); err != nil {
 		t.Fatal(err)
