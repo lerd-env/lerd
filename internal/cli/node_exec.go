@@ -16,11 +16,11 @@ import (
 func NewNodeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:                "node [args...]",
-		Short:              "Run node using the project's version via fnm",
+		Short:              "Run node using the project's version",
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("node", args, true)
+			return runNode("node", args, true)
 		},
 	}
 }
@@ -29,11 +29,11 @@ func NewNodeCmd() *cobra.Command {
 func NewNpmCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:                "npm [args...]",
-		Short:              "Run npm using the project's node version via fnm",
+		Short:              "Run npm using the project's node version",
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("npm", args, true)
+			return runNode("npm", args, true)
 		},
 	}
 }
@@ -42,25 +42,26 @@ func NewNpmCmd() *cobra.Command {
 func NewNpxCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:                "npx [args...]",
-		Short:              "Run npx using the project's node version via fnm",
+		Short:              "Run npx using the project's node version",
 		DisableFlagParsing: true,
 		SilenceUsage:       true,
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runWithFnm("npx", args, true)
+			return runNode("npx", args, true)
 		},
 	}
 }
 
 // runNpmCaptured runs `npm <args>` in dir using the project's Node version via
-// fnm, capturing combined output. Unlike runWithFnm (which streams to the
-// terminal and os.Exit's on failure for CLI use), this is for non-interactive
-// callers like the UI: it returns the output and never exits the process, and
-// it surfaces a failed `fnm install` instead of swallowing it. Shares the same
-// fnm lookup, version detection, and npm_config_prefix handling as runWithFnm.
+// the active version manager, capturing combined output. Unlike runNode (which
+// streams to the terminal and os.Exit's on failure for CLI use), this is for
+// non-interactive callers like the UI: it returns the output and never exits the
+// process, and it surfaces a failed install instead of swallowing it. Shares the
+// same manager lookup, version detection, and npm_config_prefix handling as
+// runNode.
 func runNpmCaptured(dir string, args ...string) (string, error) {
-	fnm := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnm); err != nil {
-		return "", fmt.Errorf("fnm not found at %s, run 'lerd install' first", fnm)
+	mgr := nodeDet.Active()
+	if !mgr.Available() {
+		return "", fmt.Errorf("%s not found, run 'lerd install' first", mgr.Name())
 	}
 
 	version, _ := nodeDet.DetectVersion(dir)
@@ -68,15 +69,14 @@ func runNpmCaptured(dir string, args ...string) (string, error) {
 		version = "default"
 	}
 	if version != "default" {
-		if out, err := exec.Command(fnm, "install", version).CombinedOutput(); err != nil {
-			return "", fmt.Errorf("installing Node %s via fnm: %s", version, strings.TrimSpace(string(out)))
+		if err := mgr.Install(version); err != nil {
+			return "", fmt.Errorf("installing Node %s: %w", version, err)
 		}
-	} else if exec.Command(fnm, "exec", "--using=default", "--", "true").Run() != nil {
+	} else if !mgr.HasDefault() {
 		return "", fmt.Errorf("no Node.js version available via lerd, run: lerd node:install 22")
 	}
 
-	cmdArgs := append([]string{"exec", "--using=" + version, "--", "npm"}, args...)
-	cmd := exec.Command(fnm, cmdArgs...)
+	cmd := mgr.Command(version, "npm", args)
 	cmd.Dir = dir
 	cmd.Env = append(shimLeadingEnv(os.Environ()), "npm_config_prefix="+config.NodeGlobalDir())
 	out, err := cmd.CombinedOutput()
@@ -122,7 +122,7 @@ func systemNodeAvailable() bool {
 
 // runBun execs the host bun binary in dir, streaming to the terminal. bun is
 // self-contained, so unlike node it needs no fnm wrapper or version pin. When
-// exitOnFail is set it os.Exit's with the child's code to mirror runWithFnm's
+// exitOnFail is set it os.Exit's with the child's code to mirror runNode's
 // CLI behaviour; callers that fold the run behind a feedback step (setup) pass
 // false so the non-zero exit is returned and the step loop can report it.
 func runBun(dir, bun string, args []string, exitOnFail bool) error {
@@ -165,7 +165,7 @@ func runJSInstall(dir string, frozen bool) error {
 		if frozen {
 			args = append(args, "--frozen-lockfile")
 		}
-		return runWithFnm("corepack", args, false)
+		return runNode("corepack", args, false)
 	case "yarn":
 		// --immutable covers yarn berry; classic (v1) ignores it and does a
 		// normal install, which is what we want with a lockfile present.
@@ -173,12 +173,12 @@ func runJSInstall(dir string, frozen bool) error {
 		if frozen {
 			args = append(args, "--immutable")
 		}
-		return runWithFnm("corepack", args, false)
+		return runNode("corepack", args, false)
 	default:
 		if frozen {
-			return runWithFnm("npm", []string{"ci"}, false)
+			return runNode("npm", []string{"ci"}, false)
 		}
-		return runWithFnm("npm", []string{"install"}, false)
+		return runNode("npm", []string{"install"}, false)
 	}
 }
 
@@ -190,11 +190,11 @@ func runJSScript(dir, script string) error {
 	}
 	switch nodeDet.PackageManager(dir) {
 	case "pnpm":
-		return runWithFnm("corepack", []string{"pnpm", "run", script}, false)
+		return runNode("corepack", []string{"pnpm", "run", script}, false)
 	case "yarn":
-		return runWithFnm("corepack", []string{"yarn", "run", script}, false)
+		return runNode("corepack", []string{"yarn", "run", script}, false)
 	default:
-		return runWithFnm("npm", []string{"run", script}, false)
+		return runNode("npm", []string{"run", script}, false)
 	}
 }
 
@@ -219,36 +219,33 @@ func shimLeadingEnv(env []string) []string {
 	return out
 }
 
-func runWithFnm(bin string, args []string, exitOnFail bool) error {
+func runNode(bin string, args []string, exitOnFail bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
 	recordCwdActivity(cwd) // keep the site awake under idle-suspend while you work in the terminal
 
+	mgr := nodeDet.Active()
+	if !mgr.Available() {
+		return fmt.Errorf("%s not found — run 'lerd install' first", mgr.Name())
+	}
+
 	version, _ := nodeDet.DetectVersion(cwd)
 	// Empty means the user has no .nvmrc / .node-version / global default; fall
-	// through to the fnm `default` alias so we still surface a friendly error
-	// instead of an unhelpful "Can't find version in dotfiles".
+	// through to the manager's `default` alias so we still surface a friendly
+	// error instead of an unhelpful "Can't find version in dotfiles".
 	if version == "" {
 		version = "default"
 	}
 
-	fnm := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnm); err != nil {
-		return fmt.Errorf("fnm not found at %s — run 'lerd install' first", fnm)
-	}
-
 	if version != "default" {
-		_ = exec.Command(fnm, "install", version).Run()
-	} else if exec.Command(fnm, "exec", "--using=default", "--", "true").Run() != nil {
+		_ = mgr.Install(version)
+	} else if !mgr.HasDefault() {
 		return fmt.Errorf("no Node.js version available via lerd — run: lerd node:install 22")
 	}
 
-	cmdArgs := []string{"exec", "--using=" + version, "--", bin}
-	cmdArgs = append(cmdArgs, args...)
-
-	cmd := exec.Command(fnm, cmdArgs...)
+	cmd := mgr.Command(version, bin, args)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -268,7 +265,7 @@ func runWithFnm(bin string, args []string, exitOnFail bool) error {
 	}
 	runErr := cmd.Run()
 	if manageGlobals {
-		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), fnm); syncErr != nil {
+		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), mgr.ExecPrefix("default")); syncErr != nil {
 			fmt.Fprintf(os.Stderr, "lerd: warning: failed to sync npm global wrappers: %v\n", syncErr)
 		}
 	}

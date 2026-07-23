@@ -78,16 +78,20 @@ WantedBy=default.target
 // lerdBinDir is prepended to PATH so the php/composer/laravel/node
 // shims are reachable from npm-spawned subprocesses (e.g. Inertia's
 // wayfinder Vite plugin shelling out to `php artisan`) — issue #375.
-func buildDarwinHostWorkerGuardScript(fnmBin, lerdBinDir, nodeVersion, sitePath, command, bunDir string) string {
+//
+// execPrefix is the active version manager's ExecPrefix for the resolved Node
+// version, or empty to run the command directly (bun / non-Node / unmanaged).
+func buildDarwinHostWorkerGuardScript(execPrefix, lerdBinDir, sitePath, command, bunDir string) string {
 	escapedPath := strings.ReplaceAll(sitePath, "'", `'"'"'`)
 	escapedCmd := strings.ReplaceAll(command, "'", `'"'"'`)
 	escapedBin := strings.ReplaceAll(lerdBinDir, `"`, `\"`)
 	// Non-Node host-proxy commands (Python, Ruby, Go, …) run directly; only
-	// Node projects are routed through fnm to pin the Node version. bun is
-	// self-contained, so it also runs directly with its bin dir on PATH.
+	// Node projects are routed through the version manager to pin the Node
+	// version. bun is self-contained, so it also runs directly with its bin dir
+	// on PATH.
 	execLine := fmt.Sprintf("exec /bin/sh -c '%s'", escapedCmd)
-	if nodeVersion != "" {
-		execLine = fmt.Sprintf("exec '%s' exec --using=%s -- /bin/sh -c '%s'", fnmBin, nodeVersion, escapedCmd)
+	if execPrefix != "" {
+		execLine = fmt.Sprintf("exec %s /bin/sh -c '%s'", execPrefix, escapedCmd)
 	}
 	bunPrefix := ""
 	if bunDir != "" {

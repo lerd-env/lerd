@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
@@ -351,14 +351,13 @@ func ensureViteSleepableAt(site *config.Site, dir string) bool {
 var viteBuildAttempted sync.Map
 
 // runViteBuildAt runs `npm run build` in dir (a site or worktree checkout). A
-// var so tests can stand in for the host build without invoking fnm/npm.
+// var so tests can stand in for the host build without invoking the manager/npm.
 var runViteBuildAt = func(site *config.Site, dir string) {
 	nodeVersion := site.NodeVersion
 	if nodeVersion == "" {
 		nodeVersion = "default"
 	}
-	fnm := filepath.Join(config.BinDir(), "fnm")
-	cmd := exec.Command(fnm, "exec", "--using="+nodeVersion, "--", "npm", "run", "build")
+	cmd := nodeDet.Active().Command(nodeVersion, "npm", []string{"run", "build"})
 	cmd.Dir = dir
 	cmd.Env = shimLeadingEnv(os.Environ()) // wayfinder needs lerd's php shim to lead PATH — issue #381
 	if out, err := cmd.CombinedOutput(); err != nil {
