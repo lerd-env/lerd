@@ -137,6 +137,17 @@ func InstallSudoers() error {
 	return nil
 }
 
+// sudoersProbeCommand / sudoProbeArgs are the passwordless-liveness probe on
+// macOS. It must exercise a command renderDarwinSudoers actually grants, or the
+// probe can never succeed: `mkdir -p /etc/resolver` matches the granted rule
+// verbatim and is idempotent (a no-op once the directory exists). resolvectl,
+// the Linux probe, is never granted here, which forced a sudoers rewrite on
+// every run (issue #1101).
+var (
+	sudoersProbeCommand = "/bin/mkdir"
+	sudoProbeArgs       = []string{"-p", "/etc/resolver"}
+)
+
 // renderDarwinSudoers returns the macOS sudoers content for user + the
 // configured TLD. Every command argument is fully qualified — no
 // wildcards — so the rules pass modern strict sudo parsers (sudo-rs on

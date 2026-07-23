@@ -47,9 +47,11 @@ func sudoersInstalled(content []byte) bool {
 	return true
 }
 
-// sudoersProbeCommand is one of the commands the drop-in grants passwordless;
-// used only to probe whether that grant is still live.
-const sudoersProbeCommand = "/usr/bin/resolvectl"
+// sudoersProbeCommand and sudoProbeArgs name a command the platform's drop-in
+// grants passwordless, invoked only to probe whether that grant is still live.
+// They are platform-specific (see setup.go / setup_darwin.go): the macOS drop-in
+// never grants resolvectl, so a shared Linux probe could never succeed there and
+// forced a sudoers rewrite on every run (issue #1101).
 
 // sudoProbe is the seam tests override. It reports whether the drop-in's
 // passwordless grant is currently live and whether the answer is conclusive.
@@ -78,9 +80,11 @@ func defaultSudoProbe() (permitted, conclusive bool) {
 // all, which is true for anyone carrying a broader password-requiring rule like
 // ALL=(ALL) ALL, so the listing succeeded while running it still prompted.
 // Running the command is the only thing that answers the question being asked.
-// resolvectl --version touches nothing.
+// The chosen invocation touches nothing: resolvectl --version on Linux, an
+// idempotent `mkdir -p /etc/resolver` on macOS.
 func sudoProbeCmd() *exec.Cmd {
-	cmd := exec.Command("sudo", "-n", sudoersProbeCommand, "--version")
+	args := append([]string{"-n", sudoersProbeCommand}, sudoProbeArgs...)
+	cmd := exec.Command("sudo", args...)
 	cmd.Env = cLocaleEnv(os.Environ())
 	return cmd
 }
