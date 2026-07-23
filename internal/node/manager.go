@@ -1,7 +1,9 @@
 package node
 
 import (
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -55,6 +57,29 @@ func Active() Manager {
 		name = cfg.NodeManager()
 	}
 	return ManagerByName(name)
+}
+
+// Managed reports whether lerd is managing Node for this host. An explicit
+// node.managed config preference wins; when the field is unset (configs from
+// before it existed), presence of the node PATH shim is the historical signal.
+// With nvm there is no node shim on PATH (nvm already owns node/npm/npx), so
+// the persisted preference is what keeps managed mode visible to the UI/CLI.
+func Managed() bool {
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		if v, set := cfg.NodeManagedPref(); set {
+			return v
+		}
+	}
+	_, err := os.Stat(filepath.Join(config.BinDir(), "node"))
+	return err == nil
+}
+
+// WritesPathShims reports whether this manager should install node/npm/npx
+// wrappers into lerd's bin dir. fnm needs them (nothing else puts fnm on PATH);
+// nvm must not (the user's shell already loads nvm, and lerd shims ahead of it
+// make `nvm ls` / `nvm use` hang).
+func WritesPathShims(m Manager) bool {
+	return m.Name() != "nvm"
 }
 
 // ManagerByName returns the manager for an explicit name, defaulting to fnm for

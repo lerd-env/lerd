@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestManagerByName(t *testing.T) {
@@ -17,6 +19,38 @@ func TestManagerByName(t *testing.T) {
 		if got := ManagerByName(in).Name(); got != want {
 			t.Errorf("ManagerByName(%q).Name() = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestWritesPathShims(t *testing.T) {
+	if !WritesPathShims(fnmManager{}) {
+		t.Error("fnm should write PATH shims")
+	}
+	if WritesPathShims(nvmManager{}) {
+		t.Error("nvm must not write PATH shims (user's nvm owns node/npm/npx)")
+	}
+}
+
+func TestManaged_PrefWinsOverMissingShim(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	cfg.SetNodeManaged(true)
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if !Managed() {
+		t.Fatal("Managed() = false with node.managed=true and no node shim")
+	}
+	cfg.SetNodeManaged(false)
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatal(err)
+	}
+	if Managed() {
+		t.Fatal("Managed() = true with node.managed=false")
 	}
 }
 

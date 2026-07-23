@@ -40,7 +40,7 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("%s not found — run 'lerd install' first", mgr.Name())
 	}
 	feedback.Begin()
-	step := feedback.Start("installing node/npm/npx shims")
+	step := feedback.Start("enabling lerd-managed Node")
 	if err := addShellShims(true); err != nil {
 		step.Fail(err)
 		return fmt.Errorf("writing shims: %w", err)
@@ -109,7 +109,7 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
 	// the choice is just persisted and applies whenever management is enabled.
 	if lerdManagesNode() {
-		step := feedback.Start("rewriting node/npm/npx shims for " + target)
+		step := feedback.Start("updating Node PATH shims for " + target)
 		if err := addShellShims(true); err != nil {
 			step.Fail(err)
 			return fmt.Errorf("writing shims: %w", err)

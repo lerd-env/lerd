@@ -1346,12 +1346,10 @@ func installLaravelInstaller() error {
 	return cmd.Run()
 }
 
-// lerdManagesNode reports whether lerd's node shim is present in its bin dir,
-// meaning the user opted in to lerd-managed node version management.
+// lerdManagesNode reports whether lerd is managing Node for this host
+// (persisted node.managed preference, or the historical node PATH shim).
 func lerdManagesNode() bool {
-	shim := filepath.Join(config.BinDir(), "node")
-	_, err := os.Stat(shim)
-	return err == nil
+	return nodeDet.Managed()
 }
 
 // nodeManageDecision resolves whether lerd should manage Node.js for this
@@ -1388,7 +1386,11 @@ func ensureNodeManaged() error {
 		return fmt.Errorf("lerd is not managing Node.js; run 'lerd install' to enable it")
 	}
 	fmt.Println("Lerd is currently using your system Node.js.")
-	fmt.Println("Continuing will install lerd-managed shims into", config.BinDir(), "and override your system node, npm and npx in PATH.")
+	if nodeDet.WritesPathShims(nodeDet.Active()) {
+		fmt.Println("Continuing will install lerd-managed shims into", config.BinDir(), "and override your system node, npm and npx in PATH.")
+	} else {
+		fmt.Println("Continuing will let lerd drive your existing nvm for install/use/default (your shell's nvm keeps owning node/npm/npx on PATH).")
+	}
 	if !confirmInstallPromptDefault("Switch to lerd-managed Node.js?", false) {
 		return fmt.Errorf("aborted")
 	}
@@ -1680,15 +1682,15 @@ func addShellShims(manageNode bool) error {
 		return fmt.Errorf("writing laravel shim: %w", err)
 	}
 
-	// Write node/npm/npx shims via the active version manager. Each shim prefers
-	// routing through the lerd binary so `npm install -g` lands in lerd's managed
-	// prefix and the per-bin wrappers under ~/.local/bin/ stay in sync, and falls
-	// back to a direct manager invocation when lerd is not reachable (e.g. inside
-	// Alpine-based PHP containers, since lerd is glibc-linked).
-	// Only written when lerd is managing Node versions; otherwise existing shims
-	// are removed so the user's system node stops being masked by a stale shim
-	// from a prior managed install.
-	if manageNode {
+	// Write node/npm/npx PATH shims only when the active manager needs them.
+	// fnm has no shell hook, so the shims are how `node` on PATH reaches fnm.
+	// nvm is already loaded by the user's shell; putting lerd wrappers ahead of
+	// it makes `nvm ls` / `nvm use` hang, so managed-nvm only removes any stale
+	// shims and leaves PATH to nvm. CLI (`lerd node`/`npm`) and host workers
+	// still drive nvm through Active() either way.
+	// When manageNode is false, existing shims are removed so a prior managed
+	// install stops masking the user's node.
+	if manageNode && nodeDet.WritesPathShims(nodeDet.Active()) {
 		mgr := nodeDet.Active()
 		for _, bin := range []string{"node", "npm", "npx"} {
 			shim := mgr.ShimScript(lerdBin, bin)

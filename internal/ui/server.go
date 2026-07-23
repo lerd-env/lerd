@@ -680,9 +680,7 @@ func buildStatus() StatusResponse {
 		nodeDefault = cfg.Node.DefaultVersion
 		nodeManager = cfg.NodeManager()
 	}
-	nodeShim := filepath.Join(config.BinDir(), "node")
-	_, nodeShimErr := os.Stat(nodeShim)
-	nodeManagedByLerd := nodeShimErr == nil
+	nodeManagedByLerd := lerdNode.Managed()
 	bunAvailable := lerdNode.BunPath() != ""
 	bunVersion := ""
 	if bunAvailable {
@@ -4688,7 +4686,7 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
@@ -4778,7 +4776,7 @@ func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
