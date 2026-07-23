@@ -403,6 +403,17 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --expose` | Force Expose |
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
+| `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies `--cloudflare`) |
+
+### Sharing on your own domain
+
+Quick tunnels hand out a fresh random `trycloudflare.com` URL on every run. When you need a stable URL (sending a client the same link twice, webhook or OAuth callback targets), pass `--domain` with a hostname whose DNS is managed by Cloudflare:
+
+```bash
+lerd share --domain dev.example.com
+```
+
+On the first run cloudflared opens a browser window to authorize your Cloudflare account (a one-time login that writes `~/.cloudflared/cert.pem`). lerd then creates a named tunnel called `lerd-<site>`, routes the hostname to it with a CNAME record, and starts the tunnel. Later runs reuse the same tunnel and hostname, so the URL never changes. If a DNS record for the hostname already exists, lerd leaves it alone and prints a note asking you to check that it points at the tunnel.
 
 A local reverse proxy rewrites the `Host` header to the site's domain so nginx routes to the correct vhost. Response `Location` headers and HTML/CSS/JS/JSON body references to the local domain are also rewritten to the public tunnel URL, so redirects and asset links work correctly in the browser.
 
