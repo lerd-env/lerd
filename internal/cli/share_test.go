@@ -66,7 +66,7 @@ func TestPickShareTool_mutualExclusion(t *testing.T) {
 		{true, false, false, false, true}, // ngrok + localhost-run
 	}
 	for _, p := range pairs {
-		_, err := pickShareTool(p[0], p[1], p[2], p[3], p[4], "")
+		_, err := pickShareTool(p[0], p[1], p[2], p[3], p[4], "", "")
 		if err == nil {
 			t.Errorf("pickShareTool%v: expected mutual-exclusion error, got nil", p)
 			continue
@@ -79,7 +79,7 @@ func TestPickShareTool_mutualExclusion(t *testing.T) {
 
 func TestPickShareTool_explicitNgrok_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok"))
-	tool, err := pickShareTool(true, false, false, false, false, "")
+	tool, err := pickShareTool(true, false, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPickShareTool_explicitNgrok_present(t *testing.T) {
 
 func TestPickShareTool_explicitNgrok_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(true, false, false, false, false, "")
+	_, err := pickShareTool(true, false, false, false, false, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -101,7 +101,7 @@ func TestPickShareTool_explicitNgrok_absent(t *testing.T) {
 
 func TestPickShareTool_explicitCloudflare_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "cloudflared"))
-	tool, err := pickShareTool(false, true, false, false, false, "")
+	tool, err := pickShareTool(false, true, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestPickShareTool_explicitCloudflare_present(t *testing.T) {
 
 func TestPickShareTool_explicitCloudflare_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, true, false, false, false, "")
+	_, err := pickShareTool(false, true, false, false, false, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -123,7 +123,7 @@ func TestPickShareTool_explicitCloudflare_absent(t *testing.T) {
 
 func TestPickShareTool_explicitExpose_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "expose"))
-	tool, err := pickShareTool(false, false, true, false, false, "")
+	tool, err := pickShareTool(false, false, true, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestPickShareTool_explicitExpose_present(t *testing.T) {
 
 func TestPickShareTool_explicitExpose_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, false, true, false, false, "")
+	_, err := pickShareTool(false, false, true, false, false, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -144,7 +144,7 @@ func TestPickShareTool_explicitExpose_absent(t *testing.T) {
 }
 
 func TestPickShareTool_explicitServeo(t *testing.T) {
-	tool, err := pickShareTool(false, false, false, true, false, "")
+	tool, err := pickShareTool(false, false, false, true, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestPickShareTool_explicitServeo(t *testing.T) {
 }
 
 func TestPickShareTool_explicitLocalhostRun(t *testing.T) {
-	tool, err := pickShareTool(false, false, false, false, true, "")
+	tool, err := pickShareTool(false, false, false, false, true, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestPickShareTool_explicitLocalhostRun(t *testing.T) {
 
 func TestPickShareTool_autoDetect_ngrokFirst(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared", "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false, "")
+	tool, err := pickShareTool(false, false, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestPickShareTool_autoDetect_ngrokFirst(t *testing.T) {
 
 func TestPickShareTool_autoDetect_cloudflareBeforeExpose(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "cloudflared", "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false, "")
+	tool, err := pickShareTool(false, false, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestPickShareTool_autoDetect_cloudflareBeforeExpose(t *testing.T) {
 
 func TestPickShareTool_autoDetect_expose(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false, "")
+	tool, err := pickShareTool(false, false, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestPickShareTool_autoDetect_expose(t *testing.T) {
 
 func TestPickShareTool_autoDetect_sshFallback(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false, "")
+	tool, err := pickShareTool(false, false, false, false, false, "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestPickShareTool_autoDetect_sshFallback(t *testing.T) {
 
 func TestPickShareTool_autoDetect_noTools(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, false, false, false, false, "")
+	_, err := pickShareTool(false, false, false, false, false, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -227,9 +227,9 @@ func TestPickShareTool_autoDetect_noTools(t *testing.T) {
 	}
 }
 
-func TestPickShareTool_domain_impliesCloudflare(t *testing.T) {
+func TestPickShareTool_domain_withExplicitCloudflare(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
-	tool, err := pickShareTool(false, false, false, false, false, "dev.example.com")
+	tool, err := pickShareTool(false, true, false, false, false, "dev.example.com", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -241,6 +241,31 @@ func TestPickShareTool_domain_impliesCloudflare(t *testing.T) {
 	}
 }
 
+func TestPickShareTool_domain_withCloudflareDefault(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	tool, err := pickShareTool(false, false, false, false, false, "dev.example.com", "cloudflare")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tool.mode != shareModeCloudflare {
+		t.Errorf("mode = %v, want shareModeCloudflare", tool.mode)
+	}
+	if tool.domain != "dev.example.com" {
+		t.Errorf("domain = %q, want dev.example.com", tool.domain)
+	}
+}
+
+func TestPickShareTool_domain_withoutCloudflare(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	// No tool flag and no cloudflare default: --domain must not pick a tool itself.
+	for _, defaultTool := range []string{"", "ngrok"} {
+		_, err := pickShareTool(false, false, false, false, false, "dev.example.com", defaultTool)
+		if err == nil || !strings.Contains(err.Error(), "--domain needs Cloudflare Tunnel") {
+			t.Errorf("default %q: error = %v, want '--domain needs Cloudflare Tunnel'", defaultTool, err)
+		}
+	}
+}
+
 func TestPickShareTool_domain_withOtherTool(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
 	for _, p := range [][4]bool{
@@ -249,18 +274,65 @@ func TestPickShareTool_domain_withOtherTool(t *testing.T) {
 		{false, false, true, false},
 		{false, false, false, true},
 	} {
-		_, err := pickShareTool(p[0], false, p[1], p[2], p[3], "dev.example.com")
-		if err == nil || !strings.Contains(err.Error(), "--domain only works with Cloudflare") {
-			t.Errorf("pickShareTool%v: error = %v, want '--domain only works with Cloudflare'", p, err)
+		_, err := pickShareTool(p[0], false, p[1], p[2], p[3], "dev.example.com", "")
+		if err == nil || !strings.Contains(err.Error(), "--domain needs Cloudflare Tunnel") {
+			t.Errorf("pickShareTool%v: error = %v, want '--domain needs Cloudflare Tunnel'", p, err)
 		}
 	}
 }
 
 func TestPickShareTool_domain_cloudflaredAbsent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, true, false, false, false, "dev.example.com")
+	_, err := pickShareTool(false, true, false, false, false, "dev.example.com", "")
 	if err == nil || !strings.Contains(err.Error(), "cloudflared not found") {
 		t.Errorf("error = %v, want 'cloudflared not found'", err)
+	}
+}
+
+func TestPickShareTool_defaultTool_used(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared", "expose", "ssh"))
+	cases := []struct {
+		defaultTool string
+		wantMode    shareMode
+		wantSSHHost string
+	}{
+		{"ngrok", shareModeNgrok, ""},
+		{"cloudflare", shareModeCloudflare, ""},
+		{"expose", shareModeExpose, ""},
+		{"serveo", shareModeSSH, "serveo.net"},
+		{"localhost-run", shareModeSSH, "localhost.run"},
+	}
+	for _, c := range cases {
+		tool, err := pickShareTool(false, false, false, false, false, "", c.defaultTool)
+		if err != nil {
+			t.Errorf("default %q: unexpected error: %v", c.defaultTool, err)
+			continue
+		}
+		if tool.mode != c.wantMode {
+			t.Errorf("default %q: mode = %v, want %v", c.defaultTool, tool.mode, c.wantMode)
+		}
+		if tool.sshHost != c.wantSSHHost {
+			t.Errorf("default %q: sshHost = %q, want %q", c.defaultTool, tool.sshHost, c.wantSSHHost)
+		}
+	}
+}
+
+func TestPickShareTool_defaultTool_flagOverrides(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	tool, err := pickShareTool(true, false, false, false, false, "", "cloudflare")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tool.mode != shareModeNgrok {
+		t.Errorf("mode = %v, want shareModeNgrok (flag beats default)", tool.mode)
+	}
+}
+
+func TestPickShareTool_defaultTool_unknown(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok"))
+	_, err := pickShareTool(false, false, false, false, false, "", "bogus")
+	if err == nil || !strings.Contains(err.Error(), "unknown default share tool") {
+		t.Errorf("error = %v, want 'unknown default share tool'", err)
 	}
 }
 

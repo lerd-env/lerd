@@ -403,13 +403,19 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --expose` | Force Expose |
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
-| `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies `--cloudflare`) |
+| `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (Cloudflare Tunnel only) |
+| `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
+
+### Default tunnel tool
+
+Auto-detection picks the first installed tool, which may not be the one you want. `lerd share:tool cloudflare` pins the default; from then on a bare `lerd share` uses Cloudflare Tunnel even with ngrok installed. A tool flag still overrides the default per run, and `lerd share:tool auto` restores auto-detection.
 
 ### Sharing on your own domain
 
-Quick tunnels hand out a fresh random `trycloudflare.com` URL on every run. When you need a stable URL (sending a client the same link twice, webhook or OAuth callback targets), pass `--domain` with a hostname whose DNS is managed by Cloudflare:
+Quick tunnels hand out a fresh random `trycloudflare.com` URL on every run. When you need a stable URL (sending a client the same link twice, webhook or OAuth callback targets), pass `--domain` with a hostname whose DNS is managed by Cloudflare. It only applies to Cloudflare Tunnel, so pass `--cloudflare` or set it as your default tool first:
 
 ```bash
+lerd share:tool cloudflare
 lerd share --domain dev.example.com
 ```
 

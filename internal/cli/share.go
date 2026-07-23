@@ -44,9 +44,12 @@ Supported tools:
   localhost.run  free SSH tunnel, no account needed (--localhost-run)
   serveo.net     free SSH tunnel, no account needed (--serveo)
 
-With --domain, a named Cloudflare Tunnel is created (or reused) and the given
-hostname is routed to it, so the site is served on your own domain instead of a
-random trycloudflare.com URL. The domain's DNS must be managed by Cloudflare.`,
+A default tool can be set with "lerd share:tool"; flags override it per run.
+
+With --domain (Cloudflare Tunnel only), a named tunnel is created (or reused)
+and the given hostname is routed to it, so the site is served on your own
+domain instead of a random trycloudflare.com URL. The domain's DNS must be
+managed by Cloudflare.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain)
@@ -58,7 +61,7 @@ random trycloudflare.com URL. The domain's DNS must be managed by Cloudflare.`,
 	cmd.Flags().BoolVar(&useExpose, "expose", false, "Use Expose")
 	cmd.Flags().BoolVar(&useServeo, "serveo", false, "Use serveo.net (SSH, no signup)")
 	cmd.Flags().BoolVar(&useLocalhostRun, "localhost-run", false, "Use localhost.run (SSH, no signup)")
-	cmd.Flags().StringVar(&domain, "domain", "", "Serve on your own Cloudflare-managed hostname (implies --cloudflare)")
+	cmd.Flags().StringVar(&domain, "domain", "", "Serve on your own Cloudflare-managed hostname (Cloudflare Tunnel only)")
 	return cmd
 }
 
@@ -92,7 +95,7 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 		port = 80
 	}
 
-	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain)
+	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain, cfg.Share.DefaultTool)
 	if err != nil {
 		return err
 	}
@@ -190,7 +193,7 @@ func resolveShareSite(args []string) (*config.Site, error) {
 	return ensureSiteForCwd()
 }
 
-func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain string) (*shareTool, error) {
+func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, defaultTool string) (*shareTool, error) {
 	count := 0
 	for _, f := range []bool{useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun} {
 		if f {
@@ -201,14 +204,26 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 		return nil, fmt.Errorf("only one of --ngrok, --cloudflare, --expose, --serveo, --localhost-run may be specified")
 	}
 
-	if domain != "" {
-		if useNgrok || useExpose || useServeo || useLocalhostRun {
-			return nil, fmt.Errorf("--domain only works with Cloudflare Tunnel: drop the other tunnel flag")
+	// No tool flag: fall back to the configured default before auto-detecting.
+	if count == 0 && defaultTool != "" {
+		switch defaultTool {
+		case "ngrok":
+			useNgrok = true
+		case "cloudflare":
+			useCloudflare = true
+		case "expose":
+			useExpose = true
+		case "serveo":
+			useServeo = true
+		case "localhost-run":
+			useLocalhostRun = true
+		default:
+			return nil, fmt.Errorf("unknown default share tool %q in config: run \"lerd share:tool\" to fix it", defaultTool)
 		}
-		if _, err := exec.LookPath("cloudflared"); err != nil {
-			return nil, fmt.Errorf("cloudflared not found in PATH, install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
-		}
-		return &shareTool{mode: shareModeCloudflare, domain: domain}, nil
+	}
+
+	if domain != "" && !useCloudflare {
+		return nil, fmt.Errorf("--domain needs Cloudflare Tunnel: pass --cloudflare or set it as the default with \"lerd share:tool cloudflare\"")
 	}
 
 	if useNgrok {
@@ -221,7 +236,7 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 		if _, err := exec.LookPath("cloudflared"); err != nil {
 			return nil, fmt.Errorf("cloudflared not found in PATH — install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
 		}
-		return &shareTool{mode: shareModeCloudflare}, nil
+		return &shareTool{mode: shareModeCloudflare, domain: domain}, nil
 	}
 	if useExpose {
 		if _, err := exec.LookPath("expose"); err != nil {
