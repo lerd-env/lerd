@@ -18,12 +18,12 @@ import (
 )
 
 // NewNodeManageCmd returns the node:manage command, which opts the host into
-// lerd-managed Node.js (fnm shims) after the fact, for users who declined at
-// `lerd install` time.
+// lerd-managed Node.js (version-manager shims) after the fact, for users who
+// declined at `lerd install` time.
 func NewNodeManageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:manage",
-		Short: "Let lerd manage Node.js (install fnm shims and a default version)",
+		Short: "Let lerd manage Node.js (install shims and a default version)",
 		Args:  cobra.NoArgs,
 		RunE:  runNodeManage,
 	}
@@ -35,12 +35,12 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 		feedback.Line("lerd is already managing Node.js")
 		return nil
 	}
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		return fmt.Errorf("fnm not found at %s — run 'lerd install' first", fnmPath)
+	mgr := nodeDet.Active()
+	if !mgr.Available() {
+		return fmt.Errorf("%s not found — run 'lerd install' first", mgr.Name())
 	}
 	feedback.Begin()
-	step := feedback.Start("installing fnm-managed node/npm/npx shims")
+	step := feedback.Start("installing node/npm/npx shims")
 	if err := addShellShims(true); err != nil {
 		step.Fail(err)
 		return fmt.Errorf("writing shims: %w", err)
@@ -49,16 +49,83 @@ func runNodeManage(_ *cobra.Command, _ []string) error {
 	ensureDefaultNode()
 	persistNodeManaged(true)
 	// Host workers (Vite etc.) were generated to run directly or via bun while
-	// Node was unmanaged; rewrite them so they route through fnm again.
+	// Node was unmanaged; rewrite them so they route through the manager again.
 	regenerateHostWorkers()
 	feedback.Done("lerd is now managing Node.js")
 	feedback.Note("pin a version per project with `lerd isolate:node <v>`")
 	return nil
 }
 
+// NewNodeManagerCmd returns the node:manager command, which reports or switches
+// the Node version manager lerd drives ("fnm" or "nvm"). Switching persists the
+// choice and, when lerd is managing Node, rewrites the shims, ensures a default
+// version, and re-syncs host workers so the new manager takes effect at once.
+func NewNodeManagerCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:       "node:manager [fnm|nvm]",
+		Short:     "Show or switch the Node version manager lerd drives",
+		Args:      cobra.MaximumNArgs(1),
+		ValidArgs: []string{"fnm", "nvm"},
+		RunE:      runNodeSetManager,
+	}
+}
+
+func runNodeSetManager(_ *cobra.Command, args []string) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	current := cfg.NodeManager()
+
+	// No argument: report the active manager.
+	if len(args) == 0 {
+		feedback.Begin()
+		feedback.Line("Node version manager: " + feedback.Val(current))
+		return nil
+	}
+
+	target := args[0]
+	if target != "fnm" && target != "nvm" {
+		return fmt.Errorf("unknown manager %q — use 'fnm' or 'nvm'", target)
+	}
+	if target == current {
+		feedback.Begin()
+		feedback.Line("already using " + feedback.Val(target))
+		return nil
+	}
+	if !nodeDet.ManagerByName(target).Available() {
+		if target == "nvm" {
+			return fmt.Errorf("nvm not found — install it first (https://github.com/nvm-sh/nvm)")
+		}
+		return fmt.Errorf("fnm not found — run 'lerd install' to set it up")
+	}
+
+	cfg.SetNodeManager(target)
+	if err := config.SaveGlobal(cfg); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+
+	feedback.Begin()
+	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
+	// the choice is just persisted and applies whenever management is enabled.
+	if lerdManagesNode() {
+		step := feedback.Start("rewriting node/npm/npx shims for " + target)
+		if err := addShellShims(true); err != nil {
+			step.Fail(err)
+			return fmt.Errorf("writing shims: %w", err)
+		}
+		step.OK("")
+		ensureDefaultNode()
+		regenerateHostWorkers()
+	}
+	feedback.Done("Node version manager set to " + feedback.Val(target))
+	return nil
+}
+
 // NewNodeUnmanageCmd returns the node:unmanage command, which removes lerd's
-// node shims and the fnm-installed Node binaries, leaving a clean system so the
-// user can rely on bun or their own system Node.
+// node shims and, when lerd owns the version manager (fnm), the Node binaries it
+// installed — leaving a clean system so the user can rely on bun or their own
+// system Node.
 func NewNodeUnmanageCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:unmanage",
@@ -89,22 +156,25 @@ func persistNodeManaged(managed bool) {
 var fnmVersionRe = regexp.MustCompile(`v\d+\.\d+\.\d+`)
 
 func runNodeUnmanage(_ *cobra.Command, _ []string) error {
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-
-	// Uninstall every fnm-managed Node version so no stale binaries linger.
-	// Uses fnm's own listing so we hit its data dir wherever it lives.
-	if _, err := os.Stat(fnmPath); err == nil {
-		if out, err := exec.Command(fnmPath, "list").CombinedOutput(); err == nil {
-			seen := map[string]bool{}
-			for _, v := range fnmVersionRe.FindAllString(string(out), -1) {
-				if seen[v] {
-					continue
-				}
-				seen[v] = true
-				if uo, uerr := exec.Command(fnmPath, "uninstall", v).CombinedOutput(); uerr != nil {
-					feedback.Warn("fnm uninstall %s: %s", v, string(uo))
-				} else {
-					feedback.Note("removed Node " + v)
+	// Uninstall every fnm-managed Node version so no stale binaries linger, but
+	// only when lerd owns the manager. fnm is bundled by lerd, so its versions
+	// are lerd's to remove; a user-installed nvm and its versions belong to the
+	// user and must be left untouched — we only drop lerd's shims for those.
+	if nodeDet.Active().Name() == "fnm" {
+		fnmPath := filepath.Join(config.BinDir(), "fnm")
+		if _, err := os.Stat(fnmPath); err == nil {
+			if out, err := exec.Command(fnmPath, "list").CombinedOutput(); err == nil {
+				seen := map[string]bool{}
+				for _, v := range fnmVersionRe.FindAllString(string(out), -1) {
+					if seen[v] {
+						continue
+					}
+					seen[v] = true
+					if uo, uerr := exec.Command(fnmPath, "uninstall", v).CombinedOutput(); uerr != nil {
+						feedback.Warn("fnm uninstall %s: %s", v, string(uo))
+					} else {
+						feedback.Note("removed Node " + v)
+					}
 				}
 			}
 		}
@@ -116,7 +186,7 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("removing shims: %w", err)
 	}
 
-	// Existing host worker units still reference `fnm exec --using=… -- npm …`,
+	// Existing host worker units still reference the manager's `exec … -- npm …`,
 	// which now has no Node to run; rewrite them so they use bun (when present)
 	// or the user's system Node directly.
 	persistNodeManaged(false)

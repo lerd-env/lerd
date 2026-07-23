@@ -1,9 +1,10 @@
 <script lang="ts">
   import { status, loadStatus } from '$stores/status';
-  import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode } from '$stores/nodeVersions';
+  import { nodeVersions, loadNodeVersions, setDefaultNode, removeNode, installNode, manageNode, unmanageNode, setNodeManager } from '$stores/nodeVersions';
   import { sites, sitesByNode, openSiteInBrowser } from '$stores/sites';
   import { goToTab } from '$stores/route';
   import DetailButton from '$components/DetailButton.svelte';
+  import SegmentedControl from '$components/SegmentedControl.svelte';
   import { m } from '../../paraglide/messages.js';
 
   // Mirror the store value into local $state via subscribe so the
@@ -88,7 +89,29 @@
   }
 
   let manageBusy = $state(false);
+  let managerBusy = $state(false);
   let manageError = $state('');
+
+  const managerOptions = [
+    { value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() },
+    { value: 'nvm' as const, label: 'nvm', title: m.system_node_managerNvm() }
+  ];
+
+  async function onSwitchManager(manager: 'fnm' | 'nvm') {
+    if (managerBusy || manageBusy || manager === $status.node_manager) return;
+    managerBusy = true;
+    manageError = '';
+    try {
+      const res = await setNodeManager(manager);
+      if (!res.ok) manageError = res.error || m.common_failed();
+      await loadStatus();
+      await loadNodeVersions();
+    } catch (e) {
+      manageError = e instanceof Error ? e.message : m.common_failed();
+    } finally {
+      managerBusy = false;
+    }
+  }
 
   async function onToggleManage(manage: boolean) {
     manageBusy = true;
@@ -125,6 +148,14 @@
     </div>
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
+      {#if !$status.using_system_bun}
+        <SegmentedControl
+          options={managerOptions}
+          value={$status.node_manager}
+          label={m.system_node_manager()}
+          onchange={onSwitchManager}
+        />
+      {/if}
       {#if $status.node_managed_by_lerd}
         <DetailButton
           tone="warn"
