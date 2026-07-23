@@ -982,6 +982,14 @@ func InstallSudoers() error {
 	return nil
 }
 
+// sudoersProbeCommand / sudoProbeArgs are the passwordless-liveness probe on
+// Linux: resolvectl is granted by renderLinuxSudoers and `--version` touches
+// nothing.
+var (
+	sudoersProbeCommand = "/usr/bin/resolvectl"
+	sudoProbeArgs       = []string{"--version"}
+)
+
 // renderLinuxSudoers returns the sudoers drop-in content for the given user.
 // Every rule uses a fully qualified command argument so modern strict
 // parsers (sudo-rs on Ubuntu 26.04+, C sudo >= 1.9.16 on Fedora 41+ /
