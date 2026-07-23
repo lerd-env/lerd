@@ -96,11 +96,15 @@ type GlobalConfig struct {
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
-		// Managed records whether lerd manages Node.js via fnm shims. A pointer
-		// so a config predating the field (nil) keeps the historical
-		// shim-presence behaviour, while an explicit false survives updates that
-		// would otherwise re-add the shims a `node:unmanage` removed.
+		// Managed records whether lerd manages Node.js via version-manager
+		// shims. A pointer so a config predating the field (nil) keeps the
+		// historical shim-presence behaviour, while an explicit false survives
+		// updates that would otherwise re-add the shims a `node:unmanage` removed.
 		Managed *bool `yaml:"managed,omitempty" mapstructure:"managed"`
+		// Manager selects the Node version manager lerd drives: "fnm" (the
+		// bundled default) or "nvm" (a user-installed nvm). Empty means fnm so
+		// configs predating the field keep working unchanged.
+		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
 	} `yaml:"node" mapstructure:"node"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`
@@ -1111,6 +1115,21 @@ func (c *GlobalConfig) NodeManagedPref() (val bool, set bool) {
 // the install/update flow reads it to keep the choice across updates.
 func (c *GlobalConfig) SetNodeManaged(managed bool) {
 	c.Node.Managed = &managed
+}
+
+// NodeManager returns the configured Node version manager, defaulting to "fnm"
+// when unset so configs predating the field keep the bundled behaviour.
+func (c *GlobalConfig) NodeManager() string {
+	if c.Node.Manager == "" {
+		return "fnm"
+	}
+	return c.Node.Manager
+}
+
+// SetNodeManager records which Node version manager lerd drives ("fnm" or
+// "nvm"). Persist via SaveGlobal.
+func (c *GlobalConfig) SetNodeManager(manager string) {
+	c.Node.Manager = manager
 }
 
 // SaveGlobal writes the configuration to config.yaml.
