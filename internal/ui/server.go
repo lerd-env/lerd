@@ -499,33 +499,36 @@ func graphicalEnv() []string {
 	return out
 }
 
-// openTerminalAt opens the user's preferred terminal emulator in dir.
-// It checks $TERMINAL first, then falls back to a list of common emulators.
-func openTerminalAt(dir string) error {
-	type termCmd struct {
-		bin  string
-		args []string
-	}
+// terminalCmd is a terminal emulator binary and the args that open it at a dir.
+type terminalCmd struct {
+	bin  string
+	args []string
+}
 
-	candidates := []termCmd{}
+// terminalDirCandidates returns the ordered emulator candidates for opening a
+// new terminal at dir. $TERMINAL leads, then a fixed fallback list.
+func terminalDirCandidates(dir string) []terminalCmd {
+	candidates := []terminalCmd{}
 
 	if t := os.Getenv("TERMINAL"); t != "" {
-		candidates = append(candidates, termCmd{t, []string{}})
+		candidates = append(candidates, terminalCmd{t, []string{}})
 	}
 
 	candidates = append(candidates,
-		termCmd{"kitty", []string{"--directory", dir}},
-		termCmd{"foot", []string{"--working-directory", dir}},
-		termCmd{"alacritty", []string{"--working-directory", dir}},
-		termCmd{"wezterm", []string{"start", "--cwd", dir}},
-		termCmd{"ghostty", []string{"--working-directory=" + dir}},
-		termCmd{"ptyxis", []string{"--working-directory", dir}},
-		termCmd{"konsole", []string{"--separate", "--workdir", dir}},
-		termCmd{"gnome-terminal", []string{"--working-directory", dir}},
-		termCmd{"xfce4-terminal", []string{"--working-directory", dir}},
-		termCmd{"tilix", []string{"--working-directory", dir}},
-		termCmd{"terminator", []string{"--working-directory", dir}},
-		termCmd{"xterm", []string{"-e", "sh", "-c", `cd "$0" && exec "$SHELL"`, dir}},
+		terminalCmd{"kitty", []string{"--directory", dir}},
+		terminalCmd{"foot", []string{"--working-directory", dir}},
+		terminalCmd{"alacritty", []string{"--working-directory", dir}},
+		terminalCmd{"wezterm", []string{"start", "--cwd", dir}},
+		terminalCmd{"ghostty", []string{"--working-directory=" + dir}},
+		// ptyxis is single-instance: --working-directory is honoured only
+		// alongside --new-window/--tab/-x, so a bare launch lands in $HOME.
+		terminalCmd{"ptyxis", []string{"--new-window", "--working-directory", dir}},
+		terminalCmd{"konsole", []string{"--separate", "--workdir", dir}},
+		terminalCmd{"gnome-terminal", []string{"--working-directory", dir}},
+		terminalCmd{"xfce4-terminal", []string{"--working-directory", dir}},
+		terminalCmd{"tilix", []string{"--working-directory", dir}},
+		terminalCmd{"terminator", []string{"--working-directory", dir}},
+		terminalCmd{"xterm", []string{"-e", "sh", "-c", `cd "$0" && exec "$SHELL"`, dir}},
 	)
 
 	if runtime.GOOS == "darwin" {
@@ -533,12 +536,18 @@ func openTerminalAt(dir string) error {
 		// command — cleaner than `do script "cd ... && exec $SHELL"` which types
 		// the command visibly into the shell. iTerm2 supports the same via open.
 		if _, err := os.Stat("/Applications/iTerm.app"); err == nil {
-			candidates = append(candidates, termCmd{"open", []string{"-a", "iTerm", dir}})
+			candidates = append(candidates, terminalCmd{"open", []string{"-a", "iTerm", dir}})
 		}
-		candidates = append(candidates, termCmd{"open", []string{"-a", "Terminal", dir}})
+		candidates = append(candidates, terminalCmd{"open", []string{"-a", "Terminal", dir}})
 	}
 
-	for _, t := range candidates {
+	return candidates
+}
+
+// openTerminalAt opens the user's preferred terminal emulator in dir.
+// It checks $TERMINAL first, then falls back to a list of common emulators.
+func openTerminalAt(dir string) error {
+	for _, t := range terminalDirCandidates(dir) {
 		bin, err := exec.LookPath(t.bin)
 		if err != nil {
 			continue
