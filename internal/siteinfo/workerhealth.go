@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -63,6 +64,16 @@ func WorkerServerReachable(sitePath string, h *config.WorkerHealth, activeEnter 
 		return false, true
 	}
 	return true, true
+}
+
+// proxyPortListening reports whether a proxy-only host site's dev server is
+// accepting connections on its proxied port. Such sites have no worker unit to
+// reflect, so their liveness is the port itself: the user starts the server.
+func proxyPortListening(port int) bool {
+	if port <= 0 {
+		return false
+	}
+	return dialProbe(net.JoinHostPort("127.0.0.1", strconv.Itoa(port))) == nil
 }
 
 // hostPortFromURL pulls a dialable host:port out of a server URL like
