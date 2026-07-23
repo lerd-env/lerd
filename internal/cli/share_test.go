@@ -66,7 +66,7 @@ func TestPickShareTool_mutualExclusion(t *testing.T) {
 		{true, false, false, false, true}, // ngrok + localhost-run
 	}
 	for _, p := range pairs {
-		_, err := pickShareTool(p[0], p[1], p[2], p[3], p[4])
+		_, err := pickShareTool(p[0], p[1], p[2], p[3], p[4], "")
 		if err == nil {
 			t.Errorf("pickShareTool%v: expected mutual-exclusion error, got nil", p)
 			continue
@@ -79,7 +79,7 @@ func TestPickShareTool_mutualExclusion(t *testing.T) {
 
 func TestPickShareTool_explicitNgrok_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok"))
-	tool, err := pickShareTool(true, false, false, false, false)
+	tool, err := pickShareTool(true, false, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestPickShareTool_explicitNgrok_present(t *testing.T) {
 
 func TestPickShareTool_explicitNgrok_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(true, false, false, false, false)
+	_, err := pickShareTool(true, false, false, false, false, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -101,7 +101,7 @@ func TestPickShareTool_explicitNgrok_absent(t *testing.T) {
 
 func TestPickShareTool_explicitCloudflare_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "cloudflared"))
-	tool, err := pickShareTool(false, true, false, false, false)
+	tool, err := pickShareTool(false, true, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +112,7 @@ func TestPickShareTool_explicitCloudflare_present(t *testing.T) {
 
 func TestPickShareTool_explicitCloudflare_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, true, false, false, false)
+	_, err := pickShareTool(false, true, false, false, false, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -123,7 +123,7 @@ func TestPickShareTool_explicitCloudflare_absent(t *testing.T) {
 
 func TestPickShareTool_explicitExpose_present(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "expose"))
-	tool, err := pickShareTool(false, false, true, false, false)
+	tool, err := pickShareTool(false, false, true, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -134,7 +134,7 @@ func TestPickShareTool_explicitExpose_present(t *testing.T) {
 
 func TestPickShareTool_explicitExpose_absent(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, false, true, false, false)
+	_, err := pickShareTool(false, false, true, false, false, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -144,7 +144,7 @@ func TestPickShareTool_explicitExpose_absent(t *testing.T) {
 }
 
 func TestPickShareTool_explicitServeo(t *testing.T) {
-	tool, err := pickShareTool(false, false, false, true, false)
+	tool, err := pickShareTool(false, false, false, true, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -157,7 +157,7 @@ func TestPickShareTool_explicitServeo(t *testing.T) {
 }
 
 func TestPickShareTool_explicitLocalhostRun(t *testing.T) {
-	tool, err := pickShareTool(false, false, false, false, true)
+	tool, err := pickShareTool(false, false, false, false, true, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +171,7 @@ func TestPickShareTool_explicitLocalhostRun(t *testing.T) {
 
 func TestPickShareTool_autoDetect_ngrokFirst(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared", "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false)
+	tool, err := pickShareTool(false, false, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -182,7 +182,7 @@ func TestPickShareTool_autoDetect_ngrokFirst(t *testing.T) {
 
 func TestPickShareTool_autoDetect_cloudflareBeforeExpose(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "cloudflared", "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false)
+	tool, err := pickShareTool(false, false, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -193,7 +193,7 @@ func TestPickShareTool_autoDetect_cloudflareBeforeExpose(t *testing.T) {
 
 func TestPickShareTool_autoDetect_expose(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "expose", "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false)
+	tool, err := pickShareTool(false, false, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestPickShareTool_autoDetect_expose(t *testing.T) {
 
 func TestPickShareTool_autoDetect_sshFallback(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ssh"))
-	tool, err := pickShareTool(false, false, false, false, false)
+	tool, err := pickShareTool(false, false, false, false, false, "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -218,12 +218,165 @@ func TestPickShareTool_autoDetect_sshFallback(t *testing.T) {
 
 func TestPickShareTool_autoDetect_noTools(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	_, err := pickShareTool(false, false, false, false, false)
+	_, err := pickShareTool(false, false, false, false, false, "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "no tunnel tool found") {
 		t.Errorf("error %q does not mention 'no tunnel tool found'", err)
+	}
+}
+
+func TestPickShareTool_domain_impliesCloudflare(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	tool, err := pickShareTool(false, false, false, false, false, "dev.example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tool.mode != shareModeCloudflare {
+		t.Errorf("mode = %v, want shareModeCloudflare", tool.mode)
+	}
+	if tool.domain != "dev.example.com" {
+		t.Errorf("domain = %q, want dev.example.com", tool.domain)
+	}
+}
+
+func TestPickShareTool_domain_withOtherTool(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	for _, p := range [][4]bool{
+		{true, false, false, false},
+		{false, true, false, false},
+		{false, false, true, false},
+		{false, false, false, true},
+	} {
+		_, err := pickShareTool(p[0], false, p[1], p[2], p[3], "dev.example.com")
+		if err == nil || !strings.Contains(err.Error(), "--domain only works with Cloudflare") {
+			t.Errorf("pickShareTool%v: error = %v, want '--domain only works with Cloudflare'", p, err)
+		}
+	}
+}
+
+func TestPickShareTool_domain_cloudflaredAbsent(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, err := pickShareTool(false, true, false, false, false, "dev.example.com")
+	if err == nil || !strings.Contains(err.Error(), "cloudflared not found") {
+		t.Errorf("error = %v, want 'cloudflared not found'", err)
+	}
+}
+
+// ── ensureCloudflareTunnel ────────────────────────────────────────────────────
+
+// fakeCloudflared installs a fake cloudflared script and returns its log file.
+// The script logs every invocation; createExit/routeExit control the exit codes
+// and output of "tunnel create" / "tunnel route dns". "tunnel login" writes
+// cert.pem under $HOME/.cloudflared.
+func fakeCloudflared(t *testing.T, createOut string, createExit int, routeOut string, routeExit int) string {
+	t.Helper()
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "calls.log")
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %q
+case "$1 $2" in
+"tunnel login") : > "$HOME/.cloudflared/cert.pem";;
+"tunnel create") echo %q; exit %d;;
+"tunnel route") echo %q; exit %d;;
+esac
+`, logFile, createOut, createExit, routeOut, routeExit)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflared"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	return logFile
+}
+
+func readCalls(t *testing.T, logFile string) string {
+	t.Helper()
+	b, _ := os.ReadFile(logFile)
+	return string(b)
+}
+
+func TestEnsureCloudflareTunnel_happyPath_logsInWhenNoCert(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("TUNNEL_ORIGIN_CERT", "")
+	if err := os.MkdirAll(filepath.Join(home, ".cloudflared"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	logFile := fakeCloudflared(t, "created", 0, "routed", 0)
+
+	name, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if name != "lerd-mysite" {
+		t.Errorf("name = %q, want lerd-mysite", name)
+	}
+	calls := readCalls(t, logFile)
+	for _, want := range []string{"tunnel login", "tunnel create lerd-mysite", "tunnel route dns lerd-mysite dev.example.com"} {
+		if !strings.Contains(calls, want) {
+			t.Errorf("calls %q missing %q", calls, want)
+		}
+	}
+}
+
+func TestEnsureCloudflareTunnel_skipsLoginWhenCertExists(t *testing.T) {
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(cert, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
+	logFile := fakeCloudflared(t, "created", 0, "routed", 0)
+
+	if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(readCalls(t, logFile), "tunnel login") {
+		t.Error("tunnel login was called despite existing cert")
+	}
+}
+
+func TestEnsureCloudflareTunnel_toleratesExistingTunnelAndRoute(t *testing.T) {
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(cert, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
+	fakeCloudflared(t, "tunnel with name already exists", 1, "record with that host already exists", 1)
+
+	name, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if name != "lerd-mysite" {
+		t.Errorf("name = %q, want lerd-mysite", name)
+	}
+}
+
+func TestEnsureCloudflareTunnel_createFailurePropagates(t *testing.T) {
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(cert, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
+	fakeCloudflared(t, "auth error", 1, "routed", 0)
+
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	if err == nil || !strings.Contains(err.Error(), "tunnel create") {
+		t.Errorf("error = %v, want tunnel create failure", err)
+	}
+}
+
+func TestEnsureCloudflareTunnel_routeFailurePropagates(t *testing.T) {
+	cert := filepath.Join(t.TempDir(), "cert.pem")
+	if err := os.WriteFile(cert, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
+	fakeCloudflared(t, "created", 0, "zone not found", 1)
+
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	if err == nil || !strings.Contains(err.Error(), "route dns") {
+		t.Errorf("error = %v, want route dns failure", err)
 	}
 }
 
