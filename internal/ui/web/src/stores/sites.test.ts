@@ -247,4 +247,29 @@ describe('sites store', () => {
     expect(res.error).toBe('writing temp file: no space');
     vi.unstubAllGlobals();
   });
+
+  it('siteHasLogSources sees a proxy-only host site whose only source is a stripe listener', async () => {
+    const { siteHasLogSources } = await import('./sites');
+    const proxyOnly = {
+      domain: 'gonitro.test',
+      host_proxy: true,
+      host_has_dev_server: false,
+      has_app_logs: false,
+      uses_php: false,
+      stripe_running: true
+    } as unknown as import('./sites').Site;
+    expect(siteHasLogSources(proxyOnly)).toBe(true);
+  });
+
+  it('siteHasLogSources covers running and failing workers, and is false with no source', async () => {
+    const { siteHasLogSources } = await import('./sites');
+    const base = { domain: 'x.test', host_proxy: true } as unknown as import('./sites').Site;
+    expect(siteHasLogSources(base)).toBe(false);
+    expect(siteHasLogSources({ ...base, queue_running: true })).toBe(true);
+    expect(siteHasLogSources({ ...base, schedule_failing: true })).toBe(true);
+    expect(siteHasLogSources({ ...base, host_has_dev_server: true })).toBe(true);
+    expect(
+      siteHasLogSources({ ...base, framework_workers: [{ name: 'vite', running: true }] })
+    ).toBe(true);
+  });
 });
