@@ -7,6 +7,17 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.30.1] - 2026-07-23
+
+Two fixes: `lerd start` stopped prompting to reinstall the DNS sudoers rule on macOS every run, and the web UI's open-terminal button opens in the site directory again where ptyxis is the terminal.
+
+### Fixed
+
+- **macOS prompted to reinstall the DNS sudoers rule on every `lerd start`** (#1101). The passwordless-liveness probe that decides whether the drop-in is still active was hardcoded to `resolvectl`, a systemd tool that exists only on Linux, so on macOS `sudo -n` always refused with "a password is required", which the probe read as a conclusive "the grant is gone" and rewrote the rule, prompting for sudo, even when the installed `/etc/sudoers.d/lerd` was byte identical to its recorded hash. The probe command is platform specific now: Linux keeps `resolvectl --version`, macOS exercises `mkdir -p /etc/resolver`, a command the drop-in already grants verbatim and which is idempotent, so it succeeds silently when the grant is live and only reports it gone when sudo genuinely refuses.
+- **The open-terminal button opened in the home directory on ptyxis** (#1103). The web UI launched ptyxis with a bare `--working-directory`, but ptyxis is single-instance and applies that flag only alongside `--new-window`, `--tab` or `-x`, so it was ignored and a new window opened in the home directory instead of the site. The button passes `--new-window` now, so the terminal opens in the site or worktree path. Every other emulator was already correct and is unchanged.
+
+---
+
 ## [1.30.0] - 2026-07-22
 
 The 1.30.0 line shrinks what a PHP version owns and widens what the dashboard can reach. Custom extensions and packages became one declared set applied to every image lerd builds, and php.ini follows with a shared scope that fills the gaps under each version's own file, so a site that changes version stops silently losing what the developer asked for. The dashboard manages an engine's databases from its service page with snapshots, export and import, offers to install a service the project asks for but never had, keeps every notification in a bell that survives a reload, renders log output in colour and hands any log to a terminal, and groups the services list by type. `lerd doctor` stops merely reporting and learns to repair what it safely can, notifications grow a native desktop sink alongside the new Lerd desktop app, and the terminal dashboard moves onto the Charm v2 stack. Git worktrees get a round of their own, resolving their own PHP version, their own image, their own pin and their own database from wherever a command is run. Underneath all of it there is a long tail of resolution and resource work: `.test` keeps answering with no network at all and comes back after a sleep, nginx stops rejecting a config over a directive lerd also declares, and the daemon stops paying for background work while nobody is looking at it.

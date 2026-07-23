@@ -47,6 +47,30 @@ func TestGraphicalEnvPreservesBaseEnvAndPatchesDisplay(t *testing.T) {
 	}
 }
 
+func TestTerminalDirCandidatesOpenPtyxisInDir(t *testing.T) {
+	t.Setenv("TERMINAL", "")
+	const dir = "/home/user/project"
+	var ptyxis *terminalCmd
+	for _, c := range terminalDirCandidates(dir) {
+		if c.bin == "ptyxis" {
+			cp := c
+			ptyxis = &cp
+		}
+	}
+	if ptyxis == nil {
+		t.Fatal("ptyxis is not among the terminal candidates")
+	}
+	joined := strings.Join(ptyxis.args, " ")
+	// ptyxis is single-instance: without --new-window (or --tab/-x) it ignores
+	// --working-directory and opens a new window in $HOME instead of the site.
+	if !strings.Contains(joined, "--new-window") {
+		t.Errorf("ptyxis args %v lack --new-window, so %q would be ignored", ptyxis.args, dir)
+	}
+	if !strings.Contains(joined, dir) {
+		t.Errorf("ptyxis args %v do not carry the target dir %q", ptyxis.args, dir)
+	}
+}
+
 func TestGraphicalEnvDoesNotDuplicateKeys(t *testing.T) {
 	t.Setenv("XDG_SESSION_TYPE", "wayland")
 	env := graphicalEnv()
