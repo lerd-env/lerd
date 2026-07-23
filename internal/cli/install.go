@@ -283,24 +283,50 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// system node exists. Update runs non-interactively so a prior node:unmanage
 	// survives; a fresh install only prompts when a system node is present.
 	var savedNode *bool
+	savedManager := ""
 	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
 		if v, set := nodeCfg.NodeManagedPref(); set {
 			savedNode = &v
 		}
+		savedManager = nodeCfg.Node.Manager
 	}
 	systemNode := detectSystemNode()
+	nvmDetected := detectNvm()
 	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", lerdManagesNode())
 	if promptNode {
 		feedback.Line("Node.js detected at " + systemNode)
-		prompt := "Let lerd manage Node.js versions (installs fnm shims, may override system node)?"
+		prompt := "Let lerd manage Node.js versions (installs shims, may override system node)?"
 		if bunPath != "" {
 			prompt += " Decline to keep your system Node and use bun."
 		}
 		wantLerdNode = confirmInstallPromptDefault(prompt, nodeDefault)
 	}
+
+	// Resolve which version manager lerd drives. An explicit saved choice wins
+	// silently; otherwise, when the user opts into managed Node on a fresh
+	// interactive install and a user-installed nvm is present, offer to drive it
+	// instead of installing the bundled fnm.
+	nodeManager := savedManager
+	if nodeManager == "" {
+		nodeManager = "fnm"
+		if wantLerdNode && nvmDetected && promptNode {
+			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", true) {
+				nodeManager = "nvm"
+			}
+		}
+	}
+
 	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
+		changed := false
 		if v, set := nodeCfg.NodeManagedPref(); !set || v != wantLerdNode {
 			nodeCfg.SetNodeManaged(wantLerdNode)
+			changed = true
+		}
+		if nodeCfg.Node.Manager != nodeManager {
+			nodeCfg.SetNodeManager(nodeManager)
+			changed = true
+		}
+		if changed {
 			if err := config.SaveGlobal(nodeCfg); err != nil {
 				fmt.Printf("    WARN: persist Node-management choice: %v\n", err)
 			}
@@ -1321,7 +1347,7 @@ func installLaravelInstaller() error {
 }
 
 // lerdManagesNode reports whether lerd's node shim is present in its bin dir,
-// meaning the user opted in to fnm-based node version management.
+// meaning the user opted in to lerd-managed node version management.
 func lerdManagesNode() bool {
 	shim := filepath.Join(config.BinDir(), "node")
 	_, err := os.Stat(shim)
@@ -1350,7 +1376,7 @@ func nodeManageDecision(fromUpdate bool, saved *bool, systemNodeDetected, shimPr
 }
 
 // ensureNodeManaged is called by the node:install/use/uninstall commands to
-// guard against running fnm operations while the user has opted out of
+// guard against running version-manager operations while the user has opted out of
 // lerd-managed Node. Prompts for confirmation and writes shims on accept.
 // Returns an error when stdin is not a TTY so scripted callers fail loudly
 // instead of silently flipping the user's choice.
@@ -1362,7 +1388,7 @@ func ensureNodeManaged() error {
 		return fmt.Errorf("lerd is not managing Node.js; run 'lerd install' to enable it")
 	}
 	fmt.Println("Lerd is currently using your system Node.js.")
-	fmt.Println("Continuing will install fnm-managed shims into", config.BinDir(), "and override your system node, npm and npx in PATH.")
+	fmt.Println("Continuing will install lerd-managed shims into", config.BinDir(), "and override your system node, npm and npx in PATH.")
 	if !confirmInstallPromptDefault("Switch to lerd-managed Node.js?", false) {
 		return fmt.Errorf("aborted")
 	}
@@ -1373,16 +1399,17 @@ func ensureNodeManaged() error {
 	return nil
 }
 
-// ensureDefaultNode installs the configured default Node.js version via fnm
-// and pins it as the fnm default if no version is already set up. Skips when
-// fnm already has a working default so reruns of `lerd install` stay quiet.
+// ensureDefaultNode installs the configured default Node.js version via the
+// active version manager and pins it as the default if no version is already set
+// up. Skips when the manager already has a working default so reruns of
+// `lerd install` stay quiet.
 func ensureDefaultNode() {
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		fmt.Printf("    WARN: fnm not found at %s, skipping default Node install\n", fnmPath)
+	mgr := nodeDet.Active()
+	if !mgr.Available() {
+		fmt.Printf("    WARN: %s not found, skipping default Node install\n", mgr.Name())
 		return
 	}
-	if exec.Command(fnmPath, "exec", "--using=default", "--", "true").Run() == nil {
+	if mgr.HasDefault() {
 		return
 	}
 	version := "22"
@@ -1390,12 +1417,12 @@ func ensureDefaultNode() {
 		version = cfg.Node.DefaultVersion
 	}
 	step(fmt.Sprintf("Installing Node.js %s", version))
-	if out, err := exec.Command(fnmPath, "install", version).CombinedOutput(); err != nil {
-		fmt.Printf("    WARN: fnm install %s: %s\n", version, strings.TrimSpace(string(out)))
+	if err := mgr.Install(version); err != nil {
+		fmt.Printf("    WARN: %v\n", err)
 		return
 	}
-	if out, err := exec.Command(fnmPath, "default", version).CombinedOutput(); err != nil {
-		fmt.Printf("    WARN: fnm default %s: %s\n", version, strings.TrimSpace(string(out)))
+	if err := mgr.SetDefault(version); err != nil {
+		fmt.Printf("    WARN: %v\n", err)
 		return
 	}
 	ok()
@@ -1436,6 +1463,22 @@ func detectSystemNode() string {
 		}
 	}
 	return ""
+}
+
+// detectNvm reports whether a user-installed nvm is present, so the installer can
+// offer to drive it instead of downloading the bundled fnm. Checks $NVM_DIR
+// first, then the ~/.nvm default, for the nvm.sh script that must be sourced.
+func detectNvm() bool {
+	dir := os.Getenv("NVM_DIR")
+	if dir == "" {
+		home, _ := os.UserHomeDir()
+		if home == "" {
+			return false
+		}
+		dir = filepath.Join(home, ".nvm")
+	}
+	_, err := os.Stat(filepath.Join(dir, "nvm.sh"))
+	return err == nil
 }
 
 // confirmInstallPrompt asks a [Y/n] question. Must be called before any
@@ -1607,7 +1650,6 @@ func addShellShims(manageNode bool) error {
 	if lerdBin == "" {
 		lerdBin = filepath.Join(home, ".local", "bin", "lerd")
 	}
-	fnmBin := filepath.Join(binDir, "fnm")
 
 	// Write php shim
 	phpShim := fmt.Sprintf("#!/bin/sh\nexec %s php \"$@\"\n", lerdBin)
@@ -1638,38 +1680,18 @@ func addShellShims(manageNode bool) error {
 		return fmt.Errorf("writing laravel shim: %w", err)
 	}
 
-	// Write node/npm/npx shims. Prefer routing through the lerd binary so
-	// `npm install -g` lands in lerd's managed prefix and the per-bin
-	// wrappers under ~/.local/bin/ stay in sync, but fall back to a direct
-	// fnm invocation when lerd is not reachable (e.g. inside Alpine-based
-	// PHP containers, since lerd is glibc-linked).
-	// Only written when lerd is managing Node versions; otherwise existing
-	// shims are removed so the user's system node stops being masked by a
-	// stale fnm shim from a prior managed install.
+	// Write node/npm/npx shims via the active version manager. Each shim prefers
+	// routing through the lerd binary so `npm install -g` lands in lerd's managed
+	// prefix and the per-bin wrappers under ~/.local/bin/ stay in sync, and falls
+	// back to a direct manager invocation when lerd is not reachable (e.g. inside
+	// Alpine-based PHP containers, since lerd is glibc-linked).
+	// Only written when lerd is managing Node versions; otherwise existing shims
+	// are removed so the user's system node stops being masked by a stale shim
+	// from a prior managed install.
 	if manageNode {
-		nodeShimTmpl := `#!/bin/sh
-LERD="%s"
-if [ -x "$LERD" ]; then
-  exec "$LERD" %s "$@"
-fi
-FNM="%s"
-VERSION=""
-for f in .node-version .nvmrc; do
-  [ -f "$f" ] && VERSION=$(tr -d '[:space:]' < "$f") && break
-done
-if [ -n "$VERSION" ]; then
-  "$FNM" install "$VERSION" >/dev/null 2>&1 || true
-  exec "$FNM" exec --using="$VERSION" -- %s "$@"
-else
-  if ! "$FNM" exec --using=default -- true >/dev/null 2>&1; then
-    printf 'No Node.js version available via lerd. Run: lerd node:install 22\n' >&2
-    exit 1
-  fi
-  exec "$FNM" exec --using=default -- %s "$@"
-fi
-`
+		mgr := nodeDet.Active()
 		for _, bin := range []string{"node", "npm", "npx"} {
-			shim := fmt.Sprintf(nodeShimTmpl, lerdBin, bin, fnmBin, bin, bin)
+			shim := mgr.ShimScript(lerdBin, bin)
 			if err := os.WriteFile(filepath.Join(binDir, bin), []byte(shim), 0755); err != nil {
 				return fmt.Errorf("writing %s shim: %w", bin, err)
 			}
