@@ -1,0 +1,119 @@
+package serviceops
+
+import (
+	"bufio"
+	"io"
+	"regexp"
+	"strings"
+	"sync"
+)
+
+// Ownership and privilege statements name roles that only exist where the dump
+// was taken. lerd's engines run one admin role, so the statements cannot apply
+// and every one of them lands in the import report as an error nobody can act on.
+var pgOwnership = regexp.MustCompile(`(?i)^\s*(ALTER\s+DEFAULT\s+PRIVILEGES\b|GRANT\b|REVOKE\b|ALTER\s+.*\s+OWNER\s+TO\b)`)
+
+// The mysql families carry the same thing as a DEFINER clause on views,
+// triggers and routines, which is worse: created as root it imports clean and
+// only fails when the object is used. Dropping the clause defaults it to the
+// importing user. Matched only on a DDL line, since row data is free text and a
+// value holding the word must survive.
+var (
+	myDefiner = regexp.MustCompile("DEFINER=[^ ]+ ?")
+	myDDL     = regexp.MustCompile(`(?i)^\s*(/\*![0-9]*\s*)?(CREATE\b|ALTER\b|DEFINER=)`)
+)
+
+// copyStart marks the header of a postgres COPY block, after which every line is
+// row data until a lone "\.", so nothing between them may be rewritten.
+var copyStart = regexp.MustCompile(`(?i)^\s*COPY\s.*\sFROM\s+stdin;\s*$`)
+
+// SanitizeDump filters a dump on its way to the engine so statements that name
+// roles the local engine does not have never reach it. It returns the filtered
+// stream and a function reporting what was dropped, valid once the stream has
+// been read to the end.
+func SanitizeDump(family string, r io.Reader) (io.Reader, func() []ImportIssue) {
+	s := &dumpSanitizer{postgres: family == "postgres"}
+	pr, pw := io.Pipe()
+	go func() { pw.CloseWithError(s.copy(r, pw)) }()
+	return pr, s.report
+}
+
+type dumpSanitizer struct {
+	postgres bool
+	mu       sync.Mutex
+	counts   map[string]int
+	order    []string
+}
+
+func (s *dumpSanitizer) note(kind string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.counts == nil {
+		s.counts = map[string]int{}
+	}
+	if _, seen := s.counts[kind]; !seen {
+		s.order = append(s.order, kind)
+	}
+	s.counts[kind]++
+}
+
+func (s *dumpSanitizer) report() []ImportIssue {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]ImportIssue, 0, len(s.order))
+	for _, kind := range s.order {
+		out = append(out, ImportIssue{Message: kind, Count: s.counts[kind]})
+	}
+	return out
+}
+
+// copy streams r to w a line at a time. ReadString rather than a Scanner: a
+// mysqldump INSERT is one line and can run to megabytes, past any token limit.
+func (s *dumpSanitizer) copy(r io.Reader, w io.Writer) error {
+	br := bufio.NewReader(r)
+	inCopy := false
+	for {
+		line, err := br.ReadString('\n')
+		if line != "" {
+			out := line
+			switch {
+			case inCopy:
+				if strings.TrimRight(line, "\r\n") == `\.` {
+					inCopy = false
+				}
+			case s.postgres && copyStart.MatchString(line):
+				inCopy = true
+			default:
+				out = s.filter(line)
+			}
+			if out != "" {
+				if _, werr := io.WriteString(w, out); werr != nil {
+					return werr
+				}
+			}
+		}
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+// filter returns what should be written for one statement line, empty when the
+// whole line is dropped.
+func (s *dumpSanitizer) filter(line string) string {
+	if s.postgres {
+		if pgOwnership.MatchString(line) {
+			s.note("ownership and privilege statements the local engine has no roles for")
+			return ""
+		}
+		return line
+	}
+	if !myDDL.MatchString(line) || !strings.Contains(line, "DEFINER=") {
+		return line
+	}
+	s.note("DEFINER clauses naming users the local engine does not have")
+	return myDefiner.ReplaceAllString(line, "")
+}

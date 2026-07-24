@@ -4218,17 +4218,33 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
 	}
 
+	// The tool talks to the family's canonical service, the same one the commands
+	// above hardcode as lerd-mysql / lerd-postgres.
+	svc := "mysql"
+	if env.connection == "pgsql" || env.connection == "postgres" {
+		svc = "postgres"
+	}
+	if boolArg(args, "fresh") {
+		if err := serviceops.EmptyDatabase(svc, env.database); err != nil {
+			return toolErr(err.Error()), nil
+		}
+	}
 	src, err := serviceops.DumpReader(f)
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
+	src, skipped := serviceops.SanitizeDump(config.FamilyOfName(svc), src)
 	var stderr bytes.Buffer
 	cmd.Stdin = src
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
 	}
-	return toolOK(fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)), nil
+	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)
+	if note := (serviceops.ImportReport{Skipped: skipped()}).SkippedSummary(); note != "" {
+		msg += ", " + note
+	}
+	return toolOK(msg), nil
 }
 
 // mcpSnapshotTarget resolves a snapshot target from MCP args. It honours an
