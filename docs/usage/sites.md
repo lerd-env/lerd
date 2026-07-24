@@ -6,7 +6,7 @@
 |---|---|
 | `lerd init` | Interactive wizard: choose PHP version, HTTPS, and services, then save `.lerd.yaml` and apply |
 | `lerd init --fresh` | Re-run the wizard with existing `.lerd.yaml` values as defaults |
-| `lerd park [dir]` | Register all Laravel projects inside `dir` (defaults to cwd) |
+| `lerd park [dir]` | Register every PHP project inside `dir` as a site, and keep doing so as new ones appear (defaults to cwd) |
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
 | `lerd link [domain]` | Register the current directory as a site (domain name without TLD, defaults to directory name). On a fresh project in an interactive terminal it runs the `lerd init` wizard first |
 | `lerd unlink` | Unlink the current directory site (removes all domains) |
@@ -34,7 +34,9 @@
 
 `lerd init` runs an interactive wizard, writes the answers to `.lerd.yaml` in the project root, and then applies the configuration: linking the site, enabling HTTPS if requested, picking a database, and starting any required services.
 
-`lerd link` and `lerd init` overlap on purpose. When you run `lerd link` on a project that has no `.lerd.yaml` yet and you're in an interactive terminal, link routes straight into the init wizard, so you don't have to know to reach for `init` first. If the project already has a `.lerd.yaml`, link just applies it. And in a non-interactive shell (a script, CI, `lerd park`, or any piped invocation) link always does a fast, bare auto-detected registration with no wizard, so automation never blocks on a prompt. Passing an explicit domain (`lerd link myapp`) also skips the wizard and links directly.
+`lerd link` and `lerd init` overlap on purpose. When you run `lerd link` on a project that has no `.lerd.yaml` yet and you're in an interactive terminal, link routes straight into the init wizard, so you don't have to know to reach for `init` first. If the project already has a `.lerd.yaml`, link just applies it. In a non-interactive shell (a script, CI, or any piped invocation) link does a fast auto-detected registration with no wizard, so automation never blocks on a prompt. Passing an explicit domain (`lerd link myapp`) also skips the wizard and links directly.
+
+Every way of linking a project resolves the same plan: the CLI, the dashboard's **+** button, `lerd park`, the parked-directory watcher, and the MCP `site link` action. They differ only in what they are allowed to do, and the difference is deliberate. A link you type can prompt, write `.php-version` and `.node-version`, install services, issue a certificate, and supervise a dev command the project declares. An unattended link (park and the watcher) reads the same committed configuration but never prompts, never writes into the project, and never runs anything the repository authored.
 
 ```bash
 cd ~/Projects/my-app
@@ -90,6 +92,48 @@ Use `--fresh` to re-run the wizard while keeping existing values as defaults:
 ```bash
 lerd init --fresh
 ```
+
+---
+
+## Parking a directory of projects
+
+`lerd park ~/Code` registers every PHP project directly inside a directory, and
+records the directory so the watcher keeps up with it: a project you clone into
+it later is registered on its own, and one you delete is unlinked.
+
+```bash
+lerd park ~/Code
+```
+
+```
+ parking /home/me/Code
+ → linking 128 projects… ████████████░░░░░░░░ 74/128 · shop ⠙
+ ✓ linking 128 projects 126 linked, 2 skipped
+ → publishing… ✓ 126 site(s) serving
+```
+
+Each project writes only its own vhost and PHP unit; the reloads that publish
+them run once for the whole batch. That matters at scale, because those steps
+rewrite every quadlet and every container hosts entry, so doing them per project
+made a large directory take minutes rather than seconds.
+
+A parked link reads the project's committed `.lerd.yaml` — its domains, public
+directory and PHP version — but it runs unattended, so it stops short of
+anything that needs a decision or runs code the repository wrote. It never
+prompts, never writes `.php-version` or `.node-version` into your project, never
+installs services, and never issues a certificate.
+
+Some projects are reported as skipped rather than registered:
+
+- A directory that is not a PHP project at all.
+- A git worktree of a project that is already a site; worktrees inherit the
+  parent's registration and are served at `branch.domain.test`.
+- A project that declares its own runtime — a custom container, a host-proxy dev
+  server, FrankenPHP, or a custom FPM image. Each needs an image built or a
+  command run, which an unattended sweep should not do on its own. Run `lerd
+  link` in the project to set it up, after which the watcher leaves it alone.
+
+Use `lerd unpark <dir>` to stop watching a directory and unlink its sites.
 
 ---
 
