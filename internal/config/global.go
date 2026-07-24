@@ -57,7 +57,11 @@ type GlobalConfig struct {
 	// placeholders; if omitted, lerd appends the file. Empty = autodetect a
 	// known GUI editor (code/cursor/phpstorm/subl/zed), then xdg-open/open.
 	Editor string `yaml:"editor,omitempty" mapstructure:"editor"`
-	PHP    struct {
+	// IDEDataSource keeps a JetBrains project's database connection pointed at
+	// lerd, written only into a project that already has a .idea directory. Set
+	// false to leave every IDE file alone.
+	IDEDataSource *bool `yaml:"ide_data_source,omitempty" mapstructure:"ide_data_source"`
+	PHP           struct {
 		DefaultVersion string            `yaml:"default_version" mapstructure:"default_version"`
 		XdebugEnabled  map[string]bool   `yaml:"xdebug_enabled"  mapstructure:"xdebug_enabled"`
 		XdebugMode     map[string]string `yaml:"xdebug_mode,omitempty" mapstructure:"xdebug_mode"`
@@ -1135,4 +1139,15 @@ func SaveGlobal(cfg *GlobalConfig) error {
 	}
 	invalidateGlobalCache()
 	return nil
+}
+
+// IDEDataSourceEnabled reports whether lerd may maintain a project's JetBrains
+// data source. On by default: it only ever touches a project that already has a
+// .idea directory, and only its own entry in it.
+func IDEDataSourceEnabled() bool {
+	cfg, err := LoadGlobal()
+	if err != nil || cfg == nil || cfg.IDEDataSource == nil {
+		return true
+	}
+	return *cfg.IDEDataSource
 }

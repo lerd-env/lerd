@@ -110,6 +110,10 @@ func UnlinkSite(name string) error {
 	// the moment another site needs it.
 	offerRemoveOrphanedFramework(site.Framework)
 
+	// The site is no longer lerd's, so neither is the connection lerd wrote into
+	// its IDE configuration.
+	removeIDEDataSource(site.Path)
+
 	autoStopUnusedServices()
 	autoStopUnusedFPMs()
 
