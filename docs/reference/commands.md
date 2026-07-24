@@ -302,7 +302,7 @@ Activity-driven worker suspension: lerd gracefully stops each site's suspendable
 | Command | Description |
 |---|---|
 | `lerd framework list` | List all available framework definitions and their workers |
-| `lerd framework add <name>` | Add or update a framework definition (flags or `--from-file`) |
+| `lerd framework add <name>` | Install a published framework from the store, or author a custom one (flags or `--from-file`) |
 | `lerd framework remove <name>` | Remove a framework definition (confirms if a site still uses it) |
 | `lerd framework prune` | Remove installed definitions no site uses |
 
