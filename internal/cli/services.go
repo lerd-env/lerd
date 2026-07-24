@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
@@ -1087,6 +1089,38 @@ func init() {
 	// service manager (launchd plist on macOS, .container quadlet on Linux) so
 	// it matches `lerd start`'s notion of an installed unit.
 	serviceops.UnitInstalledFn = services.Mgr.ContainerUnitInstalled
+	// Drop-in alternatives for missing depends_on (mariadb for mysql, valkey
+	// for redis) come from the store index so a clean box that has not cached
+	// those presets yet still sees them in the error — ListPresets alone only
+	// has the embedded defaults plus whatever is already fetched.
+	serviceops.ListStoreDropIns = listStoreDropIns
+}
+
+var (
+	storeDropInMu    sync.Mutex
+	storeDropInIdx   *store.ServiceIndex
+	storeDropInIdxAt time.Time
+)
+
+func listStoreDropIns(dep string) []string {
+	storeDropInMu.Lock()
+	defer storeDropInMu.Unlock()
+	if storeDropInIdx == nil || time.Since(storeDropInIdxAt) > 5*time.Minute {
+		if idx, err := store.NewServiceClient().FetchServiceIndex(); err == nil {
+			storeDropInIdx = idx
+			storeDropInIdxAt = time.Now()
+		}
+	}
+	if storeDropInIdx == nil {
+		return nil
+	}
+	var out []string
+	for _, e := range storeDropInIdx.Services {
+		if e.Family == dep || e.EnvRole == dep {
+			out = append(out, e.Name)
+		}
+	}
+	return out
 }
 
 // autoStopUnusedServices stops any running service that has no active sites
@@ -1107,7 +1141,11 @@ func autoStopUnusedServices() {
 				running = status == "active" || status == "activating"
 			}
 			if running {
-				_ = serviceops.StopService(name)
+				// Soft stop only: do not go through StopService, which sets the
+				// paused flag. Auto-stop means "nothing needs this right now",
+				// not "the user manually stopped it"; lerd start must bring
+				// redis/mailpit back the way it did before the shared lifecycle.
+				_ = serviceops.StopWithDependents(name)
 			}
 		}
 	}
