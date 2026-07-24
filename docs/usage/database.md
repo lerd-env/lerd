@@ -258,7 +258,7 @@ When you give no host, the tool connects to a local lerd database with its admin
 
 Run from inside a git worktree, the shim reads that checkout's own env file rather than the parent site's, so a branch with an isolated database dumps from its own schema even when the worktree lives inside the parent's directory. A worktree whose env was never rewritten keeps using the parent site's.
 
-To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`.
+To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`. IDEs validate the path by running the tool with `--version` first, and a bare `--version` or `--help` is always forwarded exactly as given, without the local-database default and without starting the service behind it.
 
 ### Managing shims
 
