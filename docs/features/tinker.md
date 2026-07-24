@@ -102,9 +102,13 @@ The editor contents are saved to `localStorage` under `tinker:{domain}:draft`, s
 |---|---|
 | Mode badge | Shows `tinker` or `php`; tooltip explains which runtime is used. |
 | Duration | Shown after a run, in milliseconds. |
+| Split direction | Flips the editor and output between side by side and stacked. Hidden on narrow screens, where stacked is the only sensible layout. The choice is remembered across sessions under `tinker:splitDir`. |
+| Full screen | Expands the editor and output to fill the viewport, hiding the surrounding navigation. The site domain, and the branch when you are on a worktree, appear next to the mode badge so you can see what you are running against. Press `Esc` or click the button again to leave. |
 | `Copy code` | Copies the editor contents to the clipboard. |
-| `Clear` | Wipes both the editor and the output. |
-| `Run` | Executes the code (also bound to Ctrl/Cmd+Enter). |
+| Clear | Wipes both the editor and the output. |
+| Run | Executes the code (also bound to Ctrl/Cmd+Enter); the icon spins while a run is in flight. |
+
+The toolbar actions are icon buttons with tooltips, matching the log viewer.
 
 The output panel itself adds a per-block `Copy` button on hover, for copying just one of the numbered output blocks.
 
