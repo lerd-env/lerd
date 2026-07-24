@@ -446,9 +446,15 @@ func (e *EnrichedSite) enrichVersions(s config.Site, fw *config.Framework, hasFw
 
 func (e *EnrichedSite) enrichFPM() {
 	if e.HostPort > 0 {
-		// Host-proxy sites have no container; "running" reflects the
-		// supervised dev-server worker. Proxy-only sites (no worker) stay
-		// false. Match the activating-state handling used for worker rows.
+		// Host-proxy sites have no container. When lerd supervises the dev
+		// server, "running" reflects that worker unit. Proxy-only sites have no
+		// worker, so their liveness is whether the user's own dev server is
+		// listening on the proxied port.
+		if e.HostCommand == "" {
+			e.FPMRunning = proxyPortListening(e.HostPort)
+			return
+		}
+		// Match the activating-state handling used for worker rows.
 		st, _ := unitStatusFn(config.HostProxyWorkerUnit(e.Name))
 		e.FPMRunning = st == "active" || st == "activating"
 		return

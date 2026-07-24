@@ -15,7 +15,7 @@
 | `lerd domain list` | List all domains for the current site |
 | `lerd sites` | Table view of all registered sites |
 | `lerd open [name]` | Open the site in the default browser |
-| `lerd share [name]` | Expose the site publicly via ngrok or Expose (auto-detected) |
+| `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected) |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
 | `lerd unsecure [name]` | Remove TLS and switch back to HTTP, updates `APP_URL` in `.env` |
 | `lerd pause [name]` | Pause a site: stop its workers and replace the vhost with a landing page |
@@ -403,6 +403,26 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --expose` | Force Expose |
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
+| `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
+| `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
+
+### Default tunnel tool
+
+Auto-detection picks the first installed tool, which may not be the one you want. `lerd share:tool cloudflare` pins the default; from then on a bare `lerd share` uses Cloudflare Tunnel even with ngrok installed. A tool flag still overrides the default per run, and `lerd share:tool auto` restores auto-detection.
+
+### Sharing on your own domain
+
+Quick tunnels hand out a fresh random `trycloudflare.com` URL on every run. When you need a stable URL (sending a client the same link twice, webhook or OAuth callback targets), pass `--domain` with a hostname whose DNS is managed by Cloudflare:
+
+```bash
+lerd share --domain dev.example.com
+```
+
+Custom hostnames are a Cloudflare Tunnel feature, so `--domain` selects that tool on its own. You never need `--cloudflare` alongside it, and it wins over a different default set with `lerd share:tool`. Combining it with another tool flag is rejected rather than silently ignored.
+
+On the first run cloudflared opens a browser window to authorize your Cloudflare account (a one-time login that writes `~/.cloudflared/cert.pem`). lerd then creates a named tunnel called `lerd-<site>`, routes the hostname to it with a CNAME record, and starts the tunnel. Later runs reuse the same tunnel and hostname, so the URL never changes. Re-routing a hostname that already points at the same tunnel is a no-op; if the record exists but points somewhere else, lerd leaves it alone and prints a note asking you to check it.
+
+A freshly created DNS record takes a moment to become visible. If you open the URL in the first seconds and your resolver caches the miss, it can keep answering NXDOMAIN for up to 30 minutes even though the tunnel is healthy.
 
 A local reverse proxy rewrites the `Host` header to the site's domain so nginx routes to the correct vhost. Response `Location` headers and HTML/CSS/JS/JSON body references to the local domain are also rewritten to the public tunnel URL, so redirects and asset links work correctly in the browser.
 
