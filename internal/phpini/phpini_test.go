@@ -63,6 +63,30 @@ func TestRestartNoSeed_SharedReseedsFile(t *testing.T) {
 	}
 }
 
+// The per-version file is bind-mounted into that version's FPM unconditionally,
+// so a reset that leaves it deleted makes podman refuse to start the container
+// (statfs, exit 125) and systemd restart-loop it until the start limit is hit.
+func TestRestartNoSeed_VersionReseedsFile(t *testing.T) {
+	restore := restartFPMUnit
+	restartFPMUnit = func(string) error { return nil }
+	t.Cleanup(func() { restartFPMUnit = restore })
+
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	// Simulate the post-reset state: no per-version file on disk.
+	if err := RestartNoSeed("8.4"); err != nil {
+		t.Fatalf("RestartNoSeed(8.4): %v", err)
+	}
+	got, err := ScopeFile("8.4").Read()
+	if err != nil {
+		t.Fatalf("reading per-version ini: %v", err)
+	}
+	if !got.Exists {
+		t.Errorf("per-version ini must be re-seeded after a reset, but it is missing")
+	}
+}
+
 func TestEnsure_SharedCreatesFile(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	if err := Ensure(SharedScope); err != nil {

@@ -23,7 +23,8 @@ func phpIniScopeFile(scope string) cfgedit.File { return phpini.ScopeFile(scope)
 func phpIniRestart(scope string) error { return phpini.Restart(scope) }
 
 // phpIniRestartNoSeed restarts a scope's container(s) after a reset without
-// re-seeding a per-version/shared file.
+// rewriting the quadlet. The ini file itself is re-seeded to keep the bind mount
+// valid.
 func phpIniRestartNoSeed(scope string) error { return phpini.RestartNoSeed(scope) }
 
 // PhpIniReadResponse mirrors SiteNginxReadResponse. Exists distinguishes a
@@ -190,9 +191,9 @@ func handlePhpIniReset(w http.ResponseWriter, r *http.Request, version string) {
 		http.NotFound(w, r)
 		return
 	}
-	// RestartNoSeed, not Restart: the latter re-seeds via EnsureUserIni, which
-	// would recreate the file we just deleted. cfgedit.Reset skips the restart
-	// when nothing was removed.
+	// RestartNoSeed, not Restart: it restarts without rewriting the quadlet. The
+	// file is still re-seeded to its commented template, which is what "no
+	// override" looks like on disk and keeps the bind mount valid.
 	if err := phpIniScopeFile(version).Reset(func() error { return phpIniRestartNoSeed(version) }); err != nil {
 		writeJSON(w, PhpIniResetResponse{OK: false, Error: "removed, but FPM restart failed: " + err.Error()})
 		return
