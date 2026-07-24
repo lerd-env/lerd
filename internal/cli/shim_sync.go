@@ -100,18 +100,18 @@ const nodeShimMarker = "lerd-managed npm global shim"
 // composerShimMarker tags wrapper scripts lerd writes for composer globals.
 const composerShimMarker = "lerd-managed composer global shim"
 
-// syncNodeGlobalBins mirrors sourceBin into targetBin via `fnm exec`, so
-// `#!/usr/bin/env node` shebangs resolve against the fnm-managed default
-// node from any directory.
-func syncNodeGlobalBins(sourceBin, targetBin, fnmPath string) error {
+// syncNodeGlobalBins mirrors sourceBin into targetBin via the active version
+// manager's default-version exec prefix, so `#!/usr/bin/env node` shebangs
+// resolve against the managed default node from any directory. execPrefix is the
+// manager's ExecPrefix("default") — the wrapper works from any directory because
+// it pins the default version rather than relying on a cwd .nvmrc/.node-version.
+func syncNodeGlobalBins(sourceBin, targetBin, execPrefix string) error {
 	return shimSync{
 		sourceBin: sourceBin,
 		targetBin: targetBin,
 		marker:    nodeShimMarker,
 		bodyFor: func(realBin string) string {
-			// --using=default so the wrapper works from any directory; without
-			// it fnm errors out unless the cwd has a .nvmrc/.node-version.
-			return fmt.Sprintf("#!/bin/sh\n# %s\nexec %q exec --using=default -- %q \"$@\"\n", nodeShimMarker, fnmPath, realBin)
+			return fmt.Sprintf("#!/bin/sh\n# %s\nexec %s %q \"$@\"\n", nodeShimMarker, execPrefix, realBin)
 		},
 	}.run()
 }

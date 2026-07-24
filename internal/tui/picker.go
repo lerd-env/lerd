@@ -1,9 +1,7 @@
 package tui
 
 import (
-	"os/exec"
 	"sort"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -190,34 +188,11 @@ func (m *Model) applyPicker() tea.Cmd {
 	return nil
 }
 
-// listNodeMajors returns the installed Node major versions as reported by
-// fnm. Mirrors ui.handleNodeVersions so the picker sees the same list the
-// web UI dropdown shows.
+// listNodeMajors returns the installed Node major versions as reported by the
+// active version manager. Mirrors ui.handleNodeVersions so the picker sees the
+// same list the web UI dropdown shows.
 func listNodeMajors() []string {
-	fnm := config.BinDir() + "/fnm"
-	out, err := exec.Command(fnm, "list").Output()
-	if err != nil {
-		return nil
-	}
-	seen := map[string]bool{}
-	var versions []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "* "))
-		fields := strings.Fields(line)
-		if len(fields) == 0 {
-			continue
-		}
-		v := strings.TrimPrefix(fields[0], "v")
-		if v == "" {
-			continue
-		}
-		major := strings.SplitN(v, ".", 2)[0]
-		if seen[major] || strings.Trim(major, "0123456789") != "" {
-			continue
-		}
-		seen[major] = true
-		versions = append(versions, major)
-	}
+	versions := nodeDet.ListInstalled()
 	sort.Strings(versions)
 	return versions
 }

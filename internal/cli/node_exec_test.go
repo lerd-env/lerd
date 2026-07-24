@@ -79,7 +79,7 @@ func TestSyncNodeGlobalBins_CreatesWrappers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm"); err != nil {
+	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm exec --using=default --"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 
@@ -127,7 +127,7 @@ func TestSyncNodeGlobalBins_RemovesOrphans(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm"); err != nil {
+	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm exec --using=default --"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func TestSyncNodeGlobalBins_PreservesForeignFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm"); err != nil {
+	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm exec --using=default --"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 
@@ -189,7 +189,7 @@ func TestSyncNodeGlobalBins_IgnoresBinariesContainingMarker(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm"); err != nil {
+	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm exec --using=default --"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 	if _, err := os.Stat(binPath); err != nil {
@@ -211,7 +211,7 @@ func TestSyncNodeGlobalBins_MissingSourceIsNoOp(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm"); err != nil {
+	if err := syncNodeGlobalBins(sourceBin, targetBin, "/fake/fnm exec --using=default --"); err != nil {
 		t.Fatalf("sync: %v", err)
 	}
 	if _, err := os.Stat(orphan); !os.IsNotExist(err) {

@@ -231,6 +231,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/node-versions/", withCORS(publishAfter(handleNodeVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node/manage", withCORS(publishAfter(handleNodeManage, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node/unmanage", withCORS(publishAfter(handleNodeUnmanage, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/node/set-manager", withCORS(publishAfter(handleNodeSetManager, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/link", withCORS(publishAfter(handleSiteLink, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/reorder", withCORS(publishAfter(handleSiteReorder, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
@@ -590,6 +591,11 @@ type StatusResponse struct {
 	PHPDefault        string       `json:"php_default"`
 	NodeDefault       string       `json:"node_default"`
 	NodeManagedByLerd bool         `json:"node_managed_by_lerd"`
+	// NodeManager is the active Node version manager lerd drives: "fnm" or "nvm".
+	NodeManager string `json:"node_manager"`
+	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
+	// so the dashboard can disable the nvm switch rather than error on click.
+	NvmAvailable bool `json:"nvm_available"`
 	// BunAvailable is true when a bun binary is installed on the host;
 	// BunVersion carries its version for an at-a-glance reference.
 	// UsingSystemBun is true when lerd isn't managing Node and there's no system
@@ -671,13 +677,13 @@ func buildStatus() StatusResponse {
 
 	phpDefault := ""
 	nodeDefault := ""
+	nodeManager := "fnm"
 	if cfg != nil {
 		phpDefault = cfg.PHP.DefaultVersion
 		nodeDefault = cfg.Node.DefaultVersion
+		nodeManager = cfg.NodeManager()
 	}
-	nodeShim := filepath.Join(config.BinDir(), "node")
-	_, nodeShimErr := os.Stat(nodeShim)
-	nodeManagedByLerd := nodeShimErr == nil
+	nodeManagedByLerd := lerdNode.Managed()
 	bunAvailable := lerdNode.BunPath() != ""
 	bunVersion := ""
 	if bunAvailable {
@@ -696,6 +702,8 @@ func buildStatus() StatusResponse {
 		PHPDefault:         phpDefault,
 		NodeDefault:        nodeDefault,
 		NodeManagedByLerd:  nodeManagedByLerd,
+		NodeManager:        nodeManager,
+		NvmAvailable:       lerdNode.ManagerByName("nvm").Available(),
 		BunAvailable:       bunAvailable,
 		BunVersion:         bunVersion,
 		UsingSystemBun:     usingSystemBun,
@@ -4682,7 +4690,7 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
@@ -4693,9 +4701,8 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 	}
 	switch action {
 	case "set-default":
-		fnmPath := config.BinDir() + "/fnm"
-		if out, err := exec.Command(fnmPath, "default", version).CombinedOutput(); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
+		if err := lerdNode.Active().SetDefault(version); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		cfg, err := config.LoadGlobal()
@@ -4710,30 +4717,10 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true, "node_default": version})
 	case "remove":
-		fnmPath := config.BinDir() + "/fnm"
-		// Collect all full versions that belong to this major
-		listOut, _ := exec.Command(fnmPath, "list").Output()
-		var toRemove []string
-		for _, line := range strings.Split(strings.TrimSpace(string(listOut)), "\n") {
-			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "* "))
-			fields := strings.Fields(line)
-			if len(fields) == 0 {
-				continue
-			}
-			v := strings.TrimPrefix(fields[0], "v")
-			if strings.SplitN(v, ".", 2)[0] == version {
-				toRemove = append(toRemove, v)
-			}
-		}
-		var lastErr error
-		for _, v := range toRemove {
-			out, err := exec.Command(fnmPath, "uninstall", v).CombinedOutput()
-			if err != nil {
-				lastErr = fmt.Errorf("fnm uninstall %s: %s", v, strings.TrimSpace(string(out)))
-			}
-		}
-		if lastErr != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": lastErr.Error()})
+		// version is a major; Uninstall removes every installed full version
+		// under it via the active manager.
+		if err := lerdNode.Active().Uninstall(version); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})
@@ -4745,14 +4732,32 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 // handleNodeManage / handleNodeUnmanage opt the host into or out of
 // lerd-managed Node by shelling out to the lerd binary, reusing the CLI's shim
 // + worker-regeneration logic rather than duplicating it here. Synchronous:
-// these can take a few seconds (fnm install, worker restarts), so the UI shows
+// these can take a few seconds (Node install, worker restarts), so the UI shows
 // a loading state.
 func handleNodeManage(w http.ResponseWriter, r *http.Request) { runNodeMgmtCmd(w, r, "node:manage") }
 func handleNodeUnmanage(w http.ResponseWriter, r *http.Request) {
 	runNodeMgmtCmd(w, r, "node:unmanage")
 }
 
-func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string) {
+// handleNodeSetManager switches the Node version manager lerd drives (fnm/nvm)
+// by shelling out to `lerd node:manager <manager>`, reusing the CLI's shim +
+// worker-regeneration logic rather than duplicating it here.
+func handleNodeSetManager(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Manager string `json:"manager"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Manager != "fnm" && req.Manager != "nvm") {
+		writeJSON(w, map[string]any{"ok": false, "error": "invalid manager"})
+		return
+	}
+	runNodeMgmtCmd(w, r, "node:manager", req.Manager)
+}
+
+func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string, extra ...string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -4761,7 +4766,7 @@ func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string) {
 	if err != nil || self == "" {
 		self = "lerd"
 	}
-	if out, err := exec.Command(self, sub).CombinedOutput(); err != nil {
+	if out, err := exec.Command(self, append([]string{sub}, extra...)...).CombinedOutput(); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
 		return
 	}
@@ -4775,7 +4780,7 @@ func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
@@ -4788,11 +4793,8 @@ func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	version := req.Version
 	major := strings.SplitN(version, ".", 2)[0]
-	fnmPath := config.BinDir() + "/fnm"
-	cmd := exec.Command(fnmPath, "install", major)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
+	if err := lerdNode.Active().Install(major); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})

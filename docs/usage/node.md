@@ -4,12 +4,12 @@
 
 | Command | Description |
 |---|---|
-| `lerd node:install <version>` | Install a Node.js version globally via fnm |
-| `lerd node:uninstall <version>` | Uninstall a Node.js version via fnm |
+| `lerd node:install <version>` | Install a Node.js version globally |
+| `lerd node:uninstall <version>` | Uninstall a Node.js version |
 | `lerd node:use <version>` | Set the global default Node.js version |
-| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version`, runs `fnm install` |
-| `lerd node:manage` | Opt into lerd-managed Node: install the fnm shims and a default version |
-| `lerd node:unmanage` | Stop managing Node: remove lerd's shims and fnm-installed versions for a clean system |
+| `lerd isolate:node <version>` | Pin Node version for cwd: writes `.node-version` and installs the version |
+| `lerd node:manage` | Opt into lerd-managed Node: install the version-manager shims and a default version |
+| `lerd node:unmanage` | Stop managing Node: remove lerd's shims (and, with fnm, the versions it installed) for a clean system |
 | `lerd js:runtime [bun\|node\|auto]` | Pin the current site's JS runtime (or show it with no argument) |
 | `lerd php:bun install [version]` | Install a musl bun inside the PHP-FPM container |
 | `lerd php:bun remove` | Remove the in-container bun and clear its shared persistent volume |
@@ -40,7 +40,7 @@ Detection runs in this order:
 2. The lockfile: `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `bun.lockb` / `bun.lock` → bun, `package-lock.json` → npm
 3. npm, as the fallback
 
-pnpm and yarn run through [Corepack](https://nodejs.org/api/corepack.html), which ships with the fnm-managed Node lerd installs, so neither needs a separate global install. Corepack is enabled on demand the first time a project needs it.
+pnpm and yarn run through [Corepack](https://nodejs.org/api/corepack.html), which ships with the Node lerd manages, so neither needs a separate global install. Corepack is enabled on demand the first time a project needs it.
 
 Installs use each manager's frozen-lockfile mode, so a lerd install never silently rewrites your lockfile:
 
@@ -70,7 +70,7 @@ To pin a project to a specific version:
 ```bash
 cd ~/Lerd/my-app
 lerd isolate:node 20
-# writes .node-version and installs Node 20 via fnm
+# writes .node-version and installs Node 20 via the active version manager
 ```
 
 To install a version without pinning a project:
@@ -93,19 +93,26 @@ Version numbers are normalised to the major only, so `22.11.0` and `22.14.1` are
 
 ---
 
-## fnm
+## Version manager: fnm or nvm
 
-Node version management is handled by [fnm](https://github.com/Schniz/fnm), which is bundled and installed automatically. The `node`, `npm`, and `npx` shims in `~/.local/share/lerd/bin/` invoke the correct version via fnm for each project.
+Node version management runs through a version manager, and lerd supports two: [fnm](https://github.com/Schniz/fnm), the bundled default, and [nvm](https://github.com/nvm-sh/nvm), if you already have it installed.
+
+- **fnm** is bundled and installed automatically. lerd writes `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/` so those commands reach fnm from any shell.
+- **nvm** is never installed by lerd. If `lerd install` finds an existing nvm (via `$NVM_DIR` or `~/.nvm`), it offers to drive that instead of downloading fnm — even when you have not installed any Node versions into nvm yet. With nvm, lerd does **not** put node/npm/npx shims on PATH — your shell's nvm keeps owning those binaries (so `which node` and `nvm ls` behave normally). `lerd node` / `lerd npm`, host workers, and the dashboard still drive nvm for install, use, and defaults. lerd never touches the Node versions you installed yourself with nvm.
+
+The choice is stored in `~/.config/lerd/config.yaml` under `node.manager` (`fnm` or `nvm`) and, for nvm, `node.nvm_dir` (so `lerd-ui` and the watcher find nvm even without your shell rc). Switch later with `lerd node:manager fnm|nvm` or from the dashboard's Node page, which shows an **fnm / nvm** toggle (nvm is disabled when it is not installed). Switching updates PATH shims (write them for fnm, remove them for nvm) and re-syncs host workers so the new manager takes effect at once. `node:install` and `node:use` act on whichever manager is active; `node:uninstall` and `node:unmanage` only ever remove Node versions when lerd owns them (fnm) and leave your nvm-installed versions alone.
 
 ---
 
 ## Global npm packages
 
-`npm install -g <pkg>` works through the lerd shim. The package goes to a lerd managed prefix at `~/.local/share/lerd/node-global/`, and lerd writes a small wrapper script for every binary into `~/.local/share/lerd/bin/`, which is already on your `PATH` because `lerd install` adds it. After `npm install -g pm2` you can call `pm2` from any shell directly, no extra setup, on both Linux and macOS regardless of whether lerd itself was installed via Homebrew or curl-pipe.
+With **fnm**, `npm install -g <pkg>` works through the lerd shim. The package goes to a lerd managed prefix at `~/.local/share/lerd/node-global/`, and lerd writes a small wrapper script for every binary into `~/.local/share/lerd/bin/`, which is already on your `PATH` because `lerd install` adds it. After `npm install -g pm2` you can call `pm2` from any shell directly, no extra setup, on both Linux and macOS regardless of whether lerd itself was installed via Homebrew or curl-pipe.
 
-The wrapper exec's the real binary through `fnm exec --using=default`, so globally installed tools always run on the fnm default node version regardless of the project you are inside when you call them. If you need a specific version for a global tool, change the default with `lerd node:use <version>` before installing it.
+The wrapper exec's the real binary through the active version manager's default version, so globally installed tools always run on the default node version regardless of the project you are inside when you call them. If you need a specific version for a global tool, change the default with `lerd node:use <version>` before installing it.
 
 `npm uninstall -g <pkg>` removes the wrapper as well. Files in `~/.local/share/lerd/bin/` that lerd did not create with its own marker comment are never touched, so the existing `node`, `npm`, `npx`, `php`, `composer`, and `laravel` shims in the same directory stay safe.
+
+With **nvm**, bare `npm` is your nvm npm (no lerd shim). Use `lerd npm install -g …` when you want the managed prefix and PATH wrappers.
 
 The same mechanism applies to `composer global require`. Composer's global vendor/bin (`~/.config/composer/vendor/bin/` by default, respecting `COMPOSER_HOME` and `XDG_CONFIG_HOME`) is mirrored into `~/.local/share/lerd/bin/` after every `composer` run, with wrappers that exec the real bin through `lerd php` so `#!/usr/bin/env php` shebangs resolve against the FPM container. After `composer global require psy/psysh` you can call `psysh` from any shell directly. `composer global remove` cleans the wrapper too.
 
@@ -113,21 +120,21 @@ The same mechanism applies to `composer global require`. Composer's global vendo
 
 ## System-managed vs lerd-managed Node
 
-If `lerd install` detects an existing `node`, `npm`, or `npx` on your `PATH` or under a known version-manager directory (nvm, volta, mise, asdf, fnm), it asks **"Let lerd manage Node.js?"** before writing any shims.
+If `lerd install` detects an existing `node`, `npm`, or `npx` on your `PATH` or under a known version-manager directory (nvm, volta, mise, asdf, fnm), it asks **"Let lerd manage Node.js?"** before changing anything.
 
-- **Answer yes**: lerd installs fnm, picks the current LTS, sets it as the fnm default, and writes the `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/`. Per-project version pinning works as described above.
-- **Answer no**: lerd writes nothing into `~/.local/share/lerd/bin/`, removes any stale shims from a previous opt-in, and stays out of your `PATH`. Sites use whatever `node` your shell resolves; per-project pinning is your version manager's job. The dashboard's Node tab disables the install controls and points back at `lerd install` if you change your mind.
+- **Answer yes**: lerd sets up a version manager (fnm by default, or your existing nvm if it offers and you accept), picks the current LTS, and sets it as the default. With fnm it also writes the `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/`. With nvm it leaves those names to your shell. Per-project version pinning works as described above (`.node-version` / `.nvmrc`, or nvm's own hooks).
+- **Answer no**: lerd writes no node shims, removes any stale ones from a previous opt-in, and stays out of Node on `PATH`. Sites use whatever `node` your shell resolves; per-project pinning is your version manager's job. The dashboard's Node tab disables the install controls and points back at `lerd install` if you change your mind.
 
-`lerd node:install` / `node:use` / `node:uninstall` warn and require confirmation if you run them on a host where lerd isn't currently managing Node, and write fresh shims on accept so CLI opt-in matches the install flow.
+`lerd node:install` / `node:use` / `node:uninstall` warn and require confirmation if you run them on a host where lerd isn't currently managing Node, and opt you in on accept so CLI matches the install flow.
 
 You can flip the choice at any time without re-running the whole installer:
 
-- `lerd node:manage` writes the fnm shims and installs a default version (the same thing accepting the install prompt does).
-- `lerd node:unmanage` removes the node/npm/npx shims and uninstalls the fnm Node versions, leaving a clean system so your own Node (or bun) is used directly.
+- `lerd node:manage` opts in (writes fnm shims when using fnm, or just records managed mode for nvm) and installs a default version.
+- `lerd node:unmanage` removes any node/npm/npx shims and, when lerd owns the manager (fnm), uninstalls the Node versions it installed, leaving a clean system so your own Node (or bun) is used directly. With nvm it only clears managed mode: your nvm versions stay put.
 
-Both also regenerate any host worker units (Vite and other `host: true` workers) so they switch between fnm, your system Node, and bun to match the new state. The dashboard and Settings exposes the same toggle: the Node page shows a **Let lerd manage Node** / **Stop managing** button.
+Both also regenerate any host worker units (Vite and other `host: true` workers) so they switch between the managed Node, your system Node, and bun to match the new state. The dashboard and Settings exposes the same toggle: the Node page shows a **Let lerd manage Node** / **Stop managing** button.
 
-The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
+The question is asked once and then remembered in `~/.config/lerd/config.yaml` (`node.managed`, alongside `node.manager` for the fnm/nvm choice). After that, neither `lerd install` nor `lerd update` asks again or undoes your choice, you change it only with `lerd node:manage` / `lerd node:unmanage`. A config predating this adopts whatever lerd is currently doing (shims present means managed) as the remembered choice without prompting, so existing installs are never re-asked.
 
 ---
 

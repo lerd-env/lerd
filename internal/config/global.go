@@ -96,11 +96,20 @@ type GlobalConfig struct {
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
-		// Managed records whether lerd manages Node.js via fnm shims. A pointer
-		// so a config predating the field (nil) keeps the historical
-		// shim-presence behaviour, while an explicit false survives updates that
-		// would otherwise re-add the shims a `node:unmanage` removed.
+		// Managed records whether lerd manages Node.js via version-manager
+		// shims. A pointer so a config predating the field (nil) keeps the
+		// historical shim-presence behaviour, while an explicit false survives
+		// updates that would otherwise re-add the shims a `node:unmanage` removed.
 		Managed *bool `yaml:"managed,omitempty" mapstructure:"managed"`
+		// Manager selects the Node version manager lerd drives: "fnm" (the
+		// bundled default) or "nvm" (a user-installed nvm). Empty means fnm so
+		// configs predating the field keep working unchanged.
+		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
+		// NvmDir is the nvm install directory when Manager is "nvm". Persisted
+		// at install/switch time so daemons (lerd-ui, watcher) find nvm even
+		// though systemd/launchd never load the user's shell rc that exports
+		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
+		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
 	} `yaml:"node" mapstructure:"node"`
 	Share struct {
 		// DefaultTool is the tunnel tool "lerd share" uses when no flag is
@@ -1117,6 +1126,32 @@ func (c *GlobalConfig) NodeManagedPref() (val bool, set bool) {
 // the install/update flow reads it to keep the choice across updates.
 func (c *GlobalConfig) SetNodeManaged(managed bool) {
 	c.Node.Managed = &managed
+}
+
+// NodeManager returns the configured Node version manager, defaulting to "fnm"
+// when unset so configs predating the field keep the bundled behaviour.
+func (c *GlobalConfig) NodeManager() string {
+	if c.Node.Manager == "" {
+		return "fnm"
+	}
+	return c.Node.Manager
+}
+
+// SetNodeManager records which Node version manager lerd drives ("fnm" or
+// "nvm"). Persist via SaveGlobal.
+func (c *GlobalConfig) SetNodeManager(manager string) {
+	c.Node.Manager = manager
+}
+
+// NodeNvmDir returns the persisted nvm install directory, or empty when unset.
+func (c *GlobalConfig) NodeNvmDir() string {
+	return c.Node.NvmDir
+}
+
+// SetNodeNvmDir records where nvm lives so daemons agree with the CLI. Pass
+// empty to clear (fnm switch, or fall back to $NVM_DIR / ~/.nvm).
+func (c *GlobalConfig) SetNodeNvmDir(dir string) {
+	c.Node.NvmDir = dir
 }
 
 // SaveGlobal writes the configuration to config.yaml.

@@ -9,11 +9,22 @@ php:
   default_version: "8.5"
 node:
   default_version: "22"
-  managed: true           # optional. Whether lerd manages Node.js via fnm shims.
-                          # Written by the install prompt and by lerd node:manage
-                          # / node:unmanage; honoured on lerd update so an opt-out
-                          # is not undone. Omitted on configs predating it, which
-                          # fall back to whatever shims are on disk.
+  managed: true           # optional. Whether lerd manages Node (install/use/default
+                          # via the active manager). With fnm that includes PATH
+                          # shims; with nvm the user's shell keeps owning
+                          # node/npm/npx. Written by the install prompt and by
+                          # lerd node:manage / node:unmanage; honoured on lerd
+                          # update so an opt-out is not undone. Omitted on
+                          # configs predating it, which fall back to whether a
+                          # node shim is on disk.
+  manager: fnm            # optional. Which version manager lerd drives: "fnm"
+                          # (the bundled default) or "nvm" (a user-installed nvm
+                          # lerd detected at install time). Switchable from the
+                          # dashboard's Node page. Empty means fnm.
+  nvm_dir: ~/.nvm         # optional. Where nvm lives when manager is nvm.
+                          # Written at install/switch so lerd-ui and the watcher
+                          # (which never load your shell rc) find a custom
+                          # $NVM_DIR. Empty falls back to $NVM_DIR or ~/.nvm.
 share:
   default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
                             # flag is given: ngrok, cloudflare, expose, serveo or

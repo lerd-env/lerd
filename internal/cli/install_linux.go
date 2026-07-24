@@ -28,9 +28,13 @@ func downloadBinaries(w io.Writer) error {
 		}
 	}
 
-	// fnm
+	// fnm — skipped when the user drives Node via their own nvm, since lerd never
+	// provisions nvm and fnm would sit unused.
+	cfg, _ := config.LoadGlobal()
 	fnmPath := filepath.Join(binDir, "fnm")
-	if _, err := os.Stat(fnmPath); os.IsNotExist(err) {
+	if cfg != nil && cfg.NodeManager() == "nvm" {
+		// nothing to download
+	} else if _, err := os.Stat(fnmPath); os.IsNotExist(err) {
 		fnmAsset := "fnm-linux.zip"
 		if arch == "arm64" {
 			fnmAsset = "fnm-arm64.zip"

@@ -1,11 +1,8 @@
 package cli
 
 import (
-	"fmt"
-	"os/exec"
-	"path/filepath"
-
-	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/spf13/cobra"
 )
 
@@ -13,7 +10,7 @@ import (
 func NewNodeInstallCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "node:install <version>",
-		Short: "Install a Node.js version via fnm",
+		Short: "Install a Node.js version",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runNodeInstall,
 	}
@@ -24,19 +21,19 @@ func runNodeInstall(_ *cobra.Command, args []string) error {
 		return err
 	}
 	version := args[0]
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	cmd := exec.Command(fnmPath, "install", version)
-	out, err := cmd.CombinedOutput()
-	if len(out) > 0 {
-		fmt.Print(string(out))
+	mgr := nodeDet.Active()
+
+	feedback.Begin()
+	step := feedback.Start("installing Node " + version)
+	if err := mgr.Install(version); err != nil {
+		step.Fail(err)
+		return err
 	}
-	if err != nil {
-		return fmt.Errorf("fnm install %s: %w", version, err)
-	}
+	step.OK("")
+
 	// Set as default if no default is configured yet.
-	checkCmd := exec.Command(fnmPath, "exec", "--using=default", "--", "node", "--version")
-	if checkCmd.Run() != nil {
-		exec.Command(fnmPath, "default", version).Run() //nolint:errcheck
+	if !mgr.HasDefault() {
+		_ = mgr.SetDefault(version)
 	}
 	return nil
 }

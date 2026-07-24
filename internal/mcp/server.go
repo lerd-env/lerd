@@ -1062,19 +1062,14 @@ func execNodeInstall(args map[string]any) (any, *rpcError) {
 		return toolErr("version is required"), nil
 	}
 
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		return toolErr("fnm not found — run 'lerd install' to set up Node.js management"), nil
+	mgr := lerdNode.Active()
+	if !mgr.Available() {
+		return toolErr(mgr.Name() + " not found — run 'lerd install' to set up Node.js management"), nil
 	}
-
-	var out bytes.Buffer
-	cmd := exec.Command(fnmPath, "install", version)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("fnm install %s failed (%v):\n%s", version, err, stripANSI(out.String()))), nil
+	if err := mgr.Install(version); err != nil {
+		return toolErr(fmt.Sprintf("node install %s failed: %v", version, err)), nil
 	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK("installed Node " + version), nil
 }
 
 func execNodeUninstall(args map[string]any) (any, *rpcError) {
@@ -1083,19 +1078,14 @@ func execNodeUninstall(args map[string]any) (any, *rpcError) {
 		return toolErr("version is required"), nil
 	}
 
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		return toolErr("fnm not found — run 'lerd install' to set up Node.js management"), nil
+	mgr := lerdNode.Active()
+	if !mgr.Available() {
+		return toolErr(mgr.Name() + " not found — run 'lerd install' to set up Node.js management"), nil
 	}
-
-	var out bytes.Buffer
-	cmd := exec.Command(fnmPath, "uninstall", version)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("fnm uninstall %s failed (%v):\n%s", version, err, stripANSI(out.String()))), nil
+	if err := mgr.Uninstall(version); err != nil {
+		return toolErr(fmt.Sprintf("node uninstall %s failed: %v", version, err)), nil
 	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK("uninstalled Node " + version), nil
 }
 
 func execRuntimeVersions() (any, *rpcError) {
@@ -1108,9 +1098,9 @@ func execRuntimeVersions() (any, *rpcError) {
 		defaultPHP = cfg.PHP.DefaultVersion
 	}
 
-	// Node.js versions via fnm. Goes through the shared internal/node
-	// helper so the MCP and the web UI (/api/node-versions) return the
-	// same shape: major-only deduped majors like "20", "18".
+	// Node.js versions via the active version manager. Goes through the shared
+	// internal/node helper so the MCP and the web UI (/api/node-versions)
+	// return the same shape: major-only deduped majors like "20", "18".
 	defaultNode := ""
 	if cfg != nil {
 		defaultNode = cfg.Node.DefaultVersion
@@ -3984,14 +3974,10 @@ func execSiteNode(args map[string]any) (any, *rpcError) {
 		return toolErr("writing .node-version: " + err.Error()), nil
 	}
 
-	// Install the version via fnm (non-fatal if already installed or fnm unavailable).
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, statErr := os.Stat(fnmPath); statErr == nil {
-		var out bytes.Buffer
-		cmd := exec.Command(fnmPath, "install", version)
-		cmd.Stdout = &out
-		cmd.Stderr = &out
-		_ = cmd.Run()
+	// Install the version via the active manager (non-fatal if already installed
+	// or the manager is unavailable).
+	if mgr := lerdNode.Active(); mgr.Available() {
+		_ = mgr.Install(version)
 	}
 
 	// Update the site registry.
