@@ -33,8 +33,8 @@ func init() {
 		ok, _ := podman.ContainerRunning("lerd-" + name)
 		return ok
 	}
-	// resolve_dep prefers a running satisfier so RedisInsight / mongo-express
-	// wire to the engine that is actually up when both redis and valkey exist.
+	// The dependency host rewrite prefers a running satisfier so RedisInsight /
+	// mongo-express wire to the engine actually up when both redis and valkey exist.
 	config.ResolveDepHost = func(dep string) string {
 		name := resolveDependency(dep, "", true)
 		if name == "" {
@@ -462,9 +462,9 @@ func registerPreset(svc *config.CustomService) error {
 
 // MissingPresetDependencies returns declared dependencies that ResolveDependency
 // cannot satisfy, or that are only met by a drop-in the consumer cannot bind
-// (no discover_family covering it and no resolve_dep for the dep). Each entry
-// is the dependency name, with known drop-in alternatives listed when the store
-// or the consumer's admin_for declares any.
+// (no discover_family covering it and no pinned lerd-<dep> host to rewrite).
+// Each entry is the dependency name, with known drop-in alternatives listed
+// when the store or the consumer's admin_for declares any.
 func MissingPresetDependencies(svc *config.CustomService) []string {
 	var missing []string
 	for _, dep := range svc.DependsOn {
@@ -477,14 +477,15 @@ func MissingPresetDependencies(svc *config.CustomService) []string {
 }
 
 // consumerCanUseDropIn reports whether svc can wire a non-literal satisfier for
-// dep: discover_family that names dep or the satisfier's family, or resolve_dep
-// for dep. Without one of those, RedisInsight-on-Valkey (and similar) would
-// install green and then time out talking to a hardcoded lerd-redis host.
+// dep: discover_family that names dep or the satisfier's family, or a pinned
+// lerd-<dep> host that RewriteDependencyHosts can retarget. Without one of those,
+// RedisInsight-on-Valkey (and similar) would install green and then time out
+// talking to a hardcoded lerd-redis host.
 func consumerCanUseDropIn(svc *config.CustomService, dep, resolved string) bool {
 	if svc == nil {
 		return false
 	}
-	if consumesResolveDepNamed(svc, dep) {
+	if pinsDependencyHost(svc, dep) {
 		return true
 	}
 	families := consumerDiscoverFamilies(svc)
@@ -934,6 +935,10 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 	if err := config.ResolveDynamicEnv(svc); err != nil {
 		return false, err
 	}
+	// Retarget a pinned dependency host (RI_REDIS_HOST=lerd-redis) to the
+	// drop-in that actually satisfies it (lerd-valkey), driven by depends_on so
+	// the store YAML stays parseable by binaries that predate this.
+	config.RewriteDependencyHosts(svc)
 	// Re-validate post dynamic_env and for inline services that skip
 	// SaveCustomService: this is the choke point every quadlet passes through.
 	if err := config.ValidateCustomService(svc); err != nil {
@@ -1110,7 +1115,7 @@ func RegenerateFamilyConsumersForService(name string) {
 }
 
 // RegenerateDynamicEnvConsumersForService regenerates discover_family and
-// resolve_dep consumers after name starts or stops.
+// pinned-dependency-host consumers after name starts or stops.
 func RegenerateDynamicEnvConsumersForService(name string) {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
@@ -1128,12 +1133,12 @@ func RegenerateDynamicEnvConsumersForService(name string) {
 	if fam := ServiceFamily(name); fam != "" {
 		RegenerateFamilyConsumers(fam)
 	}
-	RegenerateResolveDepConsumers(name)
+	RegenerateDependencyHostConsumers(name)
 }
 
 // RefreshDiscoverFamilyConsumers waits for running family members that any
 // installed discover_family consumer cares about, then rewrites those
-// consumers and every resolve_dep consumer. Bulk start (lerd start / install)
+// consumers and every pinned-dependency-host consumer. Bulk start (lerd start / install)
 // brings engines and admin UIs up together via StartUnit and never hits
 // RegenerateDynamicEnvConsumersForService, so without this pass phpMyAdmin can
 // start with an empty PMA_HOSTS written during pre-start reconcile when no
@@ -1162,57 +1167,60 @@ func RefreshDiscoverFamilyConsumers() {
 		RegenerateFamilyConsumers(fam)
 	}
 	for _, c := range customs {
-		if !consumesResolveDep(c) {
+		if !consumesDependencyHost(c) {
 			continue
 		}
 		bounceConsumerIfChanged(c, "updated dependency hosts")
 	}
 }
 
-// RegenerateResolveDepConsumers rewrites installed customs whose resolve_dep
-// directives name can satisfy, so RedisInsight picks up lerd-valkey when
+// RegenerateDependencyHostConsumers rewrites installed customs that pin a
+// dependency host name can satisfy, so RedisInsight picks up lerd-valkey when
 // Valkey starts (or drops it when the last redis-role engine stops).
-func RegenerateResolveDepConsumers(name string) {
+func RegenerateDependencyHostConsumers(name string) {
 	customs, err := config.ListCustomServices()
 	if err != nil {
 		return
 	}
 	for _, c := range customs {
-		if !consumesResolveDepSatisfiedBy(c, name) {
+		if !consumesDependencyHostSatisfiedBy(c, name) {
 			continue
 		}
 		bounceConsumerIfChanged(c, "updated dependency hosts")
 	}
 }
 
-func consumesResolveDep(svc *config.CustomService) bool {
-	return eachResolveDep(svc, func(string) bool { return true })
+func consumesDependencyHost(svc *config.CustomService) bool {
+	return eachDependencyHost(svc, func(string) bool { return true })
 }
 
-func consumesResolveDepNamed(svc *config.CustomService, dep string) bool {
-	return eachResolveDep(svc, func(name string) bool { return name == dep })
+func pinsDependencyHost(svc *config.CustomService, dep string) bool {
+	return eachDependencyHost(svc, func(name string) bool { return name == dep })
 }
 
-func consumesResolveDepSatisfiedBy(svc *config.CustomService, name string) bool {
-	return eachResolveDep(svc, func(dep string) bool {
+func consumesDependencyHostSatisfiedBy(svc *config.CustomService, name string) bool {
+	return eachDependencyHost(svc, func(dep string) bool {
 		return name == dep || serviceSatisfiesDep(name, dep)
 	})
 }
 
-// eachResolveDep walks resolve_dep directives on svc, calling fn with the
-// dependency name (template suffix stripped). Returns true on the first fn hit.
-func eachResolveDep(svc *config.CustomService, fn func(dep string) bool) bool {
+// eachDependencyHost calls fn with each depends_on entry whose canonical host
+// lerd-<dep> the preset pins somewhere in its environment (so
+// RewriteDependencyHosts will retarget it). Returns true on the first fn hit.
+func eachDependencyHost(svc *config.CustomService, fn func(dep string) bool) bool {
 	if svc == nil {
 		return false
 	}
-	for _, directive := range svc.DynamicEnv {
-		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "resolve_dep" {
-			continue
+	for _, dep := range svc.DependsOn {
+		canonical := "lerd-" + dep
+		pinned := false
+		for _, v := range svc.Environment {
+			if strings.Contains(v, canonical) {
+				pinned = true
+				break
+			}
 		}
-		dep, _, _ := strings.Cut(parts[1], "=")
-		dep = strings.TrimSpace(dep)
-		if dep != "" && fn(dep) {
+		if pinned && fn(dep) {
 			return true
 		}
 	}

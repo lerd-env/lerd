@@ -179,13 +179,15 @@ tuning:
 #   discover_family:<name>[,<name>...] — comma-joined hostnames for every
 #     running member of the named families (phpMyAdmin PMA_HOSTS).
 #   repeat_family:<families>=<value> — N copies of <value> matching that host list.
-#   resolve_dep:<name> — lerd-<satisfier> for depends_on <name> (prefer running),
-#     including family / env_role drop-ins. Optional =<template> substitutes {host}
-#     for URL-shaped values (mongo-express).
 dynamic_env:
   PMA_HOSTS: discover_family:mysql,mariadb
-  RI_REDIS_HOST: resolve_dep:redis
-  ME_CONFIG_MONGODB_URL: resolve_dep:mongo=mongodb://root:lerd@{host}:27017/?authSource=admin
+
+# A single-host admin UI just pins the canonical dependency host in plain
+# environment; lerd retargets lerd-<dep> to the actual satisfier (Valkey for
+# redis) at quadlet generation, so no special directive reaches an old binary.
+environment:
+  RI_REDIS_HOST: lerd-redis
+  ME_CONFIG_MONGODB_URL: mongodb://root:lerd@lerd-mongo:27017/?authSource=admin
 
 # Injected into .env by `lerd env`
 env_vars:
@@ -240,7 +242,7 @@ When `lerd env` runs in a project directory, it checks each custom service's `en
 
 ## How `lerd start` / `lerd stop` handle custom services
 
-`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` / `resolve_dep` consumers (phpMyAdmin, pgAdmin, RedisInsight, mongo-express) so their host lists include engines that came up in the same pass — otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
+`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` and pinned-dependency-host consumers (phpMyAdmin, pgAdmin, RedisInsight, mongo-express) so their host lists include engines that came up in the same pass — otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
 
 Custom service containers are given a 5-second graceful stop window before podman sends `SIGKILL`. This keeps `lerd service stop` and the web UI's Stop button responsive even for images with slow shutdown sequences (Selenium Chromium/supervisord, for example, can otherwise block for 30 s+). On Podman 5.0+ this is emitted as the native `StopTimeout=5` quadlet key; on Podman 4.x (e.g. Ubuntu 24.04's 4.9.3) lerd writes `PodmanArgs=--stop-timeout=5` instead, since the `StopTimeout=` key only exists in 5.0+. Existing installs of a slow-stopping service can pick up the change with `lerd service remove <name> && lerd service preset <name>`.
 
@@ -324,7 +326,7 @@ dependency; installed-but-stopped engines do not keep the admin UI alive.
 Otherwise family consumers are regenerated instead (after a just-started engine
 is ready, so host lists are not rewritten empty). Install preflight uses the
 same satisfaction rule and names the accepted alternatives when nothing is
-installed. `discover_family` lists only running family members in admin UIs, `resolve_dep` wires single-host admin UIs to the active satisfier, and a bulk `lerd start` refreshes those lists once engines are up.
+installed. `discover_family` lists only running family members in admin UIs, a pinned `lerd-<dep>` host wires single-host admin UIs to the active satisfier, and a bulk `lerd start` refreshes those lists once engines are up.
 
 | Action | Effect |
 |---|---|

@@ -4,12 +4,9 @@ description: Mongo Express web UI for the lerd MongoDB service
 ports:
   - "8082:8081"
 environment:
+  ME_CONFIG_MONGODB_URL: mongodb://root:lerd@lerd-mongo:27017/?authSource=admin
   ME_CONFIG_MONGODB_ENABLE_ADMIN: "true"
   ME_CONFIG_BASICAUTH: "false"
-dynamic_env:
-  # {host} is the running/installed mongo family satisfier (lerd-mongo,
-  # lerd-mongo-7, …) so a versioned engine is not stuck pointing at lerd-mongo.
-  ME_CONFIG_MONGODB_URL: resolve_dep:mongo=mongodb://root:lerd@{host}:27017/?authSource=admin
 depends_on:
   - mongo
 dashboard: http://localhost:8082

@@ -147,7 +147,7 @@ A **site group** (the `site` tool's `group_*` actions) nests a real site under a
 
 `preset_list` returns each preset's `category`, `icon` and `admin_for`. `admin_for` names the services a preset's admin UI administers, and it is **not** `depends_on`: phpMyAdmin depends on mysql (satisfied by MariaDB via `env_role`) but administers both, and RedisInsight depends on redis (satisfied by Valkey) while administering both. To answer "which dashboard administers this database", read `admin_for`.
 
-`service` start/stop/restart use the same `serviceops` path as the CLI, Web UI, and TUI: `depends_on` resolution (including family / `env_role` drop-ins), reverse-dependent start, soft stop cascade, and `discover_family` / `resolve_dep` consumer regen. Stop failures surface as errors rather than a silent OK. Do not assume MCP is a thinner StartUnit wrapper.
+`service` start/stop/restart use the same `serviceops` path as the CLI, Web UI, and TUI: `depends_on` resolution (including family / `env_role` drop-ins), reverse-dependent start, soft stop cascade, and `discover_family` / pinned-dependency-host consumer regen. Stop failures surface as errors rather than a silent OK. Do not assume MCP is a thinner StartUnit wrapper.
 
 ### Reading logs
 

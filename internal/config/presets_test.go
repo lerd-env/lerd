@@ -505,11 +505,7 @@ func TestResolveDynamicEnv_UnknownDirective(t *testing.T) {
 	}
 }
 
-func TestResolveDynamicEnv_ResolveDep(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
-	t.Setenv("XDG_DATA_HOME", tmp)
-
+func TestRewriteDependencyHosts_DropIn(t *testing.T) {
 	prev := ResolveDepHost
 	ResolveDepHost = func(dep string) string {
 		if dep == "redis" {
@@ -521,17 +517,26 @@ func TestResolveDynamicEnv_ResolveDep(t *testing.T) {
 
 	svc := &CustomService{
 		Name: "redisinsight", Image: "x",
-		DynamicEnv: map[string]string{"RI_REDIS_HOST": "resolve_dep:redis"},
+		DependsOn: []string{"redis"},
+		Environment: map[string]string{
+			"RI_REDIS_HOST":  "lerd-redis",
+			"RI_REDIS_ALIAS": "lerd-redis",
+			"RI_REDIS_PORT":  "6379",
+		},
 	}
-	if err := ResolveDynamicEnv(svc); err != nil {
-		t.Fatalf("ResolveDynamicEnv: %v", err)
-	}
+	RewriteDependencyHosts(svc)
 	if got := svc.Environment["RI_REDIS_HOST"]; got != "lerd-valkey" {
 		t.Errorf("RI_REDIS_HOST = %q, want lerd-valkey", got)
 	}
+	if got := svc.Environment["RI_REDIS_ALIAS"]; got != "lerd-valkey" {
+		t.Errorf("RI_REDIS_ALIAS = %q, want lerd-valkey", got)
+	}
+	if got := svc.Environment["RI_REDIS_PORT"]; got != "6379" {
+		t.Errorf("RI_REDIS_PORT = %q, want it left untouched", got)
+	}
 }
 
-func TestResolveDynamicEnv_ResolveDepTemplate(t *testing.T) {
+func TestRewriteDependencyHosts_InURLTemplate(t *testing.T) {
 	prev := ResolveDepHost
 	ResolveDepHost = func(dep string) string {
 		if dep == "mongo" {
@@ -543,16 +548,31 @@ func TestResolveDynamicEnv_ResolveDepTemplate(t *testing.T) {
 
 	svc := &CustomService{
 		Name: "mongo-express", Image: "x",
-		DynamicEnv: map[string]string{
-			"ME_CONFIG_MONGODB_URL": "resolve_dep:mongo=mongodb://root:lerd@{host}:27017/?authSource=admin",
+		DependsOn: []string{"mongo"},
+		Environment: map[string]string{
+			"ME_CONFIG_MONGODB_URL": "mongodb://root:lerd@lerd-mongo:27017/?authSource=admin",
 		},
 	}
-	if err := ResolveDynamicEnv(svc); err != nil {
-		t.Fatalf("ResolveDynamicEnv: %v", err)
-	}
+	RewriteDependencyHosts(svc)
 	want := "mongodb://root:lerd@lerd-mongo-7:27017/?authSource=admin"
 	if got := svc.Environment["ME_CONFIG_MONGODB_URL"]; got != want {
 		t.Errorf("ME_CONFIG_MONGODB_URL = %q, want %q", got, want)
+	}
+}
+
+func TestRewriteDependencyHosts_CanonicalUnchanged(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string { return "lerd-" + dep }
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		DependsOn:   []string{"redis"},
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+	}
+	RewriteDependencyHosts(svc)
+	if got := svc.Environment["RI_REDIS_HOST"]; got != "lerd-redis" {
+		t.Errorf("RI_REDIS_HOST = %q, want lerd-redis (satisfier is the literal dep)", got)
 	}
 }
 
@@ -759,11 +779,11 @@ func TestLoadPreset_RedisInsight(t *testing.T) {
 	if !p.DashboardExternal {
 		t.Errorf("redisinsight must set dashboard_external because its consent cookies can't be carried by the iframe")
 	}
-	if got := p.DynamicEnv["RI_REDIS_HOST"]; got != "resolve_dep:redis" {
-		t.Errorf("redisinsight must resolve RI_REDIS_HOST via resolve_dep:redis, got %q", got)
+	if got := p.Environment["RI_REDIS_HOST"]; got != "lerd-redis" {
+		t.Errorf("redisinsight must pin RI_REDIS_HOST to lerd-redis so old binaries parse it and the host rewrite can retarget it, got %q", got)
 	}
-	if _, ok := p.Environment["RI_REDIS_HOST"]; ok {
-		t.Errorf("RI_REDIS_HOST must not be hardcoded in environment; use dynamic_env resolve_dep")
+	if _, ok := p.DynamicEnv["RI_REDIS_HOST"]; ok {
+		t.Errorf("RI_REDIS_HOST must not use a dynamic_env directive; that breaks binaries that predate it")
 	}
 }
 

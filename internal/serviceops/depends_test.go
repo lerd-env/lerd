@@ -149,10 +149,10 @@ func TestMissingPresetDependencies_ValkeyOKForRedisInsight(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "redisinsight", DependsOn: []string{"redis"},
-		DynamicEnv: map[string]string{"RI_REDIS_HOST": "resolve_dep:redis"},
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
 	})
 	if len(missing) != 0 {
-		t.Errorf("valkey should satisfy redisinsight's redis dep when resolve_dep is declared, got missing=%v", missing)
+		t.Errorf("valkey should satisfy redisinsight's redis dep when it pins lerd-redis for the host rewrite, got missing=%v", missing)
 	}
 }
 
@@ -190,7 +190,7 @@ func TestMissingPresetDependencies_MentionsStoreDropIns(t *testing.T) {
 	}
 }
 
-func TestMissingPresetDependencies_FamilyMemberWithResolveDep(t *testing.T) {
+func TestMissingPresetDependencies_FamilyMemberWithPinnedHost(t *testing.T) {
 	withServiceHome(t)
 	if err := config.SaveCustomService(&config.CustomService{
 		Name: "mongo-7", Image: "x", Family: "mongo",
@@ -200,19 +200,20 @@ func TestMissingPresetDependencies_FamilyMemberWithResolveDep(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "mongo-express", DependsOn: []string{"mongo"},
-		DynamicEnv: map[string]string{
-			"ME_CONFIG_MONGODB_URL": "resolve_dep:mongo=mongodb://root:lerd@{host}:27017/",
+		Environment: map[string]string{
+			"ME_CONFIG_MONGODB_URL": "mongodb://root:lerd@lerd-mongo:27017/",
 		},
 	})
 	if len(missing) != 0 {
-		t.Errorf("mongo-7 should satisfy mongo dep via family when resolve_dep can bind it, got missing=%v", missing)
+		t.Errorf("mongo-7 should satisfy mongo dep via family when the URL pins lerd-mongo for the rewrite, got missing=%v", missing)
 	}
 }
 
-func TestMissingPresetDependencies_NonDiscoveringDepStaysStrict(t *testing.T) {
+func TestMissingPresetDependencies_UnbindableDropInStaysStrict(t *testing.T) {
 	withServiceHome(t)
-	// Valkey meets redis via env_role, but a consumer that hardcodes lerd-redis
-	// (no discover_family, no resolve_dep) must still be refused — otherwise
+	// Valkey meets redis via env_role, but a consumer that neither pins
+	// lerd-redis (nothing for the host rewrite to retarget) nor declares
+	// discover_family cannot bind the drop-in and must stay refused, otherwise
 	// install succeeds and the UI times out talking to a missing hostname.
 	if err := config.SaveCustomService(&config.CustomService{
 		Name: "valkey", Image: "x", Family: "valkey", EnvRole: "redis",
@@ -222,10 +223,10 @@ func TestMissingPresetDependencies_NonDiscoveringDepStaysStrict(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "redisinsight", DependsOn: []string{"redis"},
-		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+		Environment: map[string]string{"RI_REDIS_HOST": "some-external-host"},
 	})
 	if len(missing) != 1 || !strings.Contains(missing[0], "redis") {
-		t.Errorf("non-discovering consumer must stay strict, got missing=%v", missing)
+		t.Errorf("unbindable drop-in consumer must stay strict, got missing=%v", missing)
 	}
 }
 

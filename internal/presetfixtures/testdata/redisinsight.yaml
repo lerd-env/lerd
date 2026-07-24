@@ -5,12 +5,10 @@ ports:
   - "8085:5540"
 environment:
   RI_APP_PORT: "5540"
+  # Pre-populate the lerd Redis connection so the UI opens already wired up.
+  RI_REDIS_HOST: lerd-redis
   RI_REDIS_PORT: "6379"
-dynamic_env:
-  # Prefer a running redis-role satisfier so Valkey (or a versioned redis)
-  # lands here instead of a hardcoded lerd-redis that may not exist.
-  RI_REDIS_HOST: resolve_dep:redis
-  RI_REDIS_ALIAS: resolve_dep:redis
+  RI_REDIS_ALIAS: lerd-redis
 depends_on:
   - redis
 dashboard: http://localhost:8085
