@@ -33,3 +33,7 @@ env_vars:
 connection_url: postgresql://postgres:lerd@127.0.0.1:{{host_port}}/lerd
 category: databases
 icon: elephant
+extensions:
+  - name: vector
+    always: true
+    types: [vector, halfvec, sparsevec]

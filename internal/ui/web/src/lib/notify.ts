@@ -263,6 +263,16 @@ export function dismissInApp(id: number) {
   inAppNotifications.update((list) => list.filter((n) => n.id !== id));
 }
 
+// notifyLocalFailure raises a failure the page itself detected, rather than one
+// the daemon pushed. It takes the same in-app surface and history as a pushed
+// event, so a container that will not come back up is still on screen after the
+// modal is closed. Failures never auto-dismiss.
+export function notifyLocalFailure(kind: string, title: string, body: string) {
+  const entry = { kind, title, body, url: '', failed: true };
+  record(entry);
+  pushInApp(entry);
+}
+
 // dedupeWindowMs scopes the tag dedupe to a short window so an immediate
 // retry of the same payload collapses but a same-tag send seconds later
 // (Send-test double-click, two identical mail webhooks) still fires.

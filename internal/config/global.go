@@ -106,6 +106,12 @@ type GlobalConfig struct {
 		// configs predating the field keep working unchanged.
 		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
 	} `yaml:"node" mapstructure:"node"`
+	Share struct {
+		// DefaultTool is the tunnel tool "lerd share" uses when no flag is
+		// given: ngrok | cloudflare | expose | serveo | localhost-run.
+		// Empty = auto-detect. Set via "lerd share:tool".
+		DefaultTool string `yaml:"default_tool,omitempty" mapstructure:"default_tool"`
+	} `yaml:"share,omitempty" mapstructure:"share"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`
 		HTTPSPort int `yaml:"https_port" mapstructure:"https_port"`

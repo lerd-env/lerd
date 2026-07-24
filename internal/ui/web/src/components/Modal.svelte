@@ -41,11 +41,11 @@
     <div
       class="relative bg-white dark:bg-lerd-card border border-gray-200 dark:border-lerd-border rounded-xl shadow-2xl w-full {widthClass} mx-4"
     >
-      <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
-        <h3 class="font-semibold text-gray-900 dark:text-white">{title}</h3>
+      <div class="flex items-center justify-between gap-3 px-5 py-4 border-b border-gray-100 dark:border-lerd-border">
+        <h3 class="min-w-0 break-words font-semibold text-gray-900 dark:text-white">{title}</h3>
         <button
           onclick={onclose}
-          class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+          class="shrink-0 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           title={m.common_close()}
         >
           <Icon name="close" class="w-5 h-5" />

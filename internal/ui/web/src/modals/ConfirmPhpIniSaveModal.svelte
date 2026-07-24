@@ -3,6 +3,7 @@
   import DetailButton from '$components/DetailButton.svelte';
   import { closeModal, modal } from '$stores/modals';
   import { savePhpIni } from '$stores/phpVersions';
+  import { notifyLocalFailure } from '$lib/notify';
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.phpIniSave);
@@ -25,6 +26,9 @@
       const res = await savePhpIni(target.version, target.content, backup);
       if (!res.ok) {
         error = res.error || m.nginxEditor_saveFailed();
+        // The restart is the slow, failure-prone half, and the error otherwise
+        // lives only in a modal the user is about to close.
+        notifyLocalFailure('php_ini', m.phpIniEditor_restartFailed({ scope: target.label }), error);
         return;
       }
       closeModal();
@@ -75,7 +79,7 @@
     <DetailButton onclick={safeClose} disabled={busy}>{m.common_cancel()}</DetailButton>
     {#if target}
       <DetailButton tone="primary" onclick={confirm} loading={busy} disabled={busy}>
-        {busy ? m.nginxEditor_saving() : m.common_save()}
+        {busy ? m.phpIniEditor_restarting() : m.common_save()}
       </DetailButton>
     {/if}
   {/snippet}

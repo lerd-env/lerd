@@ -21,6 +21,11 @@ node:
                           # (the bundled default) or "nvm" (a user-installed nvm
                           # lerd detected at install time). Switchable from the
                           # dashboard's Node page. Empty means fnm.
+share:
+  default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
+                            # flag is given: ngrok, cloudflare, expose, serveo or
+                            # localhost-run. Written by lerd share:tool; omitted
+                            # (the default) means auto-detect.
 nginx:
   http_port: 80
   https_port: 443

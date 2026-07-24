@@ -263,12 +263,14 @@ type dbActionResponse struct {
 	Errors  int                      `json:"errors,omitempty"`
 	Issues  []serviceops.ImportIssue `json:"issues,omitempty"`
 	Omitted int                      `json:"omitted,omitempty"`
+	Skipped []serviceops.ImportIssue `json:"skipped,omitempty"`
+	Created []serviceops.ImportIssue `json:"created,omitempty"`
 }
 
 func writeDBOK(w http.ResponseWriter) { writeJSON(w, dbActionResponse{OK: true}) }
 
 func writeDBReport(w http.ResponseWriter, rep serviceops.ImportReport) {
-	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues, Omitted: rep.Omitted})
+	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues, Omitted: rep.Omitted, Skipped: rep.Skipped, Created: rep.Created})
 }
 func writeDBError(w http.ResponseWriter, m string) {
 	writeJSON(w, dbActionResponse{OK: false, Error: m})
@@ -425,31 +427,35 @@ func handleDatabaseImport(w http.ResponseWriter, r *http.Request, service string
 		return
 	}
 	database := ""
+	var opt serviceops.ImportOptions
 	for {
 		part, err := parts.NextPart()
 		if err != nil {
 			writeDBError(w, "a dump file is required")
 			return
 		}
-		if part.FormName() == "database" {
-			name, err := io.ReadAll(io.LimitReader(part, 1024))
+		// The field order is the client's, so the file part is the terminator and
+		// everything before it is read as a setting.
+		if name := part.FormName(); name != "file" && name != "" {
+			val, err := io.ReadAll(io.LimitReader(part, 1024))
 			part.Close()
 			if err != nil {
-				writeDBError(w, "a database name is required")
+				writeDBError(w, "could not read the "+name+" field")
 				return
 			}
-			database = strings.TrimSpace(string(name))
-			continue
-		}
-		if part.FormName() != "file" {
-			part.Close()
+			switch name {
+			case "database":
+				database = strings.TrimSpace(string(val))
+			case "fresh":
+				opt.Fresh = strings.TrimSpace(string(val)) == "true"
+			}
 			continue
 		}
 		if !requireDatabaseName(w, database) {
 			part.Close()
 			return
 		}
-		rep, err := serviceops.ImportDatabase(service, database, part)
+		rep, err := serviceops.ImportDatabase(service, database, part, opt)
 		// Whatever the engine left unread is drained so the client still gets the
 		// response instead of a reset connection.
 		_, _ = io.Copy(io.Discard, part)

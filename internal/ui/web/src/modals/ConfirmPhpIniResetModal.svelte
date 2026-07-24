@@ -3,6 +3,7 @@
   import DetailButton from '$components/DetailButton.svelte';
   import { closeModal, modal } from '$stores/modals';
   import { resetPhpIni } from '$stores/phpVersions';
+  import { notifyLocalFailure } from '$lib/notify';
   import { m } from '../paraglide/messages.js';
 
   const target = $derived($modal.phpIniReset);
@@ -24,6 +25,9 @@
       const res = await resetPhpIni(target.version);
       if (!res.ok) {
         error = res.error || m.nginxEditor_resetFailed();
+        // A reset that cannot restart FPM leaves the version down, so say so
+        // somewhere that outlives this modal.
+        notifyLocalFailure('php_ini', m.phpIniEditor_restartFailed({ scope: target.label }), error);
         return;
       }
       closeModal();
@@ -60,7 +64,7 @@
     <DetailButton onclick={safeClose} disabled={busy}>{m.common_cancel()}</DetailButton>
     {#if target}
       <DetailButton tone="primary" onclick={confirm} loading={busy} disabled={busy}>
-        {busy ? m.nginxEditor_resetting() : m.nginxEditor_resetAccept()}
+        {busy ? m.phpIniEditor_restarting() : m.nginxEditor_resetAccept()}
       </DetailButton>
     {/if}
   {/snippet}

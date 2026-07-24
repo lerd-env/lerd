@@ -51,7 +51,13 @@
     errors?: number;
     issues?: ImportIssue[];
     omitted?: number;
+    skipped?: ImportIssue[];
+    created?: ImportIssue[];
   } | null>(null);
+  // The dump waiting on the confirmation, and whether to empty the database
+  // before it loads.
+  let pending = $state<File | null>(null);
+  let importFresh = $state(false);
   const importBusy = $derived(importOp?.tone === 'busy');
   // The engine's complaints open over the page rather than inside the card,
   // which has no room for a list and belongs to one database in a grid.
@@ -63,7 +69,13 @@
     if (importOp.tone === 'error') return m.databases_importFailed({ error: importOp.error ?? '' });
     if (importOp.tone === 'warn')
       return m.databases_importedWithErrors({ file: importOp.file, count: importOp.errors ?? 0 });
-    if (importOp.tone === 'done') return m.databases_imported({ file: importOp.file });
+    if (importOp.tone === 'done')
+      return importOp.created?.length
+        ? m.databases_importedWithExtensions({
+            file: importOp.file,
+            names: importOp.created.map((c) => c.message).join(', ')
+          })
+        : m.databases_imported({ file: importOp.file });
     return importOp.percent === null
       ? m.databases_importing({ file: importOp.file })
       : m.databases_importingPercent({
@@ -92,18 +104,27 @@
     setTimeout(() => (copied = false), 1200);
   }
 
-  async function onImport(e: Event) {
+  // Picking a file opens the confirmation rather than loading straight away, so
+  // the choice between loading on top and replacing is made before anything runs.
+  function onFilePicked(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
+    pending = input.files?.[0] ?? null;
     input.value = '';
+    importFresh = false;
+  }
+
+  async function startImport() {
+    const file = pending;
+    pending = null;
     if (!file) return;
+    const fresh = importFresh;
     importOp = { tone: 'busy', file: file.name, percent: 0 };
     const res = await importDatabase(engine.service, active.name, file, (p) => {
       if (importOp?.tone !== 'busy') return;
       // Once the last byte is out the engine is still replaying the dump, and
       // there is nothing left to measure, so the bar gives way to a spinner.
       importOp = { ...importOp, percent: p.uploaded ? null : p.percent };
-    });
+    }, fresh);
     if (!res.ok) {
       importOp = { tone: 'error', file: file.name, percent: null, error: res.error || m.common_failed() };
       return;
@@ -117,12 +138,14 @@
         percent: null,
         errors: res.errors,
         issues: res.issues,
-        omitted: res.omitted
+        omitted: res.omitted,
+        skipped: res.skipped,
+        created: res.created
       };
       showIssues = (res.issues ?? []).length > 0;
       return;
     }
-    importOp = { tone: 'done', file: file.name, percent: null };
+    importOp = { tone: 'done', file: file.name, percent: null, created: res.created };
     clearTimeout(clearDone);
     clearDone = setTimeout(() => {
       if (importOp?.tone === 'done') importOp = null;
@@ -221,7 +244,7 @@
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
       </button>
-      <input bind:this={fileInput} type="file" accept=".sql,.txt" class="hidden" onchange={onImport} />
+      <input bind:this={fileInput} type="file" accept=".sql,.txt,.gz" class="hidden" onchange={onFilePicked} />
 
       <button
         type="button"
@@ -270,12 +293,43 @@
     title={importMessage}
     issues={importOp.issues}
     omitted={importOp.omitted}
+    skipped={importOp.skipped}
     onclose={() => (showIssues = false)}
   />
 {/if}
 
 {#if showSnapshots}
   <DatabaseSnapshotsModal {engine} entry={active} onclose={() => (showSnapshots = false)} />
+{/if}
+
+{#if pending}
+  <Modal
+    open
+    title={m.databases_importTitle({ file: pending.name })}
+    onclose={() => (pending = null)}
+    size="sm"
+  >
+    <div class="px-5 py-4 space-y-3">
+      <p class="text-sm text-gray-700 dark:text-gray-300">
+        {m.databases_importBody({ name: active.name })}
+      </p>
+      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input type="checkbox" bind:checked={importFresh} class="mt-0.5 accent-lerd-red" />
+        <span>
+          {m.databases_importFresh()}
+          <span class="block text-xs text-gray-500 dark:text-gray-400">
+            {m.databases_importFreshHint()}
+          </span>
+        </span>
+      </label>
+    </div>
+    {#snippet footer()}
+      <DetailButton onclick={() => (pending = null)}>{m.common_cancel()}</DetailButton>
+      <DetailButton tone={importFresh ? 'danger' : 'primary'} onclick={startImport}>
+        {m.databases_import()}
+      </DetailButton>
+    {/snippet}
+  </Modal>
 {/if}
 
 {#if showDrop}

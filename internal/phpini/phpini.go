@@ -126,13 +126,12 @@ func Restart(scope string) error {
 	return restartVersion(scope)
 }
 
-// RestartNoSeed restarts a scope's container(s) after a reset. The per-version
-// file is not re-seeded (the shared FPM tolerates its absence: only that one
-// version's container mounts it, and the reset means "no per-version override").
-// The shared file IS re-seeded first, because every PHP container mounts it and
-// a missing bind-mount source makes them all fail to start; re-seeding the
-// commented template is functionally "no shared override" while keeping the
-// mount valid. A FrankenPHP site is re-seeded for the same bind-mount reason.
+// RestartNoSeed restarts a scope's container(s) after a reset. Every scope is
+// re-seeded first: the quadlets bind-mount each ini path unconditionally, so a
+// missing source makes podman refuse to start the container (statfs, exit 125)
+// and systemd restart-loops it. Re-seeding the commented template is what "no
+// override" means on disk while keeping the mount valid. NoSeed refers to
+// skipping the quadlet rewrite, not the file itself.
 func RestartNoSeed(scope string) error {
 	if scope == SharedScope {
 		_ = podman.EnsureSharedIni()
@@ -153,6 +152,7 @@ func RestartNoSeed(scope string) error {
 		_ = podman.EnsureSitePHPUserIni(name)
 		return podman.RestartUnit(podman.FrankenPHPContainerName(site.Name))
 	}
+	_ = podman.EnsureUserIni(scope)
 	return restartFPMUnit(scope)
 }
 
@@ -191,7 +191,9 @@ func restartFrankenPHPSite(name string) error {
 	return podman.RestartUnit(podman.FrankenPHPContainerName(site.Name))
 }
 
-func restartFPMUnit(version string) error {
+// A var for the same reason as installedVersions below: a test that left it live
+// would restart the developer's own FPM containers.
+var restartFPMUnit = func(version string) error {
 	short := strings.ReplaceAll(version, ".", "")
 	return podman.RestartUnit("lerd-php" + short + "-fpm")
 }

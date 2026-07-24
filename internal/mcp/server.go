@@ -2682,11 +2682,14 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 	var cmd *exec.Cmd
 	switch env.connection {
 	case "mysql", "mariadb":
-		cmd = podman.Cmd("exec", "-i", "lerd-mysql",
-			"mysqldump", "-u"+env.username, "-p"+env.password, env.database)
+		args := []string{"exec", "-i", "lerd-mysql", "mysqldump", "-u" + env.username, "-p" + env.password}
+		args = append(args, serviceops.DumpFlags("mysql")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	case "pgsql", "postgres":
-		cmd = podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			"lerd-postgres", "pg_dump", "-U", env.username, env.database)
+		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
+			"lerd-postgres", "pg_dump", "-U", env.username}
+		args = append(args, serviceops.DumpFlags("postgres")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	default:
 		_ = os.Remove(output)
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
@@ -4201,13 +4204,40 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
 	}
 
+	// The tool talks to the family's canonical service, the same one the commands
+	// above hardcode as lerd-mysql / lerd-postgres.
+	svc := "mysql"
+	if env.connection == "pgsql" || env.connection == "postgres" {
+		svc = "postgres"
+	}
+	if boolArg(args, "fresh") {
+		if err := serviceops.EmptyDatabase(svc, env.database); err != nil {
+			return toolErr(err.Error()), nil
+		}
+	}
+	src, err := serviceops.DumpReader(f)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
+		Service: svc, Family: config.FamilyOfName(svc), Database: env.database,
+		Extensions: serviceops.DeclaredExtensions(svc),
+	}, src)
 	var stderr bytes.Buffer
-	cmd.Stdin = f
+	cmd.Stdin = src
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
 	}
-	return toolOK(fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)), nil
+	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)
+	n := notes()
+	rep := serviceops.ImportReport{Skipped: n.Skipped, Created: n.Created}
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+		if note != "" {
+			msg += ", " + note
+		}
+	}
+	return toolOK(msg), nil
 }
 
 // mcpSnapshotTarget resolves a snapshot target from MCP args. It honours an

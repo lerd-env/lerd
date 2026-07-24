@@ -191,6 +191,7 @@ func main() {
 	root.AddCommand(cli.NewDbRestoreCmd())
 	root.AddCommand(cli.NewDbSnapshotRmCmd())
 	root.AddCommand(cli.NewDbMoveCmd())
+	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
 	root.AddCommand(cli.NewShimsCmd())
 	root.AddCommand(cli.NewXdebugCmd())
@@ -209,6 +210,7 @@ func main() {
 		root.AddCommand(cmd)
 	}
 	root.AddCommand(cli.NewShareCmd())
+	root.AddCommand(cli.NewShareToolCmd())
 	root.AddCommand(cli.NewDomainCmd())
 	root.AddCommand(cli.NewGroupCmd())
 	root.AddCommand(cli.NewWorkspaceCmd())

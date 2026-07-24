@@ -175,6 +175,44 @@ func TestReset_removesFile(t *testing.T) {
 	}
 }
 
+// A reset whose restart fails must not leave the file deleted: the container is
+// already down, and without the contents back the user has no way to undo it.
+func TestReset_restoresFileWhenApplyFails(t *testing.T) {
+	f := tmpFile(t)
+	if err := os.MkdirAll(filepath.Dir(f.Path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	const original = "; keep me\nmemory_limit = 512M\n"
+	if err := os.WriteFile(f.Path, []byte(original), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	applies := 0
+	err := f.Reset(func() error {
+		applies++
+		if applies == 1 {
+			return errors.New("fpm did not come back")
+		}
+		return nil
+	})
+	if err == nil {
+		t.Fatal("expected the apply failure to surface, got nil")
+	}
+	if !strings.Contains(err.Error(), "rolled back") {
+		t.Errorf("error = %v, want it to say the reset was rolled back", err)
+	}
+	if applies != 2 {
+		t.Errorf("apply ran %d times, want 2 (once to fail, once after the rollback)", applies)
+	}
+	got, readErr := os.ReadFile(f.Path)
+	if readErr != nil {
+		t.Fatalf("file must be restored after a failed apply: %v", readErr)
+	}
+	if string(got) != original {
+		t.Errorf("restored contents = %q, want %q", got, original)
+	}
+}
+
 func TestValidBackupName_rejectsForeignAndTraversal(t *testing.T) {
 	f := tmpFile(t)
 	for _, bad := range []string{"../etc/passwd", "other.conf.bkp.20260101-101010", "x_acme.test.conf.bkp.20260101-101010"} {

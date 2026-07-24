@@ -186,6 +186,28 @@ func isSQLTool(tool string) bool {
 	return isPostgresTool(tool) || tool == "mysql" || tool == "mysqldump"
 }
 
+// isVersionProbe reports whether the arguments are a bare version or help query,
+// which is how an IDE validates a client executable before offering it. The
+// postgres tools answer one only as their very first argument.
+func isVersionProbe(args []string) bool {
+	if len(args) == 0 {
+		return false
+	}
+	switch args[0] {
+	case "--version", "-V", "--help", "-?":
+		return true
+	}
+	return false
+}
+
+// wantsLocalDefault reports whether the shim should aim a hostless invocation at
+// the backing lerd service. A version probe is excluded: prepending -h in front
+// of it leaves pg_dump exiting non-zero with no version, and the IDE that asked
+// then rejects the shim path.
+func wantsLocalDefault(tool string, args []string, hostGiven bool) bool {
+	return !hostGiven && isSQLTool(tool) && !isVersionProbe(args)
+}
+
 // siteServiceForTool returns the lerd service the project at cwd points its
 // DB_HOST at, so a bare dump run from a project targets that project's own
 // database service (e.g. a mariadb-backed project routes to lerd-mariadb-<v>
@@ -261,12 +283,15 @@ func runClientExec(tool string, args []string) error {
 	}
 
 	// Autostart the backing service so its image is present and, for a dump
-	// against a local lerd database (-h lerd-<service>), the server is up.
-	if err := ensureServiceRunning(target.Service); err != nil {
-		return fmt.Errorf("could not start %s: %w", target.Service, err)
-	}
-
+	// against a local lerd database (-h lerd-<service>), the server is up. A
+	// version probe needs neither, so it skips the start once the image is there.
 	image := podman.InstalledImage("lerd-" + target.Service)
+	if image == "" || !isVersionProbe(args) {
+		if err := ensureServiceRunning(target.Service); err != nil {
+			return fmt.Errorf("could not start %s: %w", target.Service, err)
+		}
+		image = podman.InstalledImage("lerd-" + target.Service)
+	}
 	if image == "" {
 		return fmt.Errorf("could not resolve the image for service %q", target.Service)
 	}
@@ -278,7 +303,7 @@ func runClientExec(tool string, args []string) error {
 	// reads -h as --help and redis-cli/mongo tools have their own conventions, so
 	// those pass through and expect an explicit host.
 	var defaultEnv []string
-	if !hostGiven && isSQLTool(tool) {
+	if wantsLocalDefault(tool, args, hostGiven) {
 		args = append([]string{"-h", "lerd-" + target.Service}, args...)
 		defaultEnv = localCredsEnv(tool)
 	}

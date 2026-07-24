@@ -7,9 +7,10 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | Command | Description |
 |---|---|
 | `lerd db:create [name]` | Create a database and a `<name>_testing` database |
-| `lerd db:import [-s service] [-d name] <file.sql>` | Import a SQL dump |
+| `lerd db:import [-s service] [-d name] [--fresh] <file.sql>` | Import a SQL dump |
 | `lerd db:export [-s service] [-d name] [-o file.sql]` | Export a database to a SQL dump |
 | `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL or PostgreSQL shell |
+| `lerd db:extension list\|add <name>` | List or create the extensions an engine offers |
 | `lerd db:snapshot [name] [-A]` | Create a named, restorable snapshot of a database |
 | `lerd db:snapshots [--all]` | List stored snapshots |
 | `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
@@ -32,6 +33,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `--output <file>` | `-o` | Output file for `db:export` (default: `<database>.sql`) |
 | `--all-databases` | `-A` | Snapshot or restore every database in the service at once |
 | `--force` | `-f` | Skip the `db:restore` confirmation prompt |
+| `--fresh` | | Empty the database before loading, so the dump replaces it (`db:import`) |
 | `--all` | | List snapshots across every database on the service (`db:snapshots`) |
 
 A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to its name, e.g. `nightly-20260719-135558`, so taking the same name twice never collides. Reference the full stamped name shown by `db:snapshots` when restoring or removing it.
@@ -43,7 +45,7 @@ A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to i
 Each database engine's detail page in the web UI (Services → pick MySQL, MariaDB, PostgreSQL or MongoDB) opens on a **Databases** tab that shows the databases inside that engine as a grid of cards, each with its on-disk size. It surfaces the same operations as the CLI without leaving the browser:
 
 - **Create** a database inline from the field above the grid. Names accepted here are limited to letters, digits, underscores and dashes, up to 64 characters, which covers every name lerd generates and keeps the value safe to use as both a path segment and a SQL identifier.
-- **Export** a database to a `.sql` dump, or **import** a dump into one, from the card. An import reports itself while it runs: the card shows the dump's name with a progress bar, then a spinner once the last byte is in and the engine is still replaying it, and finally either a confirmation that fades away or the engine's own error, so a dump that fails halfway says why instead of quietly stopping. The daemon pipes the upload straight into the engine instead of reading the whole request into a temp file first, so the bar tracks what the engine has actually swallowed and a multi-gigabyte dump never lands on disk twice. A load that the engine accepted while still complaining ends on an amber warning with the error count and the most frequent complaints, because `psql` exits 0 even when every statement in a dump failed and a silent green tick over a half-empty database is worse than no feedback at all.
+- **Export** a database to a `.sql` dump, or **import** a dump into one, from the card. An import reports itself while it runs: the card shows the dump's name with a progress bar, then a spinner once the last byte is in and the engine is still replaying it, and finally either a confirmation that fades away or the engine's own error, so a dump that fails halfway says why instead of quietly stopping. The daemon pipes the upload straight into the engine instead of reading the whole request into a temp file first, so the bar tracks what the engine has actually swallowed and a multi-gigabyte dump never lands on disk twice. A load that the engine accepted while still complaining ends on an amber warning with the error count, because `psql` exits 0 even when every statement in a dump failed and a silent green tick over a half-empty database is worse than no feedback at all. Opening the warning lists every distinct complaint with how often the engine made it, in the order it hit them, so a dump replayed over a populated schema shows all of what it tripped over rather than the first few.
 - **Snapshots** are managed on the card of the database they belong to: take a snapshot, restore one (with a confirmation, since a restore overwrites the current data), delete one (also confirmed), or download one as a plain `.sql` dump. Taking, restoring and deleting all report what they are doing in the snapshots modal and leave a confirmation or the engine's error behind, so a slow restore of a large database is visibly working rather than apparently frozen. A snapshot is keyed on the engine and database it was taken from, never on a site, so it lives with the database rather than on the site page. A named snapshot gets a UTC timestamp appended (`nightly-20260719-135558`), so repeated snapshots of one name never collide; the list shows the parsed time and sorts newest first.
 - **Copy connection string** builds a ready-to-paste DSN for that specific database, which works whether or not an admin UI is installed.
 - **Open in the admin UI** appears on the card when an admin tool is installed for the engine, and opens it straight to this database when the tool supports a per-database URL (phpMyAdmin and Adminer for MySQL/MariaDB, Mongo Express for MongoDB). pgAdmin has no such URL, so it opens at its root.
@@ -141,9 +143,43 @@ An all-databases restore drops and recreates every database contained in the sna
 
 `db:snapshot` rejects names that look like command verbs (`list`, `rm`, `delete`, `restore`, …), so `lerd db snapshot list` errors with a hint instead of silently creating a snapshot literally named "list". Use `lerd db:snapshots` to list.
 
+### What an export carries
+
+Every export lerd produces, from the CLI, the web UI download and the MCP tool, carries the same flags a snapshot already used, so handing a colleague a dump and having them import it through lerd gives them what you have.
+
+It drops each object before recreating it, so the load replaces what they had rather than colliding with it. `mysqldump` writes `DROP TABLE` on its own; `pg_dump` only does it when asked, so lerd passes `--clean --if-exists`.
+
+It carries stored procedures, functions and events. `pg_dump` writes functions either way, but `mysqldump` leaves routines and events out unless asked, so a mysql or mariadb dump taken without `--routines --events` hands over a database that looks complete and is not.
+
+Two things a dump cannot carry across on its own. Dropping only covers the objects the dump contains, so a table the other machine has and yours does not survives the import. And an extension your database uses has to exist in their engine too, so a dump from `postgres-pgvector` will not load into plain `postgres`.
+
+### Dumps from a managed provider
+
+A dump taken from a hosted Postgres or MySQL carries statements about that host's own roles: `ALTER ... OWNER TO`, `GRANT`, `REVOKE` and `ALTER DEFAULT PRIVILEGES` on postgres, and a `DEFINER` clause on every view, trigger and routine on the mysql families. lerd's engines run a single admin role, so none of it can apply here. On postgres each one lands as an error you cannot act on, and on mysql it is worse: the object is created and only fails when something uses it, with `ERROR 1449: The user specified as a definer does not exist`.
+
+lerd filters those out on the way in, which is what `--no-owner --no-privileges` does at dump time, except you do not have to have thought of it when you took the dump. A bare `CREATE SCHEMA` is made conditional for the same reason: every database lerd creates already has a public schema, so the statement can only ever fail, and the database is identical either way. What it skipped is reported next to the errors, since a dump lerd quietly rewrote should never read as one that arrived clean. Row data is never touched: a postgres `COPY` block is passed through byte for byte between its header and its closing `\.`, and on mysql only DDL lines are rewritten, so a value that happens to contain the word survives.
+
+Ownership is the smaller half of what goes wrong. The rest comes from loading into a database that already has the objects, which no filter can fix: the schema, tables, sequences, indexes and constraints all collide, and then the rows land on populated tables as duplicate keys and foreign key violations. Tick **Empty the database first** in the import dialog, or pass `--fresh` on the CLI, and the database is dropped and recreated before the dump loads, so it replaces what was there rather than fighting it.
+
+### Extensions
+
+A postgres engine declares in its [service preset](service-presets.md) which extensions its image can create and which types each provides, so lerd never carries a list of extension names in its own code. Two things follow from that declaration.
+
+An extension marked as always-on is created wherever lerd creates a database, so a project on `postgres-pgvector` gets `vector` in both its app and `_testing` databases, and a database that is dropped and recreated, by an import with **Empty the database first** or by a snapshot restore, comes back with it rather than missing what the site was built on. A database that already exists is topped up the same way, so a site set up before its engine declared an extension picks it up rather than staying behind.
+
+The rest are created only when an imported dump reaches for one, matched on the type names the preset declares. That is how a dump holding a `public.geometry` column brings PostGIS with it on the default engine without every database on the machine paying for it: an empty postgres database is about 7.5 MB, and PostGIS doubles it, while `vector` costs a third of a megabyte, which is why one waits and the other does not. What was created is reported next to the import, since a database should never gain something without saying so.
+
+`lerd db:extension list` shows what the engine offers against what the database already has, and `lerd db:extension add <name>` creates one when you want it before any dump arrives.
+
+### Compressed and custom-format dumps
+
+A `.sql.gz` imports like a `.sql`. The engine clients read plain SQL, so lerd looks at the head of the upload and decompresses it on the way in rather than handing gzip bytes to `psql`, which would report a couple of encoding errors, load nothing and still exit clean.
+
+A custom-format archive (`pg_dump -Fc`) is not a SQL file at all, and `psql` says so: the import fails with "The input is a PostgreSQL custom-format dump. Use the pg_restore command-line client". Export it as plain SQL, or `--format=plain`, and it imports.
+
 ### Imports that finish with errors
 
-`psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. The warning lists the most frequent complaints with their counts, which is usually enough to name the cause on sight: a flood of `invalid command \N` means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created.
+`psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. On the terminal the warning spells out the first few complaints with their counts and folds the rest into a tally, which is usually enough to name the cause on sight; the web UI lists them all: a flood of `invalid command \N`, or of `backslash commands are restricted` on PostgreSQL 18, means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created. Both phrasings are the same thing and both fold into a single line in the report, so the cascade never crowds out its cause.
 
 ### Large dumps and `max_allowed_packet`
 
@@ -258,7 +294,7 @@ When you give no host, the tool connects to a local lerd database with its admin
 
 Run from inside a git worktree, the shim reads that checkout's own env file rather than the parent site's, so a branch with an isolated database dumps from its own schema even when the worktree lives inside the parent's directory. A worktree whose env was never rewritten keeps using the parent site's.
 
-To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`.
+To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`. IDEs validate the path by running the tool with `--version` first, and a bare `--version` or `--help` is always forwarded exactly as given, without the local-database default and without starting the service behind it.
 
 ### Managing shims
 
