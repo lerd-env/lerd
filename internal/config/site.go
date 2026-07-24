@@ -71,6 +71,10 @@ type Site struct {
 	// on the host for this site (project-origin custom host workers and commands).
 	// Keyed by the exact string so a changed command re-prompts.
 	ApprovedCommands []string `yaml:"approved_commands,omitempty"`
+	// Lerdstead marks a site provisioned from lerdstead.yml. `lerd apply` only
+	// prunes sites carrying this flag, so a manually linked site is never
+	// unlinked by a file edit.
+	Lerdstead bool `yaml:"lerdstead,omitempty"`
 	// Group is the group key shared by a main site and its secondaries. It is
 	// set to the main site's name. Empty when the site is not grouped.
 	Group string `yaml:"group,omitempty"`
@@ -209,6 +213,7 @@ type siteYAML struct {
 	HostSSL               bool                `yaml:"host_ssl,omitempty"`
 	HostCommand           string              `yaml:"host_command,omitempty"`
 	ApprovedCommands      []string            `yaml:"approved_commands,omitempty"`
+	Lerdstead             bool                `yaml:"lerdstead,omitempty"`
 	Group                 string              `yaml:"group,omitempty"`
 	GroupSubdomain        string              `yaml:"group_subdomain,omitempty"`
 	GroupSharedDB         bool                `yaml:"group_shared_db,omitempty"`
@@ -241,6 +246,7 @@ func (s Site) toYAML() siteYAML {
 		HostSSL:               s.HostSSL,
 		HostCommand:           s.HostCommand,
 		ApprovedCommands:      s.ApprovedCommands,
+		Lerdstead:             s.Lerdstead,
 		Group:                 s.Group,
 		GroupSubdomain:        s.GroupSubdomain,
 		GroupSharedDB:         s.GroupSharedDB,
@@ -278,6 +284,7 @@ func (sy siteYAML) toSite() Site {
 		HostSSL:               sy.HostSSL,
 		HostCommand:           sy.HostCommand,
 		ApprovedCommands:      sy.ApprovedCommands,
+		Lerdstead:             sy.Lerdstead,
 		Group:                 sy.Group,
 		GroupSubdomain:        sy.GroupSubdomain,
 		GroupSharedDB:         sy.GroupSharedDB,
