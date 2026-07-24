@@ -147,6 +147,100 @@ func TestOfferBetterPHP_saysNothingWhenTheVersionIsUnconstrained(t *testing.T) {
 	}
 }
 
+// withFPMImageExists swaps the image-existence seam for one test.
+func withFPMImageExists(t *testing.T, exists bool) {
+	t.Helper()
+	prev := fpmImageExists
+	fpmImageExists = func(string) bool { return exists }
+	t.Cleanup(func() { fpmImageExists = prev })
+}
+
+func fpmSite() config.Site {
+	return config.Site{Name: "myapp", PHPVersion: "8.1"}
+}
+
+// Linking onto a version whose image was never built must build it, so the site
+// serves instead of answering 502. This is the core of issue #1164.
+func TestEnsureServableFPMImage_buildsAMissingVersion(t *testing.T) {
+	withFPMImageExists(t, false)
+	built := ""
+	d := Deps{EnsureFPMQuadlet: func(v string) error { built = v; return nil }}
+	r := &recorder{}
+
+	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r)
+
+	if built != "8.1" {
+		t.Errorf("built %q, want the selected version 8.1", built)
+	}
+	if !r.saw(r.steps, "building PHP 8.1 image") {
+		t.Errorf("the build was not reported as a step, steps = %v", r.steps)
+	}
+	if len(r.warns) != 0 {
+		t.Errorf("a successful build must not warn, warns = %v", r.warns)
+	}
+}
+
+// An already-built version is left alone: no build, no warning.
+func TestEnsureServableFPMImage_skipsAnExistingImage(t *testing.T) {
+	withFPMImageExists(t, true)
+	d := Deps{EnsureFPMQuadlet: func(string) error { t.Fatal("must not build an image that exists"); return nil }}
+	r := &recorder{}
+
+	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r)
+
+	if len(r.steps) != 0 || len(r.warns) != 0 {
+		t.Errorf("an existing image needs no work, steps = %v warns = %v", r.steps, r.warns)
+	}
+}
+
+// A failed build keeps the site registered and names the command that fixes it,
+// rather than aborting the link.
+func TestEnsureServableFPMImage_warnsWhenTheBuildFails(t *testing.T) {
+	withFPMImageExists(t, false)
+	d := Deps{EnsureFPMQuadlet: func(string) error { return errors.New("no network") }}
+	r := &recorder{}
+
+	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: true}, d, r)
+
+	if len(r.fails) == 0 {
+		t.Error("the failed build was not reported")
+	}
+	if !r.saw(r.warns, "lerd php:rebuild 8.1") {
+		t.Errorf("the warning must name the rebuild command, warns = %v", r.warns)
+	}
+}
+
+// A caller that cannot build (the watcher, or no builder wired) warns plainly
+// instead of registering a silent 502.
+func TestEnsureServableFPMImage_warnsWhenBuildsAreWithheld(t *testing.T) {
+	withFPMImageExists(t, false)
+	r := &recorder{}
+
+	ensureServableFPMImage(&Plan{Mode: ModeFPM}, fpmSite(), Policy{ImageBuild: false},
+		Deps{EnsureFPMQuadlet: func(string) error { t.Fatal("must not build when withheld"); return nil }}, r)
+
+	if !r.saw(r.warns, "lerd php:rebuild 8.1") {
+		t.Errorf("the warning must name the rebuild command, warns = %v", r.warns)
+	}
+	if len(r.steps) != 0 {
+		t.Errorf("nothing should be built, steps = %v", r.steps)
+	}
+}
+
+// Per-site runtimes build their own image in their finisher, so this check only
+// governs the shared FPM mode.
+func TestEnsureServableFPMImage_ignoresNonFPMModes(t *testing.T) {
+	withFPMImageExists(t, false)
+	for _, mode := range []Mode{ModeFrankenPHP, ModeCustomFPM, ModeCustomContainer, ModeHostProxy} {
+		r := &recorder{}
+		ensureServableFPMImage(&Plan{Mode: mode}, fpmSite(), Policy{ImageBuild: true},
+			Deps{EnsureFPMQuadlet: func(string) error { t.Fatalf("must not build for %s", mode); return nil }}, r)
+		if len(r.steps) != 0 || len(r.warns) != 0 {
+			t.Errorf("%s should be untouched, steps = %v warns = %v", mode, r.steps, r.warns)
+		}
+	}
+}
+
 func proxyPlan(command string) *Plan {
 	return &Plan{
 		Mode:         ModeHostProxy,

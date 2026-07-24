@@ -7,8 +7,15 @@ import (
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 )
+
+// fpmImageExists is a seam so tests can decide a version's image is present
+// without a podman image tree. It answers "can this version serve a request",
+// which writing a quadlet does not: several paths write one for a version whose
+// image was never built.
+var fpmImageExists = podman.FPMImageExists
 
 // Deps are the side effects a link needs that live above this package. A nil
 // field means the caller cannot do that thing, and the step is skipped.
@@ -93,7 +100,7 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 		}
 	}
 
-	if err := provision(plan, site, p, r); err != nil {
+	if err := provision(plan, site, p, d, r); err != nil {
 		return res, err
 	}
 
@@ -109,7 +116,9 @@ func Apply(plan *Plan, p Policy, d Deps, r Reporter) (*Result, error) {
 // provision writes the vhost and runtime units for the site's mode, then issues
 // its certificate. The certificate is a separate step from the runtime so
 // mkcert's work gets its own line rather than being buried in the runtime's.
-func provision(plan *Plan, site config.Site, p Policy, r Reporter) error {
+func provision(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) error {
+	ensureServableFPMImage(plan, site, p, d, r)
+
 	label, detail := provisionLabels(plan, site, r)
 
 	unsecured := site
@@ -168,6 +177,33 @@ func finish(plan *Plan, site config.Site, p Policy) error {
 		}
 		return siteops.FinishLink(site, site.PHPVersion)
 	}
+}
+
+// ensureServableFPMImage makes the selected version's image exist before the
+// shared FPM unit is (re)started, so a link onto a version this machine never
+// built serves instead of answering 502. The other modes build their own
+// per-site image in their finisher. On a build lerd cannot run here, or one that
+// fails, the site stays registered and the user is told the single command that
+// makes it serve, rather than being left on a silent 502.
+func ensureServableFPMImage(plan *Plan, site config.Site, p Policy, d Deps, r Reporter) {
+	if plan.Mode != ModeFPM || fpmImageExists(site.PHPVersion) {
+		return
+	}
+	rebuildHint := fmt.Sprintf("PHP %s is not built, so %s will answer 502 until you run 'lerd php:rebuild %s'",
+		site.PHPVersion, site.Name, site.PHPVersion)
+	// The watcher's unattended sweep withholds image builds; naming the command
+	// keeps it honest rather than silently registering a 502.
+	if !p.ImageBuild || d.EnsureFPMQuadlet == nil {
+		r.Warn("%s", rebuildHint)
+		return
+	}
+	step := r.Step("building PHP " + site.PHPVersion + " image (first use)")
+	if err := d.EnsureFPMQuadlet(site.PHPVersion); err != nil {
+		step.Fail(err)
+		r.Warn("%s", rebuildHint)
+		return
+	}
+	step.OK("")
 }
 
 // provisionLabels names the provisioning step and its result for a mode.
