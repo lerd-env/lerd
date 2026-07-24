@@ -81,6 +81,8 @@ The dev server is the site's main process, not a togglable worker. Its health dr
 
 If it dies it is restarted automatically (`Restart=always`), and lerd's worker-heal pass recovers it if it ever gets stuck, while leaving paused sites alone. Because pause already stops it, there is deliberately no separate start/stop toggle for the dev server in the dashboard.
 
+For a proxy-only site, which has no command for lerd to run, there is no unit to reflect, so the running indicator instead follows the proxied port: it is green while the dev server you start yourself is listening on it, and grey otherwise.
+
 The dashboard shows a **Proxy** badge with the port (mirroring the container badge custom-container sites get), and the dev server's journal is available under a read-only **Dev Server** logs tab. The site header carries a reload button that restarts the dev server, the same thing `lerd restart` does; proxy-only sites, which have no command for lerd to run, do not get it. From the CLI:
 
 ```bash

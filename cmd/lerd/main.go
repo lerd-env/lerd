@@ -208,6 +208,7 @@ func main() {
 		root.AddCommand(cmd)
 	}
 	root.AddCommand(cli.NewShareCmd())
+	root.AddCommand(cli.NewShareToolCmd())
 	root.AddCommand(cli.NewDomainCmd())
 	root.AddCommand(cli.NewGroupCmd())
 	root.AddCommand(cli.NewWorkspaceCmd())
