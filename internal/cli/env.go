@@ -1088,6 +1088,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// keeps pointing at a host that no longer resolves.
 	alignWorktreeEnvDBConnection(site, envPath, envRelPath, envFormat)
 
+	// The connection a JetBrains project points at is rebuilt from the same
+	// resolution, so a database or an engine that changed here reaches the IDE
+	// rather than leaving it on coordinates that no longer answer.
+	if syncIDEDataSource(site.Path).wrote() {
+		envInfo("  IDE database connection updated in .idea\n")
+	}
+
 	envInfo("Done.\n")
 	return nil
 }

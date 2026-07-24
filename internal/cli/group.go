@@ -97,6 +97,9 @@ func runGroupAdd(_ *cobra.Command, args []string) error {
 	if groupShareDB {
 		feedback.Note("sharing the " + main.Name + " database")
 	}
+	// Sharing rewrote the secondary's DB_DATABASE, so its IDE connection now
+	// points at a database it no longer uses.
+	syncIDEDataSource(secondary.Path)
 	return nil
 }
 
@@ -123,6 +126,7 @@ func runGroupDB(_ *cobra.Command, args []string) error {
 	} else {
 		feedback.Done("now using a separate database")
 	}
+	syncIDEDataSource(secondary.Path)
 	return nil
 }
 
@@ -136,6 +140,8 @@ func runGroupRemove(_ *cobra.Command, _ []string) error {
 	}
 	feedback.Begin()
 	feedback.Done("ungrouped " + secondary.Name + " → " + feedback.Val(secondary.PrimaryDomain()))
+	// Leaving a group restores the site's own database name.
+	syncIDEDataSource(secondary.Path)
 	return nil
 }
 

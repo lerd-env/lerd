@@ -1,4 +1,4 @@
-package cli
+package linker
 
 import (
 	"os"
@@ -26,7 +26,7 @@ func TestFreeSiteName_reusesNameForSymlinkedSpelling(t *testing.T) {
 
 	// Linking the same directory through the symlinked spelling must reuse the
 	// existing name, not disambiguate it to app-2 (#930).
-	if got := freeSiteName("app", appLink); got != "app" {
-		t.Errorf("freeSiteName(app, symlinked spelling) = %q, want app", got)
+	if got := FreeSiteName("app", appLink); got != "app" {
+		t.Errorf("FreeSiteName(app, symlinked spelling) = %q, want app", got)
 	}
 }

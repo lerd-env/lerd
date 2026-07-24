@@ -296,6 +296,22 @@ Run from inside a git worktree, the shim reads that checkout's own env file rath
 
 To point an IDE at a tool, use its shim path, for example `~/.local/share/lerd/bin/mysqldump`. IDEs validate the path by running the tool with `--version` first, and a bare `--version` or `--help` is always forwarded exactly as given, without the local-database default and without starting the service behind it.
 
+### The connection in a JetBrains project
+
+An IDE cannot work out a site's database on its own. The site's `.env` names the container and its internal port, `lerd-postgres-pgvector:5432`, which is correct inside the network and unusable from the machine, where the same engine answers on `127.0.0.1` and whatever port it was published on. No format is shared across IDEs for a project to declare a database either, so the connection normally gets typed by hand, and typed wrong the moment two engines of one family push the second onto a shifted port.
+
+JetBrains keeps its data sources in `<project>/.idea/dataSources.xml`, so lerd maintains one entry there, named `<database> (lerd)`, scoped to the project's own database rather than the whole server, which on a busy machine holds every other project's databases too.
+
+It is written on `lerd link`, refreshed by `lerd env` and by the group commands, and removed by `lerd unlink`. An entry lerd owns whose database the project no longer uses is dropped rather than left behind, which is what keeps a site that moved onto a group's shared database from carrying two connections. The port is read fresh every time, so an engine that moved is picked up rather than remembered wrong.
+
+A grouped secondary sharing the main site's database gets the main's database, because sharing rewrites the secondary's own `DB_DATABASE`, which is what the connection is resolved from.
+
+A project linked before this existed picks it up the next time either command runs there, which is also how a connection catches up with an engine that moved to another port.
+
+lerd only ever touches a project that already has a `.idea` directory, because that directory existing is what says the project is open in a JetBrains IDE; it never creates one. Inside the file it owns exactly one entry, keyed on a stable identifier derived from the project path, so your own data sources are left byte for byte as they were. The user and password ride in the JDBC URL, since JetBrains keeps secrets in its own credential store where lerd cannot write, and they are the fixed local ones the site's `.env` already spells out.
+
+Set `ide_data_source: false` in `~/.config/lerd/config.yaml` to leave IDE files alone entirely. IDEs validate the path by running the tool with `--version` first, and a bare `--version` or `--help` is always forwarded exactly as given, without the local-database default and without starting the service behind it.
+
 ### Managing shims
 
 List the shims your installed services expose and whether each is installed:
