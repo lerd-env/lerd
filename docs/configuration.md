@@ -21,6 +21,10 @@ node:
                           # (the bundled default) or "nvm" (a user-installed nvm
                           # lerd detected at install time). Switchable from the
                           # dashboard's Node page. Empty means fnm.
+  nvm_dir: ~/.nvm         # optional. Where nvm lives when manager is nvm.
+                          # Written at install/switch so lerd-ui and the watcher
+                          # (which never load your shell rc) find a custom
+                          # $NVM_DIR. Empty falls back to $NVM_DIR or ~/.nvm.
 share:
   default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
                             # flag is given: ngrok, cloudflare, expose, serveo or
