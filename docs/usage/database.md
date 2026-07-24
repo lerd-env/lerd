@@ -179,7 +179,7 @@ A custom-format archive (`pg_dump -Fc`) is not a SQL file at all, and `psql` say
 
 ### Imports that finish with errors
 
-`psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. On the terminal the warning spells out the first few complaints with their counts and folds the rest into a tally, which is usually enough to name the cause on sight; the web UI lists them all: a flood of `invalid command \N` means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created.
+`psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. On the terminal the warning spells out the first few complaints with their counts and folds the rest into a tally, which is usually enough to name the cause on sight; the web UI lists them all: a flood of `invalid command \N`, or of `backslash commands are restricted` on PostgreSQL 18, means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created. Both phrasings are the same thing and both fold into a single line in the report, so the cascade never crowds out its cause.
 
 ### Large dumps and `max_allowed_packet`
 

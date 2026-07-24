@@ -185,3 +185,58 @@ func TestImportTallyBoundsPartialLine(t *testing.T) {
 		t.Fatalf("partial = %d bytes, want at most %d", got, maxPartialLine)
 	}
 }
+
+// pg_dump 18 opens its dumps with \restrict, and in that mode psql refuses
+// backslash commands. So the COPY data that spills out after a missing table,
+// which used to read "invalid command \N", now reads this instead, and the
+// tally never saw it.
+func TestParseImportOutputCountsThePostgres18Cascade(t *testing.T) {
+	out := `ERROR:  type "public.vector" does not exist
+ERROR:  relation "public.embeddings" does not exist
+backslash commands are restricted; only \unrestrict is allowed
+backslash commands are restricted; only \unrestrict is allowed
+backslash commands are restricted; only \unrestrict is allowed
+ERROR:  syntax error at or near "1"
+`
+	rep := parseImportOutput(out)
+	if rep.Errors != 6 {
+		t.Fatalf("errors = %d, want 6", rep.Errors)
+	}
+	// The cascade folds into one entry, at the end, so it cannot crowd out the
+	// failure that caused it.
+	last := rep.Issues[len(rep.Issues)-1]
+	if !strings.Contains(last.Message, "backslash commands are restricted") || last.Count != 3 {
+		t.Fatalf("last issue = %+v", last)
+	}
+	if rep.Issues[0].Message != `ERROR:  type "public.vector" does not exist` {
+		t.Errorf("the cause is no longer first: %+v", rep.Issues[0])
+	}
+	if len(rep.Issues) != 4 {
+		t.Errorf("issues = %+v", rep.Issues)
+	}
+}
+
+// Both phrasings are the same cascade, and a dump that somehow produced both
+// must still leave room for the statements that matter.
+func TestParseImportOutputFoldsEitherCascadePhrasing(t *testing.T) {
+	out := "invalid command \\N\ninvalid command \\N\n" +
+		"backslash commands are restricted; only \\unrestrict is allowed\n" +
+		"ERROR:  relation \"t\" does not exist\n"
+	rep := parseImportOutput(out)
+	noise := 0
+	for _, i := range rep.Issues {
+		if strings.HasPrefix(i.Message, "invalid command") || strings.HasPrefix(i.Message, "backslash commands") {
+			noise++
+		}
+	}
+	if noise != 1 {
+		t.Errorf("both phrasings should fold to one entry: %+v", rep.Issues)
+	}
+}
+
+func TestTrimImportPrefixHandlesTheRestrictedLine(t *testing.T) {
+	got := trimImportPrefix(`psql:<stdin>:4412: backslash commands are restricted; only \unrestrict is allowed`)
+	if got != `backslash commands are restricted; only \unrestrict is allowed` {
+		t.Errorf("trim = %q", got)
+	}
+}
