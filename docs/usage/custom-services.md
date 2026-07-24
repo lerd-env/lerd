@@ -234,7 +234,7 @@ When `lerd env` runs in a project directory, it checks each custom service's `en
 
 ## How `lerd start` / `lerd stop` handle custom services
 
-`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services.
+`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` consumers (phpMyAdmin, pgAdmin) so their host lists include engines that came up in the same pass — otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
 
 Custom service containers are given a 5-second graceful stop window before podman sends `SIGKILL`. This keeps `lerd service stop` and the web UI's Stop button responsive even for images with slow shutdown sequences (Selenium Chromium/supervisord, for example, can otherwise block for 30 s+). On Podman 5.0+ this is emitted as the native `StopTimeout=5` quadlet key; on Podman 4.x (e.g. Ubuntu 24.04's 4.9.3) lerd writes `PodmanArgs=--stop-timeout=5` instead, since the `StopTimeout=` key only exists in 5.0+. Existing installs of a slow-stopping service can pick up the change with `lerd service remove <name> && lerd service preset <name>`.
 
@@ -311,15 +311,20 @@ lerd service add \
 
 A `depends_on` entry is satisfied by that service, or by any installed service
 whose `family` or `env_role` names it (MariaDB for `mysql`, Valkey for `redis`,
-`postgres-pgvector` for `postgres`). Start resolves to the installed satisfier
-and brings that one up; install preflight uses the same rule and names the
-accepted alternatives when nothing is installed.
+`postgres-pgvector` for `postgres`). Start resolves to one satisfier (literal
+name, then same-family, then env_role drop-in) and brings that one up. Stop
+cascade-stops a dependent only when nothing else still **running** meets its
+dependency; installed-but-stopped engines do not keep the admin UI alive.
+Otherwise family consumers are regenerated instead (after a just-started engine
+is ready, so host lists are not rewritten empty). Install preflight uses the
+same satisfaction rule and names the accepted alternatives when nothing is
+installed. `discover_family` lists only running family members in admin UIs, and a bulk `lerd start` refreshes those lists once engines are up.
 
 | Action | Effect |
 |---|---|
-| `lerd service start phpmyadmin` | Starts a satisfier for `mysql` first (MySQL itself, or MariaDB), then starts `phpmyadmin` |
-| `lerd service start mysql` | Starts `mysql`, then also starts any services that depend on it (e.g. `phpmyadmin`) |
-| `lerd service stop mysql` | Stops `phpmyadmin` first (cascade), then stops `mysql` |
+| `lerd service start phpmyadmin` (also UI / TUI / MCP) | Starts a satisfier for `mysql` first (MySQL itself, or MariaDB), then starts `phpmyadmin` |
+| `lerd service start mysql` (also UI / TUI / MCP) | Starts `mysql`, then also starts any services that depend on it (e.g. `phpmyadmin`) |
+| `lerd service stop mysql` (also UI / TUI / MCP) | Stops `phpmyadmin` first when nothing else running satisfies it, then stops `mysql` |
 | Site pause (auto-stops `mysql`) | `phpmyadmin` is stopped first, then `mysql` |
 | Site unpause (starts `mysql`) | `mysql` starts, then `phpmyadmin` starts |
 

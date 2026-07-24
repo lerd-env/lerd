@@ -440,27 +440,7 @@ func execServiceStart(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-
-	unitName := "lerd-" + name
-
-	if isKnownService(name) {
-		if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
-			return toolErr("ensuring default preset quadlet: " + err.Error()), nil
-		}
-	} else {
-		svc, err := config.LoadCustomService(name)
-		if err != nil {
-			return toolErr("unknown service: " + name + ". Use service_add to register a custom service first."), nil
-		}
-		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
-			return toolErr("writing quadlet: " + err.Error()), nil
-		}
-	}
-
-	if err := podman.DaemonReloadFn(); err != nil {
-		return toolErr("daemon-reload: " + err.Error()), nil
-	}
-	if err := podman.StartUnit(unitName); err != nil {
+	if err := serviceops.StartService(name); err != nil {
 		return toolErr("starting " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " started"), nil
@@ -471,7 +451,7 @@ func execServiceStop(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-	if err := podman.StopUnit("lerd-" + name); err != nil {
+	if err := serviceops.StopService(name); err != nil {
 		return toolErr("stopping " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " stopped"), nil
@@ -482,16 +462,7 @@ func execServiceRestart(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-	if isKnownService(name) {
-		if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
-			return toolErr("ensuring quadlet: " + err.Error()), nil
-		}
-	} else if svc, err := config.LoadCustomService(name); err == nil {
-		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
-			return toolErr("ensuring quadlet: " + err.Error()), nil
-		}
-	}
-	if err := podman.RestartUnit("lerd-" + name); err != nil {
+	if err := serviceops.RestartService(name); err != nil {
 		return toolErr("restarting " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " restarted"), nil

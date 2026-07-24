@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -82,27 +81,14 @@ func newServiceStartCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
-			unit := "lerd-" + name
 
 			var image string
 			if isKnownService(name) {
-				if err := ensureServiceQuadlet(name); err != nil {
-					return err
-				}
 				image = podman.ServiceImage("lerd-" + name)
 			} else {
 				svc, loadErr := config.LoadCustomService(name)
 				if loadErr != nil {
 					return fmt.Errorf("unknown service %q", name)
-				}
-				if err := ensureCustomServiceQuadlet(svc); err != nil {
-					return err
-				}
-				// Make sure every declared dependency is up first. Without
-				// this, starting e.g. mongo-express by itself would leave
-				// mongo stopped and the container would fail to connect.
-				if err := StartServiceDependencies(svc); err != nil {
-					return err
 				}
 				image = svc.Image
 			}
@@ -118,28 +104,12 @@ func newServiceStartCmd() *cobra.Command {
 			}
 
 			feedback.Begin()
-			svcStep := feedback.Start("starting " + unit)
-			if err := podman.StartUnit(unit); err != nil {
+			svcStep := feedback.Start("starting lerd-" + name)
+			if err := serviceops.StartService(name); err != nil {
 				svcStep.Fail(err)
 				return err
 			}
 			svcStep.OK("")
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-
-			// Start any custom services that depend on this one.
-			for _, dep := range config.CustomServicesDependingOn(name) {
-				if err := ensureServiceRunning(dep); err != nil {
-					feedback.Warn("could not start dependent service %s: %v", dep, err)
-				}
-			}
-
-			// Restart family consumers (e.g. phpMyAdmin) so they pick up
-			// the freshly-started member without DNS / connection caching.
-			if fam := serviceops.ServiceFamily(name); fam != "" {
-				serviceops.RegenerateFamilyConsumers(fam)
-			}
-
 			printEnvVars(name)
 			return nil
 		},
@@ -154,23 +124,11 @@ func newServiceStopCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 			feedback.Begin()
-			// StopServiceAndDependents emits its own "stopping <service>" step
-			// (per service in the dependency cascade), so don't wrap it here.
-			StopServiceAndDependents(name)
-			_ = config.SetServicePaused(name, true)
-			_ = config.SetServiceManuallyStarted(name, false)
-			if fam := serviceops.ServiceFamily(name); fam != "" {
-				serviceops.RegenerateFamilyConsumers(fam)
-			}
-			return nil
+			// StopService emits its own "stopping <service>" step for the
+			// cascade, so don't wrap it here.
+			return serviceops.StopService(name)
 		},
 	}
-}
-
-// RegenerateFamilyConsumersForService is the public entry the Web UI uses
-// after a start/stop. Forwards to serviceops.
-func RegenerateFamilyConsumersForService(name string) {
-	serviceops.RegenerateFamilyConsumersForService(name)
 }
 
 // serviceUpdateHint queries the registry for an update / upgrade tag and
@@ -359,23 +317,9 @@ func newServiceRestartCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
-			unit := "lerd-" + name
-			// Refresh the quadlet first so config edits and preset file
-			// mounts land before the unit picks them up. If regen fails,
-			// warn and restart the existing quadlet — failing here would
-			// strand a healthy unit on a transient render error.
-			if isKnownService(name) {
-				if err := ensureServiceQuadlet(name); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
-				}
-			} else if svc, err := config.LoadCustomService(name); err == nil {
-				if err := ensureCustomServiceQuadlet(svc); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
-				}
-			}
 			feedback.Begin()
-			svcStep := feedback.Start("restarting " + unit)
-			if err := podman.RestartUnit(unit); err != nil {
+			svcStep := feedback.Start("restarting lerd-" + name)
+			if err := serviceops.RestartService(name); err != nil {
 				svcStep.Fail(err)
 				return err
 			}
@@ -1145,16 +1089,6 @@ func init() {
 	serviceops.UnitInstalledFn = services.Mgr.ContainerUnitInstalled
 }
 
-// StartServiceDependencies and StopServiceAndDependents are thin wrappers so
-// the Web UI can share the same semantics as the CLI.
-func StartServiceDependencies(svc *config.CustomService) error {
-	return serviceops.StartDependencies(svc)
-}
-
-func StopServiceAndDependents(name string) {
-	serviceops.StopWithDependents(name)
-}
-
 // autoStopUnusedServices stops any running service that has no active sites
 // referencing it and was not manually started by the user.
 func autoStopUnusedServices() {
@@ -1173,7 +1107,7 @@ func autoStopUnusedServices() {
 				running = status == "active" || status == "activating"
 			}
 			if running {
-				StopServiceAndDependents(name)
+				_ = serviceops.StopService(name)
 			}
 		}
 	}

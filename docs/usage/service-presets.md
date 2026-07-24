@@ -205,16 +205,17 @@ dynamic_env:
 ```
 
 `PMA_HOSTS` is recomputed at every quadlet generation as a comma-joined list
-of every installed mysql / mariadb family member's container hostname (e.g.
-`lerd-mysql,lerd-mysql-5-7,lerd-mariadb-11`). The resulting login page shows
-a server dropdown with every variant; auto-login still works with the
-preset's static `PMA_USER` / `PMA_PASSWORD`.
+of every **running** mysql / mariadb family member's container hostname (e.g.
+`lerd-mysql,lerd-mysql-5-7`). A stopped member is omitted so the login page
+does not offer an offline server. Auto-login still works with the preset's
+static `PMA_USER` / `PMA_PASSWORD`.
 
 Lerd automatically regenerates phpMyAdmin's quadlet (and any other consumer
 of `discover_family`) whenever a family member is **installed**, **removed**,
-**started**, or **stopped**. Active consumers are stop-removed-restarted in
-one shot so the new env vars take effect without DNS / connection caching
-holding stale state.
+**started**, or **stopped**, and again at the end of a bulk `lerd start` /
+install so engines and admin UIs that come up together still get a correct
+host list. Active consumers are stop-removed-restarted only when the rendered
+unit changed, so a steady host list does not bounce phpMyAdmin on every start.
 
 ## `.lerd.yaml` preset references
 
@@ -245,10 +246,10 @@ full definition into `.lerd.yaml` for portability; see [Custom services](custom-
 
 A preset's `depends_on` is enforced two ways:
 
-1. **At install time**: installing a preset is rejected until each dependency is satisfied. A `depends_on` entry is met by that service, or by any installed service whose `family` or `env_role` names it — so phpMyAdmin's `mysql` dependency is met by MariaDB (`env_role: mysql`), RedisInsight's `redis` dependency by Valkey, and pgAdmin's `postgres` dependency by `postgres-pgvector`. When nothing satisfies a dependency the error lists those alternatives. The Web UI's preset picker disables the **Add** button with the same gating.
-2. **At start/stop time**: `lerd service start mongo-express` brings a satisfier for `mongo` up first, recursively (the literal name when installed, otherwise a family or env_role drop-in). `lerd service stop mongo` first stops `mongo-express` (and any other dependent), then stops `mongo`. The Web UI's Start and Stop buttons share the same semantics.
+1. **At install time**: installing a preset is rejected until each dependency is satisfied. A `depends_on` entry is met by that service, or by any installed service whose `family` or `env_role` names it — so phpMyAdmin's `mysql` dependency is met by MariaDB (`env_role: mysql`), RedisInsight's `redis` dependency by Valkey, and pgAdmin's `postgres` dependency by `postgres-pgvector`. When several satisfiers exist, lerd prefers the literal name, then a same-family member, then an env_role drop-in. When nothing satisfies a dependency the error lists those alternatives. The Web UI's preset picker disables the **Add** button with the same gating.
+2. **At start/stop time**: `lerd service start`, the Web UI Start/Stop buttons, the TUI service actions, and MCP `service` start/stop/restart all share one `serviceops` path. Start brings a satisfier for each `depends_on` entry up first (literal name when installed, otherwise a family or env_role drop-in), then regenerates `discover_family` consumers. Stop cascade-stops dependents only when nothing else still **running** satisfies their dependency; otherwise the dependent stays up and family consumers are regenerated. Starting an engine waits until it is ready before that regen, so the consumer is not rewritten with an empty host list. Bulk `lerd start` / install refresh every `discover_family` consumer once engines are up.
 
-`discover_family` is separate: it only expands admin UI host lists at quadlet generation time. It is not how dependencies are satisfied.
+`discover_family` is separate: it expands admin UI host lists at quadlet generation time to every **running** member of the named families, so a stopped database does not appear as a selectable server.
 
 ## Default credentials
 

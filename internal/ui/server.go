@@ -1732,7 +1732,6 @@ func handleServicePresetInstall(w http.ResponseWriter, r *http.Request) {
 		dispatchNotification(notificationForServiceOp("install", name, start, err))
 		return
 	}
-	cli.RegenerateFamilyConsumersForService(svc.Name)
 	writeLine(map[string]any{
 		"phase":      "done",
 		"name":       svc.Name,
@@ -2421,12 +2420,8 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate service name — built-in or custom
-	isBuiltin := config.IsDefaultPreset(name)
-	var customSvc *config.CustomService
-	if !isBuiltin {
-		var loadErr error
-		customSvc, loadErr = config.LoadCustomService(name)
-		if loadErr != nil {
+	if !config.IsDefaultPreset(name) {
+		if _, loadErr := config.LoadCustomService(name); loadErr != nil {
 			http.Error(w, "unknown service", http.StatusNotFound)
 			return
 		}
@@ -2437,79 +2432,11 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "start":
-		// Ensure quadlet file exists and systemd knows about it before starting
-		var quadletErr error
-		if isBuiltin {
-			quadletErr = ensureServiceQuadlet(name)
-		} else {
-			quadletErr = ensureCustomServiceQuadlet(customSvc)
-		}
-		if quadletErr != nil {
-			resp := ServiceActionResponse{
-				ServiceResponse: buildServiceResponse(name),
-				OK:              false,
-				Error:           quadletErr.Error(),
-				Logs:            serviceRecentLogs(unit),
-			}
-			writeJSON(w, resp)
-			return
-		}
-		// Bring every declared dependency up first. Without this, starting
-		// mongo-express from the dashboard would leave mongo stopped and the
-		// container would fail to connect.
-		if !isBuiltin {
-			if depErr := cli.StartServiceDependencies(customSvc); depErr != nil {
-				resp := ServiceActionResponse{
-					ServiceResponse: buildServiceResponse(name),
-					OK:              false,
-					Error:           depErr.Error(),
-					Logs:            serviceRecentLogs(unit),
-				}
-				writeJSON(w, resp)
-				return
-			}
-		}
-		// Retry to handle Quadlet generator latency after daemon-reload.
-		for attempt := range 5 {
-			opErr = podman.StartUnit(unit)
-			if opErr == nil || !strings.Contains(opErr.Error(), "not found") {
-				break
-			}
-			time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-		}
-		if opErr == nil {
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.StartService(name)
 	case "stop":
-		// Stop any custom services that depend on this one before stopping
-		// it, mirroring the CLI's `lerd service stop` behaviour. Otherwise
-		// stopping mysql leaves phpmyadmin running with a dead backend (and
-		// the same for postgres+pgadmin, mongo+mongo-express).
-		cli.StopServiceAndDependents(name)
-		// Cover the parent itself in case the recursive helper short-circuited
-		// (e.g. unit was reported inactive but the user explicitly clicked stop).
-		opErr = podman.StopUnit(unit)
-		if opErr == nil {
-			_ = config.SetServicePaused(name, true)
-			_ = config.SetServiceManuallyStarted(name, false)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.StopService(name)
 	case "restart":
-		// Refresh the quadlet first so config edits and preset file mounts
-		// land on disk before systemd restarts the container.
-		if isBuiltin {
-			_ = ensureServiceQuadlet(name)
-		} else {
-			_ = ensureCustomServiceQuadlet(customSvc)
-		}
-		opErr = podman.RestartUnit(unit)
-		if opErr == nil {
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.RestartService(name)
 	case "remove":
 		removeData := r.URL.Query().Get("removeData") == "true"
 		if err := serviceops.RemoveService(name, serviceops.RemoveOptions{RemoveData: removeData}, nil); err != nil {
@@ -2522,21 +2449,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		if opErr = config.SetServicePinned(name, true); opErr == nil {
 			status, _ := podman.UnitStatus(unit)
 			if status != "active" {
-				if isBuiltin {
-					_ = ensureServiceQuadlet(name)
-				} else {
-					_ = ensureCustomServiceQuadlet(customSvc)
-				}
-				for attempt := range 5 {
-					opErr = podman.StartUnit(unit)
-					if opErr == nil || !strings.Contains(opErr.Error(), "not found") {
-						break
-					}
-					time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-				}
-				if opErr == nil {
-					_ = config.SetServicePaused(name, false)
-				}
+				opErr = serviceops.StartService(name)
 			}
 		}
 	case "unpin":

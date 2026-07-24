@@ -147,6 +147,8 @@ A **site group** (the `site` tool's `group_*` actions) nests a real site under a
 
 `preset_list` returns each preset's `category`, `icon` and `admin_for`. `admin_for` names the services a preset's admin UI administers, and it is **not** `depends_on`: phpMyAdmin depends on mysql (satisfied by MariaDB via `env_role`) but administers both, and RedisInsight depends on redis (satisfied by Valkey) while administering both. To answer "which dashboard administers this database", read `admin_for`.
 
+`service` start/stop/restart use the same `serviceops` path as the CLI, Web UI, and TUI: `depends_on` resolution (including family / `env_role` drop-ins), reverse-dependent start, soft stop cascade, and `discover_family` consumer regen. Do not assume MCP is a thinner StartUnit wrapper.
+
 ### Reading logs
 
 The `logs` tool lets an assistant debug a site's logs without opening files by hand. Call `logs` with `action: "sources"` to list every queryable source for a site (`app:<file>` framework logs, `fpm`, `worker:<name>`) plus shared infrastructure (`nginx`, `dns`, `watcher`, `ui`, services, `php<ver>`), then `action: "fetch"` with a `source` and any of `grep` (regex or literal substring), `since`/`until` (relative like `15m`/`2h30m`, or a timestamp), `level` (app logs only), and `lines`. Each `fetch` returns an opaque `cursor`; pass it back as `since` on the next call to receive only the new lines, which is how streaming is modelled over MCP's request/response transport. See [the logs feature page](logs.md) for the full source list, filter semantics, and platform notes.
