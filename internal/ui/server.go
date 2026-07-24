@@ -5536,6 +5536,46 @@ func handleBrowse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"current": dir, "dirs": dirs})
 }
 
+// failureMessage extracts why a lerd command failed from its output. A failure
+// is printed as a "✗" line followed by any guidance, so everything from that
+// marker on is the message; without one, the last non-empty line is the best
+// available. Trimmed so the modal shows a sentence rather than a wall of output.
+func failureMessage(out string) string {
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+
+	from := -1
+	for i, line := range lines {
+		if strings.Contains(line, "✗") {
+			from = i
+		}
+	}
+
+	var parts []string
+	if from >= 0 {
+		for _, line := range lines[from:] {
+			if t := strings.TrimSpace(strings.ReplaceAll(line, "✗", "")); t != "" {
+				parts = append(parts, t)
+			}
+		}
+	} else {
+		for i := len(lines) - 1; i >= 0; i-- {
+			if t := strings.TrimSpace(lines[i]); t != "" {
+				parts = append(parts, t)
+				break
+			}
+		}
+	}
+
+	msg := strings.Join(parts, " — ")
+	if msg == "" {
+		msg = strings.TrimSpace(out)
+	}
+	if len(msg) > 300 {
+		return strings.TrimSpace(msg[:300]) + "…"
+	}
+	return msg
+}
+
 // handleSiteLink links a directory as a site via POST /api/sites/link.
 // It streams command output as SSE events and sends a final "done" event.
 // SiteReorderRequest is the JSON body for POST /api/sites/reorder.
@@ -5644,19 +5684,23 @@ func handleSiteLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run env setup (non-fatal).
+	// Run env setup. The site is linked either way, so a failure here is a
+	// warning rather than an error — but it must reach the modal: a project with
+	// no framework, or a framework whose YAML declares no env section, leaves the
+	// .env untouched, and silently reporting success hid that entirely.
 	fmt.Fprintf(w, "data: → Setting up environment...\n\n")
 	flusher.Flush()
-	streamCmd(self, "env") //nolint:errcheck
+	envOut, envFailed := streamCmd(self, "env")
 
-	// Find the newly linked site to return its domain.
-	site, err := config.FindSiteByPath(path)
-	if err != nil {
-		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(map[string]any{"ok": true}))
-		flusher.Flush()
-		return
+	done := map[string]any{"ok": true}
+	if envFailed {
+		done["warning"] = "environment setup failed: " + failureMessage(envOut)
 	}
-	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(map[string]any{"ok": true, "domain": site.PrimaryDomain()}))
+	// Find the newly linked site to return its domain.
+	if site, err := config.FindSiteByPath(path); err == nil {
+		done["domain"] = site.PrimaryDomain()
+	}
+	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(done))
 	flusher.Flush()
 }
 

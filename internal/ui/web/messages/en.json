@@ -668,6 +668,8 @@
   "link_linkThisDir": "Link This Directory",
   "link_waitingOutput": "Waiting for output...",
   "link_failed": "Link failed",
+  "link_envWarning": "The site is linked, but its environment setup did not finish.",
+  "link_continueToSite": "Continue to site",
   "workers_health_banner_title": "{count} worker(s) need healing",
   "workers_health_banner_starting": "Starting {unit}…",
   "workers_health_banner_heal": "Heal",

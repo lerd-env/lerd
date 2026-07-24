@@ -246,19 +246,9 @@ func runLink(args []string) error {
 		}
 	}
 
-	// Apply remaining .lerd.yaml settings: HTTPS and services. The site's secured
-	// state already folds in the DNS-managed gate, so a secured: true project on a
-	// localhost install lands here unsecured and is left on http rather than
-	// triggering a runSecure that the cert layer would only reject.
-	if proj != nil {
-		if proj.Secured && !site.Secured && cfg.DNSManaged() {
-			if err := runSecure(nil, []string{}); err != nil {
-				feedback.Warn("securing site: %v", err)
-			}
-		} else if !proj.Secured && site.Secured {
-			if err := runUnsecure(nil, []string{}); err != nil {
-				feedback.Warn("disabling HTTPS: %v", err)
-			}
+	if proj != nil && shouldSecureOnLink(proj.Secured, site.Secured, cfg.DNSManaged()) {
+		if err := runSecure(nil, []string{}); err != nil {
+			feedback.Warn("securing site: %v", err)
 		}
 	}
 
@@ -295,9 +285,9 @@ func printLinkSummary(site config.Site, start time.Time, wroteDataSource bool) {
 	if site.Framework != "" {
 		sum.Row("Framework", site.Framework)
 	}
-	if env := sailReadRawEnv(site.Path); env["DB_CONNECTION"] != "" {
-		db := env["DB_CONNECTION"]
-		if cache := env["CACHE_STORE"]; cache != "" {
+	readEnv := summaryEnvReader(site)
+	if db := strings.TrimSpace(readEnv("DB_CONNECTION")); db != "" {
+		if cache := strings.TrimSpace(readEnv("CACHE_STORE")); cache != "" {
 			db += " · cache " + cache
 		}
 		sum.Row("DB", db)
@@ -306,6 +296,35 @@ func printLinkSummary(site config.Site, start time.Time, wroteDataSource bool) {
 		sum.Row("IDE", "database connection written to .idea")
 	}
 	sum.Print()
+}
+
+// shouldSecureOnLink reports whether a link should turn HTTPS on because the
+// project asks for it. A link only ever turns HTTPS on: it is turned off with
+// `lerd unsecure`, never as a side effect of linking. secured is a plain bool,
+// so an absent .lerd.yaml, an empty one, and one that omits the field all read
+// as false — and treating that as "turn HTTPS off" silently dropped a secured
+// site back to HTTP every time it was re-linked, undoing the carry-over
+// CleanupRelink had just performed. The DNS gate is folded in so a secured:
+// true project on a localhost install stays on http rather than triggering a
+// runSecure the cert layer would only reject.
+func shouldSecureOnLink(projSecured, siteSecured, dnsManaged bool) bool {
+	return projSecured && !siteSecured && dnsManaged
+}
+
+// summaryEnvReader reads the site's live env file, resolved through the
+// framework's env config so a project in a non-dotenv format is parsed in its
+// own. Deliberately not sailReadRawEnv, which prefers the .env.before_lerd
+// backup the first link has just written, so the summary reported the database
+// lerd had replaced rather than the one it configured (#1144).
+func summaryEnvReader(site config.Site) func(key string) string {
+	envPath := filepath.Join(site.Path, ".env")
+	format := "dotenv"
+	if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok {
+		file, f := fw.Env.Resolve(site.Path)
+		envPath = filepath.Join(site.Path, file)
+		format = f
+	}
+	return makeEnvReader(envExampleFallback(envPath), format)
 }
 
 // linkRuntimeLabel names the serving runtime for the link summary's PHP row.

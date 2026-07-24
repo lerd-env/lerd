@@ -668,6 +668,8 @@
   "link_linkThisDir": "Conectează acest director",
   "link_waitingOutput": "Se așteaptă rezultatul...",
   "link_failed": "Conectare eșuată",
+  "link_envWarning": "Site-ul este legat, dar configurarea mediului nu s-a finalizat.",
+  "link_continueToSite": "Mergi la site",
   "workers_health_banner_title": "{count} worker(i) necesită reparare",
   "workers_health_banner_starting": "Se pornește {unit}…",
   "workers_health_banner_heal": "Repară",

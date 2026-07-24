@@ -668,6 +668,8 @@
   "link_linkThisDir": "Vincular este diretório",
   "link_waitingOutput": "Aguardando saída...",
   "link_failed": "Vinculação falhou",
+  "link_envWarning": "O site está vinculado, mas a configuração do ambiente não foi concluída.",
+  "link_continueToSite": "Ir para o site",
   "workers_health_banner_title": "{count} worker(s) precisam de reparo",
   "workers_health_banner_starting": "Iniciando {unit}…",
   "workers_health_banner_heal": "Reparar",

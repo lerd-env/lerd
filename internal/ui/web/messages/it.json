@@ -668,6 +668,8 @@
   "link_linkThisDir": "Collega questa directory",
   "link_waitingOutput": "In attesa di output...",
   "link_failed": "Collegamento fallito",
+  "link_envWarning": "Il sito è collegato, ma la configurazione dell'ambiente non è stata completata.",
+  "link_continueToSite": "Vai al sito",
   "workers_health_banner_title": "{count} worker necessitano di ripristino",
   "workers_health_banner_starting": "Avvio di {unit}…",
   "workers_health_banner_heal": "Ripristina",

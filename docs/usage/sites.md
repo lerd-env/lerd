@@ -315,6 +315,16 @@ Paths are compared after resolving symlinks, and the resolved path is what gets 
 
 You can link a new site directly from the dashboard by clicking the **+** button in the sites panel header. A directory browser modal lets you navigate to the project folder and click **Link This Directory**. After linking, the site's `.env` is auto-configured and the UI switches to the new site's settings.
 
+Clicking **Link This Directory** is the consent a terminal link would ask for, so
+a project that declares a host-proxy dev command has that command started for
+you. The command is printed in the modal's output, so what lerd runs on your host
+is on screen either way.
+
+The environment step can fail on its own — a project with no framework, or a
+framework that declares no env file, has nothing to configure. The site is still
+linked, and the modal says what went wrong instead of closing on a clean
+success.
+
 ---
 
 ## Unlinked domains
