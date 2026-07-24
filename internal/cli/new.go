@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -117,10 +118,36 @@ func scaffoldPlan(create, target string, extraArgs []string) scaffold {
 	}
 }
 
-// runScaffold executes a scaffold plan from the target's parent directory.
-func runScaffold(plan scaffold, workDir string) error {
+// scaffoldPHPVersion returns the PHP version the scaffold should run under: the
+// machine default clamped into the framework's declared range, so composer
+// resolves against a PHP the framework supports rather than whatever the parent
+// directory (empty, so the default) would pick. Returns "" when the framework
+// declares no range, leaving the caller on the default as before.
+func scaffoldPHPVersion(fw *config.Framework) string {
+	if fw.PHP.Min == "" && fw.PHP.Max == "" {
+		return ""
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return ""
+	}
+	return phpDet.ClampToRange(cfg.PHP.DefaultVersion, fw.PHP.Min, fw.PHP.Max)
+}
+
+// runScaffold executes a scaffold plan from the target's parent directory. When
+// version is set, the containerized create command runs under that PHP rather
+// than the one the parent directory resolves to.
+func runScaffold(plan scaffold, workDir, version string) error {
 	if plan.inContainer {
-		code, err := RunPHPCaptureEnv(workDir, plan.args, []string{composer.ProcessTimeoutEnv()})
+		var (
+			code int
+			err  error
+		)
+		if version != "" {
+			code, err = RunPHPVersionCaptureEnv(workDir, version, plan.args, []string{composer.ProcessTimeoutEnv()})
+		} else {
+			code, err = RunPHPCaptureEnv(workDir, plan.args, []string{composer.ProcessTimeoutEnv()})
+		}
 		if err != nil {
 			return err
 		}
@@ -171,12 +198,18 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 		return fmt.Errorf("framework %q has an empty create command", frameworkName)
 	}
 
+	scaffoldVersion := scaffoldPHPVersion(fw)
+
 	start := time.Now()
 	feedback.Begin()
-	feedback.Line("scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.Create), " ") + " " + target)
+	line := "scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.Create), " ") + " " + target
+	if plan.inContainer && scaffoldVersion != "" {
+		line += " · php " + feedback.Val(scaffoldVersion)
+	}
+	feedback.Line(line)
 	fmt.Println()
 
-	if err := runScaffold(plan, filepath.Dir(target)); err != nil {
+	if err := runScaffold(plan, filepath.Dir(target), scaffoldVersion); err != nil {
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
 
