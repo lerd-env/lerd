@@ -210,11 +210,14 @@ type ImportIssue struct {
 }
 
 // Omitted is how many further distinct complaints were dropped past the cap, so
-// a truncated list never reads as the whole of what went wrong.
+// a truncated list never reads as the whole of what went wrong. Skipped is what
+// the sanitizer held back on the way in, reported so lerd never rewrites a dump
+// silently.
 type ImportReport struct {
 	Errors  int           `json:"errors"`
 	Issues  []ImportIssue `json:"issues,omitempty"`
 	Omitted int           `json:"omitted,omitempty"`
+	Skipped []ImportIssue `json:"skipped,omitempty"`
 }
 
 // Summary renders the report as one line for the CLI and the phase stream.
@@ -235,6 +238,19 @@ func (r ImportReport) Summary() string {
 		parts = append(parts, fmt.Sprintf("and %d more", more))
 	}
 	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
+}
+
+// SkippedSummary renders what the sanitizer held back, so a load that came out
+// clean because lerd filtered it says so rather than looking untouched.
+func (r ImportReport) SkippedSummary() string {
+	if len(r.Skipped) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Skipped))
+	for _, s := range r.Skipped {
+		parts = append(parts, fmt.Sprintf("%d× %s", s.Count, s.Message))
+	}
+	return "skipped " + strings.Join(parts, "; ")
 }
 
 // ImportTally counts an engine's complaints as its output streams past, so a
@@ -384,15 +400,27 @@ func DumpReader(r io.Reader) (io.Reader, error) {
 	return gz, nil
 }
 
+// ImportOptions carries the choices a caller makes about a load. Fresh drops and
+// recreates the database first, so a dump replaces what is there instead of
+// colliding with it statement by statement.
+type ImportOptions struct {
+	Fresh bool
+}
+
 // ImportDatabase streams a SQL dump from r into database on the service
-// container. The database must already exist. The report carries what the
-// engine complained about, which is the only sign of a partial load when the
-// client still exits clean.
-func ImportDatabase(service, database string, r io.Reader) (ImportReport, error) {
+// container. The database must already exist unless Fresh is set. The report
+// carries what the engine complained about, which is the only sign of a partial
+// load when the client still exits clean, and what the sanitizer held back.
+func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (ImportReport, error) {
 	family := config.FamilyOfName(service)
 	shellCmd, ok := importShellCommand(family, database)
 	if !ok {
 		return ImportReport{}, fmt.Errorf("importing into %s databases is not supported", service)
+	}
+	if opt.Fresh {
+		if err := EmptyDatabase(service, database); err != nil {
+			return ImportReport{}, err
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
@@ -405,11 +433,29 @@ func ImportDatabase(service, database string, r io.Reader) (ImportReport, error)
 	if err != nil {
 		return ImportReport{}, err
 	}
+	src, skipped := SanitizeDump(family, src)
 	cmd := podman.CmdContext(ctx, args...)
 	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
-	return parseImportOutput(string(out)), nil
+	rep := parseImportOutput(string(out))
+	rep.Skipped = skipped()
+	return rep, nil
+}
+
+// EmptyDatabase drops and recreates a database, the same replacement a snapshot
+// restore does, so a dump lands on nothing rather than on top of what is there.
+func EmptyDatabase(service, database string) error {
+	if err := ValidateDatabaseName(database); err != nil {
+		return err
+	}
+	if _, err := DropDatabase(service, database); err != nil {
+		return fmt.Errorf("emptying %s: %w", database, err)
+	}
+	if _, err := CreateDatabase(service, database); err != nil {
+		return fmt.Errorf("recreating %s: %w", database, err)
+	}
+	return nil
 }

@@ -7,7 +7,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | Command | Description |
 |---|---|
 | `lerd db:create [name]` | Create a database and a `<name>_testing` database |
-| `lerd db:import [-s service] [-d name] <file.sql>` | Import a SQL dump |
+| `lerd db:import [-s service] [-d name] [--fresh] <file.sql>` | Import a SQL dump |
 | `lerd db:export [-s service] [-d name] [-o file.sql]` | Export a database to a SQL dump |
 | `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL or PostgreSQL shell |
 | `lerd db:snapshot [name] [-A]` | Create a named, restorable snapshot of a database |
@@ -32,6 +32,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `--output <file>` | `-o` | Output file for `db:export` (default: `<database>.sql`) |
 | `--all-databases` | `-A` | Snapshot or restore every database in the service at once |
 | `--force` | `-f` | Skip the `db:restore` confirmation prompt |
+| `--fresh` | | Empty the database before loading, so the dump replaces it (`db:import`) |
 | `--all` | | List snapshots across every database on the service (`db:snapshots`) |
 
 A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to its name, e.g. `nightly-20260719-135558`, so taking the same name twice never collides. Reference the full stamped name shown by `db:snapshots` when restoring or removing it.
@@ -150,6 +151,14 @@ It drops each object before recreating it, so the load replaces what they had ra
 It carries stored procedures, functions and events. `pg_dump` writes functions either way, but `mysqldump` leaves routines and events out unless asked, so a mysql or mariadb dump taken without `--routines --events` hands over a database that looks complete and is not.
 
 Two things a dump cannot carry across on its own. Dropping only covers the objects the dump contains, so a table the other machine has and yours does not survives the import. And an extension your database uses has to exist in their engine too, so a dump from `postgres-pgvector` will not load into plain `postgres`.
+
+### Dumps from a managed provider
+
+A dump taken from a hosted Postgres or MySQL carries statements about that host's own roles: `ALTER ... OWNER TO`, `GRANT`, `REVOKE` and `ALTER DEFAULT PRIVILEGES` on postgres, and a `DEFINER` clause on every view, trigger and routine on the mysql families. lerd's engines run a single admin role, so none of it can apply here. On postgres each one lands as an error you cannot act on, and on mysql it is worse: the object is created and only fails when something uses it, with `ERROR 1449: The user specified as a definer does not exist`.
+
+lerd filters those out on the way in, which is what `--no-owner --no-privileges` does at dump time, except you do not have to have thought of it when you took the dump. What it skipped is reported next to the errors, since a dump lerd quietly rewrote should never read as one that arrived clean. Row data is never touched: a postgres `COPY` block is passed through byte for byte between its header and its closing `\.`, and on mysql only DDL lines are rewritten, so a value that happens to contain the word survives.
+
+Ownership is the smaller half of what goes wrong. The rest comes from loading into a database that already has the objects, which no filter can fix: the schema, tables, sequences, indexes and constraints all collide, and then the rows land on populated tables as duplicate keys and foreign key violations. Tick **Empty the database first** in the import dialog, or pass `--fresh` on the CLI, and the database is dropped and recreated before the dump loads, so it replaces what was there rather than fighting it.
 
 ### Compressed and custom-format dumps
 

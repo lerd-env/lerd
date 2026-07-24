@@ -41,11 +41,15 @@ function db(name: string, size = 0, site?: string, branch?: string): DatabaseEnt
 const parent = db('havenly', 4096, 'havenly.test');
 const testing = db('havenly_testing', 0, 'havenly.test');
 
-// pickDump drives the hidden file input the import button clicks.
-async function pickDump(container: HTMLElement, name = 'shop.sql') {
+// pickDump drives the hidden file input the import button clicks, then confirms
+// the dialog that stands between picking a dump and loading it.
+async function pickDump(container: HTMLElement, name = 'shop.sql', fresh = false) {
   const input = container.querySelector('input[type="file"]') as HTMLInputElement;
   Object.defineProperty(input, 'files', { value: [new File(['dump'], name)], configurable: true });
   await fireEvent.change(input);
+  if (fresh) await fireEvent.click(container.querySelector('input[type="checkbox"]') as HTMLElement);
+  const confirm = [...container.querySelectorAll('button')].filter((b) => b.textContent?.trim() === 'Import');
+  await fireEvent.click(confirm[confirm.length - 1]);
 }
 
 describe('DatabaseCard', () => {
@@ -138,6 +142,40 @@ describe('DatabaseCard', () => {
     ).not.toHaveLength(0);
     expect(getByText('27331×')).toBeInTheDocument();
     expect(getByText(/invalid command/)).toBeInTheDocument();
+  });
+
+  it('asks before loading, and does nothing until the dialog is confirmed', async () => {
+    const { container, getByText } = render(DatabaseCard, { props: { engine, entry: parent } });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    Object.defineProperty(input, 'files', { value: [new File(['dump'], 'shop.sql')], configurable: true });
+    await fireEvent.change(input);
+    expect(getByText('Import shop.sql')).toBeInTheDocument();
+    expect(importDatabase).not.toHaveBeenCalled();
+  });
+
+  it('passes the empty-first choice through to the daemon', async () => {
+    const { container } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container, 'shop.sql', true);
+    expect(importDatabase).toHaveBeenCalledWith('mysql', 'havenly', expect.any(File), expect.any(Function), true);
+  });
+
+  it('loads on top of what is there when the box is left unticked', async () => {
+    const { container } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container);
+    expect(importDatabase).toHaveBeenCalledWith('mysql', 'havenly', expect.any(File), expect.any(Function), false);
+  });
+
+  it('lists what the daemon held back on the way in', async () => {
+    importDatabase.mockResolvedValueOnce({
+      ok: true,
+      errors: 3,
+      issues: [{ message: 'ERROR:  relation "users" already exists', count: 1 }],
+      skipped: [{ message: 'ownership and privilege statements the local engine has no roles for', count: 80 }]
+    });
+    const { container, findByText, getByText } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container);
+    expect(await findByText(/ownership and privilege statements/)).toBeInTheDocument();
+    expect(getByText('80×')).toBeInTheDocument();
   });
 
   it('surfaces the engine error when an import fails', async () => {

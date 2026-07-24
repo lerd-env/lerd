@@ -49,14 +49,16 @@ func NewDbShellCmd() *cobra.Command { return newDbShellCmd("db:shell") }
 
 func newDbImportCmd(use string) *cobra.Command {
 	var database, service string
+	var fresh bool
 	cmd := &cobra.Command{
 		Use:   use + " <file.sql>",
 		Short: "Import a SQL dump into a database (default: site DB from .env)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runDbImport(args[0], service, database)
+			return runDbImport(args[0], service, database, fresh)
 		},
 	}
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "Empty the database before loading, so the dump replaces it")
 	cmd.Flags().StringVarP(&database, "database", "d", "", "Database name (default: from .env or .lerd.yaml)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Lerd DB service to target (e.g. mysql, postgres)")
 	return cmd
@@ -295,7 +297,7 @@ func loadDBEnv(cwd string) (*dbEnv, error) {
 	}, nil
 }
 
-func runDbImport(file, service, database string) error {
+func runDbImport(file, service, database string, fresh bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -323,6 +325,7 @@ func runDbImport(file, service, database string) error {
 	if err != nil {
 		return err
 	}
+	src, skipped := serviceops.SanitizeDump(config.FamilyOfName(env.service), src)
 	// psql exits 0 even when every statement failed, so the output is tallied on
 	// its way to the terminal and the result reported at the end.
 	var tally serviceops.ImportTally
@@ -331,11 +334,22 @@ func runDbImport(file, service, database string) error {
 	cmd.Stderr = io.MultiWriter(os.Stderr, tally.Stream())
 
 	feedback.Begin()
+	if fresh {
+		feedback.Line("emptying " + feedback.Val(env.database) + " first")
+		if err := serviceops.EmptyDatabase(env.service, env.database); err != nil {
+			return err
+		}
+	}
 	feedback.Line("importing " + file + " into " + feedback.Val(env.database) + " (" + env.connection + ")")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-	if rep := tally.Report(); rep.Errors > 0 {
+	rep := tally.Report()
+	rep.Skipped = skipped()
+	if note := rep.SkippedSummary(); note != "" {
+		feedback.Line(note)
+	}
+	if rep.Errors > 0 {
 		feedback.Warn("import finished but %s", rep.Summary())
 		return nil
 	}

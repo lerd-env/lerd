@@ -10,9 +10,12 @@
     // Distinct complaints dropped past the cap, so a trimmed list never reads
     // as the whole of what went wrong.
     omitted?: number;
+    // What the daemon held back on the way in, so a filtered load never reads
+    // as an untouched one.
+    skipped?: ImportIssue[];
     onclose: () => void;
   }
-  let { title, issues, omitted = 0, onclose }: Props = $props();
+  let { title, issues, omitted = 0, skipped = [], onclose }: Props = $props();
 </script>
 
 <Modal open {title} {onclose} size="lg">
@@ -30,6 +33,17 @@
       <p class="text-xs text-gray-500 dark:text-gray-400">
         {m.databases_importIssuesMore({ count: omitted })}
       </p>
+    {/if}
+    {#if skipped.length > 0}
+      <p class="text-sm text-gray-600 dark:text-gray-300">{m.databases_importIssuesSkipped()}</p>
+      <ul class="divide-y divide-gray-100 dark:divide-lerd-border/60 rounded-lg border border-gray-100 dark:border-lerd-border">
+        {#each skipped as item (item.message)}
+          <li class="flex items-start gap-3 px-3 py-2">
+            <span class="shrink-0 tabular-nums text-xs font-semibold text-gray-500 dark:text-gray-400">{item.count}×</span>
+            <span class="min-w-0 break-words text-xs text-gray-600 dark:text-gray-400">{item.message}</span>
+          </li>
+        {/each}
+      </ul>
     {/if}
   </div>
 

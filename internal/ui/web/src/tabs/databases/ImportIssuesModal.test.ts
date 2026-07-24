@@ -21,6 +21,20 @@ describe('ImportIssuesModal', () => {
     expect(container.querySelector('ul')?.className).toContain('overflow-y-auto');
   });
 
+  it('lists what lerd held back separately from what the engine rejected', () => {
+    const { queryByText, getByText } = render(ImportIssuesModal, {
+      props: {
+        title: 'Imported',
+        issues: issues(2),
+        skipped: [{ message: 'DEFINER clauses naming users the local engine does not have', count: 4 }],
+        onclose: () => {}
+      }
+    });
+    expect(getByText(/lerd left these out on the way in/)).toBeInTheDocument();
+    expect(getByText('4×')).toBeInTheDocument();
+    expect(queryByText(/more distinct errors not shown/)).toBeNull();
+  });
+
   it('notes what was dropped only when something was', () => {
     const { queryByText, rerender } = render(ImportIssuesModal, {
       props: { title: 'Imported', issues: issues(3), onclose: () => {} }
