@@ -137,7 +137,10 @@ lerd new /path/to/myapp                 # create at an absolute path
 lerd new myapp -- --no-interaction      # pass extra flags to the scaffold command
 ```
 
-`--framework` works before or after the name. Flags belong to lerd wherever they
+`--framework` works before or after the name. A framework the store publishes
+but you have not installed yet is fetched on demand, so you can scaffold a
+project type you have never built before without an install step; only a name the
+store does not know is refused. Flags belong to lerd wherever they
 appear on the line, so anything meant for the scaffold command itself goes after
 `--`. An absolute target outside your home directory is fine: lerd creates the
 parent directory and mounts it into the PHP container before scaffolding.

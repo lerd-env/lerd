@@ -151,8 +151,10 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 		target = filepath.Join(cwd, target)
 	}
 
-	// Look up the framework
-	fw, ok := config.GetFramework(frameworkName)
+	// Look up the framework, fetching from the store if it's published but not
+	// installed here yet — starting a project you've never built is exactly when
+	// the definition won't be local.
+	fw, ok := config.GetFrameworkOrFetch(frameworkName)
 	if !ok {
 		return fmt.Errorf("unknown framework %q — run 'lerd framework list' to see available frameworks", frameworkName)
 	}

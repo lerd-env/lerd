@@ -859,6 +859,24 @@ func GetFramework(name string) (*Framework, bool) {
 	return mergeBuiltinTinker(mergeBuiltinFrankenPHP(mergeUserOverlay(base))), true
 }
 
+// GetFrameworkOrFetch is like GetFramework but, when the framework is not
+// installed locally, fetches its latest definition from the store and saves it,
+// the way linking pulls a definition for a project whose framework isn't
+// installed yet. It returns false only when the store doesn't publish the name
+// either. Scaffolding a project you've never built before lands here.
+func GetFrameworkOrFetch(name string) (*Framework, bool) {
+	if fw, ok := GetFramework(name); ok {
+		return fw, true
+	}
+	if frameworkFetchHook == nil {
+		return nil, false
+	}
+	if _, err := frameworkFetchHook(name, ""); err != nil {
+		return nil, false
+	}
+	return GetFramework(name)
+}
+
 // loadBaseFramework returns the base definition for a framework:
 // built-in for "laravel" and "symfony", then store-installed (versioned >
 // unversioned).
