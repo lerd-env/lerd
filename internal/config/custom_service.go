@@ -430,7 +430,9 @@ func ResolveDynamicEnv(svc *CustomService) error {
 }
 
 // uniqueFamilyHosts returns sorted, de-duplicated container hostnames across a
-// comma-separated list of family names.
+// comma-separated list of family names. When ServiceRunning is set (production),
+// only members whose unit is active are included so admin UIs do not list
+// offline hosts.
 func uniqueFamilyHosts(families string) []string {
 	seen := map[string]bool{}
 	var all []string
@@ -442,9 +444,23 @@ func uniqueFamilyHosts(families string) []string {
 			}
 		}
 	}
+	if ServiceRunning != nil {
+		var running []string
+		for _, host := range all {
+			name := strings.TrimPrefix(host, "lerd-")
+			if ServiceRunning(name) {
+				running = append(running, host)
+			}
+		}
+		all = running
+	}
 	sort.Strings(all)
 	return all
 }
+
+// ServiceRunning, when set, reports whether a service is up. discover_family
+// uses it to omit stopped members. Nil keeps the installed-member list (tests).
+var ServiceRunning func(name string) bool
 
 // MaterializeServiceFiles writes each FileMount for svc to its host path,
 // creating the parent directory and applying the requested mode. The file
@@ -547,25 +563,6 @@ func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 		changed = true
 	}
 	return changed, nil
-}
-
-// CustomServicesDependingOn returns the names of all custom services that
-// declare name in their depends_on list.
-func CustomServicesDependingOn(name string) []string {
-	customs, err := ListCustomServices()
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, svc := range customs {
-		for _, dep := range svc.DependsOn {
-			if dep == name {
-				out = append(out, svc.Name)
-				break
-			}
-		}
-	}
-	return out
 }
 
 // LoadCustomService loads a custom service by name from the services directory.

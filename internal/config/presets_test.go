@@ -428,6 +428,32 @@ func TestResolveDynamicEnv_DiscoverFamily(t *testing.T) {
 	}
 }
 
+func TestResolveDynamicEnv_DiscoverFamily_OnlyRunning(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := SaveCustomService(&CustomService{
+		Name: "mysql-9-7", Image: "x", Family: "mysql",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev := ServiceRunning
+	ServiceRunning = func(name string) bool { return name == "mysql" }
+	t.Cleanup(func() { ServiceRunning = prev })
+
+	svc := &CustomService{
+		Name: "phpmyadmin", Image: "x",
+		DynamicEnv: map[string]string{"PMA_HOSTS": "discover_family:mysql"},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.Environment["PMA_HOSTS"]; got != "lerd-mysql" {
+		t.Errorf("PMA_HOSTS = %q, want only running lerd-mysql, got stopped members too", got)
+	}
+}
+
 func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

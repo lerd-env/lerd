@@ -92,6 +92,29 @@ func TestResolveDependency_PrefersLiteral(t *testing.T) {
 	}
 }
 
+func TestResolveDependency_PrefersFamilyOverEnvRole(t *testing.T) {
+	withServiceHome(t)
+	// No bare mysql: versioned mysql and mariadb both satisfy. Same-family
+	// must win over the env_role drop-in (alphabetical would pick mariadb).
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-12-3", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mysql-9-7", Image: "x", Family: "mysql", Preset: "mysql",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := ResolveDependency("mysql"); got != "mysql-9-7" {
+		t.Errorf("ResolveDependency(mysql) = %q, want mysql-9-7 (family over env_role)", got)
+	}
+	if got := DependencyDisplayName("mysql"); got != "mysql" {
+		t.Errorf("DependencyDisplayName(mysql) = %q, want mysql", got)
+	}
+}
+
 func TestResolveDependency_NothingInstalled(t *testing.T) {
 	withServiceHome(t)
 	if got := ResolveDependency("mysql"); got != "" {
@@ -188,5 +211,82 @@ func TestDependencyDisplayName_ExactBuiltin(t *testing.T) {
 	writeDepQuadlet(t, "lerd-mysql")
 	if got := DependencyDisplayName("mysql"); got != "mysql" {
 		t.Errorf("DependencyDisplayName(mysql) = %q, want mysql", got)
+	}
+}
+
+func TestDependentNeedsCascade_AlternateRemains(t *testing.T) {
+	withServiceHome(t)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-12-3", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeDepQuadlet(t, "lerd-mysql")
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "phpmyadmin", Image: "x", DependsOn: []string{"mysql"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Both installed and "running" (ServiceRunning nil → installed counts).
+	if dependentNeedsCascade("phpmyadmin", "mysql") {
+		t.Fatal("cascade must not run when mariadb still satisfies mysql")
+	}
+	if got := dependentsOf("mysql"); len(got) != 1 || got[0] != "phpmyadmin" {
+		t.Errorf("dependentsOf(mysql) = %v, want [phpmyadmin]", got)
+	}
+}
+
+func TestDependentNeedsCascade_LastSatisfier(t *testing.T) {
+	withServiceHome(t)
+	writeDepQuadlet(t, "lerd-mysql")
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "phpmyadmin", Image: "x", DependsOn: []string{"mysql"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !dependentNeedsCascade("phpmyadmin", "mysql") {
+		t.Fatal("cascade must run when mysql is the only satisfier")
+	}
+}
+
+func TestDependentNeedsCascade_StoppedAlternateDoesNotCount(t *testing.T) {
+	withServiceHome(t)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-12-3", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	writeDepQuadlet(t, "lerd-mysql")
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "phpmyadmin", Image: "x", DependsOn: []string{"mysql"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev := config.ServiceRunning
+	config.ServiceRunning = func(name string) bool { return name == "mysql" }
+	t.Cleanup(func() { config.ServiceRunning = prev })
+
+	// mariadb is installed but stopped; stopping mysql is the last running
+	// satisfier so phpMyAdmin must cascade-stop.
+	if !dependentNeedsCascade("phpmyadmin", "mysql") {
+		t.Fatal("cascade must run when the only other satisfier is stopped")
+	}
+}
+
+func TestDependentsOf_EnvRoleDropIn(t *testing.T) {
+	withServiceHome(t)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-12-3", Image: "x", Family: "mariadb", EnvRole: "mysql",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "phpmyadmin", Image: "x", DependsOn: []string{"mysql"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if got := dependentsOf("mariadb-12-3"); len(got) != 1 || got[0] != "phpmyadmin" {
+		t.Errorf("dependentsOf(mariadb) = %v, want [phpmyadmin]", got)
 	}
 }
