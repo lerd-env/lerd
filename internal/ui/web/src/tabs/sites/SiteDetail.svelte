@@ -7,7 +7,7 @@
   import SiteEnvTab from './SiteEnvTab.svelte';
   import SiteNginxModal from '../../modals/SiteNginxModal.svelte';
   import SiteDebugTab from '$tabs/sites/SiteDebugTab.svelte';
-  import { resumeSite, loadSites, activeWorktreeDomain, type Site } from '$stores/sites';
+  import { resumeSite, loadSites, activeWorktreeDomain, siteHasLogSources, type Site } from '$stores/sites';
   import { routeRest, goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
 
@@ -44,10 +44,9 @@
   const canDumps = $derived(Boolean(site.uses_php));
   const canEnv = $derived(Boolean(site.has_env));
   // Logs get their own tab in the resource layout rather than living under the
-  // overview. Offer it whenever the site exposes any log source.
-  const canLogs = $derived(
-    Boolean(site.has_app_logs || site.uses_php || site.custom_container || site.host_has_dev_server)
-  );
+  // overview. Offer it whenever the site exposes any log source, including a
+  // worker-only source like a stripe listener on a proxy-only host site.
+  const canLogs = $derived(siteHasLogSources(site));
   // A lone Overview tab can't be switched to anything, so don't render the tab
   // row at all when no other tab is available (e.g. static sites).
   const hasExtraTabs = $derived(canLogs || canEnv || canTinker || canDumps);

@@ -182,6 +182,28 @@ export function siteWorkerFailing(s: Site): boolean {
   );
 }
 
+// siteHasLogSources reports whether a site exposes any streamable log tab: app
+// logs, a PHP-FPM/container runtime, a host dev server, or any running/failing
+// worker (queue, horizon, stripe, schedule, reverb, or a framework worker).
+// Kept in sync with the tab list SiteLogs builds so the Logs tab is offered iff
+// SiteLogs has something to show; a proxy-only host site whose sole source is a
+// stripe listener would otherwise never get the tab.
+export function siteHasLogSources(s: Site): boolean {
+  return Boolean(
+    s.has_app_logs ||
+      s.uses_php ||
+      s.custom_container ||
+      s.host_has_dev_server ||
+      s.queue_running ||
+      s.horizon_running ||
+      s.stripe_running ||
+      s.schedule_running ||
+      s.reverb_running ||
+      (s.framework_workers || []).some((w) => w.running) ||
+      siteWorkerFailing(s)
+  );
+}
+
 export type WorkerDotColor = 'amber' | 'violet' | 'emerald' | 'sky' | 'indigo';
 
 // Colors for each running worker, used as little status dots in list rows and
