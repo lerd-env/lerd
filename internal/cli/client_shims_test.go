@@ -119,3 +119,51 @@ func TestHostEnvSet(t *testing.T) {
 		t.Error("MYSQL_HOST should count for mysql tools")
 	}
 }
+
+func TestIsVersionProbe(t *testing.T) {
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{nil, false},
+		{[]string{"--version"}, true},
+		{[]string{"-V"}, true},
+		{[]string{"--help"}, true},
+		{[]string{"-?"}, true},
+		{[]string{"mydb"}, false},
+		{[]string{"-U", "postgres", "mydb"}, false},
+		// Only the leading position counts: that is the one the postgres tools
+		// answer, and anywhere else it is a value, not a query.
+		{[]string{"-c", "--version"}, false},
+		{[]string{"--where=--version"}, false},
+	}
+	for _, c := range cases {
+		if got := isVersionProbe(c.args); got != c.want {
+			t.Errorf("isVersionProbe(%v) = %v, want %v", c.args, got, c.want)
+		}
+	}
+}
+
+func TestWantsLocalDefault(t *testing.T) {
+	cases := []struct {
+		tool      string
+		args      []string
+		hostGiven bool
+		want      bool
+	}{
+		{"pg_dump", []string{"mydb"}, false, true},
+		{"mysqldump", []string{"mydb"}, false, true},
+		{"pg_dump", []string{"mydb"}, true, false},
+		{"mongodump", []string{"mydb"}, false, false},
+		// An IDE validates the executable with a bare --version. Prepending the
+		// local -h in front of it makes pg_dump exit non-zero with no version.
+		{"pg_dump", []string{"--version"}, false, false},
+		{"pg_restore", []string{"--help"}, false, false},
+		{"mysqldump", []string{"-V"}, false, false},
+	}
+	for _, c := range cases {
+		if got := wantsLocalDefault(c.tool, c.args, c.hostGiven); got != c.want {
+			t.Errorf("wantsLocalDefault(%q, %v, %v) = %v, want %v", c.tool, c.args, c.hostGiven, got, c.want)
+		}
+	}
+}
