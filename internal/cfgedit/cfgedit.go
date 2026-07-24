@@ -192,23 +192,37 @@ func (f File) Save(content string, opt SaveOpts) (SaveResult, error) {
 
 // Reset deletes the live file (its include glob then expands to nothing) and
 // runs apply. Backups are kept. Apply is skipped when nothing was removed.
+// An apply failure puts the file back and re-applies, the same rollback the save
+// path performs, so a container that will not come back up is never left behind
+// a reset the user cannot undo.
 func (f File) Reset(apply func() error) error {
 	Mu.Lock()
 	defer Mu.Unlock()
 
-	removeErr := os.Remove(f.Path)
-	if removeErr != nil {
-		if os.IsNotExist(removeErr) {
+	snap, snapErr := ReadSnapshot(f.Path)
+	if err := os.Remove(f.Path); err != nil {
+		if os.IsNotExist(err) {
 			return nil
 		}
-		return removeErr
+		return err
 	}
-	if apply != nil {
-		if err := apply(); err != nil {
-			return fmt.Errorf("reset, but apply failed: %w", err)
-		}
+	if apply == nil {
+		return nil
 	}
-	return nil
+	applyErr := apply()
+	if applyErr == nil {
+		return nil
+	}
+	if snapErr != nil {
+		return fmt.Errorf("reset, but apply failed and the previous contents could not be read back: %v (apply error: %w)", snapErr, applyErr)
+	}
+	if rbErr := RestoreSnapshot(f.Path, snap); rbErr != nil {
+		return fmt.Errorf("reset, apply failed and rollback failed: %v (apply error: %w)", rbErr, applyErr)
+	}
+	if rb2Err := apply(); rb2Err != nil {
+		return fmt.Errorf("reset rolled back, but the restart still failed: %v (original: %w)", rb2Err, applyErr)
+	}
+	return fmt.Errorf("reset rolled back: %w", applyErr)
 }
 
 // Restore swaps a backup over the live file, applies, and only then drops the
