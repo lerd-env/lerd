@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // nvmManager drives nvm-sh/nvm. Unlike fnm, nvm is not a binary: it is a bash
@@ -18,13 +20,27 @@ type nvmManager struct{}
 
 func (nvmManager) Name() string { return "nvm" }
 
-// nvmDir resolves the nvm install directory: $NVM_DIR when set, else ~/.nvm.
-func nvmDir() string {
+// DiscoverNvmDir returns the live nvm location from $NVM_DIR or ~/.nvm,
+// ignoring any persisted node.nvm_dir. Used when recording the path at
+// install/switch time so daemons keep agreeing with the CLI.
+func DiscoverNvmDir() string {
 	if d := os.Getenv("NVM_DIR"); d != "" {
 		return d
 	}
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".nvm")
+}
+
+// nvmDir resolves the nvm install directory: a persisted node.nvm_dir wins
+// (so daemons without shell rc still find a custom install), then $NVM_DIR,
+// then ~/.nvm.
+func nvmDir() string {
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		if d := cfg.NodeNvmDir(); d != "" {
+			return d
+		}
+	}
+	return DiscoverNvmDir()
 }
 
 func (nvmManager) Available() bool {
@@ -89,19 +105,45 @@ func (m nvmManager) HasDefault() bool {
 	if err != nil {
 		return false
 	}
-	return strings.TrimSpace(string(out)) != "N/A"
+	return nvmDefaultUsable(string(out))
+}
+
+// nvmDefaultUsable reports whether `nvm version default` output names a real
+// nvm-managed version. "system" means the alias points at the host node.
+func nvmDefaultUsable(raw string) bool {
+	v := strings.TrimSpace(raw)
+	return v != "" && v != "N/A" && v != "system"
 }
 
 // nvmActivate returns the shell prelude that sources nvm, selects version, and
-// puts that version's bin dir at the front of PATH. It aborts (exit 1) when no
-// version becomes active rather than falling through to `exec "$@"`: a bare
-// `exec node` would resolve `node` via PATH, and since lerd's own shim dir is on
-// PATH, it would re-enter the very shim that invoked this and fork-bomb. nvm
-// exports $NVM_BIN when a version is active, so a non-empty $NVM_BIN is the
-// reliable signal that activation succeeded, and prepending it makes both the
-// command and any child (npx, npm lifecycle scripts) resolve node to nvm's copy.
+// puts that version's bin dir at the front of PATH. It aborts when `nvm use`
+// fails (rc 3 when the version is not installed) rather than trusting $NVM_BIN:
+// sourcing nvm.sh already populates $NVM_BIN with the current default, so an
+// empty check can never catch a failed pin and the version would silently fall
+// through.
 func nvmActivate(version string) string {
-	return sourceScript() + fmt.Sprintf(`nvm use %s >/dev/null 2>&1; if [ -z "$NVM_BIN" ]; then echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; fi; PATH="$NVM_BIN:$PATH"; export PATH; `, shellQuote(version), version)
+	return sourceScript() + fmt.Sprintf(
+		`nvm use %s >/dev/null 2>&1 || { echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; }; `+
+			`PATH="$NVM_BIN:$PATH"; export PATH; `,
+		shellQuote(version), version)
+}
+
+// nvmExports builds `export KEY=VAL;` statements for ApplyEnv. Values are
+// shell-quoted so spaces and quotes survive.
+func nvmExports(env []string) string {
+	var b strings.Builder
+	for _, e := range env {
+		key, val, ok := strings.Cut(e, "=")
+		if !ok || key == "" {
+			continue
+		}
+		b.WriteString("export ")
+		b.WriteString(key)
+		b.WriteByte('=')
+		b.WriteString(shellQuote(val))
+		b.WriteString("; ")
+	}
+	return b.String()
 }
 
 func (nvmManager) Command(version, bin string, args []string) *exec.Cmd {
@@ -112,52 +154,61 @@ func (nvmManager) Command(version, bin string, args []string) *exec.Cmd {
 	return exec.Command("bash", full...)
 }
 
+func (nvmManager) ApplyEnv(cmd *exec.Cmd, env []string) {
+	if len(env) == 0 || cmd == nil {
+		return
+	}
+	exports := nvmExports(env)
+	if exports == "" {
+		return
+	}
+	// Args: bash -c '<activate>exec "$@"' lerd-nvm bin ...
+	for i := 0; i+1 < len(cmd.Args); i++ {
+		if cmd.Args[i] != "-c" {
+			continue
+		}
+		script := cmd.Args[i+1]
+		const marker = `exec "$@"`
+		if idx := strings.LastIndex(script, marker); idx >= 0 {
+			cmd.Args[i+1] = script[:idx] + exports + script[idx:]
+		}
+		return
+	}
+}
+
 func (nvmManager) ExecPrefix(version string) string {
 	if version == "" {
 		version = "default"
 	}
-	// A bash -c wrapper that sources nvm, activates the version (aborting if none
-	// is available so it can't fork-bomb), then exec's the command supplied as
+	// A bash -c wrapper that sources nvm, activates the version (aborting if
+	// nvm use fails so it can't fork-bomb), then exec's the command supplied as
 	// positional args ("$@"). "lerd-nvm" is $0.
 	return fmt.Sprintf("bash -c %s lerd-nvm", shellQuote(nvmActivate(version)+`exec "$@"`))
 }
 
-func (nvmManager) ShimScript(lerdBin, bin string) string {
-	return fmt.Sprintf(`#!/usr/bin/env bash
-LERD="%s"
-if [ -x "$LERD" ]; then
-  exec "$LERD" %s "$@"
-fi
-export NVM_DIR=%s
-[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"
-VERSION=""
-for f in .node-version .nvmrc; do
-  [ -f "$f" ] && VERSION=$(tr -d '[:space:]' < "$f") && break
-done
-if [ -n "$VERSION" ]; then
-  nvm install "$VERSION" >/dev/null 2>&1 || true
-  nvm use "$VERSION" >/dev/null 2>&1
-else
-  nvm use default >/dev/null 2>&1
-fi
-if [ -z "$NVM_BIN" ]; then
-  printf 'No Node.js version available via nvm. Run: lerd node:install 22\n' >&2
-  exit 1
-fi
-PATH="$NVM_BIN:$PATH"
-exec "$NVM_BIN/%s" "$@"
-`, lerdBin, bin, shellQuote(nvmDir()), bin)
+// ShimScript satisfies Manager but is unused for nvm (WritesPathShims is false).
+func (nvmManager) ShimScript(_, bin string) string {
+	return fmt.Sprintf("#!/usr/bin/env bash\nprintf 'lerd: nvm does not install PATH shims; use: lerd %%s\\n' %s >&2\nexit 1\n", shellQuote(bin))
 }
 
 // nvmVersionRe matches a "vMAJOR.MINOR.PATCH" token on an installed-version line
 // of `nvm ls --no-colors --no-alias` (e.g. "->     v24.16.0 *" or "  v18.20.0").
 var nvmVersionRe = regexp.MustCompile(`\bv(\d+\.\d+\.\d+)\b`)
 
+// nvmSystemField matches a standalone "system" token in nvm ls output so the
+// system row (which may also carry a resolved version) is not treated as an
+// installed nvm version.
+var nvmSystemField = regexp.MustCompile(`(?:^|[\s>])system(?:\s|$|\*)`)
+
 // parseNvmListFull extracts the full version strings (leading "v" stripped) from
-// `nvm ls --no-colors --no-alias` output, in the order nvm reports them.
+// `nvm ls --no-colors --no-alias` output, in the order nvm reports them. Lines
+// for the system node are skipped even when they embed a resolved version.
 func parseNvmListFull(raw string) []string {
 	var versions []string
 	for _, line := range strings.Split(raw, "\n") {
+		if nvmSystemField.MatchString(line) {
+			continue
+		}
 		if m := nvmVersionRe.FindStringSubmatch(line); m != nil {
 			versions = append(versions, m[1])
 		}

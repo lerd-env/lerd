@@ -37,14 +37,19 @@ type Manager interface {
 	// empty version or "default" uses the manager's default. The caller sets
 	// Dir/Env/streams on the returned command.
 	Command(version, bin string, args []string) *exec.Cmd
+	// ApplyEnv makes KEY=VAL pairs take effect for cmd after the manager has
+	// activated the Node version. Call after setting cmd.Env. fnm appends to
+	// cmd.Env; nvm embeds `export` statements after `nvm use` inside the bash
+	// wrapper so vars like npm_config_prefix are not visible during activation
+	// (nvm aborts when that variable is already set in the process environment).
+	ApplyEnv(cmd *exec.Cmd, env []string)
 	// ExecPrefix returns the shell tokens that precede a command so that
 	// "<ExecPrefix(version)> <command> <args>" runs the command under version.
 	// Used to build worker units and npm global wrappers.
 	ExecPrefix(version string) string
 	// ShimScript returns the full shell script for a node/npm/npx PATH shim
-	// named bin. It prefers routing through the lerd binary at lerdBin (so
-	// global installs land in lerd's managed prefix) and falls back to driving
-	// the manager directly when lerd is unreachable (e.g. inside containers).
+	// named bin. Only used when WritesPathShims is true (fnm). nvm returns a
+	// stub that explains PATH shims are not installed for that manager.
 	ShimScript(lerdBin, bin string) string
 }
 

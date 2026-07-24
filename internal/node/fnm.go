@@ -72,6 +72,16 @@ func (m fnmManager) Command(version, bin string, args []string) *exec.Cmd {
 	return exec.Command(m.bin(), cmdArgs...)
 }
 
+func (fnmManager) ApplyEnv(cmd *exec.Cmd, env []string) {
+	if len(env) == 0 || cmd == nil {
+		return
+	}
+	if cmd.Env == nil {
+		cmd.Env = os.Environ()
+	}
+	cmd.Env = append(cmd.Env, env...)
+}
+
 func (m fnmManager) ExecPrefix(version string) string {
 	if version == "" {
 		version = "default"

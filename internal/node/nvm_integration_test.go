@@ -1,21 +1,24 @@
 package node
 
 import (
-	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// requireNvm skips the calling test unless a usable nvm with a default version
-// is installed, so CI (and any host without nvm) stays green. Returns the
-// backend for the test to drive.
+// requireNvm skips the calling test unless nvm is installed and activating the
+// default version actually yields a Node binary. HasDefault alone is not enough:
+// `nvm version default` returns "system" when the alias points at the host node,
+// which would leave CI red on runners whose default is system.
 func requireNvm(t *testing.T) nvmManager {
 	t.Helper()
 	m := nvmManager{}
-	if !m.Available() || !m.HasDefault() {
-		t.Skip("nvm with a default version not available; skipping integration test")
+	if !m.Available() {
+		t.Skip("nvm not available; skipping integration test")
+	}
+	out, err := m.Command("default", "node", []string{"--version"}).CombinedOutput()
+	if err != nil || !strings.HasPrefix(strings.TrimSpace(string(out)), "v") {
+		t.Skipf("nvm available but activation yields no Node (%v: %s); skipping", err, strings.TrimSpace(string(out)))
 	}
 	return m
 }
@@ -49,21 +52,4 @@ func TestNvmExecPrefix_SurvivesGuardLine(t *testing.T) {
 	m := requireNvm(t)
 	guardLine := "exec " + m.ExecPrefix("default") + " /bin/sh -c 'node --version'"
 	wantNodeVersion(t, exec.Command("sh", "-c", guardLine))
-}
-
-// TestNvmShimScript_FallsBackToNvm writes the generated node shim to disk and
-// runs it with an unreachable lerd binary, so it exercises the direct-nvm
-// fallback branch (bash sourcing nvm.sh, selecting the default, exec'ing node).
-func TestNvmShimScript_FallsBackToNvm(t *testing.T) {
-	m := requireNvm(t)
-	dir := t.TempDir()
-	shimPath := filepath.Join(dir, "node")
-	// A lerd path that does not exist forces the shim past its lerd branch.
-	shim := m.ShimScript(filepath.Join(dir, "does-not-exist-lerd"), "node")
-	if err := os.WriteFile(shimPath, []byte(shim), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	cmd := exec.Command(shimPath, "--version")
-	cmd.Dir = dir // no .node-version here, so the shim uses the nvm default
-	wantNodeVersion(t, cmd)
 }

@@ -145,23 +145,66 @@ func TestFnmShellFragments(t *testing.T) {
 func TestNvmShellFragments(t *testing.T) {
 	m := nvmManager{}
 	prefix := m.ExecPrefix("20")
-	// The $NVM_BIN guard + PATH prepend is what prevents `exec "$@"` from
-	// resolving `node` back to lerd's own shim and fork-bombing, so assert it.
-	for _, want := range []string{"nvm.sh", "nvm use", `[ -z "$NVM_BIN" ]`, `PATH="$NVM_BIN:$PATH"`, `exec "$@"`} {
+	// Honouring `nvm use` exit status catches a missing pin; $NVM_BIN alone is
+	// already set by sourcing nvm.sh and is not enough.
+	for _, want := range []string{"nvm.sh", "nvm use", `PATH="$NVM_BIN:$PATH"`, `exec "$@"`} {
 		if !strings.Contains(prefix, want) {
 			t.Errorf("nvm ExecPrefix missing %q:\n%s", want, prefix)
 		}
 	}
-	shim := m.ShimScript("/home/u/.local/bin/lerd", "node")
-	// nvm is a bash function, so its shims must use bash, not /bin/sh; and the
-	// shim must exec node by absolute $NVM_BIN path, never by bare name.
-	for _, want := range []string{"#!/usr/bin/env bash", "nvm use", `[ -z "$NVM_BIN" ]`, `exec "$NVM_BIN/node"`} {
-		if !strings.Contains(shim, want) {
-			t.Errorf("nvm ShimScript missing %q:\n%s", want, shim)
+	if strings.Contains(prefix, `[ -z "$NVM_BIN" ]`) {
+		t.Errorf("nvm ExecPrefix still guards on empty NVM_BIN (false negative):\n%s", prefix)
+	}
+	shim := m.ShimScript("/unused", "node")
+	if !strings.Contains(shim, "does not install PATH shims") {
+		t.Errorf("nvm ShimScript should be a stub explaining shims are unused:\n%s", shim)
+	}
+}
+
+func TestNvmApplyEnv_ExportsAfterActivation(t *testing.T) {
+	m := nvmManager{}
+	cmd := m.Command("20", "npm", []string{"root", "-g"})
+	m.ApplyEnv(cmd, []string{"npm_config_prefix=/tmp/lerd-global"})
+	script := ""
+	for i := 0; i+1 < len(cmd.Args); i++ {
+		if cmd.Args[i] == "-c" {
+			script = cmd.Args[i+1]
+			break
 		}
 	}
-	// Regression guard: the shim must not exec node by bare name (fork-bomb path).
-	if strings.Contains(shim, "exec node ") {
-		t.Errorf("nvm ShimScript execs node by bare name (fork-bomb risk):\n%s", shim)
+	if script == "" {
+		t.Fatal("no -c script on command")
+	}
+	useIdx := strings.Index(script, "nvm use")
+	exportIdx := strings.Index(script, "export npm_config_prefix=")
+	execIdx := strings.Index(script, `exec "$@"`)
+	if useIdx < 0 || exportIdx < 0 || execIdx < 0 {
+		t.Fatalf("script missing pieces:\n%s", script)
+	}
+	if !(useIdx < exportIdx && exportIdx < execIdx) {
+		t.Errorf("export must sit after nvm use and before exec:\n%s", script)
+	}
+	if strings.Contains(script, "export npm_config_prefix=/tmp/lerd-global") {
+		t.Errorf("value must be shell-quoted:\n%s", script)
+	}
+	if !strings.Contains(script, "export npm_config_prefix='/tmp/lerd-global'") {
+		t.Errorf("expected quoted export:\n%s", script)
+	}
+}
+
+func TestFnmApplyEnv_AppendsToCmdEnv(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	m := fnmManager{}
+	cmd := m.Command("20", "npm", []string{"root", "-g"})
+	cmd.Env = []string{"PATH=/bin"}
+	m.ApplyEnv(cmd, []string{"npm_config_prefix=/tmp/g"})
+	found := false
+	for _, e := range cmd.Env {
+		if e == "npm_config_prefix=/tmp/g" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("fnm ApplyEnv did not append prefix: %v", cmd.Env)
 	}
 }

@@ -78,7 +78,8 @@ func runNpmCaptured(dir string, args ...string) (string, error) {
 
 	cmd := mgr.Command(version, "npm", args)
 	cmd.Dir = dir
-	cmd.Env = append(shimLeadingEnv(os.Environ()), "npm_config_prefix="+config.NodeGlobalDir())
+	cmd.Env = shimLeadingEnv(os.Environ())
+	mgr.ApplyEnv(cmd, []string{"npm_config_prefix=" + config.NodeGlobalDir()})
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -211,6 +212,12 @@ func shimLeadingEnv(env []string) []string {
 			found = true
 			continue
 		}
+		// Drop npm_config_prefix from the inherited environment so managers that
+		// activate inside the child (nvm) never see it before `nvm use`. ApplyEnv
+		// re-adds it after activation when needed.
+		if name, _, ok := strings.Cut(kv, "="); ok && name == "npm_config_prefix" {
+			continue
+		}
 		out = append(out, kv)
 	}
 	if !found {
@@ -253,16 +260,18 @@ func runNode(bin string, args []string, exitOnFail bool) error {
 	manageGlobals := bin == "npm" || bin == "npx"
 	prefix := config.NodeGlobalDir()
 	cmd.Env = shimLeadingEnv(os.Environ())
+	var extraEnv []string
 	if bin == "corepack" {
 		// First use of a manager downloads it; don't block on the interactive
 		// "Corepack is about to download…" prompt in a non-interactive setup.
-		cmd.Env = append(cmd.Env, "COREPACK_ENABLE_DOWNLOAD_PROMPT=0")
+		extraEnv = append(extraEnv, "COREPACK_ENABLE_DOWNLOAD_PROMPT=0")
 	}
 	if manageGlobals {
 		if err := os.MkdirAll(filepath.Join(prefix, "bin"), 0o755); err == nil {
-			cmd.Env = append(cmd.Env, "npm_config_prefix="+prefix)
+			extraEnv = append(extraEnv, "npm_config_prefix="+prefix)
 		}
 	}
+	mgr.ApplyEnv(cmd, extraEnv)
 	runErr := cmd.Run()
 	if manageGlobals {
 		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), mgr.ExecPrefix("default")); syncErr != nil {
