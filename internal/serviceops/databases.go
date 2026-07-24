@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -105,12 +106,24 @@ func exportShellCommand(family, database string) (string, bool) {
 	q := podman.ShellQuote(database)
 	switch family {
 	case "mysql", "mariadb":
-		return mysqlDumpBin + " -uroot " + q, true
+		return mysqlDumpBin + " -uroot " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	case "postgres":
-		return "pg_dump -U postgres " + q, true
+		return "pg_dump -U postgres " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	default:
 		return "", false
 	}
+}
+
+// DumpFlags are the flags every dump of a family carries, so an export, a
+// snapshot and a migration all produce the same file. Postgres needs --clean
+// --if-exists to load back over objects that already exist, which mysqldump does
+// on its own; mysqldump needs --routines and --events, which are off by default
+// and would otherwise leave stored procedures out of the dump without a word.
+func DumpFlags(family string) []string {
+	if family == "postgres" {
+		return []string{"--clean", "--if-exists"}
+	}
+	return []string{"--single-transaction", "--quick", "--no-tablespaces", "--routines", "--triggers", "--events"}
 }
 
 func importShellCommand(family, database string) (string, bool) {
@@ -177,9 +190,15 @@ func ExportSnapshot(service, database, name string, w io.Writer) error {
 	return nil
 }
 
-// maxImportIssues caps the distinct complaints kept from a load, enough to show
-// the shape of the failure without carrying a 27k-line psql transcript around.
-const maxImportIssues = 5
+// maxImportIssues caps the distinct complaints kept from a load. A dump replayed
+// over a populated schema complains once per object, so the cap is high enough to
+// carry the whole list to the UI and still bounded well under a 27k-line psql
+// transcript.
+const maxImportIssues = 500
+
+// summaryIssues caps what the one-line CLI summary spells out. The rest is
+// counted in the same "and N more" tail, since the full list belongs in the UI.
+const summaryIssues = 5
 
 // ImportIssue is one distinct complaint the engine made, and how often it made
 // it. ImportReport summarises a load: psql exits 0 even when every statement in
@@ -203,12 +222,17 @@ func (r ImportReport) Summary() string {
 	if r.Errors == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(r.Issues)+1)
-	for _, issue := range r.Issues {
+	shown, more := r.Issues, r.Omitted
+	if len(shown) > summaryIssues {
+		more += len(shown) - summaryIssues
+		shown = shown[:summaryIssues]
+	}
+	parts := make([]string, 0, len(shown)+1)
+	for _, issue := range shown {
 		parts = append(parts, fmt.Sprintf("%d× %s", issue.Count, issue.Message))
 	}
-	if r.Omitted > 0 {
-		parts = append(parts, fmt.Sprintf("and %d more", r.Omitted))
+	if more > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", more))
 	}
 	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
 }
@@ -342,6 +366,24 @@ func isImportErrorLine(line string) bool {
 	return strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "invalid command")
 }
 
+// DumpReader unwraps a gzipped dump so a .sql.gz loads like a .sql. The engine
+// clients read plain SQL: handed compressed bytes, psql reports a couple of
+// encoding errors, loads nothing and still exits clean, which reads as a load
+// that mostly worked. Anything else is passed through untouched, including a
+// custom-format archive, which psql itself recognises and names.
+func DumpReader(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(r)
+	magic, err := br.Peek(2)
+	if err != nil || magic[0] != 0x1f || magic[1] != 0x8b {
+		return br, nil
+	}
+	gz, err := gzip.NewReader(br)
+	if err != nil {
+		return nil, fmt.Errorf("reading compressed dump: %w", err)
+	}
+	return gz, nil
+}
+
 // ImportDatabase streams a SQL dump from r into database on the service
 // container. The database must already exist. The report carries what the
 // engine complained about, which is the only sign of a partial load when the
@@ -359,8 +401,12 @@ func ImportDatabase(service, database string, r io.Reader) (ImportReport, error)
 		args = append(args, "--env", kv)
 	}
 	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
+	src, err := DumpReader(r)
+	if err != nil {
+		return ImportReport{}, err
+	}
 	cmd := podman.CmdContext(ctx, args...)
-	cmd.Stdin = r
+	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
