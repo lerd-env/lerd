@@ -39,7 +39,8 @@
     | 'splitHorizontal'
     | 'splitVertical'
     | 'maximize'
-    | 'minimize';
+    | 'minimize'
+    | 'branch';
 </script>
 
 <script lang="ts">
@@ -105,7 +106,8 @@
     maximize:
       'M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4',
     minimize:
-      'M9 4v4a1 1 0 01-1 1H4M15 4v4a1 1 0 001 1h4M9 20v-4a1 1 0 00-1-1H4M15 20v-4a1 1 0 011-1h4'
+      'M9 4v4a1 1 0 01-1 1H4M15 4v4a1 1 0 001 1h4M9 20v-4a1 1 0 00-1-1H4M15 20v-4a1 1 0 011-1h4',
+    branch: 'M6 3v12M15 6a3 3 0 106 0 3 3 0 10-6 0M3 18a3 3 0 106 0 3 3 0 10-6 0M18 9a9 9 0 01-9 9'
   };
 </script>
 

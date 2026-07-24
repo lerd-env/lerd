@@ -76,6 +76,34 @@ describe('SiteTinkerTab split and full screen', () => {
     expect(root.className).toContain('fixed');
   });
 
+  it('keeps the flex column while full screen so the panes fill the viewport', async () => {
+    const { getByLabelText, container } = render(SiteTinkerTab, { props: { site } });
+    const root = container.firstElementChild as HTMLElement;
+    await fireEvent.click(getByLabelText('Enter full screen'));
+    for (const cls of ['flex', 'flex-col', 'min-h-0']) expect(root.classList).toContain(cls);
+    const split = document.querySelector('[data-splitdir]') as HTMLElement;
+    expect(split.classList).toContain('flex-1');
+  });
+
+  it('names the site only while full screen', async () => {
+    const { getByLabelText, queryByText, getByText } = render(SiteTinkerTab, { props: { site } });
+    expect(queryByText('app.test')).not.toBeInTheDocument();
+    await fireEvent.click(getByLabelText('Enter full screen'));
+    expect(getByText('app.test')).toBeInTheDocument();
+  });
+
+  it('names the worktree branch alongside its domain while full screen', async () => {
+    const wt = {
+      domain: 'app.test',
+      is_laravel: false,
+      worktrees: [{ branch: 'feature/x', domain: 'feature-x.app.test' }]
+    } as unknown as Site;
+    const { getByLabelText, getByText } = render(SiteTinkerTab, { props: { site: wt, branch: 'feature/x' } });
+    await fireEvent.click(getByLabelText('Enter full screen'));
+    expect(getByText('feature-x.app.test')).toBeInTheDocument();
+    expect(getByText('feature/x')).toBeInTheDocument();
+  });
+
   it('exits full screen on Escape', async () => {
     const { getByLabelText, container } = render(SiteTinkerTab, { props: { site } });
     const root = container.firstElementChild as HTMLElement;

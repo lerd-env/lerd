@@ -1,11 +1,12 @@
 <script lang="ts">
-  import { runTinker, type TinkerResponse, type Site } from '$stores/sites';
+  import { runTinker, activeWorktreeDomain, type TinkerResponse, type Site } from '$stores/sites';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
   import { parseBlock } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
   import MonacoEditor from '$components/MonacoEditor.svelte';
   import Icon from '$components/Icon.svelte';
   import { attachPhpLsp, type PhpLspHandle } from '$lib/lsp';
+  import { tooltip } from '$lib/tooltip';
   import type { MonacoModule } from '$lib/monaco';
   import type * as Monaco from 'monaco-editor';
   import { onDestroy, onMount } from 'svelte';
@@ -198,7 +199,9 @@
   const placeholder = m.tinker_placeholder();
 </script>
 
-<div class="{fullscreen ? 'fixed inset-0 z-[100] bg-white/95 dark:bg-lerd-bg/95 backdrop-blur-md shadow-2xl pt-2 px-2 pb-2' : 'flex-1 flex flex-col min-h-0 overflow-hidden pt-4 px-3 sm:px-5 pb-3 sm:pb-5'} gap-3 transition-all duration-200 ease-in-out">
+<!-- The flex column stays in both modes: full screen only swaps the box it
+     lives in, so the panes keep filling the height they are given. -->
+<div class="flex flex-col min-h-0 overflow-hidden gap-3 {fullscreen ? 'fixed inset-0 z-50 bg-white dark:bg-lerd-bg p-3' : 'flex-1 pt-4 px-3 sm:px-5 pb-3 sm:pb-5'}">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span
@@ -207,6 +210,15 @@
       >
         {result?.mode ?? (site.is_laravel ? 'tinker' : 'php')}
       </span>
+      <!-- Full screen hides the site header, so name the target here. -->
+      {#if fullscreen}
+        <span class="text-xs font-mono text-gray-600 dark:text-gray-300">{activeWorktreeDomain(site, branch)}</span>
+        {#if branch}
+          <span class="inline-flex items-center gap-1 text-[11px] font-mono text-violet-400">
+            <Icon name="branch" class="w-3 h-3" />{branch}
+          </span>
+        {/if}
+      {/if}
       {#if result}
         <span class="text-[10px] text-gray-400">{result.duration_ms} ms</span>
       {/if}
@@ -217,11 +229,11 @@
         >{lspStatus === 'unavailable' ? m.tinker_lspUnavailable() : m.tinker_lspConnecting()}</span>
       {/if}
     </div>
-    <div class="flex items-center gap-2">
+    <div class="flex items-center gap-3">
       <button
         onclick={() => (splitDir = splitDir === SplitDir.Horizontal ? SplitDir.Vertical : SplitDir.Horizontal)}
-        class="hidden sm:inline-flex items-center justify-center h-8 w-8 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:scale-95 active:bg-gray-100 dark:active:bg-white/10 focus-visible:ring-2 focus-visible:ring-lerd-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-        title={splitDir === SplitDir.Horizontal ? m.tinker_splitVerticalTitle() : m.tinker_splitHorizontalTitle()}
+        class="hidden md:block text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        use:tooltip={splitDir === SplitDir.Horizontal ? m.tinker_splitVerticalTitle() : m.tinker_splitHorizontalTitle()}
         aria-label={splitDir === SplitDir.Horizontal ? m.tinker_splitVerticalTitle() : m.tinker_splitHorizontalTitle()}
       >
         <Icon name={splitDir === SplitDir.Horizontal ? 'splitVertical' : 'splitHorizontal'} class="w-4 h-4" />
@@ -229,8 +241,8 @@
       <button
         bind:this={fullscreenBtn}
         onclick={toggleFullscreen}
-        class="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:scale-95 active:bg-gray-100 dark:active:bg-white/10 focus-visible:ring-2 focus-visible:ring-lerd-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
-        title={fullscreen ? m.tinker_exitFullscreenTitle() : m.tinker_fullscreenTitle()}
+        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+        use:tooltip={fullscreen ? m.tinker_exitFullscreenTitle() : m.tinker_fullscreenTitle()}
         aria-label={fullscreen ? m.tinker_exitFullscreenTitle() : m.tinker_fullscreenTitle()}
       >
         <Icon name={fullscreen ? 'minimize' : 'maximize'} class="w-4 h-4" />
@@ -238,26 +250,30 @@
       <button
         onclick={clearAll}
         disabled={!code && !result}
-        class="text-xs px-2 py-1 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40 transition-colors"
-        title={m.tinker_clearTitle()}
-      >{m.common_clear()}</button>
+        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40 disabled:hover:text-gray-400 transition-colors"
+        use:tooltip={m.tinker_clearTitle()}
+        aria-label={m.common_clear()}
+      >
+        <Icon name="trash" class="w-4 h-4" />
+      </button>
       <button
         onclick={run}
         disabled={running || !code.trim()}
-        class="text-xs px-3 py-1 rounded-sm bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 transition-colors"
-        title={m.tinker_runTitle()}
+        class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-40 disabled:hover:text-gray-400 transition-colors"
+        use:tooltip={running ? m.tinker_running() : m.tinker_runTitle()}
+        aria-label={running ? m.tinker_running() : m.tinker_run()}
       >
-        {running ? m.tinker_running() : m.tinker_run()}
+        <Icon name={running ? 'spinner' : 'play'} class="w-4 h-4 {running ? 'animate-spin' : ''}" />
       </button>
     </div>
   </div>
 
   <div
-    class="flex-1 flex min-h-0 gap-3 {splitDir === SplitDir.Horizontal ? 'flex-col sm:flex-row' : 'flex-col'} transition-all duration-300 ease-in-out"
+    class="flex-1 flex min-h-0 gap-3 {splitDir === SplitDir.Horizontal ? 'flex-col md:flex-row' : 'flex-col'}"
     data-splitdir={splitDir}
   >
     <div
-      class="group flex-1 min-h-40 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-black/40 relative"
+      class="group flex-1 min-h-40 md:min-h-0 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-black/40 relative"
     >
       <div class="flex-1 min-h-0 overflow-hidden">
         <MonacoEditor bind:value={code} language="php" onReady={onEditorReady} />
@@ -272,7 +288,7 @@
     </div>
 
     <div
-      class="flex-1 min-h-30 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 tinker-output py-2"
+      class="flex-1 min-h-30 md:min-h-0 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 tinker-output py-2"
     >
       {#if !result && running}
         <p class="text-xs text-gray-400">{m.tinker_running()}</p>
