@@ -422,6 +422,34 @@ func ResolveDynamicEnv(svc *CustomService) error {
 				repeats[i] = value
 			}
 			svc.Environment[k] = strings.Join(repeats, ",")
+		case "resolve_dep":
+			// resolve_dep:<name> → lerd-<satisfier> for the installed (prefer
+			// running) service that meets depends_on <name>, including family
+			// and env_role drop-ins. Optional =<template> substitutes {host}
+			// so mongo-express can keep a full mongodb:// URL.
+			// RedisInsight / mongo-express use this so a Valkey or versioned
+			// mongo host lands in the connection env.
+			spec := strings.TrimSpace(parts[1])
+			dep, template, hasTemplate := strings.Cut(spec, "=")
+			dep = strings.TrimSpace(dep)
+			if dep == "" {
+				return fmt.Errorf("service %s: resolve_dep needs a dependency name", svc.Name)
+			}
+			if ResolveDepHost == nil {
+				return fmt.Errorf("service %s: resolve_dep is unavailable", svc.Name)
+			}
+			host := ResolveDepHost(dep)
+			if host == "" {
+				return fmt.Errorf("service %s: resolve_dep:%s found no installed satisfier", svc.Name, dep)
+			}
+			if hasTemplate {
+				if !strings.Contains(template, "{host}") {
+					return fmt.Errorf("service %s: resolve_dep template for %s must contain {host}", svc.Name, dep)
+				}
+				svc.Environment[k] = strings.ReplaceAll(template, "{host}", host)
+			} else {
+				svc.Environment[k] = host
+			}
 		default:
 			return fmt.Errorf("service %s: unknown dynamic_env directive %q", svc.Name, parts[0])
 		}
@@ -461,6 +489,11 @@ func uniqueFamilyHosts(families string) []string {
 // ServiceRunning, when set, reports whether a service is up. discover_family
 // uses it to omit stopped members. Nil keeps the installed-member list (tests).
 var ServiceRunning func(name string) bool
+
+// ResolveDepHost, when set, returns the container hostname (lerd-<name>) of an
+// installed satisfier for the named depends_on entry. serviceops wires it so
+// resolve_dep can prefer a running drop-in without config importing serviceops.
+var ResolveDepHost func(dep string) string
 
 // MaterializeServiceFiles writes each FileMount for svc to its host path,
 // creating the parent directory and applying the requested mode. The file

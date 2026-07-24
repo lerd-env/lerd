@@ -505,6 +505,57 @@ func TestResolveDynamicEnv_UnknownDirective(t *testing.T) {
 	}
 }
 
+func TestResolveDynamicEnv_ResolveDep(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string {
+		if dep == "redis" {
+			return "lerd-valkey"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		DynamicEnv: map[string]string{"RI_REDIS_HOST": "resolve_dep:redis"},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	if got := svc.Environment["RI_REDIS_HOST"]; got != "lerd-valkey" {
+		t.Errorf("RI_REDIS_HOST = %q, want lerd-valkey", got)
+	}
+}
+
+func TestResolveDynamicEnv_ResolveDepTemplate(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string {
+		if dep == "mongo" {
+			return "lerd-mongo-7"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "mongo-express", Image: "x",
+		DynamicEnv: map[string]string{
+			"ME_CONFIG_MONGODB_URL": "resolve_dep:mongo=mongodb://root:lerd@{host}:27017/?authSource=admin",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	want := "mongodb://root:lerd@lerd-mongo-7:27017/?authSource=admin"
+	if got := svc.Environment["ME_CONFIG_MONGODB_URL"]; got != want {
+		t.Errorf("ME_CONFIG_MONGODB_URL = %q, want %q", got, want)
+	}
+}
+
 func TestSanitizeImageTag(t *testing.T) {
 	cases := map[string]string{
 		"5.7":        "5-7",
@@ -708,8 +759,11 @@ func TestLoadPreset_RedisInsight(t *testing.T) {
 	if !p.DashboardExternal {
 		t.Errorf("redisinsight must set dashboard_external because its consent cookies can't be carried by the iframe")
 	}
-	if p.Environment["RI_REDIS_HOST"] != "lerd-redis" {
-		t.Errorf("redisinsight must pre-wire the lerd Redis connection via RI_REDIS_HOST, got %q", p.Environment["RI_REDIS_HOST"])
+	if got := p.DynamicEnv["RI_REDIS_HOST"]; got != "resolve_dep:redis" {
+		t.Errorf("redisinsight must resolve RI_REDIS_HOST via resolve_dep:redis, got %q", got)
+	}
+	if _, ok := p.Environment["RI_REDIS_HOST"]; ok {
+		t.Errorf("RI_REDIS_HOST must not be hardcoded in environment; use dynamic_env resolve_dep")
 	}
 }
 
