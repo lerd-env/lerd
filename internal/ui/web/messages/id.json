@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Simpan perubahan ini ke php.ini milik {scope} dan mulai ulang FPM?",
   "phpIniEditor_resetTitle": "Setel ulang php.ini",
   "phpIniEditor_resetBody": "Hapus php.ini yang tersimpan untuk {scope} dan mulai ulang FPM? Bawaan bundel akan berlaku. Cadangan tetap disimpan dan dapat dipulihkan nanti.",
+  "phpIniEditor_restarting": "Memulai ulang PHP-FPM…",
+  "phpIniEditor_restartFailed": "Gagal memulai ulang PHP-FPM untuk {scope}",
   "phpIniEditor_restoreTitle": "Pulihkan php.ini dari cadangan",
   "phpIniEditor_restoreBody": "Ganti php.ini saat ini untuk {scope} dengan {name}. Cadangan akan dihapus setelah pemulihan selesai.",
   "services_dash_overview": "Ikhtisar",

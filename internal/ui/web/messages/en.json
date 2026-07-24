@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Save these changes to {scope}'s php.ini and restart FPM?",
   "phpIniEditor_resetTitle": "Reset php.ini",
   "phpIniEditor_resetBody": "Delete the saved php.ini for {scope} and restart FPM? The bundled defaults will apply. Backups are kept and can be restored later.",
+  "phpIniEditor_restarting": "Restarting PHP-FPM…",
+  "phpIniEditor_restartFailed": "PHP-FPM restart failed for {scope}",
   "phpIniEditor_restoreTitle": "Restore php.ini from backup",
   "phpIniEditor_restoreBody": "Replace the current php.ini for {scope} with {name}. The backup will be removed after the restore completes.",
   "services_dash_overview": "Overview",

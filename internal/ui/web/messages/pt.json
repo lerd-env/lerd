@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Salvar estas alterações no php.ini de {scope} e reiniciar o FPM?",
   "phpIniEditor_resetTitle": "Redefinir o php.ini",
   "phpIniEditor_resetBody": "Excluir o php.ini salvo de {scope} e reiniciar o FPM? Os padrões integrados passam a valer. Os backups são mantidos e podem ser restaurados depois.",
+  "phpIniEditor_restarting": "Reiniciando o PHP-FPM…",
+  "phpIniEditor_restartFailed": "Falha ao reiniciar o PHP-FPM para {scope}",
   "phpIniEditor_restoreTitle": "Restaurar o php.ini a partir de um backup",
   "phpIniEditor_restoreBody": "Substituir o php.ini atual de {scope} por {name}. O backup será removido após a restauração ser concluída.",
   "services_dash_overview": "Visão geral",

@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "将这些更改保存到 {scope} 的 php.ini 并重启 FPM？",
   "phpIniEditor_resetTitle": "重置 php.ini",
   "phpIniEditor_resetBody": "删除为 {scope} 保存的 php.ini 并重启 FPM？将应用内置默认配置。备份会保留，可在之后恢复。",
+  "phpIniEditor_restarting": "正在重启 PHP-FPM…",
+  "phpIniEditor_restartFailed": "{scope} 的 PHP-FPM 重启失败",
   "phpIniEditor_restoreTitle": "从备份恢复 php.ini",
   "phpIniEditor_restoreBody": "用 {name} 替换 {scope} 的当前 php.ini。恢复完成后该备份将被移除。",
   "services_dash_overview": "概览",

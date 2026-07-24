@@ -791,3 +791,35 @@ describe('notification severity', () => {
     expect(notificationSeverity('nplusone', true)).toBe('failure');
   });
 });
+
+describe('notifyLocalFailure', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  it('puts a page-detected failure on the in-app surface and in the history', async () => {
+    const { notifyLocalFailure, inAppNotifications, notificationHistory } = await import('./notify');
+
+    notifyLocalFailure('php_ini', 'PHP-FPM restart failed for PHP 8.4', 'unit did not come back');
+
+    const inApp = get(inAppNotifications);
+    expect(inApp).toHaveLength(1);
+    expect(inApp[0].title).toBe('PHP-FPM restart failed for PHP 8.4');
+    expect(inApp[0].body).toBe('unit did not come back');
+    // failed entries are the ones NotificationToasts refuses to auto-dismiss.
+    expect(inApp[0].failed).toBe(true);
+
+    expect(get(notificationHistory)[0].title).toBe('PHP-FPM restart failed for PHP 8.4');
+  });
+
+  it('does not depend on the window having focus, unlike pushed events', async () => {
+    const hasFocus = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
+    const { notifyLocalFailure, inAppNotifications } = await import('./notify');
+
+    notifyLocalFailure('php_ini', 'title', 'body');
+
+    expect(get(inAppNotifications)).toHaveLength(1);
+    hasFocus.mockRestore();
+  });
+});
