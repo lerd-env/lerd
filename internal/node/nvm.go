@@ -116,16 +116,18 @@ func nvmDefaultUsable(raw string) bool {
 }
 
 // nvmActivate returns the shell prelude that sources nvm, selects version, and
-// puts that version's bin dir at the front of PATH. It aborts when `nvm use`
-// fails (rc 3 when the version is not installed) rather than trusting $NVM_BIN:
-// sourcing nvm.sh already populates $NVM_BIN with the current default, so an
-// empty check can never catch a failed pin and the version would silently fall
-// through.
+// puts that version's bin dir at the front of PATH. Both checks are required:
+// nvm use can return 0 on the system branch (default alias "system" with a
+// host node) while running nvm deactivate and unsetting NVM_BIN, and an empty
+// NVM_BIN would make PATH=":$PATH" put the current directory on PATH. Honouring
+// the exit status catches a missing pin; requiring a non-empty NVM_BIN catches
+// the system fall-through.
 func nvmActivate(version string) string {
 	return sourceScript() + fmt.Sprintf(
 		`nvm use %s >/dev/null 2>&1 || { echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; }; `+
+			`if [ -z "$NVM_BIN" ]; then echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; fi; `+
 			`PATH="$NVM_BIN:$PATH"; export PATH; `,
-		shellQuote(version), version)
+		shellQuote(version), version, version)
 }
 
 // nvmExports builds `export KEY=VAL;` statements for ApplyEnv. Values are

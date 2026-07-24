@@ -145,15 +145,13 @@ func TestFnmShellFragments(t *testing.T) {
 func TestNvmShellFragments(t *testing.T) {
 	m := nvmManager{}
 	prefix := m.ExecPrefix("20")
-	// Honouring `nvm use` exit status catches a missing pin; $NVM_BIN alone is
-	// already set by sourcing nvm.sh and is not enough.
-	for _, want := range []string{"nvm.sh", "nvm use", `PATH="$NVM_BIN:$PATH"`, `exec "$@"`} {
+	// Both checks are required: `nvm use` exit status catches a missing pin;
+	// non-empty $NVM_BIN catches the system-alias fall-through (use returns 0
+	// but deactivates and clears NVM_BIN).
+	for _, want := range []string{"nvm.sh", "nvm use", `[ -z "$NVM_BIN" ]`, `PATH="$NVM_BIN:$PATH"`, `exec "$@"`} {
 		if !strings.Contains(prefix, want) {
 			t.Errorf("nvm ExecPrefix missing %q:\n%s", want, prefix)
 		}
-	}
-	if strings.Contains(prefix, `[ -z "$NVM_BIN" ]`) {
-		t.Errorf("nvm ExecPrefix still guards on empty NVM_BIN (false negative):\n%s", prefix)
 	}
 	shim := m.ShimScript("/unused", "node")
 	if !strings.Contains(shim, "does not install PATH shims") {
