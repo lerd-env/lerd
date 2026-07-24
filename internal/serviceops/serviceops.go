@@ -110,11 +110,15 @@ func firePublishedPortShiftForced(service string, newPort int) {
 	}
 }
 
+// ensureUnitStatus is the seam the port guard reads unit state through, so tests
+// can decide it instead of inheriting whatever the developer happens to be running.
+var ensureUnitStatus = podman.UnitStatus
+
 // unitActive reports whether a service's own systemd unit is currently up. The
 // generic port guard uses it to avoid treating the service's *own* published
 // listener as a foreign owner of the port (see maybeShiftPublishedPort).
 func unitActive(name string) bool {
-	status, _ := podman.UnitStatus("lerd-" + name)
+	status, _ := ensureUnitStatus("lerd-" + name)
 	return status == "active" || status == "activating"
 }
 
