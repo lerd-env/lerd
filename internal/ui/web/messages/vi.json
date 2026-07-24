@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Đang xóa {name}…",
   "databases_snapshotDeleted": "Đã xóa {name}",
   "databases_importedWithErrors": "Đã nhập {file}, nhưng engine báo {count} lỗi",
+  "databases_importedWithExtensions": "Đã nhập {file} và tạo {names}",
   "databases_restoredWithErrors": "Đã khôi phục {name}, nhưng engine báo {count} lỗi",
   "databases_importIssuesLink": "Xem những gì engine báo lại",
   "databases_importIssuesBody": "Bản kết xuất đã được tải, nhưng engine từ chối các câu lệnh này.",

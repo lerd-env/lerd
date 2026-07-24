@@ -101,11 +101,17 @@ func CreateDatabase(svc, name string) (bool, error) {
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			if strings.Contains(string(out), "already exists") {
-				return false, nil
+				// Applied to a database that was already there too, so a site created
+				// before its engine declared an extension picks it up on the next run
+				// rather than only ever on a new database.
+				return false, EnsureExtensions(svc, name)
 			}
 			return false, fmt.Errorf("%s", strings.TrimSpace(string(out)))
 		}
-		return true, nil
+		// The engine's up-front extensions belong to every database it holds, so a
+		// dropped and recreated one comes back whole rather than missing what the
+		// site was built on.
+		return true, EnsureExtensions(svc, name)
 	default:
 		return false, nil
 	}

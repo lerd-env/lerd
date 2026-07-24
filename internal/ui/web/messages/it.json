@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Eliminazione di {name}…",
   "databases_snapshotDeleted": "{name} eliminato",
   "databases_importedWithErrors": "{file} importato, ma il motore ha segnalato {count} errori",
+  "databases_importedWithExtensions": "Importato {file}, e creato {names}",
   "databases_restoredWithErrors": "{name} ripristinato, ma il motore ha segnalato {count} errori",
   "databases_importIssuesLink": "Vedi cosa ha segnalato il motore",
   "databases_importIssuesBody": "Il dump è stato caricato, ma il motore ha rifiutato queste istruzioni.",

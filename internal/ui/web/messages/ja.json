@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "{name} を削除中…",
   "databases_snapshotDeleted": "{name} を削除しました",
   "databases_importedWithErrors": "{file} をインポートしましたが、エンジンが {count} 件のエラーを報告しました",
+  "databases_importedWithExtensions": "{file} をインポートし、{names} を作成しました",
   "databases_restoredWithErrors": "{name} を復元しましたが、エンジンが {count} 件のエラーを報告しました",
   "databases_importIssuesLink": "エンジンの報告内容を見る",
   "databases_importIssuesBody": "ダンプは読み込まれましたが、エンジンはこれらの文を拒否しました。",

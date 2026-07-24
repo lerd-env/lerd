@@ -74,6 +74,9 @@ type Result = {
   // What the daemon held back on the way in, so a load that came out clean
   // because lerd filtered it says so rather than looking untouched.
   skipped?: ImportIssue[];
+  // Extensions the load needed and the daemon created, so a database that
+  // gained one is never changed without a word.
+  created?: ImportIssue[];
 };
 
 async function post(service: string, path: string, body: unknown): Promise<Result> {

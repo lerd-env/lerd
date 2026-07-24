@@ -32,6 +32,7 @@ func NewDbCmd() *cobra.Command {
 	cmd.AddCommand(newDbRestoreCmd("restore"))
 	cmd.AddCommand(newDbSnapshotRmCmd("snapshot:rm"))
 	cmd.AddCommand(newDbMoveCmd("move"))
+	cmd.AddCommand(newDbExtensionCmd("extension"))
 	return cmd
 }
 
@@ -325,7 +326,10 @@ func runDbImport(file, service, database string, fresh bool) error {
 	if err != nil {
 		return err
 	}
-	src, skipped := serviceops.SanitizeDump(config.FamilyOfName(env.service), src)
+	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
+		Service: env.service, Family: config.FamilyOfName(env.service), Database: env.database,
+		Extensions: serviceops.DeclaredExtensions(env.service),
+	}, src)
 	// psql exits 0 even when every statement failed, so the output is tallied on
 	// its way to the terminal and the result reported at the end.
 	var tally serviceops.ImportTally
@@ -345,9 +349,12 @@ func runDbImport(file, service, database string, fresh bool) error {
 		return fmt.Errorf("import failed: %w", err)
 	}
 	rep := tally.Report()
-	rep.Skipped = skipped()
-	if note := rep.SkippedSummary(); note != "" {
-		feedback.Line(note)
+	n := notes()
+	rep.Skipped, rep.Created = n.Skipped, n.Created
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+		if note != "" {
+			feedback.Line(note)
+		}
 	}
 	if rep.Errors > 0 {
 		feedback.Warn("import finished but %s", rep.Summary())

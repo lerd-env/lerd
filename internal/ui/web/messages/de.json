@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "{name} wird gelöscht…",
   "databases_snapshotDeleted": "{name} gelöscht",
   "databases_importedWithErrors": "{file} importiert, aber die Engine meldete {count} Fehler",
+  "databases_importedWithExtensions": "{file} importiert und {names} erstellt",
   "databases_restoredWithErrors": "{name} wiederhergestellt, aber die Engine meldete {count} Fehler",
   "databases_importIssuesLink": "Ansehen, was die Engine gemeldet hat",
   "databases_importIssuesBody": "Der Dump wurde geladen, aber die Engine hat diese Anweisungen abgelehnt.",

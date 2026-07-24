@@ -27,22 +27,45 @@ var (
 // row data until a lone "\.", so nothing between them may be rewritten.
 var copyStart = regexp.MustCompile(`(?i)^\s*COPY\s.*\sFROM\s+stdin;\s*$`)
 
+// DumpTarget is where a dump is going, so the filter knows which statements can
+// never apply and which extensions the engine could create for it.
+type DumpTarget struct {
+	Service    string
+	Family     string
+	Database   string
+	Extensions []Extension
+}
+
+// ImportNotes is what the filter did on the way in, reported beside the errors
+// so a dump lerd changed never reads as one that arrived untouched.
+type ImportNotes struct {
+	Skipped []ImportIssue
+	Created []ImportIssue
+}
+
+// createExtensionFn is the container call, swapped out in tests.
+var createExtensionFn = CreateExtension
+
 // SanitizeDump filters a dump on its way to the engine so statements that name
-// roles the local engine does not have never reach it. It returns the filtered
-// stream and a function reporting what was dropped, valid once the stream has
-// been read to the end.
-func SanitizeDump(family string, r io.Reader) (io.Reader, func() []ImportIssue) {
-	s := &dumpSanitizer{postgres: family == "postgres"}
+// roles the local engine does not have never reach it, and creates a declared
+// extension the moment a statement reaches for one of its types. It returns the
+// filtered stream and a function reporting what it did, valid once the stream
+// has been read to the end.
+func SanitizeDump(t DumpTarget, r io.Reader) (io.Reader, func() ImportNotes) {
+	s := &dumpSanitizer{target: t, postgres: t.Family == "postgres"}
 	pr, pw := io.Pipe()
 	go func() { pw.CloseWithError(s.copy(r, pw)) }()
-	return pr, s.report
+	return pr, s.notes
 }
 
 type dumpSanitizer struct {
+	target   DumpTarget
 	postgres bool
+	ensured  map[string]bool
 	mu       sync.Mutex
 	counts   map[string]int
 	order    []string
+	created  []ImportIssue
 }
 
 func (s *dumpSanitizer) note(kind string) {
@@ -57,14 +80,38 @@ func (s *dumpSanitizer) note(kind string) {
 	s.counts[kind]++
 }
 
-func (s *dumpSanitizer) report() []ImportIssue {
+func (s *dumpSanitizer) notes() ImportNotes {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	out := make([]ImportIssue, 0, len(s.order))
+	out := ImportNotes{Created: s.created}
 	for _, kind := range s.order {
-		out = append(out, ImportIssue{Message: kind, Count: s.counts[kind]})
+		out.Skipped = append(out.Skipped, ImportIssue{Message: kind, Count: s.counts[kind]})
 	}
 	return out
+}
+
+// ensureExtension creates the extension a line reaches for, before that line is
+// forwarded, so the statement needing it cannot run first. Each is attempted
+// once, whether or not it worked, so a dump full of one type costs one exec.
+func (s *dumpSanitizer) ensureExtension(line string) {
+	if !s.postgres || len(s.target.Extensions) == 0 || s.target.Database == "" {
+		return
+	}
+	e := extensionForLine(s.target.Extensions, line)
+	if e == nil || s.ensured[e.Name] {
+		return
+	}
+	if s.ensured == nil {
+		s.ensured = map[string]bool{}
+	}
+	s.ensured[e.Name] = true
+	msg := "created extension " + e.Name + ", which the dump needs and did not carry"
+	if err := createExtensionFn(s.target.Service, s.target.Database, e.Name); err != nil {
+		msg = "could not create extension " + e.Name + ", which the dump needs: " + err.Error()
+	}
+	s.mu.Lock()
+	s.created = append(s.created, ImportIssue{Message: msg, Count: 1})
+	s.mu.Unlock()
 }
 
 // copy streams r to w a line at a time. ReadString rather than a Scanner: a
@@ -85,6 +132,9 @@ func (s *dumpSanitizer) copy(r io.Reader, w io.Writer) error {
 				inCopy = true
 			default:
 				out = s.filter(line)
+				if out != "" {
+					s.ensureExtension(out)
+				}
 			}
 			if out != "" {
 				if _, werr := io.WriteString(w, out); werr != nil {

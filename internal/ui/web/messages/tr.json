@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "{name} siliniyor…",
   "databases_snapshotDeleted": "{name} silindi",
   "databases_importedWithErrors": "{file} içe aktarıldı, ancak motor {count} hata bildirdi",
+  "databases_importedWithExtensions": "{file} içe aktarıldı ve {names} oluşturuldu",
   "databases_restoredWithErrors": "{name} geri yüklendi, ancak motor {count} hata bildirdi",
   "databases_importIssuesLink": "Motorun bildirdiklerine bakın",
   "databases_importIssuesBody": "Döküm yüklendi, ancak motor bu ifadeleri reddetti.",

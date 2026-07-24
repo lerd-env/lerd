@@ -52,6 +52,7 @@
     issues?: ImportIssue[];
     omitted?: number;
     skipped?: ImportIssue[];
+    created?: ImportIssue[];
   } | null>(null);
   // The dump waiting on the confirmation, and whether to empty the database
   // before it loads.
@@ -68,7 +69,13 @@
     if (importOp.tone === 'error') return m.databases_importFailed({ error: importOp.error ?? '' });
     if (importOp.tone === 'warn')
       return m.databases_importedWithErrors({ file: importOp.file, count: importOp.errors ?? 0 });
-    if (importOp.tone === 'done') return m.databases_imported({ file: importOp.file });
+    if (importOp.tone === 'done')
+      return importOp.created?.length
+        ? m.databases_importedWithExtensions({
+            file: importOp.file,
+            names: importOp.created.map((c) => c.message).join(', ')
+          })
+        : m.databases_imported({ file: importOp.file });
     return importOp.percent === null
       ? m.databases_importing({ file: importOp.file })
       : m.databases_importingPercent({
@@ -132,12 +139,13 @@
         errors: res.errors,
         issues: res.issues,
         omitted: res.omitted,
-        skipped: res.skipped
+        skipped: res.skipped,
+        created: res.created
       };
       showIssues = (res.issues ?? []).length > 0;
       return;
     }
-    importOp = { tone: 'done', file: file.name, percent: null };
+    importOp = { tone: 'done', file: file.name, percent: null, created: res.created };
     clearTimeout(clearDone);
     clearDone = setTimeout(() => {
       if (importOp?.tone === 'done') importOp = null;

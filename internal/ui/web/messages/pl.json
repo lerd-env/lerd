@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Usuwanie {name}…",
   "databases_snapshotDeleted": "Usunięto {name}",
   "databases_importedWithErrors": "Zaimportowano {file}, ale silnik zgłosił błędy: {count}",
+  "databases_importedWithExtensions": "Zaimportowano {file} i utworzono {names}",
   "databases_restoredWithErrors": "Przywrócono {name}, ale silnik zgłosił błędy: {count}",
   "databases_importIssuesLink": "Zobacz, co zgłosił silnik",
   "databases_importIssuesBody": "Zrzut się wczytał, ale silnik odrzucił te instrukcje.",

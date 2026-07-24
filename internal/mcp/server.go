@@ -4233,7 +4233,10 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	src, skipped := serviceops.SanitizeDump(config.FamilyOfName(svc), src)
+	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
+		Service: svc, Family: config.FamilyOfName(svc), Database: env.database,
+		Extensions: serviceops.DeclaredExtensions(svc),
+	}, src)
 	var stderr bytes.Buffer
 	cmd.Stdin = src
 	cmd.Stderr = &stderr
@@ -4241,8 +4244,12 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
 	}
 	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)
-	if note := (serviceops.ImportReport{Skipped: skipped()}).SkippedSummary(); note != "" {
-		msg += ", " + note
+	n := notes()
+	rep := serviceops.ImportReport{Skipped: n.Skipped, Created: n.Created}
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+		if note != "" {
+			msg += ", " + note
+		}
 	}
 	return toolOK(msg), nil
 }

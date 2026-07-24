@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "{name} verwijderen…",
   "databases_snapshotDeleted": "{name} verwijderd",
   "databases_importedWithErrors": "{file} geïmporteerd, maar de engine meldde {count} fouten",
+  "databases_importedWithExtensions": "{file} geïmporteerd en {names} aangemaakt",
   "databases_restoredWithErrors": "{name} hersteld, maar de engine meldde {count} fouten",
   "databases_importIssuesLink": "Bekijk wat de engine meldde",
   "databases_importIssuesBody": "De dump is geladen, maar de engine heeft deze statements geweigerd.",

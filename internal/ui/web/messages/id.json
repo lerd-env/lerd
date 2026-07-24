@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Menghapus {name}…",
   "databases_snapshotDeleted": "{name} dihapus",
   "databases_importedWithErrors": "{file} diimpor, tetapi engine melaporkan {count} kesalahan",
+  "databases_importedWithExtensions": "Mengimpor {file}, dan membuat {names}",
   "databases_restoredWithErrors": "{name} dipulihkan, tetapi engine melaporkan {count} kesalahan",
   "databases_importIssuesLink": "Lihat apa yang dilaporkan engine",
   "databases_importIssuesBody": "Dump berhasil dimuat, tetapi mesin menolak pernyataan ini.",

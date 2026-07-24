@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Excluindo {name}…",
   "databases_snapshotDeleted": "{name} excluído",
   "databases_importedWithErrors": "{file} importado, mas o engine reportou {count} erros",
+  "databases_importedWithExtensions": "Importado {file}, e criado {names}",
   "databases_restoredWithErrors": "{name} restaurado, mas o engine reportou {count} erros",
   "databases_importIssuesLink": "Veja o que o engine reportou",
   "databases_importIssuesBody": "O dump foi carregado, mas o motor rejeitou estas instruções.",
