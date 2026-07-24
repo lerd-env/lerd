@@ -190,6 +190,7 @@ func main() {
 	root.AddCommand(cli.NewDbRestoreCmd())
 	root.AddCommand(cli.NewDbSnapshotRmCmd())
 	root.AddCommand(cli.NewDbMoveCmd())
+	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
 	root.AddCommand(cli.NewShimsCmd())
 	root.AddCommand(cli.NewXdebugCmd())

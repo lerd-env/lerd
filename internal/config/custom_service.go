@@ -180,6 +180,22 @@ type CustomService struct {
 	// Introspect, when set, lets the databases UI enumerate the databases inside
 	// this engine and read their sizes. Only database-engine presets declare it.
 	Introspect *Introspect `yaml:"introspect,omitempty" json:"introspect,omitempty"`
+	// Extensions lists the database extensions this engine's image can create.
+	// Only engines that ship any declare them, and lerd creates one only when a
+	// dump reaches for it, since some cost several megabytes per database.
+	Extensions []Extension `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+}
+
+// Extension is a database extension an engine's image ships, with the type
+// names it provides. The types are what let an import tell that a dump needs it,
+// so no Go code has to know what postgis or pgvector are.
+type Extension struct {
+	Name  string   `yaml:"name" json:"name"`
+	Types []string `yaml:"types,omitempty" json:"types,omitempty"`
+	// Always creates the extension wherever lerd creates a database, for the ones
+	// that are cheap or that provide no distinctive type to match a dump against.
+	// The rest wait until a dump reaches for one of their types.
+	Always bool `yaml:"always,omitempty" json:"always,omitempty"`
 }
 
 // ClientShim declares a service client tool that lerd exposes as a host shim.

@@ -45,4 +45,25 @@ describe('Modal', () => {
     const { container } = render(Harness, { props: { open: true, title: 'X', onclose: () => {} } });
     expect(container.querySelector('.max-w-lg')).toBeInTheDocument();
   });
+
+  // A dump filename is one unbreakable word. Without these the title runs past
+  // the header and under the close button.
+  it('breaks a long unspaced title instead of overflowing the header', () => {
+    const { container } = render(Harness, {
+      props: {
+        open: true,
+        title: 'main_ep_floral_union_a2140s70_aws_eu_central_1_pg_laravel_cloud-2026_07_24-dump.sql',
+        onclose: () => {}
+      }
+    });
+    const heading = container.querySelector('h3') as HTMLElement;
+    expect(heading.className).toContain('min-w-0');
+    expect(heading.className).toContain('break-words');
+  });
+
+  it('keeps the close button at full size next to a long title', () => {
+    const { container } = render(Harness, { props: { open: true, title: 'X', onclose: () => {} } });
+    const close = container.querySelector('h3 + button') as HTMLElement;
+    expect(close.className).toContain('shrink-0');
+  });
 });

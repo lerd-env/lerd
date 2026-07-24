@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/grouping"
+	"github.com/geodro/lerd/internal/linker"
 	"github.com/geodro/lerd/internal/nginx"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -71,7 +72,7 @@ func runDomainAdd(_ *cobra.Command, args []string) error {
 	domainName := strings.ToLower(args[0])
 	fullDomain := domainName + "." + cfg.DNS.TLD
 
-	if isReservedDomain(fullDomain) {
+	if linker.IsReservedDomain(fullDomain) {
 		return fmt.Errorf("domain %q is reserved for internal Lerd use", fullDomain)
 	}
 
