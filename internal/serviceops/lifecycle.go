@@ -13,7 +13,7 @@ import (
 // StartService is the shared start path for CLI, UI, TUI (via CLI), and MCP:
 // ensure the quadlet, bring depends_on satisfiers up for customs, start the
 // unit (retrying briefly for quadlet generator lag), mark it manually started,
-// start reverse dependents, and regenerate discover_family consumers.
+// start reverse dependents, and regenerate dynamic_env consumers.
 func StartService(name string) error {
 	unit := "lerd-" + name
 	if IsBuiltin(name) {
@@ -48,24 +48,26 @@ func StartService(name string) error {
 			feedback.Warn("could not start dependent service %s: %v", dep, err)
 		}
 	}
-	RegenerateFamilyConsumersForService(name)
+	RegenerateDynamicEnvConsumersForService(name)
 	return nil
 }
 
 // StopService is the shared stop path for CLI, UI, TUI (via CLI), and MCP:
 // cascade-stop dependents when no other running satisfier remains, stop name,
-// mark it paused, and regenerate discover_family consumers.
+// mark it paused, and regenerate dynamic_env consumers.
 func StopService(name string) error {
-	StopWithDependents(name)
+	if err := StopWithDependents(name); err != nil {
+		return err
+	}
 	_ = config.SetServicePaused(name, true)
 	_ = config.SetServiceManuallyStarted(name, false)
-	RegenerateFamilyConsumersForService(name)
+	RegenerateDynamicEnvConsumersForService(name)
 	return nil
 }
 
 // RestartService is the shared restart path for CLI, UI, TUI (via CLI), and MCP:
-// refresh the quadlet (so discover_family and file mounts land), restart the
-// unit, clear paused, and regenerate discover_family consumers.
+// refresh the quadlet (so dynamic_env and file mounts land), restart the
+// unit, clear paused, and regenerate dynamic_env consumers.
 func RestartService(name string) error {
 	unit := "lerd-" + name
 	if err := refreshServiceQuadlet(name); err != nil {
@@ -76,7 +78,7 @@ func RestartService(name string) error {
 	}
 	_ = config.SetServicePaused(name, false)
 	_ = config.SetServiceManuallyStarted(name, true)
-	RegenerateFamilyConsumersForService(name)
+	RegenerateDynamicEnvConsumersForService(name)
 	return nil
 }
 

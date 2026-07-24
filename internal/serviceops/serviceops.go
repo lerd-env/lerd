@@ -33,6 +33,18 @@ func init() {
 		ok, _ := podman.ContainerRunning("lerd-" + name)
 		return ok
 	}
+	// resolve_dep prefers a running satisfier so RedisInsight / mongo-express
+	// wire to the engine that is actually up when both redis and valkey exist.
+	config.ResolveDepHost = func(dep string) string {
+		name := resolveDependency(dep, "", true)
+		if name == "" {
+			name = ResolveDependency(dep)
+		}
+		if name == "" {
+			return ""
+		}
+		return "lerd-" + name
+	}
 }
 
 // IsBuiltin reports whether name is a built-in (default-preset) lerd service.
@@ -449,17 +461,43 @@ func registerPreset(svc *config.CustomService) error {
 }
 
 // MissingPresetDependencies returns declared dependencies that ResolveDependency
-// cannot satisfy. Each entry is the dependency name, with known drop-in
-// alternatives listed when the store declares any (family or env_role).
+// cannot satisfy, or that are only met by a drop-in the consumer cannot bind
+// (no discover_family covering it and no resolve_dep for the dep). Each entry
+// is the dependency name, with known drop-in alternatives listed when the store
+// or the consumer's admin_for declares any.
 func MissingPresetDependencies(svc *config.CustomService) []string {
 	var missing []string
 	for _, dep := range svc.DependsOn {
-		if ResolveDependency(dep) != "" {
-			continue
+		resolved := ResolveDependency(dep)
+		if resolved == "" || (resolved != dep && !consumerCanUseDropIn(svc, dep, resolved)) {
+			missing = append(missing, missingDepLabel(dep, svc))
 		}
-		missing = append(missing, missingDepLabel(dep))
 	}
 	return missing
+}
+
+// consumerCanUseDropIn reports whether svc can wire a non-literal satisfier for
+// dep: discover_family that names dep or the satisfier's family, or resolve_dep
+// for dep. Without one of those, RedisInsight-on-Valkey (and similar) would
+// install green and then time out talking to a hardcoded lerd-redis host.
+func consumerCanUseDropIn(svc *config.CustomService, dep, resolved string) bool {
+	if svc == nil {
+		return false
+	}
+	if consumesResolveDepNamed(svc, dep) {
+		return true
+	}
+	families := consumerDiscoverFamilies(svc)
+	if len(families) == 0 {
+		return false
+	}
+	resolvedFam := ServiceFamily(resolved)
+	for _, fam := range families {
+		if fam == dep || (resolvedFam != "" && fam == resolvedFam) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveDependency returns an installed service that meets dep: the named
@@ -527,7 +565,7 @@ func serviceIsRunning(name string) bool {
 func EnsureDependencyRunning(dep string) (string, error) {
 	name := ResolveDependency(dep)
 	if name == "" {
-		return "", fmt.Errorf("%s not installed", missingDepLabel(dep))
+		return "", fmt.Errorf("%s not installed", missingDepLabel(dep, nil))
 	}
 	if err := EnsureServiceRunning(name); err != nil {
 		return name, err
@@ -538,8 +576,13 @@ func EnsureDependencyRunning(dep string) (string, error) {
 // DependencyDisplayName is the short name to show for dep in CLI/TUI/UI: the
 // preset the installed satisfier came from (mariadb for mariadb-11-8), the
 // satisfier's own name when it has no preset, or dep when nothing is installed.
+// Prefers a running satisfier so the dashboard does not show phpMyAdmin hanging
+// off a grey mysql chip while MariaDB is the engine actually serving it.
 func DependencyDisplayName(dep string) string {
-	resolved := ResolveDependency(dep)
+	resolved := resolveDependency(dep, "", true)
+	if resolved == "" {
+		resolved = ResolveDependency(dep)
+	}
 	if resolved == "" {
 		return dep
 	}
@@ -583,31 +626,52 @@ func depRoleMatch(name, dep string) bool {
 	return false
 }
 
-// missingDepLabel is dep, plus store-declared drop-ins that would also satisfy it.
-func missingDepLabel(dep string) string {
-	alts := dropInPresets(dep)
+// ListStoreDropIns, when set, returns store-index preset names that declare
+// family or env_role matching dep. Wired from cli so serviceops does not import
+// store. Nil keeps dropInPresets on the local preset list only.
+var ListStoreDropIns func(dep string) []string
+
+// missingDepLabel is dep, plus drop-in alternatives from local presets, the
+// store index, and the consumer's admin_for list (so phpMyAdmin can name
+// mariadb before that preset has been cached locally).
+func missingDepLabel(dep string, consumer *config.CustomService) string {
+	alts := dropInPresets(dep, consumer)
 	if len(alts) == 0 {
 		return dep
 	}
 	return dep + " (or " + strings.Join(alts, ", ") + ")"
 }
 
-func dropInPresets(dep string) []string {
-	metas, err := config.ListPresets()
-	if err != nil {
-		return nil
-	}
+func dropInPresets(dep string, consumer *config.CustomService) []string {
+	seen := map[string]bool{dep: true}
 	var out []string
-	for _, m := range metas {
-		if m.Name == dep {
-			continue
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
 		}
-		p, err := config.LoadPreset(m.Name)
-		if err != nil {
-			continue
+		seen[name] = true
+		out = append(out, name)
+	}
+	if metas, err := config.ListPresets(); err == nil {
+		for _, m := range metas {
+			p, err := config.LoadPreset(m.Name)
+			if err != nil {
+				continue
+			}
+			if p.Family == dep || p.EnvRole == dep {
+				add(p.Name)
+			}
 		}
-		if p.Family == dep || p.EnvRole == dep {
-			out = append(out, p.Name)
+	}
+	if ListStoreDropIns != nil {
+		for _, name := range ListStoreDropIns(dep) {
+			add(name)
+		}
+	}
+	if consumer != nil {
+		for _, name := range consumer.AdminFor {
+			add(name)
 		}
 	}
 	sort.Strings(out)
@@ -950,23 +1014,43 @@ func StartDependencies(svc *config.CustomService) error {
 // name can satisfy, but only when nothing else still running would satisfy
 // that entry once name is gone. Otherwise the dependent stays up and the
 // caller's family-consumer regen refreshes it. Then stops name itself.
-func StopWithDependents(name string) {
+//
+// Returns the first stop error encountered. Unit status can lag (especially on
+// launchd); ContainerRunning is checked the same way RegenerateFamilyConsumers
+// does, and StopUnit is always attempted when either signal says the unit is
+// up so a lagging "inactive" reading cannot report a silent success.
+func StopWithDependents(name string) error {
+	var firstErr error
 	for _, dep := range dependentsOf(name) {
 		if !dependentNeedsCascade(dep, name) {
 			continue
 		}
-		StopWithDependents(dep)
+		if err := StopWithDependents(dep); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
-	if status == "active" || status == "activating" {
-		// Show the service name (not the lerd- unit) in the shared feedback
-		// vocabulary, so `lerd unlink`/`lerd stop` read as "stopping meilisearch"
-		// rather than the old "Stopping lerd-meilisearch...".
-		step := feedback.Start("stopping " + name)
-		_ = podman.StopUnit(unit)
-		step.OK("")
+	up := status == "active" || status == "activating"
+	if !up {
+		up, _ = podman.ContainerRunning(unit)
 	}
+	if !up {
+		return firstErr
+	}
+	// Show the service name (not the lerd- unit) in the shared feedback
+	// vocabulary, so `lerd unlink`/`lerd stop` read as "stopping meilisearch"
+	// rather than the old "Stopping lerd-meilisearch...".
+	step := feedback.Start("stopping " + name)
+	if err := podman.StopUnit(unit); err != nil {
+		step.Fail(err)
+		if firstErr == nil {
+			firstErr = err
+		}
+		return firstErr
+	}
+	step.OK("")
+	return firstErr
 }
 
 // dependentsOf returns installed custom services for which name can satisfy
@@ -1022,27 +1106,38 @@ var waitReadyFn = podman.WaitReady
 // member; when name is down it waits until the unit is inactive so the member
 // is omitted. Without those waits, consumers are rewritten with a stale host list.
 func RegenerateFamilyConsumersForService(name string) {
-	fam := ServiceFamily(name)
-	if fam == "" {
-		return
-	}
+	RegenerateDynamicEnvConsumersForService(name)
+}
+
+// RegenerateDynamicEnvConsumersForService regenerates discover_family and
+// resolve_dep consumers after name starts or stops.
+func RegenerateDynamicEnvConsumersForService(name string) {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	switch status {
 	case "active", "activating":
 		_ = waitReadyFn(name, 60*time.Second)
 	default:
-		waitUntilInactive(unit, 30*time.Second)
+		running, _ := podman.ContainerRunning(unit)
+		if running {
+			_ = waitReadyFn(name, 60*time.Second)
+		} else {
+			waitUntilInactive(unit, 30*time.Second)
+		}
 	}
-	RegenerateFamilyConsumers(fam)
+	if fam := ServiceFamily(name); fam != "" {
+		RegenerateFamilyConsumers(fam)
+	}
+	RegenerateResolveDepConsumers(name)
 }
 
 // RefreshDiscoverFamilyConsumers waits for running family members that any
 // installed discover_family consumer cares about, then rewrites those
-// consumers. Bulk start (lerd start / install) brings engines and admin UIs
-// up together via StartUnit and never hits RegenerateFamilyConsumersForService,
-// so without this pass phpMyAdmin can start with an empty PMA_HOSTS written
-// during pre-start reconcile when no engine was up yet.
+// consumers and every resolve_dep consumer. Bulk start (lerd start / install)
+// brings engines and admin UIs up together via StartUnit and never hits
+// RegenerateDynamicEnvConsumersForService, so without this pass phpMyAdmin can
+// start with an empty PMA_HOSTS written during pre-start reconcile when no
+// engine was up yet, and RedisInsight can keep a stale RI_REDIS_HOST.
 func RefreshDiscoverFamilyConsumers() {
 	customs, err := config.ListCustomServices()
 	if err != nil {
@@ -1059,15 +1154,96 @@ func RefreshDiscoverFamilyConsumers() {
 			families = append(families, fam)
 		}
 	}
-	if len(families) == 0 {
-		return
-	}
 	sort.Strings(families)
 	for _, fam := range families {
 		waitFamilyMembersReady(fam)
 	}
 	for _, fam := range families {
 		RegenerateFamilyConsumers(fam)
+	}
+	for _, c := range customs {
+		if !consumesResolveDep(c) {
+			continue
+		}
+		bounceConsumerIfChanged(c, "updated dependency hosts")
+	}
+}
+
+// RegenerateResolveDepConsumers rewrites installed customs whose resolve_dep
+// directives name can satisfy, so RedisInsight picks up lerd-valkey when
+// Valkey starts (or drops it when the last redis-role engine stops).
+func RegenerateResolveDepConsumers(name string) {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return
+	}
+	for _, c := range customs {
+		if !consumesResolveDepSatisfiedBy(c, name) {
+			continue
+		}
+		bounceConsumerIfChanged(c, "updated dependency hosts")
+	}
+}
+
+func consumesResolveDep(svc *config.CustomService) bool {
+	return eachResolveDep(svc, func(string) bool { return true })
+}
+
+func consumesResolveDepNamed(svc *config.CustomService, dep string) bool {
+	return eachResolveDep(svc, func(name string) bool { return name == dep })
+}
+
+func consumesResolveDepSatisfiedBy(svc *config.CustomService, name string) bool {
+	return eachResolveDep(svc, func(dep string) bool {
+		return name == dep || serviceSatisfiesDep(name, dep)
+	})
+}
+
+// eachResolveDep walks resolve_dep directives on svc, calling fn with the
+// dependency name (template suffix stripped). Returns true on the first fn hit.
+func eachResolveDep(svc *config.CustomService, fn func(dep string) bool) bool {
+	if svc == nil {
+		return false
+	}
+	for _, directive := range svc.DynamicEnv {
+		parts := strings.SplitN(directive, ":", 2)
+		if len(parts) != 2 || parts[0] != "resolve_dep" {
+			continue
+		}
+		dep, _, _ := strings.Cut(parts[1], "=")
+		dep = strings.TrimSpace(dep)
+		if dep != "" && fn(dep) {
+			return true
+		}
+	}
+	return false
+}
+
+func bounceConsumerIfChanged(c *config.CustomService, reason string) {
+	changed, err := ensureCustomServiceQuadletDiff(c)
+	if err != nil {
+		fmt.Printf("  [WARN] regenerating %s quadlet: %v\n", c.Name, err)
+		return
+	}
+	if !changed {
+		return
+	}
+	unit := "lerd-" + c.Name
+	status, _ := podman.UnitStatus(unit)
+	up := status == "active" || status == "activating"
+	if !up {
+		up, _ = podman.ContainerRunning(unit)
+	}
+	if !up {
+		return
+	}
+	fmt.Printf("  Restarting %s to pick up %s...\n", unit, reason)
+	if err := podman.StopUnit(unit); err != nil {
+		fmt.Printf("  [WARN] stopping %s: %v\n", unit, err)
+	}
+	podman.RemoveContainer(unit)
+	if err := podman.StartUnit(unit); err != nil {
+		fmt.Printf("  [WARN] starting %s: %v\n", unit, err)
 	}
 }
 
@@ -1113,32 +1289,7 @@ func RegenerateFamilyConsumers(family string) {
 		if !consumesFamily(c, family) {
 			continue
 		}
-		changed, err := ensureCustomServiceQuadletDiff(c)
-		if err != nil {
-			fmt.Printf("  [WARN] regenerating %s quadlet: %v\n", c.Name, err)
-			continue
-		}
-		if !changed {
-			continue
-		}
-		unit := "lerd-" + c.Name
-		status, _ := podman.UnitStatus(unit)
-		up := status == "active" || status == "activating"
-		if !up {
-			// launchd/systemd status can lag; bounce if the container is up
-			up, _ = podman.ContainerRunning(unit)
-		}
-		if !up {
-			continue
-		}
-		fmt.Printf("  Restarting %s to pick up updated %s family members...\n", unit, family)
-		if err := podman.StopUnit(unit); err != nil {
-			fmt.Printf("  [WARN] stopping %s: %v\n", unit, err)
-		}
-		podman.RemoveContainer(unit)
-		if err := podman.StartUnit(unit); err != nil {
-			fmt.Printf("  [WARN] starting %s: %v\n", unit, err)
-		}
+		bounceConsumerIfChanged(c, "updated "+family+" family members")
 	}
 }
 

@@ -132,6 +132,7 @@ func TestMissingPresetDependencies_EnvRoleDropInOK(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "phpmyadmin", DependsOn: []string{"mysql"},
+		DynamicEnv: map[string]string{"PMA_HOSTS": "discover_family:mysql,mariadb"},
 	})
 	if len(missing) != 0 {
 		t.Errorf("mariadb should satisfy mysql dep, got missing=%v", missing)
@@ -148,9 +149,10 @@ func TestMissingPresetDependencies_ValkeyOKForRedisInsight(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "redisinsight", DependsOn: []string{"redis"},
+		DynamicEnv: map[string]string{"RI_REDIS_HOST": "resolve_dep:redis"},
 	})
 	if len(missing) != 0 {
-		t.Errorf("valkey should satisfy redisinsight's redis dep, got missing=%v", missing)
+		t.Errorf("valkey should satisfy redisinsight's redis dep when resolve_dep is declared, got missing=%v", missing)
 	}
 }
 
@@ -159,6 +161,7 @@ func TestMissingPresetDependencies_MentionsAlternatives(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "phpmyadmin", DependsOn: []string{"mysql"},
+		AdminFor: []string{"mysql", "mariadb"},
 	})
 	if len(missing) != 1 {
 		t.Fatalf("expected one missing dep, got %v", missing)
@@ -168,10 +171,27 @@ func TestMissingPresetDependencies_MentionsAlternatives(t *testing.T) {
 	}
 }
 
-func TestMissingPresetDependencies_FamilyMemberNoDiscoverFamily(t *testing.T) {
+func TestMissingPresetDependencies_MentionsStoreDropIns(t *testing.T) {
 	withServiceHome(t)
-	// Same-family member satisfies even when the dependent has no discover_family
-	// (mongo-express hard-codes lerd-mongo; dependency gating still accepts mongo-7).
+	prev := ListStoreDropIns
+	ListStoreDropIns = func(dep string) []string {
+		if dep == "mysql" {
+			return []string{"mariadb"}
+		}
+		return nil
+	}
+	t.Cleanup(func() { ListStoreDropIns = prev })
+
+	missing := MissingPresetDependencies(&config.CustomService{
+		Name: "phpmyadmin", DependsOn: []string{"mysql"},
+	})
+	if len(missing) != 1 || !strings.Contains(missing[0], "mariadb") {
+		t.Errorf("store drop-ins should appear in the missing label, got %v", missing)
+	}
+}
+
+func TestMissingPresetDependencies_FamilyMemberWithResolveDep(t *testing.T) {
+	withServiceHome(t)
 	if err := config.SaveCustomService(&config.CustomService{
 		Name: "mongo-7", Image: "x", Family: "mongo",
 	}); err != nil {
@@ -180,9 +200,32 @@ func TestMissingPresetDependencies_FamilyMemberNoDiscoverFamily(t *testing.T) {
 
 	missing := MissingPresetDependencies(&config.CustomService{
 		Name: "mongo-express", DependsOn: []string{"mongo"},
+		DynamicEnv: map[string]string{
+			"ME_CONFIG_MONGODB_URL": "resolve_dep:mongo=mongodb://root:lerd@{host}:27017/",
+		},
 	})
 	if len(missing) != 0 {
-		t.Errorf("mongo-7 should satisfy mongo dep via family, got missing=%v", missing)
+		t.Errorf("mongo-7 should satisfy mongo dep via family when resolve_dep can bind it, got missing=%v", missing)
+	}
+}
+
+func TestMissingPresetDependencies_NonDiscoveringDepStaysStrict(t *testing.T) {
+	withServiceHome(t)
+	// Valkey meets redis via env_role, but a consumer that hardcodes lerd-redis
+	// (no discover_family, no resolve_dep) must still be refused — otherwise
+	// install succeeds and the UI times out talking to a missing hostname.
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "valkey", Image: "x", Family: "valkey", EnvRole: "redis",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	missing := MissingPresetDependencies(&config.CustomService{
+		Name: "redisinsight", DependsOn: []string{"redis"},
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+	})
+	if len(missing) != 1 || !strings.Contains(missing[0], "redis") {
+		t.Errorf("non-discovering consumer must stay strict, got missing=%v", missing)
 	}
 }
 
@@ -196,6 +239,23 @@ func TestDependencyDisplayName_UsesPresetNotVersionedName(t *testing.T) {
 
 	if got := DependencyDisplayName("mysql"); got != "mariadb" {
 		t.Errorf("DependencyDisplayName(mysql) = %q, want mariadb", got)
+	}
+}
+
+func TestDependencyDisplayName_PrefersRunningSatisfier(t *testing.T) {
+	withServiceHome(t)
+	writeDepQuadlet(t, "lerd-mysql")
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-11-8", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev := config.ServiceRunning
+	config.ServiceRunning = func(name string) bool { return name == "mariadb-11-8" }
+	t.Cleanup(func() { config.ServiceRunning = prev })
+
+	if got := DependencyDisplayName("mysql"); got != "mariadb" {
+		t.Errorf("DependencyDisplayName(mysql) = %q, want mariadb (running drop-in over stopped literal)", got)
 	}
 }
 

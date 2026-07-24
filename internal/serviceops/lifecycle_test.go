@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -102,5 +103,24 @@ func TestRestartService_clearsPaused(t *testing.T) {
 	}
 	if !config.ServiceIsManuallyStarted("mailhog-test") {
 		t.Fatal("RestartService must mark manually started")
+	}
+}
+
+type failStopLifecycle struct{ noopLifecycle }
+
+func (failStopLifecycle) Stop(string) error { return errors.New("stop refused") }
+func (failStopLifecycle) UnitStatus(string) (string, error) {
+	return "active", nil
+}
+
+func TestStopWithDependents_returnsStopError(t *testing.T) {
+	withServiceHome(t)
+	prev := podman.UnitLifecycle
+	podman.UnitLifecycle = failStopLifecycle{}
+	t.Cleanup(func() { podman.UnitLifecycle = prev })
+
+	err := StopWithDependents("redis")
+	if err == nil || !strings.Contains(err.Error(), "stop refused") {
+		t.Fatalf("StopWithDependents = %v, want stop refused", err)
 	}
 }
