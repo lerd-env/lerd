@@ -2692,11 +2692,14 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 	var cmd *exec.Cmd
 	switch env.connection {
 	case "mysql", "mariadb":
-		cmd = podman.Cmd("exec", "-i", "lerd-mysql",
-			"mysqldump", "-u"+env.username, "-p"+env.password, env.database)
+		args := []string{"exec", "-i", "lerd-mysql", "mysqldump", "-u" + env.username, "-p" + env.password}
+		args = append(args, serviceops.DumpFlags("mysql")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	case "pgsql", "postgres":
-		cmd = podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			"lerd-postgres", "pg_dump", "-U", env.username, env.database)
+		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
+			"lerd-postgres", "pg_dump", "-U", env.username}
+		args = append(args, serviceops.DumpFlags("postgres")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	default:
 		_ = os.Remove(output)
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil

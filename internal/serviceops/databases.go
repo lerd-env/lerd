@@ -105,12 +105,24 @@ func exportShellCommand(family, database string) (string, bool) {
 	q := podman.ShellQuote(database)
 	switch family {
 	case "mysql", "mariadb":
-		return mysqlDumpBin + " -uroot " + q, true
+		return mysqlDumpBin + " -uroot " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	case "postgres":
-		return "pg_dump -U postgres " + q, true
+		return "pg_dump -U postgres " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	default:
 		return "", false
 	}
+}
+
+// DumpFlags are the flags every dump of a family carries, so an export, a
+// snapshot and a migration all produce the same file. Postgres needs --clean
+// --if-exists to load back over objects that already exist, which mysqldump does
+// on its own; mysqldump needs --routines and --events, which are off by default
+// and would otherwise leave stored procedures out of the dump without a word.
+func DumpFlags(family string) []string {
+	if family == "postgres" {
+		return []string{"--clean", "--if-exists"}
+	}
+	return []string{"--single-transaction", "--quick", "--no-tablespaces", "--routines", "--triggers", "--events"}
 }
 
 func importShellCommand(family, database string) (string, bool) {

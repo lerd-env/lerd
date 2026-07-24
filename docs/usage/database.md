@@ -141,6 +141,16 @@ An all-databases restore drops and recreates every database contained in the sna
 
 `db:snapshot` rejects names that look like command verbs (`list`, `rm`, `delete`, `restore`, …), so `lerd db snapshot list` errors with a hint instead of silently creating a snapshot literally named "list". Use `lerd db:snapshots` to list.
 
+### What an export carries
+
+Every export lerd produces, from the CLI, the web UI download and the MCP tool, carries the same flags a snapshot already used, so handing a colleague a dump and having them import it through lerd gives them what you have.
+
+It drops each object before recreating it, so the load replaces what they had rather than colliding with it. `mysqldump` writes `DROP TABLE` on its own; `pg_dump` only does it when asked, so lerd passes `--clean --if-exists`.
+
+It carries stored procedures, functions and events. `pg_dump` writes functions either way, but `mysqldump` leaves routines and events out unless asked, so a mysql or mariadb dump taken without `--routines --events` hands over a database that looks complete and is not.
+
+Two things a dump cannot carry across on its own. Dropping only covers the objects the dump contains, so a table the other machine has and yours does not survives the import. And an extension your database uses has to exist in their engine too, so a dump from `postgres-pgvector` will not load into plain `postgres`.
+
 ### Imports that finish with errors
 
 `psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. On the terminal the warning spells out the first few complaints with their counts and folds the rest into a tally, which is usually enough to name the cause on sight; the web UI lists them all: a flood of `invalid command \N` means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created.

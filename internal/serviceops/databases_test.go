@@ -3,6 +3,7 @@ package serviceops
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -80,6 +81,50 @@ func TestIntrospectCommandUnknownEngine(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	if got := IntrospectCommand("nosuchengine"); got != "" {
 		t.Fatalf("want empty, got %q", got)
+	}
+}
+
+// A dump has to load back over a database that already has the objects, or a
+// colleague importing it drowns in "already exists". mysqldump drops each table
+// on its own; pg_dump only does it when asked.
+func TestExportShellCommandDropsBeforeCreating(t *testing.T) {
+	pg, ok := exportShellCommand("postgres", "shop")
+	if !ok {
+		t.Fatal("postgres export should be supported")
+	}
+	for _, flag := range []string{"--clean", "--if-exists"} {
+		if !strings.Contains(pg, flag) {
+			t.Errorf("postgres export missing %s: %q", flag, pg)
+		}
+	}
+	if !strings.Contains(pg, "'shop'") {
+		t.Errorf("database name not quoted into the command: %q", pg)
+	}
+	for _, family := range []string{"mysql", "mariadb"} {
+		cmd, ok := exportShellCommand(family, "shop")
+		if !ok {
+			t.Fatalf("%s export should be supported", family)
+		}
+		if strings.Contains(cmd, "--skip-add-drop-table") {
+			t.Errorf("%s export disabled its own drop statements: %q", family, cmd)
+		}
+	}
+}
+
+// mysqldump leaves routines and events out unless asked, so an export without
+// them hands over a database that looks complete and has lost its stored
+// procedures. A snapshot already asked for them; an export has to match.
+func TestExportShellCommandKeepsRoutinesAndEvents(t *testing.T) {
+	for _, family := range []string{"mysql", "mariadb"} {
+		cmd, _ := exportShellCommand(family, "shop")
+		for _, flag := range []string{"--routines", "--triggers", "--events"} {
+			if !strings.Contains(cmd, flag) {
+				t.Errorf("%s export missing %s: %q", family, flag, cmd)
+			}
+		}
+	}
+	if got, want := strings.Join(DumpFlags("mariadb"), " "), mysqldumpFlags; got != want {
+		t.Errorf("export and snapshot flags drifted: %q vs %q", got, want)
 	}
 }
 

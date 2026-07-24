@@ -405,13 +405,16 @@ func dbExportCmd(env *dbEnv) (*exec.Cmd, error) {
 	case "mysql", "mariadb":
 		// MariaDB 11+ images ship `mariadb-dump` instead of `mysqldump`; resolve
 		// whichever exists in the container at runtime.
-		shellCmd := "$(command -v mysqldump || command -v mariadb-dump) -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
+		shellCmd := "$(command -v mysqldump || command -v mariadb-dump) -u" + podman.ShellQuote(env.username) +
+			" " + strings.Join(serviceops.DumpFlags("mysql"), " ") + " " + podman.ShellQuote(env.database)
 		return podman.Cmd("exec", "-i",
 			"-e", "MYSQL_PWD="+env.password,
 			container, "sh", "-c", shellCmd), nil
 	case "pgsql", "postgres":
-		return podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			container, "pg_dump", "-U", env.username, env.database), nil
+		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
+			container, "pg_dump", "-U", env.username}
+		args = append(args, serviceops.DumpFlags("postgres")...)
+		return podman.Cmd(append(args, env.database)...), nil
 	default:
 		return nil, fmt.Errorf("unsupported DB_CONNECTION: %q (supported: mysql, pgsql)", env.connection)
 	}

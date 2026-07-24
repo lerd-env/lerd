@@ -49,8 +49,11 @@ const (
 	snapshotMetaFile = "meta.json"
 	snapshotDBScope  = "databases"
 	snapshotAllScope = "all"
-	mysqldumpFlags   = "--single-transaction --quick --no-tablespaces --routines --triggers --events"
 )
+
+// mysqldumpFlags is the shell-string form of the family's dump flags, shared
+// with the export path so a snapshot and an export carry the same objects.
+var mysqldumpFlags = strings.Join(DumpFlags("mysql"), " ")
 
 // The mariadb images ship mariadb/mariadb-dump and no mysql-named binaries, so
 // every mysql-family command resolves its tool in the container rather than
