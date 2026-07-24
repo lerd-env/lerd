@@ -505,6 +505,33 @@ func EnsureDependencyRunning(dep string) (string, error) {
 	return name, nil
 }
 
+// DependencyDisplayName is the short name to show for dep in CLI/TUI/UI: the
+// preset the installed satisfier came from (mariadb for mariadb-11-8), the
+// satisfier's own name when it has no preset, or dep when nothing is installed.
+func DependencyDisplayName(dep string) string {
+	resolved := ResolveDependency(dep)
+	if resolved == "" {
+		return dep
+	}
+	if svc, err := config.LoadCustomService(resolved); err == nil && svc.Preset != "" {
+		return svc.Preset
+	}
+	return resolved
+}
+
+// DependencyDisplayNames maps each declared depends_on entry through
+// DependencyDisplayName.
+func DependencyDisplayNames(deps []string) []string {
+	if len(deps) == 0 {
+		return nil
+	}
+	out := make([]string, len(deps))
+	for i, dep := range deps {
+		out[i] = DependencyDisplayName(dep)
+	}
+	return out
+}
+
 func serviceSatisfiesDep(name, dep string) bool {
 	if svc, err := config.LoadCustomService(name); err == nil {
 		return config.FamilyOf(svc) == dep || config.EnvRoleOf(svc) == dep

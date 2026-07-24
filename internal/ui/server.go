@@ -1383,7 +1383,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Custom:            custom != nil,
 		PresetOwned:       config.PresetExists(name),
 		DefaultPort:       defaultPort,
-		DependsOn:         dependsOn,
+		DependsOn:         serviceops.DependencyDisplayNames(dependsOn),
 	}
 	resp.SecondaryPorts = secondaryPortMappings(presetPorts, services[name])
 	if sc, ok := services[name]; ok {

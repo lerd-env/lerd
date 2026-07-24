@@ -448,7 +448,7 @@ func newServiceListCmd() *cobra.Command {
 				name := svc.Name + " " + feedback.Dim("[custom]")
 				rows = append(rows, []string{name, ver, statusCell(svc.Name, status), serviceUpdateHint(svc.Name, status)})
 				if len(svc.DependsOn) > 0 {
-					rows = append(rows, []string{feedback.Dim("↳ depends on: " + strings.Join(svc.DependsOn, ", ")), "", "", ""})
+					rows = append(rows, []string{feedback.Dim("↳ depends on: " + strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", ")), "", "", ""})
 				}
 			}
 			feedback.Table([]string{"Service", "Version", "Status", "Update"}, rows)
@@ -620,7 +620,7 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 				fmt.Printf("Dashboard: %s\n", svc.Dashboard)
 			}
 			if len(svc.DependsOn) > 0 {
-				fmt.Printf("Depends on: %s (will be auto-started)\n", strings.Join(svc.DependsOn, ", "))
+				fmt.Printf("Depends on: %s (will be auto-started)\n", strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", "))
 			}
 			if err := shims.Reconcile(clientShimPrompter()); err != nil {
 				fmt.Printf("    WARN: client shims: %v\n", err)

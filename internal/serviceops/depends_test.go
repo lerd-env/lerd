@@ -162,3 +162,31 @@ func TestMissingPresetDependencies_FamilyMemberNoDiscoverFamily(t *testing.T) {
 		t.Errorf("mongo-7 should satisfy mongo dep via family, got missing=%v", missing)
 	}
 }
+
+func TestDependencyDisplayName_UsesPresetNotVersionedName(t *testing.T) {
+	withServiceHome(t)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-11-8", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := DependencyDisplayName("mysql"); got != "mariadb" {
+		t.Errorf("DependencyDisplayName(mysql) = %q, want mariadb", got)
+	}
+}
+
+func TestDependencyDisplayName_UnsatisfiedKeepsDeclared(t *testing.T) {
+	withServiceHome(t)
+	if got := DependencyDisplayName("mysql"); got != "mysql" {
+		t.Errorf("DependencyDisplayName(mysql) = %q, want mysql", got)
+	}
+}
+
+func TestDependencyDisplayName_ExactBuiltin(t *testing.T) {
+	withServiceHome(t)
+	writeDepQuadlet(t, "lerd-mysql")
+	if got := DependencyDisplayName("mysql"); got != "mysql" {
+		t.Errorf("DependencyDisplayName(mysql) = %q, want mysql", got)
+	}
+}

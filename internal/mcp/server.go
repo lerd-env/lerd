@@ -1864,7 +1864,7 @@ func execServicePresetInstall(args map[string]any) (any, *rpcError) {
 		msg += " Dashboard: " + svc.Dashboard
 	}
 	if len(svc.DependsOn) > 0 {
-		msg += " Dependencies (auto-started on start): " + strings.Join(svc.DependsOn, ", ")
+		msg += " Dependencies (auto-started on start): " + strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", ")
 	}
 	return toolOK(msg), nil
 }
