@@ -124,3 +124,22 @@ func TestEnsureExtensionsAppliesToAnExistingDatabase(t *testing.T) {
 		t.Errorf("calls = %d, want 1", calls)
 	}
 }
+
+// A database is dropped while the site's own pool still holds it open, and that
+// pool reconnects the instant it is closed, so terminating and then dropping
+// races. The single statement that does both is what the drop has to use.
+func TestPostgresDropIsAtomicAgainstReconnects(t *testing.T) {
+	sql := postgresDropSQL("shop")
+	if !strings.Contains(sql, "WITH (FORCE)") {
+		t.Errorf("drop is not atomic: %q", sql)
+	}
+	if !strings.Contains(sql, `"shop"`) {
+		t.Errorf("database name not quoted as an identifier: %q", sql)
+	}
+	if !strings.Contains(sql, "IF EXISTS") {
+		t.Errorf("dropping an absent database must not be an error: %q", sql)
+	}
+	if got := postgresDropSQL(`we"ird`); !strings.Contains(got, `"we""ird"`) {
+		t.Errorf("quote in a name not escaped: %q", got)
+	}
+}

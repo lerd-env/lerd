@@ -23,6 +23,11 @@ var (
 	myDDL     = regexp.MustCompile(`(?i)^\s*(/\*![0-9]*\s*)?(CREATE\b|ALTER\b|DEFINER=)`)
 )
 
+// pgCreateSchema matches a plain CREATE SCHEMA so it can be made conditional.
+// The form that carries schema elements is excluded, since postgres rejects
+// IF NOT EXISTS on it.
+var pgCreateSchema = regexp.MustCompile(`(?i)^(\s*CREATE\s+SCHEMA\s+)([^;]*;\s*)$`)
+
 // copyStart marks the header of a postgres COPY block, after which every line is
 // row data until a lone "\.", so nothing between them may be rewritten.
 var copyStart = regexp.MustCompile(`(?i)^\s*COPY\s.*\sFROM\s+stdin;\s*$`)
@@ -151,6 +156,22 @@ func (s *dumpSanitizer) copy(r io.Reader, w io.Writer) error {
 	}
 }
 
+// conditionalCreateSchema turns a bare CREATE SCHEMA into its IF NOT EXISTS
+// form. Every database lerd creates already has a public schema, so a dump that
+// declares one ends on an error that means nothing; the database is the same
+// either way, so nothing is withheld by making it conditional.
+func conditionalCreateSchema(line string) string {
+	m := pgCreateSchema.FindStringSubmatch(line)
+	if m == nil {
+		return line
+	}
+	rest := strings.ToUpper(m[2])
+	if strings.HasPrefix(strings.TrimSpace(rest), "IF NOT EXISTS") || strings.Contains(rest, "CREATE ") {
+		return line
+	}
+	return m[1] + "IF NOT EXISTS " + m[2]
+}
+
 // filter returns what should be written for one statement line, empty when the
 // whole line is dropped.
 func (s *dumpSanitizer) filter(line string) string {
@@ -159,7 +180,7 @@ func (s *dumpSanitizer) filter(line string) string {
 			s.note("ownership and privilege statements the local engine has no roles for")
 			return ""
 		}
-		return line
+		return conditionalCreateSchema(line)
 	}
 	if !myDDL.MatchString(line) || !strings.Contains(line, "DEFINER=") {
 		return line
