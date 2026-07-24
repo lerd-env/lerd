@@ -668,6 +668,8 @@
   "link_linkThisDir": "Lier ce répertoire",
   "link_waitingOutput": "En attente de sortie...",
   "link_failed": "Échec de la liaison",
+  "link_envWarning": "Le site est lié, mais la configuration de son environnement n'a pas abouti.",
+  "link_continueToSite": "Aller au site",
   "workers_health_banner_title": "{count} worker(s) à réparer",
   "workers_health_banner_starting": "Démarrage de {unit}…",
   "workers_health_banner_heal": "Réparer",

@@ -668,6 +668,8 @@
   "link_linkThisDir": "Deze map koppelen",
   "link_waitingOutput": "Wachten op uitvoer...",
   "link_failed": "Koppelen mislukt",
+  "link_envWarning": "De site is gekoppeld, maar het instellen van de omgeving is niet voltooid.",
+  "link_continueToSite": "Doorgaan naar site",
   "workers_health_banner_title": "{count} worker(s) hebben herstel nodig",
   "workers_health_banner_starting": "{unit} starten…",
   "workers_health_banner_heal": "Herstellen",

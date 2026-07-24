@@ -668,6 +668,8 @@
   "link_linkThisDir": "Połącz ten katalog",
   "link_waitingOutput": "Oczekiwanie na wynik...",
   "link_failed": "Łączenie nie powiodło się",
+  "link_envWarning": "Witryna została połączona, ale konfiguracja jej środowiska nie została ukończona.",
+  "link_continueToSite": "Przejdź do witryny",
   "workers_health_banner_title": "{count} workerów wymaga naprawy",
   "workers_health_banner_starting": "Uruchamianie {unit}…",
   "workers_health_banner_heal": "Napraw",
