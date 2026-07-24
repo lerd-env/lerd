@@ -10,14 +10,32 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// shareToolBinaries maps a default-tool name to the binary it needs in PATH.
-// SSH-based tools need no dedicated binary beyond ssh itself.
-var shareToolBinaries = map[string]string{
-	"ngrok":         "ngrok",
-	"cloudflare":    "cloudflared",
-	"expose":        "expose",
-	"serveo":        "ssh",
-	"localhost-run": "ssh",
+// shareTools lists the settable default tunnel tools in the order they are
+// offered, with the binary each one needs in PATH. SSH-based tools need no
+// dedicated binary beyond ssh itself.
+var shareTools = []struct{ name, binary string }{
+	{"ngrok", "ngrok"},
+	{"cloudflare", "cloudflared"},
+	{"expose", "expose"},
+	{"serveo", "ssh"},
+	{"localhost-run", "ssh"},
+}
+
+func shareToolNames() []string {
+	names := make([]string, 0, len(shareTools))
+	for _, t := range shareTools {
+		names = append(names, t.name)
+	}
+	return names
+}
+
+func shareToolBinary(name string) (string, bool) {
+	for _, t := range shareTools {
+		if t.name == name {
+			return t.binary, true
+		}
+	}
+	return "", false
 }
 
 // NewShareToolCmd returns the share:tool command.
@@ -29,7 +47,13 @@ func NewShareToolCmd() *cobra.Command {
 
 With an argument, sets the tool "lerd share" uses when no tool flag is passed.
 "auto" clears the default and restores auto-detection
-(ngrok, then cloudflared, then Expose, then localhost.run).`,
+(ngrok, then cloudflared, then Expose, then localhost.run).
+
+The tool must already be installed. A tool flag on "lerd share" still wins for
+that run, and "lerd share --domain" always uses Cloudflare Tunnel.`,
+		Example: `  lerd share:tool
+  lerd share:tool cloudflare
+  lerd share:tool auto`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runShareTool,
 	}
@@ -47,6 +71,7 @@ func runShareTool(_ *cobra.Command, args []string) error {
 		} else {
 			fmt.Println(cfg.Share.DefaultTool)
 		}
+		fmt.Printf("\nChange it with: lerd share:tool %s|auto\n", strings.Join(shareToolNames(), "|"))
 		return nil
 	}
 
@@ -61,9 +86,9 @@ func runShareTool(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	bin, ok := shareToolBinaries[tool]
+	bin, ok := shareToolBinary(tool)
 	if !ok {
-		return fmt.Errorf("unknown tool %q: use ngrok, cloudflare, expose, serveo, localhost-run, or auto", tool)
+		return fmt.Errorf("unknown tool %q: use %s, or auto", tool, strings.Join(shareToolNames(), ", "))
 	}
 	if _, err := exec.LookPath(bin); err != nil {
 		return fmt.Errorf("%s requires %q which is not in PATH, install it first", tool, bin)

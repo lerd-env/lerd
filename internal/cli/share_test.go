@@ -255,13 +255,21 @@ func TestPickShareTool_domain_withCloudflareDefault(t *testing.T) {
 	}
 }
 
-func TestPickShareTool_domain_withoutCloudflare(t *testing.T) {
+func TestPickShareTool_domain_impliesCloudflare(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
-	// No tool flag and no cloudflare default: --domain must not pick a tool itself.
+	// --domain is Cloudflare-only, so it selects the tool with no flag at all and
+	// outranks a configured default pointing somewhere else.
 	for _, defaultTool := range []string{"", "ngrok"} {
-		_, err := pickShareTool(false, false, false, false, false, "dev.example.com", defaultTool)
-		if err == nil || !strings.Contains(err.Error(), "--domain needs Cloudflare Tunnel") {
-			t.Errorf("default %q: error = %v, want '--domain needs Cloudflare Tunnel'", defaultTool, err)
+		tool, err := pickShareTool(false, false, false, false, false, "dev.example.com", defaultTool)
+		if err != nil {
+			t.Errorf("default %q: unexpected error: %v", defaultTool, err)
+			continue
+		}
+		if tool.mode != shareModeCloudflare {
+			t.Errorf("default %q: mode = %v, want shareModeCloudflare", defaultTool, tool.mode)
+		}
+		if tool.domain != "dev.example.com" {
+			t.Errorf("default %q: domain = %q, want dev.example.com", defaultTool, tool.domain)
 		}
 	}
 }
@@ -275,8 +283,8 @@ func TestPickShareTool_domain_withOtherTool(t *testing.T) {
 		{false, false, false, true},
 	} {
 		_, err := pickShareTool(p[0], false, p[1], p[2], p[3], "dev.example.com", "")
-		if err == nil || !strings.Contains(err.Error(), "--domain needs Cloudflare Tunnel") {
-			t.Errorf("pickShareTool%v: error = %v, want '--domain needs Cloudflare Tunnel'", p, err)
+		if err == nil || !strings.Contains(err.Error(), "--domain only works with Cloudflare Tunnel") {
+			t.Errorf("pickShareTool%v: error = %v, want '--domain only works with Cloudflare Tunnel'", p, err)
 		}
 	}
 }
@@ -328,6 +336,36 @@ func TestPickShareTool_defaultTool_flagOverrides(t *testing.T) {
 	}
 }
 
+func TestPickShareTool_defaultTool_missingBinary_namesTheDefault(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	for _, c := range []struct{ defaultTool, wantBinary string }{
+		{"ngrok", "ngrok"}, {"cloudflare", "cloudflared"}, {"expose", "expose"},
+	} {
+		_, err := pickShareTool(false, false, false, false, false, "", c.defaultTool)
+		if err == nil {
+			t.Errorf("default %q: expected an error, got nil", c.defaultTool)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.wantBinary+" not found") {
+			t.Errorf("default %q: error = %v, want %q not found", c.defaultTool, err, c.wantBinary)
+		}
+		if !strings.Contains(err.Error(), "lerd share:tool") {
+			t.Errorf("default %q: error should point at share:tool, got %v", c.defaultTool, err)
+		}
+	}
+}
+
+func TestPickShareTool_explicitFlag_missingBinary_omitsTheHint(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	_, err := pickShareTool(true, false, false, false, false, "", "")
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if strings.Contains(err.Error(), "share:tool") {
+		t.Errorf("an explicit --ngrok should not mention the default, got %v", err)
+	}
+}
+
 func TestPickShareTool_defaultTool_unknown(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok"))
 	_, err := pickShareTool(false, false, false, false, false, "", "bogus")
@@ -337,6 +375,10 @@ func TestPickShareTool_defaultTool_unknown(t *testing.T) {
 }
 
 // ── ensureCloudflareTunnel ────────────────────────────────────────────────────
+
+// fakeTunnelID is the id the fake cloudflared reports from "tunnel list", and so
+// the stem of the credentials file ensureCloudflareTunnel looks for.
+const fakeTunnelID = "11111111-2222-3333-4444-555555555555"
 
 // fakeCloudflared installs a fake cloudflared script and returns its log file.
 // The script logs every invocation; createExit/routeExit control the exit codes
@@ -351,14 +393,43 @@ echo "$@" >> %q
 case "$1 $2" in
 "tunnel login") : > "$HOME/.cloudflared/cert.pem";;
 "tunnel create") echo %q; exit %d;;
+"tunnel list") printf '[{"id":"%s","name":"%%s"}]\n' "$4";;
 "tunnel route") echo %q; exit %d;;
 esac
-`, logFile, createOut, createExit, routeOut, routeExit)
+`, logFile, createOut, createExit, fakeTunnelID, routeOut, routeExit)
 	if err := os.WriteFile(filepath.Join(dir, "cloudflared"), []byte(script), 0755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", dir)
 	return logFile
+}
+
+// certWithTunnelCredentials points TUNNEL_ORIGIN_CERT at a fresh cert with the
+// credentials file for fakeTunnelID beside it, the state of a machine that
+// created the tunnel itself.
+func certWithTunnelCredentials(t *testing.T) {
+	t.Helper()
+	dir := newCertDir(t)
+	if err := os.WriteFile(filepath.Join(dir, fakeTunnelID+".json"), []byte("{}"), 0600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// certWithoutTunnelCredentials leaves the credentials file out, the state of a
+// machine where the tunnel was created somewhere else.
+func certWithoutTunnelCredentials(t *testing.T) {
+	t.Helper()
+	newCertDir(t)
+}
+
+func newCertDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "cert.pem"), []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TUNNEL_ORIGIN_CERT", filepath.Join(dir, "cert.pem"))
+	return dir
 }
 
 func readCalls(t *testing.T, logFile string) string {
@@ -408,19 +479,64 @@ func TestEnsureCloudflareTunnel_skipsLoginWhenCertExists(t *testing.T) {
 }
 
 func TestEnsureCloudflareTunnel_toleratesExistingTunnelAndRoute(t *testing.T) {
-	cert := filepath.Join(t.TempDir(), "cert.pem")
-	if err := os.WriteFile(cert, []byte("x"), 0600); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
+	certWithTunnelCredentials(t)
 	fakeCloudflared(t, "tunnel with name already exists", 1, "record with that host already exists", 1)
 
-	name, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	var name string
+	var err error
+	out := captureStdout(t, func() { name, err = ensureCloudflareTunnel("mysite", "dev.example.com") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if name != "lerd-mysite" {
 		t.Errorf("name = %q, want lerd-mysite", name)
+	}
+	if !strings.Contains(out, "already exists") {
+		t.Errorf("expected a note about the existing record, got %q", out)
+	}
+}
+
+func TestEnsureCloudflareTunnel_existingTunnelMissingCredentials(t *testing.T) {
+	certWithoutTunnelCredentials(t)
+	fakeCloudflared(t, "tunnel with name already exists", 1, "routed", 0)
+
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	if err == nil {
+		t.Fatal("expected an error, got nil")
+	}
+	if !strings.Contains(err.Error(), "credentials file is missing") {
+		t.Errorf("error = %v, want it to name the missing credentials file", err)
+	}
+	if !strings.Contains(err.Error(), fakeTunnelID+".json") {
+		t.Errorf("error = %v, want it to name the expected credentials path", err)
+	}
+}
+
+func TestEnsureCloudflareTunnel_freshRouteWarnsAboutPropagation(t *testing.T) {
+	certWithTunnelCredentials(t)
+	fakeCloudflared(t, "created", 0, "Added CNAME dev.example.com which will route to this tunnel", 0)
+
+	out := captureStdout(t, func() {
+		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+	if !strings.Contains(out, "30 minutes") {
+		t.Errorf("a freshly added record should warn about resolver caching, got %q", out)
+	}
+}
+
+func TestEnsureCloudflareTunnel_reusedRouteStaysQuiet(t *testing.T) {
+	certWithTunnelCredentials(t)
+	fakeCloudflared(t, "created", 0, "", 0)
+
+	out := captureStdout(t, func() {
+		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+	})
+	if strings.Contains(out, "30 minutes") {
+		t.Errorf("an unchanged route should not warn about propagation, got %q", out)
 	}
 }
 
