@@ -287,7 +287,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	if nodeManager == "" {
 		nodeManager = "fnm"
 		if wantLerdNode && nvmDetected && !fromUpdate {
-			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", true) {
+			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", false) {
 				nodeManager = "nvm"
 			}
 		}
