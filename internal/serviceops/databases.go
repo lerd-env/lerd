@@ -177,9 +177,15 @@ func ExportSnapshot(service, database, name string, w io.Writer) error {
 	return nil
 }
 
-// maxImportIssues caps the distinct complaints kept from a load, enough to show
-// the shape of the failure without carrying a 27k-line psql transcript around.
-const maxImportIssues = 5
+// maxImportIssues caps the distinct complaints kept from a load. A dump replayed
+// over a populated schema complains once per object, so the cap is high enough to
+// carry the whole list to the UI and still bounded well under a 27k-line psql
+// transcript.
+const maxImportIssues = 500
+
+// summaryIssues caps what the one-line CLI summary spells out. The rest is
+// counted in the same "and N more" tail, since the full list belongs in the UI.
+const summaryIssues = 5
 
 // ImportIssue is one distinct complaint the engine made, and how often it made
 // it. ImportReport summarises a load: psql exits 0 even when every statement in
@@ -203,12 +209,17 @@ func (r ImportReport) Summary() string {
 	if r.Errors == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(r.Issues)+1)
-	for _, issue := range r.Issues {
+	shown, more := r.Issues, r.Omitted
+	if len(shown) > summaryIssues {
+		more += len(shown) - summaryIssues
+		shown = shown[:summaryIssues]
+	}
+	parts := make([]string, 0, len(shown)+1)
+	for _, issue := range shown {
 		parts = append(parts, fmt.Sprintf("%d× %s", issue.Count, issue.Message))
 	}
-	if r.Omitted > 0 {
-		parts = append(parts, fmt.Sprintf("and %d more", r.Omitted))
+	if more > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", more))
 	}
 	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
 }

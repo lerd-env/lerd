@@ -1,8 +1,10 @@
 package serviceops
 
 import (
+	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -99,12 +101,16 @@ func TestImportTallyAcrossConcurrentStreams(t *testing.T) {
 	}
 }
 
-func TestParseImportOutputCapsIssues(t *testing.T) {
+func distinctErrors(n int) string {
 	out := ""
-	for i := 0; i < maxImportIssues+3; i++ {
-		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
+	for i := 0; i < n; i++ {
+		out += fmt.Sprintf("ERROR:  failure number %d\n", i)
 	}
-	rep := parseImportOutput(out)
+	return out
+}
+
+func TestParseImportOutputCapsIssues(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(maxImportIssues + 3))
 	// Nothing is held back when the output carries no COPY cascade to hold it for.
 	if len(rep.Issues) != maxImportIssues {
 		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
@@ -117,14 +123,22 @@ func TestParseImportOutputCapsIssues(t *testing.T) {
 	}
 }
 
+// A dump replayed over a populated schema complains once per object. Every one
+// of those has to reach the report, or the modal listing them cannot show them.
+func TestParseImportOutputKeepsEveryIssueOfARealDump(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(243))
+	if len(rep.Issues) != 243 {
+		t.Fatalf("issues = %d, want 243", len(rep.Issues))
+	}
+	if rep.Omitted != 0 {
+		t.Fatalf("omitted = %d, want 0", rep.Omitted)
+	}
+}
+
 // The COPY cascade gets its slot only when there is one, and it never crowds
 // out the failure that caused it.
 func TestParseImportOutputReservesNoiseSlot(t *testing.T) {
-	out := ""
-	for i := 0; i < maxImportIssues+1; i++ {
-		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
-	}
-	out += "invalid command \\N\ninvalid command \\N\n"
+	out := distinctErrors(maxImportIssues+1) + "invalid command \\N\ninvalid command \\N\n"
 	rep := parseImportOutput(out)
 	if len(rep.Issues) != maxImportIssues {
 		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
@@ -135,6 +149,29 @@ func TestParseImportOutputReservesNoiseSlot(t *testing.T) {
 	}
 	if rep.Omitted != 2 {
 		t.Fatalf("omitted = %d, want 2", rep.Omitted)
+	}
+}
+
+// The CLI prints one line, so it spells out the first few and folds the rest
+// into the same tail the cap uses.
+func TestSummaryTrimsToAHandful(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(20))
+	got := rep.Summary()
+	if !strings.Contains(got, "the engine reported 20 errors") {
+		t.Fatalf("summary = %q", got)
+	}
+	if !strings.Contains(got, "and 15 more") {
+		t.Fatalf("summary = %q", got)
+	}
+	if strings.Contains(got, "failure number 5") {
+		t.Fatalf("summary spelled out past the cap: %q", got)
+	}
+}
+
+func TestSummaryFoldsOmittedIntoTheSameTail(t *testing.T) {
+	rep := ImportReport{Errors: 40, Issues: []ImportIssue{{Message: "ERROR:  a", Count: 1}}, Omitted: 12}
+	if got := rep.Summary(); !strings.Contains(got, "and 12 more") {
+		t.Fatalf("summary = %q", got)
 	}
 }
 
