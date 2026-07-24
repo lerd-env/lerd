@@ -102,6 +102,8 @@ The editor contents are saved to `localStorage` under `tinker:{domain}:draft`, s
 |---|---|
 | Mode badge | Shows `tinker` or `php`; tooltip explains which runtime is used. |
 | Duration | Shown after a run, in milliseconds. |
+| Split direction | Flips the editor and output between side by side and stacked. Hidden on narrow screens, where stacked is the only sensible layout. The choice is remembered across sessions under `tinker:splitDir`. |
+| Full screen | Expands the editor and output to fill the viewport, hiding the surrounding navigation. Press `Esc` or click the button again to leave. |
 | `Copy code` | Copies the editor contents to the clipboard. |
 | `Clear` | Wipes both the editor and the output. |
 | `Run` | Executes the code (also bound to Ctrl/Cmd+Enter). |

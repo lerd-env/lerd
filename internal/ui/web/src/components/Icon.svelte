@@ -35,7 +35,11 @@
     | 'camera'
     | 'bell'
     | 'alert'
-    | 'contrast';
+    | 'contrast'
+    | 'splitHorizontal'
+    | 'splitVertical'
+    | 'maximize'
+    | 'minimize';
 </script>
 
 <script lang="ts">
@@ -93,7 +97,15 @@
     bell: 'M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0a3 3 0 11-6 0',
     alert:
       'M12 9.5v4m0 3.5h.01M10.3 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.7 3.86a2 2 0 00-3.4 0z',
-    contrast: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18'
+    contrast: 'M12 3a9 9 0 100 18 9 9 0 000-18zm0 0v18',
+    splitHorizontal:
+      'M4 5h7v14H4zM13 5h7v14h-7z',
+    splitVertical:
+      'M5 4h14v7H5zM5 13h14v7H5z',
+    maximize:
+      'M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4',
+    minimize:
+      'M9 4v4a1 1 0 01-1 1H4M15 4v4a1 1 0 001 1h4M9 20v-4a1 1 0 00-1-1H4M15 20v-4a1 1 0 011-1h4'
   };
 </script>
 

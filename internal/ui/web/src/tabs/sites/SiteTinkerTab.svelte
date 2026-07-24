@@ -8,7 +8,7 @@
   import { attachPhpLsp, type PhpLspHandle } from '$lib/lsp';
   import type { MonacoModule } from '$lib/monaco';
   import type * as Monaco from 'monaco-editor';
-  import { onDestroy } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -31,6 +31,21 @@
   let code = $state(loadInitialDraft());
   let running = $state(false);
   let result = $state<TinkerResponse | null>(null);
+
+  // Split direction is a single global preference (not per site), so the
+  // choice follows the user across every tinker session. Full screen is
+  // transient and never persisted.
+  const SPLIT_KEY = 'tinker:splitDir';
+  const SplitDir = { Horizontal: 'horizontal', Vertical: 'vertical' } as const;
+  type SplitDir = typeof SplitDir[keyof typeof SplitDir];
+  function loadSplitDir(): SplitDir {
+    if (typeof localStorage === 'undefined') return SplitDir.Horizontal;
+    return localStorage.getItem(SPLIT_KEY) === SplitDir.Vertical ? SplitDir.Vertical : SplitDir.Horizontal;
+  }
+  let splitDir = $state<SplitDir>(loadSplitDir());
+  let fullscreen = $state(false);
+  let fullscreenBtn: HTMLButtonElement | undefined;
+  let editor: Monaco.editor.IStandaloneCodeEditor | null = null;
 
   // Backend frames each top-level statement's output as `\x1e<line>\x1f<out>`:
   // the record separator splits blocks, and `line` is the editor line that
@@ -100,6 +115,36 @@
     }
   });
 
+  $effect(() => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(SPLIT_KEY, splitDir);
+    }
+  });
+
+  // Escape exits full screen. The guard inside keeps it inert otherwise, so
+  // it never steals Escape from Monaco completions or modals.
+  function onKeydown(e: KeyboardEvent) {
+    if (e.key === 'Escape' && fullscreen) {
+      e.preventDefault();
+      fullscreen = false;
+      requestAnimationFrame(() => fullscreenBtn?.focus());
+    }
+  }
+
+  function toggleFullscreen() {
+    fullscreen = !fullscreen;
+    if (fullscreen) {
+      requestAnimationFrame(() => editor?.focus());
+    } else {
+      requestAnimationFrame(() => fullscreenBtn?.focus());
+    }
+  }
+
+  onMount(() => {
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  });
+
   async function run() {
     if (running || !code.trim()) return;
     running = true;
@@ -125,14 +170,15 @@
 
   // Mod-Enter runs the buffer; the LSP attaches to the live editor. The
   // closure reads the current `code` state on each invocation.
-  function onEditorReady({ editor, monaco }: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: MonacoModule }) {
+  function onEditorReady({ editor: e, monaco }: { editor: Monaco.editor.IStandaloneCodeEditor; monaco: MonacoModule }) {
+    editor = e;
     // Intercept at the keydown level rather than via addCommand: Ctrl/Cmd+Enter
     // must run even while the suggestion widget is open (which otherwise
     // captures Enter to accept the highlighted completion).
-    editor.onKeyDown((e) => {
-      if ((e.ctrlKey || e.metaKey) && e.keyCode === monaco.KeyCode.Enter) {
-        e.preventDefault();
-        e.stopPropagation();
+    e.onKeyDown((e2) => {
+      if ((e2.ctrlKey || e2.metaKey) && e2.keyCode === monaco.KeyCode.Enter) {
+        e2.preventDefault();
+        e2.stopPropagation();
         void run();
       }
     });
@@ -140,7 +186,7 @@
     lsp?.dispose();
     lsp = attachPhpLsp({
       monaco,
-      editor,
+      editor: e,
       domain: site.domain,
       branch,
       onStatus: (s) => { lspStatus = s; }
@@ -152,7 +198,7 @@
   const placeholder = m.tinker_placeholder();
 </script>
 
-<div class="flex-1 flex flex-col min-h-0 overflow-hidden pt-4 px-3 sm:px-5 pb-3 sm:pb-5 gap-3">
+<div class="{fullscreen ? 'fixed inset-0 z-[100] bg-white/95 dark:bg-lerd-bg/95 backdrop-blur-md shadow-2xl pt-2 px-2 pb-2' : 'flex-1 flex flex-col min-h-0 overflow-hidden pt-4 px-3 sm:px-5 pb-3 sm:pb-5'} gap-3 transition-all duration-200 ease-in-out">
   <div class="flex items-center justify-between">
     <div class="flex items-center gap-2">
       <span
@@ -173,9 +219,26 @@
     </div>
     <div class="flex items-center gap-2">
       <button
+        onclick={() => (splitDir = splitDir === SplitDir.Horizontal ? SplitDir.Vertical : SplitDir.Horizontal)}
+        class="hidden sm:inline-flex items-center justify-center h-8 w-8 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:scale-95 active:bg-gray-100 dark:active:bg-white/10 focus-visible:ring-2 focus-visible:ring-lerd-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
+        title={splitDir === SplitDir.Horizontal ? m.tinker_splitVerticalTitle() : m.tinker_splitHorizontalTitle()}
+        aria-label={splitDir === SplitDir.Horizontal ? m.tinker_splitVerticalTitle() : m.tinker_splitHorizontalTitle()}
+      >
+        <Icon name={splitDir === SplitDir.Horizontal ? 'splitVertical' : 'splitHorizontal'} class="w-4 h-4" />
+      </button>
+      <button
+        bind:this={fullscreenBtn}
+        onclick={toggleFullscreen}
+        class="inline-flex items-center justify-center h-8 w-8 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 active:scale-95 active:bg-gray-100 dark:active:bg-white/10 focus-visible:ring-2 focus-visible:ring-lerd-red focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-900 disabled:opacity-40 disabled:cursor-not-allowed transition-all duration-150"
+        title={fullscreen ? m.tinker_exitFullscreenTitle() : m.tinker_fullscreenTitle()}
+        aria-label={fullscreen ? m.tinker_exitFullscreenTitle() : m.tinker_fullscreenTitle()}
+      >
+        <Icon name={fullscreen ? 'minimize' : 'maximize'} class="w-4 h-4" />
+      </button>
+      <button
         onclick={clearAll}
         disabled={!code && !result}
-        class="text-xs px-2 py-1 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40"
+        class="text-xs px-2 py-1 rounded-sm border border-gray-200 dark:border-lerd-border text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40 transition-colors"
         title={m.tinker_clearTitle()}
       >{m.common_clear()}</button>
       <button
@@ -189,9 +252,12 @@
     </div>
   </div>
 
-  <div class="flex-1 flex flex-col md:flex-row min-h-0 gap-3">
+  <div
+    class="flex-1 flex min-h-0 gap-3 {splitDir === SplitDir.Horizontal ? 'flex-col sm:flex-row' : 'flex-col'} transition-all duration-300 ease-in-out"
+    data-splitdir={splitDir}
+  >
     <div
-      class="group flex-1 min-h-[160px] md:min-h-0 md:basis-1/2 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-black/40 relative"
+      class="group flex-1 min-h-40 flex flex-col rounded-lg border border-gray-200 dark:border-lerd-border overflow-hidden bg-gray-50 dark:bg-black/40 relative"
     >
       <div class="flex-1 min-h-0 overflow-hidden">
         <MonacoEditor bind:value={code} language="php" onReady={onEditorReady} />
@@ -206,7 +272,7 @@
     </div>
 
     <div
-      class="flex-1 min-h-[120px] md:min-h-0 md:basis-1/2 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 tinker-output py-2"
+      class="flex-1 min-h-30 flex flex-col overflow-y-auto rounded-lg border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-black/40 tinker-output py-2"
     >
       {#if !result && running}
         <p class="text-xs text-gray-400">{m.tinker_running()}</p>
@@ -237,7 +303,7 @@
                 </div>
               {:else if block.kind === 'query'}
                 <div class="flex items-start gap-2 rounded-md border-l-2 border-sky-400 dark:border-sky-500 border-y border-r border-y-sky-200/60 border-r-sky-200/60 dark:border-y-sky-800/40 dark:border-r-sky-800/40 bg-sky-50/80 dark:bg-sky-950/30 px-2 py-1">
-                  <Icon name="database" class="w-3.5 h-3.5 mt-[2px] text-sky-500 dark:text-sky-400 shrink-0" />
+                  <Icon name="database" class="w-4 h-4 mt-0.5 text-sky-500 dark:text-sky-400 shrink-0" />
                   <pre class="whitespace-pre-wrap text-[11px] leading-relaxed text-sky-800 dark:text-sky-300">{block.sql}</pre>
                 </div>
               {:else}
@@ -333,5 +399,11 @@
     top: 4px;
     right: 6px;
     margin-left: 0;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tinker-output, .tinker-output * {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
 </style>
