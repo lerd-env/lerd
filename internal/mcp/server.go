@@ -2755,10 +2755,76 @@ func execFrameworkList() (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+// frameworkAddIsAuthoring reports whether the request carries any field that
+// only makes sense when defining a framework by hand, which is what separates
+// authoring from a plain store install of a published name.
+func frameworkAddIsAuthoring(args map[string]any) bool {
+	for _, k := range []string{"workers", "setup", "logs", "detect_files", "detect_packages"} {
+		if v, ok := args[k]; ok && v != nil {
+			return true
+		}
+	}
+	for _, k := range []string{"label", "public_dir", "env_file", "env_format", "env_fallback_file", "env_fallback_format"} {
+		if strArg(args, k) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// frameworkAddFromStore installs a published definition, resolving the version
+// from the active site when there is one and otherwise the latest. A name the
+// store does not publish points back at search and at authoring by hand.
+func frameworkAddFromStore(name, version string) (any, *rpcError) {
+	client := store.NewClient()
+	idx, err := client.FetchIndex()
+	if err != nil {
+		return toolErr(fmt.Sprintf("fetching store index: %v", err)), nil
+	}
+	var entry *store.IndexEntry
+	for i := range idx.Frameworks {
+		if idx.Frameworks[i].Name == name {
+			entry = &idx.Frameworks[i]
+			break
+		}
+	}
+	if entry == nil {
+		return toolErr(fmt.Sprintf("framework %q is not in the store — use framework_search to see published names, or provide public_dir and detection fields to author one by hand", name)), nil
+	}
+
+	if version == "" {
+		if defaultSitePath != "" {
+			version = store.ResolveVersion(defaultSitePath, entry.Detect, entry.Versions, entry.Latest)
+		} else {
+			version = entry.Latest
+		}
+	}
+	remote, err := client.FetchFramework(name, version)
+	if err != nil {
+		return toolErr(fmt.Sprintf("fetching framework: %v", err)), nil
+	}
+	if err := config.SaveStoreFramework(remote); err != nil {
+		return toolErr(fmt.Sprintf("saving framework: %v", err)), nil
+	}
+	config.RemoveUserFramework(name)
+
+	installed := remote.Version
+	if installed == "" {
+		installed = version
+	}
+	return toolOK(fmt.Sprintf("Installed %s@%s (%s) from the store. Use site_link to register a project using this framework.", remote.Name, installed, remote.Label)), nil
+}
+
 func execFrameworkAdd(args map[string]any) (any, *rpcError) {
 	name := strArg(args, "name")
 	if name == "" {
 		return toolErr("name is required"), nil
+	}
+
+	// A bare name with no authoring fields is a request to install a published
+	// definition, not to hand-author a hollow stub that would shadow the store's.
+	if !frameworkAddIsAuthoring(args) {
+		return frameworkAddFromStore(name, strArg(args, "version"))
 	}
 
 	// Parse workers map if provided

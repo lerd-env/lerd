@@ -16,7 +16,7 @@ Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal,
 | `lerd framework search [query]` | Search the community store for available definitions |
 | `lerd framework update [name[@version]]` | Refresh definitions from the store (definitions otherwise auto-fetch on link) |
 | `lerd framework update --diff` | Preview changes before applying updates |
-| `lerd framework add <name>` | Add or update a user-defined framework definition |
+| `lerd framework add <name>` | Install a published framework from the store, or author a custom one with flags |
 | `lerd framework remove <name>[@version]` | Remove a framework definition (prompts if multiple versions) |
 | `lerd framework remove <name> --all` | Remove all versions of a framework definition |
 | `lerd framework prune` | Remove installed definitions no site uses |
@@ -49,6 +49,8 @@ lerd framework search
 ### Getting definitions from the store
 
 Definitions arrive automatically. Linking a project detects its framework and version and fetches the matching definition from the store, and the cached catalogue refreshes on its own in the background, so there is no install step to run. Because the catalogue is cached locally, detection resolves the right framework and version even offline and for frameworks you have not linked before.
+
+To install a published definition on demand, `lerd framework add <name>` fetches it from the store, the natural next step after `lerd framework search`. It resolves the version from the project in the current directory when there is one and otherwise takes the latest, and `lerd framework add symfony@7` pins a version. A name the store does not publish falls back to authoring a definition by hand (see below).
 
 To refresh manually, `lerd framework update`. With no arguments it refreshes the cached catalogue and re-fetches every installed definition; with a name it fetches that one, installing it if it isn't cached yet:
 

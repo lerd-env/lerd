@@ -160,8 +160,12 @@ func newFrameworkAddCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "add <name>",
-		Short: "Add or update a framework definition",
-		Long: `Add or update a user-defined framework definition.
+		Short: "Install a framework from the store, or author a custom definition",
+		Long: `Install a published framework or author a custom one.
+
+A bare name the store publishes is installed from the store, the natural next
+step after 'lerd framework search'. Passing --from-file or any of the definition
+flags below instead authors a user-defined framework by hand.
 
 Provide a YAML file with --from-file, or specify fields via flags:
 
@@ -191,7 +195,13 @@ YAML file format:
       check:
         composer: doctrine/doctrine-fixtures-bundle`,
 		Args: cobra.MaximumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, args []string) error {
+			// A bare name with no authoring flags is a request to install a
+			// published definition, the obvious next step after a search.
+			if len(args) == 1 && !frameworkAuthoringFlagsSet(cmd) {
+				return addFrameworkFromStore(store.NewClient(), args[0])
+			}
+
 			var fw config.Framework
 
 			if fromFile != "" {
@@ -277,6 +287,65 @@ YAML file format:
 	cmd.Flags().StringArrayVar(&setupCmds, "setup", nil, `Setup command as "label:command" (repeatable, e.g. --setup "Run migrations:php bin/console doctrine:migrations:migrate")`)
 
 	return cmd
+}
+
+// frameworkAuthoringFlagsSet reports whether any flag that only makes sense when
+// defining a framework by hand was given, which is what separates authoring from
+// a plain store install of a published name.
+func frameworkAuthoringFlagsSet(cmd *cobra.Command) bool {
+	for _, name := range []string{
+		"from-file", "label", "public-dir", "detect-file", "detect-composer",
+		"env-file", "env-example", "env-format", "composer", "npm", "create", "setup",
+	} {
+		if cmd.Flags().Changed(name) {
+			return true
+		}
+	}
+	return false
+}
+
+// addFrameworkFromStore installs a published definition, resolving the version
+// from the project in cwd when there is one and falling back to the latest. A
+// name the store does not publish points back at authoring by hand.
+func addFrameworkFromStore(client *store.Client, nameArg string) error {
+	name, version := parseNameVersion(nameArg)
+
+	idx, err := client.FetchIndex()
+	if err != nil {
+		return err
+	}
+	entry := frameworkIndexEntry(idx, name)
+	if entry == nil {
+		return fmt.Errorf("framework %q is not in the store — run 'lerd framework search' to see published names, or pass --public-dir and detection flags to author one by hand", name)
+	}
+
+	if version == "" {
+		cwd, _ := os.Getwd()
+		version = store.ResolveVersion(cwd, entry.Detect, entry.Versions, entry.Latest)
+	}
+	remote, err := client.FetchFramework(name, version)
+	if err != nil {
+		return err
+	}
+	if err := config.SaveStoreFramework(remote); err != nil {
+		return fmt.Errorf("saving framework: %w", err)
+	}
+	// A store version supersedes any hand-authored file of the same name.
+	config.RemoveUserFramework(name)
+
+	feedback.Begin()
+	feedback.Done(fmt.Sprintf("installed %s@%s (%s) from the store", remote.Name, versionOrLatest(remote), remote.Label))
+	fmt.Println("Use 'lerd link' in a project directory to register a site using this framework.")
+	return nil
+}
+
+func frameworkIndexEntry(idx *store.Index, name string) *store.IndexEntry {
+	for i := range idx.Frameworks {
+		if idx.Frameworks[i].Name == name {
+			return &idx.Frameworks[i]
+		}
+	}
+	return nil
 }
 
 func newFrameworkRemoveCmd() *cobra.Command {
