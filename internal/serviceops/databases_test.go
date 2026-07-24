@@ -1,6 +1,9 @@
 package serviceops
 
 import (
+	"bytes"
+	"compress/gzip"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -138,4 +141,53 @@ func TestListDatabasesEmptyCommand(t *testing.T) {
 	if dbs != nil {
 		t.Fatalf("want nil, got %+v", dbs)
 	}
+}
+
+// A .sql.gz is how dumps travel between people. Handed the compressed bytes the
+// engine client reports a few encoding errors, loads nothing and exits clean.
+func TestDumpReaderUnwrapsGzip(t *testing.T) {
+	const sql = "CREATE TABLE t (id int);\n"
+
+	plain, err := DumpReader(strings.NewReader(sql))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readAll(t, plain); got != sql {
+		t.Errorf("plain dump = %q, want %q", got, sql)
+	}
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	_, _ = gz.Write([]byte(sql))
+	_ = gz.Close()
+	unwrapped, err := DumpReader(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := readAll(t, unwrapped); got != sql {
+		t.Errorf("gzipped dump = %q, want %q", got, sql)
+	}
+}
+
+// An empty or one-byte upload has no magic to peek at and must not be mistaken
+// for a broken archive; the engine reports what it makes of it.
+func TestDumpReaderPassesShortInputThrough(t *testing.T) {
+	for _, in := range []string{"", "-"} {
+		r, err := DumpReader(strings.NewReader(in))
+		if err != nil {
+			t.Fatalf("input %q: %v", in, err)
+		}
+		if got := readAll(t, r); got != in {
+			t.Errorf("input %q came back as %q", in, got)
+		}
+	}
+}
+
+func readAll(t *testing.T, r io.Reader) string {
+	t.Helper()
+	b, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
 }

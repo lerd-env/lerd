@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -365,6 +366,24 @@ func isImportErrorLine(line string) bool {
 	return strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "invalid command")
 }
 
+// DumpReader unwraps a gzipped dump so a .sql.gz loads like a .sql. The engine
+// clients read plain SQL: handed compressed bytes, psql reports a couple of
+// encoding errors, loads nothing and still exits clean, which reads as a load
+// that mostly worked. Anything else is passed through untouched, including a
+// custom-format archive, which psql itself recognises and names.
+func DumpReader(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(r)
+	magic, err := br.Peek(2)
+	if err != nil || magic[0] != 0x1f || magic[1] != 0x8b {
+		return br, nil
+	}
+	gz, err := gzip.NewReader(br)
+	if err != nil {
+		return nil, fmt.Errorf("reading compressed dump: %w", err)
+	}
+	return gz, nil
+}
+
 // ImportDatabase streams a SQL dump from r into database on the service
 // container. The database must already exist. The report carries what the
 // engine complained about, which is the only sign of a partial load when the
@@ -382,8 +401,12 @@ func ImportDatabase(service, database string, r io.Reader) (ImportReport, error)
 		args = append(args, "--env", kv)
 	}
 	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
+	src, err := DumpReader(r)
+	if err != nil {
+		return ImportReport{}, err
+	}
 	cmd := podman.CmdContext(ctx, args...)
-	cmd.Stdin = r
+	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))

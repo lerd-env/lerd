@@ -151,6 +151,12 @@ It carries stored procedures, functions and events. `pg_dump` writes functions e
 
 Two things a dump cannot carry across on its own. Dropping only covers the objects the dump contains, so a table the other machine has and yours does not survives the import. And an extension your database uses has to exist in their engine too, so a dump from `postgres-pgvector` will not load into plain `postgres`.
 
+### Compressed and custom-format dumps
+
+A `.sql.gz` imports like a `.sql`. The engine clients read plain SQL, so lerd looks at the head of the upload and decompresses it on the way in rather than handing gzip bytes to `psql`, which would report a couple of encoding errors, load nothing and still exit clean.
+
+A custom-format archive (`pg_dump -Fc`) is not a SQL file at all, and `psql` says so: the import fails with "The input is a PostgreSQL custom-format dump. Use the pg_restore command-line client". Export it as plain SQL, or `--format=plain`, and it imports.
+
 ### Imports that finish with errors
 
 `psql` exits 0 whether a dump loaded cleanly or every statement in it failed, so `lerd db:import`, `lerd db:restore` and a cross-version `service migrate` count what the engine wrote and end on a warning instead of "import complete" when it complained. On the terminal the warning spells out the first few complaints with their counts and folds the rest into a tally, which is usually enough to name the cause on sight; the web UI lists them all: a flood of `invalid command \N` means a `COPY` block had no table to load into, so the failure is further up in whatever stopped that table from being created.

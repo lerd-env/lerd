@@ -4218,8 +4218,12 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
 	}
 
+	src, err := serviceops.DumpReader(f)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
 	var stderr bytes.Buffer
-	cmd.Stdin = f
+	cmd.Stdin = src
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
