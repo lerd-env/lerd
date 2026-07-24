@@ -2283,122 +2283,43 @@ func execEnvCheck(args map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+// execSiteLink registers a project as a site by delegating to `lerd link`, so
+// an assistant gets exactly what the CLI does: name and domain resolution, the
+// framework and PHP detection, every serving mode, and the services a framework
+// requires. Running it as a subprocess with no terminal is also what refuses a
+// repository's dev command rather than approving it on the user's behalf.
 func execSiteLink(args map[string]any) (any, *rpcError) {
 	projectPath := resolvedPath(args)
 	if projectPath == "" {
 		return toolErr("path is required — pass a path argument or open Claude in the project directory"), nil
 	}
+	if info, err := os.Stat(projectPath); err != nil || !info.IsDir() {
+		return toolErr("not a directory: " + projectPath), nil
+	}
 
-	cfg, err := config.LoadGlobal()
+	// Strip styling: a subcommand that renders with lipgloss rather than the
+	// feedback layer colours its output even into a pipe, and escape codes are
+	// noise in a tool result.
+	out, err := runIn(projectPath, lerdSelf(), siteLinkArgs(strArg(args, "name"))...)
+	out = strings.TrimSpace(stripANSI(out))
 	if err != nil {
-		return toolErr("loading config: " + err.Error()), nil
-	}
-
-	proj, _ := config.LoadProjectConfig(projectPath)
-
-	rawName := strArg(args, "name")
-	if rawName == "" {
-		rawName = filepath.Base(projectPath)
-	}
-	name, _ := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
-
-	// Build domains: prefer .lerd.yaml domains, fall back to auto-generated.
-	var domains []string
-	if proj != nil && len(proj.Domains) > 0 {
-		for _, d := range proj.Domains {
-			domains = append(domains, strings.ToLower(d)+"."+cfg.DNS.TLD)
+		if out == "" {
+			out = err.Error()
 		}
-	} else {
-		_, domain := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
-		domains = []string{domain}
+		return toolErr(out), nil
 	}
+	return toolOK(out), nil
+}
 
-	// Validate domains are not used by other sites.
-	for _, d := range domains {
-		if existing, err := config.IsDomainUsed(d); err == nil && existing != nil && existing.Path != projectPath {
-			return toolErr(fmt.Sprintf("domain %q is already used by site %q", d, existing.Name)), nil
-		}
+// siteLinkArgs builds the `lerd link` invocation. A requested name is passed as
+// the positional, which makes it the site's primary domain. Without one the
+// positional is omitted, so a project's committed .lerd.yaml domains are
+// honoured verbatim rather than having a directory-derived name prepended.
+func siteLinkArgs(name string) []string {
+	if name == "" {
+		return []string{"link"}
 	}
-
-	// Custom container path: .lerd.yaml has a container section with a port.
-	if proj != nil && proj.Container != nil && proj.Container.Port > 0 {
-		secured := siteops.ResolveSecured(siteops.CleanupRelink(projectPath, name), proj, cfg)
-		site := config.Site{
-			Name:          name,
-			Domains:       domains,
-			Path:          projectPath,
-			Secured:       secured,
-			ContainerPort: proj.Container.Port,
-			ContainerSSL:  proj.Container.SSL,
-		}
-		if err := config.AddSite(site); err != nil {
-			return toolErr("registering site: " + err.Error()), nil
-		}
-		_ = config.SyncProjectDomains(projectPath, site.Domains, cfg.DNS.TLD)
-		if err := siteops.FinishCustomLink(site, proj.Container); err != nil {
-			return toolErr(err.Error()), nil
-		}
-		return toolOK(fmt.Sprintf("Linked %s -> %s (custom container, port %d)", name, strings.Join(domains, ", "), proj.Container.Port)), nil
-	}
-
-	// Host-proxy path: .lerd.yaml has a proxy section, so the site runs a dev
-	// server on the host that nginx reverse-proxies to. Supervising that command
-	// needs the consent gating and worker-start logic that live in the cli
-	// package, so delegate to `lerd link` (the same shell-out pattern as worker
-	// start) instead of falling through to the PHP path, which would downgrade
-	// the site to plain FPM and drop the proxy vhost. The consent gate still
-	// applies: an already-approved command (or host_proxy.skip_confirmation)
-	// proceeds, while an unapproved command in this non-interactive context is
-	// refused with guidance rather than run blindly.
-	if proj != nil && proj.Proxy != nil && proj.Proxy.Port > 0 {
-		// No positional name: a positional is treated by runLink as an explicit
-		// primary domain to prepend, which would register the directory-derived
-		// name alongside the .lerd.yaml domains (and SyncProjectDomains would then
-		// persist the spurious entry). Plain `lerd link` honors proj.Domains
-		// verbatim, matching the container and PHP branches above.
-		out, err := runIn(projectPath, "lerd", "link")
-		if err != nil {
-			msg := strings.TrimSpace(out)
-			if msg == "" {
-				msg = err.Error()
-			}
-			return toolErr(msg), nil
-		}
-		return toolOK(strings.TrimSpace(out)), nil
-	}
-
-	// PHP / framework path.
-	framework := ""
-	if fname, ok := config.DetectFrameworkForDir(projectPath); ok {
-		framework = fname
-	}
-	versions := siteops.DetectSiteVersions(projectPath, framework, cfg.PHP.DefaultVersion, cfg.Node.DefaultVersion)
-	phpVersion, nodeVersion := versions.PHP, versions.Node
-	if proj != nil && proj.PHPVersion != "" {
-		phpVersion = proj.PHPVersion
-	}
-
-	secured := siteops.ResolveSecured(siteops.CleanupRelink(projectPath, name), proj, cfg)
-	site := config.Site{
-		Name:        name,
-		Domains:     domains,
-		Path:        projectPath,
-		PHPVersion:  phpVersion,
-		NodeVersion: nodeVersion,
-		Secured:     secured,
-		Framework:   framework,
-	}
-
-	if err := config.AddSite(site); err != nil {
-		return toolErr("registering site: " + err.Error()), nil
-	}
-	_ = config.SyncProjectDomains(projectPath, site.Domains, cfg.DNS.TLD)
-
-	if err := siteops.FinishLink(site, phpVersion); err != nil {
-		return toolErr(err.Error()), nil
-	}
-
-	return toolOK(fmt.Sprintf("Linked %s -> %s (PHP %s, Node %s)", name, strings.Join(domains, ", "), phpVersion, nodeVersion)), nil
+	return []string{"link", name}
 }
 
 func execSiteUnlink(args map[string]any) (any, *rpcError) {
@@ -3218,7 +3139,7 @@ func execWorkerStart(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	out, err := runIn(cwd, "lerd", "worker", "start", workerName)
+	out, err := runIn(cwd, lerdSelf(), "worker", "start", workerName)
 	if err != nil {
 		msg := strings.TrimSpace(out)
 		if msg == "" {
@@ -3246,7 +3167,7 @@ func execWorkerStop(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	out, err := runIn(cwd, "lerd", "worker", "stop", workerName)
+	out, err := runIn(cwd, lerdSelf(), "worker", "stop", workerName)
 	if err != nil {
 		msg := strings.TrimSpace(out)
 		if msg == "" {
@@ -3398,7 +3319,7 @@ func execWorkersMode(args map[string]any) (any, *rpcError) {
 	action := strArg(args, "action")
 	switch action {
 	case "get":
-		out, err := runIn("", "lerd", "workers", "mode")
+		out, err := runIn("", lerdSelf(), "workers", "mode")
 		if err != nil {
 			msg := strings.TrimSpace(out)
 			if msg == "" {

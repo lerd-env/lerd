@@ -7,14 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	gitpkg "github.com/geodro/lerd/internal/git"
-	"github.com/geodro/lerd/internal/nginx"
-	phpDet "github.com/geodro/lerd/internal/php"
-	"github.com/geodro/lerd/internal/podman"
-	"github.com/geodro/lerd/internal/siteops"
+	"github.com/geodro/lerd/internal/linker"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -124,13 +119,6 @@ func runLink(args []string) error {
 		return err
 	}
 
-	if parent, branch, ok := findOwningWorktree(cwd); ok {
-		fmt.Printf("This directory is the %q worktree of site %q.\n", branch, parent.Name)
-		fmt.Printf("Worktrees inherit the parent's registration; not linking %s as a separate site.\n", cwd)
-		fmt.Printf("Manage it from the parent (%s) or via `lerd worktree`.\n", parent.Path)
-		return nil
-	}
-
 	start := time.Now()
 	// A standalone link opens the feedback block with a blank line for breathing
 	// room; when embedded in init/setup the caller already printed one.
@@ -146,9 +134,10 @@ func runLink(args []string) error {
 	// Load .lerd.yaml early so its values can influence the link.
 	proj, _ := config.LoadProjectConfig(cwd)
 
-	// Restore embedded custom framework definition before resolveFramework runs.
-	// The embedded def in .lerd.yaml is the project's known-good configuration.
-	// Compare against whichever definition is currently active (user-defined or store-installed).
+	// Restore embedded custom framework definition before the framework is
+	// resolved. The embedded def in .lerd.yaml is the project's known-good
+	// configuration. Compare against whichever definition is currently active
+	// (user-defined or store-installed).
 	if proj != nil && proj.Framework != "" && proj.FrameworkDef != nil {
 		proj.FrameworkDef.Name = proj.Framework
 		// The embedded def is untrusted; sanitise the copy we'd install so a
@@ -183,255 +172,54 @@ func runLink(args []string) error {
 		}
 	}
 
-	rawName := filepath.Base(cwd)
+	requested := ""
 	if len(args) > 0 {
-		rawName = args[0]
+		requested = args[0]
 	}
-
-	baseName, _ := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
-	name := freeSiteName(baseName, cwd)
-
-	// Build the domains list.
-	// 1. Start from .lerd.yaml domains if present, else auto-generate from name.
-	// 2. If an explicit arg is given, ensure it is the primary (first) domain.
-	var domains []string
-	if proj != nil && len(proj.Domains) > 0 {
-		for _, d := range proj.Domains {
-			domains = append(domains, strings.ToLower(d)+"."+cfg.DNS.TLD)
-		}
-	} else {
-		domains = []string{name + "." + cfg.DNS.TLD}
-	}
-
-	// If the user passed an explicit domain, make it the primary.
-	if len(args) > 0 {
-		explicit := strings.ToLower(args[0]) + "." + cfg.DNS.TLD
-		// Remove it from the list if already present, then prepend.
-		var filtered []string
-		for _, d := range domains {
-			if d != explicit {
-				filtered = append(filtered, d)
-			}
-		}
-		domains = append([]string{explicit}, filtered...)
-	}
-
-	// Filter out domains already owned by another site (and reserved domains).
-	// The check is strict — a domain may only belong to one site regardless of
-	// TLS scheme. We never touch .lerd.yaml on disk; the surviving in-memory
-	// list is what gets registered. If everything was conflicted, fall back to
-	// a freshly generated <baseName>.<tld>. Re-linking the same path is not a
-	// conflict.
-	kept, removed := resolveSiteDomains(domains, baseName, cwd, cfg.DNS.TLD)
-	warnFilteredDomains(removed)
-	domains = kept
-
-	// Custom container path: the project defines its own Containerfile and
-	// nginx reverse-proxies to it. Skip PHP/framework detection entirely.
-	if proj != nil && proj.Container != nil && proj.Container.Port > 0 {
-		secured := siteops.ResolveSecured(siteops.CleanupRelink(cwd, name), proj, cfg)
-		site := config.Site{
-			Name:          name,
-			Domains:       domains,
-			Path:          cwd,
-			Secured:       secured,
-			ContainerPort: proj.Container.Port,
-			ContainerSSL:  proj.Container.SSL,
-		}
-		if err := config.AddSite(site); err != nil {
-			return fmt.Errorf("registering site: %w", err)
-		}
-		// A site that used to be FrankenPHP or custom-FPM and now reverse-proxies a
-		// container leaves its old per-site PHP quadlet auto-starting; clear it.
-		reconcileStaleRuntimeQuadlets(site)
-		_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
-		if err := siteops.FinishCustomLink(site, proj.Container); err != nil {
-			return err
-		}
-		printLinkSummary(site, start)
-		return linkApplyServices(cwd, proj)
-	}
-
-	// Host-proxy path: the project runs a dev server on the host and nginx
-	// reverse-proxies to it. No container, no PHP/framework detection.
-	if proj != nil && proj.Proxy != nil && proj.Proxy.Port > 0 {
-		// Gate supervising a dev command on the host behind explicit consent: a
-		// re-link with the same approved command, --yes, or the wizard's own
-		// choice passes silently; a fresh repo-authored command prompts.
-		approved := linkAssumeYes
-		if existing, err := config.FindSite(name); err == nil && existing.HostCommand == proj.Proxy.Command {
-			approved = true
-		}
-		if err := approveHostProxyCommand(name, proj.Proxy.Command, approved); err != nil {
-			return err
-		}
-		secured := siteops.ResolveSecured(siteops.CleanupRelink(cwd, name), proj, cfg)
-		site := config.Site{
-			Name:        name,
-			Domains:     domains,
-			Path:        cwd,
-			Secured:     secured,
-			HostPort:    proj.Proxy.Port,
-			HostSSL:     proj.Proxy.SSL,
-			HostCommand: proj.Proxy.Command,
-		}
-		if err := config.AddSite(site); err != nil {
-			return fmt.Errorf("registering site: %w", err)
-		}
-		// A site that used to be FrankenPHP or custom-FPM and now proxies a host
-		// dev server leaves its old per-site PHP quadlet auto-starting; clear it.
-		reconcileStaleRuntimeQuadlets(site)
-		_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
-		if err := siteops.FinishHostProxyLink(site); err != nil {
-			return err
-		}
-		startHostProxyWorker(site, proj.Proxy)
-		printLinkSummary(site, start)
-		return linkApplyServices(cwd, proj)
-	}
-
-	framework, ok := resolveFramework(cwd)
-	detectedPublicDir := ""
-	if proj != nil && proj.PublicDir != "" {
-		detectedPublicDir = proj.PublicDir
-	} else if !ok {
-		detectedPublicDir = config.DetectPublicDir(cwd)
-	}
-
-	frameworkLabel := framework
-	if frameworkLabel == "" {
-		frameworkLabel = "unknown (public: " + detectedPublicDir + ")"
-	}
-	fwStep := feedback.Start("detecting framework")
-	if framework != "" {
-		fwStep.OK(frameworkLabel)
-	} else {
-		fwStep.Info(frameworkLabel)
-	}
-
-	versions := siteops.DetectSiteVersions(cwd, framework, cfg.PHP.DefaultVersion, cfg.Node.DefaultVersion)
-	phpVersion, nodeVersion := versions.PHP, versions.Node
-	if proj != nil && proj.PHPVersion != "" {
-		phpVersion = phpDet.ClampToRange(proj.PHPVersion, versions.PHPMin, versions.PHPMax)
-	}
-	if versions.PHPMin != "" || versions.PHPMax != "" {
-		unclamped, _ := phpDet.DetectVersion(cwd)
-		if unclamped != phpVersion {
-			if versions.SuggestedPHP != "" {
-				q := fmt.Sprintf("Using PHP %s (best installed in range %s–%s). Install PHP %s?",
-					phpVersion, versions.PHPMin, versions.PHPMax, versions.SuggestedPHP)
-				if feedback.Confirm(q, true) {
-					inst := feedback.Start("installing PHP " + versions.SuggestedPHP)
-					if err := ensureFPMQuadlet(versions.SuggestedPHP); err != nil {
-						inst.Fail(err)
-					} else {
-						inst.OK("")
-						phpVersion = versions.SuggestedPHP
-					}
-				}
-			} else {
-				fmt.Printf("Using PHP %s (%s supports %s–%s).\n",
-					phpVersion, versions.FrameworkLabel, versions.PHPMin, versions.PHPMax)
-			}
-		}
-	}
-
-	secured := siteops.ResolveSecured(siteops.CleanupRelink(cwd, name), proj, cfg)
-
-	site := config.Site{
-		Name:        name,
-		Domains:     domains,
-		Path:        cwd,
-		PHPVersion:  phpVersion,
-		NodeVersion: nodeVersion,
-		Secured:     secured,
-		Framework:   framework,
-		PublicDir:   detectedPublicDir,
-	}
-
-	// Honour .lerd.yaml runtime selection (e.g. "frankenphp") so a re-link
-	// rehydrates the site with the committed runtime rather than resetting
-	// to FPM.
-	if proj != nil && proj.Runtime != "" {
-		site.Runtime = proj.Runtime
-		site.RuntimeWorker = proj.RuntimeWorker
-		// FrankenPHP only publishes images for PHP >= 8.2; without this guard the
-		// build normalizes the version up (e.g. 8.1 -> 8.5) and silently runs a
-		// different PHP than the site reports. Mirror the `lerd runtime` guard and
-		// fall back to FPM rather than upgrading PHP behind the user's back.
-		if site.IsFrankenPHP() && !config.IsFrankenPHPVersion(site.PHPVersion) {
-			fmt.Printf("  FrankenPHP has no PHP %s image; linking as FPM instead\n", site.PHPVersion)
-			site.Runtime = ""
-			site.RuntimeWorker = false
-		}
-	}
-	// A container: config with no port on a PHP project means the site is served
-	// by fastcgi from its own image, built from the project's Containerfile.
-	if proj != nil && proj.Container != nil && proj.Container.Port == 0 {
-		site.Runtime = "fpm-custom"
-		// The PHP version is fixed by the Containerfile's FROM lerd-php<ver>-fpm line,
-		// not project detection; honour it so the reported version and the per-version
-		// ini mounts match the image the container actually runs.
-		if v := podman.CustomFPMBaseVersion(cwd, proj.Container); v != "" {
-			site.PHPVersion = v
-			phpVersion = v
-		}
-	}
-
-	if err := config.AddSite(site); err != nil {
-		return fmt.Errorf("registering site: %w", err)
-	}
-
-	// Custom-FPM takes its version from the Containerfile and host-proxy sites have
-	// none, so neither has a version the file should pin.
-	if !site.IsCustomContainer() && !site.IsHostProxy() {
-		_ = siteops.PinPHPVersionFile(cwd, site.PHPVersion)
-	}
-
-	// A re-link of a site that dropped its frankenphp or custom-FPM runtime
-	// leaves the old per-site quadlet behind; reconcile it to the site's real type.
-	reconcileStaleRuntimeQuadlets(site)
-
-	_ = config.SyncProjectDomains(cwd, site.Domains, cfg.DNS.TLD)
-	_ = config.SyncProjectFrameworkVersion(framework, cwd)
-
-	// Fold in the framework's required services before any runtime path applies
-	// them, so a custom-FPM or FrankenPHP site gets them too, not only the
-	// standard PHP-FPM path below.
-	if fw, ok := config.GetFrameworkForDir(framework, cwd); ok {
-		proj = ensureRequiredServices(cwd, proj, fw, presetResolvable)
-	}
-
-	if site.IsCustomFPM() {
-		result := "php " + feedback.Val(phpVersion) + " · nginx vhost written"
-		if err := provisionAndSecure("building custom FPM image", result, site,
-			func(s config.Site) error { return siteops.FinishCustomFPMLink(s, proj.Container) }); err != nil {
-			return err
-		}
-		printLinkSummary(site, start)
-		return linkApplyServices(cwd, proj)
-	}
-
-	if site.IsFrankenPHP() {
-		result := "php " + feedback.Val(phpVersion) + " · node " + feedback.Val(nodeVersion) + " · nginx vhost written"
-		if err := provisionAndSecure("provisioning FrankenPHP runtime", result, site,
-			func(s config.Site) error { return siteops.FinishFrankenPHPLink(s) }); err != nil {
-			return err
-		}
-		printLinkSummary(site, start)
-		return linkApplyServices(cwd, proj)
-	}
-
-	result := "php " + feedback.Val(phpVersion) + " · node " + feedback.Val(nodeVersion) + " · nginx vhost written"
-	if err := provisionAndSecure("provisioning PHP-FPM runtime", result, site,
-		func(s config.Site) error { return siteops.FinishLink(s, phpVersion) }); err != nil {
+	policy := linkPolicy(requested)
+	plan, err := linker.Resolve(cwd, cfg, policy)
+	if err != nil {
 		return err
 	}
-	printLinkSummary(site, start)
+	if plan.Skip == linker.SkipWorktree {
+		fmt.Printf("This directory is the %q worktree of site %q.\n", plan.WorktreeBranch, plan.WorktreeParent.Name)
+		fmt.Printf("Worktrees inherit the parent's registration; not linking %s as a separate site.\n", cwd)
+		fmt.Printf("Manage it from the parent (%s) or via `lerd worktree`.\n", plan.WorktreeParent.Path)
+		return nil
+	}
+
+	servesPHP := plan.Mode != linker.ModeCustomContainer && plan.Mode != linker.ModeHostProxy
+	if servesPHP {
+		fwStep := feedback.Start("detecting framework")
+		if plan.Site.Framework != "" {
+			fwStep.OK(plan.FrameworkLabel)
+		} else {
+			fwStep.Info(plan.FrameworkLabel)
+		}
+
+		// Fold in the framework's required services before the runtime is applied,
+		// so a custom-FPM or FrankenPHP site gets them too, not only the standard
+		// PHP-FPM path.
+		if fw, ok := config.GetFrameworkForDir(plan.Site.Framework, cwd); ok {
+			proj = ensureRequiredServices(cwd, proj, fw, presetResolvable)
+			plan.Project = proj
+		}
+	}
+
+	res, err := linker.Apply(plan, policy, linkDeps(), cliReporter{})
+	if err != nil {
+		return err
+	}
+	site := res.Site
+	printLinkSummary(site, start, res.WroteIDEDataSource)
+
+	if plan.Mode != linker.ModeFPM {
+		return linkApplyServices(cwd, proj)
+	}
 
 	// Warn before the setup prompt below: an ext-* requirement the image cannot
 	// satisfy fails composer install, which is the first thing setup runs.
-	warnMissingExtensions(cwd, site.Name, phpVersion, cfg)
+	warnMissingExtensions(cwd, site.Name, site.PHPVersion, cfg)
 
 	// Sail detection — offer to import data before setup so lerd's DB is
 	// populated from the existing Sail environment. Gate on Sail actually being
@@ -458,76 +246,21 @@ func runLink(args []string) error {
 		}
 	}
 
-	// Apply remaining .lerd.yaml settings: HTTPS and services. secured already
-	// folds in the DNS-managed gate, so a secured: true project on a localhost
-	// install lands here with secured=false and is left on http rather than
-	// triggering a runSecure that the cert layer would only reject.
-	if proj != nil {
-		if proj.Secured && !secured && cfg.DNSManaged() {
-			if err := runSecure(nil, []string{}); err != nil {
-				feedback.Warn("securing site: %v", err)
-			}
-		} else if !proj.Secured && secured {
-			if err := runUnsecure(nil, []string{}); err != nil {
-				feedback.Warn("disabling HTTPS: %v", err)
-			}
-		}
-
-		if err := linkApplyServices(cwd, proj); err != nil {
-			return err
+	if proj != nil && shouldSecureOnLink(proj.Secured, site.Secured, cfg.DNSManaged()) {
+		if err := runSecure(nil, []string{}); err != nil {
+			feedback.Warn("securing site: %v", err)
 		}
 	}
 
-	return nil
-}
-
-// provisionAndSecure runs a PHP runtime's link finisher as plain HTTP under a
-// "provisioning" step, then, when the site is secured, issues its certificate
-// under a separate "generating certificate" step. Splitting the secure work out
-// of the finisher keeps mkcert's work on its own clean line instead of buried
-// inside the runtime step.
-func provisionAndSecure(label, result string, site config.Site, finish func(config.Site) error) error {
-	unsecured := site
-	unsecured.Secured = false
-	prov := feedback.Start(label)
-	if err := finish(unsecured); err != nil {
-		prov.Fail(err)
-		return err
-	}
-	prov.OK(result)
-
-	if site.Secured {
-		cert := feedback.Start("generating certificate")
-		if err := certs.SecureSite(site); err != nil {
-			cert.Fail(err)
-			return err
-		}
-		// SecureSite swaps the vhost to HTTPS on disk but doesn't reload nginx;
-		// the finisher above only reloaded it for the plain-HTTP config, so
-		// without this the site keeps serving the now-deleted HTTP vhost from
-		// nginx's memory and HTTPS never comes up until an unrelated reload.
-		// Retry the reload: a concurrent cert reissue (the watcher or UI
-		// reacting to the same new site) can briefly race the cert swap and
-		// make a single reload fail with "cannot load certificate".
-		if err := nginx.ReloadWithRetry(10 * time.Second); err != nil {
-			cert.Fail(err)
-			return err
-		}
-		cert.OK("trusted")
-	}
-	return nil
+	return linkApplyServices(cwd, proj)
 }
 
 // printLinkSummary prints the green success line and an aligned details block,
 // deriving every field from the registered site so callers don't repeat them.
-func printLinkSummary(site config.Site, start time.Time) {
+func printLinkSummary(site config.Site, start time.Time, wroteDataSource bool) {
 	// Reached on every successful link path, so this is where we record that the
 	// site is linked for this process (even when the summary itself is deferred).
 	linkApplied = true
-	// A JetBrains project gets its database connection pointed at lerd, using
-	// coordinates that work from the machine rather than the container ones the
-	// site's env file carries.
-	wroteDataSource := syncIDEDataSource(site.Path).wrote()
 	if linkSkipSummary {
 		return
 	}
@@ -552,9 +285,9 @@ func printLinkSummary(site config.Site, start time.Time) {
 	if site.Framework != "" {
 		sum.Row("Framework", site.Framework)
 	}
-	if env := sailReadRawEnv(site.Path); env["DB_CONNECTION"] != "" {
-		db := env["DB_CONNECTION"]
-		if cache := env["CACHE_STORE"]; cache != "" {
+	readEnv := summaryEnvReader(site)
+	if db := strings.TrimSpace(readEnv("DB_CONNECTION")); db != "" {
+		if cache := strings.TrimSpace(readEnv("CACHE_STORE")); cache != "" {
 			db += " · cache " + cache
 		}
 		sum.Row("DB", db)
@@ -563,6 +296,35 @@ func printLinkSummary(site config.Site, start time.Time) {
 		sum.Row("IDE", "database connection written to .idea")
 	}
 	sum.Print()
+}
+
+// shouldSecureOnLink reports whether a link should turn HTTPS on because the
+// project asks for it. A link only ever turns HTTPS on: it is turned off with
+// `lerd unsecure`, never as a side effect of linking. secured is a plain bool,
+// so an absent .lerd.yaml, an empty one, and one that omits the field all read
+// as false — and treating that as "turn HTTPS off" silently dropped a secured
+// site back to HTTP every time it was re-linked, undoing the carry-over
+// CleanupRelink had just performed. The DNS gate is folded in so a secured:
+// true project on a localhost install stays on http rather than triggering a
+// runSecure the cert layer would only reject.
+func shouldSecureOnLink(projSecured, siteSecured, dnsManaged bool) bool {
+	return projSecured && !siteSecured && dnsManaged
+}
+
+// summaryEnvReader reads the site's live env file, resolved through the
+// framework's env config so a project in a non-dotenv format is parsed in its
+// own. Deliberately not sailReadRawEnv, which prefers the .env.before_lerd
+// backup the first link has just written, so the summary reported the database
+// lerd had replaced rather than the one it configured (#1144).
+func summaryEnvReader(site config.Site) func(key string) string {
+	envPath := filepath.Join(site.Path, ".env")
+	format := "dotenv"
+	if fw, ok := config.GetFrameworkForDir(site.Framework, site.Path); ok {
+		file, f := fw.Env.Resolve(site.Path)
+		envPath = filepath.Join(site.Path, file)
+		format = f
+	}
+	return makeEnvReader(envExampleFallback(envPath), format)
 }
 
 // linkRuntimeLabel names the serving runtime for the link summary's PHP row.
@@ -849,39 +611,17 @@ func linkNextStep(skipPrompt bool) (hint string, suggest bool) {
 	return "\nRun 'lerd setup' to install dependencies, run migrations, and start workers.", true
 }
 
-// resolveFramework returns the framework name for the project at dir.
-// It reads the .lerd.yaml framework field first (explicit override), then
-// auto-detects via config.DetectFramework. Returns ("", false) if no
-// framework definition is found.
+// resolveFramework returns the framework name for the project at dir, falling
+// back to the interactive store picker for a terminal command.
 func resolveFramework(dir string) (string, bool) {
-	if name, ok := config.DetectFrameworkForDir(dir); ok {
-		return name, true
-	}
-	// Interactive store fallback — only for terminal commands.
-	return store.DetectFrameworkWithStore(dir)
+	return linker.ResolveFramework(dir, true)
 }
 
 // findOwningWorktree returns the parent site if cwd is one of its worktree
 // checkouts. Used to short-circuit runLink so worktrees don't get registered
 // as standalone sites.
 func findOwningWorktree(cwd string) (*config.Site, string, bool) {
-	reg, err := config.LoadSites()
-	if err != nil {
-		return nil, "", false
-	}
-	for i := range reg.Sites {
-		s := &reg.Sites[i]
-		if s.Ignored || s.Path == cwd {
-			continue
-		}
-		wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
-		for _, wt := range wts {
-			if wt.Path == cwd {
-				return s, wt.Branch, true
-			}
-		}
-	}
-	return nil, "", false
+	return linker.OwningWorktree(cwd)
 }
 
 // fetchFrameworkFromStore attempts to install a framework definition from the

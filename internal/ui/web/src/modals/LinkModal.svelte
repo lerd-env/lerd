@@ -14,6 +14,8 @@
   let loading = $state(false);
   let linking = $state(false);
   let error = $state('');
+  let warning = $state('');
+  let linkedDomain = $state('');
   let logs = $state<string[]>([]);
   let scrollEl: HTMLDivElement | null = $state(null);
 
@@ -33,9 +35,15 @@
     }
   }
 
+  function openLinkedSite() {
+    closeModal();
+    if (linkedDomain) goToTab('sites', linkedDomain);
+  }
+
   async function link() {
     linking = true;
     error = '';
+    warning = '';
     logs = [];
     try {
       const box: { result: { ok?: boolean; domain?: string; error?: string } | null } = { result: null };
@@ -57,8 +65,14 @@
         return;
       }
       await loadSites();
-      closeModal();
-      if (result.domain) goToTab('sites', result.domain);
+      linkedDomain = result.domain ?? '';
+      // The site is linked, but something it needs did not finish. Stay open so
+      // the reason is read rather than scrolling past as the modal closes.
+      if (result.warning) {
+        warning = result.warning;
+        return;
+      }
+      openLinkedSite();
     } catch (e) {
       error = e instanceof Error ? e.message : m.common_failed();
     } finally {
@@ -120,12 +134,23 @@
     </div>
   {/if}
 
+  {#if warning}
+    <div class="px-5 py-2">
+      <p class="text-xs text-amber-600 dark:text-amber-500">{m.link_envWarning()}</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 font-mono break-words">{warning}</p>
+    </div>
+  {/if}
+
   {#snippet footer()}
-    {#if !linking}
-      <DetailButton onclick={closeModal}>{m.common_cancel()}</DetailButton>
+    {#if warning}
+      <DetailButton tone="primary" onclick={openLinkedSite}>{m.link_continueToSite()}</DetailButton>
+    {:else}
+      {#if !linking}
+        <DetailButton onclick={closeModal}>{m.common_cancel()}</DetailButton>
+      {/if}
+      <DetailButton tone="primary" onclick={link} disabled={linking || loading} loading={linking}>
+        {m.link_linkThisDir()}
+      </DetailButton>
     {/if}
-    <DetailButton tone="primary" onclick={link} disabled={linking || loading} loading={linking}>
-      {m.link_linkThisDir()}
-    </DetailButton>
   {/snippet}
 </Modal>

@@ -668,6 +668,8 @@
   "link_linkThisDir": "Enlazar este directorio",
   "link_waitingOutput": "Esperando salida...",
   "link_failed": "Enlace fallido",
+  "link_envWarning": "El sitio está enlazado, pero la configuración de su entorno no se completó.",
+  "link_continueToSite": "Ir al sitio",
   "workers_health_banner_title": "{count} worker(s) necesitan reparación",
   "workers_health_banner_starting": "Iniciando {unit}…",
   "workers_health_banner_heal": "Reparar",

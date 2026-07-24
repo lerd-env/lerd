@@ -61,7 +61,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 
 | Command | Description |
 |---|---|
-| `lerd park [dir]` | Register all Laravel projects inside `dir` (defaults to cwd) |
+| `lerd park [dir]` | Register every PHP project inside `dir` as a site, and keep doing so as new ones appear (defaults to cwd) |
 | `lerd unpark [dir]` | Remove a parked directory and unlink all its sites |
 | `lerd link [name]` | Register the current directory as a site. On a fresh project with no `.lerd.yaml`, an interactive terminal routes through the `lerd init` wizard first (PHP version, HTTPS, services) before linking; prompts to import data when `laravel/sail` is detected in `composer.json`. **Non-PHP projects** (Node.js, Python, Go, etc.) must have `Containerfile.lerd` and `.lerd.yaml` with `container: {port: N}` already written before calling this, see [Custom Containers](../usage/custom-containers.md) |
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
