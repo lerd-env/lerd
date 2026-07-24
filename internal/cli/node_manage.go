@@ -96,11 +96,23 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		feedback.Line("already using " + feedback.Val(target))
 		return nil
 	}
+
+	feedback.Begin()
+	// Fetch fnm on demand when switching back after an nvm-only install that
+	// never downloaded it. Keeps the nvm path lean while leaving a way home.
+	if target == "fnm" && !nodeDet.ManagerByName("fnm").Available() {
+		step := feedback.Start("downloading fnm")
+		if err := ensureFnmBinary(os.Stdout); err != nil {
+			step.Fail(err)
+			return fmt.Errorf("fnm download: %w", err)
+		}
+		step.OK("")
+	}
 	if !nodeDet.ManagerByName(target).Available() {
 		if target == "nvm" {
 			return fmt.Errorf("nvm not found — install it first (https://github.com/nvm-sh/nvm)")
 		}
-		return fmt.Errorf("fnm not found — run 'lerd install' to set it up")
+		return fmt.Errorf("fnm not found — download failed; check your network and retry")
 	}
 
 	cfg.SetNodeManager(target)
@@ -113,7 +125,6 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 		return fmt.Errorf("saving config: %w", err)
 	}
 
-	feedback.Begin()
 	// Only rewrite shims/workers when lerd is actually managing Node; otherwise
 	// the choice is just persisted and applies whenever management is enabled.
 	if lerdManagesNode() {
