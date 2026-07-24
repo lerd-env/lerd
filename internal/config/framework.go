@@ -1404,7 +1404,7 @@ func DetectFrameworkForDir(dir string) (string, bool) {
 		// Restore the embedded definition from .lerd.yaml (the committed source of
 		// truth, so inert edits propagate), sanitised so an untrusted .lerd.yaml
 		// can't seed host-executing doctor checks into the store.
-		if proj.FrameworkDef != nil {
+		if proj.FrameworkDef != nil && projectOwnsFramework(name) {
 			safe := SanitizeProjectFrameworkDef(proj.FrameworkDef)
 			safe.Name = name
 			_ = SaveStoreFramework(safe)

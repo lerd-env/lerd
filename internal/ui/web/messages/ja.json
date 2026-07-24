@@ -668,6 +668,8 @@
   "link_linkThisDir": "このディレクトリをリンク",
   "link_waitingOutput": "出力を待機中...",
   "link_failed": "リンクに失敗しました",
+  "link_envWarning": "サイトはリンクされましたが、環境のセットアップは完了しませんでした。",
+  "link_continueToSite": "サイトへ移動",
   "workers_health_banner_title": "{count} 個のワーカーに修復が必要です",
   "workers_health_banner_starting": "{unit} を起動中…",
   "workers_health_banner_heal": "修復",

@@ -668,6 +668,8 @@
   "link_linkThisDir": "链接此目录",
   "link_waitingOutput": "等待输出...",
   "link_failed": "链接失败",
+  "link_envWarning": "站点已链接，但其环境设置未完成。",
+  "link_continueToSite": "前往站点",
   "workers_health_banner_title": "{count} 个 worker 需要修复",
   "workers_health_banner_starting": "启动 {unit} 中…",
   "workers_health_banner_heal": "修复",

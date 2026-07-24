@@ -668,6 +668,8 @@
   "link_linkThisDir": "Tautkan Direktori Ini",
   "link_waitingOutput": "Menunggu keluaran...",
   "link_failed": "Gagal menautkan",
+  "link_envWarning": "Situs sudah ditautkan, tetapi penyiapan lingkungannya tidak selesai.",
+  "link_continueToSite": "Lanjut ke situs",
   "workers_health_banner_title": "{count} worker perlu diperbaiki",
   "workers_health_banner_starting": "Memulai {unit}…",
   "workers_health_banner_heal": "Perbaiki",

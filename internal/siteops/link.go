@@ -139,9 +139,21 @@ func ResolveSecured(relinkSecured bool, proj *config.ProjectConfig, cfg *config.
 	return relinkSecured || (proj != nil && proj.Secured)
 }
 
-// FinishLink performs the post-registration steps shared by link, park, and MCP:
-// vhost generation, FPM quadlet setup, container hosts update, and nginx reload.
+// FinishLink performs the post-registration steps for one site: its own vhost
+// and quadlet, then the reloads that publish them.
 func FinishLink(site config.Site, phpVersion string) error {
+	if err := FinishSiteOnly(site, phpVersion); err != nil {
+		return err
+	}
+	return PublishLinks([]string{phpVersion}, site.Name)
+}
+
+// FinishSiteOnly writes just the artifacts belonging to this site: its vhost
+// (or certificate) and the quadlet for its PHP version. It leaves every shared
+// step to PublishLinks, so registering a directory of projects does the global
+// work once instead of once per project — those steps rewrite every quadlet and
+// every container hosts entry, which turns a park into quadratic work.
+func FinishSiteOnly(site config.Site, phpVersion string) error {
 	if site.Secured {
 		if err := certs.SecureSite(site); err != nil {
 			return fmt.Errorf("securing site: %w", err)
@@ -153,10 +165,17 @@ func FinishLink(site config.Site, phpVersion string) error {
 	}
 
 	_ = podman.EnsureXdebugIni(phpVersion)
-	if err := podman.WriteFPMQuadlet(phpVersion); err == nil {
+	_ = podman.WriteFPMQuadlet(phpVersion)
+	return nil
+}
+
+// PublishLinks performs the work a batch of links needs exactly once: reload
+// systemd for the quadlets written, rewrite the FPM quadlets and container
+// hosts, and reload nginx. names is what the dashboard is told changed.
+func PublishLinks(phpVersions []string, names ...string) error {
+	if len(phpVersions) > 0 {
 		_ = podman.DaemonReloadFn()
 	}
-
 	_ = podman.RewriteFPMQuadlets()
 	_ = podman.WriteContainerHosts()
 
@@ -170,7 +189,9 @@ func FinishLink(site config.Site, phpVersion string) error {
 	// own in-process handler invalidates the snapshot cache) and the
 	// new site appears in every open dashboard tab.
 	if podman.AfterUnitChange != nil {
-		podman.AfterUnitChange("site:" + site.Name)
+		for _, name := range names {
+			podman.AfterUnitChange("site:" + name)
+		}
 	}
 
 	return nil

@@ -176,7 +176,7 @@ func execWorktreeRemove(args map[string]any) (any, *rpcError) {
 	dbDropped := false
 	if !keepDB {
 		if wtPath := worktreePathFor(site, sanitized); wtPath != "" {
-			if _, err := runIn(wtPath, "lerd", "db:share"); err == nil {
+			if _, err := runIn(wtPath, lerdSelf(), "db:share"); err == nil {
 				dbDropped = true
 			}
 		}
@@ -217,7 +217,7 @@ func execWorktreeDBIsolate(args map[string]any) (any, *rpcError) {
 		return toolErr("worktree path for branch " + branch + " not on disk"), nil
 	}
 	cliArgs := []string{"db:isolate", "--source", source}
-	out, err := runIn(wtPath, "lerd", cliArgs...)
+	out, err := runIn(wtPath, lerdSelf(), cliArgs...)
 	if err != nil {
 		return toolErr("lerd " + strings.Join(cliArgs, " ") + ": " + out), nil
 	}
@@ -242,11 +242,21 @@ func execWorktreeDBShare(args map[string]any) (any, *rpcError) {
 	if wtPath == "" {
 		return toolErr("worktree path for branch " + branch + " not on disk"), nil
 	}
-	out, err := runIn(wtPath, "lerd", "db:share")
+	out, err := runIn(wtPath, lerdSelf(), "db:share")
 	if err != nil {
 		return toolErr("lerd db:share: " + out), nil
 	}
 	return toolJSON(map[string]any{"ok": true, "site": site.Name, "branch": branch, "output": out}), nil
+}
+
+// lerdSelf resolves the running lerd binary for a subprocess call. The MCP
+// server is started by an editor or an assistant whose PATH frequently lacks
+// lerd's bin directory, so a bare "lerd" lookup is not dependable.
+func lerdSelf() string {
+	if self, err := os.Executable(); err == nil && self != "" {
+		return self
+	}
+	return "lerd"
 }
 
 func runIn(dir, name string, args ...string) (string, error) {

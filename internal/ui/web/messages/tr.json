@@ -668,6 +668,8 @@
   "link_linkThisDir": "Bu Dizini Bağla",
   "link_waitingOutput": "Çıktı bekleniyor...",
   "link_failed": "Bağlama başarısız",
+  "link_envWarning": "Site bağlandı, ancak ortam kurulumu tamamlanmadı.",
+  "link_continueToSite": "Siteye git",
   "workers_health_banner_title": "{count} worker onarılmalı",
   "workers_health_banner_starting": "{unit} başlatılıyor…",
   "workers_health_banner_heal": "Onar",

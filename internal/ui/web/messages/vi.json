@@ -668,6 +668,8 @@
   "link_linkThisDir": "Liên kết thư mục này",
   "link_waitingOutput": "Đang chờ kết quả...",
   "link_failed": "Liên kết thất bại",
+  "link_envWarning": "Trang đã được liên kết, nhưng thiết lập môi trường chưa hoàn tất.",
+  "link_continueToSite": "Đến trang",
   "workers_health_banner_title": "{count} worker cần khôi phục",
   "workers_health_banner_starting": "Đang khởi động {unit}…",
   "workers_health_banner_heal": "Khôi phục",

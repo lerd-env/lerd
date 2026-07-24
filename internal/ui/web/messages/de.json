@@ -668,6 +668,8 @@
   "link_linkThisDir": "Dieses Verzeichnis verknüpfen",
   "link_waitingOutput": "Warte auf Ausgabe...",
   "link_failed": "Verknüpfen fehlgeschlagen",
+  "link_envWarning": "Die Site ist verknüpft, aber die Einrichtung der Umgebung wurde nicht abgeschlossen.",
+  "link_continueToSite": "Weiter zur Site",
   "workers_health_banner_title": "{count} Worker brauchen Reparatur",
   "workers_health_banner_starting": "{unit} wird gestartet…",
   "workers_health_banner_heal": "Reparieren",
