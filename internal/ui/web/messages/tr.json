@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Bu değişiklikler {scope} için php.ini dosyasına kaydedilip FPM yeniden başlatılsın mı?",
   "phpIniEditor_resetTitle": "php.ini'yi sıfırla",
   "phpIniEditor_resetBody": "{scope} için kaydedilmiş php.ini silinip FPM yeniden başlatılsın mı? Pakete dahil varsayılanlar geçerli olacak. Yedekler saklanır ve daha sonra geri yüklenebilir.",
+  "phpIniEditor_restarting": "PHP-FPM yeniden başlatılıyor…",
+  "phpIniEditor_restartFailed": "{scope} için PHP-FPM yeniden başlatılamadı",
   "phpIniEditor_restoreTitle": "php.ini'yi yedekten geri yükle",
   "phpIniEditor_restoreBody": "{scope} için mevcut php.ini, {name} ile değiştirilecek. Geri yükleme tamamlandıktan sonra yedek kaldırılacak.",
   "services_dash_overview": "Genel bakış",

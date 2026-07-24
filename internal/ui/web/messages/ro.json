@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Salvezi aceste modificări la php.ini al {scope} și repornești FPM?",
   "phpIniEditor_resetTitle": "Resetează php.ini",
   "phpIniEditor_resetBody": "Ștergi php.ini salvat pentru {scope} și repornești FPM? Se vor aplica valorile implicite incluse. Copiile de rezervă sunt păstrate și pot fi restaurate ulterior.",
+  "phpIniEditor_restarting": "Se repornește PHP-FPM…",
+  "phpIniEditor_restartFailed": "Repornirea PHP-FPM pentru {scope} a eșuat",
   "phpIniEditor_restoreTitle": "Restaurează php.ini din copia de rezervă",
   "phpIniEditor_restoreBody": "Înlocuiește php.ini curent pentru {scope} cu {name}. Copia de rezervă va fi eliminată după finalizarea restaurării.",
   "services_dash_overview": "Prezentare generală",

@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Zapisać te zmiany do php.ini {scope} i uruchomić ponownie FPM?",
   "phpIniEditor_resetTitle": "Resetuj php.ini",
   "phpIniEditor_resetBody": "Usunąć zapisany php.ini dla {scope} i uruchomić ponownie FPM? Zastosowane zostaną dołączone wartości domyślne. Kopie zapasowe są zachowywane i można je później odtworzyć.",
+  "phpIniEditor_restarting": "Ponowne uruchamianie PHP-FPM…",
+  "phpIniEditor_restartFailed": "Nie udało się ponownie uruchomić PHP-FPM dla {scope}",
   "phpIniEditor_restoreTitle": "Odtwórz php.ini z kopii zapasowej",
   "phpIniEditor_restoreBody": "Zastąp bieżący php.ini dla {scope} kopią {name}. Kopia zapasowa zostanie usunięta po zakończeniu odtwarzania.",
   "services_dash_overview": "Przegląd",

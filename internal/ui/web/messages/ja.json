@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "これらの変更を {scope} の php.ini に保存して FPM を再起動しますか？",
   "phpIniEditor_resetTitle": "php.ini をリセット",
   "phpIniEditor_resetBody": "{scope} の保存済み php.ini を削除して FPM を再起動しますか？ 同梱のデフォルトが適用されます。バックアップは保持され、後で復元できます。",
+  "phpIniEditor_restarting": "PHP-FPM を再起動しています…",
+  "phpIniEditor_restartFailed": "{scope} の PHP-FPM の再起動に失敗しました",
   "phpIniEditor_restoreTitle": "バックアップから php.ini を復元",
   "phpIniEditor_restoreBody": "{scope} の現在の php.ini を {name} で置き換えます。復元完了後にバックアップは削除されます。",
   "services_dash_overview": "概要",

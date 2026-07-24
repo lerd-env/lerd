@@ -1044,6 +1044,8 @@
   "phpIniEditor_confirmBody": "Lưu các thay đổi này vào php.ini của {scope} và khởi động lại FPM?",
   "phpIniEditor_resetTitle": "Đặt lại php.ini",
   "phpIniEditor_resetBody": "Xóa php.ini đã lưu cho {scope} và khởi động lại FPM? Các giá trị mặc định đi kèm sẽ áp dụng. Bản sao lưu được giữ lại và có thể khôi phục sau.",
+  "phpIniEditor_restarting": "Đang khởi động lại PHP-FPM…",
+  "phpIniEditor_restartFailed": "Không thể khởi động lại PHP-FPM cho {scope}",
   "phpIniEditor_restoreTitle": "Khôi phục php.ini từ bản sao lưu",
   "phpIniEditor_restoreBody": "Thay php.ini hiện tại cho {scope} bằng {name}. Bản sao lưu sẽ bị gỡ sau khi khôi phục hoàn tất.",
   "services_dash_overview": "Tổng quan",

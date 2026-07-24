@@ -33,13 +33,17 @@
   let copyTimer: ReturnType<typeof setTimeout> | null = null;
   let backups = $state<SiteNginxBackup[]>([]);
   let restoring = $state(false);
+  // True from the moment an action's request goes out until the tab has reloaded
+  // the file, so the editor cannot take a second write against state it has not
+  // caught up with yet.
+  let applying = $state(false);
 
   const dirty = $derived(text !== original);
   const latestBackup = $derived(backups[0]);
   const hasBackup = $derived(backups.length > 0 && !loading && !error);
-  const canRevert = $derived(dirty && !loading && !error);
-  const canReset = $derived(exists && !loading && !error);
-  const canSave = $derived(dirty && !loading && !error);
+  const canRevert = $derived(dirty && !loading && !error && !applying);
+  const canReset = $derived(exists && !loading && !error && !applying);
+  const canSave = $derived(dirty && !loading && !error && !applying);
 
   // The php.ini scope: this version's own file, or the shared file applied to
   // every version. The API keys on this token ("shared" or a bare version).
@@ -111,6 +115,7 @@
   });
 
   async function refreshAfterAction(v: string) {
+    applying = true;
     try {
       const [cfgRes, listRes] = await Promise.allSettled([getPhpIni(v), loadPhpIniBackups(v)]);
       if (currentScope !== v) return;
@@ -135,6 +140,8 @@
     } catch (e: unknown) {
       if (currentScope !== v) return;
       actionError = e instanceof Error ? e.message : String(e);
+    } finally {
+      applying = false;
     }
   }
 
@@ -222,7 +229,7 @@
     {canReset}
     {canSave}
     {hasBackup}
-    {restoring}
+    restoring={restoring || applying}
     {copied}
     onCopy={copy}
     onRevert={revert}
