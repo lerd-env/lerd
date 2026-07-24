@@ -50,8 +50,20 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		b.WriteString("PodmanArgs=--init\n")
 	}
 
+	// Always mount a lerd-managed /etc/hosts. Without an explicit mount podman
+	// synthesises the file from base_hosts_file, which defaults to the host's
+	// own /etc/hosts — so any "127.0.0.1 lerd-<svc>" entry there (a stale line
+	// from an older lerd, or one written for a client shim / host-proxy app)
+	// shadows the container-DNS name and the service resolves to its own
+	// loopback instead of the peer container, e.g. lerd-phpmyadmin failing to
+	// reach lerd-mysql with "Connection refused". PHP-FPM containers already
+	// bind-mount this file; sidecar services (phpmyadmin, pgadmin, mongo-express)
+	// need it too. ShareHosts services additionally want .test domains resolved
+	// to nginx, so they get the browser-hosts variant.
 	if svc.ShareHosts {
 		fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.BrowserHostsFile())
+	} else {
+		fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	}
 
 	for _, port := range svc.Ports {
