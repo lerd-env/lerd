@@ -176,6 +176,70 @@ func TestGetFrameworkCustom_WithoutLogs(t *testing.T) {
 	}
 }
 
+// ── GetFrameworkOrFetch ──────────────────────────────────────────────────────
+
+// A framework the store publishes but the machine hasn't installed must be
+// fetched on demand, so `lerd new --framework=X` can scaffold a project type
+// you've never built before.
+func TestGetFrameworkOrFetch_FetchesUninstalled(t *testing.T) {
+	setConfigDir(t)
+
+	prev := frameworkFetchHook
+	t.Cleanup(func() { frameworkFetchHook = prev })
+
+	called := ""
+	frameworkFetchHook = func(name, version string) (*Framework, error) {
+		called = name
+		fw := &Framework{Name: name, Label: "CodeIgniter", Version: "4", PublicDir: "public"}
+		if err := SaveStoreFramework(fw); err != nil {
+			return nil, err
+		}
+		return fw, nil
+	}
+
+	got, ok := GetFrameworkOrFetch("codeigniter")
+	if !ok {
+		t.Fatal("GetFrameworkOrFetch(codeigniter): not found after fetch")
+	}
+	if got.Label != "CodeIgniter" {
+		t.Errorf("Label = %q, want CodeIgniter", got.Label)
+	}
+	if called != "codeigniter" {
+		t.Errorf("fetch hook called with %q, want codeigniter", called)
+	}
+}
+
+// An installed framework resolves locally and must never reach for the store.
+func TestGetFrameworkOrFetch_SkipsFetchWhenInstalled(t *testing.T) {
+	setConfigDir(t)
+
+	prev := frameworkFetchHook
+	t.Cleanup(func() { frameworkFetchHook = prev })
+	frameworkFetchHook = func(name, version string) (*Framework, error) {
+		t.Fatalf("fetch hook called for an installed framework (%q)", name)
+		return nil, nil
+	}
+
+	if _, ok := GetFrameworkOrFetch("laravel"); !ok {
+		t.Fatal("GetFrameworkOrFetch(laravel): built-in not found")
+	}
+}
+
+// A name the store doesn't publish keeps the original not-found result.
+func TestGetFrameworkOrFetch_UnknownStaysNotFound(t *testing.T) {
+	setConfigDir(t)
+
+	prev := frameworkFetchHook
+	t.Cleanup(func() { frameworkFetchHook = prev })
+	frameworkFetchHook = func(name, version string) (*Framework, error) {
+		return nil, os.ErrNotExist
+	}
+
+	if _, ok := GetFrameworkOrFetch("nonexistent"); ok {
+		t.Error("GetFrameworkOrFetch(nonexistent) = true, want false")
+	}
+}
+
 // ── SaveFramework preserves Logs ─────────────────────────────────────────────
 
 func TestSaveFrameworkLaravel_PersistsLogs(t *testing.T) {
