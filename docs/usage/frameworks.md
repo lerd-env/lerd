@@ -142,6 +142,10 @@ parent directory and mounts it into the PHP container before scaffolding.
 Temporary system directories (`/tmp`, `/var/tmp`, `/run`) are never mounted, so
 scaffolding into one is refused unless you [park](/usage/sites) its parent first.
 
+Every framework's create command starts with composer, and it is lerd's own
+composer that runs it, inside the project's PHP container. You do not need
+composer, or any PHP, installed on the host.
+
 After creation:
 ```bash
 cd myapp
