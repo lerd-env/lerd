@@ -215,3 +215,32 @@ func TestSanitizeDumpNeverCreatesOnMysql(t *testing.T) {
 		t.Errorf("mysql import created %d extensions", calls)
 	}
 }
+
+// Every freshly created database already has a public schema, so a dump that
+// carries a bare CREATE SCHEMA public ends on one error nobody can act on. The
+// conditional form leaves the same database behind either way.
+func TestSanitizeDumpMakesCreateSchemaConditional(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"CREATE SCHEMA public;\n", "CREATE SCHEMA IF NOT EXISTS public;\n"},
+		{"CREATE SCHEMA reporting AUTHORIZATION lerd;\n", "CREATE SCHEMA IF NOT EXISTS reporting AUTHORIZATION lerd;\n"},
+		// Already conditional, and a lowercase spelling of it.
+		{"CREATE SCHEMA IF NOT EXISTS public;\n", "CREATE SCHEMA IF NOT EXISTS public;\n"},
+		{"create schema if not exists public;\n", "create schema if not exists public;\n"},
+		// The element form cannot take IF NOT EXISTS, so it has to be left alone.
+		{"CREATE SCHEMA hollywood CREATE TABLE films (title text);\n", "CREATE SCHEMA hollywood CREATE TABLE films (title text);\n"},
+	}
+	for _, c := range cases {
+		got, _ := sanitized(t, "postgres", c.in)
+		if got != c.want {
+			t.Errorf("sanitize(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// Only postgres has this problem, and a mysql dump must come through untouched.
+func TestSanitizeDumpLeavesMysqlSchemaStatementsAlone(t *testing.T) {
+	in := "CREATE SCHEMA `shop`;\n"
+	if got, _ := sanitized(t, "mysql", in); got != in {
+		t.Errorf("mysql dump rewritten: %q", got)
+	}
+}
