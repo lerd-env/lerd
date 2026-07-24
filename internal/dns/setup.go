@@ -959,6 +959,27 @@ func removeSudoersGrant() bool {
 // InstallSudoers writes a sudoers drop-in granting the current user passwordless
 // access to resolvectl commands. This is required for the autostart service which
 // runs non-interactively and cannot prompt for a sudo password.
+// WriteSudoersForUser writes the DNS sudoers drop-in directly, without the
+// interactive `sudo tee` that InstallSudoers uses. The caller must already be
+// root. `lerd bootstrap --system` calls this so a package maintainer script can
+// grant the passwordless DNS rules up front, letting a later unattended install
+// configure the resolver without a prompt. Idempotent.
+func WriteSudoersForUser(user string) error {
+	if user == "" {
+		return fmt.Errorf("cannot determine target user")
+	}
+	content := renderLinuxSudoers(user)
+	if sudoersInstalled([]byte(content)) {
+		return nil
+	}
+	const sudoersPath = "/etc/sudoers.d/lerd"
+	if err := os.WriteFile(sudoersPath, []byte(content), 0440); err != nil {
+		return fmt.Errorf("writing sudoers drop-in: %w", err)
+	}
+	recordSudoersInstalled([]byte(content))
+	return nil
+}
+
 func InstallSudoers() error {
 	user := os.Getenv("USER")
 	if user == "" {
