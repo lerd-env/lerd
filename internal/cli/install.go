@@ -250,7 +250,81 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	ok()
 
-	// 3. Binaries (composer, fnm, mkcert)
+	// Resolve Node management and which version manager to drive BEFORE
+	// downloadBinaries: the fnm zip is skipped when node.manager is already
+	// "nvm", and the nvm question must not wait on a system node being present
+	// (someone can have nvm installed with no versions yet).
+	bunPath := nodeDet.BunPath()
+	if bunPath != "" {
+		feedback.Line(fmt.Sprintf("bun detected at %s, lerd will use it automatically for projects that use bun", bunPath))
+	}
+
+	var savedNode *bool
+	savedManager := ""
+	savedNvmDir := ""
+	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
+		if v, set := nodeCfg.NodeManagedPref(); set {
+			savedNode = &v
+		}
+		savedManager = nodeCfg.Node.Manager
+		savedNvmDir = nodeCfg.NodeNvmDir()
+	}
+	systemNode := detectSystemNode()
+	nvmDetected := detectNvm()
+	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", lerdManagesNode())
+	if promptNode {
+		feedback.Line("Node.js detected at " + systemNode)
+		prompt := "Let lerd manage Node.js versions (installs shims, may override system node)?"
+		if bunPath != "" {
+			prompt += " Decline to keep your system Node and use bun."
+		}
+		wantLerdNode = confirmInstallPromptDefault(prompt, nodeDefault)
+	}
+
+	// Ask whenever managed Node is wanted, nvm is present, this is not an
+	// update, and nothing is saved yet — do not gate on the system-node prompt.
+	nodeManager := savedManager
+	if nodeManager == "" {
+		nodeManager = "fnm"
+		if wantLerdNode && nvmDetected && !fromUpdate {
+			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", true) {
+				nodeManager = "nvm"
+			}
+		}
+	}
+
+	nvmDirToSave := savedNvmDir
+	if nodeManager == "nvm" {
+		if nvmDirToSave == "" {
+			nvmDirToSave = nodeDet.DiscoverNvmDir()
+		}
+	} else {
+		nvmDirToSave = ""
+	}
+
+	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
+		changed := false
+		if v, set := nodeCfg.NodeManagedPref(); !set || v != wantLerdNode {
+			nodeCfg.SetNodeManaged(wantLerdNode)
+			changed = true
+		}
+		if nodeCfg.Node.Manager != nodeManager {
+			nodeCfg.SetNodeManager(nodeManager)
+			changed = true
+		}
+		if nodeCfg.NodeNvmDir() != nvmDirToSave {
+			nodeCfg.SetNodeNvmDir(nvmDirToSave)
+			changed = true
+		}
+		if changed {
+			if err := config.SaveGlobal(nodeCfg); err != nil {
+				fmt.Printf("    WARN: persist Node-management choice: %v\n", err)
+			}
+		}
+	}
+
+	// 3. Binaries (composer, fnm, mkcert) — after manager is persisted so an
+	// nvm choice skips the fnm download.
 	step("Downloading binaries")
 	if err := downloadBinaries(os.Stdout); err != nil {
 		return err
@@ -267,70 +341,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	var wantLaravelInstaller bool
 	if installedPHP, _ := phpDet.ListInstalled(); len(installedPHP) > 0 && !laravelInstallerPresent() {
 		wantLaravelInstaller = confirmInstallPrompt("Install Laravel installer (laravel new)?")
-	}
-
-	// lerd never installs bun itself, but if the user already has it we say so
-	// and soften the Node prompt: a bun user can decline lerd-managed Node and
-	// keep a clean system. Detected bun is used automatically for bun projects
-	// and mirrored into the PHP container on setup.
-	bunPath := nodeDet.BunPath()
-	if bunPath != "" {
-		feedback.Line(fmt.Sprintf("bun detected at %s, lerd will use it automatically for projects that use bun", bunPath))
-	}
-
-	// Resolve the Node-management choice from the persisted preference, the
-	// on-disk shim state (for configs predating the preference), and whether a
-	// system node exists. Update runs non-interactively so a prior node:unmanage
-	// survives; a fresh install only prompts when a system node is present.
-	var savedNode *bool
-	savedManager := ""
-	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
-		if v, set := nodeCfg.NodeManagedPref(); set {
-			savedNode = &v
-		}
-		savedManager = nodeCfg.Node.Manager
-	}
-	systemNode := detectSystemNode()
-	nvmDetected := detectNvm()
-	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", lerdManagesNode())
-	if promptNode {
-		feedback.Line("Node.js detected at " + systemNode)
-		prompt := "Let lerd manage Node.js versions (installs shims, may override system node)?"
-		if bunPath != "" {
-			prompt += " Decline to keep your system Node and use bun."
-		}
-		wantLerdNode = confirmInstallPromptDefault(prompt, nodeDefault)
-	}
-
-	// Resolve which version manager lerd drives. An explicit saved choice wins
-	// silently; otherwise, when the user opts into managed Node on a fresh
-	// interactive install and a user-installed nvm is present, offer to drive it
-	// instead of installing the bundled fnm.
-	nodeManager := savedManager
-	if nodeManager == "" {
-		nodeManager = "fnm"
-		if wantLerdNode && nvmDetected && promptNode {
-			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", true) {
-				nodeManager = "nvm"
-			}
-		}
-	}
-
-	if nodeCfg, err := config.LoadGlobal(); err == nil && nodeCfg != nil {
-		changed := false
-		if v, set := nodeCfg.NodeManagedPref(); !set || v != wantLerdNode {
-			nodeCfg.SetNodeManaged(wantLerdNode)
-			changed = true
-		}
-		if nodeCfg.Node.Manager != nodeManager {
-			nodeCfg.SetNodeManager(nodeManager)
-			changed = true
-		}
-		if changed {
-			if err := config.SaveGlobal(nodeCfg); err != nil {
-				fmt.Printf("    WARN: persist Node-management choice: %v\n", err)
-			}
-		}
 	}
 
 	// Ask whether lerd should manage local DNS. Prompted on every direct
@@ -1471,15 +1481,7 @@ func detectSystemNode() string {
 // offer to drive it instead of downloading the bundled fnm. Checks $NVM_DIR
 // first, then the ~/.nvm default, for the nvm.sh script that must be sourced.
 func detectNvm() bool {
-	dir := os.Getenv("NVM_DIR")
-	if dir == "" {
-		home, _ := os.UserHomeDir()
-		if home == "" {
-			return false
-		}
-		dir = filepath.Join(home, ".nvm")
-	}
-	_, err := os.Stat(filepath.Join(dir, "nvm.sh"))
+	_, err := os.Stat(filepath.Join(nodeDet.DiscoverNvmDir(), "nvm.sh"))
 	return err == nil
 }
 

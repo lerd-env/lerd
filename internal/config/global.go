@@ -105,6 +105,11 @@ type GlobalConfig struct {
 		// bundled default) or "nvm" (a user-installed nvm). Empty means fnm so
 		// configs predating the field keep working unchanged.
 		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
+		// NvmDir is the nvm install directory when Manager is "nvm". Persisted
+		// at install/switch time so daemons (lerd-ui, watcher) find nvm even
+		// though systemd/launchd never load the user's shell rc that exports
+		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
+		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
 	} `yaml:"node" mapstructure:"node"`
 	Share struct {
 		// DefaultTool is the tunnel tool "lerd share" uses when no flag is
@@ -1136,6 +1141,17 @@ func (c *GlobalConfig) NodeManager() string {
 // "nvm"). Persist via SaveGlobal.
 func (c *GlobalConfig) SetNodeManager(manager string) {
 	c.Node.Manager = manager
+}
+
+// NodeNvmDir returns the persisted nvm install directory, or empty when unset.
+func (c *GlobalConfig) NodeNvmDir() string {
+	return c.Node.NvmDir
+}
+
+// SetNodeNvmDir records where nvm lives so daemons agree with the CLI. Pass
+// empty to clear (fnm switch, or fall back to $NVM_DIR / ~/.nvm).
+func (c *GlobalConfig) SetNodeNvmDir(dir string) {
+	c.Node.NvmDir = dir
 }
 
 // SaveGlobal writes the configuration to config.yaml.

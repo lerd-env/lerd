@@ -72,8 +72,11 @@ func NewNodeManagerCmd() *cobra.Command {
 
 func runNodeSetManager(_ *cobra.Command, args []string) error {
 	cfg, err := config.LoadGlobal()
-	if err != nil || cfg == nil {
+	if err != nil {
 		return fmt.Errorf("loading config: %w", err)
+	}
+	if cfg == nil {
+		return fmt.Errorf("loading config: no config loaded")
 	}
 	current := cfg.NodeManager()
 
@@ -101,6 +104,11 @@ func runNodeSetManager(_ *cobra.Command, args []string) error {
 	}
 
 	cfg.SetNodeManager(target)
+	if target == "nvm" {
+		cfg.SetNodeNvmDir(nodeDet.DiscoverNvmDir())
+	} else {
+		cfg.SetNodeNvmDir("")
+	}
 	if err := config.SaveGlobal(cfg); err != nil {
 		return fmt.Errorf("saving config: %w", err)
 	}
