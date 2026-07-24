@@ -117,15 +117,15 @@ func TestMissingPresetDependencies_VersionedMemberSatisfiesFamily(t *testing.T) 
 	}
 }
 
-func TestMissingPresetDependencies_SiblingFamilySatisfiesDep(t *testing.T) {
+func TestMissingPresetDependencies_EnvRoleDropInSatisfiesDep(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	// MariaDB only, no mysql. phpmyadmin depends on mysql but discovers
-	// mysql,mariadb, so an installed mariadb satisfies the mysql dependency.
+	// MariaDB only, no mysql. phpmyadmin depends on mysql; mariadb's env_role
+	// is mysql, so the installed drop-in satisfies the dependency.
 	if err := config.SaveCustomService(&config.CustomService{
-		Name: "mariadb-11", Image: "docker.io/library/mariadb:11", Family: "mariadb",
+		Name: "mariadb-11", Image: "docker.io/library/mariadb:11", Family: "mariadb", EnvRole: "mysql",
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -146,28 +146,25 @@ func TestMissingPresetDependencies_NoFamilyMemberStillMissing(t *testing.T) {
 	// must not count as installed, so the dependency is still reported missing.
 	svc := resolvePresetForTest(t, "pgadmin")
 	missing := MissingPresetDependencies(svc)
-	if len(missing) != 1 || missing[0] != "postgres" {
-		t.Errorf("expected missing=[postgres] with nothing installed, got %v", missing)
+	if len(missing) != 1 || !strings.HasPrefix(missing[0], "postgres") {
+		t.Errorf("expected missing postgres (with alternatives), got %v", missing)
 	}
 }
 
-func TestMissingPresetDependencies_NonDiscoveringDepStaysStrict(t *testing.T) {
+func TestMissingPresetDependencies_ValkeySatisfiesRedisInsight(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	// mongo-express depends on mongo but does not declare discover_family, so it
-	// connects to the bare host: a versioned mongo alternate must NOT satisfy it.
 	if err := config.SaveCustomService(&config.CustomService{
-		Name: "mongo-7", Image: "docker.io/library/mongo:7", Family: "mongo",
+		Name: "valkey", Image: "docker.io/valkey/valkey:9-alpine", Family: "valkey", EnvRole: "redis",
 	}); err != nil {
 		t.Fatal(err)
 	}
-	writeInstalledQuadlet(t, "lerd-mongo-7")
+	writeInstalledQuadlet(t, "lerd-valkey")
 
-	svc := resolvePresetForTest(t, "mongo-express")
-	missing := MissingPresetDependencies(svc)
-	if len(missing) != 1 || missing[0] != "mongo" {
-		t.Errorf("non-discovering mongo-express must stay strict, got missing=%v", missing)
+	svc := resolvePresetForTest(t, "redisinsight")
+	if missing := MissingPresetDependencies(svc); len(missing) != 0 {
+		t.Errorf("valkey should satisfy redisinsight's redis dep, got missing=%v", missing)
 	}
 }

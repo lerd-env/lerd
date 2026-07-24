@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/serviceops"
 )
 
@@ -57,6 +58,27 @@ func TestServiceDetail_ListsDependencies(t *testing.T) {
 	}
 	if !strings.Contains(joined, "mysql") {
 		t.Errorf("expected mysql dep:\n%s", joined)
+	}
+}
+
+func TestServiceDetail_DependencyShowsPresetDropIn(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := config.SaveCustomService(&config.CustomService{
+		Name: "mariadb-11-8", Image: "x", Family: "mariadb", EnvRole: "mysql", Preset: "mariadb",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewModel("test")
+	svc := &ServiceRow{Name: "phpmyadmin", State: stateRunning, DependsOn: []string{"mysql"}}
+	joined := stripANSI(strings.Join(serviceDetailContentLines(m, svc, 120), "\n"))
+	if !strings.Contains(joined, "mariadb") {
+		t.Errorf("expected mariadb display name for mysql dep:\n%s", joined)
+	}
+	if strings.Contains(joined, "mariadb-11-8") {
+		t.Errorf("versioned name must not appear:\n%s", joined)
 	}
 }
 

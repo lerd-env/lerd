@@ -251,8 +251,9 @@ func TestMissingPresetDependencies_BuiltinNotInstalled_Reports(t *testing.T) {
 		DependsOn: []string{"mysql"}, // mysql is a default preset (IsBuiltin true)
 	}
 	// No mysql quadlet on disk -> mysql is genuinely missing.
-	if missing := MissingPresetDependencies(svc); len(missing) != 1 || missing[0] != "mysql" {
-		t.Errorf("with no mysql quadlet, expected [mysql] missing, got %v", missing)
+	missing := MissingPresetDependencies(svc)
+	if len(missing) != 1 || !strings.HasPrefix(missing[0], "mysql") {
+		t.Errorf("with no mysql quadlet, expected mysql missing (with alternatives), got %v", missing)
 	}
 }
 

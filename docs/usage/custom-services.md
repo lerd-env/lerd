@@ -309,9 +309,15 @@ lerd service add \
 
 **Behaviour:**
 
+A `depends_on` entry is satisfied by that service, or by any installed service
+whose `family` or `env_role` names it (MariaDB for `mysql`, Valkey for `redis`,
+`postgres-pgvector` for `postgres`). Start resolves to the installed satisfier
+and brings that one up; install preflight uses the same rule and names the
+accepted alternatives when nothing is installed.
+
 | Action | Effect |
 |---|---|
-| `lerd service start phpmyadmin` | Starts `mysql` first (if not already running), then starts `phpmyadmin` |
+| `lerd service start phpmyadmin` | Starts a satisfier for `mysql` first (MySQL itself, or MariaDB), then starts `phpmyadmin` |
 | `lerd service start mysql` | Starts `mysql`, then also starts any services that depend on it (e.g. `phpmyadmin`) |
 | `lerd service stop mysql` | Stops `phpmyadmin` first (cascade), then stops `mysql` |
 | Site pause (auto-stops `mysql`) | `phpmyadmin` is stopped first, then `mysql` |

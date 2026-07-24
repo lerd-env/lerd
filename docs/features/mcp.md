@@ -145,7 +145,7 @@ A **site group** (the `site` tool's `group_*` actions) nests a real site under a
 
 ### Service presets carry their own discovery metadata
 
-`preset_list` returns each preset's `category`, `icon` and `admin_for`. `admin_for` names the services a preset's admin UI administers, and it is **not** `depends_on`: phpMyAdmin depends on mysql but administers mariadb too, and RedisInsight administers valkey without depending on it. To answer "which dashboard administers this database", read `admin_for`.
+`preset_list` returns each preset's `category`, `icon` and `admin_for`. `admin_for` names the services a preset's admin UI administers, and it is **not** `depends_on`: phpMyAdmin depends on mysql (satisfied by MariaDB via `env_role`) but administers both, and RedisInsight depends on redis (satisfied by Valkey) while administering both. To answer "which dashboard administers this database", read `admin_for`.
 
 ### Reading logs
 

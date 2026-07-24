@@ -176,10 +176,11 @@ admin_for:            # the services this preset's UI administers
   - opensearch
 ```
 
-`admin_for` is not `depends_on`. `depends_on` orders container startup, while
-`admin_for` says which services a UI can administer. phpMyAdmin declares
-`admin_for: [mysql, mariadb]` but only depends on `mysql`, and RedisInsight
-declares `admin_for: [redis, valkey]` while never depending on Valkey.
+`admin_for` is not `depends_on`. `depends_on` orders container startup (and is
+satisfied by the named service or any installed drop-in whose `family` or
+`env_role` matches), while `admin_for` says which services a UI can administer.
+phpMyAdmin declares `admin_for: [mysql, mariadb]` and depends on `mysql`;
+RedisInsight declares `admin_for: [redis, valkey]` and depends on `redis`.
 
 lerd matches `admin_for` against the **preset a service was installed from**, so
 a versioned member like `mariadb-11-8` still resolves to `mariadb`. A service the
@@ -244,8 +245,10 @@ full definition into `.lerd.yaml` for portability; see [Custom services](custom-
 
 A preset's `depends_on` is enforced two ways:
 
-1. **At install time**: installing a preset whose dependency is another *custom* service (not a built-in) is rejected until the dependency is installed first. `lerd service preset mongo-express` errors out with `preset "mongo-express" requires service(s) mongo to be installed first` until you run `lerd service preset mongo`. Built-in deps (mysql, postgres) are always satisfied. The Web UI's preset picker disables the **Add** button with the same gating and shows an amber "install mongo first" hint.
-2. **At start/stop time**: `lerd service start mongo-express` brings `mongo` up first, recursively. `lerd service stop mongo` first stops `mongo-express` (and any other dependent), then stops `mongo`. The Web UI's Start and Stop buttons share the same semantics. This also means starting *any* preset that depends on a built-in (`phpmyadmin`, `pgadmin`) auto-starts the database.
+1. **At install time**: installing a preset is rejected until each dependency is satisfied. A `depends_on` entry is met by that service, or by any installed service whose `family` or `env_role` names it — so phpMyAdmin's `mysql` dependency is met by MariaDB (`env_role: mysql`), RedisInsight's `redis` dependency by Valkey, and pgAdmin's `postgres` dependency by `postgres-pgvector`. When nothing satisfies a dependency the error lists those alternatives. The Web UI's preset picker disables the **Add** button with the same gating.
+2. **At start/stop time**: `lerd service start mongo-express` brings a satisfier for `mongo` up first, recursively (the literal name when installed, otherwise a family or env_role drop-in). `lerd service stop mongo` first stops `mongo-express` (and any other dependent), then stops `mongo`. The Web UI's Start and Stop buttons share the same semantics.
+
+`discover_family` is separate: it only expands admin UI host lists at quadlet generation time. It is not how dependencies are satisfied.
 
 ## Default credentials
 

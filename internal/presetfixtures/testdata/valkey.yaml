@@ -1,6 +1,7 @@
 name: valkey
 description: Valkey in-memory store (Redis-compatible)
 family: valkey
+env_role: redis
 image: docker.io/valkey/valkey:9-alpine
 # Valkey speaks the Redis protocol on 6379 inside the container; it is
 # published on 6380 so it can coexist with the redis preset on the host.

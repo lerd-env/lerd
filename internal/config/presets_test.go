@@ -141,6 +141,9 @@ func TestLoadPreset_Valkey(t *testing.T) {
 	if p.Default {
 		t.Errorf("valkey is an opt-in add-on preset and must not be default")
 	}
+	if p.EnvRole != "redis" {
+		t.Errorf("valkey must declare env_role redis (drop-in for redis deps), got %q", p.EnvRole)
+	}
 }
 
 func TestLoadPreset_Typesense(t *testing.T) {
@@ -289,6 +292,9 @@ func TestLoadPreset_MariaDB_Versions(t *testing.T) {
 	}
 	if p.DefaultVersion != "11.8" {
 		t.Errorf("DefaultVersion = %q, want 11.8 (the pinned LTS default)", p.DefaultVersion)
+	}
+	if p.EnvRole != "mysql" {
+		t.Errorf("mariadb must declare env_role mysql (drop-in for mysql deps), got %q", p.EnvRole)
 	}
 	// Issue #704: every member of a family defaults to the family's canonical
 	// host port (3306 for the MySQL-compatible mariadb) rather than a pre-spaced
