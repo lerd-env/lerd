@@ -17,8 +17,15 @@ import (
 // Callers already pass slugged names, but these guard the SQL sinks directly so
 // a name that ever reaches here unsanitised cannot break out of its quoting.
 func escapeIdentBacktick(name string) string { return strings.ReplaceAll(name, "`", "``") }
-func escapeIdentDQuote(name string) string   { return strings.ReplaceAll(name, `"`, `""`) }
-func escapeSQLLiteral(v string) string       { return strings.ReplaceAll(v, "'", "''") }
+
+// postgresDropSQL drops a database in one statement, closing whatever still has
+// it open. Terminating the sessions first and dropping after loses a race with
+// anything that reconnects, which on a dev machine is the site's own pool.
+func postgresDropSQL(name string) string {
+	return fmt.Sprintf(`DROP DATABASE IF EXISTS "%s" WITH (FORCE);`, escapeIdentDQuote(name))
+}
+func escapeIdentDQuote(name string) string { return strings.ReplaceAll(name, `"`, `""`) }
+func escapeSQLLiteral(v string) string     { return strings.ReplaceAll(v, "'", "''") }
 
 // escapeMySQLLiteral is escapeSQLLiteral for MySQL and MariaDB, which treat a
 // backslash as an escape character unless NO_BACKSLASH_ESCAPES is set. Doubling
@@ -151,13 +158,17 @@ func DropDatabase(svc, name string) (bool, error) {
 		}
 		return false, lastErr
 	case "postgres":
-		// Postgres refuses DROP if any session has the DB open, so terminate
-		// stragglers (queue workers, lingering psql shells) first.
-		_ = podman.Cmd("exec", container, "psql", "-U", "postgres",
-			"-c", fmt.Sprintf(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid();`, escapeSQLLiteral(name))).Run()
-		cmd := podman.Cmd("exec", container, "psql", "-U", "postgres",
-			"-c", fmt.Sprintf(`DROP DATABASE IF EXISTS "%s";`, escapeIdentDQuote(name)))
+		cmd := podman.Cmd("exec", container, "psql", "-U", "postgres", "-c", postgresDropSQL(name))
 		out, err := cmd.CombinedOutput()
+		if err != nil && strings.Contains(string(out), "syntax error") {
+			// WITH (FORCE) needs postgres 13. On an older server, close the sessions
+			// and drop in two steps, which is all that was ever available there.
+			_ = podman.Cmd("exec", container, "psql", "-U", "postgres",
+				"-c", fmt.Sprintf(`SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '%s' AND pid <> pg_backend_pid();`, escapeSQLLiteral(name))).Run()
+			cmd = podman.Cmd("exec", container, "psql", "-U", "postgres",
+				"-c", fmt.Sprintf(`DROP DATABASE IF EXISTS "%s";`, escapeIdentDQuote(name)))
+			out, err = cmd.CombinedOutput()
+		}
 		if err != nil {
 			if strings.Contains(string(out), "does not exist") {
 				return false, nil
