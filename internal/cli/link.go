@@ -524,6 +524,10 @@ func printLinkSummary(site config.Site, start time.Time) {
 	// Reached on every successful link path, so this is where we record that the
 	// site is linked for this process (even when the summary itself is deferred).
 	linkApplied = true
+	// A JetBrains project gets its database connection pointed at lerd, using
+	// coordinates that work from the machine rather than the container ones the
+	// site's env file carries.
+	wroteDataSource := syncIDEDataSource(site.Path).wrote()
 	if linkSkipSummary {
 		return
 	}
@@ -554,6 +558,9 @@ func printLinkSummary(site config.Site, start time.Time) {
 			db += " · cache " + cache
 		}
 		sum.Row("DB", db)
+	}
+	if wroteDataSource {
+		sum.Row("IDE", "database connection written to .idea")
 	}
 	sum.Print()
 }
