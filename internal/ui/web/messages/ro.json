@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Se șterge {name}…",
   "databases_snapshotDeleted": "S-a șters {name}",
   "databases_importedWithErrors": "S-a importat {file}, dar motorul a raportat {count} erori",
+  "databases_importedWithExtensions": "S-a importat {file} și s-a creat {names}",
   "databases_restoredWithErrors": "S-a restaurat {name}, dar motorul a raportat {count} erori",
   "databases_importIssuesLink": "Vezi ce a raportat motorul",
   "databases_importIssuesBody": "Dump-ul s-a încărcat, dar motorul a respins aceste instrucțiuni.",

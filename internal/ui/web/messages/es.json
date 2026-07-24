@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "Eliminando {name}…",
   "databases_snapshotDeleted": "{name} eliminada",
   "databases_importedWithErrors": "{file} importado, pero el motor informó de {count} errores",
+  "databases_importedWithExtensions": "Importado {file}, y creado {names}",
   "databases_restoredWithErrors": "{name} restaurada, pero el motor informó de {count} errores",
   "databases_importIssuesLink": "Ver lo que informó el motor",
   "databases_importIssuesBody": "El volcado se cargó, pero el motor rechazó estas sentencias.",

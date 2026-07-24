@@ -1140,6 +1140,7 @@
   "databases_deletingSnapshot": "正在删除 {name}…",
   "databases_snapshotDeleted": "已删除 {name}",
   "databases_importedWithErrors": "已导入 {file}，但引擎报告了 {count} 个错误",
+  "databases_importedWithExtensions": "已导入 {file}，并创建了 {names}",
   "databases_restoredWithErrors": "已恢复 {name}，但引擎报告了 {count} 个错误",
   "databases_importIssuesLink": "查看引擎报告的内容",
   "databases_importIssuesBody": "转储已载入，但引擎拒绝了这些语句。",

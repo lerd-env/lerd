@@ -10,6 +10,7 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `lerd db:import [-s service] [-d name] [--fresh] <file.sql>` | Import a SQL dump |
 | `lerd db:export [-s service] [-d name] [-o file.sql]` | Export a database to a SQL dump |
 | `lerd db:shell [-s service] [-d name]` | Open an interactive MySQL or PostgreSQL shell |
+| `lerd db:extension list\|add <name>` | List or create the extensions an engine offers |
 | `lerd db:snapshot [name] [-A]` | Create a named, restorable snapshot of a database |
 | `lerd db:snapshots [--all]` | List stored snapshots |
 | `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
@@ -159,6 +160,16 @@ A dump taken from a hosted Postgres or MySQL carries statements about that host'
 lerd filters those out on the way in, which is what `--no-owner --no-privileges` does at dump time, except you do not have to have thought of it when you took the dump. What it skipped is reported next to the errors, since a dump lerd quietly rewrote should never read as one that arrived clean. Row data is never touched: a postgres `COPY` block is passed through byte for byte between its header and its closing `\.`, and on mysql only DDL lines are rewritten, so a value that happens to contain the word survives.
 
 Ownership is the smaller half of what goes wrong. The rest comes from loading into a database that already has the objects, which no filter can fix: the schema, tables, sequences, indexes and constraints all collide, and then the rows land on populated tables as duplicate keys and foreign key violations. Tick **Empty the database first** in the import dialog, or pass `--fresh` on the CLI, and the database is dropped and recreated before the dump loads, so it replaces what was there rather than fighting it.
+
+### Extensions
+
+A postgres engine declares in its [service preset](service-presets.md) which extensions its image can create and which types each provides, so lerd never carries a list of extension names in its own code. Two things follow from that declaration.
+
+An extension marked as always-on is created wherever lerd creates a database, so a project on `postgres-pgvector` gets `vector` in both its app and `_testing` databases, and a database that is dropped and recreated, by an import with **Empty the database first** or by a snapshot restore, comes back with it rather than missing what the site was built on. A database that already exists is topped up the same way, so a site set up before its engine declared an extension picks it up rather than staying behind.
+
+The rest are created only when an imported dump reaches for one, matched on the type names the preset declares. That is how a dump holding a `public.geometry` column brings PostGIS with it on the default engine without every database on the machine paying for it: an empty postgres database is about 7.5 MB, and PostGIS doubles it, while `vector` costs a third of a megabyte, which is why one waits and the other does not. What was created is reported next to the import, since a database should never gain something without saying so.
+
+`lerd db:extension list` shows what the engine offers against what the database already has, and `lerd db:extension add <name>` creates one when you want it before any dump arrives.
 
 ### Compressed and custom-format dumps
 

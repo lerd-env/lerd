@@ -17,6 +17,8 @@ const { dropDatabase, exportUrl, importDatabase } = vi.hoisted(() => ({
       error?: string;
       errors?: number;
       issues?: { message: string; count: number }[];
+      skipped?: { message: string; count: number }[];
+      created?: { message: string; count: number }[];
     }> => ({ ok: true })
   )
 }));
@@ -176,6 +178,16 @@ describe('DatabaseCard', () => {
     await pickDump(container);
     expect(await findByText(/ownership and privilege statements/)).toBeInTheDocument();
     expect(getByText('80×')).toBeInTheDocument();
+  });
+
+  it('names an extension it created for the dump, so nothing changes silently', async () => {
+    importDatabase.mockResolvedValueOnce({
+      ok: true,
+      created: [{ message: 'vector', count: 1 }]
+    });
+    const { container, findByText } = render(DatabaseCard, { props: { engine, entry: parent } });
+    await pickDump(container);
+    expect(await findByText('Imported shop.sql, and created vector')).toBeInTheDocument();
   });
 
   it('surfaces the engine error when an import fails', async () => {

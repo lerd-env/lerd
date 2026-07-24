@@ -218,6 +218,7 @@ type ImportReport struct {
 	Issues  []ImportIssue `json:"issues,omitempty"`
 	Omitted int           `json:"omitted,omitempty"`
 	Skipped []ImportIssue `json:"skipped,omitempty"`
+	Created []ImportIssue `json:"created,omitempty"`
 }
 
 // Summary renders the report as one line for the CLI and the phase stream.
@@ -251,6 +252,19 @@ func (r ImportReport) SkippedSummary() string {
 		parts = append(parts, fmt.Sprintf("%d× %s", s.Count, s.Message))
 	}
 	return "skipped " + strings.Join(parts, "; ")
+}
+
+// CreatedSummary renders the extensions the load needed and lerd created, or
+// could not, for the same reason.
+func (r ImportReport) CreatedSummary() string {
+	if len(r.Created) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Created))
+	for _, c := range r.Created {
+		parts = append(parts, c.Message)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // ImportTally counts an engine's complaints as its output streams past, so a
@@ -433,7 +447,9 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 	if err != nil {
 		return ImportReport{}, err
 	}
-	src, skipped := SanitizeDump(family, src)
+	src, notes := SanitizeDump(DumpTarget{
+		Service: service, Family: family, Database: database, Extensions: DeclaredExtensions(service),
+	}, src)
 	cmd := podman.CmdContext(ctx, args...)
 	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
@@ -441,7 +457,8 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
 	rep := parseImportOutput(string(out))
-	rep.Skipped = skipped()
+	n := notes()
+	rep.Skipped, rep.Created = n.Skipped, n.Created
 	return rep, nil
 }
 

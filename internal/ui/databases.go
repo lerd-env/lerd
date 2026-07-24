@@ -264,12 +264,13 @@ type dbActionResponse struct {
 	Issues  []serviceops.ImportIssue `json:"issues,omitempty"`
 	Omitted int                      `json:"omitted,omitempty"`
 	Skipped []serviceops.ImportIssue `json:"skipped,omitempty"`
+	Created []serviceops.ImportIssue `json:"created,omitempty"`
 }
 
 func writeDBOK(w http.ResponseWriter) { writeJSON(w, dbActionResponse{OK: true}) }
 
 func writeDBReport(w http.ResponseWriter, rep serviceops.ImportReport) {
-	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues, Omitted: rep.Omitted, Skipped: rep.Skipped})
+	writeJSON(w, dbActionResponse{OK: true, Errors: rep.Errors, Issues: rep.Issues, Omitted: rep.Omitted, Skipped: rep.Skipped, Created: rep.Created})
 }
 func writeDBError(w http.ResponseWriter, m string) {
 	writeJSON(w, dbActionResponse{OK: false, Error: m})

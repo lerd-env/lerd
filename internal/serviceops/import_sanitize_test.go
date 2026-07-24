@@ -1,19 +1,27 @@
 package serviceops
 
 import (
+	"errors"
 	"io"
 	"strings"
 	"testing"
 )
 
+// stubExtensionCreate swaps the container call out for the duration of a test.
+func stubExtensionCreate(fn func(service, database, name string) error) func() {
+	prev := createExtensionFn
+	createExtensionFn = fn
+	return func() { createExtensionFn = prev }
+}
+
 func sanitized(t *testing.T, family, dump string) (string, []ImportIssue) {
 	t.Helper()
-	r, skipped := SanitizeDump(family, strings.NewReader(dump))
+	r, notes := SanitizeDump(DumpTarget{Family: family}, strings.NewReader(dump))
 	out, err := io.ReadAll(r)
 	if err != nil {
 		t.Fatal(err)
 	}
-	return string(out), skipped()
+	return string(out), notes().Skipped
 }
 
 // A dump from a managed provider assigns ownership to roles that only exist
@@ -119,4 +127,91 @@ func total(issues []ImportIssue) int {
 		n += i.Count
 	}
 	return n
+}
+
+// A dump reaches for an extension by naming one of its types, and the statement
+// that needs it must not be forwarded until the extension exists, or it fails
+// exactly as it does today.
+func TestSanitizeDumpCreatesADeclaredExtensionBeforeTheLineNeedingIt(t *testing.T) {
+	var created []string
+	var orderOK bool
+	seen := ""
+	restore := stubExtensionCreate(func(service, database, name string) error {
+		created = append(created, service+"/"+database+"/"+name)
+		orderOK = !strings.Contains(seen, "vector(1536)")
+		return nil
+	})
+	defer restore()
+
+	dump := "CREATE TABLE public.embeddings (\n    id bigint NOT NULL,\n    embedding public.vector(1536)\n);\n"
+	target := DumpTarget{Service: "postgres-pgvector", Family: "postgres", Database: "shop",
+		Extensions: []Extension{{Name: "vector", Types: []string{"vector"}}}}
+	r, notes := SanitizeDump(target, strings.NewReader(dump))
+	buf := make([]byte, 1)
+	out := ""
+	for {
+		n, err := r.Read(buf)
+		out += string(buf[:n])
+		seen = out
+		if err != nil {
+			break
+		}
+	}
+	if out != dump {
+		t.Errorf("dump was rewritten:\n%q", out)
+	}
+	if len(created) != 1 || created[0] != "postgres-pgvector/shop/vector" {
+		t.Fatalf("created = %v", created)
+	}
+	if !orderOK {
+		t.Error("the extension was created after the line that needs it went out")
+	}
+	if n := notes(); len(n.Created) != 1 || n.Created[0].Count != 1 {
+		t.Errorf("notes = %+v", n)
+	}
+}
+
+// Two tables of the same type must not each pay for a container exec.
+func TestSanitizeDumpCreatesEachExtensionOnce(t *testing.T) {
+	calls := 0
+	defer stubExtensionCreate(func(_, _, _ string) error { calls++; return nil })()
+	dump := "CREATE TABLE a (\n    e public.vector(3)\n);\nCREATE TABLE b (\n    e public.vector(3)\n);\n"
+	target := DumpTarget{Service: "pg", Family: "postgres", Database: "shop",
+		Extensions: []Extension{{Name: "vector", Types: []string{"vector"}}}}
+	r, _ := SanitizeDump(target, strings.NewReader(dump))
+	_, _ = io.ReadAll(r)
+	if calls != 1 {
+		t.Errorf("created the extension %d times", calls)
+	}
+}
+
+// An extension the image does not ship has to be named in the report, since the
+// type error the engine raises afterwards cannot be mapped back to it.
+func TestSanitizeDumpReportsAnExtensionItCouldNotCreate(t *testing.T) {
+	defer stubExtensionCreate(func(_, _, _ string) error { return errors.New("not available") })()
+	target := DumpTarget{Service: "pg", Family: "postgres", Database: "shop",
+		Extensions: []Extension{{Name: "postgis", Types: []string{"geometry"}}}}
+	r, notes := SanitizeDump(target, strings.NewReader("CREATE TABLE t (\n    shape public.geometry(Point)\n);\n"))
+	_, _ = io.ReadAll(r)
+	n := notes()
+	if len(n.Created) != 1 || !strings.Contains(n.Created[0].Message, "postgis") {
+		t.Fatalf("notes = %+v", n)
+	}
+	if !strings.Contains(n.Created[0].Message, "could not") {
+		t.Errorf("a failure must not read as a success: %q", n.Created[0].Message)
+	}
+}
+
+// The mysql families have no extensions, and a dump into one must never trigger
+// a lookup for them.
+func TestSanitizeDumpNeverCreatesOnMysql(t *testing.T) {
+	calls := 0
+	defer stubExtensionCreate(func(_, _, _ string) error { calls++; return nil })()
+	target := DumpTarget{Service: "mysql", Family: "mysql", Database: "shop",
+		Extensions: []Extension{{Name: "vector", Types: []string{"vector"}}}}
+	r, _ := SanitizeDump(target, strings.NewReader("CREATE TABLE t (\n    e vector(3)\n);\n"))
+	_, _ = io.ReadAll(r)
+	if calls != 0 {
+		t.Errorf("mysql import created %d extensions", calls)
+	}
 }
