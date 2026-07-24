@@ -125,6 +125,12 @@ func TestEnsureCustomServiceQuadlet_portShiftNoticeAvoidsStdout(t *testing.T) {
 	t.Cleanup(func() { podman.DaemonReloadFn = orig })
 	podman.DaemonReloadFn = func() error { return nil }
 
+	// The guard leaves the port alone while the service's own unit is up, so pin
+	// the unit down: otherwise a developer running lerd-mongo-express fails here.
+	origStatus := ensureUnitStatus
+	t.Cleanup(func() { ensureUnitStatus = origStatus })
+	ensureUnitStatus = func(string) (string, error) { return "inactive", nil }
+
 	// Occupy the service's primary host port so the guard is forced to shift it.
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
