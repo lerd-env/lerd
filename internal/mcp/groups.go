@@ -495,7 +495,7 @@ func execTool() mcpTool {
 func frameworkTool() mcpTool {
 	return mcpTool{
 		Name:        "framework",
-		Description: "Framework definitions and scaffolding. action: list, add (name=laravel merges into built-in), remove (force=true overrides in-use guard), prune (remove unused defs), search (store), update (fetch a definition from the store), project_new (scaffold), setup (post-install steps, MANDATORY after env setup).",
+		Description: "Framework definitions and scaffolding. action: list, add (bare name installs from store, else authors custom; laravel merges built-in), remove (force=true overrides in-use guard), prune (remove unused), search (store), update (fetch a definition from the store), project_new (scaffold), setup (post-install steps, MANDATORY after env setup).",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
