@@ -347,7 +347,7 @@ func (t *ImportTally) Report() ImportReport {
 	}
 	loudestNoise := ""
 	for _, msg := range t.order {
-		if strings.HasPrefix(msg, "invalid command") && (loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise]) {
+		if isCopyCascadeLine(msg) && (loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise]) {
 			loudestNoise = msg
 		}
 	}
@@ -357,7 +357,7 @@ func (t *ImportTally) Report() ImportReport {
 	}
 	rep := ImportReport{Errors: t.errors}
 	for _, msg := range t.order {
-		if strings.HasPrefix(msg, "invalid command") {
+		if isCopyCascadeLine(msg) {
 			continue
 		}
 		if len(rep.Issues) == room {
@@ -384,7 +384,7 @@ func trimImportPrefix(line string) string {
 	if !strings.HasPrefix(line, "psql:") {
 		return line
 	}
-	for _, marker := range []string{": ERROR", ": invalid command"} {
+	for _, marker := range []string{": ERROR", ": invalid command", ": backslash commands are restricted"} {
 		if i := strings.Index(line, marker); i >= 0 {
 			return line[i+2:]
 		}
@@ -393,7 +393,16 @@ func trimImportPrefix(line string) string {
 }
 
 func isImportErrorLine(line string) bool {
-	return strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "invalid command")
+	return strings.HasPrefix(line, "ERROR") || isCopyCascadeLine(line)
+}
+
+// isCopyCascadeLine reports whether a complaint is COPY data being read as SQL,
+// which is what follows a table the dump failed to create. Postgres 18 dumps
+// open with \restrict, and in that mode psql refuses backslash commands, so the
+// rows that used to read "invalid command \N" now say so differently.
+func isCopyCascadeLine(msg string) bool {
+	return strings.HasPrefix(msg, "invalid command") ||
+		strings.HasPrefix(msg, "backslash commands are restricted")
 }
 
 // DumpReader unwraps a gzipped dump so a .sql.gz loads like a .sql. The engine
