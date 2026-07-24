@@ -100,8 +100,9 @@ type CustomService struct {
 	Category string `yaml:"category,omitempty" json:"category,omitempty"`
 	Icon     string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	// AdminFor lists the services this preset's UI administers. It is not
-	// DependsOn: phpMyAdmin starts after mysql but administers mariadb too, and
-	// RedisInsight administers valkey without ever depending on it.
+	// DependsOn: phpMyAdmin starts after a mysql satisfier but administers
+	// mariadb too, and RedisInsight administers valkey while depending on redis
+	// (satisfied by valkey via env_role).
 	AdminFor []string `yaml:"admin_for,omitempty" json:"admin_for,omitempty"`
 	// Files is deprecated as a YAML user field but kept with its yaml tag so
 	// LoadCustomServiceFromFile can detect legacy on-disk entries and migrate

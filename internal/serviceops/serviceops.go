@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -338,10 +339,11 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 
 	for _, dep := range svc.DependsOn {
 		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "starting"})
-		if err := EnsureServiceRunning(dep); err != nil {
+		resolved, err := EnsureDependencyRunning(dep)
+		if err != nil {
 			return svc, fmt.Errorf("starting dependency %q: %w", dep, err)
 		}
-		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "ready"})
+		emit(PhaseEvent{Phase: "starting_deps", Dep: resolved, State: "ready"})
 	}
 
 	unit := "lerd-" + svc.Name
@@ -443,63 +445,107 @@ func registerPreset(svc *config.CustomService) error {
 	return nil
 }
 
-// MissingPresetDependencies returns declared dependencies that are not
-// installed. A dependency the service discovers via discover_family is met by
-// any installed member of that family or a sibling family it co-discovers.
+// MissingPresetDependencies returns declared dependencies that ResolveDependency
+// cannot satisfy. Each entry is the dependency name, with known drop-in
+// alternatives listed when the store declares any (family or env_role).
 func MissingPresetDependencies(svc *config.CustomService) []string {
 	var missing []string
 	for _, dep := range svc.DependsOn {
-		if dependencyInstalled(svc, dep) {
+		if ResolveDependency(dep) != "" {
 			continue
 		}
-		missing = append(missing, dep)
+		missing = append(missing, missingDepLabel(dep))
 	}
 	return missing
 }
 
-// dependencyInstalled reports whether dep is met by an exact service match
-// (quadlet presence) or by any installed member of a family that satisfies it.
-func dependencyInstalled(svc *config.CustomService, dep string) bool {
+// ResolveDependency returns an installed service that meets dep: the named
+// service itself, or any installed service whose family or env_role is dep.
+// Prefers the literal name when it is installed; otherwise the first match
+// in sorted order. Empty when nothing installed satisfies dep.
+func ResolveDependency(dep string) string {
 	if ServiceInstalled(dep) {
+		return dep
+	}
+	var matches []string
+	seen := map[string]bool{}
+	consider := func(name string) {
+		if name == "" || name == dep || seen[name] || !ServiceInstalled(name) {
+			return
+		}
+		seen[name] = true
+		if serviceSatisfiesDep(name, dep) {
+			matches = append(matches, name)
+		}
+	}
+	if customs, err := config.ListCustomServices(); err == nil {
+		for _, svc := range customs {
+			consider(svc.Name)
+		}
+	}
+	for _, name := range config.DefaultPresetNames() {
+		consider(name)
+	}
+	if len(matches) == 0 {
+		return ""
+	}
+	sort.Strings(matches)
+	return matches[0]
+}
+
+// EnsureDependencyRunning resolves dep to an installed satisfier and starts it.
+func EnsureDependencyRunning(dep string) (string, error) {
+	name := ResolveDependency(dep)
+	if name == "" {
+		return "", fmt.Errorf("%s not installed", missingDepLabel(dep))
+	}
+	if err := EnsureServiceRunning(name); err != nil {
+		return name, err
+	}
+	return name, nil
+}
+
+func serviceSatisfiesDep(name, dep string) bool {
+	if svc, err := config.LoadCustomService(name); err == nil {
+		return config.FamilyOf(svc) == dep || config.EnvRoleOf(svc) == dep
+	}
+	if config.FamilyOfName(name) == dep {
 		return true
 	}
-	for fam := range satisfyingFamilies(svc, dep) {
-		for _, host := range config.ServicesInFamily(fam) {
-			if ServiceInstalled(strings.TrimPrefix(host, "lerd-")) {
-				return true
-			}
-		}
+	if p, err := config.LoadPreset(name); err == nil {
+		return p.EnvRole == dep
 	}
 	return false
 }
 
-// satisfyingFamilies returns the families the service co-discovers with dep via
-// discover_family (empty if it discovers none): a tool that discovers a family
-// can use any member, so phpmyadmin's mysql dep is also met by a mariadb.
-func satisfyingFamilies(svc *config.CustomService, dep string) map[string]bool {
-	out := map[string]bool{}
-	for _, directive := range svc.DynamicEnv {
-		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "discover_family" {
+// missingDepLabel is dep, plus store-declared drop-ins that would also satisfy it.
+func missingDepLabel(dep string) string {
+	alts := dropInPresets(dep)
+	if len(alts) == 0 {
+		return dep
+	}
+	return dep + " (or " + strings.Join(alts, ", ") + ")"
+}
+
+func dropInPresets(dep string) []string {
+	metas, err := config.ListPresets()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, m := range metas {
+		if m.Name == dep {
 			continue
 		}
-		fams := strings.Split(parts[1], ",")
-		listed := false
-		for _, f := range fams {
-			if strings.TrimSpace(f) == dep {
-				listed = true
-				break
-			}
-		}
-		if !listed {
+		p, err := config.LoadPreset(m.Name)
+		if err != nil {
 			continue
 		}
-		for _, f := range fams {
-			if f = strings.TrimSpace(f); config.IsKnownFamily(f) {
-				out[f] = true
-			}
+		if p.Family == dep || p.EnvRole == dep {
+			out = append(out, p.Name)
 		}
 	}
+	sort.Strings(out)
 	return out
 }
 
@@ -792,7 +838,7 @@ func EnsureServiceRunning(name string) error {
 			return fmt.Errorf("custom service %q not found: %w", name, err)
 		}
 		for _, dep := range svc.DependsOn {
-			if err := EnsureServiceRunning(dep); err != nil {
+			if _, err := EnsureDependencyRunning(dep); err != nil {
 				return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
 			}
 		}
@@ -807,13 +853,14 @@ func EnsureServiceRunning(name string) error {
 }
 
 // StartDependencies ensures every entry in svc.DependsOn is up and ready
-// before the parent is started.
+// before the parent is started. Each entry is resolved to an installed
+// satisfier (literal name, same family, or env_role drop-in) first.
 func StartDependencies(svc *config.CustomService) error {
 	if svc == nil {
 		return nil
 	}
 	for _, dep := range svc.DependsOn {
-		if err := EnsureServiceRunning(dep); err != nil {
+		if _, err := EnsureDependencyRunning(dep); err != nil {
 			return fmt.Errorf("starting dependency %q for %q: %w", dep, svc.Name, err)
 		}
 	}

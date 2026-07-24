@@ -1,6 +1,7 @@
 name: mariadb
 description: MariaDB (MySQL-compatible) versions
 family: mariadb
+env_role: mysql
 default_version: "11.8"
 init: true
 versions:
