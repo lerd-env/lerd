@@ -543,6 +543,7 @@
   "system_node_manager": "Manager de versiuni",
   "system_node_managerFnm": "Folosește fnm, managerul de versiuni inclus în lerd.",
   "system_node_managerNvm": "Folosește propriul nvm instalat în locul fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Nu se poate elimina, site-uri folosesc această versiune",
   "system_node_cannotRemoveDefault": "Nu se poate elimina versiunea implicită",
   "system_node_cannotRemoveSystem": "Node este gestionat de sistem",

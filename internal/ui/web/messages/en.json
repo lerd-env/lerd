@@ -543,6 +543,7 @@
   "system_node_manager": "Version manager",
   "system_node_managerFnm": "Use fnm, the version manager lerd bundles.",
   "system_node_managerNvm": "Use your own installed nvm instead of fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Cannot remove, sites are using this version",
   "system_node_cannotRemoveDefault": "Cannot remove the default version",
   "system_node_cannotRemoveSystem": "Node is managed by the system",

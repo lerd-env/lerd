@@ -543,6 +543,7 @@
   "system_node_manager": "Gestore di versioni",
   "system_node_managerFnm": "Usa fnm, il gestore di versioni incluso in lerd.",
   "system_node_managerNvm": "Usa il tuo nvm installato invece di fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Impossibile rimuovere, alcuni siti usano questa versione",
   "system_node_cannotRemoveDefault": "Impossibile rimuovere la versione predefinita",
   "system_node_cannotRemoveSystem": "Node è gestito dal sistema",

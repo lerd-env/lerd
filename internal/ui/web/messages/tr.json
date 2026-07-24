@@ -543,6 +543,7 @@
   "system_node_manager": "Sürüm yöneticisi",
   "system_node_managerFnm": "lerd ile gelen sürüm yöneticisi fnm'i kullan.",
   "system_node_managerNvm": "fnm yerine kendi kurulu nvm'ini kullan.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Kaldırılamaz, siteler bu sürümü kullanıyor",
   "system_node_cannotRemoveDefault": "Varsayılan sürüm kaldırılamaz",
   "system_node_cannotRemoveSystem": "Node sistem tarafından yönetiliyor",

@@ -94,11 +94,17 @@
 
   const managerOptions = [
     { value: 'fnm' as const, label: 'fnm', title: m.system_node_managerFnm() },
-    { value: 'nvm' as const, label: 'nvm', title: m.system_node_managerNvm() }
+    {
+      value: 'nvm' as const,
+      label: 'nvm',
+      title: $status.nvm_available ? m.system_node_managerNvm() : m.system_node_managerNvmMissing(),
+      disabled: !$status.nvm_available
+    }
   ];
 
   async function onSwitchManager(manager: 'fnm' | 'nvm') {
     if (managerBusy || manageBusy || manager === $status.node_manager) return;
+    if (manager === 'nvm' && !$status.nvm_available) return;
     managerBusy = true;
     manageError = '';
     try {

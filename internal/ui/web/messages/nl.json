@@ -543,6 +543,7 @@
   "system_node_manager": "Versiebeheerder",
   "system_node_managerFnm": "Gebruik fnm, de versiebeheerder die lerd meelevert.",
   "system_node_managerNvm": "Gebruik je eigen geïnstalleerde nvm in plaats van fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Kan niet verwijderen, sites gebruiken deze versie",
   "system_node_cannotRemoveDefault": "Kan de standaardversie niet verwijderen",
   "system_node_cannotRemoveSystem": "Node wordt door het systeem beheerd",

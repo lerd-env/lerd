@@ -543,6 +543,7 @@
   "system_node_manager": "Trình quản lý phiên bản",
   "system_node_managerFnm": "Dùng fnm, trình quản lý phiên bản đi kèm lerd.",
   "system_node_managerNvm": "Dùng nvm bạn đã cài thay cho fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Không thể gỡ, có sites đang dùng phiên bản này",
   "system_node_cannotRemoveDefault": "Không thể gỡ phiên bản mặc định",
   "system_node_cannotRemoveSystem": "Node do hệ thống quản lý",

@@ -23,6 +23,8 @@ export interface StatusResponse {
   node_managed_by_lerd: boolean;
   // Active Node version manager lerd drives: 'fnm' (bundled) or 'nvm' (user's).
   node_manager: 'fnm' | 'nvm';
+  // True when a user-installed nvm is present (so the nvm switch can be offered).
+  nvm_available: boolean;
   bun_available: boolean;
   bun_version: string;
   using_system_bun: boolean;
@@ -44,6 +46,7 @@ const empty: StatusResponse = {
   node_default: '',
   node_managed_by_lerd: true,
   node_manager: 'fnm',
+  nvm_available: false,
   bun_available: false,
   bun_version: '',
   using_system_bun: false,

@@ -543,6 +543,7 @@
   "system_node_manager": "Menedżer wersji",
   "system_node_managerFnm": "Użyj fnm, menedżera wersji dołączonego do lerd.",
   "system_node_managerNvm": "Użyj własnego zainstalowanego nvm zamiast fnm.",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "Nie można usunąć, witryny używają tej wersji",
   "system_node_cannotRemoveDefault": "Nie można usunąć wersji domyślnej",
   "system_node_cannotRemoveSystem": "Node jest zarządzany przez system",

@@ -593,6 +593,9 @@ type StatusResponse struct {
 	NodeManagedByLerd bool         `json:"node_managed_by_lerd"`
 	// NodeManager is the active Node version manager lerd drives: "fnm" or "nvm".
 	NodeManager string `json:"node_manager"`
+	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
+	// so the dashboard can disable the nvm switch rather than error on click.
+	NvmAvailable bool `json:"nvm_available"`
 	// BunAvailable is true when a bun binary is installed on the host;
 	// BunVersion carries its version for an at-a-glance reference.
 	// UsingSystemBun is true when lerd isn't managing Node and there's no system
@@ -700,6 +703,7 @@ func buildStatus() StatusResponse {
 		NodeDefault:        nodeDefault,
 		NodeManagedByLerd:  nodeManagedByLerd,
 		NodeManager:        nodeManager,
+		NvmAvailable:       lerdNode.ManagerByName("nvm").Available(),
 		BunAvailable:       bunAvailable,
 		BunVersion:         bunVersion,
 		UsingSystemBun:     usingSystemBun,

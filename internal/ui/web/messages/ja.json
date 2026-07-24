@@ -543,6 +543,7 @@
   "system_node_manager": "バージョンマネージャー",
   "system_node_managerFnm": "lerd に同梱のバージョンマネージャー fnm を使用します。",
   "system_node_managerNvm": "fnm の代わりに自分でインストールした nvm を使用します。",
+  "system_node_managerNvmMissing": "nvm is not installed on this machine.",
   "system_node_cannotRemove": "削除できません。サイトがこのバージョンを使用しています",
   "system_node_cannotRemoveDefault": "デフォルトバージョンは削除できません",
   "system_node_cannotRemoveSystem": "Node はシステムが管理しています",
