@@ -14,6 +14,11 @@ node:
                           # / node:unmanage; honoured on lerd update so an opt-out
                           # is not undone. Omitted on configs predating it, which
                           # fall back to whatever shims are on disk.
+share:
+  default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
+                            # flag is given: ngrok, cloudflare, expose, serveo or
+                            # localhost-run. Written by lerd share:tool; omitted
+                            # (the default) means auto-detect.
 nginx:
   http_port: 80
   https_port: 443

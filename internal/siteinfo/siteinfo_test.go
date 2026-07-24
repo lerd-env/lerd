@@ -1,6 +1,7 @@
 package siteinfo
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1078,6 +1079,57 @@ func TestEnrichFPM(t *testing.T) {
 		e.enrichFPM()
 		if e.FPMRunning {
 			t.Error("expected FPMRunning = false for stopped custom container")
+		}
+	})
+
+	t.Run("proxy-only site is running when its host port is listening", func(t *testing.T) {
+		prev := dialProbe
+		var dialed string
+		dialProbe = func(addr string) error { dialed = addr; return nil }
+		defer func() { dialProbe = prev }()
+
+		e := &EnrichedSite{Name: "vite", HostPort: 5173}
+		e.enrichFPM()
+		if dialed != "127.0.0.1:5173" {
+			t.Errorf("dialed %q, want 127.0.0.1:5173", dialed)
+		}
+		if !e.FPMRunning {
+			t.Error("expected FPMRunning = true when the proxied dev server is listening")
+		}
+	})
+
+	t.Run("proxy-only site is not running when its host port refuses", func(t *testing.T) {
+		prev := dialProbe
+		dialProbe = func(string) error { return errors.New("connection refused") }
+		defer func() { dialProbe = prev }()
+
+		e := &EnrichedSite{Name: "vite", HostPort: 5173}
+		e.enrichFPM()
+		if e.FPMRunning {
+			t.Error("expected FPMRunning = false when the proxied port refuses")
+		}
+	})
+
+	t.Run("supervised host proxy reflects its worker unit, not the port", func(t *testing.T) {
+		prev := dialProbe
+		dialProbe = func(string) error {
+			t.Fatal("supervised host-proxy site should not be port-probed")
+			return nil
+		}
+		defer func() { dialProbe = prev }()
+		origUnit := unitStatusFn
+		unitStatusFn = func(name string) (string, error) {
+			if name == config.HostProxyWorkerUnit("nestapp") {
+				return "active", nil
+			}
+			return "", nil
+		}
+		defer func() { unitStatusFn = origUnit }()
+
+		e := &EnrichedSite{Name: "nestapp", HostPort: 3100, HostCommand: "npm run start:dev"}
+		e.enrichFPM()
+		if !e.FPMRunning {
+			t.Error("expected FPMRunning = true from the active worker unit")
 		}
 	})
 }

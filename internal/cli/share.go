@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net"
@@ -28,6 +29,7 @@ func NewShareCmd() *cobra.Command {
 	var useExpose bool
 	var useServeo bool
 	var useLocalhostRun bool
+	var domain string
 
 	cmd := &cobra.Command{
 		Use:   "share [site]",
@@ -41,10 +43,17 @@ Supported tools:
   cloudflared    https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/
   expose         https://expose.dev
   localhost.run  free SSH tunnel, no account needed (--localhost-run)
-  serveo.net     free SSH tunnel, no account needed (--serveo)`,
+  serveo.net     free SSH tunnel, no account needed (--serveo)
+
+A default tool can be set with "lerd share:tool"; flags override it per run.
+
+--domain selects Cloudflare Tunnel on its own: a named tunnel is created (or
+reused) and the given hostname is routed to it, so the site is served on your
+own domain instead of a random trycloudflare.com URL. The domain's DNS must be
+managed by Cloudflare.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun)
+			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain)
 		},
 	}
 
@@ -53,6 +62,7 @@ Supported tools:
 	cmd.Flags().BoolVar(&useExpose, "expose", false, "Use Expose")
 	cmd.Flags().BoolVar(&useServeo, "serveo", false, "Use serveo.net (SSH, no signup)")
 	cmd.Flags().BoolVar(&useLocalhostRun, "localhost-run", false, "Use localhost.run (SSH, no signup)")
+	cmd.Flags().StringVar(&domain, "domain", "", "Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel)")
 	return cmd
 }
 
@@ -68,9 +78,10 @@ const (
 type shareTool struct {
 	mode    shareMode
 	sshHost string // only for shareModeSSH
+	domain  string // only for shareModeCloudflare: user's own hostname (named tunnel)
 }
 
-func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool) error {
+func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain string) error {
 	site, err := resolveShareSite(args)
 	if err != nil {
 		return err
@@ -85,7 +96,7 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 		port = 80
 	}
 
-	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun)
+	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain, cfg.Share.DefaultTool)
 	if err != nil {
 		return err
 	}
@@ -115,8 +126,18 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 			return fmt.Errorf("starting local proxy: %w", err)
 		}
 		defer stop()
-		cmd = exec.Command("cloudflared", "tunnel",
-			"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
+		if tool.domain != "" {
+			tunnelName, err := ensureCloudflareTunnel(site.Name, tool.domain)
+			if err != nil {
+				return err
+			}
+			fmt.Printf("Public URL: https://%s\n\n", tool.domain)
+			cmd = exec.Command("cloudflared", "tunnel", "run",
+				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort), tunnelName)
+		} else {
+			cmd = exec.Command("cloudflared", "tunnel",
+				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
+		}
 	case shareModeSSH:
 		httpsPort := cfg.Nginx.HTTPSPort
 		if httpsPort == 0 {
@@ -173,7 +194,7 @@ func resolveShareSite(args []string) (*config.Site, error) {
 	return ensureSiteForCwd()
 }
 
-func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool) (*shareTool, error) {
+func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, defaultTool string) (*shareTool, error) {
 	count := 0
 	for _, f := range []bool{useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun} {
 		if f {
@@ -183,22 +204,50 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	if count > 1 {
 		return nil, fmt.Errorf("only one of --ngrok, --cloudflare, --expose, --serveo, --localhost-run may be specified")
 	}
+	fromDefault := false
+
+	// --domain only means anything for Cloudflare Tunnel, so it picks the tool
+	// itself and outranks the configured default. Another explicit tool flag is
+	// a real conflict, so say so instead of silently overriding it.
+	if domain != "" {
+		if count > 0 && !useCloudflare {
+			return nil, fmt.Errorf("--domain only works with Cloudflare Tunnel, drop the other tool flag")
+		}
+		useCloudflare = true
+	} else if count == 0 && defaultTool != "" {
+		// No tool flag: fall back to the configured default before auto-detecting.
+		fromDefault = true
+		switch defaultTool {
+		case "ngrok":
+			useNgrok = true
+		case "cloudflare":
+			useCloudflare = true
+		case "expose":
+			useExpose = true
+		case "serveo":
+			useServeo = true
+		case "localhost-run":
+			useLocalhostRun = true
+		default:
+			return nil, fmt.Errorf("unknown default share tool %q in config: run \"lerd share:tool\" to fix it", defaultTool)
+		}
+	}
 
 	if useNgrok {
 		if _, err := exec.LookPath("ngrok"); err != nil {
-			return nil, fmt.Errorf("ngrok not found in PATH — install it from https://ngrok.com/download")
+			return nil, fmt.Errorf("ngrok not found in PATH — install it from https://ngrok.com/download%s", defaultToolHint(fromDefault))
 		}
 		return &shareTool{mode: shareModeNgrok}, nil
 	}
 	if useCloudflare {
 		if _, err := exec.LookPath("cloudflared"); err != nil {
-			return nil, fmt.Errorf("cloudflared not found in PATH — install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/")
+			return nil, fmt.Errorf("cloudflared not found in PATH — install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/%s", defaultToolHint(fromDefault))
 		}
-		return &shareTool{mode: shareModeCloudflare}, nil
+		return &shareTool{mode: shareModeCloudflare, domain: domain}, nil
 	}
 	if useExpose {
 		if _, err := exec.LookPath("expose"); err != nil {
-			return nil, fmt.Errorf("expose not found in PATH — install it from https://expose.dev")
+			return nil, fmt.Errorf("expose not found in PATH — install it from https://expose.dev%s", defaultToolHint(fromDefault))
 		}
 		return &shareTool{mode: shareModeExpose}, nil
 	}
@@ -225,6 +274,99 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 
 	return nil, fmt.Errorf("no tunnel tool found — install ngrok (https://ngrok.com/download), cloudflared (https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), or Expose (https://expose.dev), or ensure ssh is in PATH")
+}
+
+// defaultToolHint explains that a missing binary was picked by the configured
+// default rather than by a flag, so a bare "lerd share" does not look broken.
+func defaultToolHint(fromDefault bool) string {
+	if !fromDefault {
+		return ""
+	}
+	return "\nIt is your \"lerd share:tool\" default; run \"lerd share:tool auto\" to go back to auto-detection"
+}
+
+// cloudflaredCertPath returns the origin certificate cloudflared writes after
+// "tunnel login". TUNNEL_ORIGIN_CERT overrides it, mirroring cloudflared itself.
+func cloudflaredCertPath() string {
+	if p := os.Getenv("TUNNEL_ORIGIN_CERT"); p != "" {
+		return p
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".cloudflared", "cert.pem")
+}
+
+// ensureCloudflareTunnel makes sure a named tunnel exists for the site and that
+// domain routes to it, logging in interactively first if needed.
+// Returns the tunnel name to pass to "cloudflared tunnel run".
+func ensureCloudflareTunnel(siteName, domain string) (string, error) {
+	if _, err := os.Stat(cloudflaredCertPath()); err != nil {
+		fmt.Println("cloudflared is not logged in yet, a browser window will open to authorize it.")
+		login := exec.Command("cloudflared", "tunnel", "login")
+		login.Stdin = os.Stdin
+		login.Stdout = os.Stdout
+		login.Stderr = os.Stderr
+		if err := login.Run(); err != nil {
+			return "", fmt.Errorf("cloudflared tunnel login: %w", err)
+		}
+		if _, err := os.Stat(cloudflaredCertPath()); err != nil {
+			return "", fmt.Errorf("cloudflared login finished but %s is still missing", cloudflaredCertPath())
+		}
+	}
+
+	name := "lerd-" + siteName
+	out, err := exec.Command("cloudflared", "tunnel", "create", name).CombinedOutput()
+	reused := err != nil && strings.Contains(string(out), "already exists")
+	if err != nil && !reused {
+		return "", fmt.Errorf("cloudflared tunnel create %s: %w\n%s", name, err, out)
+	}
+	if reused {
+		if err := checkTunnelCredentials(name); err != nil {
+			return "", err
+		}
+	}
+
+	// Re-routing a hostname that already points here is a no-op, but cloudflared
+	// refuses to overwrite a record aimed elsewhere, so tolerate that and let the
+	// user verify where it points.
+	out, err = exec.Command("cloudflared", "tunnel", "route", "dns", name, domain).CombinedOutput()
+	if err != nil {
+		if strings.Contains(string(out), "already exists") || strings.Contains(string(out), "already configured") {
+			fmt.Printf("DNS record for %s already exists, make sure it CNAMEs to tunnel %q.\n", domain, name)
+		} else {
+			return "", fmt.Errorf("cloudflared tunnel route dns %s %s: %w\n%s", name, domain, err, out)
+		}
+	} else if strings.Contains(string(out), "Added CNAME") {
+		fmt.Printf("Routed %s to tunnel %q. The record is new, so give it a moment: opening it too early can leave your resolver caching the miss for up to 30 minutes.\n", domain, name)
+	}
+	return name, nil
+}
+
+// checkTunnelCredentials verifies the credentials file for an existing tunnel is
+// present locally. Without it "tunnel run" dies with an opaque cloudflared error,
+// which is what happens when the tunnel was created on another machine.
+func checkTunnelCredentials(name string) error {
+	out, err := exec.Command("cloudflared", "tunnel", "list", "--name", name, "--output", "json").Output()
+	if err != nil {
+		return nil // cannot tell, let "tunnel run" be the judge
+	}
+	var tunnels []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(out, &tunnels); err != nil || len(tunnels) == 0 {
+		return nil
+	}
+	cert := cloudflaredCertPath()
+	if cert == "" {
+		return nil
+	}
+	creds := filepath.Join(filepath.Dir(cert), tunnels[0].ID+".json")
+	if _, err := os.Stat(creds); err == nil {
+		return nil
+	}
+	return fmt.Errorf("tunnel %q exists on your Cloudflare account but its credentials file is missing at %s: copy it from the machine that created the tunnel, or run \"cloudflared tunnel delete %s\" and share again", name, creds, name)
 }
 
 // startHostProxy starts a local HTTP reverse proxy on a random loopback port.
