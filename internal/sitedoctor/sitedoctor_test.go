@@ -363,6 +363,34 @@ func TestCheckCommand(t *testing.T) {
 	if c := checkCommand(context.Background(), dir, unknown); c.Status != StatusUnknown || c.Fix != "" {
 		t.Errorf("errored: got status=%q fix=%q, want unknown with no fix", c.Status, c.Fix)
 	}
+
+	// Non-zero exit naming FailIfErrorContains → a real finding with its fix: a
+	// never-migrated database is the condition the check exists to catch, not an
+	// unreachable dependency, even though migrate:status exits non-zero for it.
+	never := config.DoctorCheck{
+		Name: "migrations", Type: "command",
+		Command:              "echo 'Migration table not found.' >&2; exit 1",
+		FailIfOutputContains: "Pending",
+		FailIfErrorContains:  "Migration table not found",
+		UnknownOnError:       true,
+		Fix:                  "migrate", Detail: "pending",
+	}
+	if c := checkCommand(context.Background(), dir, never); c.Status != StatusFail || c.Fix != "migrate" || c.Detail != "pending" {
+		t.Errorf("never migrated: got status=%q fix=%q detail=%q, want fail/migrate/pending", c.Status, c.Fix, c.Detail)
+	}
+
+	// A different error still degrades to unknown, so genuine connectivity
+	// failures keep their meaning.
+	down := config.DoctorCheck{
+		Name: "migrations", Type: "command",
+		Command:             "echo 'SQLSTATE[HY000] connection refused' >&2; exit 1",
+		FailIfErrorContains: "Migration table not found",
+		UnknownOnError:      true,
+		Fix:                 "migrate",
+	}
+	if c := checkCommand(context.Background(), dir, down); c.Status != StatusUnknown || c.Fix != "" {
+		t.Errorf("unreachable: got status=%q fix=%q, want unknown with no fix", c.Status, c.Fix)
+	}
 }
 
 func TestCheckNodeDeps(t *testing.T) {

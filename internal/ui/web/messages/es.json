@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "Esto detiene y elimina el servicio PHP-FPM y el contenedor de esta versión. La caché de compilación se conserva, así que puedes reinstalarla más tarde.",
   "system_php_removing": "Eliminando…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "Editando",
   "system_php_iniScopeVersion": "solo esta versión",
   "system_php_iniScopeSharedLabel": "Compartido (todas las versiones)",
   "system_php_iniScopeSharedDesc": "un archivo por versión sigue teniendo prioridad",

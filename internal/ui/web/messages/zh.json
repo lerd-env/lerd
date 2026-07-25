@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "这将停止并移除此版本的 PHP-FPM 服务和容器。构建缓存会保留，因此你之后可以重新安装它。",
   "system_php_removing": "移除中…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "正在编辑",
   "system_php_iniScopeVersion": "仅此版本",
   "system_php_iniScopeSharedLabel": "共享（所有版本）",
   "system_php_iniScopeSharedDesc": "按版本的文件仍然优先",

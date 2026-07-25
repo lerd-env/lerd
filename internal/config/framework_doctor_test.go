@@ -29,6 +29,7 @@ doctor:
       type: command
       command: php artisan migrate:status
       fail_if_output_contains: Pending
+      fail_if_error_contains: Migration table not found
       unknown_on_error: true
       timeout: 25
       fix: migrate
@@ -50,7 +51,8 @@ doctor:
 		t.Errorf("symlink not parsed: %+v", link)
 	}
 	cmd := fw.Doctor.Checks[2]
-	if cmd.Command != "php artisan migrate:status" || cmd.FailIfOutputContains != "Pending" || !cmd.UnknownOnError || cmd.TimeoutSeconds != 25 {
+	if cmd.Command != "php artisan migrate:status" || cmd.FailIfOutputContains != "Pending" ||
+		cmd.FailIfErrorContains != "Migration table not found" || !cmd.UnknownOnError || cmd.TimeoutSeconds != 25 {
 		t.Errorf("command not parsed: %+v", cmd)
 	}
 }
