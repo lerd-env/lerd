@@ -151,6 +151,12 @@ Every framework's create command starts with composer, and it is lerd's own
 composer that runs it, inside the project's PHP container. You do not need
 composer, or any PHP, installed on the host.
 
+The scaffold runs under a PHP version the framework supports, not whatever the
+machine defaults to. The framework definition declares a PHP range, so a
+framework whose current release tops out below your default PHP is scaffolded on
+a version inside that range instead, and composer resolves against a PHP the
+framework actually supports rather than rejecting every candidate.
+
 After creation:
 ```bash
 cd myapp
