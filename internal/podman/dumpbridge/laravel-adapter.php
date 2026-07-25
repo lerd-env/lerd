@@ -90,6 +90,23 @@ function in_test(): bool
     return defined('PHPUNIT_COMPOSER_INSTALL') || class_exists('PHPUnit\\Framework\\TestCase', false);
 }
 
+// command_line mirrors the collector's: the CLI invocation an event came from,
+// e.g. "artisan queue:work --queue=high", capped so a long argument list can't
+// bloat the context of every event the process emits.
+function command_line(): string
+{
+    $argv = $_SERVER['argv'] ?? null;
+    if (!is_array($argv) || !isset($argv[0])) {
+        return '';
+    }
+    $parts = [basename((string) $argv[0])];
+    foreach (array_slice($argv, 1) as $arg) {
+        $parts[] = (string) $arg;
+    }
+    $line = trim(implode(' ', $parts));
+    return strlen($line) > 120 ? substr($line, 0, 117) . '...' : $line;
+}
+
 function context(): array
 {
     $ctx = [
@@ -103,6 +120,9 @@ function context(): array
         $ctx['request'] = isset($_SERVER['REQUEST_METHOD'])
             ? $_SERVER['REQUEST_METHOD'] . ' ' . ($_SERVER['REQUEST_URI'] ?? '')
             : '';
+    } else {
+        // The CLI counterpart of request: what a console event points at.
+        $ctx['command'] = command_line();
     }
     $worker = defined('LERD_DEVTOOLS_WORKER') ? (string) \LERD_DEVTOOLS_WORKER : '';
     if ($worker !== '') {
