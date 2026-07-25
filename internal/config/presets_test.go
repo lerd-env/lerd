@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 func TestListPresets_IncludesShippedPresets(t *testing.T) {
@@ -535,15 +538,31 @@ func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	}
 }
 
+// An unknown directive is what a binary older than the store definition sees.
+// It must degrade to a warning: the quadlet still generates, carrying whatever
+// static environment the preset ships, instead of the service refusing to start.
 func TestResolveDynamicEnv_UnknownDirective(t *testing.T) {
+	var warned bytes.Buffer
+	defer feedback.SetTestWriter(&warned)()
+
 	svc := &CustomService{
-		Name: "x",
+		Name:        "x",
+		Environment: map[string]string{"RI_APP_PORT": "5540"},
 		DynamicEnv: map[string]string{
 			"FOO": "garbage:bar",
 		},
 	}
-	if err := ResolveDynamicEnv(svc); err == nil {
-		t.Errorf("expected error for unknown directive")
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("unknown directive must not error, got %v", err)
+	}
+	if _, ok := svc.Environment["FOO"]; ok {
+		t.Error("unknown directive must be skipped, not written")
+	}
+	if svc.Environment["RI_APP_PORT"] != "5540" {
+		t.Error("static environment must survive an unknown directive")
+	}
+	if !strings.Contains(warned.String(), "garbage") {
+		t.Errorf("expected a warning naming the directive, got %q", warned.String())
 	}
 }
 

@@ -181,6 +181,8 @@ tuning:
 #   repeat_family:<families>=<value> — N copies of <value> matching that host list.
 #   expand_family:<families>=<template>: one <key>_1..<key>_N var per member,
 #     with {host} / {name} expanded (RedisInsight RI_REDIS_HOST_1, _2, ...).
+# A directive this binary does not know is warned about and skipped, so a store
+# definition written for a newer lerd still starts on an older one.
 dynamic_env:
   PMA_HOSTS: discover_family:mysql,mariadb
 

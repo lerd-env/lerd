@@ -247,6 +247,12 @@ service name; a template with neither, like the port above, is simply repeated.
 The unsuffixed key is never written. Members are sorted by hostname, so the
 numbering is stable as long as the set of running members is.
 
+A directive the running binary does not recognise is warned about and skipped
+rather than treated as fatal, matching how a file mount naming an unknown
+`generator` is skipped. A store definition that starts using a newer directive
+therefore still generates a quadlet on an older lerd, carrying the preset's
+static `environment`, instead of leaving the service unable to start.
+
 Lerd automatically regenerates phpMyAdmin's quadlet (and any other consumer
 of a family directive or a pinned dependency host) whenever a family member is **installed**,
 **removed**, **started**, or **stopped**, and again at the end of a bulk

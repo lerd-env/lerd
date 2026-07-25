@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"gopkg.in/yaml.v3"
 )
 
@@ -439,7 +440,11 @@ func ResolveDynamicEnv(svc *CustomService) error {
 				svc.Environment[fmt.Sprintf("%s_%d", k, i+1)] = value
 			}
 		default:
-			return fmt.Errorf("service %s: unknown dynamic_env directive %q", svc.Name, parts[0])
+			// A directive this binary predates: warn and skip so the quadlet
+			// still generates with the preset's static environment. Erroring
+			// here would kill the service on every start after the store
+			// publishes a preset using a newer directive.
+			feedback.Warn("service %s: unknown dynamic_env directive %q, skipping %s (update lerd if %s needs it)", svc.Name, parts[0], k, k)
 		}
 	}
 	return nil
