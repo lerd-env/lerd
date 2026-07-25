@@ -93,11 +93,16 @@ func (m nvmManager) Uninstall(version string) error {
 	})
 }
 
+// The nvm install belongs to the user, so lerd's default lives in its own
+// config and never rewrites the user's `default` alias. The alias is still
+// honoured read-only as a fallback when no config default is set.
 func (m nvmManager) SetDefault(version string) error {
-	if out, err := m.shellCmd("alias", "default", version).CombinedOutput(); err != nil {
-		return fmt.Errorf("nvm alias default %s: %s", version, strings.TrimSpace(string(out)))
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
 	}
-	return nil
+	cfg.Node.DefaultVersion = version
+	return config.SaveGlobal(cfg)
 }
 
 func (m nvmManager) HasDefault() bool {
