@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "このバージョンの PHP-FPM サービスとコンテナを停止して削除します。ビルドキャッシュは保持されるため、後で再インストールできます。",
   "system_php_removing": "削除中…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "編集対象",
   "system_php_iniScopeVersion": "このバージョンのみ",
   "system_php_iniScopeSharedLabel": "共有（全バージョン）",
   "system_php_iniScopeSharedDesc": "バージョン別のファイルが優先されます",

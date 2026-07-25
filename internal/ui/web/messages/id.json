@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "Ini menghentikan dan menghapus layanan PHP-FPM dan kontainer untuk versi ini. Cache build tetap disimpan, jadi Anda bisa memasangnya kembali nanti.",
   "system_php_removing": "Menghapus…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "Mengubah",
   "system_php_iniScopeVersion": "versi ini saja",
   "system_php_iniScopeSharedLabel": "Bersama (semua versi)",
   "system_php_iniScopeSharedDesc": "berkas per versi tetap menang",

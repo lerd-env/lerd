@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "Bu, bu sürümün PHP-FPM hizmetini ve konteynerini durdurup kaldırır. Derleme önbelleği korunur, böylece daha sonra yeniden kurabilirsiniz.",
   "system_php_removing": "Kaldırılıyor…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "Düzenlenen",
   "system_php_iniScopeVersion": "yalnızca bu sürüm",
   "system_php_iniScopeSharedLabel": "Paylaşılan (tüm sürümler)",
   "system_php_iniScopeSharedDesc": "sürüme özel dosya yine de öncelikli",

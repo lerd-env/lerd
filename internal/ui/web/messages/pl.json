@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "Zatrzymuje i usuwa usługę PHP-FPM oraz kontener dla tej wersji. Pamięć podręczna budowania jest zachowywana, więc można ją później ponownie zainstalować.",
   "system_php_removing": "Usuwanie…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "Edycja",
   "system_php_iniScopeVersion": "tylko ta wersja",
   "system_php_iniScopeSharedLabel": "Wspólny (wszystkie wersje)",
   "system_php_iniScopeSharedDesc": "plik danej wersji nadal ma pierwszeństwo",

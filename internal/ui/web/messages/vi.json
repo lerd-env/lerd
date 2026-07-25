@@ -525,7 +525,6 @@
   "system_php_removeConfirmBody": "Thao tác này dừng và gỡ dịch vụ PHP-FPM cùng container cho phiên bản này. Bộ nhớ đệm build được giữ lại, nên bạn có thể cài lại sau.",
   "system_php_removing": "Đang gỡ…",
   "system_php_iniTab": "Ini",
-  "system_php_iniEditing": "Đang sửa",
   "system_php_iniScopeVersion": "chỉ phiên bản này",
   "system_php_iniScopeSharedLabel": "Dùng chung (mọi phiên bản)",
   "system_php_iniScopeSharedDesc": "tệp riêng của từng phiên bản vẫn được ưu tiên",
