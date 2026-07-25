@@ -154,7 +154,9 @@
     </div>
     <div class="flex items-center gap-2">
       {#if manageError}<span class="text-xs text-red-500">{manageError}</span>{/if}
-      {#if !$status.using_system_bun}
+      <!-- Hidden without nvm (nothing to switch to), unless the manager is
+           already nvm so a stranded install keeps its way back to fnm. -->
+      {#if !$status.using_system_bun && ($status.nvm_available || $status.node_manager === 'nvm')}
         <SegmentedControl
           options={managerOptions}
           value={$status.node_manager}
