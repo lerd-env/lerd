@@ -408,9 +408,9 @@ func checkAppKey(envPath string, fw *config.Framework) (Check, bool) {
 
 // checkSQLiteDatabase fails when the env file selects the sqlite driver but the
 // database file is missing or empty. Without it the app 500s on the first query
-// ("no such table"), which migrate:status can't surface — it errors when the
-// migrations table is absent and the doctor degrades that to "unknown". Skipped
-// unless DB_CONNECTION is sqlite; an in-memory database has no file to check.
+// ("no such table"), which migrate:status can't surface: it reports the missing
+// migrations table, so the remedy would point at migrate rather than the absent
+// file. Skipped unless DB_CONNECTION is sqlite; an in-memory database has none.
 func checkSQLiteDatabase(path, envPath string, fw *config.Framework) (Check, bool) {
 	if !strings.EqualFold(strings.TrimSpace(envfile.ReadKey(envPath, "DB_CONNECTION")), "sqlite") {
 		return Check{}, false
@@ -772,9 +772,10 @@ func checkSymlink(path string, spec config.DoctorCheck) (Check, bool) {
 }
 
 // checkCommand execs a console command in the site's container and fails when
-// the output contains FailIfOutputContains (pending migrations). When the
-// command can't run it degrades to "unknown" if UnknownOnError is set, so a
-// wedged app never turns the whole panel into an error.
+// the output contains FailIfOutputContains (pending migrations). A non-zero exit
+// whose output contains FailIfErrorContains is still a real finding; anything
+// else degrades to "unknown" if UnknownOnError is set, so a wedged app never
+// turns the whole panel into an error.
 func checkCommand(ctx context.Context, path string, spec config.DoctorCheck) Check {
 	timeout := commandTimeout
 	if spec.TimeoutSeconds > 0 {
@@ -784,6 +785,12 @@ func checkCommand(ctx context.Context, path string, spec config.DoctorCheck) Che
 	defer cancel()
 	out, exit, err := runCapture(cctx, path, spec.Command)
 	if err != nil || exit != 0 {
+		// A named error string means the command ran and reported the condition
+		// this check exists to catch, e.g. Laravel exits non-zero with "Migration
+		// table not found" on a database that has never been migrated.
+		if spec.FailIfErrorContains != "" && strings.Contains(out, spec.FailIfErrorContains) {
+			return Check{Name: spec.Name, Status: triggeredStatus(spec, StatusFail), Detail: spec.Detail, Fix: spec.Fix}
+		}
 		if spec.UnknownOnError {
 			return Check{Name: spec.Name, Status: StatusUnknown, Detail: "Couldn't run the check, the app may be down or a dependency unreachable."}
 		}
