@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -147,10 +148,15 @@ func runUninstall(force bool) error {
 	ok()
 
 	step("Removing lerd binary")
-	if self, err := selfPath(); err == nil {
-		os.Remove(self) //nolint:errcheck
+	if self, err := selfPath(); err == nil && isSystemPackageManaged(self) {
+		fmt.Println(feedback.Dim("kept, package-managed"))
+		feedback.Note("remove the binary with your package manager, e.g. " + packageManagerRemoveHint(self))
+	} else {
+		if err == nil {
+			os.Remove(self) //nolint:errcheck
+		}
+		ok()
 	}
-	ok()
 
 	if removeData {
 		step("Removing config and data directories")

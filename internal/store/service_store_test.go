@@ -15,7 +15,8 @@ func serviceTestServer(t *testing.T) *httptest.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/index.json", func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"services":[
-			{"name":"demo","description":"Demo document store","family":"demo","dashboard":"http://localhost:9",	"depends_on":["mysql"]},
+			{"name":"demo","description":"Demo document store","family":"demo","dashboard":"http://localhost:9","depends_on":["mysql"]},
+			{"name":"mariadb","description":"MariaDB","family":"mariadb","env_role":"mysql"},
 			{"name":"widget","description":"Widget cache"}
 		]}`))
 	})
@@ -39,11 +40,14 @@ func TestFetchServiceIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchServiceIndex: %v", err)
 	}
-	if len(idx.Services) != 2 || idx.Services[0].Name != "demo" {
+	if len(idx.Services) != 3 || idx.Services[0].Name != "demo" {
 		t.Fatalf("unexpected index: %+v", idx)
 	}
 	if idx.Services[0].Family != "demo" || idx.Services[0].Dashboard == "" {
 		t.Errorf("index entry lost metadata: %+v", idx.Services[0])
+	}
+	if idx.Services[1].EnvRole != "mysql" {
+		t.Errorf("index entry lost env_role: %+v", idx.Services[1])
 	}
 }
 
@@ -114,7 +118,7 @@ func TestSearchServices(t *testing.T) {
 	if len(got) != 1 || got[0].Name != "widget" {
 		t.Errorf("SearchServices(cache) = %+v, want [widget]", got)
 	}
-	if all, _ := c.SearchServices(""); len(all) != 2 {
+	if all, _ := c.SearchServices(""); len(all) != 3 {
 		t.Errorf("empty query should match all, got %d", len(all))
 	}
 }

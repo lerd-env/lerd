@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	neturl "net/url"
 
@@ -1236,39 +1235,10 @@ func createS3Bucket(name string) (bool, error) { return serviceops.EnsureS3Bucke
 func ensureServiceRunning(name string) error {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
-	if status == "active" {
-		if err := podman.WaitReady(name, 30*time.Second); err != nil {
-			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
-		}
-		return nil
-	}
-	if isKnownService(name) {
+	if status != "active" {
 		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
-		if err := ensureServiceQuadlet(name); err != nil {
-			return err
-		}
-	} else {
-		svc, err := config.LoadCustomService(name)
-		if err != nil {
-			if config.PresetExists(name) {
-				return fmt.Errorf("service %q is not installed; install it with 'lerd service preset %s'", name, name)
-			}
-			return fmt.Errorf("custom service %q not found: %w", name, err)
-		}
-		for _, dep := range svc.DependsOn {
-			if err := ensureServiceRunning(dep); err != nil {
-				return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
-			}
-		}
-		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
-		if err := ensureCustomServiceQuadlet(svc); err != nil {
-			return err
-		}
 	}
-	if err := podman.StartUnit(unit); err != nil {
-		return err
-	}
-	return podman.WaitReady(name, 60*time.Second)
+	return serviceops.EnsureServiceRunning(name)
 }
 
 // resolveAppURL returns the URL lerd should write to APP_URL for the project,

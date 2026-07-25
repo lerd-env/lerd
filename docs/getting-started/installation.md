@@ -72,6 +72,30 @@ bash install.sh --local ./build/lerd
 
 ---
 
+### Install via apt (Ubuntu/Debian)
+
+Lerd is published to a Launchpad PPA, so you can install and update it with your package manager:
+
+```bash
+sudo add-apt-repository ppa:lerd/lerd
+sudo apt update
+sudo apt install lerd
+```
+
+The package installs the binary to `/usr/bin/lerd` and finishes setup automatically: its maintainer script enables the unprivileged-port sysctl and systemd linger, then runs `lerd install` for your user, so the stack comes up straight away and again at every boot. `.test` DNS and HTTPS are configured with no prompt because the package sets up the sudoers rule and trusts the mkcert CA as root.
+
+Updates come through apt like any other package:
+
+```bash
+sudo apt upgrade
+```
+
+A package-installed lerd lives under `/usr`, so `lerd update` (which self-replaces a `~/.local/bin` install) detects it and defers to your package manager instead of fighting it.
+
+The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow will serve future rpm and AUR packages. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
+
+---
+
 ### Update
 
 ```bash
