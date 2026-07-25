@@ -210,3 +210,37 @@ require COLLECTOR;
 		t.Errorf("ctx.test = true for a plain CLI invocation, want false")
 	}
 }
+
+// TestCollectorPHP_StampsCommandForCLI covers ctx.command, the CLI counterpart
+// of ctx.request: a console event has no route to name, so the bridge stamps
+// the invocation and consumers like the N+1 warning have somewhere to point.
+func TestCollectorPHP_StampsCommandForCLI(t *testing.T) {
+	type ev struct {
+		Ctx struct {
+			Type    string `json:"type"`
+			Command string `json:"command"`
+			Request string `json:"request"`
+		} `json:"ctx"`
+	}
+	lines := runCollectorPHP(t, `<?php
+$_SERVER['argv'] = ['/app/artisan', 'tinker', '--queue=high', '--execute=for ($i = 0; $i < 4; $i++) { DB::select("select 1"); }'];
+require COLLECTOR;
+\Lerd\Collector\http('GET', 'https://api.test/widgets');
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if e.Ctx.Command != "artisan tinker --queue=high --execute=..." {
+		t.Errorf("ctx.command = %q, want short arguments kept and long values elided", e.Ctx.Command)
+	}
+	if e.Ctx.Request != "" {
+		t.Errorf("ctx.request = %q, want empty on a CLI invocation", e.Ctx.Request)
+	}
+	if e.Ctx.Type != "cli" {
+		t.Errorf("ctx.type = %q, want cli", e.Ctx.Type)
+	}
+}

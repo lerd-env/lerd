@@ -58,6 +58,10 @@ type Context struct {
 	// "queue:work", "scrape:rtb-data"). Set only for worker-process events,
 	// which are captured solely when the user opts in.
 	Worker string `json:"worker,omitempty"`
+	// Command is the CLI counterpart of Request: the invocation an event came
+	// from ("artisan queue:work --queue=high"), stamped by the bridge for every
+	// cli-SAPI process so console events can name where they happened.
+	Command string `json:"command,omitempty"`
 	// Test marks an event captured inside a PHPUnit/Pest run. The Debug lenses
 	// hide these by default; they are tagged rather than dropped so a dump
 	// added to diagnose a failing test stays one toggle away.

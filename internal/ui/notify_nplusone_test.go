@@ -89,6 +89,63 @@ func TestNPlusOne_DistinctQueriesDoNotTrip(t *testing.T) {
 	}
 }
 
+// TestNPlusOne_BodyNamesTheRun pins the body label: the run the queries came
+// from (worker, command, route), never the query's own file:line, which the
+// dumps lens already carries on the event.
+func TestNPlusOne_BodyNamesTheRun(t *testing.T) {
+	ev := func(ctx dumps.Context, src dumps.Source) dumps.Event {
+		e := qEvent("r1", "", "select 1")
+		e.Ctx, e.Src = ctx, src
+		return e
+	}
+	cases := []struct {
+		name string
+		ev   dumps.Event
+		want string
+	}{
+		{"worker wins", ev(dumps.Context{Worker: "queue:work", Command: "artisan queue:work", Request: "GET /x"}, dumps.Source{}),
+			"queue:work ran a similar query 3×"},
+		{"command for console", ev(dumps.Context{Command: "artisan sync:users --all"}, dumps.Source{File: "/var/www/app/Console/Sync.php", Line: 12}),
+			"artisan sync:users --all ran a similar query 3×"},
+		{"request when web", ev(dumps.Context{Request: "GET /orders"}, dumps.Source{File: "/var/www/app/X.php", Line: 3}),
+			"GET /orders ran a similar query 3×"},
+		{"no run context stays generic", ev(dumps.Context{}, dumps.Source{File: "/var/www/html/app/Jobs/SyncUsers.php", Line: 42}),
+			"Ran a similar query 3× in one request"},
+	}
+	for _, c := range cases {
+		if got := notificationForNPlusOne(c.ev, nPlusOneThreshold).Body; got != c.want {
+			t.Errorf("%s: body = %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestNPlusOne_DistinctCommandsFireIndependently pins that the dedup key
+// separates console invocations, so warning about one artisan command doesn't
+// silence every other command for the rest of the session.
+func TestNPlusOne_DistinctCommandsFireIndependently(t *testing.T) {
+	tr := newNPlusOneTracker()
+	fire := func(rid, command string) bool {
+		var got bool
+		for i := 0; i < nPlusOneThreshold; i++ {
+			e := qEvent(rid, "", "select * from users where id = 1")
+			e.Ctx = dumps.Context{Type: "cli", Site: "acme", RID: rid, Command: command}
+			if tr.observe(e) != nil {
+				got = true
+			}
+		}
+		return got
+	}
+	if !fire("a", "artisan sync:users") {
+		t.Error("first command should fire")
+	}
+	if !fire("b", "artisan import:orders") {
+		t.Error("a different command should fire independently")
+	}
+	if fire("c", "artisan sync:users") {
+		t.Error("the same command must not nag twice")
+	}
+}
+
 func TestNPlusOne_NoRidSkips(t *testing.T) {
 	tr := newNPlusOneTracker()
 	ev := qEvent("", "GET /x", "select 1")

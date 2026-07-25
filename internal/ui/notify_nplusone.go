@@ -56,12 +56,17 @@ func newNPlusOneTracker() *nPlusOneTracker {
 }
 
 // routeKeyForQuery collapses a query event to the "route or script" the warning
-// is deduped on: the worker command, or the site plus the request normalized
-// through the same reqstats route key the timing snapshot uses, so /users/1 and
-// /users/2 share a key and the two detectors bucket identically.
+// is deduped on: the worker command, the CLI invocation, or the site plus the
+// request normalized through the same reqstats route key the timing snapshot
+// uses, so /users/1 and /users/2 share a key and the two detectors bucket
+// identically. Without the command arm every console invocation would share one
+// key and only the first artisan command of a session could ever warn.
 func routeKeyForQuery(ev dumps.Event) string {
 	if ev.Ctx.Worker != "" {
 		return "worker:" + ev.Ctx.Worker
+	}
+	if ev.Ctx.Request == "" && ev.Ctx.Command != "" {
+		return "cli:" + ev.Ctx.Command
 	}
 	method, path, _ := strings.Cut(ev.Ctx.Request, " ")
 	return ev.Ctx.Site + " " + reqstats.NormalizeRoute(method, path)
@@ -110,18 +115,25 @@ func (t *nPlusOneTracker) evict() {
 	}
 }
 
+// whereForQuery names the run a warning came from, most specific first: the
+// worker command, the CLI invocation, or the request route. The query's own
+// file:line stays out of the body; the dumps lens carries it on the event.
+func whereForQuery(ev dumps.Event) string {
+	for _, s := range []string{ev.Ctx.Worker, ev.Ctx.Command, ev.Ctx.Request} {
+		if s = strings.TrimSpace(s); s != "" {
+			return s
+		}
+	}
+	return ""
+}
+
 func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 	site := ev.Ctx.Site
 	if site == "" {
 		site = "(unknown site)"
 	}
-	// Secondary context: the worker command or the request route.
-	where := ev.Ctx.Worker
-	if where == "" {
-		where = strings.TrimSpace(ev.Ctx.Request)
-	}
 	body := fmt.Sprintf("Ran a similar query %d× in one request", count)
-	if where != "" {
+	if where := whereForQuery(ev); where != "" {
 		body = fmt.Sprintf("%s ran a similar query %d×", where, count)
 	}
 	return push.Notification{
@@ -131,8 +143,9 @@ func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {
 		Tag:   "lerd-nplusone-" + routeKeyForQuery(ev),
 		URL:   debugRouteForContext(ev.Ctx),
 		Data: map[string]string{
-			"site":   ev.Ctx.Site,
-			"worker": ev.Ctx.Worker,
+			"site":    ev.Ctx.Site,
+			"worker":  ev.Ctx.Worker,
+			"command": ev.Ctx.Command,
 		},
 		Urgency: "normal",
 		TTL:     120,
