@@ -460,6 +460,10 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
 
+### Tunnels from the dashboard
+
+The same tunnels can be started from the [web UI](../features/web-ui.md)'s share menu: hover the wifi button in a site's header and pick a tool (or the auto entry, which follows the same detection order and `share:tool` default as the CLI). The dashboard waits for the tool's public URL and shows it next to the domain with a hover-QR. A tunnel started from the UI belongs to the `lerd-ui` daemon, so it ends when you stop it or when the daemon shuts down, and it is not restored on restart.
+
 ### Default tunnel tool
 
 Auto-detection picks the first installed tool, which may not be the one you want. `lerd share:tool cloudflare` pins the default; from then on a bare `lerd share` uses Cloudflare Tunnel even with ngrok installed. A tool flag still overrides the default per run, and `lerd share:tool auto` restores auto-detection.
