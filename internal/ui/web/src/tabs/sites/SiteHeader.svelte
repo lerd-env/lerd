@@ -14,7 +14,9 @@
     loadSites,
     activeWorktreeDomain,
     toggleTLS,
-    toggleLANShare
+    toggleLANShare,
+    startTunnel,
+    stopTunnel
   } from '$stores/sites';
   import {
     openDomainModal,
@@ -33,7 +35,8 @@
   import { apiBase } from '$lib/api';
   import { homeShorten } from '$lib/path';
   import DomainMorePill from './DomainMorePill.svelte';
-  import LANShareLink from './LANShareLink.svelte';
+  import ShareLink from './ShareLink.svelte';
+  import ShareMenu from './ShareMenu.svelte';
   import WorkspacePicker from './WorkspacePicker.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -125,8 +128,34 @@
   const tlsToggleable = $derived(urlEditable && dnsEnabled);
   const lanPort = $derived(activeWorktree ? activeWorktree.lan_port ?? 0 : site.lan_port ?? 0);
   const lanURL = $derived(activeWorktree ? activeWorktree.lan_share_url ?? '' : site.lan_share_url ?? '');
-  const lanDomain = $derived(activeWorktree ? activeWorktree.domain ?? site.domain : site.domain);
   const lanOn = $derived(Boolean(lanPort));
+  // QR lookup keys off the parent site's primary domain (the only one in the
+  // registry); branch carries the sanitized worktree name so the backend can
+  // resolve the worktree port.
+  const lanQrSrc = $derived(
+    apiBase + '/api/lan-qr/' + site.domain + (activeWorktreeBranch ? '?branch=' + encodeURIComponent(activeWorktreeBranch) : '')
+  );
+  // Tunnels are site-level, so the chip only shows on the main site view.
+  const tunnelURL = $derived(activeWorktreeBranch ? '' : site.tunnel_url ?? '');
+  const tunnelQrSrc = $derived(apiBase + '/api/tunnel-qr/' + site.domain);
+  let tunnelBusy = $state(false);
+
+  async function startTunnelAuto() {
+    if (tunnelBusy) return;
+    tunnelBusy = true;
+    try {
+      const res = await startTunnel(site);
+      if (!res.ok) openErrorModal(res.error || m.common_requestFailed());
+      await loadSites();
+    } finally {
+      tunnelBusy = false;
+    }
+  }
+
+  async function stopTunnelNow() {
+    await stopTunnel(site);
+    await loadSites();
+  }
 
   // A host-proxy site's dev server is its only runtime, and restarting it is the
   // routine fix when it wedges, so it gets a first-class header button rather
@@ -429,7 +458,13 @@
         {#if lanOn && lanURL}
           <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-teal-600 dark:text-teal-400">
             <Icon name="wifi" class="w-3 h-3 shrink-0" />
-            <LANShareLink domain={lanDomain} url={lanURL} siteDomain={site.domain} branch={activeWorktreeBranch} />
+            <ShareLink url={lanURL} qrSrc={lanQrSrc} />
+          </span>
+        {/if}
+        {#if tunnelURL}
+          <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400">
+            <Icon name="globe" class="w-3 h-3 shrink-0" />
+            <ShareLink url={tunnelURL} qrSrc={tunnelQrSrc} />
           </span>
         {/if}
         {#if site.paused}
@@ -462,23 +497,15 @@
 
     <div class="flex items-center shrink-0">
       {#if primaryShare}
-        <button
-          type="button"
-          onclick={flipLAN}
-          disabled={lanBusy}
-          aria-label={m.sites_controls_lanToggle_off()}
-          use:tooltip={m.sites_controls_lanToggle_off()}
-          class="w-8 h-8 flex items-center justify-center rounded-md text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors disabled:opacity-50"
-        >
-          {#if lanBusy}
-            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-          {:else}
-            <Icon name="wifi" class="w-4 h-4" />
-          {/if}
-        </button>
+        <ShareMenu
+          {site}
+          {activeWorktreeBranch}
+          {lanOn}
+          {lanBusy}
+          lanUrl={lanURL}
+          onToggleLan={flipLAN}
+          visibleClass="flex"
+        />
       {:else}
         <button
           type="button"
@@ -532,25 +559,15 @@
       {/if}
 
       {#if showLanToggle}
-        <button
-          type="button"
-          onclick={flipLAN}
-          disabled={lanBusy}
-          aria-label={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
-          use:tooltip={lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
-          class="hidden @md:flex w-8 h-8 items-center justify-center rounded-md transition-colors disabled:opacity-50 {lanOn
-            ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
-            : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
-        >
-          {#if lanBusy}
-            <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-            </svg>
-          {:else}
-            <Icon name="wifi" class="w-4 h-4" />
-          {/if}
-        </button>
+        <ShareMenu
+          {site}
+          {activeWorktreeBranch}
+          {lanOn}
+          {lanBusy}
+          lanUrl={lanURL}
+          onToggleLan={flipLAN}
+          visibleClass="hidden @md:flex"
+        />
       {/if}
 
       {#if showXdebug && !site.paused}
@@ -737,6 +754,22 @@
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
               </button>
             {/if}
+            {#if !site.paused && !activeWorktreeBranch}
+              <button
+                type="button"
+                role="menuitem"
+                onclick={() => {
+                  overflowOpen = false;
+                  if (tunnelURL) stopTunnelNow();
+                  else startTunnelAuto();
+                }}
+                disabled={tunnelBusy}
+                class="@md:hidden w-full px-3 py-1.5 text-xs text-left flex items-center gap-2 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors disabled:opacity-50 {tunnelURL ? 'text-violet-600 dark:text-violet-400' : 'text-gray-700 dark:text-gray-200'}"
+              >
+                <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
+                {tunnelBusy ? '...' : tunnelURL ? m.share_stopTunnel() : m.share_viaTunnel()}
+              </button>
+            {/if}
             {#if showXdebug && !site.paused}
               <button
                 type="button"
@@ -787,7 +820,14 @@
   {#if lanOn && lanURL}
     <div class="@md:hidden px-3 pb-2 flex items-center gap-1.5 text-[11px] text-teal-600 dark:text-teal-400 min-w-0">
       <Icon name="wifi" class="w-3 h-3 shrink-0" />
-      <LANShareLink domain={lanDomain} url={lanURL} siteDomain={site.domain} branch={activeWorktreeBranch} />
+      <ShareLink url={lanURL} qrSrc={lanQrSrc} />
+    </div>
+  {/if}
+
+  {#if tunnelURL}
+    <div class="@md:hidden px-3 pb-2 flex items-center gap-1.5 text-[11px] text-violet-600 dark:text-violet-400 min-w-0">
+      <Icon name="globe" class="w-3 h-3 shrink-0" />
+      <ShareLink url={tunnelURL} qrSrc={tunnelQrSrc} />
     </div>
   {/if}
 
