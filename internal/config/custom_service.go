@@ -152,9 +152,10 @@ type CustomService struct {
 	// that need to reach lerd sites by domain name.
 	ShareHosts bool `yaml:"share_hosts,omitempty" json:"share_hosts,omitempty"`
 	// DynamicEnv declares container env vars whose value is computed at
-	// quadlet generation time. Currently supported directive:
-	//   discover_family:<name>  -> comma-joined hostnames of every installed
-	//   service in the named family (built-in or custom).
+	// quadlet generation time. Supported directives:
+	//   discover_family:<families>            -> comma-joined member hostnames
+	//   repeat_family:<families>=<value>      -> <value> once per member, joined
+	//   expand_family:<families>=<template>   -> <key>_1.._N, one per member
 	DynamicEnv map[string]string `yaml:"dynamic_env,omitempty"`
 	// Userns sets the quadlet UserNS= line verbatim, e.g. "keep-id:uid=1000,gid=0"
 	// for images whose process runs as a non-root UID and needs that UID
@@ -422,6 +423,21 @@ func ResolveDynamicEnv(svc *CustomService) error {
 				repeats[i] = value
 			}
 			svc.Environment[k] = strings.Join(repeats, ",")
+		case "expand_family":
+			// expand_family:<families>=<template> → one env var per installed
+			// member, the declared key suffixed _1.._N. {host} and {name} expand
+			// per member, for tools that read numbered var sets instead of one
+			// comma-joined list (RedisInsight's RI_REDIS_HOST_1, _2, ...).
+			eq := strings.Index(parts[1], "=")
+			if eq < 0 {
+				return fmt.Errorf("service %s: expand_family needs <families>=<value>, got %q", svc.Name, parts[1])
+			}
+			tmpl := parts[1][eq+1:]
+			for i, host := range uniqueFamilyHosts(parts[1][:eq]) {
+				value := strings.ReplaceAll(tmpl, "{host}", host)
+				value = strings.ReplaceAll(value, "{name}", strings.TrimPrefix(host, "lerd-"))
+				svc.Environment[fmt.Sprintf("%s_%d", k, i+1)] = value
+			}
 		default:
 			return fmt.Errorf("service %s: unknown dynamic_env directive %q", svc.Name, parts[0])
 		}

@@ -454,6 +454,48 @@ func TestResolveDynamicEnv_DiscoverFamily_OnlyRunning(t *testing.T) {
 	}
 }
 
+func TestResolveDynamicEnv_ExpandFamily(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := SaveCustomService(&CustomService{Name: "valkey", Image: "x", Family: "valkey"}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		DynamicEnv: map[string]string{
+			"RI_REDIS_HOST":  "expand_family:redis,valkey={host}",
+			"RI_REDIS_PORT":  "expand_family:redis,valkey=6379",
+			"RI_REDIS_ALIAS": "expand_family:redis,valkey={name}",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	// uniqueFamilyHosts sorts, so lerd-redis is _1 and lerd-valkey is _2.
+	want := map[string]string{
+		"RI_REDIS_HOST_1": "lerd-redis", "RI_REDIS_PORT_1": "6379", "RI_REDIS_ALIAS_1": "redis",
+		"RI_REDIS_HOST_2": "lerd-valkey", "RI_REDIS_PORT_2": "6379", "RI_REDIS_ALIAS_2": "valkey",
+	}
+	for k, v := range want {
+		if got := svc.Environment[k]; got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	if _, ok := svc.Environment["RI_REDIS_HOST"]; ok {
+		t.Error("expand_family must not write the unsuffixed key")
+	}
+	if _, ok := svc.Environment["RI_REDIS_HOST_3"]; ok {
+		t.Error("expand_family wrote more members than are installed")
+	}
+
+	svc.DynamicEnv = map[string]string{"RI_REDIS_HOST": "expand_family:redis"}
+	if err := ResolveDynamicEnv(svc); err == nil {
+		t.Error("expand_family without =<value> must error")
+	}
+}
+
 func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

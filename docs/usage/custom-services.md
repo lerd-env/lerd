@@ -179,6 +179,8 @@ tuning:
 #   discover_family:<name>[,<name>...] — comma-joined hostnames for every
 #     running member of the named families (phpMyAdmin PMA_HOSTS).
 #   repeat_family:<families>=<value> — N copies of <value> matching that host list.
+#   expand_family:<families>=<template>: one <key>_1..<key>_N var per member,
+#     with {host} / {name} expanded (RedisInsight RI_REDIS_HOST_1, _2, ...).
 dynamic_env:
   PMA_HOSTS: discover_family:mysql,mariadb
 

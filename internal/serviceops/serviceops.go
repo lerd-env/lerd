@@ -1310,6 +1310,9 @@ func consumesFamily(svc *config.CustomService, family string) bool {
 	return false
 }
 
+// consumerDiscoverFamilies returns every family svc reads through a dynamic_env
+// family directive, so a preset wired only with expand_family (RedisInsight)
+// counts as a consumer just like a discover_family one (phpMyAdmin).
 func consumerDiscoverFamilies(svc *config.CustomService) []string {
 	if svc == nil {
 		return nil
@@ -1318,10 +1321,23 @@ func consumerDiscoverFamilies(svc *config.CustomService) []string {
 	seen := map[string]bool{}
 	for _, directive := range svc.DynamicEnv {
 		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "discover_family" {
+		if len(parts) != 2 {
 			continue
 		}
-		for _, fam := range strings.Split(parts[1], ",") {
+		list := parts[1]
+		switch parts[0] {
+		case "discover_family":
+		case "repeat_family", "expand_family":
+			// Both spell the family list ahead of "=<value>".
+			eq := strings.Index(list, "=")
+			if eq < 0 {
+				continue
+			}
+			list = list[:eq]
+		default:
+			continue
+		}
+		for _, fam := range strings.Split(list, ",") {
 			fam = strings.TrimSpace(fam)
 			if fam == "" || seen[fam] {
 				continue
