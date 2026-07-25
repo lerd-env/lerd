@@ -2560,9 +2560,10 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 		env.database = db
 	}
 
+	svc := mcpDBService(env)
 	output := strArg(args, "output")
 	if output == "" {
-		output = filepath.Join(projectPath, env.database+".sql")
+		output = filepath.Join(projectPath, serviceops.ExportFilename(svc, env.database))
 	}
 
 	f, err := os.Create(output)
@@ -2571,37 +2572,35 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 	}
 	defer f.Close()
 
-	var cmd *exec.Cmd
-	switch env.connection {
-	case "mysql", "mariadb":
-		args := []string{"exec", "-i", "lerd-mysql", "mysqldump", "-u" + env.username, "-p" + env.password}
-		args = append(args, serviceops.DumpFlags("mysql")...)
-		cmd = podman.Cmd(append(args, env.database)...)
-	case "pgsql", "postgres":
-		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
-			"lerd-postgres", "pg_dump", "-U", env.username}
-		args = append(args, serviceops.DumpFlags("postgres")...)
-		cmd = podman.Cmd(append(args, env.database)...)
-	default:
+	if err := serviceops.ExportDatabase(svc, env.database, f); err != nil {
 		_ = os.Remove(output)
-		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
+		return toolErr(fmt.Sprintf("export failed: %v", err)), nil
 	}
-
-	var stderr bytes.Buffer
-	cmd.Stdout = f
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		_ = os.Remove(output)
-		return toolErr(fmt.Sprintf("export failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
-	}
-	return toolOK(fmt.Sprintf("Exported %s (%s) to %s", env.database, env.connection, output)), nil
+	return toolOK(fmt.Sprintf("Exported %s (%s) to %s", env.database, svc, output)), nil
 }
 
 type mcpDBEnv struct {
 	connection string
+	host       string
 	database   string
 	username   string
 	password   string
+}
+
+// mcpDBService resolves which installed engine a project's .env points at: a
+// lerd-<service> DB_HOST names the exact instance (including alternates like
+// mysql-5-7), with the connection's canonical family service as the fallback.
+func mcpDBService(env *mcpDBEnv) string {
+	if env != nil {
+		if s := strings.TrimPrefix(env.host, "lerd-"); s != env.host && s != "" {
+			return s
+		}
+		switch strings.ToLower(env.connection) {
+		case "pgsql", "postgres":
+			return "postgres"
+		}
+	}
+	return "mysql"
 }
 
 func readDBEnv(projectPath string) (*mcpDBEnv, error) {
@@ -2626,6 +2625,7 @@ func readDBEnv(projectPath string) (*mcpDBEnv, error) {
 	}
 	return &mcpDBEnv{
 		connection: conn,
+		host:       vals["DB_HOST"],
 		database:   vals["DB_DATABASE"],
 		username:   vals["DB_USERNAME"],
 		password:   vals["DB_PASSWORD"],
@@ -4150,47 +4150,13 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 	}
 	defer f.Close()
 
-	var cmd *exec.Cmd
-	switch env.connection {
-	case "mysql", "mariadb":
-		cmd = podman.Cmd("exec", "-i", "lerd-mysql",
-			"mysql", "-u"+env.username, "-p"+env.password, env.database)
-	case "pgsql", "postgres":
-		cmd = podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			"lerd-postgres", "psql", "-U", env.username, env.database)
-	default:
-		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
-	}
-
-	// The tool talks to the family's canonical service, the same one the commands
-	// above hardcode as lerd-mysql / lerd-postgres.
-	svc := "mysql"
-	if env.connection == "pgsql" || env.connection == "postgres" {
-		svc = "postgres"
-	}
-	if boolArg(args, "fresh") {
-		if err := serviceops.EmptyDatabase(svc, env.database); err != nil {
-			return toolErr(err.Error()), nil
-		}
-	}
-	src, err := serviceops.DumpReader(f)
+	svc := mcpDBService(env)
+	rep, err := serviceops.ImportDatabase(svc, env.database, f, serviceops.ImportOptions{Fresh: boolArg(args, "fresh")})
 	if err != nil {
-		return toolErr(err.Error()), nil
+		return toolErr(fmt.Sprintf("import failed: %v", err)), nil
 	}
-	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
-		Service: svc, Family: config.FamilyOfName(svc), Database: env.database,
-		Extensions: serviceops.DeclaredExtensions(svc),
-	}, src)
-	var stderr bytes.Buffer
-	cmd.Stdin = src
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
-	}
-	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)
-	n := notes()
-	rep := serviceops.ImportReport{Skipped: n.Skipped, Created: n.Created}
-	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, svc)
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary(), rep.Summary()} {
 		if note != "" {
 			msg += ", " + note
 		}
@@ -4242,8 +4208,8 @@ func execDBSnapshot(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	if !serviceops.SnapshotFamilySupported(target.Family) {
-		return toolErr("snapshots support only MySQL, MariaDB and PostgreSQL"), nil
+	if !serviceops.SnapshotSupported(target.Service, target.AllDatabases) {
+		return toolErr(fmt.Sprintf("the %s service does not declare database snapshots", target.Service)), nil
 	}
 	if !target.AllDatabases && target.Database == "" {
 		return toolErr("database is required — pass database, or all_databases:true"), nil
@@ -4305,8 +4271,8 @@ func execDBRestore(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	if !serviceops.SnapshotFamilySupported(target.Family) {
-		return toolErr("snapshots support only MySQL, MariaDB and PostgreSQL"), nil
+	if !serviceops.SnapshotSupported(target.Service, target.AllDatabases) {
+		return toolErr(fmt.Sprintf("the %s service does not declare database snapshots", target.Service)), nil
 	}
 	if !target.AllDatabases && target.Database == "" {
 		return toolErr("database is required — pass database, or all_databases:true"), nil
@@ -4354,20 +4320,10 @@ func execDBCreate(args map[string]any) (any, *rpcError) {
 		}
 	}
 
-	conn := "mysql"
-	if env != nil && env.connection != "" {
-		conn = env.connection
-	}
-
-	svc := "mysql"
-	switch strings.ToLower(conn) {
-	case "pgsql", "postgres":
-		svc = "postgres"
-	}
-
+	svc := mcpDBService(env)
 	var results []string
 	for _, name := range []string{dbName, dbName + "_testing"} {
-		created, err := mcpCreateDatabase(svc, name)
+		created, err := serviceops.CreateDatabase(svc, name)
 		if err != nil {
 			return toolErr(fmt.Sprintf("creating %q: %v", name, err)), nil
 		}
@@ -4378,39 +4334,6 @@ func execDBCreate(args map[string]any) (any, *rpcError) {
 		}
 	}
 	return toolOK(strings.Join(results, "\n")), nil
-}
-
-func mcpCreateDatabase(svc, name string) (bool, error) {
-	switch svc {
-	case "mysql":
-		check := podman.Cmd("exec", "lerd-mysql", "mysql", "-uroot", "-plerd",
-			"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", name))
-		out, err := check.Output()
-		if err == nil && strings.TrimSpace(string(out)) != "0" {
-			return false, nil
-		}
-		cmd := podman.Cmd("exec", "lerd-mysql", "mysql", "-uroot", "-plerd",
-			"-e", fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`;", name))
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		if err := cmd.Run(); err != nil {
-			return false, fmt.Errorf("%v: %s", err, stderr.String())
-		}
-		return true, nil
-	case "postgres":
-		cmd := podman.Cmd("exec", "lerd-postgres", "psql", "-U", "postgres",
-			"-c", fmt.Sprintf(`CREATE DATABASE "%s";`, name))
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			if strings.Contains(string(out), "already exists") {
-				return false, nil
-			}
-			return false, fmt.Errorf("%s", strings.TrimSpace(string(out)))
-		}
-		return true, nil
-	default:
-		return false, nil
-	}
 }
 
 // readDBEnvLenient reads DB connection info from .env without requiring DB_DATABASE.
@@ -4432,6 +4355,7 @@ func readDBEnvLenient(projectPath string) (*mcpDBEnv, error) {
 	}
 	return &mcpDBEnv{
 		connection: vals["DB_CONNECTION"],
+		host:       vals["DB_HOST"],
 		database:   vals["DB_DATABASE"],
 		username:   vals["DB_USERNAME"],
 		password:   vals["DB_PASSWORD"],

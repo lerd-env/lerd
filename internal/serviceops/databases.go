@@ -2,7 +2,6 @@ package serviceops
 
 import (
 	"bufio"
-	"bytes"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -33,24 +32,15 @@ type DatabaseInfo struct {
 // picks whichever variable applies and ignores the rest.
 func introspectEnv() []string { return []string{"MYSQL_PWD=lerd", "PGPASSWORD=lerd"} }
 
-// IntrospectCommand resolves an engine's list-databases query, preferring the
-// preset it was installed from so an engine installed before the introspect
-// field existed still gets it from the current preset. Falls back to the stored
-// definition for a genuinely user-defined engine.
+// IntrospectCommand resolves an engine's list-databases query through the
+// entity surface, so both the entities form and the legacy list_databases
+// field serve it, preset first.
 func IntrospectCommand(service string) string {
-	presetName := service
-	if custom, err := config.LoadCustomService(service); err == nil {
-		if custom.Introspect != nil {
-			return custom.Introspect.ListDatabases
-		}
-		if custom.Preset != "" {
-			presetName = custom.Preset
-		}
+	spec := EntityFor(service, "databases")
+	if spec == nil {
+		return ""
 	}
-	if p, err := config.LoadPreset(presetName); err == nil && p.Introspect != nil {
-		return p.Introspect.ListDatabases
-	}
-	return ""
+	return spec.List
 }
 
 // ListDatabases runs the preset-declared introspection command inside the
@@ -89,31 +79,6 @@ func parseDatabaseRows(out []byte) []DatabaseInfo {
 	return dbs
 }
 
-// dumpEnv carries the fixed admin password for family through the exec env so it
-// never lands in argv.
-func dumpEnv(family string) []string {
-	if family == "postgres" {
-		return []string{"PGPASSWORD=lerd"}
-	}
-	return []string{"MYSQL_PWD=lerd"}
-}
-
-// exportShellCommand and importShellCommand return the in-container command that
-// dumps a database to stdout / loads a dump from stdin, and whether the engine
-// family supports it. Mongo and other non-SQL engines are dumped with their own
-// tools, out of scope here, so they report false.
-func exportShellCommand(family, database string) (string, bool) {
-	q := podman.ShellQuote(database)
-	switch family {
-	case "mysql", "mariadb":
-		return mysqlDumpBin + " -uroot " + strings.Join(DumpFlags(family), " ") + " " + q, true
-	case "postgres":
-		return "pg_dump -U postgres " + strings.Join(DumpFlags(family), " ") + " " + q, true
-	default:
-		return "", false
-	}
-}
-
 // DumpFlags are the flags every dump of a family carries, so an export, a
 // snapshot and a migration all produce the same file. Postgres needs --clean
 // --if-exists to load back over objects that already exist, which mysqldump does
@@ -126,41 +91,18 @@ func DumpFlags(family string) []string {
 	return []string{"--single-transaction", "--quick", "--no-tablespaces", "--routines", "--triggers", "--events"}
 }
 
-func importShellCommand(family, database string) (string, bool) {
-	q := podman.ShellQuote(database)
-	switch family {
-	case "mysql", "mariadb":
-		return mysqlClientBin + " --max-allowed-packet=1G -uroot " + q, true
-	case "postgres":
-		return "psql -U postgres -d " + q, true
-	default:
-		return "", false
-	}
+// ExportFilename is the download name for a live export of database, from the
+// declared export action's filename, with a neutral fallback for engines that
+// declare none.
+func ExportFilename(service, database string) string {
+	return EntityExportFilename(service, "databases", database)
 }
 
-// ExportDatabase streams a plain SQL dump of database from the service container
-// to w. The dump is uncompressed so the browser can save it directly.
+// ExportDatabase streams a dump of database from the service container to w,
+// through the export action the engine's preset declares. The dump is
+// uncompressed so the browser can save it directly.
 func ExportDatabase(service, database string, w io.Writer) error {
-	family := config.FamilyOfName(service)
-	shellCmd, ok := exportShellCommand(family, database)
-	if !ok {
-		return fmt.Errorf("exporting %s databases is not supported", service)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
-	defer cancel()
-	args := []string{"exec"}
-	for _, kv := range dumpEnv(family) {
-		args = append(args, "--env", kv)
-	}
-	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
-	cmd := podman.CmdContext(ctx, args...)
-	var stderr bytes.Buffer
-	cmd.Stdout = w
-	cmd.Stderr = &stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("export failed: %w\n%s", err, stderr.String())
-	}
-	return nil
+	return ExportEntity(service, "databases", database, w)
 }
 
 // ExportSnapshot streams a snapshot's stored dump to w, decompressed, so it
@@ -430,15 +372,21 @@ type ImportOptions struct {
 	Fresh bool
 }
 
-// ImportDatabase streams a SQL dump from r into database on the service
-// container. The database must already exist unless Fresh is set. The report
-// carries what the engine complained about, which is the only sign of a partial
-// load when the client still exits clean, and what the sanitizer held back.
+// ImportDatabase streams a dump from r into database on the service container,
+// through the declared import action. The database must already exist unless
+// Fresh is set. For SQL-format engines the report carries what the engine
+// complained about, which is the only sign of a partial load when the client
+// still exits clean, and what the sanitizer held back; other formats stream
+// untouched and rely on the client's exit code.
 func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (ImportReport, error) {
-	family := config.FamilyOfName(service)
-	shellCmd, ok := importShellCommand(family, database)
+	spec := EntityFor(service, "databases")
+	act, ok := entityAction(spec, "import")
 	if !ok {
 		return ImportReport{}, fmt.Errorf("importing into %s databases is not supported", service)
+	}
+	shellCmd, err := expandEntityCommand(act.Exec, database)
+	if err != nil {
+		return ImportReport{}, err
 	}
 	if opt.Fresh {
 		if err := EmptyDatabase(service, database); err != nil {
@@ -448,7 +396,7 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
 	args := []string{"exec", "-i"}
-	for _, kv := range dumpEnv(family) {
+	for _, kv := range introspectEnv() {
 		args = append(args, "--env", kv)
 	}
 	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
@@ -456,14 +404,21 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 	if err != nil {
 		return ImportReport{}, err
 	}
-	src, notes := SanitizeDump(DumpTarget{
-		Service: service, Family: family, Database: database, Extensions: DeclaredExtensions(service),
-	}, src)
+	sqlDump := spec.Format == "sql"
+	var notes func() ImportNotes
+	if sqlDump {
+		src, notes = SanitizeDump(DumpTarget{
+			Service: service, Family: config.FamilyOfName(service), Database: database, Extensions: DeclaredExtensions(service),
+		}, src)
+	}
 	cmd := podman.CmdContext(ctx, args...)
 	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	if !sqlDump {
+		return ImportReport{}, nil
 	}
 	rep := parseImportOutput(string(out))
 	n := notes()

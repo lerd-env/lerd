@@ -26,8 +26,16 @@ export interface DatabaseEngine {
   port?: number;
   icon?: string;
   connection_url?: string;
+  // Each capability mirrors an action the engine's preset declares, so they can
+  // diverge (an engine may list and drop without offering dumps).
   supports_create: boolean;
+  supports_drop: boolean;
+  supports_export: boolean;
+  supports_import: boolean;
   supports_snapshot: boolean;
+  // Declared dump format the export/import actions exchange; "sql" for the SQL
+  // engines, empty for engines with their own archive format.
+  dump_format?: string;
   databases: DatabaseEntry[];
   error?: string;
 }

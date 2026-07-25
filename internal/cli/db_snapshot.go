@@ -107,8 +107,8 @@ func runDbSnapshot(name, service, database string, allDatabases bool) error {
 		return err
 	}
 	target := snapshotTarget(env, allDatabases)
-	if !serviceops.SnapshotFamilySupported(target.Family) {
-		return fmt.Errorf("snapshots support only MySQL, MariaDB and PostgreSQL (service %q is %q)", env.service, target.Family)
+	if !serviceops.SnapshotSupported(target.Service, target.AllDatabases) {
+		return fmt.Errorf("the %q service does not declare database snapshots", env.service)
 	}
 	if !target.AllDatabases && target.Database == "" {
 		return fmt.Errorf("no database resolved — pass --database, or --all-databases to snapshot the whole service")
@@ -171,8 +171,8 @@ func runDbRestore(name, service, database string, allDatabases, force bool) erro
 		return err
 	}
 	target := snapshotTarget(env, allDatabases)
-	if !serviceops.SnapshotFamilySupported(target.Family) {
-		return fmt.Errorf("snapshots support only MySQL, MariaDB and PostgreSQL (service %q is %q)", env.service, target.Family)
+	if !serviceops.SnapshotSupported(target.Service, target.AllDatabases) {
+		return fmt.Errorf("the %q service does not declare database snapshots", env.service)
 	}
 	if !target.AllDatabases && target.Database == "" {
 		return fmt.Errorf("no database resolved — pass --database, or --all-databases to restore the whole service")

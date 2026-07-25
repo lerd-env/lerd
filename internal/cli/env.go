@@ -1177,45 +1177,8 @@ func frameworkServiceDetected(def config.FrameworkServiceDef, envMap map[string]
 // outside the cli package (e.g. the worktree DB-isolation flow).
 func CreateDatabase(svc, name string) (bool, error) { return serviceops.CreateDatabase(svc, name) }
 
-// CloneDatabase copies the schema and data from src into dst inside the same
-// service container. dst must already exist. Returns an error if the family
-// has no clone strategy or the dump/restore fails.
-func CloneDatabase(svc, src, dst string) error {
-	container := "lerd-" + svc
-	family := svc
-	if inferred := config.FamilyOfName(svc); inferred != "" {
-		family = inferred
-	}
-	switch family {
-	case "mysql", "mariadb":
-		dumpBin := "mysqldump"
-		clientBin := "mysql"
-		if family == "mariadb" {
-			dumpBin = "mariadb-dump"
-			clientBin = "mariadb"
-		}
-		shellCmd := fmt.Sprintf(
-			"%s -uroot -plerd --single-transaction --quick --no-tablespaces %s | %s -uroot -plerd %s",
-			dumpBin, src, clientBin, dst,
-		)
-		cmd := podman.Cmd("exec", container, "sh", "-c", shellCmd)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("clone %s -> %s: %s", src, dst, strings.TrimSpace(string(out)))
-		}
-		return nil
-	case "postgres":
-		shellCmd := fmt.Sprintf(`pg_dump -U postgres %s | psql -U postgres -d %s`, src, dst)
-		cmd := podman.Cmd("exec", container, "sh", "-c", shellCmd)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("clone %s -> %s: %s", src, dst, strings.TrimSpace(string(out)))
-		}
-		return nil
-	default:
-		return fmt.Errorf("clone unsupported for service family %q", family)
-	}
-}
+// CloneDatabase delegates to serviceops.CloneDatabase for cli-package callers.
+func CloneDatabase(svc, src, dst string) error { return serviceops.CloneDatabase(svc, src, dst) }
 
 // DropDatabase delegates to serviceops.DropDatabase for cli-package callers.
 func DropDatabase(svc, name string) (bool, error) { return serviceops.DropDatabase(svc, name) }

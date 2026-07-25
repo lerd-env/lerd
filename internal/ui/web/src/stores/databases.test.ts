@@ -7,6 +7,9 @@ function engine(connection_url?: string): DatabaseEngine {
     family: 'mysql',
     status: 'active',
     supports_create: true,
+    supports_drop: true,
+    supports_export: true,
+    supports_import: true,
     supports_snapshot: true,
     databases: [],
     connection_url

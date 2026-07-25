@@ -32,6 +32,9 @@ const engine: DatabaseEngine = {
   family: 'mysql',
   status: 'active',
   supports_create: true,
+  supports_drop: true,
+  supports_export: true,
+  supports_import: true,
   supports_snapshot: true,
   databases: []
 };

@@ -326,10 +326,15 @@ func runDbImport(file, service, database string, fresh bool) error {
 	if err != nil {
 		return err
 	}
-	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
-		Service: env.service, Family: config.FamilyOfName(env.service), Database: env.database,
-		Extensions: serviceops.DeclaredExtensions(env.service),
-	}, src)
+	// The sanitizer reads SQL, so engines that exchange another dump format
+	// stream their bytes untouched.
+	notes := func() serviceops.ImportNotes { return serviceops.ImportNotes{} }
+	if serviceops.DatabaseDumpFormat(env.service) == "sql" {
+		src, notes = serviceops.SanitizeDump(serviceops.DumpTarget{
+			Service: env.service, Family: config.FamilyOfName(env.service), Database: env.database,
+			Extensions: serviceops.DeclaredExtensions(env.service),
+		}, src)
+	}
 	// psql exits 0 even when every statement failed, so the output is tallied on
 	// its way to the terminal and the result reported at the end.
 	var tally serviceops.ImportTally
@@ -365,21 +370,21 @@ func runDbImport(file, service, database string, fresh bool) error {
 }
 
 func dbImportCmd(env *dbEnv) (*exec.Cmd, error) {
-	container := "lerd-" + env.service
-	switch env.connection {
-	case "mysql", "mariadb":
-		// MariaDB 11+ images ship `mariadb` instead of `mysql`; resolve whichever
-		// client exists in the container at runtime.
-		shellCmd := "$(command -v mysql || command -v mariadb) --max-allowed-packet=" + config.MySQLImportMaxPacket + " -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
-		return podman.Cmd("exec", "-i",
-			"-e", "MYSQL_PWD="+env.password,
-			container, "sh", "-c", shellCmd), nil
-	case "pgsql", "postgres":
-		return podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			container, "psql", "-U", env.username, env.database), nil
-	default:
-		return nil, fmt.Errorf("unsupported DB_CONNECTION: %q (supported: mysql, pgsql)", env.connection)
+	shellCmd, err := serviceops.ImportShellCommand(env.service, env.database)
+	if err != nil {
+		return nil, err
 	}
+	return dbEntityCmd(env.service, shellCmd), nil
+}
+
+// dbEntityCmd wraps a declared in-container command in the podman exec the CLI
+// streams through, carrying the fixed admin credentials in the env.
+func dbEntityCmd(service, shellCmd string) *exec.Cmd {
+	args := []string{"exec", "-i"}
+	for _, kv := range serviceops.EntityExecEnv() {
+		args = append(args, "-e", kv)
+	}
+	return podman.Cmd(append(args, "lerd-"+service, "sh", "-c", shellCmd)...)
 }
 
 func runDbExport(output, service, database string) error {
@@ -397,7 +402,7 @@ func runDbExport(output, service, database string) error {
 	}
 
 	if output == "" {
-		output = env.database + ".sql"
+		output = serviceops.ExportFilename(env.service, env.database)
 	}
 
 	f, err := os.Create(output)
@@ -425,24 +430,11 @@ func runDbExport(output, service, database string) error {
 }
 
 func dbExportCmd(env *dbEnv) (*exec.Cmd, error) {
-	container := "lerd-" + env.service
-	switch env.connection {
-	case "mysql", "mariadb":
-		// MariaDB 11+ images ship `mariadb-dump` instead of `mysqldump`; resolve
-		// whichever exists in the container at runtime.
-		shellCmd := "$(command -v mysqldump || command -v mariadb-dump) -u" + podman.ShellQuote(env.username) +
-			" " + strings.Join(serviceops.DumpFlags("mysql"), " ") + " " + podman.ShellQuote(env.database)
-		return podman.Cmd("exec", "-i",
-			"-e", "MYSQL_PWD="+env.password,
-			container, "sh", "-c", shellCmd), nil
-	case "pgsql", "postgres":
-		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
-			container, "pg_dump", "-U", env.username}
-		args = append(args, serviceops.DumpFlags("postgres")...)
-		return podman.Cmd(append(args, env.database)...), nil
-	default:
-		return nil, fmt.Errorf("unsupported DB_CONNECTION: %q (supported: mysql, pgsql)", env.connection)
+	shellCmd, err := serviceops.ExportShellCommand(env.service, env.database)
+	if err != nil {
+		return nil, err
 	}
+	return dbEntityCmd(env.service, shellCmd), nil
 }
 
 func newDbCreateCmd(use string) *cobra.Command {

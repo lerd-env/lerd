@@ -36,6 +36,7 @@ var loopbackOnlyRoutes = []string{
 // read out, drop and overwrite the data the "/env" gate already protects.
 var loopbackOnlyRoutePrefixes = []string{
 	"/api/databases",
+	"/api/entities",
 }
 
 // loopbackOnlySiteSubactions are the per-site actions (under

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 func TestParseDatabaseRows(t *testing.T) {
@@ -87,47 +89,59 @@ func TestIntrospectCommandUnknownEngine(t *testing.T) {
 	}
 }
 
+// bundledDatabasesAction reads a declared databases action straight off a
+// bundled preset, bypassing custom-service resolution so the test never reads
+// the developer's real install.
+func bundledDatabasesAction(t *testing.T, preset, action string) string {
+	t.Helper()
+	p, err := config.LoadPreset(preset)
+	if err != nil {
+		t.Fatalf("loading the %s preset: %v", preset, err)
+	}
+	spec := p.Introspect.DatabasesEntity()
+	if spec == nil {
+		t.Fatalf("the %s preset declares no databases entity", preset)
+	}
+	act, ok := spec.Actions[action]
+	if !ok {
+		t.Fatalf("the %s preset declares no %s action", preset, action)
+	}
+	return act.Exec
+}
+
 // A dump has to load back over a database that already has the objects, or a
 // colleague importing it drowns in "already exists". mysqldump drops each table
 // on its own; pg_dump only does it when asked.
-func TestExportShellCommandDropsBeforeCreating(t *testing.T) {
-	pg, ok := exportShellCommand("postgres", "shop")
-	if !ok {
-		t.Fatal("postgres export should be supported")
-	}
+func TestDeclaredExportDropsBeforeCreating(t *testing.T) {
+	pg := bundledDatabasesAction(t, "postgres", "export")
 	for _, flag := range []string{"--clean", "--if-exists"} {
 		if !strings.Contains(pg, flag) {
 			t.Errorf("postgres export missing %s: %q", flag, pg)
 		}
 	}
-	if !strings.Contains(pg, "'shop'") {
-		t.Errorf("database name not quoted into the command: %q", pg)
-	}
-	for _, family := range []string{"mysql", "mariadb"} {
-		cmd, ok := exportShellCommand(family, "shop")
-		if !ok {
-			t.Fatalf("%s export should be supported", family)
-		}
-		if strings.Contains(cmd, "--skip-add-drop-table") {
-			t.Errorf("%s export disabled its own drop statements: %q", family, cmd)
-		}
+	my := bundledDatabasesAction(t, "mysql", "export")
+	if strings.Contains(my, "--skip-add-drop-table") {
+		t.Errorf("mysql export disabled its own drop statements: %q", my)
 	}
 }
 
 // mysqldump leaves routines and events out unless asked, so an export without
 // them hands over a database that looks complete and has lost its stored
-// procedures. A snapshot already asked for them; an export has to match.
-func TestExportShellCommandKeepsRoutinesAndEvents(t *testing.T) {
-	for _, family := range []string{"mysql", "mariadb"} {
-		cmd, _ := exportShellCommand(family, "shop")
-		for _, flag := range []string{"--routines", "--triggers", "--events"} {
-			if !strings.Contains(cmd, flag) {
-				t.Errorf("%s export missing %s: %q", family, flag, cmd)
-			}
+// procedures. A snapshot stores the same declared export, so asserting the
+// export covers both; DumpFlags still feeds the CLI and MCP paths and must not
+// drift from what the preset declares.
+func TestDeclaredExportKeepsRoutinesAndEvents(t *testing.T) {
+	my := bundledDatabasesAction(t, "mysql", "export")
+	for _, flag := range DumpFlags("mysql") {
+		if !strings.Contains(my, flag) {
+			t.Errorf("mysql export missing %s: %q", flag, my)
 		}
 	}
-	if got, want := strings.Join(DumpFlags("mariadb"), " "), mysqldumpFlags; got != want {
-		t.Errorf("export and snapshot flags drifted: %q vs %q", got, want)
+	pg := bundledDatabasesAction(t, "postgres", "export")
+	for _, flag := range DumpFlags("postgres") {
+		if !strings.Contains(pg, flag) {
+			t.Errorf("postgres export missing %s: %q", flag, pg)
+		}
 	}
 }
 
