@@ -121,7 +121,11 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 	var versions []string
 
 	if len(args) == 1 {
-		versions = []string{args[0]}
+		v, err := config.NormalizePHPVersion(args[0])
+		if err != nil {
+			return err
+		}
+		versions = []string{v}
 	} else {
 		var err error
 		versions, err = phpPkg.ListInstalled()

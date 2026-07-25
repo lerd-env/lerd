@@ -652,6 +652,7 @@ func LoadGlobal() (*GlobalConfig, error) {
 		return nil, err
 	}
 	migrateStaleServiceImages(cfg)
+	normalizeDefaultPHPVersion(cfg)
 
 	if statErr == nil {
 		globalCacheMu.Lock()
@@ -661,6 +662,15 @@ func LoadGlobal() (*GlobalConfig, error) {
 		globalCacheMu.Unlock()
 	}
 	return cfg, nil
+}
+
+// normalizeDefaultPHPVersion repairs a default version stored raw by an older
+// `lerd use` (e.g. "php84"), which broke every derived image name. Values that
+// don't resolve to a supported version are left for callers to reject.
+func normalizeDefaultPHPVersion(cfg *GlobalConfig) {
+	if v, err := NormalizePHPVersion(cfg.PHP.DefaultVersion); err == nil {
+		cfg.PHP.DefaultVersion = v
+	}
 }
 
 // cloneGlobalConfig returns a deep copy. Maps and slices are duplicated so

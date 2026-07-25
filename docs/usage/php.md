@@ -33,6 +33,8 @@
 
 If no version is given, the version is resolved from the current directory (`.php-version` or `composer.json`, falling back to the global default).
 
+Versions are written as `major.minor`, but common spellings are accepted everywhere a version is typed: `php8.4`, `84` and `8.4.7` all normalize to `8.4`. Anything that does not resolve to a supported version is rejected up front, so a typo can never end up as the stored default and break image names.
+
 Inside a linked site, the commands that run PHP in a container (`lerd php`, `lerd composer`, `lerd console`, `lerd php:shell`) use the version the site is registered on, which is the version its FPM container serves. That matters when a framework clamps the version at link time: a Laravel 13 project pinning `.php-version` to 8.1 is linked on 8.5, because Laravel 13 supports 8.3 to 8.5, and composer then runs on 8.5 too rather than resolving 8.1 from the file and quietly using a different PHP than the site itself.
 
 A git worktree resolves ahead of the site it belongs to. A worktree inherits its parent site's version until you pin one with `lerd isolate` from inside the checkout, and from then on the whole toolchain follows that pin: the worktree's own vhost, `lerd php`, `lerd composer`, and everything else that runs PHP in a container. This holds wherever the checkout lives, including inside the parent site's own directory, so a worktree on 8.3 under a site on 8.5 runs composer on 8.3 rather than picking up the parent's version.
