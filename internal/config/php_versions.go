@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strconv"
 	"strings"
 )
@@ -22,6 +23,24 @@ func IsSupportedPHPVersion(v string) bool {
 		}
 	}
 	return false
+}
+
+// NormalizePHPVersion reduces user input to a supported "major.minor" version:
+// "php8.4", "PHP 8.4", "84" and "8.4.7" all become "8.4". Anything that does
+// not resolve to a supported version is an error naming the supported list.
+func NormalizePHPVersion(input string) (string, error) {
+	v := strings.ToLower(strings.TrimSpace(input))
+	v = strings.TrimSpace(strings.TrimPrefix(v, "php"))
+	if !strings.Contains(v, ".") && len(v) == 2 {
+		v = v[:1] + "." + v[1:]
+	}
+	if parts := strings.SplitN(v, ".", 3); len(parts) >= 2 {
+		v = parts[0] + "." + parts[1]
+	}
+	if !IsSupportedPHPVersion(v) {
+		return "", fmt.Errorf("unsupported PHP version %q (supported: %s)", input, strings.Join(SupportedPHPVersions, ", "))
+	}
+	return v, nil
 }
 
 // FrankenPHPVersions returns the subset of SupportedPHPVersions that

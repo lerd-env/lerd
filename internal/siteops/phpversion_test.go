@@ -140,6 +140,27 @@ func TestSetSitePHPVersion_clampsToFrameworkRange(t *testing.T) {
 	}
 }
 
+// Input like "php8.2" must reduce to "8.2" before anything is derived from it;
+// stored raw it produces image names like lerd-phpphp82-fpm-base (#1173).
+func TestSetSitePHPVersion_normalizesPrefixedInput(t *testing.T) {
+	site := phpVersionTestSite(t, asFPM)
+	stubPHPVersionDeps(t, "", "")
+
+	res, err := SetSitePHPVersion(site, "php8.2", PHPVersionOpts{})
+	if err != nil {
+		t.Fatalf("SetSitePHPVersion: %v", err)
+	}
+	if res.Version != "8.2" {
+		t.Errorf("res.Version = %q, want 8.2", res.Version)
+	}
+	if got := readPHPVersionFile(t, site.Path); got != "8.2" {
+		t.Errorf(".php-version = %q, want 8.2", got)
+	}
+	if site.PHPVersion != "8.2" {
+		t.Errorf("site.PHPVersion = %q, want 8.2", site.PHPVersion)
+	}
+}
+
 func TestSetSitePHPVersion_rejectsUnsupportedVersion(t *testing.T) {
 	site := phpVersionTestSite(t, asFPM)
 	stubPHPVersionDeps(t, "", "")

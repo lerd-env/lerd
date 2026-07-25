@@ -500,8 +500,13 @@ type DoctorCheck struct {
 	// command
 	Command              string `yaml:"command,omitempty"`
 	FailIfOutputContains string `yaml:"fail_if_output_contains,omitempty"`
-	UnknownOnError       bool   `yaml:"unknown_on_error,omitempty"`
-	TimeoutSeconds       int    `yaml:"timeout,omitempty"`
+	// FailIfErrorContains names output that means the command ran and found the
+	// very condition the check exists to catch, even though it exited non-zero.
+	// It wins over UnknownOnError, so an unmigrated database reports as a real
+	// finding with its fix instead of an unreachable dependency.
+	FailIfErrorContains string `yaml:"fail_if_error_contains,omitempty"`
+	UnknownOnError      bool   `yaml:"unknown_on_error,omitempty"`
+	TimeoutSeconds      int    `yaml:"timeout,omitempty"`
 }
 
 // FrameworkServiceDef describes how a service is detected and configured for a framework.
@@ -746,6 +751,7 @@ var laravelFramework = &Framework{
 				Name: "migrations", Type: "command",
 				Command:              "php artisan migrate:status",
 				FailIfOutputContains: "Pending",
+				FailIfErrorContains:  "Migration table not found",
 				UnknownOnError:       true,
 				Fix:                  "migrate",
 				Detail:               "There are pending migrations, run migrate to apply them.",

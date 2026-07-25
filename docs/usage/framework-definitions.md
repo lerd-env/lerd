@@ -341,12 +341,15 @@ There are four check types, each with its own fields.
 
 `command` runs a console command inside the site's container and judges the result. It takes `command`, and `fail_if_output_contains`, a plain substring that marks the finding as triggered when it appears in the output. `timeout` caps the run in seconds, defaulting to 25. `unknown_on_error: true` is the important one: when the command cannot run at all, because the app is wedged or the database is unreachable, the check reports "unknown" instead of failing, so a down app does not turn the whole panel red with checks that never actually ran.
 
+`fail_if_error_contains` is the escape hatch from that. Some commands exit non-zero for the very condition the check exists to catch: `php artisan migrate:status` fails with "Migration table not found" on a database that has never been migrated, which is the normal state of a freshly linked project and exactly what `fix: migrate` resolves. A substring named here is matched against the output of a non-zero run and reports the finding with its fix, ahead of `unknown_on_error`. Anything else still degrades to "unknown", so that bucket keeps meaning genuine connectivity problems.
+
 ```yaml
 - name: migrations
   type: command
   label: Migrations
   command: php artisan migrate:status
   fail_if_output_contains: "Pending"
+  fail_if_error_contains: "Migration table not found"
   unknown_on_error: true
   timeout: 30
   fix: migrate
