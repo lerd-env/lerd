@@ -3,6 +3,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/user"
@@ -60,6 +61,10 @@ func runBootstrapTrustCA(target string) error {
 		return nil
 	}
 	if err := certs.TrustCAInSystemStore(pem); err != nil {
+		if errors.Is(err, certs.ErrNoSystemTrustStore) {
+			feedback.Note("no system CA trust store on this distro; trust " + caPath + " through your system configuration (NixOS: security.pki.certificateFiles)")
+			return nil
+		}
 		return fmt.Errorf("trusting CA in system store: %w", err)
 	}
 	feedback.Done("mkcert CA trusted in the system store")

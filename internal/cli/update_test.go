@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	lerdUpdate "github.com/geodro/lerd/internal/update"
@@ -22,6 +23,8 @@ func TestIsSystemPackageManaged(t *testing.T) {
 	}{
 		{"/usr/bin/lerd", true},
 		{"/usr/local/bin/lerd", true},
+		{"/nix/store/abc123-lerd-1.30.0/bin/lerd", true},
+		{"/var/usrlocal/bin/lerd", true},
 		{"/home/george/.local/bin/lerd", false},
 		{"/opt/lerd/lerd", false},
 		{"/tmp/lerd", false},
@@ -30,6 +33,53 @@ func TestIsSystemPackageManaged(t *testing.T) {
 		if got := isSystemPackageManaged(c.path); got != c.want {
 			t.Errorf("isSystemPackageManaged(%q) = %v, want %v", c.path, got, c.want)
 		}
+	}
+}
+
+func TestPackageManagerHints(t *testing.T) {
+	orig := lookPath
+	t.Cleanup(func() { lookPath = orig })
+
+	stub := func(present ...string) {
+		lookPath = func(bin string) (string, error) {
+			for _, p := range present {
+				if bin == p {
+					return "/usr/bin/" + bin, nil
+				}
+			}
+			return "", os.ErrNotExist
+		}
+	}
+
+	stub("dnf")
+	if got := packageManagerUpdateHint("/usr/bin/lerd"); got != "sudo dnf upgrade lerd" {
+		t.Errorf("dnf update hint = %q", got)
+	}
+	if got := packageManagerRemoveHint("/usr/bin/lerd"); got != "sudo dnf remove lerd" {
+		t.Errorf("dnf remove hint = %q", got)
+	}
+
+	stub("pacman")
+	if got := packageManagerUpdateHint("/usr/bin/lerd"); got != "sudo pacman -Syu lerd" {
+		t.Errorf("pacman update hint = %q", got)
+	}
+
+	// Atomic Fedora has both; rpm-ostree owns layered packages, so it wins.
+	stub("rpm-ostree", "dnf")
+	if got := packageManagerUpdateHint("/usr/bin/lerd"); got != "rpm-ostree upgrade" {
+		t.Errorf("rpm-ostree update hint = %q", got)
+	}
+
+	// A Nix store path decides by itself, whatever is on PATH.
+	stub("apt")
+	if got := packageManagerUpdateHint("/nix/store/abc-lerd/bin/lerd"); !strings.Contains(got, "nix profile upgrade") {
+		t.Errorf("nix update hint = %q", got)
+	}
+
+	// No known package manager present falls back to a generic sentence.
+	stub("")
+	if got := packageManagerUpdateHint("/usr/bin/lerd"); !strings.Contains(got, "package manager") {
+		t.Errorf("fallback update hint = %q", got)
 	}
 }
 

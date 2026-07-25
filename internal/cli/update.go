@@ -101,7 +101,7 @@ func runUpdate(currentVersion string, beta bool) error {
 	// A deb/rpm install lives under /usr and is owned by the package manager;
 	// self-replacing it would fight apt/dnf, so defer to them.
 	if self, err := selfPath(); err == nil && isSystemPackageManaged(self) {
-		fmt.Printf("\nThis lerd is managed by your system package manager (%s).\nUpdate it with:\n\n  sudo apt upgrade\n\n", self)
+		fmt.Printf("\nThis lerd is managed by your system package manager (%s).\nUpdate it with:\n\n  %s\n\n", self, packageManagerUpdateHint(self))
 		return nil
 	}
 
@@ -496,10 +496,59 @@ func isHomebrewManaged(path string) bool {
 
 // isSystemPackageManaged reports whether the binary lives under a system prefix
 // owned by a package manager. lerd's own installers use ~/.local/bin, so a
-// binary under /usr came from the deb/rpm and must be updated with apt/dnf, not
-// by self-replacing files the package manager owns.
+// binary under /usr came from a deb/rpm/pacman package and one under /nix/store
+// from Nix; those are updated by their manager, not by self-replacing files it
+// owns.
 func isSystemPackageManaged(path string) bool {
-	return strings.HasPrefix(path, "/usr/")
+	// /var/usrlocal is what /usr/local resolves to on ostree systems
+	// (Silverblue), where selfPath's symlink resolution hides the /usr prefix.
+	return strings.HasPrefix(path, "/usr/") ||
+		strings.HasPrefix(path, "/var/usrlocal/") ||
+		strings.HasPrefix(path, "/nix/store/")
+}
+
+// lookPath is a seam for tests.
+var lookPath = exec.LookPath
+
+// systemPackageManagers maps a package manager binary to the commands that
+// update and remove a packaged lerd, in detection order.
+var systemPackageManagers = []struct{ bin, update, remove string }{
+	{"apt", "sudo apt upgrade", "sudo apt remove lerd"},
+	// Before dnf: atomic Fedora ships both, and layered packages are managed
+	// by rpm-ostree there, not dnf.
+	{"rpm-ostree", "rpm-ostree upgrade", "rpm-ostree uninstall lerd"},
+	{"dnf", "sudo dnf upgrade lerd", "sudo dnf remove lerd"},
+	{"pacman", "sudo pacman -Syu lerd", "sudo pacman -R lerd"},
+	{"zypper", "sudo zypper update lerd", "sudo zypper remove lerd"},
+}
+
+// packageManagerUpdateHint names the command that updates a package-managed
+// lerd: Nix is recognised by the binary path, everything else by the first
+// known package manager present on the system.
+func packageManagerUpdateHint(self string) string {
+	if strings.HasPrefix(self, "/nix/store/") {
+		return "nix profile upgrade lerd    (or rebuild your NixOS configuration)"
+	}
+	for _, pm := range systemPackageManagers {
+		if _, err := lookPath(pm.bin); err == nil {
+			return pm.update
+		}
+	}
+	return "your system package manager's upgrade command"
+}
+
+// packageManagerRemoveHint is the removal counterpart of
+// packageManagerUpdateHint.
+func packageManagerRemoveHint(self string) string {
+	if strings.HasPrefix(self, "/nix/store/") {
+		return "nix profile remove lerd    (or your NixOS configuration)"
+	}
+	for _, pm := range systemPackageManagers {
+		if _, err := lookPath(pm.bin); err == nil {
+			return pm.remove
+		}
+	}
+	return "your system package manager"
 }
 
 func selfPath() (string, error) {
