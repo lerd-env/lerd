@@ -211,7 +211,9 @@ func databaseEngine(name string) dbEngineResponse {
 			Snapshots: []serviceops.Snapshot{},
 		}
 		if snapOps {
-			if snaps, sErr := serviceops.ListSnapshots(name, db.Name, false); sErr == nil {
+			// Only on a non-empty result: ListSnapshots returns nil when a
+			// database has none, which would send null where the UI expects a list.
+			if snaps, sErr := serviceops.ListSnapshots(name, db.Name, false); sErr == nil && snaps != nil {
 				entry.Snapshots = snaps
 			}
 		}
@@ -440,7 +442,9 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 	}
 }
 
-// handleSnapshotExport streams a stored snapshot as a downloadable .sql dump.
+// handleSnapshotExport streams a stored snapshot as a downloadable dump, named
+// in the engine's own dump format so a mongo snapshot saves as a .archive
+// rather than being mislabelled .sql.
 func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
@@ -452,8 +456,8 @@ func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "application/sql")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name+".sql"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", serviceops.SnapshotExportFilename(service, name)))
 	if err := serviceops.ExportSnapshot(service, database, name, w); err != nil {
 		fmt.Printf("snapshot export failed for %s/%s/%s: %v\n", service, database, name, err)
 	}

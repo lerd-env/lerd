@@ -698,9 +698,25 @@ func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 	return changed, nil
 }
 
+// customServicePath returns the on-disk definition path for a service name, or
+// an error when the name is not one SaveCustomService could have written. A
+// name indexes straight into a file path, and callers derive it from things
+// like a project's .env DB host, so a name that could never have been saved
+// must not be able to read, probe or delete a path either.
+func customServicePath(name string) (string, error) {
+	if !validServiceName.MatchString(name) {
+		return "", fmt.Errorf("invalid service name %q: must match [a-z0-9][a-z0-9-]*", name)
+	}
+	return filepath.Join(CustomServicesDir(), name+".yaml"), nil
+}
+
 // LoadCustomService loads a custom service by name from the services directory.
 func LoadCustomService(name string) (*CustomService, error) {
-	return LoadCustomServiceFromFile(filepath.Join(CustomServicesDir(), name+".yaml"))
+	path, err := customServicePath(name)
+	if err != nil {
+		return nil, err
+	}
+	return LoadCustomServiceFromFile(path)
 }
 
 // LoadCustomServiceFromFile parses a CustomService from any YAML file path.
@@ -802,7 +818,10 @@ func SaveCustomService(svc *CustomService) error {
 
 // RemoveCustomService deletes a custom service config file.
 func RemoveCustomService(name string) error {
-	path := filepath.Join(CustomServicesDir(), name+".yaml")
+	path, err := customServicePath(name)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -813,8 +832,11 @@ func RemoveCustomService(name string) error {
 // The YAML is the authoritative install-state signal for a custom service, so
 // ServiceInstalled and the services list resolve from it and can't drift (#678).
 func CustomServiceExists(name string) bool {
-	path := filepath.Join(CustomServicesDir(), name+".yaml")
-	_, err := os.Stat(path)
+	path, err := customServicePath(name)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
 	return err == nil
 }
 

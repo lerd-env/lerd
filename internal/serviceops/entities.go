@@ -237,9 +237,32 @@ func ImportEntity(service, kind, name string, r io.Reader) error {
 	return streamEntityAction(service, spec, "import", name, io.Discard, src)
 }
 
+// SnapshotExportFilename is the download name for a stored snapshot. A snapshot
+// downloads in the engine's own dump format, so the extension comes from the
+// declared export filename (.archive for mongo, .sql for the SQL engines),
+// defaulting to .sql. The snapshot name is sanitized so a bad name can neither
+// escape the header nor carry a path.
+func SnapshotExportFilename(service, snapshot string) string {
+	ext := ".sql"
+	act, _ := entityAction(EntityFor(service, "databases"), "export")
+	if i := strings.LastIndex(act.Filename, "."); i >= 0 {
+		ext = act.Filename[i:]
+	}
+	clean, err := sanitizeSnapshotName(snapshot)
+	if err != nil {
+		return "snapshot" + ext
+	}
+	return clean + ext
+}
+
 // EntityExportFilename is the download name for an entity export, from the
-// declared filename, with a neutral fallback.
+// declared filename, with a neutral fallback. The result becomes an output
+// path in the CLI and MCP export paths, so a name that fails validation never
+// shapes it.
 func EntityExportFilename(service, kind, name string) string {
+	if err := ValidateDatabaseName(name); err != nil {
+		return "export.dump"
+	}
 	act, _ := entityAction(EntityFor(service, kind), "export")
 	if act.Filename != "" {
 		if out, err := expandEntityCommand(act.Filename, name); err == nil {

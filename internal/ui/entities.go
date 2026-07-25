@@ -110,6 +110,10 @@ func handleEntities(w http.ResponseWriter, r *http.Request) {
 
 	if len(parts) == 3 {
 		kind, action := parts[1], parts[2]
+		if !genericEntityKind(kind) {
+			http.Error(w, "not found", http.StatusNotFound)
+			return
+		}
 		switch {
 		case action == "export" && r.Method == http.MethodGet:
 			handleEntityExport(w, r, service, kind)
@@ -123,6 +127,23 @@ func handleEntities(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	http.Error(w, "not found", http.StatusNotFound)
+}
+
+// genericEntityKind reports whether a kind may be driven through the generic
+// entity endpoints. The databases kind is excluded because it has its own
+// endpoints, which sanitize a dump on the way in and honour the fresh option,
+// and which gate on the service actually being a database engine.
+func genericEntityKind(kind string) bool { return kind != "" && kind != "databases" }
+
+// rowEntityAction reports whether an action may be run as a per-row action. The
+// streaming pair has its own endpoints, and the service-wide variants back
+// snapshots and take no entity name at all.
+func rowEntityAction(action string) bool {
+	switch action {
+	case "", "export", "import", "export_all", "import_all":
+		return false
+	}
+	return true
 }
 
 func entityOverview(service string, specs []config.EntitySpec) []entityKindResponse {
@@ -190,12 +211,12 @@ func sortEntityActions(actions []entityActionResponse) {
 
 func handleEntityAction(w http.ResponseWriter, r *http.Request, service, kind, action string) {
 	spec := serviceops.EntityFor(service, kind)
-	if spec == nil || kind == "databases" {
+	if spec == nil || !genericEntityKind(kind) {
 		writeDBError(w, "unknown entity kind")
 		return
 	}
-	if action == "export" || action == "import" {
-		writeDBError(w, "streaming actions use their own endpoints")
+	if !rowEntityAction(action) {
+		writeDBError(w, "this action does not run from the entity list")
 		return
 	}
 	var body struct {

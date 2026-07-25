@@ -168,6 +168,11 @@ introspect:
 	if got := EntityExportFilename("myengine", "nokind", "photos"); got != "photos.dump" {
 		t.Errorf("fallback filename = %q", got)
 	}
+	// The fallback becomes an output path in the CLI and MCP export paths, so a
+	// name that never passed validation must not shape it.
+	if got := EntityExportFilename("myengine", "nokind", "../../../etc/passwd"); strings.Contains(got, "/") {
+		t.Errorf("fallback filename carries a path: %q", got)
+	}
 }
 
 // A snapshot stores the same dump an export produces, gzipped in the container
@@ -180,5 +185,34 @@ func TestEntitySnapshotCommandsWrapDeclaredActions(t *testing.T) {
 	restore := entitySnapshotRestoreCommand("import-cmd shop")
 	if !strings.HasPrefix(restore, "gunzip -c") || !strings.Contains(restore, "import-cmd shop") {
 		t.Errorf("restore = %q", restore)
+	}
+}
+
+// A snapshot downloads in the engine's own dump format, so its filename must
+// take the extension from the declared export, not a hardcoded .sql: a mongo
+// snapshot is a mongodump archive, and saving it as db.sql mislabels it.
+func TestSnapshotExportFilename(t *testing.T) {
+	writeCustomService(t, "mongo", `name: mongo
+image: docker.io/library/mongo:7
+introspect:
+  entities:
+    - kind: databases
+      list: echo x
+      actions:
+        export:
+          exec: mongodump --archive
+          filename: "{{name}}.archive"
+`)
+	if got := SnapshotExportFilename("mongo", "before-mutation-20260101-000000"); got != "before-mutation-20260101-000000.archive" {
+		t.Errorf("mongo snapshot filename = %q, want .archive", got)
+	}
+	// A bundled SQL engine keeps .sql from its declared filename.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := SnapshotExportFilename("postgres", "nightly"); got != "nightly.sql" {
+		t.Errorf("postgres snapshot filename = %q, want nightly.sql", got)
+	}
+	// An engine that declares no export filename falls back to a neutral, safe name.
+	if got := SnapshotExportFilename("mysql", "../etc/passwd"); strings.Contains(got, "/") {
+		t.Errorf("snapshot filename carries a path: %q", got)
 	}
 }
