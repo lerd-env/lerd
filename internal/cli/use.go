@@ -19,7 +19,10 @@ func NewUseCmd() *cobra.Command {
 }
 
 func runUse(_ *cobra.Command, args []string) error {
-	version := args[0]
+	version, err := config.NormalizePHPVersion(args[0])
+	if err != nil {
+		return err
+	}
 
 	cfg, err := config.LoadGlobal()
 	if err != nil {

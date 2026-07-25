@@ -8,8 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 )
@@ -86,6 +88,83 @@ func prepareScaffoldParent(target string) error {
 	return nil
 }
 
+// scaffold is how a framework's create command will be run: either through the
+// composer lerd ships (inside the project's PHP container) or, for a create
+// command composer cannot serve, a plain host binary.
+type scaffold struct {
+	inContainer bool
+	args        []string
+}
+
+// scaffoldPlan turns a framework's create command into the argument list that
+// runs it. Every definition in the store starts with composer, which lerd
+// bundles as a phar rather than expecting on the host, so that prefix is
+// swapped for the bundled one and run with the container's PHP. Anything else
+// is left to the host binary it names.
+func scaffoldPlan(create, target string, extraArgs []string) scaffold {
+	parts := strings.Fields(create)
+	if len(parts) == 0 {
+		return scaffold{}
+	}
+	tail := append(append([]string{}, parts[1:]...), target)
+	tail = append(tail, extraArgs...)
+
+	if parts[0] != "composer" {
+		return scaffold{args: append([]string{parts[0]}, tail...)}
+	}
+	return scaffold{
+		inContainer: true,
+		args:        append([]string{filepath.Join(config.BinDir(), "composer.phar")}, tail...),
+	}
+}
+
+// scaffoldPHPVersion returns the PHP version the scaffold should run under: the
+// machine default clamped into the framework's declared range, so composer
+// resolves against a PHP the framework supports rather than whatever the parent
+// directory (empty, so the default) would pick. Returns "" when the framework
+// declares no range, leaving the caller on the default as before.
+func scaffoldPHPVersion(fw *config.Framework) string {
+	if fw.PHP.Min == "" && fw.PHP.Max == "" {
+		return ""
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return ""
+	}
+	return phpDet.ClampToRange(cfg.PHP.DefaultVersion, fw.PHP.Min, fw.PHP.Max)
+}
+
+// runScaffold executes a scaffold plan from the target's parent directory. When
+// version is set, the containerized create command runs under that PHP rather
+// than the one the parent directory resolves to.
+func runScaffold(plan scaffold, workDir, version string) error {
+	if plan.inContainer {
+		var (
+			code int
+			err  error
+		)
+		if version != "" {
+			code, err = RunPHPVersionCaptureEnv(workDir, version, plan.args, []string{composer.ProcessTimeoutEnv()})
+		} else {
+			code, err = RunPHPCaptureEnv(workDir, plan.args, []string{composer.ProcessTimeoutEnv()})
+		}
+		if err != nil {
+			return err
+		}
+		if code != 0 {
+			return fmt.Errorf("exit status %d", code)
+		}
+		return nil
+	}
+
+	cmd := exec.Command(plan.args[0], plan.args[1:]...)
+	cmd.Dir = workDir
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Stdin = os.Stdin
+	return cmd.Run()
+}
+
 func runNew(target, frameworkName string, extraArgs []string) error {
 	// Preserve the path as typed for the "Next" hint before resolving it.
 	typedTarget := target
@@ -99,8 +178,10 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 		target = filepath.Join(cwd, target)
 	}
 
-	// Look up the framework
-	fw, ok := config.GetFramework(frameworkName)
+	// Look up the framework, fetching from the store if it's published but not
+	// installed here yet — starting a project you've never built is exactly when
+	// the definition won't be local.
+	fw, ok := config.GetFrameworkOrFetch(frameworkName)
 	if !ok {
 		return fmt.Errorf("unknown framework %q — run 'lerd framework list' to see available frameworks", frameworkName)
 	}
@@ -112,22 +193,23 @@ func runNew(target, frameworkName string, extraArgs []string) error {
 		return err
 	}
 
-	// Build the full command: <create command parts> <target> [extra args]
-	parts := strings.Fields(fw.Create)
-	parts = append(parts, target)
-	parts = append(parts, extraArgs...)
+	plan := scaffoldPlan(fw.Create, target, extraArgs)
+	if len(plan.args) == 0 {
+		return fmt.Errorf("framework %q has an empty create command", frameworkName)
+	}
+
+	scaffoldVersion := scaffoldPHPVersion(fw)
 
 	start := time.Now()
 	feedback.Begin()
-	feedback.Line("scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(parts, " "))
+	line := "scaffolding " + feedback.Val(fw.Label) + " · " + strings.Join(strings.Fields(fw.Create), " ") + " " + target
+	if plan.inContainer && scaffoldVersion != "" {
+		line += " · php " + feedback.Val(scaffoldVersion)
+	}
+	feedback.Line(line)
 	fmt.Println()
 
-	cmd := exec.Command(parts[0], parts[1:]...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Stdin = os.Stdin
-
-	if err := cmd.Run(); err != nil {
+	if err := runScaffold(plan, filepath.Dir(target), scaffoldVersion); err != nil {
 		return fmt.Errorf("scaffold command failed: %w", err)
 	}
 

@@ -22,7 +22,10 @@ func NewIsolateCmd() *cobra.Command {
 }
 
 func runIsolate(_ *cobra.Command, args []string) error {
-	version := args[0]
+	version, err := config.NormalizePHPVersion(args[0])
+	if err != nil {
+		return err
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -48,9 +51,6 @@ func runIsolate(_ *cobra.Command, args []string) error {
 	// to write. link picks it up when the directory is eventually linked.
 	site, err := config.FindSiteByPath(cwd)
 	if err != nil {
-		if !config.IsSupportedPHPVersion(version) {
-			return fmt.Errorf("unsupported PHP version %q (supported: %s)", version, strings.Join(config.SupportedPHPVersions, ", "))
-		}
 		if err := siteops.PinPHPVersionFile(cwd, version); err != nil {
 			return fmt.Errorf("writing .php-version: %w", err)
 		}

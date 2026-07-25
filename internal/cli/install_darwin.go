@@ -29,24 +29,14 @@ func downloadBinaries(w io.Writer) error {
 		}
 	}
 
-	// fnm — macOS universal binary
-	fnmPath := filepath.Join(binDir, "fnm")
-	if _, err := os.Stat(fnmPath); os.IsNotExist(err) {
-		fnmZip := filepath.Join(binDir, "fnm-macos.zip")
-		if err := downloadFile(
-			"https://github.com/Schniz/fnm/releases/latest/download/fnm-macos.zip",
-			fnmZip, 0644, w,
-		); err != nil {
-			return fmt.Errorf("fnm download: %w", err)
+	// fnm — macOS universal binary. Skipped when the user drives Node via their
+	// own nvm, since lerd never provisions nvm and fnm would sit unused.
+	// Switching back with `lerd node:manager fnm` calls ensureFnmBinary on demand.
+	cfg, _ := config.LoadGlobal()
+	if cfg == nil || cfg.NodeManager() != "nvm" {
+		if err := ensureFnmBinary(w); err != nil {
+			return err
 		}
-		extractCmd := exec.Command("unzip", "-o", fnmZip, "fnm", "-d", binDir)
-		extractCmd.Stdout = w
-		extractCmd.Stderr = w
-		if err := extractCmd.Run(); err != nil {
-			return fmt.Errorf("fnm extract: %w", err)
-		}
-		os.Remove(fnmZip)
-		os.Chmod(fnmPath, 0755) //nolint:errcheck
 	}
 
 	// mkcert
@@ -74,6 +64,33 @@ func downloadBinaries(w io.Writer) error {
 		}
 	}
 
+	return nil
+}
+
+// ensureFnmBinary downloads and extracts fnm into BinDir when it is missing.
+// Called from downloadBinaries on a normal (fnm) install, and on demand when
+// switching back to fnm with `lerd node:manager fnm` after an nvm-only setup.
+func ensureFnmBinary(w io.Writer) error {
+	binDir := config.BinDir()
+	fnmPath := filepath.Join(binDir, "fnm")
+	if _, err := os.Stat(fnmPath); err == nil {
+		return nil
+	}
+	fnmZip := filepath.Join(binDir, "fnm-macos.zip")
+	if err := downloadFile(
+		"https://github.com/Schniz/fnm/releases/latest/download/fnm-macos.zip",
+		fnmZip, 0644, w,
+	); err != nil {
+		return fmt.Errorf("fnm download: %w", err)
+	}
+	extractCmd := exec.Command("unzip", "-o", fnmZip, "fnm", "-d", binDir)
+	extractCmd.Stdout = w
+	extractCmd.Stderr = w
+	if err := extractCmd.Run(); err != nil {
+		return fmt.Errorf("fnm extract: %w", err)
+	}
+	os.Remove(fnmZip)
+	os.Chmod(fnmPath, 0755) //nolint:errcheck
 	return nil
 }
 

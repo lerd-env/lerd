@@ -3,11 +3,11 @@ package cli
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/spf13/cobra"
 )
 
@@ -48,17 +48,14 @@ func runIsolateNode(_ *cobra.Command, args []string) error {
 	feedback.Begin()
 	feedback.Done("Node pinned to " + feedback.Val(version))
 
-	// Run fnm install for this version
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err == nil {
-		cmd := exec.Command(fnmPath, "install", version)
-		cmd.Stdout = os.Stdout
-		cmd.Stderr = os.Stderr
-		if err := cmd.Run(); err != nil {
-			feedback.Warn("fnm install %s: %v", version, err)
+	// Install this version via the active version manager (best-effort).
+	mgr := nodeDet.Active()
+	if mgr.Available() {
+		if err := mgr.Install(version); err != nil {
+			feedback.Warn("installing Node %s: %v", version, err)
 		}
 	} else {
-		feedback.Warn("fnm not found — run 'lerd install' to set up Node.js management")
+		feedback.Warn("%s not found — run 'lerd install' to set up Node.js management", mgr.Name())
 	}
 
 	return nil

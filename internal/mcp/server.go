@@ -440,27 +440,7 @@ func execServiceStart(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-
-	unitName := "lerd-" + name
-
-	if isKnownService(name) {
-		if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
-			return toolErr("ensuring default preset quadlet: " + err.Error()), nil
-		}
-	} else {
-		svc, err := config.LoadCustomService(name)
-		if err != nil {
-			return toolErr("unknown service: " + name + ". Use service_add to register a custom service first."), nil
-		}
-		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
-			return toolErr("writing quadlet: " + err.Error()), nil
-		}
-	}
-
-	if err := podman.DaemonReloadFn(); err != nil {
-		return toolErr("daemon-reload: " + err.Error()), nil
-	}
-	if err := podman.StartUnit(unitName); err != nil {
+	if err := serviceops.StartService(name); err != nil {
 		return toolErr("starting " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " started"), nil
@@ -471,7 +451,7 @@ func execServiceStop(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-	if err := podman.StopUnit("lerd-" + name); err != nil {
+	if err := serviceops.StopService(name); err != nil {
 		return toolErr("stopping " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " stopped"), nil
@@ -482,16 +462,7 @@ func execServiceRestart(args map[string]any) (any, *rpcError) {
 	if name == "" {
 		return toolErr("name is required"), nil
 	}
-	if isKnownService(name) {
-		if err := serviceops.EnsureDefaultPresetQuadlet(name); err != nil {
-			return toolErr("ensuring quadlet: " + err.Error()), nil
-		}
-	} else if svc, err := config.LoadCustomService(name); err == nil {
-		if err := serviceops.EnsureCustomServiceQuadlet(svc); err != nil {
-			return toolErr("ensuring quadlet: " + err.Error()), nil
-		}
-	}
-	if err := podman.RestartUnit("lerd-" + name); err != nil {
+	if err := serviceops.RestartService(name); err != nil {
 		return toolErr("restarting " + name + ": " + err.Error()), nil
 	}
 	return toolOK(name + " restarted"), nil
@@ -1062,19 +1033,14 @@ func execNodeInstall(args map[string]any) (any, *rpcError) {
 		return toolErr("version is required"), nil
 	}
 
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		return toolErr("fnm not found — run 'lerd install' to set up Node.js management"), nil
+	mgr := lerdNode.Active()
+	if !mgr.Available() {
+		return toolErr(mgr.Name() + " not found — run 'lerd install' to set up Node.js management"), nil
 	}
-
-	var out bytes.Buffer
-	cmd := exec.Command(fnmPath, "install", version)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("fnm install %s failed (%v):\n%s", version, err, stripANSI(out.String()))), nil
+	if err := mgr.Install(version); err != nil {
+		return toolErr(fmt.Sprintf("node install %s failed: %v", version, err)), nil
 	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK("installed Node " + version), nil
 }
 
 func execNodeUninstall(args map[string]any) (any, *rpcError) {
@@ -1083,19 +1049,14 @@ func execNodeUninstall(args map[string]any) (any, *rpcError) {
 		return toolErr("version is required"), nil
 	}
 
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, err := os.Stat(fnmPath); err != nil {
-		return toolErr("fnm not found — run 'lerd install' to set up Node.js management"), nil
+	mgr := lerdNode.Active()
+	if !mgr.Available() {
+		return toolErr(mgr.Name() + " not found — run 'lerd install' to set up Node.js management"), nil
 	}
-
-	var out bytes.Buffer
-	cmd := exec.Command(fnmPath, "uninstall", version)
-	cmd.Stdout = &out
-	cmd.Stderr = &out
-	if err := cmd.Run(); err != nil {
-		return toolErr(fmt.Sprintf("fnm uninstall %s failed (%v):\n%s", version, err, stripANSI(out.String()))), nil
+	if err := mgr.Uninstall(version); err != nil {
+		return toolErr(fmt.Sprintf("node uninstall %s failed: %v", version, err)), nil
 	}
-	return toolOK(stripANSI(strings.TrimSpace(out.String()))), nil
+	return toolOK("uninstalled Node " + version), nil
 }
 
 func execRuntimeVersions() (any, *rpcError) {
@@ -1108,9 +1069,9 @@ func execRuntimeVersions() (any, *rpcError) {
 		defaultPHP = cfg.PHP.DefaultVersion
 	}
 
-	// Node.js versions via fnm. Goes through the shared internal/node
-	// helper so the MCP and the web UI (/api/node-versions) return the
-	// same shape: major-only deduped majors like "20", "18".
+	// Node.js versions via the active version manager. Goes through the shared
+	// internal/node helper so the MCP and the web UI (/api/node-versions)
+	// return the same shape: major-only deduped majors like "20", "18".
 	defaultNode := ""
 	if cfg != nil {
 		defaultNode = cfg.Node.DefaultVersion
@@ -1864,7 +1825,7 @@ func execServicePresetInstall(args map[string]any) (any, *rpcError) {
 		msg += " Dashboard: " + svc.Dashboard
 	}
 	if len(svc.DependsOn) > 0 {
-		msg += " Dependencies (auto-started on start): " + strings.Join(svc.DependsOn, ", ")
+		msg += " Dependencies (auto-started on start): " + strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", ")
 	}
 	return toolOK(msg), nil
 }
@@ -2283,122 +2244,43 @@ func execEnvCheck(args map[string]any) (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+// execSiteLink registers a project as a site by delegating to `lerd link`, so
+// an assistant gets exactly what the CLI does: name and domain resolution, the
+// framework and PHP detection, every serving mode, and the services a framework
+// requires. Running it as a subprocess with no terminal is also what refuses a
+// repository's dev command rather than approving it on the user's behalf.
 func execSiteLink(args map[string]any) (any, *rpcError) {
 	projectPath := resolvedPath(args)
 	if projectPath == "" {
 		return toolErr("path is required — pass a path argument or open Claude in the project directory"), nil
 	}
+	if info, err := os.Stat(projectPath); err != nil || !info.IsDir() {
+		return toolErr("not a directory: " + projectPath), nil
+	}
 
-	cfg, err := config.LoadGlobal()
+	// Strip styling: a subcommand that renders with lipgloss rather than the
+	// feedback layer colours its output even into a pipe, and escape codes are
+	// noise in a tool result.
+	out, err := runIn(projectPath, lerdSelf(), siteLinkArgs(strArg(args, "name"))...)
+	out = strings.TrimSpace(stripANSI(out))
 	if err != nil {
-		return toolErr("loading config: " + err.Error()), nil
-	}
-
-	proj, _ := config.LoadProjectConfig(projectPath)
-
-	rawName := strArg(args, "name")
-	if rawName == "" {
-		rawName = filepath.Base(projectPath)
-	}
-	name, _ := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
-
-	// Build domains: prefer .lerd.yaml domains, fall back to auto-generated.
-	var domains []string
-	if proj != nil && len(proj.Domains) > 0 {
-		for _, d := range proj.Domains {
-			domains = append(domains, strings.ToLower(d)+"."+cfg.DNS.TLD)
+		if out == "" {
+			out = err.Error()
 		}
-	} else {
-		_, domain := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
-		domains = []string{domain}
+		return toolErr(out), nil
 	}
+	return toolOK(out), nil
+}
 
-	// Validate domains are not used by other sites.
-	for _, d := range domains {
-		if existing, err := config.IsDomainUsed(d); err == nil && existing != nil && existing.Path != projectPath {
-			return toolErr(fmt.Sprintf("domain %q is already used by site %q", d, existing.Name)), nil
-		}
+// siteLinkArgs builds the `lerd link` invocation. A requested name is passed as
+// the positional, which makes it the site's primary domain. Without one the
+// positional is omitted, so a project's committed .lerd.yaml domains are
+// honoured verbatim rather than having a directory-derived name prepended.
+func siteLinkArgs(name string) []string {
+	if name == "" {
+		return []string{"link"}
 	}
-
-	// Custom container path: .lerd.yaml has a container section with a port.
-	if proj != nil && proj.Container != nil && proj.Container.Port > 0 {
-		secured := siteops.ResolveSecured(siteops.CleanupRelink(projectPath, name), proj, cfg)
-		site := config.Site{
-			Name:          name,
-			Domains:       domains,
-			Path:          projectPath,
-			Secured:       secured,
-			ContainerPort: proj.Container.Port,
-			ContainerSSL:  proj.Container.SSL,
-		}
-		if err := config.AddSite(site); err != nil {
-			return toolErr("registering site: " + err.Error()), nil
-		}
-		_ = config.SyncProjectDomains(projectPath, site.Domains, cfg.DNS.TLD)
-		if err := siteops.FinishCustomLink(site, proj.Container); err != nil {
-			return toolErr(err.Error()), nil
-		}
-		return toolOK(fmt.Sprintf("Linked %s -> %s (custom container, port %d)", name, strings.Join(domains, ", "), proj.Container.Port)), nil
-	}
-
-	// Host-proxy path: .lerd.yaml has a proxy section, so the site runs a dev
-	// server on the host that nginx reverse-proxies to. Supervising that command
-	// needs the consent gating and worker-start logic that live in the cli
-	// package, so delegate to `lerd link` (the same shell-out pattern as worker
-	// start) instead of falling through to the PHP path, which would downgrade
-	// the site to plain FPM and drop the proxy vhost. The consent gate still
-	// applies: an already-approved command (or host_proxy.skip_confirmation)
-	// proceeds, while an unapproved command in this non-interactive context is
-	// refused with guidance rather than run blindly.
-	if proj != nil && proj.Proxy != nil && proj.Proxy.Port > 0 {
-		// No positional name: a positional is treated by runLink as an explicit
-		// primary domain to prepend, which would register the directory-derived
-		// name alongside the .lerd.yaml domains (and SyncProjectDomains would then
-		// persist the spurious entry). Plain `lerd link` honors proj.Domains
-		// verbatim, matching the container and PHP branches above.
-		out, err := runIn(projectPath, "lerd", "link")
-		if err != nil {
-			msg := strings.TrimSpace(out)
-			if msg == "" {
-				msg = err.Error()
-			}
-			return toolErr(msg), nil
-		}
-		return toolOK(strings.TrimSpace(out)), nil
-	}
-
-	// PHP / framework path.
-	framework := ""
-	if fname, ok := config.DetectFrameworkForDir(projectPath); ok {
-		framework = fname
-	}
-	versions := siteops.DetectSiteVersions(projectPath, framework, cfg.PHP.DefaultVersion, cfg.Node.DefaultVersion)
-	phpVersion, nodeVersion := versions.PHP, versions.Node
-	if proj != nil && proj.PHPVersion != "" {
-		phpVersion = proj.PHPVersion
-	}
-
-	secured := siteops.ResolveSecured(siteops.CleanupRelink(projectPath, name), proj, cfg)
-	site := config.Site{
-		Name:        name,
-		Domains:     domains,
-		Path:        projectPath,
-		PHPVersion:  phpVersion,
-		NodeVersion: nodeVersion,
-		Secured:     secured,
-		Framework:   framework,
-	}
-
-	if err := config.AddSite(site); err != nil {
-		return toolErr("registering site: " + err.Error()), nil
-	}
-	_ = config.SyncProjectDomains(projectPath, site.Domains, cfg.DNS.TLD)
-
-	if err := siteops.FinishLink(site, phpVersion); err != nil {
-		return toolErr(err.Error()), nil
-	}
-
-	return toolOK(fmt.Sprintf("Linked %s -> %s (PHP %s, Node %s)", name, strings.Join(domains, ", "), phpVersion, nodeVersion)), nil
+	return []string{"link", name}
 }
 
 func execSiteUnlink(args map[string]any) (any, *rpcError) {
@@ -2692,11 +2574,14 @@ func execDBExport(args map[string]any) (any, *rpcError) {
 	var cmd *exec.Cmd
 	switch env.connection {
 	case "mysql", "mariadb":
-		cmd = podman.Cmd("exec", "-i", "lerd-mysql",
-			"mysqldump", "-u"+env.username, "-p"+env.password, env.database)
+		args := []string{"exec", "-i", "lerd-mysql", "mysqldump", "-u" + env.username, "-p" + env.password}
+		args = append(args, serviceops.DumpFlags("mysql")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	case "pgsql", "postgres":
-		cmd = podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			"lerd-postgres", "pg_dump", "-U", env.username, env.database)
+		args := []string{"exec", "-i", "-e", "PGPASSWORD=" + env.password,
+			"lerd-postgres", "pg_dump", "-U", env.username}
+		args = append(args, serviceops.DumpFlags("postgres")...)
+		cmd = podman.Cmd(append(args, env.database)...)
 	default:
 		_ = os.Remove(output)
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
@@ -2841,10 +2726,76 @@ func execFrameworkList() (any, *rpcError) {
 	return toolOK(string(data)), nil
 }
 
+// frameworkAddIsAuthoring reports whether the request carries any field that
+// only makes sense when defining a framework by hand, which is what separates
+// authoring from a plain store install of a published name.
+func frameworkAddIsAuthoring(args map[string]any) bool {
+	for _, k := range []string{"workers", "setup", "logs", "detect_files", "detect_packages"} {
+		if v, ok := args[k]; ok && v != nil {
+			return true
+		}
+	}
+	for _, k := range []string{"label", "public_dir", "env_file", "env_format", "env_fallback_file", "env_fallback_format"} {
+		if strArg(args, k) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// frameworkAddFromStore installs a published definition, resolving the version
+// from the active site when there is one and otherwise the latest. A name the
+// store does not publish points back at search and at authoring by hand.
+func frameworkAddFromStore(name, version string) (any, *rpcError) {
+	client := store.NewClient()
+	idx, err := client.FetchIndex()
+	if err != nil {
+		return toolErr(fmt.Sprintf("fetching store index: %v", err)), nil
+	}
+	var entry *store.IndexEntry
+	for i := range idx.Frameworks {
+		if idx.Frameworks[i].Name == name {
+			entry = &idx.Frameworks[i]
+			break
+		}
+	}
+	if entry == nil {
+		return toolErr(fmt.Sprintf("framework %q is not in the store — use framework_search to see published names, or provide public_dir and detection fields to author one by hand", name)), nil
+	}
+
+	if version == "" {
+		if defaultSitePath != "" {
+			version = store.ResolveVersion(defaultSitePath, entry.Detect, entry.Versions, entry.Latest)
+		} else {
+			version = entry.Latest
+		}
+	}
+	remote, err := client.FetchFramework(name, version)
+	if err != nil {
+		return toolErr(fmt.Sprintf("fetching framework: %v", err)), nil
+	}
+	if err := config.SaveStoreFramework(remote); err != nil {
+		return toolErr(fmt.Sprintf("saving framework: %v", err)), nil
+	}
+	config.RemoveUserFramework(name)
+
+	installed := remote.Version
+	if installed == "" {
+		installed = version
+	}
+	return toolOK(fmt.Sprintf("Installed %s@%s (%s) from the store. Use site_link to register a project using this framework.", remote.Name, installed, remote.Label)), nil
+}
+
 func execFrameworkAdd(args map[string]any) (any, *rpcError) {
 	name := strArg(args, "name")
 	if name == "" {
 		return toolErr("name is required"), nil
+	}
+
+	// A bare name with no authoring fields is a request to install a published
+	// definition, not to hand-author a hollow stub that would shadow the store's.
+	if !frameworkAddIsAuthoring(args) {
+		return frameworkAddFromStore(name, strArg(args, "version"))
 	}
 
 	// Parse workers map if provided
@@ -3215,7 +3166,7 @@ func execWorkerStart(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	out, err := runIn(cwd, "lerd", "worker", "start", workerName)
+	out, err := runIn(cwd, lerdSelf(), "worker", "start", workerName)
 	if err != nil {
 		msg := strings.TrimSpace(out)
 		if msg == "" {
@@ -3243,7 +3194,7 @@ func execWorkerStop(args map[string]any) (any, *rpcError) {
 	if errResp != nil {
 		return errResp, nil
 	}
-	out, err := runIn(cwd, "lerd", "worker", "stop", workerName)
+	out, err := runIn(cwd, lerdSelf(), "worker", "stop", workerName)
 	if err != nil {
 		msg := strings.TrimSpace(out)
 		if msg == "" {
@@ -3395,7 +3346,7 @@ func execWorkersMode(args map[string]any) (any, *rpcError) {
 	action := strArg(args, "action")
 	switch action {
 	case "get":
-		out, err := runIn("", "lerd", "workers", "mode")
+		out, err := runIn("", lerdSelf(), "workers", "mode")
 		if err != nil {
 			msg := strings.TrimSpace(out)
 			if msg == "" {
@@ -3767,7 +3718,7 @@ func execProjectNew(args map[string]any) (any, *rpcError) {
 	}
 	extraArgs := strSliceArg(args, "args")
 
-	fw, ok := config.GetFramework(frameworkName)
+	fw, ok := config.GetFrameworkOrFetch(frameworkName)
 	if !ok {
 		return toolErr(fmt.Sprintf("unknown framework %q — use framework_list to see available frameworks", frameworkName)), nil
 	}
@@ -3981,14 +3932,10 @@ func execSiteNode(args map[string]any) (any, *rpcError) {
 		return toolErr("writing .node-version: " + err.Error()), nil
 	}
 
-	// Install the version via fnm (non-fatal if already installed or fnm unavailable).
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
-	if _, statErr := os.Stat(fnmPath); statErr == nil {
-		var out bytes.Buffer
-		cmd := exec.Command(fnmPath, "install", version)
-		cmd.Stdout = &out
-		cmd.Stderr = &out
-		_ = cmd.Run()
+	// Install the version via the active manager (non-fatal if already installed
+	// or the manager is unavailable).
+	if mgr := lerdNode.Active(); mgr.Available() {
+		_ = mgr.Install(version)
 	}
 
 	// Update the site registry.
@@ -4215,13 +4162,40 @@ func execDBImport(args map[string]any) (any, *rpcError) {
 		return toolErr("unsupported DB_CONNECTION: " + env.connection), nil
 	}
 
+	// The tool talks to the family's canonical service, the same one the commands
+	// above hardcode as lerd-mysql / lerd-postgres.
+	svc := "mysql"
+	if env.connection == "pgsql" || env.connection == "postgres" {
+		svc = "postgres"
+	}
+	if boolArg(args, "fresh") {
+		if err := serviceops.EmptyDatabase(svc, env.database); err != nil {
+			return toolErr(err.Error()), nil
+		}
+	}
+	src, err := serviceops.DumpReader(f)
+	if err != nil {
+		return toolErr(err.Error()), nil
+	}
+	src, notes := serviceops.SanitizeDump(serviceops.DumpTarget{
+		Service: svc, Family: config.FamilyOfName(svc), Database: env.database,
+		Extensions: serviceops.DeclaredExtensions(svc),
+	}, src)
 	var stderr bytes.Buffer
-	cmd.Stdin = f
+	cmd.Stdin = src
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
 		return toolErr(fmt.Sprintf("import failed (%v):\n%s", err, stripANSI(stderr.String()))), nil
 	}
-	return toolOK(fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)), nil
+	msg := fmt.Sprintf("Imported %s into %s (%s)", file, env.database, env.connection)
+	n := notes()
+	rep := serviceops.ImportReport{Skipped: n.Skipped, Created: n.Created}
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+		if note != "" {
+			msg += ", " + note
+		}
+	}
+	return toolOK(msg), nil
 }
 
 // mcpSnapshotTarget resolves a snapshot target from MCP args. It honours an

@@ -100,8 +100,9 @@ type CustomService struct {
 	Category string `yaml:"category,omitempty" json:"category,omitempty"`
 	Icon     string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	// AdminFor lists the services this preset's UI administers. It is not
-	// DependsOn: phpMyAdmin starts after mysql but administers mariadb too, and
-	// RedisInsight administers valkey without ever depending on it.
+	// DependsOn: phpMyAdmin starts after a mysql satisfier but administers
+	// mariadb too, and RedisInsight administers valkey while depending on redis
+	// (satisfied by valkey via env_role).
 	AdminFor []string `yaml:"admin_for,omitempty" json:"admin_for,omitempty"`
 	// Files is deprecated as a YAML user field but kept with its yaml tag so
 	// LoadCustomServiceFromFile can detect legacy on-disk entries and migrate
@@ -180,6 +181,22 @@ type CustomService struct {
 	// Introspect, when set, lets the databases UI enumerate the databases inside
 	// this engine and read their sizes. Only database-engine presets declare it.
 	Introspect *Introspect `yaml:"introspect,omitempty" json:"introspect,omitempty"`
+	// Extensions lists the database extensions this engine's image can create.
+	// Only engines that ship any declare them, and lerd creates one only when a
+	// dump reaches for it, since some cost several megabytes per database.
+	Extensions []Extension `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+}
+
+// Extension is a database extension an engine's image ships, with the type
+// names it provides. The types are what let an import tell that a dump needs it,
+// so no Go code has to know what postgis or pgvector are.
+type Extension struct {
+	Name  string   `yaml:"name" json:"name"`
+	Types []string `yaml:"types,omitempty" json:"types,omitempty"`
+	// Always creates the extension wherever lerd creates a database, for the ones
+	// that are cheap or that provide no distinctive type to match a dump against.
+	// The rest wait until a dump reaches for one of their types.
+	Always bool `yaml:"always,omitempty" json:"always,omitempty"`
 }
 
 // ClientShim declares a service client tool that lerd exposes as a host shim.
@@ -412,8 +429,34 @@ func ResolveDynamicEnv(svc *CustomService) error {
 	return nil
 }
 
+// RewriteDependencyHosts retargets a preset's pinned dependency host to the
+// service that actually satisfies it: for each depends_on entry, an environment
+// value referencing lerd-<dep> is rewritten to lerd-<satisfier> when a drop-in
+// (Valkey for redis, a versioned mongo) backs the dependency instead of the
+// literal name. Driven purely by depends_on so the published store YAML carries
+// no directive an older binary would reject.
+func RewriteDependencyHosts(svc *CustomService) {
+	if svc == nil || ResolveDepHost == nil || len(svc.Environment) == 0 {
+		return
+	}
+	for _, dep := range svc.DependsOn {
+		canonical := "lerd-" + dep
+		actual := ResolveDepHost(dep)
+		if actual == "" || actual == canonical {
+			continue
+		}
+		for k, v := range svc.Environment {
+			if strings.Contains(v, canonical) {
+				svc.Environment[k] = strings.ReplaceAll(v, canonical, actual)
+			}
+		}
+	}
+}
+
 // uniqueFamilyHosts returns sorted, de-duplicated container hostnames across a
-// comma-separated list of family names.
+// comma-separated list of family names. When ServiceRunning is set (production),
+// only members whose unit is active are included so admin UIs do not list
+// offline hosts.
 func uniqueFamilyHosts(families string) []string {
 	seen := map[string]bool{}
 	var all []string
@@ -425,9 +468,29 @@ func uniqueFamilyHosts(families string) []string {
 			}
 		}
 	}
+	if ServiceRunning != nil {
+		var running []string
+		for _, host := range all {
+			name := strings.TrimPrefix(host, "lerd-")
+			if ServiceRunning(name) {
+				running = append(running, host)
+			}
+		}
+		all = running
+	}
 	sort.Strings(all)
 	return all
 }
+
+// ServiceRunning, when set, reports whether a service is up. discover_family
+// uses it to omit stopped members. Nil keeps the installed-member list (tests).
+var ServiceRunning func(name string) bool
+
+// ResolveDepHost, when set, returns the container hostname (lerd-<name>) of an
+// installed satisfier for the named depends_on entry. serviceops wires it so
+// RewriteDependencyHosts can prefer a running drop-in without config importing
+// serviceops.
+var ResolveDepHost func(dep string) string
 
 // MaterializeServiceFiles writes each FileMount for svc to its host path,
 // creating the parent directory and applying the requested mode. The file
@@ -530,25 +593,6 @@ func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 		changed = true
 	}
 	return changed, nil
-}
-
-// CustomServicesDependingOn returns the names of all custom services that
-// declare name in their depends_on list.
-func CustomServicesDependingOn(name string) []string {
-	customs, err := ListCustomServices()
-	if err != nil {
-		return nil
-	}
-	var out []string
-	for _, svc := range customs {
-		for _, dep := range svc.DependsOn {
-			if dep == name {
-				out = append(out, svc.Name)
-				break
-			}
-		}
-	}
-	return out
 }
 
 // LoadCustomService loads a custom service by name from the services directory.

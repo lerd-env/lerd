@@ -27,6 +27,7 @@ type ServiceIndexEntry struct {
 	Name           string                 `json:"name"`
 	Description    string                 `json:"description"`
 	Family         string                 `json:"family,omitempty"`
+	EnvRole        string                 `json:"env_role,omitempty"`
 	Dashboard      string                 `json:"dashboard,omitempty"`
 	DependsOn      []string               `json:"depends_on,omitempty"`
 	Image          string                 `json:"image,omitempty"`

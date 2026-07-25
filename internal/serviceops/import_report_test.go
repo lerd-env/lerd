@@ -1,8 +1,10 @@
 package serviceops
 
 import (
+	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"testing"
 )
 
@@ -99,12 +101,16 @@ func TestImportTallyAcrossConcurrentStreams(t *testing.T) {
 	}
 }
 
-func TestParseImportOutputCapsIssues(t *testing.T) {
+func distinctErrors(n int) string {
 	out := ""
-	for i := 0; i < maxImportIssues+3; i++ {
-		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
+	for i := 0; i < n; i++ {
+		out += fmt.Sprintf("ERROR:  failure number %d\n", i)
 	}
-	rep := parseImportOutput(out)
+	return out
+}
+
+func TestParseImportOutputCapsIssues(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(maxImportIssues + 3))
 	// Nothing is held back when the output carries no COPY cascade to hold it for.
 	if len(rep.Issues) != maxImportIssues {
 		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
@@ -117,14 +123,22 @@ func TestParseImportOutputCapsIssues(t *testing.T) {
 	}
 }
 
+// A dump replayed over a populated schema complains once per object. Every one
+// of those has to reach the report, or the modal listing them cannot show them.
+func TestParseImportOutputKeepsEveryIssueOfARealDump(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(243))
+	if len(rep.Issues) != 243 {
+		t.Fatalf("issues = %d, want 243", len(rep.Issues))
+	}
+	if rep.Omitted != 0 {
+		t.Fatalf("omitted = %d, want 0", rep.Omitted)
+	}
+}
+
 // The COPY cascade gets its slot only when there is one, and it never crowds
 // out the failure that caused it.
 func TestParseImportOutputReservesNoiseSlot(t *testing.T) {
-	out := ""
-	for i := 0; i < maxImportIssues+1; i++ {
-		out += "ERROR:  failure number " + string(rune('a'+i)) + "\n"
-	}
-	out += "invalid command \\N\ninvalid command \\N\n"
+	out := distinctErrors(maxImportIssues+1) + "invalid command \\N\ninvalid command \\N\n"
 	rep := parseImportOutput(out)
 	if len(rep.Issues) != maxImportIssues {
 		t.Fatalf("issues = %d, want %d", len(rep.Issues), maxImportIssues)
@@ -138,6 +152,29 @@ func TestParseImportOutputReservesNoiseSlot(t *testing.T) {
 	}
 }
 
+// The CLI prints one line, so it spells out the first few and folds the rest
+// into the same tail the cap uses.
+func TestSummaryTrimsToAHandful(t *testing.T) {
+	rep := parseImportOutput(distinctErrors(20))
+	got := rep.Summary()
+	if !strings.Contains(got, "the engine reported 20 errors") {
+		t.Fatalf("summary = %q", got)
+	}
+	if !strings.Contains(got, "and 15 more") {
+		t.Fatalf("summary = %q", got)
+	}
+	if strings.Contains(got, "failure number 5") {
+		t.Fatalf("summary spelled out past the cap: %q", got)
+	}
+}
+
+func TestSummaryFoldsOmittedIntoTheSameTail(t *testing.T) {
+	rep := ImportReport{Errors: 40, Issues: []ImportIssue{{Message: "ERROR:  a", Count: 1}}, Omitted: 12}
+	if got := rep.Summary(); !strings.Contains(got, "and 12 more") {
+		t.Fatalf("summary = %q", got)
+	}
+}
+
 func TestImportTallyBoundsPartialLine(t *testing.T) {
 	var tally ImportTally
 	out := tally.Stream()
@@ -146,5 +183,60 @@ func TestImportTallyBoundsPartialLine(t *testing.T) {
 	}
 	if got := len(tally.streams[0].partial); got > maxPartialLine {
 		t.Fatalf("partial = %d bytes, want at most %d", got, maxPartialLine)
+	}
+}
+
+// pg_dump 18 opens its dumps with \restrict, and in that mode psql refuses
+// backslash commands. So the COPY data that spills out after a missing table,
+// which used to read "invalid command \N", now reads this instead, and the
+// tally never saw it.
+func TestParseImportOutputCountsThePostgres18Cascade(t *testing.T) {
+	out := `ERROR:  type "public.vector" does not exist
+ERROR:  relation "public.embeddings" does not exist
+backslash commands are restricted; only \unrestrict is allowed
+backslash commands are restricted; only \unrestrict is allowed
+backslash commands are restricted; only \unrestrict is allowed
+ERROR:  syntax error at or near "1"
+`
+	rep := parseImportOutput(out)
+	if rep.Errors != 6 {
+		t.Fatalf("errors = %d, want 6", rep.Errors)
+	}
+	// The cascade folds into one entry, at the end, so it cannot crowd out the
+	// failure that caused it.
+	last := rep.Issues[len(rep.Issues)-1]
+	if !strings.Contains(last.Message, "backslash commands are restricted") || last.Count != 3 {
+		t.Fatalf("last issue = %+v", last)
+	}
+	if rep.Issues[0].Message != `ERROR:  type "public.vector" does not exist` {
+		t.Errorf("the cause is no longer first: %+v", rep.Issues[0])
+	}
+	if len(rep.Issues) != 4 {
+		t.Errorf("issues = %+v", rep.Issues)
+	}
+}
+
+// Both phrasings are the same cascade, and a dump that somehow produced both
+// must still leave room for the statements that matter.
+func TestParseImportOutputFoldsEitherCascadePhrasing(t *testing.T) {
+	out := "invalid command \\N\ninvalid command \\N\n" +
+		"backslash commands are restricted; only \\unrestrict is allowed\n" +
+		"ERROR:  relation \"t\" does not exist\n"
+	rep := parseImportOutput(out)
+	noise := 0
+	for _, i := range rep.Issues {
+		if strings.HasPrefix(i.Message, "invalid command") || strings.HasPrefix(i.Message, "backslash commands") {
+			noise++
+		}
+	}
+	if noise != 1 {
+		t.Errorf("both phrasings should fold to one entry: %+v", rep.Issues)
+	}
+}
+
+func TestTrimImportPrefixHandlesTheRestrictedLine(t *testing.T) {
+	got := trimImportPrefix(`psql:<stdin>:4412: backslash commands are restricted; only \unrestrict is allowed`)
+	if got != `backslash commands are restricted; only \unrestrict is allowed` {
+		t.Errorf("trim = %q", got)
 	}
 }

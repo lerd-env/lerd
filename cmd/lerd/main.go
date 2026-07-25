@@ -96,6 +96,7 @@ func main() {
 
 	// Register all subcommands
 	root.AddCommand(cli.NewInstallCmd())
+	root.AddCommand(cli.NewBootstrapCmd())
 	root.AddCommand(cli.NewStartCmd())
 	root.AddCommand(cli.NewStopCmd())
 	root.AddCommand(cli.NewQuitCmd())
@@ -124,6 +125,7 @@ func main() {
 	root.AddCommand(cli.NewNodeUseCmd())
 	root.AddCommand(cli.NewNodeManageCmd())
 	root.AddCommand(cli.NewNodeUnmanageCmd())
+	root.AddCommand(cli.NewNodeManagerCmd())
 	root.AddCommand(cli.NewJSRuntimeCmd())
 	root.AddCommand(cli.NewPhpListCmd())
 	root.AddCommand(cli.NewPhpRebuildCmd())
@@ -190,6 +192,7 @@ func main() {
 	root.AddCommand(cli.NewDbRestoreCmd())
 	root.AddCommand(cli.NewDbSnapshotRmCmd())
 	root.AddCommand(cli.NewDbMoveCmd())
+	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
 	root.AddCommand(cli.NewShimsCmd())
 	root.AddCommand(cli.NewXdebugCmd())

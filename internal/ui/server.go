@@ -199,6 +199,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/notifications/target", withCORS(handleNotifyTarget))
 	mux.HandleFunc("/api/notifications/kinds", withCORS(handleNotifyKinds))
 	mux.HandleFunc("/api/lan-qr/", withCORS(handleLANQR))
+	mux.HandleFunc("/api/share-tools", withCORS(handleShareTools))
+	mux.HandleFunc("/api/tunnel-qr/", withCORS(handleTunnelQR))
 	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
 
 	// Cross-process notifier for CLI/MCP. Loopback-only. PollNow in a
@@ -231,6 +233,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/node-versions/", withCORS(publishAfter(handleNodeVersionAction, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node/manage", withCORS(publishAfter(handleNodeManage, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/node/unmanage", withCORS(publishAfter(handleNodeUnmanage, eventbus.KindStatus, eventbus.KindSites)))
+	mux.HandleFunc("/api/node/set-manager", withCORS(publishAfter(handleNodeSetManager, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/link", withCORS(publishAfter(handleSiteLink, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/reorder", withCORS(publishAfter(handleSiteReorder, eventbus.KindSites)))
 	mux.HandleFunc("/api/sites/worktree-options", withCORS(handleSiteWorktreeOptions))
@@ -590,6 +593,11 @@ type StatusResponse struct {
 	PHPDefault        string       `json:"php_default"`
 	NodeDefault       string       `json:"node_default"`
 	NodeManagedByLerd bool         `json:"node_managed_by_lerd"`
+	// NodeManager is the active Node version manager lerd drives: "fnm" or "nvm".
+	NodeManager string `json:"node_manager"`
+	// NvmAvailable is true when a user-installed nvm is present (nvm.sh found),
+	// so the dashboard can disable the nvm switch rather than error on click.
+	NvmAvailable bool `json:"nvm_available"`
 	// BunAvailable is true when a bun binary is installed on the host;
 	// BunVersion carries its version for an at-a-glance reference.
 	// UsingSystemBun is true when lerd isn't managing Node and there's no system
@@ -671,13 +679,13 @@ func buildStatus() StatusResponse {
 
 	phpDefault := ""
 	nodeDefault := ""
+	nodeManager := "fnm"
 	if cfg != nil {
 		phpDefault = cfg.PHP.DefaultVersion
 		nodeDefault = cfg.Node.DefaultVersion
+		nodeManager = cfg.NodeManager()
 	}
-	nodeShim := filepath.Join(config.BinDir(), "node")
-	_, nodeShimErr := os.Stat(nodeShim)
-	nodeManagedByLerd := nodeShimErr == nil
+	nodeManagedByLerd := lerdNode.Managed()
 	bunAvailable := lerdNode.BunPath() != ""
 	bunVersion := ""
 	if bunAvailable {
@@ -696,6 +704,8 @@ func buildStatus() StatusResponse {
 		PHPDefault:         phpDefault,
 		NodeDefault:        nodeDefault,
 		NodeManagedByLerd:  nodeManagedByLerd,
+		NodeManager:        nodeManager,
+		NvmAvailable:       lerdNode.ManagerByName("nvm").Available(),
 		BunAvailable:       bunAvailable,
 		BunVersion:         bunVersion,
 		UsingSystemBun:     usingSystemBun,
@@ -834,6 +844,8 @@ type SiteResponse struct {
 	DBDatabase       string `json:"db_database,omitempty"`
 	LANPort          int    `json:"lan_port,omitempty"`
 	LANShareURL      string `json:"lan_share_url,omitempty"`
+	TunnelURL        string `json:"tunnel_url,omitempty"`
+	TunnelTool       string `json:"tunnel_tool,omitempty"`
 	CustomContainer  bool   `json:"custom_container,omitempty"`
 	ContainerPort    int    `json:"container_port,omitempty"`
 	ContainerImage   string `json:"container_image,omitempty"`
@@ -1007,6 +1019,8 @@ func buildSites() []SiteResponse {
 			worktreeResponses = []WorktreeResponse{}
 		}
 
+		tunnel, _ := cli.TunnelStatus(e.Name)
+
 		sites = append(sites, SiteResponse{
 			Name:                 e.Name,
 			AppName:              laravelAppName(e.FrameworkName, e.Path),
@@ -1062,6 +1076,8 @@ func buildSites() []SiteResponse {
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
 			LANShareURL:          cli.LANShareURL(e.LANPort),
+			TunnelURL:            tunnel.URL,
+			TunnelTool:           tunnel.Tool,
 			CustomContainer:      e.ContainerPort > 0,
 			ContainerPort:        e.ContainerPort,
 			ContainerImage:       e.ContainerImage,
@@ -1383,7 +1399,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Custom:            custom != nil,
 		PresetOwned:       config.PresetExists(name),
 		DefaultPort:       defaultPort,
-		DependsOn:         dependsOn,
+		DependsOn:         serviceops.DependencyDisplayNames(dependsOn),
 	}
 	resp.SecondaryPorts = secondaryPortMappings(presetPorts, services[name])
 	if sc, ok := services[name]; ok {
@@ -1732,7 +1748,6 @@ func handleServicePresetInstall(w http.ResponseWriter, r *http.Request) {
 		dispatchNotification(notificationForServiceOp("install", name, start, err))
 		return
 	}
-	cli.RegenerateFamilyConsumersForService(svc.Name)
 	writeLine(map[string]any{
 		"phase":      "done",
 		"name":       svc.Name,
@@ -2421,12 +2436,8 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate service name — built-in or custom
-	isBuiltin := config.IsDefaultPreset(name)
-	var customSvc *config.CustomService
-	if !isBuiltin {
-		var loadErr error
-		customSvc, loadErr = config.LoadCustomService(name)
-		if loadErr != nil {
+	if !config.IsDefaultPreset(name) {
+		if _, loadErr := config.LoadCustomService(name); loadErr != nil {
 			http.Error(w, "unknown service", http.StatusNotFound)
 			return
 		}
@@ -2437,79 +2448,11 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 
 	switch action {
 	case "start":
-		// Ensure quadlet file exists and systemd knows about it before starting
-		var quadletErr error
-		if isBuiltin {
-			quadletErr = ensureServiceQuadlet(name)
-		} else {
-			quadletErr = ensureCustomServiceQuadlet(customSvc)
-		}
-		if quadletErr != nil {
-			resp := ServiceActionResponse{
-				ServiceResponse: buildServiceResponse(name),
-				OK:              false,
-				Error:           quadletErr.Error(),
-				Logs:            serviceRecentLogs(unit),
-			}
-			writeJSON(w, resp)
-			return
-		}
-		// Bring every declared dependency up first. Without this, starting
-		// mongo-express from the dashboard would leave mongo stopped and the
-		// container would fail to connect.
-		if !isBuiltin {
-			if depErr := cli.StartServiceDependencies(customSvc); depErr != nil {
-				resp := ServiceActionResponse{
-					ServiceResponse: buildServiceResponse(name),
-					OK:              false,
-					Error:           depErr.Error(),
-					Logs:            serviceRecentLogs(unit),
-				}
-				writeJSON(w, resp)
-				return
-			}
-		}
-		// Retry to handle Quadlet generator latency after daemon-reload.
-		for attempt := range 5 {
-			opErr = podman.StartUnit(unit)
-			if opErr == nil || !strings.Contains(opErr.Error(), "not found") {
-				break
-			}
-			time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-		}
-		if opErr == nil {
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.StartService(name)
 	case "stop":
-		// Stop any custom services that depend on this one before stopping
-		// it, mirroring the CLI's `lerd service stop` behaviour. Otherwise
-		// stopping mysql leaves phpmyadmin running with a dead backend (and
-		// the same for postgres+pgadmin, mongo+mongo-express).
-		cli.StopServiceAndDependents(name)
-		// Cover the parent itself in case the recursive helper short-circuited
-		// (e.g. unit was reported inactive but the user explicitly clicked stop).
-		opErr = podman.StopUnit(unit)
-		if opErr == nil {
-			_ = config.SetServicePaused(name, true)
-			_ = config.SetServiceManuallyStarted(name, false)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.StopService(name)
 	case "restart":
-		// Refresh the quadlet first so config edits and preset file mounts
-		// land on disk before systemd restarts the container.
-		if isBuiltin {
-			_ = ensureServiceQuadlet(name)
-		} else {
-			_ = ensureCustomServiceQuadlet(customSvc)
-		}
-		opErr = podman.RestartUnit(unit)
-		if opErr == nil {
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-			cli.RegenerateFamilyConsumersForService(name)
-		}
+		opErr = serviceops.RestartService(name)
 	case "remove":
 		removeData := r.URL.Query().Get("removeData") == "true"
 		if err := serviceops.RemoveService(name, serviceops.RemoveOptions{RemoveData: removeData}, nil); err != nil {
@@ -2522,21 +2465,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 		if opErr = config.SetServicePinned(name, true); opErr == nil {
 			status, _ := podman.UnitStatus(unit)
 			if status != "active" {
-				if isBuiltin {
-					_ = ensureServiceQuadlet(name)
-				} else {
-					_ = ensureCustomServiceQuadlet(customSvc)
-				}
-				for attempt := range 5 {
-					opErr = podman.StartUnit(unit)
-					if opErr == nil || !strings.Contains(opErr.Error(), "not found") {
-						break
-					}
-					time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
-				}
-				if opErr == nil {
-					_ = config.SetServicePaused(name, false)
-				}
+				opErr = serviceops.StartService(name)
 			}
 		}
 	case "unpin":
@@ -3268,6 +3197,36 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	png, err := qrcode.Encode(shareURL, qrcode.Medium, 160)
+	if err != nil {
+		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
+}
+
+// handleShareTools reports the supported tunnel tools, which are installed,
+// and what the auto pick would use, so the share menu can render its entries.
+func handleShareTools(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, cli.ShareTools())
+}
+
+// handleTunnelQR serves a QR code PNG of the site's public tunnel URL, the
+// tunnel twin of handleLANQR.
+func handleTunnelQR(w http.ResponseWriter, r *http.Request) {
+	domain := strings.TrimPrefix(r.URL.Path, "/api/tunnel-qr/")
+	site, err := config.FindSiteByDomain(domain)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	tunnel, ok := cli.TunnelStatus(site.Name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	png, err := qrcode.Encode(tunnel.URL, qrcode.Medium, 160)
 	if err != nil {
 		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -4013,6 +3972,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
+	case "tunnel:start":
+		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("tool")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "tunnel:stop":
+		if err := cli.TunnelStop(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
 	case "db:isolate":
 		branch := r.URL.Query().Get("branch")
 		if branch == "" {
@@ -4682,7 +4655,7 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
@@ -4693,9 +4666,8 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 	}
 	switch action {
 	case "set-default":
-		fnmPath := config.BinDir() + "/fnm"
-		if out, err := exec.Command(fnmPath, "default", version).CombinedOutput(); err != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
+		if err := lerdNode.Active().SetDefault(version); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		cfg, err := config.LoadGlobal()
@@ -4710,30 +4682,10 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true, "node_default": version})
 	case "remove":
-		fnmPath := config.BinDir() + "/fnm"
-		// Collect all full versions that belong to this major
-		listOut, _ := exec.Command(fnmPath, "list").Output()
-		var toRemove []string
-		for _, line := range strings.Split(strings.TrimSpace(string(listOut)), "\n") {
-			line = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "* "))
-			fields := strings.Fields(line)
-			if len(fields) == 0 {
-				continue
-			}
-			v := strings.TrimPrefix(fields[0], "v")
-			if strings.SplitN(v, ".", 2)[0] == version {
-				toRemove = append(toRemove, v)
-			}
-		}
-		var lastErr error
-		for _, v := range toRemove {
-			out, err := exec.Command(fnmPath, "uninstall", v).CombinedOutput()
-			if err != nil {
-				lastErr = fmt.Errorf("fnm uninstall %s: %s", v, strings.TrimSpace(string(out)))
-			}
-		}
-		if lastErr != nil {
-			writeJSON(w, map[string]any{"ok": false, "error": lastErr.Error()})
+		// version is a major; Uninstall removes every installed full version
+		// under it via the active manager.
+		if err := lerdNode.Active().Uninstall(version); err != nil {
+			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})
@@ -4745,14 +4697,32 @@ func handleNodeVersionAction(w http.ResponseWriter, r *http.Request) {
 // handleNodeManage / handleNodeUnmanage opt the host into or out of
 // lerd-managed Node by shelling out to the lerd binary, reusing the CLI's shim
 // + worker-regeneration logic rather than duplicating it here. Synchronous:
-// these can take a few seconds (fnm install, worker restarts), so the UI shows
+// these can take a few seconds (Node install, worker restarts), so the UI shows
 // a loading state.
 func handleNodeManage(w http.ResponseWriter, r *http.Request) { runNodeMgmtCmd(w, r, "node:manage") }
 func handleNodeUnmanage(w http.ResponseWriter, r *http.Request) {
 	runNodeMgmtCmd(w, r, "node:unmanage")
 }
 
-func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string) {
+// handleNodeSetManager switches the Node version manager lerd drives (fnm/nvm)
+// by shelling out to `lerd node:manager <manager>`, reusing the CLI's shim +
+// worker-regeneration logic rather than duplicating it here.
+func handleNodeSetManager(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req struct {
+		Manager string `json:"manager"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || (req.Manager != "fnm" && req.Manager != "nvm") {
+		writeJSON(w, map[string]any{"ok": false, "error": "invalid manager"})
+		return
+	}
+	runNodeMgmtCmd(w, r, "node:manager", req.Manager)
+}
+
+func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string, extra ...string) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -4761,7 +4731,7 @@ func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string) {
 	if err != nil || self == "" {
 		self = "lerd"
 	}
-	if out, err := exec.Command(self, sub).CombinedOutput(); err != nil {
+	if out, err := exec.Command(self, append([]string{sub}, extra...)...).CombinedOutput(); err != nil {
 		writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
 		return
 	}
@@ -4775,7 +4745,7 @@ func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if _, err := os.Stat(filepath.Join(config.BinDir(), "node")); err != nil {
+	if !lerdNode.Managed() {
 		writeJSON(w, map[string]any{"ok": false, "error": "lerd is not managing Node.js"})
 		return
 	}
@@ -4788,11 +4758,8 @@ func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 	}
 	version := req.Version
 	major := strings.SplitN(version, ".", 2)[0]
-	fnmPath := config.BinDir() + "/fnm"
-	cmd := exec.Command(fnmPath, "install", major)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		writeJSON(w, map[string]any{"ok": false, "error": strings.TrimSpace(string(out))})
+	if err := lerdNode.Active().Install(major); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true})
@@ -5536,6 +5503,46 @@ func handleBrowse(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"current": dir, "dirs": dirs})
 }
 
+// failureMessage extracts why a lerd command failed from its output. A failure
+// is printed as a "✗" line followed by any guidance, so everything from that
+// marker on is the message; without one, the last non-empty line is the best
+// available. Trimmed so the modal shows a sentence rather than a wall of output.
+func failureMessage(out string) string {
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+
+	from := -1
+	for i, line := range lines {
+		if strings.Contains(line, "✗") {
+			from = i
+		}
+	}
+
+	var parts []string
+	if from >= 0 {
+		for _, line := range lines[from:] {
+			if t := strings.TrimSpace(strings.ReplaceAll(line, "✗", "")); t != "" {
+				parts = append(parts, t)
+			}
+		}
+	} else {
+		for i := len(lines) - 1; i >= 0; i-- {
+			if t := strings.TrimSpace(lines[i]); t != "" {
+				parts = append(parts, t)
+				break
+			}
+		}
+	}
+
+	msg := strings.Join(parts, " — ")
+	if msg == "" {
+		msg = strings.TrimSpace(out)
+	}
+	if len(msg) > 300 {
+		return strings.TrimSpace(msg[:300]) + "…"
+	}
+	return msg
+}
+
 // handleSiteLink links a directory as a site via POST /api/sites/link.
 // It streams command output as SSE events and sends a final "done" event.
 // SiteReorderRequest is the JSON body for POST /api/sites/reorder.
@@ -5644,19 +5651,23 @@ func handleSiteLink(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Run env setup (non-fatal).
+	// Run env setup. The site is linked either way, so a failure here is a
+	// warning rather than an error — but it must reach the modal: a project with
+	// no framework, or a framework whose YAML declares no env section, leaves the
+	// .env untouched, and silently reporting success hid that entirely.
 	fmt.Fprintf(w, "data: → Setting up environment...\n\n")
 	flusher.Flush()
-	streamCmd(self, "env") //nolint:errcheck
+	envOut, envFailed := streamCmd(self, "env")
 
-	// Find the newly linked site to return its domain.
-	site, err := config.FindSiteByPath(path)
-	if err != nil {
-		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(map[string]any{"ok": true}))
-		flusher.Flush()
-		return
+	done := map[string]any{"ok": true}
+	if envFailed {
+		done["warning"] = "environment setup failed: " + failureMessage(envOut)
 	}
-	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(map[string]any{"ok": true, "domain": site.PrimaryDomain()}))
+	// Find the newly linked site to return its domain.
+	if site, err := config.FindSiteByPath(path); err == nil {
+		done["domain"] = site.PrimaryDomain()
+	}
+	fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(done))
 	flusher.Flush()
 }
 

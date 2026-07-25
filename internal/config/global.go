@@ -57,7 +57,11 @@ type GlobalConfig struct {
 	// placeholders; if omitted, lerd appends the file. Empty = autodetect a
 	// known GUI editor (code/cursor/phpstorm/subl/zed), then xdg-open/open.
 	Editor string `yaml:"editor,omitempty" mapstructure:"editor"`
-	PHP    struct {
+	// IDEDataSource keeps a JetBrains project's database connection pointed at
+	// lerd, written only into a project that already has a .idea directory. Set
+	// false to leave every IDE file alone.
+	IDEDataSource *bool `yaml:"ide_data_source,omitempty" mapstructure:"ide_data_source"`
+	PHP           struct {
 		DefaultVersion string            `yaml:"default_version" mapstructure:"default_version"`
 		XdebugEnabled  map[string]bool   `yaml:"xdebug_enabled"  mapstructure:"xdebug_enabled"`
 		XdebugMode     map[string]string `yaml:"xdebug_mode,omitempty" mapstructure:"xdebug_mode"`
@@ -96,11 +100,20 @@ type GlobalConfig struct {
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`
-		// Managed records whether lerd manages Node.js via fnm shims. A pointer
-		// so a config predating the field (nil) keeps the historical
-		// shim-presence behaviour, while an explicit false survives updates that
-		// would otherwise re-add the shims a `node:unmanage` removed.
+		// Managed records whether lerd manages Node.js via version-manager
+		// shims. A pointer so a config predating the field (nil) keeps the
+		// historical shim-presence behaviour, while an explicit false survives
+		// updates that would otherwise re-add the shims a `node:unmanage` removed.
 		Managed *bool `yaml:"managed,omitempty" mapstructure:"managed"`
+		// Manager selects the Node version manager lerd drives: "fnm" (the
+		// bundled default) or "nvm" (a user-installed nvm). Empty means fnm so
+		// configs predating the field keep working unchanged.
+		Manager string `yaml:"manager,omitempty" mapstructure:"manager"`
+		// NvmDir is the nvm install directory when Manager is "nvm". Persisted
+		// at install/switch time so daemons (lerd-ui, watcher) find nvm even
+		// though systemd/launchd never load the user's shell rc that exports
+		// $NVM_DIR. Empty means fall back to $NVM_DIR or ~/.nvm.
+		NvmDir string `yaml:"nvm_dir,omitempty" mapstructure:"nvm_dir"`
 	} `yaml:"node" mapstructure:"node"`
 	Share struct {
 		// DefaultTool is the tunnel tool "lerd share" uses when no flag is
@@ -639,6 +652,7 @@ func LoadGlobal() (*GlobalConfig, error) {
 		return nil, err
 	}
 	migrateStaleServiceImages(cfg)
+	normalizeDefaultPHPVersion(cfg)
 
 	if statErr == nil {
 		globalCacheMu.Lock()
@@ -648,6 +662,15 @@ func LoadGlobal() (*GlobalConfig, error) {
 		globalCacheMu.Unlock()
 	}
 	return cfg, nil
+}
+
+// normalizeDefaultPHPVersion repairs a default version stored raw by an older
+// `lerd use` (e.g. "php84"), which broke every derived image name. Values that
+// don't resolve to a supported version are left for callers to reject.
+func normalizeDefaultPHPVersion(cfg *GlobalConfig) {
+	if v, err := NormalizePHPVersion(cfg.PHP.DefaultVersion); err == nil {
+		cfg.PHP.DefaultVersion = v
+	}
 }
 
 // cloneGlobalConfig returns a deep copy. Maps and slices are duplicated so
@@ -1119,6 +1142,32 @@ func (c *GlobalConfig) SetNodeManaged(managed bool) {
 	c.Node.Managed = &managed
 }
 
+// NodeManager returns the configured Node version manager, defaulting to "fnm"
+// when unset so configs predating the field keep the bundled behaviour.
+func (c *GlobalConfig) NodeManager() string {
+	if c.Node.Manager == "" {
+		return "fnm"
+	}
+	return c.Node.Manager
+}
+
+// SetNodeManager records which Node version manager lerd drives ("fnm" or
+// "nvm"). Persist via SaveGlobal.
+func (c *GlobalConfig) SetNodeManager(manager string) {
+	c.Node.Manager = manager
+}
+
+// NodeNvmDir returns the persisted nvm install directory, or empty when unset.
+func (c *GlobalConfig) NodeNvmDir() string {
+	return c.Node.NvmDir
+}
+
+// SetNodeNvmDir records where nvm lives so daemons agree with the CLI. Pass
+// empty to clear (fnm switch, or fall back to $NVM_DIR / ~/.nvm).
+func (c *GlobalConfig) SetNodeNvmDir(dir string) {
+	c.Node.NvmDir = dir
+}
+
 // SaveGlobal writes the configuration to config.yaml.
 func SaveGlobal(cfg *GlobalConfig) error {
 	if err := os.MkdirAll(ConfigDir(), 0755); err != nil {
@@ -1135,4 +1184,15 @@ func SaveGlobal(cfg *GlobalConfig) error {
 	}
 	invalidateGlobalCache()
 	return nil
+}
+
+// IDEDataSourceEnabled reports whether lerd may maintain a project's JetBrains
+// data source. On by default: it only ever touches a project that already has a
+// .idea directory, and only its own entry in it.
+func IDEDataSourceEnabled() bool {
+	cfg, err := LoadGlobal()
+	if err != nil || cfg == nil || cfg.IDEDataSource == nil {
+		return true
+	}
+	return *cfg.IDEDataSource
 }

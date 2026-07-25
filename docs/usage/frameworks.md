@@ -16,7 +16,7 @@ Laravel has a built-in definition. Other frameworks (Symfony, WordPress, Drupal,
 | `lerd framework search [query]` | Search the community store for available definitions |
 | `lerd framework update [name[@version]]` | Refresh definitions from the store (definitions otherwise auto-fetch on link) |
 | `lerd framework update --diff` | Preview changes before applying updates |
-| `lerd framework add <name>` | Add or update a user-defined framework definition |
+| `lerd framework add <name>` | Install a published framework from the store, or author a custom one with flags |
 | `lerd framework remove <name>[@version]` | Remove a framework definition (prompts if multiple versions) |
 | `lerd framework remove <name> --all` | Remove all versions of a framework definition |
 | `lerd framework prune` | Remove installed definitions no site uses |
@@ -49,6 +49,8 @@ lerd framework search
 ### Getting definitions from the store
 
 Definitions arrive automatically. Linking a project detects its framework and version and fetches the matching definition from the store, and the cached catalogue refreshes on its own in the background, so there is no install step to run. Because the catalogue is cached locally, detection resolves the right framework and version even offline and for frameworks you have not linked before.
+
+To install a published definition on demand, `lerd framework add <name>` fetches it from the store, the natural next step after `lerd framework search`. It resolves the version from the project in the current directory when there is one and otherwise takes the latest, and `lerd framework add symfony@7` pins a version. A name the store does not publish falls back to authoring a definition by hand (see below).
 
 To refresh manually, `lerd framework update`. With no arguments it refreshes the cached catalogue and re-fetches every installed definition; with a name it fetches that one, installing it if it isn't cached yet:
 
@@ -135,12 +137,25 @@ lerd new /path/to/myapp                 # create at an absolute path
 lerd new myapp -- --no-interaction      # pass extra flags to the scaffold command
 ```
 
-`--framework` works before or after the name. Flags belong to lerd wherever they
+`--framework` works before or after the name. A framework the store publishes
+but you have not installed yet is fetched on demand, so you can scaffold a
+project type you have never built before without an install step; only a name the
+store does not know is refused. Flags belong to lerd wherever they
 appear on the line, so anything meant for the scaffold command itself goes after
 `--`. An absolute target outside your home directory is fine: lerd creates the
 parent directory and mounts it into the PHP container before scaffolding.
 Temporary system directories (`/tmp`, `/var/tmp`, `/run`) are never mounted, so
 scaffolding into one is refused unless you [park](/usage/sites) its parent first.
+
+Every framework's create command starts with composer, and it is lerd's own
+composer that runs it, inside the project's PHP container. You do not need
+composer, or any PHP, installed on the host.
+
+The scaffold runs under a PHP version the framework supports, not whatever the
+machine defaults to. The framework definition declares a PHP range, so a
+framework whose current release tops out below your default PHP is scaffolded on
+a version inside that range instead, and composer resolves against a PHP the
+framework actually supports rather than rejecting every candidate.
 
 After creation:
 ```bash

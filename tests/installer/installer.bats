@@ -187,8 +187,17 @@ teardown() {
 
 # ── add_to_path / remove_from_path ────────────────────────────────────────────
 
+# install.sh writes .bash_profile for bash on Darwin and .bashrc on Linux.
+# These cases assert the Linux bash path; pin detect_os so they stay valid when
+# the suite is run on a Mac.
+_force_linux_os() {
+  function detect_os() { echo "linux"; }
+  export -f detect_os
+}
+
 @test "add_to_path appends PATH entry to .bashrc" {
   export SHELL="/bin/bash"
+  _force_linux_os
   INSTALL_DIR="$HOME/.local/bin"
   touch "$HOME/.bashrc"
 
@@ -200,6 +209,7 @@ teardown() {
 
 @test "add_to_path is idempotent — does not duplicate entry" {
   export SHELL="/bin/bash"
+  _force_linux_os
   INSTALL_DIR="$HOME/.local/bin"
   touch "$HOME/.bashrc"
 
@@ -222,6 +232,7 @@ teardown() {
 
 @test "remove_from_path removes the Lerd block from .bashrc" {
   export SHELL="/bin/bash"
+  _force_linux_os
   INSTALL_DIR="$HOME/.local/bin"
   printf '\n# Added by Lerd installer\nexport PATH="%s:$PATH"\n' "$INSTALL_DIR" > "$HOME/.bashrc"
 
@@ -233,6 +244,7 @@ teardown() {
 
 @test "remove_from_path is a no-op when marker is absent" {
   export SHELL="/bin/bash"
+  _force_linux_os
   echo "unrelated content" > "$HOME/.bashrc"
 
   remove_from_path
@@ -385,6 +397,8 @@ teardown() {
 # ── DNS mode gating of the HTTPS-only prerequisites ───────────────────────────
 
 @test "check_prerequisites skips certutil in localhost DNS mode" {
+  # certutil gating is Linux-only; macOS prerequisites never call it.
+  _force_linux_os
   function command() {
     case "$2" in
       podman|unzip) return 0 ;;
@@ -404,6 +418,8 @@ teardown() {
 }
 
 @test "check_prerequisites flags certutil in managed DNS mode" {
+  # certutil gating is Linux-only; macOS prerequisites never call it.
+  _force_linux_os
   function command() {
     case "$2" in
       podman|unzip) return 0 ;;

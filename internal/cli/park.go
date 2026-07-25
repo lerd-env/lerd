@@ -10,7 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
-	"github.com/geodro/lerd/internal/nginx"
+	"github.com/geodro/lerd/internal/linker"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
@@ -170,159 +170,199 @@ func runPark(_ *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-
-	count := 0
+	var projects []string
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		projectDir := filepath.Join(absDir, entry.Name())
-		if registered, err := RegisterProject(projectDir, cfg); err != nil {
-			feedback.Warn("could not register %s: %v", entry.Name(), err)
-		} else if registered {
-			count++
+		if entry.IsDir() {
+			projects = append(projects, filepath.Join(absDir, entry.Name()))
 		}
 	}
-
-	if count > 0 {
-		reload := feedback.Start("reloading nginx")
-		nginx.ReloadOrWarn("  ")
-		reload.OK(fmt.Sprintf("%d site(s) registered", count))
-	} else {
-		feedback.Line("no PHP projects found in directory")
+	if len(projects) == 0 {
+		feedback.Line("no subdirectories to scan")
+		return nil
 	}
 
-	// Rewrite FPM quadlets so volume mounts cover the new parked directory.
-	_ = podman.RewriteFPMQuadlets()
+	// Each link writes only its own vhost and quadlet; the reloads that publish
+	// them are hoisted out of the loop, since they rewrite every quadlet and
+	// every container hosts entry and would otherwise make a park quadratic.
+	bar := feedback.StartProgress(fmt.Sprintf("linking %d projects", len(projects)), len(projects))
+	var registered, skipped []ParkOutcome
+	versions := map[string]bool{}
+	for _, projectDir := range projects {
+		out, err := RegisterProjectDeferred(projectDir, cfg, true)
+		switch {
+		case err != nil:
+			bar.Failed(out.Name, err.Error())
+		case out.Registered:
+			bar.Step(out.Name)
+			registered = append(registered, out)
+			versions[out.PHPVersion] = true
+		default:
+			bar.Skip(out.Name, out.Reason)
+			skipped = append(skipped, out)
+		}
+	}
+	bar.Done(parkTally(bar.Completed(), bar.Skipped(), bar.Failures()))
+
+	if len(registered) == 0 {
+		if parkAllUnrecognised(skipped) {
+			feedback.Line("no PHP projects found in directory")
+		}
+		// Still refresh the mounts: the parked directory itself is new.
+		_ = podman.RewriteFPMQuadlets()
+		reportParkSkips(skipped)
+		return nil
+	}
+
+	publish := feedback.Start("publishing")
+	names := make([]string, 0, len(registered))
+	for _, r := range registered {
+		names = append(names, r.Name)
+	}
+	phpVersions := make([]string, 0, len(versions))
+	for v := range versions {
+		phpVersions = append(phpVersions, v)
+	}
+	if err := siteops.PublishLinks(phpVersions, names...); err != nil {
+		publish.Fail(err)
+		return err
+	}
+	publish.OK(fmt.Sprintf("%d site(s) serving", len(registered)))
+
+	reportParkSkips(skipped)
 
 	return nil
 }
 
-// reservedDomains are domains used by Lerd itself that cannot be assigned to user sites.
-var reservedDomains = []string{}
-
-// isReservedDomain returns true if the domain is reserved for internal Lerd use.
-func isReservedDomain(domain string) bool {
-	for _, r := range reservedDomains {
-		if domain == r {
-			return true
+// parkAllUnrecognised reports whether every skip was simply a directory that is
+// not a PHP project, which is the only case worth calling an empty park.
+func parkAllUnrecognised(skipped []ParkOutcome) bool {
+	for _, sk := range skipped {
+		if sk.Reason != reasonNotPHP {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
-// freeSiteName returns the first available site name for the given path.
-// If the desired name is unused, it is returned as-is.
-// If it is already taken by the same path, it is returned as-is (re-link).
-// If it is taken by a different path, "-2", "-3", … suffixes are tried until one is free.
-func freeSiteName(desired, path string) string {
-	for i := 0; ; i++ {
-		candidate := desired
-		if i > 0 {
-			candidate = fmt.Sprintf("%s-%d", desired, i+1)
+// reportParkSkips names the directories a park passed over for a reason the
+// user can act on. A directory that simply is not a PHP project is left out:
+// in a large tree those are the majority and listing them buries the rest.
+func reportParkSkips(skipped []ParkOutcome) {
+	for _, sk := range skipped {
+		if sk.Reason == reasonNotPHP || sk.Reason == "" {
+			continue
 		}
-		existing, err := config.FindSite(candidate)
-		if err != nil || existing == nil {
-			return candidate // name is free
+		if strings.HasPrefix(sk.Reason, "already registered") {
+			continue
 		}
-		if config.CanonicalPath(existing.Path) == config.CanonicalPath(path) {
-			return candidate // same site being re-registered (symlink spellings included, #930)
-		}
+		feedback.Line(feedback.Dim("skipped " + sk.Name + " — " + sk.Reason))
 	}
 }
 
-// RegisterProject registers a single project directory as a lerd site if it
-// looks like a PHP project. It detects the framework first; if none matches it
-// falls back to auto-detecting the public directory. Returns true if newly registered.
+// parkTally is the one-line count a park's progress bar closes with.
+func parkTally(linked, skipped, failed int) string {
+	out := fmt.Sprintf("%d linked", linked)
+	if skipped > 0 {
+		out += fmt.Sprintf(", %d skipped", skipped)
+	}
+	if failed > 0 {
+		out += fmt.Sprintf(", %d failed", failed)
+	}
+	return out
+}
+
+// reasonNotPHP marks a directory that does not look like a PHP project at all.
+const reasonNotPHP = "not a PHP project"
+
+// ParkOutcome says what registering one project did, so a batch can tally the
+// results and report a reason for everything it passed over.
+type ParkOutcome struct {
+	Name       string
+	Registered bool
+	Skipped    bool
+	Reason     string
+	PHPVersion string
+	Detail     string
+}
+
+// RegisterProject registers a single project directory as a site and publishes
+// it immediately. The watcher uses it for a project that appeared on its own;
+// `lerd park` uses RegisterProjectDeferred so a whole directory publishes once.
 func RegisterProject(projectDir string, cfg *config.GlobalConfig) (bool, error) {
+	out, err := RegisterProjectDeferred(projectDir, cfg, false)
+	return out.Registered, err
+}
+
+// RegisterProjectDeferred registers one project under the watcher's policy: it
+// reads the project's committed configuration but asks nothing, writes nothing
+// into the project, and runs nothing the repository authored. With defer set,
+// the reloads that publish the link are left to siteops.PublishLinks so a batch
+// pays for them once.
+func RegisterProjectDeferred(projectDir string, cfg *config.GlobalConfig, defer_ bool) (ParkOutcome, error) {
+	name := filepath.Base(projectDir)
+	out := ParkOutcome{Name: name}
+
 	// Don't register a directory that lives inside an existing framework project.
 	// This prevents Laravel subdirs (app/, vendor/, public/, etc.) from being
 	// registered as sites when a project root is accidentally used as a park dir.
 	if _, ok := config.DetectFramework(filepath.Dir(projectDir)); ok {
-		feedback.Warn("skipping %s — looks like a subdirectory of a framework project.\n         Run 'lerd link' from %s instead.", projectDir, filepath.Dir(projectDir))
-		return false, nil
+		out.Skipped, out.Reason = true, "inside a framework project; run 'lerd link' in "+filepath.Dir(projectDir)
+		return out, nil
+	}
+	if !parkAdmits(projectDir) {
+		out.Skipped, out.Reason = true, reasonNotPHP
+		return out, nil
 	}
 
-	framework, ok := config.DetectFrameworkForDir(projectDir)
-	detectedPublicDir := ""
-	if !ok {
-		detectedPublicDir = config.DetectPublicDir(projectDir)
-		// Only register if we're confident it's a PHP project:
-		// either a known public dir was found (has public/index.php) or
-		// the root itself has composer.json / a PHP file.
-		if detectedPublicDir == "." && !looksLikePHPProject(projectDir) {
-			return false, nil
-		}
+	policy := linker.WatcherPolicy()
+	policy.DeferPublish = defer_
+	plan, err := linker.Resolve(projectDir, cfg, policy)
+	if err != nil {
+		return out, err
+	}
+	if !plan.Registered() {
+		out.Skipped, out.Reason = true, plan.SkipDetail
+		return out, nil
+	}
+	// A project that serves itself from a container, proxies a dev server, or
+	// asks for a per-site runtime needs an image built or a repository command
+	// run. Neither belongs in an unattended sweep, so it is left for an explicit
+	// link rather than silently downgraded to plain FPM.
+	if plan.Mode != linker.ModeFPM {
+		out.Skipped, out.Reason = true, "declares its own "+string(plan.Mode)+" runtime; run 'lerd link' in it"
+		return out, nil
+	}
+	if linker.IsReservedDomain(plan.Site.PrimaryDomain()) {
+		out.Skipped, out.Reason = true, "domain is reserved"
+		return out, nil
 	}
 
-	baseName, domain := siteops.SiteNameAndDomain(filepath.Base(projectDir), cfg.DNS.TLD)
-	if isReservedDomain(domain) {
-		return false, nil
+	warnMissingExtensions(projectDir, plan.Site.Name, plan.Site.PHPVersion, cfg)
+
+	res, err := linker.Apply(plan, policy, linker.Deps{}, linker.NopReporter{})
+	if err != nil {
+		return out, err
 	}
 
-	name := freeSiteName(baseName, projectDir)
-	domain = name + "." + cfg.DNS.TLD
+	label := plan.FrameworkLabel
+	out.Registered = true
+	out.Name = res.Site.Name
+	out.PHPVersion = res.Site.PHPVersion
+	out.Detail = strings.Join(res.Site.Domains, ", ") + " · php " + res.Site.PHPVersion + " · " + label
+	return out, nil
+}
 
-	// Build domains list from .lerd.yaml if present, else from auto-generated name.
-	var domains []string
-	if proj, pErr := config.LoadProjectConfig(projectDir); pErr == nil && len(proj.Domains) > 0 {
-		for _, d := range proj.Domains {
-			domains = append(domains, strings.ToLower(d)+"."+cfg.DNS.TLD)
-		}
-	} else {
-		domains = []string{domain}
+// parkAdmits reports whether a directory looks enough like a PHP project to
+// register unattended: a framework lerd knows, a real document root, or a
+// composer.json / top-level PHP file.
+func parkAdmits(projectDir string) bool {
+	if _, ok := config.DetectFrameworkForDir(projectDir); ok {
+		return true
 	}
-
-	// Filter out conflicting / reserved domains. Strict — a domain may only
-	// belong to one site regardless of TLS scheme. .lerd.yaml is never
-	// modified on disk; the surviving list is what we register. If everything
-	// was conflicted, fall back to a freshly generated <baseName>.<tld>.
-	kept, removed := resolveSiteDomains(domains, baseName, projectDir, cfg.DNS.TLD)
-	warnFilteredDomains(removed)
-	domains = kept
-
-	versions := siteops.DetectSiteVersions(projectDir, framework, cfg.PHP.DefaultVersion, cfg.Node.DefaultVersion)
-	phpVersion, nodeVersion := versions.PHP, versions.Node
-
-	warnMissingExtensions(projectDir, name, phpVersion, cfg)
-
-	// Skip if already registered at this path. Also skip if the site is a
-	// custom container — the user linked it explicitly with their own
-	// Containerfile and the parked watcher should not overwrite it.
-	if existing, err := config.FindSite(name); err == nil && existing != nil {
-		if existing.Path == projectDir {
-			return false, nil
-		}
+	if config.DetectPublicDir(projectDir) != "." {
+		return true
 	}
-	if existing, err := config.FindSiteByPath(projectDir); err == nil && existing != nil && (existing.IsCustomContainer() || existing.IsHostProxy()) {
-		return false, nil
-	}
-
-	site := config.Site{
-		Name:        name,
-		Domains:     domains,
-		Path:        projectDir,
-		PHPVersion:  phpVersion,
-		NodeVersion: nodeVersion,
-		Secured:     false,
-		Framework:   framework,
-		PublicDir:   detectedPublicDir,
-	}
-
-	if err := config.AddSite(site); err != nil {
-		return false, err
-	}
-
-	if err := siteops.FinishLink(site, phpVersion); err != nil {
-		return false, err
-	}
-
-	frameworkLabel := framework
-	if frameworkLabel == "" {
-		frameworkLabel = "unknown (public: " + detectedPublicDir + ")"
-	}
-	feedback.Start("linking " + name).OK(feedback.Val(strings.Join(domains, ", ")) + " · php " + feedback.Val(phpVersion) + " · " + frameworkLabel)
-	return true, nil
+	return looksLikePHPProject(projectDir)
 }
 
 // looksLikePHPProject returns true if dir contains composer.json or any .php file

@@ -669,6 +669,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 	if healOverlayCorruptionIfNeeded(serviceErr) || healGhostContainersIfNeeded(serviceErr) {
 		serviceErr = RunParallel(makeJobs(serviceUnits))
 	}
+	// Bulk start does not go through lerd service start, so discover_family
+	// consumers (phpMyAdmin, pgAdmin) never got a post-engine regen. Reconcile
+	// may also have written empty host lists before any engine was up. Refresh
+	// once engines are running so PMA_HOSTS / LERD_POSTGRES_HOSTS match reality.
+	serviceops.RefreshDiscoverFamilyConsumers()
 	// If the storage is still corrupt the heal couldn't fix it; every worker
 	// (and the DNS and tray steps below) would fail the same way and bury the
 	// recovery guidance. reportOverlayHealOutcome prints the guidance and
@@ -809,6 +814,9 @@ func startRestoredServices() {
 	}
 	feedback.Header("Starting services")
 	RunParallel(startJobs) //nolint:errcheck
+	// Same discover_family refresh as runStart: engines and admin UIs come up
+	// together here without going through StartService.
+	serviceops.RefreshDiscoverFamilyConsumers()
 
 	// Workers exec into the FPM containers and depend on lerd-redis et al.
 	// Start them after the service containers are up — same ordering as

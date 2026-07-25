@@ -34,6 +34,13 @@ describe('WorkspacePicker', () => {
     expect(getByText('New workspace…')).toBeTruthy();
   });
 
+  it('opens on hover like the share menu', async () => {
+    const { container, getByText, queryByRole } = render(WorkspacePicker, { props: { site: site() } });
+    expect(queryByRole('menu')).toBeNull();
+    await fireEvent.mouseEnter(container.querySelector('div.relative')!);
+    expect(getByText('Client Work')).toBeTruthy();
+  });
+
   it('marks the current workspace as checked', async () => {
     const { getByLabelText, getByRole } = render(WorkspacePicker, {
       props: { site: site({ workspace: 'Client Work' }) }

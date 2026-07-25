@@ -176,10 +176,11 @@ admin_for:            # the services this preset's UI administers
   - opensearch
 ```
 
-`admin_for` is not `depends_on`. `depends_on` orders container startup, while
-`admin_for` says which services a UI can administer. phpMyAdmin declares
-`admin_for: [mysql, mariadb]` but only depends on `mysql`, and RedisInsight
-declares `admin_for: [redis, valkey]` while never depending on Valkey.
+`admin_for` is not `depends_on`. `depends_on` orders container startup (and is
+satisfied by the named service or any installed drop-in whose `family` or
+`env_role` matches), while `admin_for` says which services a UI can administer.
+phpMyAdmin declares `admin_for: [mysql, mariadb]` and depends on `mysql`;
+RedisInsight declares `admin_for: [redis, valkey]` and depends on `redis`.
 
 lerd matches `admin_for` against the **preset a service was installed from**, so
 a versioned member like `mariadb-11-8` still resolves to `mariadb`. A service the
@@ -204,16 +205,36 @@ dynamic_env:
 ```
 
 `PMA_HOSTS` is recomputed at every quadlet generation as a comma-joined list
-of every installed mysql / mariadb family member's container hostname (e.g.
-`lerd-mysql,lerd-mysql-5-7,lerd-mariadb-11`). The resulting login page shows
-a server dropdown with every variant; auto-login still works with the
-preset's static `PMA_USER` / `PMA_PASSWORD`.
+of every **running** mysql / mariadb family member's container hostname (e.g.
+`lerd-mysql,lerd-mysql-5-7`). A stopped member is omitted so the login page
+does not offer an offline server. Auto-login still works with the preset's
+static `PMA_USER` / `PMA_PASSWORD`.
+
+Admin UIs that talk to a single host (RedisInsight, mongo-express) just pin the
+canonical dependency host in plain `environment`, and lerd rewrites it to the
+service that actually satisfied `depends_on` at quadlet generation, including an
+`env_role` drop-in like Valkey for Redis:
+
+```yaml
+environment:
+  RI_REDIS_HOST: lerd-redis
+  ME_CONFIG_MONGODB_URL: mongodb://root:lerd@lerd-mongo:27017/?authSource=admin
+depends_on:
+  - redis
+```
+
+Any `environment` value containing `lerd-<dep>` for a `depends_on` entry is
+retargeted to `lerd-<satisfier>` (a full URL is rewritten in place). Because the
+YAML carries no special directive, an older lerd binary that predates this still
+parses the preset and connects to the canonical host.
 
 Lerd automatically regenerates phpMyAdmin's quadlet (and any other consumer
-of `discover_family`) whenever a family member is **installed**, **removed**,
-**started**, or **stopped**. Active consumers are stop-removed-restarted in
-one shot so the new env vars take effect without DNS / connection caching
-holding stale state.
+of `discover_family` or a pinned dependency host) whenever a family member is **installed**,
+**removed**, **started**, or **stopped**, and again at the end of a bulk
+`lerd start` / install so engines and admin UIs that come up together still get
+a correct host list. Active consumers are stop-removed-restarted only when the
+rendered unit changed, so a steady host list does not bounce phpMyAdmin on
+every start.
 
 ## `.lerd.yaml` preset references
 
@@ -244,8 +265,10 @@ full definition into `.lerd.yaml` for portability; see [Custom services](custom-
 
 A preset's `depends_on` is enforced two ways:
 
-1. **At install time**: installing a preset whose dependency is another *custom* service (not a built-in) is rejected until the dependency is installed first. `lerd service preset mongo-express` errors out with `preset "mongo-express" requires service(s) mongo to be installed first` until you run `lerd service preset mongo`. Built-in deps (mysql, postgres) are always satisfied. The Web UI's preset picker disables the **Add** button with the same gating and shows an amber "install mongo first" hint.
-2. **At start/stop time**: `lerd service start mongo-express` brings `mongo` up first, recursively. `lerd service stop mongo` first stops `mongo-express` (and any other dependent), then stops `mongo`. The Web UI's Start and Stop buttons share the same semantics. This also means starting *any* preset that depends on a built-in (`phpmyadmin`, `pgadmin`) auto-starts the database.
+1. **At install time**: installing a preset is rejected until each dependency is satisfied. A `depends_on` entry is met by that service, or by any installed service whose `family` or `env_role` names it — so phpMyAdmin's `mysql` dependency is met by MariaDB (`env_role: mysql`), RedisInsight's `redis` dependency by Valkey, and pgAdmin's `postgres` dependency by `postgres-pgvector`. When several satisfiers exist, lerd prefers the literal name, then a same-family member, then an env_role drop-in. A drop-in only counts when the consumer can bind it: it must declare `discover_family` covering that dependency (or the satisfier's family), or pin the canonical `lerd-<dep>` host in `environment` for lerd to retarget — otherwise a hardcoded host would install green and then fail to connect. When nothing satisfies a dependency the error lists known alternatives from local presets, the consumer's `admin_for`, and the store index (`family` / `env_role`), so MariaDB and Valkey show up on a clean box before those presets have been cached. The Web UI's preset picker disables the **Add** button with the same gating.
+2. **At start/stop time**: `lerd service start`, the Web UI Start/Stop buttons, the TUI service actions, and MCP `service` start/stop/restart all share one `serviceops` path. Start brings a satisfier for each `depends_on` entry up first (literal name when installed, otherwise a family or env_role drop-in), then regenerates `discover_family` and pinned-dependency-host consumers. Stop cascade-stops dependents only when nothing else still **running** satisfies their dependency; otherwise the dependent stays up and those consumers are regenerated. Starting an engine waits until it is ready before that regen, so the consumer is not rewritten with an empty host list. Bulk `lerd start` / install refresh every `discover_family` and pinned-dependency-host consumer once engines are up. Auto-stopping unused services (pause / unlink) uses the soft stop path only and does not set the paused flag, so a later `lerd start` still brings redis and mailpit back.
+
+`discover_family` is separate: it expands admin UI host lists at quadlet generation time to every **running** member of the named families, so a stopped database does not appear as a selectable server. CLI / UI / API dependency labels prefer a **running** satisfier when one exists, so phpMyAdmin shows as depending on MariaDB while mysql is installed but stopped.
 
 ## Default credentials
 

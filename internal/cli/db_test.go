@@ -122,6 +122,36 @@ func TestDbImportCmdMariaDBBinaryFallback(t *testing.T) {
 	}
 }
 
+// The dump has to be loadable back over a populated database, the same as the
+// one a snapshot writes.
+func TestDbExportCmdPostgresDropsBeforeCreating(t *testing.T) {
+	env := &dbEnv{connection: "pgsql", database: "shop", username: "postgres", password: "lerd"}
+	cmd, err := dbExportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	for _, flag := range []string{"--clean", "--if-exists"} {
+		if !strings.Contains(joined, flag) {
+			t.Errorf("export missing %s: %q", flag, joined)
+		}
+	}
+}
+
+func TestDbExportCmdMySQLKeepsRoutinesAndEvents(t *testing.T) {
+	env := &dbEnv{connection: "mysql", database: "shop", username: "root", password: "lerd"}
+	cmd, err := dbExportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	for _, flag := range []string{"--routines", "--triggers", "--events"} {
+		if !strings.Contains(joined, flag) {
+			t.Errorf("export missing %s: %q", flag, joined)
+		}
+	}
+}
+
 func TestDbCmdUnsupportedConnection(t *testing.T) {
 	env := &dbEnv{connection: "sqlite"}
 	_, err := dbImportCmd(env)

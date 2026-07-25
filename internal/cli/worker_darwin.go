@@ -86,23 +86,23 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, err
 	}
 	scriptPath := filepath.Join(workersDir, unitName+".sh")
 
-	fnmBin := filepath.Join(config.BinDir(), "fnm")
-	// bun projects rewrite npm/npx/node to bun and run it directly (no fnm),
-	// with ~/.bun/bin added to PATH; Node projects resolve a version via fnm;
-	// host-proxy sites in any other language run the command directly.
-	nodeVersion := ""
+	// bun projects rewrite npm/npx/node to bun and run it directly (no manager),
+	// with ~/.bun/bin added to PATH; Node projects resolve a version and run
+	// under the active manager; host-proxy sites in any other language run the
+	// command directly.
+	execPrefix := ""
 	bunDir := ""
 	if bun := bunRunnerFor(sitePath, false); bun != "" {
 		command = nodeDet.Bunify(command)
 		bunDir = filepath.Dir(bun)
 	} else if isNodeProject(sitePath) && lerdManagesNode() {
-		// Only pin via fnm when lerd manages Node; otherwise nodeVersion stays
-		// empty and the guard script runs the command directly against the
-		// user's system node (after node:unmanage there is no fnm Node).
-		nodeVersion = resolveNodeVersionForHostWorker(sitePath)
+		// Only pin via the manager when lerd manages Node; otherwise execPrefix
+		// stays empty and the guard script runs the command directly against the
+		// user's system node (after node:unmanage there is no managed Node).
+		execPrefix = nodeDet.Active().ExecPrefix(resolveNodeVersionForHostWorker(sitePath))
 	}
 
-	script := buildDarwinHostWorkerGuardScript(fnmBin, config.BinDir(), nodeVersion, sitePath, command, bunDir)
+	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, bunDir)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)
 	}

@@ -1,6 +1,7 @@
 package serviceops
 
 import (
+	"bufio"
 	"bytes"
 	"compress/gzip"
 	"context"
@@ -105,12 +106,24 @@ func exportShellCommand(family, database string) (string, bool) {
 	q := podman.ShellQuote(database)
 	switch family {
 	case "mysql", "mariadb":
-		return mysqlDumpBin + " -uroot " + q, true
+		return mysqlDumpBin + " -uroot " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	case "postgres":
-		return "pg_dump -U postgres " + q, true
+		return "pg_dump -U postgres " + strings.Join(DumpFlags(family), " ") + " " + q, true
 	default:
 		return "", false
 	}
+}
+
+// DumpFlags are the flags every dump of a family carries, so an export, a
+// snapshot and a migration all produce the same file. Postgres needs --clean
+// --if-exists to load back over objects that already exist, which mysqldump does
+// on its own; mysqldump needs --routines and --events, which are off by default
+// and would otherwise leave stored procedures out of the dump without a word.
+func DumpFlags(family string) []string {
+	if family == "postgres" {
+		return []string{"--clean", "--if-exists"}
+	}
+	return []string{"--single-transaction", "--quick", "--no-tablespaces", "--routines", "--triggers", "--events"}
 }
 
 func importShellCommand(family, database string) (string, bool) {
@@ -177,9 +190,15 @@ func ExportSnapshot(service, database, name string, w io.Writer) error {
 	return nil
 }
 
-// maxImportIssues caps the distinct complaints kept from a load, enough to show
-// the shape of the failure without carrying a 27k-line psql transcript around.
-const maxImportIssues = 5
+// maxImportIssues caps the distinct complaints kept from a load. A dump replayed
+// over a populated schema complains once per object, so the cap is high enough to
+// carry the whole list to the UI and still bounded well under a 27k-line psql
+// transcript.
+const maxImportIssues = 500
+
+// summaryIssues caps what the one-line CLI summary spells out. The rest is
+// counted in the same "and N more" tail, since the full list belongs in the UI.
+const summaryIssues = 5
 
 // ImportIssue is one distinct complaint the engine made, and how often it made
 // it. ImportReport summarises a load: psql exits 0 even when every statement in
@@ -191,11 +210,15 @@ type ImportIssue struct {
 }
 
 // Omitted is how many further distinct complaints were dropped past the cap, so
-// a truncated list never reads as the whole of what went wrong.
+// a truncated list never reads as the whole of what went wrong. Skipped is what
+// the sanitizer held back on the way in, reported so lerd never rewrites a dump
+// silently.
 type ImportReport struct {
 	Errors  int           `json:"errors"`
 	Issues  []ImportIssue `json:"issues,omitempty"`
 	Omitted int           `json:"omitted,omitempty"`
+	Skipped []ImportIssue `json:"skipped,omitempty"`
+	Created []ImportIssue `json:"created,omitempty"`
 }
 
 // Summary renders the report as one line for the CLI and the phase stream.
@@ -203,14 +226,45 @@ func (r ImportReport) Summary() string {
 	if r.Errors == 0 {
 		return ""
 	}
-	parts := make([]string, 0, len(r.Issues)+1)
-	for _, issue := range r.Issues {
+	shown, more := r.Issues, r.Omitted
+	if len(shown) > summaryIssues {
+		more += len(shown) - summaryIssues
+		shown = shown[:summaryIssues]
+	}
+	parts := make([]string, 0, len(shown)+1)
+	for _, issue := range shown {
 		parts = append(parts, fmt.Sprintf("%d× %s", issue.Count, issue.Message))
 	}
-	if r.Omitted > 0 {
-		parts = append(parts, fmt.Sprintf("and %d more", r.Omitted))
+	if more > 0 {
+		parts = append(parts, fmt.Sprintf("and %d more", more))
 	}
 	return fmt.Sprintf("the engine reported %d errors: %s", r.Errors, strings.Join(parts, "; "))
+}
+
+// SkippedSummary renders what the sanitizer held back, so a load that came out
+// clean because lerd filtered it says so rather than looking untouched.
+func (r ImportReport) SkippedSummary() string {
+	if len(r.Skipped) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Skipped))
+	for _, s := range r.Skipped {
+		parts = append(parts, fmt.Sprintf("%d× %s", s.Count, s.Message))
+	}
+	return "skipped " + strings.Join(parts, "; ")
+}
+
+// CreatedSummary renders the extensions the load needed and lerd created, or
+// could not, for the same reason.
+func (r ImportReport) CreatedSummary() string {
+	if len(r.Created) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(r.Created))
+	for _, c := range r.Created {
+		parts = append(parts, c.Message)
+	}
+	return strings.Join(parts, "; ")
 }
 
 // ImportTally counts an engine's complaints as its output streams past, so a
@@ -293,7 +347,7 @@ func (t *ImportTally) Report() ImportReport {
 	}
 	loudestNoise := ""
 	for _, msg := range t.order {
-		if strings.HasPrefix(msg, "invalid command") && (loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise]) {
+		if isCopyCascadeLine(msg) && (loudestNoise == "" || t.seen[msg] > t.seen[loudestNoise]) {
 			loudestNoise = msg
 		}
 	}
@@ -303,7 +357,7 @@ func (t *ImportTally) Report() ImportReport {
 	}
 	rep := ImportReport{Errors: t.errors}
 	for _, msg := range t.order {
-		if strings.HasPrefix(msg, "invalid command") {
+		if isCopyCascadeLine(msg) {
 			continue
 		}
 		if len(rep.Issues) == room {
@@ -330,7 +384,7 @@ func trimImportPrefix(line string) string {
 	if !strings.HasPrefix(line, "psql:") {
 		return line
 	}
-	for _, marker := range []string{": ERROR", ": invalid command"} {
+	for _, marker := range []string{": ERROR", ": invalid command", ": backslash commands are restricted"} {
 		if i := strings.Index(line, marker); i >= 0 {
 			return line[i+2:]
 		}
@@ -339,18 +393,57 @@ func trimImportPrefix(line string) string {
 }
 
 func isImportErrorLine(line string) bool {
-	return strings.HasPrefix(line, "ERROR") || strings.HasPrefix(line, "invalid command")
+	return strings.HasPrefix(line, "ERROR") || isCopyCascadeLine(line)
+}
+
+// isCopyCascadeLine reports whether a complaint is COPY data being read as SQL,
+// which is what follows a table the dump failed to create. Postgres 18 dumps
+// open with \restrict, and in that mode psql refuses backslash commands, so the
+// rows that used to read "invalid command \N" now say so differently.
+func isCopyCascadeLine(msg string) bool {
+	return strings.HasPrefix(msg, "invalid command") ||
+		strings.HasPrefix(msg, "backslash commands are restricted")
+}
+
+// DumpReader unwraps a gzipped dump so a .sql.gz loads like a .sql. The engine
+// clients read plain SQL: handed compressed bytes, psql reports a couple of
+// encoding errors, loads nothing and still exits clean, which reads as a load
+// that mostly worked. Anything else is passed through untouched, including a
+// custom-format archive, which psql itself recognises and names.
+func DumpReader(r io.Reader) (io.Reader, error) {
+	br := bufio.NewReader(r)
+	magic, err := br.Peek(2)
+	if err != nil || magic[0] != 0x1f || magic[1] != 0x8b {
+		return br, nil
+	}
+	gz, err := gzip.NewReader(br)
+	if err != nil {
+		return nil, fmt.Errorf("reading compressed dump: %w", err)
+	}
+	return gz, nil
+}
+
+// ImportOptions carries the choices a caller makes about a load. Fresh drops and
+// recreates the database first, so a dump replaces what is there instead of
+// colliding with it statement by statement.
+type ImportOptions struct {
+	Fresh bool
 }
 
 // ImportDatabase streams a SQL dump from r into database on the service
-// container. The database must already exist. The report carries what the
-// engine complained about, which is the only sign of a partial load when the
-// client still exits clean.
-func ImportDatabase(service, database string, r io.Reader) (ImportReport, error) {
+// container. The database must already exist unless Fresh is set. The report
+// carries what the engine complained about, which is the only sign of a partial
+// load when the client still exits clean, and what the sanitizer held back.
+func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (ImportReport, error) {
 	family := config.FamilyOfName(service)
 	shellCmd, ok := importShellCommand(family, database)
 	if !ok {
 		return ImportReport{}, fmt.Errorf("importing into %s databases is not supported", service)
+	}
+	if opt.Fresh {
+		if err := EmptyDatabase(service, database); err != nil {
+			return ImportReport{}, err
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
@@ -359,11 +452,36 @@ func ImportDatabase(service, database string, r io.Reader) (ImportReport, error)
 		args = append(args, "--env", kv)
 	}
 	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
+	src, err := DumpReader(r)
+	if err != nil {
+		return ImportReport{}, err
+	}
+	src, notes := SanitizeDump(DumpTarget{
+		Service: service, Family: family, Database: database, Extensions: DeclaredExtensions(service),
+	}, src)
 	cmd := podman.CmdContext(ctx, args...)
-	cmd.Stdin = r
+	cmd.Stdin = src
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return ImportReport{}, fmt.Errorf("import failed: %w\n%s", err, strings.TrimSpace(string(out)))
 	}
-	return parseImportOutput(string(out)), nil
+	rep := parseImportOutput(string(out))
+	n := notes()
+	rep.Skipped, rep.Created = n.Skipped, n.Created
+	return rep, nil
+}
+
+// EmptyDatabase drops and recreates a database, the same replacement a snapshot
+// restore does, so a dump lands on nothing rather than on top of what is there.
+func EmptyDatabase(service, database string) error {
+	if err := ValidateDatabaseName(database); err != nil {
+		return err
+	}
+	if _, err := DropDatabase(service, database); err != nil {
+		return fmt.Errorf("emptying %s: %w", database, err)
+	}
+	if _, err := CreateDatabase(service, database); err != nil {
+		return fmt.Errorf("recreating %s: %w", database, err)
+	}
+	return nil
 }

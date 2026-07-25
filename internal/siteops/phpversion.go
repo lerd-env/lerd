@@ -80,9 +80,12 @@ type PHPVersionResult struct {
 func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (PHPVersionResult, error) {
 	res := PHPVersionResult{Requested: version, Version: version}
 
-	if !config.IsSupportedPHPVersion(version) {
-		return res, fmt.Errorf("unsupported PHP version %q (supported: %s)", version, strings.Join(config.SupportedPHPVersions, ", "))
+	norm, err := config.NormalizePHPVersion(version)
+	if err != nil {
+		return res, err
 	}
+	version = norm
+	res.Version = version
 	if site.IsCustomContainer() {
 		return res, fmt.Errorf("site %q runs a custom container, which defines its own PHP runtime", site.Name)
 	}

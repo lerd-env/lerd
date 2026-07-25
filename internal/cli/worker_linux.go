@@ -130,10 +130,10 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 		shellCommand = nodeDet.Bunify(command)
 		envPath = filepath.Dir(bun) + ":" + envPath
 	} else if isNodeProject(sitePath) && lerdManagesNode() {
-		// Only route through fnm when lerd is actually managing Node; otherwise
-		// run the command directly so the user's system node/npm on PATH is used
-		// (after node:unmanage there is no fnm Node to exec into).
-		fnm := filepath.Join(config.BinDir(), "fnm")
+		// Only route through the version manager when lerd is actually managing
+		// Node; otherwise run the command directly so the user's system node/npm
+		// on PATH is used (after node:unmanage there is no managed Node to exec
+		// into).
 		nodeVersion, err := nodeDet.DetectVersion(sitePath)
 		if err != nil {
 			if cfg, _ := config.LoadGlobal(); cfg != nil {
@@ -143,7 +143,7 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 				nodeVersion = defaultNodeVersion
 			}
 		}
-		shellCommand = fmt.Sprintf("%s exec --using=%s -- %s", fnm, nodeVersion, command)
+		shellCommand = nodeDet.Active().ExecPrefix(nodeVersion) + " " + command
 	}
 	escaped := strings.ReplaceAll(shellCommand, "'", `'"'"'`)
 	// Order after and pull up the site's FPM container: host tools like Vite

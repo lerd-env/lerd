@@ -38,6 +38,30 @@ func TestLoadGlobal_Defaults(t *testing.T) {
 	}
 }
 
+// A default version stored with a "php" prefix by an older `lerd use` produced
+// image names like lerd-phpphp84-fpm-base. Loading must repair it in memory so
+// a wedged install self-heals without the user re-running `lerd use`.
+func TestLoadGlobal_NormalizesStoredDefaultVersion(t *testing.T) {
+	setConfigDir(t)
+
+	seed, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	seed.PHP.DefaultVersion = "php84"
+	if err := SaveGlobal(seed); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	cfg, err := LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if cfg.PHP.DefaultVersion != "8.4" {
+		t.Errorf("PHP.DefaultVersion = %q, want 8.4", cfg.PHP.DefaultVersion)
+	}
+}
+
 // A config returned by LoadGlobal must not share its PHP.Packages map with the
 // cache: php:pkg's AddPackage/RemovePackage mutate the loaded copy in place
 // before SaveGlobal, and that must not corrupt what later LoadGlobal calls see.

@@ -71,6 +71,12 @@ type Result = {
   // Distinct complaints dropped past the cap, so a trimmed list never reads as
   // the whole of what went wrong.
   omitted?: number;
+  // What the daemon held back on the way in, so a load that came out clean
+  // because lerd filtered it says so rather than looking untouched.
+  skipped?: ImportIssue[];
+  // Extensions the load needed and the daemon created, so a database that
+  // gained one is never changed without a word.
+  created?: ImportIssue[];
 };
 
 async function post(service: string, path: string, body: unknown): Promise<Result> {
@@ -129,12 +135,14 @@ export function importDatabase(
   service: string,
   database: string,
   file: File,
-  onProgress?: (p: ImportProgress) => void
+  onProgress?: (p: ImportProgress) => void,
+  fresh = false
 ): Promise<Result> {
   const form = new FormData();
-  // The database field goes first because the daemon walks the parts in order
+  // Every field goes before the file because the daemon walks the parts in order
   // and streams the file straight into the engine without buffering the body.
   form.append('database', database);
+  if (fresh) form.append('fresh', 'true');
   form.append('file', file);
   return new Promise<Result>((resolve) => {
     const finish = async (out: Result) => {
