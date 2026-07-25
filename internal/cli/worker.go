@@ -413,15 +413,27 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		}
 	}
 
-	// Route through podman.StartUnit (not services.Mgr.Start directly) so
-	// AfterUnitChange fires the dashboard cache invalidate + WS push. On
-	// Linux the systemd DBus subscription catches direct services.Mgr
-	// calls as a fallback; macOS has no equivalent, so a direct call
-	// leaves the UI stale until the next 15s cache poll.
+	// Route through podman.StartUnit/RestartUnit (not services.Mgr directly) so
+	// AfterUnitChange fires the dashboard cache invalidate + WS push. On Linux
+	// the systemd DBus subscription catches direct services.Mgr calls as a
+	// fallback; macOS has no equivalent, so a direct call leaves the UI stale
+	// until the next 15s cache poll.
+	//
+	// When the unit changed and is already active, restart it instead of
+	// starting: a start is a no-op on an active unit, so the old process would
+	// keep running while every status surface reports the new one. Same trap
+	// ensureFPMQuadletTo and rebindHostProxyDevServer already handle.
 	startStep := feedback.Start("starting " + label)
-	if err := podman.StartUnit(lifecycleTarget); err != nil {
-		startStep.Fail(err)
-		return fmt.Errorf("starting %s worker: %w", workerName, err)
+	if changed && isServiceActiveOrRestarting(lifecycleTarget) {
+		if err := podman.RestartUnit(lifecycleTarget); err != nil {
+			startStep.Fail(err)
+			return fmt.Errorf("restarting %s worker: %w", workerName, err)
+		}
+	} else {
+		if err := podman.StartUnit(lifecycleTarget); err != nil {
+			startStep.Fail(err)
+			return fmt.Errorf("starting %s worker: %w", workerName, err)
+		}
 	}
 	startStep.OK("")
 	feedback.Note("logs: " + workerLogHint(unitName, w.Host))
