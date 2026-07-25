@@ -103,6 +103,8 @@ export interface Site {
   reverb_failing?: boolean;
   lan_port?: number;
   lan_share_url?: string;
+  tunnel_url?: string;
+  tunnel_tool?: string;
   framework_workers?: FrameworkWorker[];
   last_request_at?: number;
   request_count?: number;
@@ -601,6 +603,22 @@ export const toggleLANShare = (s: Site, branch: string = '') => {
   const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
   return postAction(site(s.domain, action) + qs);
 };
+export interface ShareToolStatus {
+  name: string;
+  label: string;
+  binary: string;
+  installed: boolean;
+  install_url?: string;
+}
+export interface ShareToolsInfo {
+  tools: ShareToolStatus[];
+  auto?: string;
+  default?: string;
+}
+export const loadShareTools = () => apiJson<ShareToolsInfo>('/api/share-tools');
+export const startTunnel = (s: Site, tool: string = '') =>
+  postAction(site(s.domain, 'tunnel:start') + (tool ? `?tool=${encodeURIComponent(tool)}` : ''));
+export const stopTunnel = (s: Site) => postAction(site(s.domain, 'tunnel:stop'));
 export const toggleQueue = (s: Site) =>
   postAction(site(s.domain, s.queue_running ? 'queue:stop' : 'queue:start'));
 export const toggleHorizon = (s: Site) =>

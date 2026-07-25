@@ -18,11 +18,28 @@
   let creating = $state(false);
   let newName = $state('');
   let rootEl: HTMLDivElement | undefined = $state();
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
 
   function close() {
+    clearTimeout(closeTimer);
     open = false;
     creating = false;
     newName = '';
+  }
+
+  function openNow() {
+    clearTimeout(closeTimer);
+    open = true;
+  }
+
+  // Same hover grace as the share menu; while the create input is up the
+  // menu only closes explicitly (outside click, Esc, Cancel), not on
+  // mouse-out mid-typing.
+  function scheduleClose() {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      if (!creating) close();
+    }, 250);
   }
 
   async function assign(workspace: string, create = false) {
@@ -55,10 +72,18 @@
   });
 </script>
 
-<div bind:this={rootEl} class="relative">
+<div
+  bind:this={rootEl}
+  class="relative"
+  role="none"
+  onmouseenter={openNow}
+  onmouseleave={scheduleClose}
+  onfocusin={openNow}
+  onfocusout={scheduleClose}
+>
   <button
     type="button"
-    onclick={() => (open = !open)}
+    onclick={openNow}
     aria-haspopup="menu"
     aria-expanded={open}
     aria-label={m.workspaces_pickerLabel()}

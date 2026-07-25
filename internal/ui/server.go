@@ -199,6 +199,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/notifications/target", withCORS(handleNotifyTarget))
 	mux.HandleFunc("/api/notifications/kinds", withCORS(handleNotifyKinds))
 	mux.HandleFunc("/api/lan-qr/", withCORS(handleLANQR))
+	mux.HandleFunc("/api/share-tools", withCORS(handleShareTools))
+	mux.HandleFunc("/api/tunnel-qr/", withCORS(handleTunnelQR))
 	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
 
 	// Cross-process notifier for CLI/MCP. Loopback-only. PollNow in a
@@ -842,6 +844,8 @@ type SiteResponse struct {
 	DBDatabase       string `json:"db_database,omitempty"`
 	LANPort          int    `json:"lan_port,omitempty"`
 	LANShareURL      string `json:"lan_share_url,omitempty"`
+	TunnelURL        string `json:"tunnel_url,omitempty"`
+	TunnelTool       string `json:"tunnel_tool,omitempty"`
 	CustomContainer  bool   `json:"custom_container,omitempty"`
 	ContainerPort    int    `json:"container_port,omitempty"`
 	ContainerImage   string `json:"container_image,omitempty"`
@@ -1015,6 +1019,8 @@ func buildSites() []SiteResponse {
 			worktreeResponses = []WorktreeResponse{}
 		}
 
+		tunnel, _ := cli.TunnelStatus(e.Name)
+
 		sites = append(sites, SiteResponse{
 			Name:                 e.Name,
 			AppName:              laravelAppName(e.FrameworkName, e.Path),
@@ -1070,6 +1076,8 @@ func buildSites() []SiteResponse {
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
 			LANShareURL:          cli.LANShareURL(e.LANPort),
+			TunnelURL:            tunnel.URL,
+			TunnelTool:           tunnel.Tool,
 			CustomContainer:      e.ContainerPort > 0,
 			ContainerPort:        e.ContainerPort,
 			ContainerImage:       e.ContainerImage,
@@ -3198,6 +3206,36 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
 }
 
+// handleShareTools reports the supported tunnel tools, which are installed,
+// and what the auto pick would use, so the share menu can render its entries.
+func handleShareTools(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, cli.ShareTools())
+}
+
+// handleTunnelQR serves a QR code PNG of the site's public tunnel URL, the
+// tunnel twin of handleLANQR.
+func handleTunnelQR(w http.ResponseWriter, r *http.Request) {
+	domain := strings.TrimPrefix(r.URL.Path, "/api/tunnel-qr/")
+	site, err := config.FindSiteByDomain(domain)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	tunnel, ok := cli.TunnelStatus(site.Name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	png, err := qrcode.Encode(tunnel.URL, qrcode.Medium, 160)
+	if err != nil {
+		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
+}
+
 // handleDashboardQR serves a QR code PNG encoding the dashboard's own LAN URL
 // (http://<lan-ip>:7073) so a phone can scan straight into the remote
 // dashboard. Only meaningful while LAN exposure is on; 404 otherwise.
@@ -3929,6 +3967,20 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := cli.LANShareStop(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "tunnel:start":
+		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("tool")); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "tunnel:stop":
+		if err := cli.TunnelStop(site.Name); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

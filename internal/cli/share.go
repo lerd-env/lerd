@@ -105,33 +105,57 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 	fmt.Println("Press Ctrl+C to stop.")
 	fmt.Println()
 
+	tunnelName := ""
+	if tool.mode == shareModeCloudflare && tool.domain != "" {
+		if tunnelName, err = ensureCloudflareTunnel(site.Name, tool.domain); err != nil {
+			return err
+		}
+		fmt.Printf("Public URL: https://%s\n\n", tool.domain)
+	}
+
+	httpsPort := cfg.Nginx.HTTPSPort
+	if httpsPort == 0 {
+		httpsPort = 443
+	}
+	cmd, stop, err := buildTunnelCommand(tool, tunnelName, site, port, httpsPort, false)
+	if err != nil {
+		return err
+	}
+	defer stop()
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+// buildTunnelCommand builds the tunnel tool invocation for a site plus a stop
+// func for the local helper proxy the cloudflare/ssh modes need. headless
+// swaps interactive output for parseable logs so a caller can scrape the
+// public URL.
+func buildTunnelCommand(tool *shareTool, tunnelName string, site *config.Site, httpPort, httpsPort int, headless bool) (*exec.Cmd, func(), error) {
+	stop := func() {}
 	var cmd *exec.Cmd
 	switch tool.mode {
 	case shareModeNgrok:
-		cmd = exec.Command("ngrok", "http", fmt.Sprintf("%d", port),
-			"--host-header="+site.PrimaryDomain())
+		args := []string{"http", fmt.Sprintf("%d", httpPort), "--host-header=" + site.PrimaryDomain()}
+		if headless {
+			args = append(args, "--log", "stdout", "--log-format", "json")
+		}
+		cmd = exec.Command("ngrok", args...)
 	case shareModeExpose:
 		shareURL := fmt.Sprintf("http://%s", site.PrimaryDomain())
-		if port != 80 {
-			shareURL = fmt.Sprintf("http://%s:%d", site.PrimaryDomain(), port)
+		if httpPort != 80 {
+			shareURL = fmt.Sprintf("http://%s:%d", site.PrimaryDomain(), httpPort)
 		}
 		cmd = exec.Command("expose", "share", shareURL)
 	case shareModeCloudflare:
-		httpsPort := cfg.Nginx.HTTPSPort
-		if httpsPort == 0 {
-			httpsPort = 443
-		}
-		proxyPort, stop, err := startHostProxy(site.PrimaryDomain(), port, httpsPort, site.Secured)
+		proxyPort, stopProxy, err := startHostProxy(site.PrimaryDomain(), httpPort, httpsPort, site.Secured)
 		if err != nil {
-			return fmt.Errorf("starting local proxy: %w", err)
+			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
-		defer stop()
-		if tool.domain != "" {
-			tunnelName, err := ensureCloudflareTunnel(site.Name, tool.domain)
-			if err != nil {
-				return err
-			}
-			fmt.Printf("Public URL: https://%s\n\n", tool.domain)
+		stop = stopProxy
+		if tunnelName != "" {
 			cmd = exec.Command("cloudflared", "tunnel", "run",
 				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort), tunnelName)
 		} else {
@@ -139,19 +163,15 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
 		}
 	case shareModeSSH:
-		httpsPort := cfg.Nginx.HTTPSPort
-		if httpsPort == 0 {
-			httpsPort = 443
-		}
 		// Start a local reverse proxy that rewrites Host so nginx routes correctly.
-		proxyPort, stop, err := startHostProxy(site.PrimaryDomain(), port, httpsPort, site.Secured)
+		proxyPort, stopProxy, err := startHostProxy(site.PrimaryDomain(), httpPort, httpsPort, site.Secured)
 		if err != nil {
-			return fmt.Errorf("starting local proxy: %w", err)
+			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
-		defer stop()
-
-		fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, site.PrimaryDomain(), port)
-
+		stop = stopProxy
+		if !headless {
+			fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, site.PrimaryDomain(), httpPort)
+		}
 		cmd = exec.Command("ssh",
 			"-o", "StrictHostKeyChecking=no",
 			"-o", "ServerAliveInterval=30",
@@ -159,11 +179,7 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 			"nokey@"+tool.sshHost,
 		)
 	}
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	return cmd, stop, nil
 }
 
 // resolveShareSite finds the site for the given name arg (or CWD if no arg).
