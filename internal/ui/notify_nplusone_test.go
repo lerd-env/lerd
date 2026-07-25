@@ -89,11 +89,10 @@ func TestNPlusOne_DistinctQueriesDoNotTrip(t *testing.T) {
 	}
 }
 
-// TestNPlusOne_BodyAlwaysNamesWhere pins that every notification points
-// somewhere: a console run names its command, and an event with neither a
-// request nor a command falls back to the line that fired the query rather
-// than the generic "in one request".
-func TestNPlusOne_BodyAlwaysNamesWhere(t *testing.T) {
+// TestNPlusOne_BodyNamesTheRun pins the body label: the run the queries came
+// from (worker, command, route), never the query's own file:line, which the
+// dumps lens already carries on the event.
+func TestNPlusOne_BodyNamesTheRun(t *testing.T) {
 	ev := func(ctx dumps.Context, src dumps.Source) dumps.Event {
 		e := qEvent("r1", "", "select 1")
 		e.Ctx, e.Src = ctx, src
@@ -106,13 +105,11 @@ func TestNPlusOne_BodyAlwaysNamesWhere(t *testing.T) {
 	}{
 		{"worker wins", ev(dumps.Context{Worker: "queue:work", Command: "artisan queue:work", Request: "GET /x"}, dumps.Source{}),
 			"queue:work ran a similar query 3×"},
-		{"command over source", ev(dumps.Context{Command: "artisan sync:users --all"}, dumps.Source{File: "/var/www/app/Console/Sync.php", Line: 12}),
+		{"command for console", ev(dumps.Context{Command: "artisan sync:users --all"}, dumps.Source{File: "/var/www/app/Console/Sync.php", Line: 12}),
 			"artisan sync:users --all ran a similar query 3×"},
 		{"request when web", ev(dumps.Context{Request: "GET /orders"}, dumps.Source{File: "/var/www/app/X.php", Line: 3}),
 			"GET /orders ran a similar query 3×"},
-		{"source as last resort", ev(dumps.Context{}, dumps.Source{File: "/var/www/html/app/Jobs/SyncUsers.php", Line: 42}),
-			"app/Jobs/SyncUsers.php:42 ran a similar query 3×"},
-		{"nothing at all", ev(dumps.Context{}, dumps.Source{}),
+		{"no run context stays generic", ev(dumps.Context{}, dumps.Source{File: "/var/www/html/app/Jobs/SyncUsers.php", Line: 42}),
 			"Ran a similar query 3× in one request"},
 	}
 	for _, c := range cases {

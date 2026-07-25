@@ -115,34 +115,16 @@ func (t *nPlusOneTracker) evict() {
 	}
 }
 
-// whereForQuery names the place a warning should send you, most specific first:
-// the worker command, the CLI invocation, the request route, and finally the
-// line that fired the query, so no notification is left with nowhere to point.
+// whereForQuery names the run a warning came from, most specific first: the
+// worker command, the CLI invocation, or the request route. The query's own
+// file:line stays out of the body; the dumps lens carries it on the event.
 func whereForQuery(ev dumps.Event) string {
-	for _, s := range []string{ev.Ctx.Worker, ev.Ctx.Command, ev.Ctx.Request, sourceLabel(ev.Src)} {
+	for _, s := range []string{ev.Ctx.Worker, ev.Ctx.Command, ev.Ctx.Request} {
 		if s = strings.TrimSpace(s); s != "" {
 			return s
 		}
 	}
 	return ""
-}
-
-// sourceLabel renders an event's originating file:line the way the Debug list
-// does, trimmed to the last three path segments so a container-absolute path
-// stays readable in a notification body.
-func sourceLabel(src dumps.Source) string {
-	if src.File == "" {
-		return ""
-	}
-	parts := strings.Split(src.File, "/")
-	if len(parts) > 3 {
-		parts = parts[len(parts)-3:]
-	}
-	file := strings.Join(parts, "/")
-	if src.Line <= 0 {
-		return file
-	}
-	return fmt.Sprintf("%s:%d", file, src.Line)
 }
 
 func notificationForNPlusOne(ev dumps.Event, count int) push.Notification {

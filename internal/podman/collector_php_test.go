@@ -223,7 +223,7 @@ func TestCollectorPHP_StampsCommandForCLI(t *testing.T) {
 		} `json:"ctx"`
 	}
 	lines := runCollectorPHP(t, `<?php
-$_SERVER['argv'] = ['/app/artisan', 'queue:work', '--queue=high'];
+$_SERVER['argv'] = ['/app/artisan', 'tinker', '--queue=high', '--execute=for ($i = 0; $i < 4; $i++) { DB::select("select 1"); }'];
 require COLLECTOR;
 \Lerd\Collector\http('GET', 'https://api.test/widgets');
 `)
@@ -234,8 +234,8 @@ require COLLECTOR;
 	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
 		t.Fatalf("bad JSON line %q: %v", lines[0], err)
 	}
-	if e.Ctx.Command != "artisan queue:work --queue=high" {
-		t.Errorf("ctx.command = %q, want the script basename plus its arguments", e.Ctx.Command)
+	if e.Ctx.Command != "artisan tinker --queue=high --execute=..." {
+		t.Errorf("ctx.command = %q, want short arguments kept and long values elided", e.Ctx.Command)
 	}
 	if e.Ctx.Request != "" {
 		t.Errorf("ctx.request = %q, want empty on a CLI invocation", e.Ctx.Request)

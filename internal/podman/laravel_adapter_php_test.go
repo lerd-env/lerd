@@ -100,7 +100,7 @@ func TestLaravelAdapterPHP_StampsCommandForCLI(t *testing.T) {
 		} `json:"ctx"`
 	}
 	lines := runLaravelAdapterPHP(t, `<?php
-$_SERVER['argv'] = ['/app/artisan', 'queue:work', '--queue=high'];
+$_SERVER['argv'] = ['/app/artisan', 'queue:work', '--queue=high', '--execute=for ($i = 0; $i < 4; $i++) { DB::select("select 1"); }'];
 define('LERD_DEVTOOLS_ON', true);
 require ADAPTER;
 \Lerd\LaravelAdapter\emit('query', ['sql' => 'select 1']);
@@ -115,8 +115,8 @@ require ADAPTER;
 	if e.Kind != "query" {
 		t.Errorf("kind = %q, want query", e.Kind)
 	}
-	if e.Ctx.Command != "artisan queue:work --queue=high" {
-		t.Errorf("ctx.command = %q, want the script basename plus its arguments", e.Ctx.Command)
+	if e.Ctx.Command != "artisan queue:work --queue=high --execute=..." {
+		t.Errorf("ctx.command = %q, want short arguments kept and long values elided", e.Ctx.Command)
 	}
 	if e.Ctx.Request != "" {
 		t.Errorf("ctx.request = %q, want empty on a CLI invocation", e.Ctx.Request)

@@ -90,9 +90,24 @@ function in_test(): bool
     return defined('PHPUNIT_COMPOSER_INSTALL') || class_exists('PHPUnit\\Framework\\TestCase', false);
 }
 
+// condense_arg mirrors the collector's: short arguments survive intact, long
+// values are elided ("--execute=..."), since the command names the run and the
+// event's src/data carry the exact detail.
+function condense_arg(string $arg): string
+{
+    if (strlen($arg) <= 32) {
+        return $arg;
+    }
+    $eq = strpos($arg, '=');
+    if ($eq !== false && $eq < 32) {
+        return substr($arg, 0, $eq + 1) . '...';
+    }
+    return substr($arg, 0, 29) . '...';
+}
+
 // command_line mirrors the collector's: the CLI invocation an event came from,
-// e.g. "artisan queue:work --queue=high", capped so a long argument list can't
-// bloat the context of every event the process emits.
+// e.g. "artisan queue:work --queue=high", condensed per argument and capped so
+// a long invocation can't bloat the context of every event the process emits.
 function command_line(): string
 {
     $argv = $_SERVER['argv'] ?? null;
@@ -101,7 +116,7 @@ function command_line(): string
     }
     $parts = [basename((string) $argv[0])];
     foreach (array_slice($argv, 1) as $arg) {
-        $parts[] = (string) $arg;
+        $parts[] = condense_arg((string) $arg);
     }
     $line = trim(implode(' ', $parts));
     return strlen($line) > 120 ? substr($line, 0, 117) . '...' : $line;

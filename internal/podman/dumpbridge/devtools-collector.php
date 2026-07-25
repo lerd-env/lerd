@@ -116,9 +116,24 @@ function detect_site(): string
     return '';
 }
 
+// condense_arg keeps short arguments intact and elides long values, so
+// "--queue=high" survives but tinker's "--execute=<code>" reads "--execute=...":
+// the command names the run, the event's src/data carry the exact detail.
+function condense_arg(string $arg): string
+{
+    if (strlen($arg) <= 32) {
+        return $arg;
+    }
+    $eq = strpos($arg, '=');
+    if ($eq !== false && $eq < 32) {
+        return substr($arg, 0, $eq + 1) . '...';
+    }
+    return substr($arg, 0, 29) . '...';
+}
+
 // command_line names the CLI invocation an event came from, e.g.
-// "artisan queue:work --queue=high". Capped so a long argument list can't
-// bloat the context of every event the process emits.
+// "artisan queue:work --queue=high". Condensed per argument and capped so a
+// long invocation can't bloat the context of every event the process emits.
 function command_line(): string
 {
     $argv = $_SERVER['argv'] ?? null;
@@ -127,7 +142,7 @@ function command_line(): string
     }
     $parts = [basename((string) $argv[0])];
     foreach (array_slice($argv, 1) as $arg) {
-        $parts[] = (string) $arg;
+        $parts[] = condense_arg((string) $arg);
     }
     $line = trim(implode(' ', $parts));
     return strlen($line) > 120 ? substr($line, 0, 117) . '...' : $line;
