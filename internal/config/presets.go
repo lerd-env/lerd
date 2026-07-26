@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -125,13 +126,27 @@ func ListPresets() ([]PresetMeta, error) {
 
 // presetCache memoises parsed Presets so the daemon doesn't re-parse the
 // embedded YAML on every snapshot rebuild. The bundled files are immutable for
-// the lifetime of the binary, so the cache never needs invalidation.
-var presetCache sync.Map // map[string]*Preset
+// the lifetime of the binary, so their entries never need invalidation. A store
+// cache file is not immutable: lerd install, lerd service update and the 24h
+// refresh rewrite it from a different process, so the entry records the file's
+// mtime and re-parses when it changes.
+var presetCache sync.Map // map[string]presetCacheEntry
+
+type presetCacheEntry struct {
+	preset *Preset
+	mtime  time.Time // zero when the parse came from the embedded bundle
+}
 
 // LoadPreset returns the parsed Preset for a bundled file by name.
 func LoadPreset(name string) (*Preset, error) {
 	if cached, ok := presetCache.Load(name); ok {
-		return cached.(*Preset), nil
+		entry := cached.(presetCacheEntry)
+		// Re-parse only when a store cache file replaced the source the
+		// cached parse came from. The embedded bundle has no on-disk file,
+		// so a zero mtime means the parse is permanent for this process.
+		if entry.mtime.IsZero() || entry.mtime == storePresetMtime(name) {
+			return entry.preset, nil
+		}
 	}
 	data, ok := readPresetBytes(name)
 	if !ok {
@@ -147,7 +162,7 @@ func LoadPreset(name string) (*Preset, error) {
 	if len(p.Versions) > 0 && p.DefaultVersion == "" {
 		p.DefaultVersion = p.Versions[0].Tag
 	}
-	presetCache.Store(name, &p)
+	presetCache.Store(name, presetCacheEntry{preset: &p, mtime: storePresetMtime(name)})
 	return &p, nil
 }
 
