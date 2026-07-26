@@ -9,6 +9,7 @@
   import ServiceToolsTab from './ServiceToolsTab.svelte';
   import ServicePortsTab from './ServicePortsTab.svelte';
   import ServiceDatabasesTab from './ServiceDatabasesTab.svelte';
+  import ServiceEntitiesTab from './ServiceEntitiesTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import { isServiceWorker, type Service } from '$stores/services';
   import { accessMode } from '$stores/accessMode';
@@ -19,7 +20,7 @@
   }
   let { svc }: Props = $props();
 
-  type TabId = 'databases' | 'logs' | 'env' | 'config' | 'tools' | 'ports';
+  type TabId = 'databases' | 'entities' | 'logs' | 'env' | 'config' | 'tools' | 'ports';
   // A database engine opens on its Databases tab, since the databases it holds
   // are the primary thing to look at; every other service opens on logs. The
   // default is applied by the effect below on first run (shownService starts
@@ -35,8 +36,19 @@
   // so on a LAN-exposed dashboard the tab would report a running engine as
   // stopped and silently 403 every action. Hide it off the lerd host entirely.
   const hasDatabases = $derived(svc.is_database && $accessMode.loopback);
+  // The generic entity overview shares the databases surface's loopback-only
+  // restriction: its actions read out and delete the service's data.
+  const hasEntities = $derived((svc.entity_kinds?.length ?? 0) > 0 && $accessMode.loopback);
+  // A single declared kind names its own tab (Buckets, Keyspaces); several
+  // fold under a generic label.
+  const entitiesLabel = $derived.by(() => {
+    const kinds = svc.entity_kinds ?? [];
+    if (kinds.length === 1) return kinds[0].charAt(0).toUpperCase() + kinds[0].slice(1);
+    return m.entities_title();
+  });
   const tabs = $derived<TabItem<TabId>[]>([
     { id: 'databases', label: m.databases_title(), hidden: !hasDatabases },
+    { id: 'entities', label: entitiesLabel, hidden: !hasEntities },
     { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
     { id: 'config', label: m.services_tabs_tuning(), hidden: !svc.tunable },
@@ -45,15 +57,18 @@
   ]);
 
   // Selecting a different service resets to its default tab; within one service
-  // the user's tab choice sticks, falling back off any tab hidden for it.
+  // the user's tab choice sticks, falling back off any tab hidden for it. What
+  // a service holds (databases, buckets) is the primary thing to look at, so
+  // it beats logs as the landing tab.
   $effect(() => {
-    const fallback: TabId = hasDatabases ? 'databases' : 'logs';
+    const fallback: TabId = hasDatabases ? 'databases' : hasEntities ? 'entities' : 'logs';
     if (svc.name !== shownService) {
       shownService = svc.name;
       active = fallback;
       return;
     }
     if (active === 'databases' && !hasDatabases) active = fallback;
+    if (active === 'entities' && !hasEntities) active = fallback;
     if (active === 'env' && !hasEnv) active = fallback;
     if (active === 'config' && !svc.tunable) active = fallback;
     if (active === 'tools' && !hasTools) active = fallback;
@@ -89,6 +104,8 @@
   <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
   {#if active === 'databases'}
     <ServiceDatabasesTab {svc} />
+  {:else if active === 'entities'}
+    <ServiceEntitiesTab {svc} />
   {:else if active === 'logs'}
     {#key svc.name + ':' + logPath}
       <LogViewer path={logPath} {highlight} />

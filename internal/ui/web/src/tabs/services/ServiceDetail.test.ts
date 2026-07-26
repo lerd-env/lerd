@@ -8,6 +8,7 @@ vi.mock('./ServiceHeader.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./ServiceSiteBadges.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./PresetSuggestionBanner.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./ServiceDatabasesTab.svelte', () => import('./ServiceDetail.stub.svelte'));
+vi.mock('./ServiceEntitiesTab.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('$components/LogViewer.svelte', () => import('./ServiceDetail.stub.svelte'));
 
 import ServiceDetail from './ServiceDetail.svelte';
@@ -39,5 +40,33 @@ describe('ServiceDetail databases tab', () => {
     accessMode.set({ loopback: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(queryByRole('button', { name: 'Databases' })).toBeNull();
+  });
+});
+
+describe('ServiceDetail entities tab', () => {
+  beforeEach(() => accessMode.set({ loopback: true, lanExposed: false, checked: true }));
+
+  function entityService(): Service {
+    return {
+      name: 'rustfs',
+      status: 'active',
+      site_count: 0,
+      preset_owned: true,
+      entity_kinds: ['buckets']
+    } as Service;
+  }
+
+  // What the service holds is the primary thing to look at, so an
+  // entity-declaring service lands on its entity tab, not on logs.
+  it('opens on the entity tab, named after the declared kind', () => {
+    const { getByRole } = render(ServiceDetail, { props: { svc: entityService() } });
+    const tab = getByRole('button', { name: 'Buckets' });
+    expect(tab.className).toContain('border-lerd-red');
+  });
+
+  it('hides the entity tab on a LAN-exposed dashboard', () => {
+    accessMode.set({ loopback: false, lanExposed: true, checked: true });
+    const { queryByRole } = render(ServiceDetail, { props: { svc: entityService() } });
+    expect(queryByRole('button', { name: 'Buckets' })).toBeNull();
   });
 });

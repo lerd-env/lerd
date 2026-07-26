@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '$components/Icon.svelte';
   import Modal from '$components/Modal.svelte';
+  import ActionCard from '$components/ActionCard.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import { tooltip } from '$lib/tooltip';
   import { formatBytes } from '$lib/bytes';
@@ -84,7 +85,9 @@
         });
   });
 
-  const sqlOps = $derived(engine.supports_snapshot);
+  // The engines' dumps travel as SQL text unless the preset declares another
+  // format, in which case any file may be a valid archive.
+  const importAccept = $derived(engine.dump_format === 'sql' ? '.sql,.txt,.gz' : '');
   // A worktree's isolated database is shown under the branch's own domain, so it
   // reads as staging's data rather than as another database of the parent site.
   const ownerDomain = $derived(active.branch ? `${active.branch}.${active.site}` : active.site);
@@ -165,10 +168,8 @@
   }
 </script>
 
-<div class="flex h-full flex-col rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3 transition duration-150 hover:border-gray-300 dark:hover:border-white/15 hover:shadow-sm">
-  <!-- mb-2 keeps the meta line off the divider on the tallest card in a row,
-       where mt-auto has no slack left to space them apart. -->
-  <div class="flex items-start gap-2 mb-2">
+<ActionCard>
+  {#snippet header()}
     <Icon name="database" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
@@ -200,9 +201,9 @@
         onchange={(v) => (target = v)}
       />
     {/if}
-  </div>
+  {/snippet}
 
-  <div class="flex items-center gap-0.5 mt-auto pt-2 border-t border-gray-100 dark:border-lerd-border/60">
+  {#snippet actions()}
     {#if admin}
       <button
         type="button"
@@ -224,7 +225,7 @@
       <Icon name={copied ? 'check' : 'clipboard'} class="w-3.5 h-3.5" />
     </button>
 
-    {#if sqlOps}
+    {#if engine.supports_export}
       <a
         href={exportUrl(engine.service, active.name)}
         use:tooltip={m.databases_export()}
@@ -233,7 +234,9 @@
       >
         <Icon name="download" class="w-3.5 h-3.5" />
       </a>
+    {/if}
 
+    {#if engine.supports_import}
       <button
         type="button"
         use:tooltip={m.databases_import()}
@@ -244,8 +247,10 @@
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
       </button>
-      <input bind:this={fileInput} type="file" accept=".sql,.txt,.gz" class="hidden" onchange={onFilePicked} />
+      <input bind:this={fileInput} type="file" accept={importAccept} class="hidden" onchange={onFilePicked} />
+    {/if}
 
+    {#if engine.supports_snapshot}
       <button
         type="button"
         use:tooltip={m.databases_snapshots()}
@@ -260,7 +265,9 @@
           >{snapshotCount}</span>
         {/if}
       </button>
+    {/if}
 
+    {#if engine.supports_drop}
       <button
         type="button"
         use:tooltip={m.databases_drop()}
@@ -271,7 +278,7 @@
         <Icon name="trash" class="w-3.5 h-3.5" />
       </button>
     {/if}
-  </div>
+  {/snippet}
 
   {#if importOp}
     <div class="mt-2">
@@ -286,7 +293,7 @@
       </DatabaseOpStatus>
     </div>
   {/if}
-</div>
+</ActionCard>
 
 {#if showIssues && importOp?.issues}
   <ImportIssuesModal

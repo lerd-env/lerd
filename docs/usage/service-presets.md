@@ -332,30 +332,91 @@ natively. Right-click "Copy link" works.
 `mongo` declares its own `connection_url:` (see [YAML schema](custom-services.md#yaml-schema)
 in the custom services reference) so it gets the same treatment as the built-in databases.
 
-### Listing databases in the Databases tab
+### Declaring entities and actions
 
-A database-engine preset can declare an `introspect.list_databases` command so the
-web UI's [Databases tab](database.md#databases-tab-web-ui) can enumerate the
-databases inside the running engine and read their sizes:
+A preset can declare what the service holds and what can be done to it through an
+`introspect.entities` block. The declared kind `databases` powers the web UI's
+[Databases tab](database.md#databases-tab-web-ui), the `lerd db` commands and
+database snapshots; any other kind (buckets, keyspaces, indexes, queues) gets a
+generic overview tab on the service's detail page. Everything engine-specific
+lives in the declared commands, so a new engine, or a new capability on an
+existing one, ships as a store publish with no lerd release:
 
 ```yaml
 introspect:
-  list_databases: >
-    $(command -v mysql || command -v mariadb) -uroot -sN -e
-    "SELECT s.SCHEMA_NAME, COALESCE(SUM(t.DATA_LENGTH + t.INDEX_LENGTH), 0)
-    FROM information_schema.SCHEMATA s
-    LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = s.SCHEMA_NAME
-    WHERE s.SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
-    GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME"
+  entities:
+    - kind: databases
+      format: sql
+      list: >
+        $(command -v mysql || command -v mariadb) -uroot -sN -e
+        "SELECT s.SCHEMA_NAME, COALESCE(SUM(t.DATA_LENGTH + t.INDEX_LENGTH), 0)
+        FROM information_schema.SCHEMATA s
+        LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = s.SCHEMA_NAME
+        WHERE s.SCHEMA_NAME NOT IN ('information_schema', 'performance_schema', 'mysql', 'sys')
+        GROUP BY s.SCHEMA_NAME ORDER BY s.SCHEMA_NAME"
+      columns:
+        - key: size
+          label: Size
+          format: bytes
+      actions:
+        create: >
+          $(command -v mysql || command -v mariadb) -uroot -e
+          'CREATE DATABASE IF NOT EXISTS `{{name}}`;'
+        drop:
+          exec: >
+            $(command -v mysql || command -v mariadb) -uroot -e
+            'DROP DATABASE IF EXISTS `{{name}}`;'
+          destructive: true
+        export:
+          exec: >
+            $(command -v mysqldump || command -v mariadb-dump) -uroot
+            --single-transaction --quick --no-tablespaces --routines --triggers --events
+            {{name}}
+          filename: "{{name}}.sql"
+        import: >
+          $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot {{name}}
 ```
 
-The command runs via `sh -c` inside the `lerd-<service>` container and must print
-one `name<TAB>size_bytes` row per user database, filtering out the engine's own
-system databases. lerd parses the tab-separated output and never branches on the
-engine name, so a new engine appears in the tab as soon as its preset ships this
-query, with no lerd release. The fixed `lerd` admin password is passed through the
-exec environment (`MYSQL_PWD` / `PGPASSWORD`), so the query needs no inline
-credentials for MySQL and PostgreSQL.
+Every command runs via `sh -c` inside the `lerd-<service>` container. The `list`
+command prints one entity per line: the name, then one tab-separated field per
+declared column, in order; lerd parses the output and never branches on the
+engine name. The fixed `lerd` admin password is passed through the exec
+environment (`MYSQL_PWD` / `PGPASSWORD`), so commands need no inline credentials
+for MySQL and PostgreSQL; other engines embed theirs the way their client expects.
+
+In an action, every `{{name}}` is replaced by the entity name after validation
+against a strict pattern (letters, digits, underscores and dashes only, 64
+characters at most), which is what makes the substitution safe both as a shell
+word and inside a quoted SQL identifier. A bare string is shorthand for an action
+with just an `exec`. `destructive: true` makes the UI confirm before running the
+action. An `export` action writes its dump to stdout (`filename` names the
+download); an `import` action reads one from stdin, always in the plain form:
+lerd unwraps a gzipped upload before it reaches the command, so an export may
+compress for transport without the import having to care. Declaring both is also what
+enables snapshots for the engine: a snapshot stores the declared export gzipped
+and restores through the declared import, and the `export_all` / `import_all`
+variants (no `{{name}}`) cover the service-wide snapshots the engine migration
+flow uses. `format: sql` on the entity tells lerd the dump is SQL text, which
+turns on the import sanitizer and the per-statement error tally; leave it off for
+engines with their own archive format and the bytes stream through untouched.
+
+A service whose own image ships no client tooling can name an `image:` on the
+entity, and lerd runs every command in an ephemeral container of that image on
+the lerd network instead of exec-ing the service container, with the entity's
+`env:` pairs carrying the client's connection settings. RustFS is the model
+case: it holds S3 buckets but no S3 client, so its buckets entity runs through
+`minio/mc`. A single action can override the image and env for itself, because
+one tool rarely covers everything: bucket archives need `tar`, which the mc
+image does not carry, so the export and import actions run on `rclone/rclone`
+while listing stays on mc. An `owner_env:` on the entity names the site .env
+key whose value is the entity a site owns (`AWS_BUCKET` for buckets), which is
+what links each row to its site in the UI; only sites whose .env references
+this service count, so a project pointed at real AWS never claims a local
+bucket of the same name.
+
+The single-command `introspect.list_databases` form from before entities existed
+is still honoured as a list-only databases declaration, so presets published for
+older lerd versions keep listing.
 
 ## Removing and reinstalling presets
 

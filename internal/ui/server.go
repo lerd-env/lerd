@@ -220,6 +220,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/services/", withCORS(publishAfter(handleServiceAction, eventbus.KindServices, eventbus.KindStatus, eventbus.KindSites)))
 	mux.HandleFunc("/api/databases", withCORS(handleDatabases))
 	mux.HandleFunc("/api/databases/", withCORS(handleDatabaseAction))
+	mux.HandleFunc("/api/entities/", withCORS(handleEntities))
 	mux.HandleFunc("/api/version", withCORS(func(w http.ResponseWriter, r *http.Request) {
 		handleVersion(w, r, currentVersion)
 	}))
@@ -1176,7 +1177,10 @@ type ServiceResponse struct {
 	// IsDatabase is true for a database engine (mysql/mariadb/postgres/mongo),
 	// so the detail view can show its Databases tab. Excludes sqlite and admin
 	// UIs, which are not queryable engines.
-	IsDatabase         bool     `json:"is_database,omitempty"`
+	IsDatabase bool `json:"is_database,omitempty"`
+	// EntityKinds are the non-database entity kinds this service declares
+	// (buckets, keyspaces…), so the detail view can show a generic overview tab.
+	EntityKinds        []string `json:"entity_kinds,omitempty"`
 	SiteCount          int      `json:"site_count"`
 	SiteDomains        []string `json:"site_domains,omitempty"`
 	Pinned             bool     `json:"pinned"`
@@ -1396,6 +1400,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Paused:            config.ServiceIsPaused(name),
 		IsDefault:         isDefault,
 		IsDatabase:        name != "sqlite" && config.IsDBServiceName(name),
+		EntityKinds:       serviceops.EntityKinds(name),
 		Custom:            custom != nil,
 		PresetOwned:       config.PresetExists(name),
 		DefaultPort:       defaultPort,

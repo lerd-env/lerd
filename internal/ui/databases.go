@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -16,10 +17,10 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
-// dbEngineResponse is one database engine with the databases it holds. The tab
-// groups engines by family; SQL-only capabilities (create/drop/export/import/
-// snapshot) are gated on SupportsCreate / SupportsSnapshot so a document engine
-// like mongo shows its databases without offering operations it can't perform.
+// dbEngineResponse is one database engine with the databases it holds.
+// Capabilities are read off the engine's declared entity actions, so an engine
+// whose preset declares no create or export shows its databases without
+// offering operations it can't perform.
 type dbEngineResponse struct {
 	Service          string            `json:"service"`
 	Family           string            `json:"family"`
@@ -28,7 +29,11 @@ type dbEngineResponse struct {
 	Icon             string            `json:"icon,omitempty"`
 	ConnectionURL    string            `json:"connection_url,omitempty"`
 	SupportsCreate   bool              `json:"supports_create"`
+	SupportsDrop     bool              `json:"supports_drop"`
+	SupportsExport   bool              `json:"supports_export"`
+	SupportsImport   bool              `json:"supports_import"`
 	SupportsSnapshot bool              `json:"supports_snapshot"`
+	DumpFormat       string            `json:"dump_format,omitempty"`
 	Databases        []dbEntryResponse `json:"databases"`
 	Error            string            `json:"error,omitempty"`
 }
@@ -79,12 +84,20 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 			continue
 		}
 		domains[s.Name] = s.PrimaryDomain()
-		envPath := filepath.Join(s.Path, ".env")
-		host := strings.TrimSpace(envfile.ReadKey(envPath, "DB_HOST"))
-		if strings.TrimPrefix(host, "lerd-") != service {
-			continue
+		vals := envfile.ReadValues(filepath.Join(s.Path, ".env"))
+		db := ""
+		if strings.TrimPrefix(strings.TrimSpace(vals["DB_HOST"]), "lerd-") == service {
+			db = strings.TrimSpace(vals["DB_DATABASE"])
+		} else {
+			// Engines wired through a single DSN (mongodb://…@lerd-mongo:27017/mydb)
+			// carry no DB_HOST; any env value that parses as a URL against this
+			// service names the database in its path.
+			for _, v := range vals {
+				if db = dsnDatabase(v, service); db != "" {
+					break
+				}
+			}
 		}
-		db := strings.TrimSpace(envfile.ReadKey(envPath, "DB_DATABASE"))
 		if db == "" {
 			continue
 		}
@@ -107,6 +120,23 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 		claim(e.DBName+"_testing", owner, true)
 	}
 	return idx
+}
+
+// dsnDatabase returns the database a DSN-style env value targets on the given
+// service, or empty when the value is not a URL pointed at lerd-<service>.
+func dsnDatabase(value, service string) string {
+	if !strings.Contains(value, "lerd-"+service) {
+		return ""
+	}
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || u.Hostname() != "lerd-"+service {
+		return ""
+	}
+	db := strings.TrimPrefix(u.Path, "/")
+	if strings.Contains(db, "/") {
+		return ""
+	}
+	return db
 }
 
 // installedDBEngines returns the installed database-engine service names, both
@@ -142,7 +172,7 @@ func installedDBEngines() []string {
 func databaseEngine(name string) dbEngineResponse {
 	base := buildServiceResponse(name)
 	family := config.FamilyOfName(name)
-	sqlOps := serviceops.SnapshotFamilySupported(family)
+	snapOps := serviceops.SnapshotSupported(name, false)
 	eng := dbEngineResponse{
 		Service:          name,
 		Family:           family,
@@ -150,8 +180,12 @@ func databaseEngine(name string) dbEngineResponse {
 		Port:             base.Port,
 		Icon:             base.Icon,
 		ConnectionURL:    base.ConnectionURL,
-		SupportsCreate:   sqlOps,
-		SupportsSnapshot: sqlOps,
+		SupportsCreate:   serviceops.DatabaseActionDeclared(name, "create"),
+		SupportsDrop:     serviceops.DatabaseActionDeclared(name, "drop"),
+		SupportsExport:   serviceops.DatabaseActionDeclared(name, "export"),
+		SupportsImport:   serviceops.DatabaseActionDeclared(name, "import"),
+		SupportsSnapshot: snapOps,
+		DumpFormat:       serviceops.DatabaseDumpFormat(name),
 		Databases:        []dbEntryResponse{},
 	}
 	if base.Status != "active" {
@@ -176,8 +210,10 @@ func databaseEngine(name string) dbEngineResponse {
 			Branch:    owner.branch,
 			Snapshots: []serviceops.Snapshot{},
 		}
-		if sqlOps {
-			if snaps, sErr := serviceops.ListSnapshots(name, db.Name, false); sErr == nil {
+		if snapOps {
+			// Only on a non-empty result: ListSnapshots returns nil when a
+			// database has none, which would send null where the UI expects a list.
+			if snaps, sErr := serviceops.ListSnapshots(name, db.Name, false); sErr == nil && snaps != nil {
 				entry.Snapshots = snaps
 			}
 		}
@@ -304,6 +340,12 @@ func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string
 	if !ok || !requireDatabaseName(w, name) {
 		return
 	}
+	// CreateDatabase quietly no-ops for an engine without a declared create, so
+	// the gate here is what keeps "not supported" from reading as "exists".
+	if !serviceops.DatabaseActionDeclared(service, "create") {
+		writeDBError(w, fmt.Sprintf("%s does not support creating databases", service))
+		return
+	}
 	created, err := serviceops.CreateDatabase(service, name)
 	if err != nil {
 		writeDBError(w, err.Error())
@@ -319,6 +361,10 @@ func handleDatabaseCreate(w http.ResponseWriter, r *http.Request, service string
 func handleDatabaseDrop(w http.ResponseWriter, r *http.Request, service string) {
 	_, name, ok := decodeDBBody(r)
 	if !ok || !requireDatabaseName(w, name) {
+		return
+	}
+	if !serviceops.DatabaseActionDeclared(service, "drop") {
+		writeDBError(w, fmt.Sprintf("%s does not support dropping databases", service))
 		return
 	}
 	if _, err := serviceops.DropDatabase(service, name); err != nil {
@@ -387,8 +433,8 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 		http.Error(w, "start the engine before exporting", http.StatusConflict)
 		return
 	}
-	w.Header().Set("Content-Type", "application/sql")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", database+".sql"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", serviceops.ExportFilename(service, database)))
 	if err := serviceops.ExportDatabase(service, database, w); err != nil {
 		// Headers are already sent, so the browser sees a truncated file; log the
 		// cause for the terminal rather than trying to rewrite the response.
@@ -396,7 +442,9 @@ func handleDatabaseExport(w http.ResponseWriter, r *http.Request, service string
 	}
 }
 
-// handleSnapshotExport streams a stored snapshot as a downloadable .sql dump.
+// handleSnapshotExport streams a stored snapshot as a downloadable dump, named
+// in the engine's own dump format so a mongo snapshot saves as a .archive
+// rather than being mislabelled .sql.
 func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string) {
 	database := strings.TrimSpace(r.URL.Query().Get("database"))
 	name := strings.TrimSpace(r.URL.Query().Get("name"))
@@ -408,8 +456,8 @@ func handleSnapshotExport(w http.ResponseWriter, r *http.Request, service string
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	w.Header().Set("Content-Type", "application/sql")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", name+".sql"))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", serviceops.SnapshotExportFilename(service, name)))
 	if err := serviceops.ExportSnapshot(service, database, name, w); err != nil {
 		fmt.Printf("snapshot export failed for %s/%s/%s: %v\n", service, database, name, err)
 	}

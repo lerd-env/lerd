@@ -240,6 +240,7 @@ func TestDeleteSnapshotRejectsTraversalDatabase(t *testing.T) {
 }
 
 func TestSnapshotDumpCommand(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tests := []struct {
 		name   string
 		target SnapshotTarget
@@ -247,28 +248,23 @@ func TestSnapshotDumpCommand(t *testing.T) {
 	}{
 		{
 			"mysql one database",
-			SnapshotTarget{Family: "mysql", Database: "myapp"},
-			`$(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events 'myapp' | gzip -c`,
-		},
-		{
-			"mariadb one database",
-			SnapshotTarget{Family: "mariadb", Database: "shop"},
-			`$(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events 'shop' | gzip -c`,
+			SnapshotTarget{Service: "mysql", Database: "myapp"},
+			`( $(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events myapp ) | gzip -c`,
 		},
 		{
 			"mysql all databases",
-			SnapshotTarget{Family: "mysql", AllDatabases: true},
-			`$(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases | gzip -c`,
+			SnapshotTarget{Service: "mysql", AllDatabases: true},
+			`( $(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases ) | gzip -c`,
 		},
 		{
 			"postgres one database",
-			SnapshotTarget{Family: "postgres", Database: "myapp"},
-			`pg_dump -U postgres --clean --if-exists 'myapp' | gzip -c`,
+			SnapshotTarget{Service: "postgres", Database: "myapp"},
+			`( pg_dump -U postgres --clean --if-exists myapp ) | gzip -c`,
 		},
 		{
 			"postgres all databases",
-			SnapshotTarget{Family: "postgres", AllDatabases: true},
-			`pg_dumpall -U postgres --clean --if-exists | gzip -c`,
+			SnapshotTarget{Service: "postgres", AllDatabases: true},
+			`( pg_dumpall -U postgres --clean --if-exists ) | gzip -c`,
 		},
 	}
 	for _, tt := range tests {
@@ -283,12 +279,14 @@ func TestSnapshotDumpCommand(t *testing.T) {
 		})
 	}
 
-	if _, err := snapshotDumpCommand(SnapshotTarget{Family: "mongo", Database: "x"}); err == nil {
-		t.Errorf("expected error for unsupported family")
+	// redis ships bundled but declares no databases entity at all.
+	if _, err := snapshotDumpCommand(SnapshotTarget{Service: "redis", Database: "x"}); err == nil {
+		t.Errorf("expected error for an engine without a declared export")
 	}
 }
 
 func TestSnapshotRestoreCommand(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	tests := []struct {
 		name   string
 		target SnapshotTarget
@@ -296,23 +294,23 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 	}{
 		{
 			"mysql one database",
-			SnapshotTarget{Family: "mysql", Database: "myapp"},
-			`gunzip -c | $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot 'myapp'`,
+			SnapshotTarget{Service: "mysql", Database: "myapp"},
+			`gunzip -c | ( $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot myapp )`,
 		},
 		{
 			"mysql all databases",
-			SnapshotTarget{Family: "mariadb", AllDatabases: true},
-			`gunzip -c | $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot`,
+			SnapshotTarget{Service: "mysql", AllDatabases: true},
+			`gunzip -c | ( $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot )`,
 		},
 		{
 			"postgres one database",
-			SnapshotTarget{Family: "postgres", Database: "myapp"},
-			`gunzip -c | psql -U postgres -d 'myapp'`,
+			SnapshotTarget{Service: "postgres", Database: "myapp"},
+			`gunzip -c | ( psql -U postgres -d myapp )`,
 		},
 		{
 			"postgres all databases",
-			SnapshotTarget{Family: "postgres", AllDatabases: true},
-			`gunzip -c | psql -U postgres -d postgres`,
+			SnapshotTarget{Service: "postgres", AllDatabases: true},
+			`gunzip -c | ( psql -U postgres -d postgres )`,
 		},
 	}
 	for _, tt := range tests {
@@ -327,20 +325,38 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 		})
 	}
 
-	if _, err := snapshotRestoreCommand(SnapshotTarget{Family: "redis"}); err == nil {
-		t.Errorf("expected error for unsupported family")
+	if _, err := snapshotRestoreCommand(SnapshotTarget{Service: "redis"}); err == nil {
+		t.Errorf("expected error for an engine without a declared import")
 	}
 }
 
-func TestSnapshotFamilySupported(t *testing.T) {
-	for _, fam := range []string{"mysql", "mariadb", "postgres"} {
-		if !SnapshotFamilySupported(fam) {
-			t.Errorf("%q should be supported", fam)
+func TestSnapshotSupported(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	for _, svc := range []string{"mysql", "postgres"} {
+		if !SnapshotSupported(svc, false) || !SnapshotSupported(svc, true) {
+			t.Errorf("%q should support snapshots in both scopes", svc)
 		}
 	}
-	for _, fam := range []string{"mongo", "redis", "valkey", ""} {
-		if SnapshotFamilySupported(fam) {
-			t.Errorf("%q should not be supported", fam)
+	for _, svc := range []string{"redis", "meilisearch", "nosuchengine", ""} {
+		if SnapshotSupported(svc, false) {
+			t.Errorf("%q should not support snapshots", svc)
 		}
+	}
+}
+
+// An engine that can dump but not load back must not offer snapshots: a
+// snapshot nobody can restore is worse than none.
+func TestSnapshotSupportedNeedsBothDirections(t *testing.T) {
+	writeCustomService(t, "halfengine", `name: halfengine
+image: example/engine:1
+introspect:
+  entities:
+    - kind: databases
+      list: list-cmd
+      actions:
+        export: export-cmd {{name}}
+`)
+	if SnapshotSupported("halfengine", false) {
+		t.Error("export without import must not support snapshots")
 	}
 }

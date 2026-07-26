@@ -240,3 +240,64 @@ func TestCustomServiceExists(t *testing.T) {
 		t.Fatalf("expected gotenberg to not exist after RemoveCustomService")
 	}
 }
+
+// A service name indexes straight into a file path, so a name that could never
+// have been saved must not be loadable either: a project .env naming
+// "lerd-../../../Code/evil/pwn" as its DB host would otherwise load an
+// attacker-planted YAML as a service definition.
+func TestLoadCustomService_RejectsTraversingName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	// Planted where the traversing name actually resolves, so the case fails
+	// loudly if the guard ever goes away.
+	planted := filepath.Join(filepath.Dir(filepath.Dir(CustomServicesDir())), "pwn.yaml")
+	if err := os.WriteFile(planted, []byte("name: pwn\nimage: attacker/x:1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"../../pwn", "../pwn", "../../etc/pwn", `..\pwn`, ".", "..", "", "/abs/pwn", "Upper", "has space"} {
+		if _, err := LoadCustomService(name); err == nil {
+			t.Errorf("LoadCustomService(%q) loaded a definition, want an error", name)
+		}
+		if CustomServiceExists(name) {
+			t.Errorf("CustomServiceExists(%q) = true, want false", name)
+		}
+	}
+	// The planted file is still where it was: a rejected name reaches no path.
+	if _, err := os.Stat(planted); err != nil {
+		t.Errorf("planted file disturbed: %v", err)
+	}
+	for _, name := range []string{"../../pwn", ".."} {
+		if err := RemoveCustomService(name); err == nil {
+			t.Errorf("RemoveCustomService(%q) accepted a traversing name", name)
+		}
+	}
+	if _, err := os.Stat(planted); err != nil {
+		t.Errorf("planted file removed through a traversing name: %v", err)
+	}
+}
+
+// The names lerd itself generates keep working, so the guard costs nothing.
+func TestLoadCustomService_AcceptsRealServiceNames(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := CustomServicesDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"mongo", "mysql-5-7", "postgres-pgvector"} {
+		if err := os.WriteFile(filepath.Join(dir, name+".yaml"), []byte("name: "+name+"\nimage: x/y:1\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		svc, err := LoadCustomService(name)
+		if err != nil {
+			t.Errorf("LoadCustomService(%q) = %v, want it to load", name, err)
+			continue
+		}
+		if svc.Name != name {
+			t.Errorf("loaded %q, want %q", svc.Name, name)
+		}
+		if !CustomServiceExists(name) {
+			t.Errorf("CustomServiceExists(%q) = false, want true", name)
+		}
+	}
+}
