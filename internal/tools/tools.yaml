@@ -1,0 +1,23 @@
+# Pinned versions of the host tools lerd downloads. Embedded in the binary as
+# the offline fallback and fetched from GitHub before each download, so a bad
+# pin is fixable for every install here, without a binary release.
+tools:
+  composer:
+    version: "2.10.2"
+    url: https://getcomposer.org/download/{version}/composer.phar
+  fnm:
+    version: v1.39.0
+    url: https://github.com/Schniz/fnm/releases/download/{version}/{asset}
+    assets:
+      linux/amd64: fnm-linux.zip
+      linux/arm64: fnm-arm64.zip
+      darwin/amd64: fnm-macos.zip
+      darwin/arm64: fnm-macos.zip
+  mkcert:
+    version: v1.4.4
+    url: https://github.com/FiloSottile/mkcert/releases/download/{version}/{asset}
+    assets:
+      linux/amd64: mkcert-{version}-linux-amd64
+      linux/arm64: mkcert-{version}-linux-arm64
+      darwin/amd64: mkcert-{version}-darwin-amd64
+      darwin/arm64: mkcert-{version}-darwin-arm64

@@ -53,6 +53,7 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 	"github.com/geodro/lerd/internal/siteops"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/workerheal"
@@ -620,6 +621,10 @@ type StatusResponse struct {
 	// Instance identifies this lerd-ui process. An open dashboard reloads when
 	// it changes, so a restarted server never leaves a stale page behind.
 	Instance string `json:"instance"`
+	// Tools reports the managed host binaries (composer, fnm, mkcert) against
+	// their pinned versions; fnm is omitted on nvm-managed setups where its
+	// absence is deliberate.
+	Tools []tools.ToolStatus `json:"tools"`
 }
 
 // serverInstance identifies this lerd-ui process for the lifetime of the run.
@@ -693,6 +698,13 @@ func buildStatus() StatusResponse {
 		bunVersion = lerdNode.BunVersion()
 	}
 	usingSystemBun := bunAvailable && !nodeManagedByLerd && !lerdNode.SystemNodeAvailable()
+	toolStatuses := []tools.ToolStatus{}
+	for _, s := range tools.StatusAll(context.Background()) {
+		if s.Name == "fnm" && nodeManager == "nvm" {
+			continue
+		}
+		toolStatuses = append(toolStatuses, s)
+	}
 	homeDir, _ := os.UserHomeDir()
 	workspaces := cfg.WorkspaceNames()
 	if workspaces == nil {
@@ -715,6 +727,7 @@ func buildStatus() StatusResponse {
 		Home:               homeDir,
 		Workspaces:         workspaces,
 		Instance:           serverInstance,
+		Tools:              toolStatuses,
 	}
 }
 

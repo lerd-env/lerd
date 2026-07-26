@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/download"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/origin"
 	"github.com/geodro/lerd/internal/podman"
@@ -478,7 +480,7 @@ func downloadArchive(ver, filename, archive string) error {
 	var errs []string
 	for _, base := range githubDownloadBases() {
 		url := fmt.Sprintf("%s/v%s/%s", base, ver, filename)
-		if err := downloadFile(url, archive, 0644, io.Discard); err != nil {
+		if err := download.File(context.Background(), url, archive, 0644, io.Discard); err != nil {
 			errs = append(errs, fmt.Sprintf("%s: %v", url, err))
 			continue
 		}

@@ -124,6 +124,26 @@
     </div>
   {/if}
 
+  {#if ($status.tools ?? []).some((t) => t.present)}
+    <div class="pt-2 border-t border-gray-100 dark:border-lerd-border">
+      <div class="text-xs font-semibold text-gray-400 dark:text-gray-500 uppercase tracking-wide mb-2">{m.system_tools_title()}</div>
+      <div class="flex flex-wrap gap-2">
+        {#each ($status.tools ?? []).filter((t) => t.present) as tool (tool.name)}
+          <span
+            class="inline-flex items-center gap-1.5 text-xs font-mono px-2 py-0.5 rounded-sm bg-gray-100 dark:bg-white/5 text-gray-600 dark:text-gray-300"
+            title={tool.update_available ? m.system_tools_updateAvailable({ version: tool.pinned }) : ''}
+          >
+            <StatusDot color={tool.update_available ? 'yellow' : tool.installed ? 'green' : 'gray'} size="xs" />
+            {tool.name}
+            {#if tool.installed}
+              <span class="text-gray-400 dark:text-gray-500">{tool.installed}</span>
+            {/if}
+          </span>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
   {#snippet footer()}
     <button
       onclick={() => goToTab('system', 'lerd')}

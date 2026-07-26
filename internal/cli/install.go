@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -1619,60 +1618,6 @@ func readLine(r io.Reader) string {
 		}
 	}
 	return b.String()
-}
-
-// downloadFile downloads a URL to a local file, printing a progress bar to w.
-func downloadFile(url, dest string, mode os.FileMode, w io.Writer) error {
-	fmt.Fprintf(w, "\n      Downloading %s\n      ", url)
-
-	resp, err := http.Get(url) //nolint:gosec,noctx
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
-	}
-
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	written, err := io.Copy(f, &progressReader{r: resp.Body, total: resp.ContentLength, w: w})
-	if err != nil {
-		return err
-	}
-	fmt.Fprintf(w, " (%d bytes)\n", written)
-
-	return os.Chmod(dest, mode)
-}
-
-type progressReader struct {
-	r       io.Reader
-	total   int64
-	written int64
-	w       io.Writer
-}
-
-func (p *progressReader) Read(b []byte) (int, error) {
-	n, err := p.r.Read(b)
-	p.written += int64(n)
-	if p.total > 0 {
-		pct := int(float64(p.written) / float64(p.total) * 50)
-		bar := ""
-		for i := 0; i < 50; i++ {
-			if i < pct {
-				bar += "="
-			} else {
-				bar += " "
-			}
-		}
-		fmt.Fprintf(p.w, "\r      [%s] %d%%", bar, pct*2)
-	}
-	return n, err
 }
 
 func addShellShims(manageNode bool) error {
