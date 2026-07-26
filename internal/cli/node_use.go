@@ -1,13 +1,11 @@
 package cli
 
 import (
-	"fmt"
-	"os/exec"
-	"path/filepath"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/spf13/cobra"
 )
 
@@ -26,11 +24,9 @@ func runNodeUse(_ *cobra.Command, args []string) error {
 		return err
 	}
 	major := strings.SplitN(args[0], ".", 2)[0]
-	fnmPath := filepath.Join(config.BinDir(), "fnm")
 
-	out, err := exec.Command(fnmPath, "default", major).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("fnm default %s: %s", major, strings.TrimSpace(string(out)))
+	if err := nodeDet.Active().SetDefault(major); err != nil {
+		return err
 	}
 
 	cfg, err := config.LoadGlobal()

@@ -174,12 +174,31 @@ tuning:
     # -m 128
   command: memcached -f /etc/memcached.conf
 
-# Dynamic env vars are computed at quadlet generation time. Currently supported
-# directive: discover_family:<name>[,<name>...] which expands to a comma-joined
-# list of container hostnames for every installed service in the named families.
-# phpMyAdmin uses this to populate PMA_HOSTS with all mysql + mariadb variants.
+# Dynamic env vars are computed at quadlet generation time. Supported
+# directives:
+#   discover_family:<name>[,<name>...] — comma-joined hostnames for every
+#     running member of the named families (phpMyAdmin PMA_HOSTS).
+#   repeat_family:<families>=<value> — N copies of <value> matching that host list.
+# A directive this binary does not know is warned about and skipped, so a store
+# definition written for a newer lerd still starts on an older one.
 dynamic_env:
   PMA_HOSTS: discover_family:mysql,mariadb
+
+# Numbered env var sets for tools that read one variable group per connection:
+# <key>: <families>=<template> writes <key>_1..<key>_N, one per running member,
+# with {host} / {name} expanded (RedisInsight RI_REDIS_HOST_1, _2, ...). The
+# unsuffixed <key> in environment is dropped when this resolves; keep it there
+# as the single-connection fallback, because binaries that predate expand_env
+# ignore this whole block and serve the static value instead.
+expand_env:
+  RI_REDIS_HOST: redis,valkey={host}
+
+# A single-host admin UI just pins the canonical dependency host in plain
+# environment; lerd retargets lerd-<dep> to the actual satisfier (Valkey for
+# redis) at quadlet generation, so no special directive reaches an old binary.
+environment:
+  RI_REDIS_HOST: lerd-redis
+  ME_CONFIG_MONGODB_URL: mongodb://root:lerd@lerd-mongo:27017/?authSource=admin
 
 # Injected into .env by `lerd env`
 env_vars:
@@ -234,7 +253,7 @@ When `lerd env` runs in a project directory, it checks each custom service's `en
 
 ## How `lerd start` / `lerd stop` handle custom services
 
-`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services.
+`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` and pinned-dependency-host consumers (phpMyAdmin, pgAdmin, RedisInsight, mongo-express) so their host lists include engines that came up in the same pass — otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
 
 Custom service containers are given a 5-second graceful stop window before podman sends `SIGKILL`. This keeps `lerd service stop` and the web UI's Stop button responsive even for images with slow shutdown sequences (Selenium Chromium/supervisord, for example, can otherwise block for 30 s+). On Podman 5.0+ this is emitted as the native `StopTimeout=5` quadlet key; on Podman 4.x (e.g. Ubuntu 24.04's 4.9.3) lerd writes `PodmanArgs=--stop-timeout=5` instead, since the `StopTimeout=` key only exists in 5.0+. Existing installs of a slow-stopping service can pick up the change with `lerd service remove <name> && lerd service preset <name>`.
 
@@ -309,11 +328,22 @@ lerd service add \
 
 **Behaviour:**
 
+A `depends_on` entry is satisfied by that service, or by any installed service
+whose `family` or `env_role` names it (MariaDB for `mysql`, Valkey for `redis`,
+`postgres-pgvector` for `postgres`). Start resolves to one satisfier (literal
+name, then same-family, then env_role drop-in) and brings that one up. Stop
+cascade-stops a dependent only when nothing else still **running** meets its
+dependency; installed-but-stopped engines do not keep the admin UI alive.
+Otherwise family consumers are regenerated instead (after a just-started engine
+is ready, so host lists are not rewritten empty). Install preflight uses the
+same satisfaction rule and names the accepted alternatives when nothing is
+installed. `discover_family` lists only running family members in admin UIs, a pinned `lerd-<dep>` host wires single-host admin UIs to the active satisfier, and a bulk `lerd start` refreshes those lists once engines are up.
+
 | Action | Effect |
 |---|---|
-| `lerd service start phpmyadmin` | Starts `mysql` first (if not already running), then starts `phpmyadmin` |
-| `lerd service start mysql` | Starts `mysql`, then also starts any services that depend on it (e.g. `phpmyadmin`) |
-| `lerd service stop mysql` | Stops `phpmyadmin` first (cascade), then stops `mysql` |
+| `lerd service start phpmyadmin` (also UI / TUI / MCP) | Starts a satisfier for `mysql` first (MySQL itself, or MariaDB), then starts `phpmyadmin` |
+| `lerd service start mysql` (also UI / TUI / MCP) | Starts `mysql`, then also starts any services that depend on it (e.g. `phpmyadmin`) |
+| `lerd service stop mysql` (also UI / TUI / MCP) | Stops `phpmyadmin` first when nothing else running satisfies it, then stops `mysql` |
 | Site pause (auto-stops `mysql`) | `phpmyadmin` is stopped first, then `mysql` |
 | Site unpause (starts `mysql`) | `mysql` starts, then `phpmyadmin` starts |
 

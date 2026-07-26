@@ -15,14 +15,13 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
-	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/download"
 )
 
 // Version pins the phpantom_lsp release lerd installs. Bump alongside a
@@ -95,20 +94,23 @@ func EnsureBinary(ctx context.Context, w io.Writer) error {
 	}
 	fmt.Fprintf(w, "Downloading phpantom_lsp %s\n", Version)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	tmp, err := os.CreateTemp("", "phpantom_lsp-*.tar.gz")
 	if err != nil {
 		return err
 	}
-	client := &http.Client{Timeout: 5 * time.Minute}
-	resp, err := client.Do(req)
+	tmpName := tmp.Name()
+	tmp.Close()
+	defer os.Remove(tmpName)
+
+	if err := download.File(ctx, url, tmpName, 0o644, io.Discard); err != nil {
+		return fmt.Errorf("phpantom_lsp download: %w", err)
+	}
+	f, err := os.Open(tmpName)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("phpantom_lsp download: HTTP %d for %s", resp.StatusCode, url)
-	}
-	if err := extractBinary(resp.Body, BinPath()); err != nil {
+	defer f.Close()
+	if err := extractBinary(f, BinPath()); err != nil {
 		return err
 	}
 	// Stamp the version last, so a binary is only ever considered up to date

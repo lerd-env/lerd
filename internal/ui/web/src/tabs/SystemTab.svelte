@@ -95,6 +95,17 @@
       {$status.using_system_bun ? m.dashboard_health_jsRuntime() : m.system_nodeJs()}
     </ListRow>
 
+    {@const toolsAttention = ($status.tools ?? []).some((t) => t.update_available || !t.present)}
+    {#snippet toolsDot()}<StatusDot color={toolsAttention ? 'amber' : 'green'} />{/snippet}
+    {#snippet toolsTrailing()}
+      {#if ($status.tools ?? []).some((t) => t.update_available)}
+        <span class="ml-auto text-xs font-medium text-yellow-600 dark:text-yellow-400">{m.system_lerd_updateTag()}</span>
+      {/if}
+    {/snippet}
+    <ListRow active={selected === 'tools'} onclick={() => select('tools')} leading={toolsDot} trailing={toolsTrailing}>
+      {m.system_tools_title()}
+    </ListRow>
+
     {#snippet notifyDot()}<StatusDot color={notifyEffectiveOn ? 'green' : 'red'} />{/snippet}
     <ListRow active={selected === 'notifications'} onclick={() => select('notifications')} leading={notifyDot}>
       {m.notify_settings_title()}

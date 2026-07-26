@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/feedback"
 	"gopkg.in/yaml.v3"
 )
 
@@ -44,10 +45,113 @@ type SiteInit struct {
 // declared command and parsing its plain output, so no Go code branches on the
 // engine name.
 type Introspect struct {
-	// ListDatabases is run via sh -c inside the container and must print one
-	// "name<TAB>size_bytes" row per user database. lerd parses the tab-separated
-	// output; the whole query, including any system-database filtering, lives here.
+	// ListDatabases is the legacy single-command form, kept so store presets
+	// published before entities existed keep listing. New presets declare an
+	// entities entry of kind "databases" instead.
 	ListDatabases string `yaml:"list_databases,omitempty" json:"list_databases,omitempty"`
+	// Entities declares the kinds of things this service holds (databases,
+	// buckets, keyspaces…), how to list them and what can be done to them.
+	Entities []EntitySpec `yaml:"entities,omitempty" json:"entities,omitempty"`
+}
+
+// EntitySpec is one kind of entity a service exposes to the UI: the command
+// that lists its members, the columns the list prints, and the commands behind
+// each supported action. Everything engine-specific lives in the declared
+// commands, so no Go code branches on the engine name.
+type EntitySpec struct {
+	Kind  string `yaml:"kind" json:"kind"`
+	Label string `yaml:"label,omitempty" json:"label,omitempty"`
+	// List is run via sh -c and must print one entity per line: the name, then
+	// one tab-separated field per declared column, in declaration order.
+	List    string         `yaml:"list" json:"list"`
+	Columns []EntityColumn `yaml:"columns,omitempty" json:"columns,omitempty"`
+	// Format names the dump format the export/import actions exchange. "sql"
+	// turns on the SQL dump sanitizer and error tally on import; anything else
+	// streams bytes untouched.
+	Format  string                  `yaml:"format,omitempty" json:"format,omitempty"`
+	Actions map[string]EntityAction `yaml:"actions,omitempty" json:"actions,omitempty"`
+	// Image, when set, runs every command of this entity in an ephemeral
+	// container of this image on the lerd network instead of inside the service
+	// container, for services whose own image ships no client tooling (RustFS
+	// holds S3 buckets but carries no S3 client; mc does).
+	Image string `yaml:"image,omitempty" json:"image,omitempty"`
+	// Env is extra KEY=VALUE pairs for the command's environment, e.g. the
+	// client's connection alias with the fixed lerd credentials.
+	Env []string `yaml:"env,omitempty" json:"env,omitempty"`
+	// OwnerEnv names the site .env key whose value is the entity a site owns
+	// (AWS_BUCKET for buckets), so the UI can link each row to its site the way
+	// database cards do. Only sites whose .env references this service count.
+	OwnerEnv string `yaml:"owner_env,omitempty" json:"owner_env,omitempty"`
+}
+
+// EntityColumn describes one field the list command prints after the name.
+// Format is a display hint: "bytes", "number" or "" for plain text.
+type EntityColumn struct {
+	Key    string `yaml:"key" json:"key"`
+	Label  string `yaml:"label,omitempty" json:"label,omitempty"`
+	Format string `yaml:"format,omitempty" json:"format,omitempty"`
+}
+
+// EntityAction is one operation on an entity, run via sh -c with every {{name}}
+// replaced by the validated entity name. Export actions write their dump to
+// stdout and import actions read one from stdin. In YAML a bare string is
+// shorthand for an action with just an exec.
+type EntityAction struct {
+	Exec string `yaml:"exec" json:"exec"`
+	// Destructive makes the UI confirm before running the action.
+	Destructive bool `yaml:"destructive,omitempty" json:"destructive,omitempty"`
+	// Filename names the file an export action downloads as, with {{name}}
+	// replaced by the entity name.
+	Filename string `yaml:"filename,omitempty" json:"filename,omitempty"`
+	// Image and Env override the entity's client image and env for this one
+	// action, for actions that need different tooling than the rest of the
+	// entity (bucket archives need tar, which the mc image does not carry).
+	Image string   `yaml:"image,omitempty" json:"image,omitempty"`
+	Env   []string `yaml:"env,omitempty" json:"env,omitempty"`
+}
+
+// UnmarshalYAML accepts either a bare command string or a full mapping.
+func (a *EntityAction) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind == yaml.ScalarNode {
+		a.Exec = value.Value
+		return nil
+	}
+	type plain EntityAction
+	return value.Decode((*plain)(a))
+}
+
+// Entity returns the declared spec for kind, or nil when the service does not
+// declare one.
+func (i *Introspect) Entity(kind string) *EntitySpec {
+	if i == nil {
+		return nil
+	}
+	for idx := range i.Entities {
+		if i.Entities[idx].Kind == kind {
+			return &i.Entities[idx]
+		}
+	}
+	return nil
+}
+
+// DatabasesEntity returns the databases spec, synthesizing a list-only spec
+// from the legacy list_databases field so a preset published before entities
+// existed keeps listing through the same surface.
+func (i *Introspect) DatabasesEntity() *EntitySpec {
+	if i == nil {
+		return nil
+	}
+	if spec := i.Entity("databases"); spec != nil {
+		return spec
+	}
+	if i.ListDatabases == "" {
+		return nil
+	}
+	return &EntitySpec{
+		Kind:    "databases",
+		List:    i.ListDatabases,
+		Columns: []EntityColumn{{Key: "size", Label: "Size", Format: "bytes"}},
+	}
 }
 
 // FileMount is a single file rendered to disk on the host and bind-mounted
@@ -100,8 +204,9 @@ type CustomService struct {
 	Category string `yaml:"category,omitempty" json:"category,omitempty"`
 	Icon     string `yaml:"icon,omitempty" json:"icon,omitempty"`
 	// AdminFor lists the services this preset's UI administers. It is not
-	// DependsOn: phpMyAdmin starts after mysql but administers mariadb too, and
-	// RedisInsight administers valkey without ever depending on it.
+	// DependsOn: phpMyAdmin starts after a mysql satisfier but administers
+	// mariadb too, and RedisInsight administers valkey while depending on redis
+	// (satisfied by valkey via env_role).
 	AdminFor []string `yaml:"admin_for,omitempty" json:"admin_for,omitempty"`
 	// Files is deprecated as a YAML user field but kept with its yaml tag so
 	// LoadCustomServiceFromFile can detect legacy on-disk entries and migrate
@@ -151,10 +256,14 @@ type CustomService struct {
 	// that need to reach lerd sites by domain name.
 	ShareHosts bool `yaml:"share_hosts,omitempty" json:"share_hosts,omitempty"`
 	// DynamicEnv declares container env vars whose value is computed at
-	// quadlet generation time. Currently supported directive:
-	//   discover_family:<name>  -> comma-joined hostnames of every installed
-	//   service in the named family (built-in or custom).
+	// quadlet generation time. Supported directives:
+	//   discover_family:<families>            -> comma-joined member hostnames
+	//   repeat_family:<families>=<value>      -> <value> once per member, joined
 	DynamicEnv map[string]string `yaml:"dynamic_env,omitempty"`
+	// ExpandEnv maps <key> to <families>=<template>, writing <key>_1.._N (one per
+	// running member) and dropping the unsuffixed <key>, which stays in Environment
+	// as the fallback for older binaries that ignore this field on parse.
+	ExpandEnv map[string]string `yaml:"expand_env,omitempty"`
 	// Userns sets the quadlet UserNS= line verbatim, e.g. "keep-id:uid=1000,gid=0"
 	// for images whose process runs as a non-root UID and needs that UID
 	// mapped to the host user for bind-mounted volumes.
@@ -180,6 +289,22 @@ type CustomService struct {
 	// Introspect, when set, lets the databases UI enumerate the databases inside
 	// this engine and read their sizes. Only database-engine presets declare it.
 	Introspect *Introspect `yaml:"introspect,omitempty" json:"introspect,omitempty"`
+	// Extensions lists the database extensions this engine's image can create.
+	// Only engines that ship any declare them, and lerd creates one only when a
+	// dump reaches for it, since some cost several megabytes per database.
+	Extensions []Extension `yaml:"extensions,omitempty" json:"extensions,omitempty"`
+}
+
+// Extension is a database extension an engine's image ships, with the type
+// names it provides. The types are what let an import tell that a dump needs it,
+// so no Go code has to know what postgis or pgvector are.
+type Extension struct {
+	Name  string   `yaml:"name" json:"name"`
+	Types []string `yaml:"types,omitempty" json:"types,omitempty"`
+	// Always creates the extension wherever lerd creates a database, for the ones
+	// that are cheap or that provide no distinctive type to match a dump against.
+	// The rest wait until a dump reaches for one of their types.
+	Always bool `yaml:"always,omitempty" json:"always,omitempty"`
 }
 
 // ClientShim declares a service client tool that lerd exposes as a host shim.
@@ -375,11 +500,11 @@ func EnvRoleOf(svc *CustomService) string {
 // computed values into svc.Environment. Called immediately before quadlet
 // generation so the resolved values land in the rendered .container file.
 func ResolveDynamicEnv(svc *CustomService) error {
-	if len(svc.DynamicEnv) == 0 {
+	if len(svc.DynamicEnv) == 0 && len(svc.ExpandEnv) == 0 {
 		return nil
 	}
 	if svc.Environment == nil {
-		svc.Environment = make(map[string]string, len(svc.DynamicEnv))
+		svc.Environment = make(map[string]string, len(svc.DynamicEnv)+len(svc.ExpandEnv))
 	}
 	for k, directive := range svc.DynamicEnv {
 		parts := strings.SplitN(directive, ":", 2)
@@ -406,14 +531,62 @@ func ResolveDynamicEnv(svc *CustomService) error {
 			}
 			svc.Environment[k] = strings.Join(repeats, ",")
 		default:
-			return fmt.Errorf("service %s: unknown dynamic_env directive %q", svc.Name, parts[0])
+			// A directive this binary predates: warn and skip so the quadlet
+			// still generates with the preset's static environment. Erroring
+			// here would kill the service on every start after the store
+			// publishes a preset using a newer directive.
+			feedback.Warn("service %s: unknown dynamic_env directive %q, skipping %s (update lerd if %s needs it)", svc.Name, parts[0], k, k)
+		}
+	}
+	// expand_env: one env var per running member, the declared key suffixed
+	// _1.._N, for tools that read numbered var sets (RedisInsight's
+	// RI_REDIS_HOST_1, _2, ...). {host} and {name} expand per member.
+	for k, spec := range svc.ExpandEnv {
+		eq := strings.Index(spec, "=")
+		if eq < 0 {
+			return fmt.Errorf("service %s: expand_env %s needs <families>=<template>, got %q", svc.Name, k, spec)
+		}
+		// The unsuffixed key is the preset's static fallback for binaries that
+		// predate expand_env; the numbered set replaces it here.
+		delete(svc.Environment, k)
+		tmpl := spec[eq+1:]
+		for i, host := range uniqueFamilyHosts(spec[:eq]) {
+			value := strings.ReplaceAll(tmpl, "{host}", host)
+			value = strings.ReplaceAll(value, "{name}", strings.TrimPrefix(host, "lerd-"))
+			svc.Environment[fmt.Sprintf("%s_%d", k, i+1)] = value
 		}
 	}
 	return nil
 }
 
+// RewriteDependencyHosts retargets a preset's pinned dependency host to the
+// service that actually satisfies it: for each depends_on entry, an environment
+// value referencing lerd-<dep> is rewritten to lerd-<satisfier> when a drop-in
+// (Valkey for redis, a versioned mongo) backs the dependency instead of the
+// literal name. Driven purely by depends_on so the published store YAML carries
+// no directive an older binary would reject.
+func RewriteDependencyHosts(svc *CustomService) {
+	if svc == nil || ResolveDepHost == nil || len(svc.Environment) == 0 {
+		return
+	}
+	for _, dep := range svc.DependsOn {
+		canonical := "lerd-" + dep
+		actual := ResolveDepHost(dep)
+		if actual == "" || actual == canonical {
+			continue
+		}
+		for k, v := range svc.Environment {
+			if strings.Contains(v, canonical) {
+				svc.Environment[k] = strings.ReplaceAll(v, canonical, actual)
+			}
+		}
+	}
+}
+
 // uniqueFamilyHosts returns sorted, de-duplicated container hostnames across a
-// comma-separated list of family names.
+// comma-separated list of family names. When ServiceRunning is set (production),
+// only members whose unit is active are included so admin UIs do not list
+// offline hosts.
 func uniqueFamilyHosts(families string) []string {
 	seen := map[string]bool{}
 	var all []string
@@ -425,9 +598,29 @@ func uniqueFamilyHosts(families string) []string {
 			}
 		}
 	}
+	if ServiceRunning != nil {
+		var running []string
+		for _, host := range all {
+			name := strings.TrimPrefix(host, "lerd-")
+			if ServiceRunning(name) {
+				running = append(running, host)
+			}
+		}
+		all = running
+	}
 	sort.Strings(all)
 	return all
 }
+
+// ServiceRunning, when set, reports whether a service is up. discover_family
+// uses it to omit stopped members. Nil keeps the installed-member list (tests).
+var ServiceRunning func(name string) bool
+
+// ResolveDepHost, when set, returns the container hostname (lerd-<name>) of an
+// installed satisfier for the named depends_on entry. serviceops wires it so
+// RewriteDependencyHosts can prefer a running drop-in without config importing
+// serviceops.
+var ResolveDepHost func(dep string) string
 
 // MaterializeServiceFiles writes each FileMount for svc to its host path,
 // creating the parent directory and applying the requested mode. The file
@@ -532,28 +725,25 @@ func MaterializeServiceFilesChanged(svc *CustomService) (bool, error) {
 	return changed, nil
 }
 
-// CustomServicesDependingOn returns the names of all custom services that
-// declare name in their depends_on list.
-func CustomServicesDependingOn(name string) []string {
-	customs, err := ListCustomServices()
-	if err != nil {
-		return nil
+// customServicePath returns the on-disk definition path for a service name, or
+// an error when the name is not one SaveCustomService could have written. A
+// name indexes straight into a file path, and callers derive it from things
+// like a project's .env DB host, so a name that could never have been saved
+// must not be able to read, probe or delete a path either.
+func customServicePath(name string) (string, error) {
+	if !validServiceName.MatchString(name) {
+		return "", fmt.Errorf("invalid service name %q: must match [a-z0-9][a-z0-9-]*", name)
 	}
-	var out []string
-	for _, svc := range customs {
-		for _, dep := range svc.DependsOn {
-			if dep == name {
-				out = append(out, svc.Name)
-				break
-			}
-		}
-	}
-	return out
+	return filepath.Join(CustomServicesDir(), name+".yaml"), nil
 }
 
 // LoadCustomService loads a custom service by name from the services directory.
 func LoadCustomService(name string) (*CustomService, error) {
-	return LoadCustomServiceFromFile(filepath.Join(CustomServicesDir(), name+".yaml"))
+	path, err := customServicePath(name)
+	if err != nil {
+		return nil, err
+	}
+	return LoadCustomServiceFromFile(path)
 }
 
 // LoadCustomServiceFromFile parses a CustomService from any YAML file path.
@@ -655,7 +845,10 @@ func SaveCustomService(svc *CustomService) error {
 
 // RemoveCustomService deletes a custom service config file.
 func RemoveCustomService(name string) error {
-	path := filepath.Join(CustomServicesDir(), name+".yaml")
+	path, err := customServicePath(name)
+	if err != nil {
+		return err
+	}
 	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -666,8 +859,11 @@ func RemoveCustomService(name string) error {
 // The YAML is the authoritative install-state signal for a custom service, so
 // ServiceInstalled and the services list resolve from it and can't drift (#678).
 func CustomServiceExists(name string) bool {
-	path := filepath.Join(CustomServicesDir(), name+".yaml")
-	_, err := os.Stat(path)
+	path, err := customServicePath(name)
+	if err != nil {
+		return false
+	}
+	_, err = os.Stat(path)
 	return err == nil
 }
 

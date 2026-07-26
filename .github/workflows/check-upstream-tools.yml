@@ -1,0 +1,61 @@
+name: Check Upstream Tool Releases
+
+# Daily check of the host tools lerd pins (composer, fnm, mkcert). Where the
+# PHP image check auto-rebuilds artifacts, the pins live in tools.yaml, so a
+# stale pin becomes a bump PR; merging it publishes the new pins to every
+# install through the fetched manifest, no binary release needed.
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump pinned tool versions
+        run: |
+          set -euo pipefail
+          FILE=internal/tools/tools.yaml
+
+          FNM=$(curl -fsSL https://api.github.com/repos/Schniz/fnm/releases/latest | jq -r .tag_name)
+          MKCERT=$(curl -fsSL https://api.github.com/repos/FiloSottile/mkcert/releases/latest | jq -r .tag_name)
+          COMPOSER=$(curl -fsSL https://getcomposer.org/versions | jq -r '.stable[0].version')
+
+          for pair in "composer=${COMPOSER}" "fnm=${FNM}" "mkcert=${MKCERT}"; do
+            tool="${pair%%=*}" version="${pair#*=}"
+            if [ -z "$version" ] || [ "$version" = "null" ]; then
+              echo "Skipping ${tool}: upstream lookup failed"
+              continue
+            fi
+            yq -i ".tools.${tool}.version = \"${version}\"" "$FILE"
+          done
+          git diff --stat
+
+      - name: Verify the pinned URLs resolve
+        run: |
+          set -euo pipefail
+          FILE=internal/tools/tools.yaml
+          for tool in composer fnm mkcert; do
+            version=$(yq -r ".tools.${tool}.version" "$FILE")
+            url=$(yq -r ".tools.${tool}.url" "$FILE")
+            asset=$(yq -r ".tools.${tool}.assets.\"linux/amd64\" // \"\"" "$FILE")
+            asset="${asset//\{version\}/$version}"
+            url="${url//\{version\}/$version}"
+            url="${url//\{asset\}/$asset}"
+            echo "Checking ${tool}: ${url}"
+            curl -fsSLI -o /dev/null "$url"
+          done
+
+      - name: Open bump PR
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: chore/bump-tool-pins
+          commit-message: 'chore: bump pinned host tool versions'
+          title: 'chore: bump pinned host tool versions'
+          body: 'Automated bump of the pinned composer, fnm and mkcert versions in internal/tools/tools.yaml to the current upstream releases. The resolved download URLs were verified to exist before this PR was opened. Merging publishes the new pins to every install through the fetched manifest, and the embedded fallback ships with the next release.'

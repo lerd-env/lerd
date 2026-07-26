@@ -101,6 +101,8 @@ The signal is PHPUnit's own `PHPUNIT_COMPOSER_INSTALL` bootstrap constant, which
 
 When a query shape repeats past a threshold (3×) within a single request or worker invocation, lerd fires one OS notification — **once per route/script per session** — so it warns you without nagging on every subsequent hit of the same endpoint. The dashboard also flags the request group with an **N+1** badge and tints the duplicate rows. Notifications respect the global `lerd notify` toggle.
 
+Every warning names the run the queries came from: the worker command if the capture came from an opted-in worker, otherwise the CLI invocation (`artisan sync:users --all`, with long argument values elided) or the request route (`GET /orders`). The label locates the run, not the query, whose exact origin and SQL are already on the events in the Debug lens. The same value separates the warnings, so one noisy artisan command does not silence the next one for the rest of the session.
+
 ## Debugging over MCP
 
 The same capture is available to an AI assistant through lerd's MCP server, so an agent can debug and fix performance issues end to end. The loop: `dumps_toggle` to arm capture, `dumps_clear` for a clean slate, trigger the page or job, then `analyze_queries` for a per-request N+1 and slow-query report — each finding carries the originating `file:line`, so the agent can open the offending code and add a `with()` eager-load, an index, or a cache, then re-run to confirm the count dropped. `dumps_recent` with a `kind` filter (`query`, `mail`, `view`, …) pulls the raw events for anything the report doesn't cover. The analysis is server-side, so it uses the same fingerprinting as the dashboard badge and the N+1 notification.

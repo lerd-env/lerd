@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from '$components/Icon.svelte';
   import Modal from '$components/Modal.svelte';
+  import ActionCard from '$components/ActionCard.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import { tooltip } from '$lib/tooltip';
   import { formatBytes } from '$lib/bytes';
@@ -51,7 +52,13 @@
     errors?: number;
     issues?: ImportIssue[];
     omitted?: number;
+    skipped?: ImportIssue[];
+    created?: ImportIssue[];
   } | null>(null);
+  // The dump waiting on the confirmation, and whether to empty the database
+  // before it loads.
+  let pending = $state<File | null>(null);
+  let importFresh = $state(false);
   const importBusy = $derived(importOp?.tone === 'busy');
   // The engine's complaints open over the page rather than inside the card,
   // which has no room for a list and belongs to one database in a grid.
@@ -63,7 +70,13 @@
     if (importOp.tone === 'error') return m.databases_importFailed({ error: importOp.error ?? '' });
     if (importOp.tone === 'warn')
       return m.databases_importedWithErrors({ file: importOp.file, count: importOp.errors ?? 0 });
-    if (importOp.tone === 'done') return m.databases_imported({ file: importOp.file });
+    if (importOp.tone === 'done')
+      return importOp.created?.length
+        ? m.databases_importedWithExtensions({
+            file: importOp.file,
+            names: importOp.created.map((c) => c.message).join(', ')
+          })
+        : m.databases_imported({ file: importOp.file });
     return importOp.percent === null
       ? m.databases_importing({ file: importOp.file })
       : m.databases_importingPercent({
@@ -72,7 +85,9 @@
         });
   });
 
-  const sqlOps = $derived(engine.supports_snapshot);
+  // The engines' dumps travel as SQL text unless the preset declares another
+  // format, in which case any file may be a valid archive.
+  const importAccept = $derived(engine.dump_format === 'sql' ? '.sql,.txt,.gz' : '');
   // A worktree's isolated database is shown under the branch's own domain, so it
   // reads as staging's data rather than as another database of the parent site.
   const ownerDomain = $derived(active.branch ? `${active.branch}.${active.site}` : active.site);
@@ -92,18 +107,27 @@
     setTimeout(() => (copied = false), 1200);
   }
 
-  async function onImport(e: Event) {
+  // Picking a file opens the confirmation rather than loading straight away, so
+  // the choice between loading on top and replacing is made before anything runs.
+  function onFilePicked(e: Event) {
     const input = e.target as HTMLInputElement;
-    const file = input.files?.[0];
+    pending = input.files?.[0] ?? null;
     input.value = '';
+    importFresh = false;
+  }
+
+  async function startImport() {
+    const file = pending;
+    pending = null;
     if (!file) return;
+    const fresh = importFresh;
     importOp = { tone: 'busy', file: file.name, percent: 0 };
     const res = await importDatabase(engine.service, active.name, file, (p) => {
       if (importOp?.tone !== 'busy') return;
       // Once the last byte is out the engine is still replaying the dump, and
       // there is nothing left to measure, so the bar gives way to a spinner.
       importOp = { ...importOp, percent: p.uploaded ? null : p.percent };
-    });
+    }, fresh);
     if (!res.ok) {
       importOp = { tone: 'error', file: file.name, percent: null, error: res.error || m.common_failed() };
       return;
@@ -117,12 +141,14 @@
         percent: null,
         errors: res.errors,
         issues: res.issues,
-        omitted: res.omitted
+        omitted: res.omitted,
+        skipped: res.skipped,
+        created: res.created
       };
       showIssues = (res.issues ?? []).length > 0;
       return;
     }
-    importOp = { tone: 'done', file: file.name, percent: null };
+    importOp = { tone: 'done', file: file.name, percent: null, created: res.created };
     clearTimeout(clearDone);
     clearDone = setTimeout(() => {
       if (importOp?.tone === 'done') importOp = null;
@@ -142,10 +168,8 @@
   }
 </script>
 
-<div class="flex h-full flex-col rounded-xl border border-gray-200/80 dark:border-lerd-border bg-white dark:bg-lerd-card p-3 transition duration-150 hover:border-gray-300 dark:hover:border-white/15 hover:shadow-sm">
-  <!-- mb-2 keeps the meta line off the divider on the tallest card in a row,
-       where mt-auto has no slack left to space them apart. -->
-  <div class="flex items-start gap-2 mb-2">
+<ActionCard>
+  {#snippet header()}
     <Icon name="database" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
@@ -177,9 +201,9 @@
         onchange={(v) => (target = v)}
       />
     {/if}
-  </div>
+  {/snippet}
 
-  <div class="flex items-center gap-0.5 mt-auto pt-2 border-t border-gray-100 dark:border-lerd-border/60">
+  {#snippet actions()}
     {#if admin}
       <button
         type="button"
@@ -201,7 +225,7 @@
       <Icon name={copied ? 'check' : 'clipboard'} class="w-3.5 h-3.5" />
     </button>
 
-    {#if sqlOps}
+    {#if engine.supports_export}
       <a
         href={exportUrl(engine.service, active.name)}
         use:tooltip={m.databases_export()}
@@ -210,7 +234,9 @@
       >
         <Icon name="download" class="w-3.5 h-3.5" />
       </a>
+    {/if}
 
+    {#if engine.supports_import}
       <button
         type="button"
         use:tooltip={m.databases_import()}
@@ -221,8 +247,10 @@
       >
         <Icon name={importBusy ? 'spinner' : 'upload'} class="w-3.5 h-3.5 {importBusy ? 'animate-spin' : ''}" />
       </button>
-      <input bind:this={fileInput} type="file" accept=".sql,.txt" class="hidden" onchange={onImport} />
+      <input bind:this={fileInput} type="file" accept={importAccept} class="hidden" onchange={onFilePicked} />
+    {/if}
 
+    {#if engine.supports_snapshot}
       <button
         type="button"
         use:tooltip={m.databases_snapshots()}
@@ -237,7 +265,9 @@
           >{snapshotCount}</span>
         {/if}
       </button>
+    {/if}
 
+    {#if engine.supports_drop}
       <button
         type="button"
         use:tooltip={m.databases_drop()}
@@ -248,7 +278,7 @@
         <Icon name="trash" class="w-3.5 h-3.5" />
       </button>
     {/if}
-  </div>
+  {/snippet}
 
   {#if importOp}
     <div class="mt-2">
@@ -263,19 +293,50 @@
       </DatabaseOpStatus>
     </div>
   {/if}
-</div>
+</ActionCard>
 
 {#if showIssues && importOp?.issues}
   <ImportIssuesModal
     title={importMessage}
     issues={importOp.issues}
     omitted={importOp.omitted}
+    skipped={importOp.skipped}
     onclose={() => (showIssues = false)}
   />
 {/if}
 
 {#if showSnapshots}
   <DatabaseSnapshotsModal {engine} entry={active} onclose={() => (showSnapshots = false)} />
+{/if}
+
+{#if pending}
+  <Modal
+    open
+    title={m.databases_importTitle({ file: pending.name })}
+    onclose={() => (pending = null)}
+    size="sm"
+  >
+    <div class="px-5 py-4 space-y-3">
+      <p class="text-sm text-gray-700 dark:text-gray-300">
+        {m.databases_importBody({ name: active.name })}
+      </p>
+      <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+        <input type="checkbox" bind:checked={importFresh} class="mt-0.5 accent-lerd-red" />
+        <span>
+          {m.databases_importFresh()}
+          <span class="block text-xs text-gray-500 dark:text-gray-400">
+            {m.databases_importFreshHint()}
+          </span>
+        </span>
+      </label>
+    </div>
+    {#snippet footer()}
+      <DetailButton onclick={() => (pending = null)}>{m.common_cancel()}</DetailButton>
+      <DetailButton tone={importFresh ? 'danger' : 'primary'} onclick={startImport}>
+        {m.databases_import()}
+      </DetailButton>
+    {/snippet}
+  </Modal>
 {/if}
 
 {#if showDrop}

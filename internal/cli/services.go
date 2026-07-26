@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"charm.land/huh/v2"
 	"github.com/geodro/lerd/internal/config"
@@ -82,27 +83,14 @@ func newServiceStartCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
-			unit := "lerd-" + name
 
 			var image string
 			if isKnownService(name) {
-				if err := ensureServiceQuadlet(name); err != nil {
-					return err
-				}
 				image = podman.ServiceImage("lerd-" + name)
 			} else {
 				svc, loadErr := config.LoadCustomService(name)
 				if loadErr != nil {
 					return fmt.Errorf("unknown service %q", name)
-				}
-				if err := ensureCustomServiceQuadlet(svc); err != nil {
-					return err
-				}
-				// Make sure every declared dependency is up first. Without
-				// this, starting e.g. mongo-express by itself would leave
-				// mongo stopped and the container would fail to connect.
-				if err := StartServiceDependencies(svc); err != nil {
-					return err
 				}
 				image = svc.Image
 			}
@@ -118,28 +106,12 @@ func newServiceStartCmd() *cobra.Command {
 			}
 
 			feedback.Begin()
-			svcStep := feedback.Start("starting " + unit)
-			if err := podman.StartUnit(unit); err != nil {
+			svcStep := feedback.Start("starting lerd-" + name)
+			if err := serviceops.StartService(name); err != nil {
 				svcStep.Fail(err)
 				return err
 			}
 			svcStep.OK("")
-			_ = config.SetServicePaused(name, false)
-			_ = config.SetServiceManuallyStarted(name, true)
-
-			// Start any custom services that depend on this one.
-			for _, dep := range config.CustomServicesDependingOn(name) {
-				if err := ensureServiceRunning(dep); err != nil {
-					feedback.Warn("could not start dependent service %s: %v", dep, err)
-				}
-			}
-
-			// Restart family consumers (e.g. phpMyAdmin) so they pick up
-			// the freshly-started member without DNS / connection caching.
-			if fam := serviceops.ServiceFamily(name); fam != "" {
-				serviceops.RegenerateFamilyConsumers(fam)
-			}
-
 			printEnvVars(name)
 			return nil
 		},
@@ -154,23 +126,11 @@ func newServiceStopCmd() *cobra.Command {
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 			feedback.Begin()
-			// StopServiceAndDependents emits its own "stopping <service>" step
-			// (per service in the dependency cascade), so don't wrap it here.
-			StopServiceAndDependents(name)
-			_ = config.SetServicePaused(name, true)
-			_ = config.SetServiceManuallyStarted(name, false)
-			if fam := serviceops.ServiceFamily(name); fam != "" {
-				serviceops.RegenerateFamilyConsumers(fam)
-			}
-			return nil
+			// StopService emits its own "stopping <service>" step for the
+			// cascade, so don't wrap it here.
+			return serviceops.StopService(name)
 		},
 	}
-}
-
-// RegenerateFamilyConsumersForService is the public entry the Web UI uses
-// after a start/stop. Forwards to serviceops.
-func RegenerateFamilyConsumersForService(name string) {
-	serviceops.RegenerateFamilyConsumersForService(name)
 }
 
 // serviceUpdateHint queries the registry for an update / upgrade tag and
@@ -359,23 +319,9 @@ func newServiceRestartCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
-			unit := "lerd-" + name
-			// Refresh the quadlet first so config edits and preset file
-			// mounts land before the unit picks them up. If regen fails,
-			// warn and restart the existing quadlet — failing here would
-			// strand a healthy unit on a transient render error.
-			if isKnownService(name) {
-				if err := ensureServiceQuadlet(name); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
-				}
-			} else if svc, err := config.LoadCustomService(name); err == nil {
-				if err := ensureCustomServiceQuadlet(svc); err != nil {
-					fmt.Fprintf(os.Stderr, "[WARN] regenerating quadlet for %s failed: %v; restarting with the existing one\n", name, err)
-				}
-			}
 			feedback.Begin()
-			svcStep := feedback.Start("restarting " + unit)
-			if err := podman.RestartUnit(unit); err != nil {
+			svcStep := feedback.Start("restarting lerd-" + name)
+			if err := serviceops.RestartService(name); err != nil {
 				svcStep.Fail(err)
 				return err
 			}
@@ -448,7 +394,7 @@ func newServiceListCmd() *cobra.Command {
 				name := svc.Name + " " + feedback.Dim("[custom]")
 				rows = append(rows, []string{name, ver, statusCell(svc.Name, status), serviceUpdateHint(svc.Name, status)})
 				if len(svc.DependsOn) > 0 {
-					rows = append(rows, []string{feedback.Dim("↳ depends on: " + strings.Join(svc.DependsOn, ", ")), "", "", ""})
+					rows = append(rows, []string{feedback.Dim("↳ depends on: " + strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", ")), "", "", ""})
 				}
 			}
 			feedback.Table([]string{"Service", "Version", "Status", "Update"}, rows)
@@ -620,7 +566,7 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 				fmt.Printf("Dashboard: %s\n", svc.Dashboard)
 			}
 			if len(svc.DependsOn) > 0 {
-				fmt.Printf("Depends on: %s (will be auto-started)\n", strings.Join(svc.DependsOn, ", "))
+				fmt.Printf("Depends on: %s (will be auto-started)\n", strings.Join(serviceops.DependencyDisplayNames(svc.DependsOn), ", "))
 			}
 			if err := shims.Reconcile(clientShimPrompter()); err != nil {
 				fmt.Printf("    WARN: client shims: %v\n", err)
@@ -1143,16 +1089,38 @@ func init() {
 	// service manager (launchd plist on macOS, .container quadlet on Linux) so
 	// it matches `lerd start`'s notion of an installed unit.
 	serviceops.UnitInstalledFn = services.Mgr.ContainerUnitInstalled
+	// Drop-in alternatives for missing depends_on (mariadb for mysql, valkey
+	// for redis) come from the store index so a clean box that has not cached
+	// those presets yet still sees them in the error — ListPresets alone only
+	// has the embedded defaults plus whatever is already fetched.
+	serviceops.ListStoreDropIns = listStoreDropIns
 }
 
-// StartServiceDependencies and StopServiceAndDependents are thin wrappers so
-// the Web UI can share the same semantics as the CLI.
-func StartServiceDependencies(svc *config.CustomService) error {
-	return serviceops.StartDependencies(svc)
-}
+var (
+	storeDropInMu    sync.Mutex
+	storeDropInIdx   *store.ServiceIndex
+	storeDropInIdxAt time.Time
+)
 
-func StopServiceAndDependents(name string) {
-	serviceops.StopWithDependents(name)
+func listStoreDropIns(dep string) []string {
+	storeDropInMu.Lock()
+	defer storeDropInMu.Unlock()
+	if storeDropInIdx == nil || time.Since(storeDropInIdxAt) > 5*time.Minute {
+		if idx, err := store.NewServiceClient().FetchServiceIndex(); err == nil {
+			storeDropInIdx = idx
+			storeDropInIdxAt = time.Now()
+		}
+	}
+	if storeDropInIdx == nil {
+		return nil
+	}
+	var out []string
+	for _, e := range storeDropInIdx.Services {
+		if e.Family == dep || e.EnvRole == dep {
+			out = append(out, e.Name)
+		}
+	}
+	return out
 }
 
 // autoStopUnusedServices stops any running service that has no active sites
@@ -1173,7 +1141,11 @@ func autoStopUnusedServices() {
 				running = status == "active" || status == "activating"
 			}
 			if running {
-				StopServiceAndDependents(name)
+				// Soft stop only: do not go through StopService, which sets the
+				// paused flag. Auto-stop means "nothing needs this right now",
+				// not "the user manually stopped it"; lerd start must bring
+				// redis/mailpit back the way it did before the shared lifecycle.
+				_ = serviceops.StopWithDependents(name)
 			}
 		}
 	}

@@ -8,9 +8,12 @@
   }
   let { names }: Props = $props();
 
+  // Name is already the short display form from the API (mariadb, not
+  // mariadb-11-8). Match the installed unit by name or by the preset it
+  // was installed from so the status dot tracks the real satisfier.
   const entries = $derived(
     names.map((n) => {
-      const svc = $services.find((s) => s.name === n);
+      const svc = $services.find((s) => s.name === n || s.preset === n);
       return { name: n, active: svc?.status === 'active' };
     })
   );

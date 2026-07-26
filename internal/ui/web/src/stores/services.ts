@@ -40,6 +40,9 @@ export interface Service {
   // True for a database engine (mysql/mariadb/postgres/mongo), so the detail
   // view shows its Databases tab.
   is_database?: boolean;
+  // Non-database entity kinds the service's preset declares (buckets,
+  // keyspaces…), so the detail view shows the generic overview tab.
+  entity_kinds?: string[];
   site_count: number;
   site_domains?: string[];
   pinned?: boolean;

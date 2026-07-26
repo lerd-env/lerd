@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 func TestListPresets_IncludesShippedPresets(t *testing.T) {
@@ -140,6 +143,9 @@ func TestLoadPreset_Valkey(t *testing.T) {
 	}
 	if p.Default {
 		t.Errorf("valkey is an opt-in add-on preset and must not be default")
+	}
+	if p.EnvRole != "redis" {
+		t.Errorf("valkey must declare env_role redis (drop-in for redis deps), got %q", p.EnvRole)
 	}
 }
 
@@ -290,6 +296,9 @@ func TestLoadPreset_MariaDB_Versions(t *testing.T) {
 	if p.DefaultVersion != "11.8" {
 		t.Errorf("DefaultVersion = %q, want 11.8 (the pinned LTS default)", p.DefaultVersion)
 	}
+	if p.EnvRole != "mysql" {
+		t.Errorf("mariadb must declare env_role mysql (drop-in for mysql deps), got %q", p.EnvRole)
+	}
 	// Issue #704: every member of a family defaults to the family's canonical
 	// host port (3306 for the MySQL-compatible mariadb) rather than a pre-spaced
 	// unique port. The runtime port-ownership guard shifts a sibling off the
@@ -422,6 +431,107 @@ func TestResolveDynamicEnv_DiscoverFamily(t *testing.T) {
 	}
 }
 
+func TestResolveDynamicEnv_DiscoverFamily_OnlyRunning(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := SaveCustomService(&CustomService{
+		Name: "mysql-9-7", Image: "x", Family: "mysql",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	prev := ServiceRunning
+	ServiceRunning = func(name string) bool { return name == "mysql" }
+	t.Cleanup(func() { ServiceRunning = prev })
+
+	svc := &CustomService{
+		Name: "phpmyadmin", Image: "x",
+		DynamicEnv: map[string]string{"PMA_HOSTS": "discover_family:mysql"},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatal(err)
+	}
+	if got := svc.Environment["PMA_HOSTS"]; got != "lerd-mysql" {
+		t.Errorf("PMA_HOSTS = %q, want only running lerd-mysql, got stopped members too", got)
+	}
+}
+
+func TestResolveDynamicEnv_ExpandEnv(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := SaveCustomService(&CustomService{Name: "valkey", Image: "x", Family: "valkey"}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		// The static values are the fallback older binaries keep serving; a
+		// binary that resolves expand_env must replace them with numbered sets.
+		Environment: map[string]string{
+			"RI_REDIS_HOST":  "lerd-redis",
+			"RI_REDIS_PORT":  "6379",
+			"RI_REDIS_ALIAS": "lerd-redis",
+		},
+		ExpandEnv: map[string]string{
+			"RI_REDIS_HOST":  "redis,valkey={host}",
+			"RI_REDIS_PORT":  "redis,valkey=6379",
+			"RI_REDIS_ALIAS": "redis,valkey={name}",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	// uniqueFamilyHosts sorts, so lerd-redis is _1 and lerd-valkey is _2.
+	want := map[string]string{
+		"RI_REDIS_HOST_1": "lerd-redis", "RI_REDIS_PORT_1": "6379", "RI_REDIS_ALIAS_1": "redis",
+		"RI_REDIS_HOST_2": "lerd-valkey", "RI_REDIS_PORT_2": "6379", "RI_REDIS_ALIAS_2": "valkey",
+	}
+	for k, v := range want {
+		if got := svc.Environment[k]; got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	for _, k := range []string{"RI_REDIS_HOST", "RI_REDIS_PORT", "RI_REDIS_ALIAS"} {
+		if _, ok := svc.Environment[k]; ok {
+			t.Errorf("expand_env must drop the unsuffixed fallback %s", k)
+		}
+	}
+	if _, ok := svc.Environment["RI_REDIS_HOST_3"]; ok {
+		t.Error("expand_env wrote more members than are installed")
+	}
+
+	svc.ExpandEnv = map[string]string{"RI_REDIS_HOST": "redis"}
+	if err := ResolveDynamicEnv(svc); err == nil {
+		t.Error("expand_env without =<template> must error")
+	}
+}
+
+func TestCustomService_ExpandEnvRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	in := &CustomService{
+		Name: "redisinsight", Image: "x",
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+		ExpandEnv:   map[string]string{"RI_REDIS_HOST": "redis,valkey={host}"},
+	}
+	if err := SaveCustomService(in); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	out, err := LoadCustomService("redisinsight")
+	if err != nil {
+		t.Fatalf("LoadCustomService: %v", err)
+	}
+	if out.ExpandEnv["RI_REDIS_HOST"] != "redis,valkey={host}" {
+		t.Errorf("expand_env lost in round trip: %#v", out.ExpandEnv)
+	}
+	if out.Environment["RI_REDIS_HOST"] != "lerd-redis" {
+		t.Errorf("static fallback lost in round trip: %#v", out.Environment)
+	}
+}
+
 func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -461,15 +571,102 @@ func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	}
 }
 
+// An unknown directive is what a binary older than the store definition sees.
+// It must degrade to a warning: the quadlet still generates, carrying whatever
+// static environment the preset ships, instead of the service refusing to start.
 func TestResolveDynamicEnv_UnknownDirective(t *testing.T) {
+	var warned bytes.Buffer
+	defer feedback.SetTestWriter(&warned)()
+
 	svc := &CustomService{
-		Name: "x",
+		Name:        "x",
+		Environment: map[string]string{"RI_APP_PORT": "5540"},
 		DynamicEnv: map[string]string{
 			"FOO": "garbage:bar",
 		},
 	}
-	if err := ResolveDynamicEnv(svc); err == nil {
-		t.Errorf("expected error for unknown directive")
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("unknown directive must not error, got %v", err)
+	}
+	if _, ok := svc.Environment["FOO"]; ok {
+		t.Error("unknown directive must be skipped, not written")
+	}
+	if svc.Environment["RI_APP_PORT"] != "5540" {
+		t.Error("static environment must survive an unknown directive")
+	}
+	if !strings.Contains(warned.String(), "garbage") {
+		t.Errorf("expected a warning naming the directive, got %q", warned.String())
+	}
+}
+
+func TestRewriteDependencyHosts_DropIn(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string {
+		if dep == "redis" {
+			return "lerd-valkey"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		DependsOn: []string{"redis"},
+		Environment: map[string]string{
+			"RI_REDIS_HOST":  "lerd-redis",
+			"RI_REDIS_ALIAS": "lerd-redis",
+			"RI_REDIS_PORT":  "6379",
+		},
+	}
+	RewriteDependencyHosts(svc)
+	if got := svc.Environment["RI_REDIS_HOST"]; got != "lerd-valkey" {
+		t.Errorf("RI_REDIS_HOST = %q, want lerd-valkey", got)
+	}
+	if got := svc.Environment["RI_REDIS_ALIAS"]; got != "lerd-valkey" {
+		t.Errorf("RI_REDIS_ALIAS = %q, want lerd-valkey", got)
+	}
+	if got := svc.Environment["RI_REDIS_PORT"]; got != "6379" {
+		t.Errorf("RI_REDIS_PORT = %q, want it left untouched", got)
+	}
+}
+
+func TestRewriteDependencyHosts_InURLTemplate(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string {
+		if dep == "mongo" {
+			return "lerd-mongo-7"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "mongo-express", Image: "x",
+		DependsOn: []string{"mongo"},
+		Environment: map[string]string{
+			"ME_CONFIG_MONGODB_URL": "mongodb://root:lerd@lerd-mongo:27017/?authSource=admin",
+		},
+	}
+	RewriteDependencyHosts(svc)
+	want := "mongodb://root:lerd@lerd-mongo-7:27017/?authSource=admin"
+	if got := svc.Environment["ME_CONFIG_MONGODB_URL"]; got != want {
+		t.Errorf("ME_CONFIG_MONGODB_URL = %q, want %q", got, want)
+	}
+}
+
+func TestRewriteDependencyHosts_CanonicalUnchanged(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string { return "lerd-" + dep }
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		DependsOn:   []string{"redis"},
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+	}
+	RewriteDependencyHosts(svc)
+	if got := svc.Environment["RI_REDIS_HOST"]; got != "lerd-redis" {
+		t.Errorf("RI_REDIS_HOST = %q, want lerd-redis (satisfier is the literal dep)", got)
 	}
 }
 
@@ -676,8 +873,11 @@ func TestLoadPreset_RedisInsight(t *testing.T) {
 	if !p.DashboardExternal {
 		t.Errorf("redisinsight must set dashboard_external because its consent cookies can't be carried by the iframe")
 	}
-	if p.Environment["RI_REDIS_HOST"] != "lerd-redis" {
-		t.Errorf("redisinsight must pre-wire the lerd Redis connection via RI_REDIS_HOST, got %q", p.Environment["RI_REDIS_HOST"])
+	if got := p.Environment["RI_REDIS_HOST"]; got != "lerd-redis" {
+		t.Errorf("redisinsight must pin RI_REDIS_HOST to lerd-redis so old binaries parse it and the host rewrite can retarget it, got %q", got)
+	}
+	if _, ok := p.DynamicEnv["RI_REDIS_HOST"]; ok {
+		t.Errorf("RI_REDIS_HOST must not use a dynamic_env directive; that breaks binaries that predate it")
 	}
 }
 

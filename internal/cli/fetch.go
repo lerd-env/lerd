@@ -41,8 +41,9 @@ func IsLegacyPHPVersion(v string) bool {
 // quadlet and starts the service, streaming build output to w. It is the
 // programmatic entry point behind the UI's "add PHP version" flow.
 func InstallPHPVersion(version string, w io.Writer) error {
-	if !IsSupportedPHPVersion(version) {
-		return fmt.Errorf("unsupported PHP version %q", version)
+	version, err := config.NormalizePHPVersion(version)
+	if err != nil {
+		return err
 	}
 	// Always emit a line so a streamed install shows progress even when the
 	// image is already built and the build step produces no output.
@@ -69,7 +70,14 @@ func NewFetchCmd() *cobra.Command {
 func runFetch(cmd *cobra.Command, args []string) error {
 	local, _ := cmd.Flags().GetBool("local")
 
-	versions := args
+	versions := make([]string, 0, len(args))
+	for _, a := range args {
+		v, err := config.NormalizePHPVersion(a)
+		if err != nil {
+			return err
+		}
+		versions = append(versions, v)
+	}
 	if len(versions) == 0 {
 		versions = SupportedPHPVersions
 	}

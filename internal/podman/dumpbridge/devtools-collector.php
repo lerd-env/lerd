@@ -116,6 +116,38 @@ function detect_site(): string
     return '';
 }
 
+// condense_arg keeps short arguments intact and elides long values, so
+// "--queue=high" survives but tinker's "--execute=<code>" reads "--execute=...":
+// the command names the run, the event's src/data carry the exact detail.
+function condense_arg(string $arg): string
+{
+    if (strlen($arg) <= 32) {
+        return $arg;
+    }
+    $eq = strpos($arg, '=');
+    if ($eq !== false && $eq < 32) {
+        return substr($arg, 0, $eq + 1) . '...';
+    }
+    return substr($arg, 0, 29) . '...';
+}
+
+// command_line names the CLI invocation an event came from, e.g.
+// "artisan queue:work --queue=high". Condensed per argument and capped so a
+// long invocation can't bloat the context of every event the process emits.
+function command_line(): string
+{
+    $argv = $_SERVER['argv'] ?? null;
+    if (!is_array($argv) || !isset($argv[0])) {
+        return '';
+    }
+    $parts = [basename((string) $argv[0])];
+    foreach (array_slice($argv, 1) as $arg) {
+        $parts[] = condense_arg((string) $arg);
+    }
+    $line = trim(implode(' ', $parts));
+    return strlen($line) > 120 ? substr($line, 0, 117) . '...' : $line;
+}
+
 function context(): array
 {
     $ctx = [
@@ -130,6 +162,9 @@ function context(): array
         $ctx['request'] = isset($_SERVER['REQUEST_METHOD'])
             ? $_SERVER['REQUEST_METHOD'] . ' ' . ($_SERVER['REQUEST_URI'] ?? '')
             : '';
+    } else {
+        // The CLI counterpart of request: what a console event points at.
+        $ctx['command'] = command_line();
     }
     $worker = defined('LERD_DEVTOOLS_WORKER') ? (string) \LERD_DEVTOOLS_WORKER : '';
     if ($worker !== '') {

@@ -21,6 +21,10 @@ export interface StatusResponse {
   php_default: string;
   node_default: string;
   node_managed_by_lerd: boolean;
+  // Active Node version manager lerd drives: 'fnm' (bundled) or 'nvm' (user's).
+  node_manager: 'fnm' | 'nvm';
+  // True when a user-installed nvm is present (so the nvm switch can be offered).
+  nvm_available: boolean;
   bun_available: boolean;
   bun_version: string;
   using_system_bun: boolean;
@@ -32,6 +36,16 @@ export interface StatusResponse {
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;
+  // Managed host binaries (composer, fnm, mkcert) against their pinned versions.
+  tools?: ToolStatus[];
+}
+
+export interface ToolStatus {
+  name: string;
+  installed?: string;
+  pinned: string;
+  present: boolean;
+  update_available: boolean;
 }
 
 const empty: StatusResponse = {
@@ -41,13 +55,16 @@ const empty: StatusResponse = {
   php_default: '',
   node_default: '',
   node_managed_by_lerd: true,
+  node_manager: 'fnm',
+  nvm_available: false,
   bun_available: false,
   bun_version: '',
   using_system_bun: false,
   watcher_running: false,
   frankenphp_php_versions: [],
   home: '',
-  workspaces: []
+  workspaces: [],
+  tools: []
 };
 
 export const status = writable<StatusResponse>(empty);

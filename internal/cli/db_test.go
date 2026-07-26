@@ -7,45 +7,48 @@ import (
 	"testing"
 )
 
-func TestDbImportCmdMySQLPasswordNotInArgs(t *testing.T) {
-	env := &dbEnv{
-		connection: "mysql",
-		database:   "testdb",
-		username:   "root",
-		password:   "secret123",
-	}
+// isolateConfig keeps command resolution off the developer's real install, so
+// the bundled presets are the only declarations in play.
+func isolateConfig(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+}
+
+// The commands run with the fixed admin credentials in the exec environment,
+// never as a -p flag where a process listing would show them.
+func TestDbImportCmdPasswordOnlyInEnv(t *testing.T) {
+	isolateConfig(t)
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "testdb"}
 	cmd, err := dbImportCmd(env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, arg := range cmd.Args {
-		if strings.Contains(arg, "secret123") && !strings.HasPrefix(arg, "MYSQL_PWD=") {
-			t.Errorf("password leaked in command arg: %q", arg)
-		}
+	joined := strings.Join(cmd.Args, " ")
+	if !strings.Contains(joined, "MYSQL_PWD=") {
+		t.Errorf("expected MYSQL_PWD in the exec env: %v", cmd.Args)
 	}
-	// Verify password is passed via env, not -p flag
 	for _, arg := range cmd.Args {
-		if strings.HasPrefix(arg, "-psecret123") || strings.HasPrefix(arg, "-p=secret123") {
-			t.Errorf("password passed via -p flag: %q", arg)
+		if strings.HasPrefix(arg, "-p") && arg != "-p" {
+			t.Errorf("password-like flag in args: %q", arg)
 		}
 	}
 }
 
 func TestDbImportCmdMySQLRaisesClientPacket(t *testing.T) {
-	for _, conn := range []string{"mysql", "mariadb"} {
-		env := &dbEnv{connection: conn, database: "shop", username: "root", password: "lerd"}
-		cmd, err := dbImportCmd(env)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if !strings.Contains(strings.Join(cmd.Args, " "), "--max-allowed-packet=") {
-			t.Errorf("%s import must raise the client max_allowed_packet so a large dump is not capped at 16MB: %v", conn, cmd.Args)
-		}
+	isolateConfig(t)
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "shop"}
+	cmd, err := dbImportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(cmd.Args, " "), "--max-allowed-packet=") {
+		t.Errorf("mysql import must raise the client max_allowed_packet so a large dump is not capped at 16MB: %v", cmd.Args)
 	}
 }
 
 func TestDbImportCmdPostgresHasNoPacketFlag(t *testing.T) {
-	env := &dbEnv{connection: "pgsql", database: "shop", username: "postgres", password: "lerd"}
+	isolateConfig(t)
+	env := &dbEnv{service: "postgres", connection: "pgsql", database: "shop"}
 	cmd, err := dbImportCmd(env)
 	if err != nil {
 		t.Fatal(err)
@@ -55,48 +58,23 @@ func TestDbImportCmdPostgresHasNoPacketFlag(t *testing.T) {
 	}
 }
 
-func TestDbExportCmdMySQLPasswordNotInArgs(t *testing.T) {
-	env := &dbEnv{
-		connection: "mysql",
-		database:   "testdb",
-		username:   "root",
-		password:   "secret123",
-	}
-	cmd, err := dbExportCmd(env)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, arg := range cmd.Args {
-		if strings.Contains(arg, "secret123") && !strings.HasPrefix(arg, "MYSQL_PWD=") {
-			t.Errorf("password leaked in command arg: %q", arg)
-		}
-	}
-}
-
 func TestDbCmdPostgresUsesEnv(t *testing.T) {
-	env := &dbEnv{
-		connection: "pgsql",
-		database:   "testdb",
-		username:   "postgres",
-		password:   "secret123",
-	}
+	isolateConfig(t)
+	env := &dbEnv{service: "postgres", connection: "pgsql", database: "testdb"}
 	cmd, err := dbImportCmd(env)
 	if err != nil {
 		t.Fatal(err)
 	}
-	found := false
-	for _, arg := range cmd.Args {
-		if arg == "PGPASSWORD=secret123" {
-			found = true
-		}
-	}
-	if !found {
+	if !strings.Contains(strings.Join(cmd.Args, " "), "PGPASSWORD=") {
 		t.Error("expected PGPASSWORD env var in postgres command")
 	}
 }
 
+// The mariadb images carry only the mariadb-named binaries, so the declared
+// commands resolve their tool in the container instead of spelling one name.
 func TestDbExportCmdMariaDBBinaryFallback(t *testing.T) {
-	env := &dbEnv{connection: "mariadb", database: "shop", username: "root", password: "lerd"}
+	isolateConfig(t)
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "shop"}
 	cmd, err := dbExportCmd(env)
 	if err != nil {
 		t.Fatal(err)
@@ -111,7 +89,8 @@ func TestDbExportCmdMariaDBBinaryFallback(t *testing.T) {
 }
 
 func TestDbImportCmdMariaDBBinaryFallback(t *testing.T) {
-	env := &dbEnv{connection: "mysql", database: "shop", username: "root", password: "lerd"}
+	isolateConfig(t)
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "shop"}
 	cmd, err := dbImportCmd(env)
 	if err != nil {
 		t.Fatal(err)
@@ -122,8 +101,41 @@ func TestDbImportCmdMariaDBBinaryFallback(t *testing.T) {
 	}
 }
 
+// The dump has to be loadable back over a populated database, the same as the
+// one a snapshot writes.
+func TestDbExportCmdPostgresDropsBeforeCreating(t *testing.T) {
+	isolateConfig(t)
+	env := &dbEnv{service: "postgres", connection: "pgsql", database: "shop"}
+	cmd, err := dbExportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	for _, flag := range []string{"--clean", "--if-exists"} {
+		if !strings.Contains(joined, flag) {
+			t.Errorf("export missing %s: %q", flag, joined)
+		}
+	}
+}
+
+func TestDbExportCmdMySQLKeepsRoutinesAndEvents(t *testing.T) {
+	isolateConfig(t)
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "shop"}
+	cmd, err := dbExportCmd(env)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmd.Args, " ")
+	for _, flag := range []string{"--routines", "--triggers", "--events"} {
+		if !strings.Contains(joined, flag) {
+			t.Errorf("export missing %s: %q", flag, joined)
+		}
+	}
+}
+
 func TestDbCmdUnsupportedConnection(t *testing.T) {
-	env := &dbEnv{connection: "sqlite"}
+	isolateConfig(t)
+	env := &dbEnv{service: "sqlite", connection: "sqlite", database: "shop"}
 	_, err := dbImportCmd(env)
 	if err == nil {
 		t.Error("expected error for unsupported connection")

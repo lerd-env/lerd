@@ -26,3 +26,52 @@ env_vars:
   - AWS_USE_PATH_STYLE_ENDPOINT=true
 category: storage
 icon: storage
+introspect:
+  entities:
+    - kind: buckets
+      label: Buckets
+      image: docker.io/minio/mc:latest
+      env:
+        - MC_HOST_lerd=http://lerd:lerdpassword@lerd-rustfs:9000
+      owner_env: AWS_BUCKET
+      list: >
+        mc du --depth 2 --json lerd/ | while IFS= read -r l; do
+        p=${l#*\"prefix\":\"}; p=${p%%\"*};
+        s=${l#*\"size\":}; s=${s%%,*};
+        o=${l#*\"objects\":}; o=${o%%,*};
+        [ -n "$p" ] && printf '%s\t%s\t%s\n' "$p" "$o" "$s"; done; exit 0
+      columns:
+        - key: objects
+          label: Objects
+          format: number
+        - key: size
+          label: Size
+          format: bytes
+      actions:
+        create: mc mb lerd/{{name}} && mc anonymous set public lerd/{{name}}
+        delete:
+          exec: mc rb --force lerd/{{name}}
+          destructive: true
+        # The archive actions run on rclone rather than mc: streaming a bucket
+        # as one file needs tar, which the mc image does not carry.
+        export:
+          exec: >
+            mkdir -p /tmp/b && rclone copy -q :s3:{{name}} /tmp/b &&
+            tar -C /tmp/b -czf - .
+          filename: "{{name}}.tar.gz"
+          image: docker.io/rclone/rclone:latest
+          env:
+            - RCLONE_S3_PROVIDER=Minio
+            - RCLONE_S3_ENDPOINT=http://lerd-rustfs:9000
+            - RCLONE_S3_ACCESS_KEY_ID=lerd
+            - RCLONE_S3_SECRET_ACCESS_KEY=lerdpassword
+        import:
+          exec: >
+            mkdir -p /tmp/b && tar -xf - -C /tmp/b &&
+            rclone copy -q /tmp/b :s3:{{name}}
+          image: docker.io/rclone/rclone:latest
+          env:
+            - RCLONE_S3_PROVIDER=Minio
+            - RCLONE_S3_ENDPOINT=http://lerd-rustfs:9000
+            - RCLONE_S3_ACCESS_KEY_ID=lerd
+            - RCLONE_S3_SECRET_ACCESS_KEY=lerdpassword

@@ -33,6 +33,8 @@
 
 If no version is given, the version is resolved from the current directory (`.php-version` or `composer.json`, falling back to the global default).
 
+Versions are written as `major.minor`, but common spellings are accepted everywhere a version is typed: `php8.4`, `84` and `8.4.7` all normalize to `8.4`. Anything that does not resolve to a supported version is rejected up front, so a typo can never end up as the stored default and break image names.
+
 Inside a linked site, the commands that run PHP in a container (`lerd php`, `lerd composer`, `lerd console`, `lerd php:shell`) use the version the site is registered on, which is the version its FPM container serves. That matters when a framework clamps the version at link time: a Laravel 13 project pinning `.php-version` to 8.1 is linked on 8.5, because Laravel 13 supports 8.3 to 8.5, and composer then runs on 8.5 too rather than resolving 8.1 from the file and quietly using a different PHP than the site itself.
 
 A git worktree resolves ahead of the site it belongs to. A worktree inherits its parent site's version until you pin one with `lerd isolate` from inside the checkout, and from then on the whole toolchain follows that pin: the worktree's own vhost, `lerd php`, `lerd composer`, and everything else that runs PHP in a container. This holds wherever the checkout lives, including inside the parent site's own directory, so a worktree on 8.3 under a site on 8.5 runs composer on 8.3 rather than picking up the parent's version.
@@ -137,6 +139,8 @@ Lerd automatically manages which PHP-FPM containers are running based on which v
 **Paused sites count**: a site that is paused still counts as using its PHP version, so that version's FPM container is not stopped. When the site is resumed, FPM is guaranteed to be running.
 
 **Auto-start**: FPM is started automatically when you link a site (`lerd link`, `lerd park`, `lerd isolate`) or change the global default (`lerd use`). When unpausing a site, lerd also ensures the required FPM container is running before restoring the nginx vhost.
+
+**Build on first use**: when a link lands on a PHP version this machine has never built (an older framework clamps to a version below the ones you have, say), `lerd link` builds that version's image before starting it, so the site serves rather than answering 502. The build streams its progress as a link step. If the build cannot run (an unattended `lerd park` sweep withholds builds) or fails, the site is still registered and lerd names the one command that finishes the job, `lerd php:rebuild <version>`.
 
 **Manual control**: unused PHP versions (no active sites) can be started and stopped manually from the dashboard (System > PHP > Start / Stop). From the CLI:
 

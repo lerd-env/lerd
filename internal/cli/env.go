@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"time"
 
 	neturl "net/url"
 
@@ -1088,6 +1087,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// keeps pointing at a host that no longer resolves.
 	alignWorktreeEnvDBConnection(site, envPath, envRelPath, envFormat)
 
+	// The connection a JetBrains project points at is rebuilt from the same
+	// resolution, so a database or an engine that changed here reaches the IDE
+	// rather than leaving it on coordinates that no longer answer.
+	if syncIDEDataSource(site.Path).wrote() {
+		envInfo("  IDE database connection updated in .idea\n")
+	}
+
 	envInfo("Done.\n")
 	return nil
 }
@@ -1171,45 +1177,8 @@ func frameworkServiceDetected(def config.FrameworkServiceDef, envMap map[string]
 // outside the cli package (e.g. the worktree DB-isolation flow).
 func CreateDatabase(svc, name string) (bool, error) { return serviceops.CreateDatabase(svc, name) }
 
-// CloneDatabase copies the schema and data from src into dst inside the same
-// service container. dst must already exist. Returns an error if the family
-// has no clone strategy or the dump/restore fails.
-func CloneDatabase(svc, src, dst string) error {
-	container := "lerd-" + svc
-	family := svc
-	if inferred := config.FamilyOfName(svc); inferred != "" {
-		family = inferred
-	}
-	switch family {
-	case "mysql", "mariadb":
-		dumpBin := "mysqldump"
-		clientBin := "mysql"
-		if family == "mariadb" {
-			dumpBin = "mariadb-dump"
-			clientBin = "mariadb"
-		}
-		shellCmd := fmt.Sprintf(
-			"%s -uroot -plerd --single-transaction --quick --no-tablespaces %s | %s -uroot -plerd %s",
-			dumpBin, src, clientBin, dst,
-		)
-		cmd := podman.Cmd("exec", container, "sh", "-c", shellCmd)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("clone %s -> %s: %s", src, dst, strings.TrimSpace(string(out)))
-		}
-		return nil
-	case "postgres":
-		shellCmd := fmt.Sprintf(`pg_dump -U postgres %s | psql -U postgres -d %s`, src, dst)
-		cmd := podman.Cmd("exec", container, "sh", "-c", shellCmd)
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("clone %s -> %s: %s", src, dst, strings.TrimSpace(string(out)))
-		}
-		return nil
-	default:
-		return fmt.Errorf("clone unsupported for service family %q", family)
-	}
-}
+// CloneDatabase delegates to serviceops.CloneDatabase for cli-package callers.
+func CloneDatabase(svc, src, dst string) error { return serviceops.CloneDatabase(svc, src, dst) }
 
 // DropDatabase delegates to serviceops.DropDatabase for cli-package callers.
 func DropDatabase(svc, name string) (bool, error) { return serviceops.DropDatabase(svc, name) }
@@ -1229,39 +1198,10 @@ func createS3Bucket(name string) (bool, error) { return serviceops.EnsureS3Bucke
 func ensureServiceRunning(name string) error {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
-	if status == "active" {
-		if err := podman.WaitReady(name, 30*time.Second); err != nil {
-			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
-		}
-		return nil
-	}
-	if isKnownService(name) {
+	if status != "active" {
 		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
-		if err := ensureServiceQuadlet(name); err != nil {
-			return err
-		}
-	} else {
-		svc, err := config.LoadCustomService(name)
-		if err != nil {
-			if config.PresetExists(name) {
-				return fmt.Errorf("service %q is not installed; install it with 'lerd service preset %s'", name, name)
-			}
-			return fmt.Errorf("custom service %q not found: %w", name, err)
-		}
-		for _, dep := range svc.DependsOn {
-			if err := ensureServiceRunning(dep); err != nil {
-				return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
-			}
-		}
-		envInterrupt(func() { fmt.Printf("  Starting %s...\n", name) })
-		if err := ensureCustomServiceQuadlet(svc); err != nil {
-			return err
-		}
 	}
-	if err := podman.StartUnit(unit); err != nil {
-		return err
-	}
-	return podman.WaitReady(name, 60*time.Second)
+	return serviceops.EnsureServiceRunning(name)
 }
 
 // resolveAppURL returns the URL lerd should write to APP_URL for the project,

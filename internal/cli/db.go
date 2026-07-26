@@ -32,6 +32,7 @@ func NewDbCmd() *cobra.Command {
 	cmd.AddCommand(newDbRestoreCmd("restore"))
 	cmd.AddCommand(newDbSnapshotRmCmd("snapshot:rm"))
 	cmd.AddCommand(newDbMoveCmd("move"))
+	cmd.AddCommand(newDbExtensionCmd("extension"))
 	return cmd
 }
 
@@ -49,14 +50,16 @@ func NewDbShellCmd() *cobra.Command { return newDbShellCmd("db:shell") }
 
 func newDbImportCmd(use string) *cobra.Command {
 	var database, service string
+	var fresh bool
 	cmd := &cobra.Command{
 		Use:   use + " <file.sql>",
 		Short: "Import a SQL dump into a database (default: site DB from .env)",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runDbImport(args[0], service, database)
+			return runDbImport(args[0], service, database, fresh)
 		},
 	}
+	cmd.Flags().BoolVar(&fresh, "fresh", false, "Empty the database before loading, so the dump replaces it")
 	cmd.Flags().StringVarP(&database, "database", "d", "", "Database name (default: from .env or .lerd.yaml)")
 	cmd.Flags().StringVarP(&service, "service", "s", "", "Lerd DB service to target (e.g. mysql, postgres)")
 	return cmd
@@ -295,7 +298,7 @@ func loadDBEnv(cwd string) (*dbEnv, error) {
 	}, nil
 }
 
-func runDbImport(file, service, database string) error {
+func runDbImport(file, service, database string, fresh bool) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
@@ -319,19 +322,46 @@ func runDbImport(file, service, database string) error {
 	if err != nil {
 		return err
 	}
+	src, err := serviceops.DumpReader(f)
+	if err != nil {
+		return err
+	}
+	// The sanitizer reads SQL, so engines that exchange another dump format
+	// stream their bytes untouched.
+	notes := func() serviceops.ImportNotes { return serviceops.ImportNotes{} }
+	if serviceops.DatabaseDumpFormat(env.service) == "sql" {
+		src, notes = serviceops.SanitizeDump(serviceops.DumpTarget{
+			Service: env.service, Family: config.FamilyOfName(env.service), Database: env.database,
+			Extensions: serviceops.DeclaredExtensions(env.service),
+		}, src)
+	}
 	// psql exits 0 even when every statement failed, so the output is tallied on
 	// its way to the terminal and the result reported at the end.
 	var tally serviceops.ImportTally
-	cmd.Stdin = f
+	cmd.Stdin = src
 	cmd.Stdout = io.MultiWriter(os.Stdout, tally.Stream())
 	cmd.Stderr = io.MultiWriter(os.Stderr, tally.Stream())
 
 	feedback.Begin()
+	if fresh {
+		feedback.Line("emptying " + feedback.Val(env.database) + " first")
+		if err := serviceops.EmptyDatabase(env.service, env.database); err != nil {
+			return err
+		}
+	}
 	feedback.Line("importing " + file + " into " + feedback.Val(env.database) + " (" + env.connection + ")")
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("import failed: %w", err)
 	}
-	if rep := tally.Report(); rep.Errors > 0 {
+	rep := tally.Report()
+	n := notes()
+	rep.Skipped, rep.Created = n.Skipped, n.Created
+	for _, note := range []string{rep.CreatedSummary(), rep.SkippedSummary()} {
+		if note != "" {
+			feedback.Line(note)
+		}
+	}
+	if rep.Errors > 0 {
 		feedback.Warn("import finished but %s", rep.Summary())
 		return nil
 	}
@@ -340,21 +370,21 @@ func runDbImport(file, service, database string) error {
 }
 
 func dbImportCmd(env *dbEnv) (*exec.Cmd, error) {
-	container := "lerd-" + env.service
-	switch env.connection {
-	case "mysql", "mariadb":
-		// MariaDB 11+ images ship `mariadb` instead of `mysql`; resolve whichever
-		// client exists in the container at runtime.
-		shellCmd := "$(command -v mysql || command -v mariadb) --max-allowed-packet=" + config.MySQLImportMaxPacket + " -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
-		return podman.Cmd("exec", "-i",
-			"-e", "MYSQL_PWD="+env.password,
-			container, "sh", "-c", shellCmd), nil
-	case "pgsql", "postgres":
-		return podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			container, "psql", "-U", env.username, env.database), nil
-	default:
-		return nil, fmt.Errorf("unsupported DB_CONNECTION: %q (supported: mysql, pgsql)", env.connection)
+	shellCmd, err := serviceops.ImportShellCommand(env.service, env.database)
+	if err != nil {
+		return nil, err
 	}
+	return dbEntityCmd(env.service, shellCmd), nil
+}
+
+// dbEntityCmd wraps a declared in-container command in the podman exec the CLI
+// streams through, carrying the fixed admin credentials in the env.
+func dbEntityCmd(service, shellCmd string) *exec.Cmd {
+	args := []string{"exec", "-i"}
+	for _, kv := range serviceops.EntityExecEnv() {
+		args = append(args, "-e", kv)
+	}
+	return podman.Cmd(append(args, "lerd-"+service, "sh", "-c", shellCmd)...)
 }
 
 func runDbExport(output, service, database string) error {
@@ -372,7 +402,7 @@ func runDbExport(output, service, database string) error {
 	}
 
 	if output == "" {
-		output = env.database + ".sql"
+		output = serviceops.ExportFilename(env.service, env.database)
 	}
 
 	f, err := os.Create(output)
@@ -400,21 +430,11 @@ func runDbExport(output, service, database string) error {
 }
 
 func dbExportCmd(env *dbEnv) (*exec.Cmd, error) {
-	container := "lerd-" + env.service
-	switch env.connection {
-	case "mysql", "mariadb":
-		// MariaDB 11+ images ship `mariadb-dump` instead of `mysqldump`; resolve
-		// whichever exists in the container at runtime.
-		shellCmd := "$(command -v mysqldump || command -v mariadb-dump) -u" + podman.ShellQuote(env.username) + " " + podman.ShellQuote(env.database)
-		return podman.Cmd("exec", "-i",
-			"-e", "MYSQL_PWD="+env.password,
-			container, "sh", "-c", shellCmd), nil
-	case "pgsql", "postgres":
-		return podman.Cmd("exec", "-i", "-e", "PGPASSWORD="+env.password,
-			container, "pg_dump", "-U", env.username, env.database), nil
-	default:
-		return nil, fmt.Errorf("unsupported DB_CONNECTION: %q (supported: mysql, pgsql)", env.connection)
+	shellCmd, err := serviceops.ExportShellCommand(env.service, env.database)
+	if err != nil {
+		return nil, err
 	}
+	return dbEntityCmd(env.service, shellCmd), nil
 }
 
 func newDbCreateCmd(use string) *cobra.Command {

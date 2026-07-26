@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -17,53 +15,31 @@ import (
 )
 
 func downloadBinaries(w io.Writer) error {
-	arch := runtime.GOARCH
 	binDir := config.BinDir()
+	var pins pinnedTools
 
 	// composer
 	composerPharPath := filepath.Join(binDir, "composer.phar")
 	if _, err := os.Stat(composerPharPath); os.IsNotExist(err) {
-		if err := downloadFile("https://getcomposer.org/composer-stable.phar", composerPharPath, 0755, w); err != nil {
+		if err := replaceTool(&pins, "composer", composerPharPath, w); err != nil {
 			return fmt.Errorf("composer download: %w", err)
 		}
 	}
 
-	// fnm
-	fnmPath := filepath.Join(binDir, "fnm")
-	if _, err := os.Stat(fnmPath); os.IsNotExist(err) {
-		fnmAsset := "fnm-linux.zip"
-		if arch == "arm64" {
-			fnmAsset = "fnm-arm64.zip"
+	// fnm — skipped when the user drives Node via their own nvm, since lerd never
+	// provisions nvm and fnm would sit unused.
+	// Switching back with `lerd node:manager fnm` calls ensureFnmBinary on demand.
+	cfg, _ := config.LoadGlobal()
+	if cfg == nil || cfg.NodeManager() != "nvm" {
+		if err := ensureFnmBinary(w); err != nil {
+			return err
 		}
-		fnmZip := filepath.Join(binDir, fnmAsset)
-		if err := downloadFile(
-			"https://github.com/Schniz/fnm/releases/latest/download/"+fnmAsset,
-			fnmZip, 0644, w,
-		); err != nil {
-			return fmt.Errorf("fnm download: %w", err)
-		}
-		extractCmd := exec.Command("unzip", "-o", fnmZip, "fnm", "-d", binDir)
-		extractCmd.Stdout = w
-		extractCmd.Stderr = w
-		if err := extractCmd.Run(); err != nil {
-			return fmt.Errorf("fnm extract: %w", err)
-		}
-		os.Remove(fnmZip)
-		os.Chmod(fnmPath, 0755) //nolint:errcheck
 	}
 
 	// mkcert
 	mkcertPath := certs.MkcertPath()
 	if _, err := os.Stat(mkcertPath); os.IsNotExist(err) {
-		mkcertArch := "amd64"
-		if arch == "arm64" {
-			mkcertArch = "arm64"
-		}
-		mkcertURL := fmt.Sprintf(
-			"https://github.com/FiloSottile/mkcert/releases/latest/download/mkcert-v1.4.4-linux-%s",
-			mkcertArch,
-		)
-		if err := downloadFile(mkcertURL, mkcertPath, 0755, w); err != nil {
+		if err := replaceTool(&pins, "mkcert", mkcertPath, w); err != nil {
 			return fmt.Errorf("mkcert download: %w", err)
 		}
 	}

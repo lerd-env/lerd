@@ -54,6 +54,30 @@ export async function unmanageNode(): Promise<boolean> {
   }
 }
 
+// setNodeManager switches the Node version manager lerd drives (fnm/nvm). Unlike
+// manage/unmanage it parses the JSON body, because switching can legitimately
+// fail (e.g. nvm not installed) and the handler reports that as { ok:false,
+// error } with a 200 status, so the caller can surface the reason.
+export async function setNodeManager(
+  manager: 'fnm' | 'nvm'
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/node/set-manager', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ manager })
+    });
+    const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+    if (res.ok && data?.ok) {
+      await loadNodeVersions();
+      return { ok: true };
+    }
+    return { ok: false, error: data?.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : undefined };
+  }
+}
+
 export async function installNode(v: string): Promise<boolean> {
   try {
     const res = await apiFetch('/api/node-versions/install', {

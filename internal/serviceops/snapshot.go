@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/podman"
 )
 
 // Snapshot is the meta.json sidecar describing one stored database snapshot.
@@ -49,15 +48,6 @@ const (
 	snapshotMetaFile = "meta.json"
 	snapshotDBScope  = "databases"
 	snapshotAllScope = "all"
-	mysqldumpFlags   = "--single-transaction --quick --no-tablespaces --routines --triggers --events"
-)
-
-// The mariadb images ship mariadb/mariadb-dump and no mysql-named binaries, so
-// every mysql-family command resolves its tool in the container rather than
-// spelling one of the two names.
-const (
-	mysqlDumpBin   = "$(command -v mysqldump || command -v mariadb-dump)"
-	mysqlClientBin = "$(command -v mysql || command -v mariadb)"
 )
 
 // reservedSnapshotName flags snapshot names that collide with command verbs,
@@ -139,59 +129,62 @@ func snapshotEnv(family string) []string {
 }
 
 // snapshotDumpCommand builds the in-container shell command that writes a
-// gzipped SQL dump to stdout for the given target.
+// gzipped dump to stdout for the given target, wrapping the export action the
+// engine's preset declares (export_all for a service-wide snapshot, which is
+// self-cleaning so a restore replaces each contained database).
 func snapshotDumpCommand(t SnapshotTarget) (string, error) {
-	switch t.Family {
-	case "mysql", "mariadb":
-		bin := mysqlDumpBin
-		args := "-uroot " + mysqldumpFlags
-		if t.AllDatabases {
-			// --add-drop-database makes the dump self-cleaning so an
-			// all-databases restore replaces each contained database.
-			args += " --add-drop-database --all-databases"
-		} else {
-			args += " " + podman.ShellQuote(t.Database)
+	spec := EntityFor(t.Service, "databases")
+	if t.AllDatabases {
+		act, ok := entityAction(spec, "export_all")
+		if !ok {
+			return "", fmt.Errorf("service-wide snapshots are not supported for %q", t.Service)
 		}
-		return bin + " " + args + " | gzip -c", nil
-	case "postgres":
-		if t.AllDatabases {
-			return "pg_dumpall -U postgres --clean --if-exists | gzip -c", nil
-		}
-		return "pg_dump -U postgres --clean --if-exists " + podman.ShellQuote(t.Database) + " | gzip -c", nil
-	default:
-		return "", fmt.Errorf("snapshots are not supported for the %q database family", t.Family)
+		return entitySnapshotDumpCommand(act.Exec), nil
 	}
+	act, ok := entityAction(spec, "export")
+	if !ok {
+		return "", fmt.Errorf("snapshots are not supported for %q", t.Service)
+	}
+	cmd, err := expandEntityCommand(act.Exec, t.Database)
+	if err != nil {
+		return "", err
+	}
+	return entitySnapshotDumpCommand(cmd), nil
 }
 
 // snapshotRestoreCommand builds the in-container shell command that loads a
-// gzipped SQL dump piped onto its stdin.
+// gzipped dump piped onto its stdin, through the declared import action.
 func snapshotRestoreCommand(t SnapshotTarget) (string, error) {
-	switch t.Family {
-	case "mysql", "mariadb":
-		bin := mysqlClientBin + " --max-allowed-packet=" + config.MySQLImportMaxPacket
-		if t.AllDatabases {
-			return "gunzip -c | " + bin + " -uroot", nil
+	spec := EntityFor(t.Service, "databases")
+	if t.AllDatabases {
+		act, ok := entityAction(spec, "import_all")
+		if !ok {
+			return "", fmt.Errorf("service-wide snapshots are not supported for %q", t.Service)
 		}
-		return "gunzip -c | " + bin + " -uroot " + podman.ShellQuote(t.Database), nil
-	case "postgres":
-		if t.AllDatabases {
-			return "gunzip -c | psql -U postgres -d postgres", nil
-		}
-		return "gunzip -c | psql -U postgres -d " + podman.ShellQuote(t.Database), nil
-	default:
-		return "", fmt.Errorf("snapshots are not supported for the %q database family", t.Family)
+		return entitySnapshotRestoreCommand(act.Exec), nil
 	}
+	act, ok := entityAction(spec, "import")
+	if !ok {
+		return "", fmt.Errorf("snapshots are not supported for %q", t.Service)
+	}
+	cmd, err := expandEntityCommand(act.Exec, t.Database)
+	if err != nil {
+		return "", err
+	}
+	return entitySnapshotRestoreCommand(cmd), nil
 }
 
-// SnapshotFamilySupported reports whether the named database family can be
-// snapshotted (SQL engines only).
-func SnapshotFamilySupported(family string) bool {
-	switch family {
-	case "mysql", "mariadb", "postgres":
-		return true
-	default:
-		return false
+// SnapshotSupported reports whether the service declares the export and import
+// actions snapshots are built from, in the requested scope.
+func SnapshotSupported(service string, allDatabases bool) bool {
+	spec := EntityFor(service, "databases")
+	suffix := ""
+	if allDatabases {
+		suffix = "_all"
 	}
+	_, exp := entityAction(spec, "export"+suffix)
+	_, imp := entityAction(spec, "import"+suffix)
+	return exp && imp
 }
 
 // ListSnapshots returns the stored snapshots for a service. A non-empty
@@ -322,7 +315,7 @@ func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(P
 	}
 	emit(PhaseEvent{Phase: "dumping_data", Message: "dumping " + label})
 	dumpPath := filepath.Join(dir, snapshotDumpFile)
-	if err := dumpToHost("lerd-"+t.Service, dumpCmd, snapshotEnv(t.Family), dumpPath, dumpRestoreTimeout); err != nil {
+	if err := dumpToHost("lerd-"+t.Service, dumpCmd, introspectEnv(), dumpPath, dumpRestoreTimeout); err != nil {
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("dumping %s: %w", label, err)
 	}
@@ -402,7 +395,7 @@ func RestoreSnapshot(t SnapshotTarget, name string, emit func(PhaseEvent)) (Impo
 	}
 
 	emit(PhaseEvent{Phase: "restoring_data", Message: "restoring " + clean})
-	rep, err := restoreFromHost("lerd-"+t.Service, restoreCmd, snapshotEnv(t.Family), dumpPath, dumpRestoreTimeout)
+	rep, err := restoreFromHost("lerd-"+t.Service, restoreCmd, introspectEnv(), dumpPath, dumpRestoreTimeout)
 	if err != nil {
 		return rep, fmt.Errorf("restoring snapshot %q: %w", name, err)
 	}

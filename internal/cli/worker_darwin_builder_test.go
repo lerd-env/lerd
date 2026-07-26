@@ -132,7 +132,8 @@ func TestBuildDarwinHostWorkerGuardScript_WrapsFnmExec(t *testing.T) {
 	sitePath := "/Users/u/alpha"
 	command := "npm run dev"
 
-	script := buildDarwinHostWorkerGuardScript(fnm, binDir, "22", sitePath, command, "")
+	execPrefix := "'" + fnm + "' exec --using=22 --"
+	script := buildDarwinHostWorkerGuardScript(execPrefix, binDir, sitePath, command, "")
 
 	if !strings.HasPrefix(script, "#!/bin/sh") {
 		t.Errorf("guard script should start with shebang, got:\n%s", script)
@@ -156,7 +157,7 @@ func TestBuildDarwinHostWorkerGuardScript_EscapesSingleQuotes(t *testing.T) {
 	// the sh -c string early and the rest of the command would parse
 	// as separate shell tokens.
 	script := buildDarwinHostWorkerGuardScript(
-		"/bin/fnm", "/Users/u/.local/share/lerd/bin", "22", "/site",
+		"'/bin/fnm' exec --using=22 --", "/Users/u/.local/share/lerd/bin", "/site",
 		`node -e 'console.log("x")'`, "",
 	)
 	if !strings.Contains(script, `'"'"'console.log("x")'"'"'`) {
@@ -169,10 +170,26 @@ func TestBuildDarwinHostWorkerGuardScript_EscapesSingleQuotes(t *testing.T) {
 // it must lead PATH for the subprocess to find them — issue #375.
 func TestBuildDarwinHostWorkerGuardScript_PrependsLerdBinDirToPath(t *testing.T) {
 	binDir := "/Users/u/.local/share/lerd/bin"
-	script := buildDarwinHostWorkerGuardScript("/bin/fnm", binDir, "22", "/site", "npm run dev", "")
+	script := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", binDir, "/site", "npm run dev", "")
 	want := `export PATH="/Users/u/.local/share/lerd/bin:/opt/homebrew/bin:`
 	if !strings.Contains(script, want) {
 		t.Errorf("guard script must prepend lerd BinDir to PATH; got:\n%s", script)
+	}
+}
+
+// An unmanaged system node resolved outside the guard's static PATH (nvm,
+// homebrew-less installs, …) is passed through extraBinDirs and must lead
+// PATH so npm resolves at launchd time — issue #1143.
+func TestBuildDarwinHostWorkerGuardScript_BakesResolvedNodeDirs(t *testing.T) {
+	script := buildDarwinHostWorkerGuardScript(
+		"", "/Users/u/.local/share/lerd/bin", "/site", "npm run dev",
+		"/Users/u/.nvm/versions/node/v22.9.1/bin",
+	)
+	if !strings.Contains(script, `export PATH="/Users/u/.nvm/versions/node/v22.9.1/bin:/Users/u/.local/share/lerd/bin:`) {
+		t.Errorf("guard script must lead PATH with the resolved node dir; got:\n%s", script)
+	}
+	if !strings.Contains(script, "exec /bin/sh -c 'npm run dev'") {
+		t.Errorf("unmanaged node must run the command directly; got:\n%s", script)
 	}
 }
 
@@ -204,7 +221,7 @@ func TestWorkerBuilders_ForceColour(t *testing.T) {
 		t.Errorf("custom container worker unit should force colour:\n%s", custom)
 	}
 
-	guard := buildDarwinHostWorkerGuardScript("/bin/fnm", "/lerd/bin", "22", "/site", "npm run dev", "")
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "")
 	if !strings.Contains(guard, "export FORCE_COLOR=1") {
 		t.Errorf("host worker guard should export the colour vars:\n%s", guard)
 	}
@@ -237,7 +254,7 @@ func TestBuildWorkerExecCommand_EnvArgsPrecedeContainer(t *testing.T) {
 
 func TestWorkerBuilders_RespectNoColor(t *testing.T) {
 	t.Setenv("NO_COLOR", "1")
-	guard := buildDarwinHostWorkerGuardScript("/bin/fnm", "/lerd/bin", "22", "/site", "npm run dev", "")
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", "/site", "npm run dev", "")
 	if strings.Contains(guard, "FORCE_COLOR") {
 		t.Errorf("NO_COLOR should suppress the colour exports:\n%s", guard)
 	}

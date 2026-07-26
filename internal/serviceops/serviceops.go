@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,29 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/registry"
 )
+
+func init() {
+	// discover_family lists only running members so admin UIs do not offer
+	// offline hosts. Container state is the source of truth: unit status can
+	// lag (especially on launchd) and would omit a just-started engine or keep
+	// a just-stopped one in the host list.
+	config.ServiceRunning = func(name string) bool {
+		ok, _ := podman.ContainerRunning("lerd-" + name)
+		return ok
+	}
+	// The dependency host rewrite prefers a running satisfier so RedisInsight /
+	// mongo-express wire to the engine actually up when both redis and valkey exist.
+	config.ResolveDepHost = func(dep string) string {
+		name := resolveDependency(dep, "", true)
+		if name == "" {
+			name = ResolveDependency(dep)
+		}
+		if name == "" {
+			return ""
+		}
+		return "lerd-" + name
+	}
+}
 
 // IsBuiltin reports whether name is a built-in (default-preset) lerd service.
 // Kept as a passthrough so callers don't have to import config.
@@ -338,30 +362,23 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 
 	for _, dep := range svc.DependsOn {
 		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "starting"})
-		if err := EnsureServiceRunning(dep); err != nil {
+		resolved, err := EnsureDependencyRunning(dep)
+		if err != nil {
 			return svc, fmt.Errorf("starting dependency %q: %w", dep, err)
 		}
-		emit(PhaseEvent{Phase: "starting_deps", Dep: dep, State: "ready"})
+		emit(PhaseEvent{Phase: "starting_deps", Dep: resolved, State: "ready"})
 	}
 
 	unit := "lerd-" + svc.Name
 	emit(PhaseEvent{Phase: "starting_unit", Unit: unit})
-	var startErr error
-	for attempt := range 5 {
-		startErr = podman.StartUnit(unit)
-		if startErr == nil || !strings.Contains(startErr.Error(), "not found") {
-			break
-		}
-		time.Sleep(time.Duration(attempt+1) * 300 * time.Millisecond)
+	// StartService rewrites the quadlet after deps, starts the unit, and
+	// regenerates discover_family consumers — same path as CLI/UI/MCP start.
+	if err := StartService(svc.Name); err != nil {
+		return svc, err
 	}
-	if startErr != nil {
-		return svc, startErr
-	}
-	_ = config.SetServicePaused(svc.Name, false)
-	_ = config.SetServiceManuallyStarted(svc.Name, true)
 
 	emit(PhaseEvent{Phase: "waiting_ready", Unit: unit})
-	if err := podman.WaitReady(svc.Name, 60*time.Second); err != nil {
+	if err := waitReadyFn(svc.Name, 60*time.Second); err != nil {
 		return svc, err
 	}
 	return svc, nil
@@ -443,63 +460,222 @@ func registerPreset(svc *config.CustomService) error {
 	return nil
 }
 
-// MissingPresetDependencies returns declared dependencies that are not
-// installed. A dependency the service discovers via discover_family is met by
-// any installed member of that family or a sibling family it co-discovers.
+// MissingPresetDependencies returns declared dependencies that ResolveDependency
+// cannot satisfy, or that are only met by a drop-in the consumer cannot bind
+// (no discover_family covering it and no pinned lerd-<dep> host to rewrite).
+// Each entry is the dependency name, with known drop-in alternatives listed
+// when the store or the consumer's admin_for declares any.
 func MissingPresetDependencies(svc *config.CustomService) []string {
 	var missing []string
 	for _, dep := range svc.DependsOn {
-		if dependencyInstalled(svc, dep) {
-			continue
+		resolved := ResolveDependency(dep)
+		if resolved == "" || (resolved != dep && !consumerCanUseDropIn(svc, dep, resolved)) {
+			missing = append(missing, missingDepLabel(dep, svc))
 		}
-		missing = append(missing, dep)
 	}
 	return missing
 }
 
-// dependencyInstalled reports whether dep is met by an exact service match
-// (quadlet presence) or by any installed member of a family that satisfies it.
-func dependencyInstalled(svc *config.CustomService, dep string) bool {
-	if ServiceInstalled(dep) {
+// consumerCanUseDropIn reports whether svc can wire a non-literal satisfier for
+// dep: discover_family that names dep or the satisfier's family, or a pinned
+// lerd-<dep> host that RewriteDependencyHosts can retarget. Without one of those,
+// RedisInsight-on-Valkey (and similar) would install green and then time out
+// talking to a hardcoded lerd-redis host.
+func consumerCanUseDropIn(svc *config.CustomService, dep, resolved string) bool {
+	if svc == nil {
+		return false
+	}
+	if pinsDependencyHost(svc, dep) {
 		return true
 	}
-	for fam := range satisfyingFamilies(svc, dep) {
-		for _, host := range config.ServicesInFamily(fam) {
-			if ServiceInstalled(strings.TrimPrefix(host, "lerd-")) {
-				return true
-			}
+	families := consumerDiscoverFamilies(svc)
+	if len(families) == 0 {
+		return false
+	}
+	resolvedFam := ServiceFamily(resolved)
+	for _, fam := range families {
+		if fam == dep || (resolvedFam != "" && fam == resolvedFam) {
+			return true
 		}
 	}
 	return false
 }
 
-// satisfyingFamilies returns the families the service co-discovers with dep via
-// discover_family (empty if it discovers none): a tool that discovers a family
-// can use any member, so phpmyadmin's mysql dep is also met by a mariadb.
-func satisfyingFamilies(svc *config.CustomService, dep string) map[string]bool {
-	out := map[string]bool{}
-	for _, directive := range svc.DynamicEnv {
-		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "discover_family" {
-			continue
+// ResolveDependency returns an installed service that meets dep: the named
+// service itself, or any installed service whose family or env_role is dep.
+// Prefers the literal name when installed; among drop-ins prefers same-family
+// members over env_role substitutes, then sorted name. Empty when nothing
+// installed satisfies dep.
+func ResolveDependency(dep string) string {
+	return resolveDependency(dep, "", false)
+}
+
+// resolveDependency is ResolveDependency with an optional installed service
+// excluded and an optional running-only filter (stop-cascade asks "would this
+// dep still be met by something up without me?").
+func resolveDependency(dep, exclude string, runningOnly bool) string {
+	if ServiceInstalled(dep) && dep != exclude && (!runningOnly || serviceIsRunning(dep)) {
+		return dep
+	}
+	var family, role []string
+	seen := map[string]bool{}
+	consider := func(name string) {
+		if name == "" || name == dep || name == exclude || seen[name] || !ServiceInstalled(name) {
+			return
 		}
-		fams := strings.Split(parts[1], ",")
-		listed := false
-		for _, f := range fams {
-			if strings.TrimSpace(f) == dep {
-				listed = true
-				break
+		if runningOnly && !serviceIsRunning(name) {
+			return
+		}
+		seen[name] = true
+		switch {
+		case depFamilyMatch(name, dep):
+			family = append(family, name)
+		case depRoleMatch(name, dep):
+			role = append(role, name)
+		}
+	}
+	if customs, err := config.ListCustomServices(); err == nil {
+		for _, svc := range customs {
+			consider(svc.Name)
+		}
+	}
+	for _, name := range config.DefaultPresetNames() {
+		consider(name)
+	}
+	sort.Strings(family)
+	sort.Strings(role)
+	if len(family) > 0 {
+		return family[0]
+	}
+	if len(role) > 0 {
+		return role[0]
+	}
+	return ""
+}
+
+func serviceIsRunning(name string) bool {
+	// No seam (unit tests): treat installed as running so cascade tests that
+	// omit ServiceRunning keep working. Production always sets the seam.
+	if config.ServiceRunning == nil {
+		return true
+	}
+	return config.ServiceRunning(name)
+}
+
+// EnsureDependencyRunning resolves dep to an installed satisfier and starts it.
+func EnsureDependencyRunning(dep string) (string, error) {
+	name := ResolveDependency(dep)
+	if name == "" {
+		return "", fmt.Errorf("%s not installed", missingDepLabel(dep, nil))
+	}
+	if err := EnsureServiceRunning(name); err != nil {
+		return name, err
+	}
+	return name, nil
+}
+
+// DependencyDisplayName is the short name to show for dep in CLI/TUI/UI: the
+// preset the installed satisfier came from (mariadb for mariadb-11-8), the
+// satisfier's own name when it has no preset, or dep when nothing is installed.
+// Prefers a running satisfier so the dashboard does not show phpMyAdmin hanging
+// off a grey mysql chip while MariaDB is the engine actually serving it.
+func DependencyDisplayName(dep string) string {
+	resolved := resolveDependency(dep, "", true)
+	if resolved == "" {
+		resolved = ResolveDependency(dep)
+	}
+	if resolved == "" {
+		return dep
+	}
+	if svc, err := config.LoadCustomService(resolved); err == nil && svc.Preset != "" {
+		return svc.Preset
+	}
+	return resolved
+}
+
+// DependencyDisplayNames maps each declared depends_on entry through
+// DependencyDisplayName.
+func DependencyDisplayNames(deps []string) []string {
+	if len(deps) == 0 {
+		return nil
+	}
+	out := make([]string, len(deps))
+	for i, dep := range deps {
+		out[i] = DependencyDisplayName(dep)
+	}
+	return out
+}
+
+func serviceSatisfiesDep(name, dep string) bool {
+	return depFamilyMatch(name, dep) || depRoleMatch(name, dep)
+}
+
+func depFamilyMatch(name, dep string) bool {
+	if svc, err := config.LoadCustomService(name); err == nil {
+		return config.FamilyOf(svc) == dep
+	}
+	return config.FamilyOfName(name) == dep
+}
+
+func depRoleMatch(name, dep string) bool {
+	if svc, err := config.LoadCustomService(name); err == nil {
+		return config.EnvRoleOf(svc) == dep
+	}
+	if p, err := config.LoadPreset(name); err == nil {
+		return p.EnvRole == dep
+	}
+	return false
+}
+
+// ListStoreDropIns, when set, returns store-index preset names that declare
+// family or env_role matching dep. Wired from cli so serviceops does not import
+// store. Nil keeps dropInPresets on the local preset list only.
+var ListStoreDropIns func(dep string) []string
+
+// missingDepLabel is dep, plus drop-in alternatives from local presets, the
+// store index, and the consumer's admin_for list (so phpMyAdmin can name
+// mariadb before that preset has been cached locally).
+func missingDepLabel(dep string, consumer *config.CustomService) string {
+	alts := dropInPresets(dep, consumer)
+	if len(alts) == 0 {
+		return dep
+	}
+	return dep + " (or " + strings.Join(alts, ", ") + ")"
+}
+
+func dropInPresets(dep string, consumer *config.CustomService) []string {
+	seen := map[string]bool{dep: true}
+	var out []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if metas, err := config.ListPresets(); err == nil {
+		for _, m := range metas {
+			p, err := config.LoadPreset(m.Name)
+			if err != nil {
+				continue
 			}
-		}
-		if !listed {
-			continue
-		}
-		for _, f := range fams {
-			if f = strings.TrimSpace(f); config.IsKnownFamily(f) {
-				out[f] = true
+			if p.Family == dep || p.EnvRole == dep {
+				add(p.Name)
 			}
 		}
 	}
+	if ListStoreDropIns != nil {
+		for _, name := range ListStoreDropIns(dep) {
+			add(name)
+		}
+	}
+	if consumer != nil {
+		for _, name := range consumer.AdminFor {
+			add(name)
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
@@ -670,6 +846,14 @@ func matchVersionByImageTag(image string, versions []config.PresetVersion) strin
 // any declared file mounts and resolves dynamic_env directives so the
 // rendered quadlet has the computed values.
 func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
+	_, err := ensureCustomServiceQuadletDiff(svc)
+	return err
+}
+
+// ensureCustomServiceQuadletDiff is EnsureCustomServiceQuadlet and also reports
+// whether the on-disk unit changed, so family-consumer regen can skip a bounce
+// when discover_family resolved to the same host list.
+func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 	// Generic port-ownership guard — the single place every service quadlet
 	// (DB presets, redis, meilisearch, custom) passes through. When this service
 	// has no published port recorded yet and its primary host port can't be bound,
@@ -683,7 +867,7 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 		primary := podman.PrimaryHostPort(svc.Ports)
 		if free := maybeShiftPublishedPort(svc.Name, primary, unitActive(svc.Name)); free > 0 {
 			if err := persistPublishedPort(svc.Name, free); err != nil {
-				return fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
+				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, primary, err)
 			}
 			pp = free // use the just-persisted value directly — no second config read to diverge
 			// Stderr, never stdout: this path runs in-process inside the MCP stdio
@@ -723,7 +907,7 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 		host := podman.PrimaryHostPort([]string{spec})
 		if free := maybeShiftPublishedPort(svc.Name, host, unitActive(svc.Name)); free > 0 && free != host {
 			if err := persistPublishedPortFor(svc.Name, cport, free); err != nil {
-				return fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, host, err)
+				return false, fmt.Errorf("shifting lerd-%s off in-use port %d: %w", svc.Name, host, err)
 			}
 			svc.Ports = podman.SetHostPortForContainerPort(svc.Ports, cport, free)
 			fmt.Fprintf(os.Stderr, "Note: 127.0.0.1:%d is in use; publishing lerd-%s on 127.0.0.1:%d instead.\n", host, svc.Name, free)
@@ -739,28 +923,38 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	}
 	if svc.DataDir != "" {
 		if err := os.MkdirAll(config.DataSubDir(svc.Name), 0755); err != nil {
-			return fmt.Errorf("creating data directory for %s: %w", svc.Name, err)
+			return false, fmt.Errorf("creating data directory for %s: %w", svc.Name, err)
 		}
 	}
 	if err := config.MaterializeServiceFiles(svc); err != nil {
-		return err
+		return false, err
 	}
 	if err := config.MaterializeServiceTuning(svc); err != nil {
-		return err
+		return false, err
 	}
 	if err := config.ResolveDynamicEnv(svc); err != nil {
-		return err
+		return false, err
 	}
+	// Retarget a pinned dependency host (RI_REDIS_HOST=lerd-redis) to the
+	// drop-in that actually satisfies it (lerd-valkey), driven by depends_on so
+	// the store YAML stays parseable by binaries that predate this.
+	config.RewriteDependencyHosts(svc)
 	// Re-validate post dynamic_env and for inline services that skip
 	// SaveCustomService: this is the choke point every quadlet passes through.
 	if err := config.ValidateCustomService(svc); err != nil {
-		return err
+		return false, err
+	}
+	// Before the quadlet exists, not after: podman creates a directory at a
+	// missing Volume source, and on macOS WriteQuadletDiff itself pre-creates
+	// bind-mount parents, so the hosts mount has to be a regular file already.
+	if err := podman.EnsureServiceHostsFile(svc.ShareHosts); err != nil {
+		return false, fmt.Errorf("ensuring hosts mount source for %s: %w", svc.Name, err)
 	}
 	content := podman.GenerateCustomQuadlet(svc)
 	quadletName := "lerd-" + svc.Name
 	changed, err := podman.WriteQuadletDiff(quadletName, content)
 	if err != nil {
-		return fmt.Errorf("writing unit for %s: %w", svc.Name, err)
+		return false, fmt.Errorf("writing unit for %s: %w", svc.Name, err)
 	}
 	// Record the image lerd is installing so cleanup can reclaim it later even
 	// though podman, not lerd, pulls the bytes when the quadlet first starts.
@@ -769,21 +963,29 @@ func EnsureCustomServiceQuadlet(svc *config.CustomService) error {
 	if svc.Image != "" {
 		imgledger.Record(svc.Image)
 	}
-	return podman.DaemonReloadIfNeeded(changed)
+	return changed, podman.DaemonReloadIfNeeded(changed)
 }
 
 // EnsureServiceRunning starts the service if it is not already active and
 // waits until it is ready. Recurses through depends_on for custom services.
+// Unlike StartService it does not mark the service manually started, start
+// reverse dependents, or regenerate discover_family consumers — those are
+// user-facing start side effects; this is the "bring it up for env/link/db"
+// helper.
 func EnsureServiceRunning(name string) error {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status == "active" {
-		if err := podman.WaitReady(name, 30*time.Second); err != nil {
+		if err := waitReadyFn(name, 30*time.Second); err != nil {
 			return fmt.Errorf("%s is active but not yet ready: %w", name, err)
 		}
 		return nil
 	}
-	if !IsBuiltin(name) {
+	if IsBuiltin(name) {
+		if err := EnsureDefaultPresetQuadlet(name); err != nil {
+			return err
+		}
+	} else {
 		svc, err := config.LoadCustomService(name)
 		if err != nil {
 			if config.PresetExists(name) {
@@ -791,51 +993,114 @@ func EnsureServiceRunning(name string) error {
 			}
 			return fmt.Errorf("custom service %q not found: %w", name, err)
 		}
-		for _, dep := range svc.DependsOn {
-			if err := EnsureServiceRunning(dep); err != nil {
-				return fmt.Errorf("starting dependency %q for %q: %w", dep, name, err)
-			}
+		if err := StartDependencies(svc); err != nil {
+			return err
 		}
 		if err := EnsureCustomServiceQuadlet(svc); err != nil {
 			return err
 		}
 	}
-	if err := podman.StartUnit(unit); err != nil {
+	if err := startUnitRetry(unit); err != nil {
 		return err
 	}
-	return podman.WaitReady(name, 60*time.Second)
+	return waitReadyFn(name, 60*time.Second)
 }
 
 // StartDependencies ensures every entry in svc.DependsOn is up and ready
-// before the parent is started.
+// before the parent is started. Each entry is resolved to an installed
+// satisfier (literal name, same family, or env_role drop-in) first.
 func StartDependencies(svc *config.CustomService) error {
 	if svc == nil {
 		return nil
 	}
 	for _, dep := range svc.DependsOn {
-		if err := EnsureServiceRunning(dep); err != nil {
+		if _, err := EnsureDependencyRunning(dep); err != nil {
 			return fmt.Errorf("starting dependency %q for %q: %w", dep, svc.Name, err)
 		}
 	}
 	return nil
 }
 
-// StopWithDependents stops every custom service that depends on name
-// (depth-first), then stops name itself.
-func StopWithDependents(name string) {
-	for _, dep := range config.CustomServicesDependingOn(name) {
-		StopWithDependents(dep)
+// StopWithDependents stops custom services that declare a depends_on entry
+// name can satisfy, but only when nothing else still running would satisfy
+// that entry once name is gone. Otherwise the dependent stays up and the
+// caller's family-consumer regen refreshes it. Then stops name itself.
+//
+// Returns the first stop error encountered. Unit status can lag (especially on
+// launchd); ContainerRunning is checked the same way RegenerateFamilyConsumers
+// does, and StopUnit is always attempted when either signal says the unit is
+// up so a lagging "inactive" reading cannot report a silent success.
+func StopWithDependents(name string) error {
+	var firstErr error
+	for _, dep := range dependentsOf(name) {
+		if !dependentNeedsCascade(dep, name) {
+			continue
+		}
+		if err := StopWithDependents(dep); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
-	if status == "active" || status == "activating" {
-		// Show the service name (not the lerd- unit) in the shared feedback
-		// vocabulary, so `lerd unlink`/`lerd stop` read as "stopping meilisearch"
-		// rather than the old "Stopping lerd-meilisearch...".
-		step := feedback.Start("stopping " + name)
-		_ = podman.StopUnit(unit)
-		step.OK("")
+	up := status == "active" || status == "activating"
+	if !up {
+		up, _ = podman.ContainerRunning(unit)
 	}
+	if !up {
+		return firstErr
+	}
+	// Show the service name (not the lerd- unit) in the shared feedback
+	// vocabulary, so `lerd unlink`/`lerd stop` read as "stopping meilisearch"
+	// rather than the old "Stopping lerd-meilisearch...".
+	step := feedback.Start("stopping " + name)
+	if err := podman.StopUnit(unit); err != nil {
+		step.Fail(err)
+		if firstErr == nil {
+			firstErr = err
+		}
+		return firstErr
+	}
+	step.OK("")
+	return firstErr
+}
+
+// dependentsOf returns installed custom services for which name can satisfy
+// some depends_on entry (literal, family, or env_role), whether or not it is
+// the current ResolveDependency pick.
+func dependentsOf(name string) []string {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, svc := range customs {
+		for _, dep := range svc.DependsOn {
+			if name == dep || serviceSatisfiesDep(name, dep) {
+				out = append(out, svc.Name)
+				break
+			}
+		}
+	}
+	return out
+}
+
+// dependentNeedsCascade reports whether stopping `stopping` would leave
+// dependent with no running satisfier for a depends_on entry that stopping
+// can meet. Installed-but-stopped engines do not count.
+func dependentNeedsCascade(dependent, stopping string) bool {
+	svc, err := config.LoadCustomService(dependent)
+	if err != nil {
+		return true
+	}
+	for _, dep := range svc.DependsOn {
+		if stopping != dep && !serviceSatisfiesDep(stopping, dep) {
+			continue
+		}
+		if resolveDependency(dep, stopping, true) == "" {
+			return true
+		}
+	}
+	return false
 }
 
 // ServiceFamily returns the family of a service by name. Honours the
@@ -843,18 +1108,192 @@ func StopWithDependents(name string) {
 // config.InferFamily for built-ins and pattern-matched alternates.
 func ServiceFamily(name string) string { return config.FamilyOfName(name) }
 
-// RegenerateFamilyConsumersForService is a convenience that wraps
-// RegenerateFamilyConsumers in a no-op when name has no recognised family.
+// waitReadyFn is podman.WaitReady; tests stub it so RefreshDiscoverFamilyConsumers
+// does not need a live engine.
+var waitReadyFn = podman.WaitReady
+
+// RegenerateFamilyConsumersForService wraps RegenerateFamilyConsumers. When
+// name is up it waits until ready first so discover_family includes this
+// member; when name is down it waits until the unit is inactive so the member
+// is omitted. Without those waits, consumers are rewritten with a stale host list.
 func RegenerateFamilyConsumersForService(name string) {
+	RegenerateDynamicEnvConsumersForService(name)
+}
+
+// RegenerateDynamicEnvConsumersForService regenerates discover_family and
+// pinned-dependency-host consumers after name starts or stops.
+func RegenerateDynamicEnvConsumersForService(name string) {
+	unit := "lerd-" + name
+	status, _ := podman.UnitStatus(unit)
+	switch status {
+	case "active", "activating":
+		_ = waitReadyFn(name, 60*time.Second)
+	default:
+		running, _ := podman.ContainerRunning(unit)
+		if running {
+			_ = waitReadyFn(name, 60*time.Second)
+		} else {
+			waitUntilInactive(unit, 30*time.Second)
+		}
+	}
 	if fam := ServiceFamily(name); fam != "" {
 		RegenerateFamilyConsumers(fam)
+	}
+	RegenerateDependencyHostConsumers(name)
+}
+
+// RefreshDiscoverFamilyConsumers waits for running family members that any
+// installed discover_family consumer cares about, then rewrites those
+// consumers and every pinned-dependency-host consumer. Bulk start (lerd start / install)
+// brings engines and admin UIs up together via StartUnit and never hits
+// RegenerateDynamicEnvConsumersForService, so without this pass phpMyAdmin can
+// start with an empty PMA_HOSTS written during pre-start reconcile when no
+// engine was up yet, and RedisInsight can keep a stale RI_REDIS_HOST.
+func RefreshDiscoverFamilyConsumers() {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return
+	}
+	seen := map[string]bool{}
+	var families []string
+	for _, c := range customs {
+		for _, fam := range consumerDiscoverFamilies(c) {
+			if seen[fam] {
+				continue
+			}
+			seen[fam] = true
+			families = append(families, fam)
+		}
+	}
+	sort.Strings(families)
+	for _, fam := range families {
+		waitFamilyMembersReady(fam)
+	}
+	for _, fam := range families {
+		RegenerateFamilyConsumers(fam)
+	}
+	for _, c := range customs {
+		if !consumesDependencyHost(c) {
+			continue
+		}
+		bounceConsumerIfChanged(c, "updated dependency hosts")
+	}
+}
+
+// RegenerateDependencyHostConsumers rewrites installed customs that pin a
+// dependency host name can satisfy, so RedisInsight picks up lerd-valkey when
+// Valkey starts (or drops it when the last redis-role engine stops).
+func RegenerateDependencyHostConsumers(name string) {
+	customs, err := config.ListCustomServices()
+	if err != nil {
+		return
+	}
+	for _, c := range customs {
+		if !consumesDependencyHostSatisfiedBy(c, name) {
+			continue
+		}
+		bounceConsumerIfChanged(c, "updated dependency hosts")
+	}
+}
+
+func consumesDependencyHost(svc *config.CustomService) bool {
+	return eachDependencyHost(svc, func(string) bool { return true })
+}
+
+func pinsDependencyHost(svc *config.CustomService, dep string) bool {
+	return eachDependencyHost(svc, func(name string) bool { return name == dep })
+}
+
+func consumesDependencyHostSatisfiedBy(svc *config.CustomService, name string) bool {
+	return eachDependencyHost(svc, func(dep string) bool {
+		return name == dep || serviceSatisfiesDep(name, dep)
+	})
+}
+
+// eachDependencyHost calls fn with each depends_on entry whose canonical host
+// lerd-<dep> the preset pins somewhere in its environment (so
+// RewriteDependencyHosts will retarget it). Returns true on the first fn hit.
+func eachDependencyHost(svc *config.CustomService, fn func(dep string) bool) bool {
+	if svc == nil {
+		return false
+	}
+	for _, dep := range svc.DependsOn {
+		canonical := "lerd-" + dep
+		pinned := false
+		for _, v := range svc.Environment {
+			if strings.Contains(v, canonical) {
+				pinned = true
+				break
+			}
+		}
+		if pinned && fn(dep) {
+			return true
+		}
+	}
+	return false
+}
+
+func bounceConsumerIfChanged(c *config.CustomService, reason string) {
+	changed, err := ensureCustomServiceQuadletDiff(c)
+	if err != nil {
+		fmt.Printf("  [WARN] regenerating %s quadlet: %v\n", c.Name, err)
+		return
+	}
+	if !changed {
+		return
+	}
+	unit := "lerd-" + c.Name
+	status, _ := podman.UnitStatus(unit)
+	up := status == "active" || status == "activating"
+	if !up {
+		up, _ = podman.ContainerRunning(unit)
+	}
+	if !up {
+		return
+	}
+	fmt.Printf("  Restarting %s to pick up %s...\n", unit, reason)
+	if err := podman.StopUnit(unit); err != nil {
+		fmt.Printf("  [WARN] stopping %s: %v\n", unit, err)
+	}
+	podman.RemoveContainer(unit)
+	if err := podman.StartUnit(unit); err != nil {
+		fmt.Printf("  [WARN] starting %s: %v\n", unit, err)
+	}
+}
+
+// waitFamilyMembersReady waits on every family member that is active,
+// activating, or whose container is already up so discover_family can see it.
+func waitFamilyMembersReady(family string) {
+	for _, host := range config.ServicesInFamily(family) {
+		name := strings.TrimPrefix(host, "lerd-")
+		unit := "lerd-" + name
+		status, _ := podman.UnitStatus(unit)
+		running, _ := podman.ContainerRunning(unit)
+		if status != "active" && status != "activating" && !running {
+			continue
+		}
+		_ = waitReadyFn(name, 60*time.Second)
+	}
+}
+
+// waitUntilInactive polls until the unit is not active/activating and its
+// container is gone, so a just-stopped engine is omitted from discover_family.
+func waitUntilInactive(unit string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		st, _ := podman.UnitStatus(unit)
+		running, _ := podman.ContainerRunning(unit)
+		if st != "active" && st != "activating" && !running {
+			return
+		}
+		time.Sleep(200 * time.Millisecond)
 	}
 }
 
 // RegenerateFamilyConsumers re-renders the quadlet of any installed custom
-// service whose dynamic_env references the named family. Active consumers
-// are stopped, removed, and started so the new generated unit is the one
-// systemd loads.
+// service whose dynamic_env references the named family. Active consumers are
+// bounced only when the rendered unit changed, so a bulk start that already
+// has the right host list does not restart phpMyAdmin on every lerd start.
 func RegenerateFamilyConsumers(family string) {
 	customs, err := config.ListCustomServices()
 	if err != nil {
@@ -864,37 +1303,62 @@ func RegenerateFamilyConsumers(family string) {
 		if !consumesFamily(c, family) {
 			continue
 		}
-		if err := EnsureCustomServiceQuadlet(c); err != nil {
-			fmt.Printf("  [WARN] regenerating %s quadlet: %v\n", c.Name, err)
-			continue
-		}
-		unit := "lerd-" + c.Name
-		status, _ := podman.UnitStatus(unit)
-		if status != "active" && status != "activating" {
-			continue
-		}
-		fmt.Printf("  Restarting %s to pick up updated %s family members...\n", unit, family)
-		if err := podman.StopUnit(unit); err != nil {
-			fmt.Printf("  [WARN] stopping %s: %v\n", unit, err)
-		}
-		podman.RemoveContainer(unit)
-		if err := podman.StartUnit(unit); err != nil {
-			fmt.Printf("  [WARN] starting %s: %v\n", unit, err)
-		}
+		bounceConsumerIfChanged(c, "updated "+family+" family members")
 	}
 }
 
 func consumesFamily(svc *config.CustomService, family string) bool {
-	for _, directive := range svc.DynamicEnv {
-		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "discover_family" {
-			continue
-		}
-		for _, fam := range strings.Split(parts[1], ",") {
-			if strings.TrimSpace(fam) == family {
-				return true
-			}
+	for _, fam := range consumerDiscoverFamilies(svc) {
+		if fam == family {
+			return true
 		}
 	}
 	return false
+}
+
+// consumerDiscoverFamilies returns every family svc reads through a dynamic_env
+// family directive or an expand_env set, so a preset wired only with expand_env
+// (RedisInsight) counts as a consumer just like a discover_family one (phpMyAdmin).
+func consumerDiscoverFamilies(svc *config.CustomService) []string {
+	if svc == nil {
+		return nil
+	}
+	var out []string
+	seen := map[string]bool{}
+	addFamilies := func(list string) {
+		for _, fam := range strings.Split(list, ",") {
+			fam = strings.TrimSpace(fam)
+			if fam == "" || seen[fam] {
+				continue
+			}
+			seen[fam] = true
+			out = append(out, fam)
+		}
+	}
+	for _, directive := range svc.DynamicEnv {
+		parts := strings.SplitN(directive, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		list := parts[1]
+		switch parts[0] {
+		case "discover_family":
+		case "repeat_family":
+			// The family list comes ahead of "=<value>".
+			eq := strings.Index(list, "=")
+			if eq < 0 {
+				continue
+			}
+			list = list[:eq]
+		default:
+			continue
+		}
+		addFamilies(list)
+	}
+	for _, spec := range svc.ExpandEnv {
+		if eq := strings.Index(spec, "="); eq >= 0 {
+			addFamilies(spec[:eq])
+		}
+	}
+	return out
 }

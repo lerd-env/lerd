@@ -339,12 +339,18 @@ _download_tool() {
   fi
 }
 
+# Retry transient failures with a short pause, bound connects, and abort a
+# stalled transfer (curl: under 1 byte/s for 30s) so it fails into the retry
+# path instead of hanging forever.
+CURL_RETRY=(--retry 3 --retry-delay 2 --connect-timeout 15 --speed-limit 1 --speed-time 30)
+WGET_RETRY=(--tries=3 --timeout=15)
+
 # fetch <url> <dest>  — download URL to dest file
 fetch() {
   local url="$1" dest="$2"
   case "$(_download_tool)" in
-    curl) curl -fsSL --progress-bar "$url" -o "$dest" ;;
-    wget) wget -q --show-progress "$url" -O "$dest" ;;
+    curl) curl -fsSL "${CURL_RETRY[@]}" --progress-bar "$url" -o "$dest" ;;
+    wget) wget -q --show-progress "${WGET_RETRY[@]}" "$url" -O "$dest" ;;
   esac
 }
 
@@ -352,8 +358,8 @@ fetch() {
 fetch_stdout() {
   local url="$1"
   case "$(_download_tool)" in
-    curl) curl -fsSL "$url" ;;
-    wget) wget -qO- "$url" ;;
+    curl) curl -fsSL "${CURL_RETRY[@]}" "$url" ;;
+    wget) wget -qO- "${WGET_RETRY[@]}" "$url" ;;
   esac
 }
 
@@ -364,10 +370,10 @@ latest_version() {
   local url="https://github.com/${REPO}/releases/latest"
   local location
   case "$(_download_tool)" in
-    curl) location="$(curl -fsSLI --stderr /dev/null \
+    curl) location="$(curl -fsSLI "${CURL_RETRY[@]}" --stderr /dev/null \
             -H "User-Agent: lerd-installer" \
             "$url" | grep -i '^location:' | tail -1)" ;;
-    wget) location="$(wget -qS --spider \
+    wget) location="$(wget -qS --spider "${WGET_RETRY[@]}" \
             --header "User-Agent: lerd-installer" \
             "$url" 2>&1 | grep -i 'Location:'  | tail -1)" ;;
   esac

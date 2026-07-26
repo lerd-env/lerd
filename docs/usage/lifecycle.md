@@ -147,7 +147,15 @@ These map one-to-one to the CLI commands above, no special UI-only behaviour.
 lerd status
 ```
 
-Shows a live snapshot: DNS reachability, nginx, PHP-FPM containers, watcher, services, certificate expiry, and LAN exposure. Run it after every `lerd start` to confirm everything is healthy. See [Troubleshooting](../troubleshooting.md) if anything is reported as down.
+Shows a live snapshot: DNS reachability, nginx, PHP-FPM containers, watcher, host tools, services, certificate expiry, and LAN exposure. Run it after every `lerd start` to confirm everything is healthy. See [Troubleshooting](../troubleshooting.md) if anything is reported as down.
+
+The `[Tools]` section lists the host binaries lerd manages (Composer, fnm, mkcert) with their installed versions, and flags any that differ from the versions lerd currently pins. The same information appears in the web UI under System > Lerd. Apply pending updates with:
+
+```bash
+lerd tools:update
+```
+
+Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (fnm on an nvm-managed setup) are skipped. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
 
 ---
 
@@ -163,6 +171,7 @@ Shows a live snapshot: DNS reachability, nginx, PHP-FPM containers, watcher, ser
 | Full shutdown before a reinstall | `lerd quit` |
 | `lerd start` fails with an overlay / graph-driver storage error (macOS) | `lerd machine reset` |
 | Verify everything's healthy | `lerd status` |
+| Update Composer / fnm / mkcert to their pinned versions | `lerd tools:update` |
 | Uninstall a service entirely (data preserved) | `lerd service remove <name>` |
 | Uninstall and wipe data | `lerd service remove <name> --purge` |
 | Reinstall a service in place | `lerd service reinstall <name>` |

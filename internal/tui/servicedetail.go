@@ -75,7 +75,12 @@ func serviceDetailContentLines(m *Model, svc *ServiceRow, innerW int) []string {
 		add(sectionStyle.Render("Depends on"))
 		states := m.serviceStatesByName()
 		for _, dep := range svc.DependsOn {
-			add(renderSiteServiceRow(dep, states[dep]))
+			label := serviceops.DependencyDisplayName(dep)
+			key := serviceops.ResolveDependency(dep)
+			if key == "" {
+				key = dep
+			}
+			add(renderSiteServiceRow(label, states[key]))
 		}
 		add("")
 	}

@@ -647,22 +647,18 @@ func TestSailEnvSeparation(t *testing.T) {
 // the password through an environment variable rather than a positional argument.
 // (We can't execute the commands in tests; we inspect Args instead.)
 func TestSailRecreateDBPasswordNotLeaked(t *testing.T) {
-	env := &dbEnv{
-		connection: "mysql",
-		database:   "myapp",
-		username:   "root",
-		password:   "s3cr3t",
-	}
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	env := &dbEnv{service: "mysql", connection: "mysql", database: "myapp"}
 	// sailRecreateDB executes immediately, so we can't call it in a unit test.
-	// Instead, verify that the SQL it would generate uses env-var password delivery
-	// by checking dbImportCmd (which shares the same pattern) doesn't expose creds.
+	// Instead, verify that the commands it shares with dbImportCmd deliver the
+	// password through the exec env, never as a client flag.
 	cmd, err := dbImportCmd(env)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, arg := range cmd.Args {
-		if strings.Contains(arg, "s3cr3t") && !strings.HasPrefix(arg, "MYSQL_PWD=") {
-			t.Errorf("password leaked outside MYSQL_PWD env var in arg: %q", arg)
+		if strings.HasPrefix(arg, "-p") && arg != "-p" {
+			t.Errorf("password-like flag in args: %q", arg)
 		}
 	}
 }

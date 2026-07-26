@@ -168,6 +168,107 @@ func TestWriteHostWorkerUnitFile_bunFallbackWhenNodeUnmanaged(t *testing.T) {
 	}
 }
 
+// When lerd is NOT managing Node and the user's node/npm live somewhere the
+// unit's rebuilt PATH doesn't cover (nvm, snap, a self-installed fnm, …), the
+// generator must resolve where they actually are and bake that dir into the
+// unit's PATH instead of leaving `npm` unresolvable — issue #1143.
+func TestWriteHostWorkerUnitFile_unmanagedNodeBakesResolvedDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "fnm"), []byte("#!/bin/sh"), 0755)
+	// No node shim => Node unmanaged.
+
+	nodeDir := filepath.Join(tmp, "nodebin")
+	os.MkdirAll(nodeDir, 0755)
+	os.WriteFile(filepath.Join(nodeDir, "node"), []byte("#!/bin/sh"), 0755)
+	os.WriteFile(filepath.Join(nodeDir, "npm"), []byte("#!/bin/sh"), 0755)
+	t.Setenv("PATH", binDir+":"+nodeDir)
+
+	sitePath := t.TempDir()
+	os.WriteFile(filepath.Join(sitePath, "package.json"), []byte("{}"), 0644)
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-vite-sysnode", "Vite", "sysnode",
+		sitePath, "8.4", "npm run dev",
+		"on-failure", "", "lerd-php84-fpm", true,
+	); err != nil {
+		t.Fatalf("writeWorkerUnitFile (host): %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-vite-sysnode.service"))
+	if err != nil {
+		t.Fatalf("read unit: %v", err)
+	}
+	unit := string(data)
+	if !strings.Contains(unit, "Environment=PATH="+nodeDir+":") {
+		t.Errorf("unit PATH must lead with the resolved node dir; got:\n%s", unit)
+	}
+	if strings.Contains(unit, "fnm") {
+		t.Errorf("unmanaged Node must not route through fnm; got:\n%s", unit)
+	}
+	if !strings.Contains(unit, "npm run dev") {
+		t.Errorf("command must run unrewritten; got:\n%s", unit)
+	}
+}
+
+// With Node unmanaged, no bun, and nothing resolvable anywhere, writing the
+// unit must fail instead of producing a unit that crash-loops on
+// `npm: command not found` — issue #1143.
+func TestWriteHostWorkerUnitFile_unmanagedNoNodeHoldsBack(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	os.MkdirAll(binDir, 0755)
+	os.WriteFile(filepath.Join(binDir, "fnm"), []byte("#!/bin/sh"), 0755)
+	t.Setenv("PATH", binDir)
+
+	sitePath := t.TempDir()
+	os.WriteFile(filepath.Join(sitePath, "package.json"), []byte("{}"), 0644)
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-vite-nonode", "Vite", "nonode",
+		sitePath, "8.4", "npm run dev",
+		"on-failure", "", "lerd-php84-fpm", true,
+	); err == nil {
+		t.Fatal("want an error when no Node is resolvable, got nil")
+	}
+	if _, err := os.Stat(filepath.Join(tmp, "systemd", "user", "lerd-vite-nonode.service")); err == nil {
+		t.Error("unit file must not be written when no Node is resolvable")
+	}
+}
+
+// A host-proxy command that doesn't touch the Node toolchain must keep running
+// directly even when the repo carries a package.json and no Node is around.
+func TestWriteHostWorkerUnitFile_unmanagedNoNodeNonNodeCommandRuns(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	t.Setenv("HOME", filepath.Join(tmp, "home"))
+
+	binDir := filepath.Join(tmp, "lerd", "bin")
+	os.MkdirAll(binDir, 0755)
+	t.Setenv("PATH", binDir)
+
+	sitePath := t.TempDir()
+	os.WriteFile(filepath.Join(sitePath, "package.json"), []byte("{}"), 0644)
+
+	if _, err := writeWorkerUnitFile(
+		"lerd-app-gosite", "Dev Server", "gosite",
+		sitePath, "", "./server --port 8000",
+		"always", "", "", true,
+	); err != nil {
+		t.Fatalf("non-Node command must still write its unit: %v", err)
+	}
+}
+
 // A host-proxy site in a non-Node language (no package.json / .nvmrc /
 // .node-version) must run its command directly, not through fnm, so it doesn't
 // depend on Node being installed.

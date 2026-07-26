@@ -48,9 +48,8 @@ function pickSuggestion(presetList: Preset[], dismissed: string[], key: string |
   if (!key) return null;
   const p = presetList.find((x) => administers(x, key));
   if (!p || dismissed.includes(p.name)) return null;
-  // missing_deps: admin tools hard-depend on the bare family service (pgadmin ->
-  // postgres), so don't suggest one whose dependency isn't installed; the install
-  // would only fail. Matches the installablePresets filter.
+  // missing_deps: install preflight must already be clear (family / env_role
+  // drop-ins count), otherwise suggesting the preset would only fail on Add.
   if (p.installed || (p.missing_deps || []).length > 0) return null;
   return p;
 }

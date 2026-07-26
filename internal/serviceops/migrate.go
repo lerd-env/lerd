@@ -367,6 +367,18 @@ func abortMigrate(unit, name, backup string, snapshot *serviceConfigSnapshot, ca
 
 // ---- mysql / mariadb -------------------------------------------------------
 
+// mysqldumpFlags is the shell-string form of the family's dump flags, matching
+// what the presets declare so a migrate dump carries the same objects.
+var mysqldumpFlags = strings.Join(DumpFlags("mysql"), " ")
+
+// The mariadb images ship mariadb/mariadb-dump and no mysql-named binaries, so
+// every mysql-family command resolves its tool in the container rather than
+// spelling one of the two names.
+const (
+	mysqlDumpBin   = "$(command -v mysqldump || command -v mariadb-dump)"
+	mysqlClientBin = "$(command -v mysql || command -v mariadb)"
+)
+
 // The three in-container commands a mysql-family migrate runs. They resolve the
 // client binary at runtime because the mariadb images carry only the mariadb
 // names, and a literal `mysqldump` aborts the migrate before it dumps anything.

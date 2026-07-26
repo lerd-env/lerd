@@ -14,10 +14,11 @@ func TestPostgresListDatabases_NetsOffTheTemplateBaseline(t *testing.T) {
 	if err != nil {
 		t.Fatalf("loading the postgres preset: %v", err)
 	}
-	q := p.Introspect.ListDatabases
-	if q == "" {
-		t.Fatal("the postgres preset declares no list_databases query")
+	spec := p.Introspect.DatabasesEntity()
+	if spec == nil {
+		t.Fatal("the postgres preset declares no databases entity")
 	}
+	q := spec.List
 	if !strings.Contains(q, "template1") {
 		t.Errorf("query reports the catalog baseline as data: %s", q)
 	}

@@ -42,8 +42,33 @@ client_shims:
 category: databases
 icon: elephant
 introspect:
-  list_databases: >
-    psql -U postgres -tAc
-    "SELECT datname || chr(9) || GREATEST(pg_database_size(datname)
-    - (SELECT pg_database_size('template1')), 0) FROM pg_database
-    WHERE datistemplate = false AND datname <> 'postgres' ORDER BY datname"
+  entities:
+    - kind: databases
+      format: sql
+      list: >
+        psql -U postgres -tAc
+        "SELECT datname || chr(9) || GREATEST(pg_database_size(datname)
+        - (SELECT pg_database_size('template1')), 0) FROM pg_database
+        WHERE datistemplate = false AND datname <> 'postgres' ORDER BY datname"
+      columns:
+        - key: size
+          label: Size
+          format: bytes
+      actions:
+        create: psql -U postgres -c 'CREATE DATABASE "{{name}}";'
+        drop:
+          exec: psql -U postgres -c 'DROP DATABASE IF EXISTS "{{name}}" WITH (FORCE);'
+          destructive: true
+        export:
+          exec: pg_dump -U postgres --clean --if-exists {{name}}
+          filename: "{{name}}.sql"
+        import: psql -U postgres -d {{name}}
+        export_all: pg_dumpall -U postgres --clean --if-exists
+        import_all: psql -U postgres -d postgres
+extensions:
+  - name: postgis
+    types: [geometry, geography]
+  - name: postgis_raster
+    types: [raster]
+  - name: postgis_topology
+    types: [topogeometry]

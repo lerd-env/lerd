@@ -55,6 +55,8 @@ After install, reload your shell or open a new terminal so `PATH` takes effect.
 7. Enable the `lerd-watcher` background service (auto-discovers new projects)
 8. Add `~/.local/share/lerd/bin` to your shell's `PATH`
 
+The downloaded tools are pinned to explicit versions, so a fresh install always gets the same Composer, fnm and mkcert regardless of what upstream shipped that day. The pins live in a small manifest published in the lerd repository: the binary fetches it before downloading and falls back to its embedded copy when offline, so a broken pin can be fixed for every install without waiting for a release. Downloads retry transient network and server errors with a short backoff, and a stalled transfer is cancelled and retried instead of hanging, so a momentary CDN hiccup doesn't abort the install. Already-installed tools are never touched by an upgrade; `lerd status` shows their versions and `lerd tools:update` brings them to the current pins when you want that.
+
 ::: info Running alongside Laravel Herd or another local stack
 If another tool is already serving sites on ports 80/443 (Laravel Herd, a system nginx/Apache) or holding the DNS port, install prints a warning naming each busy port and how to find the process. Install still continues, so stop the other stack to free the ports first, otherwise `lerd-nginx` and `lerd-dns` will fail to start.
 :::
@@ -69,6 +71,30 @@ If you built from source and want to skip the GitHub download:
 make build
 bash install.sh --local ./build/lerd
 ```
+
+---
+
+### Install via apt (Ubuntu/Debian)
+
+Lerd is published to a Launchpad PPA, so you can install and update it with your package manager:
+
+```bash
+sudo add-apt-repository ppa:lerd/lerd
+sudo apt update
+sudo apt install lerd
+```
+
+The package installs the binary to `/usr/bin/lerd` and finishes setup automatically: its maintainer script enables the unprivileged-port sysctl and systemd linger, then runs `lerd install` for your user, so the stack comes up straight away and again at every boot. `.test` DNS and HTTPS are configured with no prompt because the package sets up the sudoers rule and trusts the mkcert CA as root.
+
+Updates come through apt like any other package:
+
+```bash
+sudo apt upgrade
+```
+
+A package-installed lerd lives under `/usr`, so `lerd update` (which self-replaces a `~/.local/bin` install) detects it and defers to your package manager instead of fighting it.
+
+The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow will serve future rpm and AUR packages. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
 
 ---
 

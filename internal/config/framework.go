@@ -500,8 +500,13 @@ type DoctorCheck struct {
 	// command
 	Command              string `yaml:"command,omitempty"`
 	FailIfOutputContains string `yaml:"fail_if_output_contains,omitempty"`
-	UnknownOnError       bool   `yaml:"unknown_on_error,omitempty"`
-	TimeoutSeconds       int    `yaml:"timeout,omitempty"`
+	// FailIfErrorContains names output that means the command ran and found the
+	// very condition the check exists to catch, even though it exited non-zero.
+	// It wins over UnknownOnError, so an unmigrated database reports as a real
+	// finding with its fix instead of an unreachable dependency.
+	FailIfErrorContains string `yaml:"fail_if_error_contains,omitempty"`
+	UnknownOnError      bool   `yaml:"unknown_on_error,omitempty"`
+	TimeoutSeconds      int    `yaml:"timeout,omitempty"`
 }
 
 // FrameworkServiceDef describes how a service is detected and configured for a framework.
@@ -746,6 +751,7 @@ var laravelFramework = &Framework{
 				Name: "migrations", Type: "command",
 				Command:              "php artisan migrate:status",
 				FailIfOutputContains: "Pending",
+				FailIfErrorContains:  "Migration table not found",
 				UnknownOnError:       true,
 				Fix:                  "migrate",
 				Detail:               "There are pending migrations, run migrate to apply them.",
@@ -857,6 +863,24 @@ func GetFramework(name string) (*Framework, bool) {
 
 	// Merge user overlay (if any) on top of the base.
 	return mergeBuiltinTinker(mergeBuiltinFrankenPHP(mergeUserOverlay(base))), true
+}
+
+// GetFrameworkOrFetch is like GetFramework but, when the framework is not
+// installed locally, fetches its latest definition from the store and saves it,
+// the way linking pulls a definition for a project whose framework isn't
+// installed yet. It returns false only when the store doesn't publish the name
+// either. Scaffolding a project you've never built before lands here.
+func GetFrameworkOrFetch(name string) (*Framework, bool) {
+	if fw, ok := GetFramework(name); ok {
+		return fw, true
+	}
+	if frameworkFetchHook == nil {
+		return nil, false
+	}
+	if _, err := frameworkFetchHook(name, ""); err != nil {
+		return nil, false
+	}
+	return GetFramework(name)
 }
 
 // loadBaseFramework returns the base definition for a framework:
@@ -1404,7 +1428,7 @@ func DetectFrameworkForDir(dir string) (string, bool) {
 		// Restore the embedded definition from .lerd.yaml (the committed source of
 		// truth, so inert edits propagate), sanitised so an untrusted .lerd.yaml
 		// can't seed host-executing doctor checks into the store.
-		if proj.FrameworkDef != nil {
+		if proj.FrameworkDef != nil && projectOwnsFramework(name) {
 			safe := SanitizeProjectFrameworkDef(proj.FrameworkDef)
 			safe.Name = name
 			_ = SaveStoreFramework(safe)

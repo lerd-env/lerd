@@ -151,12 +151,13 @@ func BunVersion() string {
 	return bunVerVal
 }
 
-// SystemNodeAvailable reports whether a `node` binary is resolvable on PATH
-// (outside lerd's own fnm shims). Used to decide the bun fallback and to
-// surface the active JS runtime in the UI.
+// SystemNodeAvailable reports whether a system Node (outside lerd's own fnm
+// shims) is resolvable, on PATH or in a known version-manager install dir.
+// Used to decide the bun fallback and to surface the active JS runtime in the
+// UI. The dir probe matters for daemon-side callers whose minimal PATH would
+// otherwise hide a shell-hooked Node and flip an npm project onto bun.
 func SystemNodeAvailable() bool {
-	_, err := exec.LookPath("node")
-	return err == nil
+	return len(SystemNodeBinDirs()) > 0
 }
 
 // Bunify rewrites the npm/npx/node command verb to its bun equivalent
@@ -165,9 +166,16 @@ func SystemNodeAvailable() bool {
 // Segments are split on the shell operators &&, ||, |, ;, & (operators inside
 // quotes don't split); each segment is rewritten independently.
 func Bunify(command string) string {
+	return mapSegments(command, bunifySegment)
+}
+
+// mapSegments splits command on the shell operators &&, ||, |, ;, & (operators
+// inside quotes don't split), applies f to each segment, and rebuilds the
+// command with the operators preserved. Shared by Bunify and CommandUsesNode.
+func mapSegments(command string, f func(string) string) string {
 	var out, seg strings.Builder
 	flush := func() {
-		out.WriteString(bunifySegment(seg.String()))
+		out.WriteString(f(seg.String()))
 		seg.Reset()
 	}
 	var quote byte
@@ -205,42 +213,47 @@ func Bunify(command string) string {
 	return out.String()
 }
 
-// bunifySegment rewrites the leading verb of one command segment. It first walks
-// past a leading `env` invocation and any KEY=VALUE assignments, since host-proxy
-// commands are wrapped as `env PORT=N npm run ...` and would otherwise never
-// switch. A segment whose verb isn't npm/npx/node is returned unchanged.
+// bunifySegment rewrites the leading verb of one command segment. A segment
+// whose verb isn't npm/npx/node is returned unchanged.
 func bunifySegment(command string) string {
+	tok, start, end := segmentVerb(command)
+	var repl string
+	switch tok {
+	case "npm", "node":
+		repl = "bun"
+	case "npx":
+		repl = "bunx"
+	default:
+		return command
+	}
+	return command[:start] + repl + command[end:]
+}
+
+// segmentVerb returns the leading command verb of one segment and its offsets,
+// walking past a leading `env` invocation and any KEY=VALUE assignments (but
+// only when another token follows them), since host-proxy commands are wrapped
+// as `env PORT=N npm run ...`. An empty segment returns tok == "".
+func segmentVerb(command string) (tok string, start, end int) {
 	pos := 0
 	for {
 		ws := 0
 		for pos+ws < len(command) && (command[pos+ws] == ' ' || command[pos+ws] == '\t') {
 			ws++
 		}
-		start := pos + ws
-		end := start
+		start = pos + ws
+		end = start
 		for end < len(command) && command[end] != ' ' && command[end] != '\t' {
 			end++
 		}
-		tok := command[start:end]
+		tok = command[start:end]
 		if tok == "" {
-			return command
+			return "", start, end
 		}
-		// Skip a leading `env` and env assignments (KEY=VALUE), but only when
-		// there's another token after them to rewrite.
 		if (tok == "env" || isEnvAssignment(tok)) && end < len(command) {
 			pos = end
 			continue
 		}
-		var repl string
-		switch tok {
-		case "npm", "node":
-			repl = "bun"
-		case "npx":
-			repl = "bunx"
-		default:
-			return command
-		}
-		return command[:start] + repl + command[end:]
+		return tok, start, end
 	}
 }
 
