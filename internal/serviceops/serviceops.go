@@ -944,6 +944,12 @@ func ensureCustomServiceQuadletDiff(svc *config.CustomService) (bool, error) {
 	if err := config.ValidateCustomService(svc); err != nil {
 		return false, err
 	}
+	// Before the quadlet exists, not after: podman creates a directory at a
+	// missing Volume source, and on macOS WriteQuadletDiff itself pre-creates
+	// bind-mount parents, so the hosts mount has to be a regular file already.
+	if err := podman.EnsureServiceHostsFile(svc.ShareHosts); err != nil {
+		return false, fmt.Errorf("ensuring hosts mount source for %s: %w", svc.Name, err)
+	}
 	content := podman.GenerateCustomQuadlet(svc)
 	quadletName := "lerd-" + svc.Name
 	changed, err := podman.WriteQuadletDiff(quadletName, content)
@@ -1310,24 +1316,48 @@ func consumesFamily(svc *config.CustomService, family string) bool {
 	return false
 }
 
+// consumerDiscoverFamilies returns every family svc reads through a dynamic_env
+// family directive or an expand_env set, so a preset wired only with expand_env
+// (RedisInsight) counts as a consumer just like a discover_family one (phpMyAdmin).
 func consumerDiscoverFamilies(svc *config.CustomService) []string {
 	if svc == nil {
 		return nil
 	}
 	var out []string
 	seen := map[string]bool{}
-	for _, directive := range svc.DynamicEnv {
-		parts := strings.SplitN(directive, ":", 2)
-		if len(parts) != 2 || parts[0] != "discover_family" {
-			continue
-		}
-		for _, fam := range strings.Split(parts[1], ",") {
+	addFamilies := func(list string) {
+		for _, fam := range strings.Split(list, ",") {
 			fam = strings.TrimSpace(fam)
 			if fam == "" || seen[fam] {
 				continue
 			}
 			seen[fam] = true
 			out = append(out, fam)
+		}
+	}
+	for _, directive := range svc.DynamicEnv {
+		parts := strings.SplitN(directive, ":", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		list := parts[1]
+		switch parts[0] {
+		case "discover_family":
+		case "repeat_family":
+			// The family list comes ahead of "=<value>".
+			eq := strings.Index(list, "=")
+			if eq < 0 {
+				continue
+			}
+			list = list[:eq]
+		default:
+			continue
+		}
+		addFamilies(list)
+	}
+	for _, spec := range svc.ExpandEnv {
+		if eq := strings.Index(spec, "="); eq >= 0 {
+			addFamilies(spec[:eq])
 		}
 	}
 	return out

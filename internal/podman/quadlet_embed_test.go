@@ -404,8 +404,17 @@ func TestGenerateCustomQuadlet_NoShareHosts(t *testing.T) {
 		Image: "docker.io/library/mongo:7",
 	}
 	out := GenerateCustomQuadlet(svc)
-	if strings.Contains(out, "/etc/hosts") {
-		t.Errorf("should not mount hosts file when ShareHosts=false, got:\n%s", out)
+	// Even without ShareHosts a sidecar must mount the managed /etc/hosts,
+	// otherwise podman inherits the host's own file and a "127.0.0.1 lerd-<svc>"
+	// line there shadows the container-DNS name and breaks connections.
+	wantVolume := "Volume=" + config.ContainerHostsFile() + ":/etc/hosts:ro,z"
+	if !strings.Contains(out, wantVolume) {
+		t.Errorf("ShareHosts=false must mount the managed container hosts file to override host inheritance, got:\n%s", out)
+	}
+	// The browser-testing hosts variant is reserved for ShareHosts=true.
+	browserVolume := "Volume=" + config.BrowserHostsFile() + ":/etc/hosts:ro,z"
+	if strings.Contains(out, browserVolume) {
+		t.Errorf("ShareHosts=false must not mount the browser hosts file, got:\n%s", out)
 	}
 }
 

@@ -110,6 +110,110 @@ func TestEnsureCustomServiceQuadlet_shiftsBusySecondaryPort(t *testing.T) {
 	}
 }
 
+// TestEnsureCustomServiceQuadlet_materialisesHostsMountSource: the generated
+// quadlet mounts the managed hosts file at /etc/hosts, and podman creates a
+// directory at a missing Volume source, so the quadlet write must not be the
+// first thing that touches that path. WriteFPMQuadlet already guarantees this
+// through ensureFPMHostsFile; the custom-service path needs the same guarantee
+// because `lerd service install` never goes near WriteContainerHosts.
+func TestEnsureCustomServiceQuadlet_materialisesHostsMountSource(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+
+	svc := &config.CustomService{
+		Name:  "mongo-express",
+		Image: "docker.io/library/mongo-express:latest",
+		Ports: []string{"127.0.0.1:8082:8081"},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+
+	info, err := os.Stat(config.ContainerHostsFile())
+	if err != nil {
+		t.Fatalf("hosts mount source not materialised: %v", err)
+	}
+	if info.IsDir() {
+		t.Error("hosts mount source is a directory, the service would inherit the host /etc/hosts")
+	}
+}
+
+// TestEnsureCustomServiceQuadlet_healsStaleHostsDirectory: a previous broken
+// start (or the macOS precreateBindMountDirs pass that runs off WriteQuadletDiff)
+// leaves a directory at the mount source. It has to be healed into a regular
+// file, otherwise every later WriteContainerHosts fails with "is a directory"
+// and only warns.
+func TestEnsureCustomServiceQuadlet_healsStaleHostsDirectory(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+
+	hostsPath := config.ContainerHostsFile()
+	if err := os.MkdirAll(hostsPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	svc := &config.CustomService{
+		Name:  "mongo-express",
+		Image: "docker.io/library/mongo-express:latest",
+		Ports: []string{"127.0.0.1:8082:8081"},
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+
+	info, err := os.Stat(hostsPath)
+	if err != nil {
+		t.Fatalf("path missing after heal: %v", err)
+	}
+	if info.IsDir() {
+		t.Error("path is still a directory, heal failed")
+	}
+}
+
+// TestEnsureCustomServiceQuadlet_materialisesBrowserHostsForShareHosts: a
+// share_hosts service mounts the browser variant instead, so that is the path
+// needing the guarantee for those.
+func TestEnsureCustomServiceQuadlet_materialisesBrowserHostsForShareHosts(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tmp, "config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, "data"))
+
+	orig := podman.DaemonReloadFn
+	t.Cleanup(func() { podman.DaemonReloadFn = orig })
+	podman.DaemonReloadFn = func() error { return nil }
+
+	svc := &config.CustomService{
+		Name:       "selenium",
+		Image:      "docker.io/selenium/standalone-chromium:latest",
+		Ports:      []string{"127.0.0.1:4444:4444"},
+		ShareHosts: true,
+	}
+	if err := EnsureCustomServiceQuadlet(svc); err != nil {
+		t.Fatalf("EnsureCustomServiceQuadlet: %v", err)
+	}
+
+	info, err := os.Stat(config.BrowserHostsFile())
+	if err != nil {
+		t.Fatalf("browser hosts mount source not materialised: %v", err)
+	}
+	if info.IsDir() {
+		t.Error("browser hosts mount source is a directory")
+	}
+}
+
 // TestEnsureCustomServiceQuadlet_portShiftNoticeAvoidsStdout: when the port guard
 // shifts a service off a busy port it must not write its notice to os.Stdout.
 // EnsureCustomServiceQuadlet is called in-process by the MCP stdio server, which

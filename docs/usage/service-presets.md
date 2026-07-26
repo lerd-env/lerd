@@ -228,8 +228,42 @@ retargeted to `lerd-<satisfier>` (a full URL is rewritten in place). Because the
 YAML carries no special directive, an older lerd binary that predates this still
 parses the preset and connects to the canonical host.
 
+A UI that reads **numbered** env var sets rather than one comma-joined list
+declares a top-level `expand_env` block instead, which writes one var per
+running member with the declared key suffixed `_1` … `_N`:
+
+```yaml
+environment:
+  RI_REDIS_HOST: lerd-redis
+  RI_REDIS_PORT: "6379"
+  RI_REDIS_ALIAS: lerd-redis
+expand_env:
+  RI_REDIS_HOST: redis,valkey={host}
+  RI_REDIS_PORT: redis,valkey=6379
+  RI_REDIS_ALIAS: redis,valkey={name}
+```
+
+With Redis and Valkey both up that renders `RI_REDIS_HOST_1=lerd-redis`,
+`RI_REDIS_ALIAS_1=redis`, `RI_REDIS_HOST_2=lerd-valkey`, `RI_REDIS_ALIAS_2=valkey`
+and a `6379` port for each, so RedisInsight opens with every installed member
+already wired. `{host}` expands to the container hostname and `{name}` to the
+service name; a template with neither, like the port above, is simply repeated.
+Members are sorted by hostname, so the numbering is stable as long as the set
+of running members is.
+
+`expand_env` is a separate top-level field precisely so the published YAML stays
+backward compatible: a binary that predates it ignores the whole block on parse
+and serves the static `environment` values, which is why a preset keeps the
+unsuffixed single-connection keys there as the fallback. A binary that resolves
+`expand_env` drops those unsuffixed keys and writes the numbered set instead, so
+the two never coexist in a rendered quadlet. For the same reason, a
+`dynamic_env` directive the running binary does not recognise is warned about
+and skipped rather than treated as fatal, matching how a file mount naming an
+unknown `generator` is skipped.
+
 Lerd automatically regenerates phpMyAdmin's quadlet (and any other consumer
-of `discover_family` or a pinned dependency host) whenever a family member is **installed**,
+of a family directive, an `expand_env` set, or a pinned dependency host)
+whenever a family member is **installed**,
 **removed**, **started**, or **stopped**, and again at the end of a bulk
 `lerd start` / install so engines and admin UIs that come up together still get
 a correct host list. Active consumers are stop-removed-restarted only when the

@@ -179,8 +179,19 @@ tuning:
 #   discover_family:<name>[,<name>...] — comma-joined hostnames for every
 #     running member of the named families (phpMyAdmin PMA_HOSTS).
 #   repeat_family:<families>=<value> — N copies of <value> matching that host list.
+# A directive this binary does not know is warned about and skipped, so a store
+# definition written for a newer lerd still starts on an older one.
 dynamic_env:
   PMA_HOSTS: discover_family:mysql,mariadb
+
+# Numbered env var sets for tools that read one variable group per connection:
+# <key>: <families>=<template> writes <key>_1..<key>_N, one per running member,
+# with {host} / {name} expanded (RedisInsight RI_REDIS_HOST_1, _2, ...). The
+# unsuffixed <key> in environment is dropped when this resolves; keep it there
+# as the single-connection fallback, because binaries that predate expand_env
+# ignore this whole block and serve the static value instead.
+expand_env:
+  RI_REDIS_HOST: redis,valkey={host}
 
 # A single-host admin UI just pins the canonical dependency host in plain
 # environment; lerd retargets lerd-<dep> to the actual satisfier (Valkey for

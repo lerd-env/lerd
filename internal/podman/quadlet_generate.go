@@ -50,8 +50,13 @@ func GenerateCustomQuadlet(svc *config.CustomService) string {
 		b.WriteString("PodmanArgs=--init\n")
 	}
 
+	// Without an explicit mount podman derives /etc/hosts from the host's own,
+	// so a hand-added "127.0.0.1 lerd-<svc>" line there shadows container DNS.
+	// ShareHosts services get the browser variant for .test resolution instead.
 	if svc.ShareHosts {
 		fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.BrowserHostsFile())
+	} else {
+		fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	}
 
 	for _, port := range svc.Ports {

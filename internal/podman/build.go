@@ -801,27 +801,32 @@ func WriteXdebugIni(version, mode, start string) error {
 	return os.WriteFile(path, []byte(content), 0644)
 }
 
+// healStaleHostsDir removes a directory podman auto-created at a hosts
+// bind-mount source on a previous broken start, the same race as the xdebug
+// ini, and reports whether the path now needs a file written.
+func healStaleHostsDir(path string) (bool, error) {
+	info, err := os.Stat(path)
+	if err == nil && info.IsDir() {
+		if rmErr := os.Remove(path); rmErr != nil {
+			return false, fmt.Errorf("removing stale hosts directory: %w", rmErr)
+		}
+		return true, nil
+	}
+	return os.IsNotExist(err), nil
+}
+
 // ensureFPMHostsFile guarantees the bind-mount source for the FPM container's
-// /etc/hosts is a regular file before podman starts the container. Three states
-// are normalised here:
-//
-//  1. Path exists and is a directory (podman auto-created it on a previous
-//     broken start, same race as the xdebug ini): remove it and fall through
-//     to the missing-file branch.
-//  2. Path is missing: try a real WriteContainerHosts; if that fails (e.g.
-//     LoadSites errors), write a minimal static header so the mount still
-//     succeeds and host.containers.internal resolves to something.
-//  3. Path is already a regular file: no-op.
+// /etc/hosts is a regular file carrying the host gateway entry Xdebug needs.
+// A file left by the lighter service pre-create has no gateway line yet, so it
+// is not treated as done. Falls back to a static header when the real render
+// fails (e.g. LoadSites errors) so the mount still succeeds.
 func ensureFPMHostsFile() error {
 	hostsPath := config.ContainerHostsFile()
-	info, err := os.Stat(hostsPath)
-	if err == nil && info.IsDir() {
-		if rmErr := os.Remove(hostsPath); rmErr != nil {
-			return fmt.Errorf("removing stale hosts directory: %w", rmErr)
-		}
-		err = os.ErrNotExist
+	missing, err := healStaleHostsDir(hostsPath)
+	if err != nil {
+		return err
 	}
-	if !os.IsNotExist(err) {
+	if !missing && hasHostGatewayEntry(hostsPath) {
 		return nil
 	}
 	if writeErr := WriteContainerHosts(); writeErr == nil {
@@ -836,6 +841,34 @@ func ensureFPMHostsFile() error {
 			"::1 localhost\n"+
 			hostIP+" host.containers.internal host.docker.internal\n",
 	), 0644)
+}
+
+// EnsureServiceHostsFile guarantees the /etc/hosts bind-mount source a service
+// quadlet declares, so writing the quadlet is never the first thing to touch
+// that path. The content stays minimal: WriteContainerHosts fills in the real
+// entries at start and link time, and a service resolves its peers through
+// container DNS rather than this file.
+func EnsureServiceHostsFile(shareHosts bool) error {
+	path := config.ContainerHostsFile()
+	if shareHosts {
+		path = config.BrowserHostsFile()
+	}
+	missing, err := healStaleHostsDir(path)
+	if err != nil {
+		return err
+	}
+	if !missing {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("127.0.0.1 localhost\n::1 localhost\n"), 0644)
+}
+
+func hasHostGatewayEntry(path string) bool {
+	body, err := os.ReadFile(path)
+	return err == nil && strings.Contains(string(body), "host.containers.internal")
 }
 
 // EnsureXdebugIni creates the xdebug ini file for the given PHP version if it doesn't

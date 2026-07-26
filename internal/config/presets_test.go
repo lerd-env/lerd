@@ -1,9 +1,12 @@
 package config
 
 import (
+	"bytes"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/geodro/lerd/internal/feedback"
 )
 
 func TestListPresets_IncludesShippedPresets(t *testing.T) {
@@ -454,6 +457,81 @@ func TestResolveDynamicEnv_DiscoverFamily_OnlyRunning(t *testing.T) {
 	}
 }
 
+func TestResolveDynamicEnv_ExpandEnv(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := SaveCustomService(&CustomService{Name: "valkey", Image: "x", Family: "valkey"}); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+
+	svc := &CustomService{
+		Name: "redisinsight", Image: "x",
+		// The static values are the fallback older binaries keep serving; a
+		// binary that resolves expand_env must replace them with numbered sets.
+		Environment: map[string]string{
+			"RI_REDIS_HOST":  "lerd-redis",
+			"RI_REDIS_PORT":  "6379",
+			"RI_REDIS_ALIAS": "lerd-redis",
+		},
+		ExpandEnv: map[string]string{
+			"RI_REDIS_HOST":  "redis,valkey={host}",
+			"RI_REDIS_PORT":  "redis,valkey=6379",
+			"RI_REDIS_ALIAS": "redis,valkey={name}",
+		},
+	}
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("ResolveDynamicEnv: %v", err)
+	}
+	// uniqueFamilyHosts sorts, so lerd-redis is _1 and lerd-valkey is _2.
+	want := map[string]string{
+		"RI_REDIS_HOST_1": "lerd-redis", "RI_REDIS_PORT_1": "6379", "RI_REDIS_ALIAS_1": "redis",
+		"RI_REDIS_HOST_2": "lerd-valkey", "RI_REDIS_PORT_2": "6379", "RI_REDIS_ALIAS_2": "valkey",
+	}
+	for k, v := range want {
+		if got := svc.Environment[k]; got != v {
+			t.Errorf("%s = %q, want %q", k, got, v)
+		}
+	}
+	for _, k := range []string{"RI_REDIS_HOST", "RI_REDIS_PORT", "RI_REDIS_ALIAS"} {
+		if _, ok := svc.Environment[k]; ok {
+			t.Errorf("expand_env must drop the unsuffixed fallback %s", k)
+		}
+	}
+	if _, ok := svc.Environment["RI_REDIS_HOST_3"]; ok {
+		t.Error("expand_env wrote more members than are installed")
+	}
+
+	svc.ExpandEnv = map[string]string{"RI_REDIS_HOST": "redis"}
+	if err := ResolveDynamicEnv(svc); err == nil {
+		t.Error("expand_env without =<template> must error")
+	}
+}
+
+func TestCustomService_ExpandEnvRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	in := &CustomService{
+		Name: "redisinsight", Image: "x",
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+		ExpandEnv:   map[string]string{"RI_REDIS_HOST": "redis,valkey={host}"},
+	}
+	if err := SaveCustomService(in); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	out, err := LoadCustomService("redisinsight")
+	if err != nil {
+		t.Fatalf("LoadCustomService: %v", err)
+	}
+	if out.ExpandEnv["RI_REDIS_HOST"] != "redis,valkey={host}" {
+		t.Errorf("expand_env lost in round trip: %#v", out.ExpandEnv)
+	}
+	if out.Environment["RI_REDIS_HOST"] != "lerd-redis" {
+		t.Errorf("static fallback lost in round trip: %#v", out.Environment)
+	}
+}
+
 func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -493,15 +571,31 @@ func TestResolveDynamicEnv_RepeatFamily(t *testing.T) {
 	}
 }
 
+// An unknown directive is what a binary older than the store definition sees.
+// It must degrade to a warning: the quadlet still generates, carrying whatever
+// static environment the preset ships, instead of the service refusing to start.
 func TestResolveDynamicEnv_UnknownDirective(t *testing.T) {
+	var warned bytes.Buffer
+	defer feedback.SetTestWriter(&warned)()
+
 	svc := &CustomService{
-		Name: "x",
+		Name:        "x",
+		Environment: map[string]string{"RI_APP_PORT": "5540"},
 		DynamicEnv: map[string]string{
 			"FOO": "garbage:bar",
 		},
 	}
-	if err := ResolveDynamicEnv(svc); err == nil {
-		t.Errorf("expected error for unknown directive")
+	if err := ResolveDynamicEnv(svc); err != nil {
+		t.Fatalf("unknown directive must not error, got %v", err)
+	}
+	if _, ok := svc.Environment["FOO"]; ok {
+		t.Error("unknown directive must be skipped, not written")
+	}
+	if svc.Environment["RI_APP_PORT"] != "5540" {
+		t.Error("static environment must survive an unknown directive")
+	}
+	if !strings.Contains(warned.String(), "garbage") {
+		t.Errorf("expected a warning naming the directive, got %q", warned.String())
 	}
 }
 
