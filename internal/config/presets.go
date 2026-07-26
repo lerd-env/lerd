@@ -124,27 +124,25 @@ func ListPresets() ([]PresetMeta, error) {
 	return out, nil
 }
 
-// presetCache memoises parsed Presets so the daemon doesn't re-parse the
-// embedded YAML on every snapshot rebuild. The bundled files are immutable for
-// the lifetime of the binary, so their entries never need invalidation. A store
-// cache file is not immutable: lerd install, lerd service update and the 24h
-// refresh rewrite it from a different process, so the entry records the file's
-// mtime and re-parses when it changes.
+// presetCache memoises parsed Presets so the daemon doesn't re-parse on every
+// snapshot rebuild. Store cache files are created/rewritten by other processes
+// (install, service update, 24h refresh), so entries key on mtime+size.
 var presetCache sync.Map // map[string]presetCacheEntry
 
 type presetCacheEntry struct {
 	preset *Preset
-	mtime  time.Time // zero when the parse came from the embedded bundle
+	mtime  time.Time // zero when no store cache file existed at parse time
+	size   int64
 }
 
 // LoadPreset returns the parsed Preset for a bundled file by name.
 func LoadPreset(name string) (*Preset, error) {
+	// Stat before reading: if a rewrite lands in between, the entry keeps the
+	// pre-rewrite key and the next load re-parses, never serving stale as fresh.
+	mtime, size := storePresetStat(name)
 	if cached, ok := presetCache.Load(name); ok {
 		entry := cached.(presetCacheEntry)
-		// Re-parse only when a store cache file replaced the source the
-		// cached parse came from. The embedded bundle has no on-disk file,
-		// so a zero mtime means the parse is permanent for this process.
-		if entry.mtime.IsZero() || entry.mtime == storePresetMtime(name) {
+		if entry.mtime.Equal(mtime) && entry.size == size {
 			return entry.preset, nil
 		}
 	}
@@ -162,7 +160,7 @@ func LoadPreset(name string) (*Preset, error) {
 	if len(p.Versions) > 0 && p.DefaultVersion == "" {
 		p.DefaultVersion = p.Versions[0].Tag
 	}
-	presetCache.Store(name, presetCacheEntry{preset: &p, mtime: storePresetMtime(name)})
+	presetCache.Store(name, presetCacheEntry{preset: &p, mtime: mtime, size: size})
 	return &p, nil
 }
 

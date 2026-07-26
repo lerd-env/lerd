@@ -51,6 +51,34 @@ func TestLoadPreset_ReParsesWhenStoreCacheFileMtimeChanges(t *testing.T) {
 	presetCache.Delete("redis")
 }
 
+// A store cache file created for the first time while the daemon runs (fresh
+// install: lerd-ui starts before refreshStorePresets writes the files) must
+// supersede a memoised embedded parse on the next load. Issue #1182.
+func TestLoadPreset_PicksUpNewlyCreatedStoreCacheFile(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	presetCache.Delete("redis")
+
+	p1, err := LoadPreset("redis")
+	if err != nil {
+		t.Fatalf("LoadPreset embedded: %v", err)
+	}
+	if p1.Image == "example/store-redis:v1" {
+		t.Fatal("first parse unexpectedly came from the store layer")
+	}
+
+	writeStorePreset(t, "redis", "name: redis\nimage: example/store-redis:v1\ndescription: created\n")
+
+	p2, err := LoadPreset("redis")
+	if err != nil {
+		t.Fatalf("LoadPreset after store file created: %v", err)
+	}
+	if p2.Image != "example/store-redis:v1" {
+		t.Errorf("embedded parse survived store file creation: Image = %q, want example/store-redis:v1", p2.Image)
+	}
+
+	presetCache.Delete("redis")
+}
+
 // The embedded bundle has no on-disk file, so its memoised parse must stay
 // cached for the process lifetime, never re-parsed on a second LoadPreset.
 func TestLoadPreset_EmbeddedBundleStaysCached(t *testing.T) {
