@@ -259,8 +259,11 @@ type CustomService struct {
 	// quadlet generation time. Supported directives:
 	//   discover_family:<families>            -> comma-joined member hostnames
 	//   repeat_family:<families>=<value>      -> <value> once per member, joined
-	//   expand_family:<families>=<template>   -> <key>_1.._N, one per member
 	DynamicEnv map[string]string `yaml:"dynamic_env,omitempty"`
+	// ExpandEnv maps <key> to <families>=<template>, writing <key>_1.._N (one per
+	// running member) and dropping the unsuffixed <key>, which stays in Environment
+	// as the fallback for older binaries that ignore this field on parse.
+	ExpandEnv map[string]string `yaml:"expand_env,omitempty"`
 	// Userns sets the quadlet UserNS= line verbatim, e.g. "keep-id:uid=1000,gid=0"
 	// for images whose process runs as a non-root UID and needs that UID
 	// mapped to the host user for bind-mounted volumes.
@@ -497,11 +500,11 @@ func EnvRoleOf(svc *CustomService) string {
 // computed values into svc.Environment. Called immediately before quadlet
 // generation so the resolved values land in the rendered .container file.
 func ResolveDynamicEnv(svc *CustomService) error {
-	if len(svc.DynamicEnv) == 0 {
+	if len(svc.DynamicEnv) == 0 && len(svc.ExpandEnv) == 0 {
 		return nil
 	}
 	if svc.Environment == nil {
-		svc.Environment = make(map[string]string, len(svc.DynamicEnv))
+		svc.Environment = make(map[string]string, len(svc.DynamicEnv)+len(svc.ExpandEnv))
 	}
 	for k, directive := range svc.DynamicEnv {
 		parts := strings.SplitN(directive, ":", 2)
@@ -527,27 +530,30 @@ func ResolveDynamicEnv(svc *CustomService) error {
 				repeats[i] = value
 			}
 			svc.Environment[k] = strings.Join(repeats, ",")
-		case "expand_family":
-			// expand_family:<families>=<template> → one env var per installed
-			// member, the declared key suffixed _1.._N. {host} and {name} expand
-			// per member, for tools that read numbered var sets instead of one
-			// comma-joined list (RedisInsight's RI_REDIS_HOST_1, _2, ...).
-			eq := strings.Index(parts[1], "=")
-			if eq < 0 {
-				return fmt.Errorf("service %s: expand_family needs <families>=<value>, got %q", svc.Name, parts[1])
-			}
-			tmpl := parts[1][eq+1:]
-			for i, host := range uniqueFamilyHosts(parts[1][:eq]) {
-				value := strings.ReplaceAll(tmpl, "{host}", host)
-				value = strings.ReplaceAll(value, "{name}", strings.TrimPrefix(host, "lerd-"))
-				svc.Environment[fmt.Sprintf("%s_%d", k, i+1)] = value
-			}
 		default:
 			// A directive this binary predates: warn and skip so the quadlet
 			// still generates with the preset's static environment. Erroring
 			// here would kill the service on every start after the store
 			// publishes a preset using a newer directive.
 			feedback.Warn("service %s: unknown dynamic_env directive %q, skipping %s (update lerd if %s needs it)", svc.Name, parts[0], k, k)
+		}
+	}
+	// expand_env: one env var per running member, the declared key suffixed
+	// _1.._N, for tools that read numbered var sets (RedisInsight's
+	// RI_REDIS_HOST_1, _2, ...). {host} and {name} expand per member.
+	for k, spec := range svc.ExpandEnv {
+		eq := strings.Index(spec, "=")
+		if eq < 0 {
+			return fmt.Errorf("service %s: expand_env %s needs <families>=<template>, got %q", svc.Name, k, spec)
+		}
+		// The unsuffixed key is the preset's static fallback for binaries that
+		// predate expand_env; the numbered set replaces it here.
+		delete(svc.Environment, k)
+		tmpl := spec[eq+1:]
+		for i, host := range uniqueFamilyHosts(spec[:eq]) {
+			value := strings.ReplaceAll(tmpl, "{host}", host)
+			value = strings.ReplaceAll(value, "{name}", strings.TrimPrefix(host, "lerd-"))
+			svc.Environment[fmt.Sprintf("%s_%d", k, i+1)] = value
 		}
 	}
 	return nil

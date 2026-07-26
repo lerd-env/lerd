@@ -457,7 +457,7 @@ func TestResolveDynamicEnv_DiscoverFamily_OnlyRunning(t *testing.T) {
 	}
 }
 
-func TestResolveDynamicEnv_ExpandFamily(t *testing.T) {
+func TestResolveDynamicEnv_ExpandEnv(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -467,10 +467,17 @@ func TestResolveDynamicEnv_ExpandFamily(t *testing.T) {
 
 	svc := &CustomService{
 		Name: "redisinsight", Image: "x",
-		DynamicEnv: map[string]string{
-			"RI_REDIS_HOST":  "expand_family:redis,valkey={host}",
-			"RI_REDIS_PORT":  "expand_family:redis,valkey=6379",
-			"RI_REDIS_ALIAS": "expand_family:redis,valkey={name}",
+		// The static values are the fallback older binaries keep serving; a
+		// binary that resolves expand_env must replace them with numbered sets.
+		Environment: map[string]string{
+			"RI_REDIS_HOST":  "lerd-redis",
+			"RI_REDIS_PORT":  "6379",
+			"RI_REDIS_ALIAS": "lerd-redis",
+		},
+		ExpandEnv: map[string]string{
+			"RI_REDIS_HOST":  "redis,valkey={host}",
+			"RI_REDIS_PORT":  "redis,valkey=6379",
+			"RI_REDIS_ALIAS": "redis,valkey={name}",
 		},
 	}
 	if err := ResolveDynamicEnv(svc); err != nil {
@@ -486,16 +493,42 @@ func TestResolveDynamicEnv_ExpandFamily(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got, v)
 		}
 	}
-	if _, ok := svc.Environment["RI_REDIS_HOST"]; ok {
-		t.Error("expand_family must not write the unsuffixed key")
+	for _, k := range []string{"RI_REDIS_HOST", "RI_REDIS_PORT", "RI_REDIS_ALIAS"} {
+		if _, ok := svc.Environment[k]; ok {
+			t.Errorf("expand_env must drop the unsuffixed fallback %s", k)
+		}
 	}
 	if _, ok := svc.Environment["RI_REDIS_HOST_3"]; ok {
-		t.Error("expand_family wrote more members than are installed")
+		t.Error("expand_env wrote more members than are installed")
 	}
 
-	svc.DynamicEnv = map[string]string{"RI_REDIS_HOST": "expand_family:redis"}
+	svc.ExpandEnv = map[string]string{"RI_REDIS_HOST": "redis"}
 	if err := ResolveDynamicEnv(svc); err == nil {
-		t.Error("expand_family without =<value> must error")
+		t.Error("expand_env without =<template> must error")
+	}
+}
+
+func TestCustomService_ExpandEnvRoundTrip(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	in := &CustomService{
+		Name: "redisinsight", Image: "x",
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+		ExpandEnv:   map[string]string{"RI_REDIS_HOST": "redis,valkey={host}"},
+	}
+	if err := SaveCustomService(in); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	out, err := LoadCustomService("redisinsight")
+	if err != nil {
+		t.Fatalf("LoadCustomService: %v", err)
+	}
+	if out.ExpandEnv["RI_REDIS_HOST"] != "redis,valkey={host}" {
+		t.Errorf("expand_env lost in round trip: %#v", out.ExpandEnv)
+	}
+	if out.Environment["RI_REDIS_HOST"] != "lerd-redis" {
+		t.Errorf("static fallback lost in round trip: %#v", out.Environment)
 	}
 }
 

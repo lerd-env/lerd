@@ -229,14 +229,18 @@ YAML carries no special directive, an older lerd binary that predates this still
 parses the preset and connects to the canonical host.
 
 A UI that reads **numbered** env var sets rather than one comma-joined list
-uses `expand_family` instead, which writes one var per running member with the
-declared key suffixed `_1` … `_N`:
+declares a top-level `expand_env` block instead, which writes one var per
+running member with the declared key suffixed `_1` … `_N`:
 
 ```yaml
-dynamic_env:
-  RI_REDIS_HOST: expand_family:redis,valkey={host}
-  RI_REDIS_PORT: expand_family:redis,valkey=6379
-  RI_REDIS_ALIAS: expand_family:redis,valkey={name}
+environment:
+  RI_REDIS_HOST: lerd-redis
+  RI_REDIS_PORT: "6379"
+  RI_REDIS_ALIAS: lerd-redis
+expand_env:
+  RI_REDIS_HOST: redis,valkey={host}
+  RI_REDIS_PORT: redis,valkey=6379
+  RI_REDIS_ALIAS: redis,valkey={name}
 ```
 
 With Redis and Valkey both up that renders `RI_REDIS_HOST_1=lerd-redis`,
@@ -244,17 +248,22 @@ With Redis and Valkey both up that renders `RI_REDIS_HOST_1=lerd-redis`,
 and a `6379` port for each, so RedisInsight opens with every installed member
 already wired. `{host}` expands to the container hostname and `{name}` to the
 service name; a template with neither, like the port above, is simply repeated.
-The unsuffixed key is never written. Members are sorted by hostname, so the
-numbering is stable as long as the set of running members is.
+Members are sorted by hostname, so the numbering is stable as long as the set
+of running members is.
 
-A directive the running binary does not recognise is warned about and skipped
-rather than treated as fatal, matching how a file mount naming an unknown
-`generator` is skipped. A store definition that starts using a newer directive
-therefore still generates a quadlet on an older lerd, carrying the preset's
-static `environment`, instead of leaving the service unable to start.
+`expand_env` is a separate top-level field precisely so the published YAML stays
+backward compatible: a binary that predates it ignores the whole block on parse
+and serves the static `environment` values, which is why a preset keeps the
+unsuffixed single-connection keys there as the fallback. A binary that resolves
+`expand_env` drops those unsuffixed keys and writes the numbered set instead, so
+the two never coexist in a rendered quadlet. For the same reason, a
+`dynamic_env` directive the running binary does not recognise is warned about
+and skipped rather than treated as fatal, matching how a file mount naming an
+unknown `generator` is skipped.
 
 Lerd automatically regenerates phpMyAdmin's quadlet (and any other consumer
-of a family directive or a pinned dependency host) whenever a family member is **installed**,
+of a family directive, an `expand_env` set, or a pinned dependency host)
+whenever a family member is **installed**,
 **removed**, **started**, or **stopped**, and again at the end of a bulk
 `lerd start` / install so engines and admin UIs that come up together still get
 a correct host list. Active consumers are stop-removed-restarted only when the

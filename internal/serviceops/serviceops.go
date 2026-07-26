@@ -1311,14 +1311,24 @@ func consumesFamily(svc *config.CustomService, family string) bool {
 }
 
 // consumerDiscoverFamilies returns every family svc reads through a dynamic_env
-// family directive, so a preset wired only with expand_family (RedisInsight)
-// counts as a consumer just like a discover_family one (phpMyAdmin).
+// family directive or an expand_env set, so a preset wired only with expand_env
+// (RedisInsight) counts as a consumer just like a discover_family one (phpMyAdmin).
 func consumerDiscoverFamilies(svc *config.CustomService) []string {
 	if svc == nil {
 		return nil
 	}
 	var out []string
 	seen := map[string]bool{}
+	addFamilies := func(list string) {
+		for _, fam := range strings.Split(list, ",") {
+			fam = strings.TrimSpace(fam)
+			if fam == "" || seen[fam] {
+				continue
+			}
+			seen[fam] = true
+			out = append(out, fam)
+		}
+	}
 	for _, directive := range svc.DynamicEnv {
 		parts := strings.SplitN(directive, ":", 2)
 		if len(parts) != 2 {
@@ -1327,8 +1337,8 @@ func consumerDiscoverFamilies(svc *config.CustomService) []string {
 		list := parts[1]
 		switch parts[0] {
 		case "discover_family":
-		case "repeat_family", "expand_family":
-			// Both spell the family list ahead of "=<value>".
+		case "repeat_family":
+			// The family list comes ahead of "=<value>".
 			eq := strings.Index(list, "=")
 			if eq < 0 {
 				continue
@@ -1337,13 +1347,11 @@ func consumerDiscoverFamilies(svc *config.CustomService) []string {
 		default:
 			continue
 		}
-		for _, fam := range strings.Split(list, ",") {
-			fam = strings.TrimSpace(fam)
-			if fam == "" || seen[fam] {
-				continue
-			}
-			seen[fam] = true
-			out = append(out, fam)
+		addFamilies(list)
+	}
+	for _, spec := range svc.ExpandEnv {
+		if eq := strings.Index(spec, "="); eq >= 0 {
+			addFamilies(spec[:eq])
 		}
 	}
 	return out

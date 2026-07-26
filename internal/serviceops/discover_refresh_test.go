@@ -59,7 +59,7 @@ func TestRefreshDiscoverFamilyConsumers_fillsEmptyHostsAfterBulkStart(t *testing
 	}
 }
 
-func TestRefreshDiscoverFamilyConsumers_picksUpExpandFamilyOnlyConsumer(t *testing.T) {
+func TestRefreshDiscoverFamilyConsumers_picksUpExpandEnvOnlyConsumer(t *testing.T) {
 	withServiceHome(t)
 	stubDaemonReload(t)
 	prevWait := waitReadyFn
@@ -76,11 +76,12 @@ func TestRefreshDiscoverFamilyConsumers_picksUpExpandFamilyOnlyConsumer(t *testi
 		t.Fatal(err)
 	}
 	ri := &config.CustomService{
-		Name:  "redisinsight",
-		Image: "docker.io/redis/redisinsight:latest",
-		Ports: []string{"127.0.0.1:8085:5540"},
-		DynamicEnv: map[string]string{
-			"RI_REDIS_HOST": "expand_family:redis,valkey={host}",
+		Name:        "redisinsight",
+		Image:       "docker.io/redis/redisinsight:latest",
+		Ports:       []string{"127.0.0.1:8085:5540"},
+		Environment: map[string]string{"RI_REDIS_HOST": "lerd-redis"},
+		ExpandEnv: map[string]string{
+			"RI_REDIS_HOST": "redis,valkey={host}",
 		},
 	}
 	if err := config.SaveCustomService(ri); err != nil {
@@ -95,7 +96,10 @@ func TestRefreshDiscoverFamilyConsumers_picksUpExpandFamilyOnlyConsumer(t *testi
 
 	got := readQuadlet(t, "lerd-redisinsight")
 	if !strings.Contains(got, "RI_REDIS_HOST_1=lerd-valkey") {
-		t.Fatalf("expand_family-only consumer should be refreshed with the running valkey:\n%s", got)
+		t.Fatalf("expand_env-only consumer should be refreshed with the running valkey:\n%s", got)
+	}
+	if strings.Contains(got, "\"RI_REDIS_HOST=") {
+		t.Fatalf("unsuffixed fallback must not survive expand_env resolution:\n%s", got)
 	}
 }
 
