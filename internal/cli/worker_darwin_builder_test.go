@@ -177,6 +177,22 @@ func TestBuildDarwinHostWorkerGuardScript_PrependsLerdBinDirToPath(t *testing.T)
 	}
 }
 
+// An unmanaged system node resolved outside the guard's static PATH (nvm,
+// homebrew-less installs, …) is passed through extraBinDirs and must lead
+// PATH so npm resolves at launchd time — issue #1143.
+func TestBuildDarwinHostWorkerGuardScript_BakesResolvedNodeDirs(t *testing.T) {
+	script := buildDarwinHostWorkerGuardScript(
+		"", "/Users/u/.local/share/lerd/bin", "/site", "npm run dev",
+		"/Users/u/.nvm/versions/node/v22.9.1/bin",
+	)
+	if !strings.Contains(script, `export PATH="/Users/u/.nvm/versions/node/v22.9.1/bin:/Users/u/.local/share/lerd/bin:`) {
+		t.Errorf("guard script must lead PATH with the resolved node dir; got:\n%s", script)
+	}
+	if !strings.Contains(script, "exec /bin/sh -c 'npm run dev'") {
+		t.Errorf("unmanaged node must run the command directly; got:\n%s", script)
+	}
+}
+
 func findLine(body, prefix string) string {
 	for _, line := range strings.Split(body, "\n") {
 		if strings.HasPrefix(line, prefix) {

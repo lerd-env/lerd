@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/geodro/lerd/internal/config"
+	nodeDet "github.com/geodro/lerd/internal/node"
 )
 
 // workerStartPreflight gates a WorkerStartForSite call on the framework's
@@ -33,6 +34,9 @@ func workerStartPreflight(sitePath, workerName string, w config.FrameworkWorker)
 	if config.ContainsUnitInjectionChars(w.Command) || config.ContainsUnitInjectionChars(w.ReloadCommand) {
 		return fmt.Errorf("worker %q has an invalid command: must not contain newline or NUL", workerName)
 	}
+	if msg := hostWorkerNoNodeMsg(workerName, sitePath, w); msg != "" {
+		return errors.New(msg)
+	}
 	if w.Check != nil && !config.MatchesRule(sitePath, *w.Check) {
 		if msg := hostWorkerNotReadyMsg(workerName, sitePath, w); msg != "" {
 			return errors.New(msg)
@@ -60,6 +64,31 @@ func hostWorkerNotReadyMsg(workerName, sitePath string, w config.FrameworkWorker
 		return ""
 	}
 	return fmt.Sprintf("%s worker not started: JS dependencies are not installed. Run `lerd setup` to install them, then `lerd worker start %s`.", workerName, workerName)
+}
+
+// hostWorkerNoNodeMsg returns an actionable message for a host node worker
+// whose command needs the Node toolchain while Node is unmanaged and neither a
+// system node/npm nor bun can be resolved anywhere. Without the gate the unit
+// would crash-loop on `npm: command not found`. Returns "" when the worker
+// isn't affected (managed Node, bun available, or a non-Node command).
+func hostWorkerNoNodeMsg(workerName, sitePath string, w config.FrameworkWorker) string {
+	if !w.Host || !isNodeProject(sitePath) || lerdManagesNode() {
+		return ""
+	}
+	if !nodeDet.CommandUsesNode(w.Command) || bunRunnerFor(sitePath, false) != "" {
+		return ""
+	}
+	if len(nodeDet.SystemNodeBinDirs()) > 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s worker not started: %v", workerName, errNoUsableNode())
+}
+
+// errNoUsableNode is the shared no-Node error for the preflight gate and the
+// host-worker unit generators (the generators also hit it on the boot restore
+// path, which never runs the preflight).
+func errNoUsableNode() error {
+	return errors.New("lerd is not managing Node.js and no node/npm (or bun) could be found on this system. Install Node.js, or run `lerd install` to let lerd manage it")
 }
 
 // describeRule renders a FrameworkRule for an end-user error message.
