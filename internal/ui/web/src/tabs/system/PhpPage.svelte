@@ -83,6 +83,7 @@
           patch={fpmFor(v)?.patch}
           running={fpmFor(v)?.running ?? false}
           isDefault={v === phpDefault}
+          updateAvailable={fpmFor(v)?.update_available ?? false}
           selected={v === active}
           onselect={() => pickVersion(v)}
         />

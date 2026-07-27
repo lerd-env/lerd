@@ -273,6 +273,14 @@ export function notifyLocalFailure(kind: string, title: string, body: string) {
   pushInApp(entry);
 }
 
+// notifyLocalInfo reports the outcome of something the user just asked for on
+// this page. It takes the toast surface and auto-dismisses, and deliberately
+// skips the notification centre: the centre is for catching up on what happened
+// while you were elsewhere, not for echoing your own click back at you.
+export function notifyLocalInfo(kind: string, title: string, body: string = '') {
+  pushInApp({ kind, title, body, url: '', failed: false });
+}
+
 // dedupeWindowMs scopes the tag dedupe to a short window so an immediate
 // retry of the same payload collapses but a same-tag send seconds later
 // (Send-test double-click, two identical mail webhooks) still fires.

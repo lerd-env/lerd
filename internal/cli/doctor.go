@@ -500,10 +500,22 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	for _, v := range phpVersions {
 		short := strings.ReplaceAll(v, ".", "")
 		image := "lerd-php" + short + "-fpm:local"
-		if !podman.ImageExists(image) {
+		// The base tag is the recipe hash, so an upstream PHP or Alpine fix
+		// republishes it without moving any local hash. Nothing else on the
+		// machine notices that the image has fallen behind it.
+		exists := podman.ImageExists(image)
+		base := (*podman.BaseImageStatus)(nil)
+		if exists {
+			base = podman.CheckBaseImageFreshness(v)
+		}
+		switch {
+		case !exists:
 			fail(fmt.Sprintf("PHP %s image", v), "missing", "lerd php:rebuild "+v)
 			rep.fixLast(autoFix(fixPhpRebuild, v, "rebuild the PHP "+v+" image"))
-		} else {
+		case base != nil && base.Stale:
+			warn(fmt.Sprintf("PHP %s image", v), "its base image was refreshed upstream, run: lerd php:rebuild "+v)
+			rep.fixLast(autoFix(fixPhpRebuild, v, "rebuild the PHP "+v+" image on the refreshed base"))
+		default:
 			ok(fmt.Sprintf("PHP %s image", v))
 		}
 	}

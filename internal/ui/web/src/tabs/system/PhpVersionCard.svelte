@@ -7,10 +7,11 @@
     patch?: string;
     running: boolean;
     isDefault: boolean;
+    updateAvailable?: boolean;
     selected: boolean;
     onselect: () => void;
   }
-  let { version, patch, running, isDefault, selected, onselect }: Props = $props();
+  let { version, patch, running, isDefault, updateAvailable = false, selected, onselect }: Props = $props();
 
   // Show the full build when known ("8.5.8"), with the patch tail dimmed so it
   // reads as one number; fall back to the minor until the probe lands.
@@ -24,7 +25,7 @@
 <button
   type="button"
   onclick={onselect}
-  title={'PHP ' + display + ' — ' + (running ? m.common_running() : m.common_stopped()) + (isDefault ? ' · ' + m.common_default() : '')}
+  title={'PHP ' + display + ' — ' + (running ? m.common_running() : m.common_stopped()) + (isDefault ? ' · ' + m.common_default() : '') + (updateAvailable ? ' · ' + m.system_php_baseUpdateHint() : '')}
   class="shrink-0 w-[9.5rem] snap-start text-left flex flex-col gap-2.5 rounded-2xl border p-3 transition-colors {selected
     ? 'border-lerd-red bg-white dark:bg-lerd-card ring-1 ring-lerd-red'
     : 'border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:border-gray-300 dark:hover:border-gray-600'}"
@@ -50,6 +51,17 @@
         aria-label={m.common_default()}
       >
         <path d="M10 1.5l2.6 5.27 5.82.85-4.21 4.1.99 5.78L10 14.77l-5.2 2.73.99-5.78L1.58 7.62l5.82-.85L10 1.5z" />
+      </svg>
+    {/if}
+    {#if updateAvailable}
+      <svg
+        class="w-3.5 h-3.5 shrink-0 text-yellow-600 dark:text-yellow-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+        aria-label={m.system_php_baseUpdate()}
+      >
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
       </svg>
     {/if}
   </div>

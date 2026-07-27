@@ -4397,10 +4397,19 @@ func execPHPList() (any, *rpcError) {
 	type entry struct {
 		Version string `json:"version"`
 		Default bool   `json:"default"`
+		// BaseUpdate is set when the prebuilt base this version's image was
+		// built from has been republished since, so a rebuild would bring in a
+		// newer PHP/Alpine. Absent when there is nothing to report.
+		BaseUpdate bool `json:"base_update,omitempty"`
 	}
 	result := make([]entry, 0, len(versions))
 	for _, v := range versions {
-		result = append(result, entry{Version: v, Default: v == cfg.PHP.DefaultVersion})
+		base := podman.CheckBaseImageFreshness(v)
+		result = append(result, entry{
+			Version:    v,
+			Default:    v == cfg.PHP.DefaultVersion,
+			BaseUpdate: base != nil && base.Stale,
+		})
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	return toolOK(string(data)), nil
