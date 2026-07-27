@@ -2,7 +2,7 @@ import { render, fireEvent } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 
 import ServiceEntitiesTab from './ServiceEntitiesTab.svelte';
-import { entities, type EntityKind } from '$stores/entities';
+import { entities, entityLoads, type EntityKind } from '$stores/entities';
 import type { Service } from '$stores/services';
 
 function svc(status = 'active'): Service {
@@ -37,6 +37,7 @@ describe('ServiceEntitiesTab', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     entities.set({});
+    entityLoads.reset();
   });
 
   it('renders rows with their declared columns formatted', () => {
@@ -73,5 +74,35 @@ describe('ServiceEntitiesTab', () => {
   it('hints at starting the service when it is stopped', () => {
     const { getByText } = render(ServiceEntitiesTab, { props: { svc: svc('inactive') } });
     expect(getByText('Start the service to browse its contents.')).toBeInTheDocument();
+  });
+
+  it('waits on the contents of a running service instead of showing it empty', () => {
+    entities.set({});
+    entityLoads.reset();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => new Promise<Response>(() => {}))
+    );
+    const { getByText, queryByText } = render(ServiceEntitiesTab, { props: { svc: svc() } });
+    expect(getByText('Loading...')).toBeInTheDocument();
+    expect(queryByText('Nothing here yet.')).toBeNull();
+  });
+
+  it('reports a failed load and reloads on retry', async () => {
+    entities.set({});
+    entityLoads.reset();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('boom', { status: 500 }))
+    );
+    const { findByText, getByText } = render(ServiceEntitiesTab, { props: { svc: svc() } });
+    expect(await findByText('Could not read what this service holds.')).toBeInTheDocument();
+
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify([buckets()]), { status: 200 }))
+    );
+    await fireEvent.click(getByText('Retry'));
+    expect(await findByText('lerd')).toBeInTheDocument();
   });
 });

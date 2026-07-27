@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiFetch, apiJson, apiUrl, decodeJSONResult, decodeJSONText } from '$lib/api';
+import { createLoadStates } from '$lib/loadState';
 import { m } from '../paraglide/messages.js';
 
 export interface Snapshot {
@@ -53,13 +54,19 @@ function upsert(engine: DatabaseEngine): void {
   });
 }
 
+// engineLoads tracks where each engine's fetch stands, so a view can say it is
+// loading rather than reading an engine it has not received yet as a stopped one.
+export const engineLoads = createLoadStates();
+
 // loadEngine fetches a single engine and merges it into the store. Failures keep
 // the last good copy rather than blanking the view.
 export async function loadEngine(service: string): Promise<void> {
+  engineLoads.start(service);
   try {
     upsert(await apiJson<DatabaseEngine>(`/api/databases/${encodeURIComponent(service)}`));
+    engineLoads.settle(service, false);
   } catch {
-    /* keep the last good copy */
+    engineLoads.settle(service, true);
   }
 }
 

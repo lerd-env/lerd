@@ -1,5 +1,6 @@
 import { writable } from 'svelte/store';
 import { apiFetch, apiJson, apiUrl, decodeJSONResult, decodeJSONText } from '$lib/api';
+import { createLoadStates } from '$lib/loadState';
 import { m } from '../paraglide/messages.js';
 
 // The generic entity overview: a service's preset declares what it holds
@@ -39,14 +40,20 @@ export interface EntityKind {
 // only the service it is showing.
 export const entities = writable<Record<string, EntityKind[]>>({});
 
+// entityLoads tracks where each service's fetch stands, so a view can say it is
+// loading rather than reading kinds it has not received yet as an empty service.
+export const entityLoads = createLoadStates();
+
 // loadEntities fetches a service's kinds and merges them in. Failures keep the
 // last good copy rather than blanking the view.
 export async function loadEntities(service: string): Promise<void> {
+  entityLoads.start(service);
   try {
     const kinds = await apiJson<EntityKind[]>(`/api/entities/${encodeURIComponent(service)}`);
     entities.update((all) => ({ ...all, [service]: kinds }));
+    entityLoads.settle(service, false);
   } catch {
-    /* keep the last good copy */
+    entityLoads.settle(service, true);
   }
 }
 
