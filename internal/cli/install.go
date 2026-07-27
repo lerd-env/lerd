@@ -286,7 +286,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	systemNode := detectSystemNode()
 	nvmDetected := detectNvm()
-	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", nvmDetected, lerdManagesNode())
+	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, unattended, savedNode, systemNode != "", nvmDetected, lerdManagesNode())
 	if promptNode {
 		if systemNode != "" {
 			feedback.Line("Node.js detected at " + systemNode)
@@ -1410,12 +1410,25 @@ func lerdManagesNode() bool {
 // it yet, which the system-node probe cannot see. Update never prompts. When
 // needPrompt is true the caller runs the prompt and overrides want with the
 // answer.
-func nodeManageDecision(fromUpdate bool, saved *bool, systemNodeDetected, nvmDetected, shimPresent bool) (want, needPrompt, promptDefault bool) {
+//
+// A package install cannot ask, so it answers by detection instead: an existing
+// nvm drives Node, otherwise lerd manages it through fnm. It must not fall
+// through to the update branch, which reads the answer off the shim state. On a
+// first install there is no shim yet, so that recorded "unmanaged" and left the
+// package to provision no Node at all, deferring it to whenever something first
+// needed one.
+func nodeManageDecision(fromUpdate, unattended bool, saved *bool, systemNodeDetected, nvmDetected, shimPresent bool) (want, needPrompt, promptDefault bool) {
 	if saved != nil {
 		return *saved, false, *saved
 	}
-	if shimPresent || fromUpdate {
-		return shimPresent, false, shimPresent
+	if shimPresent {
+		return true, false, true
+	}
+	if unattended {
+		return !nvmDetected, false, !nvmDetected
+	}
+	if fromUpdate {
+		return false, false, false
 	}
 	if systemNodeDetected || nvmDetected {
 		return true, true, true

@@ -8,6 +8,7 @@ func TestNodeManageDecision(t *testing.T) {
 	cases := []struct {
 		name        string
 		fromUpdate  bool
+		unattended  bool
 		saved       *bool
 		systemNode  bool
 		nvm         bool
@@ -17,34 +18,48 @@ func TestNodeManageDecision(t *testing.T) {
 		wantDefault bool
 	}{
 		// An explicit saved choice always wins silently, on install and update.
-		{"saved opt-out honoured on install", false, boolPtr(false), true, false, true, false, false, false},
-		{"saved opt-out honoured on update", true, boolPtr(false), true, false, true, false, false, false},
-		{"saved opt-in honoured on install", false, boolPtr(true), false, false, false, true, false, true},
-		{"saved opt-in honoured on update", true, boolPtr(true), false, false, false, true, false, true},
-		{"saved opt-out honoured with nvm", false, boolPtr(false), true, true, true, false, false, false},
+		{"saved opt-out honoured on install", false, false, boolPtr(false), true, false, true, false, false, false},
+		{"saved opt-out honoured on update", true, false, boolPtr(false), true, false, true, false, false, false},
+		{"saved opt-in honoured on install", false, false, boolPtr(true), false, false, false, true, false, true},
+		{"saved opt-in honoured on update", true, false, boolPtr(true), false, false, false, true, false, true},
+		{"saved opt-out honoured with nvm", false, false, boolPtr(false), true, true, true, false, false, false},
 
 		// No saved choice yet but lerd is already managing (shim present): adopt
 		// that as the remembered choice without asking, so an existing user is
 		// never re-prompted on a rerun.
-		{"install adopts existing managed silently", false, nil, true, false, true, true, false, true},
-		{"update adopts existing managed silently", true, nil, true, false, true, true, false, true},
+		{"install adopts existing managed silently", false, false, nil, true, false, true, true, false, true},
+		{"update adopts existing managed silently", true, false, nil, true, false, true, true, false, true},
 
 		// No saved choice and no shim on update: preserve the unmanaged state.
-		{"update legacy preserves unmanaged", true, nil, true, false, false, false, false, false},
-		{"update legacy preserves unmanaged with nvm", true, nil, false, true, false, false, false, false},
+		{"update legacy preserves unmanaged", true, false, nil, true, false, false, false, false, false},
+		{"update legacy preserves unmanaged with nvm", true, false, nil, false, true, false, false, false, false},
 
 		// Genuine first-time install (no saved choice, no shim): prompt when the
 		// user already has a Node setup of their own, otherwise default to
 		// managed with no prompt. An nvm install counts even with no versions in
 		// it yet, which is invisible to the system-node probe.
-		{"first install system node prompts", false, nil, true, false, false, false, true, true},
-		{"first install nvm without versions prompts", false, nil, false, true, false, false, true, true},
-		{"first install system node and nvm prompts", false, nil, true, true, false, false, true, true},
-		{"first install no node at all defaults on", false, nil, false, false, false, true, false, true},
+		{"first install system node prompts", false, false, nil, true, false, false, false, true, true},
+		{"first install nvm without versions prompts", false, false, nil, false, true, false, false, true, true},
+		{"first install system node and nvm prompts", false, false, nil, true, true, false, false, true, true},
+		{"first install no node at all defaults on", false, false, nil, false, false, false, true, false, true},
+
+		// A package install has nobody to ask, but must still leave a working
+		// Node behind. An existing nvm drives it, otherwise lerd owns it through
+		// fnm and installs a version. Reaching the update branch instead left a
+		// machine with no Node at all and an fnm nothing was installed into.
+		{"unattended without nvm manages node", true, true, nil, false, false, false, true, false, true},
+		{"unattended with nvm defers to nvm", true, true, nil, false, true, false, false, false, false},
+		{"unattended with system node but no nvm still manages", true, true, nil, true, false, false, true, false, true},
+		{"unattended never prompts", true, true, nil, true, true, false, false, false, false},
+
+		// An unattended rerun over an existing managed setup keeps it, and a
+		// saved choice still outranks everything.
+		{"unattended keeps existing managed", true, true, nil, false, false, true, true, false, true},
+		{"unattended honours a saved opt-out", true, true, boolPtr(false), false, false, false, false, false, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			want, prompt, def := nodeManageDecision(tc.fromUpdate, tc.saved, tc.systemNode, tc.nvm, tc.shimPresent)
+			want, prompt, def := nodeManageDecision(tc.fromUpdate, tc.unattended, tc.saved, tc.systemNode, tc.nvm, tc.shimPresent)
 			if prompt != tc.wantPrompt {
 				t.Errorf("needPrompt = %v, want %v", prompt, tc.wantPrompt)
 			}
