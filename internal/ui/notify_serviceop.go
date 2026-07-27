@@ -71,6 +71,12 @@ func notificationForPHPInstall(version string, start time.Time, opErr error) pus
 	return opNotification("Install", "PHP "+version, "lerd-op-install-php-"+version, url, "install", start, opErr)
 }
 
+// notificationForPHPRebuild builds the op_done/op_failed notification for a PHP
+// image rebuild, which outlives the modal the same way an install does.
+func notificationForPHPRebuild(version string, start time.Time, opErr error) push.Notification {
+	return opNotification("Rebuild", "PHP "+version, "lerd-op-rebuild-php-"+version, "#system/php-"+version, "rebuild", start, opErr)
+}
+
 func formatOpDuration(d time.Duration) string {
 	if d < time.Second {
 		return "0s"

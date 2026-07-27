@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onDestroy } from 'svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import LogViewer from '$components/LogViewer.svelte';
@@ -6,11 +7,11 @@
   import PhpPortsTab from './PhpPortsTab.svelte';
   import PhpExtensionsTab from './PhpExtensionsTab.svelte';
   import { status, loadStatus } from '$stores/status';
-  import { setDefaultPhp, startPhp, stopPhp } from '$stores/phpVersions';
+  import { setDefaultPhp, startPhp, stopPhp, checkPhpUpdates } from '$stores/phpVersions';
   import { sites, sitesByPhp } from '$stores/sites';
   import { xdebugOn, xdebugOff, XDEBUG_MODES, type XdebugMode } from '$stores/xdebug';
   import { goToTab } from '$stores/route';
-  import { openPhpRemoveModal } from '$stores/modals';
+  import { openPhpRemoveModal, openPhpRebuildModal } from '$stores/modals';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -26,12 +27,16 @@
   const xdebugMode = $derived<XdebugMode>((fpm?.xdebug_mode as XdebugMode) || 'debug');
   const container = $derived('lerd-php' + version.replace('.', '') + '-fpm');
   const sitesUsing = $derived($sites.filter((s) => s.php_version === version));
+  const baseUpdate = $derived(Boolean(fpm?.update_available));
 
   let defaultBusy = $state(false);
   let fpmBusy = $state(false);
   let xdebugBusy = $state(false);
   let xdebugMenuOpen = $state(false);
   let xdebugRootEl: HTMLDivElement | undefined = $state();
+  let checking = $state(false);
+  let checkMessage = $state<{ text: string; tone: 'ok' | 'info' | 'error' } | null>(null);
+  let checkMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
   // The parent (PhpPage) no longer wraps us in {#key version}; reset
   // per-version transient state when the version prop changes so a stale
@@ -124,11 +129,71 @@
     }
   }
 
-  const versionBusy = $derived(fpmBusy || defaultBusy);
+  function setCheckMessage(text: string, tone: 'ok' | 'info' | 'error') {
+    if (checkMessageTimer) clearTimeout(checkMessageTimer);
+    checkMessage = { text, tone };
+    checkMessageTimer = setTimeout(() => (checkMessage = null), 4000);
+  }
+
+  onDestroy(() => {
+    if (checkMessageTimer) clearTimeout(checkMessageTimer);
+  });
+
+  // Reads through to the registry, so it answers even when the cached digest
+  // is hours old. The badge itself follows from the refreshed status.
+  async function runCheckUpdates() {
+    checking = true;
+    try {
+      const res = await checkPhpUpdates(version);
+      if (!res.ok) {
+        setCheckMessage(m.system_php_checkUpdatesFailed(), 'error');
+        return;
+      }
+      if (res.status?.stale) {
+        setCheckMessage(m.system_php_checkUpdatesFound(), 'info');
+      } else {
+        setCheckMessage(m.system_php_checkUpdatesUpToDate(), 'ok');
+      }
+      await loadStatus();
+    } finally {
+      checking = false;
+    }
+  }
+
+  const versionBusy = $derived(fpmBusy || defaultBusy || checking);
+
+  const rebuildAction = $derived<ButtonMenuAction>({
+    id: 'rebuild',
+    tone: baseUpdate ? 'success' : undefined,
+    icon: rebuildIcon,
+    label: baseUpdate ? m.system_php_rebuildUpdate() : m.system_php_rebuild(),
+    title: baseUpdate ? m.system_php_baseUpdateHint() : m.system_php_rebuildHint(),
+    onclick: () => openPhpRebuildModal(version)
+  });
 
   const versionActions = $derived.by<ButtonMenuAction[]>(() => {
-    if (isDefault) return [];
     const acts: ButtonMenuAction[] = [];
+    // A republished base is the one thing worth pulling to the front, the way
+    // an available service update is; otherwise rebuild sits with the rest.
+    if (baseUpdate) {
+      acts.push(rebuildAction);
+    }
+    const tail: ButtonMenuAction[] = [
+      {
+        id: 'check-updates',
+        icon: checkUpdatesIcon,
+        label: checking ? m.services_checkUpdatesChecking() : m.system_php_checkUpdates(),
+        title: m.system_php_checkUpdatesTitle(),
+        disabled: checking,
+        onclick: runCheckUpdates
+      }
+    ];
+    if (!baseUpdate) {
+      tail.unshift(rebuildAction);
+    }
+    if (isDefault) {
+      return [...acts, ...tail];
+    }
     if (running) {
       acts.push({
         id: 'stop',
@@ -164,7 +229,7 @@
       title: siteCount > 0 ? m.system_php_removeWarn({ count: siteCount }) : m.system_php_removeTitle(),
       onclick: () => openPhpRemoveModal({ version, siteCount })
     });
-    return acts;
+    return [...acts, ...tail];
   });
 </script>
 
@@ -179,6 +244,12 @@
 {/snippet}
 {#snippet trashIcon()}
   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+{/snippet}
+{#snippet rebuildIcon()}
+  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+{/snippet}
+{#snippet checkUpdatesIcon()}
+  <svg class={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
 {/snippet}
 
 {#snippet detailActions()}
@@ -241,7 +312,23 @@
       {/if}
     {/if}
   </div>
-  <ButtonMenu actions={versionActions} busy={versionBusy} />
+  <!-- The check result hangs off the button rather than stacking above it: in
+       flow it would grow the action row and push every control out of line. -->
+  <div class="relative inline-flex">
+    <ButtonMenu actions={versionActions} busy={versionBusy} />
+    {#if checkMessage}
+      <span
+        class={'pointer-events-none absolute right-0 top-full mt-1 text-[11px] whitespace-nowrap ' + (
+          checkMessage.tone === 'error'
+            ? 'text-rose-600 dark:text-rose-400'
+            : checkMessage.tone === 'info'
+              ? 'text-emerald-600 dark:text-emerald-400'
+              : 'text-gray-500 dark:text-gray-400'
+        )}
+        title={checkMessage.text}
+      >{checkMessage.text}</span>
+    {/if}
+  </div>
 {/snippet}
 
 <DetailTabs {tabs} {active} onchange={(id) => (active = id)} actions={detailActions} />

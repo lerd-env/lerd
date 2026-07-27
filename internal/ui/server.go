@@ -649,6 +649,10 @@ type PHPStatus struct {
 	XdebugEnabled bool     `json:"xdebug_enabled"`
 	XdebugMode    string   `json:"xdebug_mode,omitempty"`
 	Ports         []string `json:"ports,omitempty"`
+	// UpdateAvailable is true when the prebuilt base this version's image was
+	// built from has been republished since, so a rebuild picks up whatever
+	// upstream shipped. Read from the digest cache, never from the network.
+	UpdateAvailable bool `json:"update_available,omitempty"`
 }
 
 func handleStatus(w http.ResponseWriter, _ *http.Request) {
@@ -680,7 +684,11 @@ func buildStatus() StatusResponse {
 			xdebugMode = cfg.GetXdebugMode(v)
 			ports = cfg.PHP.FPMPorts[v]
 		}
-		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: podman.FPMPHPVersion(v), Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports})
+		baseStale := false
+		if base := podman.BaseImageFreshness(v); base != nil {
+			baseStale = base.Stale
+		}
+		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: podman.FPMPHPVersion(v), Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports, UpdateAvailable: baseStale})
 	}
 
 	phpDefault := ""
@@ -4477,6 +4485,26 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Base-image freshness. GET answers from the digest cache so a snapshot
+	// rebuild never waits on the registry; POST is the manual "check for
+	// updates" and reads through to it. null means nothing to report: no
+	// recorded base, or a registry that could not answer.
+	if action == "updates" && len(parts) == 2 {
+		if r.Method == http.MethodPost {
+			writeJSON(w, podman.RefreshBaseImageFreshness(version))
+			return
+		}
+		writeJSON(w, podman.BaseImageFreshness(version))
+		return
+	}
+
+	// Streaming rebuild: same work as `lerd php:rebuild <version>`, so the
+	// update badge has an action behind it.
+	if action == "rebuild" && len(parts) == 2 {
+		handlePHPRebuild(w, r, version)
+		return
+	}
+
 	if len(parts) != 2 {
 		http.NotFound(w, r)
 		return
@@ -4581,9 +4609,9 @@ func teardownPHPFPM(version string) error {
 	return nil
 }
 
-// phpInstallInFlight guards against concurrent installs of the same version
-// racing on the same image build and quadlet file.
-var phpInstallInFlight sync.Map
+// phpBuildInFlight guards against concurrent installs or rebuilds of the same
+// version racing on the same image build and quadlet file.
+var phpBuildInFlight sync.Map
 
 // installablePHPVersions returns the supported versions that are not present in
 // installed, preserving the supported order. Always a non-nil slice.
@@ -4601,6 +4629,25 @@ func installablePHPVersions(supported, installed []string) []string {
 	return out
 }
 
+// startPHPBuildStream prepares the SSE response an image build streams over,
+// returning the writer that ships build output and the emitter for the final
+// `event: done` payload. ok is false when the client cannot be streamed to.
+func startPHPBuildStream(w http.ResponseWriter) (*sseLineWriter, func(map[string]any), bool) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		return nil, nil, false
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	done := func(payload map[string]any) {
+		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(payload))
+		flusher.Flush()
+	}
+	return &sseLineWriter{w: w, f: flusher}, done, true
+}
+
 // handlePHPInstall answers POST /api/php-versions/install?version=8.3 by
 // building the FPM image for that version, streaming the build log as SSE and
 // finishing with an `event: done` payload. Mirrors handleSiteWorktreeAdd.
@@ -4609,19 +4656,10 @@ func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	flusher, ok := w.(http.Flusher)
+	sw, done, ok := startPHPBuildStream(w)
 	if !ok {
 		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
-	}
-	w.Header().Set("Content-Type", "text/event-stream")
-	w.Header().Set("Cache-Control", "no-cache")
-	w.Header().Set("Connection", "keep-alive")
-	w.Header().Set("X-Accel-Buffering", "no")
-
-	done := func(payload map[string]any) {
-		fmt.Fprintf(w, "event: done\ndata: %s\n\n", mustJSON(payload))
-		flusher.Flush()
 	}
 
 	version := strings.TrimSpace(r.URL.Query().Get("version"))
@@ -4631,11 +4669,11 @@ func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	// Reject a second concurrent install of the same version so two clients can't
 	// race on the same image build and quadlet file.
-	if _, busy := phpInstallInFlight.LoadOrStore(version, struct{}{}); busy {
+	if _, busy := phpBuildInFlight.LoadOrStore(version, struct{}{}); busy {
 		done(map[string]any{"ok": false, "error": "PHP " + version + " is already installing"})
 		return
 	}
-	defer phpInstallInFlight.Delete(version)
+	defer phpBuildInFlight.Delete(version)
 	// Block only when fully installed (registered with a built image); a version
 	// left half-registered by an interrupted build must stay re-installable.
 	if slices.Contains(fullyInstalledPHPVersions(), version) {
@@ -4644,7 +4682,6 @@ func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	start := time.Now()
-	sw := &sseLineWriter{w: w, f: flusher}
 	err := cli.InstallPHPVersion(version, sw)
 	sw.flushTail()
 	// Notify regardless of whether the client is still connected, so a user who
@@ -4662,6 +4699,43 @@ func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
 	// Refresh the container cache before signalling done so the client's
 	// follow-up status load (and the publishAfter broadcast) report the
 	// freshly-started FPM as running instead of a stale not-running snapshot.
+	podman.Cache.PollNow()
+	done(map[string]any{"ok": true, "version": version})
+}
+
+// handlePHPRebuild answers POST /api/php-versions/{version}/rebuild by
+// force-rebuilding that version's image against the current prebuilt base and
+// restarting everything running on it, streaming the build log as SSE. This is
+// the action behind the update badge a republished base raises.
+func handlePHPRebuild(w http.ResponseWriter, r *http.Request, version string) {
+	if r.Method != http.MethodPost {
+		http.NotFound(w, r)
+		return
+	}
+	sw, done, ok := startPHPBuildStream(w)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
+		return
+	}
+	if !slices.Contains(fullyInstalledPHPVersions(), version) {
+		done(map[string]any{"ok": false, "error": "PHP " + version + " is not installed"})
+		return
+	}
+	// Shares the in-flight set with install: both build the same image.
+	if _, busy := phpBuildInFlight.LoadOrStore(version, struct{}{}); busy {
+		done(map[string]any{"ok": false, "error": "PHP " + version + " is already building"})
+		return
+	}
+	defer phpBuildInFlight.Delete(version)
+
+	start := time.Now()
+	err := cli.RebuildPHPVersion(version, sw)
+	sw.flushTail()
+	dispatchNotification(notificationForPHPRebuild(version, start, err))
+	if err != nil {
+		done(map[string]any{"ok": false, "error": err.Error(), "version": version})
+		return
+	}
 	podman.Cache.PollNow()
 	done(map[string]any{"ok": true, "version": version})
 }

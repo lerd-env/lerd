@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/svelte';
 import { describe, it, expect } from 'vitest';
 import { readable } from 'svelte/store';
+import { tick } from 'svelte';
 import { vi } from 'vitest';
 
 vi.mock('$stores/status', async (orig) => {
@@ -32,5 +33,17 @@ describe('PhpDetail', () => {
     const { container } = render(PhpDetail, { props: { version: '8.4' } });
     const xdebug = screen.getByText('Xdebug');
     expect(container.querySelector('.border-b')?.contains(xdebug)).toBe(true);
+  });
+
+  // The default version has no lifecycle actions, but rebuild and the update
+  // check still apply to it: it is the version most sites run on.
+  it('offers rebuild and the update check on the default version', async () => {
+    const { container } = render(PhpDetail, { props: { version: '8.4' } });
+    expect(screen.getByText('Rebuild image')).toBeInTheDocument();
+    const toggle = container.querySelector<HTMLButtonElement>('button[aria-haspopup="menu"]');
+    expect(toggle).not.toBeNull();
+    toggle!.click();
+    await tick();
+    expect(screen.getByText('Check for updates')).toBeInTheDocument();
   });
 });

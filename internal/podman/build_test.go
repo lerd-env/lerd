@@ -516,7 +516,7 @@ func TestFPMImageName(t *testing.T) {
 }
 
 func TestFPMBuildArgs_ContainsHashLabel(t *testing.T) {
-	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", false)
+	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", "sha256:base", false)
 	if !sliceContainsPair(args, "--label", fpmContainerfileHashLabel+"=abc123") {
 		t.Errorf("build args missing the containerfile-hash label\nargs: %v", args)
 	}
@@ -526,7 +526,7 @@ func TestFPMBuildArgs_ContainsHashLabel(t *testing.T) {
 }
 
 func TestFPMBuildArgs_ForceAddsNoCache(t *testing.T) {
-	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", true)
+	args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", "sha256:base", true)
 	if !sliceContains(args, "--no-cache") {
 		t.Errorf("force=true should add --no-cache, got: %v", args)
 	}
@@ -541,7 +541,7 @@ func TestFPMBuildArgs_ForceAddsNoCache(t *testing.T) {
 // can tell a later build that this image predates a newly declared extension.
 func TestFPMBuildArgs_ContainsCustomSetLabel(t *testing.T) {
 	for _, force := range []bool{false, true} {
-		args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", force)
+		args := fpmBuildArgs("lerd-php84-fpm:local", "abc123", "cust1", "sha256:base", force)
 		if !sliceContainsPair(args, "--label", fpmCustomSetHashLabel+"=cust1") {
 			t.Errorf("force=%v: build args missing the custom-set label\nargs: %v", force, args)
 		}
@@ -549,7 +549,7 @@ func TestFPMBuildArgs_ContainsCustomSetLabel(t *testing.T) {
 }
 
 func TestFPMBuildArgs_TagsImageName(t *testing.T) {
-	args := fpmBuildArgs("lerd-php85-fpm:local", "h", "", false)
+	args := fpmBuildArgs("lerd-php85-fpm:local", "h", "", "", false)
 	if !sliceContainsPair(args, "-t", "lerd-php85-fpm:local") {
 		t.Errorf("missing -t <image> pair\nargs: %v", args)
 	}

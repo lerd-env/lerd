@@ -360,18 +360,23 @@ func readCache(ref ImageRef) ([]TagInfo, bool) {
 func writeCache(ref ImageRef, tags []TagInfo) {
 	cacheMu.Lock()
 	defer cacheMu.Unlock()
-	dir := cacheDir()
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		warnCache("mkdir %s: %v", dir, err)
-		return
-	}
-	entry := cachedEntry{FetchedAt: time.Now(), Tags: tags}
-	data, err := json.Marshal(entry)
+	data, err := json.Marshal(cachedEntry{FetchedAt: time.Now(), Tags: tags})
 	if err != nil {
 		warnCache("marshal: %v", err)
 		return
 	}
-	final := cachePath(ref)
+	writeCacheFile(cachePath(ref), data)
+}
+
+// writeCacheFile writes data to final atomically (temp file plus rename), so a
+// concurrent reader sees either the old file or the new one. Callers hold
+// cacheMu. Failures are logged, never fatal: the cache is an optimisation.
+func writeCacheFile(final string, data []byte) {
+	dir := filepath.Dir(final)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		warnCache("mkdir %s: %v", dir, err)
+		return
+	}
 	tmp, err := os.CreateTemp(dir, ".cache-*.tmp")
 	if err != nil {
 		warnCache("tempfile in %s: %v", dir, err)

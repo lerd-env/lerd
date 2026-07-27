@@ -269,12 +269,15 @@ func imageLabel(image, key string) string {
 // fpmBuildArgs returns the `podman build` flags shared by both build
 // paths in buildFPMImage, before either appends the `-f <ctx>` tail.
 // Extracted so the load-bearing `--label` arg has unit-test coverage.
-func fpmBuildArgs(imageName, containerfileHash, customHash string, force bool) []string {
+// baseDigest is empty for a local build, and the label is emitted anyway so
+// that build clears the digest a previous prebuilt-base build stamped.
+func fpmBuildArgs(imageName, containerfileHash, customHash, baseDigest string, force bool) []string {
 	args := []string{
 		"build",
 		"-t", imageName,
 		"--label", fpmContainerfileHashLabel + "=" + containerfileHash,
 		"--label", fpmCustomSetHashLabel + "=" + customHash,
+		"--label", fpmBaseDigestLabel + "=" + baseDigest,
 	}
 	if force {
 		// Bypass layer cache so changes are fully applied. The old image
@@ -473,11 +476,15 @@ func buildFPMImage(version string, force, local bool, customExts []string, extDe
 	defer os.RemoveAll(tmp)
 
 	var containerfile string
-	buildArgs := fpmBuildArgs(imageName, canonicalHash, customHash, force)
+	// The digest of the base this image ends up carrying, read from the
+	// registry rather than the cache so a refresh inside the cache window
+	// can't stamp a digest the pulled base has already moved past.
+	var baseDigest string
 
 	// Fast path: pull pre-built base and layer just mkcert CA + custom extensions on top.
 	if !local {
 		if baseRef := tryPullBaseImage(version, w); baseRef != "" {
+			baseDigest, _ = refreshManifestDigestFn(baseRef)
 			containerfile = "FROM " + baseRef + "\n" +
 				"RUN mkdir -p /etc/my.cnf.d && printf '[client]\\nssl=0\\n' > /etc/my.cnf.d/lerd-no-ssl.cnf\n" +
 				buildCustomExtBlockWithToolchain(customExts, extDeps) +
@@ -513,6 +520,7 @@ build:
 		return false, err
 	}
 
+	buildArgs := fpmBuildArgs(imageName, canonicalHash, customHash, baseDigest, force)
 	buildArgs = append(buildArgs, "-f", cfPath, tmp)
 	cmd := execCommand(PodmanBin(), buildArgs...)
 	cmd.Stdout = w
@@ -528,6 +536,7 @@ build:
 		fmt.Fprintf(w, "  WARN: storing PHP-FPM image hash: %v\n", err)
 	}
 	RecordRealisedSet(version, customExts, packages)
+	forgetRecordedBaseDigest(version)
 
 	fmt.Fprintf(w, "  PHP %s image built successfully.\n", version)
 	if OnImageRebuilt != nil {
