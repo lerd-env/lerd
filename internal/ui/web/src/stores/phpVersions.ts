@@ -108,6 +108,59 @@ export async function streamPhpInstall(
   });
 }
 
+// streamPhpRebuild force-rebuilds a version's image against the current base,
+// streaming the build log the same way an install does.
+export async function streamPhpRebuild(
+  version: string,
+  onEvent: (e: PhpInstallEvent) => void,
+  signal?: AbortSignal
+): Promise<void> {
+  const res = await apiFetch('/api/php-versions/' + encodeURIComponent(version) + '/rebuild', {
+    method: 'POST',
+    signal
+  });
+  await readSSE(res, (event, data) => {
+    if (event === 'done') {
+      try {
+        const r = JSON.parse(data) as { ok?: boolean; version?: string; error?: string };
+        onEvent({ done: true, ok: Boolean(r.ok), version: r.version, error: r.error });
+      } catch {
+        onEvent({ done: true, ok: false, error: 'bad done payload' });
+      }
+    } else {
+      onEvent({ line: data });
+    }
+  });
+}
+
+// BaseImageStatus compares a version's image against the prebuilt base it was
+// built from. null when there is nothing to report: no recorded base (a local
+// build) or a registry that could not answer.
+export interface BaseImageStatus {
+  version: string;
+  ref?: string;
+  built_digest?: string;
+  latest_digest?: string;
+  stale: boolean;
+}
+
+// checkPhpUpdates forces a fresh registry read for a version's base image,
+// bypassing the digest cache. ok is false when the request itself failed.
+export async function checkPhpUpdates(
+  version: string
+): Promise<{ ok: boolean; status: BaseImageStatus | null }> {
+  try {
+    const res = await apiFetch('/api/php-versions/' + encodeURIComponent(version) + '/updates', {
+      method: 'POST'
+    });
+    if (!res.ok) return { ok: false, status: null };
+    const data = (await res.json().catch(() => null)) as BaseImageStatus | null;
+    return { ok: true, status: data };
+  } catch {
+    return { ok: false, status: null };
+  }
+}
+
 async function phpAction(v: string, action: 'set-default' | 'start' | 'stop' | 'remove'): Promise<boolean> {
   try {
     const res = await apiFetch('/api/php-versions/' + encodeURIComponent(v) + '/' + action, {

@@ -52,17 +52,17 @@ export const INSTALL = {
 
 /* ---- Comparison ---- */
 export const CMP = {
-  cols: ['Lerd', 'Laravel Herd', 'DDEV', 'Lando', 'Sail'],
+  cols: ['Lerd', 'Laravel Herd', 'Laragon', 'DDEV', 'Lando', 'Sail'],
   rows: [
-    { f: 'Runs on Linux',            v: ['yes', 'no', 'yes', 'yes', 'yes'] },
-    { f: 'No Docker daemon',         v: ['yes', 'yes', 'no', 'no', 'no'] },
-    { f: 'Rootless · no sudo',       v: ['yes', 'yes', 'partial', 'partial', 'no'] },
-    { f: 'Open source',              v: ['yes', 'no', 'yes', 'yes', 'yes'] },
-    { f: 'Automatic .test + TLS',    v: ['yes', 'yes', 'yes', 'partial', 'no'] },
-    { f: 'Zero per-project config',  v: ['yes', 'yes', 'no', 'no', 'no'] },
-    { f: 'Built-in Web UI',          v: ['yes', 'yes', 'partial', 'no', 'no'] },
-    { f: 'MCP server for AI agents', v: ['yes', 'yes', 'no', 'no', 'no'] },
-    { f: 'Profiler & debug window',  v: ['yes', 'yes', 'no', 'no', 'no'] },
+    { f: 'Runs on Linux',            v: ['yes', 'no', 'no', 'yes', 'yes', 'yes'] },
+    { f: 'No Docker daemon',         v: ['yes', 'yes', 'yes', 'no', 'no', 'no'] },
+    { f: 'Rootless · no sudo',       v: ['yes', 'yes', 'partial', 'partial', 'partial', 'no'] },
+    { f: 'Open source',              v: ['yes', 'no', 'no', 'yes', 'yes', 'yes'] },
+    { f: 'Automatic .test + TLS',    v: ['yes', 'yes', 'yes', 'yes', 'partial', 'no'] },
+    { f: 'Zero per-project config',  v: ['yes', 'yes', 'yes', 'no', 'no', 'no'] },
+    { f: 'Built-in Web UI',          v: ['yes', 'yes', 'no', 'partial', 'no', 'no'] },
+    { f: 'MCP server for AI agents', v: ['yes', 'yes', 'no', 'no', 'no', 'no'] },
+    { f: 'Profiler & debug window',  v: ['yes', 'yes', 'no', 'no', 'no', 'no'] },
   ],
 }
 

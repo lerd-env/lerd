@@ -91,18 +91,28 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, err
 	// under the active manager; host-proxy sites in any other language run the
 	// command directly.
 	execPrefix := ""
-	bunDir := ""
+	extraBinDirs := ""
 	if bun := bunRunnerFor(sitePath, false); bun != "" {
 		command = nodeDet.Bunify(command)
-		bunDir = filepath.Dir(bun)
-	} else if isNodeProject(sitePath) && lerdManagesNode() {
-		// Only pin via the manager when lerd manages Node; otherwise execPrefix
-		// stays empty and the guard script runs the command directly against the
-		// user's system node (after node:unmanage there is no managed Node).
-		execPrefix = nodeDet.Active().ExecPrefix(resolveNodeVersionForHostWorker(sitePath))
+		extraBinDirs = filepath.Dir(bun)
+	} else if isNodeProject(sitePath) {
+		nodeVersion := resolveNodeVersionForHostWorker(sitePath)
+		if lerdManagesNode() {
+			// Pin via the manager only when lerd manages Node (after
+			// node:unmanage there is no managed Node to exec into).
+			execPrefix = nodeDet.Active().ExecPrefix(nodeVersion)
+		} else if dirs := nodeDet.SystemNodeBinDirsFor(nodeVersion); len(dirs) > 0 {
+			// Unmanaged Node runs directly, but launchd never sees the login
+			// PATH, so bake in where node/npm actually live — issue #1143.
+			extraBinDirs = strings.Join(dirs, ":")
+		} else if nodeDet.CommandUsesNode(command) {
+			// Nothing resolvable: refuse the unit rather than crash-looping
+			// on `npm: command not found`.
+			return false, errNoUsableNode()
+		}
 	}
 
-	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, bunDir)
+	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, extraBinDirs)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)
 	}

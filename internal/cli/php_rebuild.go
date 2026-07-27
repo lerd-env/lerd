@@ -103,6 +103,45 @@ func restartFrankenPHPUnits(units []frankenRestart) {
 	}
 }
 
+// RebuildPHPVersion force-rebuilds one version's image against the current
+// prebuilt base and brings everything running on it back up, streaming the
+// build to w. The dashboard's rebuild action goes through here so it means the
+// same thing as `lerd php:rebuild <version>`.
+func RebuildPHPVersion(version string, w io.Writer) error {
+	version, err := config.NormalizePHPVersion(version)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Rebuilding PHP %s image...\n", version)
+	if err := podman.RebuildFPMImageTo(version, false, w); err != nil {
+		return err
+	}
+	if err := podman.StoreFPMHash(); err != nil {
+		fmt.Fprintf(w, "  WARN: storing PHP-FPM image hash: %v\n", err)
+	}
+	fmt.Fprintln(w, "Restarting containers...")
+	applyPHPImageChange(version)
+	restartInContainerWorkers()
+	fmt.Fprintf(w, "PHP %s image rebuilt.\n", version)
+	return nil
+}
+
+// restartInContainerWorkers restarts the workers that run inside FPM containers
+// via podman exec. BindsTo stops them when the FPM container stops but does not
+// bring them back when it returns, so a rebuild has to do it explicitly.
+func restartInContainerWorkers() {
+	for _, unit := range append(append(registeredReverbUnits(), registeredQueueUnits()...), registeredScheduleUnits()...) {
+		if !lerdSystemd.IsServiceActive(unit) && !lerdSystemd.IsServiceEnabled(unit) {
+			continue
+		}
+		if err := lerdSystemd.RestartService(unit); err != nil {
+			feedback.Warn("restart %s: %v", unit, err)
+		} else {
+			feedback.Note("restarted " + unit)
+		}
+	}
+}
+
 // NewPhpRebuildCmd returns the php:rebuild command.
 func NewPhpRebuildCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -182,18 +221,7 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Restart workers that run inside FPM containers via podman exec.
-	// BindsTo stops them when the FPM container stops but does not restart
-	// them when it comes back up, so we do it explicitly here.
-	for _, unit := range append(append(registeredReverbUnits(), registeredQueueUnits()...), registeredScheduleUnits()...) {
-		if lerdSystemd.IsServiceActive(unit) || lerdSystemd.IsServiceEnabled(unit) {
-			if err := lerdSystemd.RestartService(unit); err != nil {
-				feedback.Warn("restart %s: %v", unit, err)
-			} else {
-				feedback.Note("restarted " + unit)
-			}
-		}
-	}
+	restartInContainerWorkers()
 
 	feedback.Done(label + " rebuilt")
 	return nil

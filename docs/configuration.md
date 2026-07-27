@@ -18,11 +18,11 @@ node:
                           # configs predating it, which fall back to whether a
                           # node shim is on disk.
   manager: fnm            # optional. Which version manager lerd drives: "fnm"
-                          # (the bundled default) or "nvm" (a user-installed nvm
-                          # offered at install; defaults to keeping fnm). Switchable
-                          # from the dashboard's Node page; switching to fnm
-                          # downloads it on demand if an nvm-only install skipped it.
-                          # Empty means fnm.
+                          # (the bundled default) or "nvm" (a user-installed nvm,
+                          # picked automatically when you decline managed Node and
+                          # nvm is present). Switchable from the dashboard's Node
+                          # page; switching to fnm downloads it on demand if an
+                          # nvm-only install skipped it. Empty means fnm.
   nvm_dir: ~/.nvm         # optional. Where nvm lives when manager is nvm.
                           # Written at install/switch so lerd-ui and the watcher
                           # (which never load your shell rc) find a custom

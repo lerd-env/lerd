@@ -129,11 +129,7 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 		// directly, no fnm wrap. Put ~/.bun/bin on PATH so a bare `bun` resolves.
 		shellCommand = nodeDet.Bunify(command)
 		envPath = filepath.Dir(bun) + ":" + envPath
-	} else if isNodeProject(sitePath) && lerdManagesNode() {
-		// Only route through the version manager when lerd is actually managing
-		// Node; otherwise run the command directly so the user's system node/npm
-		// on PATH is used (after node:unmanage there is no managed Node to exec
-		// into).
+	} else if isNodeProject(sitePath) {
 		nodeVersion, err := nodeDet.DetectVersion(sitePath)
 		if err != nil {
 			if cfg, _ := config.LoadGlobal(); cfg != nil {
@@ -143,7 +139,20 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 				nodeVersion = defaultNodeVersion
 			}
 		}
-		shellCommand = nodeDet.Active().ExecPrefix(nodeVersion) + " " + command
+		if lerdManagesNode() {
+			// Route through the version manager only when lerd is actually
+			// managing Node (after node:unmanage there is no managed Node).
+			shellCommand = nodeDet.Active().ExecPrefix(nodeVersion) + " " + command
+		} else if dirs := nodeDet.SystemNodeBinDirsFor(nodeVersion); len(dirs) > 0 {
+			// Unmanaged Node runs the command directly, but the unit never
+			// inherits the login PATH, so bake in where node/npm actually live
+			// (nvm, snap, a self-installed fnm, …) — issue #1143.
+			envPath = strings.Join(dirs, ":") + ":" + envPath
+		} else if nodeDet.CommandUsesNode(command) {
+			// Nothing resolvable: refuse the unit rather than crash-looping
+			// on `npm: command not found` every 5 seconds.
+			return false, errNoUsableNode()
+		}
 	}
 	escaped := strings.ReplaceAll(shellCommand, "'", `'"'"'`)
 	// Order after and pull up the site's FPM container: host tools like Vite

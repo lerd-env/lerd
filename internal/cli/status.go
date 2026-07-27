@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"crypto/x509"
 	"encoding/pem"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/spf13/cobra"
@@ -144,6 +146,24 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		ok2("lerd-watcher")
 	} else {
 		fail2("lerd-watcher", "not running", serviceStartHint("lerd-watcher"))
+	}
+
+	// Tools — the host binaries lerd manages, against their pinned versions.
+	fmt.Println("\n[Tools]")
+	for _, s := range tools.StatusAll(context.Background()) {
+		if s.Name == "fnm" && cfg.NodeManager() == "nvm" {
+			continue // deliberately absent on nvm-managed setups
+		}
+		switch {
+		case !s.Present:
+			warn2(s.Name, "not installed — run: lerd install")
+		case s.UpdateAvailable:
+			warn2(s.Name+" "+s.Installed, s.Pinned+" available — run: lerd tools:update")
+		case s.Installed == "":
+			warn2(s.Name, "version unknown — refresh with: lerd tools:update")
+		default:
+			ok2(s.Name + " " + s.Installed)
+		}
 	}
 
 	// Services — only show services that have a quadlet file installed

@@ -76,20 +76,20 @@ Twelve grouped tools, each driven by an `action`: `site`, `service`, `db`, `env`
 
 ## Why Lerd?
 
-|                    | Lerd | DDEV | Lando | Laravel Herd |
-|--------------------|------|------|-------|--------------|
-| Podman-native      | ✅   | 🟡   | ❌    | ❌           |
-| Rootless           | ✅   | ❌   | ❌    | ✅           |
-| Web UI             | ✅   | ❌   | ❌    | ✅           |
-| Terminal dashboard | ✅   | ❌   | ❌    | ❌           |
-| Linux              | ✅   | ✅   | ✅    | ❌           |
-| macOS              | ✅   | ✅   | ✅    | ✅           |
-| Windows (WSL2)     | 🧪   | ✅   | ✅    | ✅           |
-| MCP server         | ✅   | ❌   | ❌    | ✅           |
+|                    | Lerd | DDEV | Lando | Laravel Herd | Laragon |
+|--------------------|------|------|-------|--------------|---------|
+| Podman-native      | ✅   | 🟡   | ❌    | ❌           | ❌      |
+| Rootless           | ✅   | ❌   | ❌    | ✅           | ❌      |
+| Web UI             | ✅   | ❌   | ❌    | ✅           | ❌      |
+| Terminal dashboard | ✅   | ❌   | ❌    | ❌           | ❌      |
+| Linux              | ✅   | ✅   | ✅    | ❌           | ❌      |
+| macOS              | ✅   | ✅   | ✅    | ✅           | ❌      |
+| Windows            | 🧪   | ✅   | ✅    | ✅           | ✅      |
+| MCP server         | ✅   | ❌   | ❌    | ✅           | ❌      |
 
 🟡 DDEV runs on Docker by default and can also use Podman as an alternative runtime; Lerd is built exclusively for rootless Podman.
 
-🧪 Lerd's Windows support runs inside WSL2 and is currently **beta**, see the [Windows (WSL2) guide](https://lerd.sh/getting-started/wsl2).
+🧪 Lerd's Windows support runs inside WSL2 and is currently **beta**, see the [Windows (WSL2) guide](https://lerd.sh/getting-started/wsl2). Laragon runs natively on Windows and has no Linux or macOS build, see [Laragon for Linux](https://lerd.sh/getting-started/laragon-linux) if that is what brought you here.
 
 ## Install
 

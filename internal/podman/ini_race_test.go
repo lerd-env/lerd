@@ -356,6 +356,26 @@ func TestEnsureFPMHostsFile_noopWhenRegularFileExists(t *testing.T) {
 	}
 }
 
+func TestEnsureFPMHostsFile_fillsInServicePreCreatedFile(t *testing.T) {
+	// EnsureServiceHostsFile writes a minimal file so a service quadlet's mount
+	// source exists, and it deliberately stays podman-free, so it has no host
+	// gateway line. The FPM path must not mistake that for a finished file:
+	// without the gateway entry Xdebug times out invisibly.
+	setupConfigHome(t)
+	hostsPath := config.ContainerHostsFile()
+	if err := EnsureServiceHostsFile(false); err != nil {
+		t.Fatalf("EnsureServiceHostsFile: %v", err)
+	}
+
+	if err := ensureFPMHostsFile(); err != nil {
+		t.Fatalf("ensureFPMHostsFile: %v", err)
+	}
+	body, _ := os.ReadFile(hostsPath)
+	if !strings.Contains(string(body), "host.containers.internal") {
+		t.Errorf("expected the gateway entry to be filled in:\n%s", body)
+	}
+}
+
 func TestEnsureFPMHostsFile_healsStaleDirectory(t *testing.T) {
 	// Same race surface as the xdebug ini fix: podman left a directory
 	// at the bind-mount source. ensureFPMHostsFile must remove it

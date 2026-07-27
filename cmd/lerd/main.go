@@ -101,6 +101,7 @@ func main() {
 	root.AddCommand(cli.NewStopCmd())
 	root.AddCommand(cli.NewQuitCmd())
 	root.AddCommand(cli.NewUpdateCmd(version.Version))
+	root.AddCommand(cli.NewToolsUpdateCmd())
 	root.AddCommand(cli.NewUninstallCmd())
 	root.AddCommand(cli.NewCleanupCmd())
 	root.AddCommand(cli.NewParkCmd())

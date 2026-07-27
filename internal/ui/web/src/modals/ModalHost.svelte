@@ -9,6 +9,7 @@
   import AddWorktreeModal from './AddWorktreeModal.svelte';
   import RemoveWorktreeModal from './RemoveWorktreeModal.svelte';
   import AddPhpModal from './AddPhpModal.svelte';
+  import RebuildPhpModal from './RebuildPhpModal.svelte';
   import ConfirmEnvSaveModal from './ConfirmEnvSaveModal.svelte';
   import ConfirmEnvRestoreModal from './ConfirmEnvRestoreModal.svelte';
   import EnvProposeModal from './EnvProposeModal.svelte';
@@ -49,6 +50,8 @@
   <RemoveWorktreeModal site={$modal.site} branch={$modal.branch} />
 {:else if $modal.kind === 'phpAdd'}
   <AddPhpModal />
+{:else if $modal.kind === 'phpRebuild' && $modal.phpRebuild}
+  <RebuildPhpModal version={$modal.phpRebuild.version} />
 {:else if $modal.kind === 'envSave' && $modal.envSave}
   <ConfirmEnvSaveModal />
 {:else if $modal.kind === 'envRestore' && $modal.envRestore}

@@ -63,6 +63,16 @@ func ReleaseAPIBaseURLs() []string {
 	return []string{"https://api.github.com/repos/" + mainRepo}
 }
 
+// ToolsManifestURLs lists raw URLs of the pinned host-tool manifest
+// (internal/tools/tools.yaml); the embedded copy is the fallback when none
+// answer.
+func ToolsManifestURLs() []string {
+	if list := splitList(os.Getenv("LERD_TOOLS_URL")); len(list) > 0 {
+		return list
+	}
+	return []string{"https://raw.githubusercontent.com/" + mainRepo + "/main/internal/tools/tools.yaml"}
+}
+
 // ChangelogURLs lists raw changelog URLs.
 func ChangelogURLs() []string {
 	if list := splitList(os.Getenv("LERD_CHANGELOG_URL")); len(list) > 0 {

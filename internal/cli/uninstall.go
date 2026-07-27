@@ -126,6 +126,9 @@ func runUninstall(force bool) error {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		_ = cmd.Run()
+		// mkcert only removes the anchor it wrote itself, so the one lerd
+		// installed as root has to go separately or it stays trusted for good.
+		removeSystemTrustAnchor()
 	}
 
 	if removeMCP {

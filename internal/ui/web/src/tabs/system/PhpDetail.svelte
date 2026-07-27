@@ -6,11 +6,12 @@
   import PhpPortsTab from './PhpPortsTab.svelte';
   import PhpExtensionsTab from './PhpExtensionsTab.svelte';
   import { status, loadStatus } from '$stores/status';
-  import { setDefaultPhp, startPhp, stopPhp } from '$stores/phpVersions';
+  import { setDefaultPhp, startPhp, stopPhp, checkPhpUpdates } from '$stores/phpVersions';
   import { sites, sitesByPhp } from '$stores/sites';
   import { xdebugOn, xdebugOff, XDEBUG_MODES, type XdebugMode } from '$stores/xdebug';
   import { goToTab } from '$stores/route';
-  import { openPhpRemoveModal } from '$stores/modals';
+  import { openPhpRemoveModal, openPhpRebuildModal } from '$stores/modals';
+  import { notifyLocalInfo } from '$lib/notify';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -26,12 +27,14 @@
   const xdebugMode = $derived<XdebugMode>((fpm?.xdebug_mode as XdebugMode) || 'debug');
   const container = $derived('lerd-php' + version.replace('.', '') + '-fpm');
   const sitesUsing = $derived($sites.filter((s) => s.php_version === version));
+  const baseUpdate = $derived(Boolean(fpm?.update_available));
 
   let defaultBusy = $state(false);
   let fpmBusy = $state(false);
   let xdebugBusy = $state(false);
   let xdebugMenuOpen = $state(false);
   let xdebugRootEl: HTMLDivElement | undefined = $state();
+  let checking = $state(false);
 
   // The parent (PhpPage) no longer wraps us in {#key version}; reset
   // per-version transient state when the version prop changes so a stale
@@ -124,11 +127,65 @@
     }
   }
 
-  const versionBusy = $derived(fpmBusy || defaultBusy);
+  // Reads through to the registry, so it answers even when the cached digest is
+  // hours old. The result goes to the toast surface rather than a line in the
+  // action row, which would either push the controls out of line or sit on top
+  // of whatever the tab below is showing. The badge follows from the status.
+  async function runCheckUpdates() {
+    checking = true;
+    try {
+      const res = await checkPhpUpdates(version);
+      const label = 'PHP ' + version;
+      if (!res.ok) {
+        notifyLocalInfo('update_check', label, m.system_php_checkUpdatesFailed());
+        return;
+      }
+      notifyLocalInfo(
+        'update_check',
+        label,
+        res.status?.stale ? m.system_php_checkUpdatesFound() : m.system_php_checkUpdatesUpToDate()
+      );
+      await loadStatus();
+    } finally {
+      checking = false;
+    }
+  }
+
+  const versionBusy = $derived(fpmBusy || defaultBusy || checking);
+
+  const rebuildAction = $derived<ButtonMenuAction>({
+    id: 'rebuild',
+    tone: baseUpdate ? 'success' : undefined,
+    icon: rebuildIcon,
+    label: baseUpdate ? m.system_php_rebuildUpdate() : m.system_php_rebuild(),
+    title: baseUpdate ? m.system_php_baseUpdateHint() : m.system_php_rebuildHint(),
+    onclick: () => openPhpRebuildModal(version)
+  });
 
   const versionActions = $derived.by<ButtonMenuAction[]>(() => {
-    if (isDefault) return [];
     const acts: ButtonMenuAction[] = [];
+    // Rebuild is only worth a button of its own when the base has actually
+    // moved, the way an available service update is; with nothing to pick up it
+    // stays in the menu rather than sitting there inviting a five-minute build.
+    if (baseUpdate) {
+      acts.push(rebuildAction);
+    }
+    const tail: ButtonMenuAction[] = [
+      {
+        id: 'check-updates',
+        icon: checkUpdatesIcon,
+        label: checking ? m.services_checkUpdatesChecking() : m.system_php_checkUpdates(),
+        title: m.system_php_checkUpdatesTitle(),
+        disabled: checking,
+        onclick: runCheckUpdates
+      }
+    ];
+    if (!baseUpdate) {
+      tail.push(rebuildAction);
+    }
+    if (isDefault) {
+      return [...acts, ...tail];
+    }
     if (running) {
       acts.push({
         id: 'stop',
@@ -164,7 +221,7 @@
       title: siteCount > 0 ? m.system_php_removeWarn({ count: siteCount }) : m.system_php_removeTitle(),
       onclick: () => openPhpRemoveModal({ version, siteCount })
     });
-    return acts;
+    return [...acts, ...tail];
   });
 </script>
 
@@ -179,6 +236,12 @@
 {/snippet}
 {#snippet trashIcon()}
   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+{/snippet}
+{#snippet rebuildIcon()}
+  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+{/snippet}
+{#snippet checkUpdatesIcon()}
+  <svg class={`w-3.5 h-3.5 ${checking ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 4 21 10 15 10"/></svg>
 {/snippet}
 
 {#snippet detailActions()}

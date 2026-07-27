@@ -106,8 +106,8 @@ func bunRunnerFor(dir string, warn bool) string {
 		}
 		return bun
 	}
-	// Fallback: when lerd isn't managing Node and there's no system Node on
-	// PATH but bun is installed, use bun as the JS runtime — it's a drop-in for
+	// Fallback: when lerd isn't managing Node and no system Node is resolvable
+	// but bun is installed, use bun as the JS runtime — it's a drop-in for
 	// npm and is the only thing left that can run JS (e.g. after node:unmanage).
 	if bun != "" && !lerdManagesNode() && !systemNodeAvailable() {
 		return bun
@@ -115,8 +115,9 @@ func bunRunnerFor(dir string, warn bool) string {
 	return ""
 }
 
-// systemNodeAvailable reports whether a `node` binary is resolvable on PATH
-// (outside lerd's own fnm shims). Used to decide the bun fallback.
+// systemNodeAvailable reports whether a system Node (outside lerd's own fnm
+// shims) is resolvable on PATH or in a known version-manager install dir.
+// Used to decide the bun fallback.
 func systemNodeAvailable() bool {
 	return nodeDet.SystemNodeAvailable()
 }

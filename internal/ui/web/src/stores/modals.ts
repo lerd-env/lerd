@@ -11,6 +11,7 @@ export type ModalKind =
   | 'worktreeAdd'
   | 'worktreeRemove'
   | 'phpAdd'
+  | 'phpRebuild'
   | 'envSave'
   | 'envRestore'
   | 'envPropose'
@@ -122,6 +123,10 @@ export interface PhpIniResetTarget {
   path: string;
 }
 
+export interface PhpRebuildTarget {
+  version: string;
+}
+
 export interface PhpRemoveTarget {
   version: string;
   siteCount: number;
@@ -186,6 +191,7 @@ export interface ModalState {
   phpIniSave?: PhpIniSaveTarget;
   phpIniRestore?: PhpIniRestoreTarget;
   phpIniReset?: PhpIniResetTarget;
+  phpRebuild?: PhpRebuildTarget;
   phpRemove?: PhpRemoveTarget;
   tuningSave?: TuningSaveTarget;
   tuningRestore?: TuningRestoreTarget;
@@ -250,6 +256,10 @@ export function openWorktreeRemoveModal(site: Site, branch: string) {
 
 export function openPhpAddModal() {
   modal.set({ kind: 'phpAdd' });
+}
+
+export function openPhpRebuildModal(version: string) {
+  modal.set({ kind: 'phpRebuild', phpRebuild: { version } });
 }
 
 export function openEnvSaveModal(target: EnvSaveTarget, onSuccess?: () => void) {

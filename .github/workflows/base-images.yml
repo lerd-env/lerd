@@ -226,3 +226,210 @@ jobs:
             --tag "${BASE}:${TAG}" \
             "${BASE}:${TAG}-amd64" \
             "${BASE}:${TAG}-arm64"
+
+  # An upstream refresh only republishes the hash main computes. Every earlier
+  # hash tag stays frozen at its last build, so a user one release behind keeps
+  # pulling an unpatched base no matter what they do short of updating lerd.
+  # These jobs rebuild the hashes recent releases still resolve to.
+  historic-plan:
+    name: Plan historic hashes
+    if: ${{ inputs.force_rebuild == 'true' }}
+    runs-on: ubuntu-latest
+    outputs:
+      entries: ${{ steps.plan.outputs.entries }}
+      count: ${{ steps.plan.outputs.count }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Collect the recipe hashes recent releases pull
+        id: plan
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import hashlib, json, re, subprocess, time
+
+          RECIPE = 'internal/podman/quadlets/lerd-php-fpm.Containerfile'
+          # Stable releases only, from the last month, and at most two distinct
+          # hashes: each one costs a full version x arch build matrix, and a
+          # patched base only has to reach the users a release or two behind.
+          # Anyone older needs a lerd update for other reasons anyway.
+          WINDOW = 30 * 24 * 3600
+          MAX_HASHES = 2
+          STABLE = re.compile(r'^v[0-9]+\.[0-9]+(\.[0-9]+)?$')
+
+          def recipe_hash(blob):
+              for ph in ('{{.CustomExtensions}}', '{{.CustomExtensionsRuntime}}',
+                         '{{.CustomPackages}}', '{{.MkcertCA}}'):
+                  blob = blob.replace(ph, '')
+              return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+          def show(ref):
+              try:
+                  return subprocess.check_output(['git', 'show', f'{ref}:{RECIPE}'], text=True)
+              except subprocess.CalledProcessError:
+                  return None
+
+          current = recipe_hash(show('HEAD'))
+          listing = subprocess.check_output(
+              ['git', 'tag', '--list', 'v*', '--sort=-creatordate',
+               '--format=%(refname:short) %(creatordate:unix)'], text=True)
+
+          cutoff, seen, entries, dropped = time.time() - WINDOW, {current}, [], []
+          for line in listing.splitlines():
+              tag, _, when = line.partition(' ')
+              if not when or int(when) < cutoff:
+                  break
+              if not STABLE.match(tag):
+                  continue
+              blob = show(tag)
+              if blob is None:
+                  continue
+              h = recipe_hash(blob)
+              if h in seen:
+                  continue
+              seen.add(h)
+              (entries if len(entries) < MAX_HASHES else dropped).append({'tag': tag, 'hash': h})
+
+          print(f'entries={json.dumps(entries)}')
+          print(f'count={len(entries)}')
+          for e in entries:
+              print(f"::notice::rebuilding historic base {e['hash']} (from {e['tag']})")
+          for e in dropped:
+              print(f"::notice::skipping historic base {e['hash']} ({e['tag']}): past the {MAX_HASHES}-hash cap")
+          EOF
+
+  historic-build:
+    name: PHP ${{ matrix.php }} @ ${{ matrix.entry.tag }} (${{ matrix.arch.name }})
+    needs: historic-plan
+    if: ${{ needs.historic-plan.result == 'success' && needs.historic-plan.outputs.count != '0' }}
+    runs-on: ${{ matrix.arch.runner }}
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        arch:
+          - { name: amd64, runner: ubuntu-latest }
+          - { name: arm64, runner: ubuntu-24.04-arm }
+        entry: ${{ fromJSON(needs.historic-plan.outputs.entries) }}
+
+    steps:
+      # The old tag's own tree, not main: the Containerfile copies the devtools
+      # source and its marker asserts the compiled extension matches that
+      # recipe, so building from a newer tree would publish new source under a
+      # tag that promises the old one.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.entry.tag }}
+
+      - name: Preprocess the historic Containerfile
+        id: prep
+        run: |
+          python3 - "${{ matrix.php }}" <<'EOF'
+          import sys
+          version = sys.argv[1]
+          with open('internal/podman/quadlets/lerd-php-fpm.Containerfile') as f:
+              content = f.read()
+          content = content.replace('{{.Version}}', version)
+          for ph in ('{{.CustomExtensions}}', '{{.CustomExtensionsRuntime}}',
+                     '{{.CustomPackages}}', '{{.MkcertCA}}'):
+              content = content.replace(ph, '')
+          with open('/tmp/Containerfile', 'w') as f:
+              f.write(content)
+          EOF
+          PHP_SHORT=$(echo "${{ matrix.php }}" | tr -d '.')
+          echo "php_short=${PHP_SHORT}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: /tmp/Containerfile
+          push: true
+          pull: true
+          platforms: linux/${{ matrix.arch.name }}
+          tags: ghcr.io/lerd-env/lerd-php${{ steps.prep.outputs.php_short }}-fpm-base:${{ matrix.entry.hash }}-${{ matrix.arch.name }}
+          cache-from: type=gha,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}-${{ matrix.entry.hash }}
+          cache-to: type=gha,mode=max,scope=php-${{ matrix.php }}-${{ matrix.arch.name }}-${{ matrix.entry.hash }}
+
+      - name: Smoke-test built image
+        run: |
+          IMG="ghcr.io/lerd-env/lerd-php${{ steps.prep.outputs.php_short }}-fpm-base:${{ matrix.entry.hash }}-${{ matrix.arch.name }}"
+          docker pull "$IMG" >/dev/null
+          docker run --rm "$IMG" php -m > /tmp/php-modules.txt 2>&1
+          COUNT=$(grep -vc '^\[\|^$' /tmp/php-modules.txt)
+          echo "PHP ${{ matrix.php }} @ ${{ matrix.entry.tag }}: $COUNT modules loaded"
+          cat /tmp/php-modules.txt
+          if [ "$COUNT" -lt 50 ]; then
+            echo "::error::PHP ${{ matrix.php }} @ ${{ matrix.entry.tag }} module count dropped to $COUNT (expected >=50)"
+            exit 1
+          fi
+          docker run --rm "$IMG" php -r 'exit(count(PDO::getAvailableDrivers()) >= 3 ? 0 : 1);'
+          docker run --rm "$IMG" composer --version >/dev/null
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # From the old checkout too: the advertised set is that release's claim,
+      # and main's may since have changed.
+      - name: Verify the image loads every advertised extension
+        env:
+          LERD_PHP_MODULES: /tmp/php-modules.txt
+          LERD_PHP_VERSION: ${{ matrix.php }}
+        run: go test ./internal/podman -run TestImageReportsAdvertisedExtensions -v
+
+  historic-manifest:
+    name: Manifest PHP ${{ matrix.php }} @ ${{ matrix.entry.tag }}
+    # !cancelled() so one failed arch cell does not skip the manifests for the
+    # other versions; the plan's own result is still required, or a skipped plan
+    # would expand an empty matrix.
+    needs: [historic-plan, historic-build]
+    if: ${{ !cancelled() && needs.historic-plan.result == 'success' && needs.historic-plan.outputs.count != '0' }}
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["7.4", "8.0", "8.1", "8.2", "8.3", "8.4", "8.5"]
+        entry: ${{ fromJSON(needs.historic-plan.outputs.entries) }}
+
+    steps:
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Recreate the multi-arch manifest
+        run: |
+          PHP_SHORT=$(echo "${{ matrix.php }}" | tr -d '.')
+          BASE="ghcr.io/lerd-env/lerd-php${PHP_SHORT}-fpm-base"
+          TAG="${{ matrix.entry.hash }}"
+          MISSING=""
+          for a in amd64 arm64; do
+            docker manifest inspect "${BASE}:${TAG}-${a}" > /dev/null 2>&1 || MISSING="$MISSING ${a}"
+          done
+          if [ -n "$MISSING" ]; then
+            echo "::error::historic ${TAG} (${{ matrix.entry.tag }}) did not publish:$MISSING; leaving the existing manifest in place"
+            exit 1
+          fi
+          docker buildx imagetools create \
+            --tag "${BASE}:${TAG}" \
+            "${BASE}:${TAG}-amd64" \
+            "${BASE}:${TAG}-arm64"

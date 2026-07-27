@@ -3,6 +3,7 @@ package mcp
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,6 +33,7 @@ import (
 	"github.com/geodro/lerd/internal/sitetpl"
 	"github.com/geodro/lerd/internal/store"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tools"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/workerheal"
 	"github.com/geodro/lerd/internal/xdebugops"
@@ -1124,6 +1126,10 @@ func execStatus() (any, *rpcError) {
 			Running bool `json:"running"`
 		} `json:"watcher"`
 		PHPFPMs []phpStatus `json:"php_fpms"`
+		// Tools are the managed host binaries against their pinned versions;
+		// ToolsHint tells the assistant how to apply a pending update.
+		Tools     []tools.ToolStatus `json:"tools"`
+		ToolsHint string             `json:"tools_hint,omitempty"`
 	}
 
 	var r result
@@ -1137,6 +1143,15 @@ func execStatus() (any, *rpcError) {
 		short := strings.ReplaceAll(v, ".", "")
 		running, _ := podman.ContainerRunning("lerd-php" + short + "-fpm")
 		r.PHPFPMs = append(r.PHPFPMs, phpStatus{Version: v, Running: running})
+	}
+	for _, s := range tools.StatusAll(context.Background()) {
+		if s.Name == "fnm" && cfg != nil && cfg.NodeManager() == "nvm" {
+			continue
+		}
+		if s.UpdateAvailable {
+			r.ToolsHint = "a tool differs from its pinned version; the user can apply it with `lerd tools:update` (CLI-only)"
+		}
+		r.Tools = append(r.Tools, s)
 	}
 
 	data, _ := json.MarshalIndent(r, "", "  ")
@@ -4382,10 +4397,19 @@ func execPHPList() (any, *rpcError) {
 	type entry struct {
 		Version string `json:"version"`
 		Default bool   `json:"default"`
+		// BaseUpdate is set when the prebuilt base this version's image was
+		// built from has been republished since, so a rebuild would bring in a
+		// newer PHP/Alpine. Absent when there is nothing to report.
+		BaseUpdate bool `json:"base_update,omitempty"`
 	}
 	result := make([]entry, 0, len(versions))
 	for _, v := range versions {
-		result = append(result, entry{Version: v, Default: v == cfg.PHP.DefaultVersion})
+		base := podman.CheckBaseImageFreshness(v)
+		result = append(result, entry{
+			Version:    v,
+			Default:    v == cfg.PHP.DefaultVersion,
+			BaseUpdate: base != nil && base.Stale,
+		})
 	}
 	data, _ := json.MarshalIndent(result, "", "  ")
 	return toolOK(string(data)), nil

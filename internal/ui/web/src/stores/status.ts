@@ -12,6 +12,9 @@ export interface PHPStatus {
   xdebug_enabled: boolean;
   xdebug_mode?: string;
   ports?: string[];
+  // True when the prebuilt base this image was built from has been republished
+  // upstream, so a rebuild would bring in a newer PHP/Alpine.
+  update_available?: boolean;
 }
 
 export interface StatusResponse {
@@ -36,6 +39,16 @@ export interface StatusResponse {
   // Identifier of the lerd-ui process that answered. A change means the server
   // restarted, so the page is reloaded onto the assets it now serves.
   instance?: string;
+  // Managed host binaries (composer, fnm, mkcert) against their pinned versions.
+  tools?: ToolStatus[];
+}
+
+export interface ToolStatus {
+  name: string;
+  installed?: string;
+  pinned: string;
+  present: boolean;
+  update_available: boolean;
 }
 
 const empty: StatusResponse = {
@@ -53,7 +66,8 @@ const empty: StatusResponse = {
   watcher_running: false,
   frankenphp_php_versions: [],
   home: '',
-  workspaces: []
+  workspaces: [],
+  tools: []
 };
 
 export const status = writable<StatusResponse>(empty);

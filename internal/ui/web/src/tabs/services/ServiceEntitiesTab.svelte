@@ -2,7 +2,16 @@
   import Icon from '$components/Icon.svelte';
   import DetailButton from '$components/DetailButton.svelte';
   import SectionHeader from '$components/SectionHeader.svelte';
-  import { entities, loadEntities, runEntityAction, kindLabel, type EntityKind } from '$stores/entities';
+  import LoadingRow from '$components/LoadingRow.svelte';
+  import LoadFailedRow from '$components/LoadFailedRow.svelte';
+  import {
+    entities,
+    entityLoads,
+    loadEntities,
+    runEntityAction,
+    kindLabel,
+    type EntityKind
+  } from '$stores/entities';
   import type { Service } from '$stores/services';
   import EntityCard from './EntityCard.svelte';
   import { m } from '../../paraglide/messages.js';
@@ -18,8 +27,11 @@
     void loadEntities(svc.name);
   });
 
-  const kinds = $derived($entities[svc.name] ?? []);
-  const active = $derived(svc.status === 'active');
+  const loaded = $derived($entities[svc.name]);
+  const kinds = $derived(loaded ?? []);
+  const stopped = $derived(svc.status !== 'active');
+  const load = $derived($entityLoads[svc.name]);
+  const failed = $derived(!loaded && Boolean(load?.failed));
 
   let newName = $state<Record<string, string>>({});
   let creating = $state('');
@@ -45,8 +57,18 @@
 </script>
 
 <div class="p-3 sm:p-5 space-y-5 overflow-y-auto">
-  {#if !active}
+  {#if stopped}
     <p class="text-sm text-gray-400 dark:text-gray-500">{m.entities_startHint()}</p>
+  {:else if failed}
+    <LoadFailedRow
+      message={m.entities_loadFailed()}
+      retrying={Boolean(load?.pending)}
+      onretry={() => loadEntities(svc.name)}
+    />
+  {:else if !loaded}
+    <LoadingRow />
+  {:else if kinds.length === 0}
+    <p class="text-sm text-gray-400 dark:text-gray-500">{m.entities_empty()}</p>
   {:else}
     {#each kinds as kind (kind.kind)}
       <div class="space-y-4">
