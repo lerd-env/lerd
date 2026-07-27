@@ -1,7 +1,9 @@
 <script lang="ts">
   import Icon from '$components/Icon.svelte';
   import DetailButton from '$components/DetailButton.svelte';
-  import { databases, loadEngine, createDatabase } from '$stores/databases';
+  import LoadingRow from '$components/LoadingRow.svelte';
+  import LoadFailedRow from '$components/LoadFailedRow.svelte';
+  import { databases, engineLoads, loadEngine, createDatabase } from '$stores/databases';
   import type { Service } from '$stores/services';
   import { pairDatabases } from '$lib/databasePairs';
   import DatabaseCard from '../databases/DatabaseCard.svelte';
@@ -19,7 +21,11 @@
   });
 
   const engine = $derived($databases.find((e) => e.service === svc.name));
-  const active = $derived(engine?.status === 'active');
+  // The service's own status is the live one; the engine's arrives with the
+  // fetch, so reading it before then would call a running engine stopped.
+  const stopped = $derived(svc.status !== 'active');
+  const load = $derived($engineLoads[svc.name]);
+  const failed = $derived(!engine && Boolean(load?.failed));
   const pairs = $derived(pairDatabases(engine?.databases ?? []));
 
   let newName = $state('');
@@ -42,10 +48,18 @@
 </script>
 
 <div class="p-3 sm:p-5 space-y-4 overflow-y-auto">
-  {#if !active}
+  {#if stopped}
     <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_startHint()}</p>
+  {:else if failed}
+    <LoadFailedRow
+      message={m.databases_loadFailed()}
+      retrying={Boolean(load?.pending)}
+      onretry={() => loadEngine(svc.name)}
+    />
+  {:else if !engine}
+    <LoadingRow />
   {:else}
-    {#if engine?.supports_create}
+    {#if engine.supports_create}
       <div class="space-y-1.5">
         <div class="flex gap-2">
           <input
@@ -64,9 +78,9 @@
       </div>
     {/if}
 
-    {#if engine?.error}
+    {#if engine.error}
       <p class="text-xs text-red-500">{engine.error}</p>
-    {:else if !engine || engine.databases.length === 0}
+    {:else if engine.databases.length === 0}
       <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noDatabases()}</p>
     {:else}
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
