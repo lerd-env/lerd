@@ -96,11 +96,12 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, err
 		command = nodeDet.Bunify(command)
 		extraBinDirs = filepath.Dir(bun)
 	} else if isNodeProject(sitePath) {
+		nodeVersion := resolveNodeVersionForHostWorker(sitePath)
 		if lerdManagesNode() {
 			// Pin via the manager only when lerd manages Node (after
 			// node:unmanage there is no managed Node to exec into).
-			execPrefix = nodeDet.Active().ExecPrefix(resolveNodeVersionForHostWorker(sitePath))
-		} else if dirs := nodeDet.SystemNodeBinDirs(); len(dirs) > 0 {
+			execPrefix = nodeDet.Active().ExecPrefix(nodeVersion)
+		} else if dirs := nodeDet.SystemNodeBinDirsFor(nodeVersion); len(dirs) > 0 {
 			// Unmanaged Node runs directly, but launchd never sees the login
 			// PATH, so bake in where node/npm actually live — issue #1143.
 			extraBinDirs = strings.Join(dirs, ":")

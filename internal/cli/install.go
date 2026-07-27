@@ -268,9 +268,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	ok()
 
 	// Resolve Node management and which version manager to drive BEFORE
-	// downloadBinaries: the fnm zip is skipped when node.manager is already
-	// "nvm", and the nvm question must not wait on a system node being present
-	// (someone can have nvm installed with no versions yet).
+	// downloadBinaries, which skips the fnm zip when node.manager is "nvm".
 	bunPath := nodeDet.BunPath()
 	if bunPath != "" {
 		feedback.Line(fmt.Sprintf("bun detected at %s, lerd will use it automatically for projects that use bun", bunPath))
@@ -288,27 +286,37 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	systemNode := detectSystemNode()
 	nvmDetected := detectNvm()
-	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", lerdManagesNode())
+	wantLerdNode, promptNode, nodeDefault := nodeManageDecision(fromUpdate, savedNode, systemNode != "", nvmDetected, lerdManagesNode())
 	if promptNode {
-		feedback.Line("Node.js detected at " + systemNode)
+		if systemNode != "" {
+			feedback.Line("Node.js detected at " + systemNode)
+		} else {
+			feedback.Line("nvm detected at " + nodeDet.DiscoverNvmDir())
+		}
 		prompt := "Let lerd manage Node.js versions (installs shims, may override system node)?"
-		if bunPath != "" {
+		switch {
+		case nvmDetected:
+			prompt += " Decline to leave Node to your existing nvm."
+		case bunPath != "":
 			prompt += " Decline to keep your system Node and use bun."
 		}
 		wantLerdNode = confirmInstallPromptDefault(prompt, nodeDefault)
 	}
 
-	// Ask whenever managed Node is wanted, nvm is present, this is not an
-	// update, and nothing is saved yet — do not gate on the system-node prompt.
-	nodeManager := savedManager
-	if nodeManager == "" {
-		nodeManager = "fnm"
-		if wantLerdNode && nvmDetected && !fromUpdate {
-			if confirmInstallPromptDefault("nvm detected — use it for lerd-managed Node instead of fnm?", false) {
-				nodeManager = "nvm"
-			}
+	// Only on the run that actually makes the choice: once persisted, savedManager
+	// is set and neither line comes back.
+	nodeManager := nodeManagerChoice(savedManager, wantLerdNode, nvmDetected)
+	if savedManager == "" && nvmDetected {
+		if nodeManager == "nvm" {
+			feedback.Line("leaving Node to your nvm, lerd will run npm and npx through it")
+		} else {
+			feedback.Line("using the bundled fnm for lerd-managed Node, switch with: lerd node:manager nvm")
 		}
 	}
+
+	// Captured before the save below: a flip either way leaves existing host
+	// worker units routing through the old manager until they are regenerated.
+	nodeStateChanged := nodeStateFlipped(lerdManagesNode(), savedManager, wantLerdNode, nodeManager)
 
 	nvmDirToSave := savedNvmDir
 	if nodeManager == "nvm" {
@@ -1097,11 +1105,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	// Re-sync host workers to the current JS runtime once the Node-management
 	// state is finalized. This makes "install bun, then `lerd update`" switch
-	// Vite and friends onto bun with no manual re-link. Gated on bun being
-	// present (no reason to touch workers otherwise) and on autostart (don't
-	// start units the user disabled); change-detection inside means only
+	// Vite and friends onto bun with no manual re-link, and makes answering the
+	// management question move existing workers onto the manager that answer
+	// selects, the way node:manage / node:unmanage already do. Gated on autostart
+	// (don't start units the user disabled); change-detection inside means only
 	// workers whose command actually changes get restarted.
-	if autostartOn && bunPath != "" {
+	if autostartOn && (bunPath != "" || nodeStateChanged) {
 		regenerateHostWorkers()
 	}
 
@@ -1396,20 +1405,50 @@ func lerdManagesNode() bool {
 // preference always wins silently, and a config predating the field adopts the
 // current on-disk shim state as that choice without asking. Only a genuine
 // first-time install (no saved preference and no shim) prompts, and then only
-// when a system node exists; with none it defaults to managed. Update never
-// prompts. When needPrompt is true the caller runs the prompt and overrides want
-// with the answer.
-func nodeManageDecision(fromUpdate bool, saved *bool, systemNodeDetected, shimPresent bool) (want, needPrompt, promptDefault bool) {
+// when the user already has a Node setup of their own; with none it defaults to
+// managed. An nvm install counts as one even when no version is installed into
+// it yet, which the system-node probe cannot see. Update never prompts. When
+// needPrompt is true the caller runs the prompt and overrides want with the
+// answer.
+func nodeManageDecision(fromUpdate bool, saved *bool, systemNodeDetected, nvmDetected, shimPresent bool) (want, needPrompt, promptDefault bool) {
 	if saved != nil {
 		return *saved, false, *saved
 	}
 	if shimPresent || fromUpdate {
 		return shimPresent, false, shimPresent
 	}
-	if systemNodeDetected {
+	if systemNodeDetected || nvmDetected {
 		return true, true, true
 	}
 	return true, false, true
+}
+
+// nodeManagerChoice picks the Node version manager to drive. A saved choice is
+// never revisited. Otherwise it follows the one management question: lerd-managed
+// Node uses the bundled fnm, since managing means owning the versions in lerd's
+// own tool, and declining hands Node back to an existing nvm so `lerd npm`, npx
+// and setup runs follow it instead of an fnm no version is ever installed into.
+// Users who want lerd to manage Node through their nvm switch with
+// `lerd node:manager nvm` or the dashboard.
+func nodeManagerChoice(saved string, wantLerdNode, nvmDetected bool) string {
+	if saved != "" {
+		return saved
+	}
+	if !wantLerdNode && nvmDetected {
+		return "nvm"
+	}
+	return "fnm"
+}
+
+// nodeStateFlipped reports whether this install run changed which Node host
+// workers should run: the management answer moved, or the version manager did.
+// An empty prevManager is a config predating the setting, which meant fnm, so a
+// first-time write of "fnm" is not a flip.
+func nodeStateFlipped(prevManaged bool, prevManager string, managed bool, manager string) bool {
+	if prevManager == "" {
+		prevManager = "fnm"
+	}
+	return prevManaged != managed || prevManager != manager
 }
 
 // ensureNodeManaged is called by the node:install/use/uninstall commands to
@@ -1506,9 +1545,9 @@ func detectSystemNode() string {
 	return ""
 }
 
-// detectNvm reports whether a user-installed nvm is present, so the installer can
-// offer to drive it instead of downloading the bundled fnm. Checks $NVM_DIR
-// first, then the ~/.nvm default, for the nvm.sh script that must be sourced.
+// detectNvm reports whether a user-installed nvm is present, so declining
+// lerd-managed Node can hand Node back to it instead of the bundled fnm. Checks
+// $NVM_DIR first, then the ~/.nvm default, for the sourced nvm.sh script.
 func detectNvm() bool {
 	_, err := os.Stat(filepath.Join(nodeDet.DiscoverNvmDir(), "nvm.sh"))
 	return err == nil

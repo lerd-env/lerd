@@ -530,6 +530,39 @@ func TestDetectSystemNode_findsNvmDirEvenWhenPathIsEmpty(t *testing.T) {
 	}
 }
 
+// An nvm with no Node versions in it is invisible to detectSystemNode, so
+// detectNvm is what makes the management question reach that user at all.
+func TestDetectNvm(t *testing.T) {
+	t.Run("empty nvm dir under NVM_DIR counts", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("NVM_DIR", tmp)
+		if detectNvm() {
+			t.Error("detectNvm true for a directory with no nvm.sh")
+		}
+		if err := os.WriteFile(filepath.Join(tmp, "nvm.sh"), []byte("#!/bin/bash\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if !detectNvm() {
+			t.Error("detectNvm false even though $NVM_DIR holds nvm.sh")
+		}
+	})
+
+	t.Run("falls back to ~/.nvm", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("NVM_DIR", "")
+		t.Setenv("HOME", tmp)
+		if err := os.MkdirAll(filepath.Join(tmp, ".nvm"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(tmp, ".nvm", "nvm.sh"), []byte("#!/bin/bash\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if !detectNvm() {
+			t.Error("detectNvm false for an nvm.sh in the default ~/.nvm")
+		}
+	})
+}
+
 func TestDetectSystemNode_findsNpmInPath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("HOME", tmp)

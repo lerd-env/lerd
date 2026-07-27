@@ -130,20 +130,20 @@ func writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, resta
 		shellCommand = nodeDet.Bunify(command)
 		envPath = filepath.Dir(bun) + ":" + envPath
 	} else if isNodeProject(sitePath) {
+		nodeVersion, err := nodeDet.DetectVersion(sitePath)
+		if err != nil {
+			if cfg, _ := config.LoadGlobal(); cfg != nil {
+				nodeVersion = cfg.Node.DefaultVersion
+			}
+			if nodeVersion == "" {
+				nodeVersion = defaultNodeVersion
+			}
+		}
 		if lerdManagesNode() {
 			// Route through the version manager only when lerd is actually
 			// managing Node (after node:unmanage there is no managed Node).
-			nodeVersion, err := nodeDet.DetectVersion(sitePath)
-			if err != nil {
-				if cfg, _ := config.LoadGlobal(); cfg != nil {
-					nodeVersion = cfg.Node.DefaultVersion
-				}
-				if nodeVersion == "" {
-					nodeVersion = defaultNodeVersion
-				}
-			}
 			shellCommand = nodeDet.Active().ExecPrefix(nodeVersion) + " " + command
-		} else if dirs := nodeDet.SystemNodeBinDirs(); len(dirs) > 0 {
+		} else if dirs := nodeDet.SystemNodeBinDirsFor(nodeVersion); len(dirs) > 0 {
 			// Unmanaged Node runs the command directly, but the unit never
 			// inherits the login PATH, so bake in where node/npm actually live
 			// (nvm, snap, a self-installed fnm, …) — issue #1143.
