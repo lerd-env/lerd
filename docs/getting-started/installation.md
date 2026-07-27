@@ -38,8 +38,10 @@ The installer will:
 - Add `~/.local/bin` to your shell's `PATH` (bash, zsh, or fish)
 - Automatically run `lerd install` to complete environment setup
 
-::: info DNS setup requires sudo
-`lerd install` writes to `/etc/NetworkManager/dnsmasq.d/` and `/etc/NetworkManager/conf.d/` and restarts NetworkManager. This is the only step that requires `sudo`. It also installs a passwordless sudoers rule for the DNS resolver operations, so this is a one-time prompt: reinstalling for an update or a test reuses the existing rule and does not ask again. Uninstalling takes the rule back out, so the grant lasts exactly as long as lerd does.
+::: info Setup asks for sudo once, up front
+Everything `lerd install` needs root for happens in one step at the very start, before any downloading or container work: the unprivileged-port sysctl so nginx can bind 80 and 443, systemd linger so your containers survive logout, and a passwordless sudoers rule for the DNS resolver operations. It runs as `sudo lerd bootstrap --system`, the same command the apt package runs as root, so both routes apply identical settings. The mkcert CA is trusted in the system store the same way once it has been generated.
+
+Reinstalling for an update or a test reuses what is already in place and does not ask again, and if a step cannot run through `sudo` it falls back to prompting for each one separately. Uninstalling takes the sudoers rule and the CA back out, so both last exactly as long as lerd does.
 :::
 
 After install, reload your shell or open a new terminal so `PATH` takes effect.
@@ -95,6 +97,8 @@ sudo apt upgrade
 A package-installed lerd lives under `/usr`, so `lerd update` (which self-replaces a `~/.local/bin` install) detects it and defers to your package manager instead of fighting it.
 
 The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow will serve future rpm and AUR packages. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
+
+It is also not package-specific. A normal `lerd install` runs the same `lerd bootstrap` steps through `sudo` rather than through a maintainer script, so the machine ends up in the same state however you installed.
 
 ---
 

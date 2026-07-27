@@ -57,6 +57,57 @@ func TestTrustCAInSystemStore(t *testing.T) {
 	}
 }
 
+func TestUntrustCAFromSystemStore(t *testing.T) {
+	dir := t.TempDir()
+	present := filepath.Join(dir, "anchors")
+	if err := os.MkdirAll(present, 0755); err != nil {
+		t.Fatal(err)
+	}
+	commands := stubTrustStores(t, []systemTrustStore{
+		{filepath.Join(dir, "missing"), "lerd-mkcert-rootCA.pem", []string{"update-ca-trust", "extract"}},
+		{present, "lerd-mkcert-rootCA.crt", []string{"update-ca-certificates"}},
+	})
+
+	ca := []byte("-----BEGIN CERTIFICATE-----\nfake\n-----END CERTIFICATE-----\n")
+	if err := TrustCAInSystemStore(ca); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !SystemTrustAnchorPresent() {
+		t.Fatal("anchor reported absent right after install")
+	}
+
+	if err := UntrustCAFromSystemStore(); err != nil {
+		t.Fatalf("uninstall: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(present, "lerd-mkcert-rootCA.crt")); !os.IsNotExist(err) {
+		t.Errorf("anchor still on disk after removal (stat err %v)", err)
+	}
+	if SystemTrustAnchorPresent() {
+		t.Error("anchor still reported present after removal")
+	}
+	if len(*commands) != 2 {
+		t.Errorf("bundle refreshes = %d, want 2 (one per install/uninstall)", len(*commands))
+	}
+
+	// Idempotent: nothing left to remove means no second bundle refresh.
+	if err := UntrustCAFromSystemStore(); err != nil {
+		t.Fatalf("second uninstall: %v", err)
+	}
+	if len(*commands) != 2 {
+		t.Errorf("uninstall with no anchor re-ran the trust command (%d runs)", len(*commands))
+	}
+}
+
+func TestUntrustCAFromSystemStoreNoStore(t *testing.T) {
+	dir := t.TempDir()
+	stubTrustStores(t, []systemTrustStore{
+		{filepath.Join(dir, "missing-a"), "a.pem", []string{"update-ca-trust", "extract"}},
+	})
+	if err := UntrustCAFromSystemStore(); !errors.Is(err, ErrNoSystemTrustStore) {
+		t.Fatalf("err = %v, want ErrNoSystemTrustStore", err)
+	}
+}
+
 func TestTrustCAInSystemStoreNoStore(t *testing.T) {
 	dir := t.TempDir()
 	commands := stubTrustStores(t, []systemTrustStore{

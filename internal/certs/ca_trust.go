@@ -34,6 +34,10 @@ var caRootFunc = func() (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
+// CARoot returns mkcert's CAROOT directory, so a caller escalating to root can
+// name the user's real CA location instead of assuming the default.
+func CARoot() (string, error) { return caRootFunc() }
+
 // CATrusted reports whether mkcert's root CA is already present in the system
 // trust store. Callers use it to skip the sudo announcement (and mkcert's
 // chatty banner) on a reinstall where the CA is already installed.

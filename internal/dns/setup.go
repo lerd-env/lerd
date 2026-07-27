@@ -46,8 +46,9 @@ func resolvedDropinFor(tld string) string {
 const lerdNMUnmanaged = "/etc/NetworkManager/conf.d/lerd-dns-link.conf"
 
 // lerdSudoersPath is the passwordless DNS grant lerd installs. Teardown removes
-// it, so this is a package const both sides share.
-const lerdSudoersPath = "/etc/sudoers.d/lerd"
+// it, so both sides share this. A var, not a const, so tests can redirect the
+// write off the real /etc.
+var lerdSudoersPath = "/etc/sudoers.d/lerd"
 
 // Pre-1.30 builds shipped lerd0 as an NM keyfile connection. Kept so setup can
 // migrate those hosts off it and Teardown can clean it up.
@@ -969,15 +970,43 @@ func WriteSudoersForUser(user string) error {
 		return fmt.Errorf("cannot determine target user")
 	}
 	content := renderLinuxSudoers(user)
-	if sudoersInstalled([]byte(content)) {
+	// Compare against the real file, not the user-owned marker: this runs as
+	// root, where the marker resolves to root's HOME and says nothing about the
+	// target user. A stale one there claimed the grant was in place and skipped
+	// the write, leaving an install with no drop-in at all. Root can read
+	// /etc/sudoers.d, so the file itself is the authority here.
+	if existing, err := os.ReadFile(lerdSudoersPath); err == nil && string(existing) == content {
 		return nil
 	}
-	const sudoersPath = "/etc/sudoers.d/lerd"
-	if err := os.WriteFile(sudoersPath, []byte(content), 0440); err != nil {
+	if err := os.WriteFile(lerdSudoersPath, []byte(content), 0440); err != nil {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
-	recordSudoersInstalled([]byte(content))
 	return nil
+}
+
+// RecordSudoersForUser stores the user-owned marker for a drop-in that a root
+// pass has just written. The root process cannot leave it: sudo hands it root's
+// own HOME, so the marker would land there and the user's side would keep
+// re-running the grant on every install.
+func RecordSudoersForUser(user string) {
+	if user == "" {
+		return
+	}
+	recordSudoersInstalled([]byte(renderLinuxSudoers(user)))
+}
+
+// SudoersCurrent reports whether the drop-in lerd would write for this user is
+// already recorded as installed, so an install can skip the root pass entirely
+// when there is nothing left for it to do.
+func SudoersCurrent() bool {
+	user := os.Getenv("USER")
+	if user == "" {
+		user = os.Getenv("LOGNAME")
+	}
+	if user == "" {
+		return false
+	}
+	return sudoersInstalled([]byte(renderLinuxSudoers(user)))
 }
 
 func InstallSudoers() error {
