@@ -44,6 +44,8 @@ type Snapshot struct {
 	PHPVersions          []phpInfo
 	PHPDefault           string
 	Services             []serviceInfo
+	WorkersRunning       int      // per-site worker units currently up
+	WorkersDown          []string // sites lerd considers unhealthy, not merely stopped
 	AutostartEnabled     bool
 	LANExposed           bool   // lerd lan expose state — drives the LAN toggle item
 	DumpsEnabled         bool   // lerd dump on/off state — drives the dump toggle item
@@ -66,6 +68,14 @@ type serviceInfo struct {
 	ReverbSite         string `json:"reverb_site,omitempty"`
 	HorizonSite        string `json:"horizon_site,omitempty"`
 	WorkerSite         string `json:"worker_site,omitempty"`
+}
+
+// isWorker reports whether an /api/services entry is a synthetic per-site
+// worker unit rather than a real service preset.
+func (s serviceInfo) isWorker() bool {
+	return s.QueueSite != "" || s.ScheduleWorkerSite != "" ||
+		s.StripeListenerSite != "" || s.ReverbSite != "" ||
+		s.HorizonSite != "" || s.WorkerSite != ""
 }
 
 const daemonEnv = "LERD_TRAY_DAEMON"
@@ -227,8 +237,8 @@ func onReady(mono bool) {
 	go applyLoop(menu, updateCh, mono, icons)
 	go handleDash(menu.mDash)
 	go handleToggle(menu.mToggle, refresh)
-	go handleServices(menu, refresh)
-	go handlePHP(menu, refresh)
+	menu.svcs.watch(refresh)
+	menu.php.watch(refresh)
 	go handleAutostart(menu.mAutostart, refresh)
 	if menu.mLAN != nil {
 		go handleLAN(menu.mLAN, refresh)
@@ -316,17 +326,35 @@ func fetchSnapshot() *Snapshot {
 		snap.HighContrastIcon = cfg.IsHighContrastTrayIcon()
 	}
 
-	// /api/services — only real services (exclude queue/schedule/stripe per-site workers)
+	// /api/services — real services only. The per-site worker units mixed into
+	// the same payload are counted rather than discarded; the API lists them
+	// only while they are up, so the count needs no extra call.
 	if r, err := client.Get(apiBase + "/api/services"); err == nil {
 		var all []serviceInfo
 		if json.NewDecoder(r.Body).Decode(&all) == nil {
 			for _, svc := range all {
-				if svc.QueueSite != "" || svc.ScheduleWorkerSite != "" ||
-					svc.StripeListenerSite != "" || svc.ReverbSite != "" ||
-					svc.HorizonSite != "" || svc.WorkerSite != "" {
+				if svc.isWorker() {
+					snap.WorkersRunning++
 					continue
 				}
 				snap.Services = append(snap.Services, svc)
+			}
+		}
+		r.Body.Close()
+	}
+
+	// /api/workers/health knows the difference between a worker that is down
+	// because its site is paused or idle-suspended and one that actually
+	// broke, so the tray reports its verdict instead of counting stopped units.
+	if r, err := client.Get(apiBase + "/api/workers/health"); err == nil {
+		var health struct {
+			Unhealthy []struct {
+				Site string `json:"site"`
+			} `json:"unhealthy"`
+		}
+		if json.NewDecoder(r.Body).Decode(&health) == nil {
+			for _, u := range health.Unhealthy {
+				snap.WorkersDown = append(snap.WorkersDown, u.Site)
 			}
 		}
 		r.Body.Close()
@@ -462,43 +490,6 @@ func handleToggle(item *systray.MenuItem, refresh func()) {
 			}
 			runAndRefresh(lerdCmd(arg), refresh)
 		}()
-	}
-}
-
-func handleServices(menu *menuState, refresh func()) {
-	for i := 0; i < maxServices; i++ {
-		go func(idx int) {
-			for range menu.svcItems[idx].ClickedCh {
-				menu.svcMu.RLock()
-				name := menu.svcNames[idx]
-				status := menu.svcStatus[idx]
-				menu.svcMu.RUnlock()
-				if name == "" {
-					continue
-				}
-				arg := "start"
-				if status == "active" {
-					arg = "stop"
-				}
-				runAndRefresh(lerdCmd("service", arg, name), refresh)
-			}
-		}(i)
-	}
-}
-
-func handlePHP(menu *menuState, refresh func()) {
-	for i := 0; i < maxPHP; i++ {
-		go func(idx int) {
-			for range menu.phpItems[idx].ClickedCh {
-				menu.phpMu.RLock()
-				version := menu.phpVersion[idx]
-				menu.phpMu.RUnlock()
-				if version == "" {
-					continue
-				}
-				runAndRefresh(lerdCmd("use", version), refresh)
-			}
-		}(i)
 	}
 }
 

@@ -17,32 +17,43 @@ The tray detaches from the terminal immediately, your shell prompt returns strai
 🟢 Running          ← overall status (disabled, informational)
   🟢 nginx
   🟢 dns
+  🟢 4 workers       ← per-site workers, hidden when there is nothing to report
 ─────────────────
-Open Dashboard       ← opens http://127.0.0.1:7073
+Open Dashboard       ← opens http://lerd.localhost
 Stop Lerd            ← toggles between Start / Stop Lerd
 ─────────────────
-── Services ──
-  🟢 mysql           ← click to stop
-  🔴 redis           ← click to start
+Services (2/3)  ▸    ← submenu, the count is running out of installed
+PHP 8.5         ▸    ← submenu, the label is the current default
 ─────────────────
-── PHP ──
-  ✔ 8.5              ← current default (click to switch)
-  8.4
-─────────────────
-Autostart at login: ✔ On   ← click to toggle (enables/disables every lerd unit)
-Expose to LAN: Off         ← click to toggle (Linux only)
-Debug bridge: Off           ← click to toggle `lerd dump on/off`
-Notifications: ✔ On        ← click to toggle `lerd notify on/off`
-High-contrast icon: Off     ← click to toggle `lerd tray icon default/high-contrast`
-⬆ Update to v0.8.3         ← shown when an update is cached; click to open terminal
-Stop Lerd & Quit     ← runs lerd stop then exits the tray
+Settings        ▸    ← submenu holding the global toggles
+Check for update...  ← becomes "⬆ Update to vX.Y.Z" once one is cached
+Quit Lerd            ← stops the environment and exits the tray
 ```
 
-The menu refreshes every 5 seconds. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Stop Lerd & Quit" stops the entire environment before closing.
+The submenus hold the entries you click:
+
+```
+Services (2/3) ▸   🟢 mysql        ← click to stop
+                   🔴 redis        ← click to start
+                   🟡 meilisearch  ← paused, click to start
+
+PHP 8.5        ▸   ✔ 8.5           ← current default
+                   8.4             ← click to switch
+
+Settings       ▸   Autostart at login: ✔ On   ← enables/disables every lerd unit
+                   Expose to LAN: Off         ← Linux only
+                   Debug bridge: Off          ← `lerd dump on/off`
+                   Notifications: ✔ On        ← `lerd notify on/off`
+                   High-contrast icon: Off    ← `lerd tray icon default/high-contrast`
+```
+
+The menu refreshes every 30 seconds, and again right after any click so it redraws against the result instead of waiting for the next poll. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Quit Lerd" stops the entire environment before closing.
 
 The **Debug bridge** item shells out to `lerd dump on` / `lerd dump off` — see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off` — see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
 
-The **Services** section shows only core services (MySQL, Redis, PostgreSQL, etc.). Per-site workers (queue, schedule, Stripe, Reverb) are managed from the web UI or via their respective CLI commands and are not listed in the tray.
+The **Services** submenu shows only core services (MySQL, Redis, PostgreSQL, etc.), and its parent row hides itself when none are installed. If you ever install more than the menu has room for, the last row reports how many are not shown rather than dropping them quietly.
+
+The **workers line** summarises the per-site workers (queue, schedule, Horizon, Reverb, Stripe, and any framework-declared worker) without listing them, since their number grows with your sites. It shows the running count in green, or a red warning naming the site when one has actually broken. A worker stopped because its site is paused or idle-suspended is not a fault, so it never raises the warning, and the line hides itself entirely when nothing is running and nothing is wrong. Workers are still started and stopped from the web UI or their CLI commands.
 
 The **update item** shows "Check for update..." when no update information is cached, and "⬆ Update to vX.Y.Z" once the background checker finds a newer release. Clicking it opens a terminal to run `lerd update`.
 
