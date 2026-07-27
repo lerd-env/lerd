@@ -1,10 +1,15 @@
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { defineConfig } from 'vitepress'
 
 const SITE_URL = 'https://lerd.sh'
 const OG_IMAGE = `${SITE_URL}/assets/social-preview.png`
 const DIGEST_DIR = fileURLToPath(new URL('../public/digest', import.meta.url))
+
+// Read the version off the Go source of truth so the structured data can't
+// drift behind a release.
+const VERSION_GO = fileURLToPath(new URL('../../internal/version/version.go', import.meta.url))
+const SOFTWARE_VERSION = readFileSync(VERSION_GO, 'utf8').match(/Version\s*=\s*"([^"]+)"/)?.[1] ?? ''
 
 export default defineConfig({
   title: 'Lerd',
@@ -64,9 +69,11 @@ export default defineConfig({
             operatingSystem: 'Linux, macOS',
             description:
               'Open-source, Herd-like local PHP development environment for Linux and macOS: automatic .test domains and HTTPS, per-project PHP 7.4–8.5 and Node, rootless Podman, a built-in Web UI, and an MCP server for AI agents. No Docker daemon, no sudo.',
+            keywords:
+              'local PHP development, Laravel Herd for Linux, Laragon for Linux, Laragon alternative Linux, .test domains, rootless Podman, PHP-FPM, local development environment',
             url: SITE_URL,
             downloadUrl: `${SITE_URL}/install.sh`,
-            softwareVersion: '1.25.0',
+            softwareVersion: SOFTWARE_VERSION,
             license: 'https://opensource.org/licenses/MIT',
             image: OG_IMAGE,
             author: { '@type': 'Person', name: 'George Dumitrescu' },
@@ -125,6 +132,7 @@ export default defineConfig({
             { text: 'NixOS', link: '/getting-started/nixos' },
             { text: 'Quick Start', link: '/getting-started/quick-start' },
             { text: 'Comparison', link: '/getting-started/comparison' },
+            { text: 'Laragon for Linux', link: '/getting-started/laragon-linux' },
           ],
         },
         {

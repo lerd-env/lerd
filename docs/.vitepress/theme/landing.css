@@ -428,7 +428,7 @@
    COMPARISON TABLE
    =========================================================== */
 .lerd-landing .cmp-wrap { overflow-x: auto; }
-.lerd-landing .cmp { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 680px; }
+.lerd-landing .cmp { width: 100%; border-collapse: separate; border-spacing: 0; min-width: 820px; }
 .lerd-landing .cmp th, .lerd-landing .cmp td { padding: 16px 18px; text-align: left; border-bottom: 1px solid var(--line); }
 .lerd-landing .cmp thead th { font-family: var(--mono); font-size: 12px; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); font-weight: 500; vertical-align: bottom; }
 .lerd-landing .cmp thead th.lerd-col { color: var(--accent-2); }
@@ -441,6 +441,9 @@
 .lerd-landing .cmp-partial { color: var(--amber); }
 .lerd-landing .cmp svg { width: 18px; height: 18px; vertical-align: -4px; }
 .lerd-landing .cmp-lead { display:flex; align-items:center; gap:9px; font-weight:600; color:var(--ink); }
+.lerd-landing .cmp-note { margin-top: 20px; font-size: 15px; color: var(--muted); max-width: 68ch; }
+.lerd-landing .cmp-note a { color: var(--accent-2); }
+.lerd-landing .cmp-note a:hover { text-decoration: underline; }
 
 /* ===========================================================
    SERVICES

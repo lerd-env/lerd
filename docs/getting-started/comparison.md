@@ -41,6 +41,35 @@ You trade a sliver of native performance (Podman Machine on macOS adds overhead 
 
 ---
 
+## Lerd vs Laragon
+
+[Laragon](https://laragon.org/) is the Windows counterpart to this idea: a portable, zero-config stack with pretty `.test` URLs, auto-generated virtual hosts, one-click SSL and bundled databases. It runs on Windows only and a Linux build is not planned, which is why "Laragon for Linux" is a question people keep asking. Lerd is the answer to it, the same shared-stack model built on rootless Podman.
+
+|  | Lerd | Laragon |
+|---|---|---|
+| Platforms | Linux (systemd), macOS, Windows via WSL2 (beta) | Windows only |
+| License | Open source (MIT), free for commercial use | Proprietary, a licence is required from Laragon 7 onwards |
+| Cost | Free | Free unlicenced tier with a reminder popup and no auto-updates; paid non-commercial and commercial licences |
+| Stack | Nginx, PHP-FPM and services as rootless Podman containers | Apache or Nginx and services as native Windows binaries in a portable folder |
+| PHP versions | 7.4, 8.0 to 8.5 (shared FPM containers) | Multiple versions downloaded into the Laragon folder |
+| `.test` domains | Automatic via dnsmasq container, no hosts file edits | Automatic via hosts file entries written by the tray app |
+| HTTPS | `lerd secure` + mkcert, trusted system-wide | One-click self-signed certificate, trusted manually |
+| Scaffolding | `lerd new` runs the framework's own installer | Quick app, one-click Laravel, WordPress, Symfony |
+| Services | MySQL, Postgres, Redis, Meilisearch, MongoDB, RustFS (S3), Mailpit, shared across sites | MySQL, PostgreSQL, Redis, Memcached, per-install |
+| Non-PHP projects | First-class via `Containerfile.lerd` (Node, Python, Go, Rails) | Node, Python and Go bundled as tools, not served as projects |
+| Per-project config | `.lerd.yaml` committed to the repo | None, configuration lives in the Laragon install |
+| Queue + scheduler workers | `lerd worker start queue` / `schedule` as systemd user services | Not built in |
+| Dashboard | Web UI at `127.0.0.1:7073`, system tray, terminal dashboard, installable PWA | Native tray application |
+| AI / MCP | Built-in MCP server | Not built in |
+
+**Choose Laragon when:** you work on Windows and want native binaries with no container layer, and the portable folder suits how you move between machines.
+
+**Choose Lerd when:** you have moved to Linux or macOS, want the same zero-config experience without a Docker daemon, or want the environment described in a file you can commit.
+
+See [Laragon for Linux](/getting-started/laragon-linux) for the feature-by-feature mapping and a migration walkthrough.
+
+---
+
 ## Lerd vs Laravel Sail
 
 [Laravel Sail](https://laravel.com/docs/sail) is the official per-project Docker Compose solution. Lerd is a shared infrastructure approach, closer to what [Laravel Herd](https://herd.laravel.com/) does on macOS. Both are valid; they solve slightly different problems.
