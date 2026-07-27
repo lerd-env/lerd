@@ -84,3 +84,52 @@ func TestFindOwningWorktree_skipsParentItself(t *testing.T) {
 		t.Error("the parent path itself must not register as one of its own worktrees")
 	}
 }
+
+// A path can be spelled two ways when a parent directory is a symlink: macOS
+// resolves /var to /private/var and ostree hosts resolve /home to /var/home,
+// so the registry and git's own metadata can hold one spelling while os.Getwd
+// hands back the other. The lookup has to compare canonical paths or a
+// worktree is never matched to its parent on those hosts.
+func TestFindOwningWorktree_matchesThroughASymlinkedPath(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	root := t.TempDir()
+	real := filepath.Join(root, "real")
+	if err := os.MkdirAll(real, 0755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(root, "link")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+
+	// Register the site and write git's metadata using the symlinked spelling.
+	parent := filepath.Join(link, "rapids")
+	wtPath := filepath.Join(parent, "feature")
+	meta := filepath.Join(parent, ".git", "worktrees", "feature")
+	if err := os.MkdirAll(meta, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(wtPath, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(meta, "HEAD"), []byte("ref: refs/heads/feature\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(meta, "gitdir"), []byte(filepath.Join(wtPath, ".git")+"\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	writeSitesYAML(t, []config.Site{{Name: "rapids", Path: parent}})
+
+	// The resolved spelling is what os.Getwd reports from inside the checkout.
+	resolved, err := filepath.EvalSymlinks(wtPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	owner, branch, ok := findOwningWorktree(resolved)
+	if !ok {
+		t.Fatal("worktree not matched to its parent through the symlinked path")
+	}
+	if owner.Name != "rapids" || branch != "feature" {
+		t.Errorf("got %s/%s, want rapids/feature", owner.Name, branch)
+	}
+}

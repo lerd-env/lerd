@@ -221,14 +221,18 @@ func OwningWorktree(dir string) (*config.Site, string, bool) {
 	if err != nil {
 		return nil, "", false
 	}
+	// Compare canonical paths, as the registry lookup does: a checkout under a
+	// symlinked parent (/var on macOS, /home on ostree) is spelled one way in
+	// the registry and git's metadata and another by os.Getwd.
+	target := config.CanonicalPath(dir)
 	for i := range reg.Sites {
 		s := &reg.Sites[i]
-		if s.Ignored || s.Path == dir {
+		if s.Ignored || config.CanonicalPath(s.Path) == target {
 			continue
 		}
 		wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
 		for _, wt := range wts {
-			if wt.Path == dir {
+			if config.CanonicalPath(wt.Path) == target {
 				return s, wt.Branch, true
 			}
 		}
