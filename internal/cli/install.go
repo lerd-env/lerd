@@ -173,11 +173,17 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 	ensurePortsAvailable()
 
-	// Skipped under --unattended: these prompt for sudo, which a package
-	// maintainer script cannot answer. `lerd bootstrap --system` set the
-	// unprivileged-port sysctl and enabled linger as root beforehand.
+	// Resolved before the root pass below, which needs to know whether to
+	// install the resolver sudoers grant. The side effects of a changed answer
+	// (TLD rename, persistence) stay further down, once the directories and
+	// network this run depends on exist.
+	wantDNS, haveDNSConfig, prevEnabled, prevTLD := resolveDNSChoice(fromUpdate, configExisted, dnsFlag)
+
+	// Skipped under --unattended: this escalates to root, which a package
+	// maintainer script cannot answer for. `lerd bootstrap --system` already
+	// applied the same steps beforehand.
 	if !unattended {
-		if err := ensureUnprivilegedPorts(); err != nil {
+		if err := runSystemSetup(wantDNS); err != nil {
 			return err
 		}
 	}
@@ -202,18 +208,6 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		}
 	}
 	ok()
-
-	// 1b. Enable systemd linger so user services (lerd-dns, lerd-nginx, the
-	// PHP-FPM containers) survive screen blank, lock, and logout. Without
-	// linger, Ubuntu/GNOME tears down the rootless Podman containers when
-	// the session goes inactive and lerd appears to "stop working" until
-	// the next manual `lerd install`. This is the single biggest source of
-	// "DNS just stopped" issues reported in the wild — see #153.
-	if !unattended {
-		if err := ensureSystemdLinger(); err != nil {
-			fmt.Printf("    WARN: %v\n", err)
-		}
-	}
 
 	// 2. Podman network
 	// Containers removed by recreate are restarted AFTER the quadlet refresh
@@ -368,36 +362,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		wantLaravelInstaller = confirmInstallPrompt("Install Laravel installer (laravel new)?")
 	}
 
-	// Ask whether lerd should manage local DNS. Prompted on every direct
-	// `lerd install` (fresh or rerun) with the default reflecting the saved
-	// choice, so users can flip the mode without hand-editing config.yaml.
-	// `lerd update` re-execs install with --from-update; in that path the
-	// saved choice is honoured silently so updates are non-interactive.
-	wantDNS := true
-	prevEnabled := true
-	prevTLD := "test"
-	dnsCfg, loadErr := config.LoadGlobal()
-	if loadErr != nil || dnsCfg == nil {
-		if loadErr != nil {
-			fmt.Printf("    WARN: load config (%v); proceeding with DNS enabled\n", loadErr)
-		}
-	} else {
-		prevEnabled = dnsCfg.DNS.Enabled
-		if dnsCfg.DNS.TLD != "" {
-			prevTLD = dnsCfg.DNS.TLD
-		}
-		var flagDNS *bool
-		if v, ok := parseDNSMode(dnsFlag); ok {
-			flagDNS = &v
-		}
-		want, needPrompt := dnsManageDecision(fromUpdate, configExisted, flagDNS, prevEnabled)
-		if needPrompt {
-			want = confirmInstallPromptDefault(
-				"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
-				true,
-			)
-		}
-		wantDNS = want
+	// Apply what the DNS answer resolved above implies for existing sites and
+	// for the saved config.
+	if haveDNSConfig {
 		// Only flip TLD on a real toggle and only when the current TLD is the
 		// canonical default for the previous state; preserves any custom TLD
 		// the user has set in config.yaml.
@@ -432,12 +399,19 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 
 		// Persist on any real change, and always on a first install so the
 		// remembered choice exists on disk for the next run to honour, even when
-		// the user just accepted the enabled default.
+		// the user just accepted the enabled default. Re-read rather than reusing
+		// the copy the decision was made from: the Node-management steps above
+		// save their own, and writing back a pre-Node snapshot would drop it.
 		if !configExisted || prevEnabled != wantDNS || newTLD != prevTLD {
-			dnsCfg.DNS.Enabled = wantDNS
-			dnsCfg.DNS.TLD = newTLD
-			if err := config.SaveGlobal(dnsCfg); err != nil {
+			cur, err := config.LoadGlobal()
+			if err != nil || cur == nil {
 				fmt.Printf("    WARN: persist DNS choice: %v\n", err)
+			} else {
+				cur.DNS.Enabled = wantDNS
+				cur.DNS.TLD = newTLD
+				if err := config.SaveGlobal(cur); err != nil {
+					fmt.Printf("    WARN: persist DNS choice: %v\n", err)
+				}
 			}
 		}
 	}
@@ -459,29 +433,8 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	dnsChanged := false
 
 	if wantDNS {
-		// 4. mkcert CA. When the CA is already in the system trust store,
-		// mkcert -install is a silent no-op that never prompts, so skip the
-		// gold sudo header and swallow its "already installed" banner. Only a
-		// genuine first install announces the sudo step and runs interactively.
-		mkcertCmd := exec.Command(certs.MkcertPath(), "-install")
-		switch {
-		case unattended:
-			// No sudo available: generate the CA and trust it only in the user's
-			// NSS store (TRUST_STORES=nss skips the system store). The system
-			// store is handled afterward by `lerd bootstrap --trust-ca` as root.
-			mkcertCmd.Env = append(os.Environ(), "TRUST_STORES=nss")
-			mkcertCmd.Stdout = io.Discard
-			mkcertCmd.Stderr = io.Discard
-		case certs.CATrusted():
-			mkcertCmd.Stdout = io.Discard
-			mkcertCmd.Stderr = io.Discard
-		default:
-			feedback.Sudo("Installing mkcert CA")
-			mkcertCmd.Stdin = os.Stdin
-			mkcertCmd.Stdout = os.Stdout
-			mkcertCmd.Stderr = os.Stderr
-		}
-		mkcertCmd.Run() //nolint:errcheck
+		// 4. mkcert CA.
+		ensureMkcertCA(unattended)
 
 		// mkcert only adds the CA to the browser NSS stores when certutil is
 		// present, and it exits 0 with a warning otherwise (which the discard
@@ -491,7 +444,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 			feedback.Note(browserTrustGuidance(ostreeBootedFn()))
 		}
 
-		// 5. DNS config + sudoers
+		// 5. DNS config
 		step("Writing DNS configuration")
 		dnsConfPath := filepath.Join(config.DnsmasqDir(), "lerd.conf")
 		confChanged, err := fileChangedBy(dnsConfPath, func() error {
@@ -503,12 +456,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		dnsChanged = dnsChanged || confChanged
 		ok()
 
-		// InstallSudoers prints its own gold "🔒 Installing DNS sudoers rule"
-		// line when it actually writes the drop-in, so no header is printed here.
-		// Skipped under --unattended: `lerd bootstrap --system` already wrote the
-		// rule as root, and InstallSudoers would prompt for a password here.
+		// Platform-dependent: on Linux the root pass already installed the grant
+		// and this is a no-op, while macOS writes it here because its rule names
+		// the TLD, which is only settled once the choice above was persisted.
 		if !unattended {
-			dns.InstallSudoers() //nolint:errcheck
+			ensureResolverSudoers()
 		}
 	} else {
 		feedback.Line("DNS disabled, skipping mkcert CA, dnsmasq and sudoers")
@@ -1234,23 +1186,10 @@ func refreshUnreferencedCustomQuadlets(seenSvc map[string]bool, reg *config.Site
 // output is unparseable (non-systemd init, container without logind, …) we
 // silently skip rather than fail the install.
 func ensureSystemdLinger() error {
-	user := os.Getenv("USER")
-	if user == "" {
-		user = os.Getenv("LOGNAME")
-	}
-	if user == "" {
+	if !defaultLingerNeeded() {
 		return nil
 	}
-	if _, err := exec.LookPath("loginctl"); err != nil {
-		return nil
-	}
-	out, err := exec.Command("loginctl", "show-user", user).Output()
-	if err != nil {
-		return nil
-	}
-	if !strings.Contains(string(out), "Linger=no") {
-		return nil
-	}
+	user := currentUserName()
 
 	feedback.Warn("systemd user linger is disabled for this account")
 	feedback.Note("without it, lerd's containers (DNS, nginx, PHP-FPM) are torn down by")
@@ -1271,19 +1210,54 @@ func ensureSystemdLinger() error {
 	return nil
 }
 
-// ensureUnprivilegedPorts checks net.ipv4.ip_unprivileged_port_start and
-// offers to set it to 80 so rootless Podman can bind to ports 80 and 443.
-func ensureUnprivilegedPorts() error {
-	const sysctlPath = "/proc/sys/net/ipv4/ip_unprivileged_port_start"
-	data, err := os.ReadFile(sysctlPath)
+// currentUserName resolves the login name the per-user setup steps apply to.
+func currentUserName() string {
+	if u := os.Getenv("USER"); u != "" {
+		return u
+	}
+	return os.Getenv("LOGNAME")
+}
+
+// unprivilegedPortStart reads the sysctl gating rootless binds of 80/443. ok is
+// false on a kernel that does not expose it, where there is nothing to set.
+func unprivilegedPortStart() (int, bool) {
+	data, err := os.ReadFile("/proc/sys/net/ipv4/ip_unprivileged_port_start")
 	if err != nil {
-		// Not available on this kernel — skip
-		return nil
+		return 0, false
 	}
 	val := 1024
 	fmt.Sscanf(strings.TrimSpace(string(data)), "%d", &val)
-	if val <= 80 {
-		return nil // already fine
+	return val, true
+}
+
+func defaultUnprivPortsNeeded() bool {
+	val, available := unprivilegedPortStart()
+	return available && val > 80
+}
+
+// defaultLingerNeeded acts only on a clear "Linger=no". A missing or
+// unparseable loginctl reads as nothing to do rather than as a failure.
+func defaultLingerNeeded() bool {
+	user := currentUserName()
+	if user == "" {
+		return false
+	}
+	if _, err := exec.LookPath("loginctl"); err != nil {
+		return false
+	}
+	out, err := exec.Command("loginctl", "show-user", user).Output()
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "Linger=no")
+}
+
+// ensureUnprivilegedPorts checks net.ipv4.ip_unprivileged_port_start and
+// offers to set it to 80 so rootless Podman can bind to ports 80 and 443.
+func ensureUnprivilegedPorts() error {
+	val, available := unprivilegedPortStart()
+	if !available || val <= 80 {
+		return nil
 	}
 
 	feedback.Warn("port 80/443 require net.ipv4.ip_unprivileged_port_start ≤ 80 (current: %d)", val)
@@ -1604,6 +1578,38 @@ func dnsManageDecision(fromUpdate, configExisted bool, flag *bool, savedEnabled 
 		return savedEnabled, false
 	}
 	return true, true
+}
+
+// resolveDNSChoice decides whether lerd manages local DNS for this run, and
+// prompts when the answer is not already settled. It runs early because the
+// answer decides whether the root pass installs the resolver sudoers grant.
+// haveConfig is false when the config could not be read, in which case the
+// caller skips the TLD and persistence side effects and proceeds with DNS on.
+func resolveDNSChoice(fromUpdate, configExisted bool, dnsFlag string) (want, haveConfig, prevEnabled bool, prevTLD string) {
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		if err != nil {
+			fmt.Printf("    WARN: load config (%v); proceeding with DNS enabled\n", err)
+		}
+		return true, false, true, "test"
+	}
+	prevEnabled = cfg.DNS.Enabled
+	prevTLD = "test"
+	if cfg.DNS.TLD != "" {
+		prevTLD = cfg.DNS.TLD
+	}
+	var flagDNS *bool
+	if v, ok := parseDNSMode(dnsFlag); ok {
+		flagDNS = &v
+	}
+	want, needPrompt := dnsManageDecision(fromUpdate, configExisted, flagDNS, prevEnabled)
+	if needPrompt {
+		want = confirmInstallPromptDefault(
+			"Let lerd manage DNS for local sites (No: use *.localhost, no dnsmasq, no HTTPS)?",
+			true,
+		)
+	}
+	return want, true, prevEnabled, prevTLD
 }
 
 // confirmInstallPromptDefault is like confirmInstallPrompt but lets the caller

@@ -13,9 +13,13 @@ import (
 // as root but cannot prompt, so it calls `lerd bootstrap --system` for the
 // prerequisites and `lerd bootstrap --trust-ca` after the per-user install, so
 // `lerd install --unattended` in between needs no sudo. See lerd-env/lerd#979.
-const (
-	unprivPortDropIn  = "/etc/sysctl.d/99-lerd-ports.conf"
-	unprivPortSetting = "net.ipv4.ip_unprivileged_port_start=80"
+const unprivPortSetting = "net.ipv4.ip_unprivileged_port_start=80"
+
+// Vars rather than consts so tests can redirect the root actions away from the
+// real /etc and login manager.
+var (
+	unprivPortDropIn           = "/etc/sysctl.d/99-lerd-ports.conf"
+	bootstrapRunner  cmdRunner = execRunner
 )
 
 // cmdRunner runs an external command. A seam so the bootstrap steps can be
@@ -69,27 +73,35 @@ func bootstrapTargetUser(flagUser string) string {
 // non-interactive halves of setup so a deb/rpm postinst can finish the install
 // without prompting, pairing with `lerd install --unattended`.
 func NewBootstrapCmd() *cobra.Command {
-	var system, trustCA bool
-	var user string
+	var system, trustCA, untrustCA, skipSudoers bool
+	var user, caRoot string
 	cmd := &cobra.Command{
 		Use:   "bootstrap",
 		Short: "Apply the root-level system setup (for package maintainer scripts)",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			if !system && !trustCA {
-				return fmt.Errorf("nothing to do: pass --system or --trust-ca")
+			if !system && !trustCA && !untrustCA {
+				return fmt.Errorf("nothing to do: pass --system, --trust-ca or --untrust-ca")
 			}
 			if os.Geteuid() != 0 {
 				return fmt.Errorf("lerd bootstrap configures system-level settings and must run as root")
 			}
-			target := bootstrapTargetUser(user)
-			if trustCA {
-				return runBootstrapTrustCA(target)
+			switch {
+			case trustCA:
+				return runBootstrapTrustCA(bootstrapTargetUser(user), caRoot)
+			case untrustCA:
+				return runBootstrapUntrustCA()
+			default:
+				return runBootstrapSystem(bootstrapTargetUser(user), skipSudoers)
 			}
-			return runBootstrapSystem(target)
 		},
 	}
 	cmd.Flags().BoolVar(&system, "system", false, "Apply root-level setup: unprivileged ports, linger, DNS sudoers")
 	cmd.Flags().BoolVar(&trustCA, "trust-ca", false, "Trust the user's mkcert CA in the system store (run after install)")
+	cmd.Flags().BoolVar(&untrustCA, "untrust-ca", false, "Remove lerd's mkcert CA from the system store (run on uninstall)")
+	cmd.Flags().BoolVar(&skipSudoers, "skip-sudoers", false,
+		"With --system, leave out the passwordless DNS grant (for installs that manage no DNS)")
 	cmd.Flags().StringVar(&user, "user", "", "Target user for per-user settings (defaults to SUDO_USER)")
+	cmd.Flags().StringVar(&caRoot, "ca-root", "",
+		"mkcert CAROOT holding the CA to trust (defaults to the target user's ~/.local/share/mkcert)")
 	return cmd
 }
