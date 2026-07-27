@@ -162,6 +162,17 @@ func RemoveStorePreset(name string) error {
 	return nil
 }
 
+// storePresetStat returns the mtime and size of the store cache file for name,
+// zero values when none exists. LoadPreset keys its memoised entry on this pair
+// so another process creating, rewriting or removing the file is picked up.
+func storePresetStat(name string) (time.Time, int64) {
+	info, err := os.Stat(filepath.Join(StorePresetsDir(), name+".yaml"))
+	if err != nil {
+		return time.Time{}, 0
+	}
+	return info.ModTime(), info.Size()
+}
+
 // presetSourceExists reports whether any layer can serve a preset by this name.
 func presetSourceExists(name string) bool {
 	_, ok := readPresetBytes(name)

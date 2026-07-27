@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -123,15 +124,27 @@ func ListPresets() ([]PresetMeta, error) {
 	return out, nil
 }
 
-// presetCache memoises parsed Presets so the daemon doesn't re-parse the
-// embedded YAML on every snapshot rebuild. The bundled files are immutable for
-// the lifetime of the binary, so the cache never needs invalidation.
-var presetCache sync.Map // map[string]*Preset
+// presetCache memoises parsed Presets so the daemon doesn't re-parse on every
+// snapshot rebuild. Store cache files are created/rewritten by other processes
+// (install, service update, 24h refresh), so entries key on mtime+size.
+var presetCache sync.Map // map[string]presetCacheEntry
+
+type presetCacheEntry struct {
+	preset *Preset
+	mtime  time.Time // zero when no store cache file existed at parse time
+	size   int64
+}
 
 // LoadPreset returns the parsed Preset for a bundled file by name.
 func LoadPreset(name string) (*Preset, error) {
+	// Stat before reading: if a rewrite lands in between, the entry keeps the
+	// pre-rewrite key and the next load re-parses, never serving stale as fresh.
+	mtime, size := storePresetStat(name)
 	if cached, ok := presetCache.Load(name); ok {
-		return cached.(*Preset), nil
+		entry := cached.(presetCacheEntry)
+		if entry.mtime.Equal(mtime) && entry.size == size {
+			return entry.preset, nil
+		}
 	}
 	data, ok := readPresetBytes(name)
 	if !ok {
@@ -147,7 +160,7 @@ func LoadPreset(name string) (*Preset, error) {
 	if len(p.Versions) > 0 && p.DefaultVersion == "" {
 		p.DefaultVersion = p.Versions[0].Tag
 	}
-	presetCache.Store(name, &p)
+	presetCache.Store(name, presetCacheEntry{preset: &p, mtime: mtime, size: size})
 	return &p, nil
 }
 
