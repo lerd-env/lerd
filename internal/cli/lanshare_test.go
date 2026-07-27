@@ -712,3 +712,72 @@ func TestIsViteHMRSocket_matchesViteSubprotocolOnAnyPath(t *testing.T) {
 		}
 	}
 }
+
+// ── worktree LAN port ─────────────────────────────────────────────────────────
+
+// lerd lan:share inside a worktree persists a port for that branch, not for
+// the parent site, so the daemon starts the branch's own proxy.
+func TestLANShareEnsureWorktreePort_persistsPerBranch(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent, _ := makeWorktreeLayout(t, "rapids", "feature")
+	writeSitesYAML(t, []config.Site{{Name: "rapids", Path: parent}})
+
+	port, err := LANShareEnsureWorktreePort("rapids", "feature")
+	if err != nil {
+		t.Fatalf("LANShareEnsureWorktreePort: %v", err)
+	}
+	if port == 0 {
+		t.Fatal("expected a port to be assigned")
+	}
+	entry, found, err := config.FindWorktreeLAN("rapids", "feature")
+	if err != nil || !found {
+		t.Fatalf("worktree entry not persisted: found=%v err=%v", found, err)
+	}
+	if entry.Port != port {
+		t.Errorf("persisted port = %d, want %d", entry.Port, port)
+	}
+	site, err := config.FindSite("rapids")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.LANPort != 0 {
+		t.Errorf("parent site LANPort = %d, want it left alone", site.LANPort)
+	}
+}
+
+func TestLANShareEnsureWorktreePort_isIdempotent(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent, _ := makeWorktreeLayout(t, "rapids", "feature")
+	writeSitesYAML(t, []config.Site{{Name: "rapids", Path: parent}})
+
+	first, err := LANShareEnsureWorktreePort("rapids", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := LANShareEnsureWorktreePort("rapids", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first != second {
+		t.Errorf("port moved between calls: %d then %d", first, second)
+	}
+}
+
+// Two branches of one site are two listeners, so they must not collide.
+func TestLANShareEnsureWorktreePort_branchesGetDistinctPorts(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent, _ := makeWorktreeLayout(t, "rapids", "feature")
+	writeSitesYAML(t, []config.Site{{Name: "rapids", Path: parent}})
+
+	a, err := LANShareEnsureWorktreePort("rapids", "feature")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := LANShareEnsureWorktreePort("rapids", "other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a == b {
+		t.Errorf("both branches got port %d", a)
+	}
+}

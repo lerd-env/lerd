@@ -135,16 +135,19 @@
   const lanQrSrc = $derived(
     apiBase + '/api/lan-qr/' + site.domain + (activeWorktreeBranch ? '?branch=' + encodeURIComponent(activeWorktreeBranch) : '')
   );
-  // Tunnels are site-level, so the chip only shows on the main site view.
-  const tunnelURL = $derived(activeWorktreeBranch ? '' : site.tunnel_url ?? '');
-  const tunnelQrSrc = $derived(apiBase + '/api/tunnel-qr/' + site.domain);
+  // A worktree tunnels its own subdomain, so the chip follows the active view
+  // the same way the LAN one does.
+  const tunnelURL = $derived(activeWorktree ? activeWorktree.tunnel_url ?? '' : site.tunnel_url ?? '');
+  const tunnelQrSrc = $derived(
+    apiBase + '/api/tunnel-qr/' + site.domain + (activeWorktreeBranch ? '?branch=' + encodeURIComponent(activeWorktreeBranch) : '')
+  );
   let tunnelBusy = $state(false);
 
   async function startTunnelAuto() {
     if (tunnelBusy) return;
     tunnelBusy = true;
     try {
-      const res = await startTunnel(site);
+      const res = await startTunnel(site, '', activeWorktreeBranch);
       if (!res.ok) openErrorModal(res.error || m.common_requestFailed());
       await loadSites();
     } finally {
@@ -153,7 +156,7 @@
   }
 
   async function stopTunnelNow() {
-    await stopTunnel(site);
+    await stopTunnel(site, activeWorktreeBranch);
     await loadSites();
   }
 
@@ -754,7 +757,7 @@
                 {lanOn ? m.sites_controls_lanToggle_on() : m.sites_controls_lanToggle_off()}
               </button>
             {/if}
-            {#if !site.paused && !activeWorktreeBranch}
+            {#if !site.paused}
               <button
                 type="button"
                 role="menuitem"

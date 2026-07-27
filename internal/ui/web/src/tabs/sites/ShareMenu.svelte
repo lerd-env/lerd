@@ -47,12 +47,20 @@
   let errorTool = $state('');
   let cancelRequested = false;
 
-  const tunnelUrl = $derived(site.tunnel_url ?? '');
-  const tunnelTool = $derived(site.tunnel_tool ?? '');
+  // A worktree is served on its own subdomain and tunnels it separately, so
+  // the section reads and acts on the active branch's tunnel, not the site's.
+  const activeWorktree = $derived(
+    activeWorktreeBranch
+      ? (site.worktrees || []).find((w) => w.branch === activeWorktreeBranch)
+      : undefined
+  );
+  const tunnelUrl = $derived(
+    (activeWorktreeBranch ? activeWorktree?.tunnel_url : site.tunnel_url) ?? ''
+  );
+  const tunnelTool = $derived(
+    (activeWorktreeBranch ? activeWorktree?.tunnel_tool : site.tunnel_tool) ?? ''
+  );
   const tunnelOn = $derived(Boolean(tunnelUrl));
-  // Tunnels are site-level (they front the primary domain), so the section
-  // hides while a worktree is the active view.
-  const showTunnelSection = $derived(!activeWorktreeBranch);
   const autoTool = $derived(toolsInfo?.tools.find((t) => t.name === toolsInfo?.auto));
 
   function toolLabel(name: string): string {
@@ -107,7 +115,7 @@
     tunnelError = '';
     cancelRequested = false;
     try {
-      const res = await startTunnel(site, tool);
+      const res = await startTunnel(site, tool, activeWorktreeBranch);
       if (!res.ok && !cancelRequested) {
         tunnelError = res.error || m.common_requestFailed();
         errorTool = label;
@@ -120,7 +128,7 @@
 
   async function cancelStart() {
     cancelRequested = true;
-    await stopTunnel(site);
+    await stopTunnel(site, activeWorktreeBranch);
   }
 
   let stopBusy = $state(false);
@@ -129,7 +137,7 @@
     if (stopBusy) return;
     stopBusy = true;
     try {
-      await stopTunnel(site);
+      await stopTunnel(site, activeWorktreeBranch);
       await loadSites();
     } finally {
       stopBusy = false;
@@ -227,93 +235,91 @@
         </button>
       {/if}
 
-      {#if showTunnelSection}
-        <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
-        <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
-          {m.share_publicTunnel()}
-        </div>
+      <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        {m.share_publicTunnel()}
+      </div>
 
-        {#if tunnelBusy}
-          <div class="{itemClass} text-gray-700 dark:text-gray-200">
+      {#if tunnelBusy}
+        <div class="{itemClass} text-gray-700 dark:text-gray-200">
+          <Icon name="spinner" class="w-3.5 h-3.5 shrink-0 animate-spin" />
+          <span class="flex-1 min-w-0">
+            <span class="block font-medium">{m.share_starting({ tool: startingLabel })}</span>
+            <span class="block text-[10px] text-gray-500 dark:text-gray-400">{m.share_waitingURL()}</span>
+          </span>
+          <button
+            type="button"
+            role="menuitem"
+            onclick={cancelStart}
+            class="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-400 dark:hover:text-red-400 transition-colors"
+          >{m.common_cancel()}</button>
+        </div>
+      {:else if tunnelOn}
+        <div class="{itemClass} border-l-2 border-violet-500 bg-violet-50/60 dark:bg-violet-900/15">
+          <Icon name="globe" class="w-3.5 h-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
+          <span class="flex-1 min-w-0">
+            <span class="block font-medium text-gray-700 dark:text-gray-200">{m.share_tunnelVia({ tool: toolLabel(tunnelTool) })}</span>
+            <a href={tunnelUrl} target="_blank" rel="noopener" class="block font-mono text-[10px] text-violet-600 dark:text-violet-400 truncate hover:underline">{tunnelUrl}</a>
+          </span>
+          <button
+            type="button"
+            role="menuitem"
+            onclick={stopT}
+            class="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-400 dark:hover:text-red-400 transition-colors"
+          >{m.share_stop()}</button>
+        </div>
+      {:else}
+        {#if tunnelError}
+          <button
+            type="button"
+            role="menuitem"
+            onclick={() => (tunnelError = '')}
+            class="{itemClass} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
+          >
+            <Icon name="alert" class="w-3.5 h-3.5 shrink-0" />
+            <span class="flex-1 min-w-0">
+              <span class="block font-medium">{m.share_startFailed({ tool: errorTool })}</span>
+              <span class="block text-[10px] break-words">{tunnelError}</span>
+            </span>
+          </button>
+        {/if}
+        {#if toolsLoading}
+          <div class="{itemClass} text-gray-500 dark:text-gray-400">
             <Icon name="spinner" class="w-3.5 h-3.5 shrink-0 animate-spin" />
-            <span class="flex-1 min-w-0">
-              <span class="block font-medium">{m.share_starting({ tool: startingLabel })}</span>
-              <span class="block text-[10px] text-gray-500 dark:text-gray-400">{m.share_waitingURL()}</span>
-            </span>
-            <button
-              type="button"
-              role="menuitem"
-              onclick={cancelStart}
-              class="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-400 dark:hover:text-red-400 transition-colors"
-            >{m.common_cancel()}</button>
           </div>
-        {:else if tunnelOn}
-          <div class="{itemClass} border-l-2 border-violet-500 bg-violet-50/60 dark:bg-violet-900/15">
-            <Icon name="globe" class="w-3.5 h-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
-            <span class="flex-1 min-w-0">
-              <span class="block font-medium text-gray-700 dark:text-gray-200">{m.share_tunnelVia({ tool: toolLabel(tunnelTool) })}</span>
-              <a href={tunnelUrl} target="_blank" rel="noopener" class="block font-mono text-[10px] text-violet-600 dark:text-violet-400 truncate hover:underline">{tunnelUrl}</a>
-            </span>
-            <button
-              type="button"
-              role="menuitem"
-              onclick={stopT}
-              class="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-400 dark:hover:text-red-400 transition-colors"
-            >{m.share_stop()}</button>
-          </div>
-        {:else}
-          {#if tunnelError}
-            <button
-              type="button"
-              role="menuitem"
-              onclick={() => (tunnelError = '')}
-              class="{itemClass} text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20"
-            >
-              <Icon name="alert" class="w-3.5 h-3.5 shrink-0" />
-              <span class="flex-1 min-w-0">
-                <span class="block font-medium">{m.share_startFailed({ tool: errorTool })}</span>
-                <span class="block text-[10px] break-words">{tunnelError}</span>
+        {:else if toolsInfo}
+          <button
+            type="button"
+            role="menuitem"
+            disabled={!autoTool}
+            onclick={() => startTool('', m.share_autoLabel())}
+            class="{itemClass} {autoTool ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
+          >
+            <Icon name="external" class="w-3.5 h-3.5 shrink-0" />
+            <span class="flex-1 min-w-0 text-left">
+              <span class="block font-medium">{m.share_viaTunnel()}</span>
+              <span class="block text-[10px] {autoTool ? 'text-gray-500 dark:text-gray-400' : ''}">
+                {autoTool ? m.share_autoPicks({ tool: autoTool.label }) : m.share_noTools()}
               </span>
-            </button>
-          {/if}
-          {#if toolsLoading}
-            <div class="{itemClass} text-gray-500 dark:text-gray-400">
-              <Icon name="spinner" class="w-3.5 h-3.5 shrink-0 animate-spin" />
-            </div>
-          {:else if toolsInfo}
+            </span>
+          </button>
+          {#each toolsInfo.tools as tool (tool.name)}
             <button
               type="button"
               role="menuitem"
-              disabled={!autoTool}
-              onclick={() => startTool('', m.share_autoLabel())}
-              class="{itemClass} {autoTool ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
+              disabled={!tool.installed}
+              onclick={() => startTool(tool.name, tool.label)}
+              class="{itemClass} {tool.installed ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
             >
-              <Icon name="external" class="w-3.5 h-3.5 shrink-0" />
+              <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
               <span class="flex-1 min-w-0 text-left">
-                <span class="block font-medium">{m.share_viaTunnel()}</span>
-                <span class="block text-[10px] {autoTool ? 'text-gray-500 dark:text-gray-400' : ''}">
-                  {autoTool ? m.share_autoPicks({ tool: autoTool.label }) : m.share_noTools()}
+                <span class="block font-medium">{tool.label}</span>
+                <span class="block text-[10px] {tool.installed ? 'text-gray-500 dark:text-gray-400' : ''}">
+                  {tool.installed ? tool.binary : installHint(tool)}
                 </span>
               </span>
             </button>
-            {#each toolsInfo.tools as tool (tool.name)}
-              <button
-                type="button"
-                role="menuitem"
-                disabled={!tool.installed}
-                onclick={() => startTool(tool.name, tool.label)}
-                class="{itemClass} {tool.installed ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
-              >
-                <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
-                <span class="flex-1 min-w-0 text-left">
-                  <span class="block font-medium">{tool.label}</span>
-                  <span class="block text-[10px] {tool.installed ? 'text-gray-500 dark:text-gray-400' : ''}">
-                    {tool.installed ? tool.binary : installHint(tool)}
-                  </span>
-                </span>
-              </button>
-            {/each}
-          {/if}
+          {/each}
         {/if}
       {/if}
     </div>

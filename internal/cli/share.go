@@ -82,7 +82,11 @@ type shareTool struct {
 }
 
 func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain string) error {
-	site, err := resolveShareSite(args)
+	site, branch, err := resolveShareSite(args)
+	if err != nil {
+		return err
+	}
+	target, err := shareTargetFor(site, branch)
 	if err != nil {
 		return err
 	}
@@ -101,13 +105,13 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 		return err
 	}
 
-	fmt.Printf("Sharing %s...\n", site.PrimaryDomain())
+	fmt.Printf("Sharing %s...\n", target.domain)
 	fmt.Println("Press Ctrl+C to stop.")
 	fmt.Println()
 
 	tunnelName := ""
 	if tool.mode == shareModeCloudflare && tool.domain != "" {
-		if tunnelName, err = ensureCloudflareTunnel(site.Name, tool.domain); err != nil {
+		if tunnelName, err = ensureCloudflareTunnel(target.name, tool.domain); err != nil {
 			return err
 		}
 		fmt.Printf("Public URL: https://%s\n\n", tool.domain)
@@ -117,7 +121,7 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 	if httpsPort == 0 {
 		httpsPort = 443
 	}
-	cmd, stop, err := buildTunnelCommand(tool, tunnelName, site, port, httpsPort, false)
+	cmd, stop, err := buildTunnelCommand(tool, tunnelName, target, port, httpsPort, false)
 	if err != nil {
 		return err
 	}
@@ -129,28 +133,53 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 	return cmd.Run()
 }
 
-// buildTunnelCommand builds the tunnel tool invocation for a site plus a stop
+// shareTarget is what a tunnel fronts: the domain nginx routes on and whether
+// that vhost is served over HTTPS. A worktree resolves to its own subdomain
+// under the parent's TLS state, the same way the LAN share proxy does.
+type shareTarget struct {
+	// name identifies the target when a tool needs a stable handle for it,
+	// which today is the Cloudflare named tunnel.
+	name    string
+	domain  string
+	secured bool
+}
+
+// shareTargetFor resolves a site, and optionally one of its worktree branches,
+// to the domain a tunnel should front.
+func shareTargetFor(site *config.Site, branch string) (shareTarget, error) {
+	domain, err := siteops.WorktreeDomain(site, branch)
+	if err != nil {
+		return shareTarget{}, err
+	}
+	name := site.Name
+	if branch != "" {
+		name = site.Name + "-" + branch
+	}
+	return shareTarget{name: name, domain: domain, secured: site.Secured}, nil
+}
+
+// buildTunnelCommand builds the tunnel tool invocation for a target plus a stop
 // func for the local helper proxy the cloudflare/ssh modes need. headless
 // swaps interactive output for parseable logs so a caller can scrape the
 // public URL.
-func buildTunnelCommand(tool *shareTool, tunnelName string, site *config.Site, httpPort, httpsPort int, headless bool) (*exec.Cmd, func(), error) {
+func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, httpPort, httpsPort int, headless bool) (*exec.Cmd, func(), error) {
 	stop := func() {}
 	var cmd *exec.Cmd
 	switch tool.mode {
 	case shareModeNgrok:
-		args := []string{"http", fmt.Sprintf("%d", httpPort), "--host-header=" + site.PrimaryDomain()}
+		args := []string{"http", fmt.Sprintf("%d", httpPort), "--host-header=" + target.domain}
 		if headless {
 			args = append(args, "--log", "stdout", "--log-format", "json")
 		}
 		cmd = exec.Command("ngrok", args...)
 	case shareModeExpose:
-		shareURL := fmt.Sprintf("http://%s", site.PrimaryDomain())
+		shareURL := fmt.Sprintf("http://%s", target.domain)
 		if httpPort != 80 {
-			shareURL = fmt.Sprintf("http://%s:%d", site.PrimaryDomain(), httpPort)
+			shareURL = fmt.Sprintf("http://%s:%d", target.domain, httpPort)
 		}
 		cmd = exec.Command("expose", "share", shareURL)
 	case shareModeCloudflare:
-		proxyPort, stopProxy, err := startHostProxy(site.PrimaryDomain(), httpPort, httpsPort, site.Secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
@@ -164,13 +193,13 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, site *config.Site, h
 		}
 	case shareModeSSH:
 		// Start a local reverse proxy that rewrites Host so nginx routes correctly.
-		proxyPort, stopProxy, err := startHostProxy(site.PrimaryDomain(), httpPort, httpsPort, site.Secured)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
 		if err != nil {
 			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
 		stop = stopProxy
 		if !headless {
-			fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, site.PrimaryDomain(), httpPort)
+			fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, target.domain, httpPort)
 		}
 		cmd = exec.Command("ssh",
 			"-o", "StrictHostKeyChecking=no",
@@ -182,32 +211,37 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, site *config.Site, h
 	return cmd, stop, nil
 }
 
-// resolveShareSite finds the site for the given name arg (or CWD if no arg).
-func resolveShareSite(args []string) (*config.Site, error) {
+// resolveShareSite finds the site for the given name arg (or CWD if no arg),
+// plus the worktree branch when the CWD is one. Naming a site explicitly always
+// means the site itself, never a branch of it.
+func resolveShareSite(args []string) (*config.Site, string, error) {
 	if len(args) == 1 {
 		site, err := config.FindSite(args[0])
 		if err != nil {
-			return nil, fmt.Errorf("site %q not found — run 'lerd sites' to list registered sites", args[0])
+			return nil, "", fmt.Errorf("site %q not found — run 'lerd sites' to list registered sites", args[0])
 		}
-		return site, nil
+		return site, "", nil
 	}
 
 	cwd, err := os.Getwd()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	site, err := config.FindSiteByPath(cwd)
 	if err == nil {
-		return site, nil
+		return site, "", nil
+	}
+	if parent, branch, ok := findOwningWorktree(cwd); ok {
+		return parent, branch, nil
 	}
 
 	// Fall back: treat the directory name as a site name.
 	name, _ := siteops.SiteNameAndDomain(filepath.Base(cwd), "test")
 	if site, err = config.FindSite(name); err == nil {
-		return site, nil
+		return site, "", nil
 	}
-	return ensureSiteForCwd()
+	return ensureSiteAndBranchForCwd()
 }
 
 func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, defaultTool string) (*shareTool, error) {

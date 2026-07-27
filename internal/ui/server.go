@@ -760,6 +760,8 @@ type WorktreeResponse struct {
 	DBDatabase          string         `json:"db_database,omitempty"`
 	LANPort             int            `json:"lan_port,omitempty"`
 	LANShareURL         string         `json:"lan_share_url,omitempty"`
+	TunnelURL           string         `json:"tunnel_url,omitempty"`
+	TunnelTool          string         `json:"tunnel_tool,omitempty"`
 	FrameworkWorkers    []WorkerStatus `json:"framework_workers,omitempty"`
 	// Idle-suspend state for the worktree, which idles on its own timer.
 	LastActive           int64    `json:"last_active,omitempty"`
@@ -1015,6 +1017,7 @@ func buildSites() []SiteResponse {
 			// timing API share). Same worktree, two key schemes.
 			wtKeyStr := wtKey(e.Name, config.WorktreeUnitSlug(filepath.Base(wt.Path)))
 			usage = addUsage(usage, siteUsage[reqstats.Key(e.Name, wt.Branch)])
+			wtTunnel, _ := cli.TunnelStatus(e.Name, wt.Branch)
 			worktreeResponses = append(worktreeResponses, WorktreeResponse{
 				Branch:               wt.Branch,
 				Domain:               wt.Domain,
@@ -1031,6 +1034,8 @@ func buildSites() []SiteResponse {
 				DBDatabase:           wt.DBDatabase,
 				LANPort:              lanPort,
 				LANShareURL:          lanURL,
+				TunnelURL:            wtTunnel.URL,
+				TunnelTool:           wtTunnel.Tool,
 				FrameworkWorkers:     wtWorkers,
 				LastActive:           idleActivity[wtKeyStr],
 				Idle:                 idleSiteIsIdle(idleActivity, wtKeyStr, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
@@ -1041,7 +1046,7 @@ func buildSites() []SiteResponse {
 			worktreeResponses = []WorktreeResponse{}
 		}
 
-		tunnel, _ := cli.TunnelStatus(e.Name)
+		tunnel, _ := cli.TunnelStatus(e.Name, "")
 
 		sites = append(sites, SiteResponse{
 			Name:                 e.Name,
@@ -3247,7 +3252,7 @@ func handleTunnelQR(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	tunnel, ok := cli.TunnelStatus(site.Name)
+	tunnel, ok := cli.TunnelStatus(site.Name, r.URL.Query().Get("branch"))
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -3999,14 +4004,14 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "tunnel:start":
-		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("tool")); err != nil {
+		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("branch"), r.URL.Query().Get("tool")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "tunnel:stop":
-		if err := cli.TunnelStop(site.Name); err != nil {
+		if err := cli.TunnelStop(site.Name, r.URL.Query().Get("branch")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

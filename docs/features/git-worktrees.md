@@ -186,7 +186,13 @@ The same toggle is available on the dashboard for already-active worktrees: flip
 
 ### Per-worktree LAN share
 
-LAN share has a separate toggle that's worktree-aware: when a worktree is active in the dashboard, the toggle controls a proxy bound to a per-worktree port (next free `>= 9100` across all sites and worktrees). The proxy targets the worktree's vhost domain so devices on your network reach the worktree's URL directly — no DNS setup on the client. Removing the worktree releases the port via the watcher's cleanup pass; the dashboard QR-code popover honours `?branch=` so the QR encodes the worktree's URL.
+LAN share has a separate toggle that's worktree-aware: when a worktree is active in the dashboard, the toggle controls a proxy bound to a per-worktree port (next free `>= 9100` across all sites and worktrees). The proxy targets the worktree's vhost domain so devices on your network reach the worktree's URL directly — no DNS setup on the client. Removing the worktree releases the port via the watcher's cleanup pass; the dashboard QR-code popover honours `?branch=` so the QR encodes the worktree's URL. Running `lerd lan:share` from inside the checkout does the same thing from the CLI.
+
+### Per-worktree public tunnel
+
+Public tunnels are worktree-scoped too. `lerd share` run from inside a checkout tunnels `<branch>.<site>.test`, and the dashboard's share menu acts on whichever branch tab is active. A worktree's tunnel is a process of its own: it can run alongside the parent site's, each with its own public URL, and stopping one does not touch the other. Under `--domain`, the Cloudflare named tunnel is keyed to the branch as well, so routing a hostname to a worktree never takes over the one the parent site is using.
+
+Commands that act on a directory resolve a worktree to its parent site automatically. `lerd share`, `lerd open`, `lerd domain`, `lerd env`, `lerd worker`, `lerd runtime` and the rest run from inside a checkout without linking it as a site of its own.
 
 ---
 

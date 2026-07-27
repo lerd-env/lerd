@@ -77,6 +77,8 @@ export interface Site {
     db_database?: string;
     lan_port?: number;
     lan_share_url?: string;
+    tunnel_url?: string;
+    tunnel_tool?: string;
     framework_workers?: FrameworkWorker[];
     idle_suspended_workers?: string[];
   }>;
@@ -616,9 +618,15 @@ export interface ShareToolsInfo {
   default?: string;
 }
 export const loadShareTools = () => apiJson<ShareToolsInfo>('/api/share-tools');
-export const startTunnel = (s: Site, tool: string = '') =>
-  postAction(site(s.domain, 'tunnel:start') + (tool ? `?tool=${encodeURIComponent(tool)}` : ''));
-export const stopTunnel = (s: Site) => postAction(site(s.domain, 'tunnel:stop'));
+export const startTunnel = (s: Site, tool: string = '', branch: string = '') => {
+  const params = new URLSearchParams();
+  if (tool) params.set('tool', tool);
+  if (branch) params.set('branch', branch);
+  const qs = params.toString();
+  return postAction(site(s.domain, 'tunnel:start') + (qs ? `?${qs}` : ''));
+};
+export const stopTunnel = (s: Site, branch: string = '') =>
+  postAction(site(s.domain, 'tunnel:stop') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 export const toggleQueue = (s: Site) =>
   postAction(site(s.domain, s.queue_running ? 'queue:stop' : 'queue:start'));
 export const toggleHorizon = (s: Site) =>

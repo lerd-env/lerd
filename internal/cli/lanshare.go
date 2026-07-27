@@ -45,6 +45,21 @@ func LANShareEnsurePort(siteName string) (int, error) {
 	return port, nil
 }
 
+// LANShareEnsureWorktreePort is LANShareEnsurePort for a worktree branch,
+// persisting the entry the daemon's proxy reads without starting anything.
+func LANShareEnsureWorktreePort(siteName, branch string) (int, error) {
+	if entry, found, err := config.FindWorktreeLAN(siteName, branch); err == nil && found && entry.Port != 0 {
+		return entry.Port, nil
+	}
+	port := assignWorktreeLANPort(siteName, branch)
+	if err := config.AddWorktreeLAN(config.WorktreeLANEntry{
+		Site: siteName, Branch: branch, Port: port,
+	}); err != nil {
+		return 0, fmt.Errorf("saving worktree LAN port: %w", err)
+	}
+	return port, nil
+}
+
 // LANShareStart starts the in-process reverse proxy for the site. It is
 // intended to be called from the daemon (UI server) only — the proxy goroutine
 // lives in the daemon process. CLI commands should notify the daemon via its

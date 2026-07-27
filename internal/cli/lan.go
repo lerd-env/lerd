@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 	"net/http"
-	"os"
+	"net/url"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -188,31 +188,37 @@ the LAN address instead of the .test domain.
 The assigned port is stored in sites.yaml and reused across restarts.
 Run 'lerd lan:unshare' to stop sharing and release the port.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
-			cwd, err := os.Getwd()
+			// A worktree resolves to its parent plus the branch, so running this
+			// inside one shares that branch's own domain rather than assigning a
+			// port to a site name derived from the checkout directory.
+			site, branch, err := ensureSiteAndBranchForCwd()
 			if err != nil {
 				return err
 			}
-			siteName, err := queueSiteName(cwd)
-			if err != nil {
-				return err
-			}
+			siteName := site.Name
+			label := siteName
 			// Persist the port assignment (daemon will start the proxy).
-			port, err := LANShareEnsurePort(siteName)
+			port := 0
+			action := "lan:share"
+			if branch != "" {
+				port, err = LANShareEnsureWorktreePort(siteName, branch)
+				action += "?branch=" + url.QueryEscape(branch)
+				label = branch + "." + site.PrimaryDomain()
+			} else {
+				port, err = LANShareEnsurePort(siteName)
+			}
 			if err != nil {
 				return err
 			}
 			// Tell the running daemon to start the proxy now.
-			site, _ := config.FindSite(siteName)
-			if site != nil {
-				notifyDaemon(site.PrimaryDomain(), "lan:share") //nolint:errcheck
-			}
+			notifyDaemon(site.PrimaryDomain(), action) //nolint:errcheck
 			ip, _ := detectPrimaryLANIP()
 			if ip == "" {
 				ip = "<your-LAN-IP>"
 			}
 			shareURL := fmt.Sprintf("http://%s:%d", ip, port)
 			feedback.Begin()
-			feedback.Done("sharing " + siteName + " at " + feedback.Val(shareURL))
+			feedback.Done("sharing " + label + " at " + feedback.Val(shareURL))
 			feedback.Note("other devices on the network can use that URL directly — no DNS setup needed")
 			fmt.Println()
 			PrintLANShareQR(shareURL)
@@ -228,27 +234,29 @@ func newLANUnshareCmd() *cobra.Command {
 		Use:   "unshare",
 		Short: "Stop LAN sharing for the current site",
 		RunE: func(_ *cobra.Command, _ []string) error {
-			cwd, err := os.Getwd()
+			site, branch, err := ensureSiteAndBranchForCwd()
 			if err != nil {
 				return err
 			}
-			siteName, err := queueSiteName(cwd)
-			if err != nil {
-				return err
-			}
-			site, err := config.FindSite(siteName)
-			if err != nil {
-				return err
+			label := site.Name
+			action := "lan:unshare"
+			if branch != "" {
+				action += "?branch=" + url.QueryEscape(branch)
+				label = branch + "." + site.PrimaryDomain()
 			}
 			// Tell the running daemon to stop the proxy and clear the port.
 			// If the daemon is not reachable, clear the port directly so the
 			// proxy is not restored on next daemon start.
-			if nErr := notifyDaemon(site.PrimaryDomain(), "lan:unshare"); nErr != nil {
-				site.LANPort = 0
-				_ = config.AddSite(*site)
+			if nErr := notifyDaemon(site.PrimaryDomain(), action); nErr != nil {
+				if branch != "" {
+					_, _, _ = config.RemoveWorktreeLAN(site.Name, branch)
+				} else {
+					site.LANPort = 0
+					_ = config.AddSite(*site)
+				}
 			}
 			feedback.Begin()
-			feedback.Done("LAN sharing stopped for " + siteName)
+			feedback.Done("LAN sharing stopped for " + label)
 			return nil
 		},
 	}

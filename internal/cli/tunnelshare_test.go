@@ -134,33 +134,33 @@ func shellTunnel(script string) *exec.Cmd {
 	return exec.Command("/bin/sh", "-c", script)
 }
 
-func waitTunnelGone(t *testing.T, site string) {
+func waitTunnelGone(t *testing.T, key string) {
 	t.Helper()
 	for range 100 {
-		if _, ok := TunnelStatus(site); !ok {
+		if _, ok := tunnelStatusByKey(key); !ok {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("tunnel for %s still reported after waiting", site)
+	t.Fatalf("tunnel for %s still reported after waiting", key)
 }
 
 func TestStartTunnelProcess_returnsURLAndTracksTunnel(t *testing.T) {
 	site := "tunnel-test-a"
 	cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://abc123.serveo.net"; sleep 30`)
 	url, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second)
-	t.Cleanup(func() { _ = TunnelStop(site) })
+	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if url != "https://abc123.serveo.net" {
 		t.Errorf("url = %q, want the serveo URL", url)
 	}
-	info, ok := TunnelStatus(site)
+	info, ok := TunnelStatus(site, "")
 	if !ok || info.URL != url || info.Tool != "serveo" {
 		t.Errorf("TunnelStatus = %+v, %v; want running serveo tunnel", info, ok)
 	}
-	if err := TunnelStop(site); err != nil {
+	if err := TunnelStop(site, ""); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 	waitTunnelGone(t, site)
@@ -170,14 +170,14 @@ func TestStartTunnelProcess_readsStderrToo(t *testing.T) {
 	site := "tunnel-test-stderr"
 	cmd := shellTunnel(`echo "INF |  https://plum-lakes-agree.trycloudflare.com  |" >&2; sleep 30`)
 	url, err := startTunnelProcess(site, "cloudflare", cmd, nil, 5*time.Second)
-	t.Cleanup(func() { _ = TunnelStop(site) })
+	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if url != "https://plum-lakes-agree.trycloudflare.com" {
 		t.Errorf("url = %q, want the trycloudflare URL", url)
 	}
-	_ = TunnelStop(site)
+	_ = TunnelStop(site, "")
 	waitTunnelGone(t, site)
 }
 
@@ -206,7 +206,7 @@ func TestStartTunnelProcess_timesOut(t *testing.T) {
 
 func TestStartTunnelProcess_replacesExistingTunnel(t *testing.T) {
 	site := "tunnel-test-replace"
-	t.Cleanup(func() { _ = TunnelStop(site) })
+	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	first := shellTunnel(`echo "Forwarding HTTP traffic from https://first.serveo.net"; sleep 30`)
 	if _, err := startTunnelProcess(site, "serveo", first, nil, 5*time.Second); err != nil {
 		t.Fatalf("first start: %v", err)
@@ -219,7 +219,7 @@ func TestStartTunnelProcess_replacesExistingTunnel(t *testing.T) {
 	if url != "https://second.serveo.net" {
 		t.Errorf("url = %q, want the second tunnel's URL", url)
 	}
-	info, ok := TunnelStatus(site)
+	info, ok := TunnelStatus(site, "")
 	if !ok || info.URL != "https://second.serveo.net" {
 		t.Errorf("TunnelStatus = %+v, %v; want the second tunnel", info, ok)
 	}
@@ -232,7 +232,7 @@ func TestStartTunnelProcess_stopProxyRunsWhenProcessDies(t *testing.T) {
 	if _, err := startTunnelProcess(site, "serveo", cmd, func() { close(stopped) }, 5*time.Second); err != nil {
 		t.Fatalf("start: %v", err)
 	}
-	if err := TunnelStop(site); err != nil {
+	if err := TunnelStop(site, ""); err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 	select {
@@ -257,7 +257,56 @@ func TestStopAllTunnels(t *testing.T) {
 }
 
 func TestTunnelStop_noopWhenNotRunning(t *testing.T) {
-	if err := TunnelStop("tunnel-test-none"); err != nil {
+	if err := TunnelStop("tunnel-test-none", ""); err != nil {
 		t.Fatalf("expected no-op, got %v", err)
+	}
+}
+
+// ── worktree tunnels ──────────────────────────────────────────────────────────
+
+func TestTunnelKey_separatesWorktreeFromSite(t *testing.T) {
+	if got := tunnelKey("rapids", ""); got != "rapids" {
+		t.Errorf("tunnelKey with no branch = %q, want the bare site name", got)
+	}
+	if tunnelKey("rapids", "feature") == tunnelKey("rapids", "") {
+		t.Error("a worktree tunnel must not share the site's key")
+	}
+	if tunnelKey("rapids", "feature") == tunnelKey("rapids", "other") {
+		t.Error("two branches of one site must not share a key")
+	}
+}
+
+// A worktree fronts its own domain, so its tunnel is a separate process that
+// neither replaces the parent's nor is stopped along with it.
+func TestStartTunnelProcess_worktreeTunnelIsIndependentOfTheSite(t *testing.T) {
+	site := "tunnel-test-wt"
+	siteKey := tunnelKey(site, "")
+	wtKey := tunnelKey(site, "feature")
+	t.Cleanup(func() { _ = TunnelStop(site, ""); _ = TunnelStop(site, "feature") })
+
+	parent := shellTunnel(`echo "Forwarding HTTP traffic from https://parent.serveo.net"; sleep 30`)
+	if _, err := startTunnelProcess(siteKey, "serveo", parent, nil, 5*time.Second); err != nil {
+		t.Fatalf("parent start: %v", err)
+	}
+	wt := shellTunnel(`echo "Forwarding HTTP traffic from https://branch.serveo.net"; sleep 30`)
+	if _, err := startTunnelProcess(wtKey, "serveo", wt, nil, 5*time.Second); err != nil {
+		t.Fatalf("worktree start: %v", err)
+	}
+
+	pInfo, ok := TunnelStatus(site, "")
+	if !ok || pInfo.URL != "https://parent.serveo.net" {
+		t.Errorf("site tunnel = %+v, %v; want the parent URL still running", pInfo, ok)
+	}
+	wInfo, ok := TunnelStatus(site, "feature")
+	if !ok || wInfo.URL != "https://branch.serveo.net" {
+		t.Errorf("worktree tunnel = %+v, %v; want the branch URL", wInfo, ok)
+	}
+
+	if err := TunnelStop(site, "feature"); err != nil {
+		t.Fatalf("stop worktree: %v", err)
+	}
+	waitTunnelGone(t, wtKey)
+	if _, ok := TunnelStatus(site, ""); !ok {
+		t.Error("stopping the worktree tunnel also stopped the site's")
 	}
 }

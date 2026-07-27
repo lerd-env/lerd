@@ -10,6 +10,15 @@ const site = {
   worktrees: []
 } as unknown as Site;
 
+// A site whose "feat" worktree is the active view, carrying whatever tunnel
+// state the test needs on the worktree itself.
+function withWorktree(wt: Record<string, unknown> = {}): Site {
+  return {
+    ...site,
+    worktrees: [{ branch: 'feat', domain: 'feat.app.test', path: '/home/u/Code/app/wt/feat', ...wt }]
+  } as unknown as Site;
+}
+
 const toolsPayload = {
   tools: [
     { name: 'ngrok', label: 'ngrok', binary: 'ngrok', installed: false, install_url: 'https://ngrok.com/download' },
@@ -94,11 +103,44 @@ describe('ShareMenu', () => {
     await waitFor(() => expect(fetchCalls.some((u) => u.includes('/api/sites/app.test/tunnel:stop'))).toBe(true));
   });
 
-  it('hides the tunnel section on a worktree view', async () => {
-    const { container } = render(Harness, { props: { site, activeWorktreeBranch: 'feat' } });
+  it('offers the tunnel section on a worktree view', async () => {
+    const { container } = render(Harness, { props: { site: withWorktree(), activeWorktreeBranch: 'feat' } });
     await openMenu(container);
-    expect(screen.queryByText('Public tunnel')).not.toBeInTheDocument();
+    expect(screen.getByText('Public tunnel')).toBeInTheDocument();
     expect(screen.getByText('Local network')).toBeInTheDocument();
+  });
+
+  it('starts a worktree tunnel against its branch', async () => {
+    const { container } = render(Harness, { props: { site: withWorktree(), activeWorktreeBranch: 'feat' } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByText('Serveo')).toBeInTheDocument());
+    await fireEvent.click(screen.getByText('Serveo').closest('button')!);
+    await waitFor(() =>
+      expect(
+        fetchCalls.some((u) => u.includes('tunnel:start?tool=serveo&branch=feat'))
+      ).toBe(true)
+    );
+  });
+
+  // The branch has a tunnel of its own, so the menu must show that one rather
+  // than whatever the parent site happens to be running.
+  it('shows the worktree tunnel, not the site tunnel', async () => {
+    const s = withWorktree({ tunnel_url: 'https://branch.serveo.net', tunnel_tool: 'serveo' });
+    (s as unknown as { tunnel_url: string }).tunnel_url = 'https://parent.trycloudflare.com';
+    const { container } = render(Harness, { props: { site: s, activeWorktreeBranch: 'feat' } });
+    await openMenu(container);
+    expect(screen.getByText('https://branch.serveo.net')).toBeInTheDocument();
+    expect(screen.queryByText('https://parent.trycloudflare.com')).not.toBeInTheDocument();
+  });
+
+  it('stops a worktree tunnel against its branch', async () => {
+    const s = withWorktree({ tunnel_url: 'https://branch.serveo.net', tunnel_tool: 'serveo' });
+    const { container } = render(Harness, { props: { site: s, activeWorktreeBranch: 'feat' } });
+    await openMenu(container);
+    await fireEvent.click(screen.getByText('Stop'));
+    await waitFor(() =>
+      expect(fetchCalls.some((u) => u.includes('tunnel:stop?branch=feat'))).toBe(true)
+    );
   });
 
   it('closes on Escape', async () => {

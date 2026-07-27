@@ -10,6 +10,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+
+	"github.com/geodro/lerd/internal/config"
 	"strings"
 	"testing"
 )
@@ -851,5 +853,76 @@ func TestStartHostProxy_stopClosesListener(t *testing.T) {
 	_, err = http.Get(fmt.Sprintf("http://127.0.0.1:%d/", port))
 	if err == nil {
 		t.Error("expected connection error after stop, got nil")
+	}
+}
+
+// ── share target ──────────────────────────────────────────────────────────────
+
+// A worktree is served on its own subdomain, so a tunnel started from one must
+// front that domain rather than the parent site's.
+func TestShareTargetFor_worktreeUsesTheBranchDomain(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent, _ := makeWorktreeLayout(t, "rapids", "feature")
+	site := &config.Site{Name: "rapids", Path: parent, Domains: []string{"rapids.test"}, Secured: true}
+
+	target, err := shareTargetFor(site, "feature")
+	if err != nil {
+		t.Fatalf("shareTargetFor: %v", err)
+	}
+	if target.domain != "feature.rapids.test" {
+		t.Errorf("domain = %q, want feature.rapids.test", target.domain)
+	}
+	if !target.secured {
+		t.Error("a worktree inherits the parent's TLS state")
+	}
+	// The Cloudflare named tunnel is keyed off this, so a branch must not
+	// reuse the parent's tunnel and take over its hostname.
+	if target.name == site.Name {
+		t.Errorf("name = %q, want a name distinct from the site's", target.name)
+	}
+}
+
+func TestShareTargetFor_siteUsesItsPrimaryDomain(t *testing.T) {
+	site := &config.Site{Name: "rapids", Domains: []string{"rapids.test"}}
+	target, err := shareTargetFor(site, "")
+	if err != nil {
+		t.Fatalf("shareTargetFor: %v", err)
+	}
+	if target.domain != "rapids.test" || target.name != "rapids" {
+		t.Errorf("target = %+v, want the site's own domain and name", target)
+	}
+}
+
+func TestShareTargetFor_unknownBranchErrors(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent, _ := makeWorktreeLayout(t, "rapids", "feature")
+	site := &config.Site{Name: "rapids", Path: parent, Domains: []string{"rapids.test"}}
+
+	if _, err := shareTargetFor(site, "nope"); err == nil {
+		t.Fatal("expected an error for a branch with no worktree")
+	}
+}
+
+func TestBuildTunnelCommand_ngrokRoutesTheTargetDomain(t *testing.T) {
+	target := shareTarget{name: "rapids-feature", domain: "feature.rapids.test"}
+	cmd, stop, err := buildTunnelCommand(&shareTool{mode: shareModeNgrok}, "", target, 80, 443, true)
+	if err != nil {
+		t.Fatalf("buildTunnelCommand: %v", err)
+	}
+	defer stop()
+	if !strings.Contains(strings.Join(cmd.Args, " "), "--host-header=feature.rapids.test") {
+		t.Errorf("args = %v, want the worktree domain as the host header", cmd.Args)
+	}
+}
+
+func TestBuildTunnelCommand_exposeSharesTheTargetDomain(t *testing.T) {
+	target := shareTarget{name: "rapids-feature", domain: "feature.rapids.test"}
+	cmd, stop, err := buildTunnelCommand(&shareTool{mode: shareModeExpose}, "", target, 80, 443, true)
+	if err != nil {
+		t.Fatalf("buildTunnelCommand: %v", err)
+	}
+	defer stop()
+	if !strings.Contains(strings.Join(cmd.Args, " "), "http://feature.rapids.test") {
+		t.Errorf("args = %v, want the worktree domain shared", cmd.Args)
 	}
 }

@@ -20,6 +20,20 @@ func NewOpenCmd() *cobra.Command {
 	}
 }
 
+// worktreeURL is the address a branch is served on, under the parent's scheme.
+// Empty when the branch has no worktree.
+func worktreeURL(site *config.Site, branch string) string {
+	domain, err := siteops.WorktreeDomain(site, branch)
+	if err != nil {
+		return ""
+	}
+	scheme := "http"
+	if site.Secured {
+		scheme = "https"
+	}
+	return scheme + "://" + domain
+}
+
 func runOpen(_ *cobra.Command, args []string) error {
 	var url string
 
@@ -37,6 +51,13 @@ func runOpen(_ *cobra.Command, args []string) error {
 			return err
 		}
 		url = siteURL(cwd)
+		if url == "" {
+			// A worktree is served on its own subdomain, so open that rather
+			// than the parent site it inherits its registration from.
+			if parent, branch, ok := findOwningWorktree(cwd); ok {
+				url = worktreeURL(parent, branch)
+			}
+		}
 		if url == "" {
 			// Fall back: maybe cwd is named like a site.
 			name, _ := siteops.SiteNameAndDomain(filepath.Base(cwd), "test")

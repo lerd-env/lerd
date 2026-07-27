@@ -165,21 +165,42 @@ func parseTunnelURL(tool, line string) (string, bool) {
 	return "", false
 }
 
-// TunnelStatus returns the running tunnel for a site, if one has a URL yet.
-func TunnelStatus(siteName string) (TunnelInfo, bool) {
+// tunnelKey identifies a running tunnel. A worktree fronts its own domain, so
+// it gets a key of its own rather than replacing the parent site's tunnel. The
+// bare site name is kept as the key for the site itself.
+func tunnelKey(siteName, branch string) string {
+	if branch == "" {
+		return siteName
+	}
+	return siteName + "@" + branch
+}
+
+// tunnelStatusByKey returns the running tunnel registered under key.
+func tunnelStatusByKey(key string) (TunnelInfo, bool) {
 	tunnelsMu.Lock()
 	defer tunnelsMu.Unlock()
-	p := tunnels[siteName]
+	p := tunnels[key]
 	if p == nil || p.url == "" {
 		return TunnelInfo{}, false
 	}
 	return TunnelInfo{Tool: p.tool, URL: p.url}, true
 }
 
-// TunnelStart starts a public tunnel for the site and blocks until the tool
-// prints its public URL. An empty toolName auto-picks like the CLI does.
-func TunnelStart(siteName, toolName string) (string, error) {
+// TunnelStatus returns the running tunnel for a site, or for one of its
+// worktrees when branch is set, if one has a URL yet.
+func TunnelStatus(siteName, branch string) (TunnelInfo, bool) {
+	return tunnelStatusByKey(tunnelKey(siteName, branch))
+}
+
+// TunnelStart starts a public tunnel for the site, or for one of its worktrees
+// when branch is set, and blocks until the tool prints its public URL. An empty
+// toolName auto-picks like the CLI does.
+func TunnelStart(siteName, branch, toolName string) (string, error) {
 	site, err := config.FindSite(siteName)
+	if err != nil {
+		return "", err
+	}
+	target, err := shareTargetFor(site, branch)
 	if err != nil {
 		return "", err
 	}
@@ -199,18 +220,18 @@ func TunnelStart(siteName, toolName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd, stopProxy, err := buildTunnelCommand(tool, "", site, httpPort, httpsPort, true)
+	cmd, stopProxy, err := buildTunnelCommand(tool, "", target, httpPort, httpsPort, true)
 	if err != nil {
 		return "", err
 	}
-	return startTunnelProcess(siteName, shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout)
+	return startTunnelProcess(tunnelKey(siteName, branch), shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout)
 }
 
 // startTunnelProcess runs the tool, scans its output for the public URL, and
-// registers the tunnel. It replaces any tunnel already running for the site.
-// After a successful Start the exit watcher owns stopProxy.
-func startTunnelProcess(siteName, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration) (string, error) {
-	_ = TunnelStop(siteName)
+// registers the tunnel under key. It replaces any tunnel already running for
+// that key. After a successful Start the exit watcher owns stopProxy.
+func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration) (string, error) {
+	stopTunnelByKey(key)
 	if stopProxy == nil {
 		stopProxy = func() {}
 	}
@@ -233,7 +254,7 @@ func startTunnelProcess(siteName, toolName string, cmd *exec.Cmd, stopProxy func
 
 	p := &tunnelProc{tool: toolName, cmd: cmd, stopProxy: stopProxy, done: make(chan struct{})}
 	tunnelsMu.Lock()
-	tunnels[siteName] = p
+	tunnels[key] = p
 	tunnelsMu.Unlock()
 
 	urlCh := make(chan string, 1)
@@ -268,8 +289,8 @@ func startTunnelProcess(siteName, toolName string, cmd *exec.Cmd, stopProxy func
 		stopProxy()
 		close(p.done)
 		tunnelsMu.Lock()
-		if tunnels[siteName] == p {
-			delete(tunnels, siteName)
+		if tunnels[key] == p {
+			delete(tunnels, key)
 		}
 		tunnelsMu.Unlock()
 	}()
@@ -287,8 +308,8 @@ func startTunnelProcess(siteName, toolName string, cmd *exec.Cmd, stopProxy func
 		return "", fmt.Errorf("%s exited before printing a public URL: %s", toolName, out)
 	case <-time.After(timeout):
 		tunnelsMu.Lock()
-		if tunnels[siteName] == p {
-			delete(tunnels, siteName)
+		if tunnels[key] == p {
+			delete(tunnels, key)
 		}
 		tunnelsMu.Unlock()
 		killTunnel(p)
@@ -296,17 +317,23 @@ func startTunnelProcess(siteName, toolName string, cmd *exec.Cmd, stopProxy func
 	}
 }
 
-// TunnelStop stops the site's tunnel. A no-op when none is running.
-func TunnelStop(siteName string) error {
+// TunnelStop stops the tunnel for a site, or for one of its worktrees when
+// branch is set. A no-op when none is running.
+func TunnelStop(siteName, branch string) error {
+	stopTunnelByKey(tunnelKey(siteName, branch))
+	return nil
+}
+
+// stopTunnelByKey kills the tunnel registered under key, if any.
+func stopTunnelByKey(key string) {
 	tunnelsMu.Lock()
-	p := tunnels[siteName]
-	delete(tunnels, siteName)
+	p := tunnels[key]
+	delete(tunnels, key)
 	tunnelsMu.Unlock()
 	if p == nil {
-		return nil
+		return
 	}
 	killTunnel(p)
-	return nil
 }
 
 // StopAllTunnels kills every running tunnel.

@@ -464,6 +464,14 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 
 The same tunnels can be started from the [web UI](../features/web-ui.md)'s share menu: hover the wifi button in a site's header and pick a tool (or the auto entry, which follows the same detection order and `share:tool` default as the CLI). The dashboard waits for the tool's public URL and shows it next to the domain with a hover-QR. A tunnel started from the UI belongs to the `lerd-ui` daemon, so it ends when you stop it or when the daemon shuts down, and it is not restored on restart.
 
+### Sharing a worktree
+
+Run `lerd share` from inside a git worktree and lerd tunnels that branch's own domain (`<branch>.<site>.test`), not the parent checkout's. The worktree inherits the parent's registration, so there is nothing to link first: the command resolves the parent site and the branch you are standing in. The same is true of `lerd lan:share`, which assigns the branch its own LAN port, and of `lerd open`, which opens the branch domain.
+
+A worktree tunnel is independent of the parent's. Both can run at once, each on its own public URL, and stopping one leaves the other alone. In the dashboard, switch to the worktree's tab and the share menu acts on that branch.
+
+Naming a site explicitly (`lerd share myapp`) always means the site itself, never one of its branches.
+
 ### Default tunnel tool
 
 Auto-detection picks the first installed tool, which may not be the one you want. `lerd share:tool cloudflare` pins the default; from then on a bare `lerd share` uses Cloudflare Tunnel even with ngrok installed. A tool flag still overrides the default per run, and `lerd share:tool auto` restores auto-detection.
