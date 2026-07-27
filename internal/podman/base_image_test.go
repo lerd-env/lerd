@@ -2,16 +2,42 @@ package podman
 
 import (
 	"errors"
+	"sync"
 	"testing"
+	"time"
 )
 
-// stubBaseDigests installs the label reader and the two registry seams
-// BaseImageFreshness reads, and reports which refs were asked for.
-func stubBaseDigests(t *testing.T, builtLabel string, cached map[string]string, live map[string]string) *[]string {
+// digestStub records the refs a test's registry seams were asked for. The
+// recording is locked because a cold-cache check answers from a background
+// goroutine, which would otherwise append concurrently with the assertion.
+type digestStub struct {
+	mu    sync.Mutex
+	asked []string
+}
+
+func (s *digestStub) record(ref string) {
+	s.mu.Lock()
+	s.asked = append(s.asked, ref)
+	s.mu.Unlock()
+}
+
+func (s *digestStub) reads() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.asked...)
+}
+
+// stubBaseDigests installs the label reader and the registry seams the
+// freshness checks read, and reports which refs were asked for.
+func stubBaseDigests(t *testing.T, builtLabel string, cached map[string]string, live map[string]string) *digestStub {
 	t.Helper()
 	origLabel, origCached, origFetch := imageLabelFn, cachedManifestDigestFn, refreshManifestDigestFn
 	origThrough := manifestDigestFn
 	t.Cleanup(func() {
+		// Drain first: a background refresh still in flight would otherwise
+		// run against the next test's stub, or against the real registry once
+		// the seams below are restored.
+		waitForBaseRefreshes(t)
 		imageLabelFn, cachedManifestDigestFn, refreshManifestDigestFn = origLabel, origCached, origFetch
 		manifestDigestFn = origThrough
 	})
@@ -21,7 +47,7 @@ func stubBaseDigests(t *testing.T, builtLabel string, cached map[string]string, 
 	baseLabelMemo = map[string]baseLabelEntry{}
 	baseLabelMu.Unlock()
 
-	asked := []string{}
+	stub := &digestStub{}
 	imageLabelFn = func(_, key string) string {
 		if key == fpmBaseDigestLabel {
 			return builtLabel
@@ -33,7 +59,7 @@ func stubBaseDigests(t *testing.T, builtLabel string, cached map[string]string, 
 		return d, ok
 	}
 	refreshManifestDigestFn = func(ref string) (string, error) {
-		asked = append(asked, ref)
+		stub.record(ref)
 		d, ok := live[ref]
 		if !ok {
 			return "", errors.New("unreachable")
@@ -47,7 +73,22 @@ func stubBaseDigests(t *testing.T, builtLabel string, cached map[string]string, 
 		}
 		return refreshManifestDigestFn(ref)
 	}
-	return &asked
+	return stub
+}
+
+// waitForBaseRefreshes blocks until no background digest refresh is in flight.
+func waitForBaseRefreshes(t *testing.T) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); {
+		baseRefreshMu.Lock()
+		inFlight := len(baseRefreshing)
+		baseRefreshMu.Unlock()
+		if inFlight == 0 {
+			return
+		}
+		time.Sleep(2 * time.Millisecond)
+	}
+	t.Error("a background base-digest refresh never finished")
 }
 
 func baseRefFor(t *testing.T, version string) string {
@@ -125,8 +166,8 @@ func TestCheckBaseImageFreshness_ReadsThroughOnColdCache(t *testing.T) {
 	if st == nil || !st.Stale {
 		t.Fatalf("expected a stale status, got %+v", st)
 	}
-	if len(*asked) != 1 {
-		t.Errorf("expected one registry read, got %v", *asked)
+	if reads := asked.reads(); len(reads) != 1 {
+		t.Errorf("expected one registry read, got %v", reads)
 	}
 }
 
@@ -142,8 +183,8 @@ func TestRefreshBaseImageFreshness_ReadsThroughToTheRegistry(t *testing.T) {
 	if !st.Stale || st.LatestDigest != "sha256:new" {
 		t.Errorf("manual check must bypass the cache: %+v", st)
 	}
-	if len(*asked) != 1 || (*asked)[0] != ref {
-		t.Errorf("expected one registry read for %q, got %v", ref, *asked)
+	if reads := asked.reads(); len(reads) != 1 || reads[0] != ref {
+		t.Errorf("expected one registry read for %q, got %v", ref, reads)
 	}
 }
 
