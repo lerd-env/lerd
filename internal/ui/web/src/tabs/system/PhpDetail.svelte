@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
   import ButtonMenu, { type ButtonMenuAction } from '$components/ButtonMenu.svelte';
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import LogViewer from '$components/LogViewer.svelte';
@@ -12,6 +11,7 @@
   import { xdebugOn, xdebugOff, XDEBUG_MODES, type XdebugMode } from '$stores/xdebug';
   import { goToTab } from '$stores/route';
   import { openPhpRemoveModal, openPhpRebuildModal } from '$stores/modals';
+  import { notifyLocalInfo } from '$lib/notify';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -35,8 +35,6 @@
   let xdebugMenuOpen = $state(false);
   let xdebugRootEl: HTMLDivElement | undefined = $state();
   let checking = $state(false);
-  let checkMessage = $state<{ text: string; tone: 'ok' | 'info' | 'error' } | null>(null);
-  let checkMessageTimer: ReturnType<typeof setTimeout> | null = null;
 
   // The parent (PhpPage) no longer wraps us in {#key version}; reset
   // per-version transient state when the version prop changes so a stale
@@ -129,31 +127,24 @@
     }
   }
 
-  function setCheckMessage(text: string, tone: 'ok' | 'info' | 'error') {
-    if (checkMessageTimer) clearTimeout(checkMessageTimer);
-    checkMessage = { text, tone };
-    checkMessageTimer = setTimeout(() => (checkMessage = null), 4000);
-  }
-
-  onDestroy(() => {
-    if (checkMessageTimer) clearTimeout(checkMessageTimer);
-  });
-
-  // Reads through to the registry, so it answers even when the cached digest
-  // is hours old. The badge itself follows from the refreshed status.
+  // Reads through to the registry, so it answers even when the cached digest is
+  // hours old. The result goes to the toast surface rather than a line in the
+  // action row, which would either push the controls out of line or sit on top
+  // of whatever the tab below is showing. The badge follows from the status.
   async function runCheckUpdates() {
     checking = true;
     try {
       const res = await checkPhpUpdates(version);
+      const label = 'PHP ' + version;
       if (!res.ok) {
-        setCheckMessage(m.system_php_checkUpdatesFailed(), 'error');
+        notifyLocalInfo('update_check', label, m.system_php_checkUpdatesFailed());
         return;
       }
-      if (res.status?.stale) {
-        setCheckMessage(m.system_php_checkUpdatesFound(), 'info');
-      } else {
-        setCheckMessage(m.system_php_checkUpdatesUpToDate(), 'ok');
-      }
+      notifyLocalInfo(
+        'update_check',
+        label,
+        res.status?.stale ? m.system_php_checkUpdatesFound() : m.system_php_checkUpdatesUpToDate()
+      );
       await loadStatus();
     } finally {
       checking = false;
@@ -173,8 +164,9 @@
 
   const versionActions = $derived.by<ButtonMenuAction[]>(() => {
     const acts: ButtonMenuAction[] = [];
-    // A republished base is the one thing worth pulling to the front, the way
-    // an available service update is; otherwise rebuild sits with the rest.
+    // Rebuild is only worth a button of its own when the base has actually
+    // moved, the way an available service update is; with nothing to pick up it
+    // stays in the menu rather than sitting there inviting a five-minute build.
     if (baseUpdate) {
       acts.push(rebuildAction);
     }
@@ -189,7 +181,7 @@
       }
     ];
     if (!baseUpdate) {
-      tail.unshift(rebuildAction);
+      tail.push(rebuildAction);
     }
     if (isDefault) {
       return [...acts, ...tail];
@@ -312,23 +304,7 @@
       {/if}
     {/if}
   </div>
-  <!-- The check result hangs off the button rather than stacking above it: in
-       flow it would grow the action row and push every control out of line. -->
-  <div class="relative inline-flex">
-    <ButtonMenu actions={versionActions} busy={versionBusy} />
-    {#if checkMessage}
-      <span
-        class={'pointer-events-none absolute right-0 top-full mt-1 text-[11px] whitespace-nowrap ' + (
-          checkMessage.tone === 'error'
-            ? 'text-rose-600 dark:text-rose-400'
-            : checkMessage.tone === 'info'
-              ? 'text-emerald-600 dark:text-emerald-400'
-              : 'text-gray-500 dark:text-gray-400'
-        )}
-        title={checkMessage.text}
-      >{checkMessage.text}</span>
-    {/if}
-  </div>
+  <ButtonMenu actions={versionActions} busy={versionBusy} />
 {/snippet}
 
 <DetailTabs {tabs} {active} onchange={(id) => (active = id)} actions={detailActions} />

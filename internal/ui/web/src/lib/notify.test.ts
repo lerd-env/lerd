@@ -823,3 +823,27 @@ describe('notifyLocalFailure', () => {
     hasFocus.mockRestore();
   });
 });
+
+describe('notifyLocalInfo', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.resetModules();
+  });
+
+  // The outcome of a click the user just made is worth a toast and nothing
+  // more; keeping it out of the centre is what stops the bell filling up with
+  // echoes of the user's own actions.
+  it('toasts the result without recording it in the centre', async () => {
+    const { notifyLocalInfo, inAppNotifications, notificationHistory } = await import('./notify');
+
+    notifyLocalInfo('update_check', 'PHP 8.4', 'Base image is current');
+
+    const inApp = get(inAppNotifications);
+    expect(inApp).toHaveLength(1);
+    expect(inApp[0].body).toBe('Base image is current');
+    // Not a failure, so NotificationToasts auto-dismisses it.
+    expect(inApp[0].failed).toBe(false);
+
+    expect(get(notificationHistory)).toHaveLength(0);
+  });
+});
