@@ -241,8 +241,11 @@ func satisfiesConstraint(version, constraint string) bool {
 		return false
 	}
 
-	// Handle OR constraints: "^8.1 || ^7.4"
-	for _, alt := range strings.Split(constraint, "||") {
+	// Handle OR constraints: "^8.1 || ^7.4". Composer accepts a single pipe too,
+	// and Laravel 8 and its contemporaries write it that way ("^7.3|^8.0"), so
+	// both spellings are normalised before splitting or the whole constraint is
+	// read as one unparseable term and nothing satisfies it.
+	for _, alt := range strings.Split(strings.ReplaceAll(constraint, "||", "|"), "|") {
 		alt = strings.TrimSpace(alt)
 		if alt == "" {
 			continue
@@ -367,4 +370,40 @@ func parseMajorMinor(s string) (int, int) {
 		return -1, -1
 	}
 	return major, minor
+}
+
+// ComposerPHPConstraint returns the project's declared PHP requirement from
+// composer.json, or empty when there is none to read. It is what a project
+// actually says it supports, which is the right authority whenever lerd has no
+// exact framework definition to go on.
+func ComposerPHPConstraint(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+	if err != nil {
+		return ""
+	}
+	var composer struct {
+		Require map[string]string `json:"require"`
+	}
+	if json.Unmarshal(data, &composer) != nil {
+		return ""
+	}
+	return strings.TrimSpace(composer.Require["php"])
+}
+
+// ClampToConstraint returns version when it satisfies constraint, else the best
+// installed version that does, else the constraint's own minimum. Unlike a
+// min/max range this keeps an alternation intact, so a project requiring
+// "^7.3|^8.0" is allowed 7.4 rather than being pushed to the top of one branch.
+// An empty or unreadable constraint clamps nothing.
+func ClampToConstraint(version, constraint string) string {
+	if constraint == "" || satisfiesConstraint(version, constraint) {
+		return version
+	}
+	if best := bestInstalledVersion(constraint); best != "" {
+		return best
+	}
+	if min := parseComposerPHP(constraint); min != "" {
+		return min
+	}
+	return version
 }

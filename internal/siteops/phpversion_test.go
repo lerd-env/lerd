@@ -10,6 +10,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
+	"github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -61,15 +62,15 @@ func stubPHPVersionDeps(t *testing.T, min, max string) *int {
 	t.Helper()
 	reloads := 0
 	origReload := nginxReloadFn
-	origRange := frameworkPHPRange
+	origRange := phpConstraintFor
 	origGap := imageGapFn
 	t.Cleanup(func() {
 		nginxReloadFn = origReload
-		frameworkPHPRange = origRange
+		phpConstraintFor = origRange
 		imageGapFn = origGap
 	})
 	nginxReloadFn = func() error { reloads++; return nil }
-	frameworkPHPRange = func(*config.Site) (string, string) { return min, max }
+	phpConstraintFor = func(*config.Site) string { return phpRangeConstraint(min, max) }
 	imageGapFn = func(string) imageGapResult { return imageGapResult{} }
 	return &reloads
 }
@@ -429,5 +430,73 @@ func TestSetSitePHPVersion_worktreeDoesTheSameRuntimeSetup(t *testing.T) {
 	}
 	if got := config.WorktreePHPVersion(wtPath, stored.PHPVersion); got != "8.3" {
 		t.Errorf("worktree version = %q, want 8.3", got)
+	}
+}
+
+// The reported case. Definitions exist for Laravel 10 and up, so an older
+// project borrows one and is marked guessed. Clamping to a borrowed range
+// refuses the version the project actually requires: `lerd isolate 7.4` on a
+// Laravel 8 app answered "7.4 isn't usable here" and moved it to 8.5.
+// `lerd link` already declined to clamp a guessed definition; this path did not.
+func TestPHPConstraintFor_GuessedFrameworkUsesComposer(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"php":"^7.3|^8.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := getFrameworkFn
+	t.Cleanup(func() { getFrameworkFn = orig })
+	getFrameworkFn = func(string, string) (*config.Framework, bool) {
+		return &config.Framework{
+			Name: "laravel", Version: "10", VersionGuessed: true, DetectedVersion: "8",
+			PHP: config.FrameworkPHP{Min: "8.1", Max: "8.3"},
+		}, true
+	}
+
+	site := &config.Site{Name: "legacy", Path: dir, Framework: "laravel"}
+	got := phpConstraintFor(site)
+	if got != "^7.3|^8.0" {
+		t.Errorf("constraint = %q, want the project's own ^7.3|^8.0", got)
+	}
+	if v := php.ClampToConstraint("7.4", got); v != "7.4" {
+		t.Errorf("7.4 was clamped to %q on a project that requires it", v)
+	}
+}
+
+// The real definition still governs, so a modern Laravel keeps refusing a PHP
+// it cannot run.
+func TestPHPConstraintFor_RealFrameworkStillGoverns(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"php":"^7.3|^8.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := getFrameworkFn
+	t.Cleanup(func() { getFrameworkFn = orig })
+	getFrameworkFn = func(string, string) (*config.Framework, bool) {
+		return &config.Framework{
+			Name: "laravel", Version: "13",
+			PHP: config.FrameworkPHP{Min: "8.3", Max: "8.5"},
+		}, true
+	}
+
+	site := &config.Site{Name: "modern", Path: dir, Framework: "laravel"}
+	if got := phpConstraintFor(site); got != ">=8.3 <=8.5" {
+		t.Errorf("constraint = %q, want the definition's own range", got)
+	}
+}
+
+// No framework recognised at all: the project still gets a say.
+func TestPHPConstraintFor_NoFrameworkUsesComposer(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"php":"^8.2"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	site := &config.Site{Name: "plain", Path: dir}
+	if got := phpConstraintFor(site); got != "^8.2" {
+		t.Errorf("constraint = %q, want ^8.2", got)
 	}
 }

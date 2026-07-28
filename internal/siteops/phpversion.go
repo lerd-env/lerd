@@ -23,17 +23,40 @@ var (
 	imageExistsFn      = podman.FPMImageExists
 	detectWorktreesFn  = gitpkg.DetectWorktrees
 
-	frameworkPHPRange = func(site *config.Site) (string, string) {
-		if site.Framework == "" {
-			return "", ""
+	// phpConstraintFor is what the site is allowed to run, as a composer-style
+	// constraint. The framework definition is the authority only when it is the
+	// real one for the project's version: a borrowed definition describes a
+	// different release (Laravel 6 served by the Laravel 10 def), and clamping to
+	// its range would refuse the version the project actually requires. In that
+	// case, and when no framework was recognised at all, the project's own
+	// composer.json is what it says it supports.
+	// getFrameworkFn is the definition lookup, a seam so the constraint choice
+	// can be tested without a framework store on disk.
+	getFrameworkFn = config.GetFrameworkForDir
+
+	phpConstraintFor = func(site *config.Site) string {
+		if site.Framework != "" {
+			if fw, ok := getFrameworkFn(site.Framework, site.Path); ok && !fw.VersionGuessed {
+				return phpRangeConstraint(fw.PHP.Min, fw.PHP.Max)
+			}
 		}
-		fw, ok := config.GetFrameworkForDir(site.Framework, site.Path)
-		if !ok {
-			return "", ""
-		}
-		return fw.PHP.Min, fw.PHP.Max
+		return php.ComposerPHPConstraint(site.Path)
 	}
 )
+
+// phpRangeConstraint renders a framework definition's min/max as the constraint
+// shape everything else in this path speaks.
+func phpRangeConstraint(min, max string) string {
+	switch {
+	case min != "" && max != "":
+		return ">=" + min + " <=" + max
+	case min != "":
+		return ">=" + min
+	case max != "":
+		return "<=" + max
+	}
+	return ""
+}
 
 // PHPVersionOpts varies what SetSitePHPVersion targets.
 type PHPVersionOpts struct {
@@ -93,8 +116,7 @@ func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (
 		return res, fmt.Errorf("site %q is a host-proxy site, which runs your dev command on the host", site.Name)
 	}
 
-	min, max := frameworkPHPRange(site)
-	if clamped := php.ClampToRange(version, min, max); clamped != version {
+	if clamped := php.ClampToConstraint(version, phpConstraintFor(site)); clamped != version {
 		res.Version, res.Clamped = clamped, true
 		version = clamped
 	}
