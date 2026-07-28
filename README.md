@@ -50,7 +50,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 - 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site, rendered in the colour the tool actually emits (artisan, composer, vite, pest) and with a button that hands any log to a real terminal so a long tail survives closing the tab
 - 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
 - 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly
-- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic with versioned auto-detection
+- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic with versioned auto-detection, back to the majors that still run on PHP 7.4
 - ⚡ **No per-framework setup**, workers, env values and the nginx vhost are all configured for you when you link a project
 
 ## AI Integration (MCP)
