@@ -37,15 +37,20 @@ func TestDebounceEvents(t *testing.T) {
 		out := make(chan struct{}, 64)
 		done := make(chan struct{})
 		stopped := make(chan struct{})
-		go func() { DebounceEvents(in, out, 60*time.Millisecond, done); close(stopped) }()
+		// The window has to be wide enough that a scheduling stall between two
+		// sends cannot exceed it. A 10ms gap against a 60ms window left only six
+		// times the margin, and a loaded CI runner overshot a sleep far enough to
+		// settle mid-burst and emit twice.
+		go func() { DebounceEvents(in, out, 400*time.Millisecond, done); close(stopped) }()
 		defer func() { close(done); <-stopped }()
 
 		for i := 0; i < 10; i++ {
 			in <- struct{}{}
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(5 * time.Millisecond)
 		}
 		emits := 0
-		timeout := time.After(400 * time.Millisecond)
+		// Long enough for the settled emit to land, and to catch a second one.
+		timeout := time.After(1500 * time.Millisecond)
 	collect:
 		for {
 			select {
