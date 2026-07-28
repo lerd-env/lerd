@@ -152,6 +152,15 @@ func dsnDatabase(value, service string) string {
 	return db
 }
 
+// isDatabaseEngine reports whether a service belongs on the Databases surface: a
+// family lerd wires as a project database, or any engine whose preset declares
+// databases it can enumerate. The second half is what lets the store publish an
+// engine outside the wired families (an analytics column store, say) and have it
+// appear with the operations it declares.
+func isDatabaseEngine(name string) bool {
+	return config.IsDBServiceName(name) || serviceops.DeclaresDatabases(name)
+}
+
 // installedDBEngines returns the installed database-engine service names, both
 // default-stack (mysql, postgres) and add-on (mariadb, mongo, postgres-pgvector).
 // sqlite is a file-based engine with no container, so it is excluded.
@@ -159,7 +168,7 @@ func installedDBEngines() []string {
 	seen := map[string]bool{}
 	var names []string
 	add := func(name string) {
-		if name == "sqlite" || seen[name] || !config.IsDBServiceName(name) {
+		if name == "sqlite" || seen[name] || !isDatabaseEngine(name) {
 			return
 		}
 		if !serviceops.ServiceInstalled(name) {
@@ -254,7 +263,7 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	service := parts[0]
-	if !config.IsDBServiceName(service) || !serviceops.ServiceInstalled(service) {
+	if !isDatabaseEngine(service) || !serviceops.ServiceInstalled(service) {
 		http.Error(w, "unknown database engine", http.StatusNotFound)
 		return
 	}

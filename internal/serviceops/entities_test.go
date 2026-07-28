@@ -216,3 +216,24 @@ introspect:
 		t.Errorf("snapshot filename carries a path: %q", got)
 	}
 }
+
+func TestDeclaresDatabasesFollowsTheDeclaration(t *testing.T) {
+	writeCustomService(t, "myengine", entityEngineYAML)
+	if DeclaresDatabases("myengine") {
+		t.Error("an engine declaring only buckets must not count as a database engine")
+	}
+	writeCustomService(t, "analytics", `name: analytics
+image: example/analytics:1
+introspect:
+  entities:
+    - kind: databases
+      list: list-dbs
+`)
+	if !DeclaresDatabases("analytics") {
+		t.Error("a declared databases entity must count whatever the family is")
+	}
+	writeCustomService(t, "legacy", "name: legacy\nimage: example/legacy:1\nintrospect:\n  list_databases: echo hi\n")
+	if !DeclaresDatabases("legacy") {
+		t.Error("the legacy list_databases field must count too")
+	}
+}

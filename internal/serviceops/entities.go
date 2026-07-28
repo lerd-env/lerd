@@ -272,6 +272,13 @@ func EntityExportFilename(service, kind, name string) string {
 	return name + ".dump"
 }
 
+// DeclaresDatabases reports whether a service holds databases the UI can
+// enumerate, read off its own declaration rather than a known family, so a
+// store-published engine reaches the Databases tab without a Go change.
+func DeclaresDatabases(service string) bool {
+	return EntityFor(service, "databases") != nil
+}
+
 // ServiceEntities returns the non-database entity specs a service declares.
 // The databases kind is excluded because the Databases tab is its surface.
 func ServiceEntities(service string) []config.EntitySpec {

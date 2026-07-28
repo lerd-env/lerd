@@ -1211,9 +1211,10 @@ type ServiceResponse struct {
 	// Tunable is true when the service exposes a user-editable runtime config
 	// override (see config.ServiceTuningMount), so the UI can show a Tuning tab.
 	Tunable bool `json:"tunable,omitempty"`
-	// IsDatabase is true for a database engine (mysql/mariadb/postgres/mongo),
-	// so the detail view can show its Databases tab. Excludes sqlite and admin
-	// UIs, which are not queryable engines.
+	// IsDatabase is true for a database engine, whether it is a wired family
+	// (mysql/mariadb/postgres/mongo) or a store engine that declares databases
+	// of its own, so the detail view can show its Databases tab. Excludes sqlite
+	// and admin UIs, which are not queryable engines.
 	IsDatabase bool `json:"is_database,omitempty"`
 	// EntityKinds are the non-database entity kinds this service declares
 	// (buckets, keyspaces…), so the detail view can show a generic overview tab.
@@ -1436,7 +1437,7 @@ func buildServiceResponseWithPortList(services map[string]config.ServiceConfig, 
 		Pinned:            config.ServiceIsPinned(name),
 		Paused:            config.ServiceIsPaused(name),
 		IsDefault:         isDefault,
-		IsDatabase:        name != "sqlite" && config.IsDBServiceName(name),
+		IsDatabase:        name != "sqlite" && isDatabaseEngine(name),
 		EntityKinds:       serviceops.EntityKinds(name),
 		Custom:            custom != nil,
 		PresetOwned:       config.PresetExists(name),
