@@ -128,6 +128,8 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"preset_search":       execServicePresetSearch,
 		"preset_install":      execServicePresetInstall,
 		"check_updates":       execServiceCheckUpdates,
+		"entities":            execServiceEntities,
+		"entity_action":       execServiceEntityAction,
 	},
 	"db": {
 		"list":            execDBList,
@@ -140,6 +142,8 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"snapshots":       execDBSnapshots,
 		"restore":         execDBRestore,
 		"snapshot_delete": execDBSnapshotDelete,
+		"extension_list":  execDBExtensionList,
+		"extension_add":   execDBExtensionAdd,
 	},
 	"env": {
 		"setup":    execEnvSetup,
@@ -149,6 +153,7 @@ var groupDispatch = map[string]map[string]handlerFn{
 	"runtime": {
 		"versions":       func(a map[string]any) (any, *rpcError) { return execRuntimeVersions() },
 		"node_install":   execNodeInstall,
+		"node_manager":   execNodeManager,
 		"node_uninstall": execNodeUninstall,
 		"php_list":       func(a map[string]any) (any, *rpcError) { return execPHPList() },
 		"ext_list":       execPHPExtList,
@@ -330,11 +335,11 @@ func siteTool() mcpTool {
 func serviceTool() mcpTool {
 	return mcpTool{
 		Name:        "service",
-		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_search, preset_install, check_updates. preset_search browses the store (name=filter). update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
+		Description: "Manage services (built-in + custom). action: start, stop, restart, pin, unpin, update, rollback, migrate, remove, reinstall, add, expose, port, env, config_read, config_write, config_restore, config_reset, config_list_backups, preset_list, preset_search, preset_install, check_updates, entities, entity_action. entities lists what a service holds beyond databases (buckets, etc.) with the actions each kind supports; databases have their own tool. preset_search browses the store (name=filter). update=pull; migrate=dump+restore; reinstall reset_data wipes data; remove remove_data renames data aside.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_search", "preset_install", "check_updates"}},
+				"action":         {Type: "string", Enum: []string{"start", "stop", "restart", "pin", "unpin", "update", "rollback", "migrate", "remove", "reinstall", "add", "expose", "port", "env", "config_read", "config_write", "config_restore", "config_reset", "config_list_backups", "preset_list", "preset_search", "preset_install", "check_updates", "entities", "entity_action"}},
 				"name":           {Type: "string", Description: "Service name/slug."},
 				"tag":            {Type: "string", Description: "update/migrate: image tag."},
 				"remove_data":    {Type: "boolean", Description: "remove: rename data dir aside."},
@@ -357,6 +362,9 @@ func serviceTool() mcpTool {
 				"content":        {Type: "string", Description: "config_write: new file contents."},
 				"backup":         {Type: "boolean", Description: "config_write: stage a backup first."},
 				"backup_name":    {Type: "string", Description: "config_restore: backup to restore (newest if omitted)."},
+				"kind":           {Type: "string", Description: "entity_action: entity kind, as `entities` reported it (e.g. buckets)."},
+				"entity":         {Type: "string", Description: "entity_action: the entity to act on."},
+				"entity_action":  {Type: "string", Description: "entity_action: which declared action to run; export/import stream a file and stay on the CLI."},
 			},
 			Required: []string{"action"},
 		},
@@ -366,11 +374,11 @@ func serviceTool() mcpTool {
 func dbTool() mcpTool {
 	return mcpTool{
 		Name:        "db",
-		Description: "Database operations. action: list (an engine's databases), set (pick sqlite/mysql/postgres/alternate), move (same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete.",
+		Description: "Database operations. action: list (an engine's databases), set (pick sqlite/mysql/postgres/alternate), move (same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete, extension_list, extension_add. extension_* are postgres-only; an import already creates what a dump reaches for, so use these to inspect or to add one up front.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":        {Type: "string", Enum: []string{"list", "set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete"}},
+				"action":        {Type: "string", Enum: []string{"list", "set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete", "extension_list", "extension_add"}},
 				"path":          {Type: "string", Description: "Project root. Defaults to cwd."},
 				"database":      {Type: "string", Description: "set: db engine. Others: db name (default DB_DATABASE)."},
 				"from":          {Type: "string", Description: "move: source service."},
@@ -379,6 +387,7 @@ func dbTool() mcpTool {
 				"all":           {Type: "boolean", Description: "move/snapshots: cover every site/db."},
 				"file":          {Type: "string", Description: "import: SQL dump path."},
 				"fresh":         {Type: "boolean", Description: "import: empty the db first."},
+				"extension":     {Type: "string", Description: "extension_add: extension name (e.g. postgis, vector)."},
 				"output":        {Type: "string", Description: "export: output file (default <database>.sql)."},
 				"name":          {Type: "string", Description: "snapshot ops: snapshot name. create: db name."},
 				"service":       {Type: "string", Description: "list/snapshot: service override."},
@@ -408,17 +417,18 @@ func envTool() mcpTool {
 func runtimeTool() mcpTool {
 	return mcpTool{
 		Name:        "runtime",
-		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove, ini_read, ini_write, ini_reset. php_list flags base_update when a newer base image is published. ext_add/remove apply to EVERY PHP version (one declared set, kept across a version change) and rebuild one version's image now (slow); others rebuild on next use. ports_* publish host ports on a version's shell container; a busy port shifts to the next free one. ini_* edit php.ini: a per-version file (version=8.4) or the shared file (shared=true), where a per-version key wins; prefer shared so a version change never drops a setting.",
+		Description: "PHP/Node runtimes. action: versions, node_install, node_uninstall, node_manager, php_list, ext_list, ext_add, ext_remove, ports_list, ports_add, ports_remove, ini_read, ini_write, ini_reset. php_list flags base_update when a newer base image is published. ext_add/remove apply to EVERY PHP version and rebuild one version's image now (slow); others rebuild on next use. ports_* publish host ports on a version's shell container; a busy port shifts to the next free one. ini_* edit php.ini: per-version (version=8.4) or shared (shared=true), where a per-version key wins; prefer shared.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove", "ini_read", "ini_write", "ini_reset"}},
+				"action":    {Type: "string", Enum: []string{"versions", "node_install", "node_uninstall", "node_manager", "php_list", "ext_list", "ext_add", "ext_remove", "ports_list", "ports_add", "ports_remove", "ini_read", "ini_write", "ini_reset"}},
 				"version":   {Type: "string", Description: "node_*: version/alias (20, lts). ports_*: PHP version. ext_*: which version to rebuild/report on now (the set applies to all). ini_*: PHP version (or shared=true)."},
 				"extension": {Type: "string", Description: "ext_add/ext_remove: extension name (imagick, redis, swoole)."},
 				"apk_deps":  {Type: "string", Description: "ext_add: extra Alpine build packages, space-separated."},
 				"host":      {Type: "integer", Description: "ports_add/remove: host port."},
 				"container": {Type: "integer", Description: "ports_add: container port."},
 				"shared":    {Type: "boolean", Description: "ini_*: target the shared file (all versions)."},
+				"manager":   {Type: "string", Enum: []string{"fnm", "nvm"}, Description: "node_manager: switch the version manager; omit to report the current one."},
 				"content":   {Type: "string", Description: "ini_write: full php.ini contents."},
 			},
 			Required: []string{"action"},
