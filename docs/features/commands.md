@@ -24,10 +24,10 @@ Some commands include a `check:` rule and only surface when the relevant package
 
 Clicking a command (or pressing Enter on a palette entry, or running `lerd run <name>`) executes the shell command in the project's directory, with stdio routed depending on the command's `output:` value:
 
-- **`text`** (default) — streams stdout and stderr into the modal as a scrollable monospace block, and leaves it open on the exit code. Use for commands whose output you'd want to read (test runs, route lists, config diffs).
-- **`silent`** — runs without opening the modal and toasts when it's done, so a cache clear doesn't cost you a click. A failure still opens the modal with the captured output, since that's the only thing that explains it.
-- **`url`** — captures stdout, scans it for the first `http(s)://...` URL, and surfaces it with Copy and Open buttons. The killer feature for `drush uli` and similar one-time-login generators.
-- **`terminal`** — spawns the user's terminal emulator (kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, gnome-terminal, xterm; on macOS iTerm or Terminal.app) with the command running inside. Use for interactive commands like `php artisan tinker`, `bin/cake bake`, `wp shell` that need a real TTY. The lerd-ui modal stays closed.
+- **`text`** (default), streams stdout and stderr into the modal as a scrollable monospace block, and leaves it open on the exit code. Use for commands whose output you'd want to read (test runs, route lists, config diffs).
+- **`silent`**: runs without opening the modal and toasts when it's done, so a cache clear doesn't cost you a click. A failure still opens the modal with the captured output, since that's the only thing that explains it.
+- **`url`**: captures stdout, scans it for the first `http(s)://...` URL, and surfaces it with Copy and Open buttons. The killer feature for `drush uli` and similar one-time-login generators.
+- **`terminal`**: spawns the user's terminal emulator (kitty, foot, alacritty, wezterm, ghostty, ptyxis, konsole, gnome-terminal, xterm; on macOS iTerm or Terminal.app) with the command running inside. Use for interactive commands like `php artisan tinker`, `bin/cake bake`, `wp shell` that need a real TTY. The lerd-ui modal stays closed.
 
 The dashboard modal streams output as it arrives via Server-Sent Events from `POST /api/sites/:domain/commands/:name/run`; the CLI streams straight to your terminal (`lerd run` is stdio-passthrough).
 
@@ -94,10 +94,10 @@ commands:
 
 When the lerd MCP server is registered, an AI assistant can:
 
-- `commands_list(site)` — see what's available for a site
-- `commands_run(site, name, force?)` — execute one (with `force: true` to bypass `confirm`)
-- `command_add(site, name, command, ...)` — write a new entry into `.lerd.yaml`'s `commands:` block. Same `name` as a framework default replaces it. Use `disabled: true` to suppress a framework default
-- `command_remove(site, name)` — delete a project entry
+- `commands_list(site)`: see what's available for a site
+- `commands_run(site, name, force?)`: execute one (with `force: true` to bypass `confirm`)
+- `command_add(site, name, command, ...)`: write a new entry into `.lerd.yaml`'s `commands:` block. Same `name` as a framework default replaces it. Use `disabled: true` to suppress a framework default
+- `command_remove(site, name)`: delete a project entry
 
 Agents should prefer `commands_run` over invoking `php artisan` / `drush` / `wp` directly so per-project overrides are honored, and `command_add` over hand-editing yaml so the entry passes the same validation `lerd check` runs.
 
@@ -123,4 +123,4 @@ Shell completion populates command names: `lerd run <TAB>` lists what's availabl
 
 Two commands cannot run on the same site at the same time; the API returns `409 Conflict` if a second run is attempted while one is in flight. This protects against accidentally running `migrate:fresh` twice from two tabs.
 
-The run endpoint is loopback-only — LAN clients (when the access mode allows remote viewing) can see the list of commands but cannot execute them. The list endpoint is read-only and exposed everywhere lerd-ui is reachable.
+The run endpoint is loopback-only, LAN clients (when the access mode allows remote viewing) can see the list of commands but cannot execute them. The list endpoint is read-only and exposed everywhere lerd-ui is reachable.

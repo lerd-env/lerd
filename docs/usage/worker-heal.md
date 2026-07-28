@@ -53,14 +53,14 @@ The banner refresh is event-driven: the dashboard reloads health on every `sites
 
 ## TUI
 
-Press `H` from any pane to heal every failed worker on the box. The status line tracks progress; the snapshot reloads automatically once heal returns. Failing workers also show as red glyphs (`q`, `s`, `v`, `h`, `•`) in the site list — the same surface the dashboard banner reflects.
+Press `H` from any pane to heal every failed worker on the box. The status line tracks progress; the snapshot reloads automatically once heal returns. Failing workers also show as red glyphs (`q`, `s`, `v`, `h`, `•`) in the site list, the same surface the dashboard banner reflects.
 
 ## MCP
 
 Two tools:
 
-- **`workers_health`** — read-only. Returns the JSON list of unhealthy workers (site, worker name, full unit name, state). Call before deciding whether to heal.
-- **`workers_heal`** — heals every failed worker, or one named unit if `unit` is passed. Returns `{summary, healed, failed}` so the agent can report what was fixed without re-querying.
+- **`workers_health`**: read-only. Returns the JSON list of unhealthy workers (site, worker name, full unit name, state). Call before deciding whether to heal.
+- **`workers_heal`**: heals every failed worker, or one named unit if `unit` is passed. Returns `{summary, healed, failed}` so the agent can report what was fixed without re-querying.
 
 ## What heal will not do
 

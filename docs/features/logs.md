@@ -23,10 +23,10 @@ Sources are listed whether or not they are currently running; a source that isn'
 
 Call `logs` with `action: "fetch"`, a `source` name, and any of these filters:
 
-- `grep` — keep only lines matching this pattern. It is compiled as a regular expression and falls back to a literal substring match when the pattern isn't valid regex.
-- `since` / `until` — a time window. Accepts relative durations (`15m`, `1h`, `2h30m`), absolute timestamps (`2026-06-11T10:00:00Z` or `2026-06-11 10:00:00`), or a `cursor` returned by a previous fetch.
-- `level` — application logs only: filter by `error`, `warning`, `info`, `debug`, etc.
-- `lines` — maximum number of lines to return (default 50).
+- `grep`: keep only lines matching this pattern. It is compiled as a regular expression and falls back to a literal substring match when the pattern isn't valid regex.
+- `since` / `until`, a time window. Accepts relative durations (`15m`, `1h`, `2h30m`), absolute timestamps (`2026-06-11T10:00:00Z` or `2026-06-11 10:00:00`), or a `cursor` returned by a previous fetch.
+- `level`: application logs only: filter by `error`, `warning`, `info`, `debug`, etc.
+- `lines`: maximum number of lines to return (default 50).
 
 Entries come back in chronological order, oldest first. Container-stdout and journal sources push the time window down to `podman logs --since/--until` and `journalctl --since/--until -g` respectively; application-log files are filtered in process.
 

@@ -1,6 +1,6 @@
 # Git Worktrees
 
-Lerd treats every [git worktree](https://git-scm.com/docs/git-worktree) as a first-class scope: each branch checkout gets its own subdomain, its own optional database, its own PHP and Node versions, and its own slot in the dashboard. Branch names are sanitised to be subdomain-safe — `/`, `_`, and `.` are replaced with `-`, and non-alphanumeric characters are stripped.
+Lerd treats every [git worktree](https://git-scm.com/docs/git-worktree) as a first-class scope: each branch checkout gets its own subdomain, its own optional database, its own PHP and Node versions, and its own slot in the dashboard. Branch names are sanitised to be subdomain-safe, `/`, `_`, and `.` are replaced with `-`, and non-alphanumeric characters are stripped.
 
 ```bash
 cd ~/Lerd/myapp                                    # parent site, branch: main
@@ -14,7 +14,7 @@ Plain `git worktree add` from any tool (CLI, IDE, GitLens) is enough to get a us
 
 ## `lerd worktree add` and `lerd worktree remove`
 
-The wrapper commands mirror `git worktree`'s subcommand layout — every flag passes straight through to git — and add an interactive setup pipeline on top.
+The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top.
 
 ### `lerd worktree add <git args>`
 
@@ -30,14 +30,14 @@ After git completes, the wrapper:
 
 1. Polls until the watcher has installed dependencies (`composer install` + `npm ci`) and synced the worktree's `.env`. The `.env` is set up *before* installs so `npm` build steps that read `VITE_*` env vars compile against the right values.
 2. Prompts what should serve the worktree's frontend assets. The select lists every framework worker eligible to replace the build (asset workers with `replaces_build: true` and a passing `check`, e.g. `vite`), every production-build script declared in `package.json` (`build`, `prod`, `build:prod`, `build-prod`, `production`), and a Skip option. The default is the first asset worker that's already opted into the parent's `.lerd.yaml workers:`, then the first npm script, then skip. Picking an asset worker starts it as a per-worktree unit (with `persist=false`, so it doesn't get added to `workers:`); picking an npm script runs it once.
-3. Prompts how to set up the worktree's database — see [Per-worktree database](#per-worktree-database) below.
+3. Prompts how to set up the worktree's database, see [Per-worktree database](#per-worktree-database) below.
 4. If you pick "isolated empty", asks whether to run `php artisan migrate --force` against the new schema right away.
 
-The asset-worker option appears even when the worker isn't in the parent's `workers:` list — as long as the framework declares it and its `check` passes (e.g. `node_modules/vite` exists). That lets you opt into vite for a single worktree without editing the parent yaml. The choice is per-session: on a daemon restart only opted-in workers get auto-started by `scanWorktrees`, so an ad-hoc pick won't survive a `lerd stop && lerd start`. If you want it permanent, run `lerd setup` to add it to `workers:`.
+The asset-worker option appears even when the worker isn't in the parent's `workers:` list, as long as the framework declares it and its `check` passes (e.g. `node_modules/vite` exists). That lets you opt into vite for a single worktree without editing the parent yaml. The choice is per-session: on a daemon restart only opted-in workers get auto-started by `scanWorktrees`, so an ad-hoc pick won't survive a `lerd stop && lerd start`. If you want it permanent, run `lerd setup` to add it to `workers:`.
 
-When an asset worker is opted-in on the parent, the watcher also auto-starts it as a per-worktree unit independently of the prompt — a systemd `.service` on Linux, a launchd plist on macOS. Multiple worktrees can run Vite simultaneously — each gets its own unit (`lerd-vite-<site>-<branch>`) and Vite auto-increments ports. The same auto-start runs at daemon boot too, so per-worktree units recover after a host reboot or `lerd stop && lerd start` even when fsnotify hasn't fired. On `lerd worktree remove`, the matching units are stopped and their unit files removed before git tears the worktree down — without that step, the supervisor would restart-loop the unit against the deleted `WorkingDirectory`.
+When an asset worker is opted-in on the parent, the watcher also auto-starts it as a per-worktree unit independently of the prompt, a systemd `.service` on Linux, a launchd plist on macOS. Multiple worktrees can run Vite simultaneously, each gets its own unit (`lerd-vite-<site>-<branch>`) and Vite auto-increments ports. The same auto-start runs at daemon boot too, so per-worktree units recover after a host reboot or `lerd stop && lerd start` even when fsnotify hasn't fired. On `lerd worktree remove`, the matching units are stopped and their unit files removed before git tears the worktree down, without that step, the supervisor would restart-loop the unit against the deleted `WorkingDirectory`.
 
-Skipping both the asset worker and the npm script leaves the worktree without a Vite manifest, which means the first request will throw `ViteManifestNotFoundException` until you run `npm run dev` or `npm run build` yourself. That's intentional — the alternative is silently rendering main's compiled UI on the worktree, which is worse.
+Skipping both the asset worker and the npm script leaves the worktree without a Vite manifest, which means the first request will throw `ViteManifestNotFoundException` until you run `npm run dev` or `npm run build` yourself. That's intentional, the alternative is silently rendering main's compiled UI on the worktree, which is worse.
 
 ### `lerd worktree remove <git args>`
 
@@ -48,7 +48,7 @@ lerd worktree remove --force main          # discards local modifications
 
 The wrapper runs `git worktree remove` and, when needed, falls back interactively. If git refuses with the *use --force* hint (modified or untracked files in the worktree) the wrapper offers a select prompt to retry with `--force` instead of forcing the user to rerun the command.
 
-After git succeeds the wrapper asks whether to delete the worktree's isolated database. The default is **Keep the database** — if you re-create the worktree on the same branch later, the dashboard prompt will offer to reuse the preserved data without rebuilding it. Picking **Drop** drops the database and removes its registry entry.
+After git succeeds the wrapper asks whether to delete the worktree's isolated database. The default is **Keep the database**: if you re-create the worktree on the same branch later, the dashboard prompt will offer to reuse the preserved data without rebuilding it. Picking **Drop** drops the database and removes its registry entry.
 
 ---
 
@@ -56,13 +56,13 @@ After git succeeds the wrapper asks whether to delete the worktree's isolated da
 
 Whether you use `lerd worktree add` or the bare `git` command, the daemon's watcher (`lerd-watcher`) sees the new entry under `.git/worktrees/` and runs the same setup steps in this order:
 
-1. Wait for `HEAD` to be a final ref or SHA — git writes `gitdir`/`HEAD` over multiple steps and the watcher must avoid acting on a half-written detached state.
+1. Wait for `HEAD` to be a final ref or SHA, git writes `gitdir`/`HEAD` over multiple steps and the watcher must avoid acting on a half-written detached state.
 2. Seed `vendor/` and `node_modules/` from the main repo when the worktree's `composer.lock` / JS lockfile matches main's, using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS) and a plain copy elsewhere.
 3. Sync the framework's env file from main with its base-URL key rewritten to the worktree's vhost domain. The file, its format and the key all come from the framework definition, so Laravel gets `.env` / `APP_URL`, Symfony `.env.local` / `DEFAULT_URI`, CodeIgniter `config/.env` / `app.baseURL`, and the PHP-config frameworks are seeded through their own writers: WordPress's `wp-config.php` (rewriting `WP_HOME`) and Magento's `app/etc/env.php` (carried across for its database credentials). Magento keeps its base URL in the database rather than in a single env key, so it declares `worktree_url_keys` instead, and the seeded `env.php` overrides the database with the worktree's own domain. Writing that base URL changes the config hash Magento keeps in the database, so its definition also declares a [`worktree` block](../usage/framework-definitions.md#yaml-schema): the worktree gets its own database cloned from main, and `app:config:import` runs against it once the file and the database are both in place. When `.lerd.yaml` defines `env_overrides`, those dotenv templates are resolved on top (see [env overrides](#env-overrides) below).
 4. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
 5. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
-Frontend build (`npm run build`) is **not** part of the watcher pipeline — it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
+Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
 
 `public/build/` is also intentionally not seeded from main: it's a build artefact of the source tree, and copying it would render main's compiled UI on the worktree until the user noticed.
 
@@ -133,7 +133,7 @@ Picking a branch re-scopes the rest of the detail view to that worktree:
 - The **Tinker** tab REPL runs inside the worktree's PHP context (its own `.env`, its own vendor).
 - The **Request timing** panel shows the branch's own traffic: requests to the worktree's subdomain are recorded against it, and its slow routes open and profile on that subdomain. The parent's timing stays separate, though a worktree's requests still count toward the site when the sites list is ordered by traffic. See [Request timing](../usage/sites.md#request-timing).
 - The **PHP** and **Node** version selectors show the worktree's effective version. A dashed violet border indicates "Inherits from main"; changing the value persists a worktree-only override.
-- Worker toggles (queue, schedule, Horizon, Reverb, custom workers) collapse into a "Workers run from main" pill — those run against main's checkout regardless of which worktree is active. Switch to main to start or stop them.
+- Worker toggles (queue, schedule, Horizon, Reverb, custom workers) collapse into a "Workers run from main" pill, those run against main's checkout regardless of which worktree is active. Switch to main to start or stop them.
 - The domain-edit pencil disappears (worktree domains are derived from the parent's primary).
 
 ### Manage worktrees modal
@@ -149,7 +149,7 @@ Next to the branch picker is a worktrees icon that opens a modal for adding and 
 
 ### Per-worktree PHP and Node versions
 
-Each worktree can pin its own PHP or Node version without affecting the parent site — the natural way to test a runtime upgrade on a feature branch.
+Each worktree can pin its own PHP or Node version without affecting the parent site, the natural way to test a runtime upgrade on a feature branch.
 
 When you pick a non-default value from the version selector while a worktree is active, lerd writes the override to `.lerd.yaml` *inside that worktree's checkout*. The file lives in the working tree, so the choice travels with the branch in git.
 
@@ -159,7 +159,7 @@ php_version: "8.4"
 node_version: "24"
 ```
 
-The override is honoured wherever lerd materialises worktree state on disk: vhost generation on add, rename, pause/unpause, and `lerd secure`/`lerd unsecure`. The commands that run PHP in a container follow it too, so `lerd php` and `lerd composer` from inside the checkout use the worktree's version rather than the parent's, whether the worktree sits beside the project or inside it. Switching a worktree's version writes the target version's FPM quadlet the same way a site switch does, so the vhost it generates always has a container behind it. Worktrees with no override inherit the parent's pinned version (not the highest-installed satisfier of `composer.json`/`package.json` constraints — that detection only kicks in for unregistered directories).
+The override is honoured wherever lerd materialises worktree state on disk: vhost generation on add, rename, pause/unpause, and `lerd secure`/`lerd unsecure`. The commands that run PHP in a container follow it too, so `lerd php` and `lerd composer` from inside the checkout use the worktree's version rather than the parent's, whether the worktree sits beside the project or inside it. Switching a worktree's version writes the target version's FPM quadlet the same way a site switch does, so the vhost it generates always has a container behind it. Worktrees with no override inherit the parent's pinned version (not the highest-installed satisfier of `composer.json`/`package.json` constraints, that detection only kicks in for unregistered directories).
 
 Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), workers, and any custom container settings.
 
@@ -177,16 +177,16 @@ When isolation is enabled lerd asks where the new schema should start from:
 | Clone from main | `mysqldump --single-transaction` (or `pg_dump`) of the parent's DB piped into the new schema, entirely inside the service container. |
 | Clone from another isolated worktree | Same dump/restore pipeline, source is an existing isolated worktree's DB. Useful when staging migrations on top of an already-migrated branch. |
 
-The isolated database survives `lerd worktree remove` by default — the wrapper asks at the end whether to drop it, and **Keep the database** is the default. Re-adding the same branch via `lerd worktree add` later detects the preserved entry and offers two extra options at the top of the DB-isolation prompt:
+The isolated database survives `lerd worktree remove` by default, the wrapper asks at the end whether to drop it, and **Keep the database** is the default. Re-adding the same branch via `lerd worktree add` later detects the preserved entry and offers two extra options at the top of the DB-isolation prompt:
 
-- **Reuse preserved isolated DB** — reconnects the worktree to the same data with no schema changes.
-- **Reset preserved DB to a fresh empty schema** — drops the existing DB, recreates it empty, then offers to run migrations.
+- **Reuse preserved isolated DB**: reconnects the worktree to the same data with no schema changes.
+- **Reset preserved DB to a fresh empty schema**: drops the existing DB, recreates it empty, then offers to run migrations.
 
 The same toggle is available on the dashboard for already-active worktrees: flipping **Isolated DB** off opens a confirmation modal naming the database that is about to go, and on confirm it drops the database and restores the parent's database-name value in the worktree's env file. The toggle only appears when the parent uses a lerd-managed mysql/mariadb/postgres service. Sqlite is naturally file-based and isolated per checkout, no opt-in needed.
 
 ### Per-worktree LAN share
 
-LAN share has a separate toggle that's worktree-aware: when a worktree is active in the dashboard, the toggle controls a proxy bound to a per-worktree port (next free `>= 9100` across all sites and worktrees). The proxy targets the worktree's vhost domain so devices on your network reach the worktree's URL directly — no DNS setup on the client. Removing the worktree releases the port via the watcher's cleanup pass; the dashboard QR-code popover honours `?branch=` so the QR encodes the worktree's URL. Running `lerd lan:share` from inside the checkout does the same thing from the CLI.
+LAN share has a separate toggle that's worktree-aware: when a worktree is active in the dashboard, the toggle controls a proxy bound to a per-worktree port (next free `>= 9100` across all sites and worktrees). The proxy targets the worktree's vhost domain so devices on your network reach the worktree's URL directly, no DNS setup on the client. Removing the worktree releases the port via the watcher's cleanup pass; the dashboard QR-code popover honours `?branch=` so the QR encodes the worktree's URL. Running `lerd lan:share` from inside the checkout does the same thing from the CLI.
 
 ### Per-worktree public tunnel
 
@@ -200,12 +200,12 @@ Commands that act on a directory resolve a worktree to its parent site automatic
 
 When a worktree is removed (via `git worktree remove` directly or `lerd worktree remove`) the watcher tears state down in this order so that any earlier failure leaves the database intact:
 
-1. Per-worktree host-worker units (`lerd-<worker>-<site>-<branch>`; systemd `.service` on Linux, launchd plist on macOS) — stopped and removed so the supervisor doesn't restart-loop them against the deleted `WorkingDirectory`.
+1. Per-worktree host-worker units (`lerd-<worker>-<site>-<branch>`; systemd `.service` on Linux, launchd plist on macOS), stopped and removed so the supervisor doesn't restart-loop them against the deleted `WorkingDirectory`.
 2. nginx vhost (URL stops resolving).
 3. LAN-share proxy + registry entry (port released).
-4. Isolated database — *only* via `lerd worktree remove`'s explicit prompt or the daemon's `scanWorktrees` startup sweep. Plain `git worktree remove` leaves the DB and its registry entry alone, so the user can recover by re-adding the worktree without losing migrations or seed data.
+4. Isolated database, *only* via `lerd worktree remove`'s explicit prompt or the daemon's `scanWorktrees` startup sweep. Plain `git worktree remove` leaves the DB and its registry entry alone, so the user can recover by re-adding the worktree without losing migrations or seed data.
 
-The startup sweep also catches any registry entries whose worktree directory disappeared while the watcher was offline — restarting `lerd-watcher` reconciles state.
+The startup sweep also catches any registry entries whose worktree directory disappeared while the watcher was offline, restarting `lerd-watcher` reconciles state.
 
 ---
 

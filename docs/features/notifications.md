@@ -1,15 +1,15 @@
 # Notifications
 
-The dashboard can pop OS-level notifications for events you'd otherwise have to keep an eye on a tab to catch: a captured email, a worker that just crashed, a long-running service operation that finished, a new image tag available for a service, or a `ray()`/`dump()` arriving from a site you're debugging. Notifications fire even when the dashboard tab is minimised, in the background, or fully closed — they're delivered via Web Push, which wakes the registered service worker through your browser vendor's push infrastructure (FCM for Chrome/Brave/Edge, Mozilla autopush for Firefox).
+The dashboard can pop OS-level notifications for events you'd otherwise have to keep an eye on a tab to catch: a captured email, a worker that just crashed, a long-running service operation that finished, a new image tag available for a service, or a `ray()`/`dump()` arriving from a site you're debugging. Notifications fire even when the dashboard tab is minimised, in the background, or fully closed, they're delivered via Web Push, which wakes the registered service worker through your browser vendor's push infrastructure (FCM for Chrome/Brave/Edge, Mozilla autopush for Firefox).
 
-The first time you open the dashboard a small banner offers to enable browser notifications; clicking *Enable* prompts your browser for permission once. Granting it is sticky — the dashboard re-uses the permission across sessions and re-registers the push subscription on every page load so the server's subscription list stays in sync after browser resets or sub expiry.
+The first time you open the dashboard a small banner offers to enable browser notifications; clicking *Enable* prompts your browser for permission once. Granting it is sticky, the dashboard re-uses the permission across sessions and re-registers the push subscription on every page load so the server's subscription list stays in sync after browser resets or sub expiry.
 
 ## Delivery: browser or native desktop
 
 Notifications have a single delivery **sink**, chosen per install and mutually exclusive so you never get the same alert twice:
 
-- **Browser** — the WebSocket fan-out to open dashboards plus Web Push to subscribed browsers (the paths described under [How it works](#how-it-works)). Needs a browser permission grant, works cross-machine over the LAN, and delivers to a closed PWA.
-- **Native desktop** — the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode, and so is the popup an open dashboard would otherwise raise itself, so the daemon's is the only copy and clicking it opens the desktop app. Linux only for now; macOS follows later.
+- **Browser**: the WebSocket fan-out to open dashboards plus Web Push to subscribed browsers (the paths described under [How it works](#how-it-works)). Needs a browser permission grant, works cross-machine over the LAN, and delivers to a closed PWA.
+- **Native desktop**: the `lerd-ui` daemon posts straight to the desktop notification service (`org.freedesktop.Notifications` over the session bus, using the DBus library lerd already ships). No browser, no permission prompt, and notifications appear even with nothing open. Web Push is suppressed in this mode, and so is the popup an open dashboard would otherwise raise itself, so the daemon's is the only copy and clicking it opens the desktop app. Linux only for now; macOS follows later.
 
 Switch under **System → Notifications** with the *Delivery* control, or from the CLI:
 
@@ -39,7 +39,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | --- | --- | --- | --- |
 | `mail` | Mailpit captures an outgoing email | on | normal |
 | `worker_failed` | A queue / horizon / reverb / schedule / stripe worker needs healing: it entered the `failed` state, or it's still enabled yet found stopped (drift, e.g. an FPM restart knocked it out). The dashboard banner surfaces both and offers a one-click heal | on | high |
-| `nplusone` | A request (or worker invocation) runs the same query shape 3+ times — a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
+| `nplusone` | A request (or worker invocation) runs the same query shape 3+ times, a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
 | `slow_route` | A route's p95 response time is running well above the site's typical time, from the watcher's request-timing snapshot. Edge-triggered: fires once when a route goes slow and rearms once it drops back within the typical band, so a later slowdown notifies again | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
 | `update_available` | The registry has a newer image tag for an installed service | on | low |
@@ -49,7 +49,7 @@ The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found
 
 Clicking a debug notification (`dump`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.
 
-Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription — closed-PWA push respects the toggles even when the dashboard isn't running.
+Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription, closed-PWA push respects the toggles even when the dashboard isn't running.
 
 The dashboard's System health card also carries a bell toggle, next to the debug bridge and profiler ones, that flips the master switch and prompts for browser permission on first use. It dims when the browser has blocked notifications, in which case the recovery flow lives under **System → Notifications**.
 
@@ -76,7 +76,7 @@ Both paths receive the same JSON payload: `{kind, title, title_key, body, body_k
 
 ## Localisation
 
-Notification copy is translatable. Every category has paraglide keys under `notify_*` in `internal/ui/web/messages/<locale>.json` — `notify_mail_title`, `notify_worker_failed_body`, `notify_op_done_title`, etc. The page side resolves them through Paraglide using the user's selected locale. The server-side English fallback is always sent in `title`/`body` so the SW (which has no DOM and no Paraglide bundle) can still render correctly when the tab is closed.
+Notification copy is translatable. Every category has paraglide keys under `notify_*` in `internal/ui/web/messages/<locale>.json`, `notify_mail_title`, `notify_worker_failed_body`, `notify_op_done_title`, etc. The page side resolves them through Paraglide using the user's selected locale. The server-side English fallback is always sent in `title`/`body` so the SW (which has no DOM and no Paraglide bundle) can still render correctly when the tab is closed.
 
 To add a new locale, drop a new file under `internal/ui/web/messages/` and copy the `notify_*` keys.
 
@@ -85,16 +85,16 @@ To add a new locale, drop a new file under `internal/ui/web/messages/` and copy 
 - **VAPID key pair**: `~/.local/share/lerd/vapid-private.key` (mode 0600) + `vapid-public.key`. Generated lazily on first call. Re-using the same pair keeps existing subscriptions valid across lerd-ui restarts.
 - **Subscriptions**: `~/.local/share/lerd/push-subscriptions.json`. One entry per browser. Each entry records the push endpoint, encryption keys, the User-Agent that subscribed, the timestamp, the master `enabled` flag, and the per-kind `enabled_kinds` allow-list.
 
-Subscriptions that the push service retires (HTTP 410 Gone, 404 Not Found) are pruned automatically on the next send attempt — no manual cleanup needed.
+Subscriptions that the push service retires (HTTP 410 Gone, 404 Not Found) are pruned automatically on the next send attempt, no manual cleanup needed.
 
 ## Settings panel
 
 **System → Notifications** is the canonical control surface:
 
-- *Master switch* — overrides every per-category toggle.
-- *Per-category toggles* — one row per kind with a short description.
-- *Send a test notification* — fires a no-op `test` push so you can verify the full pipeline (WS + push + SW) end-to-end. The `test` kind always passes the category filter so you can test even with everything muted.
-- *Subscribed devices* — lists every browser that has subscribed (truncated UA + added-at timestamp). Click *Forget* to revoke a device's subscription server-side without touching the browser-side permission.
+- *Master switch*, overrides every per-category toggle.
+- *Per-category toggles*, one row per kind with a short description.
+- *Send a test notification*, fires a no-op `test` push so you can verify the full pipeline (WS + push + SW) end-to-end. The `test` kind always passes the category filter so you can test even with everything muted.
+- *Subscribed devices*, lists every browser that has subscribed (truncated UA + added-at timestamp). Click *Forget* to revoke a device's subscription server-side without touching the browser-side permission.
 
 ## Endpoints
 
@@ -109,7 +109,7 @@ Subscriptions that the push service retires (HTTP 410 Gone, 404 Not Found) are p
 | `POST` | `/api/notifications/target` | Sets the delivery sink to `browser` or `native`. |
 | `POST` | `/api/notifications/kinds` | Toggles one native category (`{kind, enabled}`). |
 
-All endpoints sit behind the standard `withRemoteControlGate` (loopback-only by default). The mailpit webhook at `/api/webhooks/mailpit` has its own explicit bypass — the threat surface is bounded (a LAN attacker could spoof fake mail notifications) and lerd is a local-dev tool.
+All endpoints sit behind the standard `withRemoteControlGate` (loopback-only by default). The mailpit webhook at `/api/webhooks/mailpit` has its own explicit bypass, the threat surface is bounded (a LAN attacker could spoof fake mail notifications) and lerd is a local-dev tool.
 
 ## Disabling notifications
 
@@ -118,7 +118,7 @@ Four layers; each is enough on its own:
 - **Global mute**: `lerd notify off` (or click *Notifications* in the system tray). The central dispatcher short-circuits before either the WebSocket broadcast or the Web Push fanout runs, so every category, every device, every tab is silenced at once. Persists to `~/.config/lerd/config.yaml` under `notifications.disabled: true`. `lerd notify on` flips it back; `lerd notify status` reports the current state. On by default.
 - Toggle off in **System → Notifications** (per-category or master).
 - Reset the browser's notification permission for the dashboard origin (Brave / Chrome / Firefox → site settings).
-- `rm ~/.local/share/lerd/push-subscriptions.json` — server-side wipe; the browser will silently re-subscribe on the next page load if permission is still granted, so combine with the first two options if you want a permanent uninstall.
+- `rm ~/.local/share/lerd/push-subscriptions.json`: server-side wipe; the browser will silently re-subscribe on the next page load if permission is still granted, so combine with the first two options if you want a permanent uninstall.
 
 ## Browser support
 

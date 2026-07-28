@@ -10,8 +10,8 @@ Useful for the things you'd otherwise do in `php artisan tinker` or a `bin/conso
 
 The Run button POSTs your code to `lerd-ui`, which executes it inside the site's PHP container and returns the captured output. The execution mode is driven by the framework definition's `tinker:` block (see [framework definitions](#framework-defined-repl) below):
 
-- **Framework-defined REPL** — when the active framework declares a `tinker:` block in its YAML and the declared `requires_package` / `requires_file` checks pass, lerd runs the framework's REPL. For Laravel that's `php artisan tinker --execute=...`, so the app is bootstrapped: `User::count()`, `Route::getRoutes()`, `Cache::get('foo')` all just work. The `mode` field in the response is set to the framework name (e.g. `"laravel"`).
-- **Plain `php` fallback** — any site without a satisfied framework REPL (Symfony, vanilla PHP, Laravel without `laravel/tinker` installed). The code is written to a temp script inside the site, with `vendor/autoload.php` auto-required if it exists, and executed via `php {file}`. `mode` is `"php"`.
+- **Framework-defined REPL**: when the active framework declares a `tinker:` block in its YAML and the declared `requires_package` / `requires_file` checks pass, lerd runs the framework's REPL. For Laravel that's `php artisan tinker --execute=...`, so the app is bootstrapped: `User::count()`, `Route::getRoutes()`, `Cache::get('foo')` all just work. The `mode` field in the response is set to the framework name (e.g. `"laravel"`).
+- **Plain `php` fallback**: any site without a satisfied framework REPL (Symfony, vanilla PHP, Laravel without `laravel/tinker` installed). The code is written to a temp script inside the site, with `vendor/autoload.php` auto-required if it exists, and executed via `php {file}`. `mode` is `"php"`.
 
 The active mode is shown as a small badge in the toolbar.
 
@@ -34,7 +34,7 @@ Resolution rules:
 2. If `requires_package` is set and `vendor/<package>` is missing, the framework's REPL is skipped.
 3. Otherwise, lerd runs `podman exec ... php <Command…>` and either appends `<execute_flag>=<code>` or pipes the code via stdin.
 
-To add Tinker support for another framework, ship a `tinker:` block in its YAML — no Go changes needed. Examples:
+To add Tinker support for another framework, ship a `tinker:` block in its YAML, no Go changes needed. Examples:
 
 ```yaml
 # A hypothetical Symfony with psysh installed
@@ -69,7 +69,7 @@ The [Monaco editor](https://microsoft.github.io/monaco-editor/) (the engine behi
 
 ### Language intelligence (phpantom_lsp)
 
-Autocomplete, diagnostics, hover, and signature help are powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), a fast, self-contained Rust PHP language server. It bundles phpstorm-stubs and the Mago parser, so it needs no PHP runtime to analyze a project — lerd runs it on the host (managed binary in `~/.local/share/lerd/bin/phpantom_lsp`, like `fnm`/`mkcert`/`composer`) pointed at the site's project directory.
+Autocomplete, diagnostics, hover, and signature help are powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), a fast, self-contained Rust PHP language server. It bundles phpstorm-stubs and the Mago parser, so it needs no PHP runtime to analyze a project, lerd runs it on the host (managed binary in `~/.local/share/lerd/bin/phpantom_lsp`, like `fnm`/`mkcert`/`composer`) pointed at the site's project directory.
 
 Because it analyzes the real project, completions are genuinely project-aware: your Eloquent models, relationships, scopes, casts and Builder chains resolve end-to-end, alongside framework facades, vendor classes, and the PHP standard library. Hover a symbol for its docblock; type `(` inside a call for signature help.
 
@@ -77,9 +77,9 @@ Quick fixes and imports are wired in too: the "Class not found" diagnostic offer
 
 Highlighting is semantic, not just grammar-based: the editor colours each token from what phpantom actually resolved it to, so a real method reads differently from an unresolved one and framework magic (facades, Eloquent properties) is coloured like the real symbol it maps to. Monaco falls back to its plain PHP grammar when the server is unavailable.
 
-The browser connects to the server over a WebSocket (`/api/lsp/php`). `lerd-ui` spawns one `phpantom_lsp` process per connection, rooted at the site (or worktree) path, and bridges its stdio LSP traffic to Monaco. Tinker buffers are headerless PHP, so the bridge presents the document to the server with a synthetic leading `<?php` line (and offsets positions accordingly) — you keep typing bare snippets while the server still parses valid PHP.
+The browser connects to the server over a WebSocket (`/api/lsp/php`). `lerd-ui` spawns one `phpantom_lsp` process per connection, rooted at the site (or worktree) path, and bridges its stdio LSP traffic to Monaco. Tinker buffers are headerless PHP, so the bridge presents the document to the server with a synthetic leading `<?php` line (and offsets positions accordingly), you keep typing bare snippets while the server still parses valid PHP.
 
-A small status hint sits in the toolbar while the server is starting, and switches to "Language server unavailable" if it can't be reached. When that happens (offline first-run download, unsupported platform) the editor still works and code still runs — only the live intelligence is missing.
+A small status hint sits in the toolbar while the server is starting, and switches to "Language server unavailable" if it can't be reached. When that happens (offline first-run download, unsupported platform) the editor still works and code still runs, only the live intelligence is missing.
 
 The server binary is fetched at `lerd install` time, and lazily on first connect for existing installs, so no manual setup is required.
 
@@ -114,7 +114,7 @@ The output panel itself adds a per-block `Copy` button on hover, for copying jus
 
 ## When the tab is hidden
 
-The Tinker tab is shown for any site that has a `php_version`. It is hidden for static-only sites and custom-container sites without a PHP runtime. Paused sites still get the tab — pausing only removes routing, the shared PHP-FPM container stays up.
+The Tinker tab is shown for any site that has a `php_version`. It is hidden for static-only sites and custom-container sites without a PHP runtime. Paused sites still get the tab, pausing only removes routing, the shared PHP-FPM container stays up.
 
 ## Limits
 
@@ -143,19 +143,19 @@ The `/api/lsp/php` socket first sends a single `{"type":"lerd-root","root":"…"
 
 Backend (Go):
 
-- `internal/cli/tinker.go` — `RunTinker`, the dump-function detector, the multi-statement transformer, `splitTopLevelStatements`, the auto-dump heuristic, output cleanup.
-- `internal/phpantom/phpantom.go` — manages the `phpantom_lsp` host binary: platform asset resolution, pinned-version download, tar extraction into `BinDir`.
-- `internal/ui/lsp.go` — `handleLSPPhp`, the WebSocket ↔ stdio LSP framing bridge (`readLSPMessage` / `encodeLSPMessage`).
-- `internal/ui/server.go` — the `tinker` case on the site action handler and the `/api/lsp/php` route.
+- `internal/cli/tinker.go`: `RunTinker`, the dump-function detector, the multi-statement transformer, `splitTopLevelStatements`, the auto-dump heuristic, output cleanup.
+- `internal/phpantom/phpantom.go`: manages the `phpantom_lsp` host binary: platform asset resolution, pinned-version download, tar extraction into `BinDir`.
+- `internal/ui/lsp.go`: `handleLSPPhp`, the WebSocket ↔ stdio LSP framing bridge (`readLSPMessage` / `encodeLSPMessage`).
+- `internal/ui/server.go`: the `tinker` case on the site action handler and the `/api/lsp/php` route.
 - Tests: `tinker_test.go`, `internal/ui/lsp_test.go`, `internal/phpantom/phpantom_test.go`.
 
 Frontend (Svelte 5 + Monaco):
 
-- `internal/ui/web/src/components/MonacoEditor.svelte` — reusable lazy-loaded Monaco wrapper.
-- `internal/ui/web/src/lib/monaco.ts` — single-instance Monaco loader (editor.api + PHP grammar, themes, worker).
-- `internal/ui/web/src/lib/lsp.ts` — dependency-free LSP client: completion/hover/signature providers, diagnostics-to-markers, headerless-REPL position mapping.
-- `internal/ui/web/src/tabs/sites/SiteTinkerTab.svelte` — editor, LSP wiring, output rendering.
-- `internal/ui/web/src/components/DumpView.svelte` — recursive collapsible tree.
-- `internal/ui/web/src/lib/dump-parser.ts` — parses Symfony VarDumper CLI output into a tree (`+ tests`).
-- `internal/ui/web/src/tabs/sites/SiteDetail.svelte` — host the tabs in the bottom-right of `SiteHeader`.
-- `internal/ui/web/src/stores/sites.ts` — `runTinker` API helper.
+- `internal/ui/web/src/components/MonacoEditor.svelte`: reusable lazy-loaded Monaco wrapper.
+- `internal/ui/web/src/lib/monaco.ts`: single-instance Monaco loader (editor.api + PHP grammar, themes, worker).
+- `internal/ui/web/src/lib/lsp.ts`: dependency-free LSP client: completion/hover/signature providers, diagnostics-to-markers, headerless-REPL position mapping.
+- `internal/ui/web/src/tabs/sites/SiteTinkerTab.svelte`: editor, LSP wiring, output rendering.
+- `internal/ui/web/src/components/DumpView.svelte`: recursive collapsible tree.
+- `internal/ui/web/src/lib/dump-parser.ts`: parses Symfony VarDumper CLI output into a tree (`+ tests`).
+- `internal/ui/web/src/tabs/sites/SiteDetail.svelte`: host the tabs in the bottom-right of `SiteHeader`.
+- `internal/ui/web/src/stores/sites.ts`: `runTinker` API helper.

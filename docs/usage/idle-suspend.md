@@ -2,9 +2,9 @@
 
 Idle-suspend reclaims the resources a site's background workers hold while you're not using it. When a site sees no activity for the timeout, lerd gracefully stops **all** of its workers and resumes them on the next activity. It's off by default.
 
-On a typical dev box your sites share one PHP-FPM container, so the per-site resource cost isn't the web tier — it's the workers (queue, Horizon, scheduler, Reverb, the Stripe listener, Vite), which run around the clock whether or not you're working. Idle-suspend stops them while a site is quiet and brings them back the moment the site is used again. Workers are asynchronous, so the request that wakes them is served immediately while they boot in the background.
+On a typical dev box your sites share one PHP-FPM container, so the per-site resource cost isn't the web tier, it's the workers (queue, Horizon, scheduler, Reverb, the Stripe listener, Vite), which run around the clock whether or not you're working. Idle-suspend stops them while a site is quiet and brings them back the moment the site is used again. Workers are asynchronous, so the request that wakes them is served immediately while they boot in the background.
 
-It is a single global policy: one on/off switch and one timeout for every site. There is no per-site enable or per-site timeout — to keep one site always-warm, [pin](#pinning-a-site) it.
+It is a single global policy: one on/off switch and one timeout for every site. There is no per-site enable or per-site timeout, to keep one site always-warm, [pin](#pinning-a-site) it.
 
 ## Commands
 
@@ -33,7 +33,7 @@ Idle-suspend: enabled, timeout 30m
 
 ## Which workers are suspended
 
-All of them. When a site goes idle, lerd stops every worker it runs — queue, scheduler, Horizon, Reverb, the Stripe listener, and Vite — and persists which it stopped so it can restart exactly those on the next activity. An idle site should do no background work at all.
+All of them. When a site goes idle, lerd stops every worker it runs, queue, scheduler, Horizon, Reverb, the Stripe listener, and Vite, and persists which it stopped so it can restart exactly those on the next activity. An idle site should do no background work at all.
 
 Suspension is graceful: workers receive `SIGTERM` and finish their current job before exiting, and Laravel's job reservation/retry covers anything in flight, so no jobs are lost.
 
@@ -47,25 +47,25 @@ A pinned site is excluded from idle-suspend: its workers stay running even while
 
 ## Proxy-only sites
 
-A [proxy-only site](/usage/host-proxy) — one where nginx forwards to a dev server you start yourself, with no command for lerd to supervise — is excluded too. There is no process lerd could stop, so suspending it would only put the waking page in front of an app that is still serving. Such a site never shows as sleeping in the dashboard. A host-proxy site whose command lerd does supervise sleeps like any other.
+A [proxy-only site](/usage/host-proxy), one where nginx forwards to a dev server you start yourself, with no command for lerd to supervise, is excluded too. There is no process lerd could stop, so suspending it would only put the waking page in front of an app that is still serving. Such a site never shows as sleeping in the dashboard. A host-proxy site whose command lerd does supervise sleeps like any other.
 
 ## Worktrees
 
-Each git worktree idles on its **own** timer, independent of the main checkout and of the other worktrees. Working on `feature.myapp.test` keeps that worktree's workers alive while the main site and other worktrees can sleep on their own schedules. Only workers a framework marks `per_worktree: true` run per worktree — for Laravel that's Vite — so suspending a worktree stops its `lerd-vite-<site>-<branch>` unit (with the same build-on-suspend handling) and resumes it on the worktree's own traffic.
+Each git worktree idles on its **own** timer, independent of the main checkout and of the other worktrees. Working on `feature.myapp.test` keeps that worktree's workers alive while the main site and other worktrees can sleep on their own schedules. Only workers a framework marks `per_worktree: true` run per worktree, for Laravel that's Vite, so suspending a worktree stops its `lerd-vite-<site>-<branch>` unit (with the same build-on-suspend handling) and resumes it on the worktree's own traffic.
 
 ## How activity is detected
 
 Four signals count as activity, none of which poll or burn CPU:
 
-- **HTTP requests** — nginx logs each request's host to a unix datagram socket the `lerd-watcher` owns; the watcher maps the host (including worktree subdomains) to its site or worktree and stamps it active.
-- **CLI commands** — running `php`, `artisan`, `composer`, `npm`, or `node` through lerd's shims inside a project directory pings the watcher's control socket to keep that site awake, so working in the terminal doesn't let it sleep.
-- **MCP tools** — a lerd MCP tool call that targets a site (by `site` name or `path`) marks it active too, so an agent working on a site keeps it warm.
-- **Source-file saves** — `lerd-watcher` watches each site's (and each worktree's) source tree and treats a save as activity, so editing keeps the site awake even when nothing reaches nginx — a Vite HMR session, for instance, where the browser talks to the dev server directly and no request is logged. The watched directories default to the common source roots (`resources`, `src`, `app`, `routes`, ...) and never include `node_modules`/`vendor`; a framework can override them with `source_dirs` in its definition. This is the primary idle signal on macOS, where the nginx access feed isn't reachable from the host.
+- **HTTP requests**: nginx logs each request's host to a unix datagram socket the `lerd-watcher` owns; the watcher maps the host (including worktree subdomains) to its site or worktree and stamps it active.
+- **CLI commands**: running `php`, `artisan`, `composer`, `npm`, or `node` through lerd's shims inside a project directory pings the watcher's control socket to keep that site awake, so working in the terminal doesn't let it sleep.
+- **MCP tools**: a lerd MCP tool call that targets a site (by `site` name or `path`) marks it active too, so an agent working on a site keeps it warm.
+- **Source-file saves**: `lerd-watcher` watches each site's (and each worktree's) source tree and treats a save as activity, so editing keeps the site awake even when nothing reaches nginx, a Vite HMR session, for instance, where the browser talks to the dev server directly and no request is logged. The watched directories default to the common source roots (`resources`, `src`, `app`, `routes`, ...) and never include `node_modules`/`vendor`; a framework can override them with `source_dirs` in its definition. This is the primary idle signal on macOS, where the nginx access feed isn't reachable from the host.
 
 A site is idle once it has gone `timeout` without any of these. The suspend engine lives in the `lerd-watcher` daemon (the same process that watches DNS, source files, and worktrees), so the activity it watches and the suspend/resume it performs sit together, and the dashboard only reads and displays the result. Last-active times are persisted, so a `lerd-watcher` restart or a redeploy restores each countdown instead of resetting it. Resume is immediate: activity on a suspended site wakes its workers right away, not on the next evaluation tick (which only bounds how long an idle site waits past its timeout before suspending). Turning the feature off brings every suspended worker back at once.
 
 ## Notes
 
-- Off by default — a quiet dev box only reclaims worker memory once you opt in. While it is off the feature is fully dormant: the `lerd-watcher` does no activity tracking, file watching, or evaluation at all, it only keeps a tiny control socket bound so that toggling it on takes effect immediately. Turning it on or off (via `lerd idle on/off` or the dashboard) persists the choice and signals the watcher to start or tear the subsystem down on the spot. Turning it off, or restarting the watcher while it's off, also brings back any workers a prior session had suspended, so a disabled feature never leaves a site's workers stopped.
+- Off by default, a quiet dev box only reclaims worker memory once you opt in. While it is off the feature is fully dormant: the `lerd-watcher` does no activity tracking, file watching, or evaluation at all, it only keeps a tiny control socket bound so that toggling it on takes effect immediately. Turning it on or off (via `lerd idle on/off` or the dashboard) persists the choice and signals the watcher to start or tear the subsystem down on the spot. Turning it off, or restarting the watcher while it's off, also brings back any workers a prior session had suspended, so a disabled feature never leaves a site's workers stopped.
 - Workers stopped by idle-suspend are not reported as failed by the health watcher; they're asleep on purpose.
 - Starting a worker any other way re-arms idle-suspend for it. An install, a relink, or `lerd worker start` that brings a worker back clears it from the suspended set, and the `lerd-watcher` verifies the set against the workers actually running when it starts, so a site never stays awake because lerd still thought those workers were asleep.

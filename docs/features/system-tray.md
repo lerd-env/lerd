@@ -49,7 +49,7 @@ Settings       ▸   Autostart at login: ✔ On   ← enables/disables every ler
 
 The menu refreshes every 30 seconds, and again right after any click so it redraws against the result instead of waiting for the next poll. Clicking a service toggles it on/off. Clicking a PHP version sets it as the global default. "Quit Lerd" stops the entire environment before closing.
 
-The **Debug bridge** item shells out to `lerd dump on` / `lerd dump off` — see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off` — see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
+The **Debug bridge** item shells out to `lerd dump on` / `lerd dump off`, see [Dumps](dumps.md). The **Notifications** item shells out to `lerd notify on` / `lerd notify off`, see [Notifications](notifications.md). Both are global toggles, persisted to `config.yaml`.
 
 The **Services** submenu shows only core services (MySQL, Redis, PostgreSQL, etc.), and its parent row hides itself when none are installed. If you ever install more than the menu has room for, the last row reports how many are not shown rather than dropping them quietly.
 

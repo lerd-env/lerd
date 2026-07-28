@@ -131,7 +131,7 @@ A portable, self-contained description of a project's local environment. Created
 | `public_dir` | Override for the framework's default document-root subdirectory, e.g. `public_html` for a Laravel skeleton that doesn't use the conventional `public/` folder. Empty means use the framework default |
 | `request_timeout` | nginx request timeout in seconds for this site. Maps to `fastcgi_read_timeout`/`fastcgi_send_timeout` for PHP-FPM sites and `proxy_read_timeout`/`proxy_send_timeout` for proxy and custom-container sites. Overrides the global `nginx.request_timeout`. Omit (or `0`) to inherit the global default of 60s. Raise it for apps with deliberately long-running requests |
 | `secured` | When `true`, HTTPS is enabled on apply |
-| `domains` | Site hostnames without the TLD (e.g. `[myapp, api]`). The first entry is the primary; additional entries become aliases. Conflict-filtered domains stay in this list on disk but are not registered |
+| `domains` | Site hostnames without the TLD (e.g. `[myapp, api]`). The first entry is the primary; additional entries become aliases. Conflict-filtered domains stay in this list on disk but are not registered. A hostname may not contain whitespace, a slash, or nginx punctuation (`{`, `}`, `;`, `#`), since it is written into the generated vhost's `server_name` |
 | `app_url` | Override for `APP_URL` (or the framework's URL key) written to `.env`. Highest priority, it beats the per-machine `sites.yaml` override and the default `<scheme>://<primary-domain>` generator. Use for custom path prefixes, ports, or unrelated hostnames you want shared across machines |
 | `env_overrides` | Map of env var names to templated or static values applied to `.env` on `lerd setup` and to per-worktree `.env` files when worktrees are created. Values may use <code v-pre>{{domain}}</code>, <code v-pre>{{scheme}}</code>, <code v-pre>{{site}}</code>, <code v-pre>{{branch}}</code>, and <code v-pre>{{parent}}</code> placeholders, or be plain strings. When `APP_URL` is in `env_overrides` it takes precedence over the default rewrite; declared keys override defaults, undeclared defaults still apply. The one exception is `DB_DATABASE` on a worktree whose `db_isolated` is true: the isolation flow owns that key and the watcher won't re-render it from the parent's template until isolation is turned back off. See [Env overrides](./features/git-worktrees.md#env-overrides) |
 | `services` | Services to start on apply. Accepts built-in names, custom service names, or full inline definitions |
@@ -184,6 +184,8 @@ custom_workers:
     command: npm run start:dev
     restart: always
 ```
+
+Every field of a worker becomes a line of the systemd unit lerd generates, so none of them may contain a newline or a NUL. A worker whose `label`, `command`, `restart` or `schedule` carries one is refused with the offending field named, rather than written out as a unit. `.lerd.yaml` is committed and travels with a checkout, so a cloned project cannot use a worker definition to add directives to a unit on your machine.
 
 When `container` is present, `php_version`, `framework`, and `node_version` are ignored.
 

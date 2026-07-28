@@ -45,10 +45,10 @@ If you ran `lerd uninstall` and then reinstalled, worker units and service quadl
 ::: info Deleted project directories are auto-cleaned
 `lerd-watcher` removes sites from `sites.yaml` whenever their project directory disappears on disk. Two paths do this:
 
-- **Instant** — fsnotify on every parked directory (configured via `lerd park`). When a direct subdirectory gets deleted, the corresponding site is unlinked within milliseconds.
-- **Periodic** — every 30 seconds the watcher sweeps the full site registry (parked and non-parked) and removes any site whose path no longer exists. The UI refreshes via the sites eventbus so the dashboard reflects the removal without a manual page reload.
+- **Instant**: fsnotify on every parked directory (configured via `lerd park`). When a direct subdirectory gets deleted, the corresponding site is unlinked within milliseconds.
+- **Periodic**: every 30 seconds the watcher sweeps the full site registry (parked and non-parked) and removes any site whose path no longer exists. The UI refreshes via the sites eventbus so the dashboard reflects the removal without a manual page reload.
 
-Both paths skip `Ignored: true` sites — those are explicitly parked by the user (e.g. via `lerd unpark` leaving a tombstone) and must not be reaped.
+Both paths skip `Ignored: true` sites, those are explicitly parked by the user (e.g. via `lerd unpark` leaving a tombstone) and must not be reaped.
 :::
 
 ---
@@ -156,6 +156,29 @@ lerd tools:update
 ```
 
 Tools that are already at their pinned version are left untouched, and tools that are deliberately absent (fnm on an nvm-managed setup) are skipped. A tool whose version shows as unknown, for example Composer after a `composer self-update`, is re-downloaded at the pinned version.
+
+Each tool is an independent download, so one that cannot be updated does not stop the others. The run carries on and closes with a count of what failed.
+
+### Where the pins come from
+
+The pinned versions live in `internal/tools/tools.yaml`. A copy is embedded in the binary as the offline fallback, and the published one is fetched before a download so a bad pin can be fixed without a release.
+
+Because that file reaches every install without going through a release, a published pin is only honoured when its URL points at a host lerd downloads tools from: `getcomposer.org`, `github.com`, and GitHub's asset hosts. Anything else falls back to the embedded pin. Set `LERD_TOOLS_HOSTS` to a comma-separated list to allow additional hosts, and `LERD_TOOLS_URL` to fetch the manifest from somewhere other than GitHub.
+
+A pin may also carry a `digests` map alongside `assets`, giving the sha256 of each platform's asset:
+
+```yaml
+tools:
+  mkcert:
+    version: v1.4.4
+    url: https://github.com/FiloSottile/mkcert/releases/download/{version}/{asset}
+    assets:
+      linux/amd64: mkcert-{version}-linux-amd64
+    digests:
+      linux/amd64: 6d31c65b03972c6dc4a14ab429f2928300518b26503f58723e532d1b0a3bbb52
+```
+
+Where a digest is given the download is checked against it and rejected on a mismatch. The field is optional, so a manifest without it installs exactly as before, and binaries that predate the field ignore it. Either way a download is written to a temporary file and moved into place only once it is complete, so a failed or rejected download never replaces a working binary.
 
 ---
 

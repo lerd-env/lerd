@@ -103,8 +103,8 @@ Tradeoffs of worker mode:
 Typical usage:
 
 - **Local dev, iterating on code**: worker off, or Symfony worker on (auto reload). Laravel dev is usually happier with worker off or the shared FPM runtime.
-- **Benchmarking, perf testing, staging**: worker on — this is the realistic production picture.
-- **CI / ephemeral environments**: worker off — simpler, no state-leak surprises.
+- **Benchmarking, perf testing, staging**: worker on, this is the realistic production picture.
+- **CI / ephemeral environments**: worker off, simpler, no state-leak surprises.
 
 ---
 
@@ -149,7 +149,7 @@ Everything the FPM runtime offers works on FrankenPHP **except one thing**:
 
 - **SPX profiler** (`lerd profile`). SPX profiles per request and does not hook Octane's resident-worker loop (its `/_spx` UI 404s under Octane, and lerd's profiler injection is fastcgi-only), so it stays FPM-only. The global profiler toggle still profiles your FPM sites; to profile a FrankenPHP site with SPX, switch it back to FPM (`lerd runtime fpm`, run from the project).
 
-Everything else — the full runtime extension set, Xdebug, the dump()/dd() bridge, the Debug window (`lerd_devtools`), per-site php.ini, bun, and Pest browser testing — is supported.
+Everything else, the full runtime extension set, Xdebug, the dump()/dd() bridge, the Debug window (`lerd_devtools`), per-site php.ini, bun, and Pest browser testing, is supported.
 
 ## Other notes
 
@@ -166,6 +166,6 @@ The Web UI site detail panel shows an orange **FrankenPHP** badge next to the fr
 
 ## Related pages
 
-- [Per-project custom container](project-setup.md#custom-container) — for non-PHP apps or a fully custom image.
-- [Web UI](web-ui.md) and [TUI](tui.md) — where the runtime badge appears.
-- [Environment setup](env-setup.md) — `.env` wiring is identical under both runtimes.
+- [Per-project custom container](project-setup.md#custom-container): for non-PHP apps or a fully custom image.
+- [Web UI](web-ui.md) and [TUI](tui.md), where the runtime badge appears.
+- [Environment setup](env-setup.md): `.env` wiring is identical under both runtimes.

@@ -48,9 +48,9 @@ The target URL is auto-detected from the registered site in the current director
 
 Lerd resolves the Stripe secret from the project's `.env` automatically, probing these keys in order until one is set:
 
-1. `STRIPE_SECRET` — Laravel / Cashier
-2. `STRIPE_SECRET_KEY` — the common Stripe Node / NestJS convention
-3. `STRIPE_API_KEY` — the generic SDK name
+1. `STRIPE_SECRET`: Laravel / Cashier
+2. `STRIPE_SECRET_KEY`: the common Stripe Node / NestJS convention
+3. `STRIPE_API_KEY`: the generic SDK name
 
 No flags are required if any of these is present. To force a specific key (for example a project that stores it under a non-standard name), pin it with `--secret-env-key` or the `stripe.secret_env_key` field in `.lerd.yaml`.
 

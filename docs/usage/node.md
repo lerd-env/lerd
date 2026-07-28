@@ -65,6 +65,10 @@ Nothing needs configuring. If you want to change the manager, change the project
 4. `package.json`: `engines.node` field
 5. Global default in `~/.config/lerd/config.yaml`
 
+`.nvmrc` and `.node-version` are reduced to their major version, so `20.11.0` in either means Node 20. `.lerd.yaml` is not, so a full pin like `20.11.0` is used as written and reaches the version manager verbatim.
+
+Every source has to be version shaped: letters, digits, dots, dashes, underscores and slashes, so `22`, `20.11.0`, `v18.20.4` and `lts/iron` all work. A value carrying anything else is ignored and resolution falls through to the next source. These values are put on the command line of the worker units lerd generates, and `.lerd.yaml` is committed to the repository, so a checkout can never decide what those units run.
+
 To pin a project to a specific version:
 
 ```bash
@@ -98,7 +102,7 @@ Version numbers are normalised to the major only, so `22.11.0` and `22.14.1` are
 Node version management runs through a version manager, and lerd supports two: [fnm](https://github.com/Schniz/fnm), the bundled default, and [nvm](https://github.com/nvm-sh/nvm), if you already have it installed.
 
 - **fnm** is bundled and installed automatically. lerd writes `node` / `npm` / `npx` shims into `~/.local/share/lerd/bin/` so those commands reach fnm from any shell.
-- **nvm** is never installed by lerd. If `lerd install` finds an existing nvm (via `$NVM_DIR` or `~/.nvm`), it picks nvm automatically when you decline lerd-managed Node, so Node stays yours and lerd follows your nvm instead of an fnm it would never install a version into. Answering yes keeps the bundled fnm; switch to nvm afterwards with `lerd node:manager nvm` or the dashboard. With nvm, lerd does **not** put node/npm/npx shims on PATH — your shell's nvm keeps owning those binaries (so `which node` and `nvm ls` behave normally). `lerd node` / `lerd npm`, host workers, and the dashboard still drive nvm for install, use, and defaults. lerd never touches the Node versions you installed yourself with nvm.
+- **nvm** is never installed by lerd. If `lerd install` finds an existing nvm (via `$NVM_DIR` or `~/.nvm`), it picks nvm automatically when you decline lerd-managed Node, so Node stays yours and lerd follows your nvm instead of an fnm it would never install a version into. Answering yes keeps the bundled fnm; switch to nvm afterwards with `lerd node:manager nvm` or the dashboard. With nvm, lerd does **not** put node/npm/npx shims on PATH, your shell's nvm keeps owning those binaries (so `which node` and `nvm ls` behave normally). `lerd node` / `lerd npm`, host workers, and the dashboard still drive nvm for install, use, and defaults. lerd never touches the Node versions you installed yourself with nvm.
 
 Installing lerd from a package rather than interactively answers the same question by detection, since a maintainer script has nobody to ask. An existing nvm takes it, exactly as declining does above. With no nvm, lerd manages Node through the bundled fnm and installs the default version during setup, so the package leaves you a working Node rather than one that appears the first time something reaches for it.
 

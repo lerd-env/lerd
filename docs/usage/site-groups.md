@@ -17,8 +17,8 @@ A secondary stays a completely independent site: its own project path, PHP versi
 
 Open a site in the [web UI](../features/web-ui.md) and click the group icon next to the domain. For a site that isn't grouped yet you first choose its role:
 
-- **This is the main** — pick an ungrouped site to add as a secondary under it. The subdomain label is pre-filled from that site's name (`admin-astrolov` becomes `admin`) and is editable before you confirm, and a "Share the main's database" checkbox lets the secondary use the main's database instead of its own.
-- **Secondary of…** — pick which site this one should sit under, set its subdomain label, and optionally share that main's database. Confirming makes the current site a secondary.
+- **This is the main**: pick an ungrouped site to add as a secondary under it. The subdomain label is pre-filled from that site's name (`admin-astrolov` becomes `admin`) and is editable before you confirm, and a "Share the main's database" checkbox lets the secondary use the main's database instead of its own.
+- **Secondary of…**: pick which site this one should sit under, set its subdomain label, and optionally share that main's database. Confirming makes the current site a secondary.
 
 So you can build a group from either end: add secondaries from the main, or attach the current site under another main. Once a group exists you can also:
 

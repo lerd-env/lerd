@@ -67,11 +67,11 @@ Every widget is driven by the same Svelte stores that power the rest of the dash
 
 Press **`Cmd+K`** (macOS) / **`Ctrl+K`** (Linux/Windows), or **`/`** anywhere outside an input, to open a global command palette overlay. It searches across:
 
-- **Pages** — Dashboard, Sites, Services, System
-- **Sites** — every linked domain, with framework hint
-- **Services** — every core service, with version hint
-- **Install service** (loopback only) — every installable bundled preset, so searching "install redis" installs it inline without opening the picker modal
-- **Actions** — Link a site, Add a service, Heal failing workers (when any), Check for updates, Open documentation, Open current site in browser, Toggle theme
+- **Pages**: Dashboard, Sites, Services, System
+- **Sites**: every linked domain, with framework hint
+- **Services**: every core service, with version hint
+- **Install service** (loopback only), every installable bundled preset, so searching "install redis" installs it inline without opening the picker modal
+- **Actions**: Link a site, Add a service, Heal failing workers (when any), Check for updates, Open documentation, Open current site in browser, Toggle theme
 
 Use `↑` / `↓` to move the selection, `↵` to execute, `esc` to close. The palette is available on every tab, not just the dashboard.
 

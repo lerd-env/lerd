@@ -89,7 +89,7 @@ tuning:
 
 The inline `tuning:` block exposes the Config tab and the `lerd service config <name>` CLI for any custom service. `target` is required; if your image already auto-includes its target path, leave `command` empty (mysql / mariadb work this way). Set `command` when the image loads no config by default (redis is the built-in example). Inline tuning wins over the family-keyed defaults, so you can override the bundled mysql/mariadb/redis paths if you ship a non-standard image.
 
-The service must already be installed — running `lerd service config <name>` against a service whose quadlet isn't on disk errors out with a hint to `lerd service preset install <name>` first, rather than silently reinstalling it as a side effect of an edit.
+The service must already be installed, running `lerd service config <name>` against a service whose quadlet isn't on disk errors out with a hint to `lerd service preset install <name>` first, rather than silently reinstalling it as a side effect of an edit.
 
 ## YAML schema
 
@@ -253,7 +253,7 @@ When `lerd env` runs in a project directory, it checks each custom service's `en
 
 ## How `lerd start` / `lerd stop` handle custom services
 
-`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` and pinned-dependency-host consumers (phpMyAdmin, pgAdmin, RedisInsight, mongo-express) so their host lists include engines that came up in the same pass — otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
+`lerd start` and `lerd stop` include any custom service that has a quadlet file installed (i.e. has been started at least once via `lerd service start`). They are started and stopped alongside the built-in services. After the bulk start, lerd refreshes any `discover_family` and pinned-dependency-host consumers (phpMyAdmin, pgAdmin, RedisInsight, mongo-express) so their host lists include engines that came up in the same pass, otherwise a pre-start reconcile can leave `PMA_HOSTS` empty when MariaDB was not running yet.
 
 Custom service containers are given a 5-second graceful stop window before podman sends `SIGKILL`. This keeps `lerd service stop` and the web UI's Stop button responsive even for images with slow shutdown sequences (Selenium Chromium/supervisord, for example, can otherwise block for 30 s+). On Podman 5.0+ this is emitted as the native `StopTimeout=5` quadlet key; on Podman 4.x (e.g. Ubuntu 24.04's 4.9.3) lerd writes `PodmanArgs=--stop-timeout=5` instead, since the `StopTimeout=` key only exists in 5.0+. Existing installs of a slow-stopping service can pick up the change with `lerd service remove <name> && lerd service preset <name>`.
 

@@ -310,7 +310,7 @@ A grouped secondary sharing the main site's database gets the main's database, b
 
 A project linked before this existed picks it up the next time either command runs there, which is also how a connection catches up with an engine that moved to another port.
 
-lerd only ever touches a project that already has a `.idea` directory, because that directory existing is what says the project is open in a JetBrains IDE; it never creates one. Inside the file it owns exactly one entry, keyed on a stable identifier derived from the project path, so your own data sources are left byte for byte as they were. The user and password ride in the JDBC URL, since JetBrains keeps secrets in its own credential store where lerd cannot write, and they are the fixed local ones the site's `.env` already spells out.
+lerd only ever touches a project that already has a `.idea` directory, because that directory existing is what says the project is open in a JetBrains IDE; it never creates one. Inside the file it owns exactly one entry, keyed on a stable identifier derived from the project path, so your own data sources are left byte for byte as they were. The URL carries no credentials. The user goes into `dataSources.local.xml`, which is where the IDE reads it from, and the password is left to JetBrains' own credential store, which lerd cannot write to, so the first connection asks for it once. It is the fixed local one the site's `.env` already spells out.
 
 Set `ide_data_source: false` in `~/.config/lerd/config.yaml` to leave IDE files alone entirely. IDEs validate the path by running the tool with `--version` first, and a bare `--version` or `--help` is always forwarded exactly as given, without the local-database default and without starting the service behind it.
 

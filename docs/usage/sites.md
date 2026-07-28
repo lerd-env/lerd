@@ -117,8 +117,8 @@ them run once for the whole batch. That matters at scale, because those steps
 rewrite every quadlet and every container hosts entry, so doing them per project
 made a large directory take minutes rather than seconds.
 
-A parked link reads the project's committed `.lerd.yaml` — its domains, public
-directory and PHP version — but it runs unattended, so it stops short of
+A parked link reads the project's committed `.lerd.yaml`, its domains, public
+directory and PHP version, but it runs unattended, so it stops short of
 anything that needs a decision or runs code the repository wrote. It never
 prompts, never writes `.php-version` or `.node-version` into your project, never
 installs services, and never issues a certificate.
@@ -128,7 +128,7 @@ Some projects are reported as skipped rather than registered:
 - A directory that is not a PHP project at all.
 - A git worktree of a project that is already a site; worktrees inherit the
   parent's registration and are served at `branch.domain.test`.
-- A project that declares its own runtime — a custom container, a host-proxy dev
+- A project that declares its own runtime, a custom container, a host-proxy dev
   server, FrankenPHP, or a custom FPM image. Each needs an image built or a
   command run, which an unattended sweep should not do on its own. Run `lerd
   link` in the project to set it up, after which the watcher leaves it alone.
@@ -320,7 +320,7 @@ a project that declares a host-proxy dev command has that command started for
 you. The command is printed in the modal's output, so what lerd runs on your host
 is on screen either way.
 
-The environment step can fail on its own — a project with no framework, or a
+The environment step can fail on its own, a project with no framework, or a
 framework that declares no env file, has nothing to configure. The site is still
 linked, and the modal says what went wrong instead of closing on a clean
 success.

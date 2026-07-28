@@ -38,11 +38,11 @@ What gets filtered before it lands on disk:
 - Site `.env` files are excluded outright.
 - Home paths render as `$HOME` and the username as `$USER`.
 - Site names, domains and parked-directory paths are replaced with `site-1`/`site1.<tld>`/`$PARK_1` placeholders. Pass `--show-real-names` to keep the raw values for local debugging.
-- Logs are kept only for lerd's own infra (`lerd-nginx`, `lerd-ui`, `lerd-dns`, `lerd-watcher`, `lerd-tray`, etc.). Preset services (mysql, redis, meilisearch, gotenberg, …), FPM containers and per-site workers still appear in the unit-state and container tables but their logs are dropped — they were producing repetitive request-shaped noise that didn't help triage.
+- Logs are kept only for lerd's own infra (`lerd-nginx`, `lerd-ui`, `lerd-dns`, `lerd-watcher`, `lerd-tray`, etc.). Preset services (mysql, redis, meilisearch, gotenberg, …), FPM containers and per-site workers still appear in the unit-state and container tables but their logs are dropped, they were producing repetitive request-shaped noise that didn't help triage.
 - Custom services and per-site custom / FrankenPHP containers are omitted entirely so the report doesn't expose user app identifiers.
 - Nginx structured error lines have their `request:` / `upstream:` / `referrer:` URI fields redacted, and HTTP access lines are dropped.
 
-Skim the file before posting (it's plain text — open it in any editor) and attach it to your GitHub issue.
+Skim the file before posting (it's plain text, open it in any editor) and attach it to your GitHub issue.
 
 Override the destination with `--output`, change how many log lines per service to include with `--log-lines`, or keep raw site names with `--show-real-names`:
 
@@ -181,7 +181,7 @@ cat ~/.local/share/lerd/nginx/conf.d/my-app.test.conf   # check generated vhost
 :::
 
 ::: details My custom nginx directive disappeared after an update
-Don't edit `~/.local/share/lerd/nginx/conf.d/*.conf` directly. Lerd regenerates those files on `lerd link`, `lerd secure`, `lerd site rebuild`, and every `lerd install` (which `lerd update` re-execs). Drop your snippet in `~/.local/share/lerd/nginx/custom.d/{domain}.conf` instead — the generated vhost ends with an `include` for that file, and lerd never writes into `custom.d/`. See [Nginx Overrides](./usage/nginx-overrides.md) for examples.
+Don't edit `~/.local/share/lerd/nginx/conf.d/*.conf` directly. Lerd regenerates those files on `lerd link`, `lerd secure`, `lerd site rebuild`, and every `lerd install` (which `lerd update` re-execs). Drop your snippet in `~/.local/share/lerd/nginx/custom.d/{domain}.conf` instead, the generated vhost ends with an `include` for that file, and lerd never writes into `custom.d/`. See [Nginx Overrides](./usage/nginx-overrides.md) for examples.
 :::
 
 ::: details PHP-FPM container not running
@@ -422,7 +422,7 @@ Error starting server failed to bind udp listener on [fd00:1e7d::1]:53:
 IO error: Cannot assign requested address (os error 99)
 ```
 
-Cause: the host advertises IPv6 in the kernel but has no routable v6 address on any interface — only `::1` and `fe80::` — so netavark can't hold the ULA gateway on the rootless bridge, and aardvark-dns bind fails with `EADDRNOTAVAIL`. Typical in headless QEMU/KVM VMs and networks without v6 DHCP.
+Cause: the host advertises IPv6 in the kernel but has no routable v6 address on any interface, only `::1` and `fe80::`, so netavark can't hold the ULA gateway on the rootless bridge, and aardvark-dns bind fails with `EADDRNOTAVAIL`. Typical in headless QEMU/KVM VMs and networks without v6 DHCP.
 
 Lerd 1.18+ detects this on every `lerd install` by reading `/proc/net/if_inet6` (any non-loopback, non-link-local v6 address counts as usable) and falls back to a v4-only `lerd` network. An existing dual-stack network on a v6-less host is recreated as v4-only automatically. Force it:
 
