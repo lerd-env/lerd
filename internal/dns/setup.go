@@ -4,10 +4,12 @@ package dns
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -966,10 +968,13 @@ func removeSudoersGrant() bool {
 // grant the passwordless DNS rules up front, letting a later unattended install
 // configure the resolver without a prompt. Idempotent.
 func WriteSudoersForUser(user string) error {
-	if user == "" {
-		return fmt.Errorf("cannot determine target user")
+	if err := validSudoersUser(user); err != nil {
+		return err
 	}
 	content := renderLinuxSudoers(user)
+	if err := checkSudoersSyntax(content); err != nil {
+		return err
+	}
 	// Compare against the real file, not the user-owned marker: this runs as
 	// root, where the marker resolves to root's HOME and says nothing about the
 	// target user. A stale one there claimed the grant was in place and skipped
@@ -982,6 +987,57 @@ func WriteSudoersForUser(user string) error {
 		return fmt.Errorf("writing sudoers drop-in: %w", err)
 	}
 	return nil
+}
+
+// sudoersUserPattern is the shape a name must have to be spliced into a
+// sudoers rule. Deliberately tighter than what useradd will accept: this string
+// becomes the first field of every line in a file sudo parses, and a space in
+// it is enough to make the whole drop-in invalid.
+var sudoersUserPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}\$?$`)
+
+func validSudoersUser(user string) error {
+	switch {
+	case user == "":
+		return fmt.Errorf("cannot determine target user")
+	case !sudoersUserPattern.MatchString(user):
+		return fmt.Errorf("refusing to write a sudoers rule for %q: not a valid user name", user)
+	}
+	return nil
+}
+
+// visudoCheck runs the syntax check; a var so tests can drive both answers on a
+// host that may not ship visudo.
+var visudoCheck = func(path string) ([]byte, error) {
+	return exec.Command("visudo", "-c", "-f", path).CombinedOutput()
+}
+
+// checkSudoersSyntax refuses to install a drop-in sudo cannot parse. A drop-in
+// that fails to parse is not a grant that merely does not work: depending on
+// the sudo build it can take the rest of the configuration down with it, so it
+// is checked before it lands rather than after. A host with no visudo is not a
+// reason to skip the write; the rule shape is already constrained above.
+func checkSudoersSyntax(content string) error {
+	f, err := os.CreateTemp("", "lerd-sudoers-*")
+	if err != nil {
+		return nil
+	}
+	defer os.Remove(f.Name())
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		return nil
+	}
+	f.Close()
+	if err := os.Chmod(f.Name(), 0440); err != nil {
+		return nil
+	}
+	out, err := visudoCheck(f.Name())
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return nil
+	}
+	return fmt.Errorf("refusing to install an invalid sudoers drop-in: %s", strings.TrimSpace(string(out)))
 }
 
 // RecordSudoersForUser stores the user-owned marker for a drop-in that a root
