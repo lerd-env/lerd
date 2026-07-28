@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostbin"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
 )
@@ -171,13 +172,13 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		if headless {
 			args = append(args, "--log", "stdout", "--log-format", "json")
 		}
-		cmd = exec.Command("ngrok", args...)
+		cmd = exec.Command(hostbin.Path("ngrok"), args...)
 	case shareModeExpose:
 		shareURL := fmt.Sprintf("http://%s", target.domain)
 		if httpPort != 80 {
 			shareURL = fmt.Sprintf("http://%s:%d", target.domain, httpPort)
 		}
-		cmd = exec.Command("expose", "share", shareURL)
+		cmd = exec.Command(hostbin.Path("expose"), "share", shareURL)
 	case shareModeCloudflare:
 		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
 		if err != nil {
@@ -185,10 +186,10 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		}
 		stop = stopProxy
 		if tunnelName != "" {
-			cmd = exec.Command("cloudflared", "tunnel", "run",
+			cmd = exec.Command(hostbin.Path("cloudflared"), "tunnel", "run",
 				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort), tunnelName)
 		} else {
-			cmd = exec.Command("cloudflared", "tunnel",
+			cmd = exec.Command(hostbin.Path("cloudflared"), "tunnel",
 				"--url", fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
 		}
 	case shareModeSSH:
@@ -201,7 +202,7 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		if !headless {
 			fmt.Printf("Local proxy started on port %d (Host: %s → nginx:%d)\n\n", proxyPort, target.domain, httpPort)
 		}
-		cmd = exec.Command("ssh",
+		cmd = exec.Command(hostbin.Path("ssh"),
 			"-o", "StrictHostKeyChecking=no",
 			"-o", "ServerAliveInterval=30",
 			"-R", fmt.Sprintf("80:localhost:%d", proxyPort),
@@ -289,20 +290,20 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 
 	if useNgrok {
-		if _, err := exec.LookPath("ngrok"); err != nil {
-			return nil, fmt.Errorf("ngrok not found in PATH — install it from https://ngrok.com/download%s", defaultToolHint(fromDefault))
+		if _, ok := hostbin.Look("ngrok"); !ok {
+			return nil, fmt.Errorf("ngrok not found — install it from https://ngrok.com/download%s", defaultToolHint(fromDefault))
 		}
 		return &shareTool{mode: shareModeNgrok}, nil
 	}
 	if useCloudflare {
-		if _, err := exec.LookPath("cloudflared"); err != nil {
-			return nil, fmt.Errorf("cloudflared not found in PATH — install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/%s", defaultToolHint(fromDefault))
+		if _, ok := hostbin.Look("cloudflared"); !ok {
+			return nil, fmt.Errorf("cloudflared not found — install it from https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/%s", defaultToolHint(fromDefault))
 		}
 		return &shareTool{mode: shareModeCloudflare, domain: domain}, nil
 	}
 	if useExpose {
-		if _, err := exec.LookPath("expose"); err != nil {
-			return nil, fmt.Errorf("expose not found in PATH — install it from https://expose.dev%s", defaultToolHint(fromDefault))
+		if _, ok := hostbin.Look("expose"); !ok {
+			return nil, fmt.Errorf("expose not found — install it from https://expose.dev%s", defaultToolHint(fromDefault))
 		}
 		return &shareTool{mode: shareModeExpose}, nil
 	}
@@ -314,16 +315,16 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 
 	// Auto-detect.
-	if _, err := exec.LookPath("ngrok"); err == nil {
+	if _, ok := hostbin.Look("ngrok"); ok {
 		return &shareTool{mode: shareModeNgrok}, nil
 	}
-	if _, err := exec.LookPath("cloudflared"); err == nil {
+	if _, ok := hostbin.Look("cloudflared"); ok {
 		return &shareTool{mode: shareModeCloudflare}, nil
 	}
-	if _, err := exec.LookPath("expose"); err == nil {
+	if _, ok := hostbin.Look("expose"); ok {
 		return &shareTool{mode: shareModeExpose}, nil
 	}
-	if _, err := exec.LookPath("ssh"); err == nil {
+	if _, ok := hostbin.Look("ssh"); ok {
 		fmt.Println("ngrok/cloudflared/Expose not found — using localhost.run (SSH, no signup required)")
 		return &shareTool{mode: shareModeSSH, sshHost: "localhost.run"}, nil
 	}
@@ -359,7 +360,7 @@ func cloudflaredCertPath() string {
 func ensureCloudflareTunnel(siteName, domain string) (string, error) {
 	if _, err := os.Stat(cloudflaredCertPath()); err != nil {
 		fmt.Println("cloudflared is not logged in yet, a browser window will open to authorize it.")
-		login := exec.Command("cloudflared", "tunnel", "login")
+		login := exec.Command(hostbin.Path("cloudflared"), "tunnel", "login")
 		login.Stdin = os.Stdin
 		login.Stdout = os.Stdout
 		login.Stderr = os.Stderr
@@ -372,7 +373,7 @@ func ensureCloudflareTunnel(siteName, domain string) (string, error) {
 	}
 
 	name := "lerd-" + siteName
-	out, err := exec.Command("cloudflared", "tunnel", "create", name).CombinedOutput()
+	out, err := exec.Command(hostbin.Path("cloudflared"), "tunnel", "create", name).CombinedOutput()
 	reused := err != nil && strings.Contains(string(out), "already exists")
 	if err != nil && !reused {
 		return "", fmt.Errorf("cloudflared tunnel create %s: %w\n%s", name, err, out)
@@ -386,7 +387,7 @@ func ensureCloudflareTunnel(siteName, domain string) (string, error) {
 	// Re-routing a hostname that already points here is a no-op, but cloudflared
 	// refuses to overwrite a record aimed elsewhere, so tolerate that and let the
 	// user verify where it points.
-	out, err = exec.Command("cloudflared", "tunnel", "route", "dns", name, domain).CombinedOutput()
+	out, err = exec.Command(hostbin.Path("cloudflared"), "tunnel", "route", "dns", name, domain).CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(out), "already exists") || strings.Contains(string(out), "already configured") {
 			fmt.Printf("DNS record for %s already exists, make sure it CNAMEs to tunnel %q.\n", domain, name)
@@ -403,7 +404,7 @@ func ensureCloudflareTunnel(siteName, domain string) (string, error) {
 // present locally. Without it "tunnel run" dies with an opaque cloudflared error,
 // which is what happens when the tunnel was created on another machine.
 func checkTunnelCredentials(name string) error {
-	out, err := exec.Command("cloudflared", "tunnel", "list", "--name", name, "--output", "json").Output()
+	out, err := exec.Command(hostbin.Path("cloudflared"), "tunnel", "list", "--name", name, "--output", "json").Output()
 	if err != nil {
 		return nil // cannot tell, let "tunnel run" be the judge
 	}

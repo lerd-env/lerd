@@ -119,6 +119,12 @@ func Start(currentVersion string) error {
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
 
+	// A public tunnel must not outlive the process that owns it. Stop them on
+	// the way out, and kill anything a previous run was killed too hard to
+	// clean up itself.
+	cli.ReapOrphanTunnels()
+	stopTunnelsOnShutdown()
+
 	// Single coalescer for the three event sources that need to refresh the
 	// container cache and broadcast a snapshot: in-process mutations
 	// (AfterUnitChange), DBus push notifications (SubscribeLerdUnitStateChanges),

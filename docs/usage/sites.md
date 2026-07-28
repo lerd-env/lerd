@@ -446,7 +446,7 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 
 ## Sharing sites
 
-`lerd share` exposes the current site via a public tunnel. Requires [ngrok](https://ngrok.com/download), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), or [Expose](https://expose.dev) to be installed.
+`lerd share` exposes the current site via a public tunnel. Requires [ngrok](https://ngrok.com/download), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), or [Expose](https://expose.dev) to be installed. A tool installed with Homebrew is found by the dashboard too, which does not inherit your shell's `PATH`.
 
 | Command | Description |
 |---|---|
@@ -462,7 +462,7 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 
 ### Tunnels from the dashboard
 
-The same tunnels can be started from the [web UI](../features/web-ui.md)'s share menu: hover the wifi button in a site's header and pick a tool (or the auto entry, which follows the same detection order and `share:tool` default as the CLI). The dashboard waits for the tool's public URL and shows it next to the domain with a hover-QR. A tunnel started from the UI belongs to the `lerd-ui` daemon, so it ends when you stop it or when the daemon shuts down, and it is not restored on restart.
+The same tunnels can be started from the [web UI](../features/web-ui.md)'s share menu: hover the wifi button in a site's header and pick a tool (or the auto entry, which follows the same detection order and `share:tool` default as the CLI). The dashboard waits for the tool's public URL and shows it next to the domain with a hover-QR. A tunnel started from the UI belongs to the `lerd-ui` daemon, so it ends when you stop it or when the daemon shuts down, and it is not restored on restart. If the daemon is killed outright rather than asked to stop, the next start reaps whatever tunnel survived, so a public URL never outlives the dashboard that owns it.
 
 ### Sharing a worktree
 

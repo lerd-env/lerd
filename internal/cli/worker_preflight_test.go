@@ -35,6 +35,9 @@ func TestWorkerStartPreflight_noUsableNodeIsActionable(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("HOME", filepath.Join(tmp, "home"))
 	t.Setenv("PATH", filepath.Join(tmp, "empty"))
+	// The developer's own shell exports NVM_DIR, and this test is describing a
+	// host with no Node at all.
+	t.Setenv("NVM_DIR", filepath.Join(tmp, "home", ".nvm"))
 
 	sitePath := t.TempDir()
 	os.WriteFile(filepath.Join(sitePath, "package.json"), []byte("{}"), 0644)

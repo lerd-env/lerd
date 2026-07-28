@@ -3,11 +3,13 @@ package node
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostbin"
 )
 
 // SystemNodeBinDirs resolves the directories where an unmanaged node and npm
@@ -54,6 +56,19 @@ func SystemNodeBinDirsFor(version string) []string {
 	return pathDirs
 }
 
+// unitPathDirs are the prefixes the generated worker unit puts on PATH itself
+// while a daemon's own PATH omits them: on macOS launchd hands lerd-ui and
+// lerd-watcher /usr/bin:/bin:/usr/sbin:/sbin, so a Homebrew node is invisible to
+// them and a unit written by the dashboard resolved a different Node than the
+// same unit written by the CLI. Walking them with PATH keeps the answer equal on
+// both routes, and equal to what the unit runs. A var so tests can drive it.
+var unitPathDirs = func() []string {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	return hostbin.ExtraDirs()
+}
+
 // pathNodeBinDirs walks PATH for the first dirs holding node and npm, skipping
 // lerd's own bin dir so a stale managed-node shim never counts as a system
 // install. node and npm can resolve to different dirs (e.g. a distro node with
@@ -62,7 +77,7 @@ func SystemNodeBinDirsFor(version string) []string {
 func pathNodeBinDirs() (dirs []string, complete bool) {
 	lerdBin := config.BinDir()
 	var nodeDir, npmDir string
-	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+	for _, dir := range append(filepath.SplitList(os.Getenv("PATH")), unitPathDirs()...) {
 		if dir == "" || dir == lerdBin {
 			continue
 		}

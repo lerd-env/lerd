@@ -502,11 +502,19 @@ func isHomebrewManaged(path string) bool {
 // from Nix; those are updated by their manager, not by self-replacing files it
 // owns.
 func isSystemPackageManaged(path string) bool {
+	if strings.HasPrefix(path, "/nix/store/") {
+		return true
+	}
+	// The /usr prefixes only mean "packaged" where a deb/rpm/pacman could have
+	// put it there. On macOS /usr/local is an ordinary install prefix (and where
+	// Intel Homebrew lives), with no package manager to hand the job to.
+	if runtime.GOOS != "linux" {
+		return false
+	}
 	// /var/usrlocal is what /usr/local resolves to on ostree systems
 	// (Silverblue), where selfPath's symlink resolution hides the /usr prefix.
 	return strings.HasPrefix(path, "/usr/") ||
-		strings.HasPrefix(path, "/var/usrlocal/") ||
-		strings.HasPrefix(path, "/nix/store/")
+		strings.HasPrefix(path, "/var/usrlocal/")
 }
 
 // lookPath is a seam for tests.
@@ -531,6 +539,9 @@ func packageManagerUpdateHint(self string) string {
 	if strings.HasPrefix(self, "/nix/store/") {
 		return "nix profile upgrade lerd    (or rebuild your NixOS configuration)"
 	}
+	if isHomebrewManaged(self) {
+		return "brew upgrade lerd"
+	}
 	for _, pm := range systemPackageManagers {
 		if _, err := lookPath(pm.bin); err == nil {
 			return pm.update
@@ -544,6 +555,9 @@ func packageManagerUpdateHint(self string) string {
 func packageManagerRemoveHint(self string) string {
 	if strings.HasPrefix(self, "/nix/store/") {
 		return "nix profile remove lerd    (or your NixOS configuration)"
+	}
+	if isHomebrewManaged(self) {
+		return "brew uninstall lerd"
 	}
 	for _, pm := range systemPackageManagers {
 		if _, err := lookPath(pm.bin); err == nil {

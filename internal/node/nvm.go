@@ -6,9 +6,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostbin"
 )
 
 // nvmManager drives nvm-sh/nvm. Unlike fnm, nvm is not a binary: it is a bash
@@ -43,15 +45,55 @@ func nvmDir() string {
 	return DiscoverNvmDir()
 }
 
-func (nvmManager) Available() bool {
-	_, err := os.Stat(filepath.Join(nvmDir(), "nvm.sh"))
-	return err == nil
+func (nvmManager) Available() bool { return ScriptPresent() }
+
+// brewNvmScripts lists where a Homebrew nvm keeps nvm.sh: <prefix>/opt/nvm,
+// derived from the same prefixes everything else here resolves tools in. A var
+// so tests can point it at a fixture.
+var brewNvmScripts = func() []string {
+	if runtime.GOOS != "darwin" {
+		return nil
+	}
+	var out []string
+	for _, binDir := range hostbin.ExtraDirs() {
+		out = append(out, filepath.Join(filepath.Dir(binDir), "opt", "nvm", "nvm.sh"))
+	}
+	return out
+}
+
+// nvmScript resolves the nvm.sh to source. $NVM_DIR/nvm.sh is the script
+// install's layout and wins. Homebrew is the other common one: it keeps the
+// script under its own prefix and has the user create an empty ~/.nvm for the
+// versions, so NVM_DIR is a real nvm dir with no script in it. Empty when nvm
+// is not installed at all.
+func nvmScript() string {
+	if p := filepath.Join(nvmDir(), "nvm.sh"); fileExists(p) {
+		return p
+	}
+	for _, p := range brewNvmScripts() {
+		if fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+// ScriptPresent reports whether an nvm this host can drive is installed, in
+// either layout. Install and the manager switch ask through here so a Homebrew
+// nvm counts as one.
+func ScriptPresent() bool { return nvmScript() != "" }
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
 }
 
 // sourceScript is the shell prelude that loads nvm into the current bash
 // process. Embedded verbatim in every generated fragment and in-process call.
+// NVM_DIR and the script are set separately because Homebrew splits them.
 func sourceScript() string {
-	return fmt.Sprintf(`export NVM_DIR=%s; [ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"; `, shellQuote(nvmDir()))
+	return fmt.Sprintf(`export NVM_DIR=%s; [ -s %s ] && . %s; `,
+		shellQuote(nvmDir()), shellQuote(nvmScript()), shellQuote(nvmScript()))
 }
 
 // shellCmd builds a bash command that sources nvm and runs `nvm <args...>`,

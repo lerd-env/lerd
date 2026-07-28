@@ -7,15 +7,22 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/geodro/lerd/internal/hostbin"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
 // TestMain stubs the Claude Code CLI seam so the cli test suite never mutates the
 // developer's real `claude mcp` registration (RemoveGlobalAISkills and the
 // enable-global path otherwise shell out to the live binary).
+//
+// The install prefixes are emptied for the same reason: tests that hand a
+// fixture PATH are describing a host with only what they set up, and searching
+// /opt/homebrew/bin would let a developer's own cloudflared or Node decide the
+// result. Tests that exercise the fallback set their own.
 func TestMain(m *testing.M) {
 	claudeAvailable = func() bool { return false }
 	claudeMCP = func(args ...string) ([]byte, error) { return nil, nil }
+	hostbin.ExtraDirs = func() []string { return nil }
 	os.Exit(m.Run())
 }
 

@@ -15,6 +15,9 @@ func installedPHP(t *testing.T, versions ...string) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// macOS reads the installed set from ~/Library/LaunchAgents, so the real
+	// home would add whatever the developer has installed to the staged set.
+	t.Setenv("HOME", t.TempDir())
 	dir := config.QuadletDir()
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)

@@ -11,6 +11,9 @@ func setDefaultPHP(t *testing.T, v string) {
 	t.Helper()
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	// macOS reads the installed PHP set from ~/Library/LaunchAgents, so without
+	// a temp home the developer's own versions decide what is "installed".
+	t.Setenv("HOME", t.TempDir())
 	cfg := &config.GlobalConfig{}
 	cfg.DNS.TLD = "test"
 	cfg.PHP.DefaultVersion = v

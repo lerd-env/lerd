@@ -12,11 +12,15 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/hostbin"
 )
 
 // Public tunnels started from the UI. Unlike LAN share proxies these are
-// deliberately not persisted: a tunnel dies with lerd-ui (systemd kills the
-// control group, Pdeathsig covers non-systemd runs) and is never resurrected.
+// deliberately not persisted: a tunnel dies with lerd-ui and is never
+// resurrected. Systemd kills the control group and Pdeathsig covers a
+// non-systemd run; on macOS neither applies, so StopAllTunnels runs from the
+// shutdown handler and anything that outlived a SIGKILL is reaped at the next
+// start (see tunnel_reap.go).
 
 // TunnelInfo describes a running tunnel for the sites payload.
 type TunnelInfo struct {
@@ -73,12 +77,12 @@ func ShareTools() ShareToolsInfo {
 	info := ShareToolsInfo{Default: defaultTool, Auto: autoShareToolName(defaultTool)}
 	for _, t := range shareTools {
 		meta := shareToolMeta[t.name]
-		_, err := exec.LookPath(t.binary)
+		_, found := hostbin.Look(t.binary)
 		info.Tools = append(info.Tools, ShareToolStatus{
 			Name:       t.name,
 			Label:      meta.label,
 			Binary:     t.binary,
-			Installed:  err == nil,
+			Installed:  found,
 			InstallURL: meta.installURL,
 		})
 	}
@@ -89,13 +93,13 @@ func ShareTools() ShareToolsInfo {
 // side effects, so the UI can display what a bare start would pick.
 func autoShareToolName(defaultTool string) string {
 	if bin, ok := shareToolBinary(defaultTool); ok {
-		if _, err := exec.LookPath(bin); err == nil {
+		if _, found := hostbin.Look(bin); found {
 			return defaultTool
 		}
 	}
 	for _, name := range []string{"ngrok", "cloudflare", "expose", "localhost-run"} {
 		bin, _ := shareToolBinary(name)
-		if _, err := exec.LookPath(bin); err == nil {
+		if _, found := hostbin.Look(bin); found {
 			return name
 		}
 	}
@@ -256,6 +260,7 @@ func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), t
 	tunnelsMu.Lock()
 	tunnels[key] = p
 	tunnelsMu.Unlock()
+	recordTunnel(cmd.Process.Pid, cmd.Args)
 
 	urlCh := make(chan string, 1)
 	var tailMu sync.Mutex
@@ -287,6 +292,7 @@ func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), t
 		readers.Wait()
 		_ = cmd.Wait()
 		stopProxy()
+		forgetTunnel(cmd.Process.Pid)
 		close(p.done)
 		tunnelsMu.Lock()
 		if tunnels[key] == p {

@@ -151,7 +151,10 @@ func runUninstall(force bool) error {
 	ok()
 
 	step("Removing lerd binary")
-	if self, err := selfPath(); err == nil && isSystemPackageManaged(self) {
+	// A binary someone else owns is left where it is: deleting a file out of a
+	// Homebrew Cellar or a package's file list leaves that manager believing
+	// lerd is still installed.
+	if self, err := selfPath(); err == nil && (isSystemPackageManaged(self) || isHomebrewManaged(self)) {
 		fmt.Println(feedback.Dim("kept, package-managed"))
 		feedback.Note("remove the binary with your package manager, e.g. " + packageManagerRemoveHint(self))
 	} else {

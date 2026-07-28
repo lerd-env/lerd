@@ -66,7 +66,7 @@ func NewInstallCmd() *cobra.Command {
 	cmd.Flags().Bool("from-update", false, "")
 	_ = cmd.Flags().MarkHidden("from-update")
 	cmd.Flags().Bool("unattended", false,
-		"Run non-interactively for package installs: no prompts, and skip the sudo-gated system steps that `lerd bootstrap` handles")
+		"Run non-interactively for package installs on Linux: no prompts, and skip the sudo-gated system steps that `lerd bootstrap` handles")
 	return cmd
 }
 
@@ -154,6 +154,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	// skipped here because `lerd bootstrap --system` performs them as root
 	// beforehand, and the mkcert CA's system-trust is done afterward by
 	// `lerd bootstrap --trust-ca`, so managed .test DNS works with no prompts.
+	if err := checkUnattendedSupported(unattended); err != nil {
+		return err
+	}
 	if unattended {
 		fromUpdate = true
 	}
@@ -1210,6 +1213,19 @@ func ensureSystemdLinger() error {
 	return nil
 }
 
+// checkUnattendedSupported refuses --unattended where the other half of the
+// arrangement does not exist. The flag skips the sudo-gated steps because
+// `lerd bootstrap --system` and `--trust-ca` do them as root around it, and
+// bootstrap is Linux-only; anywhere else the flag would silently leave the
+// resolver grant unwritten and the CA untrusted, which reads as broken HTTPS
+// and a watcher asking for a password rather than as a missing feature.
+func checkUnattendedSupported(unattended bool) error {
+	if !unattended || runtime.GOOS == "linux" {
+		return nil
+	}
+	return fmt.Errorf("--unattended is for package installs on Linux, where `lerd bootstrap` applies the root-level setup around it; run `lerd install` without it")
+}
+
 // currentUserName resolves the login name the per-user setup steps apply to.
 func currentUserName() string {
 	if u := os.Getenv("USER"); u != "" {
@@ -1533,11 +1549,12 @@ func detectSystemNode() string {
 }
 
 // detectNvm reports whether a user-installed nvm is present, so declining
-// lerd-managed Node can hand Node back to it instead of the bundled fnm. Checks
-// $NVM_DIR first, then the ~/.nvm default, for the sourced nvm.sh script.
+// lerd-managed Node can hand Node back to it instead of the bundled fnm. Both
+// layouts count: the script install's $NVM_DIR/nvm.sh, and Homebrew's, which
+// keeps nvm.sh under its own prefix and leaves NVM_DIR holding only the
+// versions.
 func detectNvm() bool {
-	_, err := os.Stat(filepath.Join(nodeDet.DiscoverNvmDir(), "nvm.sh"))
-	return err == nil
+	return nodeDet.ScriptPresent()
 }
 
 // confirmInstallPrompt asks a [Y/n] question. Must be called before any

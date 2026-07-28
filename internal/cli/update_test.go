@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -17,14 +18,17 @@ import (
 // ── package-managed detection ─────────────────────────────────────────────────
 
 func TestIsSystemPackageManaged(t *testing.T) {
+	// The /usr prefixes only mean "a package manager put it there" on Linux;
+	// on macOS /usr/local is an ordinary prefix and Intel Homebrew's own.
+	linuxOnly := runtime.GOOS == "linux"
 	cases := []struct {
 		path string
 		want bool
 	}{
-		{"/usr/bin/lerd", true},
-		{"/usr/local/bin/lerd", true},
+		{"/usr/bin/lerd", linuxOnly},
+		{"/usr/local/bin/lerd", linuxOnly},
+		{"/var/usrlocal/bin/lerd", linuxOnly},
 		{"/nix/store/abc123-lerd-1.30.0/bin/lerd", true},
-		{"/var/usrlocal/bin/lerd", true},
 		{"/home/george/.local/bin/lerd", false},
 		{"/opt/lerd/lerd", false},
 		{"/tmp/lerd", false},

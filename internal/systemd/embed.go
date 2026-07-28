@@ -22,9 +22,22 @@ var lerdBinaryPath = func() string {
 		return ""
 	}
 	if resolved, rErr := filepath.EvalSymlinks(exe); rErr == nil {
-		exe = resolved
+		return stableBinaryPath(exe, resolved)
 	}
 	return exe
+}
+
+// stableBinaryPath picks which spelling of the binary a unit should carry.
+// Normally the resolved one, so a symlink that moves cannot break the unit. A
+// Homebrew Cellar is the exception: it is version-pinned, so resolving there
+// writes a path that `brew upgrade lerd` deletes, leaving the daemons pointing
+// at a binary that no longer exists. Homebrew's own symlink is the stable name,
+// so that one is kept.
+func stableBinaryPath(exe, resolved string) string {
+	if strings.Contains(resolved, "/Cellar/") {
+		return exe
+	}
+	return resolved
 }
 
 // GetUnit returns the content of an embedded systemd unit file with the lerd
