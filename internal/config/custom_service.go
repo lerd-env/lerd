@@ -576,11 +576,41 @@ func RewriteDependencyHosts(svc *CustomService) {
 			continue
 		}
 		for k, v := range svc.Environment {
-			if strings.Contains(v, canonical) {
-				svc.Environment[k] = strings.ReplaceAll(v, canonical, actual)
+			if rewritten := replaceHost(v, canonical, actual); rewritten != v {
+				svc.Environment[k] = rewritten
 			}
 		}
 	}
+}
+
+// replaceHost swaps every whole occurrence of old for new in v. The canonical
+// name is a prefix of every versioned install of the same engine, so a bare
+// substring replace would turn a value pinned to lerd-mysql-8-4 into a host that
+// does not exist; a match only counts when what follows it cannot be more of the
+// same name.
+func replaceHost(v, old, new string) string {
+	var b strings.Builder
+	for i := 0; i < len(v); {
+		if !strings.HasPrefix(v[i:], old) || continuesHostName(v, i+len(old)) {
+			b.WriteByte(v[i])
+			i++
+			continue
+		}
+		b.WriteString(new)
+		i += len(old)
+	}
+	return b.String()
+}
+
+// continuesHostName reports whether the byte at i extends a lerd container
+// name. Service names match validServiceName, so only those characters can, and
+// a dot is a domain separator (lerd-redis.dns.podman still names lerd-redis).
+func continuesHostName(v string, i int) bool {
+	if i >= len(v) {
+		return false
+	}
+	c := v[i]
+	return c == '-' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
 }
 
 // uniqueFamilyHosts returns sorted, de-duplicated container hostnames across a

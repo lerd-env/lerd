@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func project(t *testing.T, withIdea bool) string {
@@ -446,5 +447,53 @@ func TestOwns(t *testing.T) {
 		if got := Owns(name); got != want {
 			t.Errorf("Owns(%q) = %v, want %v", name, got, want)
 		}
+	}
+}
+
+// A sync that decides the user's own connection already covers the database has
+// nothing to write. Creating the credentials sidecar anyway drops a file into a
+// project lerd just decided to leave alone, and rewriting dataSources.xml
+// byte-identical moves its mtime, which the IDE reads as an external edit.
+func TestSyncWritesNothingWhenItChangesNothing(t *testing.T) {
+	dir := project(t, true)
+	path := filepath.Join(dir, ".idea", "dataSources.xml")
+	if err := os.WriteFile(path, []byte(handWired), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Backdate so an unconditional rewrite is visible regardless of clock
+	// granularity.
+	old := before.ModTime().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if wrote, err := sync(dir, pg); err != nil || wrote != AlreadyConfigured {
+		t.Fatalf("sync = %v, %v; want AlreadyConfigured", wrote, err)
+	}
+
+	after, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(old) {
+		t.Error("dataSources.xml was rewritten even though nothing changed")
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".idea", "dataSources.local.xml")); err == nil {
+		t.Error("an empty credentials sidecar was created in a project lerd left alone")
+	}
+}
+
+// A project with no .idea is not open in a JetBrains IDE and must stay that way.
+func TestSyncCreatesNoSidecarForANonJetBrainsProject(t *testing.T) {
+	dir := project(t, false)
+	if wrote, err := sync(dir, pg); err != nil || wrote != NotJetBrains {
+		t.Fatalf("sync = %v, %v; want NotJetBrains", wrote, err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, ".idea")); err == nil {
+		t.Error("lerd created a .idea directory")
 	}
 }

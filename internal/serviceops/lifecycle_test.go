@@ -2,6 +2,8 @@ package serviceops
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -122,5 +124,36 @@ func TestStopWithDependents_returnsStopError(t *testing.T) {
 	err := StopWithDependents("redis")
 	if err == nil || !strings.Contains(err.Error(), "stop refused") {
 		t.Fatalf("StopWithDependents = %v, want stop refused", err)
+	}
+}
+
+// Dependents are matched by family and env_role, not just by literal name, so a
+// service whose own family satisfies one of its own depends_on entries appears
+// in its own dependent list. The cascade has to notice.
+func TestStopWithDependentsTerminatesOnASelfSatisfyingService(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "lerd", "services")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	body := "name: weird\nimage: example/x:1\nfamily: mysql\ndepends_on:\n  - mysql\n"
+	if err := os.WriteFile(filepath.Join(dir, "weird.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The precondition the guard exists for.
+	if deps := dependentsOf("weird"); len(deps) != 1 || deps[0] != "weird" {
+		t.Fatalf("dependentsOf(weird) = %v, want [weird]", deps)
+	}
+	if !dependentNeedsCascade("weird", "weird") {
+		t.Fatal("dependentNeedsCascade(weird, weird) = false; the loop is no longer reachable this way")
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- StopWithDependents("weird") }()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("StopWithDependents did not terminate on a self-satisfying service")
 	}
 }

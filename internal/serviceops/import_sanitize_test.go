@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -133,10 +134,17 @@ func total(issues []ImportIssue) int {
 // that needs it must not be forwarded until the extension exists, or it fails
 // exactly as it does today.
 func TestSanitizeDumpCreatesADeclaredExtensionBeforeTheLineNeedingIt(t *testing.T) {
+	// The create hook fires on the sanitizer's own goroutine while this one is
+	// draining the reader, so everything they share is behind a mutex. Without
+	// it the ordering assertion below reads a value the other goroutine is
+	// writing, which is both a race and an unreliable check.
+	var mu sync.Mutex
 	var created []string
 	var orderOK bool
 	seen := ""
 	restore := stubExtensionCreate(func(service, database, name string) error {
+		mu.Lock()
+		defer mu.Unlock()
 		created = append(created, service+"/"+database+"/"+name)
 		orderOK = !strings.Contains(seen, "vector(1536)")
 		return nil
@@ -152,7 +160,9 @@ func TestSanitizeDumpCreatesADeclaredExtensionBeforeTheLineNeedingIt(t *testing.
 	for {
 		n, err := r.Read(buf)
 		out += string(buf[:n])
+		mu.Lock()
 		seen = out
+		mu.Unlock()
 		if err != nil {
 			break
 		}
@@ -160,10 +170,13 @@ func TestSanitizeDumpCreatesADeclaredExtensionBeforeTheLineNeedingIt(t *testing.
 	if out != dump {
 		t.Errorf("dump was rewritten:\n%q", out)
 	}
-	if len(created) != 1 || created[0] != "postgres-pgvector/shop/vector" {
-		t.Fatalf("created = %v", created)
+	mu.Lock()
+	gotCreated, gotOrder := append([]string(nil), created...), orderOK
+	mu.Unlock()
+	if len(gotCreated) != 1 || gotCreated[0] != "postgres-pgvector/shop/vector" {
+		t.Fatalf("created = %v", gotCreated)
 	}
-	if !orderOK {
+	if !gotOrder {
 		t.Error("the extension was created after the line that needs it went out")
 	}
 	if n := notes(); len(n.Created) != 1 || n.Created[0].Count != 1 {

@@ -89,14 +89,7 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 		if strings.TrimPrefix(strings.TrimSpace(vals["DB_HOST"]), "lerd-") == service {
 			db = strings.TrimSpace(vals["DB_DATABASE"])
 		} else {
-			// Engines wired through a single DSN (mongodb://…@lerd-mongo:27017/mydb)
-			// carry no DB_HOST; any env value that parses as a URL against this
-			// service names the database in its path.
-			for _, v := range vals {
-				if db = dsnDatabase(v, service); db != "" {
-					break
-				}
-			}
+			db = dsnDatabaseFor(vals, service)
 		}
 		if db == "" {
 			continue
@@ -120,6 +113,26 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 		claim(e.DBName+"_testing", owner, true)
 	}
 	return idx
+}
+
+// dsnDatabaseFor picks the database a project's env points at on the given
+// service through a DSN. Engines wired through a single connection string
+// (mongodb://…@lerd-mongo:27017/mydb) carry no DB_HOST. Keys are visited in
+// sorted order: a project with more than one DSN against the same engine would
+// otherwise be attributed to a different database on every snapshot, since Go
+// randomises map iteration.
+func dsnDatabaseFor(vals map[string]string, service string) string {
+	keys := make([]string, 0, len(vals))
+	for k := range vals {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if db := dsnDatabase(vals[k], service); db != "" {
+			return db
+		}
+	}
+	return ""
 }
 
 // dsnDatabase returns the database a DSN-style env value targets on the given

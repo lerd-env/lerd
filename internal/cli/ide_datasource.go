@@ -56,10 +56,10 @@ func removeIDEDataSource(siteRoot string) {
 	_, _ = ide.Remove(siteRoot)
 }
 
-// ideDataSourceFor builds the connection as an IDE stores it. The password is
-// carried in the URL because JetBrains keeps secrets in its own credential
-// store, which lerd cannot write, and it is the fixed local one that the site's
-// env file already spells out next to it.
+// ideDataSourceFor builds the connection as an IDE stores it. The URL carries no
+// password: JetBrains keeps secrets in its own credential store, which lerd
+// cannot write, so the first connect asks for the fixed local one the site's env
+// file already spells out.
 func ideDataSourceFor(env *dbEnv) (ide.DataSource, bool) {
 	family := config.FamilyOfName(env.service)
 	dialect, ok := jdbcDialect[family]

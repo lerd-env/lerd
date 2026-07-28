@@ -64,11 +64,9 @@ func EnsureExtensions(service, database string) error {
 }
 
 // typePattern matches a declared type where a dump would name one: as a column
-// type, schema qualified or not, and never as part of a longer identifier.
-var (
-	patternCache sync.Map
-	typeWord     = regexp.MustCompile(`\W`)
-)
+// type, schema qualified or not. The trailing \b is what keeps "vectorized"
+// from counting as a reference to "vector".
+var patternCache sync.Map
 
 func typePattern(name string) *regexp.Regexp {
 	if re, ok := patternCache.Load(name); ok {
@@ -92,21 +90,12 @@ func extensionForLine(exts []Extension, line string) *Extension {
 	}
 	for i := range exts {
 		for _, t := range exts[i].Types {
-			if m := typePattern(t).FindStringIndex(line); m != nil && !typeFollowedByWord(line, m[1]) {
+			if typePattern(t).MatchString(line) {
 				return &exts[i]
 			}
 		}
 	}
 	return nil
-}
-
-// typeFollowedByWord reports whether the match runs into more identifier, so
-// "vectorized" never counts as a reference to "vector".
-func typeFollowedByWord(line string, end int) bool {
-	if end >= len(line) {
-		return false
-	}
-	return !typeWord.MatchString(string(line[end]))
 }
 
 // CreateExtension creates one extension in a database, idempotently, so a dump

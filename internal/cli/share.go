@@ -207,6 +207,11 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 			"-R", fmt.Sprintf("80:localhost:%d", proxyPort),
 			"nokey@"+tool.sshHost,
 		)
+	default:
+		// Unreachable through pickShareTool, but a nil command here would be a
+		// nil dereference in the caller rather than an error it can report.
+		stop()
+		return nil, nil, fmt.Errorf("unsupported share tool")
 	}
 	return cmd, stop, nil
 }

@@ -1575,3 +1575,39 @@ func TestLoadPreset_DefaultEnvVarsParity(t *testing.T) {
 		}
 	}
 }
+
+// The canonical host is a prefix of every versioned install of the same engine
+// and of any longer container name, so the rewrite has to stop at a name
+// boundary. Replacing it as a bare substring turns a pinned lerd-mysql-8-4 into
+// a host that does not exist.
+func TestRewriteDependencyHosts_StopsAtANameBoundary(t *testing.T) {
+	prev := ResolveDepHost
+	ResolveDepHost = func(dep string) string {
+		if dep == "mysql" {
+			return "lerd-mariadb-11-8"
+		}
+		return ""
+	}
+	t.Cleanup(func() { ResolveDepHost = prev })
+
+	svc := &CustomService{
+		Name: "adminer", Image: "x",
+		DependsOn: []string{"mysql"},
+		Environment: map[string]string{
+			"PINNED":    "lerd-mysql-8-4",
+			"CANONICAL": "lerd-mysql",
+			"URL":       "mysql://lerd-mysql:3306/app",
+		},
+	}
+	RewriteDependencyHosts(svc)
+
+	if got := svc.Environment["PINNED"]; got != "lerd-mysql-8-4" {
+		t.Errorf("a host pinned to a different install was rewritten to %q", got)
+	}
+	if got := svc.Environment["CANONICAL"]; got != "lerd-mariadb-11-8" {
+		t.Errorf("CANONICAL = %q, want lerd-mariadb-11-8", got)
+	}
+	if got := svc.Environment["URL"]; got != "mysql://lerd-mariadb-11-8:3306/app" {
+		t.Errorf("URL = %q, want the host rewritten in place", got)
+	}
+}

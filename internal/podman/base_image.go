@@ -151,7 +151,11 @@ var (
 )
 
 // scheduleBaseDigestRefresh warms the digest cache for version off the caller's
-// goroutine, one refresh per version at a time.
+// goroutine, one refresh per version at a time. It reads through the cache
+// rather than invalidating it: the status snapshot rebuilds every 15 seconds and
+// lands here on every one of them while the registry cannot answer, so a warm-up
+// that dropped the cached failure would turn an offline machine into a permanent
+// poll. The manual check is what bypasses the cache.
 func scheduleBaseDigestRefresh(version string) {
 	baseRefreshMu.Lock()
 	if baseRefreshing[version] {
@@ -168,7 +172,7 @@ func scheduleBaseDigestRefresh(version string) {
 			baseRefreshMu.Unlock()
 		}()
 		for _, ref := range baseImageRefs(version) {
-			if _, err := refreshManifestDigestFn(ref); err == nil {
+			if _, err := manifestDigestFn(ref); err == nil {
 				return
 			}
 		}

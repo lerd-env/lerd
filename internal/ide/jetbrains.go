@@ -84,6 +84,7 @@ func Sync(projectDir string, sources []DataSource) ([]Outcome, error) {
 	if err != nil {
 		return nil, err
 	}
+	origBody, origLocal := body, local
 
 	// Entries lerd wrote before are dropped up front, so one whose database the
 	// project no longer uses does not linger, and the ones still wanted are
@@ -121,10 +122,19 @@ func Sync(projectDir string, sources []DataSource) ([]Outcome, error) {
 		}
 		outcomes[i] = Written
 	}
-	if err := write(dir, dataSourcesFile, body); err != nil {
-		return outcomes, err
+	// Only files this sync actually changed are written. A sync that left the
+	// user's own connection alone has nothing to say, and writing anyway would
+	// create a credentials sidecar in a project lerd just decided not to touch,
+	// and move dataSources.xml's mtime, which the IDE reads as an external edit.
+	if body != origBody {
+		if err := write(dir, dataSourcesFile, body); err != nil {
+			return outcomes, err
+		}
 	}
-	return outcomes, write(dir, localFile, local)
+	if local != origLocal {
+		return outcomes, write(dir, localFile, local)
+	}
+	return outcomes, nil
 }
 
 func repeat(o Outcome, n int) []Outcome {
@@ -139,36 +149,32 @@ func repeat(o Outcome, n int) []Outcome {
 // any more, which is how a site that changed database loses the old connection.
 func dropOwnedExcept(body string, keep map[string]bool) string {
 	for {
-		name, uuid, found := nextOwnedEntry(body, keep)
+		uuid, found := nextOwnedEntry(body, keep)
 		if !found {
 			return body
 		}
-		_ = name
 		body = dropEntry(body, uuid)
 	}
 }
 
-// nextOwnedEntry finds the first lerd-owned entry whose name is no longer
-// wanted, returning its name and uuid.
-func nextOwnedEntry(body string, keep map[string]bool) (string, string, bool) {
-	for rest, offset := body, 0; ; {
+// nextOwnedEntry returns the uuid of the first lerd-owned entry whose name is no
+// longer wanted.
+func nextOwnedEntry(body string, keep map[string]bool) (string, bool) {
+	for rest := body; ; {
 		i := strings.Index(rest, "<data-source ")
 		if i < 0 {
-			return "", "", false
+			return "", false
 		}
 		rest = rest[i:]
-		offset += i
 		end := strings.Index(rest, ">")
 		if end < 0 {
-			return "", "", false
+			return "", false
 		}
 		head := rest[:end]
-		name, uuid := attr(head, "name"), attr(head, "uuid")
-		if Owns(name) && !keep[name] && uuid != "" {
-			return name, uuid, true
+		if name, uuid := attr(head, "name"), attr(head, "uuid"); Owns(name) && !keep[name] && uuid != "" {
+			return uuid, true
 		}
 		rest = rest[len("<data-source "):]
-		offset += len("<data-source ")
 	}
 }
 

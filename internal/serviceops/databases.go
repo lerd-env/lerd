@@ -395,11 +395,11 @@ func ImportDatabase(service, database string, r io.Reader, opt ImportOptions) (I
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), dumpRestoreTimeout)
 	defer cancel()
-	args := []string{"exec", "-i"}
-	for _, kv := range introspectEnv() {
-		args = append(args, "--env", kv)
-	}
-	args = append(args, "lerd-"+service, "sh", "-c", shellCmd)
+	// Same runtime resolution the export side uses: an engine whose own image
+	// ships no client tooling declares the image its commands run in, and an
+	// import that ignored it would exec a binary that is not there.
+	image, env := actionRuntime(spec, act)
+	args := entityCommandArgs(service, image, env, shellCmd, true)
 	src, err := DumpReader(r)
 	if err != nil {
 		return ImportReport{}, err

@@ -26,8 +26,30 @@ var workerFailureDispatch = func(ws []workerheal.UnhealthyWorker) {
 }
 
 // workerFailureDetect re-reads current worker health at flush time. Swappable
-// for tests.
-var workerFailureDetect = workerheal.Detect
+// for tests, and behind a mutex because the flush runs on a timer goroutine:
+// a test swapping the seam in or restoring it races the flush left over from
+// the previous case otherwise.
+var (
+	workerFailureDetectMu sync.RWMutex
+	workerFailureDetect   = workerheal.Detect
+)
+
+// detectWorkerFailures reads the current detector through the seam.
+func detectWorkerFailures() ([]workerheal.UnhealthyWorker, error) {
+	workerFailureDetectMu.RLock()
+	detect := workerFailureDetect
+	workerFailureDetectMu.RUnlock()
+	return detect()
+}
+
+// setWorkerFailureDetect swaps the detector and returns the previous one.
+func setWorkerFailureDetect(fn func() ([]workerheal.UnhealthyWorker, error)) func() ([]workerheal.UnhealthyWorker, error) {
+	workerFailureDetectMu.Lock()
+	defer workerFailureDetectMu.Unlock()
+	prev := workerFailureDetect
+	workerFailureDetect = fn
+	return prev
+}
 
 // stillUnhealthy drops queued failures that recovered during the settle window
 // and refreshes the state of those that did not, so the notification describes
@@ -35,7 +57,7 @@ var workerFailureDetect = workerheal.Detect
 // A detector error keeps the whole batch: failing to confirm is not evidence of
 // recovery, and staying silent would be the worse mistake.
 func stillUnhealthy(queued []workerheal.UnhealthyWorker) []workerheal.UnhealthyWorker {
-	current, err := workerFailureDetect()
+	current, err := detectWorkerFailures()
 	if err != nil {
 		return queued
 	}

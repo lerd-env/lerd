@@ -55,9 +55,8 @@ func installBatchTestSink(t *testing.T, delay time.Duration) (wait func() [][]wo
 // unhealthy and everything else reads as recovered.
 func confirmUnits(t *testing.T, units ...workerheal.UnhealthyWorker) {
 	t.Helper()
-	orig := workerFailureDetect
-	workerFailureDetect = func() ([]workerheal.UnhealthyWorker, error) { return units, nil }
-	t.Cleanup(func() { workerFailureDetect = orig })
+	orig := setWorkerFailureDetect(func() ([]workerheal.UnhealthyWorker, error) { return units, nil })
+	t.Cleanup(func() { setWorkerFailureDetect(orig) })
 }
 
 func TestQueueWorkerFailureNotifications_BatchesWithinWindow(t *testing.T) {
@@ -195,11 +194,10 @@ func TestFlush_KeepsWorkersStillDownAndRefreshesState(t *testing.T) {
 // not turn into silence.
 func TestFlush_KeepsBatchWhenRecheckFails(t *testing.T) {
 	wait := installBatchTestSink(t, 50*time.Millisecond)
-	orig := workerFailureDetect
-	workerFailureDetect = func() ([]workerheal.UnhealthyWorker, error) {
+	orig := setWorkerFailureDetect(func() ([]workerheal.UnhealthyWorker, error) {
 		return nil, errors.New("systemctl unavailable")
-	}
-	t.Cleanup(func() { workerFailureDetect = orig })
+	})
+	t.Cleanup(func() { setWorkerFailureDetect(orig) })
 
 	queueWorkerFailureNotifications([]workerheal.UnhealthyWorker{
 		uw("lerd-queue-a.service", "a.test", "queue", "failed"),

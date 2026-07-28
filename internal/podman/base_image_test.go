@@ -210,3 +210,107 @@ func TestFPMBuildArgs_StampsBaseDigest(t *testing.T) {
 		t.Errorf("local build must clear the base-digest label\nargs: %v", local)
 	}
 }
+
+// cachingDigestStub models the real registry cache: a failed read is recorded
+// as a negative entry that suppresses further reads for the cache window, and
+// only an explicit invalidation clears it. The seams a test installs otherwise
+// are independent maps, which cannot show whether a refresh path discards that
+// backoff.
+type cachingDigestStub struct {
+	mu      sync.Mutex
+	cache   map[string]string // "" records a failed read
+	live    map[string]string
+	fetches int
+}
+
+func newCachingDigestStub(t *testing.T, builtLabel string, live map[string]string) *cachingDigestStub {
+	t.Helper()
+	s := &cachingDigestStub{cache: map[string]string{}, live: live}
+
+	origLabel, origCached, origThrough, origRefresh :=
+		imageLabelFn, cachedManifestDigestFn, manifestDigestFn, refreshManifestDigestFn
+	t.Cleanup(func() {
+		waitForBaseRefreshes(t)
+		imageLabelFn, cachedManifestDigestFn = origLabel, origCached
+		manifestDigestFn, refreshManifestDigestFn = origThrough, origRefresh
+	})
+
+	baseLabelMu.Lock()
+	baseLabelMemo = map[string]baseLabelEntry{}
+	baseLabelMu.Unlock()
+
+	imageLabelFn = func(_, key string) string {
+		if key == fpmBaseDigestLabel {
+			return builtLabel
+		}
+		return ""
+	}
+	// registry.CachedManifestDigest: a negative entry reads as "nothing cached".
+	cachedManifestDigestFn = func(ref string) (string, bool) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		d, ok := s.cache[ref]
+		return d, ok && d != ""
+	}
+	// registry.ManifestDigest: answers from the cache, including a negative
+	// entry, and only reaches the registry when nothing is recorded.
+	manifestDigestFn = func(ref string) (string, error) {
+		s.mu.Lock()
+		if d, ok := s.cache[ref]; ok {
+			s.mu.Unlock()
+			if d == "" {
+				return "", errors.New("no digest (cached failure)")
+			}
+			return d, nil
+		}
+		s.mu.Unlock()
+		return s.fetch(ref)
+	}
+	// registry.RefreshManifestDigest: drops the entry first, so the read always
+	// reaches the registry.
+	refreshManifestDigestFn = func(ref string) (string, error) {
+		s.mu.Lock()
+		delete(s.cache, ref)
+		s.mu.Unlock()
+		return s.fetch(ref)
+	}
+	return s
+}
+
+func (s *cachingDigestStub) fetch(ref string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fetches++
+	d, ok := s.live[ref]
+	if !ok {
+		s.cache[ref] = "" // record the failure, as the real cache does
+		return "", errors.New("unreachable")
+	}
+	s.cache[ref] = d
+	return d, nil
+}
+
+func (s *cachingDigestStub) reads() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.fetches
+}
+
+// The status snapshot rebuilds every 15 seconds and asks about every installed
+// version. When the registry cannot answer, the failure the first read cached
+// has to hold: a warm-up that clears it turns an offline machine into a
+// permanent poll.
+func TestBaseImageFreshness_UnreachableRegistryIsAskedOnce(t *testing.T) {
+	stub := newCachingDigestStub(t, "sha256:old", nil)
+
+	for range 5 {
+		if st := BaseImageFreshness("8.4"); st != nil {
+			t.Fatalf("an unreachable registry must produce no signal, got %+v", st)
+		}
+		waitForBaseRefreshes(t)
+	}
+
+	if reads := stub.reads(); reads != 1 {
+		t.Errorf("registry was read %d times across 5 snapshots, want 1: the cached failure is being discarded", reads)
+	}
+}

@@ -1031,12 +1031,26 @@ func StartDependencies(svc *config.CustomService) error {
 // does, and StopUnit is always attempted when either signal says the unit is
 // up so a lagging "inactive" reading cannot report a silent success.
 func StopWithDependents(name string) error {
+	return stopWithDependents(name, map[string]bool{})
+}
+
+// stopWithDependents carries the set already visited. A dependent is matched by
+// family and env_role, not just by literal name, so a service whose own family
+// satisfies one of its own depends_on entries is its own dependent, and two that
+// satisfy each other form a loop. Without this the cascade recurses until the
+// stack gives out.
+func stopWithDependents(name string, seen map[string]bool) error {
+	if seen[name] {
+		return nil
+	}
+	seen[name] = true
+
 	var firstErr error
 	for _, dep := range dependentsOf(name) {
-		if !dependentNeedsCascade(dep, name) {
+		if seen[dep] || !dependentNeedsCascade(dep, name) {
 			continue
 		}
-		if err := StopWithDependents(dep); err != nil && firstErr == nil {
+		if err := stopWithDependents(dep, seen); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}
