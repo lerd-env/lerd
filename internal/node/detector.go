@@ -11,6 +11,24 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// safeVersionPattern is the shape a version selector may have before it is
+// allowed near a generated shell fragment. It covers everything a manager
+// accepts (22, 20.11.0, v18.20.4, lts/iron, default, system) and excludes every
+// character that means something to a shell.
+var safeVersionPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._/-]*$`)
+
+// SafeVersion returns v when it could be a version selector, and empty when it
+// could not. The committed .lerd.yaml is repository content, and the version it
+// pins reaches a worker unit's command line, so a value that is not version
+// shaped is dropped rather than passed along.
+func SafeVersion(v string) string {
+	v = strings.TrimSpace(v)
+	if len(v) > 64 || !safeVersionPattern.MatchString(v) {
+		return ""
+	}
+	return v
+}
+
 // DetectVersion detects the Node.js version for the given directory.
 // It checks, in order:
 //  1. .lerd.yaml node_version field (explicit lerd override)
@@ -25,8 +43,13 @@ func DetectVersion(dir string) (string, error) {
 		var lerdCfg struct {
 			NodeVersion string `yaml:"node_version"`
 		}
-		if yaml.Unmarshal(data, &lerdCfg) == nil && lerdCfg.NodeVersion != "" {
-			return lerdCfg.NodeVersion, nil
+		// Unlike .nvmrc and .node-version below, this value is not reduced to a
+		// numeric major, so a full pin survives. It still has to be version
+		// shaped: it is repository content and ends up on a command line.
+		if yaml.Unmarshal(data, &lerdCfg) == nil {
+			if v := SafeVersion(lerdCfg.NodeVersion); v != "" {
+				return v, nil
+			}
 		}
 	}
 

@@ -128,11 +128,16 @@ func nvmDefaultUsable(raw string) bool {
 // the exit status catches a missing pin; requiring a non-empty NVM_BIN catches
 // the system fall-through.
 func nvmActivate(version string) string {
+	// The version is bound to a shell variable once and only ever referenced
+	// through it. Interpolating it into the messages as well would put an
+	// unquoted copy inside a single-quoted string, where one quote character in
+	// the value is enough to end the string and start a command.
 	return sourceScript() + fmt.Sprintf(
-		`nvm use %s >/dev/null 2>&1 || { echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; }; `+
-			`if [ -z "$NVM_BIN" ]; then echo 'lerd: no nvm Node available for %s (run: lerd node:install)' >&2; exit 1; fi; `+
+		`__lerd_nv=%s; `+
+			`nvm use "$__lerd_nv" >/dev/null 2>&1 || { echo "lerd: no nvm Node available for $__lerd_nv (run: lerd node:install)" >&2; exit 1; }; `+
+			`if [ -z "$NVM_BIN" ]; then echo "lerd: no nvm Node available for $__lerd_nv (run: lerd node:install)" >&2; exit 1; fi; `+
 			`PATH="$NVM_BIN:$PATH"; export PATH; `,
-		shellQuote(version), version, version)
+		shellQuote(execVersion(version)))
 }
 
 // nvmExports builds `export KEY=VAL;` statements for ApplyEnv. Values are
@@ -154,9 +159,6 @@ func nvmExports(env []string) string {
 }
 
 func (nvmManager) Command(version, bin string, args []string) *exec.Cmd {
-	if version == "" {
-		version = "default"
-	}
 	full := append([]string{"-c", nvmActivate(version) + `exec "$@"`, "lerd-nvm", bin}, args...)
 	return exec.Command("bash", full...)
 }
@@ -184,9 +186,6 @@ func (nvmManager) ApplyEnv(cmd *exec.Cmd, env []string) {
 }
 
 func (nvmManager) ExecPrefix(version string) string {
-	if version == "" {
-		version = "default"
-	}
 	// A bash -c wrapper that sources nvm, activates the version (aborting if
 	// nvm use fails so it can't fork-bomb), then exec's the command supplied as
 	// positional args ("$@"). "lerd-nvm" is $0.

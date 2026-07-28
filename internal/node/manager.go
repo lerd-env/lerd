@@ -99,6 +99,17 @@ func ManagerByName(name string) Manager {
 	}
 }
 
+// execVersion is the selector a manager should activate: the caller's version
+// when it is one, else the manager's default. A value that is not version
+// shaped never reaches a command line, so a pin that slipped past detection
+// falls back rather than being run.
+func execVersion(version string) string {
+	if v := SafeVersion(version); v != "" {
+		return v
+	}
+	return "default"
+}
+
 // dedupeMajors reduces a list of full (or bare-major) version strings to unique
 // numeric majors in first-seen order, skipping anything non-numeric. Shared by
 // the fnm and nvm List implementations so every surface sees the same rules.

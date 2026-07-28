@@ -561,8 +561,33 @@ func runDbShell(flagService, flagDatabase string) error {
 	return cmd.Run()
 }
 
+// escapeSQLLiteral makes name safe inside a '...' string literal. PostgreSQL
+// keeps standard_conforming_strings on, so a backslash is an ordinary character
+// there and doubling the quote is the whole job.
+func escapeSQLLiteral(v string) string { return strings.ReplaceAll(v, "'", "''") }
+
+// escapeMySQLLiteral is escapeSQLLiteral for MySQL and MariaDB, which treat a
+// backslash as an escape unless NO_BACKSLASH_ESCAPES is set. The backslash is
+// doubled first, so `\'` cannot escape the doubled quote and end the literal.
+func escapeMySQLLiteral(v string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(v, `\`, `\\`), "'", "''")
+}
+
+// mysqlDatabaseExistsQuery and pgDatabaseExistsQuery build the existence check
+// for one engine family. Separate so the escaping that keeps a name inside its
+// literal is asserted directly rather than through a container.
+func mysqlDatabaseExistsQuery(name string) string {
+	return fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", escapeMySQLLiteral(name))
+}
+
+func pgDatabaseExistsQuery(name string) string {
+	return fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname='%s';", escapeSQLLiteral(name))
+}
+
 // databaseExists returns whether the named database exists in the given lerd
 // DB service's container. Uses the same admin credentials createDatabase uses.
+// The name comes from a project's .env, so it is escaped for the literal it
+// lands in rather than trusted.
 func databaseExists(svc, name string) (bool, error) {
 	container := "lerd-" + svc
 	family := svc
@@ -578,7 +603,7 @@ func databaseExists(svc, name string) (bool, error) {
 		var lastErr error
 		for _, bin := range binaries {
 			check := podman.Cmd("exec", container, bin, "-uroot", "-plerd",
-				"-sNe", fmt.Sprintf("SELECT COUNT(*) FROM information_schema.schemata WHERE schema_name='%s';", name))
+				"-sNe", mysqlDatabaseExistsQuery(name))
 			out, err := check.Output()
 			if err != nil {
 				lastErr = err
@@ -589,7 +614,7 @@ func databaseExists(svc, name string) (bool, error) {
 		return false, lastErr
 	case "postgres":
 		cmd := podman.Cmd("exec", container, "psql", "-U", "postgres", "-tAc",
-			fmt.Sprintf("SELECT 1 FROM pg_database WHERE datname='%s';", name))
+			pgDatabaseExistsQuery(name))
 		out, err := cmd.Output()
 		if err != nil {
 			return false, err

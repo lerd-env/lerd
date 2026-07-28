@@ -127,11 +127,13 @@ func TestFnmShellFragments(t *testing.T) {
 	// temp tree rather than the developer's real install.
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	m := fnmManager{}
-	if prefix := m.ExecPrefix("20"); !strings.Contains(prefix, "exec --using=20 --") {
-		t.Errorf("fnm ExecPrefix(20) = %q, want it to contain 'exec --using=20 --'", prefix)
+	// Quoted: the fragment is spliced into a worker unit's sh -c body, so the
+	// version has to arrive there as an argument and not as shell syntax.
+	if prefix := m.ExecPrefix("20"); !strings.Contains(prefix, "exec --using='20' --") {
+		t.Errorf("fnm ExecPrefix(20) = %q, want it to contain \"exec --using='20' --\"", prefix)
 	}
 	// Empty version resolves to the default alias.
-	if prefix := m.ExecPrefix(""); !strings.Contains(prefix, "--using=default") {
+	if prefix := m.ExecPrefix(""); !strings.Contains(prefix, "--using='default'") {
 		t.Errorf("fnm ExecPrefix(\"\") = %q, want default alias", prefix)
 	}
 	shim := m.ShimScript("/home/u/.local/bin/lerd", "npm")

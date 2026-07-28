@@ -853,3 +853,37 @@ func TestApproveSiteCommand_RoundTrip(t *testing.T) {
 		t.Errorf("approval must be idempotent, got %v", site.ApprovedCommands)
 	}
 }
+
+// A site's domains are written into the nginx vhost's server_name, and a
+// project's .lerd.yaml supplies them. The name has been refused for this reason
+// since the unit generators needed it; the domains reach a generated file the
+// same way.
+func TestAddSiteRefusesADomainCarryingConfigSyntax(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	for _, domain := range []string{
+		"a.test; } server { listen 80; root /etc; }",
+		"a.test\nserver_name pwn.test",
+		"a.test#",
+		"a.test\x00",
+		"a/b.test",
+	} {
+		err := AddSite(Site{Name: "probe", Domains: []string{"clean.test", domain}, Path: t.TempDir()})
+		if err == nil {
+			t.Errorf("accepted the domain %q", domain)
+		}
+	}
+}
+
+func TestAddSiteAcceptsOrdinaryDomains(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	err := AddSite(Site{
+		Name:    "shop",
+		Domains: []string{"shop.test", "www-shop.test", "shop.localhost"},
+		Path:    t.TempDir(),
+	})
+	if err != nil {
+		t.Errorf("AddSite refused ordinary domains: %v", err)
+	}
+}

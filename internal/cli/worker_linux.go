@@ -34,10 +34,19 @@ func removeWorkerExecArtifacts(_ string) {}
 // restart-loop every 5s under Restart=always.
 func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, command, restart, schedule, fpmUnit string, host bool) (bool, error) {
 	// Generation-boundary guard so every caller is covered (incl. the boot
-	// restore path): a newline in the command would inject a second systemd
-	// directive from a cloned repo's .lerd.yaml custom_workers entry.
-	if config.ContainsUnitInjectionChars(command) {
-		return false, fmt.Errorf("worker unit %q: command must not contain newline or NUL", unitName)
+	// restore path): every value below is a line of the unit, and a cloned
+	// repo's .lerd.yaml can set the worker ones.
+	if err := validateWorkerUnitFields(unitName, map[string]string{
+		"command":     command,
+		"label":       label,
+		"restart":     restart,
+		"schedule":    schedule,
+		"site name":   siteName,
+		"site path":   sitePath,
+		"PHP version": phpVersion,
+		"FPM unit":    fpmUnit,
+	}); err != nil {
+		return false, err
 	}
 	if host {
 		return writeHostWorkerUnitFile(unitName, label, siteName, sitePath, command, restart, fpmUnit)

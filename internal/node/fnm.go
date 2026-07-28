@@ -65,10 +65,7 @@ func (m fnmManager) HasDefault() bool {
 }
 
 func (m fnmManager) Command(version, bin string, args []string) *exec.Cmd {
-	if version == "" {
-		version = "default"
-	}
-	cmdArgs := append([]string{"exec", "--using=" + version, "--", bin}, args...)
+	cmdArgs := append([]string{"exec", "--using=" + execVersion(version), "--", bin}, args...)
 	return exec.Command(m.bin(), cmdArgs...)
 }
 
@@ -82,11 +79,11 @@ func (fnmManager) ApplyEnv(cmd *exec.Cmd, env []string) {
 	cmd.Env = append(cmd.Env, env...)
 }
 
+// ExecPrefix quotes the version because the fragment it returns is spliced into
+// a worker unit's `sh -c` body, where an unquoted value would be read as shell
+// syntax rather than as an argument.
 func (m fnmManager) ExecPrefix(version string) string {
-	if version == "" {
-		version = "default"
-	}
-	return fmt.Sprintf("'%s' exec --using=%s --", m.bin(), version)
+	return fmt.Sprintf("'%s' exec --using=%s --", m.bin(), shellQuote(execVersion(version)))
 }
 
 func (m fnmManager) ShimScript(lerdBin, bin string) string {

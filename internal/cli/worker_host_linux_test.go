@@ -50,8 +50,11 @@ func TestWriteHostWorkerUnitFile_useFnmExec(t *testing.T) {
 	if !strings.Contains(unit, "fnm") {
 		t.Error("host worker must use fnm exec")
 	}
-	if !strings.Contains(unit, "--using=20") {
-		t.Errorf("expected --using=20 from .node-version, got:\n%s", unit)
+	// Quoted, and quoted again for the surrounding sh -c: the version comes from
+	// the repository, so it has to reach fnm as an argument rather than as shell
+	// syntax the unit would execute.
+	if !strings.Contains(unit, `--using='"'"'20'"'"'`) {
+		t.Errorf("expected a quoted --using=20 from .node-version, got:\n%s", unit)
 	}
 	if !strings.Contains(unit, "WorkingDirectory=") {
 		t.Error("host worker must set WorkingDirectory")

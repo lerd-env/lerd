@@ -445,6 +445,12 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 	return nil
 }
 
+// domainForbidden are the characters a domain may never carry. The nginx set
+// (a directive ends at `;`, blocks open and close on braces, `#` comments the
+// rest of the line) plus whitespace and the separators that would make one
+// domain read as several, or as a path when it names a vhost file.
+const domainForbidden = "{};#\n\r\x00 \t/\\"
+
 // AddSite appends or updates a site in the registry.
 func AddSite(site Site) error {
 	// A site name flows into systemd unit file names and bodies (Description=,
@@ -453,6 +459,15 @@ func AddSite(site Site) error {
 	// path), closing the injection even for callers that bypass SiteNameAndDomain.
 	if ContainsUnitInjectionChars(site.Name) || strings.ContainsRune(site.Name, '/') {
 		return fmt.Errorf("invalid site name %q: must not contain newline, NUL, or slash", site.Name)
+	}
+	// A domain is written into the vhost's server_name, and a project's
+	// .lerd.yaml supplies the list. The vhost generator refuses these too; this
+	// is the registry side, so a bad domain is rejected when the site is linked
+	// rather than when nginx is next rendered.
+	for _, d := range site.Domains {
+		if i := strings.IndexAny(d, domainForbidden); i >= 0 {
+			return fmt.Errorf("invalid domain %q: must not contain %q", d, string(d[i]))
+		}
 	}
 	// Store the resolved path so two spellings of one directory (on ostree hosts
 	// /home is a symlink to /var/home, and os.Getwd can return either) register
