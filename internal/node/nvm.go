@@ -83,6 +83,18 @@ func nvmScript() string {
 // nvm counts as one.
 func ScriptPresent() bool { return nvmScript() != "" }
 
+// scriptToSource is nvmScript with $NVM_DIR/nvm.sh as the fallback. A fragment
+// generated on a host with no nvm still has to name a real path: the `[ -s ]`
+// guard in front of it is a runtime check, so a worker unit written before nvm
+// is installed starts working once it is, while an empty path would bake in a
+// source line that can never fire.
+func scriptToSource() string {
+	if p := nvmScript(); p != "" {
+		return p
+	}
+	return filepath.Join(nvmDir(), "nvm.sh")
+}
+
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
@@ -90,10 +102,11 @@ func fileExists(path string) bool {
 
 // sourceScript is the shell prelude that loads nvm into the current bash
 // process. Embedded verbatim in every generated fragment and in-process call.
-// NVM_DIR and the script are set separately because Homebrew splits them.
+// NVM_DIR and the script are named separately because Homebrew splits them.
 func sourceScript() string {
+	script := shellQuote(scriptToSource())
 	return fmt.Sprintf(`export NVM_DIR=%s; [ -s %s ] && . %s; `,
-		shellQuote(nvmDir()), shellQuote(nvmScript()), shellQuote(nvmScript()))
+		shellQuote(nvmDir()), script, script)
 }
 
 // shellCmd builds a bash command that sources nvm and runs `nvm <args...>`,
