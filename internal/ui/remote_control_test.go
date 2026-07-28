@@ -315,6 +315,8 @@ func TestIsLoopbackOnlyPath(t *testing.T) {
 		{"/api/databases/mysql/export", true},
 		{"/api/databases/postgres/snapshots/nightly", true},
 		{"/api/databases-overview", false},
+		{"/api/tools/composer/update", true},
+		{"/api/share-tools", false},
 		{"/api/sites", false},
 		{"/api/sites/myapp.test", false},
 		{"/api/sites/myapp.test/secure", false},

@@ -2,8 +2,10 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
@@ -79,4 +81,19 @@ func updateTool(pins *pinnedTools, name string) error {
 	default:
 		return replaceTool(pins, name, filepath.Join(config.BinDir(), "composer.phar"), io.Discard)
 	}
+}
+
+// UpdateOneTool reinstalls a single managed tool at its pinned version, for
+// callers that apply one at a time and render the outcome themselves. The
+// dashboard uses it: each tool card owns its own result, so a checksum that
+// rejects one download says so on that card rather than failing a batch.
+//
+// The name is checked against the managed set rather than trusted, since it
+// arrives from a request and decides which path gets written.
+func UpdateOneTool(name string) error {
+	if !slices.Contains(tools.Names(), name) {
+		return fmt.Errorf("unknown tool %q", name)
+	}
+	var pins pinnedTools
+	return updateToolFn(&pins, name)
 }

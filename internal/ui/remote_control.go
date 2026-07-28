@@ -37,6 +37,9 @@ var loopbackOnlyRoutes = []string{
 var loopbackOnlyRoutePrefixes = []string{
 	"/api/databases",
 	"/api/entities",
+	// Replaces executables on the host's PATH, so it stays with the terminal
+	// and link routes rather than behind Basic auth alone.
+	"/api/tools",
 }
 
 // loopbackOnlySiteSubactions are the per-site actions (under

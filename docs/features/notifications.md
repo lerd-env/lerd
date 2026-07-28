@@ -42,7 +42,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `nplusone` | A request (or worker invocation) runs the same query shape 3+ times, a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
 | `slow_route` | A route's p95 response time is running well above the site's typical time, from the watcher's request-timing snapshot. Edge-triggered: fires once when a route goes slow and rearms once it drops back within the typical band, so a later slowdown notifies again | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
-| `update_available` | The registry has a newer image tag for an installed service | on | low |
+| `update_available` | Something installed has fallen behind: a newer image tag for a service, a republished PHP base image, or a host tool (Composer, fnm, mkcert) whose pin has moved. One notification per item, when it first goes stale | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
 The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.

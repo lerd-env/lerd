@@ -120,6 +120,19 @@ func Load(ctx context.Context) *Manifest {
 	return m
 }
 
+// Refresh reloads the manifest with the disk cache bypassed, for the manual
+// "check for updates" path. The 24h cache is what keeps a passive status
+// rebuild off the network, so a newly published pin is otherwise invisible for
+// up to a day; this is the way out of that window. A fetch that cannot reach
+// the endpoint leaves the cached pins in place rather than reverting to the
+// embedded ones, so being offline never reads as "nothing to update".
+func Refresh(ctx context.Context) *Manifest {
+	if fetched, data := fetchPublished(ctx); fetched != nil {
+		writeCache(manifestCachePath(), data)
+	}
+	return Load(ctx)
+}
+
 func manifestCachePath() string {
 	return filepath.Join(config.DataDir(), "tools-manifest.yaml")
 }

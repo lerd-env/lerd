@@ -136,6 +136,53 @@ func TestLoad_CachesPublishedManifestOnDisk(t *testing.T) {
 	}
 }
 
+// The 24h cache means a freshly published pin is invisible for up to a day.
+// The manual check is the way out of that window, so it has to reach the
+// endpoint even when the cache is minutes old.
+func TestRefresh_BypassesTheDiskCache(t *testing.T) {
+	var calls atomic.Int32
+	version := "9.9.9"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		fmt.Fprintf(w, "tools:\n  composer:\n    version: %q\n    url: https://getcomposer.org/download/{version}/composer.phar\n", version)
+	}))
+	defer srv.Close()
+	t.Setenv("LERD_TOOLS_URL", srv.URL)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	Load(context.Background())
+	version = "9.9.10"
+	m := Refresh(context.Background())
+
+	if calls.Load() != 2 {
+		t.Errorf("fetches = %d, want 2 (the refresh must not be served from cache)", calls.Load())
+	}
+	if v := m.Tools["composer"].Version; v != "9.9.10" {
+		t.Errorf("composer pin = %q, want the newly published 9.9.10", v)
+	}
+	// The refreshed answer replaces the cache, so the next passive Load agrees
+	// with what the user was just shown rather than reverting for a day.
+	if v := Load(context.Background()).Tools["composer"].Version; v != "9.9.10" {
+		t.Errorf("cached composer pin = %q after a refresh, want 9.9.10", v)
+	}
+}
+
+// A refresh with nothing to reach must leave the last good pins in place
+// rather than falling back to the embedded ones.
+func TestRefresh_OfflineKeepsTheCachedPins(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "tools:\n  composer:\n    version: \"9.9.9\"\n    url: https://getcomposer.org/download/{version}/composer.phar\n")
+	}))
+	t.Setenv("LERD_TOOLS_URL", srv.URL)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	Load(context.Background())
+	srv.Close()
+
+	if v := Refresh(context.Background()).Tools["composer"].Version; v != "9.9.9" {
+		t.Errorf("composer pin = %q after an offline refresh, want the cached 9.9.9", v)
+	}
+}
+
 func TestLoad_FailedFetchBacksOff(t *testing.T) {
 	offline(t)
 	Load(context.Background())

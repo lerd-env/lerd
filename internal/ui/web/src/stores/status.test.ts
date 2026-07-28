@@ -136,6 +136,30 @@ describe('server restart reload', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  it('posts one tool update and carries the refusal back to the caller', async () => {
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ ok: false, error: 'checksum mismatch' }))
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { updateTool } = await import('./status');
+
+    const res = await updateTool('composer');
+
+    expect(String(fetchMock.mock.calls[0][0])).toContain('/api/tools/composer/update');
+    expect(fetchMock.mock.calls[0][1]?.method).toBe('POST');
+    expect(res).toEqual({ ok: false, error: 'checksum mismatch' });
+  });
+
+  // http.Error answers in plain text, so the envelope decode has to cope with a
+  // body that is not JSON rather than surface a parse error as the tool's fault.
+  it('reads a plain-text refusal as an error', async () => {
+    globalThis.fetch = vi.fn(async () => new Response('method not allowed', { status: 405 })) as unknown as typeof fetch;
+    const { updateTool } = await import('./status');
+
+    expect(await updateTool('composer')).toEqual({ ok: false, error: 'method not allowed' });
+  });
+
   it('ignores a payload with no instance, so an older server never loops', async () => {
     const reload = vi.fn();
     const { applyStatus } = await import('./status');

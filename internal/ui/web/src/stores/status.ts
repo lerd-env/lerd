@@ -1,5 +1,5 @@
 import { writable, derived } from 'svelte/store';
-import { apiJson } from '$lib/api';
+import { apiFetch, apiJson, decodeJSONResult } from '$lib/api';
 import { wsMessage } from '$lib/ws';
 import { version } from './version';
 
@@ -144,3 +144,27 @@ export const allCoreRunning = derived(status, ($s): boolean => {
   );
 });
 
+// updateTool applies one managed host tool's pinned version. One tool per call:
+// a download whose checksum does not match is refused deliberately, and the card
+// that asked has to name that tool rather than show a failure for all of them.
+export async function updateTool(name: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch(`/api/tools/${encodeURIComponent(name)}/update`, { method: 'POST' });
+    return await decodeJSONResult<{ ok: boolean; error?: string }>(res);
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+// checkToolUpdates re-reads the published pins with the 24h cache bypassed.
+// The pins live in one manifest, so this is a single check for every tool
+// rather than one per card.
+export async function checkToolUpdates(): Promise<{ ok: boolean; tools?: ToolStatus[] }> {
+  try {
+    const res = await apiFetch('/api/tools/check', { method: 'POST' });
+    const out = await decodeJSONResult<{ ok?: boolean; tools?: ToolStatus[] }>(res);
+    return { ok: out.ok === true, tools: out.tools };
+  } catch {
+    return { ok: false };
+  }
+}
