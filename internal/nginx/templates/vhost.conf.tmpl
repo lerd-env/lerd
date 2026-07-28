@@ -21,6 +21,29 @@ server {
         proxy_send_timeout {{.RequestTimeout}}s;
     }
 {{end}}
+{{if .DevServerBase}}
+    location ^~ {{.DevServerBase}} {
+        proxy_pass http://{{.UpstreamHost}}:{{.DevServerPort}};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 86400s;
+        # Plugin middleware that runs ahead of the tool's own base handling never
+        # sees the prefix stripped, so a 404 is retried once without it.
+        proxy_intercept_errors on;
+        error_page 404 = @lerd_dev_unprefixed;
+    }
+
+    location @lerd_dev_unprefixed {
+        rewrite ^{{.DevServerBase}}(.*)$ /$1 break;
+        proxy_pass http://{{.UpstreamHost}}:{{.DevServerPort}};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+{{end}}
     location / {
         try_files $uri $uri/ /index.php?$query_string;
     }

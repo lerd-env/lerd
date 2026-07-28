@@ -47,6 +47,38 @@ func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 	return proxy.Path, proxyPort, true
 }
 
+// detectSiteDevServer returns the prefix and host port for a site whose
+// framework declares a dev server, once that server has been pinned to a port.
+// An unpinned site has never started one, so nothing is proxied.
+func detectSiteDevServer(site config.Site) (base string, port int) {
+	if site.DevServerPort == 0 {
+		return "", 0
+	}
+	tool := config.DevServerToolInstalled(site.Path)
+	if tool == nil {
+		return "", 0
+	}
+	return tool.Base, site.DevServerPort
+}
+
+// detectWorktreeDevServer is detectSiteDevServer for a worktree checkout, whose
+// port is pinned on the parent site under the worktree's directory base.
+func detectWorktreeDevServer(siteName, path string) (base string, port int) {
+	site, err := config.FindSite(siteName)
+	if err != nil || site == nil {
+		return "", 0
+	}
+	port = site.WorktreeDevPorts[filepath.Base(path)]
+	if port == 0 {
+		return "", 0
+	}
+	tool := config.DevServerToolInstalled(path)
+	if tool == nil {
+		return "", 0
+	}
+	return tool.Base, port
+}
+
 type nginxConfData struct {
 	Resolver        string
 	AccessLogTarget string
@@ -69,9 +101,13 @@ type VhostData struct {
 	ProxyPort       int    // port the worker listens on inside the PHP-FPM container
 	CustomContainer string // container name for custom container sites (e.g. "lerd-custom-nestapp")
 	CustomPort      int    // port the app listens on inside the custom container
-	UpstreamHost    string // host-proxy upstream address (e.g. "host.containers.internal")
-	UpstreamPort    int    // host-proxy upstream port (the dev server's host port)
-	BackendSSL      bool   // proxy to the backend via HTTPS (app serves TLS on its own port)
+	// DevServerBase is the URL prefix a host dev server serves everything
+	// under, so one location covers its assets and its hot-reload socket.
+	DevServerBase string
+	DevServerPort int
+	UpstreamHost  string // host-proxy upstream address (e.g. "host.containers.internal")
+	UpstreamPort  int    // host-proxy upstream port (the dev server's host port)
+	BackendSSL    bool   // proxy to the backend via HTTPS (app serves TLS on its own port)
 	// LerdSite / LerdBranch surface the parent site name and (for worktrees)
 	// the branch to PHP via fastcgi_param so the debug bridge can tag events
 	// with stable identifiers instead of guessing from DOCUMENT_ROOT.
@@ -353,6 +389,7 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 	serverNames := serverNamesWithWildcards(site.Domains)
 
 	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
+	devBase, devPort := detectSiteDevServer(site)
 	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
@@ -365,6 +402,9 @@ func GenerateVhost(site config.Site, phpVersion string) error {
 		Proxy:           hasProxy,
 		ProxyPath:       proxyPath,
 		ProxyPort:       proxyPort,
+		UpstreamHost:    hostProxyUpstream(),
+		DevServerBase:   devBase,
+		DevServerPort:   devPort,
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path),
@@ -400,6 +440,7 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 	serverNames := serverNamesWithWildcards(site.Domains)
 
 	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
+	devBase, devPort := detectSiteDevServer(site)
 	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
@@ -413,6 +454,9 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 		Proxy:           hasProxy,
 		ProxyPath:       proxyPath,
 		ProxyPort:       proxyPort,
+		UpstreamHost:    hostProxyUpstream(),
+		DevServerBase:   devBase,
+		DevServerPort:   devPort,
 		LerdSite:        site.Name,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(site.Path),
@@ -681,6 +725,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 	}
 
 	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
 		ServerNames:     domain + " *." + domain,
@@ -691,6 +736,9 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
+		UpstreamHost:    hostProxyUpstream(),
+		DevServerBase:   devBase,
+		DevServerPort:   devPort,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path),
 		FrameworkNginx:  frameworkNginx,
@@ -723,6 +771,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 	}
 
 	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
 		ServerNames:     domain + " *." + domain,
@@ -734,6 +783,9 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
+		UpstreamHost:    hostProxyUpstream(),
+		DevServerBase:   devBase,
+		DevServerPort:   devPort,
 		Profiling:       profilerEnabled(),
 		RequestTimeout:  resolveRequestTimeout(path),
 		FrameworkNginx:  frameworkNginx,

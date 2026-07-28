@@ -88,6 +88,18 @@ Host workers run with lerd's bin dir prepended to `PATH`, so subprocesses spawne
 
 On macOS the unit is a launchd plist (`~/Library/LaunchAgents/lerd-<worker>-<site>[-<branch>].plist`) backed by a guard script under `~/.local/share/lerd/run/workers/` that `cd`s into the site/worktree and `fnm exec`s the command. The watcher self-heals the unit independently of the worker exec mode, host workers always need launchd-level supervision because they aren't behind podman's `--restart=always`. Scheduled workers (`schedule != ""`) still aren't supported on macOS; launchd's `StartCalendarInterval` isn't wired through the unit translator yet.
 
+**Dev servers on the site's own domain**: A dev server normally advertises its own address, so a Vite app renders asset URLs pointing at `localhost:5173`. That address means nothing to anyone else, so the page arrives unstyled over a share tunnel, over [LAN sharing](/usage/lan-sharing), or on any host other than the one that started it.
+
+lerd puts a supported dev server behind the site's own domain instead. Everything the tool serves lives under one prefix (`/@lerd-vite/`), which the site's vhost proxies to it, so the assets and the hot-reload websocket both travel on whatever hostname the visitor actually used. Nothing needs rewriting, because the client derives its host, port and protocol from the URL it was loaded from.
+
+This needs no configuration and no framework definition. A host worker qualifies when the project has the tool installed and the worker command starts it directly, following one level of `npm run` indirection. A command that only reaches the tool through a runner such as `concurrently` is left alone, since the flags lerd appends would land on the wrong process.
+
+Nothing in the project is edited. lerd writes a generated config to `node_modules/.lerd/` that imports the project's own config and merges in the base, origin and allowed hosts for `serve` only, then starts the tool against it. That file is rewritten on every start, since a worktree seeds `node_modules` from its parent and would otherwise inherit the parent's domain. A project with no config file for the tool, or one that tracks the generated path in git rather than ignoring it, keeps its dev server exactly as it was.
+
+The port is pinned, because the vhost proxies to it and the tool would otherwise drift to the next free one whenever several sites run. It is kept clear of other sites, of the site's own worktrees, and of whatever else the machine is holding, and a pin something has since taken is re-picked rather than left to fail. Each worktree pins its own port and takes its origin from its own subdomain.
+
+Some plugin middleware registers itself ahead of the tool's own base handling and only answers unprefixed, which would 404 on URLs it advertised itself. nginx retries any 404 under the prefix once with the prefix removed, so those routes work without anything having to name them.
+
 When [idle-suspend](/usage/idle-suspend) is enabled it stops every one of a site's workers once the site has been idle, so workers carry no special configuration for it. A worker marked `per_worktree: true` (Vite is the only one by default) is suspended per worktree, on each worktree's own idle timer.
 
 ## Project-specific custom workers

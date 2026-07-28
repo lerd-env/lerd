@@ -370,6 +370,19 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		command = command + " --port=" + port
 	}
 
+	// A host worker that starts a known dev server is pinned to a port and
+	// pointed at a generated config, so it answers on the site's own domain.
+	// Anything the mechanism cannot apply cleanly leaves the command as it was.
+	if w.Host {
+		if tool := config.DevServerToolFor(sitePath, command); tool != nil {
+			if args, err := devServerSetup(siteName, sitePath, tool); err != nil {
+				feedback.Warn("dev server stays on its own port: %v", err)
+			} else if args != "" {
+				command += " " + args
+			}
+		}
+	}
+
 	// Workers exec into the container that hosts the site's runtime —
 	// custom container, FrankenPHP, or shared FPM. resolveWorkerFPMUnit
 	// owns the per-runtime mapping; restoreWorker / writeWorkerExecUnit
