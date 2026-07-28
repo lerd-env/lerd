@@ -1227,5 +1227,18 @@
   "share_stop": "Hentikan",
   "share_stopTunnel": "Hentikan tunnel",
   "share_tunnelVia": "Tunnel via {tool}",
-  "share_startFailed": "{tool} gagal dimulai"
+  "share_startFailed": "{tool} gagal dimulai",
+  "shareDomain_title": "Sajikan situs ini di domain Anda sendiri?",
+  "shareDomain_body": "Cloudflare Tunnel bisa menyajikan situs di domain milik Anda, sehingga alamat publiknya selalu sama. Biarkan kosong untuk URL trycloudflare.com sekali pakai.",
+  "shareDomain_label": "Domain dasar",
+  "shareDomain_preview": "Disajikan di",
+  "shareDomain_previewEmpty": "DNS-nya harus dikelola oleh Cloudflare.",
+  "shareDomain_remember": "Ingat jawaban ini",
+  "shareDomain_rememberHint": "Lain kali langsung bagikan, tanpa bertanya.",
+  "shareDomain_skip": "Lewati",
+  "shareDomain_use": "Gunakan domain ini",
+  "shareDomain_configure": "Konfigurasikan domain",
+  "share_tunnelViaCli": "Tunnel via {tool}, dari CLI",
+  "sites_sharedPublicly": "Dibagikan publik di {url}",
+  "sites_sharedOnLan": "Dibagikan di jaringan Anda di {url}"
 }

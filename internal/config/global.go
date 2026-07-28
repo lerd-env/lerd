@@ -120,6 +120,14 @@ type GlobalConfig struct {
 		// given: ngrok | cloudflare | expose | serveo | localhost-run.
 		// Empty = auto-detect. Set via "lerd share:tool".
 		DefaultTool string `yaml:"default_tool,omitempty" mapstructure:"default_tool"`
+		// BaseDomain is a Cloudflare-managed domain a share is served under:
+		// lerd routes "<site>.<base domain>" to a named tunnel instead of
+		// handing out a random trycloudflare.com URL.
+		BaseDomain string `yaml:"base_domain,omitempty" mapstructure:"base_domain"`
+		// BaseDomainAnswered records that the base-domain question has an
+		// answer worth reusing, so the dashboard stops asking. Answered with
+		// an empty BaseDomain means "always use a quick tunnel".
+		BaseDomainAnswered bool `yaml:"base_domain_answered,omitempty" mapstructure:"base_domain_answered"`
 	} `yaml:"share,omitempty" mapstructure:"share"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`

@@ -449,7 +449,7 @@ func TestEnsureCloudflareTunnel_happyPath_logsInWhenNoCert(t *testing.T) {
 	}
 	logFile := fakeCloudflared(t, "created", 0, "routed", 0)
 
-	name, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	name, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -472,7 +472,7 @@ func TestEnsureCloudflareTunnel_skipsLoginWhenCertExists(t *testing.T) {
 	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
 	logFile := fakeCloudflared(t, "created", 0, "routed", 0)
 
-	if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+	if _, err := ensureCloudflareTunnel("mysite", "dev.example.com", true); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if strings.Contains(readCalls(t, logFile), "tunnel login") {
@@ -486,7 +486,7 @@ func TestEnsureCloudflareTunnel_toleratesExistingTunnelAndRoute(t *testing.T) {
 
 	var name string
 	var err error
-	out := captureStdout(t, func() { name, err = ensureCloudflareTunnel("mysite", "dev.example.com") })
+	out := captureStdout(t, func() { name, err = ensureCloudflareTunnel("mysite", "dev.example.com", true) })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -502,7 +502,7 @@ func TestEnsureCloudflareTunnel_existingTunnelMissingCredentials(t *testing.T) {
 	certWithoutTunnelCredentials(t)
 	fakeCloudflared(t, "tunnel with name already exists", 1, "routed", 0)
 
-	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
 	if err == nil {
 		t.Fatal("expected an error, got nil")
 	}
@@ -519,7 +519,7 @@ func TestEnsureCloudflareTunnel_freshRouteWarnsAboutPropagation(t *testing.T) {
 	fakeCloudflared(t, "created", 0, "Added CNAME dev.example.com which will route to this tunnel", 0)
 
 	out := captureStdout(t, func() {
-		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com", true); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -533,7 +533,7 @@ func TestEnsureCloudflareTunnel_reusedRouteStaysQuiet(t *testing.T) {
 	fakeCloudflared(t, "created", 0, "", 0)
 
 	out := captureStdout(t, func() {
-		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com"); err != nil {
+		if _, err := ensureCloudflareTunnel("mysite", "dev.example.com", true); err != nil {
 			t.Errorf("unexpected error: %v", err)
 		}
 	})
@@ -550,7 +550,7 @@ func TestEnsureCloudflareTunnel_createFailurePropagates(t *testing.T) {
 	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
 	fakeCloudflared(t, "auth error", 1, "routed", 0)
 
-	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
 	if err == nil || !strings.Contains(err.Error(), "tunnel create") {
 		t.Errorf("error = %v, want tunnel create failure", err)
 	}
@@ -564,7 +564,7 @@ func TestEnsureCloudflareTunnel_routeFailurePropagates(t *testing.T) {
 	t.Setenv("TUNNEL_ORIGIN_CERT", cert)
 	fakeCloudflared(t, "created", 0, "zone not found", 1)
 
-	_, err := ensureCloudflareTunnel("mysite", "dev.example.com")
+	_, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
 	if err == nil || !strings.Contains(err.Error(), "route dns") {
 		t.Errorf("error = %v, want route dns failure", err)
 	}

@@ -1227,5 +1227,18 @@
   "share_stop": "停止",
   "share_stopTunnel": "停止隧道",
   "share_tunnelVia": "通过 {tool} 的隧道",
-  "share_startFailed": "{tool} 启动失败"
+  "share_startFailed": "{tool} 启动失败",
+  "shareDomain_title": "用你自己的域名提供这个站点？",
+  "shareDomain_body": "Cloudflare Tunnel 可以在你拥有的域名上提供站点，这样公开地址每次都一样。留空则使用一次性的 trycloudflare.com 地址。",
+  "shareDomain_label": "基础域名",
+  "shareDomain_preview": "提供于",
+  "shareDomain_previewEmpty": "它的 DNS 必须由 Cloudflare 托管。",
+  "shareDomain_remember": "记住这个选择",
+  "shareDomain_rememberHint": "下次直接分享，不再询问。",
+  "shareDomain_skip": "跳过",
+  "shareDomain_use": "使用该域名",
+  "shareDomain_configure": "配置域名",
+  "share_tunnelViaCli": "通过 {tool} 的隧道，来自 CLI",
+  "sites_sharedPublicly": "已公开分享于 {url}",
+  "sites_sharedOnLan": "已在你的网络中分享于 {url}"
 }

@@ -459,10 +459,15 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
 | `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
+| `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under (`none` forgets it) |
 
 ### Tunnels from the dashboard
 
 The same tunnels can be started from the [web UI](../features/web-ui.md)'s share menu: hover the wifi button in a site's header and pick a tool (or the auto entry, which follows the same detection order and `share:tool` default as the CLI). The dashboard waits for the tool's public URL and shows it next to the domain with a hover-QR. A tunnel started from the UI belongs to the `lerd-ui` daemon, so it ends when you stop it or when the daemon shuts down, and it is not restored on restart. If the daemon is killed outright rather than asked to stop, the next start reaps whatever tunnel survived, so a public URL never outlives the dashboard that owns it.
+
+A shared site is marked in the sites list too: a violet globe against the row while a public tunnel is up, a teal wifi icon while it is on the LAN, both captioned with the address. A share on one of the site's worktrees counts for the row, since the list has one row per site.
+
+A `lerd share` running in a terminal shows up there as well. The CLI records the share while it runs and clears the record on the way out, so the dashboard reflects it like one of its own, labelled as started from the CLI. Stopping it from the dashboard signals that `lerd share` to exit. A share whose process is killed outright leaves its record behind; the dashboard drops it as soon as it notices the process is gone.
 
 ### Sharing a worktree
 
@@ -486,7 +491,27 @@ lerd share --domain dev.example.com
 
 Custom hostnames are a Cloudflare Tunnel feature, so `--domain` selects that tool on its own. You never need `--cloudflare` alongside it, and it wins over a different default set with `lerd share:tool`. Combining it with another tool flag is rejected rather than silently ignored.
 
-On the first run cloudflared opens a browser window to authorize your Cloudflare account (a one-time login that writes `~/.cloudflared/cert.pem`). lerd then creates a named tunnel called `lerd-<site>`, routes the hostname to it with a CNAME record, and starts the tunnel. Later runs reuse the same tunnel and hostname, so the URL never changes. Re-routing a hostname that already points at the same tunnel is a no-op; if the record exists but points somewhere else, lerd leaves it alone and prints a note asking you to check it.
+#### A base domain, so you never type the hostname
+
+`--domain` takes a full hostname and applies to one run. Set a base domain instead and every Cloudflare share is served under it, with lerd composing the hostname from the site name:
+
+```bash
+lerd share:domain example.com   # myapp.test is shared on myapp.example.com
+lerd share:domain               # show the current one
+lerd share:domain none          # forget it, back to quick tunnels
+```
+
+The hostname follows the site's own domain rather than the folder the project sits in, so a `scorediviner.test` served out of a `score-diviner` directory is shared on `scorediviner.example.com`.
+
+The dashboard asks the first time you pick Cloudflare Tunnel from the share menu: type the base domain, or skip it for a quick tunnel. Tick **Remember this answer** and it stops asking, whichever way you answered. The cog next to the Cloudflare entry reopens that dialog whenever you want to change the domain, or clear it so lerd asks again.
+
+A worktree's subdomain flattens into one label, so `feat-login.myapp.test` is shared on `feat-login-myapp.example.com`: a Cloudflare certificate covers one level of subdomain and no more.
+
+`lerd share --domain` still wins for a single run, and the other tunnel tools ignore the base domain: no other one can hand out a subdomain of a domain you own.
+
+#### How the named tunnel is set up
+
+On the first run cloudflared opens a browser window to authorize your Cloudflare account (a one-time login that writes `~/.cloudflared/cert.pem`). The dashboard has no terminal to run that login in, so a share from the UI stops and tells you to run `cloudflared tunnel login` once. lerd then creates a named tunnel called `lerd-<site>`, routes the hostname to it with a CNAME record, and starts the tunnel. Later runs reuse the same tunnel and hostname, so the URL never changes. Re-routing a hostname that already points at the same tunnel is a no-op; if the record exists but points somewhere else, lerd leaves it alone and prints a note asking you to check it.
 
 A freshly created DNS record takes a moment to become visible. If you open the URL in the first seconds and your resolver caches the miss, it can keep answering NXDOMAIN for up to 30 minutes even though the tunnel is healthy.
 

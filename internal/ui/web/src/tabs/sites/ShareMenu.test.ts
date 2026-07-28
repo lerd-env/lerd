@@ -25,7 +25,8 @@ const toolsPayload = {
     { name: 'cloudflare', label: 'Cloudflare Tunnel', binary: 'cloudflared', installed: true },
     { name: 'serveo', label: 'Serveo', binary: 'ssh', installed: true }
   ],
-  auto: 'cloudflare'
+  auto: 'cloudflare',
+  base_domain_answered: true
 };
 
 let fetchCalls: string[];
@@ -148,5 +149,181 @@ describe('ShareMenu', () => {
     await openMenu(container);
     await fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByTestId('share-menu')).not.toBeInTheDocument();
+  });
+});
+
+// A fetch that answers each endpoint properly, so the save → start sequence
+// actually gets past the save.
+function mockShareFetch(tools: Record<string, unknown>) {
+  fetchCalls = [];
+  const bodies: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      fetchCalls.push(url);
+      if (init?.method === 'POST') {
+        if (init.body) bodies.push(String(init.body));
+        return new Response(JSON.stringify({ ok: true }), { status: 200 });
+      }
+      return new Response(JSON.stringify(tools), { status: 200 });
+    })
+  );
+  return bodies;
+}
+
+const unanswered = { ...toolsPayload, base_domain_answered: false };
+
+async function openCloudflare(container: HTMLElement) {
+  await openMenu(container);
+  await waitFor(() => expect(screen.getByText('Cloudflare Tunnel')).toBeInTheDocument());
+  await fireEvent.click(screen.getByText('Cloudflare Tunnel').closest('button')!);
+}
+
+describe('ShareMenu base domain', () => {
+  it('asks for a base domain before the first Cloudflare share', async () => {
+    mockShareFetch(unanswered);
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    expect(screen.getByText('Serve this site on your own domain?')).toBeInTheDocument();
+    expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(false);
+  });
+
+  it('previews the hostname the site would be served on', async () => {
+    mockShareFetch(unanswered);
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    await fireEvent.input(screen.getByLabelText('Base domain'), { target: { value: 'example.com' } });
+    expect(screen.getByText('app.example.com')).toBeInTheDocument();
+  });
+
+  it('starts on the given domain and remembers the answer', async () => {
+    const bodies = mockShareFetch(unanswered);
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    await fireEvent.input(screen.getByLabelText('Base domain'), { target: { value: 'example.com' } });
+    await fireEvent.click(screen.getByLabelText('Remember this answer'));
+    await fireEvent.click(screen.getByText('Use this domain'));
+
+    await waitFor(() =>
+      expect(
+        fetchCalls.some((u) => u.includes('tunnel:start?tool=cloudflare&domain=example.com'))
+      ).toBe(true)
+    );
+    expect(bodies.some((b) => JSON.parse(b).base_domain === 'example.com')).toBe(true);
+    expect(bodies.some((b) => JSON.parse(b).remember === true)).toBe(true);
+  });
+
+  it('skips straight to a quick tunnel, carrying the remember choice', async () => {
+    const bodies = mockShareFetch(unanswered);
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    await fireEvent.click(screen.getByLabelText('Remember this answer'));
+    await fireEvent.click(screen.getByText('Skip'));
+
+    await waitFor(() =>
+      expect(fetchCalls.some((u) => u.includes('tunnel:start?tool=cloudflare'))).toBe(true)
+    );
+    expect(fetchCalls.some((u) => u.includes('domain='))).toBe(false);
+    const saved = bodies.map((b) => JSON.parse(b)).find((b) => 'remember' in b);
+    expect(saved).toEqual({ base_domain: '', remember: true });
+  });
+
+  it('stops asking once the answer has been remembered', async () => {
+    mockShareFetch({ ...toolsPayload, base_domain_answered: true, base_domain: 'example.com' });
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    expect(screen.queryByText('Serve this site on your own domain?')).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchCalls.some((u) => u.includes('tunnel:start?tool=cloudflare'))).toBe(true)
+    );
+  });
+
+  it('shows the hostname a remembered domain will serve the site on', async () => {
+    mockShareFetch({ ...toolsPayload, base_domain_answered: true, base_domain: 'example.com' });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByText('app.example.com')).toBeInTheDocument());
+  });
+
+  it('reconfigures the domain from the cog without starting anything', async () => {
+    const bodies = mockShareFetch({ ...toolsPayload, base_domain_answered: true, base_domain: 'old.example' });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-domain-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-domain-cog'));
+
+    const input = screen.getByLabelText('Base domain') as HTMLInputElement;
+    expect(input.value).toBe('old.example');
+    await fireEvent.input(input, { target: { value: 'new.example' } });
+    await fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(bodies.some((b) => JSON.parse(b).base_domain === 'new.example')).toBe(true));
+    expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(false);
+  });
+
+  it('reports a rejected domain instead of starting', async () => {
+    fetchCalls = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        fetchCalls.push(String(input));
+        if (init?.method === 'POST') {
+          return new Response(JSON.stringify({ error: 'base domain "nope" needs at least one dot' }), { status: 200 });
+        }
+        return new Response(JSON.stringify(unanswered), { status: 200 });
+      })
+    );
+    const { container } = render(Harness, { props: { site } });
+    await openCloudflare(container);
+    await fireEvent.input(screen.getByLabelText('Base domain'), { target: { value: 'nope' } });
+    await fireEvent.click(screen.getByText('Use this domain'));
+
+    await waitFor(() => expect(screen.getByText(/needs at least one dot/)).toBeInTheDocument());
+    expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(false);
+  });
+
+  // A worktree is served on its own subdomain, and the hostname follows that
+  // domain flattened into one label.
+  it('previews the worktree hostname on a branch tab', async () => {
+    mockShareFetch(unanswered);
+    const { container } = render(Harness, {
+      props: { site: withWorktree(), activeWorktreeBranch: 'feat' }
+    });
+    await openCloudflare(container);
+    await fireEvent.input(screen.getByLabelText('Base domain'), { target: { value: 'example.com' } });
+    expect(screen.getByText('feat-app.example.com')).toBeInTheDocument();
+  });
+
+  it('starts a worktree share on the given domain, against its branch', async () => {
+    mockShareFetch(unanswered);
+    const { container } = render(Harness, {
+      props: { site: withWorktree(), activeWorktreeBranch: 'feat' }
+    });
+    await openCloudflare(container);
+    await fireEvent.input(screen.getByLabelText('Base domain'), { target: { value: 'example.com' } });
+    await fireEvent.click(screen.getByText('Use this domain'));
+    await waitFor(() =>
+      expect(
+        fetchCalls.some((u) =>
+          u.includes('tunnel:start?tool=cloudflare&branch=feat&domain=example.com')
+        )
+      ).toBe(true)
+    );
+  });
+
+  it('says when the running tunnel was started from the CLI', async () => {
+    mockShareFetch(toolsPayload);
+    const running = {
+      ...site,
+      tunnel_url: 'https://x.trycloudflare.com',
+      tunnel_tool: 'cloudflare',
+      tunnel_external: true
+    } as unknown as Site;
+    const { container } = render(Harness, { props: { site: running } });
+    await openMenu(container);
+    await waitFor(() =>
+      expect(screen.getByText('Tunnel via Cloudflare Tunnel, from the CLI')).toBeInTheDocument()
+    );
   });
 });

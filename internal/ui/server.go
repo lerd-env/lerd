@@ -769,6 +769,7 @@ type WorktreeResponse struct {
 	LANShareURL         string         `json:"lan_share_url,omitempty"`
 	TunnelURL           string         `json:"tunnel_url,omitempty"`
 	TunnelTool          string         `json:"tunnel_tool,omitempty"`
+	TunnelExternal      bool           `json:"tunnel_external,omitempty"`
 	FrameworkWorkers    []WorkerStatus `json:"framework_workers,omitempty"`
 	// Idle-suspend state for the worktree, which idles on its own timer.
 	LastActive           int64    `json:"last_active,omitempty"`
@@ -877,6 +878,7 @@ type SiteResponse struct {
 	LANShareURL      string `json:"lan_share_url,omitempty"`
 	TunnelURL        string `json:"tunnel_url,omitempty"`
 	TunnelTool       string `json:"tunnel_tool,omitempty"`
+	TunnelExternal   bool   `json:"tunnel_external,omitempty"`
 	CustomContainer  bool   `json:"custom_container,omitempty"`
 	ContainerPort    int    `json:"container_port,omitempty"`
 	ContainerImage   string `json:"container_image,omitempty"`
@@ -1043,6 +1045,7 @@ func buildSites() []SiteResponse {
 				LANShareURL:          lanURL,
 				TunnelURL:            wtTunnel.URL,
 				TunnelTool:           wtTunnel.Tool,
+				TunnelExternal:       wtTunnel.External,
 				FrameworkWorkers:     wtWorkers,
 				LastActive:           idleActivity[wtKeyStr],
 				Idle:                 idleSiteIsIdle(idleActivity, wtKeyStr, e.Paused, idleExempt, idleOn, idleTimeout, idleNow),
@@ -1112,6 +1115,7 @@ func buildSites() []SiteResponse {
 			LANShareURL:          cli.LANShareURL(e.LANPort),
 			TunnelURL:            tunnel.URL,
 			TunnelTool:           tunnel.Tool,
+			TunnelExternal:       tunnel.External,
 			CustomContainer:      e.ContainerPort > 0,
 			ContainerPort:        e.ContainerPort,
 			ContainerImage:       e.ContainerImage,
@@ -3246,7 +3250,24 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 
 // handleShareTools reports the supported tunnel tools, which are installed,
 // and what the auto pick would use, so the share menu can render its entries.
+// A POST records the answer to the base-domain question.
 func handleShareTools(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodPost {
+		var body struct {
+			BaseDomain string `json:"base_domain"`
+			Remember   bool   `json:"remember"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+			writeJSON(w, SiteActionResponse{Error: "invalid request body"})
+			return
+		}
+		if err := cli.SetShareBaseDomain(body.BaseDomain, body.Remember); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	}
 	writeJSON(w, cli.ShareTools())
 }
 
@@ -4011,7 +4032,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "tunnel:start":
-		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("branch"), r.URL.Query().Get("tool")); err != nil {
+		if _, err := cli.TunnelStart(site.Name, r.URL.Query().Get("branch"), r.URL.Query().Get("tool"), r.URL.Query().Get("domain")); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

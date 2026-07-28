@@ -1227,5 +1227,18 @@
   "share_stop": "Durdur",
   "share_stopTunnel": "Tüneli durdur",
   "share_tunnelVia": "{tool} üzerinden tünel",
-  "share_startFailed": "{tool} başlatılamadı"
+  "share_startFailed": "{tool} başlatılamadı",
+  "shareDomain_title": "Bu site kendi alan adınızda sunulsun mu?",
+  "shareDomain_body": "Cloudflare Tunnel siteyi sahip olduğunuz bir alan adında sunabilir, böylece genel adres her seferinde aynı kalır. Tek kullanımlık bir trycloudflare.com adresi için boş bırakın.",
+  "shareDomain_label": "Temel alan adı",
+  "shareDomain_preview": "Şurada sunuluyor",
+  "shareDomain_previewEmpty": "DNS'inin Cloudflare tarafından yönetilmesi gerekir.",
+  "shareDomain_remember": "Bu yanıtı hatırla",
+  "shareDomain_rememberHint": "Bir dahaki sefere sormadan doğrudan paylaş.",
+  "shareDomain_skip": "Atla",
+  "shareDomain_use": "Bu alan adını kullan",
+  "shareDomain_configure": "Alan adını yapılandır",
+  "share_tunnelViaCli": "{tool} üzerinden tünel, CLI'dan",
+  "sites_sharedPublicly": "{url} adresinde herkese açık paylaşıldı",
+  "sites_sharedOnLan": "Ağınızda {url} adresinde paylaşıldı"
 }

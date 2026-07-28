@@ -79,6 +79,7 @@ export interface Site {
     lan_share_url?: string;
     tunnel_url?: string;
     tunnel_tool?: string;
+    tunnel_external?: boolean;
     framework_workers?: FrameworkWorker[];
     idle_suspended_workers?: string[];
   }>;
@@ -107,6 +108,7 @@ export interface Site {
   lan_share_url?: string;
   tunnel_url?: string;
   tunnel_tool?: string;
+  tunnel_external?: boolean;
   framework_workers?: FrameworkWorker[];
   last_request_at?: number;
   request_count?: number;
@@ -616,15 +618,36 @@ export interface ShareToolsInfo {
   tools: ShareToolStatus[];
   auto?: string;
   default?: string;
+  base_domain?: string;
+  base_domain_answered?: boolean;
 }
 export const loadShareTools = () => apiJson<ShareToolsInfo>('/api/share-tools');
-export const startTunnel = (s: Site, tool: string = '', branch: string = '') => {
+export const startTunnel = (s: Site, tool: string = '', branch: string = '', domain: string = '') => {
   const params = new URLSearchParams();
   if (tool) params.set('tool', tool);
   if (branch) params.set('branch', branch);
+  if (domain) params.set('domain', domain);
   const qs = params.toString();
   return postAction(site(s.domain, 'tunnel:start') + (qs ? `?${qs}` : ''));
 };
+// Records the answer to the base-domain question. remember false forgets it, so
+// the share menu asks again next time.
+export async function saveShareDomain(
+  domain: string,
+  remember: boolean
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/share-tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_domain: domain, remember })
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+}
 export const stopTunnel = (s: Site, branch: string = '') =>
   postAction(site(s.domain, 'tunnel:stop') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
 export const toggleQueue = (s: Site) =>

@@ -1227,5 +1227,18 @@
   "share_stop": "停止",
   "share_stopTunnel": "トンネルを停止",
   "share_tunnelVia": "{tool} のトンネル",
-  "share_startFailed": "{tool} を起動できませんでした"
+  "share_startFailed": "{tool} を起動できませんでした",
+  "shareDomain_title": "このサイトを自分のドメインで公開しますか？",
+  "shareDomain_body": "Cloudflare Tunnel は所有しているドメインでサイトを配信できるため、公開アドレスが毎回同じになります。空のままにすると使い捨ての trycloudflare.com URL になります。",
+  "shareDomain_label": "ベースドメイン",
+  "shareDomain_preview": "配信先",
+  "shareDomain_previewEmpty": "DNS が Cloudflare で管理されている必要があります。",
+  "shareDomain_remember": "この回答を記憶する",
+  "shareDomain_rememberHint": "次回からは確認せずにそのまま共有します。",
+  "shareDomain_skip": "スキップ",
+  "shareDomain_use": "このドメインを使う",
+  "shareDomain_configure": "ドメインを設定",
+  "share_tunnelViaCli": "{tool} 経由のトンネル、CLI から",
+  "sites_sharedPublicly": "{url} で公開共有中",
+  "sites_sharedOnLan": "ネットワーク上の {url} で共有中"
 }

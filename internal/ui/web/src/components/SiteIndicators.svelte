@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Icon from '$components/Icon.svelte';
   import StatusDot from '$components/StatusDot.svelte';
   import { runningWorkerColors, idleWorkerColors, siteWorkerFailing, siteHasWorkers, type Site } from '$stores/sites';
   import { m } from '../paraglide/messages.js';
@@ -12,7 +13,26 @@
   // While asleep, keep showing the suspended workers' dots (dimmed) so the site
   // doesn't look like it lost its workers.
   const idleDots = $derived(idleWorkerColors(site));
+
+  // A share on a branch counts for the row: the list shows one row per site,
+  // and a shared worktree is still that site reachable from outside.
+  const worktrees = $derived(site.worktrees ?? []);
+  const tunnelUrl = $derived(site.tunnel_url || worktrees.find((w) => w.tunnel_url)?.tunnel_url || '');
+  const lanUrl = $derived(
+    site.lan_share_url || worktrees.find((w) => w.lan_share_url)?.lan_share_url || ''
+  );
 </script>
+
+{#if tunnelUrl}
+  <span title={m.sites_sharedPublicly({ url: tunnelUrl })} class="inline-flex shrink-0 text-violet-500 dark:text-violet-400">
+    <Icon name="globe" class="w-3 h-3" />
+  </span>
+{/if}
+{#if lanUrl}
+  <span title={m.sites_sharedOnLan({ url: lanUrl })} class="inline-flex shrink-0 text-teal-500 dark:text-teal-400">
+    <Icon name="wifi" class="w-3 h-3" />
+  </span>
+{/if}
 
 {#if site.worktrees && site.worktrees.length > 0}
   <span title={m.sites_gitWorktrees()} class="inline-flex shrink-0">

@@ -1227,5 +1227,18 @@
   "share_stop": "Oprește",
   "share_stopTunnel": "Oprește tunelul",
   "share_tunnelVia": "Tunel prin {tool}",
-  "share_startFailed": "{tool} nu a putut porni"
+  "share_startFailed": "{tool} nu a putut porni",
+  "shareDomain_title": "Servim acest site pe domeniul tău?",
+  "shareDomain_body": "Cloudflare Tunnel poate servi site-ul pe un domeniu al tău, astfel încât adresa publică să rămână aceeași de fiecare dată. Lasă gol pentru un URL trycloudflare.com de unică folosință.",
+  "shareDomain_label": "Domeniu de bază",
+  "shareDomain_preview": "Servit pe",
+  "shareDomain_previewEmpty": "DNS-ul lui trebuie gestionat de Cloudflare.",
+  "shareDomain_remember": "Ține minte răspunsul",
+  "shareDomain_rememberHint": "Data viitoare partajează direct, fără să întrebe.",
+  "shareDomain_skip": "Sari peste",
+  "shareDomain_use": "Folosește acest domeniu",
+  "shareDomain_configure": "Configurează domeniul",
+  "share_tunnelViaCli": "Tunel prin {tool}, din CLI",
+  "sites_sharedPublicly": "Partajat public pe {url}",
+  "sites_sharedOnLan": "Partajat în rețeaua ta la {url}"
 }

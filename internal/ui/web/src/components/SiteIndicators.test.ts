@@ -41,3 +41,37 @@ describe('SiteIndicators sleep moon', () => {
     expect(hasMoon(container)).toBe(false);
   });
 });
+
+describe('SiteIndicators share badges', () => {
+  it('marks a site that is shared through a public tunnel', () => {
+    const { getByTitle } = render(SiteIndicators, {
+      props: { site: site({ tunnel_url: 'https://abc.trycloudflare.com' }) }
+    });
+    expect(getByTitle('Shared publicly on https://abc.trycloudflare.com')).toBeInTheDocument();
+  });
+
+  it('marks a site that is shared on the local network', () => {
+    const { getByTitle } = render(SiteIndicators, {
+      props: { site: site({ lan_share_url: 'http://192.168.1.10:8080' }) }
+    });
+    expect(getByTitle('Shared on your network at http://192.168.1.10:8080')).toBeInTheDocument();
+  });
+
+  // The list has one row per site, so a share on a branch still has to show up
+  // against the site it belongs to.
+  it('counts a share on one of the site worktrees', () => {
+    const { getByTitle } = render(SiteIndicators, {
+      props: {
+        site: site({
+          worktrees: [{ branch: 'feat', tunnel_url: 'https://branch.serveo.net' }]
+        } as Partial<Site>)
+      }
+    });
+    expect(getByTitle('Shared publicly on https://branch.serveo.net')).toBeInTheDocument();
+  });
+
+  it('shows nothing for a site that is not shared', () => {
+    const { queryByTitle } = render(SiteIndicators, { props: { site: site({}) } });
+    expect(queryByTitle(/^Shared/)).not.toBeInTheDocument();
+  });
+});

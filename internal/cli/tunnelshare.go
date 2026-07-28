@@ -22,10 +22,12 @@ import (
 // shutdown handler and anything that outlived a SIGKILL is reaped at the next
 // start (see tunnel_reap.go).
 
-// TunnelInfo describes a running tunnel for the sites payload.
+// TunnelInfo describes a running tunnel for the sites payload. External marks
+// one started by "lerd share" in a terminal rather than from the dashboard.
 type TunnelInfo struct {
-	Tool string `json:"tool"`
-	URL  string `json:"url"`
+	Tool     string `json:"tool"`
+	URL      string `json:"url"`
+	External bool   `json:"external,omitempty"`
 }
 
 type tunnelProc struct {
@@ -57,6 +59,11 @@ type ShareToolsInfo struct {
 	Tools   []ShareToolStatus `json:"tools"`
 	Auto    string            `json:"auto,omitempty"`
 	Default string            `json:"default,omitempty"`
+	// BaseDomain is the Cloudflare-managed domain a share is served under, and
+	// BaseDomainAnswered says whether that answer was remembered, so the share
+	// menu knows whether it still has to ask.
+	BaseDomain         string `json:"base_domain,omitempty"`
+	BaseDomainAnswered bool   `json:"base_domain_answered,omitempty"`
 }
 
 var shareToolMeta = map[string]struct{ label, installURL string }{
@@ -70,11 +77,17 @@ var shareToolMeta = map[string]struct{ label, installURL string }{
 // ShareTools reports every supported tunnel tool, which ones are installed,
 // and what the auto pick would use right now.
 func ShareTools() ShareToolsInfo {
-	defaultTool := ""
+	defaultTool, baseDomain, answered := "", "", false
 	if cfg, err := config.LoadGlobal(); err == nil {
 		defaultTool = cfg.Share.DefaultTool
+		baseDomain, answered = cfg.Share.BaseDomain, cfg.Share.BaseDomainAnswered
 	}
-	info := ShareToolsInfo{Default: defaultTool, Auto: autoShareToolName(defaultTool)}
+	info := ShareToolsInfo{
+		Default:            defaultTool,
+		Auto:               autoShareToolName(defaultTool),
+		BaseDomain:         baseDomain,
+		BaseDomainAnswered: answered,
+	}
 	for _, t := range shareTools {
 		meta := shareToolMeta[t.name]
 		_, found := hostbin.Look(t.binary)
@@ -169,6 +182,20 @@ func parseTunnelURL(tool, line string) (string, bool) {
 	return "", false
 }
 
+// cloudflareConnected matches the line a named tunnel logs once it is carrying
+// traffic. Both spellings cloudflared has used are accepted.
+var cloudflareConnected = regexp.MustCompile(`(?i)(registered tunnel connection|connection [0-9a-f-]+ registered)`)
+
+// tunnelURLFromLine reports the public URL a line of output announces. A named
+// Cloudflare tunnel serves a hostname that is known before it starts, so there
+// the scan waits for the connection to register and reports that hostname.
+func tunnelURLFromLine(tool, known, line string) (string, bool) {
+	if known != "" {
+		return known, cloudflareConnected.MatchString(line)
+	}
+	return parseTunnelURL(tool, line)
+}
+
 // tunnelKey identifies a running tunnel. A worktree fronts its own domain, so
 // it gets a key of its own rather than replacing the parent site's tunnel. The
 // bare site name is kept as the key for the site itself.
@@ -179,15 +206,16 @@ func tunnelKey(siteName, branch string) string {
 	return siteName + "@" + branch
 }
 
-// tunnelStatusByKey returns the running tunnel registered under key.
+// tunnelStatusByKey returns the running tunnel registered under key, falling
+// back to one a "lerd share" in a terminal recorded for us.
 func tunnelStatusByKey(key string) (TunnelInfo, bool) {
 	tunnelsMu.Lock()
-	defer tunnelsMu.Unlock()
 	p := tunnels[key]
-	if p == nil || p.url == "" {
-		return TunnelInfo{}, false
+	tunnelsMu.Unlock()
+	if p != nil && p.url != "" {
+		return TunnelInfo{Tool: p.tool, URL: p.url}, true
 	}
-	return TunnelInfo{Tool: p.tool, URL: p.url}, true
+	return cliTunnelStatus(key)
 }
 
 // TunnelStatus returns the running tunnel for a site, or for one of its
@@ -196,10 +224,53 @@ func TunnelStatus(siteName, branch string) (TunnelInfo, bool) {
 	return tunnelStatusByKey(tunnelKey(siteName, branch))
 }
 
+// resolveShareBaseDomain settles which base domain a start serves under. One
+// given for this run only works with Cloudflare Tunnel, the same way --domain
+// does; the configured one simply does not apply to the other tools.
+func resolveShareBaseDomain(tool *shareTool, requested, configured string) (string, error) {
+	d, err := normalizeBaseDomain(requested)
+	if err != nil {
+		return "", err
+	}
+	if tool.mode != shareModeCloudflare {
+		if d != "" {
+			return "", fmt.Errorf("a base domain only works with Cloudflare Tunnel, pick that tool instead")
+		}
+		return "", nil
+	}
+	if d == "" {
+		d = configured
+	}
+	return d, nil
+}
+
+// SetShareBaseDomain records the answer to the base-domain question. remember
+// false forgets it, so the next share asks again.
+func SetShareBaseDomain(baseDomain string, remember bool) error {
+	domain, err := normalizeBaseDomain(baseDomain)
+	if err != nil {
+		return err
+	}
+	if !remember {
+		domain = ""
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	if cfg.Share.BaseDomain == domain && cfg.Share.BaseDomainAnswered == remember {
+		return nil
+	}
+	cfg.Share.BaseDomain, cfg.Share.BaseDomainAnswered = domain, remember
+	return config.SaveGlobal(cfg)
+}
+
 // TunnelStart starts a public tunnel for the site, or for one of its worktrees
-// when branch is set, and blocks until the tool prints its public URL. An empty
-// toolName auto-picks like the CLI does.
-func TunnelStart(siteName, branch, toolName string) (string, error) {
+// when branch is set, and blocks until the tool reports its public URL. An empty
+// toolName auto-picks like the CLI does. baseDomain serves the site on
+// "<site>.<base domain>" through a Cloudflare named tunnel for this run;
+// empty falls back to the configured one.
+func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) {
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return "", err
@@ -224,17 +295,36 @@ func TunnelStart(siteName, branch, toolName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	cmd, stopProxy, err := buildTunnelCommand(tool, "", target, httpPort, httpsPort, true)
+	base, err := resolveShareBaseDomain(tool, baseDomain, cfg.Share.BaseDomain)
 	if err != nil {
 		return "", err
 	}
-	return startTunnelProcess(tunnelKey(siteName, branch), shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout)
+
+	// A named tunnel serves a hostname known before it starts, so the scan has
+	// nothing to parse out of the output and waits for the connection instead.
+	tunnelName, known := "", ""
+	if base != "" {
+		hostname, hErr := shareHostname(target.domain, cfg.DNS.TLD, base)
+		if hErr != nil {
+			return "", hErr
+		}
+		if tunnelName, err = ensureCloudflareTunnel(target.name, hostname, false); err != nil {
+			return "", err
+		}
+		known = "https://" + hostname
+	}
+
+	cmd, stopProxy, err := buildTunnelCommand(tool, tunnelName, target, httpPort, httpsPort, true)
+	if err != nil {
+		return "", err
+	}
+	return startTunnelProcess(tunnelKey(siteName, branch), shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout, known)
 }
 
 // startTunnelProcess runs the tool, scans its output for the public URL, and
 // registers the tunnel under key. It replaces any tunnel already running for
 // that key. After a successful Start the exit watcher owns stopProxy.
-func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration) (string, error) {
+func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration, known string) (string, error) {
 	stopTunnelByKey(key)
 	if stopProxy == nil {
 		stopProxy = func() {}
@@ -277,7 +367,7 @@ func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), t
 				tail = tail[1:]
 			}
 			tailMu.Unlock()
-			if u, ok := parseTunnelURL(toolName, line); ok {
+			if u, ok := tunnelURLFromLine(toolName, known, line); ok {
 				select {
 				case urlCh <- u:
 				default:
@@ -324,22 +414,30 @@ func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), t
 }
 
 // TunnelStop stops the tunnel for a site, or for one of its worktrees when
-// branch is set. A no-op when none is running.
+// branch is set, wherever it was started from. A no-op when none is running.
+// Our own tunnel is the one the dashboard is showing when both exist, so that
+// is the one a stop acts on; the CLI share behind it stays up and takes over
+// the display.
 func TunnelStop(siteName, branch string) error {
-	stopTunnelByKey(tunnelKey(siteName, branch))
+	key := tunnelKey(siteName, branch)
+	if !stopTunnelByKey(key) {
+		stopCLITunnel(key)
+	}
 	return nil
 }
 
-// stopTunnelByKey kills the tunnel registered under key, if any.
-func stopTunnelByKey(key string) {
+// stopTunnelByKey kills the tunnel registered under key and reports whether
+// there was one.
+func stopTunnelByKey(key string) bool {
 	tunnelsMu.Lock()
 	p := tunnels[key]
 	delete(tunnels, key)
 	tunnelsMu.Unlock()
 	if p == nil {
-		return
+		return false
 	}
 	killTunnel(p)
+	return true
 }
 
 // StopAllTunnels kills every running tunnel.

@@ -1227,5 +1227,18 @@
   "share_stop": "Dừng",
   "share_stopTunnel": "Dừng tunnel",
   "share_tunnelVia": "Tunnel qua {tool}",
-  "share_startFailed": "{tool} không khởi động được"
+  "share_startFailed": "{tool} không khởi động được",
+  "shareDomain_title": "Phục vụ trang này trên tên miền của bạn?",
+  "shareDomain_body": "Cloudflare Tunnel có thể phục vụ trang trên tên miền bạn sở hữu, để địa chỉ công khai luôn giữ nguyên. Để trống nếu muốn một URL trycloudflare.com dùng một lần.",
+  "shareDomain_label": "Tên miền gốc",
+  "shareDomain_preview": "Phục vụ tại",
+  "shareDomain_previewEmpty": "DNS của nó phải do Cloudflare quản lý.",
+  "shareDomain_remember": "Ghi nhớ câu trả lời này",
+  "shareDomain_rememberHint": "Lần sau chia sẻ ngay, không hỏi lại.",
+  "shareDomain_skip": "Bỏ qua",
+  "shareDomain_use": "Dùng tên miền này",
+  "shareDomain_configure": "Cấu hình tên miền",
+  "share_tunnelViaCli": "Tunnel qua {tool}, từ CLI",
+  "sites_sharedPublicly": "Đang chia sẻ công khai tại {url}",
+  "sites_sharedOnLan": "Đang chia sẻ trong mạng của bạn tại {url}"
 }

@@ -13,11 +13,15 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"syscall"
 
 	"github.com/geodro/lerd/internal/config"
+	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/hostbin"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
@@ -51,7 +55,10 @@ A default tool can be set with "lerd share:tool"; flags override it per run.
 --domain selects Cloudflare Tunnel on its own: a named tunnel is created (or
 reused) and the given hostname is routed to it, so the site is served on your
 own domain instead of a random trycloudflare.com URL. The domain's DNS must be
-managed by Cloudflare.`,
+managed by Cloudflare.
+
+A base domain set with "lerd share:domain" does the same without the flag: a
+Cloudflare share is served on "<site>.<base domain>".`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
 			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain)
@@ -106,13 +113,21 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 		return err
 	}
 
+	// A configured base domain serves the site on "<site>.<base>" without the
+	// flag, so a bare share matches what the dashboard does.
+	if tool.mode == shareModeCloudflare && tool.domain == "" && cfg.Share.BaseDomain != "" {
+		if tool.domain, err = shareHostname(target.domain, cfg.DNS.TLD, cfg.Share.BaseDomain); err != nil {
+			return err
+		}
+	}
+
 	fmt.Printf("Sharing %s...\n", target.domain)
 	fmt.Println("Press Ctrl+C to stop.")
 	fmt.Println()
 
 	tunnelName := ""
 	if tool.mode == shareModeCloudflare && tool.domain != "" {
-		if tunnelName, err = ensureCloudflareTunnel(target.name, tool.domain); err != nil {
+		if tunnelName, err = ensureCloudflareTunnel(target.name, tool.domain, true); err != nil {
 			return err
 		}
 		fmt.Printf("Public URL: https://%s\n\n", tool.domain)
@@ -128,10 +143,43 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 	}
 	defer stop()
 
+	// Record the share so the dashboard shows it like one of its own, teeing
+	// the tool's output through the recorder to catch the URL it announces.
+	key := tunnelKey(site.Name, branch)
+	state := tunnelState{Site: site.Name, Branch: branch, Tool: shareToolCanonicalName(tool), PID: os.Getpid()}
+	if tool.domain != "" {
+		state.URL = "https://" + tool.domain
+	}
+	recorder := newTunnelStateWriter(key, state)
+	defer recorder.clear()
+
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
+	cmd.Stdout = io.MultiWriter(os.Stdout, recorder)
+	cmd.Stderr = io.MultiWriter(os.Stderr, recorder)
+
+	// The dashboard stops a CLI share by signalling this process, which the
+	// tool itself never sees, so pass it on and let the run end normally.
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+	done := make(chan struct{})
+	defer close(done)
+	var signalled atomic.Bool
+	go func() {
+		select {
+		case <-sigs:
+			signalled.Store(true)
+			if cmd.Process != nil {
+				_ = cmd.Process.Signal(syscall.SIGTERM)
+			}
+		case <-done:
+		}
+	}()
+
+	if err := cmd.Run(); err != nil && !signalled.Load() {
+		return err
+	}
+	return nil
 }
 
 // shareTarget is what a tunnel fronts: the domain nginx routes on and whether
@@ -154,9 +202,76 @@ func shareTargetFor(site *config.Site, branch string) (shareTarget, error) {
 	}
 	name := site.Name
 	if branch != "" {
-		name = site.Name + "-" + branch
+		name = site.Name + "-" + gitpkg.SanitizeBranch(branch)
 	}
 	return shareTarget{name: name, domain: domain, secured: site.Secured}, nil
+}
+
+// normalizeBaseDomain cleans up what a user typed for a Cloudflare base domain
+// and rejects anything that is not a bare registrable domain. Empty stays
+// empty: that means "no base domain", not a mistake.
+func normalizeBaseDomain(s string) (string, error) {
+	d := strings.Trim(strings.ToLower(strings.TrimSpace(s)), ".")
+	if d == "" {
+		return "", nil
+	}
+	if strings.ContainsAny(d, "/:@ \t") || strings.HasPrefix(d, "*") {
+		return "", fmt.Errorf("base domain %q must be a bare domain like example.com, without a scheme, port, path or wildcard", s)
+	}
+	if !strings.Contains(d, ".") {
+		return "", fmt.Errorf("base domain %q needs at least one dot, like example.com", s)
+	}
+	for _, label := range strings.Split(d, ".") {
+		if !isDNSLabel(label) {
+			return "", fmt.Errorf("base domain %q is not a valid domain name", s)
+		}
+	}
+	return d, nil
+}
+
+// isDNSLabel reports whether s is usable as one label of a hostname.
+func isDNSLabel(s string) bool {
+	if s == "" || len(s) > 63 || strings.HasPrefix(s, "-") || strings.HasSuffix(s, "-") {
+		return false
+	}
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
+// shareHostLabel is the single label a site is served under on a base domain.
+// It comes from the domain the user picked, not from the folder the project
+// happens to sit in, so scorediviner.test is shared as scorediviner. A
+// worktree's subdomain flattens into that same label, because a Cloudflare
+// certificate covers one level of subdomain and no more.
+func shareHostLabel(domain, tld string) string {
+	d := strings.Trim(strings.ToLower(domain), ".")
+	if tld != "" && strings.HasSuffix(d, "."+tld) {
+		d = strings.TrimSuffix(d, "."+tld)
+	} else if i := strings.LastIndex(d, "."); i > 0 {
+		d = d[:i]
+	}
+	return strings.ReplaceAll(d, ".", "-")
+}
+
+// shareHostname composes the public hostname a site's domain is served on under
+// a base domain.
+func shareHostname(domain, tld, baseDomain string) (string, error) {
+	base, err := normalizeBaseDomain(baseDomain)
+	if err != nil {
+		return "", err
+	}
+	if base == "" {
+		return "", nil
+	}
+	label := shareHostLabel(domain, tld)
+	if !isDNSLabel(label) {
+		return "", fmt.Errorf("domain %q cannot be used as a hostname label under %s", domain, base)
+	}
+	return label + "." + base, nil
 }
 
 // buildTunnelCommand builds the tunnel tool invocation for a target plus a stop
@@ -355,10 +470,15 @@ func cloudflaredCertPath() string {
 }
 
 // ensureCloudflareTunnel makes sure a named tunnel exists for the site and that
-// domain routes to it, logging in interactively first if needed.
+// domain routes to it, logging in interactively first if needed. interactive is
+// false for the dashboard, which has no terminal to run the login in and says so
+// rather than hanging on a prompt nobody can see.
 // Returns the tunnel name to pass to "cloudflared tunnel run".
-func ensureCloudflareTunnel(siteName, domain string) (string, error) {
+func ensureCloudflareTunnel(siteName, domain string, interactive bool) (string, error) {
 	if _, err := os.Stat(cloudflaredCertPath()); err != nil {
+		if !interactive {
+			return "", fmt.Errorf("cloudflared is not authorized for your Cloudflare account yet: run \"cloudflared tunnel login\" in a terminal once, then share again")
+		}
 		fmt.Println("cloudflared is not logged in yet, a browser window will open to authorize it.")
 		login := exec.Command(hostbin.Path("cloudflared"), "tunnel", "login")
 		login.Stdin = os.Stdin
@@ -390,11 +510,13 @@ func ensureCloudflareTunnel(siteName, domain string) (string, error) {
 	out, err = exec.Command(hostbin.Path("cloudflared"), "tunnel", "route", "dns", name, domain).CombinedOutput()
 	if err != nil {
 		if strings.Contains(string(out), "already exists") || strings.Contains(string(out), "already configured") {
-			fmt.Printf("DNS record for %s already exists, make sure it CNAMEs to tunnel %q.\n", domain, name)
+			if interactive {
+				fmt.Printf("DNS record for %s already exists, make sure it CNAMEs to tunnel %q.\n", domain, name)
+			}
 		} else {
 			return "", fmt.Errorf("cloudflared tunnel route dns %s %s: %w\n%s", name, domain, err, out)
 		}
-	} else if strings.Contains(string(out), "Added CNAME") {
+	} else if interactive && strings.Contains(string(out), "Added CNAME") {
 		fmt.Printf("Routed %s to tunnel %q. The record is new, so give it a moment: opening it too early can leave your resolver caching the miss for up to 30 minutes.\n", domain, name)
 	}
 	return name, nil

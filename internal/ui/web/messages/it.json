@@ -1227,5 +1227,18 @@
   "share_stop": "Ferma",
   "share_stopTunnel": "Ferma il tunnel",
   "share_tunnelVia": "Tunnel via {tool}",
-  "share_startFailed": "{tool} non è riuscito ad avviarsi"
+  "share_startFailed": "{tool} non è riuscito ad avviarsi",
+  "shareDomain_title": "Servire questo sito sul tuo dominio?",
+  "shareDomain_body": "Cloudflare Tunnel può servire il sito su un dominio tuo, così l'indirizzo pubblico resta sempre lo stesso. Lascia vuoto per un URL trycloudflare.com usa e getta.",
+  "shareDomain_label": "Dominio di base",
+  "shareDomain_preview": "Servito su",
+  "shareDomain_previewEmpty": "Il suo DNS deve essere gestito da Cloudflare.",
+  "shareDomain_remember": "Ricorda questa risposta",
+  "shareDomain_rememberHint": "La prossima volta condividi subito, senza chiedere.",
+  "shareDomain_skip": "Salta",
+  "shareDomain_use": "Usa questo dominio",
+  "shareDomain_configure": "Configura il dominio",
+  "share_tunnelViaCli": "Tunnel via {tool}, dalla CLI",
+  "sites_sharedPublicly": "Condiviso pubblicamente su {url}",
+  "sites_sharedOnLan": "Condiviso sulla tua rete su {url}"
 }

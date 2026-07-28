@@ -1227,5 +1227,18 @@
   "share_stop": "Stoppen",
   "share_stopTunnel": "Tunnel stoppen",
   "share_tunnelVia": "Tunnel via {tool}",
-  "share_startFailed": "{tool} kon niet starten"
+  "share_startFailed": "{tool} kon niet starten",
+  "shareDomain_title": "Deze site op je eigen domein serveren?",
+  "shareDomain_body": "Cloudflare Tunnel kan de site serveren op een domein van jezelf, zodat het publieke adres elke keer hetzelfde blijft. Laat leeg voor een wegwerp-URL van trycloudflare.com.",
+  "shareDomain_label": "Basisdomein",
+  "shareDomain_preview": "Geserveerd op",
+  "shareDomain_previewEmpty": "De DNS moet door Cloudflare beheerd worden.",
+  "shareDomain_remember": "Dit antwoord onthouden",
+  "shareDomain_rememberHint": "Volgende keer meteen delen, zonder te vragen.",
+  "shareDomain_skip": "Overslaan",
+  "shareDomain_use": "Dit domein gebruiken",
+  "shareDomain_configure": "Domein instellen",
+  "share_tunnelViaCli": "Tunnel via {tool}, vanaf de CLI",
+  "sites_sharedPublicly": "Publiek gedeeld op {url}",
+  "sites_sharedOnLan": "Gedeeld op je netwerk op {url}"
 }

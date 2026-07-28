@@ -4,10 +4,12 @@
     type ShareToolsInfo,
     loadShareTools,
     loadSites,
+    saveShareDomain,
     startTunnel,
     stopTunnel
   } from '$stores/sites';
   import Icon from '$components/Icon.svelte';
+  import ShareDomainModal from './ShareDomainModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -61,7 +63,22 @@
     (activeWorktreeBranch ? activeWorktree?.tunnel_tool : site.tunnel_tool) ?? ''
   );
   const tunnelOn = $derived(Boolean(tunnelUrl));
+  const tunnelExternal = $derived(
+    Boolean(activeWorktreeBranch ? activeWorktree?.tunnel_external : site.tunnel_external)
+  );
   const autoTool = $derived(toolsInfo?.tools.find((t) => t.name === toolsInfo?.auto));
+
+  // The label a Cloudflare named tunnel serves the site on, mirroring the
+  // hostname the backend composes: the site's own domain without the TLD, so
+  // it follows the domain the user picked rather than the project folder.
+  const hostLabel = $derived(
+    labelFor((activeWorktreeBranch ? activeWorktree?.domain : site.domain) || site.domain)
+  );
+
+  function labelFor(domain: string): string {
+    const parts = domain.toLowerCase().split('.').filter(Boolean);
+    return (parts.length > 1 ? parts.slice(0, -1) : parts).join('-');
+  }
 
   function toolLabel(name: string): string {
     return toolsInfo?.tools.find((t) => t.name === name)?.label || name;
@@ -108,14 +125,49 @@
     if (e.key === 'Escape') closeNow();
   }
 
-  async function startTool(tool: string, label: string) {
+  // Cloudflare is the only tool that can serve a site on your own domain, so
+  // picking it asks for one first, until the answer has been remembered.
+  const CLOUDFLARE = 'cloudflare';
+  let domainModal = $state<'start' | 'configure' | ''>('');
+  let domainError = $state('');
+  let domainBusy = $state(false);
+
+  function pickTool(tool: string, label: string) {
+    if (tool === CLOUDFLARE && !toolsInfo?.base_domain_answered) {
+      startingLabel = label;
+      domainError = '';
+      domainModal = 'start';
+      return;
+    }
+    startTool(tool, label);
+  }
+
+  async function submitDomain(domain: string, remember: boolean) {
+    const starting = domainModal === 'start';
+    domainBusy = true;
+    domainError = '';
+    try {
+      const res = await saveShareDomain(domain, remember);
+      if (!res.ok) {
+        domainError = res.error || m.common_requestFailed();
+        return;
+      }
+      toolsInfo = await loadShareTools().catch(() => toolsInfo);
+      domainModal = '';
+      if (starting) await startTool(CLOUDFLARE, startingLabel, domain);
+    } finally {
+      domainBusy = false;
+    }
+  }
+
+  async function startTool(tool: string, label: string, domain: string = '') {
     if (tunnelBusy) return;
     tunnelBusy = true;
     startingLabel = label;
     tunnelError = '';
     cancelRequested = false;
     try {
-      const res = await startTunnel(site, tool, activeWorktreeBranch);
+      const res = await startTunnel(site, tool, activeWorktreeBranch, domain);
       if (!res.ok && !cancelRequested) {
         tunnelError = res.error || m.common_requestFailed();
         errorTool = label;
@@ -258,7 +310,11 @@
         <div class="{itemClass} border-l-2 border-violet-500 bg-violet-50/60 dark:bg-violet-900/15">
           <Icon name="globe" class="w-3.5 h-3.5 shrink-0 text-violet-600 dark:text-violet-400" />
           <span class="flex-1 min-w-0">
-            <span class="block font-medium text-gray-700 dark:text-gray-200">{m.share_tunnelVia({ tool: toolLabel(tunnelTool) })}</span>
+            <span class="block font-medium text-gray-700 dark:text-gray-200">
+              {tunnelExternal
+                ? m.share_tunnelViaCli({ tool: toolLabel(tunnelTool) })
+                : m.share_tunnelVia({ tool: toolLabel(tunnelTool) })}
+            </span>
             <a href={tunnelUrl} target="_blank" rel="noopener" class="block font-mono text-[10px] text-violet-600 dark:text-violet-400 truncate hover:underline">{tunnelUrl}</a>
           </span>
           <button
@@ -292,7 +348,7 @@
             type="button"
             role="menuitem"
             disabled={!autoTool}
-            onclick={() => startTool('', m.share_autoLabel())}
+            onclick={() => pickTool(autoTool?.name === CLOUDFLARE ? CLOUDFLARE : '', m.share_autoLabel())}
             class="{itemClass} {autoTool ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
           >
             <Icon name="external" class="w-3.5 h-3.5 shrink-0" />
@@ -304,24 +360,57 @@
             </span>
           </button>
           {#each toolsInfo.tools as tool (tool.name)}
-            <button
-              type="button"
-              role="menuitem"
-              disabled={!tool.installed}
-              onclick={() => startTool(tool.name, tool.label)}
-              class="{itemClass} {tool.installed ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
-            >
-              <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
-              <span class="flex-1 min-w-0 text-left">
-                <span class="block font-medium">{tool.label}</span>
-                <span class="block text-[10px] {tool.installed ? 'text-gray-500 dark:text-gray-400' : ''}">
-                  {tool.installed ? tool.binary : installHint(tool)}
+            <div class="flex items-stretch">
+              <button
+                type="button"
+                role="menuitem"
+                disabled={!tool.installed}
+                onclick={() => pickTool(tool.name, tool.label)}
+                class="{itemClass} {tool.installed ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
+              >
+                <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
+                <span class="flex-1 min-w-0 text-left">
+                  <span class="block font-medium">{tool.label}</span>
+                  <span class="block text-[10px] {tool.installed ? 'text-gray-500 dark:text-gray-400' : ''}">
+                    {!tool.installed
+                      ? installHint(tool)
+                      : tool.name === CLOUDFLARE && toolsInfo.base_domain
+                        ? hostLabel + '.' + toolsInfo.base_domain
+                        : tool.binary}
+                  </span>
                 </span>
-              </span>
-            </button>
+              </button>
+              {#if tool.name === CLOUDFLARE && tool.installed}
+                <button
+                  type="button"
+                  role="menuitem"
+                  title={m.shareDomain_configure()}
+                  aria-label={m.shareDomain_configure()}
+                  data-testid="share-domain-cog"
+                  onclick={() => ((domainError = ''), (domainModal = 'configure'))}
+                  class="shrink-0 px-2.5 flex items-center text-gray-400 hover:text-lerd-red dark:text-gray-500 dark:hover:text-lerd-red transition-colors"
+                >
+                  <Icon name="system" class="w-3.5 h-3.5" />
+                </button>
+              {/if}
+            </div>
           {/each}
         {/if}
       {/if}
     </div>
   {/if}
 </div>
+
+<!-- Outside the menu: moving the pointer onto the modal closes the hover menu,
+     which would take the modal with it. -->
+<ShareDomainModal
+  open={domainModal !== ''}
+  mode={domainModal === 'configure' ? 'configure' : 'start'}
+  label={hostLabel}
+  baseDomain={toolsInfo?.base_domain ?? ''}
+  remembered={toolsInfo?.base_domain_answered ?? false}
+  error={domainError}
+  busy={domainBusy}
+  onclose={() => (domainModal = '')}
+  onsubmit={submitDomain}
+/>
