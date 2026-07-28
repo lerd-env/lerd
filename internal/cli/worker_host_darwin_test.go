@@ -92,7 +92,9 @@ func TestWriteWorkerHostUnit_writesGuardAndServiceUnit(t *testing.T) {
 		"#!/bin/sh",
 		"cd '" + sitePath + "'",
 		filepath.Join(config.BinDir(), "fnm"),
-		"exec --using=22",
+		// Quoted: the prefix is a line of a generated shell script, so the
+		// version has to arrive as an argument rather than as shell syntax.
+		"exec --using='22'",
 		"-- /bin/sh -c 'npm run dev'",
 	} {
 		if !strings.Contains(bodyStr, want) {

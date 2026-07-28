@@ -41,22 +41,18 @@ func TestWriteWorkerUnitFileRefusesInjectionInAnyField(t *testing.T) {
 				t.Errorf("%s carrying a newline was accepted", tc.field)
 			}
 			// Nothing may reach disk either, so a refused unit cannot be left
-			// half-written for systemd to pick up.
-			for _, ext := range []string{".service", ".timer"} {
-				path := filepath.Join(tmp, "systemd", "user", "lerd-probe-mysite"+ext)
-				b, rerr := os.ReadFile(path)
-				if rerr != nil {
-					continue
-				}
-				if strings.Contains(string(b), "ExecStartPre=") {
-					t.Errorf("%s: a unit carrying the injected directive was written to %s", tc.field, path)
-				}
+			// half-written for the service manager to pick up. The whole tree is
+			// walked rather than named files, because the artifact differs by
+			// platform and a name-based check passes vacuously on the other one.
+			if found := fileContaining(t, tmp, "ExecStartPre="); found != "" {
+				t.Errorf("%s: a unit carrying the injected directive was written to %s", tc.field, found)
 			}
 		})
 	}
 }
 
-// The ordinary shape still writes.
+// The ordinary shape still writes. What the unit says is asserted per platform,
+// since Linux writes a systemd unit and macOS a launchd plist.
 func TestWriteWorkerUnitFileAcceptsNormalFields(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
@@ -69,11 +65,20 @@ func TestWriteWorkerUnitFileAcceptsNormalFields(t *testing.T) {
 	if err != nil || !changed {
 		t.Fatalf("writeWorkerUnitFile = %v, %v; want a clean write", changed, err)
 	}
-	b, err := os.ReadFile(filepath.Join(tmp, "systemd", "user", "lerd-queue-mysite.service"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(b), "Description=Lerd Queue Worker (mysite)") {
-		t.Errorf("unit lost its description:\n%s", b)
-	}
+}
+
+// fileContaining returns the first file under root holding needle, or empty.
+func fileContaining(t *testing.T, root, needle string) string {
+	t.Helper()
+	var found string
+	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() || found != "" {
+			return nil
+		}
+		if b, rerr := os.ReadFile(p); rerr == nil && strings.Contains(string(b), needle) {
+			found = p
+		}
+		return nil
+	})
+	return found
 }
