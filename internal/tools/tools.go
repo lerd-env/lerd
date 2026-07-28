@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,11 +37,14 @@ var (
 
 // Tool is one pinned download: a version and an HTTPS URL template in which
 // {version} and {asset} expand. Assets maps GOOS/GOARCH to the release asset
-// name, which may itself contain {version}.
+// name, which may itself contain {version}. Digests maps the same GOOS/GOARCH
+// key to the asset's sha256, and is optional so a manifest published without one
+// still installs on binaries that predate the field.
 type Tool struct {
 	Version string            `yaml:"version"`
 	URL     string            `yaml:"url"`
 	Assets  map[string]string `yaml:"assets"`
+	Digests map[string]string `yaml:"digests,omitempty"`
 }
 
 // Manifest is the parsed tools.yaml.
@@ -48,12 +52,60 @@ type Manifest struct {
 	Tools map[string]Tool `yaml:"tools"`
 }
 
-var versionRe = regexp.MustCompile(`^v?[0-9]+(\.[0-9]+){1,3}$`)
+var (
+	versionRe = regexp.MustCompile(`^v?[0-9]+(\.[0-9]+){1,3}$`)
+	sha256Re  = regexp.MustCompile(`^[a-fA-F0-9]{64}$`)
+)
 
-// valid guards published values before they reach a download URL: anything
-// but a plain version string or an HTTPS template is rejected.
+// downloadHosts is where a published manifest may point. The manifest is fetched
+// from a branch at runtime rather than shipped in the release, so it reaches
+// every install without review; without this, editing one file would redirect
+// what every host downloads and marks executable. Extendable through
+// LERD_TOOLS_HOSTS for the same reason LERD_TOOLS_URL exists.
+var downloadHosts = []string{
+	"getcomposer.org",
+	"github.com",
+	"objects.githubusercontent.com",
+	"release-assets.githubusercontent.com",
+	"raw.githubusercontent.com",
+}
+
+// allowedDownloadHost reports whether an https URL points somewhere a tool may
+// be fetched from. A bare suffix match would let evil-github.com through, so the
+// host is compared whole.
+func allowedDownloadHost(rawURL string) bool {
+	u, err := url.Parse(rawURL)
+	if err != nil || u.Scheme != "https" || u.Host == "" {
+		return false
+	}
+	host := strings.ToLower(u.Hostname())
+	for _, allowed := range append(downloadHosts, origin.ExtraToolHosts()...) {
+		if host == allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// valid guards published values before they reach a download URL: a plain
+// version string, an https template pointing at an allowed host, and, where the
+// manifest gives one, a well-formed sha256 per asset.
 func (t Tool) valid() bool {
-	return versionRe.MatchString(t.Version) && strings.HasPrefix(t.URL, "https://")
+	if !versionRe.MatchString(t.Version) || !allowedDownloadHost(t.URL) {
+		return false
+	}
+	for _, d := range t.Digests {
+		if !sha256Re.MatchString(d) {
+			return false
+		}
+	}
+	return true
+}
+
+// Digest returns the published sha256 for an asset, empty when the manifest
+// pins none for this platform.
+func (m *Manifest) Digest(name, goos, goarch string) string {
+	return m.Tools[name].Digests[goos+"/"+goarch]
 }
 
 // Load returns the pinned tool manifest: the embedded copy, overlaid with
@@ -163,6 +215,13 @@ func WriteStamp(name, version string) error {
 // sidecar while it is trustworthy (not older than the binary, which would
 // mean something else replaced it, e.g. composer self-update), else a
 // version probe. Empty when the binary is missing or undeterminable.
+//
+// A probed answer is stamped on the way out. The stamp is otherwise only
+// written when lerd downloads a tool, and composer is only downloaded when it
+// is absent, so an install that already had composer.phar before stamping
+// existed never got one. With composer unprobeable by execution, it read as
+// unknown forever and, because the update check needs a known version, was
+// never offered an update either.
 func InstalledVersion(name string) string {
 	path := binPath(name)
 	binInfo, err := os.Stat(path)
@@ -177,7 +236,11 @@ func InstalledVersion(name string) string {
 			}
 		}
 	}
-	return probeVersion(name, path)
+	v := probeVersion(name, path)
+	if v != "" {
+		_ = WriteStamp(name, v)
+	}
+	return v
 }
 
 // probeOutput runs a binary's version flag, a seam for tests.
@@ -185,8 +248,41 @@ var probeOutput = func(path string, args ...string) ([]byte, error) {
 	return exec.Command(path, args...).Output()
 }
 
-// probeVersion asks the binary itself; composer is skipped because running a
-// phar needs a PHP runtime lerd only has in containers.
+// composerVersionRe matches the version constant composer compiles into its
+// phar. Anchored on the declaration: the archive also carries a version string
+// for every bundled dependency, and a looser match would report one of those.
+var composerVersionRe = regexp.MustCompile(`const VERSION = '([^']+)'`)
+
+// composerPharMaxScan bounds the read. A composer phar is a few megabytes; well
+// past this it is not one, and reading it would not be worth the memory.
+const composerPharMaxScan = 64 << 20
+
+// composerVersion reads composer's version out of the phar without running it.
+// Executing it would need a PHP runtime lerd only has in containers, so the
+// bytes are the only source available on the host.
+func composerVersion(path string) string {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() > composerPharMaxScan {
+		return ""
+	}
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	m := composerVersionRe.FindSubmatch(body)
+	if m == nil {
+		return ""
+	}
+	// A build from source carries something like 1.0.0+no-version-set, which is
+	// not a release version. Reporting nothing beats reporting that.
+	if v := strings.TrimSpace(string(m[1])); versionRe.MatchString(v) {
+		return v
+	}
+	return ""
+}
+
+// probeVersion asks the binary itself, except composer, which is a phar and is
+// read rather than run.
 func probeVersion(name, path string) string {
 	var arg string
 	switch name {
@@ -194,6 +290,8 @@ func probeVersion(name, path string) string {
 		arg = "--version"
 	case "mkcert":
 		arg = "-version"
+	case "composer":
+		return composerVersion(path)
 	default:
 		return ""
 	}

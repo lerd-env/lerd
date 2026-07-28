@@ -6,10 +6,14 @@ package download
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -25,6 +29,15 @@ var (
 // any other failure is returned immediately. An attempt that stops receiving
 // bytes for idleTimeout is cancelled into the retry path instead of hanging.
 func File(ctx context.Context, url, dest string, mode os.FileMode, w io.Writer) error {
+	return Verified(ctx, url, dest, mode, "", w)
+}
+
+// Verified is File with an expected sha256 of the downloaded bytes. An empty
+// digest skips the check, for a tool the manifest pins no hash for. Bytes land
+// in a temporary file beside dest and are only renamed over it once they have
+// been read whole and matched, so a failed or tampered download can never
+// replace a working binary with a truncated one.
+func Verified(ctx context.Context, url, dest string, mode os.FileMode, sha256Hex string, w io.Writer) error {
 	fmt.Fprintf(w, "\n      Downloading %s\n      ", url)
 
 	var lastErr error
@@ -37,7 +50,7 @@ func File(ctx context.Context, url, dest string, mode os.FileMode, w io.Writer) 
 			case <-time.After(retryDelay):
 			}
 		}
-		retryable, err := fetchOnce(ctx, url, dest, mode, w)
+		retryable, err := fetchOnce(ctx, url, dest, mode, sha256Hex, w)
 		if err == nil {
 			return nil
 		}
@@ -51,7 +64,7 @@ func File(ctx context.Context, url, dest string, mode os.FileMode, w io.Writer) 
 
 // fetchOnce runs a single download attempt. The bool reports whether the
 // failure is transient and worth retrying.
-func fetchOnce(ctx context.Context, url, dest string, mode os.FileMode, w io.Writer) (bool, error) {
+func fetchOnce(ctx context.Context, url, dest string, mode os.FileMode, sha256Hex string, w io.Writer) (bool, error) {
 	actx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	// The watchdog cancels the attempt when nothing has arrived for
@@ -73,21 +86,43 @@ func fetchOnce(ctx context.Context, url, dest string, mode os.FileMode, w io.Wri
 		return retryableStatus(resp.StatusCode), fmt.Errorf("HTTP %d for %s", resp.StatusCode, url)
 	}
 
-	f, err := os.OpenFile(dest, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return false, err
+	}
+	f, err := os.CreateTemp(filepath.Dir(dest), filepath.Base(dest)+".part-*")
 	if err != nil {
 		return false, err
 	}
-	defer f.Close()
+	tmp := f.Name()
+	defer func() {
+		f.Close()
+		os.Remove(tmp) // no-op once the rename below has moved it
+	}()
 
+	sum := sha256.New()
 	pr := &progressReader{r: resp.Body, total: resp.ContentLength, w: w,
 		progressed: func() { watchdog.Reset(idleTimeout) }}
-	written, err := io.Copy(f, pr)
+	written, err := io.Copy(io.MultiWriter(f, sum), pr)
 	if err != nil {
 		return true, err
 	}
+	if err := f.Close(); err != nil {
+		return true, err
+	}
+	if sha256Hex != "" {
+		if got := hex.EncodeToString(sum.Sum(nil)); !strings.EqualFold(got, sha256Hex) {
+			// Not retryable: the bytes arrived intact and are the wrong ones.
+			return false, fmt.Errorf("checksum mismatch for %s: got %s, expected %s", url, got, sha256Hex)
+		}
+	}
+	if err := os.Chmod(tmp, mode); err != nil {
+		return false, err
+	}
+	if err := os.Rename(tmp, dest); err != nil {
+		return false, err
+	}
 	fmt.Fprintf(w, " (%d bytes)\n", written)
-
-	return false, os.Chmod(dest, mode)
+	return false, nil
 }
 
 // retryableStatus reports whether a status is a transient server-side

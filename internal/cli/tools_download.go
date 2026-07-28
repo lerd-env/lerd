@@ -27,7 +27,8 @@ func (p *pinnedTools) download(name, dest string, mode os.FileMode, w io.Writer)
 	if err != nil {
 		return "", err
 	}
-	if err := download.File(context.Background(), url, dest, mode, w); err != nil {
+	digest := p.m.Digest(name, runtime.GOOS, runtime.GOARCH)
+	if err := download.Verified(context.Background(), url, dest, mode, digest, w); err != nil {
 		return "", err
 	}
 	return p.m.Tools[name].Version, nil

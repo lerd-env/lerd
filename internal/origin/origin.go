@@ -73,6 +73,11 @@ func ToolsManifestURLs() []string {
 	return []string{"https://raw.githubusercontent.com/" + mainRepo + "/main/internal/tools/tools.yaml"}
 }
 
+// ExtraToolHosts lists additional hosts a published tool manifest may point at,
+// for a test rig or a mirror. Empty by default: the built-in allowlist is what a
+// normal install trusts.
+func ExtraToolHosts() []string { return splitList(os.Getenv("LERD_TOOLS_HOSTS")) }
+
 // ChangelogURLs lists raw changelog URLs.
 func ChangelogURLs() []string {
 	if list := splitList(os.Getenv("LERD_CHANGELOG_URL")); len(list) > 0 {

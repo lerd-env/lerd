@@ -3,7 +3,10 @@ package download
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -193,5 +196,100 @@ func TestFile_CancelledContextStopsRetrying(t *testing.T) {
 	}
 	if calls.Load() > 1 {
 		t.Fatalf("server calls = %d, want at most 1 after cancellation", calls.Load())
+	}
+}
+
+func sha256Of(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+func TestVerified_AcceptsAMatchingDigest(t *testing.T) {
+	shorten(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, "payload")
+	}))
+	defer srv.Close()
+
+	dest := filepath.Join(t.TempDir(), "tool")
+	if err := Verified(context.Background(), srv.URL, dest, 0o755, sha256Of("payload"), io.Discard); err != nil {
+		t.Fatalf("Verified: %v", err)
+	}
+	b, err := os.ReadFile(dest)
+	if err != nil || string(b) != "payload" {
+		t.Fatalf("dest = %q, %v", b, err)
+	}
+	info, err := os.Stat(dest)
+	if err != nil || info.Mode().Perm() != 0o755 {
+		t.Errorf("mode = %v, %v", info.Mode().Perm(), err)
+	}
+}
+
+// Bytes that arrive intact but are the wrong ones are not a transient failure,
+// so the attempt must not be retried and nothing may reach dest.
+func TestVerified_RejectsAMismatchedDigest(t *testing.T) {
+	shorten(t)
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		fmt.Fprint(w, "tampered")
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "tool")
+	err := Verified(context.Background(), srv.URL, dest, 0o755, sha256Of("payload"), io.Discard)
+	if err == nil || !strings.Contains(err.Error(), "checksum mismatch") {
+		t.Fatalf("err = %v, want a checksum mismatch", err)
+	}
+	if n := hits.Load(); n != 1 {
+		t.Errorf("a wrong payload was fetched %d times, want 1", n)
+	}
+	if _, err := os.Stat(dest); !os.IsNotExist(err) {
+		t.Error("the rejected payload was written to dest")
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(dir, "*.part-*"))
+	if len(leftovers) != 0 {
+		t.Errorf("temporary files left behind: %v", leftovers)
+	}
+}
+
+// A download that never succeeds must leave the tool that is already installed
+// exactly as it was, rather than replacing it with a truncated file.
+func TestVerified_FailedDownloadLeavesTheExistingBinaryIntact(t *testing.T) {
+	shorten(t)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Length", "64")
+		fmt.Fprint(w, "half")
+		w.(http.Flusher).Flush()
+		srvHijackClose(w)
+	}))
+	defer srv.Close()
+
+	dir := t.TempDir()
+	dest := filepath.Join(dir, "tool")
+	if err := os.WriteFile(dest, []byte("the working binary"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := Verified(context.Background(), srv.URL, dest, 0o755, "", io.Discard); err == nil {
+		t.Fatal("expected the truncated download to fail")
+	}
+	b, err := os.ReadFile(dest)
+	if err != nil || string(b) != "the working binary" {
+		t.Errorf("the previously working binary was destroyed: %q, %v", b, err)
+	}
+	leftovers, _ := filepath.Glob(filepath.Join(dir, "*.part-*"))
+	if len(leftovers) != 0 {
+		t.Errorf("temporary files left behind: %v", leftovers)
+	}
+}
+
+// srvHijackClose cuts the connection mid-body so the client sees a truncated
+// read rather than a clean EOF.
+func srvHijackClose(w http.ResponseWriter) {
+	if hj, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hj.Hijack(); err == nil {
+			conn.Close()
+		}
 	}
 }

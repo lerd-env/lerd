@@ -25,7 +25,8 @@ func NewToolsUpdateCmd() *cobra.Command {
 func runToolsUpdate(_ *cobra.Command, _ []string) error {
 	feedback.Begin()
 	var pins pinnedTools
-	updated := 0
+	updated, failed := 0, 0
+	var firstErr error
 	for _, s := range tools.StatusAll(context.Background()) {
 		if !s.Present {
 			feedback.Note(s.Name + " is not installed, skipping")
@@ -36,20 +37,36 @@ func runToolsUpdate(_ *cobra.Command, _ []string) error {
 			continue
 		}
 		step := feedback.Start("updating " + s.Name + " to " + s.Pinned)
-		if err := updateTool(&pins, s.Name); err != nil {
+		// One tool that cannot be updated, a bad pin or a published digest that
+		// does not match, must not decide the fate of the others: each is an
+		// independent download, so the rest are still attempted and the failure
+		// is reported at the end.
+		if err := updateToolFn(&pins, s.Name); err != nil {
 			step.Fail(err)
-			return err
+			failed++
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
 		}
 		step.OK("")
 		updated++
 	}
-	if updated == 0 {
+	switch {
+	case failed > 0:
+		feedback.Warn("%d of %d tools could not be updated", failed, failed+updated)
+		return firstErr
+	case updated == 0:
 		feedback.Done("all tools are up to date")
-	} else {
+	default:
 		feedback.Done("tools updated")
 	}
 	return nil
 }
+
+// updateToolFn is the per-tool install, a seam so the loop's failure handling
+// can be tested without a network.
+var updateToolFn = updateTool
 
 // updateTool reinstalls one tool at its pinned version. fnm goes through the
 // zip extract; composer and mkcert are plain binary swaps.
