@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strings"
 
 	"github.com/geodro/lerd/internal/hostbin"
@@ -110,22 +111,43 @@ func ngrokHostCmd(proxyPort int, token string, headless bool) *exec.Cmd {
 	return cmd
 }
 
-// ngrokContainerCmd runs the published image on the host network, so it reaches
-// the proxy on loopback the same way the binary would. The token is exported to
-// podman and forwarded by name: spelling it as -e VAR=VALUE would put the secret
-// in the argument list, where any local user can read it off ps.
+// ngrokContainerCmd runs the published image against the local proxy. The token
+// is exported to podman and forwarded by name: spelling it as -e VAR=VALUE would
+// put the secret in the argument list, where any local user can read it off ps.
 func ngrokContainerCmd(proxyPort int, token string, headless bool, containerName string) *exec.Cmd {
-	args := []string{
-		"run", "--rm", "--replace", "--net=host",
+	return ngrokContainerCmdFor(proxyPort, token, headless, containerName, runtime.GOOS)
+}
+
+// ngrokContainerCmdFor takes the platform so the routing decision can be tested
+// on either OS. goos is split out rather than read inline because the two cases
+// are not symmetric and only one of them is ever exercised on a given machine.
+func ngrokContainerCmdFor(proxyPort int, token string, headless bool, containerName, goos string) *exec.Cmd {
+	args := []string{"run", "--rm", "--replace"}
+	netArgs, upstream := ngrokContainerUpstream(proxyPort, goos)
+	args = append(args, netArgs...)
+	args = append(args,
 		"--name", containerName,
 		"-e", "NGROK_AUTHTOKEN",
 		ngrokImage,
-		"http", fmt.Sprintf("%d", proxyPort),
-	}
+		"http", upstream,
+	)
 	args = append(args, ngrokLogArgs(headless)...)
 	cmd := podman.Cmd(args...)
 	cmd.Env = ngrokEnv(token)
 	return cmd
+}
+
+// ngrokContainerUpstream says how the container reaches the proxy, which is a
+// host process either way. On Linux --net=host puts the container in the host's
+// own network namespace, so the proxy really is on loopback. On macOS the
+// container runs inside the podman machine VM, whose loopback is not the host's:
+// --net=host there dials the VM, nothing answers, and ngrok reports
+// ERR_NGROK_8012. The VM reaches the host over the gateway instead.
+func ngrokContainerUpstream(proxyPort int, goos string) (netArgs []string, upstream string) {
+	if goos == "darwin" {
+		return nil, fmt.Sprintf("http://host.containers.internal:%d", proxyPort)
+	}
+	return []string{"--net=host"}, fmt.Sprintf("%d", proxyPort)
 }
 
 // ngrokLogArgs asks for parseable output when a caller has to scrape the public

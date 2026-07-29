@@ -70,10 +70,37 @@ func TestNgrokContainerKeepsTheTokenOutOfTheArguments(t *testing.T) {
 		t.Errorf("the token was not passed through the environment: %v", cmd.Env)
 	}
 	joined := strings.Join(cmd.Args, " ")
-	for _, want := range []string{"--net=host", "-e", "NGROK_AUTHTOKEN", ngrokImage, "http", "5180"} {
+	for _, want := range []string{"-e", "NGROK_AUTHTOKEN", ngrokImage, "http"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("container command missing %q: %s", want, joined)
 		}
+	}
+}
+
+// On macOS the container runs inside the podman machine VM, whose loopback is
+// not the host's. --net=host there points ngrok at the VM, where nothing is
+// listening, and every request comes back ERR_NGROK_8012.
+func TestNgrokContainerReachesTheProxyOverTheHostGatewayOnMacOS(t *testing.T) {
+	joined := strings.Join(ngrokContainerCmdFor(65483, "tok", false, "lerd-ngrok-t", "darwin").Args, " ")
+
+	if strings.Contains(joined, "--net=host") {
+		t.Errorf("the podman machine VM's loopback is not the host's: %s", joined)
+	}
+	if !strings.Contains(joined, "http http://host.containers.internal:65483") {
+		t.Errorf("container is not pointed at the host gateway: %s", joined)
+	}
+}
+
+// On Linux the container shares the host's own network namespace, so the proxy
+// really is on loopback and the bare port is what ngrok should be given.
+func TestNgrokContainerUsesHostNetworkingOnLinux(t *testing.T) {
+	joined := strings.Join(ngrokContainerCmdFor(65483, "tok", false, "lerd-ngrok-t", "linux").Args, " ")
+
+	if !strings.Contains(joined, "--net=host") {
+		t.Errorf("linux should share the host network namespace: %s", joined)
+	}
+	if !strings.Contains(joined, "http 65483") {
+		t.Errorf("linux should dial the proxy on loopback: %s", joined)
 	}
 }
 
