@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"net"
 	"os"
 	"os/exec"
@@ -20,8 +21,8 @@ func viteDevServer() *config.DevServerTool {
 		Args:          "--config {config} --port {port} --strictPort",
 		DefaultPort:   5173,
 		Wrapper: `import { mergeConfig } from 'vite';
-import projectConfig from '%s';
-const lerd = { base: '%s', server: { origin: '%s', allowedHosts: %s } };
+import projectConfig from %s;
+const lerd = { base: %s, server: { origin: %s, allowedHosts: %s } };
 export default projectConfig;
 `,
 	}
@@ -88,10 +89,10 @@ func TestWriteDevServerWrapperMergesBaseAndOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		"'/@lerd-vite/'",
-		"'https://myapp.test'",
+		`"/@lerd-vite/"`,
+		`"https://myapp.test"`,
 		`"myapp.test"`,
-		"'../../vite.config.js'",
+		`"../../vite.config.js"`,
 		"mergeConfig",
 	} {
 		if !strings.Contains(string(body), want) {
@@ -200,6 +201,47 @@ func TestDevServerArgsSubstitutesConfigAndPort(t *testing.T) {
 func TestDevServerArgsEmptyWithoutWrapper(t *testing.T) {
 	if got := devServerArgs(viteDevServer(), "", 5180); got != "" {
 		t.Fatalf("devServerArgs() = %q, want empty", got)
+	}
+}
+
+// The generated config is JavaScript the dev server executes, and a project's
+// own .lerd.yaml supplies the domains it is built from, so a quote in a domain
+// must stay inside the string rather than close it and run what follows.
+func TestWriteDevServerWrapperEscapesAHostileOrigin(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The real template, not the fixture: this is about what ships.
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules", "vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tool := config.DevServerToolInstalled(dir)
+	if tool == nil {
+		t.Fatal("vite not resolved from node_modules")
+	}
+
+	payload := "x'+process.env.AWS_SECRET_ACCESS_KEY+'"
+	origin := "https://" + payload
+	rel, err := writeDevServerWrapper(dir, tool, origin, []string{payload})
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The payload text survives, but only inside an encoded literal. Emitted raw
+	// between single quotes, the first one closes the string and the rest runs.
+	encoded, err := json.Marshal(origin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), string(encoded)) {
+		t.Errorf("origin is not an encoded literal, want %s:\n%s", encoded, body)
+	}
+	if strings.Contains(string(body), "'"+origin+"'") {
+		t.Errorf("origin broke out of its string literal:\n%s", body)
 	}
 }
 

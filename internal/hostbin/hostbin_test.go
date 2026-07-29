@@ -18,16 +18,18 @@ func TestLookFindsBinaryOnPATH(t *testing.T) {
 	}
 }
 
-// The launchd case: a Homebrew tool with none of its prefixes on PATH.
+// The launchd case: a Homebrew tool with none of its prefixes on PATH. The name
+// is synthetic because a machine holding the real tool in a system prefix would
+// resolve it there, failing a test that is about the fallback.
 func TestLookFallsBackToExtraDirs(t *testing.T) {
 	brew := t.TempDir()
-	writeExe(t, filepath.Join(brew, "cloudflared"))
+	writeExe(t, filepath.Join(brew, "lerdtunnel"))
 	withExtraDirs(t, brew)
 	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
 
-	got, ok := Look("cloudflared")
-	if !ok || got != filepath.Join(brew, "cloudflared") {
-		t.Fatalf("Look() = %q, %v; want %s", got, ok, filepath.Join(brew, "cloudflared"))
+	got, ok := Look("lerdtunnel")
+	if !ok || got != filepath.Join(brew, "lerdtunnel") {
+		t.Fatalf("Look() = %q, %v; want %s", got, ok, filepath.Join(brew, "lerdtunnel"))
 	}
 }
 
