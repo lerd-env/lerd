@@ -258,3 +258,56 @@ func TestRemoveShellEntry_noRcFiles_noError(t *testing.T) {
 
 	removeShellEntry() // must not panic
 }
+
+// ── removeInstalledBinaries ──────────────────────────────────────────────────
+
+// mkbin creates an executable stand-in at path.
+func mkbin(t *testing.T, path string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatalf("writing %s: %v", path, err)
+	}
+}
+
+func TestRemoveInstalledBinaries_removesLerdAndTray(t *testing.T) {
+	dir := t.TempDir()
+	self := filepath.Join(dir, "lerd")
+	tray := filepath.Join(dir, "lerd-tray")
+	mkbin(t, self)
+	mkbin(t, tray)
+
+	removeInstalledBinaries(self)
+
+	if _, err := os.Stat(self); !os.IsNotExist(err) {
+		t.Errorf("lerd binary still present")
+	}
+	if _, err := os.Stat(tray); !os.IsNotExist(err) {
+		t.Errorf("lerd-tray still present: uninstall must not leave a tray a desktop entry can launch")
+	}
+}
+
+func TestRemoveInstalledBinaries_missingTrayIsNotAnError(t *testing.T) {
+	dir := t.TempDir()
+	self := filepath.Join(dir, "lerd")
+	mkbin(t, self)
+
+	removeInstalledBinaries(self)
+
+	if _, err := os.Stat(self); !os.IsNotExist(err) {
+		t.Errorf("lerd binary still present")
+	}
+}
+
+func TestRemoveInstalledBinaries_leavesUnrelatedNeighbours(t *testing.T) {
+	dir := t.TempDir()
+	self := filepath.Join(dir, "lerd")
+	other := filepath.Join(dir, "lerdfoo")
+	mkbin(t, self)
+	mkbin(t, other)
+
+	removeInstalledBinaries(self)
+
+	if _, err := os.Stat(other); err != nil {
+		t.Errorf("removed an unrelated neighbour %s: %v", other, err)
+	}
+}
