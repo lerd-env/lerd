@@ -6,7 +6,7 @@ import version from './fixtures/version.json';
 import sitesFixture from './fixtures/sites.json';
 import servicesFixture from './fixtures/services.json';
 import presetsFixture from './fixtures/presets.json';
-import status from './fixtures/status.json';
+import statusFixture from './fixtures/status.json';
 import accessMode from './fixtures/access-mode.json';
 import settings from './fixtures/settings.json';
 import phpVersions from './fixtures/php-versions.json';
@@ -31,6 +31,8 @@ try {
 const sites = structuredClone(sitesFixture) as Array<Record<string, unknown>>;
 const services = structuredClone(servicesFixture) as Array<Record<string, unknown>>;
 const presets = structuredClone(presetsFixture) as Array<Record<string, unknown>>;
+// Status is mutable too, so applying a tool update lands on the card that asked.
+const status = structuredClone(statusFixture) as Record<string, unknown>;
 
 // Static GET fixtures keyed by exact path.
 const ROUTES: Record<string, unknown> = {
@@ -608,6 +610,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
   if (cmdList) return jsonResponse({ commands: commandsFor(decodeURIComponent(cmdList[1])) });
   const doctorMatch = path.match(/^\/api\/sites\/([^/]+)\/doctor$/);
   if (doctorMatch) return jsonResponse(doctorFor(decodeURIComponent(doctorMatch[1])));
+
+  // Managed host tools. The check re-reads the pins, which in the demo are the
+  // ones already loaded, and an update applies the pin so the card that asked
+  // lands on its up-to-date state instead of staying flagged.
+  const tools = () => (status.tools ?? []) as Array<Record<string, unknown>>;
+  if (path === '/api/tools/check' && method === 'POST')
+    return jsonResponse({ ok: true, tools: tools() });
+  const toolUpdate = path.match(/^\/api\/tools\/([^/]+)\/update$/);
+  if (toolUpdate && method === 'POST') {
+    const tool = tools().find((t) => t.name === decodeURIComponent(toolUpdate[1]));
+    if (tool) {
+      tool.installed = tool.pinned;
+      tool.update_available = false;
+    }
+    return jsonResponse({ ok: true });
+  }
 
   // Static fixtures
   if (path in ROUTES) return jsonResponse(ROUTES[path]);

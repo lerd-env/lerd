@@ -525,11 +525,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.30.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.31.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.30.0 dev digest</span>
-            <span class="digest-sub">One declared extension set applied to every PHP image, an engine's databases managed from the dashboard with snapshots and imports, and a doctor that repairs what it safely can.</span>
+            <span class="digest-title">v1.31.0 dev digest</span>
+            <span class="digest-sub">A Cloudflare base domain set once so every share keeps its URL, ngrok from its published image with nothing installed, and a dev server served on the site's own domain.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
