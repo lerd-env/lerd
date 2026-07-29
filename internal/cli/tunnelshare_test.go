@@ -88,7 +88,7 @@ func TestAutoShareToolName(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Setenv("PATH", fakeBin(t, c.bins...))
-		if got := autoShareToolName(c.defaultTool); got != c.want {
+		if got := autoShareToolName(c.defaultTool, ""); got != c.want {
 			t.Errorf("autoShareToolName(%q) with %v = %q, want %q", c.defaultTool, c.bins, got, c.want)
 		}
 	}
@@ -113,7 +113,7 @@ func TestShareToolCanonicalName(t *testing.T) {
 }
 
 func TestResolveTunnelTool_rejectsUnknownName(t *testing.T) {
-	_, err := resolveTunnelTool("wireguard", "")
+	_, err := resolveTunnelTool("wireguard", "", "")
 	if err == nil || !strings.Contains(err.Error(), "unknown tunnel tool") {
 		t.Fatalf("expected unknown-tool error, got %v", err)
 	}
@@ -121,7 +121,7 @@ func TestResolveTunnelTool_rejectsUnknownName(t *testing.T) {
 
 func TestResolveTunnelTool_explicitNameIgnoresDefault(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
-	tool, err := resolveTunnelTool("ngrok", "cloudflare")
+	tool, err := resolveTunnelTool("ngrok", "cloudflare", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestStartTunnelProcess_returnsURLAndTracksTunnel(t *testing.T) {
 	tunnelStateHome(t)
 	site := "tunnel-test-a"
 	cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://abc123.serveo.net"; sleep 30`)
-	url, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, "")
+	url, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, "", "")
 	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -173,7 +173,7 @@ func TestStartTunnelProcess_readsStderrToo(t *testing.T) {
 	tunnelStateHome(t)
 	site := "tunnel-test-stderr"
 	cmd := shellTunnel(`echo "INF |  https://plum-lakes-agree.trycloudflare.com  |" >&2; sleep 30`)
-	url, err := startTunnelProcess(site, "cloudflare", cmd, nil, 5*time.Second, "")
+	url, err := startTunnelProcess(site, "cloudflare", cmd, nil, 5*time.Second, "", "")
 	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -189,7 +189,7 @@ func TestStartTunnelProcess_exitBeforeURLReportsOutput(t *testing.T) {
 	tunnelStateHome(t)
 	site := "tunnel-test-fail"
 	cmd := shellTunnel(`echo "ERR authentication failed: install your authtoken" >&2; exit 1`)
-	_, err := startTunnelProcess(site, "ngrok", cmd, nil, 5*time.Second, "")
+	_, err := startTunnelProcess(site, "ngrok", cmd, nil, 5*time.Second, "", "")
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -203,7 +203,7 @@ func TestStartTunnelProcess_timesOut(t *testing.T) {
 	tunnelStateHome(t)
 	site := "tunnel-test-slow"
 	cmd := shellTunnel(`sleep 30`)
-	_, err := startTunnelProcess(site, "serveo", cmd, nil, 300*time.Millisecond, "")
+	_, err := startTunnelProcess(site, "serveo", cmd, nil, 300*time.Millisecond, "", "")
 	if err == nil || !strings.Contains(err.Error(), "timed out") {
 		t.Fatalf("expected timeout error, got %v", err)
 	}
@@ -215,11 +215,11 @@ func TestStartTunnelProcess_replacesExistingTunnel(t *testing.T) {
 	site := "tunnel-test-replace"
 	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	first := shellTunnel(`echo "Forwarding HTTP traffic from https://first.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(site, "serveo", first, nil, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(site, "serveo", first, nil, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("first start: %v", err)
 	}
 	second := shellTunnel(`echo "Forwarding HTTP traffic from https://second.serveo.net"; sleep 30`)
-	url, err := startTunnelProcess(site, "serveo", second, nil, 5*time.Second, "")
+	url, err := startTunnelProcess(site, "serveo", second, nil, 5*time.Second, "", "")
 	if err != nil {
 		t.Fatalf("second start: %v", err)
 	}
@@ -237,7 +237,7 @@ func TestStartTunnelProcess_stopProxyRunsWhenProcessDies(t *testing.T) {
 	site := "tunnel-test-proxy"
 	stopped := make(chan struct{})
 	cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://p.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(site, "serveo", cmd, func() { close(stopped) }, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(site, "serveo", cmd, func() { close(stopped) }, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("start: %v", err)
 	}
 	if err := TunnelStop(site, ""); err != nil {
@@ -255,7 +255,7 @@ func TestStopAllTunnels(t *testing.T) {
 	sites := []string{"tunnel-test-all-1", "tunnel-test-all-2"}
 	for _, s := range sites {
 		cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://` + s + `.serveo.net"; sleep 30`)
-		if _, err := startTunnelProcess(s, "serveo", cmd, nil, 5*time.Second, ""); err != nil {
+		if _, err := startTunnelProcess(s, "serveo", cmd, nil, 5*time.Second, "", ""); err != nil {
 			t.Fatalf("start %s: %v", s, err)
 		}
 	}
@@ -296,11 +296,11 @@ func TestStartTunnelProcess_worktreeTunnelIsIndependentOfTheSite(t *testing.T) {
 	t.Cleanup(func() { _ = TunnelStop(site, ""); _ = TunnelStop(site, "feature") })
 
 	parent := shellTunnel(`echo "Forwarding HTTP traffic from https://parent.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(siteKey, "serveo", parent, nil, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(siteKey, "serveo", parent, nil, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("parent start: %v", err)
 	}
 	wt := shellTunnel(`echo "Forwarding HTTP traffic from https://branch.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(wtKey, "serveo", wt, nil, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(wtKey, "serveo", wt, nil, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("worktree start: %v", err)
 	}
 
@@ -357,7 +357,7 @@ func TestStartTunnelProcess_namedTunnelReportsItsOwnHostname(t *testing.T) {
 	site := "tunnel-test-named"
 	known := "https://acme.example.com"
 	cmd := shellTunnel(`echo "INF Registered tunnel connection connIndex=0"; sleep 30`)
-	url, err := startTunnelProcess(site, "cloudflare", cmd, nil, 5*time.Second, known)
+	url, err := startTunnelProcess(site, "cloudflare", cmd, nil, 5*time.Second, known, "")
 	t.Cleanup(func() { _ = TunnelStop(site, "") })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -397,7 +397,7 @@ func TestTunnelStatus_prefersTheDaemonsOwnTunnel(t *testing.T) {
 		t.Fatalf("writing: %v", err)
 	}
 	cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://live.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("starting: %v", err)
 	}
 	t.Cleanup(func() { _ = TunnelStop(site, "") })
@@ -435,7 +435,7 @@ func TestTunnelStop_leavesTheCLIShareWhenWeOwnTheLiveTunnel(t *testing.T) {
 		t.Fatalf("writing: %v", err)
 	}
 	cmd := shellTunnel(`echo "Forwarding HTTP traffic from https://live.serveo.net"; sleep 30`)
-	if _, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, ""); err != nil {
+	if _, err := startTunnelProcess(site, "serveo", cmd, nil, 5*time.Second, "", ""); err != nil {
 		t.Fatalf("starting: %v", err)
 	}
 	t.Cleanup(func() { _ = TunnelStop(site, "") })

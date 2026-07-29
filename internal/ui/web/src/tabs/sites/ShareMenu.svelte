@@ -5,11 +5,14 @@
     loadShareTools,
     loadSites,
     saveShareDomain,
+    saveShareNgrokToken,
     startTunnel,
     stopTunnel
   } from '$stores/sites';
   import Icon from '$components/Icon.svelte';
   import ShareDomainModal from './ShareDomainModal.svelte';
+  import ShareTokenModal from './ShareTokenModal.svelte';
+  import ShareToolCog from './ShareToolCog.svelte';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -131,6 +134,29 @@
   let domainModal = $state<'start' | 'configure' | ''>('');
   let domainError = $state('');
   let domainBusy = $state(false);
+
+  // ngrok is the only tool with a published image, so a token makes it usable
+  // on a machine that never installed it.
+  const NGROK = 'ngrok';
+  let tokenModal = $state(false);
+  let tokenError = $state('');
+  let tokenBusy = $state(false);
+
+  async function submitToken(token: string) {
+    tokenBusy = true;
+    tokenError = '';
+    try {
+      const res = await saveShareNgrokToken(token);
+      if (!res.ok) {
+        tokenError = res.error || m.common_requestFailed();
+        return;
+      }
+      toolsInfo = await loadShareTools().catch(() => toolsInfo);
+      tokenModal = false;
+    } finally {
+      tokenBusy = false;
+    }
+  }
 
   function pickTool(tool: string, label: string) {
     if (tool === CLOUDFLARE && !toolsInfo?.base_domain_answered) {
@@ -364,34 +390,48 @@
               <button
                 type="button"
                 role="menuitem"
-                disabled={!tool.installed}
-                onclick={() => pickTool(tool.name, tool.label)}
-                class="{itemClass} {tool.installed ? itemIdle : 'text-gray-400 dark:text-gray-600'}"
+                disabled={!tool.installed && !tool.needs_token}
+                data-testid={tool.needs_token ? 'share-tool-needs-token' : undefined}
+                onclick={() =>
+                  tool.needs_token
+                    ? ((tokenError = ''), (tokenModal = true))
+                    : pickTool(tool.name, tool.label)}
+                class="{itemClass} {tool.installed || tool.needs_token
+                  ? itemIdle
+                  : 'text-gray-400 dark:text-gray-600'}"
               >
                 <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
                 <span class="flex-1 min-w-0 text-left">
                   <span class="block font-medium">{tool.label}</span>
-                  <span class="block text-[10px] {tool.installed ? 'text-gray-500 dark:text-gray-400' : ''}">
-                    {!tool.installed
-                      ? installHint(tool)
-                      : tool.name === CLOUDFLARE && toolsInfo.base_domain
-                        ? hostLabel + '.' + toolsInfo.base_domain
-                        : tool.binary}
+                  <span
+                    class="block text-[10px] {tool.installed || tool.needs_token
+                      ? 'text-gray-500 dark:text-gray-400'
+                      : ''}"
+                  >
+                    {tool.needs_token
+                      ? m.share_needsToken()
+                      : !tool.installed
+                        ? installHint(tool)
+                        : tool.containerised
+                          ? m.share_runsAsContainer()
+                          : tool.name === CLOUDFLARE && toolsInfo.base_domain
+                            ? hostLabel + '.' + toolsInfo.base_domain
+                            : tool.binary}
                   </span>
                 </span>
               </button>
               {#if tool.name === CLOUDFLARE && tool.installed}
-                <button
-                  type="button"
-                  role="menuitem"
+                <ShareToolCog
                   title={m.shareDomain_configure()}
-                  aria-label={m.shareDomain_configure()}
-                  data-testid="share-domain-cog"
+                  testid="share-domain-cog"
                   onclick={() => ((domainError = ''), (domainModal = 'configure'))}
-                  class="shrink-0 px-2.5 flex items-center text-gray-400 hover:text-lerd-red dark:text-gray-500 dark:hover:text-lerd-red transition-colors"
-                >
-                  <Icon name="system" class="w-3.5 h-3.5" />
-                </button>
+                />
+              {:else if tool.name === NGROK}
+                <ShareToolCog
+                  title={m.shareToken_configure()}
+                  testid="share-token-cog"
+                  onclick={() => ((tokenError = ''), (tokenModal = true))}
+                />
               {/if}
             </div>
           {/each}
@@ -413,4 +453,13 @@
   busy={domainBusy}
   onclose={() => (domainModal = '')}
   onsubmit={submitDomain}
+/>
+
+<ShareTokenModal
+  open={tokenModal}
+  tokenSet={toolsInfo?.ngrok_token_set ?? false}
+  error={tokenError}
+  busy={tokenBusy}
+  onclose={() => (tokenModal = false)}
+  onsubmit={submitToken}
 />

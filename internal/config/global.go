@@ -128,6 +128,10 @@ type GlobalConfig struct {
 		// answer worth reusing, so the dashboard stops asking. Answered with
 		// an empty BaseDomain means "always use a quick tunnel".
 		BaseDomainAnswered bool `yaml:"base_domain_answered,omitempty" mapstructure:"base_domain_answered"`
+		// NgrokToken authenticates ngrok. A container carries none of the
+		// host's ngrok configuration, so the published image needs this to
+		// run at all. Set via "lerd share:token".
+		NgrokToken string `yaml:"ngrok_token,omitempty" mapstructure:"ngrok_token"`
 	} `yaml:"share,omitempty" mapstructure:"share"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`

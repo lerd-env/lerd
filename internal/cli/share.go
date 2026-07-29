@@ -35,6 +35,7 @@ func NewShareCmd() *cobra.Command {
 	var useServeo bool
 	var useLocalhostRun bool
 	var domain string
+	var token string
 
 	cmd := &cobra.Command{
 		Use:   "share [site]",
@@ -61,7 +62,7 @@ A base domain set with "lerd share:domain" does the same without the flag: a
 Cloudflare share is served on "<site>.<base domain>".`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain)
+			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain, token)
 		},
 	}
 
@@ -71,6 +72,7 @@ Cloudflare share is served on "<site>.<base domain>".`,
 	cmd.Flags().BoolVar(&useServeo, "serveo", false, "Use serveo.net (SSH, no signup)")
 	cmd.Flags().BoolVar(&useLocalhostRun, "localhost-run", false, "Use localhost.run (SSH, no signup)")
 	cmd.Flags().StringVar(&domain, "domain", "", "Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel)")
+	cmd.Flags().StringVar(&token, "token", "", "ngrok auth token for this run, overriding the one from \"lerd share:token\"")
 	return cmd
 }
 
@@ -87,9 +89,13 @@ type shareTool struct {
 	mode    shareMode
 	sshHost string // only for shareModeSSH
 	domain  string // only for shareModeCloudflare: user's own hostname (named tunnel)
+	// ngrok / ngrokToken are only for shareModeNgrok: which route runs the
+	// tool, and the token that authenticates it on either of them.
+	ngrok      ngrokRunner
+	ngrokToken string
 }
 
-func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain string) error {
+func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, token string) error {
 	site, branch, err := resolveShareSite(args)
 	if err != nil {
 		return err
@@ -108,7 +114,14 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 		port = 80
 	}
 
-	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain, cfg.Share.DefaultTool)
+	// The flag is for a single run, so it outranks the stored token without
+	// replacing it.
+	ngrokToken := cfg.Share.NgrokToken
+	if token != "" {
+		ngrokToken = token
+	}
+
+	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, domain, cfg.Share.DefaultTool, ngrokToken)
 	if err != nil {
 		return err
 	}
@@ -283,17 +296,25 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 	var cmd *exec.Cmd
 	switch tool.mode {
 	case shareModeNgrok:
-		args := []string{"http", fmt.Sprintf("%d", httpPort), "--host-header=" + target.domain}
-		if headless {
-			args = append(args, "--log", "stdout", "--log-format", "json")
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		if err != nil {
+			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
-		cmd = exec.Command(hostbin.Path("ngrok"), args...)
+		name := ngrokContainerName(target.name, "")
+		stop = stopProxy
+		if tool.ngrok.container {
+			// The container outlives the podman client, so tearing the tunnel
+			// down has to remove it by name rather than signal a process.
+			stop = func() { removeNgrokContainer(name); stopProxy() }
+		}
+		cmd = tool.ngrok.cmd(proxyPort, tool.ngrokToken, headless, name)
 	case shareModeExpose:
-		shareURL := fmt.Sprintf("http://%s", target.domain)
-		if httpPort != 80 {
-			shareURL = fmt.Sprintf("http://%s:%d", target.domain, httpPort)
+		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
+		if err != nil {
+			return nil, nil, fmt.Errorf("starting local proxy: %w", err)
 		}
-		cmd = exec.Command(hostbin.Path("expose"), "share", shareURL)
+		stop = stopProxy
+		cmd = exec.Command(hostbin.Path("expose"), "share", fmt.Sprintf("http://127.0.0.1:%d", proxyPort))
 	case shareModeCloudflare:
 		proxyPort, stopProxy, err := startHostProxy(target.domain, httpPort, httpsPort, target.secured)
 		if err != nil {
@@ -365,7 +386,7 @@ func resolveShareSite(args []string) (*config.Site, string, error) {
 	return ensureSiteAndBranchForCwd()
 }
 
-func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, defaultTool string) (*shareTool, error) {
+func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun bool, domain, defaultTool, ngrokToken string) (*shareTool, error) {
 	count := 0
 	for _, f := range []bool{useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun} {
 		if f {
@@ -405,10 +426,11 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 
 	if useNgrok {
-		if _, ok := hostbin.Look("ngrok"); !ok {
-			return nil, fmt.Errorf("ngrok not found — install it from https://ngrok.com/download%s", defaultToolHint(fromDefault))
+		runner, err := ngrokRunnerFor(ngrokToken)
+		if err != nil {
+			return nil, fmt.Errorf("%w%s", err, defaultToolHint(fromDefault))
 		}
-		return &shareTool{mode: shareModeNgrok}, nil
+		return &shareTool{mode: shareModeNgrok, ngrok: runner, ngrokToken: ngrokToken}, nil
 	}
 	if useCloudflare {
 		if _, ok := hostbin.Look("cloudflared"); !ok {
@@ -438,6 +460,12 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 	if _, ok := hostbin.Look("expose"); ok {
 		return &shareTool{mode: shareModeExpose}, nil
+	}
+	// Nothing is installed. A token is a deliberate choice of ngrok, so the
+	// image stands in ahead of the signup-free SSH tools, but never ahead of a
+	// tool already on the machine: pulling one is the slower way to the same URL.
+	if ngrokToken != "" {
+		return &shareTool{mode: shareModeNgrok, ngrok: ngrokRunner{container: true}, ngrokToken: ngrokToken}, nil
 	}
 	if _, ok := hostbin.Look("ssh"); ok {
 		fmt.Println("ngrok/cloudflared/Expose not found — using localhost.run (SSH, no signup required)")
