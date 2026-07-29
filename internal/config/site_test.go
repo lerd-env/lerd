@@ -81,6 +81,24 @@ func TestAddSite_RejectsUnitInjectionNames(t *testing.T) {
 	}
 }
 
+// A project's .lerd.yaml supplies its own domains, and a domain is written into
+// generated files. A quote is never part of a hostname and would close a string
+// literal in whichever file the domain lands in, so the registry refuses it.
+func TestAddSite_RejectsQuotesInDomains(t *testing.T) {
+	setDataDir(t)
+	for _, domain := range []string{
+		"x'+process.env.SECRET+'.test",
+		`x".test`,
+	} {
+		if err := AddSite(Site{Name: "app", Domains: []string{domain}, Path: "/srv/x"}); err == nil {
+			t.Errorf("AddSite(domain %q) should have been rejected", domain)
+		}
+	}
+	if err := AddSite(Site{Name: "app", Domains: []string{"app.test"}, Path: "/srv/app"}); err != nil {
+		t.Errorf("AddSite with a clean domain should succeed: %v", err)
+	}
+}
+
 // A site at the filesystem root would be bind-mounted as /:/:rw into every
 // container, shadowing its rootfs so it cannot start (issue #884). AddSite must
 // refuse it.

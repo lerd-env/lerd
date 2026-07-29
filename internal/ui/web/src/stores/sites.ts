@@ -612,6 +612,10 @@ export interface ShareToolStatus {
   label: string;
   binary: string;
   installed: boolean;
+  // The tool has no binary here and runs from a published image instead.
+  containerised?: boolean;
+  // The image is the only route left, and it needs a token before it can run.
+  needs_token?: boolean;
   install_url?: string;
 }
 export interface ShareToolsInfo {
@@ -620,6 +624,8 @@ export interface ShareToolsInfo {
   default?: string;
   base_domain?: string;
   base_domain_answered?: boolean;
+  // Whether an ngrok token is stored. The token itself never leaves the host.
+  ngrok_token_set?: boolean;
 }
 export const loadShareTools = () => apiJson<ShareToolsInfo>('/api/share-tools');
 export const startTunnel = (s: Site, tool: string = '', branch: string = '', domain: string = '') => {
@@ -641,6 +647,23 @@ export async function saveShareDomain(
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ base_domain: domain, remember })
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+}
+// Stores the ngrok auth token, or clears it when empty. Only ever sent to the
+// host; the token is never read back out of the API.
+export async function saveShareNgrokToken(
+  token: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/share-tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ngrok_token: token })
     });
     const data = (await res.json()) as { ok?: boolean; error?: string };
     return { ok: Boolean(data.ok), error: data.error };

@@ -123,6 +123,10 @@ func Start(currentVersion string) error {
 	// the way out, and kill anything a previous run was killed too hard to
 	// clean up itself.
 	cli.ReapOrphanTunnels()
+	// A tunnel container is invisible to the pid-based reap: conmon is
+	// reparented out of the client's tree, so a killed lerd-ui leaves it
+	// running and there is no pid left to recognise it by.
+	go cli.ReapOrphanNgrokContainers()
 	stopTunnelsOnShutdown()
 
 	// Single coalescer for the three event sources that need to refresh the
@@ -3257,9 +3261,20 @@ func handleShareTools(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			BaseDomain string `json:"base_domain"`
 			Remember   bool   `json:"remember"`
+			// NgrokToken is only present when the token form was submitted, so
+			// a base-domain save cannot clear a stored token by omitting it.
+			NgrokToken *string `json:"ngrok_token"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, SiteActionResponse{Error: "invalid request body"})
+			return
+		}
+		if body.NgrokToken != nil {
+			if err := cli.SetShareNgrokToken(*body.NgrokToken); err != nil {
+				writeJSON(w, SiteActionResponse{Error: err.Error()})
+				return
+			}
+			writeJSON(w, SiteActionResponse{OK: true})
 			return
 		}
 		if err := cli.SetShareBaseDomain(body.BaseDomain, body.Remember); err != nil {

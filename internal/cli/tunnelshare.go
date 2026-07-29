@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -36,6 +37,9 @@ type tunnelProc struct {
 	cmd       *exec.Cmd
 	stopProxy func()
 	done      chan struct{}
+	// container names the tunnel's container when the tool runs as one. Killing
+	// the podman client does not stop it, so the name is what tears it down.
+	container string
 }
 
 var (
@@ -47,10 +51,18 @@ var tunnelStartTimeout = 45 * time.Second
 
 // ShareToolStatus reports one tunnel tool and whether its binary is in PATH.
 type ShareToolStatus struct {
-	Name       string `json:"name"`
-	Label      string `json:"label"`
-	Binary     string `json:"binary"`
-	Installed  bool   `json:"installed"`
+	Name      string `json:"name"`
+	Label     string `json:"label"`
+	Binary    string `json:"binary"`
+	Installed bool   `json:"installed"`
+	// Containerised says the tool has no binary here but runs from a published
+	// image instead, so the menu offers it rather than sending the user to an
+	// install page they do not need.
+	Containerised bool `json:"containerised,omitempty"`
+	// NeedsToken says the image is the only route left and it cannot run
+	// without a token, so the menu points at the token rather than at an
+	// install page the user does not have to visit.
+	NeedsToken bool   `json:"needs_token,omitempty"`
 	InstallURL string `json:"install_url,omitempty"`
 }
 
@@ -64,6 +76,9 @@ type ShareToolsInfo struct {
 	// menu knows whether it still has to ask.
 	BaseDomain         string `json:"base_domain,omitempty"`
 	BaseDomainAnswered bool   `json:"base_domain_answered,omitempty"`
+	// NgrokTokenSet reports only whether a token is stored. The token itself is
+	// a credential and never leaves the machine through this endpoint.
+	NgrokTokenSet bool `json:"ngrok_token_set,omitempty"`
 }
 
 var shareToolMeta = map[string]struct{ label, installURL string }{
@@ -77,26 +92,33 @@ var shareToolMeta = map[string]struct{ label, installURL string }{
 // ShareTools reports every supported tunnel tool, which ones are installed,
 // and what the auto pick would use right now.
 func ShareTools() ShareToolsInfo {
-	defaultTool, baseDomain, answered := "", "", false
+	defaultTool, baseDomain, answered, ngrokToken := "", "", false, ""
 	if cfg, err := config.LoadGlobal(); err == nil {
 		defaultTool = cfg.Share.DefaultTool
 		baseDomain, answered = cfg.Share.BaseDomain, cfg.Share.BaseDomainAnswered
+		ngrokToken = cfg.Share.NgrokToken
 	}
 	info := ShareToolsInfo{
 		Default:            defaultTool,
-		Auto:               autoShareToolName(defaultTool),
+		Auto:               autoShareToolName(defaultTool, ngrokToken),
 		BaseDomain:         baseDomain,
 		BaseDomainAnswered: answered,
+		NgrokTokenSet:      ngrokToken != "",
 	}
 	for _, t := range shareTools {
 		meta := shareToolMeta[t.name]
 		_, found := hostbin.Look(t.binary)
+		// ngrok is the one tool with a published image, so a missing binary is
+		// only a dead end when there is no token to run the image with.
+		image := !found && t.name == "ngrok"
 		info.Tools = append(info.Tools, ShareToolStatus{
-			Name:       t.name,
-			Label:      meta.label,
-			Binary:     t.binary,
-			Installed:  found,
-			InstallURL: meta.installURL,
+			Name:          t.name,
+			Label:         meta.label,
+			Binary:        t.binary,
+			Installed:     found || (image && ngrokToken != ""),
+			Containerised: image && ngrokToken != "",
+			NeedsToken:    image && ngrokToken == "",
+			InstallURL:    meta.installURL,
 		})
 	}
 	return info
@@ -104,24 +126,35 @@ func ShareTools() ShareToolsInfo {
 
 // autoShareToolName mirrors pickShareTool's auto-detect order without its
 // side effects, so the UI can display what a bare start would pick.
-func autoShareToolName(defaultTool string) string {
+func autoShareToolName(defaultTool, ngrokToken string) string {
 	if bin, ok := shareToolBinary(defaultTool); ok {
 		if _, found := hostbin.Look(bin); found {
 			return defaultTool
 		}
 	}
-	for _, name := range []string{"ngrok", "cloudflare", "expose", "localhost-run"} {
+	if defaultTool == "ngrok" && ngrokToken != "" {
+		return "ngrok"
+	}
+	for _, name := range []string{"ngrok", "cloudflare", "expose"} {
 		bin, _ := shareToolBinary(name)
 		if _, found := hostbin.Look(bin); found {
 			return name
 		}
+	}
+	// Mirrors pickShareTool: with nothing installed, a stored token puts ngrok
+	// ahead of the SSH fallback.
+	if ngrokToken != "" {
+		return "ngrok"
+	}
+	if _, found := hostbin.Look("ssh"); found {
+		return "localhost-run"
 	}
 	return ""
 }
 
 // resolveTunnelTool maps a UI tool name to the shareTool the CLI flags would
 // produce. Empty or "auto" runs the same auto-detection as a bare lerd share.
-func resolveTunnelTool(name, defaultTool string) (*shareTool, error) {
+func resolveTunnelTool(name, defaultTool, ngrokToken string) (*shareTool, error) {
 	var ngrok, cloudflare, expose, serveo, localhostRun bool
 	switch name {
 	case "", "auto":
@@ -141,7 +174,7 @@ func resolveTunnelTool(name, defaultTool string) (*shareTool, error) {
 	if name != "" && name != "auto" {
 		defaultTool = ""
 	}
-	return pickShareTool(ngrok, cloudflare, expose, serveo, localhostRun, "", defaultTool)
+	return pickShareTool(ngrok, cloudflare, expose, serveo, localhostRun, "", defaultTool, ngrokToken)
 }
 
 func shareToolCanonicalName(t *shareTool) string {
@@ -265,6 +298,30 @@ func SetShareBaseDomain(baseDomain string, remember bool) error {
 	return config.SaveGlobal(cfg)
 }
 
+// SetShareNgrokToken stores the ngrok auth token, or clears it when empty. The
+// config file holds a credential once this is set, so it is written back with
+// owner-only permissions.
+func SetShareNgrokToken(token string) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+	if cfg.Share.NgrokToken == token {
+		return nil
+	}
+	cfg.Share.NgrokToken = token
+	if err := config.SaveGlobal(cfg); err != nil {
+		return err
+	}
+	if token == "" {
+		return nil
+	}
+	// WriteFile keeps an existing file's mode, so tightening it once holds for
+	// every later save rather than being widened back to the default.
+	return os.Chmod(config.GlobalConfigFile(), 0600)
+}
+
 // TunnelStart starts a public tunnel for the site, or for one of its worktrees
 // when branch is set, and blocks until the tool reports its public URL. An empty
 // toolName auto-picks like the CLI does. baseDomain serves the site on
@@ -291,7 +348,7 @@ func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) 
 	if httpsPort == 0 {
 		httpsPort = 443
 	}
-	tool, err := resolveTunnelTool(toolName, cfg.Share.DefaultTool)
+	tool, err := resolveTunnelTool(toolName, cfg.Share.DefaultTool, cfg.Share.NgrokToken)
 	if err != nil {
 		return "", err
 	}
@@ -318,13 +375,17 @@ func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) 
 	if err != nil {
 		return "", err
 	}
-	return startTunnelProcess(tunnelKey(siteName, branch), shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout, known)
+	container := ""
+	if tool.mode == shareModeNgrok && tool.ngrok.container {
+		container = ngrokContainerName(target.name, "")
+	}
+	return startTunnelProcess(tunnelKey(siteName, branch), shareToolCanonicalName(tool), cmd, stopProxy, tunnelStartTimeout, known, container)
 }
 
 // startTunnelProcess runs the tool, scans its output for the public URL, and
 // registers the tunnel under key. It replaces any tunnel already running for
 // that key. After a successful Start the exit watcher owns stopProxy.
-func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration, known string) (string, error) {
+func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), timeout time.Duration, known, container string) (string, error) {
 	stopTunnelByKey(key)
 	if stopProxy == nil {
 		stopProxy = func() {}
@@ -346,7 +407,7 @@ func startTunnelProcess(key, toolName string, cmd *exec.Cmd, stopProxy func(), t
 		return "", err
 	}
 
-	p := &tunnelProc{tool: toolName, cmd: cmd, stopProxy: stopProxy, done: make(chan struct{})}
+	p := &tunnelProc{tool: toolName, cmd: cmd, stopProxy: stopProxy, done: make(chan struct{}), container: container}
 	tunnelsMu.Lock()
 	tunnels[key] = p
 	tunnelsMu.Unlock()
@@ -457,6 +518,9 @@ func StopAllTunnels() {
 // killTunnel terminates the whole process group (ssh and cloudflared may have
 // children) and escalates to SIGKILL if it lingers.
 func killTunnel(p *tunnelProc) {
+	// The container is removed either way: the escalation below ends with a
+	// SIGKILL the client cannot forward, which would leave the tunnel serving.
+	defer removeNgrokContainer(p.container)
 	if p.cmd.Process == nil {
 		return
 	}

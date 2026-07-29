@@ -49,7 +49,7 @@ func TestShareToolsReportsBrewInstalledTools(t *testing.T) {
 func TestAutoShareToolPicksBrewInstalledTool(t *testing.T) {
 	withBrewOnlyTunnelTools(t, "cloudflared")
 
-	if got := autoShareToolName(""); got != "cloudflare" {
+	if got := autoShareToolName("", ""); got != "cloudflare" {
 		t.Fatalf("autoShareToolName() = %q; want cloudflare", got)
 	}
 }
@@ -57,7 +57,7 @@ func TestAutoShareToolPicksBrewInstalledTool(t *testing.T) {
 func TestPickShareToolAcceptsBrewInstalledTool(t *testing.T) {
 	withBrewOnlyTunnelTools(t, "cloudflared")
 
-	tool, err := pickShareTool(false, true, false, false, false, "", "")
+	tool, err := pickShareTool(false, true, false, false, false, "", "", "")
 	if err != nil {
 		t.Fatalf("pickShareTool() = %v; want the Homebrew cloudflared accepted", err)
 	}

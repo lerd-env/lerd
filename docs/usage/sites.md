@@ -446,7 +446,7 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 
 ## Sharing sites
 
-`lerd share` exposes the current site via a public tunnel. Requires [ngrok](https://ngrok.com/download), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), or [Expose](https://expose.dev) to be installed. A tool installed with Homebrew is found by the dashboard too, which does not inherit your shell's `PATH`.
+`lerd share` exposes the current site via a public tunnel. Requires [ngrok](https://ngrok.com/download), [cloudflared](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), or [Expose](https://expose.dev) to be installed, or an ngrok auth token so lerd can run ngrok as a container. A tool installed with Homebrew is found by the dashboard too, which does not inherit your shell's `PATH`.
 
 | Command | Description |
 |---|---|
@@ -458,8 +458,29 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
 | `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
+| `lerd share --token <token>` | ngrok auth token for this run, overriding the stored one |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under (`none` forgets it) |
+| `lerd share:token [token]` | Show whether an ngrok auth token is stored, or set one (`none` forgets it) |
+
+Every tunnel is served through a small local proxy rather than pointed straight at nginx. The proxy sets the `Host` nginx routes on, dials a secured site over HTTPS without tripping on the local mkcert certificate, and rewrites the site's own `.test` domain out of redirects and asset URLs so the public hostname survives. Without it a secured site answers the first request with a redirect to its `.test` address, which means nothing to whoever opened the public URL.
+
+### ngrok without installing it
+
+ngrok is the one tool with a published image, so lerd can run it from `ngrok/ngrok:latest` under podman when the binary is not on the machine. A container carries none of the host's ngrok configuration, so this needs an auth token:
+
+```bash
+lerd share:token 2abcXYZ...   # get one at https://dashboard.ngrok.com/get-started/your-authtoken
+lerd share                     # ngrok is now an option even with nothing installed
+```
+
+The token authenticates an installed ngrok too, so a binary that was never run through `ngrok config add-authtoken` works the same way. `lerd share --token` overrides the stored token for a single run without replacing it.
+
+An installed tool always wins over the image: pulling one is the slower route to the same URL. The container only stands in when nothing is installed, where it ranks ahead of the signup-free SSH tools because storing a token is a deliberate choice of ngrok.
+
+The token is a credential. It is stored in `~/.config/lerd/config.yaml`, which is tightened to owner-only the moment a token is saved, it is passed to the container through the environment rather than the command line so it cannot be read off `ps`, and it is never printed back or returned by the dashboard's API. In the dashboard, the cog next to ngrok in the share menu sets and clears it.
+
+The container runs as `lerd-ngrok-<site>` (with the branch appended for a worktree), so a running tunnel appears alongside lerd's other containers in the dashboard's resource usage. The name is also how it is cleaned up. A container does not die with the process that started it: podman's supervisor is reparented out of the client's process tree and cgroup, so killing `lerd-ui` outright would otherwise leave the site publicly tunnelled. Stopping a tunnel removes the container by name rather than signalling a process, and every `lerd-ui` start sweeps any tunnel container a previous run left behind.
 
 ### Tunnels from the dashboard
 

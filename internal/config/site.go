@@ -464,8 +464,9 @@ func writeFileAtomic(path string, data []byte, mode os.FileMode) error {
 // domainForbidden are the characters a domain may never carry. The nginx set
 // (a directive ends at `;`, blocks open and close on braces, `#` comments the
 // rest of the line) plus whitespace and the separators that would make one
-// domain read as several, or as a path when it names a vhost file.
-const domainForbidden = "{};#\n\r\x00 \t/\\"
+// domain read as several, or as a path when it names a vhost file, plus the
+// quotes that would close a string literal in any file a domain is written into.
+const domainForbidden = "{};#\n\r\x00 \t/\\'\""
 
 // AddSite appends or updates a site in the registry.
 func AddSite(site Site) error {

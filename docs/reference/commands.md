@@ -72,6 +72,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel) |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool for `lerd share` (`auto` restores auto-detection) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under, as `<site>.<domain>` (`none` forgets it) |
+| `lerd share:token [token]` | Show whether an ngrok auth token is stored, or set one so ngrok can run as a container without being installed (`none` forgets it) |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
 | `lerd secure --renew [name]` | Reissue a secured site's TLS cert on demand, resetting its expiry |
 | `lerd unsecure [name]` | Remove TLS and switch back to HTTP, updates `APP_URL` in `.env` |

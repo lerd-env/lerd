@@ -327,3 +327,107 @@ describe('ShareMenu base domain', () => {
     );
   });
 });
+
+describe('ShareMenu ngrok token', () => {
+  it('offers a cog on ngrok whether or not it is installed', async () => {
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+  });
+
+  it('saves a token from the cog without starting anything', async () => {
+    const bodies = mockShareFetch(toolsPayload);
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-token-cog'));
+
+    const input = screen.getByTestId('share-token-input') as HTMLInputElement;
+    await fireEvent.input(input, { target: { value: '2abcXYZ' } });
+    await fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => expect(bodies.some((b) => JSON.parse(b).ngrok_token === '2abcXYZ')).toBe(true));
+    expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(false);
+  });
+
+  // The token is a credential, so the field is never a readable one.
+  it('masks the token field', async () => {
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-token-cog'));
+
+    expect((screen.getByTestId('share-token-input') as HTMLInputElement).type).toBe('password');
+  });
+
+  // A stored token is never sent back, so the form starts empty and says so
+  // rather than showing a masked value that cannot be edited.
+  it('starts empty when a token is already stored, and offers to clear it', async () => {
+    mockShareFetch({ ...toolsPayload, ngrok_token_set: true });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-token-cog'));
+
+    expect((screen.getByTestId('share-token-input') as HTMLInputElement).value).toBe('');
+    expect(screen.getByTestId('share-token-clear')).toBeInTheDocument();
+  });
+
+  it('clears the stored token', async () => {
+    const bodies = mockShareFetch({ ...toolsPayload, ngrok_token_set: true });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-token-cog'));
+    await fireEvent.click(screen.getByTestId('share-token-clear'));
+
+    await waitFor(() => expect(bodies.some((b) => JSON.parse(b).ngrok_token === '')).toBe(true));
+  });
+
+  // With a token stored, ngrok runs from its image, so the menu offers it
+  // instead of sending the user to an install page they do not need.
+  it('offers a containerised ngrok as usable', async () => {
+    mockShareFetch({
+      ...toolsPayload,
+      tools: [
+        { name: 'ngrok', label: 'ngrok', binary: 'ngrok', installed: true, containerised: true },
+        ...toolsPayload.tools.slice(1)
+      ],
+      ngrok_token_set: true
+    });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByText('Runs as a container')).toBeInTheDocument());
+    expect(screen.queryByText('Not installed · ngrok.com')).not.toBeInTheDocument();
+  });
+});
+
+describe('ShareMenu ngrok without a binary or a token', () => {
+  const needsToken = {
+    ...toolsPayload,
+    tools: [
+      { name: 'ngrok', label: 'ngrok', binary: 'ngrok', installed: false, needs_token: true, install_url: 'https://ngrok.com/download' },
+      ...toolsPayload.tools.slice(1)
+    ]
+  };
+
+  // Pointing at an install page hides the fact that a token alone is enough.
+  it('asks for a token rather than sending the user to install ngrok', async () => {
+    mockShareFetch(needsToken);
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByText('Needs an auth token')).toBeInTheDocument());
+    expect(screen.queryByText('Not installed · ngrok.com')).not.toBeInTheDocument();
+  });
+
+  it('opens the token form from the row instead of starting a tunnel', async () => {
+    mockShareFetch(needsToken);
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-tool-needs-token')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-tool-needs-token'));
+
+    expect(screen.getByTestId('share-token-input')).toBeInTheDocument();
+    expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(false);
+  });
+});

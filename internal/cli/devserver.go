@@ -58,6 +58,21 @@ func pathIsIgnored(sitePath, rel string) bool {
 	return true
 }
 
+// jsLiterals encodes each value as a JavaScript literal for the wrapper
+// template. JSON is a subset of JavaScript, so this is both the escaping and the
+// quoting, and a string carrying a quote of its own stays one value.
+func jsLiterals(values ...any) ([]any, error) {
+	out := make([]any, 0, len(values))
+	for _, v := range values {
+		b, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, string(b))
+	}
+	return out, nil
+}
+
 // writeDevServerWrapper generates the config that puts the dev server on the
 // site's origin and returns its site-relative path. An empty path means the
 // mechanism does not apply here and the caller must leave the command alone.
@@ -78,7 +93,10 @@ func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, origin s
 	if !strings.HasPrefix(importPath, ".") {
 		importPath = "./" + importPath
 	}
-	hosts, err := json.Marshal(domains)
+	// The wrapper is JavaScript the dev server executes and a project's own
+	// .lerd.yaml supplies its domains, so every value is encoded into a literal
+	// rather than quoted by the template.
+	literals, err := jsLiterals(importPath, tool.Base, origin, domains)
 	if err != nil {
 		return "", err
 	}
@@ -87,7 +105,7 @@ func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, origin s
 	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
 		return "", err
 	}
-	body := fmt.Sprintf(tool.Wrapper, importPath, tool.Base, origin, hosts)
+	body := fmt.Sprintf(tool.Wrapper, literals...)
 	if err := os.WriteFile(full, []byte(body), 0644); err != nil {
 		return "", err
 	}
