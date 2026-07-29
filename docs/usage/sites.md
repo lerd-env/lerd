@@ -465,6 +465,8 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 
 Every tunnel is served through a small local proxy rather than pointed straight at nginx. The proxy sets the `Host` nginx routes on, dials a secured site over HTTPS without tripping on the local mkcert certificate, and rewrites the site's own `.test` domain out of redirects and asset URLs so the public hostname survives. Without it a secured site answers the first request with a redirect to its `.test` address, which means nothing to whoever opened the public URL.
 
+That rewrite covers more than the plain form of an address. JSON escapes its slashes, so the same URL reaches the browser as `https:\/\/site.test\/path` inside a payload embedded in the page or returned from an XHR, and it is matched in that form too. An external redirect does not always travel in a `Location` header either, since a framework can hand its own client one through a header of its own, so `Content-Location` and `X-Inertia-Location` are rewritten alongside it. Rewritten URLs always come back over `https`, because the tunnel is TLS and a plain-http one would be refused as mixed content.
+
 ### ngrok without installing it
 
 ngrok is the one tool with a published image, so lerd can run it from `ngrok/ngrok:latest` under podman when the binary is not on the machine. A container carries none of the host's ngrok configuration, so this needs an auth token:
@@ -479,6 +481,8 @@ The token authenticates an installed ngrok too, so a binary that was never run t
 An installed tool always wins over the image: pulling one is the slower route to the same URL. The container only stands in when nothing is installed, where it ranks ahead of the signup-free SSH tools because storing a token is a deliberate choice of ngrok.
 
 The token is a credential. It is stored in `~/.config/lerd/config.yaml`, which is tightened to owner-only the moment a token is saved, it is passed to the container through the environment rather than the command line so it cannot be read off `ps`, and it is never printed back or returned by the dashboard's API. In the dashboard, the cog next to ngrok in the share menu sets and clears it.
+
+How the container reaches that local proxy depends on the platform, because the proxy is a host process either way. On Linux the container shares the host's own network namespace, so the proxy really is on loopback and ngrok is given the port. On macOS the container runs inside the podman machine VM, whose loopback is not the host's, so it is pointed at `host.containers.internal` instead. Sharing the VM's network namespace there would dial the VM, where nothing is listening, and every request would come back as ngrok's `ERR_NGROK_8012`.
 
 The container runs as `lerd-ngrok-<site>` (with the branch appended for a worktree), so a running tunnel appears alongside lerd's other containers in the dashboard's resource usage. The name is also how it is cleaned up. A container does not die with the process that started it: podman's supervisor is reparented out of the client's process tree and cgroup, so killing `lerd-ui` outright would otherwise leave the site publicly tunnelled. Stopping a tunnel removes the container by name rather than signalling a process, and every `lerd-ui` start sweeps any tunnel container a previous run left behind.
 

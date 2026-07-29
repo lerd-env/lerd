@@ -622,13 +622,13 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 			return nil
 		}
 
-		// Rewrite Location header.
-		if loc := resp.Header.Get("Location"); loc != "" {
-			loc = strings.ReplaceAll(loc, "://"+domain, "://"+tunnelHost)
-			if strings.HasPrefix(loc, "http://"+tunnelHost) {
-				loc = "https://" + loc[len("http://"):]
+		// Rewrite the headers that carry an absolute URL back to the client.
+		// An external redirect is not always a Location: a framework can hand
+		// one to its own client through a header of its own instead.
+		for _, h := range []string{"Location", "Content-Location", "X-Inertia-Location"} {
+			if v := resp.Header.Get(h); v != "" {
+				resp.Header.Set(h, rewriteTunnelURL(v, domain, tunnelHost))
 			}
-			resp.Header.Set("Location", loc)
 		}
 
 		ct := resp.Header.Get("Content-Type")
@@ -666,7 +666,7 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 			return nil // unknown encoding, leave untouched
 		}
 
-		body = bytes.ReplaceAll(body, []byte("://"+domain), []byte("://"+tunnelHost))
+		body = rewriteTunnelBody(body, domain, tunnelHost)
 		resp.Body = io.NopCloser(bytes.NewReader(body))
 		resp.ContentLength = int64(len(body))
 		resp.Header.Set("Content-Length", strconv.Itoa(len(body)))
@@ -683,6 +683,30 @@ func startHostProxy(domain string, httpPort, httpsPort int, secured bool) (int, 
 
 	port := ln.Addr().(*net.TCPAddr).Port
 	return port, func() { srv.Close() }, nil
+}
+
+// rewriteTunnelURL swaps the site's own domain for the public one in a single
+// URL. The tunnel is always TLS, so a plain-http local URL is upgraded rather
+// than handed back as the mixed content a browser refuses to load.
+func rewriteTunnelURL(v, domain, tunnelHost string) string {
+	v = strings.ReplaceAll(v, "://"+domain, "://"+tunnelHost)
+	if strings.HasPrefix(v, "http://"+tunnelHost) {
+		v = "https://" + v[len("http://"):]
+	}
+	return v
+}
+
+// rewriteTunnelBody does the same across a whole response body. JSON escapes its
+// slashes, so the same URL also reaches the browser as https:\/\/domain\/x, and
+// a payload embedded in a page or returned from an XHR only carries that form.
+func rewriteTunnelBody(body []byte, domain, tunnelHost string) []byte {
+	for _, sep := range []string{"://", `:\/\/`} {
+		for _, scheme := range []string{"https", "http"} {
+			body = bytes.ReplaceAll(body,
+				[]byte(scheme+sep+domain), []byte("https"+sep+tunnelHost))
+		}
+	}
+	return body
 }
 
 // isTextContent returns true for Content-Type values whose body should be

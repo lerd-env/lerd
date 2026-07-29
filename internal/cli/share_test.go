@@ -839,6 +839,85 @@ func TestStartHostProxy_rewritesGzippedHTMLBody(t *testing.T) {
 	}
 }
 
+// JSON escapes its slashes, so an absolute URL reaches the browser as
+// https:\/\/mysite.test\/x. Missed by the rewrite it stays pointed at a domain
+// only this machine resolves, and the fetch it feeds is blocked cross-origin.
+func TestStartHostProxy_rewritesEscapedURLsInJSONBody(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"url":"https:\/\/mysite.test\/checkout"}`)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	resp := doProxy(t, port, "abc.trycloudflare.com")
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if strings.Contains(string(body), "mysite.test") {
+		t.Errorf("escaped URL kept the local domain: %s", body)
+	}
+	if !strings.Contains(string(body), `https:\/\/abc.trycloudflare.com\/checkout`) {
+		t.Errorf("escaped URL was not rewritten in place: %s", body)
+	}
+}
+
+// The tunnel is always TLS, so a plain-http local URL has to come back https or
+// the browser blocks it as mixed content on the page it was rewritten into.
+func TestStartHostProxy_upgradesRewrittenBodyURLsToHTTPS(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprint(w, `<img src="http://mysite.test/logo.png">`)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	resp := doProxy(t, port, "abc.trycloudflare.com")
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+
+	if !strings.Contains(string(body), "https://abc.trycloudflare.com/logo.png") {
+		t.Errorf("body URL was not upgraded to https: %s", body)
+	}
+}
+
+// An external redirect can come back as a header of its own rather than a
+// Location, and a client that follows it lands on a domain only this machine
+// resolves.
+func TestStartHostProxy_rewritesRedirectHeadersBesidesLocation(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Inertia-Location", "https://mysite.test/login")
+		w.Header().Set("Content-Location", "https://mysite.test/canonical")
+		w.WriteHeader(http.StatusConflict)
+	}))
+	defer backend.Close()
+
+	port, stop, err := startHostProxy("mysite.test", proxyPort(t, backend.URL), 0, false)
+	if err != nil {
+		t.Fatalf("startHostProxy: %v", err)
+	}
+	defer stop()
+
+	resp := doProxy(t, port, "abc.trycloudflare.com")
+	resp.Body.Close()
+
+	for _, h := range []string{"X-Inertia-Location", "Content-Location"} {
+		if got := resp.Header.Get(h); strings.Contains(got, "mysite.test") {
+			t.Errorf("%s = %q still points at the local domain", h, got)
+		}
+	}
+}
+
 func TestStartHostProxy_stopClosesListener(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
