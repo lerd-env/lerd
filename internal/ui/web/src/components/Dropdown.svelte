@@ -59,8 +59,10 @@
 
   const selectedIdx = $derived(normalized.findIndex((o) => o.value === value));
   const display = $derived.by(() => {
-    if (!value) return placeholder || label || 'Select…';
+    // An option may legitimately carry an empty value ("current branch", "all
+    // sites"); show its label rather than the unset placeholder.
     if (selectedIdx >= 0) return displayFor(normalized[selectedIdx]);
+    if (!value) return placeholder || label || 'Select…';
     return value;
   });
 

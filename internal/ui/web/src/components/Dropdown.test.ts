@@ -23,6 +23,21 @@ describe('Dropdown', () => {
     expect(screen.getByRole('button', { name: /Choose…/ })).toBeInTheDocument();
   });
 
+  it('shows the label of an option whose value is empty', () => {
+    render(Harness, {
+      props: {
+        value: '',
+        options: [
+          { value: '', label: 'main (current)' },
+          { value: 'demo/gui', label: 'demo/gui' }
+        ],
+        placeholder: 'Choose…',
+        onchange: () => {}
+      }
+    });
+    expect(screen.getByRole('button', { name: /main \(current\)/ })).toBeInTheDocument();
+  });
+
   it('opens menu on click and lists options', async () => {
     render(Harness, { props: { value: '8.3', options: ['8.2', '8.3', '8.4'], label: 'PHP', onchange: () => {} } });
     screen.getByRole('button', { name: /PHP 8\.3/ }).click();

@@ -35,6 +35,7 @@
   let warnings = $state<string[]>([]);
   let logs = $state<string[]>([]);
   let optsTimer: ReturnType<typeof setTimeout> | undefined;
+  let optsSeq = 0;
 
   const localBranches = $derived(opts?.local_branches ?? []);
   const remoteBranches = $derived(opts?.remote_branches ?? []);
@@ -48,22 +49,26 @@
         (branchMode === 'existing' && existingBranch !== ''))
   );
 
-  async function loadOpts(branch = '') {
+  // Reloads run on every branch-name edit, so they may only refresh the option
+  // lists; seeding the defaults is the initial load's job and would otherwise
+  // wipe what the user has already picked.
+  async function loadOpts(branch = '', seed = false) {
+    const seq = ++optsSeq;
     optsLoading = true;
     try {
       const o = await worktreeOptions(cur.domain, branch);
+      if (seq !== optsSeq) return;
       opts = o;
-      if (!branch) {
+      if (seed) {
         build = o.build_default || 'auto';
-        baseRef = '';
         existingBranch = (o.local_branches ?? [])[0] ?? (o.remote_branches ?? [])[0] ?? '';
       }
       const dbo = o.db_options ?? [];
       if (!dbo.some((d) => d.value === db)) db = dbo[0]?.value ?? 'share';
     } catch (e) {
-      error = e instanceof Error ? e.message : m.common_failed();
+      if (seq === optsSeq) error = e instanceof Error ? e.message : m.common_failed();
     } finally {
-      optsLoading = false;
+      if (seq === optsSeq) optsLoading = false;
     }
   }
 
@@ -128,7 +133,7 @@
   }
 
   onMount(() => {
-    void loadOpts();
+    void loadOpts('', true);
   });
 </script>
 
