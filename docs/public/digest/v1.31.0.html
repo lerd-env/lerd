@@ -1,0 +1,848 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>lerd v1.31.0 — dev digest</title>
+<meta name="description" content="Engineering digest for lerd v1.31.0: Sharing a site stops being a link you paste and becomes an address that survives, with the dev server behind it.">
+<meta name="theme-color" content="#ff4538">
+<link rel="canonical" href="https://lerd.sh/digest/v1.31.0.html">
+<meta property="og:type" content="article">
+<meta property="article:published_time" content="2026-07-29T00:00:00Z">
+<meta property="article:section" content="Release notes">
+<meta property="og:site_name" content="Lerd">
+<meta property="og:locale" content="en_US">
+<meta property="og:title" content="lerd v1.31.0 — dev digest">
+<meta property="og:description" content="Engineering digest for lerd v1.31.0: Sharing a site stops being a link you paste and becomes an address that survives, with the dev server behind it.">
+<meta property="og:url" content="https://lerd.sh/digest/v1.31.0.html">
+<meta property="og:image" content="https://lerd.sh/assets/digest/v1.31.0.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Lerd v1.31.0 dev digest">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="lerd v1.31.0 — dev digest">
+<meta name="twitter:description" content="Sharing a site stops being a link you paste and becomes an address that survives, with the dev server behind it.">
+<meta name="twitter:image" content="https://lerd.sh/assets/digest/v1.31.0.png">
+<meta name="twitter:image:alt" content="Lerd v1.31.0 dev digest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;700;800;900&family=JetBrains+Mono:ital,wght@0,400;0,500;0,700;0,800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0b;
+    --bg-2: #0f0f11;
+    --panel: #131316;
+    --panel-2: #18181c;
+    --line: #232329;
+    --line-2: #2e2e36;
+    --text: #ece9e2;
+    --muted: #9b978e;
+    --dim: #67645c;
+    --red: #ff4538;
+    --red-soft: rgba(255,69,56,0.12);
+    --amber: #eda33b;
+    --amber-soft: rgba(237,163,59,0.12);
+    --green: #3dd68c;
+    --green-soft: rgba(61,214,140,0.11);
+    --blue: #6cb2ff;
+    --blue-soft: rgba(108,178,255,0.11);
+    --violet: #b394ff;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+    --sans: "Archivo", system-ui, sans-serif;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: var(--red); color: #0a0a0b; }
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none; z-index: 999;
+    opacity: 0.05;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+
+  ::-webkit-scrollbar { width: 10px; height: 10px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: #2a2a30; border-radius: 5px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3a42; }
+
+  code, .mono { font-family: var(--mono); }
+  a { color: inherit; }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(20px, 4vw, 48px); }
+
+  /* ---------- brand bar ---------- */
+  .brandbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 18px clamp(20px, 4vw, 48px);
+    border-bottom: 1px solid var(--line);
+  }
+  .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+  .brand-mark {
+    width: 30px; height: 30px;
+    background: var(--red); border-radius: 7px;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-weight: 800; font-size: 17px; color: #fff;
+    box-shadow: 0 0 22px rgba(255,69,56,0.35);
+  }
+  .brand-name { font-weight: 700; font-size: 16px; }
+  .brand-path { font-family: var(--mono); font-size: 13px; color: var(--dim); }
+  .brand-path b { color: var(--red); font-weight: 400; }
+  .gh-link {
+    font-family: var(--mono); font-size: 12px; color: var(--muted);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 6px;
+    padding: 6px 13px; transition: 0.2s;
+  }
+  .gh-link:hover { border-color: var(--red); color: var(--text); }
+
+  /* ---------- hero ---------- */
+  .hero {
+    padding: clamp(48px, 7vw, 88px) 0 clamp(36px, 5vw, 56px);
+    border-bottom: 1px solid var(--line);
+    background:
+      radial-gradient(ellipse 55% 60% at 12% 0%, rgba(255,69,56,0.09), transparent 60%),
+      radial-gradient(ellipse 40% 40% at 95% 90%, rgba(237,163,59,0.04), transparent 60%);
+  }
+  .hero-kicker {
+    font-family: var(--mono); font-size: 13px; color: var(--muted);
+    display: flex; align-items: center; gap: 10px; margin-bottom: 22px;
+  }
+  .hero-kicker .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 12px var(--red); animation: blink 1.6s steps(1) infinite; }
+  @keyframes blink { 50% { opacity: 0.25; } }
+  .hero-kicker em { color: var(--amber); font-style: normal; }
+
+  .hero h1 {
+    font-stretch: 125%; font-weight: 900;
+    font-size: clamp(56px, 10vw, 118px);
+    line-height: 0.95; letter-spacing: -0.03em;
+    font-variant-numeric: tabular-nums;
+  }
+  .hero h1 em { font-style: normal; color: var(--red); text-shadow: 0 0 38px rgba(255,69,56,0.45); }
+  .hero .sub {
+    font-stretch: 115%; font-weight: 800; text-transform: uppercase;
+    letter-spacing: 0.06em; font-size: clamp(14px, 1.8vw, 19px);
+    color: var(--dim); margin-top: 8px;
+  }
+  .hero .sub b { color: var(--text); }
+  .hero .lede {
+    margin-top: 24px; max-width: 700px;
+    color: var(--muted); font-size: 16px; line-height: 1.7;
+  }
+  .hero .lede b { color: var(--text); font-weight: 600; }
+
+  .stats {
+    margin-top: 32px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    border: 1px solid var(--line); border-radius: 12px;
+    overflow: hidden; background: var(--bg-2);
+  }
+  .stat { padding: 16px 18px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: 0; }
+  .stat .n { font-stretch: 120%; font-weight: 900; font-size: clamp(20px, 2.4vw, 28px); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .l { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 2px; }
+  .stat.red .n { color: var(--red); }
+  .stat.green .n { color: var(--green); }
+  .stat.amber .n { color: var(--amber); }
+
+  .diffbar { margin-top: 18px; }
+  .diffbar .bar { display: flex; height: 10px; border-radius: 99px; overflow: hidden; border: 1px solid var(--line); }
+  .diffbar .bar i { display: block; height: 100%; }
+  .diffbar .legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .diffbar .legend s { text-decoration: none; display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+
+  /* ---------- pill nav ---------- */
+  .pillnav {
+    position: sticky; top: 0; z-index: 50;
+    background: rgba(10,10,11,0.85);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line);
+    padding: 12px clamp(20px, 4vw, 48px);
+    display: flex; gap: 8px; overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .pillnav::-webkit-scrollbar { display: none; }
+  .pillnav a {
+    font-family: var(--mono); font-size: 12px; white-space: nowrap;
+    color: var(--muted); text-decoration: none;
+    border: 1px solid var(--line); border-radius: 99px;
+    padding: 6px 15px; transition: 0.2s;
+  }
+  .pillnav a i { font-style: normal; color: var(--dim); margin-right: 6px; }
+  .pillnav a:hover { color: var(--text); border-color: var(--line-2); }
+  .pillnav a.active { color: var(--red); border-color: rgba(255,69,56,0.5); background: var(--red-soft); }
+  .pillnav a.active i { color: var(--red); }
+
+  /* ---------- breaking ---------- */
+  .breaking {
+    margin: 36px 0 0;
+    border: 1px solid rgba(255,69,56,0.35); border-radius: 12px;
+    overflow: hidden;
+    background: linear-gradient(180deg, rgba(255,69,56,0.06), rgba(255,69,56,0.01) 60%);
+  }
+  .breaking-head {
+    display: flex; align-items: center; gap: 12px;
+    padding: 13px 20px; border-bottom: 1px solid rgba(255,69,56,0.25);
+    font-family: var(--mono); font-size: 12px; letter-spacing: 0.16em; font-weight: 700; color: var(--red);
+  }
+  .breaking-head .sig { animation: blink 1.4s steps(1) infinite; }
+  .breaking-body { padding: 18px 20px 20px; color: var(--muted); font-size: 14px; }
+  .breaking-body b { color: var(--text); }
+  .breaking-body code { font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; color: var(--amber); }
+
+  /* ---------- sections ---------- */
+  section.chapter { padding: clamp(48px, 6vw, 76px) 0 0; }
+  .ch-head { display: flex; align-items: baseline; gap: 18px; flex-wrap: wrap; }
+  .ch-num {
+    font-family: var(--mono); font-size: 13px; color: var(--red);
+    border: 1px solid rgba(255,69,56,0.4); border-radius: 6px; padding: 3px 9px;
+  }
+  .ch-head h2 {
+    font-stretch: 122%; font-weight: 900; text-transform: uppercase;
+    letter-spacing: -0.015em; font-size: clamp(26px, 4vw, 40px); line-height: 1.05;
+  }
+  .ch-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pill {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 700; letter-spacing: 0.1em;
+    padding: 3px 10px; border-radius: 99px;
+  }
+  .pill.feat { color: var(--green); background: var(--green-soft); border: 1px solid rgba(61,214,140,0.35); }
+  .pill.fix { color: var(--blue); background: var(--blue-soft); border: 1px solid rgba(108,178,255,0.35); }
+  .pill.brk { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.sec { color: var(--red); background: var(--red-soft); border: 1px solid rgba(255,69,56,0.4); }
+  .pill.ref { color: var(--amber); background: var(--amber-soft); border: 1px solid rgba(237,163,59,0.35); }
+  .pill.ui { color: var(--violet); background: rgba(179,148,255,0.1); border: 1px solid rgba(179,148,255,0.3); }
+
+  .ch-intro { margin-top: 18px; max-width: 760px; color: var(--muted); font-size: 15px; line-height: 1.7; }
+  .ch-intro b { color: var(--text); font-weight: 600; }
+  .ch-intro code { font-family: var(--mono); font-size: 12.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 1px 6px; border-radius: 4px; color: var(--amber); }
+
+  /* ---------- flow diagrams ---------- */
+  .flow-wrap { margin-top: 28px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg-2); overflow: hidden; }
+  .flow-title {
+    font-family: var(--mono); font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--dim); padding: 12px 18px; border-bottom: 1px solid var(--line);
+    display: flex; justify-content: space-between; gap: 12px;
+  }
+  .flow { display: flex; align-items: stretch; padding: 24px 18px; overflow-x: auto; }
+  .fnode {
+    flex: 0 0 auto;
+    border: 1px solid var(--line-2); border-radius: 10px;
+    background: var(--panel); padding: 12px 16px;
+    min-width: 132px; max-width: 200px;
+    display: flex; flex-direction: column; justify-content: center;
+  }
+  .fnode .t { font-family: var(--mono); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); margin-bottom: 4px; }
+  .fnode .v { font-weight: 700; font-size: 13.5px; line-height: 1.35; }
+  .fnode .d { font-family: var(--mono); font-size: 10.5px; color: var(--muted); margin-top: 4px; line-height: 1.5; }
+  .fnode.hot { border-color: rgba(255,69,56,0.55); box-shadow: 0 0 22px rgba(255,69,56,0.12); }
+  .fnode.hot .t { color: var(--red); }
+  .fnode.ok { border-color: rgba(61,214,140,0.45); }
+  .fnode.ok .t { color: var(--green); }
+  .fnode.warn { border-color: rgba(237,163,59,0.45); }
+  .fnode.warn .t { color: var(--amber); }
+  .farr {
+    flex: 0 0 auto; display: flex; align-items: center;
+    font-family: var(--mono); font-size: 12px; color: var(--dim);
+    padding: 0 10px; white-space: nowrap;
+  }
+  .flow-note {
+    padding: 12px 18px; border-top: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7;
+  }
+  .flow-note em { color: var(--amber); font-style: normal; }
+  .flow-note b { color: var(--green); font-weight: 600; }
+  .flow-note s { color: var(--red); text-decoration: none; }
+
+  /* vertical pipeline */
+  .pipe { padding: 20px 18px; }
+  .pipe-step { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 0 16px; position: relative; padding-bottom: 18px; }
+  .pipe-step:last-child { padding-bottom: 4px; }
+  .pipe-step::before { content: ""; position: absolute; left: 16px; top: 30px; bottom: 0; width: 1px; background: var(--line-2); }
+  .pipe-step:last-child::before { display: none; }
+  .pipe-n {
+    width: 33px; height: 33px; border-radius: 50%;
+    border: 1px solid var(--line-2); background: var(--panel);
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 12px; font-weight: 700; color: var(--muted);
+    position: relative; z-index: 1;
+  }
+  .pipe-step.hot .pipe-n { border-color: var(--red); color: var(--red); }
+  .pipe-b { padding-top: 4px; }
+  .pipe-b h5 { font-size: 14px; font-weight: 700; }
+  .pipe-b p { font-family: var(--mono); font-size: 11.5px; color: var(--muted); margin-top: 3px; line-height: 1.6; }
+  .pipe-b p code { color: var(--amber); }
+
+  /* ---------- cards ---------- */
+  .cards { margin-top: 26px; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+  .cards.three { grid-template-columns: repeat(3, 1fr); }
+  .card {
+    border: 1px solid var(--line); border-radius: 12px;
+    background: var(--panel); padding: 20px;
+    transition: border-color 0.25s, transform 0.25s;
+    min-width: 0;
+  }
+  .card:hover { border-color: var(--line-2); transform: translateY(-2px); }
+  .card .card-pills { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .card h4 { font-size: 15.5px; font-weight: 700; letter-spacing: -0.01em; line-height: 1.4; }
+  .card h4 .pr {
+    font-family: var(--mono); font-size: 10.5px; font-weight: 500; color: var(--dim);
+    text-decoration: none; border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; margin-left: 6px; vertical-align: 2px; transition: 0.2s;
+  }
+  .card h4 .pr:hover { color: var(--red); border-color: rgba(255,69,56,0.5); }
+  .card p { color: var(--muted); font-size: 13px; line-height: 1.65; margin-top: 7px; }
+  .card p code, .card li code { font-family: var(--mono); font-size: 11.5px; background: rgba(255,255,255,0.05); border: 1px solid var(--line); padding: 0.5px 5px; border-radius: 4px; color: var(--amber); }
+  .card p b { color: var(--text); font-weight: 600; }
+  .card ul { margin-top: 8px; padding-left: 0; list-style: none; }
+  .card li { color: var(--muted); font-size: 12.5px; line-height: 1.6; padding-left: 16px; position: relative; margin-top: 4px; }
+  .card li::before { content: "▸"; position: absolute; left: 0; color: var(--red); font-size: 10px; top: 3px; }
+  .card .file { display: block; font-family: var(--mono); font-size: 10.5px; color: var(--dim); margin-top: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .file::before { content: "◇ "; color: var(--line-2); }
+
+  /* ---------- code blocks ---------- */
+  .code {
+    margin-top: 16px;
+    background: #0c0c0e; border: 1px solid var(--line); border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px; border-bottom: 1px solid var(--line);
+    font-family: var(--mono); font-size: 11px; color: var(--dim);
+    background: var(--panel);
+  }
+  .code-bar .lang { color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 7px; font-size: 10px; }
+  .code pre {
+    padding: 14px 16px; overflow-x: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.75;
+    color: #c9c5bd;
+  }
+  .code pre .k { color: var(--red); }
+  .code pre .s { color: var(--green); }
+  .code pre .c { color: var(--dim); font-style: italic; }
+  .code pre .f { color: var(--amber); }
+  .code pre .t { color: var(--blue); }
+  .code pre .del { color: #e2766c; background: rgba(255,69,56,0.08); display: inline-block; width: 100%; }
+  .code pre .add { color: #6fdca6; background: rgba(61,214,140,0.08); display: inline-block; width: 100%; }
+
+  /* ---------- tables ---------- */
+  .tbl-wrap { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 560px; }
+  thead th {
+    font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--dim); text-align: left; padding: 11px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line);
+    font-weight: 600;
+  }
+  tbody td { padding: 11px 16px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--muted); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: 0; }
+  tbody tr:hover td { background: rgba(255,255,255,0.015); }
+  tbody td b { color: var(--text); font-weight: 600; }
+  tbody td code { font-family: var(--mono); font-size: 11.5px; color: var(--amber); }
+  td .mini { font-family: var(--mono); font-size: 10.5px; color: var(--dim); }
+
+  /* group chips for MCP */
+  .groups { margin-top: 22px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
+  .group-chip {
+    border: 1px solid var(--line); border-radius: 10px; background: var(--panel);
+    padding: 13px 14px; transition: border-color 0.2s;
+  }
+  .group-chip:hover { border-color: rgba(255,69,56,0.45); }
+  .group-chip .g { font-family: var(--mono); font-weight: 700; font-size: 13.5px; color: var(--red); }
+  .group-chip .a { font-family: var(--mono); font-size: 10px; color: var(--dim); margin-top: 5px; line-height: 1.6; word-break: break-word; }
+
+  /* before/after MCP visual */
+  .ba { display: grid; grid-template-columns: 1fr auto 1.2fr; gap: 0; align-items: center; padding: 26px 18px; }
+  .ba-col { min-width: 0; }
+  .ba-label { font-family: var(--mono); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--dim); margin-bottom: 12px; }
+  .ba-flat { position: relative; display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow: hidden; }
+  .ba-flat i {
+    font-family: var(--mono); font-size: 9px; color: var(--dim);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; font-style: normal;
+  }
+  .ba-flat::after {
+    content: "× ~80 flat tools · manifest ~32 KB · reshapes mid-session";
+    position: absolute; inset: auto 0 0 0;
+    padding: 38px 0 2px;
+    background: linear-gradient(transparent, var(--bg-2) 70%);
+    font-family: var(--mono); font-size: 10.5px; color: var(--red);
+  }
+  .ba-arrow { font-family: var(--mono); color: var(--dim); padding: 0 22px; font-size: 14px; white-space: nowrap; }
+  .ba-after { display: flex; flex-direction: column; gap: 8px; }
+  .ba-after .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .ba-after .gten {
+    font-family: var(--mono); font-size: 10.5px; color: var(--text);
+    border: 1px solid rgba(255,69,56,0.4); background: var(--red-soft);
+    border-radius: 5px; padding: 2px 8px;
+  }
+  .ba-after .dis {
+    font-family: var(--mono); font-size: 11px; color: var(--amber);
+    border: 1px dashed rgba(237,163,59,0.5); border-radius: 8px; padding: 8px 14px;
+  }
+  .ba-after .han { font-family: var(--mono); font-size: 11px; color: var(--green); }
+
+  .footnote { margin-top: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); line-height: 1.7; }
+  .footnote em { color: var(--amber); font-style: normal; }
+
+  /* ---------- footer ---------- */
+  footer {
+    margin-top: clamp(56px, 8vw, 96px);
+    border-top: 1px solid var(--line);
+    padding: clamp(44px, 6vw, 72px) clamp(20px, 4vw, 48px);
+    background: radial-gradient(ellipse 50% 60% at 88% 100%, rgba(255,69,56,0.07), transparent 60%);
+  }
+  .foot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; max-width: 1180px; margin: 0 auto; align-items: start; }
+  footer h2 { font-stretch: 125%; font-weight: 900; font-size: clamp(26px, 3.4vw, 40px); text-transform: uppercase; line-height: 1; letter-spacing: -0.02em; }
+  footer h2 span { color: var(--red); }
+  footer .fn { margin-top: 14px; color: var(--muted); font-size: 14px; max-width: 430px; }
+  footer .fn code { font-family: var(--mono); font-size: 12px; color: var(--amber); background: rgba(255,255,255,0.05); border: 1px solid var(--line); border-radius: 4px; padding: 1px 6px; }
+  .term { background: #0c0c0e; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.5); }
+  .term-bar { display: flex; align-items: center; gap: 7px; padding: 11px 15px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .term-bar i { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); }
+  .term-bar i:first-child { background: var(--red); }
+  .term-bar span { margin-left: auto; font-family: var(--mono); font-size: 11px; color: var(--dim); }
+  .term-body { padding: 18px 20px; font-family: var(--mono); font-size: 12.5px; line-height: 2.05; overflow-x: auto; }
+  .term-body div { white-space: pre; }
+  .term-body .c { color: var(--dim); }
+  .term-body .p { color: var(--red); }
+  .term-body .out { color: var(--green); }
+  .foot-end { max-width: 1180px; margin: 48px auto 0; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; font-family: var(--mono); font-size: 11.5px; color: var(--dim); }
+  .foot-end a { color: var(--muted); text-decoration: none; }
+  .foot-end a:hover { color: var(--red); }
+
+  /* reveal */
+  .fx { opacity: 0; transform: translateY(18px); transition: opacity 0.7s cubic-bezier(0.2,0.7,0.2,1), transform 0.7s cubic-bezier(0.2,0.7,0.2,1); }
+  .fx.in { opacity: 1; transform: none; }
+  .rise { opacity: 0; transform: translateY(14px); animation: rise 0.8s cubic-bezier(0.2,0.7,0.2,1) forwards; }
+  .d1 { animation-delay: 0.05s; } .d2 { animation-delay: 0.16s; } .d3 { animation-delay: 0.28s; } .d4 { animation-delay: 0.4s; } .d5 { animation-delay: 0.52s; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  @media (max-width: 880px) {
+    .stats { grid-template-columns: repeat(3, 1fr); }
+    .stat:nth-child(3) { border-right: 0; }
+    .stat:nth-child(n+4) { border-top: 1px solid var(--line); }
+    .cards, .cards.three { grid-template-columns: 1fr; }
+    .groups { grid-template-columns: repeat(2, 1fr); }
+    .ba { grid-template-columns: 1fr; gap: 18px; }
+    .ba-arrow { padding: 0; transform: rotate(90deg); width: fit-content; }
+    .foot-grid { grid-template-columns: 1fr; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+    .fx, .rise { opacity: 1; transform: none; }
+    html { scroll-behavior: auto; }
+  }
+</style>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "Article",
+  "headline": "lerd v1.31.0 \u2014 dev digest",
+  "description": "Engineering digest for lerd v1.31.0: Sharing a site stops being a link you paste and becomes an address that survives, with the dev server behind it.",
+  "image": "https://lerd.sh/assets/digest/v1.31.0.png",
+  "datePublished": "2026-07-29",
+  "dateModified": "2026-07-29",
+  "inLanguage": "en-US",
+  "author": { "@type": "Organization", "name": "Lerd", "url": "https://github.com/lerd-env" },
+  "publisher": {
+    "@type": "Organization",
+    "name": "Lerd",
+    "url": "https://lerd.sh",
+    "logo": { "@type": "ImageObject", "url": "https://lerd.sh/assets/logo.svg" }
+  },
+  "mainEntityOfPage": { "@type": "WebPage", "@id": "https://lerd.sh/digest/v1.31.0.html" },
+  "about": {
+    "@type": "SoftwareApplication",
+    "name": "Lerd",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "Linux, macOS",
+    "softwareVersion": "1.31.0"
+  }
+}
+</script>
+</head>
+<body>
+<header class="brandbar">
+  <a class="brand" href="https://github.com/lerd-env/lerd">
+    <span class="brand-mark">L</span>
+    <span><span class="brand-name">lerd</span> <span class="brand-path">lerd-env/<b>lerd</b></span></span>
+  </a>
+  <a class="gh-link" href="https://github.com/lerd-env/lerd/compare/v1.30.1...v1.31.0">v1.30.1…v1.31.0 ↗</a>
+</header>
+
+<nav class="pillnav">
+  <a href="#share"><i>01</i> Sharing</a>
+  <a href="#devserver"><i>02</i> Dev Servers</a>
+  <a href="#node"><i>03</i> Node</a>
+  <a href="#install"><i>04</i> Install &amp; Packaging</a>
+  <a href="#databases"><i>05</i> Databases</a>
+  <a href="#tools"><i>06</i> Host Tools</a>
+  <a href="#linking"><i>07</i> Linking &amp; Frameworks</a>
+  <a href="#macos"><i>08</i> macOS</a>
+  <a href="#security"><i>09</i> Security</a>
+  <a href="#fixes"><i>10</i> Fixes &amp; Docs</a>
+</nav>
+
+<section class="hero"><div class="wrap">
+  <div class="hero-kicker rise d1"><span class="dot"></span> ENGINEERING DIGEST <em>· 2026-07-24 → 2026-07-29</em></div>
+  <h1 class="rise d2">v1.<em>31</em>.0</h1>
+  <div class="sub rise d2">AN ADDRESS THAT SURVIVES · <b>Sharing stops being a link you paste once</b></div>
+  <p class="lede rise d3">A quick tunnel hands out a fresh URL every run, which is fine for showing someone a page and useless for a webhook or an OAuth callback. Set a <b>Cloudflare base domain once</b> and every share is served on <code>&lt;site&gt;.&lt;domain&gt;</code> through a named tunnel, <b>ngrok runs from its published image</b> on a machine that never installed it, and a <code>lerd share</code> running in a terminal finally shows up in the dashboard like one of its own. The reason to share is usually to have someone else look at it, so a <b>running dev server is served on the site's own domain</b> instead of advertising a <code>localhost</code> port only you can reach. Underneath, installing became one job again through <code>lerd bootstrap</code>, <b>nvm drives Node</b> alongside the bundled fnm, databases keep moving out of Go and into the store, and every tool lerd downloads is <b>pinned behind a published manifest</b> you can now apply from the System page.</p>
+
+  <div class="stats rise d4">
+    <div class="stat"><div class="n">57</div><div class="l">commits</div></div>
+    <div class="stat"><div class="n">57</div><div class="l">merged PRs</div></div>
+    <div class="stat"><div class="n">442</div><div class="l">files</div></div>
+    <div class="stat green"><div class="n">+33,699</div><div class="l">insertions</div></div>
+    <div class="stat red"><div class="n">−4,086</div><div class="l">deletions</div></div>
+    <div class="stat amber"><div class="n">5</div><div class="l">contributors</div></div>
+  </div>
+
+  <div class="diffbar rise d5">
+    <div class="bar">
+      <i style="width:29%;background:var(--red)"></i>
+      <i style="width:21%;background:var(--amber)"></i>
+      <i style="width:11%;background:var(--green)"></i>
+      <i style="width:6%;background:var(--blue)"></i>
+      <i style="width:5%;background:var(--violet)"></i>
+      <i style="width:28%;background:var(--line-2)"></i>
+    </div>
+    <div class="legend">
+      <span><s style="background:var(--red)"></s>cli 29%</span>
+      <span><s style="background:var(--amber)"></s>web UI 21%</span>
+      <span><s style="background:var(--green)"></s>serviceops 11%</span>
+      <span><s style="background:var(--blue)"></s>node 6%</span>
+      <span><s style="background:var(--violet)"></s>config 5%</span>
+      <span><s style="background:var(--line-2)"></s>rest 28%</span>
+    </div>
+  </div>
+</div></section>
+
+<!-- ============ 01 SHARING ============ -->
+<section id="share" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">01</span>
+    <h2>Sharing</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">The CLI could already tunnel a site through five tools; the dashboard's share button only ever started the LAN proxy. Both halves close here. The button becomes a menu, a <b>base domain set once</b> gives every Cloudflare share a hostname that outlives the run, and ngrok gains a container route so a machine with nothing installed can still share. The last piece is visibility: a share was only ever visible where it was started, so a terminal <code>lerd share</code> now records itself and the dashboard can stop it.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>QUICK TUNNEL → NAMED TUNNEL → BASE DOMAIN</span><span>how long the URL you sent someone stays alive</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">quick tunnel</div><div class="v">random.trycloudflare.com</div><div class="d">dead tomorrow</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">--domain</div><div class="v">one hostname, typed each run</div><div class="d">stable, but manual</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">share:domain</div><div class="v">&lt;site&gt;.example.com</div><div class="d">set once, every share</div></div>
+    </div>
+    <div class="flow-note"><b>The label comes from the site, not the folder</b>, so a <code>scorediviner.test</code> living in a <code>score-diviner</code> directory is shared as <code>scorediviner</code>, and a worktree's subdomain flattens to one label because a Cloudflare certificate covers one level and no more.</div>
+  </div>
+
+  <div class="code">
+    <div class="code-bar"><span>set it once, or override for a single run</span><span class="lang">bash</span></div>
+<pre><span class="k">lerd share:domain</span> example.com   <span class="c"># myapp.test is now shared on myapp.example.com</span>
+<span class="k">lerd share:token</span> 2abcXYZ...     <span class="c"># lets ngrok run from its image, with nothing installed</span>
+<span class="k">lerd share</span> --domain one.off.com <span class="c"># still wins for this run only</span></pre>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span></div><h4>A public tunnel from the dashboard <a class="pr" href="https://github.com/lerd-env/lerd/pull/1174">#1174</a></h4><p>The button opens a menu on hover without giving up its one-click LAN toggle. <code>lerd-ui</code> owns the process, building the same invocation as the CLI through a shared command builder. Tunnels are deliberately not persisted: they end when stopped or when <code>lerd-ui</code> does, and are never resurrected.</p><span class="file">internal/cli/tunnelshare.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Your own Cloudflare base domain <a class="pr" href="https://github.com/lerd-env/lerd/pull/1216">#1216</a></h4><p>The dashboard asks the first time you pick Cloudflare, and ticking remember stops it asking whichever way you answered. A named tunnel needs cloudflared authorized once, which a dashboard cannot do, so it says what to run rather than hanging on a prompt nobody can see.</p><span class="file">internal/cli/share_domain.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>ngrok from its published image <a class="pr" href="https://github.com/lerd-env/lerd/pull/1225">#1225</a></h4><p>An installed binary always wins, since pulling an image is the slower route to the same URL. The token is a credential: the config file is tightened to owner-only, it reaches the container through the environment rather than the command line, and the dashboard is told only whether one exists.</p><span class="file">internal/cli/share_ngrok.go</span></div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A secured site sent the visitor to a .test domain <a class="pr" href="https://github.com/lerd-env/lerd/pull/1228">#1228</a></h4><p>ngrok and Expose were aimed straight at nginx, which answers the first request with a redirect to https on whatever Host it was given, so the visitor landed on a domain only the developer's machine resolves. Both go through the same local proxy Cloudflare always used now. That proxy's own rewrite had a gap: JSON escapes its slashes, so an URL embedded in a page payload reached the browser untouched, and an external redirect does not always travel in a <code>Location</code> header.</p><span class="file">internal/cli/share.go</span></div>
+  </div>
+</div></section>
+
+<!-- ============ 02 DEV SERVERS ============ -->
+<section id="devserver" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">02</span>
+    <h2>Dev Servers</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill sec">SEC</span></div>
+  </div>
+  <p class="ch-intro">A dev server advertises its own address, so a Vite app renders asset URLs pointing at <code>localhost</code> on a port only this machine can reach. Share the site, open it from the LAN, or front it on a worktree subdomain, and the visitor's browser resolves those URLs against <b>their own machine</b>, so the page arrives unstyled. The share proxy could not fix it, because it only rewrites the site's own domain and the dev server's URLs never carry it.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>ONE PREFIX, WHATEVER THE HOSTNAME</span><span>nothing to rewrite, because the client works it out</span></div>
+    <div class="flow">
+      <div class="fnode hot"><div class="t">before</div><div class="v">http://localhost:5173/x.js</div><div class="d">meaningless to a visitor</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">generated config</div><div class="v">base · origin · allowedHosts</div><div class="d">serve only, never build</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">after</div><div class="v">/@lerd-vite/x.js</div><div class="d">assets and HMR on one location</div></div>
+    </div>
+    <div class="flow-note"><b>Nothing in the project is edited</b>, lerd writes a generated config next to the project's own and imports it, rewritten on every start since a worktree seeds <code>node_modules</code> from its parent by reflink and would otherwise inherit the parent's domain.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Served on the site's own domain <a class="pr" href="https://github.com/lerd-env/lerd/pull/1218">#1218</a></h4><p>Nothing is declared per framework. A worker qualifies when the project has the tool installed and the command starts it directly, following one level of package-manager script indirection. A command that only reaches the tool through a runner is deliberately not matched, since the appended flags would land on the wrong process.</p><span class="file">internal/config/devserver.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>A pinned port, kept clear <a class="pr" href="https://github.com/lerd-env/lerd/pull/1218">#1218</a></h4><p>The vhost proxies to it, so the tool cannot be left to drift to the next free port whenever several sites run. It is kept clear of other sites, of the site's own worktrees and of whatever else the machine is holding, and a pin something has since taken is re-picked rather than left to fail.</p><span class="file">internal/nginx/manager.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>Every value encoded, not quoted <a class="pr" href="https://github.com/lerd-env/lerd/pull/1223">#1223</a></h4><p>The generated config is JavaScript the tool executes, and its values sat between quotes the template supplied. A project-supplied domain carrying a quote would have closed the literal. Values are encoded as literals now, and a quote is refused in a hostname at registration, so the sink is not the only guard. No released version could hit this either: the generated config arrives with the dev server, both in this release.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 03 NODE ============ -->
+<section id="node" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">03</span>
+    <h2>Node</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">Node version management was fnm and nothing else, so a developer who already keeps their versions in nvm had lerd download a <b>second manager</b> and install its own copies beside theirs. A <code>node.manager</code> setting now chooses between the two behind one interface, and every surface that touches Node goes through the active manager rather than calling fnm directly.</p>
+
+  <div class="code">
+    <div class="code-bar"><span>whichever manager is active drives all of it</span><span class="lang">bash</span></div>
+<pre><span class="k">lerd node:manager</span> nvm      <span class="c"># hand Node back to the nvm you already have</span>
+<span class="k">lerd node:manager</span> fnm      <span class="c"># or keep the bundled one, downloaded on demand</span></pre>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>nvm drives Node alongside fnm <a class="pr" href="https://github.com/lerd-env/lerd/pull/1113">#1113</a></h4><p>lerd treats a user's nvm as read only: it never installs into it and never rewrites its <code>default</code> alias, keeping lerd's own default in lerd's config instead. It leaves the <code>node</code>, <code>npm</code> and <code>npx</code> PATH shims out entirely under nvm, since a shim ahead of nvm made <code>nvm use</code> re-enter it and hang.</p><span class="file">internal/node/nvm.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Host workers could not find an unmanaged Node <a class="pr" href="https://github.com/lerd-env/lerd/pull/1183">#1183</a></h4><p>A host worker unit runs against a rebuilt minimal PATH, so a node under snap, linuxbrew or a version manager was invisible and every npm worker died on <code>npm: command not found</code> while node worked fine in the terminal. The generators resolve where node and npm actually live and bake that into the unit.</p><span class="file">internal/node/system.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>One Node question, answered by detection <a class="pr" href="https://github.com/lerd-env/lerd/pull/1192">#1192</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1196">#1196</a></h4><p>An install that finds nvm asks once whether lerd should manage Node. The unattended path answers by detection rather than by reading shim state, which on a first install describes nothing, so a package install provisions Node instead of recording it as unmanaged.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 04 INSTALL & PACKAGING ============ -->
+<section id="install" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">04</span>
+    <h2>Install &amp; Packaging</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">Debian and Ubuntu users install from a PPA, where a maintainer script runs as root and cannot answer the sudo prompts a normal install relies on. That produced <b>two implementations of the same four privileged steps</b>, which had already drifted apart. Both routes now converge on <code>lerd bootstrap</code>.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>ONE PRIVILEGED PATH, TWO FRONT DOORS</span><span>same machine state however lerd got on</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">interactive</div><div class="v">sudo lerd bootstrap --system</div><div class="d">re-execs itself, up front</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">sysctl · linger · sudoers</div><div class="v">the root-level steps</div><div class="d">one implementation</div></div>
+      <div class="farr">◄──</div>
+      <div class="fnode"><div class="t">package</div><div class="v">lerd install --unattended</div><div class="d">no questions, PPA maintainer script</div></div>
+    </div>
+    <div class="flow-note"><b>All the privileged work happens first</b>, so someone who cannot use sudo finds out immediately rather than several minutes in, and a host where the re-exec cannot run falls back to the old per-step path.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Unattended package installs <a class="pr" href="https://github.com/lerd-env/lerd/pull/980">#980</a></h4><p>Every unattended-only step is gated behind the flag, so an ordinary install is unchanged. The unit templates no longer hardcode <code>~/.local/bin/lerd</code>, so a daemon starts from wherever the package put the binary, and <code>lerd update</code> recognises a binary under <code>/usr</code> and points at the package manager rather than fighting apt.</p><span class="file">internal/cli/install.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Every route applies setup through bootstrap <a class="pr" href="https://github.com/lerd-env/lerd/pull/1194">#1194</a></h4><p>Uninstall gains the other half: the CA bootstrap installs is named for lerd, while uninstall called <code>mkcert -uninstall</code>, which only recognises the filename mkcert itself wrote. Nothing ever deleted lerd's anchor, so uninstalling left a trusted root certificate on the machine permanently.</p><span class="file">internal/cli/uninstall.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>The trust store is found the way mkcert finds it <a class="pr" href="https://github.com/lerd-env/lerd/pull/980">#980</a></h4><p><code>bootstrap --trust-ca</code> detects the anchor directory across the Fedora, Debian, Arch and openSUSE layouts, and reports where the CA lives on a distribution with no writable store rather than failing the maintainer script outright.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 05 DATABASES ============ -->
+<section id="databases" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">05</span>
+    <h2>Databases</h2>
+    <div class="ch-pills"><span class="pill ref">STORE</span><span class="pill feat">FEAT</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">The Databases tab read its list from a preset, but everything else it did was a <b>hardcoded mysql, mariadb or postgres switch in Go</b>. An <code>introspect</code> block now declares entities, each naming the command that lists it with typed columns and the commands behind every action it supports, including which are destructive so the UI confirms first. A store engine gains any of these through a publish, with no binary release.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>A PROVIDER DUMP, END TO END</span><span>errors that were never the user's mistake</span></div>
+    <div class="flow">
+      <div class="fnode hot"><div class="t">as taken</div><div class="v">320 errors</div><div class="d">80 of them ownership</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">filtered in</div><div class="v">owners · DEFINER</div><div class="d">what --no-owner does at dump time</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">--fresh</div><div class="v">empty first</div><div class="d">no collisions to drown in</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">landed</div><div class="v">11 errors, 44/45 tables</div><div class="d">what was filtered rides back</div></div>
+    </div>
+    <div class="flow-note"><b>Row data is never rewritten</b>, a postgres <code>COPY</code> block passes through byte for byte between its header and its closing marker, and on mysql only DDL lines are touched, so a value holding the word survives.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill ref">STORE</span></div><h4>Entities and actions declared in the preset <a class="pr" href="https://github.com/lerd-env/lerd/pull/1181">#1181</a></h4><p>One generic runner validates the entity name before substituting it into the declared command and derives the capability flags from what the engine declares. MongoDB picks up the whole tab this way, and RustFS lists, creates and deletes buckets through an ephemeral client container.</p><span class="file">internal/serviceops/entities.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A store engine reaches the tab <a class="pr" href="https://github.com/lerd-env/lerd/pull/1220">#1220</a></h4><p>The UI decided what counts as an engine from a fixed list of four families, so an engine published with a perfectly good introspect block stayed invisible. It asks the engine itself now. What lerd may offer as a project's <em>primary</em> database is left alone, since an analytics column store has no business being offered there.</p><span class="file">internal/ui/databases.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>An engine declares its extensions <a class="pr" href="https://github.com/lerd-env/lerd/pull/1139">#1139</a></h4><p><code>pg_dump</code> skips extensions the connecting user does not own, so a vector column arrived with no <code>CREATE EXTENSION</code> anywhere. An entry marked always is created wherever lerd creates a database; the rest wait until a dump names one of their types, so a geometry column brings PostGIS without every database paying 15 MB for it.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>The drop lost a race with the site's pool <a class="pr" href="https://github.com/lerd-env/lerd/pull/1141">#1141</a></h4><p>The drop terminated other sessions first, but that session is the site's own pool, which reconnects the instant it is closed and is back before the drop lands. One statement closes and drops with no gap to reconnect into.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>The COPY cascade went uncounted on pg 18 <a class="pr" href="https://github.com/lerd-env/lerd/pull/1142">#1142</a></h4><p>Dumps from <code>pg_dump</code> 18 open with a restrict line, in which mode psql refuses backslash commands, so the rows changed their complaint and the tally recognised only the older phrasing. One import reported 6 errors where 48 had gone past.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Every distinct error reaches the modal <a class="pr" href="https://github.com/lerd-env/lerd/pull/1131">#1131</a></h4><p>The modal showed five and closed on a count of what it would not show, and the fifth is rarely the one that explains the load. Up to 500 distinct complaints are kept. Separately a <code>.sql.gz</code> upload went straight to a client that reads plain SQL and exited clean having done nothing.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 06 HOST TOOLS ============ -->
+<section id="tools" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">06</span>
+    <h2>Host Tools</h2>
+    <div class="ch-pills"><span class="pill feat">FEAT</span><span class="pill ui">UI</span><span class="pill sec">SEC</span></div>
+  </div>
+  <p class="ch-intro">What a fresh install downloaded <b>depended on the day it ran</b>, because fnm and mkcert came through GitHub's <code>releases/latest</code> redirect and composer through its stable channel, so an upstream release could break every new install overnight. Every binary also went through a one-shot request with no retry and no timeout, so a momentary CDN hiccup aborted the whole install.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>PINNED, VISIBLE, APPLIED</span><span>a broken pin is one commit, not a release</span></div>
+    <div class="flow">
+      <div class="fnode"><div class="t">manifest</div><div class="v">fetched, daily cache</div><div class="d">embedded as offline fallback</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">download</div><div class="v">retries · sha256 · temp file</div><div class="d">host-constrained URLs</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode"><div class="t">stamped</div><div class="v">version sidecar</div><div class="d">status · doctor · MCP</div></div>
+      <div class="farr">──►</div>
+      <div class="fnode ok"><div class="t">applied</div><div class="v">from the card that flagged it</div><div class="d">loopback only</div></div>
+    </div>
+    <div class="flow-note"><b>Offline never reads as nothing to update</b>, a fetch that cannot reach the endpoint keeps the cached pins rather than falling back to the embedded ones.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill feat">FEAT</span></div><h4>Pinned behind a published manifest <a class="pr" href="https://github.com/lerd-env/lerd/pull/1185">#1185</a></h4><p>Composer, fnm, mkcert, phpantom_lsp and the self-update archive share a helper that retries transient failures with a short backoff and cancels a stalled transfer into the retry path instead of hanging forever. A scheduled job checks upstream daily and opens the bump PR.</p><span class="file">internal/download</span></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>Applied from the dashboard <a class="pr" href="https://github.com/lerd-env/lerd/pull/1212">#1212</a></h4><p>Each card owns its result, which is what keeps this per tool rather than one button for all three: a download that fails its checksum is refused deliberately, and the card that asked has to name that tool. A stale tool raises an <code>update_available</code> notification, seeded quietly on a process's first snapshot.</p><span class="file">internal/ui/tools.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>A pin could name any host <a class="pr" href="https://github.com/lerd-env/lerd/pull/1204">#1204</a></h4><p>The manifest is fetched from a branch rather than shipped in a release, so it reaches every install without one, and a pin was honoured as long as its URL began with https. A pin is now taken only when it points at a host lerd fetches tools from, may carry a sha256, and lands in a temp file moved into place only once complete.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 07 LINKING & FRAMEWORKS ============ -->
+<section id="linking" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">07</span>
+    <h2>Linking &amp; Frameworks</h2>
+    <div class="ch-pills"><span class="pill ref">REFACTOR</span><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">Registering a directory as a site was implemented <b>three times</b>: the full one behind <code>lerd link</code>, a thinner copy the parked-directory watcher used, and a third inside the MCP server that inlined the container and PHP paths. They had drifted badly. A linker package now owns the decision half and returns a plan a second step carries out, and what separates the callers is a <b>policy</b> rather than separate code.</p>
+
+  <div class="tbl-wrap">
+    <table>
+      <thead><tr><th>Parking a tree of projects</th><th>before</th><th>after</th></tr></thead>
+      <tbody>
+        <tr><td><b>50 projects</b></td><td><code>92s</code></td><td><code>3s</code></td></tr>
+        <tr><td><b>300 projects</b></td><td><span class="mini">unbounded per-project reloads</span></td><td><code>16s</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill ref">REFACTOR</span></div><h4>One policy-driven path <a class="pr" href="https://github.com/lerd-env/lerd/pull/1159">#1159</a></h4><p>The MCP copy had no name deduplication, no domain-conflict fallback, no PHP clamping and no worktree check, and the park copy read nothing from <code>.lerd.yaml</code> beyond the domain list. Parking now writes each vhost and unit and performs the reloads once for the whole batch rather than per project.</p><span class="file">internal/linker</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A link damaged the definition it found <a class="pr" href="https://github.com/lerd-env/lerd/pull/1160">#1160</a></h4><p>Detecting a framework wrote to the store, including on calls that were only reading, and a project commits only the fields it cares about, so a copy carrying no detection rules left the shared definition with none. After that, nothing detected that framework for any project on the machine.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>lerd new, four ways it failed <a class="pr" href="https://github.com/lerd-env/lerd/pull/1161">#1161</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1167">#1167</a> <a class="pr" href="https://github.com/lerd-env/lerd/pull/1170">#1170</a></h4><p>It looked composer up on the caller's PATH, refused a framework the store publishes but the machine never installed, and scaffolded under the machine default rather than the framework's supported range, leaving composer rejecting every candidate or an empty vendor that only showed up as a 500.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 08 MACOS ============ -->
+<section id="macos" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">08</span>
+    <h2>macOS</h2>
+    <div class="ch-pills"><span class="pill fix">FIX</span></div>
+  </div>
+  <p class="ch-intro">launchd hands lerd-ui and lerd-watcher a PATH of <code>/usr/bin:/bin:/usr/sbin:/sbin</code>, so a tool installed with Homebrew is <b>invisible to them while it works fine in a terminal</b>. That one blind spot reached further than it looks: the share panel reported every tunnel tool as not installed, and the same gap decided which Node a host worker unit runs.</p>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Host binaries resolve through one place <a class="pr" href="https://github.com/lerd-env/lerd/pull/1214">#1214</a></h4><p>PATH first, then the install prefixes a daemon never sees, and the resolved path is what gets executed, since the binary has to be found at exec time too. A unit written by the CLI resolved the Homebrew node while the same unit written by the dashboard fell through to whatever nvm install was lying around.</p><span class="file">internal/hostbin</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A tunnel could outlive its owner <a class="pr" href="https://github.com/lerd-env/lerd/pull/1214">#1214</a></h4><p>systemd kills the control group and Pdeathsig covers a non-systemd run; macOS has neither, and a tunnel is deliberately in a process group of its own. Killing lerd-ui left the site public with nothing left to stop it. Since SIGKILL cannot be caught, what is running is written down and reaped at the next start, signalling a pid only while the process under it is still the recorded one.</p><span class="file">internal/cli/tunnel_reap.go</span></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Homebrew paths, three ways <a class="pr" href="https://github.com/lerd-env/lerd/pull/1214">#1214</a></h4><p>The daemon units pinned themselves to the versioned Cellar path, which the next <code>brew upgrade</code> deletes, so they keep Homebrew's symlink instead. Update and uninstall offered an apt or dnf command that does not exist on a Mac. And an nvm installed with brew went undetected, since brew keeps <code>nvm.sh</code> under its own prefix.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 09 SECURITY ============ -->
+<section id="security" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">09</span>
+    <h2>Security</h2>
+    <div class="ch-pills"><span class="pill sec">SEC</span></div>
+  </div>
+  <p class="ch-intro">A review of the whole cycle turned up three findings that let a <b>checked-out project decide what ran on the machine that linked it</b>, through values it commits in its own <code>.lerd.yaml</code>. All three predate this cycle. Values are now checked where the file is generated rather than field by field, so a field added later is covered without anyone having to remember.</p>
+
+  <div class="flow-wrap">
+    <div class="flow-title"><span>WHAT A REPOSITORY COULD REACH</span><span>three sinks, one guard</span></div>
+    <div class="flow">
+      <div class="fnode hot"><div class="t">node_version</div><div class="v">worker unit command line</div><div class="d">unquoted by fnm</div></div>
+      <div class="fnode hot"><div class="t">custom_workers</div><div class="v">label · restart · schedule</div><div class="d">systemd ran an added ExecStartPre</div></div>
+      <div class="fnode hot"><div class="t">domains</div><div class="v">vhost server_name</div><div class="d">nginx accepted a second server block</div></div>
+    </div>
+    <div class="flow-note"><b>Paths are treated separately</b>, since they reach the template quoted and a directory legitimately named with a semicolon still has to serve.</div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>A project decided what ran <a class="pr" href="https://github.com/lerd-env/lerd/pull/1204">#1204</a></h4><p>A semicolon and a pair of braces close a server block and open another, and nginx accepted the result as valid, so a project served a block of its own on a hostname it chose. Anyone on 1.30.1 or earlier was exposed.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>A sudoers drop-in for an unvalidated name <a class="pr" href="https://github.com/lerd-env/lerd/pull/1204">#1204</a></h4><p><code>bootstrap --system</code> wrote the file for whichever user it resolved, and that name became the first field of every rule with nothing checking it, where a space alone produces a drop-in sudo rejects and loses the DNS grant. The name is checked and the rendered file goes through visudo before it is installed. No released version could hit this: <code>bootstrap</code> was written in this same cycle, so the flaw only ever existed in a 1.31.0 beta.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill sec">SEC</span></div><h4>postcss and dompurify advisories <a class="pr" href="https://github.com/lerd-env/lerd/pull/1206">#1206</a></h4><p>postcss allowed a path traversal through its previous-source-map auto loading, reaching both the dashboard build and the docs site, and dompurify let a custom element bypass <code>afterSanitizeElements</code>, reaching the dashboard through the Monaco editor behind the tinker and config editors.</p></div>
+  </div>
+</div></section>
+
+<!-- ============ 10 FIXES & DOCS ============ -->
+<section id="fixes" class="chapter fx"><div class="wrap">
+  <div class="ch-head">
+    <span class="ch-num">10</span>
+    <h2>Fixes &amp; Docs</h2>
+    <div class="ch-pills"><span class="pill fix">FIX</span><span class="pill ui">UI</span></div>
+  </div>
+  <p class="ch-intro">The long tail, where most of the week actually went.</p>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Directory commands dead-ended in a worktree <a class="pr" href="https://github.com/lerd-env/lerd/pull/1200">#1200</a></h4><p>The resolver looked a directory up by exact registry path, so inside a checkout it always missed, then offered to link, which correctly refused. The advice could never succeed no matter how many times it was followed, taking out <code>share</code>, <code>open</code>, <code>domain</code>, <code>env</code>, <code>worker</code>, <code>runtime</code>, <code>stripe</code> and <code>xdebug pause</code> at once.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>php84 was stored verbatim <a class="pr" href="https://github.com/lerd-env/lerd/pull/1178">#1178</a></h4><p><code>lerd use</code> wrote it straight into the global config, after which the pre-built base resolved to a repository the registry answers with 403. The command still reported success. One normalizer reduces every spelling to major.minor, and loading the config repairs an already stored bad value.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A store preset stayed stale in lerd-ui <a class="pr" href="https://github.com/lerd-env/lerd/pull/1184">#1184</a></h4><p>Parsed presets are memoised in a cache only invalidated from the process that saved them, and the CLI rewrites those files from its own process. The entry records mtime and size now, which also fixes the fresh-install ordering where the daemon starts before the store files exist.</p></div>
+  </div>
+
+  <div class="cards three">
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>Custom services inherited /etc/hosts <a class="pr" href="https://github.com/lerd-env/lerd/pull/1105">#1105</a></h4><p>Without an explicit mount podman derives a container's hosts file from the host's own, so a line mapping a service name to loopback shadowed the container name DNS would resolve. phpMyAdmin, pgAdmin and mongo-express all connect by container name and reached their own loopback.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill fix">FIX</span></div><h4>A changed worker unit was started, not restarted <a class="pr" href="https://github.com/lerd-env/lerd/pull/1175">#1175</a></h4><p>The start path rewrites the unit, reloads, re-enables and starts, which is a no-op on an already-active unit, so lerd reported the dev server as started while the old command was still running.</p></div>
+    <div class="card"><div class="card-pills"><span class="pill ui">UI</span></div><h4>The worktree base branch picker <a class="pr" href="https://github.com/lerd-env/lerd/pull/1227">#1227</a></h4><p>An empty base ref means start from HEAD, and the dropdown decided what to render from the value alone, so the entry could never show its label and a good selection looked ignored. Clearing the branch name to retype it also threw away the base you had chosen.</p></div>
+  </div>
+
+  <div class="footnote">Also in: the tray menu groups into submenus and summarises per-site workers, taking the top level from about thirty five rows to twelve <em>#1198</em>, a republished PHP base image surfaces as an update on the version <em>#1188</em>, the N+1 warning always names where the duplicate queries ran <em>#1180</em>, a never-migrated database reports a finding rather than unknown <em>#1179</em>, the php.ini tab edits the version and shared file side by side <em>#1177</em>, the tinker split flips direction and goes full screen <em>#1166</em>, a service dependency is satisfied by an installed drop-in <em>#1148</em>, <code>expand_env</code> writes one numbered variable per family member <em>#1176</em>, a JetBrains project points at its own lerd database <em>#1145</em>, resetting a non-default version's php.ini no longer leaves its FPM unable to start <em>#1127</em>, a client shim passes a bare <code>--version</code> probe through untouched <em>#1129</em>, the Logs tab is offered when a worker is a site's only source <em>#1111</em>, a proxy-only site shows as running when its port is listening <em>#1109</em>, the service Databases and Contents tabs show a loading state <em>#1187</em>, and the docs cover Laragon for Linux across the site and landing page <em>#1190</em>.</div>
+</div></section>
+
+<footer>
+  <div class="foot-grid">
+    <div>
+      <h2>SHIP <span>IT</span></h2>
+      <p class="fn">Install on Linux or macOS, or <code>lerd update</code> if you're already on board. Full
+      story in the <a href="https://lerd.sh/changelog" style="color:var(--amber)">changelog</a>.</p>
+    </div>
+    <div class="term">
+      <div class="term-bar"><i></i><i></i><i></i><span>bash</span></div>
+      <div class="term-body">
+        <div class="c"># Linux &amp; macOS</div>
+        <div><span class="p">$</span> curl -fsSL https://lerd.sh/install.sh | bash</div>
+        <div class="c"># macOS via Homebrew</div>
+        <div><span class="p">$</span> brew install lerd-env/lerd/lerd &amp;&amp; lerd install</div>
+        <div class="c"># already installed</div>
+        <div><span class="p">$</span> lerd update <span class="out"># → v1.31.0</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="foot-end">
+    <span>lerd v1.31.0 · 2026-07-29 · <a href="/digest/v1.30.0.html">← v1.30.0 digest</a></span>
+    <span><a href="https://github.com/lerd-env/lerd/compare/v1.30.1...v1.31.0">v1.30.1…v1.31.0</a> · <a href="https://lerd.sh/">docs</a> · <a href="https://github.com/lerd-env/lerd">github</a></span>
+  </div>
+</footer>
+
+
+<script>
+  const reveal = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); reveal.unobserve(e.target); } });
+  }, { threshold: 0.08 });
+  document.querySelectorAll('.fx').forEach(el => reveal.observe(el));
+  addEventListener('load', () => document.querySelectorAll('.fx').forEach(el => el.classList.add('in')));
+
+  const links = [...document.querySelectorAll('.pillnav a')];
+  const spy = new IntersectionObserver((es) => {
+    es.forEach(e => { if (e.isIntersecting) links.forEach(l => l.classList.toggle('active', l.getAttribute('href') === '#' + e.target.id)); });
+  }, { rootMargin: '-40% 0px -55% 0px' });
+  document.querySelectorAll('section.chapter').forEach(s => spy.observe(s));
+</script>
+</body>
+</html>

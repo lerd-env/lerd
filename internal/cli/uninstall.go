@@ -150,16 +150,16 @@ func runUninstall(force bool) error {
 	removeShellEntry()
 	ok()
 
-	step("Removing lerd binary")
+	step("Removing lerd binaries")
 	// A binary someone else owns is left where it is: deleting a file out of a
 	// Homebrew Cellar or a package's file list leaves that manager believing
 	// lerd is still installed.
 	if self, err := selfPath(); err == nil && (isSystemPackageManaged(self) || isHomebrewManaged(self)) {
 		fmt.Println(feedback.Dim("kept, package-managed"))
-		feedback.Note("remove the binary with your package manager, e.g. " + packageManagerRemoveHint(self))
+		feedback.Note("remove the binaries with your package manager, e.g. " + packageManagerRemoveHint(self))
 	} else {
 		if err == nil {
-			os.Remove(self) //nolint:errcheck
+			removeInstalledBinaries(self)
 		}
 		ok()
 	}
@@ -254,6 +254,14 @@ var shellRCMarkers = []struct {
 	{"# Added by Lerd installer", 1},
 	{"# Lerd completions", 2}, // must be before "# Lerd" — longer prefix wins
 	{"# Lerd", 1},
+}
+
+// removeInstalledBinaries deletes the lerd binary and the tray binary the
+// installer puts beside it. The tray can be launched from a desktop entry
+// without a unit, so leaving it behind outlives the uninstall that removed lerd.
+func removeInstalledBinaries(self string) {
+	os.Remove(self)                                           //nolint:errcheck
+	os.Remove(filepath.Join(filepath.Dir(self), "lerd-tray")) //nolint:errcheck
 }
 
 func removeShellEntry() {
