@@ -21,9 +21,18 @@ var caTrustPaths = []string{
 }
 
 // platformTrustCheck reports whether der is trusted through a non-bundle store.
-// The darwin build wires it to a keychain lookup (mkcert installs its root
-// there, not in a PEM bundle); nil on Linux, where caTrustPaths is authoritative.
+// The darwin build wires it to a keychain trust-settings check (mkcert installs
+// its root there, not in a PEM bundle, and presence alone isn't trust — see
+// ca_trust_darwin.go); nil on Linux, where caTrustPaths is authoritative.
 var platformTrustCheck func(der []byte) bool
+
+// platformPresenceCheck reports whether der merely exists in a platform
+// certificate store, independent of any trust decision. The darwin build
+// wires this to the same keychain dump platformTrustCheck used before it was
+// upgraded to a real trust-settings check; nil on Linux, where a caTrustPaths
+// hit already is the trust decision; there's no separate presence-only state
+// to distinguish it from.
+var platformPresenceCheck func(der []byte) bool
 
 // caRootFunc resolves mkcert's CAROOT directory. Overridable in tests.
 var caRootFunc = func() (string, error) {
@@ -38,15 +47,22 @@ var caRootFunc = func() (string, error) {
 // name the user's real CA location instead of assuming the default.
 func CARoot() (string, error) { return caRootFunc() }
 
-// CATrusted reports whether mkcert's root CA is already present in the system
-// trust store. Callers use it to skip the sudo announcement (and mkcert's
-// chatty banner) on a reinstall where the CA is already installed.
-func CATrusted() bool {
+// rootCADER returns the DER bytes of mkcert's root CA certificate, or nil if
+// CAROOT can't be resolved or rootCA.pem doesn't exist yet (no CA generated).
+func rootCADER() []byte {
 	root, err := caRootFunc()
 	if err != nil || root == "" {
-		return false
+		return nil
 	}
-	der := firstCertDER(readFileNoErr(filepath.Join(root, "rootCA.pem")))
+	return firstCertDER(readFileNoErr(filepath.Join(root, "rootCA.pem")))
+}
+
+// CATrusted reports whether mkcert's root CA is already trusted by the
+// system: actually configured as a trusted root, not merely present in a
+// keychain or store. Callers use it to skip the sudo announcement (and
+// mkcert's chatty banner) on a reinstall where the CA is already trusted.
+func CATrusted() bool {
+	der := rootCADER()
 	if der == nil {
 		return false
 	}
@@ -59,6 +75,24 @@ func CATrusted() bool {
 		return platformTrustCheck(der)
 	}
 	return false
+}
+
+// CAPresentButUntrusted reports the drifted state that let a reinstall
+// silently skip re-establishing trust (see ca_trust_darwin.go): mkcert's
+// root CA sits in a platform certificate store — so mkcert's own "already
+// installed" self-check may treat it as already handled — but carries no
+// actual trust decision. Always false when CATrusted() already reports true,
+// or on a platform with no platformPresenceCheck wired (only darwin has a
+// presence/trust gap to detect; a Linux bundle hit is the trust decision).
+func CAPresentButUntrusted() bool {
+	if platformPresenceCheck == nil || CATrusted() {
+		return false
+	}
+	der := rootCADER()
+	if der == nil {
+		return false
+	}
+	return platformPresenceCheck(der)
 }
 
 func readFileNoErr(path string) []byte {
