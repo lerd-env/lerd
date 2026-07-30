@@ -98,6 +98,10 @@ Nothing in the project is edited. lerd writes a generated config to `node_module
 
 The port is pinned, because the vhost proxies to it and the tool would otherwise drift to the next free one whenever several sites run. It is kept clear of other sites, of the site's own worktrees, and of whatever else the machine is holding, and a pin something has since taken is re-picked rather than left to fail. Each worktree pins its own port and takes its origin from its own subdomain.
 
+The tool reads those addresses once, when it starts, so lerd writes them back and restarts the dev server whenever they move: `lerd secure` and `lerd unsecure`, `lerd domain add` and `lerd domain remove`, and grouping a site under a main. A dev server that is not running is left down, and a change that leaves the addresses exactly as they were restarts nothing.
+
+A site with more than one domain serves its assets from the primary one, since a dev server can advertise only a single origin. The generated config lists every domain, both as a host the server answers for (along with its subdomains, matching the vhost's wildcard) and as an origin allowed to fetch from it, so a page opened on a second domain loads normally instead of having its assets refused.
+
 Some plugin middleware registers itself ahead of the tool's own base handling and only answers unprefixed, which would 404 on URLs it advertised itself. nginx retries any 404 under the prefix once with the prefix removed, so those routes work without anything having to name them.
 
 When [idle-suspend](/usage/idle-suspend) is enabled it stops every one of a site's workers once the site has been idle, so workers carry no special configuration for it. A worker marked `per_worktree: true` (Vite is the only one by default) is suspended per worktree, on each worktree's own idle timer.

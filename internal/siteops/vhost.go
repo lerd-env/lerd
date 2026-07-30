@@ -13,7 +13,9 @@ import (
 
 // RegenerateSiteVhost regenerates the nginx vhost for a site after domain changes.
 // If the primary domain changed, the old vhost file is removed. For secured sites
-// the SSL vhost is generated and renamed to the main .conf path.
+// the SSL vhost is generated and renamed to the main .conf path. Every caller that
+// changes a site's domains comes through here, so it is also where a running dev
+// server is realigned with them.
 func RegenerateSiteVhost(site *config.Site, oldPrimary string) error {
 	newPrimary := site.PrimaryDomain()
 
@@ -71,6 +73,9 @@ func RegenerateSiteVhost(site *config.Site, oldPrimary string) error {
 			return fmt.Errorf("generating vhost: %w", err)
 		}
 	}
+	// A dev server serving under this vhost has the site's domains baked into the
+	// config it was started with, so it follows the vhost that just moved.
+	RefreshDevServers(site)
 	if podman.AfterUnitChange != nil {
 		podman.AfterUnitChange("site:" + site.Name)
 	}

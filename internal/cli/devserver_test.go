@@ -22,10 +22,15 @@ func viteDevServer() *config.DevServerTool {
 		DefaultPort:   5173,
 		Wrapper: `import { mergeConfig } from 'vite';
 import projectConfig from %s;
-const lerd = { base: %s, server: { origin: %s, allowedHosts: %s } };
+const lerd = { base: %s, server: { origin: %s, allowedHosts: %s, cors: { origin: %s } } };
 export default projectConfig;
 `,
 	}
+}
+
+// securedAddr is the addresses a secured single-domain site hands the generator.
+func securedAddr(domain string) devServerAddr {
+	return devServerAddrFor(true, domain, []string{domain})
 }
 
 func gitRepo(t *testing.T, ignore string) string {
@@ -76,7 +81,7 @@ func TestWriteDevServerWrapperMergesBaseAndOrigin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rel, err := writeDevServerWrapper(dir, viteDevServer(), "https://myapp.test", []string{"myapp.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}
@@ -91,13 +96,127 @@ func TestWriteDevServerWrapperMergesBaseAndOrigin(t *testing.T) {
 	for _, want := range []string{
 		`"/@lerd-vite/"`,
 		`"https://myapp.test"`,
-		`"myapp.test"`,
+		`".myapp.test"`,
 		`"../../vite.config.js"`,
 		"mergeConfig",
 	} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("wrapper missing %s:\n%s", want, body)
 		}
+	}
+}
+
+// The vhost answers on every domain of the site and on each one's wildcard, so
+// the generated config has to name the same set: the hosts the server may answer
+// for, and the origins a page loaded on any of them fetches its assets from.
+func TestDevServerAddrCoversEveryDomainAndItsSubdomains(t *testing.T) {
+	addr := devServerAddrFor(true, "myapp.test", []string{"myapp.test", "alias.test"})
+
+	if addr.Origin != "https://myapp.test" {
+		t.Errorf("origin = %q, want https://myapp.test", addr.Origin)
+	}
+	if got, want := strings.Join(addr.Hosts, " "), ".myapp.test .alias.test"; got != want {
+		t.Errorf("hosts = %q, want %q", got, want)
+	}
+	if got, want := strings.Join(addr.Origins, " "), "https://myapp.test https://alias.test"; got != want {
+		t.Errorf("cors origins = %q, want %q", got, want)
+	}
+}
+
+// A site served over plain HTTP has to be described that way, or the page ends
+// up asking for its assets over a scheme nothing is listening on.
+func TestDevServerAddrFollowsAPlainSite(t *testing.T) {
+	addr := devServerAddrFor(false, "myapp.test", []string{"myapp.test"})
+
+	if addr.Origin != "http://myapp.test" {
+		t.Errorf("origin = %q, want http://myapp.test", addr.Origin)
+	}
+	if got, want := strings.Join(addr.Origins, " "), "http://myapp.test"; got != want {
+		t.Errorf("cors origins = %q, want %q", got, want)
+	}
+}
+
+// Naming an origin makes some framework plugins use it as their whole CORS
+// allowlist, so a second domain of the same site has to be listed explicitly or
+// the browser refuses every asset the page just asked for.
+func TestWriteDevServerWrapperDeclaresCorsForEveryDomain(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	addr := devServerAddrFor(false, "myapp.test", []string{"myapp.test", "alias.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), addr)
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `cors: { origin: ["http://myapp.test","http://alias.test"] }`) {
+		t.Errorf("wrapper does not allow both domains to fetch from the server:\n%s", body)
+	}
+}
+
+// The tool reads the config once, at start, so a scheme that moved underneath a
+// running dev server has to be written back before it can be restarted onto it.
+func TestRewriteDevServerWrapperFollowsASchemeChange(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+
+	plain := devServerAddrFor(false, "myapp.test", []string{"myapp.test"})
+	if !rewriteDevServerWrapper(dir, viteDevServer(), plain) {
+		t.Fatal("rewriteDevServerWrapper() = false, want the unsecured site to be written back")
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "https://myapp.test") {
+		t.Errorf("config still advertises https:\n%s", body)
+	}
+	if !strings.Contains(string(body), `"http://myapp.test"`) {
+		t.Errorf("config does not advertise the site's plain origin:\n%s", body)
+	}
+}
+
+// Regeneration runs from every path that touches a vhost, most of which change
+// nothing here, and a needless rewrite would bounce a dev server someone is
+// working against.
+func TestRewriteDevServerWrapperLeavesAnUnchangedConfigAlone(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test")); err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+
+	if rewriteDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test")) {
+		t.Error("rewriteDevServerWrapper() = true for addresses that did not move")
+	}
+}
+
+// A project whose dev server has never run here has no generated config and
+// nothing pointed at one, so refreshing must not conjure one up.
+func TestRewriteDevServerWrapperSkipsAConfigItNeverWrote(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if rewriteDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test")) {
+		t.Error("rewriteDevServerWrapper() = true with no generated config on disk")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "node_modules/.lerd/vite.config.mjs")); err == nil {
+		t.Error("a config was generated for a dev server that has never started here")
 	}
 }
 
@@ -116,7 +235,7 @@ func TestWriteDevServerWrapperOverwritesInheritedCopy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rel, err := writeDevServerWrapper(dir, viteDevServer(), "https://feature.myapp.test", []string{"feature.myapp.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("feature.myapp.test"))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}
@@ -140,7 +259,7 @@ func TestWriteDevServerWrapperSkipsWhenPathIsTracked(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rel, err := writeDevServerWrapper(dir, viteDevServer(), "https://myapp.test", []string{"myapp.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}
@@ -172,7 +291,7 @@ func TestWriteDevServerWrapperSkipsWhenPathIsCommitted(t *testing.T) {
 		t.Fatalf("git add: %v (%s)", err, out)
 	}
 
-	rel, err := writeDevServerWrapper(dir, viteDevServer(), "https://myapp.test", []string{"myapp.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}
@@ -223,7 +342,7 @@ func TestWriteDevServerWrapperEscapesAHostileOrigin(t *testing.T) {
 
 	payload := "x'+process.env.AWS_SECRET_ACCESS_KEY+'"
 	origin := "https://" + payload
-	rel, err := writeDevServerWrapper(dir, tool, origin, []string{payload})
+	rel, err := writeDevServerWrapper(dir, tool, securedAddr(payload))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}
@@ -253,7 +372,7 @@ func TestWriteDevServerWrapperAppliesOutsideGit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	rel, err := writeDevServerWrapper(dir, viteDevServer(), "https://myapp.test", []string{"myapp.test"})
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
 	if err != nil {
 		t.Fatalf("writeDevServerWrapper() error: %v", err)
 	}

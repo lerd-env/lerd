@@ -24,9 +24,10 @@ type DevServerTool struct {
 	WrapperPath string
 	// Args is appended to the worker command, with {config} and {port} filled in.
 	Args string
-	// Wrapper is the generated config, taking the import path, base, origin and
-	// allowed hosts. Every placeholder is filled with an encoded JavaScript
-	// literal, so none of them carries its own quotes.
+	// Wrapper is the generated config, taking the import path, base, origin,
+	// allowed hosts and the origins allowed to fetch from the server. Every
+	// placeholder is filled with an encoded JavaScript literal, so none of them
+	// carries its own quotes.
 	Wrapper     string
 	DefaultPort int
 }
@@ -49,6 +50,10 @@ const lerd = {
         host: true,
         origin: %s,
         allowedHosts: %s,
+        // Naming an origin makes some framework plugins treat it as the whole
+        // CORS allowlist, so a page on any other domain of the site would be
+        // refused the assets it just asked for. Declare them all.
+        cors: { origin: %s },
     },
 };
 

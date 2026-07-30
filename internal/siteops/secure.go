@@ -58,7 +58,9 @@ func defaultNotifyDaemon(domain, action string) error {
 //     for these, so even callers running inside the daemon hit the same
 //     HTTP endpoints; a tiny loopback roundtrip is the cost of having one
 //     identical post-toggle path.
-//  7. Cascade to the group secondaries when the site is a secured group main,
+//  7. Realign the generated dev server config, and any dev server running on
+//     the old scheme, with the site's new one.
+//  8. Cascade to the group secondaries when the site is a secured group main,
 //     and refuse to unsecure a secondary whose main is secured (see #811).
 func SetSecured(site *config.Site, secured bool) error {
 	_, err := SetSecuredCascade(site, secured)
@@ -101,6 +103,7 @@ func SetSecuredCascade(site *config.Site, secured bool) ([]string, error) {
 	}
 	_ = notifyDaemonFn(site.PrimaryDomain(), "stripe:refresh")
 	_ = notifyDaemonFn(site.PrimaryDomain(), "lan:refresh")
+	RefreshDevServers(site)
 	if secured && site.IsGroupMain() {
 		return cascadeGroupSecondaries(site)
 	}
