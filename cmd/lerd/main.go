@@ -240,6 +240,7 @@ func main() {
 	root.AddCommand(cli.NewLANStatusCmd())
 	root.AddCommand(cli.NewLANShareCmd())
 	root.AddCommand(cli.NewLANUnshareCmd())
+	root.AddCommand(cli.NewLANServicesCmd())
 	root.AddCommand(cli.NewRemoteSetupCmd())
 	root.AddCommand(cli.NewRemoteControlCmd())
 	root.AddCommand(cli.NewRemoteControlOnCmd())

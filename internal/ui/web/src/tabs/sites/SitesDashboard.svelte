@@ -94,7 +94,7 @@
       {/if}
     {/if}
 
-    {#if $accessMode.loopback && $sitesLoaded && total > 0}
+    {#if $accessMode.localControl && $sitesLoaded && total > 0}
       <button
         onclick={openLinkModal}
         class="inline-flex items-center gap-1 text-xs font-medium text-lerd-red hover:text-lerd-redhov"

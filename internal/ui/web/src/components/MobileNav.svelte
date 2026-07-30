@@ -6,9 +6,9 @@
   import { accessMode } from '$stores/accessMode';
   import { m } from '../paraglide/messages.js';
 
-  // The Apps view only launches loopback-only service dashboards, dead from a
-  // remote (LAN) dashboard, so drop the tab there.
-  const remote = $derived(!$accessMode.loopback);
+  // Hide host-local app launchers only when dashboard-control authority is
+  // unavailable. Authenticated remote dashboards receive authority.
+  const remote = $derived(!$accessMode.localControl);
 
   const labels = $derived<Record<TabId, string>>({
     dashboard: m.nav_dashboard(),

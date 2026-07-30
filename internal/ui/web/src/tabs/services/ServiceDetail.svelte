@@ -32,13 +32,11 @@
   const hasTools = $derived(Boolean(svc.client_shims && svc.client_shims.length > 0));
   // Workers publish nothing, so the ports tab tracks the header gear's old guard.
   const hasPorts = $derived(!isServiceWorker(svc));
-  // The whole databases surface (the /api/databases subtree) is loopback-only,
-  // so on a LAN-exposed dashboard the tab would report a running engine as
-  // stopped and silently 403 every action. Hide it off the lerd host entirely.
-  const hasDatabases = $derived(svc.is_database && $accessMode.loopback);
-  // The generic entity overview shares the databases surface's loopback-only
-  // restriction: its actions read out and delete the service's data.
-  const hasEntities = $derived((svc.entity_kinds?.length ?? 0) > 0 && $accessMode.loopback);
+  // Database and entity actions require dashboard-control authority because
+  // they can read, create, and delete service data. Authenticated remote
+  // dashboards receive that authority.
+  const hasDatabases = $derived(svc.is_database && $accessMode.localControl);
+  const hasEntities = $derived((svc.entity_kinds?.length ?? 0) > 0 && $accessMode.localControl);
   // A single declared kind names its own tab (Buckets, Keyspaces); several
   // fold under a generic label.
   const entitiesLabel = $derived.by(() => {

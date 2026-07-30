@@ -225,3 +225,22 @@ func TestToggleTitle(t *testing.T) {
 		t.Errorf("toggleTitle(off) = %q", got)
 	}
 }
+
+func TestManagedServiceLANTitleDistinguishesEffectiveState(t *testing.T) {
+	cases := []struct {
+		name string
+		snap Snapshot
+		want string
+	}{
+		{"off", Snapshot{}, "Managed service LAN access: Off"},
+		{"armed", Snapshot{LANServicesExposed: true}, "Managed service LAN access: Armed (LAN exposure off)"},
+		{"active", Snapshot{LANExposed: true, LANServicesExposed: true}, "Managed service LAN access: ✔ On"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := managedServiceLANTitle(&tc.snap); got != tc.want {
+				t.Fatalf("managedServiceLANTitle() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

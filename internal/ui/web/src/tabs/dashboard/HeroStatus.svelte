@@ -121,7 +121,7 @@
           {m.dashboard_hero_lerdUpdate({ version: $version.latest })}
         </p>
       </div>
-      {#if $accessMode.loopback}
+      {#if $accessMode.localControl}
         <button
           onclick={onUpdateLerd}
           disabled={updateTerminalLoading}

@@ -594,12 +594,14 @@ func (m *darwinServiceManager) ListServiceUnits(nameGlob string) []string {
 // --- Container unit files ---
 
 func (m *darwinServiceManager) WriteContainerUnit(name, content string) error {
-	// Apply LAN binding restriction before parsing — mirrors WriteQuadletDiff on Linux.
+	// Apply the same unit-aware LAN policy as the Linux quadlet writer.
 	lanExposed := false
+	servicesExposed := false
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
 		lanExposed = cfg.LAN.Exposed
+		servicesExposed = cfg.LAN.ServicesExposed
 	}
-	content = podman.BindForLAN(content, lanExposed)
+	content = podman.BindQuadletForLAN(name, content, lanExposed, servicesExposed)
 	// gvproxy (macOS) cannot bind two specific host IPs on the same port;
 	// drop IPv6 PublishPort lines so only IPv4 bindings reach podman run.
 	content = stripIPv6PublishPorts(content)

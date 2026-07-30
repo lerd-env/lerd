@@ -60,7 +60,7 @@
 
   {#snippet footer()}
     <div class="flex flex-wrap items-center gap-2">
-      {#if $accessMode.loopback}
+      {#if $accessMode.localControl}
         <button
           onclick={openPresetModal}
           class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium bg-lerd-red hover:bg-lerd-redhov text-white transition-colors"

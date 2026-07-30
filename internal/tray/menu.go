@@ -32,6 +32,7 @@ type menuState struct {
 	mSettings      *systray.MenuItem
 	mAutostart     *systray.MenuItem
 	mLAN           *systray.MenuItem
+	mLANServices   *systray.MenuItem
 	mDumps         *systray.MenuItem
 	mNotifications *systray.MenuItem
 	mIconStyle     *systray.MenuItem
@@ -73,6 +74,7 @@ func buildMenu(mono bool) *menuState {
 	if runtime.GOOS != "darwin" {
 		m.mLAN = m.mSettings.AddSubMenuItem("Expose to LAN: Off", "Toggle whether lerd is reachable from other devices on the local network")
 	}
+	m.mLANServices = m.mSettings.AddSubMenuItem("Managed service LAN access: Off", "Allow remote access to managed service ports on trusted networks")
 	m.mDumps = m.mSettings.AddSubMenuItem("Debug bridge: Off", "Capture dump() / dd() into the lerd dashboard")
 	m.mNotifications = m.mSettings.AddSubMenuItem("Notifications: On", "Globally enable or disable lerd notifications")
 	// The high-contrast icon toggle only makes sense for the colour icon; in
@@ -182,6 +184,16 @@ func toggleTitle(label string, on bool) string {
 	return label + ": Off"
 }
 
+func managedServiceLANTitle(snap *Snapshot) string {
+	if !snap.LANServicesExposed {
+		return "Managed service LAN access: Off"
+	}
+	if !snap.LANExposed {
+		return "Managed service LAN access: Armed (LAN exposure off)"
+	}
+	return "Managed service LAN access: ✔ On"
+}
+
 // apply updates menu titles and visibility from a Snapshot.
 func (m *menuState) apply(snap *Snapshot) {
 	if snap == nil {
@@ -232,6 +244,7 @@ func (m *menuState) apply(snap *Snapshot) {
 	if m.mLAN != nil {
 		m.mLAN.SetTitle(toggleTitle("Expose to LAN", snap.LANExposed))
 	}
+	m.mLANServices.SetTitle(managedServiceLANTitle(snap))
 	m.mDumps.SetTitle(toggleTitle("Debug bridge", snap.DumpsEnabled))
 	m.mNotifications.SetTitle(toggleTitle("Notifications", snap.NotificationsEnabled))
 	if m.mIconStyle != nil {

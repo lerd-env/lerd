@@ -44,7 +44,7 @@
       {/if}
     </section>
 
-    {#if $accessMode.loopback}
+    {#if $accessMode.localControl}
       <section class="space-y-3">
         <div class="flex items-center justify-between gap-3">
           <h2 class="text-xs font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">{m.services_dash_discover()}</h2>

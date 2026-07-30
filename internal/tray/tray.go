@@ -48,6 +48,7 @@ type Snapshot struct {
 	WorkersDown          []string // sites lerd considers unhealthy, not merely stopped
 	AutostartEnabled     bool
 	LANExposed           bool   // lerd lan expose state — drives the LAN toggle item
+	LANServicesExposed   bool   // explicit managed-service LAN access preference
 	DumpsEnabled         bool   // lerd dump on/off state — drives the dump toggle item
 	NotificationsEnabled bool   // lerd notify on/off state — drives the notifications toggle item
 	HighContrastIcon     bool   // lerd tray icon high-contrast state — green running icon on any panel
@@ -243,6 +244,7 @@ func onReady(mono bool) {
 	if menu.mLAN != nil {
 		go handleLAN(menu.mLAN, refresh)
 	}
+	go handleLANServices(menu.mLANServices, refresh)
 	go handleDumps(menu.mDumps, refresh)
 	go handleNotifications(menu.mNotifications, refresh)
 	if menu.mIconStyle != nil {
@@ -321,6 +323,7 @@ func fetchSnapshot() *Snapshot {
 	// for each toggle.
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
 		snap.LANExposed = cfg.LAN.Exposed
+		snap.LANServicesExposed = cfg.LAN.ServicesExposed
 		snap.DumpsEnabled = cfg.IsDumpsEnabled()
 		snap.NotificationsEnabled = cfg.IsNotificationsEnabled()
 		snap.HighContrastIcon = cfg.IsHighContrastTrayIcon()
@@ -517,6 +520,16 @@ func handleLAN(item *systray.MenuItem, refresh func()) {
 			arg = "unexpose"
 		}
 		runAndRefresh(lerdCmd("lan", arg), refresh)
+	}
+}
+
+func handleLANServices(item *systray.MenuItem, refresh func()) {
+	for range item.ClickedCh {
+		enabled := false
+		if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+			enabled = cfg.LAN.ServicesExposed
+		}
+		runAndRefresh(lerdCmd("lan", "services", offOn(enabled)), refresh)
 	}
 }
 

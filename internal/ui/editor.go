@@ -14,10 +14,9 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// handleOpenEditor opens a file at a line in the user's editor, for the
-// "open in editor" links in the dashboard (e.g. a query's caller path).
-// Loopback-only: it execs a process on the host, so only a local browser
-// session may trigger it. Paths are confined to the user's home directory.
+// handleOpenEditor opens a file at a line in the host's editor for dashboard
+// links such as a query's caller path. It requires dashboard-control authority,
+// and paths are confined to the user's home directory.
 func handleOpenEditor(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

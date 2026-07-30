@@ -215,9 +215,9 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/tunnel-qr/", withCORS(handleTunnelQR))
 	mux.HandleFunc("/api/dashboard-qr", withCORS(handleDashboardQR))
 
-	// Cross-process notifier for CLI/MCP. Loopback-only. PollNow in a
-	// goroutine so the handler returns under the CLI's 500 ms POST
-	// timeout while the cache refresh drives the next WS broadcast.
+	// Cross-process notifier for CLI/MCP. It requires dashboard-control
+	// authority. PollNow runs in a goroutine so the handler returns under the
+	// CLI's 500 ms POST timeout while the next WebSocket broadcast refreshes.
 	mux.HandleFunc("/api/internal/notify", func(w http.ResponseWriter, r *http.Request) {
 		if !isLoopbackRequest(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
@@ -5247,9 +5247,9 @@ func handleLerdQuit(w http.ResponseWriter, r *http.Request) {
 	go cli.RunQuit() //nolint:errcheck
 }
 
-// handleLerdUpdateTerminal opens the user's terminal emulator running
-// `lerd update`. Loopback-only. Uses os.Executable() because the spawned
-// `sh -c` doesn't source .bashrc, so ~/.local/bin is off PATH otherwise.
+// handleLerdUpdateTerminal opens the host's terminal emulator running
+// `lerd update`. It requires dashboard-control authority. Uses os.Executable()
+// because the spawned shell does not load the user's interactive PATH.
 func handleLerdUpdateTerminal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -5551,7 +5551,7 @@ func handleAppLogs(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// POST /api/app-logs/{domain}/clear deletes the matched log files to reclaim
-	// disk. Loopback-only since it mutates files on the host.
+	// disk. It requires dashboard-control authority.
 	if len(parts) == 2 && parts[1] == "clear" {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

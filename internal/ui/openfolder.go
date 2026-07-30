@@ -12,8 +12,8 @@ import (
 )
 
 // handleOpenFolder opens a directory in the host's file manager (xdg-open on
-// Linux, open on macOS). Loopback-only and confined to the user's home, the
-// same guards as handleOpenEditor. Backs the clickable path on a site's header.
+// Linux, open on macOS). It requires dashboard-control authority and confines
+// paths to the user's home directory, like handleOpenEditor.
 func handleOpenFolder(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

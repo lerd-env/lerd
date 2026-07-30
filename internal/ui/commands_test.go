@@ -226,7 +226,7 @@ commands:
 	rec := httptest.NewRecorder()
 	handleSiteAction(rec, req)
 	if rec.Code != http.StatusOK {
-		t.Errorf("list endpoint must allow LAN viewers (read-only): %d %s", rec.Code, rec.Body.String())
+		t.Errorf("list endpoint must allow read-only requests: %d %s", rec.Code, rec.Body.String())
 	}
 }
 

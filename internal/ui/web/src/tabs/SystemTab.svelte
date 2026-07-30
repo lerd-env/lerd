@@ -38,7 +38,7 @@
 </script>
 
 {#snippet actions()}
-  {#if $accessMode.loopback && !$allCoreRunning}
+  {#if $accessMode.localControl && !$allCoreRunning}
     <ActionButton
       title={m.system_startLerd()}
       tone="success"
@@ -49,7 +49,7 @@
       <Icon name="play" class="w-3.5 h-3.5" />
     </ActionButton>
   {/if}
-  {#if $accessMode.loopback}
+  {#if $accessMode.localControl}
     <ActionButton
       title={m.system_stopLerd()}
       onclick={lerdStop}

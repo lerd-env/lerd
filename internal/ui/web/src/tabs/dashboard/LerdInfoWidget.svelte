@@ -53,7 +53,7 @@
       </svg>
       <div class="flex-1 space-y-2">
         <span>{m.system_lerd_available({ version: $version.latest })}</span>
-        {#if $accessMode.loopback}
+        {#if $accessMode.localControl}
           <div>
             <button
               onclick={openUpdateTerminal}

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"net"
@@ -15,43 +16,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// loopbackOnlyRoutes are dashboard endpoints that perform actions too
-// destructive or sensitive to allow from a remote (LAN) client even when
-// remote-control is enabled with valid Basic auth credentials. Examples:
-// shutting lerd down entirely, opening a terminal on the host, linking
-// arbitrary host filesystem paths as new sites. The local user can still
-// use them as normal because loopback bypasses everything.
-var loopbackOnlyRoutes = []string{
-	"/api/lerd/stop",            // shuts down all lerd containers
-	"/api/lerd/quit",            // exits the dashboard process
-	"/api/lerd/update-terminal", // spawns a terminal emulator on the host
-	"/api/logs/terminal",        // spawns a terminal emulator on the host
-	"/api/sites/link",           // links arbitrary host filesystem paths
-	"/api/browse",               // browses host filesystem
-	"/api/push/test",            // fires notifications onto subscribed devices
-}
-
-// loopbackOnlyRoutePrefixes are endpoint subtrees restricted to loopback in
-// full, so a new subresource cannot escape by failing to be listed. Databases
-// read out, drop and overwrite the data the "/env" gate already protects.
-var loopbackOnlyRoutePrefixes = []string{
-	"/api/databases",
-	"/api/entities",
-	// Replaces executables on the host's PATH, so it stays with the terminal
-	// and link routes rather than behind Basic auth alone.
-	"/api/tools",
-}
-
-// loopbackOnlySiteSubactions are the per-site actions (under
-// /api/sites/{domain}/) whose entire subtree is restricted to loopback.
-// A subaction "/env" gates /api/sites/{d}/env and every nested route
-// under it (e.g. /env/files, /env/backups, /env/backups/<name>,
-// /env/restore), so adding a new subresource cannot accidentally escape
-// the LAN gate by failing to be re-listed here.
-var loopbackOnlySiteSubactions = []string{
-	"/terminal", // opens an interactive shell on the host
-	"/env",      // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
-}
+type ctxKeyRemoteDashboard struct{}
 
 // fromHost reports whether r's source IP belongs to one of the host's
 // own interfaces. The mailpit container reaches the dashboard via
@@ -89,40 +54,6 @@ func fromHost(r *http.Request) bool {
 			continue
 		}
 		if src.Equal(ipNet.IP) {
-			return true
-		}
-	}
-	return false
-}
-
-// isLoopbackOnlyPath reports whether the given URL path is in either
-// the exact-match list or matches a per-site action whose entire subtree
-// is loopback-only. A subaction "/env" matches /api/sites/{d}/env exactly
-// and any subroute under it (/env/files, /env/backups, /env/restore,
-// /env/backups/<name>), so adding a new subresource never silently
-// escapes the gate.
-func isLoopbackOnlyPath(path string) bool {
-	for _, p := range loopbackOnlyRoutes {
-		if path == p {
-			return true
-		}
-	}
-	for _, p := range loopbackOnlyRoutePrefixes {
-		if path == p || strings.HasPrefix(path, p+"/") {
-			return true
-		}
-	}
-	if !strings.HasPrefix(path, "/api/sites/") {
-		return false
-	}
-	rest := strings.TrimPrefix(path, "/api/sites/")
-	slash := strings.Index(rest, "/")
-	if slash < 0 {
-		return false
-	}
-	after := rest[slash:]
-	for _, action := range loopbackOnlySiteSubactions {
-		if after == action || strings.HasPrefix(after, action+"/") {
 			return true
 		}
 	}
@@ -205,13 +136,10 @@ func passesCSRF(r *http.Request) bool {
 //	true            | empty               | 403 (no credentials configured)
 //	true            | set                 | require HTTP Basic auth
 //
-// Loopback (127.x, ::1) always bypasses both checks. OPTIONS preflight
-// passes through (no Authorization header expected). /api/remote-setup
-// has its own token + IP gate and is unaffected.
-//
-// Additionally, the loopbackOnlyRoutes list (lerd stop/quit, site link,
-// terminal, filesystem browse) is rejected from non-loopback even with
-// valid Basic auth. The local user keeps full access via loopback.
+// Direct local dashboard requests bypass both checks. OPTIONS preflight
+// passes through because it has no Authorization header. /api/remote-setup
+// has its own token and IP gate. An authenticated remote dashboard receives
+// the same controls as the local dashboard.
 func withRemoteControlGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. CORS preflight: pass through. Browsers don't include the
@@ -230,7 +158,7 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		// by non-browser clients that have their own source protection.
 		if unsafeMethod(r.Method) && !csrfExemptPath(r.URL.Path) && !passesCSRF(r) {
 			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "Forbidden — cross-origin request blocked. Use the lerd dashboard on this machine.", http.StatusForbidden)
+			http.Error(w, "Forbidden — cross-origin request blocked. Use the Lerd dashboard itself.", http.StatusForbidden)
 			return
 		}
 
@@ -253,20 +181,10 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 			return
 		}
 
-		// 3. Loopback (127.x, ::1) always bypasses. The local user owns the
-		// machine and can never be locked out.
-		if isLoopbackRequest(r) {
+		// 3. Only direct host control bypasses authentication. A reverse proxy
+		// may connect from 127.0.0.1 on behalf of a remote browser.
+		if isLocalControlRequest(r) {
 			next.ServeHTTP(w, r)
-			return
-		}
-
-		// 3a. Loopback-only routes: even with valid Basic auth, certain
-		// destructive actions (lerd stop, terminal, site link, filesystem
-		// browse) are not allowed from non-loopback sources. The local
-		// user can still trigger them via loopback.
-		if isLoopbackOnlyPath(r.URL.Path) {
-			w.Header().Set("Cache-Control", "no-store")
-			http.Error(w, "Forbidden — this action is only available from the lerd host (loopback).", http.StatusForbidden)
 			return
 		}
 
@@ -304,7 +222,7 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		now := time.Now()
 		if c, err := r.Cookie(remoteSessionCookie); err == nil &&
 			remoteSessionValid(c.Value, cfg.UI.Username, cfg.UI.PasswordHash, now) {
-			next.ServeHTTP(w, r)
+			serveRemoteDashboard(next, w, r)
 			return
 		}
 
@@ -332,53 +250,62 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		// Basic auth cleared — mint a session cookie so the browser skips
 		// the challenge on subsequent requests.
 		setRemoteSessionCookie(w, cfg.UI.Username, cfg.UI.PasswordHash, now)
-		next.ServeHTTP(w, r)
+		serveRemoteDashboard(next, w, r)
 	})
 }
 
-// handleAccessMode serves /api/access-mode. Returns whether the request
-// came from loopback so the frontend can hide UI elements that map to
-// loopback-only endpoints (the terminal button, the link-site button, the
-// stop-lerd button). Reachable from any source — there's no sensitive
-// information here.
+func serveRemoteDashboard(next http.Handler, w http.ResponseWriter, r *http.Request) {
+	ctx := context.WithValue(r.Context(), ctxKeyRemoteDashboard{}, true)
+	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+// handleAccessMode serves /api/access-mode. It reports whether this request
+// has dashboard-control authority and whether LAN exposure is enabled.
 func handleAccessMode(w http.ResponseWriter, r *http.Request) {
+	cfg, _ := config.LoadGlobal()
+	lanExposed := cfg != nil && cfg.LAN.Exposed
 	writeJSON(w, map[string]any{
-		"loopback": isLoopbackRequest(r),
+		"local_control": hasDashboardControl(r),
+		"lan_exposed":   lanExposed,
 	})
 }
 
 // handleLANStatus serves /api/lan/status.
 //
-//	GET                              → { exposed, lan_ip }
-//	POST { action: "expose" }        → flips lerd to LAN-exposed mode
-//	POST { action: "unexpose" }      → flips lerd back to loopback-only mode
+//	GET                               → { exposed, services_enabled, services_reachable, lan_ip }
+//	POST { action: "expose" }         → exposes sites, DNS, and dashboard bind
+//	POST { action: "unexpose" }       → returns every endpoint to loopback
+//	POST { action: "services_on" }    → opts managed services into LAN access
+//	POST { action: "services_off" }   → returns managed services to loopback
 //
-// POST is gated to loopback inside the handler because it rewrites systemd
-// user units, container quadlets, and dnsmasq config on the host.
+// POST requires dashboard-control authority because it rewrites runtime units
+// and host configuration.
 func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		cfg, _ := config.LoadGlobal()
 		exposed := false
+		servicesEnabled := false
 		if cfg != nil {
 			exposed = cfg.LAN.Exposed
+			servicesEnabled = cfg.LAN.ServicesExposed
 		}
 		lanIP := ""
 		if exposed {
 			lanIP = uiPrimaryLANIP()
 		}
 		writeJSON(w, map[string]any{
-			"exposed": exposed,
-			"lan_ip":  lanIP,
-			"macos":   runtime.GOOS == "darwin",
+			"exposed":            exposed,
+			"services_enabled":   servicesEnabled,
+			"services_reachable": exposed && servicesEnabled,
+			"lan_ip":             lanIP,
+			"macos":              runtime.GOOS == "darwin",
 		})
 		return
 
 	case http.MethodPost:
-		// POST touches systemd units and quadlets on the host — never allow
-		// from LAN even if the caller has valid Basic auth.
-		if !isLoopbackRequest(r) {
-			http.Error(w, "Forbidden — LAN exposure can only be toggled from the lerd host (loopback).", http.StatusForbidden)
+		if !hasDashboardControl(r) {
+			http.Error(w, "Forbidden — dashboard authentication is required to change LAN exposure.", http.StatusForbidden)
 			return
 		}
 		var body struct {
@@ -388,8 +315,10 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
 			return
 		}
-		if body.Action != "expose" && body.Action != "unexpose" {
-			http.Error(w, "unknown action — expected 'expose' or 'unexpose'", http.StatusBadRequest)
+		switch body.Action {
+		case "expose", "unexpose", "services_on", "services_off":
+		default:
+			http.Error(w, "unknown action — expected 'expose', 'unexpose', 'services_on', or 'services_off'", http.StatusBadRequest)
 			return
 		}
 
@@ -412,6 +341,13 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 		progress := func(step string) {
 			writeLine(map[string]any{"step": step})
 		}
+		serviceState := func() (enabled, reachable bool) {
+			cfg, _ := config.LoadGlobal()
+			if cfg == nil {
+				return false, false
+			}
+			return cfg.LAN.ServicesExposed, cfg.LAN.Exposed && cfg.LAN.ServicesExposed
+		}
 
 		switch body.Action {
 		case "expose":
@@ -420,14 +356,41 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 				writeLine(map[string]any{"result": "error", "error": err.Error()})
 				return
 			}
-			writeLine(map[string]any{"result": "ok", "exposed": true, "lan_ip": lanIP})
+			enabled, reachable := serviceState()
+			writeLine(map[string]any{
+				"result":             "ok",
+				"exposed":            true,
+				"services_enabled":   enabled,
+				"services_reachable": reachable,
+				"lan_ip":             lanIP,
+			})
 			return
 		case "unexpose":
 			if err := lerdcli.DisableLANExposure(progress); err != nil {
 				writeLine(map[string]any{"result": "error", "error": err.Error()})
 				return
 			}
-			writeLine(map[string]any{"result": "ok", "exposed": false, "lan_ip": ""})
+			enabled, _ := serviceState()
+			writeLine(map[string]any{
+				"result":             "ok",
+				"exposed":            false,
+				"services_enabled":   enabled,
+				"services_reachable": false,
+				"lan_ip":             "",
+			})
+			return
+		case "services_on", "services_off":
+			enabled := body.Action == "services_on"
+			if err := lerdcli.SetManagedServiceLANExposure(enabled, progress); err != nil {
+				writeLine(map[string]any{"result": "error", "error": err.Error()})
+				return
+			}
+			serviceEnabled, reachable := serviceState()
+			writeLine(map[string]any{
+				"result":             "ok",
+				"services_enabled":   serviceEnabled,
+				"services_reachable": reachable,
+			})
 			return
 		}
 
@@ -552,17 +515,16 @@ func handleRemoteControl(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleRemoteSetupGenerate serves /api/remote-setup/generate. POST creates a
-// fresh one-time setup token and returns the curl one-liner the laptop should
-// run. Loopback-only — generating a token from a remote browser would defeat
-// the whole gate. The corresponding /api/remote-setup endpoint (consumed by
-// the laptop) lives in remote_setup.go and has its own RFC 1918 + token gate.
+// fresh one-time setup token for a remote machine. It requires dashboard-control
+// authority. The corresponding /api/remote-setup endpoint consumed by that
+// machine has its own RFC 1918 source and one-time-token gates.
 func handleRemoteSetupGenerate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 	if !isLoopbackRequest(r) {
-		http.Error(w, "Forbidden — setup codes can only be generated from the lerd host (loopback).", http.StatusForbidden)
+		http.Error(w, "Forbidden — dashboard authentication is required to generate setup codes.", http.StatusForbidden)
 		return
 	}
 	if cfg, _ := config.LoadGlobal(); cfg != nil && !cfg.DNS.Enabled {
@@ -589,34 +551,72 @@ func handleRemoteSetupGenerate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// isLoopbackRequest reports whether r should be treated as originating from
-// the local host. Three paths qualify:
-//
-//  1. The connection arrived over the unix socket listener. Only host
-//     processes with filesystem access to the socket can connect, so this
-//     is at least as trusted as TCP loopback. The lerd.localhost nginx
-//     vhost reaches lerd-ui via this path.
-//  2. The TCP peer is a loopback IP (127.x, ::1). This catches direct visits
-//     to http://localhost:7073 / http://127.0.0.1:7073.
-//  3. The request carries an X-Lerd-Trust header whose value matches the
-//     per-install token. Kept for backward compatibility with old vhosts
-//     that may still inject the header; new installs use the unix socket.
-func isLoopbackRequest(r *http.Request) bool {
+// isLocalControlRequest reports whether a request may control the lerd host.
+// Unix-socket requests and requests carrying the private nginx trust token are
+// authoritative. A direct TCP request must have both a loopback peer and a
+// loopback or RFC-reserved .localhost Host. Requiring both rejects reverse
+// proxies, such as Tailscale Serve, that connect from 127.0.0.1 on behalf of a
+// remote browser.
+
+func hasValidTrustToken(r *http.Request) bool {
+	claimed := r.Header.Get("X-Lerd-Trust")
+	if claimed == "" {
+		return false
+	}
+	token, err := nginx.LoadOrGenerateTrustToken()
+	return err == nil && token != "" &&
+		subtle.ConstantTimeCompare([]byte(claimed), []byte(token)) == 1
+}
+
+func isLocalControlRequest(r *http.Request) bool {
 	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
 		return true
 	}
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
-	}
-	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+	if hasValidTrustToken(r) {
 		return true
 	}
-	if claimed := r.Header.Get("X-Lerd-Trust"); claimed != "" {
-		token, err := nginx.LoadOrGenerateTrustToken()
-		if err == nil && token != "" && subtle.ConstantTimeCompare([]byte(claimed), []byte(token)) == 1 {
-			return true
-		}
+	peer, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		peer = r.RemoteAddr
 	}
-	return false
+	ip := net.ParseIP(peer)
+	if ip == nil || !ip.IsLoopback() {
+		return false
+	}
+	host := r.Host
+	if parsed, _, err := net.SplitHostPort(r.Host); err == nil {
+		host = parsed
+	}
+	host = strings.Trim(strings.ToLower(host), "[]")
+	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return true
+	}
+	hostIP := net.ParseIP(host)
+	return hostIP != nil && hostIP.IsLoopback()
+}
+
+func hasDashboardControl(r *http.Request) bool {
+	if authenticated, _ := r.Context().Value(ctxKeyRemoteDashboard{}).(bool); authenticated {
+		return true
+	}
+	return isLocalControlRequest(r)
+}
+
+// isLoopbackRequest gates handlers that are also called directly in tests.
+// Authenticated dashboard requests receive the same authority as loopback.
+func isLoopbackRequest(r *http.Request) bool {
+	if authenticated, _ := r.Context().Value(ctxKeyRemoteDashboard{}).(bool); authenticated {
+		return true
+	}
+	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
+		return true
+	}
+	peer, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		peer = r.RemoteAddr
+	}
+	if ip := net.ParseIP(peer); ip != nil && ip.IsLoopback() {
+		return true
+	}
+	return hasValidTrustToken(r)
 }

@@ -7,8 +7,8 @@ import (
 	"github.com/geodro/lerd/internal/sitedoctor"
 )
 
-// doctorRoute handles the doctor subroutes for a site. Loopback-only: checks and
-// fixes exec in the site's container, the same trust level as the command runner.
+// doctorRoute handles the doctor subroutes for a site. It requires
+// dashboard-control authority because checks and fixes execute in containers.
 // Returns true when it owns the request. The check logic itself lives in
 // internal/sitedoctor so the TUI and CLI share it.
 //

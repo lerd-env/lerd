@@ -109,7 +109,7 @@ The same capture is available to an AI assistant through lerd's MCP server, so a
 
 ## Open in editor
 
-Every query's caller path in the Queries lens is a link. Expand a row to see the originating application frame (`Class::method — file:line`) and a **Details** button for the full stack trace; click any `file:line` to open it in your editor. lerd autodetects a known GUI editor (VS Code, Cursor, PhpStorm, Sublime, Zed, …); override it with an `editor` command in `~/.config/lerd/config.yaml`, e.g. `editor: "phpstorm --line {line} {file}"` ({file} and {line} are substituted). The endpoint is loopback-only.
+Every query's caller path in the Queries lens is a link. Expand a row to see the originating application frame (`Class::method — file:line`) and a **Details** button for the full stack trace; click any `file:line` to open it in the host's editor. lerd autodetects a known GUI editor (VS Code, Cursor, PhpStorm, Sublime, Zed, …); override it with an `editor` command in `~/.config/lerd/config.yaml`, e.g. `editor: "phpstorm --line {line} {file}"` ({file} and {line} are substituted). The endpoint requires dashboard-control authority, which authenticated remote sessions receive.
 
 ## Caveats
 

@@ -349,6 +349,7 @@ func PairIPv6Binds(content string) string {
 	}
 	lines := strings.Split(content, "\n")
 
+	v4LoopbackPortSpecs := map[string]bool{}
 	v6PortSpecs := map[string]bool{}
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
@@ -356,6 +357,10 @@ func PairIPv6Binds(content string) string {
 			continue
 		}
 		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		if strings.HasPrefix(value, "127.0.0.1:") {
+			v4LoopbackPortSpecs[strings.TrimPrefix(value, "127.0.0.1:")] = true
+			continue
+		}
 		if !strings.HasPrefix(value, "[") {
 			continue
 		}
@@ -376,6 +381,10 @@ func PairIPv6Binds(content string) string {
 		value := strings.TrimPrefix(trimmed, "PublishPort=")
 		if strings.HasPrefix(value, "[") {
 			out = append(out, line)
+			if rest, ok := strings.CutPrefix(value, "[::1]:"); ok && !v4LoopbackPortSpecs[rest] {
+				out = append(out, "PublishPort=127.0.0.1:"+rest)
+				v4LoopbackPortSpecs[rest] = true
+			}
 			continue
 		}
 

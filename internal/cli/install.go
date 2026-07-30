@@ -581,15 +581,11 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	ok()
 
-	// Note: WriteQuadlet centrally applies podman.BindForLAN based on
-	// cfg.LAN.Exposed, so containers default to binding 127.0.0.1 unless
-	// the user has run `lerd lan:expose on`. We use WriteQuadletDiff
-	// (which reports whether the on-disk file actually changed) so we
-	// can restart only the units whose binds shifted — important during
-	// the upgrade from a pre-LAN-toggle release where nginx was bound to
-	// 0.0.0.0 by default. Without the restart the running container
-	// would silently keep its old LAN-exposed bind even though the
-	// quadlet on disk now says 127.0.0.1.
+	// WriteQuadlet centrally applies the unit-aware LAN policy. Nginx follows
+	// cfg.LAN.Exposed; managed services also require cfg.LAN.ServicesExposed.
+	// WriteQuadletDiff lets this install restart only units whose binds changed.
+	// This also repairs drift from older releases without starting inactive
+	// services.
 	changedQuadlets := []string{}
 	extraVolumes := podman.ExtraVolumePaths()
 	// rewriteEmbedded handles the remaining embedded-template quadlets:

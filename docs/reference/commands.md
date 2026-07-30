@@ -109,13 +109,19 @@ The proxy runs inside the lerd daemon (`lerd-ui`), no external tool needed and n
 
 `lerd share` (without `lan:`) is different: it wraps an external tunnel tool (ngrok/cloudflared/Expose/SSH) to expose the site to the **public internet**.
 
-### Full LAN exposure (all sites, DNS-based)
+### Full LAN exposure (DNS-based)
 
 | Command | Description |
 |---|---|
-| `lerd lan:expose` | Expose all lerd services to the LAN: binds nginx to `0.0.0.0`, starts the DNS forwarder |
-| `lerd lan:unexpose` | Restrict everything back to `127.0.0.1` |
-| `lerd lan:status` | Show whether lerd is currently exposed to the local network |
+| `lerd lan:expose` | Expose sites, DNS, and the dashboard listener to the LAN |
+| `lerd lan:unexpose` | Restrict all Lerd endpoints to loopback |
+| `lerd lan:status` | Show site and managed-service LAN exposure state |
+| `lerd lan:services on` | Explicitly include managed databases, caches, and services |
+| `lerd lan:services off` | Return managed services to loopback without hiding sites |
+| `lerd lan:services status` | Show the persisted managed-service setting |
+
+The dashboard **System** tab and terminal UI expose the same two independent
+settings. Authenticated remote dashboard sessions receive the same controls.
 
 See [Remote / LAN Development](/usage/remote-development) for the full walkthrough.
 

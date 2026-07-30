@@ -41,6 +41,7 @@
 
 <button
   {title}
+  aria-label={title}
   {onclick}
   disabled={disabled || loading}
   class="relative inline-flex h-4 w-7 shrink-0 items-center rounded-full transition-colors duration-200 focus:outline-hidden disabled:opacity-50 {bgClass}"

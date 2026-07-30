@@ -41,6 +41,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 		exposed    bool
 		lanIP      string
 		username   string
+		services   bool
 		passHash   string
 		wantSubstr []string
 	}{
@@ -50,6 +51,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			wantSubstr: []string{
 				"LAN exposure",
 				"loopback only",
+				"Managed service LAN access (off; services loopback-only)",
 				"lerd lan expose",
 				"Dashboard remote access",
 				"LAN clients get 403",
@@ -57,12 +59,22 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			},
 		},
 		{
-			name:    "lan exposed, dashboard off",
-			exposed: true,
-			lanIP:   "192.168.1.42",
+			name:     "managed services enabled while LAN is off",
+			services: true,
+			wantSubstr: []string{
+				"Managed service LAN access",
+				"enabled but inactive until LAN exposure is on",
+			},
+		},
+		{
+			name:     "lan exposed, dashboard off",
+			exposed:  true,
+			services: true,
+			lanIP:    "192.168.1.42",
 			wantSubstr: []string{
 				"LAN exposure (192.168.1.42)",
 				"✓",
+				"Managed service LAN access",
 				"Dashboard remote access",
 				"LAN clients get 403",
 			},
@@ -71,11 +83,13 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 			name:     "both on",
 			exposed:  true,
 			lanIP:    "10.0.0.5",
+			services: true,
 			username: "george",
 			passHash: "$2a$10$fakehashfakehashfakehashfakehashfakehashfakehashfake",
 			wantSubstr: []string{
 				"LAN exposure (10.0.0.5)",
 				"Dashboard remote access (user: george)",
+				"Managed service LAN access",
 			},
 		},
 		{
@@ -92,6 +106,7 @@ func TestPrintRemoteAccessStatus(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := &config.GlobalConfig{}
 			cfg.LAN.Exposed = tc.exposed
+			cfg.LAN.ServicesExposed = tc.services
 			cfg.UI.Username = tc.username
 			cfg.UI.PasswordHash = tc.passHash
 

@@ -10,33 +10,26 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// NewLANCmd returns the `lerd lan` parent command. Subcommands flip lerd
-// between the safe-on-coffee-shop-wifi default (everything bound to
-// 127.0.0.1) and the LAN-exposed state (containers bound to 0.0.0.0,
-// dnsmasq answering with the LAN IP, lerd-ui on 0.0.0.0:7073). The
-// previous standalone `lerd dns:expose` flag was folded in here because
-// there is no meaningful state where the DNS resolver answers the LAN
-// but the actual services don't.
+// NewLANCmd returns the `lerd lan` parent command. Site exposure and managed
+// service exposure are separate persisted settings: sites follow
+// cfg.LAN.Exposed, while databases, caches, and other managed services require
+// both cfg.LAN.Exposed and cfg.LAN.ServicesExposed.
 func NewLANCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lan",
 		Short: "Expose lerd to other devices on the local network",
-		Long: `Toggle whether lerd's services are reachable from other devices on
-the local network.
+		Long: `Control whether lerd sites and managed services are reachable from
+other devices on the local network.
 
-By default lerd binds every container PublishPort to 127.0.0.1 and the
-dashboard (lerd-ui) listens only on 127.0.0.1:7073. Other devices on the
-LAN cannot reach the sites, services, mail UI, or dashboard. This is the
-safe default for untrusted networks (cafés, conference wifi, hotel
-networks).
-
-Run 'lerd lan:expose on' to flip everything to 0.0.0.0 binds and start
-the userspace DNS forwarder so LAN devices can resolve and reach your
-sites. Run 'lerd lan:expose off' to revert.`,
+By default every container PublishPort and the dashboard bind to loopback.
+Run 'lerd lan:expose' to expose sites, DNS, and the dashboard listener on a
+trusted LAN. Managed databases, caches, and other services remain loopback-only
+unless you explicitly run 'lerd lan:services on'.`,
 	}
 	cmd.AddCommand(newLANExposeCmd())
 	cmd.AddCommand(newLANUnexposeCmd())
 	cmd.AddCommand(newLANStatusCmd())
+	cmd.AddCommand(newLANServicesCmd())
 	cmd.AddCommand(newLANShareCmd())
 	cmd.AddCommand(newLANUnshareCmd())
 	return cmd
@@ -80,34 +73,36 @@ func NewLANUnshareCmd() *cobra.Command {
 	return cmd
 }
 
+// NewLANServicesCmd returns the `lerd lan:services` colon-style command.
+func NewLANServicesCmd() *cobra.Command {
+	cmd := newLANServicesCmd()
+	cmd.Use = "lan:services [on|off|status]"
+	return cmd
+}
+
 func newLANExposeCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "expose",
 		Short: "Make lerd reachable from other devices on the local network",
-		Long: `Flips lerd from its safe loopback default to LAN-exposed mode:
+		Long: `Exposes lerd sites on a trusted local network:
 
-  - Rewrites every installed lerd-* container quadlet so PublishPort=
-    bindings drop the 127.0.0.1 prefix (sites, services, mail UI, etc.
-    become reachable from other devices on the LAN).
-  - Restarts each affected container so the new bind takes effect.
-  - Rewrites the dnsmasq config to answer *.test queries with the host's
-    auto-detected LAN IP so LAN devices can resolve those names. On Linux
-    this is bridged by the userspace lerd-dns-forwarder; on macOS lerd-dns
-    binds the LAN address directly, so no forwarder is installed.
+  - Rewrites lerd-nginx so ports 80 and 443 bind to the LAN.
+  - Restarts nginx when its bind changes.
+  - Rewrites dnsmasq to answer *.test with the host's LAN IP.
+  - Starts the userspace DNS forwarder where the platform requires it.
 
-The dashboard at port 7073 is still gated by the remote-control middleware:
-LAN clients get 403 unless you have run 'lerd remote-control on' to set
-HTTP Basic auth credentials. The two switches are independent — sites
-become LAN-reachable on lan:expose, the dashboard becomes LAN-reachable
-on remote-control on, and you can have either or both.
+Managed databases, caches, and other services stay loopback-only by default.
+Run 'lerd lan:services on' once to include them. That preference persists and
+applies automatically as services start, stop, or change ports.
 
-The state is persisted in ~/.config/lerd/config.yaml so reboots and
-reinstalls restore the exposed state. Idempotent — re-running heals any
-state drift between the config flag and the actual on-disk units.
+The dashboard at port 7073 is gated by remote-control middleware. LAN clients
+get 403 unless 'lerd remote-control on' has configured HTTP Basic auth.
 
-Make sure your firewall allows the relevant ports (typically 80, 443,
-5300, 7073) from the devices you want to grant access. 'lerd remote-setup'
-generates a one-shot bootstrap code for a remote machine.`,
+The state persists in ~/.config/lerd/config.yaml. Re-running this command heals
+drift between the config and installed runtime units.
+
+Only use LAN exposure on a trusted network. Configure the host firewall for the
+ports and devices that require access.`,
 		RunE: func(_ *cobra.Command, _ []string) error {
 			cfg, _ := config.LoadGlobal()
 			dnsOn := cfg == nil || cfg.DNS.Enabled
@@ -141,6 +136,11 @@ generates a one-shot bootstrap code for a remote machine.`,
 				feedback.Note(fmt.Sprintf("dashboard: http://%s:7073 (HTTP Basic auth required)", lanIP))
 			} else {
 				feedback.Note(fmt.Sprintf("dashboard: http://%s:7073 (LAN clients get 403 — run `lerd remote-control on` to grant LAN access)", lanIP))
+			}
+			if cfg != nil && cfg.LAN.ServicesExposed {
+				feedback.Note("managed services: exposed on their configured host ports")
+			} else {
+				feedback.Note("managed services: loopback-only (run `lerd lan:services on` to expose them)")
 			}
 			if dnsOn {
 				feedback.Note("allow ports 80, 443, 5300, 7073 through your firewall; `lerd remote-setup` generates a one-time bootstrap code")
@@ -281,6 +281,52 @@ func notifyDaemon(domain, action string) error {
 	return nil
 }
 
+func newLANServicesCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:       "services [on|off|status]",
+		Short:     "Control LAN access to managed databases, caches, and services",
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		ValidArgs: []string{"on", "off", "status"},
+		RunE: func(_ *cobra.Command, args []string) error {
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				return err
+			}
+
+			if args[0] == "status" {
+				feedback.Begin()
+				switch {
+				case cfg.LAN.ServicesExposed && cfg.LAN.Exposed:
+					feedback.Done("managed service LAN access is active")
+				case cfg.LAN.ServicesExposed:
+					feedback.Line("managed service LAN access is enabled but inactive until `lerd lan:expose`")
+				default:
+					feedback.Line("managed service LAN access is off; services are loopback-only")
+				}
+				return nil
+			}
+
+			enabled := args[0] == "on"
+			feedback.Begin()
+			update := feedback.Start("updating managed service LAN access")
+			if err := SetManagedServiceLANExposure(enabled, nil); err != nil {
+				update.Fail(err)
+				return err
+			}
+			if enabled {
+				update.OK(feedback.Val("enabled"))
+				feedback.Note("development services may use weak or empty credentials; restrict their ports with the host firewall and use only on a trusted network")
+				if !cfg.LAN.Exposed {
+					feedback.Note("services remain loopback-only until `lerd lan:expose`")
+				}
+			} else {
+				update.OK(feedback.Val("loopback-only"))
+			}
+			return nil
+		},
+	}
+}
+
 func newLANStatusCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "status",
@@ -290,15 +336,19 @@ func newLANStatusCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			feedback.Begin()
 			if cfg.LAN.Exposed {
 				lanIP, _ := detectPrimaryLANIP()
 				if lanIP == "" {
 					lanIP = "(unknown)"
 				}
-				feedback.Begin()
 				feedback.Done("exposed to the LAN at " + feedback.Val(lanIP))
+				if cfg.LAN.ServicesExposed {
+					feedback.Note("managed services: exposed")
+				} else {
+					feedback.Note("managed services: loopback-only")
+				}
 			} else {
-				feedback.Begin()
 				feedback.Line("loopback-only (127.0.0.1) — LAN devices cannot reach it")
 			}
 			return nil

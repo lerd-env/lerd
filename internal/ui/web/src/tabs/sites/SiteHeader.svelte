@@ -170,13 +170,12 @@
   const useTLS = $derived(Boolean(site.tls));
   const scheme = $derived(useTLS ? 'https://' : 'http://');
 
-  // On a remote (non-loopback) dashboard the site's .test domain doesn't
-  // resolve, so the open action targets the LAN share URL instead. When the
-  // site isn't shared yet the primary button flips to a share action, since
-  // there is nothing openable off-host until it is. Loopback is unchanged.
-  const remoteView = $derived(!$accessMode.loopback);
+  // Without dashboard-control authority, treat the view conservatively as
+  // off-host and prefer an active LAN share URL. Authenticated remote
+  // dashboards receive authority and intentionally match the local dashboard.
+  const remoteView = $derived(!$accessMode.localControl);
   const primaryShare = $derived(remoteView && !lanOn && !site.paused);
-  const showLanToggle = $derived(!site.paused && ($accessMode.loopback || lanOn));
+  const showLanToggle = $derived(!site.paused && ($accessMode.localControl || lanOn));
 
   function openTarget() {
     openSiteInBrowser(site, activeWorktreeBranch, remoteView && lanOn && lanURL ? lanURL : undefined);
@@ -557,7 +556,7 @@
 
       <!-- A group secondary shows its main's workspace and moves with it, so it
            has nothing of its own to pick. -->
-      {#if $accessMode.loopback && !activeWorktreeBranch && !site.group_subdomain}
+      {#if $accessMode.localControl && !activeWorktreeBranch && !site.group_subdomain}
         <WorkspacePicker {site} />
       {/if}
 
@@ -600,7 +599,7 @@
         </button>
       {/if}
 
-      {#if $accessMode.loopback}
+      {#if $accessMode.localControl}
         <button
           type="button"
           onclick={() => openTerminal(site.domain, activeWorktreeBranch)}
@@ -700,7 +699,7 @@
                 {pauseBusy ? '...' : site.paused ? m.sites_resume() : m.sites_pause()}
               </button>
             {/if}
-            {#if $accessMode.loopback}
+            {#if $accessMode.localControl}
               <button
                 type="button"
                 role="menuitem"
@@ -835,7 +834,7 @@
   {/if}
 
   {#snippet pathLabel()}
-    {#if $accessMode.loopback}
+    {#if $accessMode.localControl}
       <button
         type="button"
         onclick={() => openFolder(activePath)}

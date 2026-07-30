@@ -42,6 +42,7 @@ PHP 8.5        ▸   ✔ 8.5           ← current default
 
 Settings       ▸   Autostart at login: ✔ On   ← enables/disables every lerd unit
                    Expose to LAN: Off         ← Linux only
+                   Managed service LAN access: Off ← explicit database/cache port access
                    Debug bridge: Off          ← `lerd dump on/off`
                    Notifications: ✔ On        ← `lerd notify on/off`
                    High-contrast icon: Off    ← `lerd tray icon default/high-contrast`

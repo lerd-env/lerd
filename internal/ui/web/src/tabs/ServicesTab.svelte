@@ -38,7 +38,7 @@
 </script>
 
 {#snippet actions()}
-  {#if $accessMode.loopback}
+  {#if $accessMode.localControl}
     <ActionButton title={m.services_addPreset()} tone="accent" onclick={openPresetModal}>
       <Icon name="plus" class="w-3.5 h-3.5" />
     </ActionButton>

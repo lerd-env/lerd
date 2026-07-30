@@ -93,9 +93,8 @@ func invalidateDiskCache() {
 }
 
 // handleDisk serves the reclaimable-disk preview (GET) and runs the reclaim
-// (POST). The POST is loopback-only: the deep scope removes images on the host,
-// including dangling ones from other podman workloads, so it stays off the LAN
-// even when remote control is on.
+// (POST). The POST requires dashboard-control authority because the deep scope
+// removes images on the host, including dangling images from other workloads.
 func handleDisk(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:

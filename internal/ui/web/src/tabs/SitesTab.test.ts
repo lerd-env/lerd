@@ -35,7 +35,7 @@ describe('SitesTab workspace sections', () => {
     workspaceCollapse.set([]);
     sitesSort.set('manual');
     sitesLoaded.set(true);
-    accessMode.set({ loopback: true } as never);
+    accessMode.set({ localControl: true } as never);
     setWorkspaces([]);
     sites.set([]);
   });
@@ -122,8 +122,8 @@ describe('SitesTab workspace sections', () => {
     expect(createWorkspace).toHaveBeenCalledWith('Client Work');
   });
 
-  it('hides the workspace controls when the dashboard is read-only', () => {
-    accessMode.set({ loopback: false } as never);
+  it('hides workspace controls without dashboard-control authority', () => {
+    accessMode.set({ localControl: false } as never);
     setWorkspaces(['Client Work']);
     sites.set([site()]);
     const { queryByLabelText } = render(SitesTab);

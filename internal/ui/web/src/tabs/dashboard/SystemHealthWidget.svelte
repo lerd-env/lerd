@@ -5,6 +5,9 @@
   import DumpBridgeToggle from '$components/DumpBridgeToggle.svelte';
   import ProfilerToggle from '$components/ProfilerToggle.svelte';
   import NotificationsToggle from '$components/NotificationsToggle.svelte';
+  import { accessMode } from '$stores/accessMode';
+  import { profilerEnabled } from '$stores/profiler';
+  import { notifyPrefs } from '$lib/notify';
   import { status, lerdStatusColor, dnsState } from '$stores/status';
   import { sitesByPhp, sitesByNode } from '$stores/sites';
   import { goToTab } from '$stores/route';
@@ -66,18 +69,36 @@
       {#if dumpsOn && dumpsBuffered > 0}
         <span class="text-[10px] font-mono text-gray-400 dark:text-gray-500">{dumpsBuffered}</span>
       {/if}
-      <DumpBridgeToggle />
+      {#if $accessMode.localControl}
+        <DumpBridgeToggle />
+      {:else}
+        <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+          <StatusDot color={dumpsOn ? 'green' : 'gray'} />
+        </span>
+      {/if}
     </span>
   </div>
 
   <div class="flex items-center justify-between text-sm">
     <span class="text-gray-600 dark:text-gray-300">{m.dashboard_health_profiler()}</span>
-    <ProfilerToggle />
+    {#if $accessMode.localControl}
+      <ProfilerToggle />
+    {:else}
+      <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+        <StatusDot color={$profilerEnabled ? 'green' : 'gray'} />
+      </span>
+    {/if}
   </div>
 
   <div class="flex items-center justify-between text-sm">
     <span class="text-gray-600 dark:text-gray-300">{m.notify_settings_title()}</span>
-    <NotificationsToggle />
+    {#if $accessMode.localControl}
+      <NotificationsToggle />
+    {:else}
+      <span class="inline-flex w-6 h-6 items-center justify-center shrink-0">
+        <StatusDot color={$notifyPrefs.enabled ? 'green' : 'gray'} />
+      </span>
+    {/if}
   </div>
 
   {#if $status.php_fpms.length > 0}

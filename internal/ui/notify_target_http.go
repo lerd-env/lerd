@@ -69,8 +69,8 @@ func handleNotifyTarget(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-// handleNotifyKinds sets one native category on or off. Loopback-only; the
-// browser sink's per-category prefs stay per-device in the page.
+// handleNotifyKinds sets one native category on or off. It requires
+// dashboard-control authority; browser preferences remain per-device.
 func handleNotifyKinds(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

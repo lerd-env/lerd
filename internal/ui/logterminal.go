@@ -60,9 +60,8 @@ func handleUnitLogStream(w http.ResponseWriter, r *http.Request) {
 // without launching a real emulator.
 var openTerminal = openTerminalCommand
 
-// handleLogTerminal opens the user's terminal emulator tailing the same unit
+// handleLogTerminal opens the host's terminal emulator tailing the same unit
 // the given log stream path shows, so a long-running tail can outlive the tab.
-// Loopback-only, see loopbackOnlyRoutes.
 func handleLogTerminal(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -83,6 +84,7 @@ func TestRemoteControlGate_loopbackBypassesEverything(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "localhost:7073"
 	rec := httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
 
@@ -91,6 +93,64 @@ func TestRemoteControlGate_loopbackBypassesEverything(t *testing.T) {
 	}
 	if rec.Code != http.StatusOK {
 		t.Errorf("loopback status = %d, want 200", rec.Code)
+	}
+}
+
+func TestRemoteControlGateReverseProxyDoesNotBypassAuthentication(t *testing.T) {
+	setupConfigDirRaw(t, "", "", true)
+	next := &nextHandler{}
+	gate := withRemoteControlGate(next)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "robotbox.example.net"
+	rec := httptest.NewRecorder()
+	gate.ServeHTTP(rec, req)
+
+	if next.called {
+		t.Fatal("loopback reverse proxy bypassed dashboard authentication")
+	}
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestRemoteControlGateAuthenticatedReverseProxyReceivesDashboardControl(t *testing.T) {
+	setupConfigDir(t, "alice", "s3cret")
+	gate := withRemoteControlGate(http.HandlerFunc(handleAccessMode))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/access-mode", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "robotbox.example.net"
+	req.SetBasicAuth("alice", "s3cret")
+	rec := httptest.NewRecorder()
+	gate.ServeHTTP(rec, req)
+
+	var body struct {
+		LocalControl bool `json:"local_control"`
+	}
+	if err := json.NewDecoder(rec.Body).Decode(&body); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	if !body.LocalControl {
+		t.Fatalf("response = %+v, authenticated dashboard must receive full controls", body)
+	}
+}
+
+func TestRemoteControlGateAuthenticatedDashboardCanMutateLANSettings(t *testing.T) {
+	setupConfigDir(t, "alice", "s3cret")
+	gate := withRemoteControlGate(http.HandlerFunc(handleLANStatus))
+
+	req := httptest.NewRequest(http.MethodPost, "/api/lan/status", http.NoBody)
+	req.RemoteAddr = "192.168.1.42:54321"
+	req.Host = "robotbox.example.net"
+	req.SetBasicAuth("alice", "s3cret")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	rec := httptest.NewRecorder()
+	gate.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400 after authenticated request reaches action validation", rec.Code)
 	}
 }
 
@@ -202,15 +262,19 @@ func TestRemoteControlGate_sessionCookie(t *testing.T) {
 	}
 
 	t.Run("cookie authenticates without Basic header", func(t *testing.T) {
-		next2 := &nextHandler{}
+		authorized := false
+		next2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			authorized = hasDashboardControl(r) && isLoopbackRequest(r)
+			w.WriteHeader(http.StatusOK)
+		})
 		gate2 := withRemoteControlGate(next2)
 		req2 := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
 		req2.RemoteAddr = "192.168.1.42:54321"
 		req2.AddCookie(session)
 		rec2 := httptest.NewRecorder()
 		gate2.ServeHTTP(rec2, req2)
-		if !next2.called || rec2.Code != http.StatusOK {
-			t.Errorf("session cookie did not authenticate, status=%d", rec2.Code)
+		if !authorized || rec2.Code != http.StatusOK {
+			t.Errorf("session cookie did not grant dashboard-control authority, status=%d", rec2.Code)
 		}
 	})
 
@@ -290,57 +354,22 @@ func TestRemoteControlGate_remoteSetupBypassesEvenWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestIsLoopbackOnlyPath(t *testing.T) {
-	cases := []struct {
-		path string
-		want bool
-	}{
-		{"/api/lerd/stop", true},
-		{"/api/lerd/quit", true},
-		{"/api/logs/terminal", true},
-		{"/api/logs/lerd-nginx", false},
-		{"/api/sites/link", true},
-		{"/api/browse", true},
-		{"/api/sites/myapp.test/terminal", true},
-		{"/api/sites/foo.bar.test/terminal", true},
-		{"/api/sites/myapp.test/env", true},
-		{"/api/sites/myapp.test/env/files", true},
-		{"/api/sites/myapp.test/env/backups", true},
-		{"/api/sites/myapp.test/env/backups/.env.bkp.20260528-103045", true},
-		{"/api/sites/myapp.test/env/restore", true},
-		{"/api/sites/myapp.test/terminal/anything", true},
-		{"/api/databases", true},
-		{"/api/databases/mysql", true},
-		{"/api/databases/mysql/drop", true},
-		{"/api/databases/mysql/export", true},
-		{"/api/databases/postgres/snapshots/nightly", true},
-		{"/api/databases-overview", false},
-		{"/api/tools/composer/update", true},
-		{"/api/share-tools", false},
-		{"/api/sites", false},
-		{"/api/sites/myapp.test", false},
-		{"/api/sites/myapp.test/secure", false},
-		{"/api/sites/myapp.test/envoy", false},
-		{"/api/lerd/start", false},
-		{"/api/version", false},
-		{"/", false},
-	}
-	for _, c := range cases {
-		t.Run(c.path, func(t *testing.T) {
-			if got := isLoopbackOnlyPath(c.path); got != c.want {
-				t.Errorf("isLoopbackOnlyPath(%q) = %v, want %v", c.path, got, c.want)
-			}
-		})
-	}
-}
-
-func TestRemoteControlGate_loopbackOnlyRoutesBlockedFromLAN(t *testing.T) {
-	setupConfigDir(t, "alice", "s3cret") // remote-control on with valid creds
-
-	next := &nextHandler{}
+func TestRemoteControlGateAuthenticatedDashboardCanUseHostControlRoutes(t *testing.T) {
+	setupConfigDir(t, "alice", "s3cret")
+	called := false
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		if !hasDashboardControl(r) {
+			t.Error("authenticated dashboard did not receive dashboard-control authority")
+		}
+		if !isLoopbackRequest(r) {
+			t.Error("authenticated dashboard did not pass handler-level authority checks")
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	gate := withRemoteControlGate(next)
 
-	cases := []string{
+	for _, path := range []string{
 		"/api/lerd/stop",
 		"/api/lerd/update-terminal",
 		"/api/logs/terminal",
@@ -353,38 +382,22 @@ func TestRemoteControlGate_loopbackOnlyRoutesBlockedFromLAN(t *testing.T) {
 		"/api/databases/mysql/drop",
 		"/api/databases/mysql/export",
 		"/api/databases/postgres/snapshots/nightly",
-	}
-	for _, path := range cases {
+		"/api/remote-setup/generate",
+		"/api/disk",
+		"/api/open-editor",
+	} {
 		t.Run(path, func(t *testing.T) {
+			called = false
 			req := httptest.NewRequest(http.MethodPost, path, nil)
 			req.RemoteAddr = "192.168.1.42:54321"
-			req.SetBasicAuth("alice", "s3cret") // valid creds present
-			req.Header.Set("X-Lerd-CSRF", "1")  // clear the CSRF gate so we exercise the loopback-only check
+			req.Host = "robotbox.example.net"
+			req.SetBasicAuth("alice", "s3cret")
+			req.Header.Set("X-Lerd-CSRF", "1")
 			rec := httptest.NewRecorder()
 			gate.ServeHTTP(rec, req)
-			if rec.Code != http.StatusForbidden {
-				t.Errorf("status = %d, want 403 (loopback-only path from LAN)", rec.Code)
-			}
-		})
-	}
-}
 
-func TestRemoteControlGate_loopbackOnlyRoutesAllowedFromLoopback(t *testing.T) {
-	setupConfigDir(t, "", "")
-
-	next := &nextHandler{}
-	gate := withRemoteControlGate(next)
-
-	for _, path := range []string{"/api/lerd/stop", "/api/sites/link", "/api/sites/myapp.test/terminal"} {
-		t.Run(path, func(t *testing.T) {
-			next.called = false
-			req := httptest.NewRequest(http.MethodPost, path, nil)
-			req.RemoteAddr = "127.0.0.1:54321"
-			req.Header.Set("X-Lerd-CSRF", "1") // the real dashboard always sends this
-			rec := httptest.NewRecorder()
-			gate.ServeHTTP(rec, req)
-			if !next.called {
-				t.Errorf("loopback request to %s blocked", path)
+			if !called || rec.Code != http.StatusOK {
+				t.Fatalf("authenticated dashboard route %s: called=%v status=%d", path, called, rec.Code)
 			}
 		})
 	}
@@ -548,6 +561,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 		gate := withRemoteControlGate(next)
 		req := httptest.NewRequest(http.MethodPost, tinker, nil)
 		req.RemoteAddr = "127.0.0.1:54321"
+		req.Host = "localhost:7073"
 		req.Header.Set("Sec-Fetch-Site", "cross-site")
 		req.Header.Set("Origin", "http://evil.example")
 		rec := httptest.NewRecorder()
@@ -565,6 +579,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 		gate := withRemoteControlGate(next)
 		req := httptest.NewRequest(http.MethodPost, tinker, nil)
 		req.RemoteAddr = "127.0.0.1:54321"
+		req.Host = "localhost:7073"
 		req.Header.Set("Sec-Fetch-Site", "same-origin")
 		rec := httptest.NewRecorder()
 		gate.ServeHTTP(rec, req)
@@ -581,6 +596,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 		gate := withRemoteControlGate(next)
 		req := httptest.NewRequest(http.MethodPost, tinker, nil)
 		req.RemoteAddr = "127.0.0.1:54321"
+		req.Host = "localhost:7073"
 		req.Header.Set("Sec-Fetch-Site", "cross-site")
 		req.Header.Set("Origin", "http://lerd.localhost")
 		rec := httptest.NewRecorder()
@@ -595,6 +611,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 		gate := withRemoteControlGate(next)
 		req := httptest.NewRequest(http.MethodPost, tinker, nil)
 		req.RemoteAddr = "127.0.0.1:54321" // no Sec-Fetch, no X-Lerd-CSRF
+		req.Host = "localhost:7073"
 		rec := httptest.NewRecorder()
 		gate.ServeHTTP(rec, req)
 		if next.called || rec.Code != http.StatusForbidden {
@@ -605,6 +622,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 		gate2 := withRemoteControlGate(next2)
 		req2 := httptest.NewRequest(http.MethodPost, tinker, nil)
 		req2.RemoteAddr = "127.0.0.1:54321"
+		req2.Host = "localhost:7073"
 		req2.Header.Set("X-Lerd-CSRF", "1")
 		rec2 := httptest.NewRecorder()
 		gate2.ServeHTTP(rec2, req2)
@@ -619,6 +637,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 			gate := withRemoteControlGate(next)
 			req := httptest.NewRequest(m, "/api/sites", nil)
 			req.RemoteAddr = "127.0.0.1:54321"
+			req.Host = "localhost:7073"
 			req.Header.Set("Sec-Fetch-Site", "cross-site")
 			req.Header.Set("Origin", "http://evil.example")
 			rec := httptest.NewRecorder()
@@ -653,6 +672,7 @@ func TestRemoteControlGate_csrf(t *testing.T) {
 				gate := withRemoteControlGate(next)
 				req := httptest.NewRequest(http.MethodPost, path, nil)
 				req.RemoteAddr = "127.0.0.1:54321" // no Sec-Fetch, no X-Lerd-CSRF
+				req.Host = "localhost:7073"
 				rec := httptest.NewRecorder()
 				gate.ServeHTTP(rec, req)
 				if !next.called {

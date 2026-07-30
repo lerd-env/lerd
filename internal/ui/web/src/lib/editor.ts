@@ -1,9 +1,8 @@
 import { apiFetch } from './api';
 
-// openInEditor asks lerd-ui to open a file at a line in the user's editor.
-// Best-effort: lerd-ui resolves the editor (configured or autodetected) and
-// execs it on the host. Loopback-only on the backend, so it's a no-op when the
-// dashboard is opened from another machine.
+// openInEditor asks lerd-ui to open a file at a line in the host's editor.
+// The backend requires dashboard-control authority and confines paths to the
+// user's home directory.
 export async function openInEditor(path: string, line: number): Promise<void> {
   if (!path) return;
   try {

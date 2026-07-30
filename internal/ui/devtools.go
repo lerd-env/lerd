@@ -37,7 +37,7 @@ func buildDevtoolsStatusJSON() []byte {
 }
 
 // handleDevtoolsWorkers toggles capture of queue/scheduler worker queries.
-// Loopback-only, same trust boundary as the enable toggle.
+// It requires dashboard-control authority, like the enable toggle.
 func handleDevtoolsWorkers(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)

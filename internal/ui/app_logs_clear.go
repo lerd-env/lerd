@@ -9,9 +9,8 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// handleAppLogsClear deletes the project's application log files (the same set
-// the App Logs viewer lists) to reclaim disk, reporting how many files and
-// bytes were freed. Loopback-only — it deletes files on the host.
+// handleAppLogsClear deletes the matched application log files (the same files
+// the App Logs viewer lists). It requires dashboard-control authority.
 func handleAppLogsClear(w http.ResponseWriter, basePath string, sources []config.FrameworkLogSource) {
 	files, bytes, err := clearAppLogs(basePath, sources)
 	resp := map[string]any{"ok": err == nil, "files_cleared": files, "bytes_cleared": bytes}

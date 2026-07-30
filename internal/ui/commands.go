@@ -73,11 +73,11 @@ func commandRoute(w http.ResponseWriter, r *http.Request, domain string, rest []
 	}
 	switch {
 	case len(rest) == 1 && r.Method == http.MethodGet:
-		// List is read-only and safe to expose to LAN viewers.
+		// Listing commands does not mutate the host.
 		handleCommandsList(w, r, site)
 	case len(rest) == 3 && rest[2] == "run" && r.Method == http.MethodPost:
-		// Run executes arbitrary shell as the lerd-ui user. Loopback-only
-		// so a LAN client can't trigger commands on the host.
+		// Running a command requires dashboard-control authority because it
+		// executes arbitrary shell code as the lerd-ui user.
 		if !isLoopbackRequest(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return true

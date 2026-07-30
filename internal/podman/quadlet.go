@@ -41,10 +41,9 @@ func DaemonReloadIfNeeded(changed bool) error {
 }
 
 // WriteQuadlet writes a Podman quadlet container unit file. Before writing
-// it applies BindForLAN to rewrite PublishPort= lines according to the
-// current cfg.LAN.Exposed setting. This is done centrally here so callers
-// (install, services, MCP server, custom-service generator) all get the
-// same loopback-by-default treatment without each having to remember.
+// it applies the current LAN bind policy centrally. Nginx follows
+// cfg.LAN.Exposed. Lerd-managed services require both cfg.LAN.Exposed and
+// cfg.LAN.ServicesExposed. Other containers stay loopback-bound.
 func WriteQuadlet(name, content string) error {
 	_, err := WriteQuadletDiff(name, content)
 	return err
@@ -62,12 +61,14 @@ func WriteQuadletDiff(name, content string) (changed bool, err error) {
 		return false, err
 	}
 	lanExposed := false
+	servicesExposed := false
 	autostartDisabled := false
 	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
 		lanExposed = cfg.LAN.Exposed
+		servicesExposed = cfg.LAN.ServicesExposed
 		autostartDisabled = cfg.Autostart.Disabled
 	}
-	content = BindForLAN(content, lanExposed)
+	content = BindQuadletForLAN(name, content, lanExposed, servicesExposed)
 	content = PairIPv6Binds(content)
 	content = StripInstallSection(content, autostartDisabled)
 	// Centralised platform image rewrite + podman-run flags so every quadlet
@@ -112,6 +113,55 @@ func QuadletInstalled(name string) bool {
 	path := filepath.Join(config.QuadletDir(), name+".container")
 	_, err := os.Stat(path)
 	return err == nil
+}
+
+// BindQuadletForLAN applies the LAN policy for one quadlet. Nginx serves sites,
+// while CustomServiceQuadletMarker identifies default and custom managed
+// services. Site and worker containers do not publish directly to the LAN.
+func BindQuadletForLAN(name, content string, lanExposed, servicesExposed bool) string {
+	exposed := lanExposed && (name == "lerd-nginx" ||
+		(servicesExposed && strings.Contains(content, CustomServiceQuadletMarker)))
+	return BindForLAN(content, exposed)
+}
+
+// RebindInstalledQuadletsForLAN reapplies the current LAN policy to every
+// installed lerd container. It rewrites only changed units and preserves each
+// installed unit's image, ports, volumes, and custom settings.
+func RebindInstalledQuadletsForLAN() ([]string, error) {
+	lanExposed := false
+	servicesExposed := false
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		lanExposed = cfg.LAN.Exposed
+		servicesExposed = cfg.LAN.ServicesExposed
+	}
+	paths, err := filepath.Glob(filepath.Join(config.QuadletDir(), "lerd-*.container"))
+	if err != nil {
+		return nil, err
+	}
+
+	changed := make([]string, 0, len(paths))
+	for _, path := range paths {
+		content, err := os.ReadFile(path)
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", filepath.Base(path), err)
+		}
+		name := strings.TrimSuffix(filepath.Base(path), ".container")
+		updated := PairIPv6Binds(BindQuadletForLAN(name, string(content), lanExposed, servicesExposed))
+		if string(content) == updated {
+			continue
+		}
+		config.GuardRealWrite(path)
+		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+			return nil, fmt.Errorf("rewriting %s: %w", filepath.Base(path), err)
+		}
+		if AfterQuadletWriteFn != nil {
+			if err := AfterQuadletWriteFn(name, updated); err != nil {
+				return nil, fmt.Errorf("syncing %s: %w", name, err)
+			}
+		}
+		changed = append(changed, name)
+	}
+	return changed, nil
 }
 
 // ListManagedServiceNames returns the service names (lerd- prefix and .container

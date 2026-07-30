@@ -155,21 +155,18 @@ type GlobalConfig struct {
 		Upstream []string `yaml:"upstream,omitempty" mapstructure:"upstream"`
 	} `yaml:"dns" mapstructure:"dns"`
 	LAN struct {
-		// Exposed controls whether lerd's services are reachable from
-		// other devices on the local network. When false (the default,
-		// safe-on-coffee-shop-wifi state) every container PublishPort is
-		// rewritten to bind 127.0.0.1, lerd-ui binds 127.0.0.1:7073, and
-		// the lerd-dns-forwarder is stopped. When true, container ports
-		// bind 0.0.0.0, lerd-ui binds 0.0.0.0:7073, dnsmasq is rewritten
-		// to answer .test queries with the host's LAN IP, and the
-		// userspace lerd-dns-forwarder runs to bridge LAN-IP:5300 to the
-		// loopback-only DNS container.
+		// Exposed controls whether lerd sites are reachable from other devices
+		// on the local network. When false (the safe default), container ports
+		// and lerd-ui bind to loopback and the DNS forwarder is stopped. When
+		// true, nginx, DNS, and the dashboard bind to the LAN.
 		//
-		// Toggled via `lerd lan:expose on/off`. The previous standalone
-		// `dns:expose` flag was folded in here because there is no
-		// meaningful state where the DNS resolver answers the LAN but
-		// the actual services don't.
-		Exposed bool `yaml:"exposed,omitempty" mapstructure:"exposed"`
+		// ServicesExposed separately controls host access to lerd-managed
+		// databases, caches, and other services. It has no effect unless
+		// Exposed is also true. Keeping this opt-in separate preserves the safe
+		// default while allowing trusted development machines to publish
+		// services without per-port configuration.
+		Exposed         bool `yaml:"exposed,omitempty"          mapstructure:"exposed"`
+		ServicesExposed bool `yaml:"services_exposed,omitempty" mapstructure:"services_exposed"`
 	} `yaml:"lan,omitempty" mapstructure:"lan"`
 	Autostart struct {
 		// Disabled controls whether lerd boots itself at login. The

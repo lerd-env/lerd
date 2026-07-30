@@ -23,10 +23,10 @@
   import { accessMode } from '$stores/accessMode';
   import { m } from '../../paraglide/messages.js';
 
-  // Service ports and their web UIs bind to loopback on the host, so their
-  // localhost links are dead from a remote (LAN) dashboard. Disable the open
-  // actions with a "host only" hint rather than offering links that can't work.
-  const remote = $derived(!$accessMode.loopback);
+  // Disable localhost dashboard links only when dashboard-control authority is
+  // unavailable. Authenticated remote dashboards receive full authority and
+  // intentionally show the same actions as direct local dashboards.
+  const remote = $derived(!$accessMode.localControl);
 
   function localDetailLabel(s: Service): string {
     if (s.queue_site) return m.services_labels_queueWorker();
@@ -224,8 +224,8 @@
       });
     }
 
-    // Strip the click/link and grey out an open action when the dashboard is
-    // viewed remotely: the target is a loopback-only localhost URL.
+    // Without dashboard-control authority, strip localhost links instead of
+    // offering actions that cannot be trusted or completed.
     const openAct = (a: ButtonMenuAction): ButtonMenuAction =>
       remote
         ? { id: a.id, tone: a.tone, icon: a.icon, disabled: true, label: `${a.label} · ${m.services_hostOnly()}`, title: m.services_hostOnly() }

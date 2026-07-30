@@ -123,4 +123,4 @@ Shell completion populates command names: `lerd run <TAB>` lists what's availabl
 
 Two commands cannot run on the same site at the same time; the API returns `409 Conflict` if a second run is attempted while one is in flight. This protects against accidentally running `migrate:fresh` twice from two tabs.
 
-The run endpoint is loopback-only, LAN clients (when the access mode allows remote viewing) can see the list of commands but cannot execute them. The list endpoint is read-only and exposed everywhere lerd-ui is reachable.
+The run endpoint is available to the local dashboard and to authenticated remote dashboard sessions. The same per-site concurrency guard applies to both.

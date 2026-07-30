@@ -65,7 +65,7 @@
           <span class="text-sm font-semibold text-gray-800 dark:text-gray-100">{m.onboarding_link_title()}</span>
         </div>
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3 flex-1">{m.onboarding_link_body()}</p>
-        {#if $accessMode.loopback}
+        {#if $accessMode.localControl}
           <button
             type="button"
             onclick={openLinkModal}
@@ -87,7 +87,7 @@
           <span class="text-sm font-semibold text-gray-800 dark:text-gray-100">{m.onboarding_service_title()}</span>
         </div>
         <p class="text-xs text-gray-500 dark:text-gray-400 mb-3 flex-1">{m.onboarding_service_body()}</p>
-        {#if $accessMode.loopback}
+        {#if $accessMode.localControl}
           <button
             type="button"
             onclick={openPresetModal}

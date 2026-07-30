@@ -16,29 +16,6 @@ import (
 	"github.com/geodro/lerd/internal/services"
 )
 
-// lanExposureContainers is the canonical list of lerd containers whose
-// PublishPort= bindings change between loopback and LAN modes.
-//
-// Only lerd-nginx is included on purpose: serving the sites is the whole
-// point of lan:expose. The service containers (mysql, postgres, redis,
-// meilisearch, rustfs, mailpit, etc.) intentionally stay bound to
-// 127.0.0.1 in both modes — Laravel apps in lerd-php-fpm reach them via
-// the podman bridge using container DNS names (DB_HOST=lerd-mysql, etc.),
-// which is unaffected by the host bind. Exposing the database ports to
-// the LAN by default would only matter for the rare "TablePlus from a
-// second machine" use case, and would be a significant attack surface
-// expansion on untrusted wifi. Power users who genuinely need that can
-// SSH-tunnel or hand-edit a single quadlet.
-//
-// lerd-dns is also intentionally excluded: its publish is already pinned
-// to 127.0.0.1:5300 in the embed (LAN access goes through the userspace
-// lerd-dns-forwarder, not a publish flip), so regenerating its quadlet
-// would be a no-op. EnableLANExposure restarts the lerd-dns unit
-// separately to pick up the new dnsmasq target config.
-var lanExposureContainers = []string{
-	"lerd-nginx",
-}
-
 // LANProgressFunc is invoked by EnableLANExposure / DisableLANExposure
 // after every meaningful step completes. The argument is a short
 // human-readable label suitable for streaming to a frontend ("Rewriting
@@ -47,18 +24,14 @@ var lanExposureContainers = []string{
 // streaming, internal idempotent re-application from `lerd remote-setup`).
 type LANProgressFunc func(step string)
 
-// EnableLANExposure flips lerd from the safe-on-coffee-shop-wifi default
-// (everything bound to 127.0.0.1) to LAN-exposed mode. Concretely:
+// EnableLANExposure flips lerd sites from the safe loopback default to
+// LAN-exposed mode. Concretely:
 //
-//   - persists cfg.LAN.Exposed=true so reinstalls and reboots restore the state
-//   - regenerates every installed lerd-* container quadlet via WriteQuadlet,
-//     which centrally rewrites PublishPort= lines to drop the loopback prefix
-//   - daemon-reloads systemd and restarts each rewritten container
-//   - rewrites the dnsmasq config to answer *.test queries with the host's
-//     LAN IP and restarts lerd-dns
-//   - installs and starts the userspace lerd-dns-forwarder.service that
-//     bridges LAN-IP:5300 → 127.0.0.1:5300 (rootless pasta cannot accept
-//     LAN-side traffic on its own, so a host-side forwarder is required)
+//   - persists cfg.LAN.Exposed=true
+//   - exposes nginx and, when cfg.LAN.ServicesExposed is set, managed services
+//   - daemon-reloads the runtime and restarts only rewritten active containers
+//   - rewrites dnsmasq to answer *.test with the host's LAN IP
+//   - installs the userspace DNS forwarder where the platform requires it
 //
 // progress, if non-nil, is invoked after each step so the caller can
 // stream feedback to a user (e.g. NDJSON over HTTP for the dashboard).
@@ -80,11 +53,9 @@ func EnableLANExposure(progress LANProgressFunc) (lanIP string, err error) {
 		return "", fmt.Errorf("saving config: %w", err)
 	}
 
-	if cfg.DNS.Enabled {
-		emit("Rewriting container quadlets")
-		if err := regenerateLANContainerQuadlets(progress); err != nil {
-			return "", err
-		}
+	emit("Rewriting container quadlets")
+	if err := regenerateLANContainerQuadlets(progress); err != nil {
+		return "", err
 	}
 
 	emit("Detecting primary LAN IP")
@@ -198,11 +169,9 @@ func DisableLANExposure(progress LANProgressFunc) error {
 		return fmt.Errorf("revoking remote-setup token: %w", err)
 	}
 
-	if cfg.DNS.Enabled {
-		emit("Rewriting container quadlets")
-		if err := regenerateLANContainerQuadlets(progress); err != nil {
-			return err
-		}
+	emit("Rewriting container quadlets")
+	if err := regenerateLANContainerQuadlets(progress); err != nil {
+		return err
 	}
 
 	if cfg.DNS.Enabled {
@@ -225,44 +194,48 @@ func DisableLANExposure(progress LANProgressFunc) error {
 	return nil
 }
 
-// regenerateLANContainerQuadlets re-reads each installed lerd-* container
-// quadlet from the embed FS, runs it back through WriteQuadlet (which now
-// applies BindForLAN based on cfg.LAN.Exposed), then daemon-reloads and
-// restarts the running containers so the new PublishPort bindings take
-// effect. Containers that aren't installed are skipped. progress, if
-// non-nil, receives a per-container "Restarting <name>" event so callers
-// streaming feedback can show finer-grained progress.
-func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
-	restarted := []string{}
-	for _, name := range lanExposureContainers {
-		if !podman.QuadletInstalled(name) {
-			continue
-		}
-		content, err := podman.GetQuadletTemplate(name + ".container")
-		if err != nil {
-			return fmt.Errorf("reading %s quadlet template: %w", name, err)
-		}
-		if err := podman.WriteContainerUnitFn(name, content); err != nil {
-			return fmt.Errorf("rewriting %s quadlet: %w", name, err)
-		}
-		restarted = append(restarted, name)
+// SetManagedServiceLANExposure persists the explicit managed-service opt-in
+// and reapplies the bind policy to every installed quadlet. Active services
+// restart when their host bind changes; inactive services remain stopped.
+func SetManagedServiceLANExposure(enabled bool, progress LANProgressFunc) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
 	}
+	cfg.LAN.ServicesExposed = enabled
+	if err := config.SaveGlobal(cfg); err != nil {
+		return fmt.Errorf("saving config: %w", err)
+	}
+	return regenerateLANContainerQuadlets(progress)
+}
 
-	if len(restarted) == 0 {
+// regenerateLANContainerQuadlets reapplies the current LAN bind policy to every
+// installed lerd container while preserving each unit's current configuration.
+// Only changed units that are already running are restarted; inactive runtime
+// services remain inactive.
+func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
+	changed, err := podman.RebindInstalledQuadletsForLAN()
+	if err != nil {
+		return err
+	}
+	if len(changed) == 0 {
 		return nil
 	}
 
 	if err := services.Mgr.DaemonReload(); err != nil {
 		return fmt.Errorf("daemon-reload: %w", err)
 	}
-	for _, name := range restarted {
+	for _, name := range changed {
+		status, _ := services.Mgr.UnitStatus(name)
+		if status != "active" && status != "activating" {
+			continue
+		}
 		if progress != nil {
 			progress("Restarting " + name)
 		}
-		// Ignore individual container restart errors so a single dead
-		// service doesn't block the rest of the toggle. The user will
-		// see the bad state via `lerd doctor` / podman ps.
-		_ = services.Mgr.Restart(name)
+		if err := services.Mgr.Restart(name); err != nil {
+			return fmt.Errorf("restarting %s: %w", name, err)
+		}
 	}
 	return nil
 }

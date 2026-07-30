@@ -379,6 +379,14 @@ func printRemoteAccessStatus(cfg *config.GlobalConfig, lanIP string) {
 	} else {
 		warn2("LAN exposure", "loopback only — enable with: lerd lan expose")
 	}
+	switch {
+	case cfg.LAN.ServicesExposed && cfg.LAN.Exposed:
+		ok2("Managed service LAN access")
+	case cfg.LAN.ServicesExposed:
+		warn2("Managed service LAN access", "enabled but inactive until LAN exposure is on")
+	default:
+		ok2("Managed service LAN access (off; services loopback-only)")
+	}
 	if cfg.UI.PasswordHash != "" {
 		ok2(fmt.Sprintf("Dashboard remote access (user: %s)", cfg.UI.Username))
 	} else {

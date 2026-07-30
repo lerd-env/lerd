@@ -1,8 +1,8 @@
 import { render } from '@testing-library/svelte';
 import { describe, it, expect, beforeEach } from 'vitest';
 
-// The children do IO on mount (log SSE, the loopback-only databases fetch);
-// swap them for stubs so these tests stay on the tab-visibility logic.
+// The children perform I/O on mount; replace them with stubs so these tests
+// stay focused on tab visibility.
 import { vi } from 'vitest';
 vi.mock('./ServiceHeader.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./ServiceSiteBadges.svelte', () => import('./ServiceDetail.stub.svelte'));
@@ -26,25 +26,22 @@ function dbService(): Service {
 }
 
 describe('ServiceDetail databases tab', () => {
-  beforeEach(() => accessMode.set({ loopback: true, lanExposed: false, checked: true }));
+  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
 
-  it('shows the Databases tab on the loopback host', () => {
+  it('shows the Databases tab with dashboard-control authority', () => {
     const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(getByRole('button', { name: 'Databases' })).toBeInTheDocument();
   });
 
-  // The whole /api/databases subtree is loopback-only, so on a LAN-exposed
-  // dashboard the tab would report a running engine as stopped and 403 every
-  // action. It must be hidden there instead.
-  it('hides the Databases tab on a LAN-exposed dashboard', () => {
-    accessMode.set({ loopback: false, lanExposed: true, checked: true });
+  it('hides the Databases tab without dashboard-control authority', () => {
+    accessMode.set({ localControl: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(queryByRole('button', { name: 'Databases' })).toBeNull();
   });
 });
 
 describe('ServiceDetail entities tab', () => {
-  beforeEach(() => accessMode.set({ loopback: true, lanExposed: false, checked: true }));
+  beforeEach(() => accessMode.set({ localControl: true, lanExposed: false, checked: true }));
 
   function entityService(): Service {
     return {
@@ -64,8 +61,8 @@ describe('ServiceDetail entities tab', () => {
     expect(tab.className).toContain('border-lerd-red');
   });
 
-  it('hides the entity tab on a LAN-exposed dashboard', () => {
-    accessMode.set({ loopback: false, lanExposed: true, checked: true });
+  it('hides the entity tab without dashboard-control authority', () => {
+    accessMode.set({ localControl: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: entityService() } });
     expect(queryByRole('button', { name: 'Buckets' })).toBeNull();
   });

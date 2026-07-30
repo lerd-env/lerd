@@ -29,9 +29,9 @@
     void loadProfilerStatus();
   });
 
-  // The profiler and service dashboards are loopback-only localhost web UIs, so
-  // their launch icons are dead from a remote (LAN) dashboard. Hide them there.
-  const remote = $derived(!$accessMode.loopback);
+  // Hide host-local launchers only when dashboard-control authority is
+  // unavailable. Authenticated remote dashboards receive authority.
+  const remote = $derived(!$accessMode.localControl);
 
   const labels = $derived<Record<TabId, string>>({
     dashboard: m.nav_dashboard(),

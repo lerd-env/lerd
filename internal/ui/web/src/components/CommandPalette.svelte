@@ -76,7 +76,7 @@
 
     // Installable service presets: each surfaces as a direct install action so
     // a search like "install redis" runs the install without opening the modal.
-    if ($accessMode.loopback) {
+    if ($accessMode.localControl) {
       for (const p of $installablePresets) {
         list.push({
           id: 'preset:' + p.name,
@@ -199,7 +199,7 @@
       }
     }
 
-    if ($accessMode.loopback) {
+    if ($accessMode.localControl) {
       list.push({ id: 'act:link', label: m.palette_action_link(), group: 'actions', action: openLinkModal });
       list.push({ id: 'act:preset', label: m.palette_action_addService(), group: 'actions', action: openPresetModal });
     }
