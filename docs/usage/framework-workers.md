@@ -48,6 +48,8 @@ workers:
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 
+The generated nginx location anchors on `path`, so `/app` proxies `/app` and everything under it without also swallowing an unrelated route that merely starts with the same letters (`/appstore`, say). Write `path` as a literal URL path; lerd escapes any regex-special characters (a literal `.` in something like `/socket.io`, for instance) before it reaches nginx's location block.
+
 **Server health probe**: A worker whose process can outlive its server (a Vite dev server that dies under `npm` while the Node process lingers) declares a `health` block, so lerd probes reachability rather than mere process liveness:
 
 ```yaml

@@ -221,6 +221,75 @@ func TestGenerateCustomVhost_honoursProjectRequestTimeout(t *testing.T) {
 	}
 }
 
+// ── proxy path (worker Proxy) ─────────────────────────────────────────────────
+
+// proxySite writes a .lerd.yaml declaring a Laravel project with one custom
+// worker carrying the given Proxy, and returns a config.Site pointing at it.
+// laravel is a builtinFramework, so GetFrameworkForDir resolves it (and merges
+// the custom worker) without needing a real frameworks store checkout.
+func proxySite(t *testing.T, name string, proxy *config.WorkerProxy) config.Site {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("framework: laravel\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	proj, err := config.LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+	proj.CustomWorkers = map[string]config.FrameworkWorker{
+		"ws": {Command: "php artisan ws:serve", Proxy: proxy},
+	}
+	if err := config.SaveProjectConfig(dir, proj); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	return config.Site{Name: name, Domains: []string{name + ".test"}, Path: dir, Framework: "laravel"}
+}
+
+// The location block must anchor the proxy path so it only matches that exact
+// path and its subpaths, not another path that merely shares the same prefix
+// (nginx's bare `location /app {` is a prefix match, so it would also catch
+// `/appfoo`, an unrelated route landing on the wrong backend).
+func TestGenerateVhost_proxyPathAnchored(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected an anchored regex location for /app, got:\n%s", content)
+	}
+}
+
+func TestGenerateSSLVhost_proxyPathAnchored(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app", DefaultPort: 6001})
+	if err := GenerateSSLVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateSSLVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test-ssl.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected an anchored regex location for /app, got:\n%s", content)
+	}
+}
+
+// A framework-declared proxy path reaches the template as a regex, but is
+// meant as a literal path: "/socket.io" is a common one in the wild, and an
+// unescaped "." would also match "/socketXio", an unrelated path lucky enough
+// to share the same shape. detectSiteProxy must regexp.QuoteMeta it.
+func TestGenerateVhost_proxyPathWithRegexMetacharsIsEscaped(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/socket.io", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/socket\.io(/|$) {`) {
+		t.Errorf("expected the literal dot in /socket.io to be regex-escaped, got:\n%s", content)
+	}
+}
+
 // ── GenerateHostProxyVhost ────────────────────────────────────────────────────
 
 func TestGenerateHostProxyVhost_proxiesToHostPort(t *testing.T) {

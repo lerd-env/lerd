@@ -7,7 +7,7 @@ server {
 {{if .FrameworkNginx}}
 {{.FrameworkNginx}}
 {{end}}{{if .Proxy}}
-    location {{.ProxyPath}} {
+    location ~ ^{{.ProxyPath}}(/|$) {
         set $proxybackend "{{.FPMContainer}}";
         proxy_pass http://$proxybackend:{{.ProxyPort}};
         proxy_http_version 1.1;

@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strconv"
 	"strings"
@@ -23,7 +24,13 @@ import (
 )
 
 // detectSiteProxy checks the site's framework definition for a worker with a
-// proxy configuration. Returns the proxy path and port if found.
+// proxy configuration. Returns the proxy path and port if found. The path is
+// regexp.QuoteMeta-escaped: the vhost templates interpolate it into an nginx
+// regex location (`location ~ ^{{.ProxyPath}}(/|$)`) so the anchoring only
+// matches that path and its subpaths, not an unrelated one sharing the same
+// prefix. A framework-declared path is realistically literal but can contain
+// regex metacharacters a template author never intended as regex — "/socket.io"
+// being the common one, where an unescaped "." would also match "/socketXio".
 func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 	fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !fwOK {
@@ -44,7 +51,7 @@ func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 			}
 		}
 	}
-	return proxy.Path, proxyPort, true
+	return regexp.QuoteMeta(proxy.Path), proxyPort, true
 }
 
 // detectSiteDevServer returns the prefix and host port for a site whose
