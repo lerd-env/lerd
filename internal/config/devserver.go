@@ -64,6 +64,20 @@ export default async (env) => {
 `,
 }}
 
+// devServerBases is computed once, since the tools are fixed at build time and
+// the request feed asks for them on every access line.
+var devServerBases = func() []string {
+	bases := make([]string, len(devServerTools))
+	for i := range devServerTools {
+		bases[i] = devServerTools[i].Base
+	}
+	return bases
+}()
+
+// DevServerBases returns the URL prefixes lerd's dev servers serve under, so a
+// caller can tell a request the dev server answered from one the app served.
+func DevServerBases() []string { return devServerBases }
+
 // DevServerToolInstalled returns the dev server the project has installed, or
 // nil. Used where only the tool's shape matters, such as rendering the vhost.
 func DevServerToolInstalled(sitePath string) *DevServerTool {

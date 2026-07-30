@@ -53,7 +53,13 @@ func IsAppRequest(status int, rawURI string, millis float64) bool {
 	if status == statusSwitchingProtocols {
 		return false
 	}
-	return !IsStaticAsset(rawURI) && millis > 0
+	return isAppURI(rawURI) && millis > 0
+}
+
+// isAppURI is the part of IsAppRequest that reads the URI alone, and so the part
+// SQL cannot express. A query pushes the rest down and drops these rows in Go.
+func isAppURI(rawURI string) bool {
+	return !IsStaticAsset(rawURI) && !IsDevServerRequest(rawURI)
 }
 
 // NormalizeRoute turns a method and raw request URI into a stable route key by
