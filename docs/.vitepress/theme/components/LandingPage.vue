@@ -487,7 +487,7 @@ onBeforeUnmount(() => {
           <div class="card cmp-wrap reveal d1" style="padding:8px 8px 0">
             <table class="cmp" id="cmp-table"></table>
           </div>
-          <p class="cmp-note reveal d2">Coming from Windows? Herd has no Linux build and Laragon is Windows-only. Lerd gives you both workflows natively, see <a :href="withBase('/getting-started/laragon-linux')">Laragon for Linux</a> and the <a :href="withBase('/getting-started/comparison')">full comparison</a>.</p>
+          <p class="cmp-note reveal d2">Coming from a Mac or from Windows? Herd has no Linux build and Laragon is Windows-only. Lerd gives you both workflows natively, see <a :href="withBase('/getting-started/herd-linux')">Laravel Herd for Linux</a>, <a :href="withBase('/getting-started/laragon-linux')">Laragon for Linux</a> and the <a :href="withBase('/getting-started/comparison')">full comparison</a>.</p>
         </div>
       </section>
 
@@ -566,6 +566,7 @@ onBeforeUnmount(() => {
             <a :href="withBase('/getting-started/requirements')">Documentation</a>
             <a :href="withBase('/usage/sites')">Site management</a>
             <a :href="withBase('/getting-started/laravel')">Laravel walkthrough</a>
+            <a :href="withBase('/getting-started/herd-linux')">Laravel Herd for Linux</a>
             <a :href="withBase('/getting-started/laragon-linux')">Laragon for Linux</a>
           </div>
           <div>
