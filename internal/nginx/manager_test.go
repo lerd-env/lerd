@@ -290,6 +290,22 @@ func TestGenerateVhost_proxyPathWithRegexMetacharsIsEscaped(t *testing.T) {
 	}
 }
 
+// A path declared with a trailing slash must anchor the same as one without.
+// `^/app/(/|$)` matches only the literal string "/app/" and nothing else, not
+// "/app" and not anything under it, so the trailing slash must be trimmed
+// before the path reaches the template.
+func TestGenerateVhost_proxyPathTrailingSlashIsTrimmed(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app/", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected the trailing slash trimmed from /app/, got:\n%s", content)
+	}
+}
+
 // ── GenerateHostProxyVhost ────────────────────────────────────────────────────
 
 func TestGenerateHostProxyVhost_proxiesToHostPort(t *testing.T) {

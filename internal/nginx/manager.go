@@ -31,6 +31,8 @@ import (
 // prefix. A framework-declared path is realistically literal but can contain
 // regex metacharacters a template author never intended as regex — "/socket.io"
 // being the common one, where an unescaped "." would also match "/socketXio".
+// A trailing slash is trimmed first: `^/app/(/|$)` matches only the literal
+// string "/app/" and nothing else, not "/app" and not anything under it.
 func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 	fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !fwOK {
@@ -51,7 +53,11 @@ func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 			}
 		}
 	}
-	return regexp.QuoteMeta(proxy.Path), proxyPort, true
+	proxyPath := strings.TrimSuffix(proxy.Path, "/")
+	if proxyPath == "" {
+		proxyPath = "/"
+	}
+	return regexp.QuoteMeta(proxyPath), proxyPort, true
 }
 
 // detectSiteDevServer returns the prefix and host port for a site whose
