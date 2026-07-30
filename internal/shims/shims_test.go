@@ -3,11 +3,24 @@ package shims
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/services"
 )
+
+// fakeMgr reports every name in installed as having an installed container
+// unit, so a test can control installedServiceNames() without a real podman
+// or launchd/systemd backend.
+type fakeMgr struct {
+	services.ServiceManager
+	installed map[string]bool
+}
+
+func (m *fakeMgr) ContainerUnitInstalled(name string) bool { return m.installed[name] }
 
 func TestScript(t *testing.T) {
 	got := script("/home/u/.local/bin/lerd", "mysqldump")
@@ -203,5 +216,53 @@ func TestDecideLeavesConflictUndecidedWithoutPrompter(t *testing.T) {
 	enabled, decided := decide("mysqldump", nil)
 	if enabled || decided {
 		t.Fatalf("a host conflict with no prompter must stay undecided, got enabled=%v decided=%v", enabled, decided)
+	}
+}
+
+// Targets() keeps only the first installed service as a tool's shared
+// "owner"; ToolCandidates must return every installed service exposing the
+// tool, so a caller can disambiguate among several same-family instances
+// (e.g. two installed postgres flavours) that Targets() alone would hide.
+func TestToolCandidates_ReturnsEveryInstalledMatch(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	// postgres-18 and postgres-timescaledb are non-default presets (unlike
+	// plain "postgres"), so they only ever exist as installed CustomService
+	// YAML — using one of those names here would double-count them, once from
+	// DefaultPresetNames() and once from ListCustomServices().
+	pg18 := &config.CustomService{Name: "postgres-18", Image: "docker.io/library/postgres:18-alpine",
+		Ports: []string{"5432:5432"}, ClientShims: []config.ClientShim{{Name: "psql"}, {Name: "pg_dump"}}}
+	ts := &config.CustomService{Name: "postgres-timescaledb", Image: "docker.io/timescale/timescaledb:latest-pg17",
+		Ports: []string{"5433:5432"}, ClientShims: []config.ClientShim{{Name: "psql"}, {Name: "pg_dump"}}}
+	valkey := &config.CustomService{Name: "valkey", Image: "docker.io/valkey/valkey:8-alpine",
+		Ports: []string{"6380:6379"}, ClientShims: []config.ClientShim{{Name: "redis-cli"}}}
+	for _, svc := range []*config.CustomService{pg18, ts, valkey} {
+		if err := config.SaveCustomService(svc); err != nil {
+			t.Fatalf("SaveCustomService(%s): %v", svc.Name, err)
+		}
+	}
+
+	prev := services.Mgr
+	services.Mgr = &fakeMgr{installed: map[string]bool{
+		"lerd-postgres-18":          true,
+		"lerd-postgres-timescaledb": true,
+		"lerd-valkey":               true,
+	}}
+	t.Cleanup(func() { services.Mgr = prev })
+
+	got := ToolCandidates("psql")
+	sort.Strings(got)
+	want := []string{"postgres-18", "postgres-timescaledb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ToolCandidates(psql) = %v, want %v", got, want)
+	}
+
+	if got := ToolCandidates("redis-cli"); !reflect.DeepEqual(got, []string{"valkey"}) {
+		t.Errorf("ToolCandidates(redis-cli) = %v, want [valkey]", got)
+	}
+
+	if got := ToolCandidates("mongosh"); got != nil {
+		t.Errorf("ToolCandidates(mongosh) = %v, want nil (no installed service exposes it)", got)
 	}
 }
