@@ -284,6 +284,8 @@ mysqldump -h db.example.com -P 25060 -u doadmin -p yourdb > dump.sql
 pg_dump -h db.example.com -p 25060 -U doadmin -d yourdb > dump.sql
 ```
 
+Each shim runs its tool inside a throwaway container, so a loopback host (`127.0.0.1`, `localhost`, `::1`) is not automatically read the same way: if its port matches one your own lerd services actually publish, the shim recognises it and routes to that service internally instead of trying (and failing) to reach the host's own loopback from inside the container. `psql -h 127.0.0.1 -p 5433 mydb`, the natural way to hit the port `lerd service start postgres-timescaledb` printed, works the same way `psql mydb` does. A loopback host whose port matches nothing lerd owns, or any other host, is left untouched.
+
 Each tool runs in a throwaway container spun from the service's image, so nothing touches your running database container. Your home directory is mounted read-write, so the tool can read a CA cert and write its output anywhere under it, whether you use a shell redirect (`> dump.sql`), the tool's own `--result-file`/`-f` flag, or an IDE that fills one in. Output files are owned by you, not root.
 
 Managed databases usually require TLS. Keep the CA file you pass with a flag like `--ssl-ca` somewhere under your home directory so the tool can read it:
@@ -292,7 +294,7 @@ Managed databases usually require TLS. Keep the CA file you pass with a flag lik
 mysqldump -h db.example.com -P 25060 -u doadmin -p --ssl-ca=ca.crt yourdb > dump.sql
 ```
 
-When you give no host, the tool connects to a local lerd database with its admin credentials, so `pg_dump mydb` or `mysqldump mydb` just works. If you run it from a project directory, it targets that project's own database service, read from the project's `DB_HOST`, so a mariadb-backed project routes to your mariadb container rather than the default mysql one. Outside a project, or when the project's database is a different family than the tool, it falls back to the family's default service. Passing `-h` (an external host) turns all of this off and the shim forwards everything untouched. For scripted local dumps `lerd db:export` is still the tidier option; the raw shim is there for external databases and IDEs.
+When you give no host, the tool connects to a local lerd database with its admin credentials, so `pg_dump mydb` or `mysqldump mydb` just works. If you run it from a project directory, it targets that project's own database service, read from the project's `DB_HOST`, so a mariadb-backed project routes to your mariadb container rather than the default mysql one. Outside a project, or when the project's database is a different family than the tool, it falls back to the family's default service. Passing `-h` an external host turns all of this off and the shim forwards everything untouched; passing `-h` a loopback host that names one of lerd's own published ports routes the same way the hostless case does, for the reason above. For scripted local dumps `lerd db:export` is still the tidier option; the raw shim is there for external databases and IDEs.
 
 Run from inside a git worktree, the shim reads that checkout's own env file rather than the parent site's, so a branch with an isolated database dumps from its own schema even when the worktree lives inside the parent's directory. A worktree whose env was never rewritten keeps using the parent site's.
 
