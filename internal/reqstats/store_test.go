@@ -269,10 +269,12 @@ func TestUsageBySite(t *testing.T) {
 	seed(t, s, mk(2, 5*time.Minute, "app", "GET", "GET /x", "/x", 200, 20))
 	seed(t, s, mk(1, time.Minute, "blog", "GET", "GET /", "/", 200, 20))
 	// Traffic the app-request predicate drops: an asset burst, a WebSocket that
-	// logged once on close, and a request nginx timed at zero.
+	// logged once on close, a request nginx timed at zero, and a dev server the
+	// site was being worked on with.
 	seed(t, s, mk(50, 10*time.Minute, "blog", "GET", "GET /app.js", "/app.js", 200, 5))
 	seed(t, s, mk(1, 11*time.Minute, "blog", "GET", "GET /ws", "/ws", 101, 900000))
 	seed(t, s, mk(1, 12*time.Minute, "blog", "GET", "GET /health", "/health", 200, 0))
+	seed(t, s, mk(30, 13*time.Minute, "blog", "GET", "GET /@lerd-vite/src/App.vue", "/@lerd-vite/src/App.vue", 200, 6))
 	seed(t, s, mk(4, -2*time.Hour, "archived", "GET", "GET /", "/", 200, 20))
 
 	got, err := s.UsageBySite(base.Add(-time.Hour), base.Add(time.Hour))
