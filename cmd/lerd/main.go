@@ -457,6 +457,19 @@ func newWatchCmd() *cobra.Command {
 				}
 			}()
 
+			// Deleting a checkout directly leaves git's worktrees/ entry in place,
+			// so the watcher below never hears about it and its worker units keep
+			// retrying against a directory that has gone. Reconcile on the same
+			// cadence instead, so an agent that removes its own worktree costs a
+			// restart loop that lasts a minute rather than one that lasts forever.
+			go func() {
+				for range time.Tick(60 * time.Second) {
+					if n := cli.PruneOrphanedWorkers(); n > 0 {
+						fmt.Printf("[INFO] pruned %d orphaned worker unit(s) whose worktree was removed\n", n)
+					}
+				}
+			}()
+
 			// Watch for git worktree additions/removals.
 			go func() {
 				err := watcher.WatchWorktrees(
@@ -734,6 +747,16 @@ func scanWorktrees() bool {
 	if err != nil {
 		return false
 	}
+	// Per-worktree worker units whose checkout is gone, once for the whole
+	// install rather than per site, since one detection pass covers every unit.
+	// The watcher's onRemoved hook only fires when git's own worktrees/ entry
+	// disappears, so a checkout deleted directly leaves a unit that restart-loops
+	// on a missing WorkingDirectory until something reconciles it. This is that
+	// something, which is also what recovers an install already stuck that way.
+	if n := cli.PruneOrphanedWorkers(); n > 0 {
+		fmt.Printf("[INFO] pruned %d orphaned worker unit(s) whose worktree was removed\n", n)
+	}
+
 	generated := false
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {

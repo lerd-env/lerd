@@ -8,6 +8,7 @@ package workerheal
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -17,12 +18,18 @@ import (
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
+// StateOrphaned marks a per-worktree unit whose checkout is gone. It is kept
+// apart from "failed" because the two need opposite treatment: a failed worker
+// is healed by starting it again, whereas an orphan can never start, so it is
+// pruned instead. Offering a heal for one is offering a button that cannot work.
+const StateOrphaned = "orphaned"
+
 // UnhealthyWorker is a single failing/stuck worker unit.
 type UnhealthyWorker struct {
 	Site      string `json:"site"`
 	Worker    string `json:"worker"`
 	Unit      string `json:"unit"`
-	State     string `json:"state"` // "failed" | "expected-but-stopped" | "unreachable" (process up, server not accepting)
+	State     string `json:"state"` // "failed" | "expected-but-stopped" | "unreachable" (process up, server not accepting) | "orphaned" (worktree gone)
 	LastError string `json:"last_error,omitempty"`
 }
 
@@ -67,7 +74,16 @@ var (
 	lastErrorFn       = readLastError
 	isStoppedFn       = config.IsStopped
 	workerReachableFn = defaultWorkerReachable
+	dirExistsFn       = defaultDirExists
 )
+
+// defaultDirExists reports whether a worktree checkout is still on disk. Asked
+// once per worktree unit per tick, and only for worktree units, so an install
+// with none pays nothing.
+func defaultDirExists(path string) bool {
+	st, err := os.Stat(path)
+	return err == nil && st.IsDir()
+}
 
 // defaultWorkerReachable probes a running worker that declares a health block.
 // probed is false (keep process-only liveness) when the site has no resolvable
@@ -287,8 +303,10 @@ func Detect() ([]UnhealthyWorker, error) {
 			continue
 		}
 		// Only these states can be unhealthy; skip the rest before the
-		// site-name resolution below so the hot path stays cheap.
-		if state != "failed" && state != "inactive" && state != "active" {
+		// site-name resolution below so the hot path stays cheap. "activating"
+		// earns its place only because a unit whose WorkingDirectory is gone
+		// restarts forever without ever settling anywhere else.
+		if state != "failed" && state != "inactive" && state != "active" && state != "activating" {
 			continue
 		}
 		body := strings.TrimPrefix(unit, "lerd-")
@@ -306,6 +324,27 @@ func Detect() ([]UnhealthyWorker, error) {
 		if suspended[site][worker] {
 			continue // intentionally idle-suspended, not a failure
 		}
+		// A per-worktree unit pins WorkingDirectory to its checkout, so once that
+		// checkout is gone the unit fails at CHDIR before the command ever runs.
+		// Decided on the checkout rather than the unit state, because such a unit
+		// never settles into a failure state to be caught: it flaps between
+		// activating and active for as long as the machine is up, which is how
+		// one reaches four thousand restarts without anything noticing.
+		if probePath != "" && !dirExistsFn(probePath) {
+			out = append(out, UnhealthyWorker{
+				Site:   site,
+				Worker: worker,
+				Unit:   strings.TrimSuffix(unit, ".service"),
+				State:  StateOrphaned,
+			})
+			continue
+		}
+		// Anything still on its way up is not yet a problem; the orphan case above
+		// is the only reason this state is looked at at all.
+		if state == "activating" {
+			continue
+		}
+
 		var detected string
 		switch state {
 		case "failed":
@@ -373,6 +412,11 @@ func HealAll(emit func(Event)) (Result, error) {
 	}
 	report := Result{}
 	for _, u := range unhealthy {
+		// An orphan has no checkout to run in, so starting it would fail and
+		// reporting it either way would misdescribe it. Pruning owns this case.
+		if u.State == StateOrphaned {
+			continue
+		}
 		emit(Event{Phase: "starting", Site: u.Site, Unit: u.Unit})
 		// An unreachable worker's process is still up, so a plain start is a no-op;
 		// restart to rebind its server. Failed/stopped workers just start.
