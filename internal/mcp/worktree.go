@@ -1,11 +1,13 @@
 package mcp
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -19,17 +21,19 @@ import (
 func worktreeTool() mcpTool {
 	return mcpTool{
 		Name:        "worktree",
-		Description: "Manage git worktrees. list / add / remove / db_isolate (empty|main|<branch>) / db_share. Watcher auto-installs deps on add and presents a unified asset-worker / npm-build prompt (workers with replaces_build+per_worktree appear alongside npm scripts; picked workers start ad-hoc with persist=false). Worktrees on secured sites get *.branch.domain.test wildcard cert SANs and nginx server_name automatically. .lerd.yaml env_overrides ({{domain}}/{{scheme}}/{{site}} placeholders) layers per-worktree env vars on top of the APP_URL rewrite. Workers with per_worktree:true run under lerd-<wname>-<site>-<wt> units. Remove keeps isolated DB unless keep_db=false.",
+		Description: "Manage git worktrees. list / add / remove / wait / db_isolate (empty|main|<branch>) / db_share. Watcher auto-installs deps on add; add waits for that and reports provisioned, and wait does the same for a worktree made with plain git. Never judge readiness from tree contents, they read as finished mid-install. add also presents a unified asset-worker / npm-build prompt (replaces_build+per_worktree workers alongside npm scripts; picks start with persist=false). Worktrees on secured sites get *.branch.domain.test wildcard cert SANs and nginx server_name automatically. .lerd.yaml env_overrides ({{domain}}/{{scheme}}/{{site}} placeholders) layers per-worktree env vars on top of the APP_URL rewrite. Workers with per_worktree:true run under lerd-<wname>-<site>-<wt> units. Remove keeps isolated DB unless keep_db=false.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":   {Type: "string", Enum: []string{"list", "add", "remove", "db_isolate", "db_share"}},
-				"site":     {Type: "string", Description: "Defaults to cwd's site."},
-				"branch":   {Type: "string"},
-				"git_args": {Type: "array", Description: "Forwarded to git worktree."},
-				"force":    {Type: "boolean", Description: "remove: --force."},
-				"keep_db":  {Type: "boolean", Description: "remove: preserve DB (default true)."},
-				"source":   {Type: "string", Description: "db_isolate seed."},
+				"action":          {Type: "string", Enum: []string{"list", "add", "remove", "wait", "db_isolate", "db_share"}},
+				"site":            {Type: "string", Description: "Defaults to cwd's site."},
+				"branch":          {Type: "string"},
+				"git_args":        {Type: "array", Description: "Forwarded to git worktree."},
+				"force":           {Type: "boolean", Description: "remove: --force."},
+				"keep_db":         {Type: "boolean", Description: "remove: preserve DB (default true)."},
+				"source":          {Type: "string", Description: "db_isolate seed."},
+				"wait":            {Type: "boolean", Description: "add: wait for setup (default true)."},
+				"timeout_seconds": {Type: "integer", Description: "add/wait: seconds, default 300."},
 			},
 			Required: []string{"action"},
 		},
@@ -44,6 +48,8 @@ func dispatchWorktree(args map[string]any) (any, *rpcError) {
 		return execWorktreeAdd(args)
 	case "remove":
 		return execWorktreeRemove(args)
+	case "wait":
+		return execWorktreeWait(args)
 	case "db_isolate":
 		return execWorktreeDBIsolate(args)
 	case "db_share":
@@ -147,11 +153,63 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 			gitArgs = append(gitArgs, fmt.Sprint(v))
 		}
 	}
+	before := worktreePaths(site)
 	out, err := runIn(site.Path, "git", gitArgs...)
 	if err != nil {
 		return toolErr("git " + strings.Join(gitArgs, " ") + ": " + out), nil
 	}
-	return toolJSON(map[string]any{"ok": true, "site": site.Name, "output": out}), nil
+	resp := map[string]any{"ok": true, "site": site.Name, "output": out}
+	// The watcher starts installing the moment git writes the worktree entry, so
+	// returning here would hand back a tree being written underneath the caller.
+	// Waiting is the default because acting on the tree is the whole point of
+	// creating it; wait=false is for a caller that only wants the checkout.
+	if path := addedWorktreePath(site, before); path != "" {
+		resp["path"] = path
+		if wantsWorktreeWait(args) {
+			code, waitOut := worktreeWaitFn(path, worktreeWaitTimeout(args))
+			resp["provisioned"] = code == 0
+			if code != 0 {
+				resp["note"] = "setup has not finished; call action=wait before writing to this tree"
+				if waitOut != "" {
+					resp["wait_output"] = waitOut
+				}
+			}
+		}
+	}
+	return toolJSON(resp), nil
+}
+
+// execWorktreeWait blocks until lerd's setup pipeline has settled for a
+// worktree, so an assistant that created one with plain git (or declined the
+// wait on add) can tell "safe to touch" from "still installing" instead of
+// guessing from directory contents.
+func execWorktreeWait(args map[string]any) (any, *rpcError) {
+	site, errResp := resolveSiteForWorktree(args)
+	if errResp != nil {
+		return errResp, nil
+	}
+	branch := branchFromArgs(args, site)
+	if branch == "" {
+		return toolErr("branch required (or run from inside the worktree's checkout)"), nil
+	}
+	wtPath := worktreePathFor(site, branch)
+	if wtPath == "" {
+		return toolErr("worktree path for branch " + branch + " not on disk"), nil
+	}
+	code, out := worktreeWaitFn(wtPath, worktreeWaitTimeout(args))
+	resp := map[string]any{
+		"site":        site.Name,
+		"branch":      branch,
+		"path":        wtPath,
+		"provisioned": code == 0,
+	}
+	if out != "" {
+		resp["output"] = out
+	}
+	if code != 0 {
+		resp["note"] = "setup has not finished; do not write to this tree yet"
+	}
+	return toolJSON(resp), nil
 }
 
 func execWorktreeRemove(args map[string]any) (any, *rpcError) {
@@ -264,6 +322,69 @@ func runIn(dir, name string, args ...string) (string, error) {
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	return strings.TrimSpace(string(out)), err
+}
+
+// worktreeWaitFn is the seam the wait goes through, so tests need neither a
+// lerd binary on PATH nor a running watcher.
+var worktreeWaitFn = shellWorktreeWait
+
+// shellWorktreeWait defers to `lerd worktree wait`, which is the only check that
+// accounts for the install lock and not just the pipeline's outputs. Shelling
+// out keeps cli the single source of truth for the lifecycle; importing it here
+// would be an import cycle. Returns the exit status: 0 settled, 1 timed out,
+// 3 not a worktree lerd manages.
+func shellWorktreeWait(worktreePath string, timeout time.Duration) (int, string) {
+	out, err := runIn(worktreePath, lerdSelf(), "worktree", "wait", "--timeout", timeout.String())
+	if err == nil {
+		return 0, out
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) {
+		return exit.ExitCode(), out
+	}
+	return -1, out
+}
+
+// wantsWorktreeWait reports whether add should block on setup. Absent means
+// yes: a caller that did not think about it is better served waiting.
+func wantsWorktreeWait(args map[string]any) bool {
+	if v, ok := args["wait"].(bool); ok {
+		return v
+	}
+	return true
+}
+
+func worktreeWaitTimeout(args map[string]any) time.Duration {
+	return time.Duration(intArg(args, "timeout_seconds", 300)) * time.Second
+}
+
+// worktreePaths returns the checkout paths currently on disk, so the caller can
+// diff before and after a git call instead of re-parsing git_args to guess where
+// the new worktree landed.
+func worktreePaths(site *config.Site) map[string]bool {
+	out := map[string]bool{}
+	wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	if err != nil {
+		return out
+	}
+	for _, wt := range wts {
+		out[wt.Path] = true
+	}
+	return out
+}
+
+// addedWorktreePath returns the one checkout that appeared since before.
+func addedWorktreePath(site *config.Site, before map[string]bool) string {
+	wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain())
+	if err != nil {
+		return ""
+	}
+	for _, wt := range wts {
+		if !before[wt.Path] {
+			return wt.Path
+		}
+	}
+	return ""
 }
 
 func worktreePathFor(site *config.Site, sanitizedBranch string) string {

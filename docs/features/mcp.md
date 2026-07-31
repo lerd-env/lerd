@@ -130,10 +130,18 @@ The MCP surface is **twelve grouped tools**, each driven by an `action` argument
 | `framework` | `list`, `add`, `remove`, `prune`, `search`, `update`, `project_new`, `setup` |
 | `diag` | `status`, `doctor`, `doctor_fix`, `site_doctor`, `which`, `check`, `dns_diagnose`, `bug_report`, `analyze_queries`, `route_timing`, `optimize_route`, `dumps_recent`, `dumps_status`, `dumps_clear`, `dumps_toggle`, `profiler_toggle`, `profiler_status`, `profiler_clear`, `profiler_report`, `xdebug_on`, `xdebug_off`, `xdebug_status` |
 | `logs` | `sources`, `fetch` |
-| `worktree` | `list`, `add`, `remove`, `db_isolate`, `db_share` |
+| `worktree` | `list`, `add`, `remove`, `wait`, `db_isolate`, `db_share` |
 | `workspace` | `list`, `create`, `rename`, `delete`, `assign`, `move` |
 
 The injected context files document each action's arguments and the key conventions in full.
+
+### Creating a worktree from an assistant
+
+`worktree add` blocks until the watcher's setup pipeline has finished and reports `provisioned: true`, because the pipeline starts the moment git writes the worktree entry, and an action that returned earlier would hand back a tree being written underneath the assistant. Two installers in one tree is how `vendor/` ends up with packages extracted but no `autoload.php`, which then presents as a Composer autoload bug rather than a race.
+
+`wait` is the same check on its own, for a worktree created with plain git or after `add` with `wait=false`. Both accept `timeout_seconds` (default 300) and report `provisioned: false` with a note rather than an error when setup is still running, since an unfinished install is a "not yet", not a failure.
+
+An assistant should never infer readiness from the tree's contents. `node_modules/` exists from the first extracted package, and composer's extraction phase fills *existing* `vendor/<org>/` directories, so neither a file count nor an mtime moves during the longest stretch of an install. Both read as finished mid-install.
 
 ### Workspaces are not site groups
 

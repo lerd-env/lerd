@@ -114,6 +114,35 @@ func TryLockInstall(worktreePath string) (func(), bool, error) {
 	}, true, nil
 }
 
+// InstallInFlight reports whether an installer currently holds worktreePath's
+// install lock, the one signal about install progress that cannot lie. It
+// probes with a shared non-blocking flock rather than TryLockInstall so it
+// neither overwrites the pid the real holder recorded nor takes an exclusive
+// lock an installer would then have to poll for.
+//
+// A missing lock file means no install has ever started for the path, so it is
+// reported as idle. The file deliberately outlives the install that created it,
+// which is why its presence, and the pid inside it, mean nothing on their own.
+func InstallInFlight(worktreePath string) (bool, error) {
+	path, err := installLockFile(worktreePath)
+	if err != nil {
+		return false, err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	defer f.Close() //nolint:errcheck
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_SH|syscall.LOCK_NB); err != nil {
+		return true, nil
+	}
+	_ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	return false, nil
+}
+
 // lockWithDeadline polls TryLock until success or deadline.
 func lockWithDeadline(mu *sync.Mutex, deadline time.Time) bool {
 	for {

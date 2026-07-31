@@ -14,7 +14,7 @@ Plain `git worktree add` from any tool (CLI, IDE, GitLens) is enough to get a us
 
 ## `lerd worktree add` and `lerd worktree remove`
 
-The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top.
+The wrapper commands mirror `git worktree`'s subcommand layout, every flag passes straight through to git, and add an interactive setup pipeline on top. `lerd worktree wait` is the non-interactive companion for scripts and tools that use plain git, see [waiting for the pipeline](#waiting-for-the-pipeline).
 
 ### `lerd worktree add <git args>`
 
@@ -76,6 +76,25 @@ Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's h
 ::: info Why not symlink?
 Earlier lerd versions symlinked `vendor/` to save disk. PHP resolves `__DIR__` through symlinks to the real path, so Composer's `ClassLoader` would initialise against the main repo and silently load stale classes. Real copies (or reflinks) avoid the problem at no meaningful disk cost on modern filesystems.
 :::
+
+### Waiting for the pipeline
+
+A tool that creates a worktree and then wants to act on it, run tests, run a composer script, seed config, has to let the pipeline finish first, or the two write the same tree at once. `lerd worktree wait` blocks until it settles:
+
+```bash
+git worktree add ../myapp-feature feature/auth
+lerd worktree wait ../myapp-feature --timeout 10m
+```
+
+Without a path it waits on the current directory. Nothing is printed on success, the exit status is the contract:
+
+| Status | Meaning |
+|---|---|
+| `0` | Provisioned, and no install is running. |
+| `1` | The timeout elapsed first. |
+| `3` | This path is not a worktree lerd manages, so nothing will ever provision it. |
+
+Do not try to infer this from the tree's contents. Composer's extraction phase fills *existing* `vendor/<org>/` directories, so neither an entry count nor a shallow mtime moves during the longest part of an install, and `node_modules/` exists from the first extracted package. The command watches the pipeline's outputs and its install lock together, which is why it can tell a finished install from one still running. `lerd worktree add` uses the same wait internally.
 
 ---
 
