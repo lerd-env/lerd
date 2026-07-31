@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/freeport"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // A host dev server normally advertises its own address, so everything it
@@ -73,21 +75,21 @@ func jsLiterals(values ...any) ([]any, error) {
 	return out, nil
 }
 
-// writeDevServerWrapper generates the config that puts the dev server on the
-// site's origin and returns its site-relative path. An empty path means the
-// mechanism does not apply here and the caller must leave the command alone.
-func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, origin string, domains []string) (string, error) {
+// devServerWrapperBody renders the config that puts the dev server on the site's
+// origin, returning its site-relative path and its contents. An empty path means
+// the mechanism does not apply here and the caller must leave the command alone.
+func devServerWrapperBody(sitePath string, tool *config.DevServerTool, addr devServerAddr) (string, string, error) {
 	projectConfig := devServerProjectConfig(sitePath, tool)
 	if projectConfig == "" {
-		return "", nil
+		return "", "", nil
 	}
 	if !pathIsIgnored(sitePath, tool.WrapperPath) {
-		return "", nil
+		return "", "", nil
 	}
 
 	importPath, err := filepath.Rel(filepath.Dir(tool.WrapperPath), projectConfig)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	importPath = filepath.ToSlash(importPath)
 	if !strings.HasPrefix(importPath, ".") {
@@ -96,54 +98,70 @@ func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, origin s
 	// The wrapper is JavaScript the dev server executes and a project's own
 	// .lerd.yaml supplies its domains, so every value is encoded into a literal
 	// rather than quoted by the template.
-	literals, err := jsLiterals(importPath, tool.Base, origin, domains)
+	literals, err := jsLiterals(importPath, tool.Base, addr.Origin, addr.Hosts, addr.Origins)
 	if err != nil {
+		return "", "", err
+	}
+	return tool.WrapperPath, fmt.Sprintf(tool.Wrapper, literals...), nil
+}
+
+// writeDevServerWrapper generates the config and returns its site-relative path.
+func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, addr devServerAddr) (string, error) {
+	rel, body, err := devServerWrapperBody(sitePath, tool, addr)
+	if err != nil || rel == "" {
 		return "", err
 	}
-
-	full := filepath.Join(sitePath, tool.WrapperPath)
+	full := filepath.Join(sitePath, rel)
 	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
 		return "", err
 	}
-	body := fmt.Sprintf(tool.Wrapper, literals...)
 	if err := os.WriteFile(full, []byte(body), 0644); err != nil {
 		return "", err
 	}
-	return tool.WrapperPath, nil
+	return rel, nil
 }
 
-// devServerOrigin returns the URL the dev server should advertise and the
-// hostnames it must accept, which is the site's own address rather than the
-// tool's localhost guess.
-func devServerOrigin(site *config.Site) (string, []string) {
+// devServerAddr is every address the site answers on, in the shape the generated
+// config needs: the one origin asset URLs resolve to, the hosts the server may
+// answer for, and the page origins allowed to fetch from it.
+type devServerAddr struct {
+	Origin  string
+	Hosts   []string
+	Origins []string
+}
+
+// devServerAddrFor mirrors what the vhost serves. Assets resolve to the primary
+// domain, since a dev server can only advertise one; each domain answers along
+// with its subdomains, matching the vhost's wildcard (a leading dot is how the
+// tool spells that); and a page on any of those domains may fetch from it.
+func devServerAddrFor(secured bool, primary string, domains []string) devServerAddr {
 	scheme := "http"
-	if site.Secured {
+	if secured {
 		scheme = "https"
 	}
-	domains := site.Domains
-	if len(domains) == 0 {
-		domains = []string{site.PrimaryDomain()}
+	addr := devServerAddr{Origin: scheme + "://" + primary}
+	for _, d := range domains {
+		addr.Hosts = append(addr.Hosts, "."+d)
+		addr.Origins = append(addr.Origins, scheme+"://"+d)
 	}
-	return scheme + "://" + site.PrimaryDomain(), domains
+	return addr
 }
 
-// devServerAddress returns the origin and accepted hostnames for whichever
-// checkout is starting: the site itself, or one of its worktrees on its own
-// subdomain.
-func devServerAddress(site *config.Site, sitePath string) (string, []string, error) {
+// devServerAddress returns the addresses for whichever checkout is starting: the
+// site itself, or one of its worktrees on its own subdomain.
+func devServerAddress(site *config.Site, sitePath string) (devServerAddr, error) {
 	if isSiteItself(site, sitePath) {
-		origin, domains := devServerOrigin(site)
-		return origin, domains, nil
+		domains := site.Domains
+		if len(domains) == 0 {
+			domains = []string{site.PrimaryDomain()}
+		}
+		return devServerAddrFor(site.Secured, site.PrimaryDomain(), domains), nil
 	}
 	wt, ok := worktreeForPath(site, sitePath)
 	if !ok {
-		return "", nil, fmt.Errorf("no worktree registered for %s", sitePath)
+		return devServerAddr{}, fmt.Errorf("no worktree registered for %s", sitePath)
 	}
-	scheme := "http"
-	if site.Secured {
-		scheme = "https"
-	}
-	return scheme + "://" + wt.Domain, []string{wt.Domain}, nil
+	return devServerAddrFor(site.Secured, wt.Domain, []string{wt.Domain}), nil
 }
 
 func isSiteItself(site *config.Site, sitePath string) bool {
@@ -263,11 +281,11 @@ func devServerSetup(siteName, sitePath string, tool *config.DevServerTool) (stri
 	}
 	// A worktree fronts its own domain and runs its own dev server, so it gets
 	// its own origin and its own pinned port rather than the parent's.
-	origin, domains, err := devServerAddress(site, sitePath)
+	addr, err := devServerAddress(site, sitePath)
 	if err != nil {
 		return "", err
 	}
-	wrapper, err := writeDevServerWrapper(sitePath, tool, origin, domains)
+	wrapper, err := writeDevServerWrapper(sitePath, tool, addr)
 	if err != nil || wrapper == "" {
 		return "", err
 	}
@@ -287,4 +305,85 @@ func devServerArgs(tool *config.DevServerTool, wrapperPath string, port int) str
 	}
 	args := strings.ReplaceAll(tool.Args, "{config}", wrapperPath)
 	return strings.ReplaceAll(args, "{port}", strconv.Itoa(port))
+}
+
+// RefreshDevServers brings the generated config back in line with the addresses
+// the site now answers on, for the site and for each of its worktrees, and
+// restarts a dev server still running on the old ones. The tool reads those
+// values once, at start, so every path that moves a site's scheme or its domains
+// has to come through here. Nothing changed means nothing is restarted.
+func RefreshDevServers(site *config.Site) {
+	if site == nil || site.Path == "" {
+		return
+	}
+	refreshDevServersAt(site, site.Path)
+	// A worktree pins its own port the first time its dev server runs, so an
+	// empty set means none of them has one to realign.
+	if len(site.WorktreeDevPorts) == 0 {
+		return
+	}
+	if wts, err := gitpkg.DetectWorktrees(site.Path, site.PrimaryDomain()); err == nil {
+		for _, wt := range wts {
+			refreshDevServersAt(site, wt.Path)
+		}
+	}
+}
+
+// refreshDevServersAt rewrites one checkout's generated config when the addresses
+// in it have moved, and restarts the worker holding the stale copy. The port is
+// left alone: it lives in the unit, nginx already proxies to it, and a plain
+// restart re-reads the config the unit is pointed at. A config that was never
+// generated here settles it in two stats, since this runs from every path that
+// regenerates a vhost.
+func refreshDevServersAt(site *config.Site, sitePath string) {
+	tool := config.DevServerToolInstalled(sitePath)
+	if tool == nil {
+		return
+	}
+	if _, err := os.Stat(filepath.Join(sitePath, tool.WrapperPath)); err != nil {
+		return
+	}
+	addr, err := devServerAddress(site, sitePath)
+	if err != nil {
+		return
+	}
+	fw, ok := config.GetFrameworkForDir(site.Framework, sitePath)
+	if !ok || fw == nil {
+		return
+	}
+	if !rewriteDevServerWrapper(sitePath, tool, addr) {
+		return
+	}
+	for name, w := range fw.Workers {
+		if !w.Host || config.DevServerToolFor(sitePath, resolveWorkerCommand(sitePath, name, w)) == nil {
+			continue
+		}
+		unit := WorkerUnitName(site.Name, sitePath, name)
+		if !unitIsActiveOrActivating(unit) {
+			continue
+		}
+		if err := podman.RestartUnit(unit); err != nil {
+			feedback.Warn("restarting %s so it serves %s: %v", name, addr.Origin, err)
+		}
+	}
+}
+
+// rewriteDevServerWrapper updates an already generated config in place and
+// reports whether it had drifted. A config this mechanism never generated here
+// is left absent rather than created: no unit is pointed at it.
+func rewriteDevServerWrapper(sitePath string, tool *config.DevServerTool, addr devServerAddr) bool {
+	rel, body, err := devServerWrapperBody(sitePath, tool, addr)
+	if err != nil || rel == "" {
+		return false
+	}
+	full := filepath.Join(sitePath, rel)
+	current, err := os.ReadFile(full)
+	if err != nil || string(current) == body {
+		return false
+	}
+	if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+		feedback.Warn("updating the generated dev server config: %v", err)
+		return false
+	}
+	return true
 }

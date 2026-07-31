@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
 	"time"
 
@@ -516,13 +517,20 @@ func TestDetect_UnreachableWorktreeWorkerFlagged(t *testing.T) {
 		map[string]string{"lerd-vite-myapp-featx.service": "active"},
 		nil,
 	)
+	// The checkout has to be real: a worktree unit whose directory is gone is an
+	// orphan now, whatever its server is doing, so a fake path would test that
+	// instead of unreachability.
+	wt := filepath.Join(t.TempDir(), "featx")
+	if err := os.MkdirAll(wt, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	prevReach, prevMeta := workerReachableFn, unitMetaFn
 	workerReachableFn = func(_ string, _ *config.Framework, worker string, _ time.Time) (bool, bool) {
 		return false, worker == "vite" // vite: process up, not accepting
 	}
 	unitMetaFn = func() map[string]siteinfo.UnitMeta {
 		return map[string]siteinfo.UnitMeta{
-			"lerd-vite-myapp-featx.service": {WorkingDir: "/home/u/wt/featx"},
+			"lerd-vite-myapp-featx.service": {WorkingDir: wt},
 		}
 	}
 	t.Cleanup(func() { workerReachableFn = prevReach; unitMetaFn = prevMeta })
@@ -578,5 +586,158 @@ func TestHealAll_RestartsUnreachableWorker(t *testing.T) {
 	}
 	if len(res.Healed) != 1 {
 		t.Errorf("healed %d, want 1", len(res.Healed))
+	}
+}
+
+// ── orphaned worktree units ──────────────────────────────────────────────────
+
+// A per-worktree unit pins WorkingDirectory to the checkout. When the worktree
+// is removed outside lerd (an agent deleting its own directory, a plain rm),
+// the unit survives and systemd retries it forever, failing at CHDIR before the
+// command ever runs. Restarting it can only fail again, so it must not be
+// reported as merely failed, which is what invites a heal that cannot work.
+func TestDetect_MissingWorktreeDirIsOrphanedNotFailed(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp-featx.service": "failed"},
+		nil,
+	)
+	prevMeta := unitMetaFn
+	unitMetaFn = func() map[string]siteinfo.UnitMeta {
+		return map[string]siteinfo.UnitMeta{
+			"lerd-vite-myapp-featx.service": {WorkingDir: "/definitely/not/here/featx"},
+		}
+	}
+	t.Cleanup(func() { unitMetaFn = prevMeta })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %v, want one entry", unitNames(got))
+	}
+	if got[0].State != StateOrphaned {
+		t.Errorf("state = %q, want %q", got[0].State, StateOrphaned)
+	}
+}
+
+// The checkout still being there means an ordinary failure, which heal can fix.
+func TestDetect_PresentWorktreeDirStaysFailed(t *testing.T) {
+	wt := t.TempDir()
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp-" + filepath.Base(wt) + ".service": "failed"},
+		nil,
+	)
+	prevMeta := unitMetaFn
+	unitMetaFn = func() map[string]siteinfo.UnitMeta {
+		return map[string]siteinfo.UnitMeta{
+			"lerd-vite-myapp-" + filepath.Base(wt) + ".service": {WorkingDir: wt},
+		}
+	}
+	t.Cleanup(func() { unitMetaFn = prevMeta })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 || got[0].State != "failed" {
+		t.Fatalf("got %v with state %q, want one failed entry", unitNames(got), stateOf(got))
+	}
+}
+
+// Heal must leave orphans alone: there is nothing to start, and reporting them
+// as healed or failed both misdescribe what happened. Pruning owns that case.
+func TestHealAll_SkipsOrphanedUnits(t *testing.T) {
+	var healed []string
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{
+			"lerd-vite-myapp-featx.service": "failed",
+			"lerd-queue-myapp.service":      "failed",
+		},
+		func(unit string) error { healed = append(healed, unit); return nil },
+	)
+	prevMeta := unitMetaFn
+	unitMetaFn = func() map[string]siteinfo.UnitMeta {
+		return map[string]siteinfo.UnitMeta{
+			"lerd-vite-myapp-featx.service": {WorkingDir: "/definitely/not/here/featx"},
+		}
+	}
+	t.Cleanup(func() { unitMetaFn = prevMeta })
+
+	report, err := HealAll(nil)
+	if err != nil {
+		t.Fatalf("HealAll: %v", err)
+	}
+	for _, u := range healed {
+		if strings.Contains(u, "featx") {
+			t.Errorf("orphaned unit %q must not be healed", u)
+		}
+	}
+	for _, u := range report.Healed {
+		if u.State == StateOrphaned {
+			t.Errorf("orphaned unit %q reported as healed", u.Unit)
+		}
+	}
+	if len(report.Failed) != 0 {
+		t.Errorf("orphaned unit must not be reported as a heal failure, got %v", report.Failed)
+	}
+}
+
+func stateOf(w []UnhealthyWorker) string {
+	if len(w) == 0 {
+		return ""
+	}
+	return w[0].State
+}
+
+// The case the whole change exists for, and the one a state filter misses. A
+// unit that cannot chdir restarts on RestartSec forever without ever settling
+// into "failed": on a live system it flaps between activating and active while
+// the restart counter climbs into the thousands. Detection therefore has to
+// rest on the checkout being gone, not on systemd having given up.
+func TestDetect_OrphanCaughtWhileRestartLooping(t *testing.T) {
+	for _, state := range []string{"activating", "active", "failed", "inactive"} {
+		t.Run(state, func(t *testing.T) {
+			stubEnv(t,
+				[]string{"myapp"}, nil,
+				map[string]string{"lerd-vite-myapp-featx.service": state},
+				nil,
+			)
+			prevMeta := unitMetaFn
+			unitMetaFn = func() map[string]siteinfo.UnitMeta {
+				return map[string]siteinfo.UnitMeta{
+					"lerd-vite-myapp-featx.service": {WorkingDir: "/definitely/not/here/featx"},
+				}
+			}
+			t.Cleanup(func() { unitMetaFn = prevMeta })
+
+			got, err := Detect()
+			if err != nil {
+				t.Fatalf("Detect: %v", err)
+			}
+			if len(got) != 1 || got[0].State != StateOrphaned {
+				t.Fatalf("state %q: got %v, want one orphaned entry", state, got)
+			}
+		})
+	}
+}
+
+// A worker still coming up is not a problem, so "activating" must not leak into
+// the report now that the filter lets it through for the orphan case.
+func TestDetect_ActivatingNonOrphanIsNotFlagged(t *testing.T) {
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-queue-myapp.service": "activating"},
+		nil,
+	)
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("got %v, want nothing: a starting worker is not unhealthy", unitNames(got))
 	}
 }

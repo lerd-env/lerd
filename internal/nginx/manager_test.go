@@ -221,6 +221,136 @@ func TestGenerateCustomVhost_honoursProjectRequestTimeout(t *testing.T) {
 	}
 }
 
+// ── proxy path (worker Proxy) ─────────────────────────────────────────────────
+
+// proxySite writes a .lerd.yaml declaring a Laravel project with one custom
+// worker carrying the given Proxy, and returns a config.Site pointing at it.
+// laravel is a builtinFramework, so GetFrameworkForDir resolves it (and merges
+// the custom worker) without needing a real frameworks store checkout.
+func proxySite(t *testing.T, name string, proxy *config.WorkerProxy) config.Site {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("framework: laravel\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	proj, err := config.LoadProjectConfig(dir)
+	if err != nil {
+		t.Fatalf("LoadProjectConfig: %v", err)
+	}
+	proj.CustomWorkers = map[string]config.FrameworkWorker{
+		"ws": {Command: "php artisan ws:serve", Proxy: proxy},
+	}
+	if err := config.SaveProjectConfig(dir, proj); err != nil {
+		t.Fatalf("SaveProjectConfig: %v", err)
+	}
+	return config.Site{Name: name, Domains: []string{name + ".test"}, Path: dir, Framework: "laravel"}
+}
+
+// The location block must anchor the proxy path so it only matches that exact
+// path and its subpaths, not another path that merely shares the same prefix
+// (nginx's bare `location /app {` is a prefix match, so it would also catch
+// `/appfoo`, an unrelated route landing on the wrong backend).
+func TestGenerateVhost_proxyPathAnchored(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected an anchored regex location for /app, got:\n%s", content)
+	}
+}
+
+func TestGenerateSSLVhost_proxyPathAnchored(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app", DefaultPort: 6001})
+	if err := GenerateSSLVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateSSLVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test-ssl.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected an anchored regex location for /app, got:\n%s", content)
+	}
+}
+
+// A framework-declared proxy path reaches the template as a regex, but is
+// meant as a literal path: "/socket.io" is a common one in the wild, and an
+// unescaped "." would also match "/socketXio", an unrelated path lucky enough
+// to share the same shape. detectSiteProxy must regexp.QuoteMeta it.
+func TestGenerateVhost_proxyPathWithRegexMetacharsIsEscaped(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/socket.io", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/socket\.io(/|$) {`) {
+		t.Errorf("expected the literal dot in /socket.io to be regex-escaped, got:\n%s", content)
+	}
+}
+
+// A path declared with a trailing slash must anchor the same as one without.
+// `^/app/(/|$)` matches only the literal string "/app/" and nothing else, not
+// "/app" and not anything under it, so the trailing slash must be trimmed
+// before the path reaches the template.
+func TestGenerateVhost_proxyPathTrailingSlashIsTrimmed(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/app/", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected the trailing slash trimmed from /app/, got:\n%s", content)
+	}
+}
+
+// A worker mounted at the site root must proxy the root and everything below
+// it. "/" trims to empty, and restoring it to "/" renders `^/(/|$)`, which
+// matches "/" and "//" and nothing else. Left empty it renders `^(/|$)`, every
+// path the site can serve.
+func TestGenerateVhost_proxyPathRootProxiesEverything(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^(/|$) {`) {
+		t.Errorf("expected a root proxy matching every path, got:\n%s", content)
+	}
+}
+
+// A path written without its leading slash is the third way to declare one that
+// silently never fires: nginx matches the location against a URI that always
+// starts with "/", so `^app(/|$)` can never match. It means "/app".
+func TestGenerateVhost_proxyPathWithoutLeadingSlashIsNormalised(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "app", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected a leading slash added to app, got:\n%s", content)
+	}
+}
+
+// A proxy declaring no path at all names nothing to proxy. It must not fall
+// through to the root and quietly capture the whole site.
+func TestGenerateVhost_proxyWithoutPathIsNotProxied(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if strings.Contains(content, "proxy_pass http://$proxybackend") {
+		t.Errorf("expected no proxy location for a proxy with no path, got:\n%s", content)
+	}
+}
+
 // ── GenerateHostProxyVhost ────────────────────────────────────────────────────
 
 func TestGenerateHostProxyVhost_proxiesToHostPort(t *testing.T) {

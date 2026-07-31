@@ -132,6 +132,7 @@ export default defineConfig({
             { text: 'NixOS', link: '/getting-started/nixos' },
             { text: 'Quick Start', link: '/getting-started/quick-start' },
             { text: 'Comparison', link: '/getting-started/comparison' },
+            { text: 'Laravel Herd for Linux', link: '/getting-started/herd-linux' },
             { text: 'Laragon for Linux', link: '/getting-started/laragon-linux' },
           ],
         },

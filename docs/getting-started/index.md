@@ -29,6 +29,7 @@ Lerd detects your framework from the project itself and configures workers, envi
 
 - [Services](/getting-started/services) adds MongoDB, phpMyAdmin, Redis and the rest of the service presets.
 - [Comparison](/getting-started/comparison) sets lerd against Herd, Laragon, DDEV, Lando and Sail.
+- [Laravel Herd for Linux](/getting-started/herd-linux) is aimed at people who used Herd on a Mac and moved to Linux.
 - [Laragon for Linux](/getting-started/laragon-linux) is aimed at people moving over from Windows.
 
 Once you are set up, [Usage](/usage/sites) covers day to day site management and [Features](/features/web-ui) covers the web UI, TUI, MCP server and the rest.

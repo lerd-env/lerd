@@ -91,6 +91,12 @@ func queueWorkerFailureNotifications(ws []workerheal.UnhealthyWorker) {
 	}
 	workerFailureBatchMu.Lock()
 	for _, w := range ws {
+		// An orphan is pruned rather than healed, so naming it a failing worker
+		// would report a problem the user did not cause, cannot act on, and that
+		// resolves itself on the next reconciliation.
+		if w.State == workerheal.StateOrphaned {
+			continue
+		}
 		pendingWorkerFailures[w.Unit] = w
 	}
 	if workerFailureFlushTimer == nil {

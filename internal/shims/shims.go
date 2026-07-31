@@ -201,6 +201,27 @@ func ToolOwner(tool string) string {
 	return Targets()[tool].Service
 }
 
+// ToolCandidates returns every installed service exposing tool. Targets()
+// keeps only the first as the tool's shared "owner"; a caller that needs to
+// tell same-family instances apart (e.g. matching an explicit port to the
+// specific postgres flavour it belongs to) walks the full set instead.
+func ToolCandidates(tool string) []string {
+	var out []string
+	for _, name := range installedServiceNames() {
+		svc, err := loadServiceDef(name)
+		if err != nil || svc == nil {
+			continue
+		}
+		for _, cs := range svc.ClientShims {
+			if cs.Name == tool {
+				out = append(out, name)
+				break
+			}
+		}
+	}
+	return out
+}
+
 // ResolveTarget picks the container and binaries to run a tool in. When prefer
 // names an installed service that exposes the tool, it wins (site-aware
 // routing: a dump run from a project targets that project's own database

@@ -509,28 +509,6 @@ func ReservedHostPorts() map[int]bool {
 			reserved[n] = true
 		}
 	}
-	// reserveDefaults reserves a service's default mappings, resolving each through
-	// the service's recorded published override so a moved primary or secondary port
-	// reserves its NEW port and frees the default, instead of pinning the vacated
-	// default reserved forever (which would keep the guard and the host-proxy
-	// allocator from ever reusing it). Matches HostPorts()'s freed-default contract.
-	reserveDefaults := func(name string, mappings []string) {
-		var svc ServiceConfig
-		configured := false
-		if cfg != nil {
-			svc, configured = cfg.Services[name]
-		}
-		for i, m := range mappings {
-			host := MappingHostPort(m)
-			if host <= 0 {
-				continue
-			}
-			if configured {
-				host = svc.HostPortFor(mappingContainerPort(m), host, i == 0)
-			}
-			add(host)
-		}
-	}
 	if cfg != nil {
 		for _, svc := range cfg.Services {
 			for _, p := range svc.HostPorts() {
@@ -546,16 +524,73 @@ func ReservedHostPorts() map[int]bool {
 	if presets, err := ListPresets(); err == nil {
 		for _, meta := range presets {
 			if p, err := LoadPreset(meta.Name); err == nil {
-				reserveDefaults(meta.Name, p.Ports)
+				for _, port := range resolveMappingPorts(cfg, meta.Name, p.Ports) {
+					add(port)
+				}
 			}
 		}
 	}
 	if customs, err := ListCustomServices(); err == nil {
 		for _, svc := range customs {
-			reserveDefaults(svc.Name, svc.Ports)
+			for _, port := range resolveMappingPorts(cfg, svc.Name, svc.Ports) {
+				add(port)
+			}
 		}
 	}
 	return reserved
+}
+
+// resolveMappingPorts resolves a service's declared port mappings to the host
+// ports it actually publishes, applying the service's recorded published-port
+// override (if any) so a moved primary or secondary port resolves to its NEW
+// port rather than the vacated default. Shared by ReservedHostPorts (which
+// wants every port a service might ever hold) and HostPortsFor (which wants
+// one installed service's current ports).
+func resolveMappingPorts(cfg *GlobalConfig, name string, mappings []string) []int {
+	var svc ServiceConfig
+	configured := false
+	if cfg != nil {
+		svc, configured = cfg.Services[name]
+	}
+	var ports []int
+	for i, m := range mappings {
+		host := MappingHostPort(m)
+		if host <= 0 {
+			continue
+		}
+		if configured {
+			host = svc.HostPortFor(mappingContainerPort(m), host, i == 0)
+		}
+		ports = append(ports, host)
+	}
+	return ports
+}
+
+// HostPortsFor returns the host ports the named installed service actually
+// publishes right now: a custom service's (including an installed preset's)
+// resolved Ports, or a default-preset's configured ServiceConfig ports. Nil
+// when name matches neither. Used by the client-tool shim to recognise an
+// explicit loopback host/port as one of lerd's own services rather than a
+// truly external database — unlike ReservedHostPorts, which reserves every
+// bundled preset's potential ports whether installed or not, this reports
+// only the ports a specific installed service is actually bound to.
+func HostPortsFor(name string) []int {
+	cfg, _ := LoadGlobal()
+	// Dispatch the way loadServiceDef (internal/shims) does: a default preset's
+	// ports live in its ServiceConfig entry, always populated by defaultConfig();
+	// anything else resolves through its own installed CustomService YAML, the
+	// ground truth for what a non-default instance actually publishes.
+	if !IsDefaultPreset(name) {
+		if svc, err := LoadCustomService(name); err == nil && svc != nil {
+			return resolveMappingPorts(cfg, name, svc.Ports)
+		}
+	}
+	if cfg != nil {
+		if svc, ok := cfg.Services[name]; ok {
+			return svc.HostPorts()
+		}
+	}
+	return nil
 }
 
 // FPMPortsFor returns the extra published port mappings recorded for a PHP
