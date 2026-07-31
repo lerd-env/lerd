@@ -5,7 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
@@ -290,6 +293,37 @@ func TestShouldInheritNginxOnSync(t *testing.T) {
 			t.Errorf("shouldInheritNginxOnSync(%q) = %v, want %v", action, got, want)
 		}
 	}
+}
+
+// The boot scan provisions worktrees, and a composer install there can take
+// longer than the Type=notify unit's start timeout. Readiness must be signalled
+// without waiting for it, or systemd terminates the process before it is ever
+// ready and the restart begins the same install again, forever.
+func TestNotifyReadyThenScan_readinessDoesNotWaitOnTheScan(t *testing.T) {
+	release := make(chan struct{})
+	// A scan run synchronously would block on release forever, so it is let go
+	// on a timer as well and the assertions below report the ordering.
+	releaseScan := sync.OnceFunc(func() { close(release) })
+	time.AfterFunc(5*time.Second, releaseScan)
+
+	var ready atomic.Bool
+	scanDone := make(chan struct{})
+	notifyReadyThenScan(
+		func() { ready.Store(true) },
+		func() { <-release; close(scanDone) },
+	)
+
+	if !ready.Load() {
+		t.Error("readiness was not signalled before the watcher moved on")
+	}
+	select {
+	case <-scanDone:
+		t.Error("readiness waited for the boot scan to finish")
+	default:
+	}
+
+	releaseScan()
+	<-scanDone
 }
 
 func TestShouldAutoStartWorkersOnSync(t *testing.T) {

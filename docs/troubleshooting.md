@@ -262,6 +262,8 @@ systemctl --user start lerd-watcher   # start it from the terminal
 # or use the Start button in the UI under System > Watcher
 ```
 
+The watcher reports itself ready as soon as its watch loops are live and does its boot reconciliation (registering parked projects, provisioning worktrees) after that, in the background. A worktree install that takes minutes therefore delays only that worktree; it can't hold the unit below its start timeout and put systemd in a restart loop.
+
 To see what the watcher is doing:
 
 ```bash

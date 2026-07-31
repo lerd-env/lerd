@@ -401,42 +401,6 @@ func newWatchCmd() *cobra.Command {
 				fmt.Printf("[WARN] default vhost: %v\n", err)
 			}
 
-			// Initial scan: register new projects.
-			reloadNeeded := false
-			for _, dir := range cfg.ParkedDirectories {
-				entries, err := os.ReadDir(dir)
-				if err != nil {
-					continue
-				}
-				for _, entry := range entries {
-					if !entry.IsDir() {
-						continue
-					}
-					registered, err := cli.RegisterProject(filepath.Join(dir, entry.Name()), cfg)
-					if err != nil {
-						fmt.Printf("[WARN] %s: %v\n", entry.Name(), err)
-					} else if registered {
-						reloadNeeded = true
-					}
-				}
-			}
-
-			// Remove stale sites (deleted while we were offline or during the scan above).
-			if removeStale(cfg) {
-				reloadNeeded = true
-			}
-
-			// Startup scan: generate vhosts for any existing worktrees.
-			if scanWorktrees() {
-				reloadNeeded = true
-			}
-
-			if reloadNeeded {
-				if err := nginx.Reload(); err != nil {
-					fmt.Printf("[WARN] nginx reload: %v\n", err)
-				}
-			}
-
 			// Periodically catch deletions that happen while the watcher is busy.
 			go func() {
 				for range time.Tick(30 * time.Second) {
@@ -680,10 +644,10 @@ func newWatchCmd() *cobra.Command {
 				}
 			}()
 
-			// Initial setup and goroutines are live; tell systemd we're
-			// ready so Type=notify unit starts unblock for any dependent
-			// startup sequence (lerd-ui, lerd-tray, test harnesses).
-			lerdSystemd.NotifyReady()
+			// Goroutines are live; tell systemd we're ready so Type=notify
+			// unit starts unblock for any dependent startup sequence
+			// (lerd-ui, lerd-tray, test harnesses), then reconcile.
+			notifyReadyThenScan(lerdSystemd.NotifyReady, func() { bootScan(cfg) })
 
 			return watcher.Watch(cfg.ParkedDirectories, func(projectPath string) {
 				fmt.Printf("New project detected: %s\n", projectPath)
@@ -740,6 +704,58 @@ func mainRepoSitePaths() []string {
 		}
 	}
 	return paths
+}
+
+// notifyReadyThenScan signals watcher readiness and then runs the boot scan in
+// the background. The order matters: the scan provisions worktrees, composer
+// install included, and that has no duration worth guessing at, while `lerd
+// watch` runs under a Type=notify unit with a start timeout. Signalling first
+// leaves a slow install as a slow install, instead of a SIGTERM before
+// readiness and a restart that begins the same install from scratch.
+func notifyReadyThenScan(notifyReady, scan func()) {
+	notifyReady()
+	go scan()
+}
+
+// bootScan is the watcher's one-shot reconciliation: register projects parked
+// while it was down, drop sites whose directory has gone, and provision the
+// worktrees found on disk. Nothing here is a precondition for serving, so it
+// runs off the startup path; the periodic passes cover whatever it misses.
+func bootScan(cfg *config.GlobalConfig) {
+	reloadNeeded := false
+	for _, dir := range cfg.ParkedDirectories {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			registered, err := cli.RegisterProject(filepath.Join(dir, entry.Name()), cfg)
+			if err != nil {
+				fmt.Printf("[WARN] %s: %v\n", entry.Name(), err)
+			} else if registered {
+				reloadNeeded = true
+			}
+		}
+	}
+
+	// Remove stale sites (deleted while we were offline or during the scan above).
+	if removeStale(cfg) {
+		reloadNeeded = true
+	}
+
+	// Generate vhosts for any existing worktrees.
+	if scanWorktrees() {
+		reloadNeeded = true
+	}
+
+	if reloadNeeded {
+		if err := nginx.Reload(); err != nil {
+			fmt.Printf("[WARN] nginx reload: %v\n", err)
+		}
+	}
 }
 
 // scanWorktrees generates vhosts for all existing worktrees across all main-repo sites.

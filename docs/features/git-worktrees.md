@@ -226,6 +226,8 @@ When a worktree is removed (via `git worktree remove` directly or `lerd worktree
 
 The startup sweep also catches any registry entries whose worktree directory disappeared while the watcher was offline, restarting `lerd-watcher` reconciles state.
 
+The sweep runs in the background, after the watcher has reported itself ready. It provisions worktrees it finds unprovisioned, which can mean a full `composer install`, and that has no duration worth waiting on: the watcher is up and watching from the first moment either way, so a long install shows up as a worktree that finishes setting itself up a few minutes in, not as a daemon that refuses to start. Use [`lerd worktree wait`](#waiting-for-the-pipeline) when you need to block until a specific worktree is actually ready.
+
 ### A checkout deleted without git
 
 That ordering hangs off git's own `.git/worktrees/` entry disappearing, which is what `git worktree remove` deletes. Deleting the checkout directory on its own leaves that entry behind, so the watcher never hears about it and the worker units keep retrying against a `WorkingDirectory` that has gone, failing at `CHDIR` before the command runs and restarting every `RestartSec` indefinitely. This is no longer unusual: coding agents create and destroy their own worktrees, and they have no reason to know lerd exists.
