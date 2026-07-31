@@ -75,6 +75,14 @@ func jsLiterals(values ...any) ([]any, error) {
 	return out, nil
 }
 
+// devServerPublicURL is the single address a browser reaches the dev server at:
+// the site's origin carrying the prefix the vhost proxies. The base keeps its
+// trailing slash for the tool, which resolves every asset against it, but the
+// URL an app is handed is joined to a path of its own.
+func devServerPublicURL(tool *config.DevServerTool, origin string) string {
+	return origin + strings.TrimSuffix(tool.Base, "/")
+}
+
 // devServerWrapperBody renders the config that puts the dev server on the site's
 // origin, returning its site-relative path and its contents. An empty path means
 // the mechanism does not apply here and the caller must leave the command alone.
@@ -98,7 +106,7 @@ func devServerWrapperBody(sitePath string, tool *config.DevServerTool, addr devS
 	// The wrapper is JavaScript the dev server executes and a project's own
 	// .lerd.yaml supplies its domains, so every value is encoded into a literal
 	// rather than quoted by the template.
-	literals, err := jsLiterals(importPath, tool.Base, addr.Origin, addr.Hosts, addr.Origins)
+	literals, err := jsLiterals(importPath, devServerPublicURL(tool, addr.Origin), tool.Base, addr.Origin, addr.Hosts, addr.Origins)
 	if err != nil {
 		return "", "", err
 	}

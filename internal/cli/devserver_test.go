@@ -22,6 +22,7 @@ func viteDevServer() *config.DevServerTool {
 		DefaultPort:   5173,
 		Wrapper: `import { mergeConfig } from 'vite';
 import projectConfig from %s;
+const publicUrl = %s;
 const lerd = { base: %s, server: { origin: %s, allowedHosts: %s, cors: { origin: %s } } };
 export default projectConfig;
 `,
@@ -103,6 +104,60 @@ func TestWriteDevServerWrapperMergesBaseAndOrigin(t *testing.T) {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("wrapper missing %s:\n%s", want, body)
 		}
+	}
+}
+
+// A framework plugin that predates server.origin publishes whatever address the
+// server bound to, so the config has to carry the one URL a browser can reach it
+// at: the site's origin and the prefix nginx proxies, joined without a seam.
+func TestWriteDevServerWrapperPublishesTheProxiedURL(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	rel, err := writeDevServerWrapper(dir, viteDevServer(), securedAddr("myapp.test"))
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), `const publicUrl = "https://myapp.test/@lerd-vite";`) {
+		t.Errorf("wrapper does not publish the proxied URL:\n%s", body)
+	}
+}
+
+// The template and the values filled into it live apart, and a count that drifts
+// leaves the dev server reading a config full of formatting errors rather than
+// failing outright, so the shipped one is rendered here in full.
+func TestWriteDevServerWrapperRendersTheShippedTemplate(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules", "vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tool := config.DevServerToolInstalled(dir)
+	if tool == nil {
+		t.Fatal("DevServerToolInstalled() = nil, want the vite tool")
+	}
+	rel, err := writeDevServerWrapper(dir, tool, securedAddr("myapp.test"))
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "%!") {
+		t.Errorf("wrapper carries a formatting error:\n%s", body)
+	}
+	if !strings.Contains(string(body), `"https://myapp.test/@lerd-vite"`) {
+		t.Errorf("wrapper does not publish the proxied URL:\n%s", body)
 	}
 }
 
