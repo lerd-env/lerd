@@ -22,6 +22,7 @@ versions:
 ports:
   - "{{host_port}}:5432"
 data_dir: /var/lib/postgresql/data
+data_version_file: PG_VERSION
 environment:
   POSTGRES_PASSWORD: lerd
   POSTGRES_DB: lerd

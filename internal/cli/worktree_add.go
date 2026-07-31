@@ -28,6 +28,7 @@ func NewWorktreeCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newWorktreeAddCmd())
 	cmd.AddCommand(newWorktreeRemoveCmd())
+	cmd.AddCommand(newWorktreeWaitCmd())
 	return cmd
 }
 
@@ -308,15 +309,36 @@ func WaitForWorktreeReady(worktreePath string, deadline time.Duration) error {
 	hasComposer := fileExistsAt(filepath.Join(worktreePath, "composer.json"))
 	hasJS := fileExistsAt(filepath.Join(worktreePath, "package.json"))
 	for time.Now().Before(end) {
-		envOk := fileExistsAt(filepath.Join(worktreePath, ".env"))
-		composerOk := !hasComposer || fileExistsAt(filepath.Join(worktreePath, "vendor", "autoload.php"))
-		jsOk := !hasJS || fileExistsAt(filepath.Join(worktreePath, "node_modules"))
-		if envOk && composerOk && jsOk {
+		if worktreeArtifactsPresent(worktreePath, hasComposer, hasJS) && !installInFlight(worktreePath) {
 			return nil
 		}
 		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("timed out after %s waiting for worktree setup", deadline)
+}
+
+// worktreeArtifactsPresent reports whether the pipeline's outputs are on disk.
+// Necessary but not sufficient on its own: node_modules exists as soon as the
+// first package is extracted, so a live npm ci already satisfies it.
+func worktreeArtifactsPresent(worktreePath string, hasComposer, hasJS bool) bool {
+	if !fileExistsAt(filepath.Join(worktreePath, ".env")) {
+		return false
+	}
+	if hasComposer && !fileExistsAt(filepath.Join(worktreePath, "vendor", "autoload.php")) {
+		return false
+	}
+	if hasJS && !fileExistsAt(filepath.Join(worktreePath, "node_modules")) {
+		return false
+	}
+	return true
+}
+
+// installInFlight reports whether an installer holds the worktree's install
+// lock. A probe that fails outright counts as idle so an unreadable lock dir
+// degrades to the old artifact-only behaviour instead of waiting forever.
+func installInFlight(worktreePath string) bool {
+	held, err := gitpkg.InstallInFlight(worktreePath)
+	return err == nil && held
 }
 
 func fileExistsAt(path string) bool {

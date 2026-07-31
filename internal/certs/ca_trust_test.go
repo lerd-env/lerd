@@ -91,3 +91,70 @@ func TestCATrusted(t *testing.T) {
 		}
 	})
 }
+
+// CAPresentButUntrusted is the signal ensureMkcertCA (darwin) uses to decide
+// whether to repair trust directly instead of trusting mkcert -install's own
+// (also fooled by the same drifted state) self-check to notice.
+func TestCAPresentButUntrusted(t *testing.T) {
+	origRoot, origPaths, origTrust, origPresence := caRootFunc, caTrustPaths, platformTrustCheck, platformPresenceCheck
+	origReadable := platformTrustReadable
+	t.Cleanup(func() {
+		caRootFunc, caTrustPaths, platformTrustCheck, platformPresenceCheck = origRoot, origPaths, origTrust, origPresence
+		platformTrustReadable = origReadable
+	})
+	caTrustPaths = nil // isolate from the bundle path; only the platform hooks matter here
+	platformTrustReadable = func() bool { return true }
+
+	caDir := t.TempDir()
+	writeTestCA(t, caDir)
+	caRootFunc = func() (string, error) { return caDir, nil }
+
+	t.Run("present but not trusted", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformPresenceCheck = func(der []byte) bool { return true }
+		if !CAPresentButUntrusted() {
+			t.Fatal("expected the drifted present-but-untrusted state to be reported")
+		}
+	})
+
+	t.Run("already trusted", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return true }
+		platformPresenceCheck = func(der []byte) bool {
+			t.Fatal("must not consult presence once CATrusted() already reports true")
+			return false
+		}
+		if CAPresentButUntrusted() {
+			t.Fatal("a genuinely trusted CA must never report as present-but-untrusted")
+		}
+	})
+
+	t.Run("absent entirely", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformPresenceCheck = func(der []byte) bool { return false }
+		if CAPresentButUntrusted() {
+			t.Fatal("a CA missing from the keychain entirely is not the drifted state")
+		}
+	})
+
+	t.Run("no platform presence hook wired", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformPresenceCheck = nil
+		if CAPresentButUntrusted() {
+			t.Fatal("must report false on a platform with no presence/trust distinction")
+		}
+	})
+
+	// The repair prompts for an admin password, so it may only run on an
+	// answered check. A store that could not be read reports nothing wrong,
+	// otherwise a machine where the export keeps failing is asked to repair a
+	// CA that was fine on every single install.
+	t.Run("trust state unreadable", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformPresenceCheck = func(der []byte) bool { return true }
+		platformTrustReadable = func() bool { return false }
+		t.Cleanup(func() { platformTrustReadable = func() bool { return true } })
+		if CAPresentButUntrusted() {
+			t.Fatal("an unreadable trust store must not drive the privileged repair")
+		}
+	})
+}

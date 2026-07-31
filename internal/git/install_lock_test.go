@@ -62,3 +62,55 @@ func TestLockInstall_serializesInProcess(t *testing.T) {
 		t.Errorf("max concurrent holders = %d, want 1", got)
 	}
 }
+
+// InstallInFlight is the signal external tools need in place of guessing from
+// directory contents. It must report a running install, go quiet once that
+// install finishes, and never be fooled by the lock file left behind, which is
+// exactly the trap that makes existence and pid checks useless.
+func TestInstallInFlight(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+
+	if held, err := InstallInFlight(dir); err != nil || held {
+		t.Fatalf("before any install: held=%v err=%v, want held=false", held, err)
+	}
+
+	release, err := LockInstall(dir, 5*time.Second)
+	if err != nil {
+		t.Fatalf("LockInstall: %v", err)
+	}
+	held, err := InstallInFlight(dir)
+	if err != nil {
+		t.Fatalf("InstallInFlight while lock held: %v", err)
+	}
+	if !held {
+		t.Error("must report in flight while an installer holds the lock")
+	}
+	release()
+
+	if held, err := InstallInFlight(dir); err != nil || held {
+		t.Errorf("after release, with the lock file still on disk: held=%v err=%v, want held=false", held, err)
+	}
+}
+
+// The probe must not disturb a real installer: it may not take the exclusive
+// lock, so an install starting immediately after a probe still acquires at once.
+func TestInstallInFlight_leavesLockAcquirable(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	dir := t.TempDir()
+
+	release, err := LockInstall(dir, 5*time.Second)
+	if err != nil {
+		t.Fatalf("seed lock: %v", err)
+	}
+	release()
+
+	if _, err := InstallInFlight(dir); err != nil {
+		t.Fatalf("InstallInFlight: %v", err)
+	}
+	release2, err := LockInstall(dir, 2*time.Second)
+	if err != nil {
+		t.Fatalf("an installer must still acquire right after a probe: %v", err)
+	}
+	release2()
+}

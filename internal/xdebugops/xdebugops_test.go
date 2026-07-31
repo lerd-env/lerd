@@ -31,6 +31,22 @@ func setupConfigHome(t *testing.T) {
 		podman.WriteContainerUnitFn = prevWrite
 		podman.DaemonReloadFn = prevReload
 	})
+
+	// WriteFPMQuadlet also calls ensureFPMHostsFile, unstubbed, which falls
+	// back to a real `podman run` of the alpine image once every cheaper
+	// probe for the host gateway IP comes up empty (as they always do here,
+	// with no lerd-nginx running). Pre-creating the hosts file with the
+	// gateway entry already in place gives ensureFPMHostsFile its "already
+	// done" fast path, so it returns before ever shelling out to podman.
+	hostsPath := config.ContainerHostsFile()
+	if err := os.MkdirAll(filepath.Dir(hostsPath), 0755); err != nil {
+		t.Fatalf("mkdir hosts dir: %v", err)
+	}
+	if err := os.WriteFile(hostsPath, []byte(
+		"127.0.0.1 localhost\n::1 localhost\n127.0.0.1 host.containers.internal host.docker.internal\n",
+	), 0644); err != nil {
+		t.Fatalf("write hosts file: %v", err)
+	}
 }
 
 func TestApply_EnablesWithDefaultMode(t *testing.T) {

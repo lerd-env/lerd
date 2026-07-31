@@ -157,6 +157,30 @@ Each default-preset install records which version's tag was canonical at install
 
 `lerd service migrate <service> <tag>` is the explicit cross-major path. Beyond the dump/restore, it rewrites `canonical_version` to the new tag so the next reconcile honors the move instead of reverting to the original pin.
 
+### The data dir has the last word
+
+A data dir outlives the config entry and the quadlet that described it, so a pin
+alone is not enough. Reinstall lerd after losing `config.yaml`, restore a
+machine from a partial backup, or re-add a service whose data was kept, and the
+pin can end up naming an older server than the files on disk, which then
+refuses to start at all.
+
+A preset closes that gap by declaring where the engine records the version that
+wrote its data:
+
+```yaml
+data_version_file: PG_VERSION   # relative to the service's data dir
+```
+
+The contents are matched against the preset's version tags, so a `PG_VERSION`
+of `18` selects version `18` and a mariadb `mariadb_upgrade_info` of
+`11.8.8-MariaDB` selects `11.8`. When that disagrees with the version resolution
+arrived at any other way, the data dir wins and the pin is corrected to match.
+Presets whose engine keeps no readable marker leave the field out, mysql among
+them: since 8.4 the version lives in the data dictionary rather than a text
+file. An explicit `image:` in `config.yaml` is a deliberate choice and still
+takes precedence, so nothing is rewritten behind your back.
+
 The mysql preset bundles a `my.cnf` (`/etc/mysql/conf.d/lerd.cnf`) that
 enables `innodb_large_prefix`, `Barracuda`, `innodb_default_row_format=DYNAMIC`
 (via `loose-` so MySQL 5.6 ignores it), and `innodb_strict_mode=OFF`. Combined

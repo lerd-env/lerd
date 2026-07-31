@@ -27,7 +27,9 @@ Certificates are stored in `~/.local/share/lerd/certs/sites/`.
 
 ## Browser trust (certutil / nss-tools)
 
-mkcert installs the local CA into two places: the system trust store, used by curl, PHP, wget and openssl, and the browser NSS databases used by Firefox and Chrome/Chromium. Writing to the browser stores needs `certutil`, which ships in `nss-tools`. When `certutil` is missing mkcert still trusts the system store, so command-line tools accept `.test` HTTPS, but browsers show a certificate warning. `lerd doctor` reports this under "browser HTTPS trust (certutil)", and `lerd install` / `lerd dns:enable` print a note when it applies.
+mkcert installs the local CA into two places: the system trust store, used by curl, PHP, wget and openssl, and the browser NSS databases used by Firefox and Chrome/Chromium. Writing to the browser stores needs `certutil`, which ships in `nss-tools`. When `certutil` is missing mkcert still trusts the system store, so command-line tools accept `.test` HTTPS, but browsers show a certificate warning. `lerd doctor` reports this under "browser HTTPS trust", and `lerd install` / `lerd dns:enable` print a note when it applies.
+
+That check looks in the stores themselves rather than settling for `certutil` being installed, since the two can disagree: a CA that never reached a browser, or one that was removed from a profile afterwards, leaves every `.test` site warning on a machine that otherwise looks healthy. The certificate found in each store is compared against the CA lerd signs with today, so a CA regenerated after a profile imported the old one is reported rather than accepted for carrying the same name. Any store that comes up short is named in the warning, and `lerd dns:repair` installs the CA there. A machine with no browser store at all has nothing to check and passes.
 
 On ordinary distributions install nss-tools and re-run `lerd dns:repair`:
 

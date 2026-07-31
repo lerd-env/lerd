@@ -40,9 +40,31 @@ func ensureResolverSudoers() {
 	dns.InstallSudoers() //nolint:errcheck
 }
 
-// ensureMkcertCA installs the root CA. mkcert reaches the login keychain by
-// itself here, so generation and trust are the same call.
+// ensureMkcertCA installs the root CA. mkcert reaches the system keychain by
+// itself here (prompting for the admin password via a GUI dialog the first
+// time), so generation and trust are normally the same call.
+//
+// The one case that isn't: a reinstall where the CA cert is already present
+// in the keychain but its trust settings were cleared independent of the
+// cert item itself (a macOS update is the most common real trigger — see
+// certs.CAPresentButUntrusted's doc comment). mkcert's own "already
+// installed" self-check can't tell that state apart from a genuinely trusted
+// CA — it verifies the self-signed root against itself, which succeeds
+// cryptographically regardless of trust settings — so it would silently skip
+// re-establishing trust exactly when that's what's needed. Repairing trust
+// directly first, before mkcert gets a chance to (wrongly) decide there's
+// nothing to do, is what actually fixes it.
 func ensureMkcertCA(unattended bool) {
+	if !unattended && certs.CAPresentButUntrusted() {
+		feedback.Sudo("Repairing mkcert CA trust (present in the keychain but not trusted)")
+		// Named rather than swallowed: macOS draws the authorization dialog
+		// itself, so a run with no window server behind it fails here, and a
+		// silent failure would leave every site's HTTPS invalid with nothing
+		// said about why.
+		if err := certs.RepairSystemTrust(); err != nil {
+			feedback.Warn("repairing mkcert CA trust: %v", err)
+		}
+	}
 	cmd := exec.Command(certs.MkcertPath(), "-install")
 	switch {
 	case unattended:

@@ -14,19 +14,25 @@ import (
 // gets an isolated tree so concurrent test runs don't collide on the per-version
 // ini paths.
 //
-// PATH is also emptied and the macOS homebrew podman fallbacks are redirected
-// so PodmanBin() resolves to a non-existent binary. Any exec.Command podman
-// the helpers under test trigger (WriteContainerHosts calls DetectHostGatewayIP
-// and nginxContainerIP, which both shell out to podman) fails fast with
-// "executable not found" instead of hitting a real podman and polluting the
-// temp dir with container-storage overlays that the Go TempDir cleanup then
-// fails to remove.
+// execCommand is also stubbed so the helpers under test (WriteContainerHosts
+// calls DetectHostGatewayIP and nginxContainerIP, which shell out to podman,
+// and DetectHostGatewayIP's last-resort fallback runs a real `podman run` of
+// the alpine image when every other probe fails) can never reach a real
+// binary. PATH alone doesn't guarantee that: PodmanBin() also tries hardcoded
+// absolute paths (homebrew's install locations) that bypass PATH entirely,
+// and matching one on the host running the test would have podman actually
+// pull and run a container, leaving container-storage overlay layers in the
+// temp dir that the Go TempDir cleanup can't remove afterward.
 func setupConfigHome(t *testing.T) {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("PATH", filepath.Join(tmp, "no-bin"))
+
+	prev := execCommand
+	t.Cleanup(func() { execCommand = prev })
+	execCommand = fakeExec("", "", 1)
 }
 
 // writeConfigYAML writes a global config.yaml with the given xdebug-enabled

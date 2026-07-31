@@ -257,8 +257,12 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// surface at all: db `extension_list`/`extension_add`, service `entities`/
 	// `entity_action` (everything a preset declares that is not a database), and
 	// runtime `node_manager`. Description verbosity in the same three tools was
-	// trimmed to pay for part of it.
-	const ceiling = 22100
+	// trimmed to pay for part of it, then 22100 → 22450 for the worktree `wait`
+	// action and its `wait` / `timeout_seconds` properties, another capability
+	// with no MCP surface at all: without it an assistant cannot tell a finished
+	// install from a running one and races the watcher inside the tree. The
+	// worktree description was merged and trimmed to pay for half of it.
+	const ceiling = 22450
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)
