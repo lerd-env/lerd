@@ -307,6 +307,13 @@ func newLANServicesCmd() *cobra.Command {
 			}
 
 			enabled := args[0] == "on"
+			// Turning it on while lerd is loopback-only would persist a
+			// setting that publishes nothing, so refuse rather than store an
+			// inert preference. Turning it off always works, so a setting
+			// armed before an unexpose can still be cleared.
+			if enabled && !cfg.LAN.Exposed {
+				return fmt.Errorf("LAN exposure is off — run `lerd lan:expose` first. Managed services can only reach the LAN while lerd itself does")
+			}
 			feedback.Begin()
 			update := feedback.Start("updating managed service LAN access")
 			if err := SetManagedServiceLANExposure(enabled, nil); err != nil {
@@ -316,9 +323,6 @@ func newLANServicesCmd() *cobra.Command {
 			if enabled {
 				update.OK(feedback.Val("enabled"))
 				feedback.Note("development services may use weak or empty credentials; restrict their ports with the host firewall and use only on a trusted network")
-				if !cfg.LAN.Exposed {
-					feedback.Note("services remain loopback-only until `lerd lan:expose`")
-				}
 			} else {
 				update.OK(feedback.Val("loopback-only"))
 			}

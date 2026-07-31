@@ -200,6 +200,9 @@ the local dashboard or a local shell can change it.`,
 			}
 
 			enabled := args[0] == "on"
+			if enabled && !cfg.LAN.Exposed {
+				return fmt.Errorf("LAN exposure is off — run `lerd lan:expose` first. There are no remote sessions to widen while the dashboard is loopback-only")
+			}
 			if enabled && cfg.UI.PasswordHash == "" {
 				return fmt.Errorf("dashboard credentials are not configured — run `lerd remote-control on` first")
 			}

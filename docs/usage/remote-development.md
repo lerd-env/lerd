@@ -110,10 +110,16 @@ or `lerd lan:services off` to return all managed services to loopback.
 This option exposes databases and caches without adding authentication. Limit
 their ports with the host firewall and use it only on a trusted network.
 
-The same controls are available on the dashboard **System** tab. Use **LAN
-exposure** for sites and DNS, and **Managed service LAN access** for databases,
-caches, mail, and custom services. The terminal UI exposes both settings in its
-Settings and System views.
+The same controls are available on the dashboard **System** tab. **Managed
+service LAN access** sits inside the **LAN exposure** card, below the expose
+control it depends on, for databases, caches, mail, and custom services. The
+terminal UI exposes both settings in its Settings and System views.
+
+Both `lerd lan:services on` and `lerd remote-control full-access on` refuse to
+run while LAN exposure is off, and the matching dashboard toggles are disabled,
+since neither setting publishes anything while lerd is loopback-only. Turning
+either one off always works, so a setting armed before an unexpose can still be
+cleared.
 
 The dashboard at port 7073 is gated independently. By default it returns 403 to LAN clients even when `lan:expose` is on; set HTTP Basic auth credentials with `lerd remote-control on` (or via the **Remote dashboard access** card in the dashboard) to grant LAN access. The two switches are independent: you can have sites LAN-reachable without exposing the dashboard, or vice versa.
 

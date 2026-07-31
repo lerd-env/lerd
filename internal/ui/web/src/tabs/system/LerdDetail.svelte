@@ -3,7 +3,7 @@
   import CheckUpdatesButton from '$components/CheckUpdatesButton.svelte';
   import { version, loadVersion } from '$stores/version';
   import { accessMode } from '$stores/accessMode';
-  import { lan, loadLANStatus, toggleLAN, toggleLANServices, generateRemoteSetupCode, copySetupCurl } from '$stores/lan';
+  import { lan, loadLANStatus, toggleLAN, generateRemoteSetupCode, copySetupCurl } from '$stores/lan';
   import { status } from '$stores/status';
   import {
     remoteControl,
@@ -16,6 +16,7 @@
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
   import Toggle from '$components/Toggle.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
+  import LANServicesSetting from './LANServicesSetting.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
   import { apiFetch, apiBase } from '$lib/api';
   import { escapeHtml } from '$lib/html';
@@ -84,6 +85,19 @@
 
   let updateTerminalLoading = $state(false);
   let updateTerminalError = $state('');
+
+  // There is no remote session to widen while lerd is loopback-only, so the
+  // setting stays out of the way. An already enabled setting keeps showing, so
+  // that re-exposing does not silently hand host access back out.
+  const fullAccessHidden = $derived(!$lan.exposed && !$remoteControl.fullAccess);
+
+  // Dashboard credentials are equally inert while lerd is loopback-only, so the
+  // card goes too. Configured credentials keep it visible so they can be
+  // rotated or cleared, and disabled-DNS mode keeps it as its only route to
+  // LAN exposure at all.
+  const remoteCardHidden = $derived(
+    !$lan.exposed && !$remoteControl.enabled && $status.dns?.enabled !== false
+  );
   async function openUpdateTerminal() {
     updateTerminalLoading = true;
     updateTerminalError = '';
@@ -371,57 +385,13 @@
           </div>
         </div>
       {/if}
+      <LANServicesSetting nested />
     </SettingsCard>
+    {:else}
+    <LANServicesSetting />
     {/if}
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-3 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_lan_services_title()}</span>
-        {#if $accessMode.localControl}
-          <Toggle
-            on={$lan.servicesEnabled}
-            loading={$lan.servicesLoading}
-            disabled={!$lan.loaded}
-            title={m.system_lan_services_title()}
-            onclick={() => toggleLANServices(!$lan.servicesEnabled)}
-          />
-        {:else}
-          <span class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$lan.servicesReachable
-            ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-            : $lan.servicesEnabled
-              ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
-              : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}">
-            <span class="w-1.5 h-1.5 rounded-full {$lan.servicesReachable
-              ? 'bg-emerald-500'
-              : $lan.servicesEnabled
-                ? 'bg-amber-500'
-                : 'bg-gray-400'}"></span>
-            {$lan.servicesReachable
-              ? m.system_lan_services_enabled()
-              : $lan.servicesEnabled
-                ? m.system_remote_status_inert()
-                : m.system_lan_loopback()}
-          </span>
-        {/if}
-      </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">
-        {m.system_lan_services_description()}
-      </p>
-      {#if $lan.servicesEnabled && !$lan.servicesReachable}
-        <p class="text-xs text-amber-600 dark:text-amber-400 mt-2">
-          {m.system_lan_services_inactive()}
-        </p>
-      {/if}
-      {#if $lan.servicesError}
-        <p class="text-xs text-red-500 mt-2">{$lan.servicesError}</p>
-      {/if}
-      {#if $lan.servicesEnabled}
-        <p class="text-xs text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-lg px-3 py-2 mt-3">
-          {m.system_lan_services_warning()}
-        </p>
-      {/if}
-    </SettingsCard>
-
+    {#if !remoteCardHidden}
     <SettingsCard>
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_remote_title()}</span>
@@ -471,6 +441,7 @@
               {@html m.system_remote_inertWarning({ cmd: '<code class="font-mono">lerd lan:expose</code>', btn: '<em>' + m.system_lan_expose() + '</em>' })}
             </p>
           {/if}
+          {#if !fullAccessHidden}
           <div class="pt-1">
             <div class="flex items-center justify-between gap-3">
               <span class="text-xs font-semibold text-gray-700 dark:text-gray-300">{m.system_remote_fullAccess_title()}</span>
@@ -489,6 +460,7 @@
               </p>
             {/if}
           </div>
+          {/if}
           <div class="flex flex-wrap gap-2">
             <button
               onclick={() => openRemoteControlModal()}
@@ -526,5 +498,6 @@
       {/if}
       {#if $remoteControl.error}<p class="text-xs text-red-500 mt-2">{$remoteControl.error}</p>{/if}
     </SettingsCard>
+    {/if}
   </div>
 </div>

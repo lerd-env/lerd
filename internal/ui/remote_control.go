@@ -405,6 +405,16 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 		}
 		switch body.Action {
 		case "expose", "unexpose", "services_on", "services_off":
+			// Managed services can only reach the LAN while lerd itself does,
+			// so opting in beforehand would persist a setting that publishes
+			// nothing. Opting out stays available so a setting armed before an
+			// unexpose can still be cleared.
+			if body.Action == "services_on" {
+				if cfg, _ := config.LoadGlobal(); cfg == nil || !cfg.LAN.Exposed {
+					http.Error(w, "LAN exposure is off — managed services can only reach the LAN while lerd itself does.", http.StatusBadRequest)
+					return
+				}
+			}
 		default:
 			http.Error(w, "unknown action — expected 'expose', 'unexpose', 'services_on', or 'services_off'", http.StatusBadRequest)
 			return
@@ -599,6 +609,10 @@ func handleRemoteControl(w http.ResponseWriter, r *http.Request) {
 			// remote session can never grant itself host actions.
 			if !isLocalControlRequest(r) {
 				http.Error(w, "Forbidden — remote full access can only be changed from the lerd host.", http.StatusForbidden)
+				return
+			}
+			if body.Enabled && !cfg.LAN.Exposed {
+				http.Error(w, "LAN exposure is off — there are no remote sessions to widen while the dashboard is loopback-only.", http.StatusBadRequest)
 				return
 			}
 			if body.Enabled && cfg.UI.PasswordHash == "" {

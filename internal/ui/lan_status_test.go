@@ -42,7 +42,9 @@ func TestLANStatusIncludesManagedServiceExposure(t *testing.T) {
 
 func TestLANStatusCanToggleManagedServiceExposureFromLoopback(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	if err := config.SaveGlobal(&config.GlobalConfig{}); err != nil {
+	exposed := &config.GlobalConfig{}
+	exposed.LAN.Exposed = true
+	if err := config.SaveGlobal(exposed); err != nil {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
 
@@ -82,8 +84,8 @@ func TestLANStatusCanToggleManagedServiceExposureFromLoopback(t *testing.T) {
 	if final.Result != "ok" || !final.ServicesEnabled {
 		t.Fatalf("final event = %+v", final)
 	}
-	if final.ServicesReachable {
-		t.Fatalf("services must remain unreachable while LAN exposure is off: %+v", final)
+	if !final.ServicesReachable {
+		t.Fatalf("services must be reachable once both settings are on: %+v", final)
 	}
 }
 
