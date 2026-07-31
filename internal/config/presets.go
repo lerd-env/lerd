@@ -73,6 +73,13 @@ type Preset struct {
 	// installs. Existing users with a saved image override are untouched —
 	// they progress through the Update / Upgrade buttons instead.
 	TrackLatest bool `yaml:"track_latest,omitempty"`
+	// DataVersionFile names a file inside the service's data dir whose contents
+	// identify the version that wrote the data (postgres PG_VERSION, mariadb
+	// mariadb_upgrade_info). It is matched against Versions[].Tag so a data dir
+	// that outlives its config still resolves the server that can open it.
+	// Empty for engines with no readable marker, e.g. mysql 8.4 keeps the
+	// version in its data dictionary rather than a text file.
+	DataVersionFile string `yaml:"data_version_file,omitempty"`
 }
 
 // PresetMeta is the lightweight description of a bundled preset, suitable for

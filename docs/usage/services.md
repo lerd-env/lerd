@@ -23,7 +23,7 @@
 
 Available services: `mysql` (8.4 LTS canonical, 9.7 LTS / 5.7 alternates), `redis` (7-alpine), `postgres` (16 canonical with PostGIS, 17 / 18 alternates), `meilisearch` (v1.42), `rustfs` (S3-compatible), `mailpit` (SMTP catcher).
 
-Default services are defined as YAML presets with `default: true` in the lerd binary. Adding or replacing a default service is a YAML edit, not a code change. Each preset declares its own `update_strategy` (patch / minor / rolling), whether `track_latest` should auto-bump fresh installs to the current upstream, and whether `allow_major_upgrade` lets the cross-strategy upgrade button cross numeric majors. See [Service updates](service-updates.md) for the full update / upgrade / migrate / rollback flow.
+Default services are defined as YAML presets with `default: true` in the lerd binary. Adding or replacing a default service is a YAML edit, not a code change. Each preset declares its own `update_strategy` (patch / minor / rolling), whether `track_latest` should auto-bump fresh installs to the current upstream, whether `allow_major_upgrade` lets the cross-strategy upgrade button cross numeric majors, and where the engine records the version that wrote its data (`data_version_file`) so a data dir that outlives its config still gets a server that can open it. See [Service updates](service-updates.md) for the full update / upgrade / migrate / rollback flow.
 
 `lerd service list` shows the version (derived from the image tag) and an Update column with green / amber / violet badges:
 
