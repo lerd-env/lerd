@@ -102,27 +102,6 @@ func runShimsSet(tool string, enabled bool) error {
 	return nil
 }
 
-// argsSpecifyHost reports whether the tool arguments already name a host, in
-// which case the shim leaves the connection untouched (an external database).
-// Both the postgres and mysql client families use -h / --host for the host.
-func argsSpecifyHost(args []string) bool {
-	for _, a := range args {
-		// The glued short form is "-hHOST" with no whitespace; "-h note" (a space)
-		// is a -c/-e body that happens to start with -h, not a host flag.
-		gluedHost := strings.HasPrefix(a, "-h") && len(a) > 2 && !strings.ContainsAny(a, " \t")
-		if a == "-h" || a == "--host" || strings.HasPrefix(a, "--host=") || gluedHost {
-			return true
-		}
-		// A connection URI (scheme://…) or a libpq conninfo string carries its own
-		// host. Conninfo detection requires an actual "host" key, so a host= inside a
-		// SQL body (via -c/-e) or a "--where=host=x" filter is never mistaken for one.
-		if isConnURI(a) || looksLikeConninfo(a) {
-			return true
-		}
-	}
-	return false
-}
-
 // isConnURI reports whether a is a database connection URI, matched by a known
 // scheme prefix rather than a bare "://" so a URL literal inside a query value
 // is not mistaken for a connection target.
@@ -171,9 +150,9 @@ var loopbackHosts = map[string]bool{
 // hostFlagSpan returns the value of an explicit -h/--host flag in args and
 // the [start, start+n) index span it occupies (n=2 for a separate-value
 // form, 1 for a glued/= form), so a matched loopback host can be stripped
-// back out. Detection mirrors argsSpecifyHost's flag-form cases; conninfo
-// strings and connection URIs are intentionally not parsed here; they carry
-// host and port together and are left to pass through untouched.
+// back out. Only the flag forms are detected here; conninfo strings and
+// connection URIs carry host and port together in one token and are answered
+// by resolveLoopbackTarget before it calls this.
 func hostFlagSpan(args []string) (value string, start, n int, ok bool) {
 	for i, a := range args {
 		switch {
@@ -258,7 +237,23 @@ var loopbackServiceOwningPortFn = loopbackServiceOwningPort
 // internal (family-default) port. Returns the original args unchanged, with
 // hostGiven=true, when the host isn't a loopback spelling or matches no
 // installed service (a genuinely external host, left untouched as before).
+//
+// It owns the whole "did the caller name a host" answer, every shape of it, so
+// hostGiven is safe to act on: a shape it missed would read as hostless, and
+// the caller would then aim a connection lerd doesn't own at a lerd service and
+// hand it lerd's own credentials.
 func resolveLoopbackTarget(tool string, args []string) (out []string, hostGiven bool, prefer string) {
+	// A connection URI or a libpq conninfo string names its host inside a single
+	// token, so no -h flag appears and the flag scan below would read the call as
+	// hostless. Answer for them here, before it runs: they are external targets,
+	// left exactly as the caller wrote them. Conninfo detection requires a real
+	// "host" key, so a host= inside a -c/-e SQL body or a "--where=host=x" filter
+	// is never mistaken for one.
+	for _, a := range args {
+		if isConnURI(a) || looksLikeConninfo(a) {
+			return args, true, ""
+		}
+	}
 	host, hStart, hN, ok := hostFlagSpan(args)
 	if !ok {
 		return args, false, ""

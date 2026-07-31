@@ -5,7 +5,19 @@ import (
 	"testing"
 )
 
-func TestArgsSpecifyHost(t *testing.T) {
+// resolveLoopbackTarget owns the whole "did the caller name a host" answer, so
+// every shape counts: the -h/--host flag forms, a connection URI, and a libpq
+// conninfo string. A shape it fails to see reads as no host at all, and the
+// caller then treats a connection that was never ours as a local one, prepending
+// -h lerd-<service> and handing it lerd's own credentials.
+func TestResolveLoopbackTargetHostDetection(t *testing.T) {
+	prevFn := loopbackServiceOwningPortFn
+	t.Cleanup(func() { loopbackServiceOwningPortFn = prevFn })
+	loopbackServiceOwningPortFn = func(tool, port string) (string, bool) {
+		t.Fatalf("must not be called: no case here names a loopback host")
+		return "", false
+	}
+
 	cases := []struct {
 		args []string
 		want bool
@@ -42,8 +54,14 @@ func TestArgsSpecifyHost(t *testing.T) {
 		{[]string{"-c", "-h note"}, false},
 	}
 	for _, c := range cases {
-		if got := argsSpecifyHost(c.args); got != c.want {
-			t.Errorf("argsSpecifyHost(%v) = %v, want %v", c.args, got, c.want)
+		args, hostGiven, prefer := resolveLoopbackTarget("psql", c.args)
+		if hostGiven != c.want {
+			t.Errorf("resolveLoopbackTarget(psql, %v) hostGiven = %v, want %v", c.args, hostGiven, c.want)
+		}
+		// None of these is a loopback match, so the args must come back untouched
+		// and pick no local service to route to.
+		if prefer != "" || !reflect.DeepEqual(args, c.args) {
+			t.Errorf("resolveLoopbackTarget(psql, %v) = (%v, _, %q), want the args unchanged and no prefer", c.args, args, prefer)
 		}
 	}
 }
@@ -333,6 +351,22 @@ func TestResolveLoopbackTarget(t *testing.T) {
 		want := []string{"-U", "postgres"}
 		if hostGiven || prefer != "postgres" || !reflect.DeepEqual(args, want) {
 			t.Errorf("got (%v, %v, %q), want (%v, false, postgres)", args, hostGiven, prefer, want)
+		}
+	})
+
+	// A URI carries its host and port inside one token, so rewriting it would mean
+	// parsing and rebuilding it. It stays external even when it spells a loopback
+	// host: passing it through unchanged is what 1.31.0 did, and it keeps lerd's
+	// credentials away from a connection lerd does not own.
+	t.Run("a connection URI naming a loopback host is left alone", func(t *testing.T) {
+		loopbackServiceOwningPortFn = func(tool, port string) (string, bool) {
+			t.Fatalf("must not be called for a connection URI")
+			return "", false
+		}
+		in := []string{"postgresql://user:pw@127.0.0.1:5432/mydb"}
+		args, hostGiven, prefer := resolveLoopbackTarget("psql", in)
+		if !hostGiven || prefer != "" || !reflect.DeepEqual(args, in) {
+			t.Errorf("got (%v, %v, %q), want (%v, true, \"\")", args, hostGiven, prefer, in)
 		}
 	})
 
