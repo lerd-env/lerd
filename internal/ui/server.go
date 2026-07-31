@@ -750,7 +750,7 @@ func buildStatus() StatusResponse {
 	}
 }
 
-func buildStatusJSON() []byte { return []byte(mustJSON(buildStatus())) }
+func buildStatusJSON() ([]byte, error) { return []byte(mustJSON(buildStatus())), nil }
 
 // WorktreeResponse is embedded in SiteResponse for each git worktree.
 // PHP/NodeVersion are the effective values; *Override flags signal whether
@@ -916,16 +916,30 @@ type SiteResponse struct {
 }
 
 func handleSites(w http.ResponseWriter, _ *http.Request) {
+	// A nil snapshot means the registry could not be read and there is nothing
+	// cached to fall back on. Saying so beats writing a zero-byte body the
+	// dashboard would render as "you have no sites".
+	body := snapshots.Sites()
+	if body == nil {
+		http.Error(w, "sites are temporarily unavailable, the registry could not be read", http.StatusServiceUnavailable)
+		return
+	}
 	w.Header().Set("Content-Type", "application/json")
-	_, _ = w.Write(snapshots.Sites())
+	_, _ = w.Write(body)
 }
 
-func buildSitesJSON() []byte { return []byte(mustJSON(buildSites())) }
+func buildSitesJSON() ([]byte, error) {
+	sites, err := buildSites()
+	if err != nil {
+		return nil, err
+	}
+	return []byte(mustJSON(sites)), nil
+}
 
-func buildSites() []SiteResponse {
+func buildSites() ([]SiteResponse, error) {
 	enriched, err := siteinfo.LoadAll(siteinfo.EnrichUI)
 	if err != nil {
-		return []SiteResponse{}
+		return nil, fmt.Errorf("loading sites: %w", err)
 	}
 	_ = siteinfo.PersistVersionChanges(enriched)
 
@@ -1140,7 +1154,7 @@ func buildSites() []SiteResponse {
 			Workspace:       resolveSiteWorkspace(e, groupMainName, siteWorkspace),
 		})
 	}
-	return sites
+	return sites, nil
 }
 
 // ServicePortMapping describes one published port of a service: its
@@ -1524,7 +1538,7 @@ func handleServices(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write(snapshots.Services())
 }
 
-func buildServicesJSON() []byte { return []byte(mustJSON(buildServicesList())) }
+func buildServicesJSON() ([]byte, error) { return []byte(mustJSON(buildServicesList())), nil }
 
 func buildServicesList() []ServiceResponse {
 	// One ss/lsof call shared across all installed-but-stopped services in
