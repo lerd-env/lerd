@@ -5,6 +5,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -79,5 +80,174 @@ func gitRun(t *testing.T, dir string, args ...string) {
 	cmd.Dir = dir
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// initRepoSite builds a real git repo registered as a lerd site, the fixture
+// the worktree actions run against.
+func initRepoSite(t *testing.T, name string) string {
+	t.Helper()
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+	root := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", filepath.Join(root, "data"))
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(root, "config"))
+
+	repo := filepath.Join(root, name)
+	if err := os.MkdirAll(repo, 0755); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "init")
+	gitRun(t, repo, "config", "user.email", "test@example.com")
+	gitRun(t, repo, "config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hi\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	gitRun(t, repo, "add", "README.md")
+	gitRun(t, repo, "commit", "-m", "init")
+	if err := config.AddSite(config.Site{Name: name, Domains: []string{name + ".test"}, Path: repo}); err != nil {
+		t.Fatal("add site:", err)
+	}
+	return repo
+}
+
+// stubWorktreeWait swaps the wait seam so tests need neither a lerd binary on
+// PATH nor a running watcher, and records the path it was asked about.
+func stubWorktreeWait(t *testing.T, code int) *string {
+	t.Helper()
+	var gotPath string
+	orig := worktreeWaitFn
+	t.Cleanup(func() { worktreeWaitFn = orig })
+	worktreeWaitFn = func(path string, _ time.Duration) (int, string) {
+		gotPath = path
+		return code, ""
+	}
+	return &gotPath
+}
+
+func TestWorktreeTool_advertisesWait(t *testing.T) {
+	enum := worktreeTool().InputSchema.Properties["action"].Enum
+	for _, a := range enum {
+		if a == "wait" {
+			return
+		}
+	}
+	t.Errorf("action enum %v must offer wait, or no assistant can discover it", enum)
+}
+
+// The race this closes: the watcher starts installing the moment git writes the
+// worktree entry, so an add that returns immediately hands back a tree being
+// written underneath the caller.
+func TestExecWorktreeAdd_waitsForThePipeline(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gotPath := stubWorktreeWait(t, 0)
+
+	result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		OK          bool   `json:"ok"`
+		Path        string `json:"path"`
+		Provisioned bool   `json:"provisioned"`
+	}
+	decodeContent(t, result, &parsed)
+	if !parsed.OK || !parsed.Provisioned {
+		t.Errorf("ok=%v provisioned=%v, want both true", parsed.OK, parsed.Provisioned)
+	}
+	if *gotPath == "" {
+		t.Fatal("add returned without waiting for the pipeline")
+	}
+	if filepath.Base(*gotPath) != "feature" {
+		t.Errorf("waited on %q, want the newly created worktree", *gotPath)
+	}
+	if parsed.Path == "" {
+		t.Error("response must report the new worktree path")
+	}
+}
+
+// A pipeline still running is not an error, the tree just is not safe to touch
+// yet, so the caller is told rather than handed a failure.
+func TestExecWorktreeAdd_reportsAnUnfinishedPipeline(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	stubWorktreeWait(t, 1)
+
+	result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		OK          bool   `json:"ok"`
+		Provisioned bool   `json:"provisioned"`
+		Note        string `json:"note"`
+	}
+	decodeContent(t, result, &parsed)
+	if !parsed.OK {
+		t.Error("git succeeded, so ok must stay true")
+	}
+	if parsed.Provisioned {
+		t.Error("provisioned must be false while setup is still running")
+	}
+	if parsed.Note == "" {
+		t.Error("an unfinished pipeline needs a note telling the caller to wait")
+	}
+}
+
+func TestExecWorktreeAdd_waitCanBeDeclined(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gotPath := stubWorktreeWait(t, 0)
+
+	if _, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+		"wait":     false,
+	}); rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	if *gotPath != "" {
+		t.Errorf("wait=false must not block, but it waited on %q", *gotPath)
+	}
+}
+
+func TestExecWorktreeWait_reportsSettled(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gitRun(t, repo, "worktree", "add", filepath.Join(repo, "feature"), "-b", "feature")
+	stubWorktreeWait(t, 0)
+
+	result, rpcErr := execWorktreeWait(map[string]any{"site": "demo", "branch": "feature"})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		Provisioned bool `json:"provisioned"`
+	}
+	decodeContent(t, result, &parsed)
+	if !parsed.Provisioned {
+		t.Error("provisioned must be true when the wait exits 0")
+	}
+}
+
+func TestExecWorktreeWait_timeoutIsNotSuccess(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gitRun(t, repo, "worktree", "add", filepath.Join(repo, "feature"), "-b", "feature")
+	stubWorktreeWait(t, 1)
+
+	result, rpcErr := execWorktreeWait(map[string]any{"site": "demo", "branch": "feature"})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	var parsed struct {
+		Provisioned bool `json:"provisioned"`
+	}
+	decodeContent(t, result, &parsed)
+	if parsed.Provisioned {
+		t.Error("a timeout must not be reported as provisioned")
 	}
 }
