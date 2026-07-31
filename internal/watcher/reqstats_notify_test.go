@@ -16,6 +16,51 @@ func snapWithSlow(routes ...string) []reqstats.SiteStats {
 
 func idDomain(site string) string { return site + ".test" }
 
+// The saver builds a resolver every tick; a tick with nothing to notify about
+// must not pay for reading the site registry.
+func TestLazyResolver_notBuiltUntilADomainIsNeeded(t *testing.T) {
+	builds := 0
+	build := func() func(string) string {
+		builds++
+		return idDomain
+	}
+
+	n := newSlowRouteNotifier()
+	for i := 0; i < 5; i++ {
+		if got := n.notifications(nil, lazyResolver(build)); len(got) != 0 {
+			t.Fatalf("empty snapshot produced %d notifications", len(got))
+		}
+	}
+	if builds != 0 {
+		t.Errorf("resolver built %d times with nothing to notify, want 0", builds)
+	}
+
+	if got := n.notifications(snapWithSlow("GET /reports/:id"), lazyResolver(build)); len(got) != 1 {
+		t.Fatalf("got %d notifications, want 1", len(got))
+	}
+	if builds != 1 {
+		t.Errorf("resolver built %d times once a domain was needed, want 1", builds)
+	}
+}
+
+func TestLazyResolver_buildsOnceAcrossLookups(t *testing.T) {
+	builds := 0
+	resolve := lazyResolver(func() func(string) string {
+		builds++
+		return idDomain
+	})
+
+	if got := resolve("acme"); got != "acme.test" {
+		t.Errorf("resolve = %q, want acme.test", got)
+	}
+	if got := resolve("other"); got != "other.test" {
+		t.Errorf("resolve = %q, want other.test", got)
+	}
+	if builds != 1 {
+		t.Errorf("built %d times across two lookups, want 1", builds)
+	}
+}
+
 func TestSlowRouteNotifier_firesOncePerRoute(t *testing.T) {
 	n := newSlowRouteNotifier()
 
