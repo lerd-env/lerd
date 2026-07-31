@@ -155,11 +155,18 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		// store only, so curl and PHP trust it but Firefox and Chrome warn, and
 		// the mkcert warning is swallowed. Only relevant when DNS/HTTPS is managed.
 		if cfg, cfgErr := config.LoadGlobal(); cfgErr == nil && cfg.DNSManaged() {
-			if certs.BrowserTrustAvailable() {
-				ok("browser HTTPS trust (certutil)")
-			} else {
-				warn("browser HTTPS trust (certutil)", browserTrustGuidance(ostreeBootedFn()))
+			// certutil being installed says nothing about the store it writes
+			// into, so the CA itself has to be found there.
+			missing := certs.BrowserStoresMissingCA()
+			switch {
+			case !certs.BrowserTrustAvailable():
+				warn("browser HTTPS trust", browserTrustGuidance(ostreeBootedFn()))
 				rep.fixLast(manualFix)
+			case len(missing) > 0:
+				warn("browser HTTPS trust", browserTrustStoreGuidance(missing))
+				rep.fixLast(manualFix)
+			default:
+				ok("browser HTTPS trust")
 			}
 		}
 
