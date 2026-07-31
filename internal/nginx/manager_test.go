@@ -306,6 +306,51 @@ func TestGenerateVhost_proxyPathTrailingSlashIsTrimmed(t *testing.T) {
 	}
 }
 
+// A worker mounted at the site root must proxy the root and everything below
+// it. "/" trims to empty, and restoring it to "/" renders `^/(/|$)`, which
+// matches "/" and "//" and nothing else. Left empty it renders `^(/|$)`, every
+// path the site can serve.
+func TestGenerateVhost_proxyPathRootProxiesEverything(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "/", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^(/|$) {`) {
+		t.Errorf("expected a root proxy matching every path, got:\n%s", content)
+	}
+}
+
+// A path written without its leading slash is the third way to declare one that
+// silently never fires: nginx matches the location against a URI that always
+// starts with "/", so `^app(/|$)` can never match. It means "/app".
+func TestGenerateVhost_proxyPathWithoutLeadingSlashIsNormalised(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{Path: "app", DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if !strings.Contains(content, `location ~ ^/app(/|$) {`) {
+		t.Errorf("expected a leading slash added to app, got:\n%s", content)
+	}
+}
+
+// A proxy declaring no path at all names nothing to proxy. It must not fall
+// through to the root and quietly capture the whole site.
+func TestGenerateVhost_proxyWithoutPathIsNotProxied(t *testing.T) {
+	confD := setupConfD(t)
+	site := proxySite(t, "app", &config.WorkerProxy{DefaultPort: 6001})
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "app.test.conf"))
+	if strings.Contains(content, "proxy_pass http://$proxybackend") {
+		t.Errorf("expected no proxy location for a proxy with no path, got:\n%s", content)
+	}
+}
+
 // ── GenerateHostProxyVhost ────────────────────────────────────────────────────
 
 func TestGenerateHostProxyVhost_proxiesToHostPort(t *testing.T) {

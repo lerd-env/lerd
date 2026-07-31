@@ -48,7 +48,7 @@ workers:
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 
-The generated nginx location anchors on `path`, so `/app` proxies `/app` and everything under it without also swallowing an unrelated route that merely starts with the same letters (`/appstore`, say). Write `path` as a literal URL path, without a trailing slash; lerd escapes any regex-special characters (a literal `.` in something like `/socket.io`, for instance) before it reaches nginx's location block.
+The generated nginx location anchors on `path`, so `/app` proxies `/app` and everything under it without also swallowing an unrelated route that merely starts with the same letters (`/appstore`, say). Write `path` as a literal URL path and lerd normalises it, so `/app`, `/app/` and `app` all anchor identically; a `path` of `/` mounts the worker at the site root and proxies everything. Regex-special characters are escaped (a literal `.` in something like `/socket.io`, for instance) before the path reaches nginx's location block, so write it exactly as the URL reads. A `proxy` block with no `path` names nothing to proxy and is ignored.
 
 Anchoring also turns the location into a regex, and nginx runs regex locations in file order ahead of the prefix location it would otherwise have picked, so the proxy takes precedence over lerd's own PHP handling and dotfile deny for anything under `path`. That's the right call for a worker mounted on its own path, but it means a `.php` file or dotfile living under `path` is proxied rather than served by lerd.
 

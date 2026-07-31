@@ -31,8 +31,12 @@ import (
 // prefix. A framework-declared path is realistically literal but can contain
 // regex metacharacters a template author never intended as regex — "/socket.io"
 // being the common one, where an unescaped "." would also match "/socketXio".
-// A trailing slash is trimmed first: `^/app/(/|$)` matches only the literal
-// string "/app/" and nothing else, not "/app" and not anything under it.
+// The path is normalised first, since every way of writing one that reads
+// naturally has to anchor the same: a trailing slash is trimmed (`^/app/(/|$)`
+// would match the literal "/app/" and nothing else, not "/app" and nothing
+// under it) and a missing leading slash is added (`^app(/|$)` can never match a
+// URI, which always starts with "/"). A proxy declaring no path at all names
+// nothing to proxy, and is reported as no proxy rather than capturing the site.
 func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 	fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !fwOK {
@@ -53,9 +57,15 @@ func detectSiteProxy(site config.Site) (path string, port int, ok bool) {
 			}
 		}
 	}
+	if proxy.Path == "" {
+		return "", 0, false
+	}
+	// "/" trims to empty, which renders `^(/|$)`: the root and everything under
+	// it, what a root-mounted worker means. Restoring it to "/" instead would
+	// render `^/(/|$)`, matching "/" and "//" and nothing else.
 	proxyPath := strings.TrimSuffix(proxy.Path, "/")
-	if proxyPath == "" {
-		proxyPath = "/"
+	if proxyPath != "" && !strings.HasPrefix(proxyPath, "/") {
+		proxyPath = "/" + proxyPath
 	}
 	return regexp.QuoteMeta(proxyPath), proxyPort, true
 }
