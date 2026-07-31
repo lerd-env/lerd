@@ -124,9 +124,54 @@ func BindQuadletForLAN(name, content string, lanExposed, servicesExposed bool) s
 	return BindForLAN(content, exposed)
 }
 
+// ContainerPublishesLANFn probes whether a running container currently
+// publishes any port beyond loopback. It reports (lanBound, known); known is
+// false when the container is absent, stopped, or podman can't be reached.
+// Swappable in tests.
+var ContainerPublishesLANFn = containerPublishesLAN
+
+func containerPublishesLAN(name string) (bool, bool) {
+	out, err := Run("ps", "--filter", "name=^"+name+"$", "--format", "{{.Ports}}")
+	if err != nil {
+		return false, false
+	}
+	trimmed := strings.TrimSpace(out)
+	if trimmed == "" {
+		return false, false
+	}
+	return portsPublishToLAN(trimmed), true
+}
+
+// portsPublishToLAN parses podman's port column ("127.0.0.1:3306->3306/tcp,
+// :::8025->8025/tcp, 9000/tcp") and reports whether any published binding
+// listens beyond loopback. Entries without "->" are container-only ports.
+func portsPublishToLAN(ports string) bool {
+	for _, entry := range strings.Split(ports, ",") {
+		entry = strings.TrimSpace(entry)
+		hostSide, _, found := strings.Cut(entry, "->")
+		if !found {
+			continue
+		}
+		colon := strings.LastIndex(hostSide, ":")
+		if colon < 0 {
+			// No host IP at all means podman published on every interface.
+			return true
+		}
+		ip := net.ParseIP(strings.Trim(hostSide[:colon], "[]"))
+		if ip == nil || !ip.IsLoopback() {
+			return true
+		}
+	}
+	return false
+}
+
 // RebindInstalledQuadletsForLAN reapplies the current LAN policy to every
-// installed lerd container. It rewrites only changed units and preserves each
-// installed unit's image, ports, volumes, and custom settings.
+// installed lerd container, preserving each unit's image, ports, volumes and
+// custom settings. It returns the units that need restarting: those whose file
+// it rewrote, plus those whose running container still publishes on the wrong
+// side of the policy. That second group is what makes the operation heal
+// itself — a container left LAN-bound by an earlier toggle that failed part way
+// is picked up on the next run even though its file already reads correctly.
 func RebindInstalledQuadletsForLAN() ([]string, error) {
 	lanExposed := false
 	servicesExposed := false
@@ -139,7 +184,7 @@ func RebindInstalledQuadletsForLAN() ([]string, error) {
 		return nil, err
 	}
 
-	changed := make([]string, 0, len(paths))
+	restart := make([]string, 0, len(paths))
 	for _, path := range paths {
 		content, err := os.ReadFile(path)
 		if err != nil {
@@ -147,21 +192,50 @@ func RebindInstalledQuadletsForLAN() ([]string, error) {
 		}
 		name := strings.TrimSuffix(filepath.Base(path), ".container")
 		updated := PairIPv6Binds(BindQuadletForLAN(name, string(content), lanExposed, servicesExposed))
-		if string(content) == updated {
+		if string(content) != updated {
+			config.GuardRealWrite(path)
+			if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
+				return nil, fmt.Errorf("rewriting %s: %w", filepath.Base(path), err)
+			}
+			if AfterQuadletWriteFn != nil {
+				if err := AfterQuadletWriteFn(name, updated); err != nil {
+					return nil, fmt.Errorf("syncing %s: %w", name, err)
+				}
+			}
+			restart = append(restart, name)
 			continue
 		}
-		config.GuardRealWrite(path)
-		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {
-			return nil, fmt.Errorf("rewriting %s: %w", filepath.Base(path), err)
+		if lanBound, known := ContainerPublishesLANFn(name); known && lanBound != quadletWantsLAN(updated) {
+			restart = append(restart, name)
 		}
-		if AfterQuadletWriteFn != nil {
-			if err := AfterQuadletWriteFn(name, updated); err != nil {
-				return nil, fmt.Errorf("syncing %s: %w", name, err)
+	}
+	return restart, nil
+}
+
+// quadletWantsLAN reports whether the given quadlet content publishes beyond
+// loopback, i.e. what the running container should look like.
+func quadletWantsLAN(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "PublishPort=") {
+			continue
+		}
+		value := strings.TrimPrefix(trimmed, "PublishPort=")
+		colon := strings.Index(value, ":")
+		if colon < 0 {
+			continue
+		}
+		ip := net.ParseIP(strings.Trim(value[:colon], "[]"))
+		if strings.HasPrefix(value, "[") {
+			if end := strings.Index(value, "]"); end > 0 {
+				ip = net.ParseIP(value[1:end])
 			}
 		}
-		changed = append(changed, name)
+		if ip == nil || !ip.IsLoopback() {
+			return true
+		}
 	}
-	return changed, nil
+	return false
 }
 
 // ListManagedServiceNames returns the service names (lerd- prefix and .container

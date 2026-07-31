@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -211,21 +212,28 @@ func SetManagedServiceLANExposure(enabled bool, progress LANProgressFunc) error 
 
 // regenerateLANContainerQuadlets reapplies the current LAN bind policy to every
 // installed lerd container while preserving each unit's current configuration.
-// Only changed units that are already running are restarted; inactive runtime
+// Only affected units that are already running are restarted; inactive runtime
 // services remain inactive.
+//
+// Every unit is attempted even when one fails. Stopping at the first error
+// would leave the units after it still bound to their old address while the
+// config, the CLI and the dashboard all report the new one, and because the
+// files on disk are already correct by then, re-running would find nothing to
+// do and the drift would never clear.
 func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
-	changed, err := podman.RebindInstalledQuadletsForLAN()
+	restart, err := podman.RebindInstalledQuadletsForLAN()
 	if err != nil {
 		return err
 	}
-	if len(changed) == 0 {
+	if len(restart) == 0 {
 		return nil
 	}
 
 	if err := services.Mgr.DaemonReload(); err != nil {
 		return fmt.Errorf("daemon-reload: %w", err)
 	}
-	for _, name := range changed {
+	var failures []error
+	for _, name := range restart {
 		status, _ := services.Mgr.UnitStatus(name)
 		if status != "active" && status != "activating" {
 			continue
@@ -234,10 +242,10 @@ func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
 			progress("Restarting " + name)
 		}
 		if err := services.Mgr.Restart(name); err != nil {
-			return fmt.Errorf("restarting %s: %w", name, err)
+			failures = append(failures, fmt.Errorf("restarting %s: %w", name, err))
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 // Seams for preflightForwarderPort so the logic can be unit-tested
