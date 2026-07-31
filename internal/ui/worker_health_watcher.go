@@ -173,15 +173,18 @@ func healthSignature(ws []workerheal.UnhealthyWorker) string {
 // degrade to an empty array so the dashboard never sees a malformed frame.
 // Each entry is enriched with the last journal line so the dashboard can
 // surface "why did this fail?" without a drill-down.
-func buildUnhealthyWorkersJSON() []byte {
+// buildUnhealthyWorkersJSON reports an empty list rather than an error when
+// detection fails: "no unhealthy workers" is the safe reading of a failed
+// health probe, unlike "no sites", which is a claim about the registry.
+func buildUnhealthyWorkersJSON() ([]byte, error) {
 	out, err := workerheal.Detect()
 	if err != nil || len(out) == 0 {
-		return []byte("[]")
+		return []byte("[]"), nil
 	}
 	out = workerheal.Enrich(out)
 	b, err := json.Marshal(out)
 	if err != nil {
-		return []byte("[]")
+		return []byte("[]"), nil
 	}
-	return b
+	return b, nil
 }

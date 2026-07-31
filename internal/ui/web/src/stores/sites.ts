@@ -118,13 +118,24 @@ export interface Site {
 export const sites = writable<Site[]>([]);
 export const sitesLoaded = writable<boolean>(false);
 
-export async function loadSites() {
+// Nothing polls the sites list on a timer, so a load that fails before the
+// first success leaves the dashboard empty until some unrelated mutation
+// publishes a sites payload over the websocket, which on an idle machine can
+// be minutes. Retry until we have a list to show, backing off as we go.
+const sitesRetryDelays = [500, 1500, 4000];
+
+export async function loadSites(attempt = 0): Promise<boolean> {
   try {
     const list = await apiJson<Site[]>('/api/sites');
     sites.set(Array.isArray(list) ? list : []);
     sitesLoaded.set(true);
+    return true;
   } catch {
-    /* keep previous */
+    // A later failure keeps whatever is already on screen; only the cold case
+    // is worth chasing, since there the alternative is showing nothing.
+    if (get(sitesLoaded) || attempt >= sitesRetryDelays.length) return false;
+    setTimeout(() => loadSites(attempt + 1), sitesRetryDelays[attempt]);
+    return false;
   }
 }
 
