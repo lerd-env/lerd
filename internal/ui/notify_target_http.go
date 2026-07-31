@@ -38,7 +38,7 @@ func handleNotifyTarget(w http.ResponseWriter, r *http.Request) {
 		cfg, _ := config.LoadGlobal()
 		writeJSON(w, newNotifyTargetResponse(cfg))
 	case http.MethodPost:
-		if !isLoopbackRequest(r) {
+		if !hasHostActionAuthority(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -76,7 +76,7 @@ func handleNotifyKinds(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackRequest(r) {
+	if !hasHostActionAuthority(r) {
 		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}

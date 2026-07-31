@@ -30,6 +30,19 @@ func setupConfigDir(t *testing.T, username, plainPassword string) {
 
 func setupConfigDirRaw(t *testing.T, username, plainPassword string, lanExposed bool) {
 	t.Helper()
+	setupConfigDirWith(t, username, plainPassword, lanExposed, false)
+}
+
+// setupConfigDirFullAccess is setupConfigDir with ui.remote_full_access set,
+// for the tests that exercise the host-action opt-in. LAN exposure is on so
+// the remote requests reach the authentication step.
+func setupConfigDirFullAccess(t *testing.T, username, plainPassword string, fullAccess bool) {
+	t.Helper()
+	setupConfigDirWith(t, username, plainPassword, true, fullAccess)
+}
+
+func setupConfigDirWith(t *testing.T, username, plainPassword string, lanExposed, fullAccess bool) {
+	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
@@ -37,15 +50,20 @@ func setupConfigDirRaw(t *testing.T, username, plainPassword string, lanExposed 
 	if lanExposed {
 		cfg["lan"] = map[string]any{"exposed": true}
 	}
+	ui := map[string]any{}
 	if username != "" || plainPassword != "" {
 		hash, err := bcrypt.GenerateFromPassword([]byte(plainPassword), bcrypt.MinCost)
 		if err != nil {
 			t.Fatalf("bcrypt: %v", err)
 		}
-		cfg["ui"] = map[string]any{
-			"username":      username,
-			"password_hash": string(hash),
-		}
+		ui["username"] = username
+		ui["password_hash"] = string(hash)
+	}
+	if fullAccess {
+		ui["remote_full_access"] = true
+	}
+	if len(ui) > 0 {
+		cfg["ui"] = ui
 	}
 	if len(cfg) == 0 {
 		return
@@ -104,6 +122,7 @@ func TestRemoteControlGateReverseProxyDoesNotBypassAuthentication(t *testing.T) 
 	req := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
 	req.Host = "robotbox.example.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	rec := httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
 
@@ -116,12 +135,13 @@ func TestRemoteControlGateReverseProxyDoesNotBypassAuthentication(t *testing.T) 
 }
 
 func TestRemoteControlGateAuthenticatedReverseProxyReceivesDashboardControl(t *testing.T) {
-	setupConfigDir(t, "alice", "s3cret")
+	setupConfigDirFullAccess(t, "alice", "s3cret", true)
 	gate := withRemoteControlGate(http.HandlerFunc(handleAccessMode))
 
 	req := httptest.NewRequest(http.MethodGet, "/api/access-mode", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
 	req.Host = "robotbox.example.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	req.SetBasicAuth("alice", "s3cret")
 	rec := httptest.NewRecorder()
 	gate.ServeHTTP(rec, req)
@@ -138,12 +158,13 @@ func TestRemoteControlGateAuthenticatedReverseProxyReceivesDashboardControl(t *t
 }
 
 func TestRemoteControlGateAuthenticatedDashboardCanMutateLANSettings(t *testing.T) {
-	setupConfigDir(t, "alice", "s3cret")
+	setupConfigDirFullAccess(t, "alice", "s3cret", true)
 	gate := withRemoteControlGate(http.HandlerFunc(handleLANStatus))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/lan/status", http.NoBody)
 	req.RemoteAddr = "192.168.1.42:54321"
 	req.Host = "robotbox.example.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	req.SetBasicAuth("alice", "s3cret")
 	req.Header.Set("X-Lerd-CSRF", "1")
 	rec := httptest.NewRecorder()
@@ -262,19 +283,15 @@ func TestRemoteControlGate_sessionCookie(t *testing.T) {
 	}
 
 	t.Run("cookie authenticates without Basic header", func(t *testing.T) {
-		authorized := false
-		next2 := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authorized = hasDashboardControl(r) && isLoopbackRequest(r)
-			w.WriteHeader(http.StatusOK)
-		})
+		next2 := &nextHandler{}
 		gate2 := withRemoteControlGate(next2)
 		req2 := httptest.NewRequest(http.MethodGet, "/api/sites", nil)
 		req2.RemoteAddr = "192.168.1.42:54321"
 		req2.AddCookie(session)
 		rec2 := httptest.NewRecorder()
 		gate2.ServeHTTP(rec2, req2)
-		if !authorized || rec2.Code != http.StatusOK {
-			t.Errorf("session cookie did not grant dashboard-control authority, status=%d", rec2.Code)
+		if !next2.called || rec2.Code != http.StatusOK {
+			t.Errorf("session cookie did not authenticate, status=%d", rec2.Code)
 		}
 	})
 
@@ -354,43 +371,31 @@ func TestRemoteControlGate_remoteSetupBypassesEvenWhenDisabled(t *testing.T) {
 	}
 }
 
-func TestRemoteControlGateAuthenticatedDashboardCanUseHostControlRoutes(t *testing.T) {
+// Ordinary dashboard routes are the ones a remote session is meant to drive.
+// The host-action subset is covered in remote_full_access_test.go.
+func TestRemoteControlGateAuthenticatedDashboardUsesOrdinaryRoutes(t *testing.T) {
 	setupConfigDir(t, "alice", "s3cret")
 	called := false
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if !hasDashboardControl(r) {
-			t.Error("authenticated dashboard did not receive dashboard-control authority")
-		}
-		if !isLoopbackRequest(r) {
-			t.Error("authenticated dashboard did not pass handler-level authority checks")
-		}
 		w.WriteHeader(http.StatusOK)
 	})
 	gate := withRemoteControlGate(next)
 
 	for _, path := range []string{
-		"/api/lerd/stop",
-		"/api/lerd/update-terminal",
-		"/api/logs/terminal",
-		"/api/sites/link",
-		"/api/sites/myapp.test/terminal",
-		"/api/sites/myapp.test/env",
-		"/api/browse",
-		"/api/push/test",
-		"/api/databases",
-		"/api/databases/mysql/drop",
-		"/api/databases/mysql/export",
-		"/api/databases/postgres/snapshots/nightly",
-		"/api/remote-setup/generate",
-		"/api/disk",
-		"/api/open-editor",
+		"/api/lerd/start",
+		"/api/sites/myapp.test/secure",
+		"/api/sites/myapp.test/restart",
+		"/api/services/mysql/restart",
+		"/api/dumps/toggle",
 	} {
 		t.Run(path, func(t *testing.T) {
 			called = false
 			req := httptest.NewRequest(http.MethodPost, path, nil)
 			req.RemoteAddr = "192.168.1.42:54321"
 			req.Host = "robotbox.example.net"
+			req.Header.Set("X-Forwarded-For", "203.0.113.7")
+			req.Header.Set("X-Forwarded-For", "203.0.113.7")
 			req.SetBasicAuth("alice", "s3cret")
 			req.Header.Set("X-Lerd-CSRF", "1")
 			rec := httptest.NewRecorder()

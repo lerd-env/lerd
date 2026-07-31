@@ -330,7 +330,23 @@ lerd remote-control on   # 2. set the Basic auth credentials
 # Remote dashboard access enabled.
 ```
 
-The password is bcrypt-hashed (default cost) and stored in `~/.config/lerd/config.yaml`. From this point on, loopback bypasses everything; LAN requests must present HTTP Basic auth. An authenticated remote session receives the same dashboard and controls as a local session. Actions run on the host that runs Lerd. Re-running `lerd remote-control on` rotates the password.
+The password is bcrypt-hashed (default cost) and stored in `~/.config/lerd/config.yaml`. From this point on, loopback bypasses everything; LAN requests must present HTTP Basic auth. Actions run on the host that runs Lerd. Re-running `lerd remote-control on` rotates the password.
+
+### Host actions stay local by default
+
+An authenticated remote session drives the dashboard, but the actions that reach the host itself are held back: reading a site's raw `.env` (app key, database credentials, tokens), browsing the filesystem, linking arbitrary paths as sites, dropping or exporting databases, opening a terminal, replacing tooling on the host's PATH, and shutting lerd down. A remote client asking for one of those gets 403 even with valid credentials, and the dashboard hides the controls that map to them.
+
+Opt in when you want the full thing from another device:
+
+```bash
+lerd remote-control full-access on     # allow host actions remotely
+lerd remote-control full-access status # on, off, or enabled-but-inert
+lerd remote-control full-access off    # back to local-only
+```
+
+The same switch lives in the dashboard's **Remote dashboard access** card, as **Host actions from remote sessions**. Either way it can only be changed from the machine running lerd, so a remote session can never widen its own authority. `lerd remote-control off` clears it along with the credentials.
+
+Turning it on means the dashboard password is the only thing between the LAN and your files, secrets and shell, so treat it the way you would an SSH key: trusted networks only, and rotate the password with `lerd remote-control on` if it has ever been shared.
 
 Disable either flag at any time:
 
@@ -357,6 +373,18 @@ Once the dashboard is exposed and credentials are set, the **Remote dashboard ac
   MySQL, Redis, and similar development services may use weak or empty
   credentials. Restrict their ports with the host firewall before running
   `lerd lan:services on`.
+- **A reverse proxy in front of the dashboard does not inherit local trust.**
+  Tailscale Serve, Caddy or nginx relaying a remote browser connect from
+  127.0.0.1, which would otherwise look local. lerd treats a loopback request
+  carrying `X-Forwarded-For`, `X-Forwarded-Host`, `X-Real-IP` or `Forwarded` as
+  remote, so it still faces the LAN gate and Basic auth. A browser on the
+  machine itself is unaffected, including one reaching lerd by the machine's
+  own hostname. A proxy configured to strip those headers would appear local,
+  so terminate it in front of the auth you want, not behind it.
+- **`lerd remote-control full-access on` puts your host behind one password.**
+  Host actions are local-only by default for this reason. With the opt-in on,
+  anyone who guesses or obtains the dashboard password can read every site's
+  `.env`, browse the filesystem and run commands on the machine.
 - **`lerd lan:expose` makes your dnsmasq an open recursive resolver for anyone on the LAN.** Lock down with firewall rules to your subnet, not 0.0.0.0/0.
 - **The mkcert root CA has authority over any HTTPS site on the trusting machine.** Only install the CA on devices you own. Treat the private key (which never leaves the server) as a high-value secret.
 - **The `/api/remote-setup` endpoint hands out the public CA to anyone who can pass the source-IP and code checks.** Don't share active codes.

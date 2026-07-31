@@ -42,6 +42,7 @@ flag — it has its own token + IP + brute-force gate.`,
 	cmd.AddCommand(newRemoteControlOnCmd())
 	cmd.AddCommand(newRemoteControlOffCmd())
 	cmd.AddCommand(newRemoteControlStatusCmd())
+	cmd.AddCommand(newRemoteControlFullAccessCmd())
 	return cmd
 }
 
@@ -145,11 +146,76 @@ the password — you cannot lock yourself out of your own machine.`,
 			}
 			cfg.UI.Username = ""
 			cfg.UI.PasswordHash = ""
+			cfg.UI.RemoteFullAccess = false
 			if err := config.SaveGlobal(cfg); err != nil {
 				return fmt.Errorf("saving config: %w", err)
 			}
 			feedback.Begin()
 			feedback.Done("remote dashboard access disabled — LAN clients now get 403 Forbidden")
+			return nil
+		},
+	}
+}
+
+// NewRemoteControlFullAccessCmd returns the `lerd remote-control:full-access`
+// colon alias.
+func NewRemoteControlFullAccessCmd() *cobra.Command {
+	cmd := newRemoteControlFullAccessCmd()
+	cmd.Use = "remote-control:full-access [on|off|status]"
+	cmd.Hidden = true
+	return cmd
+}
+
+func newRemoteControlFullAccessCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "full-access [on|off|status]",
+		Short: "Control whether remote sessions may run host actions",
+		Long: `A remote client with valid credentials can drive the dashboard, but the
+actions that reach the host itself stay local-only by default: reading a
+site's raw .env, browsing the filesystem, dropping or exporting databases,
+opening a terminal, and running commands.
+
+Run 'lerd remote-control full-access on' to let authenticated remote
+sessions use them too. The setting never replaces authentication, and only
+the local dashboard or a local shell can change it.`,
+		Args:      cobra.MatchAll(cobra.ExactArgs(1), cobra.OnlyValidArgs),
+		ValidArgs: []string{"on", "off", "status"},
+		RunE: func(_ *cobra.Command, args []string) error {
+			cfg, err := config.LoadGlobal()
+			if err != nil {
+				return fmt.Errorf("loading config: %w", err)
+			}
+
+			if args[0] == "status" {
+				feedback.Begin()
+				switch {
+				case cfg.UI.RemoteFullAccess && cfg.UI.PasswordHash != "":
+					feedback.Done("remote sessions may run host actions")
+				case cfg.UI.RemoteFullAccess:
+					feedback.Line("remote host actions are enabled but inactive until `lerd remote-control on`")
+				default:
+					feedback.Line("remote host actions are off; they stay local-only")
+				}
+				return nil
+			}
+
+			enabled := args[0] == "on"
+			if enabled && cfg.UI.PasswordHash == "" {
+				return fmt.Errorf("dashboard credentials are not configured — run `lerd remote-control on` first")
+			}
+			cfg.UI.RemoteFullAccess = enabled
+			if err := config.SaveGlobal(cfg); err != nil {
+				return fmt.Errorf("saving config: %w", err)
+			}
+
+			feedback.Begin()
+			if enabled {
+				feedback.Done("remote host actions " + feedback.Val("enabled"))
+				feedback.Note("anyone with the dashboard password can now read site .env files, browse the filesystem, drop databases and run commands on this machine")
+				feedback.Note("use only on a trusted network, and rotate the password with `lerd remote-control on` if it has ever been shared")
+			} else {
+				feedback.Done("remote host actions " + feedback.Val("local-only"))
+			}
 			return nil
 		},
 	}
@@ -173,6 +239,11 @@ func newRemoteControlStatusCmd() *cobra.Command {
 			}
 			feedback.Line("remote dashboard access: " + feedback.Green("enabled") + " (user: " + cfg.UI.Username + ")")
 			feedback.Note("LAN clients must present HTTP Basic auth; loopback bypasses it")
+			if cfg.UI.RemoteFullAccess {
+				feedback.Note("host actions: allowed remotely (`lerd remote-control full-access off` to restrict)")
+			} else {
+				feedback.Note("host actions: local-only (`lerd remote-control full-access on` to allow)")
+			}
 			feedback.Note("disable with: lerd remote-control off")
 			return nil
 		},

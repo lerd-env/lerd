@@ -18,6 +18,82 @@ import (
 
 type ctxKeyRemoteDashboard struct{}
 
+// loopbackOnlyRoutes are dashboard endpoints that perform actions too
+// destructive or sensitive to hand to a remote (LAN) client on the strength
+// of a password alone: shutting lerd down entirely, opening a terminal on
+// the host, linking arbitrary host filesystem paths as new sites. The local
+// user can still use them as normal, and a remote session reaches them only
+// after `lerd remote-control full-access on`.
+var loopbackOnlyRoutes = []string{
+	"/api/lerd/stop",            // shuts down all lerd containers
+	"/api/lerd/quit",            // exits the dashboard process
+	"/api/lerd/update-terminal", // spawns a terminal emulator on the host
+	"/api/logs/terminal",        // spawns a terminal emulator on the host
+	"/api/sites/link",           // links arbitrary host filesystem paths
+	"/api/browse",               // browses host filesystem
+	"/api/push/test",            // fires notifications onto subscribed devices
+}
+
+// loopbackOnlyRoutePrefixes are endpoint subtrees restricted in full, so a
+// new subresource cannot escape by failing to be listed. Databases read out,
+// drop and overwrite the data the "/env" gate already protects.
+var loopbackOnlyRoutePrefixes = []string{
+	"/api/databases",
+	"/api/entities",
+	// Replaces executables on the host's PATH, so it stays with the terminal
+	// and link routes rather than behind Basic auth alone.
+	"/api/tools",
+}
+
+// loopbackOnlySiteSubactions are the per-site actions (under
+// /api/sites/{domain}/) whose entire subtree is restricted. A subaction
+// "/env" gates /api/sites/{d}/env and every nested route under it (e.g.
+// /env/files, /env/backups, /env/backups/<name>, /env/restore), so adding a
+// new subresource cannot accidentally escape the gate by failing to be
+// re-listed here.
+var loopbackOnlySiteSubactions = []string{
+	"/terminal", // opens an interactive shell on the host
+	"/env",      // raw .env content + backups + restore (APP_KEY, DB creds, tokens)
+}
+
+// isLoopbackOnlyPath reports whether the given URL path is in either the
+// exact-match list or matches a per-site action whose entire subtree is
+// restricted.
+func isLoopbackOnlyPath(path string) bool {
+	for _, p := range loopbackOnlyRoutes {
+		if path == p {
+			return true
+		}
+	}
+	for _, p := range loopbackOnlyRoutePrefixes {
+		if path == p || strings.HasPrefix(path, p+"/") {
+			return true
+		}
+	}
+	if !strings.HasPrefix(path, "/api/sites/") {
+		return false
+	}
+	rest := strings.TrimPrefix(path, "/api/sites/")
+	slash := strings.Index(rest, "/")
+	if slash < 0 {
+		return false
+	}
+	after := rest[slash:]
+	for _, action := range loopbackOnlySiteSubactions {
+		if after == action || strings.HasPrefix(after, action+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// remoteFullAccessEnabled reports whether authenticated remote sessions have
+// been opted into host actions.
+func remoteFullAccessEnabled() bool {
+	cfg, _ := config.LoadGlobal()
+	return cfg != nil && cfg.UI.RemoteFullAccess
+}
+
 // fromHost reports whether r's source IP belongs to one of the host's
 // own interfaces. The mailpit container reaches the dashboard via
 // host.containers.internal, which pasta (Linux) and gvproxy / vmnet
@@ -138,8 +214,11 @@ func passesCSRF(r *http.Request) bool {
 //
 // Direct local dashboard requests bypass both checks. OPTIONS preflight
 // passes through because it has no Authorization header. /api/remote-setup
-// has its own token and IP gate. An authenticated remote dashboard receives
-// the same controls as the local dashboard.
+// has its own token and IP gate.
+//
+// Beyond authentication, the loopbackOnlyRoutes list stays closed to remote
+// clients unless cfg.UI.RemoteFullAccess is set. The local user keeps those
+// routes either way.
 func withRemoteControlGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// 1. CORS preflight: pass through. Browsers don't include the
@@ -193,6 +272,15 @@ func withRemoteControlGate(next http.Handler) http.Handler {
 		// browsers don't replay an old 403/401 after the user enables
 		// remote control or LAN exposure.
 		cfg, _ := config.LoadGlobal()
+
+		// 4pre. Host-action routes stay closed to remote clients unless the
+		// user has explicitly opted in. This is checked before credentials
+		// so an unopted install answers the same way whatever is guessed.
+		if isLoopbackOnlyPath(r.URL.Path) && (cfg == nil || !cfg.UI.RemoteFullAccess) {
+			w.Header().Set("Cache-Control", "no-store")
+			http.Error(w, "Forbidden — this action is only available from the lerd host. Run `lerd remote-control full-access on` to allow it remotely.", http.StatusForbidden)
+			return
+		}
 
 		// 4a. LAN exposure is the top-level gate. If lan:expose is off,
 		// LAN clients are denied regardless of whether credentials are
@@ -442,8 +530,9 @@ func handleRemoteControl(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]any{
-			"enabled":  cfg.UI.PasswordHash != "",
-			"username": cfg.UI.Username,
+			"enabled":     cfg.UI.PasswordHash != "",
+			"username":    cfg.UI.Username,
+			"full_access": cfg.UI.RemoteFullAccess,
 		})
 		return
 
@@ -452,6 +541,7 @@ func handleRemoteControl(w http.ResponseWriter, r *http.Request) {
 			Action   string `json:"action"`
 			Username string `json:"username"`
 			Password string `json:"password"`
+			Enabled  bool   `json:"enabled"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			http.Error(w, "invalid JSON: "+err.Error(), http.StatusBadRequest)
@@ -496,15 +586,35 @@ func handleRemoteControl(w http.ResponseWriter, r *http.Request) {
 		case "disable":
 			cfg.UI.Username = ""
 			cfg.UI.PasswordHash = ""
+			cfg.UI.RemoteFullAccess = false
 			if err := config.SaveGlobal(cfg); err != nil {
 				http.Error(w, "saving config: "+err.Error(), http.StatusInternalServerError)
 				return
 			}
-			writeJSON(w, map[string]any{"ok": true, "enabled": false})
+			writeJSON(w, map[string]any{"ok": true, "enabled": false, "full_access": false})
+			return
+
+		case "full-access":
+			// Only the local dashboard may widen remote authority, so a
+			// remote session can never grant itself host actions.
+			if !isLocalControlRequest(r) {
+				http.Error(w, "Forbidden — remote full access can only be changed from the lerd host.", http.StatusForbidden)
+				return
+			}
+			if body.Enabled && cfg.UI.PasswordHash == "" {
+				http.Error(w, "dashboard credentials are not configured — run `lerd remote-control on` first", http.StatusBadRequest)
+				return
+			}
+			cfg.UI.RemoteFullAccess = body.Enabled
+			if err := config.SaveGlobal(cfg); err != nil {
+				http.Error(w, "saving config: "+err.Error(), http.StatusInternalServerError)
+				return
+			}
+			writeJSON(w, map[string]any{"ok": true, "full_access": body.Enabled})
 			return
 
 		default:
-			http.Error(w, "unknown action — expected 'enable' or 'disable'", http.StatusBadRequest)
+			http.Error(w, "unknown action — expected 'enable', 'disable' or 'full-access'", http.StatusBadRequest)
 			return
 		}
 
@@ -523,7 +633,7 @@ func handleRemoteSetupGenerate(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	if !isLoopbackRequest(r) {
+	if !hasHostActionAuthority(r) {
 		http.Error(w, "Forbidden — dashboard authentication is required to generate setup codes.", http.StatusForbidden)
 		return
 	}
@@ -551,12 +661,31 @@ func handleRemoteSetupGenerate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// proxyHeaders are the headers a reverse proxy adds when it forwards a request
+// on someone else's behalf. Their presence is what distinguishes a proxied
+// request from a browser on the machine itself, since both arrive from 127.0.0.1.
+var proxyHeaders = []string{"X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip", "Forwarded"}
+
+// forwardedByProxy reports whether r carries evidence of having been relayed.
+func forwardedByProxy(r *http.Request) bool {
+	for _, h := range proxyHeaders {
+		if r.Header.Get(h) != "" {
+			return true
+		}
+	}
+	return false
+}
+
 // isLocalControlRequest reports whether a request may control the lerd host.
 // Unix-socket requests and requests carrying the private nginx trust token are
-// authoritative. A direct TCP request must have both a loopback peer and a
-// loopback or RFC-reserved .localhost Host. Requiring both rejects reverse
-// proxies, such as Tailscale Serve, that connect from 127.0.0.1 on behalf of a
-// remote browser.
+// authoritative. A direct TCP request qualifies when its peer is loopback and
+// it carries no forwarding headers, which rejects reverse proxies such as
+// Tailscale Serve that connect from 127.0.0.1 for a remote browser.
+//
+// The Host header is deliberately not part of this: a local browser may reach
+// the dashboard by the machine's own hostname (Debian and Ubuntu map it to
+// 127.0.1.1) or any /etc/hosts alias, and locking those out would leave the
+// local user with no way in.
 
 func hasValidTrustToken(r *http.Request) bool {
 	claimed := r.Header.Get("X-Lerd-Trust")
@@ -575,39 +704,54 @@ func isLocalControlRequest(r *http.Request) bool {
 	if hasValidTrustToken(r) {
 		return true
 	}
+	if forwardedByProxy(r) {
+		return false
+	}
 	peer, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		peer = r.RemoteAddr
 	}
 	ip := net.ParseIP(peer)
-	if ip == nil || !ip.IsLoopback() {
-		return false
-	}
-	host := r.Host
-	if parsed, _, err := net.SplitHostPort(r.Host); err == nil {
-		host = parsed
-	}
-	host = strings.Trim(strings.ToLower(host), "[]")
-	if host == "localhost" || strings.HasSuffix(host, ".localhost") {
-		return true
-	}
-	hostIP := net.ParseIP(host)
-	return hostIP != nil && hostIP.IsLoopback()
+	return ip != nil && ip.IsLoopback()
 }
 
+// remoteSessionMayActOnHost reports whether r is an authenticated remote
+// dashboard session that the user has opted into host actions.
+func remoteSessionMayActOnHost(r *http.Request) bool {
+	authenticated, _ := r.Context().Value(ctxKeyRemoteDashboard{}).(bool)
+	return authenticated && remoteFullAccessEnabled()
+}
+
+// hasHostActionAuthority reports whether r may perform an action that reaches
+// the host itself: executing commands, reading raw .env content, touching the
+// filesystem, deleting captured data. The local dashboard always may; a remote
+// session only after `lerd remote-control full-access on`. The middleware has
+// already applied the stricter local check to anything that reaches a handler,
+// so the loopback test here is the peer one.
+func hasHostActionAuthority(r *http.Request) bool {
+	return isLoopbackRequest(r) || remoteSessionMayActOnHost(r)
+}
+
+// hasDashboardControl is hasHostActionAuthority for the handlers that must
+// hold up on their own, without the middleware in front: it rejects a reverse
+// proxy connecting from 127.0.0.1 on behalf of a remote browser.
 func hasDashboardControl(r *http.Request) bool {
-	if authenticated, _ := r.Context().Value(ctxKeyRemoteDashboard{}).(bool); authenticated {
-		return true
-	}
-	return isLocalControlRequest(r)
+	return isLocalControlRequest(r) || remoteSessionMayActOnHost(r)
 }
 
-// isLoopbackRequest gates handlers that are also called directly in tests.
-// Authenticated dashboard requests receive the same authority as loopback.
+// isLoopbackRequest reports whether r originates from the local host. Three
+// paths qualify:
+//
+//  1. The connection arrived over the unix socket listener. Only host
+//     processes with filesystem access to the socket can connect, so this is
+//     at least as trusted as TCP loopback. The lerd.localhost nginx vhost
+//     reaches lerd-ui via this path.
+//  2. The TCP peer is a loopback IP (127.x, ::1). This catches direct visits
+//     to http://localhost:7073 / http://127.0.0.1:7073.
+//  3. The request carries an X-Lerd-Trust header whose value matches the
+//     per-install token. Kept for backward compatibility with old vhosts
+//     that may still inject the header; new installs use the unix socket.
 func isLoopbackRequest(r *http.Request) bool {
-	if authenticated, _ := r.Context().Value(ctxKeyRemoteDashboard{}).(bool); authenticated {
-		return true
-	}
 	if v, _ := r.Context().Value(ctxKeyUnixSocket{}).(bool); v {
 		return true
 	}

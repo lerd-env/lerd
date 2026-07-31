@@ -78,7 +78,7 @@ func commandRoute(w http.ResponseWriter, r *http.Request, domain string, rest []
 	case len(rest) == 3 && rest[2] == "run" && r.Method == http.MethodPost:
 		// Running a command requires dashboard-control authority because it
 		// executes arbitrary shell code as the lerd-ui user.
-		if !isLoopbackRequest(r) {
+		if !hasHostActionAuthority(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return true
 		}

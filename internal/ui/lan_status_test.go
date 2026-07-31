@@ -102,6 +102,7 @@ func TestLANStatusRejectsUnauthenticatedLoopbackReverseProxy(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/api/lan/status", strings.NewReader(`{"action":"services_on"}`))
 	req.RemoteAddr = "127.0.0.1:54321"
 	req.Host = "robotbox.example.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	rec := httptest.NewRecorder()
 	handleLANStatus(rec, req)
 
@@ -114,6 +115,7 @@ func TestAccessModeRejectsUnauthenticatedLoopbackReverseProxy(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/access-mode", nil)
 	req.RemoteAddr = "127.0.0.1:54321"
 	req.Host = "robotbox.example.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
 	rec := httptest.NewRecorder()
 	handleAccessMode(rec, req)
 

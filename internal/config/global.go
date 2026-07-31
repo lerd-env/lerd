@@ -195,6 +195,17 @@ type GlobalConfig struct {
 		// (127.0.0.1, ::1) always bypasses both checks.
 		Username     string `yaml:"username,omitempty" mapstructure:"username"`
 		PasswordHash string `yaml:"password_hash,omitempty" mapstructure:"password_hash"`
+
+		// RemoteFullAccess opts authenticated remote sessions into the host
+		// actions that are otherwise reserved for the local dashboard: raw
+		// .env reads, filesystem browsing, database drops, terminals and
+		// command execution. Off by default, so a leaked or guessed password
+		// alone never reaches them. It widens which routes an authenticated
+		// session may use; it never substitutes for authentication.
+		//
+		// Toggled via `lerd remote-control full-access on/off`, which only
+		// the local dashboard or a local shell can do.
+		RemoteFullAccess bool `yaml:"remote_full_access,omitempty" mapstructure:"remote_full_access"`
 	} `yaml:"ui,omitempty" mapstructure:"ui"`
 	Workers struct {
 		// ExecMode controls how framework workers (queue, schedule, horizon,

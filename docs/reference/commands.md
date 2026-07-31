@@ -119,9 +119,14 @@ The proxy runs inside the lerd daemon (`lerd-ui`), no external tool needed and n
 | `lerd lan:services on` | Explicitly include managed databases, caches, and services |
 | `lerd lan:services off` | Return managed services to loopback without hiding sites |
 | `lerd lan:services status` | Show the persisted managed-service setting |
+| `lerd remote-control full-access on` | Let authenticated remote sessions run host actions |
+| `lerd remote-control full-access off` | Keep host actions local-only (the default) |
+| `lerd remote-control full-access status` | Show the persisted host-action setting |
 
-The dashboard **System** tab and terminal UI expose the same two independent
-settings. Authenticated remote dashboard sessions receive the same controls.
+The dashboard **System** tab and terminal UI expose the same independent
+settings. Host actions such as reading a site's `.env`, browsing the
+filesystem, dropping databases or opening a terminal stay local-only until
+`lerd remote-control full-access on`, which only the lerd host can set.
 
 See [Remote / LAN Development](/usage/remote-development) for the full walkthrough.
 

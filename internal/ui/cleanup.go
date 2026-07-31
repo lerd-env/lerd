@@ -100,7 +100,7 @@ func handleDisk(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		writeJSON(w, cachedDisk())
 	case http.MethodPost:
-		if !isLoopbackRequest(r) {
+		if !hasHostActionAuthority(r) {
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
