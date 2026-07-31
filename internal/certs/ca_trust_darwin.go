@@ -17,8 +17,8 @@ import (
 // keychainCertsPEM dumps every certificate in the keychain search list as
 // concatenated PEM, regardless of trust settings. Used only to tell whether
 // mkcert's CA is present at all (CAPresentButUntrusted); the actual trust
-// decision comes from adminTrustSettingsPlist below — presence is not trust,
-// see its doc comment. Overridable in tests.
+// decision comes from adminTrustSettingsPlist below, since a certificate can
+// outlive the trust settings that made it trusted. Overridable in tests.
 var keychainCertsPEM = func() []byte {
 	out, _ := exec.Command("security", "find-certificate", "-a", "-p").Output()
 	return out
@@ -48,38 +48,69 @@ var adminTrustSettingsPlist = func() []byte {
 // each certificate keyed by its uppercase-hex SHA-1 fingerprint.
 var fingerprintKeyPattern = regexp.MustCompile(`<key>[0-9A-F]{40}</key>`)
 
-// plistHasTrustEntry reports whether the admin trust-settings plist exported
-// by `security trust-settings-export -d` has an entry for der's certificate
-// that actually carries a trustSettings array.
+// trustResultPattern matches an entry's kSecTrustSettingsResult values.
+var trustResultPattern = regexp.MustCompile(`<key>kSecTrustSettingsResult</key>\s*<integer>(\d+)</integer>`)
+
+// trustSettingsExported reports whether plist is an admin trust-settings
+// export that actually parsed, as opposed to nothing at all. A `security`
+// that failed, or that one day writes something other than this XML, must
+// read as "no answer" rather than as "not trusted": drawing a conclusion
+// from a read that did not happen is what makes an install re-run a
+// privileged repair on every run (the shape of issue #1101).
+func trustSettingsExported(plist []byte) bool {
+	return bytes.Contains(plist, []byte("<key>trustList</key>"))
+}
+
+// plistTrustsCert reports whether the admin trust-settings plist exported by
+// `security trust-settings-export -d` trusts der's certificate.
 //
-// This is the check `security find-certificate` can't make, and the one
-// that matters: a certificate can sit in the keychain — findable, matching
-// this whole file's older keychainCertsPEM check — with its trust settings
-// cleared independent of the certificate item itself (a macOS update is the
-// most common real trigger). find-certificate reports both states
-// identically as "present"; only the trust-settings export tells them apart,
-// by whether the entry carries a trustSettings array at all. An entry
-// without one is exactly the drifted state CAPresentButUntrusted exists to
-// catch: present in the keychain, not actually trusted.
-func plistHasTrustEntry(plist, der []byte) bool {
+// Presence of the entry is the trust decision. Per SecTrustSettings, an
+// absent or empty trust-settings array means "trust this certificate as a
+// root", which is how macOS records everything `security add-trusted-cert`
+// installs; mkcert is unusual in writing an explicit array of its own
+// through trust-settings-import afterwards. So only an entry whose explicit
+// settings all refuse (deny, or unspecified, which defers to a system trust
+// this certificate does not have) counts as untrusted, and a certificate
+// with no entry at all is the drifted state CAPresentButUntrusted catches:
+// still in the keychain, no longer trusted by it.
+func plistTrustsCert(plist, der []byte) bool {
+	block, ok := trustEntryBlock(plist, der)
+	if !ok {
+		return false
+	}
+	results := trustResultPattern.FindAllSubmatch(block, -1)
+	if len(results) == 0 {
+		return true
+	}
+	for _, r := range results {
+		// kSecTrustSettingsResultTrustRoot / TrustAsRoot.
+		if v := string(r[1]); v == "1" || v == "2" {
+			return true
+		}
+	}
+	return false
+}
+
+// trustEntryBlock returns der's own entry in the export, bounded so a
+// neighbour's settings can never be read as this certificate's. The block
+// runs from the fingerprint key to whichever comes first, the next sibling
+// entry or the trailing trustVersion key: a trustList entry never nests
+// another fingerprint key, so the bound is exact for this schema without a
+// full XML parse.
+func trustEntryBlock(plist, der []byte) ([]byte, bool) {
 	sum := sha1.Sum(der)
 	key := strings.ToUpper(hex.EncodeToString(sum[:]))
 	marker := []byte("<key>" + key + "</key>")
 	idx := bytes.Index(plist, marker)
 	if idx < 0 {
-		return false
+		return nil, false
 	}
-	// Scope the search to this entry's own block: from the marker to whichever
-	// comes first, the next sibling entry (another fingerprint key) or the
-	// trailing trustVersion key. A trustList entry never nests another
-	// fingerprint key inside itself, so this bound is exact for this command's
-	// schema without needing a full plist/XML parse.
 	rest := plist[idx+len(marker):]
 	end := len(rest)
 	if i := nextSiblingKeyIndex(rest); i >= 0 && i < end {
 		end = i
 	}
-	return bytes.Contains(rest[:end], []byte("<key>trustSettings</key>"))
+	return rest[:end], true
 }
 
 // nextSiblingKeyIndex returns the start of whichever comes first in plist: the
@@ -103,27 +134,34 @@ var systemKeychainPath = "/Library/Keychains/System.keychain"
 
 func init() {
 	platformTrustCheck = func(der []byte) bool {
-		return plistHasTrustEntry(adminTrustSettingsPlist(), der)
+		return plistTrustsCert(adminTrustSettingsPlist(), der)
 	}
 	platformPresenceCheck = func(der []byte) bool {
 		return bundleContainsDER(keychainCertsPEM(), der)
+	}
+	platformTrustReadable = func() bool {
+		return trustSettingsExported(adminTrustSettingsPlist())
 	}
 }
 
 // RepairSystemTrust re-asserts trust for mkcert's root CA directly, for the
 // state CAPresentButUntrusted reports: the certificate sits in the keychain
-// but carries no trust settings, most likely because a macOS update cleared
-// them independent of the certificate item itself.
+// but has no trust-settings entry, most likely because a macOS update cleared
+// it independent of the certificate item itself. The write restores the entry
+// the trust check reads, so a repaired CA reads as trusted from the next run
+// on and the prompt does not come back.
 //
 // This deliberately does not go through `mkcert -install`. mkcert's own
 // "already installed" self-check (m.caCert.Verify against the system pool)
-// is susceptible to the identical false positive plistHasTrustEntry exists
-// to avoid: a self-signed root cryptographically verifies against itself
-// regardless of its actual trust settings, so mkcert may silently skip
-// re-establishing trust in exactly the state this function exists to fix.
-// Running the same security add-trusted-cert command mkcert itself uses,
-// directly, sidesteps that self-check entirely. The caller is expected to
-// have already announced the sudo/password prompt this triggers.
+// is susceptible to the false positive plistTrustsCert exists to avoid: a
+// self-signed root cryptographically verifies against itself regardless of
+// its actual trust settings, so mkcert may silently skip re-establishing
+// trust in exactly the state this function exists to fix. Running the
+// add-trusted-cert half of mkcert's own install directly sidesteps that
+// self-check. macOS authorizes the write itself, through the same admin
+// dialog `mkcert -install` raises, so the caller is expected to have
+// announced it; with no window server to draw that dialog (over ssh, say)
+// the command fails and the caller reports it rather than looping.
 func RepairSystemTrust() error {
 	root, err := caRootFunc()
 	if err != nil {

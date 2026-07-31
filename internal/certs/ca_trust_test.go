@@ -97,10 +97,13 @@ func TestCATrusted(t *testing.T) {
 // (also fooled by the same drifted state) self-check to notice.
 func TestCAPresentButUntrusted(t *testing.T) {
 	origRoot, origPaths, origTrust, origPresence := caRootFunc, caTrustPaths, platformTrustCheck, platformPresenceCheck
+	origReadable := platformTrustReadable
 	t.Cleanup(func() {
 		caRootFunc, caTrustPaths, platformTrustCheck, platformPresenceCheck = origRoot, origPaths, origTrust, origPresence
+		platformTrustReadable = origReadable
 	})
 	caTrustPaths = nil // isolate from the bundle path; only the platform hooks matter here
+	platformTrustReadable = func() bool { return true }
 
 	caDir := t.TempDir()
 	writeTestCA(t, caDir)
@@ -138,6 +141,20 @@ func TestCAPresentButUntrusted(t *testing.T) {
 		platformPresenceCheck = nil
 		if CAPresentButUntrusted() {
 			t.Fatal("must report false on a platform with no presence/trust distinction")
+		}
+	})
+
+	// The repair prompts for an admin password, so it may only run on an
+	// answered check. A store that could not be read reports nothing wrong,
+	// otherwise a machine where the export keeps failing is asked to repair a
+	// CA that was fine on every single install.
+	t.Run("trust state unreadable", func(t *testing.T) {
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformPresenceCheck = func(der []byte) bool { return true }
+		platformTrustReadable = func() bool { return false }
+		t.Cleanup(func() { platformTrustReadable = func() bool { return true } })
+		if CAPresentButUntrusted() {
+			t.Fatal("an unreadable trust store must not drive the privileged repair")
 		}
 	})
 }

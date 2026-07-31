@@ -34,6 +34,12 @@ var platformTrustCheck func(der []byte) bool
 // to distinguish it from.
 var platformPresenceCheck func(der []byte) bool
 
+// platformTrustReadable reports whether the platform's trust state could be
+// read at all. Only a store that answered may drive the privileged repair
+// CAPresentButUntrusted gates: a check that could not run has not found
+// anything wrong. nil where there is nothing that can fail to answer.
+var platformTrustReadable func() bool
+
 // caRootFunc resolves mkcert's CAROOT directory. Overridable in tests.
 var caRootFunc = func() (string, error) {
 	out, err := exec.Command(MkcertPath(), "-CAROOT").Output()
@@ -80,12 +86,17 @@ func CATrusted() bool {
 // CAPresentButUntrusted reports the drifted state that let a reinstall
 // silently skip re-establishing trust (see ca_trust_darwin.go): mkcert's
 // root CA sits in a platform certificate store — so mkcert's own "already
-// installed" self-check may treat it as already handled — but carries no
-// actual trust decision. Always false when CATrusted() already reports true,
-// or on a platform with no platformPresenceCheck wired (only darwin has a
+// installed" self-check may treat it as already handled — but the store no
+// longer trusts it. Always false when CATrusted() already reports true, when
+// the trust state could not be read (an unanswered check is not a finding,
+// and acting on one would prompt for the repair on every run), or on a
+// platform with no platformPresenceCheck wired (only darwin has a
 // presence/trust gap to detect; a Linux bundle hit is the trust decision).
 func CAPresentButUntrusted() bool {
 	if platformPresenceCheck == nil || CATrusted() {
+		return false
+	}
+	if platformTrustReadable != nil && !platformTrustReadable() {
 		return false
 	}
 	der := rootCADER()

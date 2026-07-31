@@ -289,7 +289,7 @@ The mkcert CA must be installed in your browser's trust store. Ensure `certutil`
 
 After installing the package, run `lerd install` again to register the CA.
 
-On macOS, this can also show up after a reinstall even though everything worked the first time: a macOS update can clear a certificate's trust settings while leaving the certificate itself in the keychain. `lerd install` checks the actual trust setting now, not just whether the certificate is present, and repairs it (with the usual admin password prompt) when it finds that drifted state. Just re-run `lerd install`.
+On macOS, this can also show up after a reinstall even though everything worked the first time: a macOS update can drop a certificate's trust settings while leaving the certificate itself in the keychain. `lerd install` asks whether the keychain still trusts the CA now, rather than only whether the certificate is there, and repairs it (with the usual admin authorization prompt) when it finds that drifted state. Just re-run `lerd install`.
 :::
 
 ::: details PHP image build is slow on first run

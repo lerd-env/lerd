@@ -57,7 +57,13 @@ func ensureResolverSudoers() {
 func ensureMkcertCA(unattended bool) {
 	if !unattended && certs.CAPresentButUntrusted() {
 		feedback.Sudo("Repairing mkcert CA trust (present in the keychain but not trusted)")
-		certs.RepairSystemTrust() //nolint:errcheck // best-effort; mkcert -install still runs next either way
+		// Named rather than swallowed: macOS draws the authorization dialog
+		// itself, so a run with no window server behind it fails here, and a
+		// silent failure would leave every site's HTTPS invalid with nothing
+		// said about why.
+		if err := certs.RepairSystemTrust(); err != nil {
+			feedback.Warn("repairing mkcert CA trust: %v", err)
+		}
 	}
 	cmd := exec.Command(certs.MkcertPath(), "-install")
 	switch {
