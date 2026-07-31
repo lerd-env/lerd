@@ -232,8 +232,8 @@ type SiteUsage struct {
 // UsageBySite aggregates the app requests each site served in [since, until), so
 // the sites list can order by real traffic. It filters through the same predicate
 // as the timing view, so an asset pipeline or a long-lived WebSocket can't make a
-// site look busy. The two predicates SQL can express are pushed down; the
-// static-asset test is on the URI's extension, so those rows are dropped in Go.
+// site look busy. The two predicates SQL can express are pushed down; the rest
+// read the URI itself, so those rows are dropped in Go.
 func (s *Store) UsageBySite(since, until time.Time) (map[string]SiteUsage, error) {
 	rows, err := s.db.Query(
 		`SELECT site, at_ms, uri FROM requests
@@ -250,7 +250,7 @@ func (s *Store) UsageBySite(since, until time.Time) (map[string]SiteUsage, error
 		if err := rows.Scan(&site, &atMs, &uri); err != nil {
 			return nil, err
 		}
-		if IsStaticAsset(uri) {
+		if !isAppURI(uri) {
 			continue
 		}
 		u := out[site]

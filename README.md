@@ -25,35 +25,75 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ## Features
 
-- 🌐 **Automatic `.test` domains** with one-command TLS that reissues before it expires. No dnsmasq, no system resolver tweak, no sudo for the DNS bits. [Opt out of lerd-managed DNS](https://lerd.sh/features/dns) for `*.localhost`, or toggle it later with `dns:enable` / `dns:disable` / `dns:repair`
-- 🐘 **Per-project PHP version** (8.1–8.5, plus a frozen 7.4 / 8.0 legacy tier for hosted-on-the-old-stack projects), switch with one click, with custom PHP extensions and Alpine packages declared once and applied to every image lerd builds, so changing a site's version never silently drops what you asked for
-- ⚡ **FrankenPHP runtime** per site as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode
-- 📦 **Node.js isolation** per project (Node 22, 24) through the bundled fnm or an nvm you already have, switchable from the dashboard, or **bun** as the JS runtime on the host and, opt-in, inside the container
-- 🖥️ **Built-in Web UI** with sites and services dashboards, live widgets, a global Cmd+K command palette, and install/remove of PHP and Node versions from the System page. Available in fourteen languages
-- ✏️ **Edit config in the browser**: per-site and global nginx, `php.ini` with the version's own file and the shared scope side by side, `.env` files, and database/service runtime tuning, each validated (`nginx -t` where it applies), with timestamped backups and one-click restore
-- 🧪 **Tinker tab**, an in-browser PHP REPL per site with project-aware autocomplete, hover and diagnostics powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), so your models and Builder chains resolve alongside composer helpers. Works on Laravel, Symfony, and any composer project
-- 🛰️ **Debug window** that intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI, MCP and `lerd dump tail`, scoped per site and per worktree branch. The same window captures SQL with N+1 and slow-query detection, plus mail, views, events, queued jobs and outgoing HTTP, on Laravel and Symfony
-- 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off, every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard. No FPM restart, no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command
-- 📈 **Request timing analytics** per site, a durable view of typical and p95 response times, throughput, error rate, and the slowest routes ranked by recent p95 with one-click profiling. Agents get the same signal over MCP with `route_timing` and `optimize_route`
-- 🔔 **Notifications** for the things worth interrupting you, delivered to open dashboards, to subscribed browsers over Web Push, or to your desktop's native notification daemon. Every one also lands in the dashboard's sidebar bell, which keeps the last 50 with an unread count across reloads
-- 🧰 **Environment doctor** (`lerd doctor`) checks the host lerd itself depends on and repairs what it safely can with `--fix`: missing directories, linger, a missing PHP image, the DNS wiring. Anything needing sudo is printed as a command and never run for you, and `--dry-run` shows it first
-- 🩺 **Site doctor**, health checks that apply to any project (env drift, application key, composer and node install state, security audits, database presence, PHP version range) plus extra checks for your framework, with one-click fixes. From the web UI, the TUI, `lerd site:doctor` and MCP
-- 📌 **Pinned host tools**: Composer, fnm and mkcert are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install overnight, and the System page reports each against its pin and applies the update on the card that flagged it
-- 💻 **Terminal dashboard** (`lerd tui`) - btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort, the same operations surface as the web UI, for tmux and SSH workflows
-- 🗄️ **One-click services**: MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Reverb, OpenSearch and more, the default stack built in and every add-on fetched from a store that updates without a new lerd release. Browse, create and drop an engine's databases from its service page, with snapshots, export and import
-- 🧷 **IDE database wiring** for JetBrains: a project gets one data source pointed at its own lerd database on the host port it actually answers on, written on link and refreshed as the project's database changes, leaving every data source lerd doesn't own untouched
-- 🌍 **Share a site** on your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, serveo or localhost.run, from the CLI or the dashboard's share menu. Set a Cloudflare base domain once and every share is served on `<site>.<domain>`, so a webhook or OAuth callback keeps its URL between runs, and ngrok runs from its published image on a machine that never installed it
-- 🎨 **Dev servers on the site's own domain**: a running Vite serves its assets and its hot-reload socket under the site's `.test` hostname instead of advertising `localhost:5173`, so a shared, LAN-opened or worktree page arrives styled. Nothing in the project is edited and nothing is declared per framework
-- 🔗 **Site groups**: group related sites so a main owns a base domain and the rest occupy its subdomains, with a shared or separate database per secondary
-- 🧱 **Host-proxy sites**: run a Node, Python, Go, or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included, and bounce a wedged dev server from the site header without reaching for a terminal
-- 🌳 **First-class git worktrees** with auto-detected branch domains, per-worktree PHP and Node versions, optional database isolation, wildcard cert SANs for `*.branch.site.test`, and a per-branch Vite worker on the host. Add and remove them from a dashboard modal without touching the CLI
-- ⚒️ **Worker self-heal**, failed queue, schedule, horizon, reverb, and stripe workers are surfaced everywhere (CLI, dashboard banner, TUI, MCP) and recovered with one click or `lerd worker heal`
-- 💤 **Idle-suspend**, activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, resumed on the next request, CLI command, MCP call, or file save, with per-site pinning
-- 📋 **Live logs** for PHP-FPM, Queue, Schedule, Reverb, per site, rendered in the colour the tool actually emits (artisan, composer, vite, pest) and with a button that hands any log to a real terminal so a long tail survives closing the tab
-- 🔒 **Rootless & daemonless** - Podman-native, no Docker required, dual-stack IPv4 + IPv6
-- 🤖 **MCP server** - let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly
-- 🧩 **Framework store** - community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, Statamic with versioned auto-detection, back to the majors that still run on PHP 7.4
-- ⚡ **No per-framework setup**, workers, env values and the nginx vhost are all configured for you when you link a project
+### Sites, domains and TLS
+
+- 🌐 **Automatic `.test` domains.** One command gives a project a hostname and TLS that reissues before it expires, with no dnsmasq, no system resolver tweak and no sudo for the DNS bits. You can [opt out of lerd-managed DNS](https://lerd.sh/features/dns) for `*.localhost`, or toggle it later with `dns:enable` / `dns:disable` / `dns:repair`.
+
+- 🔗 **Site groups.** Group related sites so a main site owns a base domain and the rest occupy its subdomains, with a shared or separate database per secondary.
+
+- 🧱 **Host-proxy sites.** Run a Node, Python, Go or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included. A wedged dev server can be bounced from the site header without reaching for a terminal.
+
+- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, optional database isolation, wildcard cert SANs for `*.branch.site.test`, and a per-branch Vite worker on the host. Add and remove them from a dashboard modal without touching the CLI.
+
+- 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, serveo or localhost.run, from the CLI or the dashboard's share menu. Set a Cloudflare base domain once and every share is served on `<site>.<domain>`, so a webhook or OAuth callback keeps its URL between runs, and ngrok runs from its published image on a machine that never installed it.
+
+- 🎨 **Dev servers on the site's own domain.** A running Vite serves its assets and its hot-reload socket under the site's `.test` hostname instead of advertising `localhost:5173`, so a shared, LAN-opened or worktree page arrives styled. Nothing in the project is edited and nothing is declared per framework.
+
+### PHP, Node and runtimes
+
+- 🐘 **Per-project PHP version.** 8.1 to 8.5, plus a frozen 7.4 / 8.0 legacy tier for projects hosted on the old stack, switched with one click. Custom PHP extensions and Alpine packages are declared once and applied to every image lerd builds, so changing a site's version never silently drops what you asked for.
+
+- ⚡ **FrankenPHP runtime.** Per site, as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode.
+
+- 📦 **Node.js isolation.** Node 22 or 24 per project, through the bundled fnm or an nvm you already have, switchable from the dashboard. Or **bun** as the JS runtime on the host and, opt-in, inside the container.
+
+- 🪄 **No per-framework setup.** Workers, env values and the nginx vhost are all configured for you when you link a project.
+
+- 🧩 **Framework store.** Community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP and Statamic with versioned auto-detection, back to the majors that still run on PHP 7.4.
+
+### Services and databases
+
+- 🗄️ **One-click services.** MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Reverb, OpenSearch and more, the default stack built in and every add-on fetched from a store that updates without a new lerd release. Browse, create and drop an engine's databases from its service page, with snapshots, export and import.
+
+- 🧷 **IDE database wiring** for JetBrains. A project gets one data source pointed at its own lerd database on the host port it actually answers on, written on link and refreshed as the project's database changes, leaving every data source lerd doesn't own untouched.
+
+### Debugging and performance
+
+- 🛰️ **Debug window.** Intercepts every `dump()` / `dd()` and streams it to the dashboard, TUI, MCP and `lerd dump tail`, scoped per site and per worktree branch. The same window captures SQL with N+1 and slow-query detection, plus mail, views, events, queued jobs and outgoing HTTP, on Laravel and Symfony.
+
+- 🔥 **[SPX](https://github.com/NoiseByNorthwest/php-spx) profiler** with one-click on/off. Every PHP-FPM request becomes a flame graph viewable in a same-origin Profiler view in the dashboard, with no FPM restart and no code changes, and `lerd profile run` profiles a one-shot artisan or CLI command.
+
+- 📈 **Request timing analytics.** A durable per-site view of typical and p95 response times, throughput, error rate, and the slowest routes ranked by recent p95 with one-click profiling. Agents get the same signal over MCP with `route_timing` and `optimize_route`.
+
+- 🧪 **Tinker tab.** An in-browser PHP REPL per site with project-aware autocomplete, hover and diagnostics powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), so your models and Builder chains resolve alongside composer helpers. Works on Laravel, Symfony, and any composer project.
+
+### Interfaces
+
+- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, and install/remove of PHP and Node versions from the System page. Available in fourteen languages.
+
+- 💻 **Terminal dashboard** (`lerd tui`). A btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort, the same operations surface as the web UI, for tmux and SSH workflows.
+
+- ✏️ **Edit config in the browser.** Per-site and global nginx, `php.ini` with the version's own file and the shared scope side by side, `.env` files, and database/service runtime tuning, each validated (`nginx -t` where it applies), with timestamped backups and one-click restore.
+
+- 📋 **Live logs** for PHP-FPM, Queue, Schedule and Reverb, per site, rendered in the colour the tool actually emits (artisan, composer, vite, pest) and with a button that hands any log to a real terminal so a long tail survives closing the tab.
+
+- 🔔 **Notifications** for the things worth interrupting you, delivered to open dashboards, to subscribed browsers over Web Push, or to your desktop's native notification daemon. Every one also lands in the dashboard's sidebar bell, which keeps the last 50 with an unread count across reloads.
+
+- 🤖 **MCP server.** Let AI assistants (Claude Code, Cursor, JetBrains Junie, Codex CLI, Gemini CLI, GitHub Copilot, Google Antigravity, Windsurf) manage your environment directly.
+
+### Health and upkeep
+
+- 🧰 **Environment doctor** (`lerd doctor`). Checks the host lerd itself depends on and repairs what it safely can with `--fix`: missing directories, linger, a missing PHP image, the DNS wiring. Anything needing sudo is printed as a command and never run for you, and `--dry-run` shows it first.
+
+- 🩺 **Site doctor.** Health checks that apply to any project (env drift, application key, composer and node install state, security audits, database presence, PHP version range) plus extra checks for your framework, with one-click fixes. From the web UI, the TUI, `lerd site:doctor` and MCP.
+
+- ⚒️ **Worker self-heal.** Failed queue, schedule, horizon, reverb and stripe workers are surfaced everywhere (CLI, dashboard banner, TUI, MCP) and recovered with one click or `lerd worker heal`.
+
+- 💤 **Idle-suspend.** Activity-driven suspension of a site's workers (queue, schedule, horizon, reverb, stripe, Vite) after a configurable idle timeout, resumed on the next request, CLI command, MCP call or file save, with per-site pinning.
+
+- 📌 **Pinned host tools.** Composer, fnm and mkcert are pinned behind a published manifest rather than whatever `releases/latest` served that day, so an upstream release cannot break a fresh install overnight, and the System page reports each against its pin and applies the update on the card that flagged it.
+
+- 🔒 **Rootless and daemonless.** Podman-native, no Docker required, dual-stack IPv4 + IPv6.
 
 ## AI Integration (MCP)
 

@@ -26,18 +26,7 @@
 
 **Choose Lerd when:** you work on Linux (Herd has no Linux build), prefer open source, want reproducible project setup checked into git via `.lerd.yaml`, need first-class non-PHP containers, or want a single tool that covers PHP, Node, Python, and Go behind the same `.test` routing.
 
-### The "Herd on Linux" pitch
-
-If you're moving from macOS + Herd to Linux, or want the same workflow on both, Lerd covers the Herd day-to-day surface:
-
-- Automatic `.test` domains with no `/etc/hosts` edits
-- Instant HTTPS via mkcert
-- Per-site PHP version selection
-- Shared MySQL, Postgres, Redis, Mailpit, S3-compatible storage
-- Per-site queue workers and scheduler as systemd services
-- A visual dashboard for sites, services, and logs
-
-You trade a sliver of native performance (Podman Machine on macOS adds overhead versus native binaries) for rootless isolation, a fully open stack, reproducible `.lerd.yaml` project setup, and the same tool on Linux.
+See [Laravel Herd for Linux](/getting-started/herd-linux) for the command-by-command mapping, what Herd Pro gates that Lerd does not, and a migration walkthrough.
 
 ---
 

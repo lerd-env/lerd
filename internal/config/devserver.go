@@ -24,9 +24,10 @@ type DevServerTool struct {
 	WrapperPath string
 	// Args is appended to the worker command, with {config} and {port} filled in.
 	Args string
-	// Wrapper is the generated config, taking the import path, base, origin and
-	// allowed hosts. Every placeholder is filled with an encoded JavaScript
-	// literal, so none of them carries its own quotes.
+	// Wrapper is the generated config, taking the import path, base, origin,
+	// allowed hosts and the origins allowed to fetch from the server. Every
+	// placeholder is filled with an encoded JavaScript literal, so none of them
+	// carries its own quotes.
 	Wrapper     string
 	DefaultPort int
 }
@@ -49,6 +50,10 @@ const lerd = {
         host: true,
         origin: %s,
         allowedHosts: %s,
+        // Naming an origin makes some framework plugins treat it as the whole
+        // CORS allowlist, so a page on any other domain of the site would be
+        // refused the assets it just asked for. Declare them all.
+        cors: { origin: %s },
     },
 };
 
@@ -58,6 +63,20 @@ export default async (env) => {
 };
 `,
 }}
+
+// devServerBases is computed once, since the tools are fixed at build time and
+// the request feed asks for them on every access line.
+var devServerBases = func() []string {
+	bases := make([]string, len(devServerTools))
+	for i := range devServerTools {
+		bases[i] = devServerTools[i].Base
+	}
+	return bases
+}()
+
+// DevServerBases returns the URL prefixes lerd's dev servers serve under, so a
+// caller can tell a request the dev server answered from one the app served.
+func DevServerBases() []string { return devServerBases }
 
 // DevServerToolInstalled returns the dev server the project has installed, or
 // nil. Used where only the tool's shape matters, such as rendering the vhost.

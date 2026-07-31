@@ -58,6 +58,11 @@ func TestIsAppRequest(t *testing.T) {
 		{"short websocket", 101, "/app/key", 40},
 		{"static asset", 200, "/build/assets/app-DQ0VOLSm.js", 4},
 		{"file nginx served directly", 200, "/manifest.json", 0},
+		// A dev server answers on the site's domain, so its modules reach the feed
+		// as if the app had served them. Their extensions are not asset extensions.
+		{"dev server client", 200, "/@lerd-vite/@vite/client", 3},
+		{"dev server module", 200, "/@lerd-vite/src/App.vue", 12},
+		{"dev server entrypoint", 200, "/@lerd-vite/src/main.ts", 8},
 	}
 	for _, r := range skipped {
 		if IsAppRequest(r.status, r.uri, r.ms) {

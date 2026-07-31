@@ -220,3 +220,61 @@ func TestQueueWorkerFailureNotifications_EmptyNoDispatch(t *testing.T) {
 		t.Errorf("empty batch should not arm timer or dispatch")
 	}
 }
+
+// An orphaned unit is on its way to being pruned, so telling the user a worker
+// is failing names a problem they neither caused nor can act on, for something
+// that resolves itself. Only real failures are worth a push notification.
+func TestQueueWorkerFailureNotifications_skipsOrphaned(t *testing.T) {
+	wait := installBatchTestSink(t, 10*time.Millisecond)
+	confirmUnits(t,
+		uw("lerd-vite-ws-feat-x.service", "ws.test", "vite", workerheal.StateOrphaned),
+		uw("lerd-queue-ws.service", "ws.test", "queue", "failed"),
+	)
+	queueWorkerFailureNotifications([]workerheal.UnhealthyWorker{
+		uw("lerd-vite-ws-feat-x.service", "ws.test", "vite", workerheal.StateOrphaned),
+		uw("lerd-queue-ws.service", "ws.test", "queue", "failed"),
+	})
+
+	calls := wait()
+	if len(calls) != 1 {
+		t.Fatalf("dispatch calls = %d, want 1", len(calls))
+	}
+	if len(calls[0]) != 1 || calls[0][0].Unit != "lerd-queue-ws.service" {
+		t.Fatalf("dispatched %v, want only the real failure", calls[0])
+	}
+}
+
+// Nothing but orphans means nothing to say, so the batcher must stay silent
+// rather than dispatch a notification with an empty body.
+func TestQueueWorkerFailureNotifications_allOrphanedDispatchesNothing(t *testing.T) {
+	var mu sync.Mutex
+	var calls int
+	origDispatch, origDelay := workerFailureDispatch, workerFailureBatchDelay
+	workerFailureDispatch = func([]workerheal.UnhealthyWorker) {
+		mu.Lock()
+		calls++
+		mu.Unlock()
+	}
+	workerFailureBatchDelay = 10 * time.Millisecond
+	t.Cleanup(func() {
+		workerFailureDispatch, workerFailureBatchDelay = origDispatch, origDelay
+		workerFailureBatchMu.Lock()
+		pendingWorkerFailures = map[string]workerheal.UnhealthyWorker{}
+		if workerFailureFlushTimer != nil {
+			workerFailureFlushTimer.Stop()
+			workerFailureFlushTimer = nil
+		}
+		workerFailureBatchMu.Unlock()
+	})
+
+	queueWorkerFailureNotifications([]workerheal.UnhealthyWorker{
+		uw("lerd-vite-ws-feat-x.service", "ws.test", "vite", workerheal.StateOrphaned),
+	})
+	time.Sleep(150 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if calls != 0 {
+		t.Errorf("dispatch calls = %d, want 0", calls)
+	}
+}

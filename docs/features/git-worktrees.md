@@ -207,6 +207,12 @@ When a worktree is removed (via `git worktree remove` directly or `lerd worktree
 
 The startup sweep also catches any registry entries whose worktree directory disappeared while the watcher was offline, restarting `lerd-watcher` reconciles state.
 
+### A checkout deleted without git
+
+That ordering hangs off git's own `.git/worktrees/` entry disappearing, which is what `git worktree remove` deletes. Deleting the checkout directory on its own leaves that entry behind, so the watcher never hears about it and the worker units keep retrying against a `WorkingDirectory` that has gone, failing at `CHDIR` before the command runs and restarting every `RestartSec` indefinitely. This is no longer unusual: coding agents create and destroy their own worktrees, and they have no reason to know lerd exists.
+
+Such a unit is reported as **orphaned** rather than failing, and is never offered a heal, because starting it again cannot do anything except fail in the same place. It is removed instead, on the daemon's reconciliation pass and again at startup, so an install already stuck this way recovers on its own. Nothing is preserved because there is nothing left to preserve; re-adding the worktree recreates the unit from scratch. Orphans also stay out of the failing-worker notifications, since they name a problem that resolves itself.
+
 ---
 
 ## `lerd sites` output
