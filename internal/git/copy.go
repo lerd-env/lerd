@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	nodeDet "github.com/geodro/lerd/internal/node"
@@ -112,12 +113,17 @@ func InstallDependencies(projectPath string, out io.Writer) error {
 		composer := filepath.Join(config.BinDir(), "composer")
 		if err := runIn(projectPath, out, composer, "install", "--no-interaction", "--no-progress"); err != nil {
 			errs = append(errs, fmt.Errorf("composer install: %w", err))
+		} else {
+			stampInstallMarker(filepath.Join(projectPath, "vendor", "composer", "installed.json"))
 		}
 	}
 
 	if jsNeedsInstall(projectPath) {
 		if err := runJSInstall(projectPath, out); err != nil {
 			errs = append(errs, err)
+		} else {
+			marker, _ := jsInstallPaths(projectPath)
+			stampInstallMarker(marker)
 		}
 	}
 
@@ -223,6 +229,29 @@ func jsInstallPaths(projectPath string) (marker, ref string) {
 // the reference file. A missing reference (lockfile/manifest) is treated
 // as "no signal" and the marker is trusted: in that pathological case we
 // avoid spurious reinstalls.
+// stampInstallMarker moves an install marker's mtime to now, after the install
+// that owns it has succeeded.
+//
+// Composer and npm only rewrite these files when the package set actually
+// changes, so an install against a tree that is already correct exits with
+// "nothing to install" and leaves the marker's mtime where it was. When that
+// mtime predates the lockfile, every later staleness check says an install is
+// needed and the install is run again, forever. A worktree is the normal way to
+// get there: it is seeded with a copy of the main repo's vendor/, whose marker
+// carries the main repo's older timestamp, while its lockfile is freshly checked
+// out. The watcher's rescan then re-ran composer install on that worktree once a
+// minute for the life of the daemon.
+//
+// A missing marker is left alone: nothing was installed, so there is nothing to
+// vouch for, and the check should keep asking.
+func stampInstallMarker(marker string) {
+	if _, err := os.Stat(marker); err != nil {
+		return
+	}
+	now := time.Now()
+	_ = os.Chtimes(marker, now, now)
+}
+
 func markerStale(marker, ref string) bool {
 	refInfo, err := os.Stat(ref)
 	if err != nil {

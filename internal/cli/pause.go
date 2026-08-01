@@ -14,6 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/siteinfo"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 	"github.com/spf13/cobra"
 )
@@ -405,11 +406,12 @@ func collectRunningWorkers(site *config.Site) []string {
 			names = append(names, wName)
 		}
 		sort.Strings(names)
+		states := siteinfo.AllUnitStates()
 		for _, wName := range names {
 			unit := "lerd-" + wName + "-" + site.Name
 			// Scheduled workers' .service sits at inactive between timer firings.
 			if unitIsActiveOrActivating(unit) ||
-				lerdSystemd.IsTimerActive(unit) {
+				timerIsActive(states, unit) {
 				active = append(active, wName)
 			}
 		}
@@ -463,13 +465,27 @@ func collectRunningWorktreeWorkersByBase(site *config.Site, wtBase string) []str
 	sort.Strings(names)
 
 	var active []string
+	states := siteinfo.AllUnitStates()
 	for _, wName := range names {
 		unit := "lerd-" + wName + "-" + site.Name + "-" + wtBase
-		if unitIsActiveOrActivating(unit) || lerdSystemd.IsTimerActive(unit) {
+		if unitIsActiveOrActivating(unit) || timerIsActive(states, unit) {
 			active = append(active, wName)
 		}
 	}
 	return active
+}
+
+// timerIsActive reports whether a worker's sibling .timer is active, answered
+// from the batched unit snapshot instead of a per-unit DBus round trip.
+//
+// systemd.IsTimerActive fetches the unit's entire property dictionary to read
+// one field. The idle engine calls this for every worker of every site it
+// believes suspended, every tick, which on a box with a dozen suspended sites
+// made that pass the daemon's largest remaining source of idle wakeups.
+// AllUnitStates answers from the one cached systemctl enumeration the dashboard
+// already populates, and it keeps the .timer suffix for exactly this lookup.
+func timerIsActive(states map[string]string, unit string) bool {
+	return states[unit+".timer"] == "active"
 }
 
 // unitIsActiveOrActivating routes through podman.UnitStatus so the check
