@@ -459,21 +459,41 @@ func parentProxyConfig(site config.Site) *config.ProxyConfig {
 // (lerd-app-<site>-<branch>) and teardown are handled by the shared per-worktree
 // worker machinery.
 func SetupHostProxyWorktree(site config.Site, wtPath, wtDomain string) error {
+	if err := GenerateHostProxyWorktreeVhost(site, wtPath, wtDomain); err != nil {
+		return err
+	}
+	return StartHostProxyWorktreeServer(site, wtPath)
+}
+
+// GenerateHostProxyWorktreeVhost writes the proxy vhost that fronts a host-proxy
+// worktree's dev server. Split from starting that server so the watcher's boot
+// scan can route every worktree subdomain before it starts anything.
+func GenerateHostProxyWorktreeVhost(site config.Site, wtPath, wtDomain string) error {
 	proxy := parentProxyConfig(site)
 	if proxy == nil {
 		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
 	}
 	port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
-	if err := nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured); err != nil {
+	return nginx.GenerateWorktreeHostProxyVhostFor(wtDomain, wtPath, site.PrimaryDomain(), port, proxy.SSL, site.Secured)
+}
+
+// StartHostProxyWorktreeServer supervises the parent's dev command from the
+// worktree checkout, on the per-worktree port its vhost already proxies to.
+func StartHostProxyWorktreeServer(site config.Site, wtPath string) error {
+	proxy := parentProxyConfig(site)
+	if proxy == nil {
+		return fmt.Errorf("parent site %s has no proxy config to mirror", site.Name)
+	}
+	port := WorktreeHostPort(proxy.Port, wtPath, hostProxyPortEnvKey(proxy))
+	w, ok := hostProxyWorkerForPort(proxy, port)
+	if !ok {
+		return nil
+	}
+	if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
 		return err
 	}
-	if w, ok := hostProxyWorkerForPort(proxy, port); ok {
-		if err := gateHostProxyAutostart(site, proxy.Command); err != nil {
-			return err
-		}
-		if err := WorkerStartForSite(site.Name, wtPath, "", hostProxyWorkerName, w, false); err != nil {
-			return fmt.Errorf("starting worktree dev server: %w", err)
-		}
+	if err := WorkerStartForSite(site.Name, wtPath, "", hostProxyWorkerName, w, false); err != nil {
+		return fmt.Errorf("starting worktree dev server: %w", err)
 	}
 	return nil
 }
