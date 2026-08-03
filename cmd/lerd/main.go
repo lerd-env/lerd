@@ -6,7 +6,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -751,8 +753,11 @@ func bootScan(cfg *config.GlobalConfig) {
 		reloadNeeded = true
 	}
 
-	// Generate vhosts for any existing worktrees.
-	if scanWorktrees() {
+	// Generate vhosts for any existing worktrees. The heavy per-worktree work
+	// comes back as deferred jobs so the reload below, and with it every
+	// worktree subdomain, does not queue behind the first composer install.
+	provision, generated := scanWorktrees()
+	if generated {
 		reloadNeeded = true
 	}
 
@@ -761,14 +766,60 @@ func bootScan(cfg *config.GlobalConfig) {
 			fmt.Printf("[WARN] nginx reload: %v\n", err)
 		}
 	}
+
+	gitpkg.ResetJSInstallFailures()
+	runProvisioning(provision, worktreeProvisionLimit())
 }
 
-// scanWorktrees generates vhosts for all existing worktrees across all main-repo sites.
-// Returns true if any vhosts were generated.
-func scanWorktrees() bool {
+// maxProvisionSlots caps how many worktrees are provisioned at once however
+// many cores the machine has. Past a handful the wait is the network and the
+// package caches rather than the CPU, so more installs only compete.
+const maxProvisionSlots = 4
+
+// provisionSlots is how many worktrees a machine with numCPU cores provisions
+// at once. A composer install and a JS install each saturate a core, and this
+// runs unattended at daemon start, so two cores are left for the rest of the
+// machine: the daemons, the containers serving every other site, and whatever
+// the user is in the middle of. A machine too small to spare them runs one.
+func provisionSlots(numCPU int) int {
+	return max(1, min(numCPU-2, maxProvisionSlots))
+}
+
+func worktreeProvisionLimit() int {
+	return provisionSlots(runtime.NumCPU())
+}
+
+// runProvisioning runs the deferred half of the boot scan, at most limit jobs
+// at a time. Worktrees are independent of one another, so the scan that used to
+// take one install after another now takes as long as the slowest few.
+func runProvisioning(jobs []func(), limit int) {
+	if limit < 1 {
+		limit = 1
+	}
+	slots := make(chan struct{}, limit)
+	var wg sync.WaitGroup
+	for _, job := range jobs {
+		slots <- struct{}{}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			defer func() { <-slots }()
+			job()
+		}()
+	}
+	wg.Wait()
+}
+
+// scanWorktrees generates vhosts for all existing worktrees across all
+// main-repo sites, and returns the provisioning each one still needs alongside
+// whether any vhost was generated. Writing every vhost first is what keeps a
+// repo's last worktree from 404ing for as long as all the earlier installs
+// take: routing needs nothing but the vhost, so nothing that serving does not
+// depend on runs before the whole set is written.
+func scanWorktrees() ([]func(), bool) {
 	reg, err := config.LoadSites()
 	if err != nil {
-		return false
+		return nil, false
 	}
 	// Per-worktree worker units whose checkout is gone, once for the whole
 	// install rather than per site, since one detection pass covers every unit.
@@ -781,6 +832,7 @@ func scanWorktrees() bool {
 	}
 
 	generated := false
+	var provision []func()
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
 			continue
@@ -822,52 +874,66 @@ func scanWorktrees() bool {
 			}
 		}
 		for _, wt := range worktrees {
-			// Skip the install when the UI/CLI holds the cross-process lock:
-			// it is running composer/npm install with streamed output and
-			// would race the watcher's vendor seed otherwise.
-			if release, ok, _ := gitpkg.TryLockInstall(wt.Path); ok {
-				gitpkg.EnsureWorktreeDeps(s.Path, wt.Path, wt.Domain, s.Secured, nil)
-				release()
-			}
-			// Provision the isolated DB for a worktree that committed
-			// db_isolated: true but was never run through `lerd worktree add`
-			// (e.g. linked with the worktree already present). No-op otherwise.
-			if created, err := cli.EnsureWorktreeIsolatedDB(&site, wt.Branch, wt.Path); err != nil {
-				fmt.Printf("[WARN] isolated DB for worktree %s: %v\n", wt.Branch, err)
-			} else if created {
-				fmt.Printf("Worktree DB: created isolated database for %s\n", wt.Branch)
-			}
 			// Host-proxy sites mirror the parent dev command on a per-worktree
 			// port behind the worktree domain; no PHP vhost or framework workers.
 			if site.IsHostProxy() {
-				if err := cli.SetupHostProxyWorktree(site, wt.Path, wt.Domain); err != nil {
+				if err := cli.GenerateHostProxyWorktreeVhost(site, wt.Path, wt.Domain); err != nil {
 					fmt.Printf("[WARN] worktree host-proxy for %s: %v\n", wt.Domain, err)
 					continue
 				}
 				fmt.Printf("Worktree vhost: %s -> %s (host proxy)\n", wt.Branch, wt.Domain)
-				generated = true
-				continue
+			} else {
+				// Inheritance is intentionally NOT run on the boot rescan: it only
+				// fires on genuine creation (the "added" watcher event in
+				// syncWorktree). Re-seeding here would resurrect an override the
+				// user deliberately reset, on every daemon restart.
+				// A worktree can pin its own PHP version, and the vhost has to
+				// name that version's FPM container or the branch is served by
+				// the parent's PHP.
+				effectivePHP := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
+				if err := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, effectivePHP, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured); err != nil {
+					fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, err)
+					continue
+				}
+				fmt.Printf("Worktree vhost: %s -> %s\n", wt.Branch, wt.Domain)
 			}
-			vhostErr := nginx.GenerateWorktreeVhostFor(wt.Domain, wt.Path, s.PHPVersion, s.PrimaryDomain(), s.Name, wt.Branch, s.Secured)
-			if vhostErr != nil {
-				fmt.Printf("[WARN] worktree vhost for %s: %v\n", wt.Domain, vhostErr)
-				continue
-			}
-			// Inheritance is intentionally NOT run on the boot rescan: it only
-			// fires on genuine creation (the "added" watcher event in
-			// syncWorktree). Re-seeding here would resurrect an override the
-			// user deliberately reset, on every daemon restart.
-			fmt.Printf("Worktree vhost: %s -> %s\n", wt.Branch, wt.Domain)
 			generated = true
-
-			// Per-worktree host workers (e.g. vite) need to be (re)started
-			// at daemon boot too, not just when fsnotify fires onAdded.
-			// Without this, units stopped during downtime never come back.
-			effectivePHP := config.WorktreePHPVersion(wt.Path, s.PHPVersion)
-			cli.AutoStartOptedInWorktreeWorkers(&site, wt.Path, effectivePHP)
+			provision = append(provision, func() { provisionWorktree(site, wt) })
 		}
 	}
-	return generated
+	return provision, generated
+}
+
+// provisionWorktree is the part of a worktree's boot reconcile that its vhost
+// does not wait on: the dependency install, the isolated database, and the
+// workers, in that order because each one needs what the previous put in place.
+// The vhost is already written and reloaded by the time this runs.
+func provisionWorktree(site config.Site, wt gitpkg.Worktree) {
+	// Skip the install when the UI/CLI holds the cross-process lock: it is
+	// running composer/npm install with streamed output and would race the
+	// watcher's vendor seed otherwise.
+	if release, ok, _ := gitpkg.TryLockInstall(wt.Path); ok {
+		gitpkg.EnsureWorktreeDeps(site.Path, wt.Path, wt.Domain, site.Secured, nil)
+		release()
+	}
+	// Provision the isolated DB for a worktree that committed db_isolated: true
+	// but was never run through `lerd worktree add` (e.g. linked with the
+	// worktree already present). No-op otherwise.
+	if created, err := cli.EnsureWorktreeIsolatedDB(&site, wt.Branch, wt.Path); err != nil {
+		fmt.Printf("[WARN] isolated DB for worktree %s: %v\n", wt.Branch, err)
+	} else if created {
+		fmt.Printf("Worktree DB: created isolated database for %s\n", wt.Branch)
+	}
+	if site.IsHostProxy() {
+		if err := cli.StartHostProxyWorktreeServer(site, wt.Path); err != nil {
+			fmt.Printf("[WARN] worktree dev server for %s: %v\n", wt.Domain, err)
+		}
+		return
+	}
+	// Per-worktree host workers (e.g. vite) need to be (re)started at daemon
+	// boot too, not just when fsnotify fires onAdded. Without this, units
+	// stopped during downtime never come back.
+	cli.AutoStartOptedInWorktreeWorkers(&site, wt.Path, config.WorktreePHPVersion(wt.Path, site.PHPVersion))
 }
 
 // rescanWorktreeInstalls re-runs EnsureWorktreeDeps for any worktree whose
@@ -880,6 +946,10 @@ func rescanWorktreeInstalls() {
 	if err != nil {
 		return
 	}
+	// Each pass gets a clean slate: a lockfile the user has fixed since the last
+	// one, or one whose install only failed on an unreachable registry, is due
+	// another attempt.
+	gitpkg.ResetJSInstallFailures()
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused || !gitpkg.IsMainRepo(s.Path) {
 			continue

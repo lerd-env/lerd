@@ -133,6 +133,8 @@ archives:
 brews:
   - name: lerd
     ids:
+      - lerd-amd64
+      - lerd-arm64
       - lerd-darwin-amd64
       - lerd-darwin-arm64
     repository:
@@ -143,8 +145,11 @@ brews:
     description: "Local Laravel development environment for Linux and macOS"
     license: "MIT"
     skip_upload: auto
+    # On macOS podman comes from brew; on Linux the distro's podman is the
+    # one lerd integrates with, so no brew dependency there.
     dependencies:
       - name: podman
+        os: mac
     install: |
       bin.install "lerd"
       bin.install "lerd-tray" if File.exist?("lerd-tray")
@@ -207,6 +212,9 @@ release:
     ```bash
     lerd update
     ```
+
+    Also available through apt (PPA), dnf (COPR) and Homebrew, see the
+    [installation docs](https://lerd.sh/getting-started/installation).
 
     ### Install on macOS
 

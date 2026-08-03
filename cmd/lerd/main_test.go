@@ -326,6 +326,170 @@ func TestNotifyReadyThenScan_readinessDoesNotWaitOnTheScan(t *testing.T) {
 	<-scanDone
 }
 
+// A worktree's subdomain only needs its vhost, so the boot scan must write
+// every one of them before it starts installing anything. Serving behind the
+// installs meant the last worktree of a large repo kept 404ing for as long as
+// all the earlier composer/npm runs took.
+func TestScanWorktrees_writesVhostBeforeTheDependencyInstall(t *testing.T) {
+	isolateConfig(t)
+
+	mainRepo := filepath.Join(t.TempDir(), "myapp")
+	worktree := filepath.Join(t.TempDir(), "myapp-feat")
+	wtMeta := filepath.Join(mainRepo, ".git", "worktrees", "feat")
+	for _, d := range []string{wtMeta, worktree} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(mainRepo, ".env"), []byte("APP_URL=http://myapp.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(worktree, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "myapp", Domains: []string{"myapp.test"}, Path: mainRepo, PHPVersion: "8.3",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	provision, generated := scanWorktrees()
+
+	if !generated {
+		t.Fatal("expected the scan to report a generated vhost")
+	}
+	vhost := filepath.Join(config.NginxConfD(), "feat.myapp.test.conf")
+	if _, err := os.Stat(vhost); err != nil {
+		t.Errorf("worktree vhost must exist as soon as the scan returns: %v", err)
+	}
+	wtEnv := filepath.Join(worktree, ".env")
+	if _, err := os.Stat(wtEnv); !os.IsNotExist(err) {
+		t.Error("the dependency seed must be deferred, not run before the vhost is written")
+	}
+	if len(provision) != 1 {
+		t.Fatalf("expected one deferred provisioning job, got %d", len(provision))
+	}
+
+	runProvisioning(provision, 1)
+
+	if _, err := os.Stat(wtEnv); err != nil {
+		t.Errorf("deferred provisioning must still seed the worktree: %v", err)
+	}
+}
+
+// A worktree that pins its own PHP version in .lerd.yaml must be served by that
+// version's FPM container. The boot scan wrote the parent's instead, so every
+// watcher restart pointed such a worktree at the wrong container until some
+// later pass corrected it.
+func TestScanWorktrees_vhostHonoursTheWorktreePHPPin(t *testing.T) {
+	isolateConfig(t)
+
+	mainRepo := filepath.Join(t.TempDir(), "myapp")
+	worktree := filepath.Join(t.TempDir(), "myapp-feat")
+	wtMeta := filepath.Join(mainRepo, ".git", "worktrees", "feat")
+	for _, d := range []string{wtMeta, worktree} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "HEAD"), []byte("ref: refs/heads/feat\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(wtMeta, "gitdir"), []byte(filepath.Join(worktree, ".git")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// The branch is on 8.3 while the parent site stays on 8.4.
+	if err := config.SetWorktreePHPVersion(worktree, "8.3"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "myapp", Domains: []string{"myapp.test"}, Path: mainRepo, PHPVersion: "8.4",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	scanWorktrees()
+
+	vhost, err := os.ReadFile(filepath.Join(config.NginxConfD(), "feat.myapp.test.conf"))
+	if err != nil {
+		t.Fatalf("reading the generated worktree vhost: %v", err)
+	}
+	if !strings.Contains(string(vhost), "lerd-php83-fpm") {
+		t.Errorf("worktree vhost must route to the pinned 8.3 container, got:\n%s", vhost)
+	}
+	if strings.Contains(string(vhost), "lerd-php84-fpm") {
+		t.Error("worktree vhost fell back to the parent site's PHP container")
+	}
+}
+
+// The boot scan runs unattended while the machine is being used for something
+// else, so it never claims every core: two are left for the daemons, the
+// containers serving the other sites, and the user's own work.
+func TestProvisionSlots(t *testing.T) {
+	cases := map[int]int{1: 1, 2: 1, 3: 1, 4: 2, 5: 3, 6: 4, 8: 4, 16: 4, 64: 4}
+	for numCPU, want := range cases {
+		if got := provisionSlots(numCPU); got != want {
+			t.Errorf("provisionSlots(%d) = %d, want %d", numCPU, got, want)
+		}
+	}
+	if got := provisionSlots(0); got != 1 {
+		t.Errorf("provisionSlots must never return less than one slot, got %d", got)
+	}
+}
+
+// Worktrees are independent of each other, so the deferred half of the boot
+// scan runs them concurrently — bounded, since each one is a composer and a
+// JS install and a repo with dozens of worktrees would otherwise fork all of
+// them at once.
+func TestRunProvisioning_runsEveryJobWithinTheConcurrencyLimit(t *testing.T) {
+	const jobs, limit = 12, 3
+
+	var live, peak, done atomic.Int64
+	entered := make(chan struct{}, jobs)
+	release := make(chan struct{})
+	work := make([]func(), 0, jobs)
+	for range jobs {
+		work = append(work, func() {
+			n := live.Add(1)
+			for p := peak.Load(); n > p; p = peak.Load() {
+				if peak.CompareAndSwap(p, n) {
+					break
+				}
+			}
+			entered <- struct{}{}
+			// Hold every slot open until the limit is reached, so it is the
+			// limit that caps the count and not jobs finishing before their
+			// peers have started.
+			<-release
+			live.Add(-1)
+			done.Add(1)
+		})
+	}
+
+	finished := make(chan struct{})
+	go func() { runProvisioning(work, limit); close(finished) }()
+
+	for range limit {
+		select {
+		case <-entered:
+		case <-time.After(5 * time.Second):
+			t.Fatalf("only %d of %d slots ever filled", peak.Load(), limit)
+		}
+	}
+	close(release)
+	<-finished
+
+	if got := peak.Load(); got > limit {
+		t.Errorf("ran %d jobs at once, limit is %d", got, limit)
+	}
+	if got := done.Load(); got != jobs {
+		t.Errorf("ran %d of %d jobs", got, jobs)
+	}
+}
+
 func TestShouldAutoStartWorkersOnSync(t *testing.T) {
 	cases := map[string]bool{
 		"added":   true,
