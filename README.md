@@ -152,11 +152,15 @@ lerd update
 <details>
 <summary>Install via apt instead (Ubuntu/Debian)</summary>
 
+The PPA publishes for every Ubuntu release in standard support and for the current development release. On one of those:
+
 ```bash
 sudo add-apt-repository ppa:lerd/lerd
 sudo apt update
 sudo apt install lerd
 ```
+
+On any other release the PPA has no packages, and `add-apt-repository` leaves behind a source entry that fails every later `apt update`. Remove it with `sudo add-apt-repository --remove ppa:lerd/lerd` and use the script installer above.
 
 The package finishes setup with no prompt: its maintainer script applies the root-level steps and runs the per-user install, so `.test` DNS and HTTPS come up on their own. Update with `sudo apt upgrade`; a packaged lerd lives under `/usr`, so `lerd update` defers to your package manager instead of fighting it.
 
