@@ -219,7 +219,7 @@ func runReqStatsSaver() {
 		snap := reqAggregator.Snapshot()
 		_ = reqstats.SaveSnapshot(snap, config.RequestStatsFile())
 		flushReqStore()
-		domainOf := siteDomainResolver()
+		domainOf := lazyResolver(siteDomainResolver)
 		for _, n := range slowNotifier.notifications(snap, domainOf) {
 			_ = push.Send(n)
 		}

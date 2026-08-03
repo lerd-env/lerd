@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/geodro/lerd/internal/atomicfile"
 )
 
 // SiteResolver maps a request host (e.g. "admin.myapp.test") to the owning
@@ -114,7 +116,9 @@ func (t *Tracker) Forget(site string) {
 
 // Save persists the last-active map to path as JSON ({site: unixSeconds}) so a
 // restart can restore the idle countdowns instead of re-seeding to now. Written
-// atomically via a temp file + rename.
+// atomically via a temp file + rename, and skipped when the map is unchanged:
+// the engine saves on every tick, and on a quiet machine no site's last-active
+// second moves between ticks.
 func (t *Tracker) Save(path string) error {
 	snap := t.Snapshot()
 	m := make(map[string]int64, len(snap))
@@ -125,11 +129,8 @@ func (t *Tracker) Save(path string) error {
 	if err != nil {
 		return err
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, data, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	_, err = atomicfile.WriteIfChanged(path, data, 0644)
+	return err
 }
 
 // LoadActivity reads a last-active map previously written by Save, returning the

@@ -129,10 +129,12 @@ func Start(currentVersion string) error {
 	go cli.ReapOrphanNgrokContainers()
 	stopTunnelsOnShutdown()
 
-	// Single coalescer for the three event sources that need to refresh the
+	// Single coalescer for the two event sources that need to refresh the
 	// container cache and broadcast a snapshot: in-process mutations
-	// (AfterUnitChange), DBus push notifications (SubscribeLerdUnitStateChanges),
-	// and CLI/MCP notifications (/api/internal/notify). A burst of state
+	// (AfterUnitChange) and CLI/MCP notifications (/api/internal/notify).
+	// systemd's DBus subscription is deliberately not one of them: it wakes on
+	// every unit property change on the bus, which costs more at idle than the
+	// polling it would replace. A burst of state
 	// transitions (e.g. a unit cycling activating→active during start) used to
 	// spawn one podman ps subprocess per transition; the coalescer collapses
 	// them into one poll + one publish per ~250ms quiet period.

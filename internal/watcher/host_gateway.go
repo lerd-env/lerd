@@ -61,88 +61,131 @@ func hostGatewayDepsFromPodman() hostGatewayDeps {
 	}
 }
 
+// hostGatewayInspectEvery is how many ticks pass between podman inspects once
+// the addresses have settled.
+//
+// The two halves of this watch cost wildly different amounts. Comparing the LAN
+// address is a UDP dial with no process behind it, so it runs every tick and a
+// laptop changing networks is still noticed within one interval. Looking up
+// lerd-nginx's bridge address forks podman, which at one fork per tick was the
+// largest single source of this daemon's idle wakeups, measurably more than
+// everything else it does combined. That address only moves when the container
+// is recreated, so it is checked on the first tick and then only occasionally,
+// snapping back to every tick as soon as anything does move.
+const hostGatewayInspectEvery = 10
+
+// hostGatewayDepsForWatch is the seam WatchHostGateway resolves its deps
+// through, so a test can drive the loop's cadence without a live podman.
+var hostGatewayDepsForWatch = hostGatewayDepsFromPodman
+
 // WatchHostGateway keeps both addresses in the shared hosts files fresh:
 // lerd-nginx's bridge IP, and the host.containers.internal gateway that Xdebug
-// needs. Costs one podman inspect per tick; the exec probe stays LAN-gated.
-// Runs until stop is closed; pass nil to run forever.
+// needs. Runs until stop is closed; pass nil to run forever.
 func WatchHostGateway(interval time.Duration, stop <-chan struct{}) {
-	deps := hostGatewayDepsFromPodman()
+	deps := hostGatewayDepsForWatch()
 	state := &hostGatewayState{lastLAN: primaryLANIP()}
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
+	ticksToInspect := 0
 	for {
 		select {
 		case <-ticker.C:
-			tickHostGateway(deps, state)
+			inspect := ticksToInspect <= 0
+			if tickHostGatewayWith(deps, state, inspect) {
+				// Something moved: look again next tick instead of waiting out
+				// the slow cadence.
+				ticksToInspect = 0
+				continue
+			}
+			if inspect {
+				ticksToInspect = hostGatewayInspectEvery
+			} else {
+				ticksToInspect--
+			}
 		case <-stop:
 			return
 		}
 	}
 }
 
-// tickHostGateway runs one iteration of the watch loop, checking the two
-// addresses baked into the hosts files. The nginx IP is looked up once and
-// threaded into both halves, so a tick costs exactly one podman inspect.
-func tickHostGateway(d hostGatewayDeps, s *hostGatewayState) {
-	nginxIP := d.freshNginxIP()
-	tickNginxIP(d, nginxIP)
-	tickGatewayIP(d, s, nginxIP)
+// tickHostGateway runs one full iteration, checking both addresses baked into
+// the hosts files. Reports whether either was rewritten.
+func tickHostGateway(d hostGatewayDeps, s *hostGatewayState) bool {
+	return tickHostGatewayWith(d, s, true)
+}
+
+// tickHostGatewayWith is tickHostGateway with the expensive half optional. With
+// inspect false it skips the podman lookup and runs only the LAN-gated gateway
+// check, which then reads whatever nginx address the hosts file already pins.
+func tickHostGatewayWith(d hostGatewayDeps, s *hostGatewayState, inspect bool) bool {
+	nginxIP := ""
+	changed := false
+	if inspect {
+		nginxIP = d.freshNginxIP()
+		changed = tickNginxIP(d, nginxIP)
+	}
+	if tickGatewayIP(d, s, nginxIP) {
+		changed = true
+	}
+	return changed
 }
 
 // tickNginxIP repoints the hosts files when lerd-nginx returns on a new bridge
 // IP, as it does on every recreation. It rewrites when either file has drifted,
 // so a write that updated one and failed on the other is retried next tick.
-func tickNginxIP(d hostGatewayDeps, fresh string) {
+func tickNginxIP(d hostGatewayDeps, fresh string) bool {
 	if fresh == "" {
-		return
+		return false
 	}
 	current := d.readNginxIP()
 	if current == "" {
-		return
+		return false
 	}
 	if current == fresh && d.readBrowserNginxIP() == fresh {
-		return
+		return false
 	}
 	// Pass the gateway back in untouched. Re-detecting it here would let an
 	// nginx-only rewrite move host.containers.internal without firing
 	// onUpdate, stranding the host-proxy vhosts on the old address.
 	gateway := d.readCurrent()
 	if gateway == "" {
-		return
+		return false
 	}
 	if err := d.writeHosts(gateway, fresh); err != nil {
 		d.log("warn", "rewriting container hosts file", "err", err)
-		return
+		return false
 	}
 	d.log("info", "container hosts files repointed at lerd-nginx", "ip", fresh)
+	return true
 }
 
 // tickGatewayIP keeps host.containers.internal pointing at a routable address.
 // The fast path (LAN IP unchanged since last tick) returns without a podman
 // exec; the slow path fires only when the laptop actually moved networks.
-func tickGatewayIP(d hostGatewayDeps, s *hostGatewayState, nginxIP string) {
+func tickGatewayIP(d hostGatewayDeps, s *hostGatewayState, nginxIP string) bool {
 	lan := d.primaryLANIP()
 	if lan == s.lastLAN {
-		return
+		return false
 	}
 	s.lastLAN = lan
 
 	current := d.readCurrent()
 	if current != "" && d.reachable(current) {
-		return
+		return false
 	}
 	fresh := d.detectFresh()
 	if fresh == "" || fresh == current {
-		return
+		return false
 	}
 	if err := d.writeHosts(fresh, nginxIPForWrite(d, nginxIP)); err != nil {
 		d.log("warn", "rewriting container hosts file", "err", err)
-		return
+		return false
 	}
 	d.log("info", "host gateway IP updated", "old", current, "new", fresh)
 	if d.onUpdate != nil {
 		d.onUpdate()
 	}
+	return true
 }
 
 // nginxIPForWrite prefers the live address, keeps whatever the file already
