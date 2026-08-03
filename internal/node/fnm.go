@@ -86,6 +86,14 @@ func (m fnmManager) ExecPrefix(version string) string {
 	return fmt.Sprintf("'%s' exec --using=%s --", m.bin(), shellQuote(execVersion(version)))
 }
 
+func (m fnmManager) ExecPrefixWithEnv(version string, env []string) string {
+	prefix := m.ExecPrefix(version)
+	if len(env) == 0 {
+		return prefix
+	}
+	return prefix + " env " + strings.Join(env, " ")
+}
+
 func (m fnmManager) ShimScript(lerdBin, bin string) string {
 	return fmt.Sprintf(`#!/bin/sh
 LERD="%s"

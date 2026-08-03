@@ -275,7 +275,7 @@ func runNode(bin string, args []string, exitOnFail bool) error {
 	mgr.ApplyEnv(cmd, extraEnv)
 	runErr := cmd.Run()
 	if manageGlobals {
-		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), mgr.ExecPrefix("default")); syncErr != nil {
+		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), mgr.ExecPrefixWithEnv("default", []string{"npm_config_prefix=" + prefix})); syncErr != nil {
 			fmt.Fprintf(os.Stderr, "lerd: warning: failed to sync npm global wrappers: %v\n", syncErr)
 		}
 	}
