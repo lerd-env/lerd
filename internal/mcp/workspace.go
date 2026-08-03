@@ -20,7 +20,7 @@ func workspaceTool() mcpTool {
 				"action":    {Type: "string", Enum: []string{"list", "create", "rename", "delete", "assign", "move"}},
 				"name":      {Type: "string", Description: "create/rename/delete/move: workspace name."},
 				"new_name":  {Type: "string", Description: "rename: the new name."},
-				"sites":     {Type: "array", Description: `assign: site names or domains, e.g. ["shop"].`},
+				"sites":     {Type: "array", Items: stringItems, Description: `assign: site names or domains, e.g. ["shop"].`},
 				"workspace": {Type: "string", Description: `assign: target workspace, created if new. "none" ungroups.`},
 				"position":  {Type: "integer", Description: "move: zero-based slot in the display order."},
 			},
