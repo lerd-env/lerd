@@ -110,6 +110,35 @@ func TestSyncNodeGlobalBins_CreatesWrappers(t *testing.T) {
 	}
 }
 
+func TestSyncNodeGlobalBins_InjectsNpmPrefix(t *testing.T) {
+	root := t.TempDir()
+	sourceBin := filepath.Join(root, "node-global", "bin")
+	targetBin := filepath.Join(root, "local-bin")
+	if err := os.MkdirAll(sourceBin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sourceBin, "codex"), []byte("#!/usr/bin/env node\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	execPrefix := "/fake/fnm exec --using=default -- env npm_config_prefix=" + filepath.Join(root, "node-global")
+	if err := syncNodeGlobalBins(sourceBin, targetBin, execPrefix); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+
+	data, err := os.ReadFile(filepath.Join(targetBin, "codex"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(data)
+	if !strings.Contains(body, "npm_config_prefix=") {
+		t.Errorf("wrapper missing npm_config_prefix: %q", body)
+	}
+	if !strings.Contains(body, filepath.Join(root, "node-global")) {
+		t.Errorf("wrapper missing prefix path: %q", body)
+	}
+}
+
 func TestSyncNodeGlobalBins_RemovesOrphans(t *testing.T) {
 	root := t.TempDir()
 	sourceBin := filepath.Join(root, "node-global", "bin")

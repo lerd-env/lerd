@@ -247,6 +247,11 @@ func (nvmManager) ExecPrefix(version string) string {
 	return fmt.Sprintf("bash -c %s lerd-nvm", shellQuote(nvmActivate(version)+`exec "$@"`))
 }
 
+func (nvmManager) ExecPrefixWithEnv(version string, env []string) string {
+	exports := nvmExports(env)
+	return fmt.Sprintf("bash -c %s lerd-nvm", shellQuote(nvmActivate(version)+exports+`exec "$@"`))
+}
+
 // ShimScript satisfies Manager but is unused for nvm (WritesPathShims is false).
 func (nvmManager) ShimScript(_, bin string) string {
 	return fmt.Sprintf("#!/usr/bin/env bash\nprintf 'lerd: nvm does not install PATH shims; use: lerd %%s\\n' %s >&2\nexit 1\n", shellQuote(bin))
