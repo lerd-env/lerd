@@ -79,7 +79,8 @@ func runNpmCaptured(dir string, args ...string) (string, error) {
 	cmd := mgr.Command(version, "npm", args)
 	cmd.Dir = dir
 	cmd.Env = shimLeadingEnv(os.Environ())
-	mgr.ApplyEnv(cmd, []string{"npm_config_prefix=" + config.NodeGlobalDir()})
+	prefixEnv, _ := npmGlobalPrefixEnv()
+	mgr.ApplyEnv(cmd, prefixEnv)
 	out, err := cmd.CombinedOutput()
 	return string(out), err
 }
@@ -258,8 +259,6 @@ func runNode(bin string, args []string, exitOnFail bool) error {
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	manageGlobals := bin == "npm" || bin == "npx"
-	prefix := config.NodeGlobalDir()
 	cmd.Env = shimLeadingEnv(os.Environ())
 	var extraEnv []string
 	if bin == "corepack" {
@@ -267,14 +266,19 @@ func runNode(bin string, args []string, exitOnFail bool) error {
 		// "Corepack is about to download…" prompt in a non-interactive setup.
 		extraEnv = append(extraEnv, "COREPACK_ENABLE_DOWNLOAD_PROMPT=0")
 	}
-	if manageGlobals {
-		if err := os.MkdirAll(filepath.Join(prefix, "bin"), 0o755); err == nil {
-			extraEnv = append(extraEnv, "npm_config_prefix="+prefix)
-		}
+	// A user-configured npm prefix (env or ~/.npmrc) wins over lerd's own, so
+	// `npm install -g` lands where the user expects and survives a lerd
+	// uninstall; the wrapper sync only runs for lerd's prefix.
+	syncGlobals := false
+	if bin == "npm" || bin == "npx" {
+		prefixEnv, lerdOwned := npmGlobalPrefixEnv()
+		extraEnv = append(extraEnv, prefixEnv...)
+		syncGlobals = lerdOwned
 	}
 	mgr.ApplyEnv(cmd, extraEnv)
 	runErr := cmd.Run()
-	if manageGlobals {
+	if syncGlobals {
+		prefix := config.NodeGlobalDir()
 		if syncErr := syncNodeGlobalBins(filepath.Join(prefix, "bin"), config.BinDir(), mgr.ExecPrefixWithEnv("default", []string{"npm_config_prefix=" + prefix})); syncErr != nil {
 			fmt.Fprintf(os.Stderr, "lerd: warning: failed to sync npm global wrappers: %v\n", syncErr)
 		}

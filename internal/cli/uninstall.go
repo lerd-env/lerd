@@ -44,6 +44,24 @@ func runUninstall(force bool) error {
 	// Ask about data removal up front — the StepRunner puts stdin into raw
 	// mode and its reader goroutine would consume bytes meant for this prompt.
 	removeData := force || confirmRemoveData()
+
+	// Global npm packages the npm shim captured into lerd's prefix would
+	// silently vanish with the data dir — nobody expects uninstalling a dev
+	// tool to take their globals with it. Offer to move them back to the
+	// user's own npm before anything is deleted.
+	var strandedGlobals []string
+	var reinstallNPM string
+	if removeData {
+		strandedGlobals = nodeGlobalPackages(config.NodeGlobalDir())
+		if len(strandedGlobals) > 0 && !force {
+			if npm := systemNPMPath(); npm != "" && feedback.Confirm(
+				fmt.Sprintf("Reinstall %d global npm package(s) (%s) with your own npm?",
+					len(strandedGlobals), formatNodeGlobalsNote(strandedGlobals)), true) {
+				reinstallNPM = npm
+			}
+		}
+	}
+
 	removeMCP := force || confirmRemoveMCPIntegration()
 	removeMkcertCA := force || confirmRemoveMkcertCA()
 	purgeImages := force || confirmPurgeLerdImages()
@@ -165,6 +183,16 @@ func runUninstall(force bool) error {
 	}
 
 	if removeData {
+		if reinstallNPM != "" {
+			feedback.Line("reinstalling global npm packages with your own npm")
+			if err := reinstallNodeGlobals(reinstallNPM, strandedGlobals); err != nil {
+				feedback.Warn("npm install -g failed: %v", err)
+				feedback.Note("reinstall them yourself with: npm install -g " + strings.Join(strandedGlobals, " "))
+			}
+		} else if len(strandedGlobals) > 0 {
+			feedback.Note("global npm packages removed with lerd: " + formatNodeGlobalsNote(strandedGlobals))
+			feedback.Note("reinstall them with: npm install -g " + strings.Join(strandedGlobals, " "))
+		}
 		step("Removing config and data directories")
 		os.RemoveAll(config.ConfigDir())
 		os.RemoveAll(config.DataDir())

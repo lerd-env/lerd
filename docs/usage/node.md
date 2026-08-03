@@ -120,6 +120,10 @@ The wrapper exec's the real binary through the active version manager's default 
 
 With **nvm**, bare `npm` is your nvm npm (no lerd shim). Use `lerd npm install -g …` when you want the managed prefix and PATH wrappers.
 
+If you configured your own npm prefix — `npm_config_prefix` / `NPM_CONFIG_PREFIX` in the environment or a `prefix=` line in `~/.npmrc` — lerd respects it: `npm install -g` lands in *your* prefix, no wrappers are written, and your globals never depend on lerd. The managed prefix is only used when you have none of your own.
+
+Globals that did land in the managed prefix are never silently lost. `lerd node:unmanage` lists them, leaves them on disk, and removes the now-dead wrappers so a reinstall with your own npm is not shadowed. `lerd uninstall` with data removal offers to reinstall them with your system npm before deleting anything, and otherwise prints the exact `npm install -g …` line to run afterwards.
+
 The same mechanism applies to `composer global require`. Composer's global vendor/bin (`~/.config/composer/vendor/bin/` by default, respecting `COMPOSER_HOME` and `XDG_CONFIG_HOME`) is mirrored into `~/.local/share/lerd/bin/` after every `composer` run, with wrappers that exec the real bin through `lerd php` so `#!/usr/bin/env php` shebangs resolve against the FPM container. After `composer global require psy/psysh` you can call `psysh` from any shell directly. `composer global remove` cleans the wrapper too.
 
 ---

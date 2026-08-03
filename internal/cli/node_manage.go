@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 
 	"github.com/geodro/lerd/internal/config"
@@ -213,6 +214,16 @@ func runNodeUnmanage(_ *cobra.Command, _ []string) error {
 	regen := feedback.Start("regenerating host worker units")
 	regenerateHostWorkers()
 	regen.OK("")
+
+	// Globals npm captured into lerd's prefix are unreachable now that the
+	// managed Node behind their wrappers is gone. Drop the stale wrappers (a
+	// broken wrapper would shadow a real reinstall on PATH) and tell the user
+	// what to reinstall — the packages themselves stay on disk.
+	if stranded := nodeGlobalPackages(config.NodeGlobalDir()); len(stranded) > 0 {
+		removeNodeGlobalWrappers(config.BinDir())
+		feedback.Note("global npm packages installed through lerd stay at " + config.NodeGlobalDir())
+		feedback.Note("reinstall them with your own npm: npm install -g " + strings.Join(stranded, " "))
+	}
 
 	feedback.Done("lerd is no longer managing Node.js")
 	if nodeDet.BunPath() != "" {
