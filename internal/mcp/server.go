@@ -112,10 +112,19 @@ type mcpSchema struct {
 }
 
 type mcpProp struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description,omitempty"`
-	Enum        []string `json:"enum,omitempty"`
+	Type        string    `json:"type"`
+	Description string    `json:"description,omitempty"`
+	Enum        []string  `json:"enum,omitempty"`
+	Items       *mcpItems `json:"items,omitempty"`
 }
+
+// mcpItems is the element schema for an array-typed property. Every MCP
+// array property in lerd is a string array, so callers use stringItems.
+type mcpItems struct {
+	Type string `json:"type"`
+}
+
+var stringItems = &mcpItems{Type: "string"}
 
 // Serve runs the MCP server, reading JSON-RPC messages from stdin and writing responses to stdout.
 // All diagnostic output goes to stderr so it never corrupts the JSON-RPC stream on stdout.
