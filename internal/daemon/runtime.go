@@ -1,5 +1,5 @@
 // Package daemon holds process-level setup shared by lerd's long-running
-// daemons: lerd-ui, the watcher, and the tray.
+// processes: lerd-ui, the watcher, the tray, and the MCP server.
 package daemon
 
 import (
