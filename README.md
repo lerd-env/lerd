@@ -152,13 +152,43 @@ lerd update
 <details>
 <summary>Install via apt instead (Ubuntu/Debian)</summary>
 
+The PPA publishes for every Ubuntu release in standard support and for the current development release. On one of those:
+
 ```bash
 sudo add-apt-repository ppa:lerd/lerd
 sudo apt update
 sudo apt install lerd
 ```
 
+On any other release the PPA has no packages, and `add-apt-repository` leaves behind a source entry that fails every later `apt update`. Remove it with `sudo add-apt-repository --remove ppa:lerd/lerd` and use the script installer above.
+
 The package finishes setup with no prompt: its maintainer script applies the root-level steps and runs the per-user install, so `.test` DNS and HTTPS come up on their own. Update with `sudo apt upgrade`; a packaged lerd lives under `/usr`, so `lerd update` defers to your package manager instead of fighting it.
+
+</details>
+
+<details>
+<summary>Install via dnf instead (Fedora)</summary>
+
+The COPR builds for every Fedora release in standard support and for rawhide:
+
+```bash
+sudo dnf copr enable georged/lerd
+sudo dnf install lerd
+```
+
+The package finishes setup with no prompt, exactly like the apt one: `.test` DNS and HTTPS come up on their own. Update with `sudo dnf upgrade`; a packaged lerd lives under `/usr`, so `lerd update` defers to your package manager instead of fighting it.
+
+</details>
+
+<details>
+<summary>Install via Homebrew instead</summary>
+
+```bash
+brew install lerd-env/lerd/lerd
+lerd install
+```
+
+Podman comes from your distro rather than as a brew dependency, and Homebrew on Linux needs its usual prerequisites (notably a C compiler). Update with `brew upgrade lerd`.
 
 </details>
 

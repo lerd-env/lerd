@@ -102,9 +102,9 @@ const composerShimMarker = "lerd-managed composer global shim"
 
 // syncNodeGlobalBins mirrors sourceBin into targetBin via the active version
 // manager's default-version exec prefix, so `#!/usr/bin/env node` shebangs
-// resolve against the managed default node from any directory. execPrefix is the
-// manager's ExecPrefix("default") — the wrapper works from any directory because
-// it pins the default version rather than relying on a cwd .nvmrc/.node-version.
+// resolve against the managed default node from any directory. execPrefix is
+// the manager's ExecPrefixWithEnv("default", env) — env (typically
+// npm_config_prefix) is injected after Node activation.
 func syncNodeGlobalBins(sourceBin, targetBin, execPrefix string) error {
 	return shimSync{
 		sourceBin: sourceBin,

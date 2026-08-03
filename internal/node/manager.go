@@ -47,6 +47,9 @@ type Manager interface {
 	// "<ExecPrefix(version)> <command> <args>" runs the command under version.
 	// Used to build worker units and npm global wrappers.
 	ExecPrefix(version string) string
+	// ExecPrefixWithEnv is ExecPrefix with env vars set after Node activation,
+	// so npm global wrappers see lerd's npm_config_prefix, not the manager's.
+	ExecPrefixWithEnv(version string, env []string) string
 	// ShimScript returns the full shell script for a node/npm/npx PATH shim
 	// named bin. Only used when WritesPathShims is true (fnm). nvm returns a
 	// stub that explains PATH shims are not installed for that manager.

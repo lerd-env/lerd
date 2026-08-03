@@ -78,13 +78,17 @@ bash install.sh --local ./build/lerd
 
 ### Install via apt (Ubuntu/Debian)
 
-Lerd is published to a Launchpad PPA, so you can install and update it with your package manager:
+Lerd is published to a Launchpad PPA, so you can install and update it with your package manager. The PPA publishes for every Ubuntu release in standard support and for the current development release; on one of those:
 
 ```bash
 sudo add-apt-repository ppa:lerd/lerd
 sudo apt update
 sudo apt install lerd
 ```
+
+::: warning On other Ubuntu releases
+On a release the PPA does not publish for, `add-apt-repository` leaves behind a source entry that fails every later `apt update` with `does not have a Release file`. Remove it with `sudo add-apt-repository --remove ppa:lerd/lerd` and use the [script installer](#one-line-installer-recommended) instead.
+:::
 
 The package installs the binary to `/usr/bin/lerd` and finishes setup automatically: its maintainer script enables the unprivileged-port sysctl and systemd linger, then runs `lerd install` for your user, so the stack comes up straight away and again at every boot. `.test` DNS and HTTPS are configured with no prompt because the package sets up the sudoers rule and trusts the mkcert CA as root.
 
@@ -96,9 +100,45 @@ sudo apt upgrade
 
 A package-installed lerd lives under `/usr`, so `lerd update` (which self-replaces a `~/.local/bin` install) detects it and defers to your package manager instead of fighting it.
 
-The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow will serve future rpm and AUR packages. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
+The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow serves the deb and rpm packages alike and will serve a future AUR package. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
 
 It is also not package-specific. A normal `lerd install` runs the same `lerd bootstrap` steps through `sudo` rather than through a maintainer script, so the machine ends up in the same state however you installed.
+
+---
+
+### Install via dnf (Fedora)
+
+Lerd is published to the [`georged/lerd`](https://copr.fedorainfracloud.org/coprs/georged/lerd/) Fedora COPR, which builds for every Fedora release in standard support and for rawhide (the project follows Fedora branching, so new releases are picked up automatically):
+
+```bash
+sudo dnf copr enable georged/lerd
+sudo dnf install lerd
+```
+
+The package behaves exactly like the apt one: it installs the binary to `/usr/bin/lerd`, its scriptlet runs the same root-level bootstrap and per-user install, and `.test` DNS and HTTPS come up with no prompt.
+
+Updates come through dnf like any other package:
+
+```bash
+sudo dnf upgrade
+```
+
+As with apt, a package-installed lerd lives under `/usr`, so `lerd update` defers to your package manager.
+
+---
+
+### Install via Homebrew
+
+Homebrew on Linux works too:
+
+```bash
+brew install lerd-env/lerd/lerd
+lerd install
+```
+
+Unlike on macOS, Podman is not pulled in as a Homebrew dependency: lerd integrates with the distribution's own Podman, so install that with your package manager first. Homebrew itself needs its usual Linux prerequisites, notably a C compiler such as gcc, even though the formula only unpacks a prebuilt binary. If Homebrew refuses the tap as untrusted, run `brew trust lerd-env/lerd` once.
+
+Update with `brew upgrade lerd`.
 
 ---
 
