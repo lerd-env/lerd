@@ -166,6 +166,20 @@ The package finishes setup with no prompt: its maintainer script applies the roo
 
 </details>
 
+<details>
+<summary>Install via dnf instead (Fedora)</summary>
+
+The COPR builds for every Fedora release in standard support and for rawhide:
+
+```bash
+sudo dnf copr enable georged/lerd
+sudo dnf install lerd
+```
+
+The package finishes setup with no prompt, exactly like the apt one: `.test` DNS and HTTPS come up on their own. Update with `sudo dnf upgrade`; a packaged lerd lives under `/usr`, so `lerd update` defers to your package manager instead of fighting it.
+
+</details>
+
 ### macOS
 
 ```bash

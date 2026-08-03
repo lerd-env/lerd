@@ -100,9 +100,30 @@ sudo apt upgrade
 
 A package-installed lerd lives under `/usr`, so `lerd update` (which self-replaces a `~/.local/bin` install) detects it and defers to your package manager instead of fighting it.
 
-The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow will serve future rpm and AUR packages. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
+The setup steps behind the package are not Debian-specific: `lerd bootstrap` recognises the Debian, Fedora, Arch and openSUSE trust store layouts and picks whichever the system uses, so the same flow serves the deb and rpm packages alike and will serve a future AUR package. On distros with no writable system trust store (NixOS), it prints where the CA lives so you can trust it declaratively.
 
 It is also not package-specific. A normal `lerd install` runs the same `lerd bootstrap` steps through `sudo` rather than through a maintainer script, so the machine ends up in the same state however you installed.
+
+---
+
+### Install via dnf (Fedora)
+
+Lerd is published to the [`georged/lerd`](https://copr.fedorainfracloud.org/coprs/georged/lerd/) Fedora COPR, which builds for every Fedora release in standard support and for rawhide (the project follows Fedora branching, so new releases are picked up automatically):
+
+```bash
+sudo dnf copr enable georged/lerd
+sudo dnf install lerd
+```
+
+The package behaves exactly like the apt one: it installs the binary to `/usr/bin/lerd`, its scriptlet runs the same root-level bootstrap and per-user install, and `.test` DNS and HTTPS come up with no prompt.
+
+Updates come through dnf like any other package:
+
+```bash
+sudo dnf upgrade
+```
+
+As with apt, a package-installed lerd lives under `/usr`, so `lerd update` defers to your package manager.
 
 ---
 
