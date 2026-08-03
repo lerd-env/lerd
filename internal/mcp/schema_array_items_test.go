@@ -34,3 +34,34 @@ func TestToolList_arrayPropsHaveItems(t *testing.T) {
 		}
 	}
 }
+
+// objectArrayProps are the array properties whose elements the handlers parse
+// as objects rather than strings. Declaring string items on these is worse than
+// declaring none: a strict client then sends strings, and the map[string]any
+// assertion in the handler drops every element without reporting anything, so
+// the framework saves with the section silently empty.
+var objectArrayProps = map[string]bool{
+	"setup": true,
+	"logs":  true,
+}
+
+func TestToolList_arrayItemTypeMatchesHandler(t *testing.T) {
+	for _, tool := range toolList() {
+		for name, prop := range tool.InputSchema.Properties {
+			if prop.Type != "array" {
+				continue
+			}
+			if prop.Items == nil {
+				continue // covered by TestToolList_arrayPropsHaveItems
+			}
+			want := "string"
+			if objectArrayProps[name] {
+				want = "object"
+			}
+			if prop.Items.Type != want {
+				t.Errorf("tool %q property %q declares items type %q, handler parses %q",
+					tool.Name, name, prop.Items.Type, want)
+			}
+		}
+	}
+}
