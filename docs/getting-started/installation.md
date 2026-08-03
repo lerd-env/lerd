@@ -127,6 +127,21 @@ As with apt, a package-installed lerd lives under `/usr`, so `lerd update` defer
 
 ---
 
+### Install via Homebrew
+
+Homebrew on Linux works too:
+
+```bash
+brew install lerd-env/lerd/lerd
+lerd install
+```
+
+Unlike on macOS, Podman is not pulled in as a Homebrew dependency: lerd integrates with the distribution's own Podman, so install that with your package manager first. Homebrew itself needs its usual Linux prerequisites, notably a C compiler such as gcc, even though the formula only unpacks a prebuilt binary. If Homebrew refuses the tap as untrusted, run `brew trust lerd-env/lerd` once.
+
+Update with `brew upgrade lerd`.
+
+---
+
 ### Update
 
 ```bash

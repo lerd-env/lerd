@@ -180,6 +180,18 @@ The package finishes setup with no prompt, exactly like the apt one: `.test` DNS
 
 </details>
 
+<details>
+<summary>Install via Homebrew instead</summary>
+
+```bash
+brew install lerd-env/lerd/lerd
+lerd install
+```
+
+Podman comes from your distro rather than as a brew dependency, and Homebrew on Linux needs its usual prerequisites (notably a C compiler). Update with `brew upgrade lerd`.
+
+</details>
+
 ### macOS
 
 ```bash
