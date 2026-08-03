@@ -2,6 +2,7 @@ package watcher
 
 import (
 	"fmt"
+	"sync"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/push"
@@ -78,6 +79,19 @@ func notificationForSlowRoute(site, domain string, r reqstats.RouteStat) push.No
 		Data:    map[string]string{"site": site, "route": r.Route},
 		Urgency: "normal",
 		TTL:     120,
+	}
+}
+
+// lazyResolver defers build until a domain is actually looked up, then reuses
+// the result. The stats saver ticks for the daemon's life and almost every tick
+// emits no notification, so building the resolver up front would re-read and
+// re-parse the site registry every tick to answer nothing.
+func lazyResolver(build func() func(string) string) func(string) string {
+	var once sync.Once
+	var resolve func(string) string
+	return func(key string) string {
+		once.Do(func() { resolve = build() })
+		return resolve(key)
 	}
 }
 

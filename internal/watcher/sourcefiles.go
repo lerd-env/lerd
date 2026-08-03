@@ -36,6 +36,43 @@ const maxSourceDirEntries = 2000
 // feed for activity, which is the primary signal anyway.
 const maxWatchedSourceFiles = 32768
 
+// sourceRescanInterval is how often the watcher looks for source trees it isn't
+// watching yet, i.e. a newly linked site or a newly created worktree.
+//
+// sourceResyncEvery is how many of those passes go by before one re-walks the
+// trees already being watched. Walking a tree costs a readdir per directory, so
+// on a machine with a few dozen checkouts it is thousands of syscalls; doing it
+// on every pass was the single largest source of this daemon's idle wakeups. It
+// is also nearly always redundant, because a directory created under a watched
+// parent already arrives as a CREATE event and is watched from that event. The
+// periodic re-walk only has to cover the gap where a directory appeared before
+// its parent was being watched, which a slow cadence catches just as well.
+var (
+	sourceRescanInterval = 30 * time.Second
+	sourceResyncEvery    = 20
+)
+
+// rootsToWalk picks the source roots a pass has to walk. An incremental pass
+// takes only roots that aren't fully watched yet; a resync pass takes them all.
+func rootsToWalk(targets []SourceTarget, walked map[string]bool, resync bool) []SourceTarget {
+	if resync {
+		return targets
+	}
+	var out []SourceTarget
+	for _, t := range targets {
+		var dirs []string
+		for _, d := range t.Dirs {
+			if !walked[d] {
+				dirs = append(dirs, d)
+			}
+		}
+		if len(dirs) > 0 {
+			out = append(out, SourceTarget{Key: t.Key, Dirs: dirs})
+		}
+	}
+	return out
+}
+
 // WatchSourceFiles watches each target's source directories recursively and
 // calls onActivity(key), debounced per key, when a source file under them is
 // written, created, or renamed — i.e. when you save while coding. Heavy or
@@ -60,8 +97,11 @@ func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, 
 	// addTree recursively watches root and its subdirs (skipping excludes and
 	// oversized asset dumps), tagging each watched directory with key. It bounds
 	// the total files watched so a pathological tree can't exhaust the process fd
-	// limit (see maxSourceDirEntries / maxWatchedSourceFiles).
-	addTree := func(root, key string) {
+	// limit (see maxSourceDirEntries / maxWatchedSourceFiles). It reports whether
+	// the whole tree got watched; a root that ran into the fd budget or a failed
+	// watch is left unmarked so a later pass retries it.
+	addTree := func(root, key string) bool {
+		complete := true
 		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 			if err != nil || !d.IsDir() {
 				return nil
@@ -109,11 +149,13 @@ func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, 
 				mu.Unlock()
 				// Hard fd budget reached: stop adding trees this pass. The nginx
 				// access feed still drives activity for the unwatched remainder.
+				complete = false
 				return filepath.SkipAll
 			}
 			mu.Unlock()
 			if err := w.Add(p); err != nil {
 				logger.Error("failed to watch source dir", "path", p, "err", err)
+				complete = false
 				return nil
 			}
 			mu.Lock()
@@ -122,19 +164,26 @@ func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, 
 			mu.Unlock()
 			return nil
 		})
+		return complete
 	}
 
-	scan := func() {
-		for _, t := range getTargets() {
+	// walked holds the source roots whose tree is fully watched. Only the loop
+	// below touches it, so it needs no lock of its own.
+	walked := map[string]bool{}
+	scan := func(resync bool) {
+		for _, t := range rootsToWalk(getTargets(), walked, resync) {
 			for _, dir := range t.Dirs {
-				addTree(dir, t.Key)
+				if addTree(dir, t.Key) {
+					walked[dir] = true
+				}
 			}
 		}
 	}
-	scan()
+	scan(true)
 
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(sourceRescanInterval)
 	defer ticker.Stop()
+	passes := 0
 
 	for {
 		select {
@@ -142,7 +191,8 @@ func WatchSourceFiles(getTargets func() []SourceTarget, debounce time.Duration, 
 			return nil
 
 		case <-ticker.C:
-			scan()
+			passes++
+			scan(passes%sourceResyncEvery == 0)
 
 		case event, ok := <-w.Events:
 			if !ok {

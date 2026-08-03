@@ -2210,33 +2210,81 @@ func extractMajorFromConstraint(constraint string) string {
 	return ""
 }
 
-// ComposerHasPackage reports whether the composer.json in dir lists pkg
-// in require or require-dev.
-// ComposerHasPackage reports whether the composer.json in dir lists pkg
-// in require, require-dev, or any of the extra sections specified.
-func ComposerHasPackage(dir, pkg string, extraSections ...string) bool {
-	data, err := os.ReadFile(filepath.Join(dir, "composer.json"))
+// composerCacheEntry is one parsed composer.json: every top-level section that
+// decodes as a package map, keyed by section name then package name, together
+// with the file identity the parse was made from.
+type composerCacheEntry struct {
+	modTime  time.Time
+	size     int64
+	sections map[string]map[string]bool
+}
+
+var (
+	composerCacheMu sync.Mutex
+	composerCache   = map[string]composerCacheEntry{}
+
+	// composerReadFile is swappable so a test can count reads.
+	composerReadFile = os.ReadFile
+)
+
+// composerSections returns the package sections of dir's composer.json, reusing
+// the previous parse while the file's mtime and size are both unchanged.
+//
+// Worker detection asks ComposerHasPackage once per rule per site, and the
+// dashboard re-runs that on every snapshot rebuild, so an uncached read meant
+// re-reading and re-decoding the same file dozens of times per refresh. A stat
+// is a fraction of that, and an edit still lands: the site-file watcher already
+// treats composer.json as a change trigger.
+func composerSections(dir string) map[string]map[string]bool {
+	path := filepath.Join(dir, "composer.json")
+	st, err := os.Stat(path)
 	if err != nil {
-		return false
+		return nil
 	}
 
+	composerCacheMu.Lock()
+	defer composerCacheMu.Unlock()
+	if e, ok := composerCache[path]; ok && e.modTime.Equal(st.ModTime()) && e.size == st.Size() {
+		return e.sections
+	}
+
+	data, err := composerReadFile(path)
+	if err != nil {
+		return nil
+	}
 	// Parse into a generic map so we can look up arbitrary top-level keys.
 	var raw map[string]json.RawMessage
 	if json.Unmarshal(data, &raw) != nil {
-		return false
+		return nil
 	}
-
-	sections := append([]string{"require", "require-dev"}, extraSections...)
-	for _, section := range sections {
-		chunk, ok := raw[section]
-		if !ok {
-			continue
-		}
+	sections := make(map[string]map[string]bool, len(raw))
+	for name, chunk := range raw {
 		var m map[string]string
 		if json.Unmarshal(chunk, &m) != nil {
-			continue
+			continue // not a package map (autoload, scripts, ...)
 		}
-		if _, found := m[pkg]; found {
+		pkgs := make(map[string]bool, len(m))
+		for p := range m {
+			pkgs[p] = true
+		}
+		sections[name] = pkgs
+	}
+	composerCache[path] = composerCacheEntry{modTime: st.ModTime(), size: st.Size(), sections: sections}
+	return sections
+}
+
+// ComposerHasPackage reports whether the composer.json in dir lists pkg
+// in require, require-dev, or any of the extra sections specified.
+func ComposerHasPackage(dir, pkg string, extraSections ...string) bool {
+	sections := composerSections(dir)
+	if sections == nil {
+		return false
+	}
+	if sections["require"][pkg] || sections["require-dev"][pkg] {
+		return true
+	}
+	for _, name := range extraSections {
+		if sections[name][pkg] {
 			return true
 		}
 	}

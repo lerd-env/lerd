@@ -4,10 +4,12 @@ import (
 	"flag"
 	"os"
 
+	"github.com/geodro/lerd/internal/daemon"
 	"github.com/geodro/lerd/internal/tray"
 )
 
 func main() {
+	daemon.TuneRuntime()
 	var mono bool
 	flag.BoolVar(&mono, "mono", false, "Use monochrome (template) icon — lets the OS recolor it to match the panel")
 	flag.Parse()

@@ -325,3 +325,52 @@ func TestCopyTree_CP(t *testing.T) {
 		t.Fatalf("copied file: got %q err %v", got, err)
 	}
 }
+
+// A no-op composer/npm install leaves the marker's mtime alone, so without a
+// stamp the staleness check stays true forever and the watcher's rescan
+// re-runs the install every minute for the life of the daemon. This is exactly
+// what a worktree seeded with a copied vendor/ looks like: the tree is correct
+// but its marker carries the main repo's older mtime.
+func TestStampInstallMarker_makesAConvergedTreeStopAskingForInstall(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, filepath.Join(dir, "composer.json"))
+	touch(t, filepath.Join(dir, "composer.lock"))
+	touchAt(t, filepath.Join(dir, "vendor", "composer", "installed.json"), time.Now().Add(-30*24*time.Hour))
+
+	if !composerNeedsInstall(dir) {
+		t.Fatal("precondition: a stale marker must ask for an install")
+	}
+
+	stampInstallMarker(filepath.Join(dir, "vendor", "composer", "installed.json"))
+
+	if composerNeedsInstall(dir) {
+		t.Error("after stamping, the marker still reports an install is needed")
+	}
+}
+
+func TestStampInstallMarker_missingMarkerIsLeftAlone(t *testing.T) {
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "vendor", "composer", "installed.json")
+
+	stampInstallMarker(marker) // must not create it
+
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Error("stamping created a marker that no install had written")
+	}
+}
+
+// A genuinely stale tree must still be installed: stamping only ever happens
+// after an install has run, never as a way to silence the check.
+func TestStampInstallMarker_doesNotHideARealLockChange(t *testing.T) {
+	dir := t.TempDir()
+	touch(t, filepath.Join(dir, "composer.json"))
+	touchAt(t, filepath.Join(dir, "vendor", "composer", "installed.json"), time.Now().Add(-time.Hour))
+	stampInstallMarker(filepath.Join(dir, "vendor", "composer", "installed.json"))
+
+	// The lock is edited after the install, as a branch switch or a require does.
+	touch(t, filepath.Join(dir, "composer.lock"))
+
+	if !composerNeedsInstall(dir) {
+		t.Error("a lockfile written after the install must still require one")
+	}
+}

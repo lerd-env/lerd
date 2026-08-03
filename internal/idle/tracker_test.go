@@ -1,6 +1,7 @@
 package idle
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -20,6 +21,50 @@ func TestSaveLoadActivity(t *testing.T) {
 	}
 	if LoadActivity(filepath.Join(t.TempDir(), "missing.json")) != nil {
 		t.Error("missing file should load to nil")
+	}
+}
+
+// The idle engine saves every tick; on a quiet machine no last-active second
+// moves, so the file must not be rewritten.
+func TestSave_unchangedActivityLeavesFileUntouched(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idle-activity.json")
+	tr := NewTracker(nil)
+	tr.TouchSite("a", time.Unix(1000, 0))
+	if err := tr.Save(path); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	old := time.Now().Add(-time.Hour)
+	if err := os.Chtimes(path, old, old); err != nil {
+		t.Fatalf("chtimes: %v", err)
+	}
+
+	if err := tr.Save(path); err != nil {
+		t.Fatalf("resave: %v", err)
+	}
+
+	st, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if !st.ModTime().Equal(old) {
+		t.Error("re-saving unchanged activity rewrote the file")
+	}
+}
+
+func TestSave_newActivityIsWritten(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "idle-activity.json")
+	tr := NewTracker(nil)
+	tr.TouchSite("a", time.Unix(1000, 0))
+	if err := tr.Save(path); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+
+	tr.TouchSite("a", time.Unix(3000, 0))
+	if err := tr.Save(path); err != nil {
+		t.Fatalf("resave: %v", err)
+	}
+	if m := LoadActivity(path); m["a"] != 3000 {
+		t.Errorf("loaded a=%d, want 3000", m["a"])
 	}
 }
 

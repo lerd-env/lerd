@@ -18,6 +18,7 @@ import (
 	"github.com/geodro/lerd/internal/cleanup"
 	"github.com/geodro/lerd/internal/cli"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/daemon"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/eventbus"
 	"github.com/geodro/lerd/internal/feedback"
@@ -312,6 +313,7 @@ func newServeUICmd() *cobra.Command {
 		Short:  "Start the Lerd UI dashboard server",
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			daemon.TuneRuntime()
 			return ui.Start(version.Version)
 		},
 	}
@@ -383,6 +385,7 @@ func newWatchCmd() *cobra.Command {
 		Short:  "Watch parked directories for new projects (daemon)",
 		Hidden: true,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			daemon.TuneRuntime()
 			if os.Getenv("LERD_DEBUG") != "" {
 				watcher.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
 					Level: slog.LevelDebug,

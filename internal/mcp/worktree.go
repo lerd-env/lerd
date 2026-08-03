@@ -28,7 +28,7 @@ func worktreeTool() mcpTool {
 				"action":          {Type: "string", Enum: []string{"list", "add", "remove", "wait", "db_isolate", "db_share"}},
 				"site":            {Type: "string", Description: "Defaults to cwd's site."},
 				"branch":          {Type: "string"},
-				"git_args":        {Type: "array", Description: "Forwarded to git worktree."},
+				"git_args":        {Type: "array", Items: stringItems, Description: "Forwarded to git worktree."},
 				"force":           {Type: "boolean", Description: "remove: --force."},
 				"keep_db":         {Type: "boolean", Description: "remove: preserve DB (default true)."},
 				"source":          {Type: "string", Description: "db_isolate seed."},

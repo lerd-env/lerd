@@ -3,7 +3,8 @@ package reqstats
 import (
 	"encoding/json"
 	"os"
-	"path/filepath"
+
+	"github.com/geodro/lerd/internal/atomicfile"
 )
 
 // Save writes the current snapshot of every site to path as JSON, via a temp
@@ -16,19 +17,17 @@ func (a *Aggregator) Save(path string) error {
 // SaveSnapshot persists an already-computed snapshot, so a caller that also needs
 // the snapshot (e.g. to feed slow-route notifications) can build it once and
 // avoid recomputing it inside Save.
+//
+// The watcher calls this every reqStatsSaveInterval for the daemon's life, so a
+// quiet machine would otherwise rewrite the same bytes thousands of times a day;
+// an unchanged snapshot leaves the file alone.
 func SaveSnapshot(snap []SiteStats, path string) error {
 	b, err := json.Marshal(snap)
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, b, 0644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	_, err = atomicfile.WriteIfChanged(path, b, 0644)
+	return err
 }
 
 // Load reads a snapshot previously written by Save. A missing or unreadable file

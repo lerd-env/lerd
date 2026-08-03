@@ -87,3 +87,30 @@ func TestSetSiteContainerAutostart_plainFPMNoop(t *testing.T) {
 		t.Error("plain FPM site should have no container quadlet to strip")
 	}
 }
+
+// The idle engine asks this for every worker of every suspended site on every
+// tick, so it reads the batched snapshot rather than fetching a unit's whole
+// property dictionary over DBus one worker at a time.
+func TestTimerIsActive(t *testing.T) {
+	states := map[string]string{
+		"lerd-schedule-acme.timer":  "active",
+		"lerd-schedule-other.timer": "inactive",
+		"lerd-queue-acme.service":   "active",
+		"lerd-queue-acme":           "active",
+	}
+	if !timerIsActive(states, "lerd-schedule-acme") {
+		t.Error("an active timer was not detected")
+	}
+	if timerIsActive(states, "lerd-schedule-other") {
+		t.Error("an inactive timer reported active")
+	}
+	if timerIsActive(states, "lerd-queue-acme") {
+		t.Error("a service with no sibling timer reported active")
+	}
+	if timerIsActive(states, "lerd-missing-site") {
+		t.Error("an absent unit reported active")
+	}
+	if timerIsActive(nil, "lerd-schedule-acme") {
+		t.Error("a failed enumeration must not report a timer active")
+	}
+}

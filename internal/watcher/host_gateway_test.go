@@ -2,7 +2,9 @@ package watcher
 
 import (
 	"errors"
+	"sync"
 	"testing"
+	"time"
 )
 
 // tickHostGateway is the decision point for the host-gateway watcher.
@@ -458,5 +460,101 @@ func TestTickHostGateway_RetriesAfterPartialWriteFailure(t *testing.T) {
 	}
 	if browser != fresh {
 		t.Errorf("browser-hosts IP = %q, want %q", browser, fresh)
+	}
+}
+
+// gatewayCountingDeps is a deps set that records how often the expensive podman
+// lookup ran, with everything settled so no tick ever rewrites.
+func gatewayCountingDeps(inspects *int) hostGatewayDeps {
+	return hostGatewayDeps{
+		primaryLANIP:       func() string { return "192.168.1.10" },
+		readCurrent:        func() string { return "192.168.1.10" },
+		reachable:          func(string) bool { return true },
+		detectFresh:        func() string { return "192.168.1.10" },
+		readNginxIP:        func() string { return "10.89.0.2" },
+		readBrowserNginxIP: func() string { return "10.89.0.2" },
+		freshNginxIP:       func() string { *inspects++; return "10.89.0.2" },
+		writeHosts:         func(string, string) error { return nil },
+		log:                func(string, string, ...any) {},
+	}
+}
+
+// The podman lookup is a process fork and the single biggest contributor to the
+// daemon's idle wakeups, so a settled tick must not pay for it.
+func TestTickHostGatewayWith_skipsThePodmanLookupWhenNotInspecting(t *testing.T) {
+	inspects := 0
+	deps := gatewayCountingDeps(&inspects)
+	state := &hostGatewayState{lastLAN: "192.168.1.10"}
+
+	if changed := tickHostGatewayWith(deps, state, false); changed {
+		t.Error("a settled tick reported a change")
+	}
+	if inspects != 0 {
+		t.Errorf("podman lookup ran %d times on a non-inspecting tick, want 0", inspects)
+	}
+
+	if changed := tickHostGatewayWith(deps, state, true); changed {
+		t.Error("a settled inspecting tick reported a change")
+	}
+	if inspects != 1 {
+		t.Errorf("podman lookup ran %d times on an inspecting tick, want 1", inspects)
+	}
+}
+
+// A network change must still be caught on a tick that skips the podman lookup,
+// which is why the cheap half runs every time.
+func TestTickHostGatewayWith_stillCatchesALANChangeWithoutInspecting(t *testing.T) {
+	inspects, writes := 0, 0
+	deps := gatewayCountingDeps(&inspects)
+	deps.primaryLANIP = func() string { return "10.0.0.50" } // moved networks
+	deps.reachable = func(string) bool { return false }      // old gateway dead
+	deps.detectFresh = func() string { return "10.0.0.1" }
+	deps.writeHosts = func(string, string) error { writes++; return nil }
+
+	state := &hostGatewayState{lastLAN: "192.168.1.10"}
+	if changed := tickHostGatewayWith(deps, state, false); !changed {
+		t.Error("a LAN change was missed on a non-inspecting tick")
+	}
+	if writes != 1 {
+		t.Errorf("hosts written %d times, want 1", writes)
+	}
+	if inspects != 0 {
+		t.Errorf("podman lookup ran %d times, want 0", inspects)
+	}
+}
+
+// With nothing moving, the loop settles into inspecting once every
+// hostGatewayInspectEvery+1 ticks rather than once per tick.
+func TestWatchHostGateway_backsOffThePodmanLookupWhenSettled(t *testing.T) {
+	inspects := 0
+	var mu sync.Mutex
+	deps := gatewayCountingDeps(new(int))
+	deps.freshNginxIP = func() string {
+		mu.Lock()
+		inspects++
+		mu.Unlock()
+		return "10.89.0.2"
+	}
+
+	orig := hostGatewayDepsForWatch
+	hostGatewayDepsForWatch = func() hostGatewayDeps { return deps }
+	t.Cleanup(func() { hostGatewayDepsForWatch = orig })
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() { defer close(done); WatchHostGateway(5*time.Millisecond, stop) }()
+	time.Sleep(320 * time.Millisecond) // ~64 ticks
+	close(stop)
+	<-done
+
+	mu.Lock()
+	got := inspects
+	mu.Unlock()
+	// Every tick would be ~64. Backed off it should be roughly 64/11.
+	if got > 20 {
+		t.Errorf("podman lookup ran %d times over ~64 ticks; it is not backing off", got)
+	}
+	if got == 0 {
+		t.Error("podman lookup never ran; the address would never be refreshed")
 	}
 }
