@@ -188,6 +188,16 @@ type GlobalConfig struct {
 		// see no change.
 		Disabled bool `yaml:"disabled,omitempty" mapstructure:"disabled"`
 	} `yaml:"autostart,omitempty" mapstructure:"autostart"`
+	Shims struct {
+		// PathDisabled stops lerd from writing its bin dir (the php/composer/
+		// node shims) onto the shell PATH, for users who prefer typing
+		// `lerd php` explicitly. Only the rc PATH entry is affected: the shim
+		// scripts are still written and every internal code path keeps
+		// injecting the dir for its own child processes. Inverted so the YAML
+		// zero value keeps the historical shims-on-PATH behaviour. Toggled via
+		// `lerd path:disable / path:enable`.
+		PathDisabled bool `yaml:"path_disabled,omitempty" mapstructure:"path_disabled"`
+	} `yaml:"shims,omitempty" mapstructure:"shims"`
 	UI struct {
 		// RemoteControl gates non-loopback access to the lerd dashboard.
 		// Empty PasswordHash = disabled = LAN clients get 403. With a hash

@@ -16,6 +16,8 @@
 | `lerd uninstall --force` | Same, skipping all confirmation prompts |
 | `lerd autostart enable` | Start Lerd automatically on every login |
 | `lerd autostart disable` | Disable autostart on login |
+| `lerd path:disable` | Take lerd's shims (`php`, `composer`, `node`…) off your shell PATH; `lerd php` etc. keep working, and installs/updates stop re-adding the entry |
+| `lerd path:enable` | Put lerd's shims back on your shell PATH (the default) |
 | `lerd tray` | Launch the system tray applet (detaches from terminal) |
 | `lerd tray icon [default\|high-contrast]` | Choose the running-icon style; high-contrast shows an always-visible green icon for mixed themes like KDE Breeze Twilight; no argument prints the current style |
 | `lerd dns:check` | Walk the DNS chain (container, dnsmasq config, port 5300, dig at 5300, resolver hookup, interface routing, system lookup) and print the layered status with a remediation hint per failure |

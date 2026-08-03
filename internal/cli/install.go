@@ -1754,40 +1754,97 @@ func addShellShims(manageNode bool) error {
 		}
 	}
 
-	shell := os.Getenv("SHELL")
+	if pathShimDisabled() {
+		removeShellPathEntry(home)
+	} else if err := writeShellPathEntry(home, binDir); err != nil {
+		return err
+	}
+	installShellCompletions(home, lerdBin)
+	return nil
+}
 
+// pathShimDisabled reports whether the user opted out of the shell PATH entry
+// (`lerd path:disable`). Best-effort: an unreadable config keeps the default.
+func pathShimDisabled() bool {
+	cfg, err := config.LoadGlobal()
+	return err == nil && cfg != nil && cfg.Shims.PathDisabled
+}
+
+// writeShellPathEntry puts lerd's bin dir on the PATH of the user's shell:
+// an rc export for bash/zsh, a dedicated conf.d file for fish.
+func writeShellPathEntry(home, binDir string) error {
+	shell := os.Getenv("SHELL")
 	switch {
 	case isShell(shell, "fish"):
 		fishConfigDir := filepath.Join(home, ".config", "fish", "conf.d")
 		if err := os.MkdirAll(fishConfigDir, 0755); err != nil {
 			return err
 		}
-		fishConf := filepath.Join(fishConfigDir, "lerd.fish")
 		content := fmt.Sprintf("set -gx PATH %s $PATH\n", binDir)
-		if err := os.WriteFile(fishConf, []byte(content), 0644); err != nil {
-			return err
-		}
-		installCompletion(lerdBin, "fish", filepath.Join(home, ".config", "fish", "completions"), "lerd.fish")
-		return nil
+		return os.WriteFile(filepath.Join(fishConfigDir, "lerd.fish"), []byte(content), 0644)
 	case isShell(shell, "zsh"):
-		if err := appendShellRC(filepath.Join(home, ".zshrc"), binDir); err != nil {
-			return err
+		return appendShellRC(filepath.Join(home, ".zshrc"), binDir)
+	default:
+		return appendShellRC(bashRCPath(home), binDir)
+	}
+}
+
+// removeShellPathEntry removes the PATH entry writeShellPathEntry wrote, in
+// every shell's location so a shell switch leaves nothing behind: the "# Lerd"
+// block in bash/zsh rc files and the PATH line in fish's conf.d/lerd.fish
+// (deleting the file when nothing else remains). The installer's "# Added by
+// Lerd installer" block is left alone — it puts the lerd binary itself on
+// PATH, not the shims.
+func removeShellPathEntry(home string) {
+	for _, rc := range []string{
+		filepath.Join(home, ".bashrc"),
+		filepath.Join(home, ".bash_profile"),
+		filepath.Join(home, ".zshrc"),
+	} {
+		removeMarkedBlock(rc, "# Lerd", 1)
+	}
+	fishConf := filepath.Join(home, ".config", "fish", "conf.d", "lerd.fish")
+	data, err := os.ReadFile(fishConf)
+	if err != nil {
+		return
+	}
+	var kept []string
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "set -gx PATH ") &&
+			strings.Contains(line, config.BinDir()) {
+			continue
 		}
+		kept = append(kept, line)
+	}
+	rest := strings.Join(kept, "\n")
+	if strings.TrimSpace(rest) == "" {
+		os.Remove(fishConf) //nolint:errcheck
+		return
+	}
+	if rest != string(data) {
+		os.WriteFile(fishConf, []byte(rest), 0644) //nolint:errcheck
+	}
+}
+
+// installShellCompletions installs the completion script for the user's shell.
+// Kept separate from the PATH entry so completions for `lerd` itself survive
+// path:disable.
+func installShellCompletions(home, lerdBin string) {
+	shell := os.Getenv("SHELL")
+	switch {
+	case isShell(shell, "fish"):
+		installCompletion(lerdBin, "fish", filepath.Join(home, ".config", "fish", "completions"), "lerd.fish")
+	case isShell(shell, "zsh"):
 		zshFunctionsDir := filepath.Join(home, ".local", "share", "zsh", "site-functions")
 		if err := os.MkdirAll(zshFunctionsDir, 0755); err == nil {
 			installCompletion(lerdBin, "zsh", zshFunctionsDir, "_lerd")
 			ensureZshFpath(filepath.Join(home, ".zshrc"), zshFunctionsDir)
 		}
-		return nil
 	default:
-		if err := appendShellRC(bashRCPath(home), binDir); err != nil {
-			return err
-		}
 		bashCompDir := filepath.Join(home, ".local", "share", "bash-completion", "completions")
 		if err := os.MkdirAll(bashCompDir, 0755); err == nil {
 			installCompletion(lerdBin, "bash", bashCompDir, "lerd")
 		}
-		return nil
 	}
 }
 

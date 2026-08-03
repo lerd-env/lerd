@@ -27,6 +27,13 @@ node:
                           # Written at install/switch so lerd-ui and the watcher
                           # (which never load your shell rc) find a custom
                           # $NVM_DIR. Empty falls back to $NVM_DIR or ~/.nvm.
+shims:
+  path_disabled: false    # optional. Set true (or run lerd path:disable) to keep
+                          # lerd's shims dir (~/.local/share/lerd/bin with php,
+                          # composer, node…) off your shell PATH, for typing
+                          # `lerd php` explicitly instead. Honoured by install
+                          # and update, so the rc entry is not re-added. lerd's
+                          # own commands and workers are unaffected.
 share:
   default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
                             # flag is given: ngrok, cloudflare, expose, serveo or

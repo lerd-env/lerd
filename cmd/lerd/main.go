@@ -197,6 +197,8 @@ func main() {
 	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
 	root.AddCommand(cli.NewShimsCmd())
+	root.AddCommand(cli.NewPathEnableCmd())
+	root.AddCommand(cli.NewPathDisableCmd())
 	root.AddCommand(cli.NewXdebugCmd())
 	root.AddCommand(cli.NewDumpCmd())
 	root.AddCommand(cli.NewIdleCmd())
