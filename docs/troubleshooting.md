@@ -370,6 +370,20 @@ Common causes:
 When you unlink a site, crash-looping workers are automatically detected and stopped.
 :::
 
+::: details Error: could not fetch latest version: unexpected release URL format
+Symptom: `lerd update` fails with `unexpected release URL format: https://github.com/lerd-env/lerd/releases/latest`.
+
+Cause: your binary predates lerd 1.26 and still asks GitHub for releases under the old `geodro/lerd` path. Since the project moved to the `lerd-env` organisation, GitHub answers that path with a rename redirect to the new `/releases/latest` URL instead of the release itself, and older binaries only read the first redirect. The update command is the broken part, so no release can repair it remotely.
+
+Fix: reinstall once. This only replaces the binary; your sites, services, and config are untouched:
+
+```bash
+curl -fsSL https://lerd.sh/install.sh | bash
+```
+
+Everything from 1.26 onwards resolves the organisation move on its own, so this is a one-time step.
+:::
+
 ::: details Error: NetworkUpdate is not supported for backend CNI: invalid argument
 Your system is likely configured to use the older CNI backend, which lacks support for the requested network operation. Edit or create the Podman configuration file at `/etc/containers/containers.conf` and add or modify the `network_backend` setting to `netavark`:
 
