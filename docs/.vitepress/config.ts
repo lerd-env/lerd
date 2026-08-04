@@ -147,6 +147,7 @@ export default defineConfig({
             { text: 'CodeIgniter', link: '/getting-started/codeigniter' },
             { text: 'Statamic', link: '/getting-started/statamic' },
             { text: 'Tempest', link: '/getting-started/tempest' },
+            { text: 'Magento', link: '/getting-started/magento' },
             { text: 'Containers (Node, Python, Go, …)', link: '/getting-started/containers' },
           ],
         },
