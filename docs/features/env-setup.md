@@ -96,7 +96,9 @@ DB_PASSWORD=mysecret
 LERD_EXTERNAL_SERVICES=postgres
 ```
 
-Use `host.containers.internal` for the host rather than `127.0.0.1`. The override is read inside the PHP-FPM container, where `127.0.0.1` is the container's own loopback, not your machine. lerd keeps a `host.containers.internal` entry in the container that resolves to the host, so a containerized app reaches a host MySQL, MariaDB or Postgres over it with no extra setup. For MySQL use `DB_PORT=3306`.
+Use `host.containers.internal` for the host rather than `127.0.0.1`. The override is read inside the PHP-FPM container, where `127.0.0.1` is the container's own loopback, not your machine. lerd keeps a `host.containers.internal` entry in the container that resolves to the host. For MySQL use `DB_PORT=3306`.
+
+On macOS that is all it takes: the connection is delivered to the host's loopback, so a server bound to `127.0.0.1` with `'user'@'localhost'` grants accepts it unchanged. On Linux it arrives from a real, non-loopback address instead, so a distro package left at its defaults refuses it and the server needs to listen past loopback and grant from somewhere other than `localhost`. [Using a service you run on the host](../usage/services.md#using-a-service-you-run-on-the-host) has the per-platform detail.
 
 The value is comma or space separated, so `LERD_EXTERNAL_SERVICES=postgres, redis` opts both out. The reserved key is consumed by lerd and is never written into `.env`.
 
