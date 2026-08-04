@@ -3729,6 +3729,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Tinker snippets: GET lists, POST saves, DELETE removes.
+	if action == "tinker:snippets" {
+		handleSiteTinkerSnippets(w, r, domain)
+		return
+	}
+
 	// Per-site nginx override editor (GET reads, POST saves + reloads).
 	if action == "nginx" && (r.Method == http.MethodGet || r.Method == http.MethodPost) {
 		handleSiteNginx(w, r, domain)

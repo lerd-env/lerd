@@ -11,7 +11,11 @@
     size?: 'sm' | 'md';
     width?: number;
     onopen?: () => void;
-    trigger: Snippet;
+    trigger?: Snippet;
+    // Replaces the default IconButton wholesale so the trigger can match its
+    // surroundings (e.g. the Tinker toolbar's bare icon buttons). Receives
+    // (toggle, open) and must wire toggle to its onclick itself.
+    triggerButton?: Snippet<[() => void, boolean]>;
     children: Snippet<[() => void]>;
   }
   let {
@@ -21,6 +25,7 @@
     width = 320,
     onopen,
     trigger,
+    triggerButton,
     children
   }: Props = $props();
 
@@ -59,9 +64,13 @@
 <svelte:window onkeydown={(e) => e.key === 'Escape' && close()} onresize={() => open && place()} />
 
 <div class="relative" bind:this={triggerEl}>
-  <IconButton title={label} active={open} onclick={toggle} {size}>
-    {@render trigger()}
-  </IconButton>
+  {#if triggerButton}
+    {@render triggerButton(toggle, open)}
+  {:else if trigger}
+    <IconButton title={label} active={open} onclick={toggle} {size}>
+      {@render trigger()}
+    </IconButton>
+  {/if}
 
   {#if open}
     <!-- Click-away backdrop; the panel sits above it. -->
