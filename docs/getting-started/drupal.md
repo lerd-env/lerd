@@ -97,16 +97,14 @@ Everything lerd knows how to do with a Drupal site goes through Drush: the setup
 lerd composer require drush/drush
 ```
 
-Until Drush is present, `lerd setup` offers only `composer install` and `lerd mcp:inject`, and the cron worker does not appear at all. That is deliberate, the steps are gated on the package being installed, but it does mean a fresh project looks emptier than it is.
+Until Drush is present, `lerd setup` offers only `composer install` and `lerd mcp:inject`, the cron worker does not appear, and `lerd run` reports no commands at all. That is deliberate, every one of them is gated on the package being installed, but it does mean a fresh project looks emptier than it is.
 
 ---
 
 ## 5. Install the site
 
 ```bash
-lerd php vendor/drush/drush/drush.php site:install \
-  --db-url=mysql://root:lerd@lerd-mysql:3306/mysite \
-  --site-name="My site" --account-name=admin --account-pass=secret --yes
+lerd run site:install --yes
 ```
 
 ```
@@ -116,13 +114,19 @@ lerd php vendor/drush/drush/drush.php site:install \
  [success] Installation complete. (Admin)
 ```
 
+That installs against the database `lerd init` created, with an admin user of `admin` / `lerdadmin1`. It asks for confirmation in the dashboard and the TUI because it creates a schema; `--yes` is what skips that prompt on the CLI.
+
 ::: warning Drupal does not read `.env`
-`lerd init` writes `DB_DRIVER`, `DB_HOST`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` into `.env`, which is where lerd records what it provisioned and where the dashboard reads it from. Drupal itself has no dotenv wiring in `drupal/recommended-project`, so it never reads that file. Pass `--db-url` on the first install, as above, and Drush writes the real credentials into `web/sites/default/settings.php`, which is what Drupal actually loads from then on. Running `site:install` with no `--db-url` on a fresh project fails with `Call to a member function getInstallTasks() on null`, because there is nothing for it to connect to yet.
+`lerd init` writes `DB_DRIVER`, `DB_HOST`, `DB_NAME`, `DB_USER` and `DB_PASSWORD` into `.env`, which is where lerd records what it provisioned and where the dashboard reads it from. Drupal itself has no dotenv wiring in `drupal/recommended-project`, so it never reads that file. That is why the install command passes `--db-url` explicitly: without it, Drush has nothing to connect to on a fresh project and fails with `Call to a member function getInstallTasks() on null`. Once it has run, the real credentials live in `web/sites/default/settings.php`, which is what Drupal loads from then on.
 
 The `.env` values still matter if you wire `settings.php` up to read them yourself, which is the usual pattern for a project that keeps credentials out of the repo.
 :::
 
-Use `--db-url=pgsql://postgres:lerd@lerd-postgres:5432/mysite` for PostgreSQL. The database itself was already created by `lerd init`, so the URL only has to point at it.
+The command points at lerd's MySQL. On a PostgreSQL project, run the install by hand with the connection your project uses:
+
+```bash
+lerd console site:install --db-url=pgsql://postgres:lerd@lerd-postgres:5432/mysite --yes
+```
 
 ---
 
@@ -138,17 +142,16 @@ With Drush installed the full step list appears, pre-selecting what a normal run
 ? Setup steps
   [ ] composer install
   [ ] lerd mcp:inject
-  [ ] Install site
   [•] Run database updates
   [•] Rebuild cache
   [ ] Import config
   [ ] cron:start
 ```
 
-`Run database updates` and `Rebuild cache` are the two that matter after a pull. `Install site` is the step you just ran by hand, `Import config` runs `drush config:import` for a project that tracks its configuration in the repo, and `cron:start` launches the cron worker as a systemd user service.
+`Run database updates` and `Rebuild cache` are the two that matter after a pull. `Import config` runs `drush config:import` for a project that tracks its configuration in the repo, and `cron:start` launches the cron worker as a systemd user service.
 
 ::: info One-shot
-`lerd setup --all` skips the prompt and runs every pre-selected step. Useful in scripts or after a fresh clone.
+`lerd setup --all` skips the prompt and runs every step, not only the pre-selected ones. Installing the site is deliberately a command rather than a setup step, so a blanket run can never drop and recreate the schema of a store you already have.
 :::
 
 ---
@@ -188,23 +191,24 @@ Live logs are in the [Web UI](../features/web-ui.md) at `http://127.0.0.1:7073` 
 
 ## Drush quick commands
 
-The Drupal definition ships five one-click actions, available on the site's card in the dashboard, in the TUI, and to an AI assistant over MCP:
+The Drupal definition ships six one-click actions, available from `lerd run`, on the site's card in the dashboard, in the TUI, and to an AI assistant over MCP:
 
 | Command | Runs | What it does |
 |---|---|---|
+| `site:install` | `drush site:install …` | Install a fresh site (confirm-gated) |
 | `cr` | `drush cr` | Rebuild all Drupal caches |
-| `uli` | `drush uli` | Generate a one-time admin login URL |
+| `uli` | `drush uli --uri=…` | Generate a one-time admin login URL |
 | `updb` | `drush updb -y` | Apply pending `hook_update_N` updates |
 | `cex` | `drush cex -y` | Export configuration to the sync directory |
 | `cim` | `drush cim -y` | Import configuration from the sync directory |
 
-`uli` returns a URL, so the dashboard shows it as a link you can open straight into an authenticated session. `cim` asks for confirmation first, since it overwrites live configuration.
+`uli` returns a URL on the site's own domain, so the dashboard shows it as a link you can open straight into an authenticated session. `cim` asks for confirmation first, since it overwrites live configuration. All six stay hidden until `drush/drush` is installed.
 
-From a shell, run any Drush command through the project's PHP container:
+Any other Drush command works through the console:
 
 ```bash
-lerd php vendor/drush/drush/drush.php cr
-lerd php vendor/drush/drush/drush.php uli
+lerd console cache:rebuild
+lerd console status
 ```
 
 The [Tinker tab](../features/tinker.md) is wired to `drush php:eval`, so you can evaluate code against a booted Drupal from the dashboard.
