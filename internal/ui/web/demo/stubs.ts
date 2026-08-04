@@ -152,6 +152,30 @@ $total = Order::where('status', 'paid')->sum('total');
 User::count();
 collect([1, 2, 3])->map(fn ($n) => $n * 2);`;
 
+// Snippets the Tinker tab's picker offers: project files from
+// .lerd/tinker/snippets plus a personal one from ~/.config/lerd. Mutable so
+// the demo's save and delete flows behave like the real backend.
+const TINKER_SNIPPETS = [
+  {
+    name: 'paid-orders-total.php',
+    label: 'Paid orders total',
+    source: 'project',
+    content: "$total = Order::where('status', 'paid')->sum('total');\n"
+  },
+  {
+    name: 'seed-lookups.php',
+    label: 'Seed demo lookups',
+    source: 'project',
+    content: '// @name Seed demo lookups\nSeeder::run();\n'
+  },
+  {
+    name: 'current-user.php',
+    label: 'current-user',
+    source: 'global',
+    content: 'User::first();\n'
+  }
+];
+
 // Per-site request-timing analytics (the site Overview's Request timing view,
 // served at /api/sites/<domain>/analytics). The real view reads a durable SQLite
 // store; each profile below is expanded into the same shape, with the throughput
@@ -609,7 +633,22 @@ window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Res
     if (/\/env$/.test(path)) return textResponse(ENV_TEXT);
   }
 
-  // Tinker REPL (POST)
+  // Tinker REPL (POST) and its snippet picker (GET list, POST save, DELETE)
+  if (/\/tinker:snippets$/.test(path)) {
+    if (method === 'POST') {
+      const body = JSON.parse(String(init?.body || '{}')) as { name?: string; source?: string; content?: string };
+      const name = (body.name || '').endsWith('.php') ? body.name! : (body.name || '') + '.php';
+      const source = body.source === 'global' ? 'global' : 'project';
+      const idx = TINKER_SNIPPETS.findIndex((s) => s.name === name && s.source === source);
+      const saved = { name, label: name.replace(/\.php$/, ''), source, content: body.content || '' };
+      if (idx >= 0) TINKER_SNIPPETS[idx] = saved;
+      else TINKER_SNIPPETS.push(saved);
+    } else if (method === 'DELETE') {
+      const idx = TINKER_SNIPPETS.findIndex((s) => s.name === qs.get('name') && s.source === qs.get('source'));
+      if (idx >= 0) TINKER_SNIPPETS.splice(idx, 1);
+    }
+    return jsonResponse(TINKER_SNIPPETS);
+  }
   if (/\/tinker$/.test(path)) return jsonResponse(TINKER_RESPONSE);
 
   // Nginx — global /api/nginx and per-site /api/sites/<domain>/nginx (+ /backups)

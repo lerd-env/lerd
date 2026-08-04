@@ -51,6 +51,30 @@ tinker:
   requires_file: drush.php
 ```
 
+## Snippets
+
+Reusable snippets can be committed inside the project and shared with the whole team, Tinkerwell-style. The **Snippets** menu in the toolbar lists them; picking one loads it into the editor so you can tweak it before hitting Run, nothing executes on selection. If the editor already holds something else, loading asks for confirmation first so a draft is never silently replaced.
+
+The same menu manages snippets. **Save editor as snippet…** stores the current editor contents under a name of your choosing, either in the project or in your global folder; saving over an existing name asks before overwriting. Each row has a delete button (hover to reveal) that removes the file after a confirmation. Tinkerwell snippets are read-only: lerd lists them but never writes into another tool's directory, so their rows carry no delete and saving always targets the project or global folder.
+
+Snippets are plain `.php` files, gathered from three places, in this order:
+
+| Location | Scope |
+|---|---|
+| `.lerd/tinker/snippets/` in the project | Shared with the team via version control |
+| `.tinkerwell/snippets/` in the project | Read as-is, so existing Tinkerwell snippets work without moving them |
+| `~/.config/lerd/tinker/snippets/` | Personal snippets, available on every site |
+
+One file is one snippet. The label in the picker is the filename without its extension, unless the file carries a name header in its first lines:
+
+```php
+// @name Reset demo data
+Order::truncate();
+Seeder::run();
+```
+
+The dropdown shows which folder each snippet came from, and worktrees read snippets from their own checkout. Files over 64 KB (the run request cap), dotfiles, and anything that isn't a `.php` file are ignored, and subdirectories are not scanned.
+
 ## Output rendering
 
 The output panel is styled like a read-only editor: bordered box, monospace, line-number gutter rendered as CSS pseudo-elements so dragging across results never selects or copies the line numbers.
@@ -102,6 +126,7 @@ The editor contents are saved to `localStorage` under `tinker:{domain}:draft`, s
 |---|---|
 | Mode badge | Shows `tinker` or `php`; tooltip explains which runtime is used. |
 | Duration | Shown after a run, in milliseconds. |
+| Snippets | Opens the snippets menu: load one into the editor, save the editor contents as a new or updated snippet, or delete one. See [Snippets](#snippets). |
 | Split direction | Flips the editor and output between side by side and stacked. Hidden on narrow screens, where stacked is the only sensible layout. The choice is remembered across sessions under `tinker:splitDir`. |
 | Full screen | Expands the editor and output to fill the viewport, hiding the surrounding navigation. The site domain, and the branch when you are on a worktree, appear next to the mode badge so you can see what you are running against. Press `Esc` or click the button again to leave. |
 | `Copy code` | Copies the editor contents to the clipboard. |
@@ -133,6 +158,9 @@ The Tinker tab executes arbitrary PHP inside your site's container with the same
 | Method + Path | Body | Returns |
 |---|---|---|
 | `POST /api/sites/{domain}/tinker` | `{ "code": "..." }` | `{ ok, stdout, stderr, exit_code, duration_ms, mode, error? }` |
+| `GET /api/sites/{domain}/tinker:snippets` | none | `[ { name, label, source, content } ]`, `source` is `project`, `tinkerwell` or `global` |
+| `POST /api/sites/{domain}/tinker:snippets` | `{ "name", "source", "content" }` | the refreshed snippet list; `source` must be `project` or `global`, `.php` is appended to the name when missing |
+| `DELETE /api/sites/{domain}/tinker:snippets?source=…&name=…` | none | the refreshed snippet list; only `project` and `global` files can be deleted |
 | `GET /api/lsp/php?domain={domain}&branch={branch}` | WebSocket | LSP JSON-RPC bridged to `phpantom_lsp` (one message per text frame) |
 
 Output from `tinker` runs uses ASCII `0x1E` (record separator) between top-level statements; the frontend splits on it. Aliasing notices and psysh source-location annotations are stripped before being returned.
@@ -147,7 +175,8 @@ Backend (Go):
 - `internal/phpantom/phpantom.go`: manages the `phpantom_lsp` host binary: platform asset resolution, pinned-version download, tar extraction into `BinDir`.
 - `internal/ui/lsp.go`: `handleLSPPhp`, the WebSocket ↔ stdio LSP framing bridge (`readLSPMessage` / `encodeLSPMessage`).
 - `internal/ui/server.go`: the `tinker` case on the site action handler and the `/api/lsp/php` route.
-- Tests: `tinker_test.go`, `internal/ui/lsp_test.go`, `internal/phpantom/phpantom_test.go`.
+- `internal/ui/tinker_snippets.go`: snippet directory scanning and the `tinker:snippets` handler.
+- Tests: `tinker_test.go`, `internal/ui/tinker_snippets_test.go`, `internal/ui/lsp_test.go`, `internal/phpantom/phpantom_test.go`.
 
 Frontend (Svelte 5 + Monaco):
 

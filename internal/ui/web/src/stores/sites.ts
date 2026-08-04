@@ -751,6 +751,69 @@ export async function runTinker(
   }
 }
 
+export type TinkerSnippet = {
+  name: string;
+  label: string;
+  source: 'project' | 'tinkerwell' | 'global';
+  content: string;
+};
+
+export async function fetchTinkerSnippets(
+  domain: string,
+  branch: string = ''
+): Promise<TinkerSnippet[]> {
+  try {
+    const res = await apiFetch(tinkerURL(domain, 'tinker:snippets', branch));
+    if (!res.ok) return [];
+    return (await res.json()) as TinkerSnippet[];
+  } catch {
+    return [];
+  }
+}
+
+export type TinkerSnippetsResult = {
+  ok: boolean;
+  snippets?: TinkerSnippet[];
+  error?: string;
+};
+
+// Save and delete answer the refreshed snippet list so the picker can update
+// without a second round trip.
+export async function saveTinkerSnippet(
+  domain: string,
+  snippet: { name: string; source: 'project' | 'global'; content: string },
+  branch: string = ''
+): Promise<TinkerSnippetsResult> {
+  try {
+    const res = await apiFetch(tinkerURL(domain, 'tinker:snippets', branch), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(snippet)
+    });
+    if (!res.ok) return { ok: false, error: (await res.text()).trim() };
+    return { ok: true, snippets: (await res.json()) as TinkerSnippet[] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+}
+
+export async function deleteTinkerSnippet(
+  domain: string,
+  snippet: { name: string; source: string },
+  branch: string = ''
+): Promise<TinkerSnippetsResult> {
+  const base = tinkerURL(domain, 'tinker:snippets', branch);
+  const sep = base.includes('?') ? '&' : '?';
+  const url = `${base}${sep}source=${encodeURIComponent(snippet.source)}&name=${encodeURIComponent(snippet.name)}`;
+  try {
+    const res = await apiFetch(url, { method: 'DELETE' });
+    if (!res.ok) return { ok: false, error: (await res.text()).trim() };
+    return { ok: true, snippets: (await res.json()) as TinkerSnippet[] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+}
+
 export async function setSiteVersion(
   s: Site,
   type: 'php' | 'node',

@@ -1,8 +1,12 @@
 <script lang="ts">
-  import { runTinker, activeWorktreeDomain, type TinkerResponse, type Site } from '$stores/sites';
+  import { runTinker, fetchTinkerSnippets, saveTinkerSnippet, deleteTinkerSnippet, activeWorktreeDomain, type TinkerResponse, type TinkerSnippet, type Site } from '$stores/sites';
+  import { openErrorModal } from '$stores/modals';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
   import { parseBlock } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
+  import Popover from '$components/Popover.svelte';
+  import ConfirmModal from '$components/ConfirmModal.svelte';
+  import TinkerSnippetSaveModal from './TinkerSnippetSaveModal.svelte';
   import MonacoEditor from '$components/MonacoEditor.svelte';
   import Icon from '$components/Icon.svelte';
   import { attachPhpLsp, type PhpLspHandle } from '$lib/lsp';
@@ -141,7 +145,83 @@
     }
   }
 
+  // Snippets are reusable .php files committed in the project
+  // (.lerd/tinker/snippets, .tinkerwell/snippets) or kept globally in
+  // ~/.config/lerd/tinker/snippets. Loading one only fills the editor; every
+  // destructive step (replace a non-empty editor, overwrite, delete) confirms
+  // first. The tinkerwell dir is read-only, so its rows carry no delete.
+  let snippets = $state<TinkerSnippet[]>([]);
+  const snippetSourceDirs: Record<TinkerSnippet['source'], string> = {
+    project: '.lerd/tinker/snippets',
+    tinkerwell: '.tinkerwell/snippets',
+    global: '~/.config/lerd/tinker/snippets'
+  };
+
+  // The last loaded/saved snippet prefills the save dialog for update flows.
+  let loadedSnippet = $state<{ name: string; source: 'project' | 'global' } | null>(null);
+  let confirmLoad = $state<TinkerSnippet | null>(null);
+  let confirmDelete = $state<TinkerSnippet | null>(null);
+  let deleting = $state(false);
+  let saveOpen = $state(false);
+  let saving = $state(false);
+  let saveError = $state('');
+
+  function requestLoad(s: TinkerSnippet) {
+    if (code.trim() && code !== s.content) confirmLoad = s;
+    else applyLoad(s);
+  }
+
+  function applyLoad(s: TinkerSnippet) {
+    code = s.content;
+    loadedSnippet = s.source === 'tinkerwell' ? null : { name: s.name, source: s.source };
+    confirmLoad = null;
+  }
+
+  function openSave() {
+    saveError = '';
+    saveOpen = true;
+  }
+
+  async function doSave(name: string, source: 'project' | 'global') {
+    saving = true;
+    try {
+      const r = await saveTinkerSnippet(site.domain, { name, source, content: code }, branch);
+      if (!r.ok) {
+        saveError = r.error || m.common_requestFailed();
+        return;
+      }
+      snippets = r.snippets ?? snippets;
+      loadedSnippet = { name: name.endsWith('.php') ? name : name + '.php', source };
+      saveOpen = false;
+    } finally {
+      saving = false;
+    }
+  }
+
+  async function doDelete() {
+    const target = confirmDelete;
+    if (!target || deleting) return;
+    deleting = true;
+    try {
+      const r = await deleteTinkerSnippet(site.domain, { name: target.name, source: target.source }, branch);
+      confirmDelete = null;
+      if (!r.ok) {
+        openErrorModal(m.tinker_snippetDeleteFailed({ error: r.error || '' }));
+        return;
+      }
+      snippets = r.snippets ?? [];
+      if (loadedSnippet && loadedSnippet.name === target.name && loadedSnippet.source === target.source) {
+        loadedSnippet = null;
+      }
+    } finally {
+      deleting = false;
+    }
+  }
+
   onMount(() => {
+    void fetchTinkerSnippets(site.domain, branch).then((list) => {
+      snippets = list;
+    });
     window.addEventListener('keydown', onKeydown);
     return () => window.removeEventListener('keydown', onKeydown);
   });
@@ -230,6 +310,76 @@
       {/if}
     </div>
     <div class="flex items-center gap-3">
+      <Popover
+        label={m.tinker_snippets()}
+        align="right"
+        width={280}
+        onopen={() => {
+          // Refresh on open so files added outside this tab (git pull, another
+          // window) show up and the overwrite check compares against reality.
+          void fetchTinkerSnippets(site.domain, branch).then((list) => {
+            snippets = list;
+          });
+        }}
+      >
+        <!-- Bare trigger so the button reads exactly like its toolbar
+             siblings: same classes, same default tooltip placement. -->
+        {#snippet triggerButton(toggle)}
+          <button
+            type="button"
+            onclick={toggle}
+            class="block text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            use:tooltip={m.tinker_snippets()}
+            aria-label={m.tinker_snippets()}
+          >
+            <Icon name="docs" class="w-4 h-4" />
+          </button>
+        {/snippet}
+        {#snippet children(close)}
+          <div class="py-1" data-testid="snippets-menu">
+            <!-- Only the rows scroll; the save action stays pinned below so it
+                 never disappears under a long snippet list. -->
+            <div class="max-h-60 overflow-y-auto">
+            {#if snippets.length === 0}
+              <p class="px-3 py-2 text-xs text-gray-400 dark:text-gray-500">{m.tinker_snippetsEmpty()}</p>
+            {/if}
+            {#each snippets as s (s.source + ':' + s.name)}
+              <div class="group flex items-center pr-1">
+                <button
+                  type="button"
+                  class="flex-1 min-w-0 px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors"
+                  onclick={() => { close(); requestLoad(s); }}
+                >
+                  <span class="block truncate">{s.label}</span>
+                  <span class="block text-[10px] text-gray-500 dark:text-gray-400 truncate">{snippetSourceDirs[s.source]}</span>
+                </button>
+                {#if s.source !== 'tinkerwell'}
+                  <button
+                    type="button"
+                    class="shrink-0 p-1 rounded-sm opacity-0 group-hover:opacity-100 focus:opacity-100 text-gray-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
+                    aria-label={m.tinker_snippetDeleteTitle()}
+                    use:tooltip={m.tinker_snippetDeleteTitle()}
+                    onclick={() => { close(); confirmDelete = s; }}
+                  >
+                    <Icon name="trash" class="w-3.5 h-3.5" />
+                  </button>
+                {/if}
+              </div>
+            {/each}
+            </div>
+            <div class="border-t border-gray-100 dark:border-lerd-border mt-1 pt-1">
+              <button
+                type="button"
+                class="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-white/5 disabled:opacity-40 transition-colors"
+                disabled={!code.trim()}
+                onclick={() => { close(); openSave(); }}
+              >
+                <Icon name="plus" class="w-3.5 h-3.5" />{m.tinker_snippetSaveAction()}
+              </button>
+            </div>
+          </div>
+        {/snippet}
+      </Popover>
       <button
         onclick={() => (splitDir = splitDir === SplitDir.Horizontal ? SplitDir.Vertical : SplitDir.Horizontal)}
         class="hidden md:block text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
@@ -360,6 +510,44 @@
     </div>
   </div>
 </div>
+
+<TinkerSnippetSaveModal
+  open={saveOpen}
+  {snippets}
+  initialName={loadedSnippet ? loadedSnippet.name.replace(/\.php$/, '') : ''}
+  initialSource={loadedSnippet?.source ?? 'project'}
+  {saving}
+  error={saveError}
+  onsave={doSave}
+  onclose={() => {
+    if (!saving) saveOpen = false;
+  }}
+/>
+
+<ConfirmModal
+  open={confirmLoad !== null}
+  title={m.tinker_snippetLoadTitle()}
+  body={m.tinker_snippetLoadBody({ name: confirmLoad?.label ?? '' })}
+  confirmLabel={m.tinker_snippetLoadConfirm()}
+  onconfirm={() => confirmLoad && applyLoad(confirmLoad)}
+  onclose={() => (confirmLoad = null)}
+/>
+
+<ConfirmModal
+  open={confirmDelete !== null}
+  title={m.tinker_snippetDeleteTitle()}
+  body={m.tinker_snippetDeleteBody({
+    name: confirmDelete?.name ?? '',
+    dir: confirmDelete ? snippetSourceDirs[confirmDelete.source] : ''
+  })}
+  confirmLabel={m.tinker_snippetDeleteConfirm()}
+  danger
+  loading={deleting}
+  onconfirm={doDelete}
+  onclose={() => {
+    if (!deleting) confirmDelete = null;
+  }}
+/>
 
 <style>
   /* Output panel, visually mirrors the editor on the left: bordered box,
