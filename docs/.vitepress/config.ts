@@ -143,6 +143,7 @@ export default defineConfig({
             { text: 'Symfony', link: '/getting-started/symfony' },
             { text: 'WordPress', link: '/getting-started/wordpress' },
             { text: 'Drupal', link: '/getting-started/drupal' },
+            { text: 'Statamic', link: '/getting-started/statamic' },
             { text: 'Containers (Node, Python, Go, …)', link: '/getting-started/containers' },
           ],
         },
