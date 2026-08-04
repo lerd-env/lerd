@@ -123,7 +123,7 @@ There are no available migrations. Try creating one using the create command.
 Reaching the migrations table at all means the app is talking to `lerd-mysql`.
 
 ::: info `APP_FULL_BASE_URL`
-lerd writes the site address as `APP_URL`, which CakePHP does not read. Its own key is `APP_FULL_BASE_URL`, and `config/.env.example` seeds it with `https://example.com`. Set it to `https://mysite.test` if your app generates absolute URLs.
+lerd writes the site address to `APP_FULL_BASE_URL`, the key CakePHP 5 reads for absolute URLs. It lands after the `https://example.com` that `config/.env.example` seeds, so the site's own address wins once the loader is on. CakePHP 3 and 4 have no such key, both hardcode `'fullBaseUrl' => false` and derive the address from the request, so lerd writes nothing there.
 :::
 
 ---
@@ -205,16 +205,14 @@ The CakePHP definition ships three one-click actions, available on the site's ca
 
 `migrate` only shows up when `cakephp/migrations` is installed.
 
-::: warning Running the console yourself
-`bin/cake` is a shell wrapper, not a PHP file, so `lerd console` cannot run it. Use the PHP entry point instead:
+Any other CakePHP command works through the console:
 
 ```bash
-lerd php bin/cake.php migrations migrate
-lerd php bin/cake.php cache clear_all
+lerd console migrations migrate
+lerd console cache clear_all
 ```
 
-The setup steps and the quick actions above are unaffected; they go through a shell and use `bin/cake` directly.
-:::
+`lerd console` runs `bin/cake.php`, the PHP entry point, rather than the `bin/cake` shell wrapper next to it.
 
 ---
 
