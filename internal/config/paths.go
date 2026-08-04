@@ -44,6 +44,20 @@ func BinDir() string {
 	return filepath.Join(DataDir(), "bin")
 }
 
+// PathWithBinDir returns the inherited PATH with lerd's shim dir in front, for
+// child processes that run a shell command string. Framework commands all start
+// with `php`, which only resolves through that dir, and it is absent from the
+// user's own PATH both under `lerd path:disable` and under launchd on macOS.
+// An empty inherited PATH yields the dir alone: a trailing separator would make
+// the shell search the working directory.
+func PathWithBinDir() string {
+	path := BinDir()
+	if existing := os.Getenv("PATH"); existing != "" {
+		path += string(os.PathListSeparator) + existing
+	}
+	return path
+}
+
 // NodeGlobalDir is the npm prefix lerd points its node shim at, so
 // `npm install -g foo` lands in a stable per-user path instead of a
 // version-specific fnm directory that nothing has on PATH.

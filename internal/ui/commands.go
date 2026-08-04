@@ -258,17 +258,10 @@ func streamShellRun(w http.ResponseWriter, ctx context.Context, cwd, shell strin
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", shell)
 	cmd.Dir = cwd
-	// Prepend BinDir so php/composer/npm shims resolve under launchd's
-	// restricted PATH on macOS. Skip the trailing separator when PATH is
-	// empty — a bare "PATH=<bin>:" would search CWD on POSIX.
-	path := config.BinDir()
-	if existing := os.Getenv("PATH"); existing != "" {
-		path += string(os.PathListSeparator) + existing
-	}
 	// Force colour on: the command runs against a pipe, so composer, artisan
 	// and friends would otherwise strip their ANSI escapes and the run modal
 	// would show a wall of grey.
-	cmd.Env = logcolor.Environ(append(os.Environ(), "PATH="+path))
+	cmd.Env = logcolor.Environ(append(os.Environ(), "PATH="+config.PathWithBinDir()))
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {

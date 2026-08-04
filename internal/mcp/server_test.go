@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -541,5 +542,26 @@ func TestExecServiceConfig_ReadHonoursInlineTuningSpec(t *testing.T) {
 	}
 	if !bytes.Contains(raw, []byte("user-defined memcached overrides")) {
 		t.Errorf("response missing inline template: %s", raw)
+	}
+}
+
+// An AI assistant running a framework command goes through the same host shell
+// as `lerd run` and the dashboard, so it needs lerd's shim dir on PATH too:
+// every framework command starts with `php`, which `lerd path:disable` takes
+// off the user's own PATH.
+func TestHostCommandEnv_PutsShimDirOnPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+
+	var got string
+	for _, kv := range hostCommandEnv() {
+		if strings.HasPrefix(kv, "PATH=") {
+			got = strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	if !strings.HasPrefix(got, config.BinDir()+string(os.PathListSeparator)) {
+		t.Errorf("PATH = %q, want it to start with the shim dir %q", got, config.BinDir())
+	}
+	if !strings.HasSuffix(got, "/usr/bin:/bin") {
+		t.Errorf("PATH = %q, want the inherited entries kept", got)
 	}
 }

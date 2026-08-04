@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -158,5 +159,28 @@ func TestDataSubDir(t *testing.T) {
 	got := DataSubDir("mysql")
 	if !strings.Contains(got, "mysql") {
 		t.Errorf("DataSubDir(mysql) = %q, expected to contain mysql", got)
+	}
+}
+
+// A command string from a framework definition starts with `php` (php spark,
+// php please, php bin/magento, php vendor/drush/drush/drush.php). Those resolve
+// through lerd's shim dir, which `lerd path:disable` deliberately keeps off the
+// user's shell PATH, so every caller that hands such a string to a shell has to
+// put the dir back for the child process.
+func TestPathWithBinDir_PrependsShimDir(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	got := PathWithBinDir()
+	want := BinDir() + string(os.PathListSeparator) + "/usr/bin:/bin"
+	if got != want {
+		t.Errorf("PathWithBinDir() = %q, want %q", got, want)
+	}
+}
+
+// A bare "PATH=<bin>:" searches the working directory on POSIX, so an empty
+// inherited PATH must not gain a trailing separator.
+func TestPathWithBinDir_EmptyPathHasNoTrailingSeparator(t *testing.T) {
+	t.Setenv("PATH", "")
+	if got := PathWithBinDir(); got != BinDir() {
+		t.Errorf("PathWithBinDir() = %q, want %q", got, BinDir())
 	}
 }

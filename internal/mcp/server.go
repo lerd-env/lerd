@@ -3088,6 +3088,7 @@ func execCommandsRun(args map[string]any) (any, *rpcError) {
 	}
 	cmd := exec.Command("sh", "-c", target.Command)
 	cmd.Dir = cwd
+	cmd.Env = hostCommandEnv()
 	out, runErr := cmd.CombinedOutput()
 	body := string(out)
 	if runErr != nil {
@@ -4626,4 +4627,11 @@ func execUnpark(args map[string]any) (any, *rpcError) {
 		return toolErr("path is required"), nil
 	}
 	return runLerdCmd("unpark", path)
+}
+
+// hostCommandEnv is the environment for a framework command run on the host.
+// Those strings all start with `php`, which resolves through lerd's shim dir,
+// and `lerd path:disable` keeps that dir off the user's own PATH.
+func hostCommandEnv() []string {
+	return append(os.Environ(), "PATH="+config.PathWithBinDir())
 }

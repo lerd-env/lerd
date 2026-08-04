@@ -1051,11 +1051,7 @@ func plural(n int, one, many string) string {
 func runCapture(ctx context.Context, cwd, command string) (string, int, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = cwd
-	path := config.BinDir()
-	if existing := os.Getenv("PATH"); existing != "" {
-		path += string(os.PathListSeparator) + existing
-	}
-	cmd.Env = append(os.Environ(), "PATH="+path)
+	cmd.Env = append(os.Environ(), "PATH="+config.PathWithBinDir())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		if ee, ok := err.(*exec.ExitError); ok {

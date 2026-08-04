@@ -160,8 +160,7 @@ func runNamedCommand(cwd string, cmds []config.FrameworkCommand, name string, as
 		runDir = filepath.Join(runDir, target.CWD)
 	}
 
-	c := exec.Command("sh", "-c", target.Command)
-	c.Dir = runDir
+	c := newCommandExec(runDir, target.Command)
 	c.Stdin = os.Stdin
 	c.Stdout = os.Stdout
 	c.Stderr = os.Stderr
@@ -172,4 +171,15 @@ func runNamedCommand(cwd string, cmds []config.FrameworkCommand, name string, as
 		return err
 	}
 	return nil
+}
+
+// newCommandExec builds the shell invocation for a framework command. The
+// dashboard runs the same strings with lerd's shim dir on PATH; the CLI has to
+// do it too, or every command that starts with `php` dies with "command not
+// found" for anyone running `lerd path:disable`.
+func newCommandExec(dir, command string) *exec.Cmd {
+	c := exec.Command("sh", "-c", command)
+	c.Dir = dir
+	c.Env = append(os.Environ(), "PATH="+config.PathWithBinDir())
+	return c
 }
