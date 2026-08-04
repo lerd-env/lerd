@@ -142,6 +142,7 @@ export default defineConfig({
             { text: 'Laravel', link: '/getting-started/laravel' },
             { text: 'Symfony', link: '/getting-started/symfony' },
             { text: 'WordPress', link: '/getting-started/wordpress' },
+            { text: 'Drupal', link: '/getting-started/drupal' },
             { text: 'Containers (Node, Python, Go, …)', link: '/getting-started/containers' },
           ],
         },
