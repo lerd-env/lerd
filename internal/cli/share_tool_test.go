@@ -32,7 +32,7 @@ func TestShareToolNames_matchBinaries(t *testing.T) {
 // The order is what the command line and the "change it with" hint offer, and it
 // mirrors the auto-detection order in pickShareTool.
 func TestShareToolNames_order(t *testing.T) {
-	want := "ngrok|cloudflare|expose|serveo|localhost-run"
+	want := "ngrok|cloudflare|expose|serveo|localhost-run|pinggy"
 	if got := strings.Join(shareToolNames(), "|"); got != want {
 		t.Errorf("shareToolNames() = %q, want %q", got, want)
 	}

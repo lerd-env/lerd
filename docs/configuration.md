@@ -36,9 +36,10 @@ shims:
                           # own commands and workers are unaffected.
 share:
   default_tool: cloudflare  # optional. Tunnel tool lerd share uses when no tool
-                            # flag is given: ngrok, cloudflare, expose, serveo or
-                            # localhost-run. Written by lerd share:tool; omitted
-                            # (the default) means auto-detect.
+                            # flag is given: ngrok, cloudflare, expose, serveo,
+                            # localhost-run or pinggy. Written by lerd
+                            # share:tool; omitted (the default) means
+                            # auto-detect.
 nginx:
   http_port: 80
   https_port: 443

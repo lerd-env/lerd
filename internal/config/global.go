@@ -132,6 +132,10 @@ type GlobalConfig struct {
 		// host's ngrok configuration, so the published image needs this to
 		// run at all. Set via "lerd share:token".
 		NgrokToken string `yaml:"ngrok_token,omitempty" mapstructure:"ngrok_token"`
+		// PinggyToken authenticates Pinggy for a stable subdomain. Optional:
+		// without it a Pinggy share gets an ephemeral free-tier URL. Set via
+		// "lerd share:token pinggy".
+		PinggyToken string `yaml:"pinggy_token,omitempty" mapstructure:"pinggy_token"`
 	} `yaml:"share,omitempty" mapstructure:"share"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`

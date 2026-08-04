@@ -57,7 +57,7 @@ func TestAutoShareToolPicksBrewInstalledTool(t *testing.T) {
 func TestPickShareToolAcceptsBrewInstalledTool(t *testing.T) {
 	withBrewOnlyTunnelTools(t, "cloudflared")
 
-	tool, err := pickShareTool(false, true, false, false, false, "", "", "")
+	tool, err := pickShareTool(false, true, false, false, false, false, "", "", "", "")
 	if err != nil {
 		t.Fatalf("pickShareTool() = %v; want the Homebrew cloudflared accepted", err)
 	}

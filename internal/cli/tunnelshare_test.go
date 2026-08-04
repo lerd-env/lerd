@@ -28,6 +28,11 @@ func TestParseTunnelURL(t *testing.T) {
 		{"serveo", `Press g to start a GUI session and ctrl-c to quit.`, ""},
 		{"localhost-run", `a1b2c3d4.lhr.life tunneled with tls termination, https://a1b2c3d4.lhr.life`, "https://a1b2c3d4.lhr.life"},
 		{"localhost-run", `** visit https://localhost.run/docs/ for documentation **`, ""},
+		{"pinggy", `https://dztqm-84-232-173-137.free.pinggy.net`, "https://dztqm-84-232-173-137.free.pinggy.net"},
+		{"pinggy", `https://vurbr-84-232-173-137.run.pinggy-free.link`, "https://vurbr-84-232-173-137.run.pinggy-free.link"},
+		{"pinggy", `https://myapp.a.pinggy.link`, "https://myapp.a.pinggy.link"},
+		{"pinggy", `http://dztqm-84-232-173-137.free.pinggy.net`, ""},
+		{"pinggy", `Your tunnel will expire in 60 minutes. Upgrade to Pinggy Pro to get unrestricted tunnels. https://dashboard.pinggy.io`, ""},
 	}
 	for _, c := range cases {
 		got, ok := parseTunnelURL(c.tool, c.line)
@@ -51,7 +56,7 @@ func TestShareTools_detectsInstalledBinaries(t *testing.T) {
 	for _, tool := range ShareTools().Tools {
 		installed[tool.Name] = tool.Installed
 	}
-	want := map[string]bool{"ngrok": true, "cloudflare": false, "expose": false, "serveo": true, "localhost-run": true}
+	want := map[string]bool{"ngrok": true, "cloudflare": false, "expose": false, "serveo": true, "localhost-run": true, "pinggy": true}
 	for name, w := range want {
 		if installed[name] != w {
 			t.Errorf("tool %s installed = %v, want %v", name, installed[name], w)
@@ -102,8 +107,9 @@ func TestShareToolCanonicalName(t *testing.T) {
 		{&shareTool{mode: shareModeNgrok}, "ngrok"},
 		{&shareTool{mode: shareModeCloudflare}, "cloudflare"},
 		{&shareTool{mode: shareModeExpose}, "expose"},
-		{&shareTool{mode: shareModeSSH, sshHost: "serveo.net"}, "serveo"},
-		{&shareTool{mode: shareModeSSH, sshHost: "localhost.run"}, "localhost-run"},
+		{&shareTool{mode: shareModeSSH, ssh: sshProviders["serveo"]}, "serveo"},
+		{&shareTool{mode: shareModeSSH, ssh: sshProviders["localhost-run"]}, "localhost-run"},
+		{&shareTool{mode: shareModeSSH, ssh: sshProviders["pinggy"]}, "pinggy"},
 	}
 	for _, c := range cases {
 		if got := shareToolCanonicalName(c.tool); got != c.want {
@@ -113,7 +119,7 @@ func TestShareToolCanonicalName(t *testing.T) {
 }
 
 func TestResolveTunnelTool_rejectsUnknownName(t *testing.T) {
-	_, err := resolveTunnelTool("wireguard", "", "")
+	_, err := resolveTunnelTool("wireguard", "", "", "")
 	if err == nil || !strings.Contains(err.Error(), "unknown tunnel tool") {
 		t.Fatalf("expected unknown-tool error, got %v", err)
 	}
@@ -121,7 +127,7 @@ func TestResolveTunnelTool_rejectsUnknownName(t *testing.T) {
 
 func TestResolveTunnelTool_explicitNameIgnoresDefault(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
-	tool, err := resolveTunnelTool("ngrok", "cloudflare", "")
+	tool, err := resolveTunnelTool("ngrok", "cloudflare", "", "")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

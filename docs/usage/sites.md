@@ -457,11 +457,14 @@ Lerd automatically creates a subdomain for each `git worktree` checkout. See [Gi
 | `lerd share --expose` | Force Expose |
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
+| `lerd share --pinggy` | Force Pinggy (SSH, no signup) |
 | `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
-| `lerd share --token <token>` | ngrok auth token for this run, overriding the stored one |
-| `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, or `auto`) |
+| `lerd share --token <token>` | Auth token for this run, overriding the stored one (ngrok, or Pinggy with `--pinggy`) |
+| `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, `pinggy`, or `auto`) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under (`none` forgets it) |
-| `lerd share:token [token]` | Show whether an ngrok auth token is stored, or set one (`none` forgets it) |
+| `lerd share:token [provider] [token]` | Show whether auth tokens are stored, or set one (`none` forgets it); a bare token means ngrok |
+
+The three SSH tunnels need nothing installed beyond `ssh` itself and no account. Pinggy's free tier hands out an ephemeral URL per run; a token from the [Pinggy dashboard](https://dashboard.pinggy.io), stored with `lerd share:token pinggy <token>`, gives it a stable subdomain instead.
 
 Every tunnel is served through a small local proxy rather than pointed straight at nginx. The proxy sets the `Host` nginx routes on, dials a secured site over HTTPS without tripping on the local mkcert certificate, and rewrites the site's own `.test` domain out of redirects and asset URLs so the public hostname survives. Without it a secured site answers the first request with a redirect to its `.test` address, which means nothing to whoever opened the public URL.
 

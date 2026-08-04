@@ -87,6 +87,7 @@ var shareToolMeta = map[string]struct{ label, installURL string }{
 	"expose":        {"Expose", "https://expose.dev"},
 	"serveo":        {"Serveo", ""},
 	"localhost-run": {"localhost.run", ""},
+	"pinggy":        {"Pinggy", ""},
 }
 
 // ShareTools reports every supported tunnel tool, which ones are installed,
@@ -154,8 +155,8 @@ func autoShareToolName(defaultTool, ngrokToken string) string {
 
 // resolveTunnelTool maps a UI tool name to the shareTool the CLI flags would
 // produce. Empty or "auto" runs the same auto-detection as a bare lerd share.
-func resolveTunnelTool(name, defaultTool, ngrokToken string) (*shareTool, error) {
-	var ngrok, cloudflare, expose, serveo, localhostRun bool
+func resolveTunnelTool(name, defaultTool, ngrokToken, pinggyToken string) (*shareTool, error) {
+	var ngrok, cloudflare, expose, serveo, localhostRun, pinggy bool
 	switch name {
 	case "", "auto":
 	case "ngrok":
@@ -168,13 +169,15 @@ func resolveTunnelTool(name, defaultTool, ngrokToken string) (*shareTool, error)
 		serveo = true
 	case "localhost-run":
 		localhostRun = true
+	case "pinggy":
+		pinggy = true
 	default:
 		return nil, fmt.Errorf("unknown tunnel tool %q: use %s, or auto", name, strings.Join(shareToolNames(), ", "))
 	}
 	if name != "" && name != "auto" {
 		defaultTool = ""
 	}
-	return pickShareTool(ngrok, cloudflare, expose, serveo, localhostRun, "", defaultTool, ngrokToken)
+	return pickShareTool(ngrok, cloudflare, expose, serveo, localhostRun, pinggy, "", defaultTool, ngrokToken, pinggyToken)
 }
 
 func shareToolCanonicalName(t *shareTool) string {
@@ -186,10 +189,7 @@ func shareToolCanonicalName(t *shareTool) string {
 	case shareModeExpose:
 		return "expose"
 	case shareModeSSH:
-		if t.sshHost == "serveo.net" {
-			return "serveo"
-		}
-		return "localhost-run"
+		return t.ssh.name
 	}
 	return ""
 }
@@ -203,6 +203,10 @@ var tunnelURLPatterns = map[string][]*regexp.Regexp{
 	},
 	"serveo":        {regexp.MustCompile(`(https://[a-zA-Z0-9.-]+\.serveo\.net\S*)`)},
 	"localhost-run": {regexp.MustCompile(`(https://[a-z0-9-]+\.lhr\.life\S*)`)},
+	// Pinggy has handed out *.free.pinggy.net, *.pinggy.link and
+	// *.pinggy-free.link shapes, so the pattern accepts any of them rather
+	// than pinning one tier's spelling.
+	"pinggy": {regexp.MustCompile(`(https://[a-zA-Z0-9.-]+\.pinggy(?:-free)?\.(?:net|link)\S*)`)},
 }
 
 // parseTunnelURL extracts the public URL from one line of tool output.
@@ -298,19 +302,29 @@ func SetShareBaseDomain(baseDomain string, remember bool) error {
 	return config.SaveGlobal(cfg)
 }
 
-// SetShareNgrokToken stores the ngrok auth token, or clears it when empty. The
-// config file holds a credential once this is set, so it is written back with
-// owner-only permissions.
+// SetShareNgrokToken stores the ngrok auth token, or clears it when empty.
 func SetShareNgrokToken(token string) error {
+	return setShareToken(token, func(cfg *config.GlobalConfig) *string { return &cfg.Share.NgrokToken })
+}
+
+// SetSharePinggyToken stores the Pinggy access token, or clears it when empty.
+func SetSharePinggyToken(token string) error {
+	return setShareToken(token, func(cfg *config.GlobalConfig) *string { return &cfg.Share.PinggyToken })
+}
+
+// setShareToken writes one provider's token. The config file holds a credential
+// once any token is set, so it is written back with owner-only permissions.
+func setShareToken(token string, field func(*config.GlobalConfig) *string) error {
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		return err
 	}
 	token = strings.TrimSpace(token)
-	if cfg.Share.NgrokToken == token {
+	stored := field(cfg)
+	if *stored == token {
 		return nil
 	}
-	cfg.Share.NgrokToken = token
+	*stored = token
 	if err := config.SaveGlobal(cfg); err != nil {
 		return err
 	}
@@ -348,7 +362,7 @@ func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) 
 	if httpsPort == 0 {
 		httpsPort = 443
 	}
-	tool, err := resolveTunnelTool(toolName, cfg.Share.DefaultTool, cfg.Share.NgrokToken)
+	tool, err := resolveTunnelTool(toolName, cfg.Share.DefaultTool, cfg.Share.NgrokToken, cfg.Share.PinggyToken)
 	if err != nil {
 		return "", err
 	}

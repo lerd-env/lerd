@@ -19,6 +19,7 @@ var shareTools = []struct{ name, binary string }{
 	{"expose", "expose"},
 	{"serveo", "ssh"},
 	{"localhost-run", "ssh"},
+	{"pinggy", "ssh"},
 }
 
 func shareToolNames() []string {
@@ -41,7 +42,7 @@ func shareToolBinary(name string) (string, bool) {
 // NewShareToolCmd returns the share:tool command.
 func NewShareToolCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "share:tool [ngrok|cloudflare|expose|serveo|localhost-run|auto]",
+		Use:   "share:tool [ngrok|cloudflare|expose|serveo|localhost-run|pinggy|auto]",
 		Short: "Show or set the default tunnel tool for lerd share",
 		Long: `Without an argument, prints the current default tunnel tool.
 
