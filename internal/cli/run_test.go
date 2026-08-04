@@ -118,3 +118,25 @@ commands:
 		}
 	}
 }
+
+// Framework commands all start with `php`, which resolves only through lerd's
+// shim dir. `lerd path:disable` keeps that dir off the user's shell PATH, so
+// without this the CLI runner dies with "php: command not found" on every
+// command while the dashboard, which prepends the dir itself, works fine.
+func TestNewCommandExec_PutsShimDirOnPath(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	c := newCommandExec(t.TempDir(), "php artisan optimize:clear")
+
+	var got string
+	for _, kv := range c.Env {
+		if strings.HasPrefix(kv, "PATH=") {
+			got = strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	if !strings.HasPrefix(got, config.BinDir()+string(os.PathListSeparator)) {
+		t.Errorf("PATH = %q, want it to start with the shim dir %q", got, config.BinDir())
+	}
+	if !strings.HasSuffix(got, "/usr/bin:/bin") {
+		t.Errorf("PATH = %q, want the inherited entries kept", got)
+	}
+}
