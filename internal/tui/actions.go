@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/geodro/lerd/internal/logcolor"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
@@ -21,18 +22,24 @@ type ActionResult struct {
 	Detail  string
 }
 
+// shellExecArgs builds the exec that opens the session, forwarding the colour
+// capability of the terminal the TUI is running in so prompt and tool output
+// inside the container match what the same tools render on the host.
+func shellExecArgs(container, workDir string) []string {
+	args := append([]string{"exec", "-it"}, logcolor.PodmanExecTerminalArgs(os.Environ())...)
+	if workDir != "" {
+		args = append(args, "-w", workDir)
+	}
+	return append(args, container, "sh", "-c", podman.InteractiveShellScript())
+}
+
 // runShellIn suspends bubbletea, opens an interactive shell inside the
 // chosen container (FPM for PHP sites, the custom container for Node/Go/etc.
 // sites, and the service's own container for services), then resumes. The
 // shell fallback chain prefers the host user's shell (fish or zsh) when the
 // image has it, falling back through bash to sh for minimal images.
 func runShellIn(container, workDir string) tea.Cmd {
-	args := []string{"exec", "-it"}
-	if workDir != "" {
-		args = append(args, "-w", workDir)
-	}
-	args = append(args, container, "sh", "-c", podman.InteractiveShellScript())
-	cmd := podman.Cmd(args...)
+	cmd := podman.Cmd(shellExecArgs(container, workDir)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
