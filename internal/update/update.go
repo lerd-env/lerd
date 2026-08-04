@@ -31,37 +31,48 @@ func FetchLatestVersion() (string, error) {
 	return "", fmt.Errorf("fetching latest version: %s", strings.Join(errs, "; "))
 }
 
+// maxRedirectHops bounds the /releases/latest redirect chain. A repo or org
+// rename inserts an extra hop before the tag redirect, so the chain is
+// followed to completion instead of reading a single Location (#1296).
+const maxRedirectHops = 5
+
 func fetchLatestFrom(base string) (string, error) {
-	url := base + "/latest"
 	client := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
-	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "lerd-cli")
+	url := base + "/latest"
+	for hop := 0; hop < maxRedirectHops; hop++ {
+		req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
+		if err != nil {
+			return "", err
+		}
+		req.Header.Set("User-Agent", "lerd-cli")
 
-	resp, err := client.Do(req)
-	if err != nil {
-		return "", err
-	}
-	resp.Body.Close()
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", err
+		}
+		resp.Body.Close()
 
-	if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
-		return "", fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
+		if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
+			return "", fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
+		}
+		location, err := resp.Location()
+		if err != nil {
+			return "", fmt.Errorf("no Location header in redirect from %s", url)
+		}
+		if strings.Contains(location.String(), "/tag/") {
+			parts := strings.Split(location.String(), "/tag/")
+			if len(parts) != 2 || parts[1] == "" {
+				return "", fmt.Errorf("unexpected release URL format: %s", location)
+			}
+			return parts[1], nil
+		}
+		url = location.String()
 	}
-	location := resp.Header.Get("Location")
-	if location == "" {
-		return "", fmt.Errorf("no Location header in redirect from %s", url)
-	}
-	parts := strings.Split(location, "/tag/")
-	if len(parts) != 2 || parts[1] == "" {
-		return "", fmt.Errorf("unexpected release URL format: %s", location)
-	}
-	return parts[1], nil
+	return "", fmt.Errorf("no release tag after %d redirects from %s/latest", maxRedirectHops, base)
 }
 
 // GithubReleaseForTest is exported only so tests in other packages can build
