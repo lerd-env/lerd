@@ -78,6 +78,12 @@ These run inside the project's PHP-FPM container with the project's working dire
 
 The MCP integration exposes the same surface through two tools, `vendor_bins` (list available binaries) and `vendor_run` (execute one), so AI assistants can discover and run project tooling without per-project configuration.
 
+### Terminal colours
+
+Commands that run in a container get the colour capability of the terminal you started them from. `lerd php`, `lerd composer`, `lerd console`, `lerd shell` and the shell you open from the TUI forward `COLORTERM`, so Symfony Console, laravel/prompts, Pest, the Filament CLI and starship pick the same colour mode inside the container as the same tools do against a host PHP. Without it, podman hands the container a sixteen-colour terminal and anything styled with hex or 256 colours is flattened to the nearest basic colour.
+
+`NO_COLOR` and `FORCE_COLOR` travel with it, so a preference set in your shell holds on both sides of the boundary. `TERM` is deliberately not forwarded: the image only carries terminfo for the xterm family, and a terminal that names itself `foot` or `wezterm` would end up with no colour at all. A terminal that advertises more than sixteen colours gets `TERM=xterm-256color` instead of its own value, which keeps the 256-colour path reachable too. `lerd tinker` is the exception and still runs uncoloured, since its output is captured and rendered by the UI rather than written to your terminal.
+
 ---
 
 ## Version resolution

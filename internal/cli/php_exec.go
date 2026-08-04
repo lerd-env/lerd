@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/logcolor"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -97,6 +98,14 @@ func debugSiteEnvArgs(dir string) []string {
 	return nil
 }
 
+// terminalColorEnvArgs carries the attached terminal's colour capability into
+// the container. Every exec path the user watches needs it: podman forwards no
+// host environment, so without COLORTERM the tools inside see a sixteen-colour
+// terminal and style themselves down to match.
+func terminalColorEnvArgs() []string {
+	return logcolor.PodmanExecTerminalArgs(os.Environ())
+}
+
 // RunPHPCaptureEnv is RunPHPCapture with extra KEY=VALUE environment entries
 // injected into the container exec — used by `lerd profile run` to set
 // SPX_ENABLED so a CLI command is profiled.
@@ -178,6 +187,7 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 		"--env", "PATH="+projectVendorBin+":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"+composerBin,
 	)
 	cmdArgs = append(cmdArgs, debugSiteEnvArgs(cwd)...)
+	cmdArgs = append(cmdArgs, terminalColorEnvArgs()...)
 	// Forward SPX_* profiler vars from the host so `SPX_ENABLED=1 php ...` (or
 	// any shim'd tool like composer) reaches SPX inside the container. extraEnv
 	// is applied after, so an explicit caller like `lerd profile run` wins.

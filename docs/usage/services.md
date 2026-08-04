@@ -107,6 +107,59 @@ The shift is decided at quadlet-write time, from whether the port can be bound r
 
 ---
 
+## Using a service you run on the host
+
+Moving lerd's published port lets a host-installed server keep its own. The step past that is pointing a project at your server instead of lerd's container: the database you already have, with your data and your users, while lerd keeps managing everything else.
+
+It takes two things, both in the project's personal, gitignored [`.env.lerd_override`](../features/env-setup.md#personal-overrides-envlerd_override): the connection values that point at your server, and the reserved `LERD_EXTERNAL_SERVICES` key that tells lerd to stay out of the way.
+
+```dotenv
+# .env.lerd_override: this project uses the MySQL installed on the machine
+DB_HOST=host.containers.internal
+DB_PORT=3306
+DB_DATABASE=myapp
+DB_USERNAME=myapp
+DB_PASSWORD=secret
+
+LERD_EXTERNAL_SERVICES=mysql
+```
+
+Run `lerd env` and those values are written into `.env`, last, over anything lerd computed. For a service named in `LERD_EXTERNAL_SERVICES` lerd still writes the connection variables your framework reads, but it does not start the container and does not create the project database or S3 bucket. The key is comma or space separated, so `LERD_EXTERNAL_SERVICES=mysql, redis` opts both out, and it is consumed by lerd rather than written into `.env`. The output names what it skipped:
+
+```
+Updating existing .env...
+  Detected mysql        — applying lerd connection values
+   mysql externally managed (.env.lerd_override) — not starting it
+  Applying 5 override(s) from .env.lerd_override
+Done.
+```
+
+Opting out does not stop a lerd service that is already running. Leave it (the two coexist once their ports differ, see above) or shut it down with `lerd service stop mysql`.
+
+Use `host.containers.internal` as the host, never `127.0.0.1` or `localhost`. The app runs inside the PHP-FPM container, where loopback is the container itself; `host.containers.internal` is an entry lerd maintains that points at an address it has probed and found routable back to your machine. `lerd doctor` prints the one in force under **Container → Host connectivity**.
+
+### What the host server has to allow
+
+A container is not on your machine's loopback, and what that costs you depends on the platform.
+
+**macOS.** gvproxy maps `host.containers.internal` to `192.168.127.254` and hands the connection to the host's loopback, so a server listening on `127.0.0.1` with `'user'@'localhost'` grants accepts it with nothing changed.
+
+**Linux.** The connection arrives from a real, non-loopback address, so a distro package left at its defaults refuses it. On Ubuntu, `mysql-server` ships `bind-address = 127.0.0.1` in `/etc/mysql/mysql.conf.d/mysqld.cnf` and grants only for `localhost`, which is exactly the combination that produces a refused connection from a lerd site. Three things need attention:
+
+1. **Listen past loopback.** MySQL and MariaDB: set `bind-address = 0.0.0.0` and restart the server. PostgreSQL: `listen_addresses = '*'` in `postgresql.conf`. Redis: comment out `bind 127.0.0.1` or add the address the container reaches.
+2. **Grant from somewhere other than `localhost`.** `CREATE USER 'myapp'@'%'` rather than `'myapp'@'localhost'`; PostgreSQL needs a matching `host` line in `pg_hba.conf`. The address the server actually sees is your machine's own address on one of its interfaces, and which one it is depends on the podman network setup, so `%` is the practical choice on a development machine. If you would rather pin it, make one failed attempt and read it back out of the rejection: MySQL answers `Access denied for user 'myapp'@'192.168.122.139'`, and that address is the one to grant.
+3. **Let it through the firewall.** ufw and firewalld both drop the port by default once they are enabled.
+
+::: warning Binding wider than loopback
+`bind-address = 0.0.0.0` exposes the server to every network the machine is on, not just to containers. On a laptop that joins untrusted networks, keep a firewall rule that allows the port only from the podman subnet, or bind to that bridge address specifically instead of to everything.
+:::
+
+### What still points at lerd's container
+
+The `lerd db:*` commands resolve their target from the service, not from `DB_HOST`, so `db:shell`, `db:import`, `db:export` and the snapshot commands keep talking to `lerd-mysql` even while your site reads and writes your own server. Use your own `mysql` or `psql` client for a host-run database. Everything else, the site's `.env`, migrations, queue workers, and the app itself, goes to the host server.
+
+---
+
 ## Service credentials
 
 ::: tip Two sets of hostnames

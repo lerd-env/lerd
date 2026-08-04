@@ -216,6 +216,14 @@ You can change the choice at any time by editing the `services:` list in `.lerd.
 
 ---
 
+## Using a database you run on the host
+
+A project can use the MySQL, MariaDB or PostgreSQL already installed on the machine instead of lerd's container, keeping your existing data and users while lerd manages the rest. The connection values and the `LERD_EXTERNAL_SERVICES` opt-out go in the project's `.env.lerd_override`; the host server also has to accept a connection that does not come from its own loopback, which on Linux means changing what it listens on and who it grants to. See [Using a service you run on the host](services.md#using-a-service-you-run-on-the-host).
+
+Note that the `lerd db:*` commands on this page resolve their target from the service rather than from `DB_HOST`, so they keep talking to lerd's container. Use your own `mysql` or `psql` client against a host-run server.
+
+---
+
 ## Moving sites between services
 
 `lerd service migrate <service> <version>` upgrades one service in place (e.g. `postgres` from 16 to 18): the service keeps its name, so every site on it follows automatically and no `.env` changes. Use that when you want to move everyone off a major version at once. See [Service updates](service-updates.md#migrate-automated-dump-restore).

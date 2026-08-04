@@ -23,6 +23,19 @@ func NewConsoleCmd() *cobra.Command {
 	}
 }
 
+// consoleCmdArgs builds the podman exec that runs a framework console command
+// in the project's container, carrying the terminal's colour capability so
+// styled console output keeps the fidelity it has on the host.
+func consoleCmdArgs(cwd, container, consoleCmd string, tty bool, args []string) []string {
+	execFlags := []string{"exec", "-i"}
+	if tty {
+		execFlags = append(execFlags, "-t")
+	}
+	cmdArgs := append(execFlags, terminalColorEnvArgs()...)
+	cmdArgs = append(cmdArgs, "-w", cwd, container, "php", consoleCmd)
+	return append(cmdArgs, args...)
+}
+
 func runConsole(_ *cobra.Command, args []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -50,14 +63,7 @@ func runConsole(_ *cobra.Command, args []string) error {
 	podman.EnsurePathMounted(cwd, version)
 	ensureServicesForCwd(cwd)
 
-	execFlags := []string{"exec", "-i"}
-	if term.IsTerminal(int(os.Stdin.Fd())) {
-		execFlags = append(execFlags, "-t")
-	}
-	cmdArgs := append(execFlags, "-w", cwd, container, "php", consoleCmd)
-	cmdArgs = append(cmdArgs, args...)
-
-	cmd := podman.Cmd(cmdArgs...)
+	cmd := podman.Cmd(consoleCmdArgs(cwd, container, consoleCmd, term.IsTerminal(int(os.Stdin.Fd())), args)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

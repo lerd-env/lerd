@@ -32,6 +32,17 @@ func shellWorkDir(cwd string) string {
 	return phpDet.SiteRootFor(cwd)
 }
 
+// phpShellExecArgs builds the interactive shell exec. It puts the opt-in
+// in-container bun (lerd php:bun install) on PATH so a bare `bun` resolves,
+// harmless when bun isn't installed, and forwards the terminal's colour
+// capability so starship and the tools run in the session render as they do
+// on the host.
+func phpShellExecArgs(container, workDir string) []string {
+	args := append([]string{"exec", "-it"}, terminalColorEnvArgs()...)
+	return append(args, "-w", workDir, container,
+		"sh", "-c", `export PATH="/root/.bun/bin:$PATH"; `+podman.InteractiveShellScript())
+}
+
 func runPhpShell(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -55,10 +66,7 @@ func runPhpShell(_ *cobra.Command, _ []string) error {
 	podman.EnsurePathMounted(workDir, version)
 	ensureServicesForCwd(workDir)
 
-	// Put the opt-in in-container bun (lerd php:bun install) on PATH so a bare
-	// `bun` resolves in the shell. Harmless no-op when bun isn't installed.
-	cmd := podman.Cmd("exec", "-it", "-w", workDir, container,
-		"sh", "-c", `export PATH="/root/.bun/bin:$PATH"; `+podman.InteractiveShellScript())
+	cmd := podman.Cmd(phpShellExecArgs(container, workDir)...)
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
