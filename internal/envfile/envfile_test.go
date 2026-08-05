@@ -163,7 +163,7 @@ func TestApplyUpdates_uncomments(t *testing.T) {
 func TestUpdateAppURL_setsHTTPS(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, ".env"), []byte("APP_URL=http://old.test\n"), 0644)
-	if err := UpdateAppURL(dir, "https", "myapp.test"); err != nil {
+	if err := UpdateAppURL(dir, ".env", "APP_URL", "https", "myapp.test"); err != nil {
 		t.Fatal(err)
 	}
 	got := readEnv(t, filepath.Join(dir, ".env"))
@@ -214,7 +214,7 @@ func TestReadKeys_missingFile(t *testing.T) {
 
 func TestUpdateAppURL_noEnvFile_silent(t *testing.T) {
 	// Should silently return nil when .env doesn't exist
-	err := UpdateAppURL(t.TempDir(), "https", "myapp.test")
+	err := UpdateAppURL(t.TempDir(), ".env", "APP_URL", "https", "myapp.test")
 	if err != nil {
 		t.Errorf("expected no error for missing .env, got: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestSyncPrimaryDomain_updatesAllReverbVars(t *testing.T) {
 			"VITE_REVERB_PORT=443\n",
 	), 0644)
 
-	if err := SyncPrimaryDomain(dir, "new.test", false); err != nil {
+	if err := SyncPrimaryDomain(dir, ".env", "APP_URL", "new.test", false); err != nil {
 		t.Fatal(err)
 	}
 	got := readEnv(t, filepath.Join(dir, ".env"))
@@ -256,7 +256,7 @@ func TestSyncPrimaryDomain_skipsAbsentKeys(t *testing.T) {
 		"APP_URL=http://old.test\nAPP_NAME=MyApp\n",
 	), 0644)
 
-	if err := SyncPrimaryDomain(dir, "new.test", true); err != nil {
+	if err := SyncPrimaryDomain(dir, ".env", "APP_URL", "new.test", true); err != nil {
 		t.Fatal(err)
 	}
 	got := readEnv(t, filepath.Join(dir, ".env"))
@@ -271,7 +271,7 @@ func TestSyncPrimaryDomain_skipsAbsentKeys(t *testing.T) {
 }
 
 func TestSyncPrimaryDomain_noEnvFile_silent(t *testing.T) {
-	err := SyncPrimaryDomain(t.TempDir(), "new.test", true)
+	err := SyncPrimaryDomain(t.TempDir(), ".env", "APP_URL", "new.test", true)
 	if err != nil {
 		t.Errorf("expected no error for missing .env, got: %v", err)
 	}

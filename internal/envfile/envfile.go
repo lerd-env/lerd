@@ -274,24 +274,37 @@ func ReadKeys(path string) ([]string, error) {
 	return keys, nil
 }
 
-// UpdateAppURL sets APP_URL in the project's .env to scheme://domain.
-// Silently does nothing if no .env exists.
-func UpdateAppURL(projectPath, scheme, domain string) error {
-	envPath := filepath.Join(projectPath, ".env")
+// UpdateAppURL sets the framework's URL key in envFile to scheme://domain.
+// envFile and urlKey come from the framework definition (config.URLTargetFor),
+// so Symfony's DEFAULT_URI in .env.local is written the same way Laravel's
+// APP_URL in .env is. An empty urlKey means the framework holds its base URL
+// somewhere other than the env file. Silently does nothing if the file is absent.
+func UpdateAppURL(projectPath, envFile, urlKey, scheme, domain string) error {
+	if urlKey == "" {
+		return nil
+	}
+	if envFile == "" {
+		envFile = ".env"
+	}
+	envPath := filepath.Join(projectPath, envFile)
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
 		return nil
 	}
 	return ApplyUpdates(envPath, map[string]string{
-		"APP_URL": scheme + "://" + domain,
+		urlKey: scheme + "://" + domain,
 	})
 }
 
-// SyncPrimaryDomain updates APP_URL and VITE_REVERB_HOST/SCHEME/PORT in the
-// project's .env to reflect the current primary domain and TLS state.
+// SyncPrimaryDomain updates the framework's URL key and VITE_REVERB_HOST/SCHEME/PORT
+// in the project's env file to reflect the current primary domain and TLS state.
+// envFile and urlKey are the framework's, resolved by config.URLTargetFor.
 // Only keys that already exist in the .env are touched.
 // Silently does nothing if no .env exists.
-func SyncPrimaryDomain(projectPath, domain string, secured bool) error {
-	envPath := filepath.Join(projectPath, ".env")
+func SyncPrimaryDomain(projectPath, envFile, urlKey, domain string, secured bool) error {
+	if envFile == "" {
+		envFile = ".env"
+	}
+	envPath := filepath.Join(projectPath, envFile)
 	if _, err := os.Stat(envPath); os.IsNotExist(err) {
 		return nil
 	}
@@ -313,8 +326,8 @@ func SyncPrimaryDomain(projectPath, domain string, secured bool) error {
 	}
 
 	updates := map[string]string{}
-	if present["APP_URL"] {
-		updates["APP_URL"] = scheme + "://" + domain
+	if urlKey != "" && present[urlKey] {
+		updates[urlKey] = scheme + "://" + domain
 	}
 	if present["VITE_REVERB_HOST"] {
 		updates["VITE_REVERB_HOST"] = domain

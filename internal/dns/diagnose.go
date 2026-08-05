@@ -259,8 +259,11 @@ func diagnose(tld string, p probeFns) Diagnostic {
 		return finalize(d)
 	}
 
-	// Rung 6 — Linux interface-level routing (skip on macOS).
-	if runtime.GOOS == "linux" {
+	// Rung 6 — Linux interface-level routing (skip on macOS). NetworkManager's
+	// own dnsmasq answers .test without systemd-resolved, which is typically
+	// masked on those hosts, so resolvectl has nothing to report and probing it
+	// would warn about a healthy install.
+	if runtime.GOOS == "linux" && kind != nmDnsmasqKind {
 		iface, has5300, hasTLD, err := p.interfaceRouting(tld)
 		switch {
 		case err != nil:

@@ -26,3 +26,29 @@ func TestPostgresListDatabases_NetsOffTheTemplateBaseline(t *testing.T) {
 		t.Errorf("query can report a negative size for a database below the baseline: %s", q)
 	}
 }
+
+// The mysql client falls back to a unix socket when no host is given, and the
+// path it compiles in is not always the one the server listens on, so every
+// action has to name the host the way the migrate path already does.
+func TestMysqlDatabaseActionsAddressTheClientByHost(t *testing.T) {
+	p, err := LoadPreset("mysql")
+	if err != nil {
+		t.Fatalf("loading the mysql preset: %v", err)
+	}
+	spec := p.Introspect.DatabasesEntity()
+	if spec == nil {
+		t.Fatal("the mysql preset declares no databases entity")
+	}
+	cmds := map[string]string{"list": spec.List}
+	for name, act := range spec.Actions {
+		cmds[name] = act.Exec
+	}
+	for name, cmd := range cmds {
+		if strings.TrimSpace(cmd) == "" {
+			continue
+		}
+		if !strings.Contains(cmd, "-h 127.0.0.1") {
+			t.Errorf("%s relies on socket resolution: %s", name, cmd)
+		}
+	}
+}

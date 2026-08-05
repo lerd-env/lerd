@@ -659,6 +659,7 @@ func runStart(_ *cobra.Command, _ []string) error {
 		return jobs
 	}
 
+	startedServiceUnits := installedServiceUnits()
 	serviceErr := RunParallel(makeJobs(serviceUnits))
 	// When the Podman Machine's container storage is left corrupt after an
 	// unclean host shutdown, every container start fails. Remount storage and
@@ -674,6 +675,11 @@ func runStart(_ *cobra.Command, _ []string) error {
 	// may also have written empty host lists before any engine was up. Refresh
 	// once engines are running so PMA_HOSTS / LERD_POSTGRES_HOSTS match reality.
 	serviceops.RefreshDiscoverFamilyConsumers()
+	// systemd reports a unit active as soon as its container starts, but the
+	// engine inside is not accepting connections yet. Without this wait, start
+	// hands back control while mysql is still booting and the first request to
+	// a database-backed site returns 500 until the engine catches up.
+	waitServicesReady(startedServiceUnits, serviceReadyTimeout)
 	// If the storage is still corrupt the heal couldn't fix it; every worker
 	// (and the DNS and tray steps below) would fail the same way and bury the
 	// recovery guidance. reportOverlayHealOutcome prints the guidance and

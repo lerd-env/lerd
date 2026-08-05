@@ -231,6 +231,12 @@ func configuredUpstreamDNS() []string {
 // (dnsmasq supports DNS over TCP), or until the timeout elapses.
 // Returns nil when ready, error on timeout.
 func WaitReady(timeout time.Duration) error {
+	// Nothing to wait for when lerd does not own resolution: there is no
+	// lerd-dns container in that mode, so waiting would spend the whole timeout
+	// and warn about its absence on every start.
+	if cfg, err := config.LoadGlobal(); err == nil && !cfg.DNSManaged() {
+		return nil
+	}
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
 		conn, err := net.DialTimeout("tcp", "127.0.0.1:5300", 200*time.Millisecond)

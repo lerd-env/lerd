@@ -2,6 +2,7 @@ package sitedoctor
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -800,6 +801,55 @@ func TestApplies(t *testing.T) {
 	t.Run("bare framework, no manifests: not applicable", func(t *testing.T) {
 		if Applies(t.TempDir(), &config.Framework{Name: "x"}) {
 			t.Error("a framework with no env, services, checks or range and no manifest has nothing to run")
+		}
+	})
+}
+
+// A missing MySQL or Postgres schema takes the site down exactly as a missing
+// SQLite file does, but the doctor had no check for it: the framework's own
+// migration check degrades to "couldn't run" and is not counted, so a 500ing
+// site reported 0 failing.
+func TestCheckServerDatabase(t *testing.T) {
+	migrateFW := &config.Framework{Commands: []config.FrameworkCommand{{Name: "migrate"}}}
+	env := "DB_CONNECTION=mysql\nDB_HOST=lerd-mysql\nDB_DATABASE=shop\n"
+
+	t.Run("missing schema fails with a migrate fix", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", env)
+		restore := stubDatabaseLister(func(string) ([]string, error) { return []string{"other", "lerd"}, nil })
+		defer restore()
+		c, ok := checkServerDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusFail {
+			t.Fatalf("a missing schema should fail, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("existing schema passes", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", env)
+		restore := stubDatabaseLister(func(string) ([]string, error) { return []string{"shop"}, nil })
+		defer restore()
+		c, ok := checkServerDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		if !ok || c.Status != StatusOK {
+			t.Fatalf("an existing schema should pass, got ok=%v %+v", ok, c)
+		}
+	})
+
+	t.Run("an unreachable engine is not reported as a missing schema", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", env)
+		restore := stubDatabaseLister(func(string) ([]string, error) { return nil, errors.New("engine down") })
+		defer restore()
+		if _, ok := checkServerDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+			t.Fatal("an engine that could not be queried should produce no check")
+		}
+	})
+
+	t.Run("sqlite is left to the sqlite check", func(t *testing.T) {
+		dir := t.TempDir()
+		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
+		if _, ok := checkServerDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+			t.Fatal("sqlite should be skipped")
 		}
 	})
 }

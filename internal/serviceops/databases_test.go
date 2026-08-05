@@ -205,3 +205,46 @@ func readAll(t *testing.T, r io.Reader) string {
 	}
 	return string(b)
 }
+
+// An empty gzip stream is 20 bytes and decompresses to nothing. A dump that
+// produced one is a failure whatever the shell reported, so it must never be
+// kept as a restorable snapshot.
+func TestVerifyDumpHasContent(t *testing.T) {
+	dir := t.TempDir()
+	empty := filepath.Join(dir, "empty.gz")
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(empty, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDumpHasContent(empty, true); err == nil {
+		t.Error("an empty gzip dump passed verification")
+	}
+
+	full := filepath.Join(dir, "full.gz")
+	buf.Reset()
+	zw = gzip.NewWriter(&buf)
+	if _, err := zw.Write([]byte("CREATE TABLE t (id int);")); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(full, buf.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDumpHasContent(full, true); err != nil {
+		t.Errorf("a real dump failed verification: %v", err)
+	}
+
+	plain := filepath.Join(dir, "plain.sql")
+	if err := os.WriteFile(plain, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyDumpHasContent(plain, false); err == nil {
+		t.Error("an empty uncompressed dump passed verification")
+	}
+}

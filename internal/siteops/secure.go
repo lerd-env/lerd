@@ -6,7 +6,6 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/nginx"
 )
 
@@ -96,7 +95,7 @@ func SetSecuredCascade(site *config.Site, secured bool) ([]string, error) {
 	if err := config.AddSite(*site); err != nil {
 		return nil, fmt.Errorf("updating site registry: %w", err)
 	}
-	_ = envfile.SyncPrimaryDomain(site.Path, site.PrimaryDomain(), secured)
+	_ = config.SyncSiteURL(site.Path, site.PrimaryDomain(), secured)
 	_ = config.SetProjectSecured(site.Path, secured)
 	if err := nginxReloadFn(); err != nil {
 		return nil, fmt.Errorf("reloading nginx: %w", err)

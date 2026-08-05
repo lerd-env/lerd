@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
 )
@@ -66,12 +65,12 @@ func SecureSite(site config.Site) error {
 				if RegenerateHostProxyWorktreeVhost != nil {
 					_ = RegenerateHostProxyWorktreeVhost(site, wt.Path, wt.Domain, true)
 				}
-				envfile.SyncPrimaryDomain(wt.Path, wt.Domain, true) //nolint:errcheck
+				config.SyncSiteURL(wt.Path, wt.Domain, true) //nolint:errcheck
 				continue
 			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 			_ = nginx.GenerateWorktreeSSLVhost(wt.Domain, wt.Path, effectivePHP, site.PrimaryDomain(), site.Name, wt.Branch)
-			envfile.SyncPrimaryDomain(wt.Path, wt.Domain, true) //nolint:errcheck
+			config.SyncSiteURL(wt.Path, wt.Domain, true) //nolint:errcheck
 		}
 	}
 
@@ -161,12 +160,12 @@ func UnsecureSite(site config.Site) error {
 				if RegenerateHostProxyWorktreeVhost != nil {
 					_ = RegenerateHostProxyWorktreeVhost(site, wt.Path, wt.Domain, false)
 				}
-				envfile.SyncPrimaryDomain(wt.Path, wt.Domain, false) //nolint:errcheck
+				config.SyncSiteURL(wt.Path, wt.Domain, false) //nolint:errcheck
 				continue
 			}
 			effectivePHP := config.WorktreePHPVersion(wt.Path, site.PHPVersion)
 			_ = nginx.GenerateWorktreeVhost(wt.Domain, wt.Path, effectivePHP, site.Name, wt.Branch)
-			envfile.SyncPrimaryDomain(wt.Path, wt.Domain, false) //nolint:errcheck
+			config.SyncSiteURL(wt.Path, wt.Domain, false) //nolint:errcheck
 		}
 	}
 

@@ -319,6 +319,10 @@ func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(P
 		_ = os.RemoveAll(dir)
 		return nil, fmt.Errorf("dumping %s: %w", label, err)
 	}
+	if err := verifyDumpHasContent(dumpPath, true); err != nil {
+		_ = os.RemoveAll(dir)
+		return nil, fmt.Errorf("dumping %s: %w", label, err)
+	}
 
 	var size int64
 	if fi, statErr := os.Stat(dumpPath); statErr == nil {

@@ -237,3 +237,13 @@ introspect:
 		t.Error("the legacy list_databases field must count too")
 	}
 }
+
+// A dump that fails must not be stored as a snapshot. The command pipes into
+// gzip, so without pipefail the shell reports gzip's status and a failed dump
+// looks like a clean one, leaving an empty archive that restores nothing.
+func TestEntitySnapshotDumpCommandFailsOnADeadDump(t *testing.T) {
+	dump := entitySnapshotDumpCommand("export-cmd shop")
+	if !strings.Contains(dump, "pipefail") {
+		t.Errorf("dump command lets a failed dump exit 0: %q", dump)
+	}
+}

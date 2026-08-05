@@ -620,3 +620,25 @@ func TestDnsmasqInstallHintFallsBackToEveryFamily(t *testing.T) {
 		}
 	}
 }
+
+// On the NetworkManager dnsmasq path, resolution never goes through
+// systemd-resolved, so resolvectl has nothing to say and is usually masked.
+// Probing it there turns a healthy install into a warning that reads like a
+// raw command failure.
+func TestDiagnose_SkipsResolvedRoutingOnNMDnsmasq(t *testing.T) {
+	p := fakeProbes()
+	p.resolverHookup = func() (string, bool, string) {
+		return nmDnsmasqKind, true, "/etc/NetworkManager/dnsmasq.d/lerd.conf"
+	}
+	p.interfaceRouting = func(string) (string, bool, bool, error) {
+		return "", false, false, errors.New("exit status 1")
+	}
+
+	d := diagnose("test", p)
+	if step := findStep(d, "interface routes"); step != nil {
+		t.Errorf("resolved routing was probed on the NM dnsmasq path: %+v", *step)
+	}
+	if hook := findStep(d, "resolver hookup"); hook == nil || hook.Status != StepOK {
+		t.Errorf("resolver hookup should still pass: %+v", hook)
+	}
+}

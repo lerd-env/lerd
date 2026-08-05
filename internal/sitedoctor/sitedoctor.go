@@ -170,6 +170,10 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 			resp.add(c)
 			dbBroken = c.Status == StatusFail
 		}
+		if c, ok := checkServerDatabase(path, envPath, fw); ok {
+			resp.add(c)
+			dbBroken = dbBroken || c.Status == StatusFail
+		}
 	}
 
 	// The framework command checks and the composer/node dependency + audit checks
@@ -335,6 +339,7 @@ var universalLabels = map[string]string{
 	"app_key":           "App Key",
 	"env_drift":         "Env Drift",
 	"sqlite_database":   "Database",
+	"server_database":   "Database",
 	"composer_deps":     "Composer Dependencies",
 	"composer_audit":    "Composer Audit",
 	"node_deps":         "Node Dependencies",

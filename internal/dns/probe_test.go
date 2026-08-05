@@ -2,6 +2,7 @@ package dns
 
 import (
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -48,5 +49,29 @@ func TestCheckStatus_DNSDisabledReturnsOK(t *testing.T) {
 
 	if got := CheckStatus("test"); got != StatusOK {
 		t.Fatalf("CheckStatus = %q, want %q when DNS disabled", got, StatusOK)
+	}
+}
+
+// In external-DNS mode there is no lerd-dns container to wait for, so waiting
+// only spends the full timeout and warns about something that is absent by
+// design, on every single start.
+func TestWaitReady_ReturnsImmediatelyWhenDNSDisabled(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	cfg := &config.GlobalConfig{}
+	cfg.DNS.Enabled = false
+	cfg.DNS.TLD = "localhost"
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	start := time.Now()
+	if err := WaitReady(3 * time.Second); err != nil {
+		t.Fatalf("WaitReady in disabled mode: %v", err)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("WaitReady waited %s in disabled mode, want an immediate return", elapsed)
 	}
 }

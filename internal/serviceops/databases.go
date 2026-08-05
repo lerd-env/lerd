@@ -132,6 +132,34 @@ func ExportSnapshot(service, database, name string, w io.Writer) error {
 	return nil
 }
 
+// verifyDumpHasContent rejects a dump that carries no bytes. A failed dump
+// piped into gzip still writes a valid, empty 20-byte stream, so size alone
+// says nothing: the archive has to be read back to tell it apart from a real
+// one. Restoring an empty dump would replace a live database with nothing.
+func verifyDumpHasContent(path string, compressed bool) error {
+	f, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("reading back the dump: %w", err)
+	}
+	defer f.Close()
+
+	var r io.Reader = f
+	if compressed {
+		gz, gzErr := gzip.NewReader(f)
+		if gzErr != nil {
+			return fmt.Errorf("the dump is not a readable archive: %w", gzErr)
+		}
+		defer gz.Close()
+		r = gz
+	}
+
+	var probe [1]byte
+	if _, err := io.ReadFull(r, probe[:]); err != nil {
+		return fmt.Errorf("the dump is empty, the engine wrote nothing")
+	}
+	return nil
+}
+
 // maxImportIssues caps the distinct complaints kept from a load. A dump replayed
 // over a populated schema complains once per object, so the cap is high enough to
 // carry the whole list to the UI and still bounded well under a 27k-line psql

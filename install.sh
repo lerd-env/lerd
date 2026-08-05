@@ -36,7 +36,13 @@ warn()    { echo -e "  ${YELLOW}!${RESET}  $*"; }
 error()   { echo -e "  ${RED}✗${RESET}  $*" >&2; }
 die()     { error "$*"; exit 1; }
 header()  { echo -e "\n${BOLD}$*${RESET}"; }
-ask()     { echo -en "  ${BOLD}?${RESET}  $* [y/N] "; read -r _ans </dev/tty 2>/dev/null || true; [[ "$_ans" =~ ^[Yy]$ ]]; }
+# /dev/tty exists and is readable by its permission bits even when the process
+# has no controlling terminal, so only opening it answers the question. Getting
+# this wrong skips whatever the caller guarded, silently.
+have_tty() { ( : >/dev/tty ) 2>/dev/null; }
+# _ans is seeded because `set -u` is on and a read that never ran leaves it
+# unset, which aborts the script instead of declining the question.
+ask()     { local _ans=""; echo -en "  ${BOLD}?${RESET}  $* [y/N] "; read -r _ans 2>/dev/null </dev/tty || true; [[ "$_ans" =~ ^[Yy]$ ]]; }
 star_note() {
   echo ""
   echo -e "  ${CYAN}★${RESET}  If lerd is useful to you, a GitHub star helps others find it:"
@@ -128,7 +134,7 @@ ask_dns_mode() {
   echo "  dnsmasq, no mkcert, and no extra packages."
   echo ""
   echo -en "  ${BOLD}?${RESET}  Let lerd manage DNS for .test sites with HTTPS? [Y/n] "
-  read -r _ans </dev/tty 2>/dev/null || true
+  read -r _ans 2>/dev/null </dev/tty || true
   if [[ "$_ans" =~ ^[Nn]$ ]]; then
     DNS_MODE="localhost"
     info "Using *.localhost over HTTP, no certificates or extra packages required"
@@ -476,7 +482,7 @@ guard_dev_build() {
   local target="$1" current_raw; current_raw="$(installed_version_raw)"
   version_is_dev "$current_raw" || return 0
   warn "A local development build (v${current_raw}) is installed."
-  if [ -r /dev/tty ] && ask "Replace it with release v${target}?"; then
+  if have_tty && ask "Replace it with release v${target}?"; then
     return 0
   fi
   info "Keeping your local build. Reinstall a dev build with: install.sh --local <path>"
@@ -604,7 +610,7 @@ cmd_install() {
   # When this script is piped through `curl|bash`, our own stdin is the pipe
   # and lerd's prompts would silently hit EOF. Hand it /dev/tty when one is
   # available so [Y/n] questions reach the user.
-  if [ -r /dev/tty ]; then
+  if have_tty; then
     "${INSTALL_DIR}/${BINARY}" install --dns "$DNS_MODE" </dev/tty
   else
     "${INSTALL_DIR}/${BINARY}" install --dns "$DNS_MODE"
@@ -612,7 +618,7 @@ cmd_install() {
 
   # Offer the desktop app on a fresh Linux install. Its own installer does the
   # download; here we only record the notification sink the user prefers.
-  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && [ -r /dev/tty ]; then
+  if [ -z "$was_installed" ] && [ "$(uname -s)" = "Linux" ] && have_tty; then
     offer_desktop_app
   fi
 
@@ -687,7 +693,7 @@ cmd_uninstall_macos() {
   if command -v lerd &>/dev/null; then
     warn "This script does not remove the DNS resolver (/etc/resolver/test) or the Podman machine."
     info "Those are torn down by 'lerd uninstall' (needs sudo), which is unavailable once the binary is gone."
-    if [ -r /dev/tty ] && ! ask "Continue and remove the lerd binary now?"; then
+    if have_tty && ! ask "Continue and remove the lerd binary now?"; then
       info "Aborted. Run 'lerd uninstall' first, then re-run this uninstaller."
       exit 0
     fi

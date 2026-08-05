@@ -1,6 +1,7 @@
 package linker
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -44,6 +45,15 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 	}
 	baseName, _ := siteops.SiteNameAndDomain(rawName, cfg.DNS.TLD)
 	name := FreeSiteName(baseName, dir)
+
+	// One directory is one site. FreeSiteName already folds a re-link back onto
+	// its own name, so a different name here means a second registration for a
+	// path that already has one, which serves the project twice with duplicate
+	// vhosts and workers. Symlinked spellings (/home vs /var/home on ostree
+	// hosts) reach this the same way, since the lookup is canonical.
+	if existing, err := config.FindSiteByPath(dir); err == nil && existing != nil && existing.Name != name {
+		return nil, fmt.Errorf("this directory is already linked as %q — unlink it first to link it under another name", existing.Name)
+	}
 
 	kept, removed := ResolveDomains(desiredDomains(proj, p.Name, name, cfg.DNS.TLD), baseName, dir, cfg.DNS.TLD)
 	plan.DroppedDomains = removed

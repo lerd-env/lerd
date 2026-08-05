@@ -56,7 +56,7 @@ introspect:
     - kind: databases
       format: sql
       list: >
-        $(command -v mysql || command -v mariadb) -uroot -sN -e
+        $(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -sN -e
         "SELECT s.SCHEMA_NAME, COALESCE(SUM(t.DATA_LENGTH + t.INDEX_LENGTH), 0)
         FROM information_schema.SCHEMATA s
         LEFT JOIN information_schema.TABLES t ON t.TABLE_SCHEMA = s.SCHEMA_NAME
@@ -68,24 +68,24 @@ introspect:
           format: bytes
       actions:
         create: >
-          $(command -v mysql || command -v mariadb) -uroot -e
+          $(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -e
           'CREATE DATABASE IF NOT EXISTS `{{name}}`;'
         drop:
           exec: >
-            $(command -v mysql || command -v mariadb) -uroot -e
+            $(command -v mysql || command -v mariadb) -h 127.0.0.1 -uroot -e
             'DROP DATABASE IF EXISTS `{{name}}`;'
           destructive: true
         export:
           exec: >
-            $(command -v mysqldump || command -v mariadb-dump) -uroot
+            $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
             --single-transaction --quick --no-tablespaces --routines --triggers --events
             {{name}}
           filename: "{{name}}.sql"
         import: >
-          $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot {{name}}
+          $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot {{name}}
         export_all: >
-          $(command -v mysqldump || command -v mariadb-dump) -uroot
+          $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot
           --single-transaction --quick --no-tablespaces --routines --triggers --events
           --add-drop-database --all-databases
         import_all: >
-          $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot
+          $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot

@@ -8,7 +8,6 @@ import (
 
 	"github.com/geodro/lerd/internal/certs"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/nginx"
@@ -52,7 +51,7 @@ func projectWantsHTTPS(dir string) bool {
 // migrateSiteTLD rewrites every site's domain suffix from oldTLD to newTLD,
 // removes stale nginx vhost confs at the previous primary-domain paths, and
 // updates each site's .env APP_URL (plus Vite/Reverb keys) via
-// envfile.SyncPrimaryDomain. When forceUnsecure is true (DNS being disabled,
+// config.SyncSiteURL. When forceUnsecure is true (DNS being disabled,
 // so HTTPS is unavailable) the site's registry Secured flag is flipped off so
 // the regen pass writes plain HTTP vhosts, but the project's committed HTTPS
 // intent in .lerd.yaml is left intact. When forceUnsecure is false (DNS being
@@ -150,7 +149,7 @@ func migrateSiteTLD(oldTLD, newTLD string, forceUnsecure bool) []string {
 		if s.Secured {
 			scheme = "https"
 		}
-		if err := envfile.SyncPrimaryDomain(s.Path, newPrimary, s.Secured); err != nil {
+		if err := config.SyncSiteURL(s.Path, newPrimary, s.Secured); err != nil {
 			fmt.Printf("    WARN: %s: update .env: %v\n", s.Name, err)
 		}
 		_ = config.SyncProjectDomains(s.Path, s.Domains, newTLD)
@@ -212,7 +211,7 @@ func adjustSitesSecuredForDNS(tld string, enabling bool) {
 			if err := certs.ReissueCertForWorktree(s); err != nil {
 				fmt.Printf("    WARN: %s: reissue cert: %v\n", s.Name, err)
 			}
-			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), true)
+			_ = config.SyncSiteURL(s.Path, s.PrimaryDomain(), true)
 			regenWorktrees(s)
 			feedback.Note(fmt.Sprintf("%s: restored https://%s", s.Name, s.PrimaryDomain()))
 		} else {
@@ -226,7 +225,7 @@ func adjustSitesSecuredForDNS(tld string, enabling bool) {
 				continue
 			}
 			removeStaleCerts(s.PrimaryDomain())
-			_ = envfile.SyncPrimaryDomain(s.Path, s.PrimaryDomain(), false)
+			_ = config.SyncSiteURL(s.Path, s.PrimaryDomain(), false)
 			regenWorktrees(s)
 			feedback.Note(fmt.Sprintf("%s: dropped to http://%s (HTTPS unavailable with DNS off)", s.Name, s.PrimaryDomain()))
 		}
@@ -255,7 +254,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 			if secured {
 				scheme = "https"
 			}
-			if err := envfile.UpdateAppURL(wt.Path, scheme, newWTDomain); err != nil {
+			if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil {
 				fmt.Printf("    WARN: worktree %s: update .env: %v\n", wt.Branch, err)
 			}
 			continue
@@ -269,7 +268,7 @@ func migrateWorktreeVhosts(worktrees []gitpkg.Worktree, newPrimary, phpVersion, 
 		if secured {
 			scheme = "https"
 		}
-		if err := envfile.UpdateAppURL(wt.Path, scheme, newWTDomain); err != nil {
+		if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil {
 			fmt.Printf("    WARN: worktree %s: update .env: %v\n", wt.Branch, err)
 		}
 	}

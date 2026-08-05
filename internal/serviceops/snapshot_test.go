@@ -249,22 +249,22 @@ func TestSnapshotDumpCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Service: "mysql", Database: "myapp"},
-			`( $(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events myapp ) | gzip -c`,
+			`set -o pipefail 2>/dev/null; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events myapp ) | gzip -c`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`( $(command -v mysqldump || command -v mariadb-dump) -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases ) | gzip -c`,
+			`set -o pipefail 2>/dev/null; ( $(command -v mysqldump || command -v mariadb-dump) -h 127.0.0.1 -uroot --single-transaction --quick --no-tablespaces --routines --triggers --events --add-drop-database --all-databases ) | gzip -c`,
 		},
 		{
 			"postgres one database",
 			SnapshotTarget{Service: "postgres", Database: "myapp"},
-			`( pg_dump -U postgres --clean --if-exists myapp ) | gzip -c`,
+			`set -o pipefail 2>/dev/null; ( pg_dump -U postgres --clean --if-exists myapp ) | gzip -c`,
 		},
 		{
 			"postgres all databases",
 			SnapshotTarget{Service: "postgres", AllDatabases: true},
-			`( pg_dumpall -U postgres --clean --if-exists ) | gzip -c`,
+			`set -o pipefail 2>/dev/null; ( pg_dumpall -U postgres --clean --if-exists ) | gzip -c`,
 		},
 	}
 	for _, tt := range tests {
@@ -295,12 +295,12 @@ func TestSnapshotRestoreCommand(t *testing.T) {
 		{
 			"mysql one database",
 			SnapshotTarget{Service: "mysql", Database: "myapp"},
-			`gunzip -c | ( $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot myapp )`,
+			`gunzip -c | ( $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot myapp )`,
 		},
 		{
 			"mysql all databases",
 			SnapshotTarget{Service: "mysql", AllDatabases: true},
-			`gunzip -c | ( $(command -v mysql || command -v mariadb) --max-allowed-packet=1G -uroot )`,
+			`gunzip -c | ( $(command -v mysql || command -v mariadb) -h 127.0.0.1 --max-allowed-packet=1G -uroot )`,
 		},
 		{
 			"postgres one database",

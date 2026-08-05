@@ -39,6 +39,10 @@ func newWorktreeRemoveCmd() *cobra.Command {
 				return fmt.Errorf("not inside a registered lerd site (cwd=%s)", cwd)
 			}
 
+			// `worktree add -b feat-x` checks out at <project>-feat-x, so accept
+			// that branch name here and hand git the path it understands.
+			args = resolveWorktreeArgs(cwd, args)
+
 			// Best-effort: identify the branch about to be removed so we can
 			// warn about lerd-managed state. We pick the last positional arg
 			// (git's <worktree> argument) and resolve its current HEAD.
@@ -145,7 +149,12 @@ func runGitWorktreeRemove(args []string) error {
 	}
 
 	if !strings.Contains(stderr, "--force") {
-		return fmt.Errorf("git worktree remove: exit status from git")
+		// git's own message is the only thing that says what went wrong, so it
+		// travels with the error rather than being replaced by a fixed string.
+		if detail := strings.TrimSpace(stderr); detail != "" {
+			return fmt.Errorf("git worktree remove: %w\n%s", err, detail)
+		}
+		return fmt.Errorf("git worktree remove: %w", err)
 	}
 
 	var picked string

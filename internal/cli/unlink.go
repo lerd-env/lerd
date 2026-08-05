@@ -47,14 +47,23 @@ func init() {
 // NewUnlinkCmd returns the unlink command.
 func NewUnlinkCmd() *cobra.Command {
 	return &cobra.Command{
-		Use:   "unlink",
-		Short: "Unlink the current directory site",
-		Args:  cobra.NoArgs,
+		Use:   "unlink [name]",
+		Short: "Unlink a site, defaulting to the one in the current directory",
+		Args:  cobra.MaximumNArgs(1),
 		RunE:  runUnlink,
 	}
 }
 
-func runUnlink(_ *cobra.Command, _ []string) error {
+func runUnlink(_ *cobra.Command, args []string) error {
+	// Naming the site is the only way to unlink one whose directory has moved
+	// or been deleted, and the only way to pick between two registrations that
+	// point at the same directory.
+	if len(args) == 1 {
+		feedback.Begin()
+		unlinkErr := UnlinkSite(args[0])
+		feedback.Begin()
+		return unlinkErr
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err

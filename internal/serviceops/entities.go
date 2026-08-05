@@ -372,8 +372,12 @@ func CloneDatabase(service, src, dst string) error {
 
 // entitySnapshotDumpCommand wraps a declared export so its dump crosses podman
 // exec gzipped, which is how snapshots are stored.
+// pipefail is requested rather than assumed: the shell reports the last command
+// in a pipeline, so without it a dump that died still exits 0 through gzip and
+// stores an empty archive. Shells that don't know the option ignore the request
+// and verifyDumpHasContent catches the same failure from the bytes.
 func entitySnapshotDumpCommand(exportCmd string) string {
-	return "( " + strings.TrimSpace(exportCmd) + " ) | gzip -c"
+	return "set -o pipefail 2>/dev/null; ( " + strings.TrimSpace(exportCmd) + " ) | gzip -c"
 }
 
 // entitySnapshotRestoreCommand feeds a stored gzipped dump into a declared

@@ -2,7 +2,6 @@ package siteops
 
 import (
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	gitpkg "github.com/geodro/lerd/internal/git"
 )
 
@@ -17,7 +16,7 @@ func SyncEnvIfPrimaryChanged(site *config.Site, oldPrimary string) error {
 	if newPrimary == oldPrimary {
 		return nil
 	}
-	if err := envfile.SyncPrimaryDomain(site.Path, newPrimary, site.Secured); err != nil {
+	if err := config.SyncSiteURL(site.Path, newPrimary, site.Secured); err != nil {
 		return err
 	}
 	scheme := "http"
@@ -31,7 +30,7 @@ func SyncEnvIfPrimaryChanged(site *config.Site, oldPrimary string) error {
 	var firstErr error
 	for _, wt := range worktrees {
 		newWTDomain := wt.Branch + "." + newPrimary
-		if err := envfile.UpdateAppURL(wt.Path, scheme, newWTDomain); err != nil && firstErr == nil {
+		if err := config.SetSiteURL(wt.Path, scheme, newWTDomain); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

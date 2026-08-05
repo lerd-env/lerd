@@ -641,3 +641,35 @@ _stub_dns_files() {
   [ -n "$bin_at" ]
   [ "$dns_at" -lt "$bin_at" ]
 }
+
+# ── controlling terminal detection ────────────────────────────────────────────
+
+# [ -r /dev/tty ] tests the permission bits on the device node, which pass even
+# when the process has no controlling terminal. The redirect then fails and the
+# step it guarded is skipped, which is how `lerd install` came to be silently
+# skipped over ssh without a tty.
+@test "tty detection opens the device instead of testing permission bits" {
+  run grep -q '\[ -r /dev/tty \]' "$INSTALLER"
+  [ "$status" -ne 0 ]
+}
+
+@test "have_tty is false when the process has no controlling terminal" {
+  run setsid bash -c "source '$INSTALLER'; have_tty && echo yes || echo no"
+  [ "$status" -eq 0 ]
+  [ "$output" = "no" ]
+}
+
+# set -u is on, so a read that never ran leaves _ans unset and the script aborts
+# instead of taking the question as declined.
+@test "ask declines cleanly when there is no controlling terminal" {
+  run setsid bash -c "source '$INSTALLER'; ask 'proceed?' && echo GOT_YES || echo GOT_NO"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"GOT_NO"* ]]
+  [[ "$output" != *"unbound variable"* ]]
+}
+
+@test "ask reads the answer from the terminal when one is present" {
+  command -v script >/dev/null || skip "needs script(1) to allocate a pty"
+  run bash -c "printf 'y\n' | script -qec \"bash -c 'source $INSTALLER; ask proceed? && echo GOT_YES || echo GOT_NO'\" /dev/null"
+  [[ "$output" == *"GOT_YES"* ]]
+}
