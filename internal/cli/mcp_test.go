@@ -583,9 +583,11 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // db `import` provider-dump handling and the `php_list` base-image update flag,
 // then 30300 → 30800 for the worktree `wait` action and the readiness rule it
 // exists to replace: an assistant that guesses from the tree's contents races
-// the watcher's installer, and no amount of probing files can tell it apart.
+// the watcher's installer, and no amount of probing files can tell it apart,
+// then 30800 → 31000 for the reverse-proxy public share, so the sharing rule
+// names every route rather than reading as though only tunnels exist.
 func TestLerdReference_underSizeCeiling(t *testing.T) {
-	const ceiling = 30800
+	const ceiling = 31000
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}

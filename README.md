@@ -33,9 +33,9 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🧱 **Host-proxy sites.** Run a Node, Python, Go or any non-PHP dev server on the host and have nginx serve it at a `.test` domain with HTTPS, git worktrees included. A wedged dev server can be bounced from the site header without reaching for a terminal.
 
-- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, optional database isolation, wildcard cert SANs for `*.branch.site.test`, and a per-branch Vite worker on the host. Add and remove them from a dashboard modal without touching the CLI.
+- 🌳 **First-class git worktrees.** Auto-detected branch domains, per-worktree PHP and Node versions, optional database isolation, wildcard cert SANs for `*.branch.site.test`, and a per-branch Vite worker on the host. Add and remove them from a dashboard modal without touching the CLI. A bare `git worktree add` from any tool is set up automatically, and `lerd worktree wait` blocks until that pipeline has actually finished, so a script or an agent never touches a half-installed tree.
 
-- 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, serveo or localhost.run, from the CLI or the dashboard's share menu. Set a Cloudflare base domain once and every share is served on `<site>.<domain>`, so a webhook or OAuth callback keeps its URL between runs, and ngrok runs from its published image on a machine that never installed it.
+- 🌍 **Share a site.** On your LAN with a stable port and a QR code, or publicly through ngrok, cloudflared, Expose, Pinggy, serveo or localhost.run, from the CLI or the dashboard's share menu. Set a Cloudflare base domain once and every share is served on `<site>.<domain>`, so a webhook or OAuth callback keeps its URL between runs, and ngrok runs from its published image on a machine that never installed it. Or skip the tunnel services entirely: point a wildcard you control at the machine, set that base domain once, and lerd answers on `<site>.<domain>` through the reverse proxy or VPN you already run, with the site's ordinary `.test` vhost untouched beside it.
 
 - 🎨 **Dev servers on the site's own domain.** A running Vite serves its assets and its hot-reload socket under the site's `.test` hostname instead of advertising `localhost:5173`, so a shared, LAN-opened or worktree page arrives styled. Nothing in the project is edited and nothing is declared per framework.
 
@@ -53,7 +53,9 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Services and databases
 
-- 🗄️ **One-click services.** MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Reverb, OpenSearch and more, the default stack built in and every add-on fetched from a store that updates without a new lerd release. Browse, create and drop an engine's databases from its service page, with snapshots, export and import.
+- 🗄️ **One-click services.** MySQL, PostgreSQL, Redis, Meilisearch, RustFS, Mailpit, Reverb, OpenSearch and more, the default stack built in and every add-on fetched from a store that updates without a new lerd release. Browse, create and drop an engine's databases from its service page, with snapshots, export and import. Engines stay on loopback unless you publish them to the LAN, which is an opt-in that lives under the LAN exposure it depends on.
+
+- 🔌 **Host tools that reach the container.** `psql`, `mysql`, `pg_dump` and friends run on your host against lerd's engines with no client installed and no port to remember, by name or on the loopback port lerd publishes. Point an IDE's phpstan, php-cs-fixer or phpcs at the same shims and they run in the project's PHP container, including against the temp buffer copies PhpStorm analyses from outside the project tree. Prefer a bare `php` pointed at a host install? `lerd path:disable` takes the shims off your PATH and everything lerd runs keeps working.
 
 - 🧷 **IDE database wiring** for JetBrains. A project gets one data source pointed at its own lerd database on the host port it actually answers on, written on link and refreshed as the project's database changes, leaving every data source lerd doesn't own untouched.
 
@@ -65,11 +67,11 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 📈 **Request timing analytics.** A durable per-site view of typical and p95 response times, throughput, error rate, and the slowest routes ranked by recent p95 with one-click profiling. Agents get the same signal over MCP with `route_timing` and `optimize_route`.
 
-- 🧪 **Tinker tab.** An in-browser PHP REPL per site with project-aware autocomplete, hover and diagnostics powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), so your models and Builder chains resolve alongside composer helpers. Works on Laravel, Symfony, and any composer project.
+- 🧪 **Tinker tab.** An in-browser PHP REPL per site with project-aware autocomplete, hover and diagnostics powered by [phpantom_lsp](https://github.com/PHPantom-dev/phpantom_lsp), so your models and Builder chains resolve alongside composer helpers. Works on Laravel, Symfony, and any composer project. Reusable snippets are read from the project, from an existing `.tinkerwell/snippets`, or from a personal folder that follows you across every site.
 
 ### Interfaces
 
-- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, and install/remove of PHP and Node versions from the System page. Available in fourteen languages.
+- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, and install/remove of PHP and Node versions from the System page. Available in fourteen languages. Reachable from another machine behind credentials when you expose it, where the actions that touch the host itself, terminals, filesystem browsing, raw `.env` reads, stay local until you grant them explicitly.
 
 - 💻 **Terminal dashboard** (`lerd tui`). A btop-style TUI with live status, site detail pane, inline domain and version editing, shell drop-in, log tailing, and filter/sort, the same operations surface as the web UI, for tmux and SSH workflows.
 

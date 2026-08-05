@@ -525,11 +525,11 @@ onBeforeUnmount(() => {
 
       <!-- ============ DEV DIGEST BANNER ============ -->
       <div class="wrap">
-        <a class="digest" :href="withBase('/digest/v1.31.0.html')" target="_blank" rel="noopener">
+        <a class="digest" :href="withBase('/digest/v1.32.0.html')" target="_blank" rel="noopener">
           <span class="digest-pill">NEW</span>
           <span class="digest-body">
-            <span class="digest-title">v1.31.0 dev digest</span>
-            <span class="digest-sub">A Cloudflare base domain set once so every share keeps its URL, ngrok from its published image with nothing installed, and a dev server served on the site's own domain.</span>
+            <span class="digest-title">v1.32.0 dev digest</span>
+            <span class="digest-sub">A public share through the reverse proxy you already run, managed engines reachable from the LAN, and daemons that stop working while the machine is idle.</span>
           </span>
           <span class="digest-cta">Read the digest&nbsp;→</span>
         </a>
