@@ -236,6 +236,12 @@ var isNetworkManagerActive = func() bool {
 	return cmd.Run() == nil
 }
 
+// dnsmasqBinaryPresent reports whether dnsmasq is on PATH.
+var dnsmasqBinaryPresent = func() bool {
+	_, err := exec.LookPath("dnsmasq")
+	return err == nil
+}
+
 // ResolverHint returns a user-facing hint for restarting the active DNS resolver.
 func ResolverHint() string {
 	if isNetworkManagerActive() {
@@ -785,6 +791,12 @@ func removeSupersededResolvedDropin(dropin, tld string) error {
 func setupNetworkManager() error {
 	nmConfFile := "/etc/NetworkManager/conf.d/lerd.conf"
 	nmDnsmasqFile := "/etc/NetworkManager/dnsmasq.d/lerd.conf"
+
+	// dns=dnsmasq only picks the plugin; it doesn't install it. Without the
+	// binary NetworkManager would restart into a config it can't actually run.
+	if !dnsmasqBinaryPresent() {
+		return fmt.Errorf("dnsmasq binary not found on PATH (install: sudo apt install dnsmasq / sudo dnf install dnsmasq / sudo pacman -S dnsmasq), then rerun `lerd dns:repair`")
+	}
 
 	dnsmasqConf := nmDnsmasqConfFor(ConfiguredTLD())
 	if isFileContent(nmConfFile, []byte(nmDnsConf)) && isFileContent(nmDnsmasqFile, []byte(dnsmasqConf)) {

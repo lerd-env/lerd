@@ -63,6 +63,10 @@ type probeFns struct {
 	// lanExposedIP is the LAN IP dnsmasq hands out under lan:expose, or "" when
 	// off, so the answer checks accept it as legitimate (see probe.go Check).
 	lanExposedIP func() string
+	// hostDnsmasqPresent reports whether dnsmasq is on PATH. Only meaningful
+	// for the nmDnsmasqKind hookup, where NetworkManager needs it to act on
+	// the config lerd writes.
+	hostDnsmasqPresent func() bool
 }
 
 // exposedIP is the LAN IP dnsmasq publishes under lan:expose, or "" when the
@@ -231,6 +235,17 @@ func diagnose(tld string, p probeFns) Diagnostic {
 
 	// Rung 5 — resolver hookup file.
 	kind, exists, path := p.resolverHookup()
+	if exists && kind == nmDnsmasqKind && p.hostDnsmasqPresent != nil && !p.hostDnsmasqPresent() {
+		// Config file is real, but with no dnsmasq binary to run it
+		// NetworkManager silently keeps using upstream DNS instead.
+		d.Steps = append(d.Steps, Step{
+			Name:   "resolver hookup",
+			Status: StepFail,
+			Detail: kind + ": " + path + " (dnsmasq binary not found on PATH)",
+			Hint:   "sudo apt install dnsmasq / sudo dnf install dnsmasq / sudo pacman -S dnsmasq, then sudo systemctl restart NetworkManager",
+		})
+		return finalize(d)
+	}
 	if exists {
 		d.Steps = append(d.Steps, Step{Name: "resolver hookup", Status: StepOK, Detail: kind + ": " + path})
 	} else {
@@ -381,6 +396,12 @@ func defaultProbes() probeFns {
 		systemLookup:     defaultSystemLookup,
 		vpnActive:        VPNActive,
 		lanExposedIP:     defaultLanExposedIP,
+		// Not setup.go's dnsmasqBinaryPresent: that file is linux-only and this
+		// one also serves the macOS path.
+		hostDnsmasqPresent: func() bool {
+			_, err := exec.LookPath("dnsmasq")
+			return err == nil
+		},
 	}
 }
 

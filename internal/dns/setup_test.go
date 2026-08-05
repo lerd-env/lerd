@@ -514,6 +514,20 @@ func TestResolverHint_NoResolver(t *testing.T) {
 	}
 }
 
+func TestSetupNetworkManager_missingDnsmasqBinaryFailsFast(t *testing.T) {
+	origPresent := dnsmasqBinaryPresent
+	defer func() { dnsmasqBinaryPresent = origPresent }()
+	dnsmasqBinaryPresent = func() bool { return false }
+
+	err := setupNetworkManager()
+	if err == nil {
+		t.Fatal("expected an error when dnsmasq is not on PATH, got nil")
+	}
+	if !strings.Contains(err.Error(), "dnsmasq") {
+		t.Errorf("error %q should mention dnsmasq", err.Error())
+	}
+}
+
 // --- helpers (Linux-only) ---
 
 func readFile(t *testing.T, path string) string {
