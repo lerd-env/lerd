@@ -72,6 +72,9 @@ func LANShareStart(siteName string) (int, error) {
 	if site.Paused {
 		return site.LANPort, fmt.Errorf("site %q is paused", siteName)
 	}
+	if PublicShareRunning(siteName) || TunnelActive(siteName, "") {
+		return 0, errShareBusy
+	}
 
 	port := site.LANPort
 	if port == 0 {
@@ -151,6 +154,11 @@ func LANShareRunning(siteName string) bool {
 	_, ok := lanShareServers[siteName]
 	return ok
 }
+
+// errShareBusy is returned when a site (or worktree) is already exposed one way
+// and a second, different share is attempted: it may only be shared one way at
+// a time (LAN, public reverse-proxy, or a tunnel).
+var errShareBusy = fmt.Errorf("this site is already shared another way; stop that first")
 
 // LANShareRefreshIfRunning closes any running share proxy for the site and
 // re-opens it using the current site config — needed when TLS gets toggled
@@ -328,6 +336,9 @@ func LANShareStartWorktree(siteName, branch string) (int, error) {
 	}
 	if site.Paused {
 		return 0, fmt.Errorf("site %q is paused", siteName)
+	}
+	if PublicShareWorktreeRunning(siteName, branch) || TunnelActive(siteName, branch) {
+		return 0, errShareBusy
 	}
 
 	worktreeDomain := branch + "." + site.PrimaryDomain()

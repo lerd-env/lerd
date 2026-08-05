@@ -38,6 +38,20 @@ The same mechanism handles any other loopback service whose URLs leak into the p
 
 The `Referer` header is **not** trusted for routing decisions. Because the share listens on `0.0.0.0`, anyone else on the LAN could forge a `Referer` pointing at an arbitrary loopback port (SSH, the database, etc.). The proxy only dials a non-prefixed Vite-internal path against a port it learned from a genuine `/__lerd_vite__/<port>/` request.
 
+## Public sharing through your own reverse proxy
+
+A **public share** is the same mechanism as a LAN share, reached through a reverse proxy you run instead of by LAN IP. It suits a setup where a wildcard subdomain you control already points at this machine, for example a self-hosted netbird VPN or an nginx/Caddy in front of your dev box.
+
+Configure it from a site's share menu in the dashboard (the wifi/globe button):
+
+1. Click the cog next to **Public domain** and set a base domain you control, like `dev.example.com`. It must be a real domain (at least two labels); a bare TLD is refused, since lerd serves local development, it is not a host.
+2. Point that base's wildcard (`*.dev.example.com`) at this machine in your own DNS or reverse proxy, forwarding each `<site>.<base>` to the share's port on the lerd host.
+3. Click **Share via your reverse proxy**. lerd starts a Host-rewriting proxy on a stable `0.0.0.0` port (from 9300), and the menu shows `https://<site>.<base>`, a QR, and a stop, exactly like the LAN and tunnel shares.
+
+Because it reuses the LAN share proxy, everything LAN sharing does works here too: nginx serves the site's normal `.test` vhost with the `Host` rewritten, response URLs are rewritten to the public hostname, and **Vite HMR works** through the same listener. Nothing is added to the site's domains, nginx `server_name`, or certificates; it is a runtime share, off until you start it and gone when you stop it. TLS is expected to terminate at your proxy, which forwards plain HTTP to the share port.
+
+Worktrees share independently, served on the flat `<site>-<branch>.<base>` so a single `*.<base>` wildcard covers them. A site (or worktree) can be exposed only one way at a time: starting a public share is refused while a tunnel or LAN share is live for it, and vice versa.
+
 ## When to use LAN sharing vs full LAN exposure
 
 | | `lerd lan:share` | `lerd lan:expose` |

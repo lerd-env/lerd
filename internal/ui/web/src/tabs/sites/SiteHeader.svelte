@@ -141,6 +141,15 @@
   const tunnelQrSrc = $derived(
     apiBase + '/api/tunnel-qr/' + site.domain + (activeWorktreeBranch ? '?branch=' + encodeURIComponent(activeWorktreeBranch) : '')
   );
+  const publicShared = $derived(
+    activeWorktree ? Boolean(activeWorktree.public_shared) : Boolean(site.public_shared)
+  );
+  const publicURL = $derived(
+    activeWorktree ? activeWorktree.public_share_url ?? '' : site.public_share_url ?? ''
+  );
+  const publicQrSrc = $derived(
+    apiBase + '/api/public-qr/' + site.domain + (activeWorktreeBranch ? '?branch=' + encodeURIComponent(activeWorktreeBranch) : '')
+  );
   let tunnelBusy = $state(false);
 
   async function startTunnelAuto() {
@@ -467,6 +476,12 @@
           <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-violet-600 dark:text-violet-400">
             <Icon name="globe" class="w-3 h-3 shrink-0" />
             <ShareLink url={tunnelURL} qrSrc={tunnelQrSrc} />
+          </span>
+        {/if}
+        {#if publicShared && publicURL}
+          <span class="hidden @md:inline-flex items-center gap-1 text-[10px] text-sky-600 dark:text-sky-400">
+            <Icon name="globe" class="w-3 h-3 shrink-0" />
+            <ShareLink url={publicURL} qrSrc={publicQrSrc} />
           </span>
         {/if}
         {#if site.paused}
@@ -830,6 +845,13 @@
     <div class="@md:hidden px-3 pb-2 flex items-center gap-1.5 text-[11px] text-violet-600 dark:text-violet-400 min-w-0">
       <Icon name="globe" class="w-3 h-3 shrink-0" />
       <ShareLink url={tunnelURL} qrSrc={tunnelQrSrc} />
+    </div>
+  {/if}
+
+  {#if publicShared && publicURL}
+    <div class="@md:hidden px-3 pb-2 flex items-center gap-1.5 text-[11px] text-sky-600 dark:text-sky-400 min-w-0">
+      <Icon name="globe" class="w-3 h-3 shrink-0" />
+      <ShareLink url={publicURL} qrSrc={publicQrSrc} />
     </div>
   {/if}
 

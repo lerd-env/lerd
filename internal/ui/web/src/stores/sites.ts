@@ -77,6 +77,8 @@ export interface Site {
     db_database?: string;
     lan_port?: number;
     lan_share_url?: string;
+    public_shared?: boolean;
+    public_share_url?: string;
     tunnel_url?: string;
     tunnel_tool?: string;
     tunnel_external?: boolean;
@@ -106,6 +108,8 @@ export interface Site {
   reverb_failing?: boolean;
   lan_port?: number;
   lan_share_url?: string;
+  public_shared?: boolean;
+  public_share_url?: string;
   tunnel_url?: string;
   tunnel_tool?: string;
   tunnel_external?: boolean;
@@ -637,6 +641,8 @@ export interface ShareToolsInfo {
   base_domain_answered?: boolean;
   // Whether an ngrok token is stored. The token itself never leaves the host.
   ngrok_token_set?: boolean;
+  // Domain a public (reverse-proxy) share is served under, as <site>.<base>.
+  public_base_domain?: string;
 }
 export const loadShareTools = () => apiJson<ShareToolsInfo>('/api/share-tools');
 export const startTunnel = (s: Site, tool: string = '', branch: string = '', domain: string = '') => {
@@ -684,6 +690,28 @@ export async function saveShareNgrokToken(
 }
 export const stopTunnel = (s: Site, branch: string = '') =>
   postAction(site(s.domain, 'tunnel:stop') + (branch ? `?branch=${encodeURIComponent(branch)}` : ''));
+// Starts or stops the public (reverse-proxy) share for the site or a worktree.
+export const togglePublicShare = (s: Site, branch: string = '') => {
+  const wt = branch ? (s.worktrees || []).find((w) => w.branch === branch) : undefined;
+  const isOn = branch ? Boolean(wt?.public_shared) : Boolean(s.public_shared);
+  const action = isOn ? 'public:unshare' : 'public:share';
+  const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+  return postAction(site(s.domain, action) + qs);
+};
+// Sets (or clears, when empty) the public-share base domain.
+export async function savePublicBase(base: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await apiFetch('/api/share-tools', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ public_base_domain: base })
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    return { ok: Boolean(data.ok), error: data.error };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
+  }
+}
 export const toggleQueue = (s: Site) =>
   postAction(site(s.domain, s.queue_running ? 'queue:stop' : 'queue:start'));
 export const toggleHorizon = (s: Site) =>

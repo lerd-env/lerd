@@ -118,6 +118,7 @@ func Start(currentVersion string) error {
 
 	// Restart any LAN share proxies that were active before this process started.
 	go cli.RestoreLANShareProxies()
+	go cli.RestorePublicShareProxies()
 
 	// A public tunnel must not outlive the process that owns it. Stop them on
 	// the way out, and kill anything a previous run was killed too hard to
@@ -212,6 +213,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/notifications/target", withCORS(handleNotifyTarget))
 	mux.HandleFunc("/api/notifications/kinds", withCORS(handleNotifyKinds))
 	mux.HandleFunc("/api/lan-qr/", withCORS(handleLANQR))
+	mux.HandleFunc("/api/public-qr/", withCORS(handlePublicQR))
 	mux.HandleFunc("/api/share-tools", withCORS(handleShareTools))
 	mux.HandleFunc("/api/tools/", withCORS(publishAfter(handleTools, eventbus.KindStatus)))
 	mux.HandleFunc("/api/tunnel-qr/", withCORS(handleTunnelQR))
@@ -758,25 +760,29 @@ func buildStatusJSON() ([]byte, error) { return []byte(mustJSON(buildStatus())),
 // PHP/NodeVersion are the effective values; *Override flags signal whether
 // the worktree's .lerd.yaml set them explicitly or it's inherited.
 type WorktreeResponse struct {
-	Branch              string         `json:"branch"`
-	Domain              string         `json:"domain"`
-	Path                string         `json:"path"`
-	PHPVersion          string         `json:"php_version,omitempty"`
-	PHPMin              string         `json:"php_min,omitempty"`
-	PHPMax              string         `json:"php_max,omitempty"`
-	NodeVersion         string         `json:"node_version,omitempty"`
-	PHPVersionOverride  bool           `json:"php_version_override,omitempty"`
-	NodeVersionOverride bool           `json:"node_version_override,omitempty"`
-	FrameworkVersion    string         `json:"framework_version,omitempty"`
-	FrameworkLabel      string         `json:"framework_label,omitempty"`
-	DBIsolated          bool           `json:"db_isolated,omitempty"`
-	DBDatabase          string         `json:"db_database,omitempty"`
-	LANPort             int            `json:"lan_port,omitempty"`
-	LANShareURL         string         `json:"lan_share_url,omitempty"`
-	TunnelURL           string         `json:"tunnel_url,omitempty"`
-	TunnelTool          string         `json:"tunnel_tool,omitempty"`
-	TunnelExternal      bool           `json:"tunnel_external,omitempty"`
-	FrameworkWorkers    []WorkerStatus `json:"framework_workers,omitempty"`
+	Branch              string `json:"branch"`
+	Domain              string `json:"domain"`
+	Path                string `json:"path"`
+	PHPVersion          string `json:"php_version,omitempty"`
+	PHPMin              string `json:"php_min,omitempty"`
+	PHPMax              string `json:"php_max,omitempty"`
+	NodeVersion         string `json:"node_version,omitempty"`
+	PHPVersionOverride  bool   `json:"php_version_override,omitempty"`
+	NodeVersionOverride bool   `json:"node_version_override,omitempty"`
+	FrameworkVersion    string `json:"framework_version,omitempty"`
+	FrameworkLabel      string `json:"framework_label,omitempty"`
+	DBIsolated          bool   `json:"db_isolated,omitempty"`
+	DBDatabase          string `json:"db_database,omitempty"`
+	LANPort             int    `json:"lan_port,omitempty"`
+	LANShareURL         string `json:"lan_share_url,omitempty"`
+	// PublicShared reports the site's public (reverse-proxy) share is running;
+	// PublicShareURL is the "<site>.<base>" it is reached at.
+	PublicShared     bool           `json:"public_shared,omitempty"`
+	PublicShareURL   string         `json:"public_share_url,omitempty"`
+	TunnelURL        string         `json:"tunnel_url,omitempty"`
+	TunnelTool       string         `json:"tunnel_tool,omitempty"`
+	TunnelExternal   bool           `json:"tunnel_external,omitempty"`
+	FrameworkWorkers []WorkerStatus `json:"framework_workers,omitempty"`
 	// Idle-suspend state for the worktree, which idles on its own timer.
 	LastActive           int64    `json:"last_active,omitempty"`
 	Idle                 bool     `json:"idle,omitempty"`
@@ -882,6 +888,8 @@ type SiteResponse struct {
 	DBDatabase       string `json:"db_database,omitempty"`
 	LANPort          int    `json:"lan_port,omitempty"`
 	LANShareURL      string `json:"lan_share_url,omitempty"`
+	PublicShared     bool   `json:"public_shared,omitempty"`
+	PublicShareURL   string `json:"public_share_url,omitempty"`
 	TunnelURL        string `json:"tunnel_url,omitempty"`
 	TunnelTool       string `json:"tunnel_tool,omitempty"`
 	TunnelExternal   bool   `json:"tunnel_external,omitempty"`
@@ -948,6 +956,7 @@ func buildSites() ([]SiteResponse, error) {
 	// Resolve the global idle policy once so each site can report whether it is
 	// currently idle (drives the dashboard sleep indicator).
 	idleCfg, _ := config.LoadGlobal()
+	publicBase := cli.PublicBaseDomain()
 	idleOn := idleCfg != nil && idleCfg.IdleSuspend.Enabled
 	idleTimeout := config.DefaultIdleSuspendTimeout
 	if idleCfg != nil {
@@ -1063,6 +1072,8 @@ func buildSites() ([]SiteResponse, error) {
 				DBDatabase:           wt.DBDatabase,
 				LANPort:              lanPort,
 				LANShareURL:          lanURL,
+				PublicShared:         cli.PublicShareWorktreeRunning(e.Name, wt.Branch),
+				PublicShareURL:       config.PublicShareURL(config.PublicShareWorktreeHost(e.Name, gitpkg.SanitizeBranch(wt.Branch), publicBase)),
 				TunnelURL:            wtTunnel.URL,
 				TunnelTool:           wtTunnel.Tool,
 				TunnelExternal:       wtTunnel.External,
@@ -1133,6 +1144,8 @@ func buildSites() ([]SiteResponse, error) {
 			DBDatabase:           envfile.ReadKey(filepath.Join(e.Path, ".env"), "DB_DATABASE"),
 			LANPort:              e.LANPort,
 			LANShareURL:          cli.LANShareURL(e.LANPort),
+			PublicShared:         cli.PublicShareRunning(e.Name),
+			PublicShareURL:       config.PublicShareURL(config.PublicShareHost(e.Name, publicBase)),
 			TunnelURL:            tunnel.URL,
 			TunnelTool:           tunnel.Tool,
 			TunnelExternal:       tunnel.External,
@@ -3269,6 +3282,41 @@ func handleLANQR(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
 }
 
+// handlePublicQR serves a QR code PNG for the public (reverse-proxy) share URL
+// of a site or one of its worktrees.
+// Path: /api/public-qr/{domain}[?branch=<branch>]
+func handlePublicQR(w http.ResponseWriter, r *http.Request) {
+	domain := strings.TrimPrefix(r.URL.Path, "/api/public-qr/")
+	site, err := config.FindSiteByDomain(domain)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	base := cli.PublicBaseDomain()
+	if base == "" {
+		http.NotFound(w, r)
+		return
+	}
+	var shareURL string
+	if branch := r.URL.Query().Get("branch"); branch != "" {
+		shareURL = config.PublicShareURL(config.PublicShareWorktreeHost(site.Name, gitpkg.SanitizeBranch(branch), base))
+	} else {
+		shareURL = config.PublicShareURL(config.PublicShareHost(site.Name, base))
+	}
+	if shareURL == "" {
+		http.NotFound(w, r)
+		return
+	}
+	png, err := qrcode.Encode(shareURL, qrcode.Medium, 160)
+	if err != nil {
+		http.Error(w, "qr encode: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "no-cache")
+	http.ServeContent(w, r, "qr.png", time.Time{}, bytes.NewReader(png))
+}
+
 // handleShareTools reports the supported tunnel tools, which are installed,
 // and what the auto pick would use, so the share menu can render its entries.
 // A POST records the answer to the base-domain question.
@@ -3280,9 +3328,20 @@ func handleShareTools(w http.ResponseWriter, r *http.Request) {
 			// NgrokToken is only present when the token form was submitted, so
 			// a base-domain save cannot clear a stored token by omitting it.
 			NgrokToken *string `json:"ngrok_token"`
+			// PublicBaseDomain is only present when the public-share base form
+			// was submitted, for the same reason.
+			PublicBaseDomain *string `json:"public_base_domain"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, SiteActionResponse{Error: "invalid request body"})
+			return
+		}
+		if body.PublicBaseDomain != nil {
+			if _, err := cli.SetPublicBaseDomain(*body.PublicBaseDomain); err != nil {
+				writeJSON(w, SiteActionResponse{Error: err.Error()})
+				return
+			}
+			writeJSON(w, SiteActionResponse{OK: true})
 			return
 		}
 		if body.NgrokToken != nil {
@@ -4064,6 +4123,32 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if err := cli.LANShareStop(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "public:share":
+		var err error
+		if branch := r.URL.Query().Get("branch"); branch != "" {
+			_, err = cli.PublicShareStartWorktree(site.Name, branch)
+		} else {
+			_, err = cli.PublicShareStart(site.Name)
+		}
+		if err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		writeJSON(w, SiteActionResponse{OK: true})
+		return
+	case "public:unshare":
+		var err error
+		if branch := r.URL.Query().Get("branch"); branch != "" {
+			err = cli.PublicShareStopWorktree(site.Name, branch)
+		} else {
+			err = cli.PublicShareStop(site.Name)
+		}
+		if err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
