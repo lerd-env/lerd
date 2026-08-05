@@ -169,6 +169,35 @@ check_dns_resolver() {
   fi
 }
 
+# dnsmasq lives in sbin on Debian-family systems, which a normal user's PATH
+# often omits, so a plain PATH lookup would miss an installed binary.
+DNSMASQ_PATHS="/usr/sbin/dnsmasq /sbin/dnsmasq /usr/local/sbin/dnsmasq"
+
+host_has_dnsmasq() {
+  command -v dnsmasq &>/dev/null && return 0
+  local p
+  for p in $DNSMASQ_PATHS; do
+    [ -x "$p" ] && return 0
+  done
+  return 1
+}
+
+# NetworkManager without systemd-resolved resolves .test through NM's dnsmasq
+# plugin, which needs the host dnsmasq binary that nothing pulls in on Arch.
+# Queue it here so the consent prompt covers it instead of lerd stopping later.
+check_nm_dnsmasq() {
+  systemctl is-active --quiet NetworkManager 2>/dev/null || return 0
+  systemctl is-active --quiet systemd-resolved 2>/dev/null && return 0
+  if host_has_dnsmasq; then
+    success "dnsmasq found (NetworkManager's DNS plugin runs it)"
+    return
+  fi
+  local pkg="dnsmasq"
+  [ "$(distro_family)" = "debian" ] && pkg="dnsmasq-base"
+  warn "dnsmasq missing (NetworkManager's DNS plugin needs it for .test resolution)"
+  MISSING_PKGS+=("$pkg")
+}
+
 check_certutil() {
   if command -v certutil &>/dev/null; then
     success "certutil found (needed for mkcert CA trust in browsers)"
@@ -245,6 +274,7 @@ check_prerequisites_linux() {
   check_podman_rootless
   if [ "$DNS_MODE" = "managed" ]; then
     check_certutil
+    check_nm_dnsmasq
   fi
 
   if [ ${#MISSING_PKGS[@]} -eq 0 ]; then

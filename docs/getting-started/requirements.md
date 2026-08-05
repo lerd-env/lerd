@@ -51,6 +51,9 @@ sudo dnf install crun
     - Arch: `nss`
     - Debian/Ubuntu: `libnss3-tools`
     - Fedora: `nss-tools`
+- **`dnsmasq`**: only on hosts where NetworkManager manages DNS without systemd-resolved (some Arch setups). NetworkManager's dnsmasq plugin needs the host binary to route `.test` to lerd; the installer detects this combination and offers the package like any other prerequisite. Hosts running systemd-resolved never need it, and the `.localhost` mode skips it entirely since `.localhost` resolves to loopback with no resolver configuration at all.
+    - Arch: `dnsmasq`
+    - Debian/Ubuntu: `dnsmasq-base`
 
 ::: tip Go is only needed to build from source
 The released binary is fully static with no runtime dependencies. You do not need Go installed to use Lerd.

@@ -144,6 +144,73 @@ teardown() {
   [ "${MISSING_PKGS[0]}" = "nss-tools" ]
 }
 
+# ── check_nm_dnsmasq ──────────────────────────────────────────────────────────
+
+@test "check_nm_dnsmasq queues dnsmasq on NetworkManager-only hosts" {
+  function systemctl() { [ "$3" = "NetworkManager" ]; }
+  export -f systemctl
+  function host_has_dnsmasq() { return 1; }
+  export -f host_has_dnsmasq
+  function distro_family() { echo "arch"; }
+  export -f distro_family
+
+  MISSING_PKGS=()
+  check_nm_dnsmasq >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 1 ]
+  [ "${MISSING_PKGS[0]}" = "dnsmasq" ]
+}
+
+@test "check_nm_dnsmasq queues dnsmasq-base on the debian family" {
+  function systemctl() { [ "$3" = "NetworkManager" ]; }
+  export -f systemctl
+  function host_has_dnsmasq() { return 1; }
+  export -f host_has_dnsmasq
+  function distro_family() { echo "debian"; }
+  export -f distro_family
+
+  MISSING_PKGS=()
+  check_nm_dnsmasq >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 1 ]
+  [ "${MISSING_PKGS[0]}" = "dnsmasq-base" ]
+}
+
+@test "check_nm_dnsmasq stays quiet when systemd-resolved is active" {
+  function systemctl() { return 0; }
+  export -f systemctl
+  function host_has_dnsmasq() { return 1; }
+  export -f host_has_dnsmasq
+
+  MISSING_PKGS=()
+  check_nm_dnsmasq >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 0 ]
+}
+
+@test "check_nm_dnsmasq stays quiet when dnsmasq is already present" {
+  function systemctl() { [ "$3" = "NetworkManager" ]; }
+  export -f systemctl
+  function host_has_dnsmasq() { return 0; }
+  export -f host_has_dnsmasq
+
+  MISSING_PKGS=()
+  check_nm_dnsmasq >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 0 ]
+}
+
+@test "host_has_dnsmasq finds a sbin binary that PATH misses" {
+  function command() { if [ "$1" = "-v" ] && [ "$2" = "dnsmasq" ]; then return 1; fi; builtin command "$@"; }
+  export -f command
+
+  mkdir -p "$BATS_TMPDIR/sbin-$$"
+  DNSMASQ_PATHS="$BATS_TMPDIR/sbin-$$/dnsmasq"
+  run host_has_dnsmasq
+  [ "$status" -ne 0 ]
+
+  printf '#!/bin/sh\n' >"$BATS_TMPDIR/sbin-$$/dnsmasq"
+  chmod +x "$BATS_TMPDIR/sbin-$$/dnsmasq"
+  run host_has_dnsmasq
+  [ "$status" -eq 0 ]
+}
+
 # ── _download_tool ────────────────────────────────────────────────────────────
 
 @test "_download_tool prefers curl when both are available" {
