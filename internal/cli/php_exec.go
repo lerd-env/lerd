@@ -176,6 +176,28 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 		}
 	}
 
+	// An IDE hands its quality tools the file to work on as an *argument* — a
+	// copy of the buffer, written to the IDE's own temp directory — so the
+	// script rescue above never sees it. Stage those paths into a directory the
+	// container does reach and rewrite the arguments to match; php_path_args.go
+	// maps the output back and writes an edited copy home again.
+	var stage *argStage
+	var mapOut, mapErr *pathMapWriter
+	if root, ok := stageRoot(version); ok {
+		idxs := stagePathArgIndexes(args, phpScriptArgIndex(args), func(p string) bool {
+			return unreachableInContainer(p, version)
+		})
+		if len(idxs) > 0 {
+			staged, rewritten, err := stageArgs(args, idxs, root)
+			if err != nil {
+				return 0, err
+			}
+			defer staged.remove()
+			stage, args = staged, rewritten
+			useTTY = false // the output streams are filtered, so they are pipes
+		}
+	}
+
 	execFlags := []string{"exec", "-i"}
 	if useTTY {
 		execFlags = append(execFlags, "-t")
@@ -213,11 +235,24 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	cmd.Stdin = stdinReader
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		if exit, ok := err.(*exec.ExitError); ok {
+	if stage != nil {
+		mapOut = newPathMapWriter(os.Stdout, stage.items)
+		mapErr = newPathMapWriter(os.Stderr, stage.items)
+		cmd.Stdout, cmd.Stderr = mapOut, mapErr
+	}
+	runErr := cmd.Run()
+	if stage != nil {
+		// A failed write-back leaves the caller's file holding the version the
+		// tool meant to replace, which matters more than the tool's own status.
+		if err := stage.finish(mapOut, mapErr); err != nil {
+			return 0, err
+		}
+	}
+	if runErr != nil {
+		if exit, ok := runErr.(*exec.ExitError); ok {
 			return exit.ExitCode(), nil
 		}
-		return 0, err
+		return 0, runErr
 	}
 	return 0, nil
 }
