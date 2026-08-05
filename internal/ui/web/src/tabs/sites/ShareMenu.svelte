@@ -13,6 +13,8 @@
   import ShareDomainModal from './ShareDomainModal.svelte';
   import ShareTokenModal from './ShareTokenModal.svelte';
   import ShareToolCog from './ShareToolCog.svelte';
+  import PublicBaseModal from './PublicBaseModal.svelte';
+  import { togglePublicShare, savePublicBase } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
   interface Props {
@@ -222,11 +224,60 @@
     }
   }
 
-  // The button acts on the state it shows: a globe (tunnel running) stops
-  // the tunnel, a wifi icon toggles the LAN share.
+  // The button acts on the state it shows: a globe stops whichever public
+  // exposure is live (a tunnel, or the reverse-proxy share), a wifi icon
+  // toggles the LAN share.
   function onButtonClick() {
     if (tunnelOn) stopT();
+    else if (publicShared) togglePublic();
     else onToggleLan();
+  }
+
+  // Public (reverse-proxy) share: lerd serves the site on a stable port and the
+  // user points their own proxy at "<site>.<base>" -> that port. Runtime share,
+  // start/stop, per site and per active worktree.
+  const publicBase = $derived(toolsInfo?.public_base_domain ?? '');
+  const publicShared = $derived(
+    Boolean(activeWorktreeBranch ? activeWorktree?.public_shared : site.public_shared)
+  );
+  const publicUrl = $derived(
+    (activeWorktreeBranch ? activeWorktree?.public_share_url : site.public_share_url) ?? ''
+  );
+  let publicBusy = $state(false);
+  // A site is shared one way at a time. Each section can still stop its own
+  // share, but starting one is blocked while any other is live or opening.
+  const lanBlocked = $derived(tunnelOn || tunnelBusy || publicShared || publicBusy);
+  const publicBlocked = $derived(tunnelOn || tunnelBusy || lanOn || lanBusy);
+  const tunnelBlocked = $derived(publicShared || publicBusy || lanOn || lanBusy);
+  let baseModal = $state(false);
+  let baseError = $state('');
+  let baseBusy = $state(false);
+
+  async function togglePublic() {
+    if (publicBusy) return;
+    publicBusy = true;
+    try {
+      await togglePublicShare(site, activeWorktreeBranch);
+      await loadSites();
+    } finally {
+      publicBusy = false;
+    }
+  }
+  async function saveBase(base: string) {
+    baseBusy = true;
+    baseError = '';
+    try {
+      const res = await savePublicBase(base);
+      if (!res.ok) {
+        baseError = res.error || m.common_requestFailed();
+        return;
+      }
+      toolsInfo = await loadShareTools().catch(() => toolsInfo);
+      await loadSites();
+      baseModal = false;
+    } finally {
+      baseBusy = false;
+    }
   }
 
   const itemClass =
@@ -258,13 +309,15 @@
     aria-expanded={open}
     class="{visibleClass} w-8 h-8 items-center justify-center rounded-md transition-colors {tunnelOn
       ? 'text-violet-500 dark:text-violet-400 hover:bg-violet-50 dark:hover:bg-violet-900/20'
-      : lanOn
-        ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
-        : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+      : publicShared
+        ? 'text-sky-500 dark:text-sky-400 hover:bg-sky-50 dark:hover:bg-sky-900/20'
+        : lanOn
+          ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
+          : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
   >
-    {#if lanBusy || tunnelBusy || stopBusy}
+    {#if lanBusy || tunnelBusy || stopBusy || publicBusy}
       <Icon name="spinner" class="w-4 h-4 animate-spin" />
-    {:else if tunnelOn}
+    {:else if tunnelOn || publicShared}
       <Icon name="globe" class="w-4 h-4" />
     {:else}
       <Icon name="wifi" class="w-4 h-4" />
@@ -304,13 +357,70 @@
           >{m.share_stop()}</button>
         </div>
       {:else}
-        <button type="button" role="menuitem" onclick={onToggleLan} class="{itemClass} {itemIdle}">
+        <button
+          type="button"
+          role="menuitem"
+          disabled={lanBlocked}
+          onclick={onToggleLan}
+          class="{itemClass} {lanBlocked ? 'text-gray-400 dark:text-gray-600' : itemIdle}"
+        >
           <Icon name="wifi" class="w-3.5 h-3.5 shrink-0" />
           <span class="flex-1 min-w-0 text-left">
             <span class="block font-medium">{m.sites_controls_lanToggle_off()}</span>
-            <span class="block text-[10px] text-gray-500 dark:text-gray-400">{m.share_lanDevices()}</span>
+            <span class="block text-[10px] text-gray-500 dark:text-gray-400">
+              {lanBlocked ? m.share_busyElsewhere() : m.share_lanDevices()}
+            </span>
           </span>
         </button>
+      {/if}
+
+      <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
+      <div class="px-3 pt-0.5 pb-0.5 text-[9px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
+        {m.publicShare_title()}
+      </div>
+
+      {#if publicBusy}
+        <div class="{itemClass} text-gray-500 dark:text-gray-400">
+          <Icon name="spinner" class="w-3.5 h-3.5 shrink-0 animate-spin" />
+          {m.share_switching()}
+        </div>
+      {:else if publicShared}
+        <div class="{itemClass} border-l-2 border-sky-500 bg-sky-50/60 dark:bg-sky-900/15">
+          <Icon name="globe" class="w-3.5 h-3.5 shrink-0 text-sky-600 dark:text-sky-400" />
+          <span class="flex-1 min-w-0">
+            <span class="block font-medium text-gray-700 dark:text-gray-200">{m.publicShare_active()}</span>
+            <a href={publicUrl} target="_blank" rel="noopener" class="block font-mono text-[10px] text-sky-600 dark:text-sky-400 truncate hover:underline">{publicUrl}</a>
+          </span>
+          <button
+            type="button"
+            role="menuitem"
+            onclick={togglePublic}
+            class="shrink-0 text-[10px] font-medium px-2 py-0.5 rounded border border-gray-200 dark:border-lerd-border text-gray-500 dark:text-gray-400 hover:text-red-600 hover:border-red-400 dark:hover:text-red-400 transition-colors"
+          >{m.share_stop()}</button>
+        </div>
+      {:else}
+        <div class="flex items-stretch">
+          <button
+            type="button"
+            role="menuitem"
+            disabled={publicBlocked}
+            onclick={() => (publicBase ? togglePublic() : ((baseError = ''), (baseModal = true)))}
+            class="{itemClass} {publicBlocked ? 'text-gray-400 dark:text-gray-600' : itemIdle}"
+          >
+            <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
+            <span class="flex-1 min-w-0 text-left">
+              <span class="block font-medium">{m.publicShare_start()}</span>
+              <span class="block text-[10px] {publicBase && !publicBlocked ? 'font-mono' : ''} text-gray-500 dark:text-gray-400 truncate">
+                {publicBlocked ? m.share_busyElsewhere() : publicBase ? publicUrl : m.publicShare_noBase()}
+              </span>
+            </span>
+          </button>
+          <ShareToolCog
+            title={m.publicShare_configureBase()}
+            testid="public-base-cog"
+            onclick={() => ((baseError = ''), (baseModal = true))}
+          />
+        </div>
       {/if}
 
       <div class="my-1 border-t border-gray-100 dark:border-lerd-border"></div>
@@ -318,7 +428,12 @@
         {m.share_publicTunnel()}
       </div>
 
-      {#if tunnelBusy}
+      {#if tunnelBlocked}
+        <div class="{itemClass} text-gray-400 dark:text-gray-600">
+          <Icon name="globe" class="w-3.5 h-3.5 shrink-0" />
+          <span class="flex-1 min-w-0 text-left text-[10px]">{m.share_busyElsewhere()}</span>
+        </div>
+      {:else if tunnelBusy}
         <div class="{itemClass} text-gray-700 dark:text-gray-200">
           <Icon name="spinner" class="w-3.5 h-3.5 shrink-0 animate-spin" />
           <span class="flex-1 min-w-0">
@@ -462,4 +577,13 @@
   busy={tokenBusy}
   onclose={() => (tokenModal = false)}
   onsubmit={submitToken}
+/>
+
+<PublicBaseModal
+  open={baseModal}
+  base={publicBase}
+  error={baseError}
+  busy={baseBusy}
+  onclose={() => (baseModal = false)}
+  onsubmit={saveBase}
 />
