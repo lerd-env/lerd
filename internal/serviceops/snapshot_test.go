@@ -1,6 +1,8 @@
 package serviceops
 
 import (
+	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -358,5 +360,41 @@ introspect:
 `)
 	if SnapshotSupported("halfengine", false) {
 		t.Error("export without import must not support snapshots")
+	}
+}
+
+// Restore drops and recreates the database before it reads the dump, so an
+// empty archive is total data loss. Snapshots written before the dump status
+// was checked are still on disk at 20 bytes and still list as restorable, so
+// the guard has to be on the restore side too, and it has to fire before the
+// drop.
+func TestRestoreSnapshotRefusesAnEmptyDump(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	target := SnapshotTarget{Service: "mysql", Database: "myapp"}
+	dir := snapshotDir(target.Service, target.Database, "poisoned", false)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	var empty bytes.Buffer
+	zw := gzip.NewWriter(&empty)
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, snapshotDumpFile), empty.Bytes(), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeSnapshotMeta(dir, Snapshot{
+		Name: "poisoned", Service: "mysql", Family: "mysql", Database: "myapp",
+		DumpFile: snapshotDumpFile, Compressed: true, SizeBytes: int64(empty.Len()),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := RestoreSnapshot(target, "poisoned", nil)
+	if err == nil {
+		t.Fatal("restoring an empty snapshot was allowed")
+	}
+	if !strings.Contains(err.Error(), "empty") {
+		t.Errorf("error should say the dump is empty, got: %v", err)
 	}
 }

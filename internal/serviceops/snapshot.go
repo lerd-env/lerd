@@ -388,6 +388,14 @@ func RestoreSnapshot(t SnapshotTarget, name string, emit func(PhaseEvent)) (Impo
 	}
 	dumpPath := filepath.Join(dir, snap.DumpFile)
 
+	// Checked before the drop: restore recreates the database from empty, so a
+	// dump carrying nothing would replace live data with nothing. Snapshots
+	// written before creation verified its dump are still on disk and still
+	// list as restorable, so this is the guard that protects them.
+	if err := verifyDumpHasContent(dumpPath, snap.Compressed); err != nil {
+		return ImportReport{}, fmt.Errorf("refusing to restore snapshot %q: %w", name, err)
+	}
+
 	if !t.AllDatabases {
 		emit(PhaseEvent{Phase: "dropping_database", Message: "recreating " + t.Database})
 		if _, err := DropDatabase(t.Service, t.Database); err != nil {
