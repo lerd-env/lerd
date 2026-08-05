@@ -150,6 +150,8 @@ lerd update
 
 Fetches the latest release from GitHub, downloads the binary for your architecture, and atomically replaces the running binary. No restart needed.
 
+This applies to script and source installs in `~/.local/bin`. On a packaged install the binary is owned by apt or dnf, so `lerd update` prints that package manager's upgrade command instead of self-replacing; a Homebrew install updates with `brew upgrade lerd`.
+
 You can also re-run the installer:
 
 ::: code-group
@@ -186,6 +188,8 @@ To answer yes to every prompt without interaction:
 ```bash
 lerd uninstall --force
 ```
+
+If lerd came from apt, dnf or Homebrew, the teardown is the same but the binary stays where it is: deleting a file the package manager owns would leave it believing lerd is still installed. `lerd uninstall` prints the matching removal command at that step, so finish with `sudo apt remove lerd`, `sudo dnf remove lerd` or `brew uninstall lerd`.
 
 The installer's own `--uninstall` stops the user units and removes the binary, but the DNS setup lives outside your home directory and only lerd can take it back out: the `lerd0` link unit, the NetworkManager rules and dispatcher, the drop-in that empties `FallbackDNS`, and the passwordless sudoers rule the DNS operations run under. So when it finds that configuration it offers to run `lerd dns:disable` first, and prints the root commands to clear it by hand if you decline or the binary has already gone.
 

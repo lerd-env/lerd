@@ -70,6 +70,8 @@ lerd link
 
 Your project is live at `https://myapp.test`. That is the whole setup.
 
+Prefer your package manager? Lerd is also available through an [apt PPA, a Fedora COPR or Homebrew](/getting-started/installation#install-via-apt-ubuntu-debian), so it updates with the rest of your system.
+
 ## Every Laragon feature, and the Lerd equivalent
 
 | What you used in Laragon | The same thing in Lerd |

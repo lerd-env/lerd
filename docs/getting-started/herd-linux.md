@@ -70,6 +70,8 @@ lerd link
 
 Your project is live at `https://myapp.test`. That is the whole setup.
 
+Unlike Herd, lerd also ships as real distro packages: install it through an [apt PPA, a Fedora COPR or Homebrew](/getting-started/installation#install-via-apt-ubuntu-debian) and it updates with the rest of your system.
+
 ## Every Herd feature, and the Lerd equivalent
 
 | What you used in Herd | The same thing in Lerd |

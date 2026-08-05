@@ -8,6 +8,8 @@
 - **DNS resolver**: [NetworkManager](https://networkmanager.dev/) or [systemd-resolved](https://www.freedesktop.org/software/systemd/man/systemd-resolved.service.html) (at least one is required for `.test` DNS)
 - **`systemctl --user` functional**: run `loginctl enable-linger $USER` if needed
 
+You rarely need to install Podman yourself: the [apt and dnf packages](./installation#install-via-apt-ubuntu-debian) declare it as a dependency so it comes in with `lerd`, and the script installer detects a missing Podman and offers to install it. Only the Homebrew-on-Linux route expects the distro's Podman to be there already.
+
 ### Podman 4.5 minimum
 
 ::: warning
