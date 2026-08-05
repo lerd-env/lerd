@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/unitlog"
 )
 
 // frankenPHPPreflight decides whether a runtime switch can go ahead. A failed
@@ -29,7 +30,7 @@ func frankenPHPUnitError(unit string, running bool) error {
 	if running {
 		return nil
 	}
-	return fmt.Errorf("the FrankenPHP container did not start; inspect it with 'journalctl --user -u %s' and switch back with 'lerd runtime fpm'", unit)
+	return fmt.Errorf("the FrankenPHP container did not start; inspect it with '%s' and switch back with 'lerd runtime fpm'", unitlog.LogHint(unit))
 }
 
 // waitContainerRunningFn reports whether the container settles into a running

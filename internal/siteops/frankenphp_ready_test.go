@@ -2,8 +2,11 @@ package siteops
 
 import (
 	"errors"
+	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/unitlog"
 )
 
 // A runtime switch that cannot run must fail loudly. Reporting success while the
@@ -46,5 +49,21 @@ func TestFrankenPHPUnitFailure(t *testing.T) {
 	}
 	if err := frankenPHPUnitError("lerd-fp-demo3", true); err != nil {
 		t.Errorf("a running unit should not error: %v", err)
+	}
+}
+
+// The switch failing is the moment a user reaches for the logs, so the command
+// it hands them has to exist on their platform.
+func TestFrankenPHPUnitError_logHintSuitsThePlatform(t *testing.T) {
+	err := frankenPHPUnitError("lerd-myapp-frankenphp", false)
+	if err == nil {
+		t.Fatal("a container that did not start should be an error")
+	}
+	msg := err.Error()
+	if !strings.Contains(msg, unitlog.LogHint("lerd-myapp-frankenphp")) {
+		t.Errorf("error %q should carry the platform's own log hint", msg)
+	}
+	if runtime.GOOS == "darwin" && strings.Contains(msg, "journalctl") {
+		t.Errorf("error %q names journalctl, which does not exist on macOS", msg)
 	}
 }

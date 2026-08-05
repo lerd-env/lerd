@@ -16,6 +16,13 @@ func LogPath(unit string) string {
 	return filepath.Join(home, "Library", "Logs", "lerd", unit+".log")
 }
 
+// LogHint is the command a user runs to read a unit's recent output. It lives
+// here rather than beside each caller so a message that offers it cannot end up
+// naming journalctl, which no Mac has.
+func LogHint(unit string) string {
+	return "tail -n 20 " + LogPath(unit)
+}
+
 // IsContainerUnit returns true for units that run as detached podman containers
 // (podman run -d). Their logs come from `podman logs`, not the launchd log file.
 //
