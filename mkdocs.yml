@@ -85,6 +85,7 @@ nav:
       - Quick Start: getting-started/quick-start.md
   - Usage:
       - Site Management: usage/sites.md
+      - Declarative Sites: usage/lerdstead.md
       - PHP: usage/php.md
       - Node: usage/node.md
       - Host-Proxy Sites: usage/host-proxy.md
