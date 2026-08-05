@@ -262,3 +262,45 @@ func TestWorkerBuilders_RespectNoColor(t *testing.T) {
 		t.Errorf("workerColorArgs() = %q, want empty under NO_COLOR", got)
 	}
 }
+
+// The darwin unit cache recovers a worker's working directory by reading it back
+// out of the guard script, since a launchd job exposes no WorkingDirectory
+// property. These pin that round trip: a builder that stops emitting the shape
+// the parser reads would silently take orphan detection down with it.
+
+func TestDarwinHostWorkerGuard_WorkingDirIsReadableBack(t *testing.T) {
+	site := "/Users/u/Projects/app-feat-login"
+	guard := buildDarwinHostWorkerGuardScript("'/bin/fnm' exec --using=22 --", "/lerd/bin", site, "npm run dev", "")
+	if got := services.WorkerGuardWorkingDir(guard); got != site {
+		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
+	}
+}
+
+func TestDarwinHostWorkerGuard_WorkingDirWithQuoteIsReadableBack(t *testing.T) {
+	site := "/Users/u/it's/app"
+	guard := buildDarwinHostWorkerGuardScript("", "/lerd/bin", site, "npm run dev", "")
+	if got := services.WorkerGuardWorkingDir(guard); got != site {
+		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
+	}
+}
+
+func TestDarwinExecWorkerGuard_WorkingDirIsReadableBack(t *testing.T) {
+	site := "/Users/u/Projects/app-feat-login"
+	run := buildWorkerExecCommand("/usr/bin/podman", site, "lerd-php84-fpm", "php artisan queue:work", nil)
+	guard := buildDarwinExecWorkerGuardScript("/run/w.pid", "/usr/bin/podman", "lerd-php84-fpm", site, "php artisan queue:work", run)
+	if got := services.WorkerGuardWorkingDir(guard); got != site {
+		t.Errorf("WorkerGuardWorkingDir = %q, want %q\n%s", got, site, guard)
+	}
+}
+
+// A container-mode worker pins no directory, and the reap line names the site
+// path inside a quoted snippet. Reading that back as a working directory would
+// make every such unit look like a worktree's.
+func TestDarwinContainerWorkerGuard_PinsNoWorkingDir(t *testing.T) {
+	site := "/Users/u/Projects/app"
+	guard := buildDarwinExecWorkerGuardScript("/run/w.pid", "/usr/bin/podman", "lerd-php84-fpm", site, "php artisan queue:work",
+		"/usr/bin/podman start -a lerd-queue-app")
+	if got := services.WorkerGuardWorkingDir(guard); got != "" {
+		t.Errorf("WorkerGuardWorkingDir = %q, want empty for a guard that pins no directory\n%s", got, guard)
+	}
+}

@@ -234,9 +234,11 @@ A lockfile the JS package manager refuses is the same lockfile in every worktree
 
 ### A checkout deleted without git
 
-That ordering hangs off git's own `.git/worktrees/` entry disappearing, which is what `git worktree remove` deletes. Deleting the checkout directory on its own leaves that entry behind, so the watcher never hears about it and the worker units keep retrying against a `WorkingDirectory` that has gone, failing at `CHDIR` before the command runs and restarting every `RestartSec` indefinitely. This is no longer unusual: coding agents create and destroy their own worktrees, and they have no reason to know lerd exists.
+That ordering hangs off git's own `.git/worktrees/` entry disappearing, which is what `git worktree remove` deletes. Deleting the checkout directory on its own leaves that entry behind, so the watcher never hears about it and the worker units keep retrying against a working directory that has gone, failing before the command runs and restarting on the supervisor's own interval indefinitely. This is no longer unusual: coding agents create and destroy their own worktrees, and they have no reason to know lerd exists.
 
 Such a unit is reported as **orphaned** rather than failing, and is never offered a heal, because starting it again cannot do anything except fail in the same place. It is removed instead, on the daemon's reconciliation pass and again at startup, so an install already stuck this way recovers on its own. Nothing is preserved because there is nothing left to preserve; re-adding the worktree recreates the unit from scratch. Orphans also stay out of the failing-worker notifications, since they name a problem that resolves itself.
+
+Deciding this needs the directory the unit is pinned to. On Linux that is the unit's own `WorkingDirectory=`. launchd has no equivalent to read back, so on macOS it comes from the guard script lerd writes alongside every worker plist, which is where a host-mode worker's `cd` and an exec-mode worker's `podman exec -w` already record it. The two files are written and removed together, so a unit that still exists still has one.
 
 ---
 

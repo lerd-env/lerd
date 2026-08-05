@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // darwinUnitStatesCache mirrors the 3s TTL the linux path enforces around
@@ -20,7 +21,20 @@ type darwinUnitStates struct {
 	at     time.Time
 }
 
-var darwinUnitStatesCache darwinUnitStates
+// darwinUnitMeta throttles the working-directory enumeration on the same TTL.
+// It is cheaper than the states walk (a glob and a read per guard script rather
+// than a launchctl fork), but AllUnitMeta is called from inside a per-worktree
+// loop, so an uncached read would rescan the whole directory once per worker.
+type darwinUnitMeta struct {
+	mu   sync.Mutex
+	meta map[string]UnitMeta
+	at   time.Time
+}
+
+var (
+	darwinUnitStatesCache darwinUnitStates
+	darwinUnitMetaCache   darwinUnitMeta
+)
 
 const darwinUnitStatesTTL = 3 * time.Second
 
@@ -59,11 +73,35 @@ func init() {
 	invalidateExtraFn = func() {
 		darwinUnitStatesCache.mu.Lock()
 		darwinUnitStatesCache.at = time.Time{}
+		darwinUnitStatesCache.states = nil
 		darwinUnitStatesCache.mu.Unlock()
+		darwinUnitMetaCache.mu.Lock()
+		darwinUnitMetaCache.at = time.Time{}
+		darwinUnitMetaCache.meta = nil
+		darwinUnitMetaCache.mu.Unlock()
 	}
 
-	// launchd exposes neither ActiveEnter nor a per-unit WorkingDirectory cleanly,
-	// so meta is empty on darwin: the gate falls back to always dialing and heal
-	// keeps its process-only path (a darwin follow-up; the incident is systemd).
-	allUnitMetaFn = func() map[string]UnitMeta { return map[string]UnitMeta{} }
+	// launchd exposes no ActiveEnter, so the dial gate keeps falling back to
+	// always dialing here. WorkingDirectory it does not expose either, but lerd
+	// writes one into every worker's guard script, so that is where it is read
+	// back from: without it a per-worktree unit resolves with an empty probe
+	// path and an orphan whose checkout is gone is never pruned on macOS.
+	allUnitMetaFn = func() map[string]UnitMeta {
+		darwinUnitMetaCache.mu.Lock()
+		defer darwinUnitMetaCache.mu.Unlock()
+		if darwinUnitMetaCache.meta == nil || time.Since(darwinUnitMetaCache.at) > darwinUnitStatesTTL {
+			dirs := services.WorkerWorkingDirs()
+			meta := make(map[string]UnitMeta, len(dirs))
+			for unit, dir := range dirs {
+				meta[unit] = UnitMeta{WorkingDir: dir}
+			}
+			darwinUnitMetaCache.meta = meta
+			darwinUnitMetaCache.at = time.Now()
+		}
+		out := make(map[string]UnitMeta, len(darwinUnitMetaCache.meta))
+		for k, v := range darwinUnitMetaCache.meta {
+			out[k] = v
+		}
+		return out
+	}
 }
