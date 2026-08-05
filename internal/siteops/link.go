@@ -209,8 +209,13 @@ func FinishFrankenPHPLink(site config.Site) error {
 	// Build the derived image (dunglas base + lerd's standard extension set) so
 	// the site has redis/gd/pdo/... instead of the bare base. The build pulls the
 	// base itself; a failure leaves the site registered to retry on next start.
-	if err := podman.BuildFrankenPHPImage(site.PHPVersion, false, os.Stdout); err != nil {
-		fmt.Printf("[WARN] building FrankenPHP image: %v\n", err)
+	buildErr := podman.BuildFrankenPHPImage(site.PHPVersion, false, os.Stdout)
+	// Starting a unit whose image is absent is worse than not switching: podman
+	// reads the "localhost/" prefix as a registry and the unit restart-loops on a
+	// TLS error that says nothing about the real problem.
+	if err := frankenPHPPreflight(site.PHPVersion, buildErr,
+		podman.RunSilent("image", "exists", podman.FrankenPHPImage(site.PHPVersion)) == nil); err != nil {
+		return err
 	}
 
 	// WriteFrankenPHPQuadletDiff ensures the debug-tooling bind-mount sources
@@ -233,6 +238,11 @@ func FinishFrankenPHPLink(site config.Site) error {
 		if err := podman.RestartUnit(unitName); err != nil {
 			fmt.Printf("[WARN] restarting FrankenPHP container after quadlet change: %v\n", err)
 		}
+	}
+	// systemctl start returns before the unit has settled, so the switch has to
+	// look at what the container actually did rather than trust the start call.
+	if err := frankenPHPUnitError(unitName, waitContainerRunningFn(unitName)); err != nil {
+		return err
 	}
 
 	if site.Secured {

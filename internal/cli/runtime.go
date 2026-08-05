@@ -207,6 +207,7 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 		WorkerStopForSite(site.Name, site.Path, w) //nolint:errcheck
 	}
 
+	prevRuntime, prevWorker := site.Runtime, site.RuntimeWorker
 	site.Runtime = "frankenphp"
 	site.RuntimeWorker = worker
 	if err := config.AddSite(*site); err != nil {
@@ -215,6 +216,13 @@ func switchToFrankenPHP(site *config.Site, worker bool) error {
 	_ = config.SetProjectRuntime(site.Path, "frankenphp", worker)
 
 	if err := siteops.FinishFrankenPHPLink(*site); err != nil {
+		// The registry is written before the container exists, so a switch that
+		// could not complete would otherwise leave the site recorded as
+		// FrankenPHP while FPM is what actually serves it.
+		site.Runtime, site.RuntimeWorker = prevRuntime, prevWorker
+		_ = config.AddSite(*site)
+		_ = config.SetProjectRuntime(site.Path, prevRuntime, prevWorker)
+		startWorkersForSite(site, running, site.PHPVersion)
 		return err
 	}
 
