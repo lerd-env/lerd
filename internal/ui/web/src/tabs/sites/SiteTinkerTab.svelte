@@ -1,6 +1,6 @@
 <script lang="ts">
   import { runTinker, fetchTinkerSnippets, saveTinkerSnippet, deleteTinkerSnippet, activeWorktreeDomain, type TinkerResponse, type TinkerSnippet, type Site } from '$stores/sites';
-  import { openErrorModal } from '$stores/modals';
+  import { modal, openErrorModal } from '$stores/modals';
   import { parseDump, looksLikeDump } from '$lib/dump-parser';
   import { parseBlock } from '$lib/tinker';
   import DumpView from '$components/DumpView.svelte';
@@ -126,10 +126,10 @@
     }
   });
 
-  // Escape exits full screen. The guard inside keeps it inert otherwise, so
-  // it never steals Escape from Monaco completions or modals.
+  // Escape belongs to the topmost layer: a modal stacked on the tab owns it
+  // and closes first, full screen only exits once nothing is stacked on top.
   function onKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && fullscreen) {
+    if (e.key === 'Escape' && fullscreen && !modalOnTop && !e.defaultPrevented) {
       e.preventDefault();
       fullscreen = false;
       requestAnimationFrame(() => fullscreenBtn?.focus());
@@ -165,6 +165,9 @@
   let saveOpen = $state(false);
   let saving = $state(false);
   let saveError = $state('');
+  const modalOnTop = $derived(
+    saveOpen || confirmLoad !== null || confirmDelete !== null || $modal.kind !== null
+  );
 
   function requestLoad(s: TinkerSnippet) {
     if (code.trim() && code !== s.content) confirmLoad = s;

@@ -169,16 +169,20 @@ func healthSignature(ws []workerheal.UnhealthyWorker) string {
 	return strings.Join(parts, ",")
 }
 
-// buildUnhealthyWorkersJSON serialises the current detector output. Errors
-// degrade to an empty array so the dashboard never sees a malformed frame.
-// Each entry is enriched with the last journal line so the dashboard can
-// surface "why did this fail?" without a drill-down.
-// buildUnhealthyWorkersJSON reports an empty list rather than an error when
-// detection fails: "no unhealthy workers" is the safe reading of a failed
-// health probe, unlike "no sites", which is a claim about the registry.
+// buildUnhealthyWorkersJSON serialises the current detector output, filtered to
+// what a heal can actually act on: an orphan is pruned, not healed, so listing
+// it would leave a banner offering a button that touches nothing and a banner
+// that returns on the next snapshot. Each entry is enriched with the last
+// journal line so the dashboard can answer "why did this fail?" without a
+// drill-down. Errors degrade to an empty array rather than a malformed frame:
+// "no unhealthy workers" is the safe reading of a failed health probe, unlike
+// "no sites", which is a claim about the registry.
 func buildUnhealthyWorkersJSON() ([]byte, error) {
 	out, err := workerheal.Detect()
-	if err != nil || len(out) == 0 {
+	if err != nil {
+		return []byte("[]"), nil
+	}
+	if out = workerheal.Healable(out); len(out) == 0 {
 		return []byte("[]"), nil
 	}
 	out = workerheal.Enrich(out)

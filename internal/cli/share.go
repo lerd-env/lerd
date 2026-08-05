@@ -391,7 +391,9 @@ func buildTunnelCommand(tool *shareTool, tunnelName string, target shareTarget, 
 		if tool.ssh.user != "" {
 			dest = tool.ssh.user + "@" + dest
 		}
-		args = append(args, "-R", fmt.Sprintf("%s:localhost:%d", tool.ssh.remotePort, proxyPort), dest)
+		// "--" ends option parsing: a Pinggy token rides as the SSH user, so a
+		// token starting with "-" would otherwise reach ssh as a flag.
+		args = append(args, "-R", fmt.Sprintf("%s:localhost:%d", tool.ssh.remotePort, proxyPort), "--", dest)
 		cmd = exec.Command(hostbin.Path("ssh"), args...)
 	default:
 		// Unreachable through pickShareTool, but a nil command here would be a

@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,9 +114,12 @@ func initRepoSite(t *testing.T, name string) string {
 }
 
 // stubWorktreeWait swaps the wait seam so tests need neither a lerd binary on
-// PATH nor a running watcher, and records the path it was asked about.
+// PATH nor a running watcher, and records the path it was asked about. The
+// watcher is reported up so the wait is reached whatever the host's systemd
+// state, which the not-running case below overrides for itself.
 func stubWorktreeWait(t *testing.T, code int) *string {
 	t.Helper()
+	stubWatcherRunning(t, true)
 	var gotPath string
 	orig := worktreeWaitFn
 	t.Cleanup(func() { worktreeWaitFn = orig })
@@ -124,6 +128,13 @@ func stubWorktreeWait(t *testing.T, code int) *string {
 		return code, ""
 	}
 	return &gotPath
+}
+
+func stubWatcherRunning(t *testing.T, running bool) {
+	t.Helper()
+	orig := watcherRunningFn
+	t.Cleanup(func() { watcherRunningFn = orig })
+	watcherRunningFn = func() bool { return running }
 }
 
 func TestWorktreeTool_advertisesWait(t *testing.T) {
@@ -249,5 +260,35 @@ func TestExecWorktreeWait_timeoutIsNotSuccess(t *testing.T) {
 	decodeContent(t, result, &parsed)
 	if parsed.Provisioned {
 		t.Error("a timeout must not be reported as provisioned")
+	}
+}
+
+// Nothing provisions a worktree while the watcher is down, so waiting would
+// burn the full timeout before reporting the same failure.
+func TestExecWorktreeAdd_doesNotWaitWhenTheWatcherIsDown(t *testing.T) {
+	repo := initRepoSite(t, "demo")
+	gotPath := stubWorktreeWait(t, 0)
+	stubWatcherRunning(t, false)
+
+	result, rpcErr := execWorktreeAdd(map[string]any{
+		"site":     "demo",
+		"git_args": []any{filepath.Join(repo, "feature"), "-b", "feature"},
+	})
+	if rpcErr != nil {
+		t.Fatal("unexpected rpc error:", rpcErr.Message)
+	}
+	if *gotPath != "" {
+		t.Errorf("waited on %q with no watcher to finish the work", *gotPath)
+	}
+	var parsed struct {
+		Provisioned bool   `json:"provisioned"`
+		Note        string `json:"note"`
+	}
+	decodeContent(t, result, &parsed)
+	if parsed.Provisioned {
+		t.Error("provisioned must be false when the watcher never ran")
+	}
+	if !strings.Contains(parsed.Note, "lerd-watcher") {
+		t.Errorf("note %q must name the watcher so the caller can fix it", parsed.Note)
 	}
 }

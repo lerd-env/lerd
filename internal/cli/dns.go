@@ -233,6 +233,7 @@ func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
 		return fmt.Errorf("daemon-reload: %w", err)
 	}
 	var failures []error
+	restarted := false
 	for _, name := range restart {
 		status, _ := services.Mgr.UnitStatus(name)
 		if status != "active" && status != "activating" {
@@ -241,12 +242,26 @@ func regenerateLANContainerQuadlets(progress LANProgressFunc) error {
 		if progress != nil {
 			progress("Restarting " + name)
 		}
+		restarted = true
 		if err := services.Mgr.Restart(name); err != nil {
 			failures = append(failures, fmt.Errorf("restarting %s: %w", name, err))
 		}
 	}
+	// lerd-nginx comes back on a fresh bridge address and the hosts file
+	// bind-mounted into every container still pins .test to the old one, so
+	// refresh it now rather than leave container-side resolution dead until the
+	// watcher's next inspect.
+	if restarted {
+		if err := writeContainerHostsFn(); err != nil {
+			failures = append(failures, fmt.Errorf("refreshing container hosts: %w", err))
+		}
+	}
 	return errors.Join(failures...)
 }
+
+// Seam so the LAN path's container-hosts refresh can be asserted without a
+// live podman.
+var writeContainerHostsFn = podman.WriteContainerHosts
 
 // Seams for preflightForwarderPort so the logic can be unit-tested
 // without binding real ports, spawning lsof, or depending on services.Mgr.

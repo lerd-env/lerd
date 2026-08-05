@@ -21,10 +21,12 @@ func BrowserTrustAvailable() bool {
 	return certutilLookup()
 }
 
-// nssDBDirs returns the NSS databases on this machine, the same set mkcert
-// installs the root CA into: the store the Chromium family shares and every
-// Firefox profile carrying one. Only directories that actually hold a database
-// are returned, so a machine with no browser reports none rather than reporting
+// nssDBDirs returns the NSS databases on this machine, and only the ones the
+// pinned mkcert installs the root CA into: the store the Chromium family shares
+// plus the native and snap Firefox profiles. A store mkcert never writes (a
+// Flatpak Firefox profile, say) would report as permanently missing the CA with
+// no repair able to fix it. Only directories that actually hold a database are
+// returned, so a machine with no browser reports none rather than reporting
 // browser trust broken. Overridable in tests.
 var nssDBDirs = func() []string {
 	home, err := os.UserHomeDir()
@@ -44,7 +46,6 @@ var nssDBDirs = func() []string {
 	for _, pattern := range []string{
 		filepath.Join(home, ".mozilla", "firefox", "*"),
 		filepath.Join(home, "snap", "firefox", "common", ".mozilla", "firefox", "*"),
-		filepath.Join(home, ".var", "app", "org.mozilla.firefox", ".mozilla", "firefox", "*"),
 	} {
 		matches, _ := filepath.Glob(pattern)
 		for _, dir := range matches {

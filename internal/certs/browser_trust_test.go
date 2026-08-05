@@ -137,3 +137,27 @@ func TestNSSDBPresentRequiresADatabase(t *testing.T) {
 		t.Error("a directory with cert9.db is an NSS store")
 	}
 }
+
+// Only stores mkcert itself writes may be reported. A Flatpak Firefox profile is
+// not one of them in the pinned mkcert, so naming it would leave doctor warning
+// about a store `lerd dns:repair` can never fill.
+func TestNSSDBDirsOnlyReportsStoresMkcertWritesTo(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	native := filepath.Join(home, ".mozilla", "firefox", "abc.default")
+	flatpak := filepath.Join(home, ".var", "app", "org.mozilla.firefox", ".mozilla", "firefox", "abc.default")
+	for _, dir := range []string{native, flatpak} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "cert9.db"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	dirs := nssDBDirs()
+	if len(dirs) != 1 || dirs[0] != native {
+		t.Fatalf("nssDBDirs() = %v, want only %s", dirs, native)
+	}
+}

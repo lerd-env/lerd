@@ -793,7 +793,7 @@ func setupNetworkManager() error {
 	// dns=dnsmasq only picks the plugin; it doesn't install it. Without the
 	// binary NetworkManager would restart into a config it can't actually run.
 	if !dnsmasqBinaryPresent() {
-		return fmt.Errorf("dnsmasq binary not found on PATH (install: sudo apt install dnsmasq / sudo dnf install dnsmasq / sudo pacman -S dnsmasq), then rerun `lerd dns:repair`")
+		return fmt.Errorf("dnsmasq binary not found on PATH (install: %s), then rerun `lerd dns:repair`", dnsmasqInstallHint())
 	}
 
 	dnsmasqConf := nmDnsmasqConfFor(ConfiguredTLD())

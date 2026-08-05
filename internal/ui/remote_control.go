@@ -353,7 +353,7 @@ func handleAccessMode(w http.ResponseWriter, r *http.Request) {
 	cfg, _ := config.LoadGlobal()
 	lanExposed := cfg != nil && cfg.LAN.Exposed
 	writeJSON(w, map[string]any{
-		"local_control": hasDashboardControl(r),
+		"local_control": hasHostActionAuthority(r),
 		"lan_exposed":   lanExposed,
 	})
 }
@@ -392,7 +392,7 @@ func handleLANStatus(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case http.MethodPost:
-		if !hasDashboardControl(r) {
+		if !hasHostActionAuthority(r) {
 			http.Error(w, "Forbidden — dashboard authentication is required to change LAN exposure.", http.StatusForbidden)
 			return
 		}
@@ -739,17 +739,13 @@ func remoteSessionMayActOnHost(r *http.Request) bool {
 // hasHostActionAuthority reports whether r may perform an action that reaches
 // the host itself: executing commands, reading raw .env content, touching the
 // filesystem, deleting captured data. The local dashboard always may; a remote
-// session only after `lerd remote-control full-access on`. The middleware has
-// already applied the stricter local check to anything that reaches a handler,
-// so the loopback test here is the peer one.
+// session only after `lerd remote-control full-access on`.
+//
+// The local test is the strict one. The middleware lets an authenticated remote
+// session through to any handler that isn't on the loopback-only list, and a
+// reverse proxy relaying that session connects from 127.0.0.1 — so a peer-only
+// check here would hand it the very authority the opt-in exists to withhold.
 func hasHostActionAuthority(r *http.Request) bool {
-	return isLoopbackRequest(r) || remoteSessionMayActOnHost(r)
-}
-
-// hasDashboardControl is hasHostActionAuthority for the handlers that must
-// hold up on their own, without the middleware in front: it rejects a reverse
-// proxy connecting from 127.0.0.1 on behalf of a remote browser.
-func hasDashboardControl(r *http.Request) bool {
 	return isLocalControlRequest(r) || remoteSessionMayActOnHost(r)
 }
 

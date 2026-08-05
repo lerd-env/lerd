@@ -93,11 +93,11 @@ func runUpdate(currentVersion string, beta bool) error {
 	// A Homebrew-managed binary lives under a Cellar prefix; self-replacing it
 	// would fight `brew`, so defer to it. Curl-installed binaries (the default
 	// on macOS now) live in ~/.local/bin and self-update like Linux does below.
-	if runtime.GOOS == "darwin" {
-		if self, err := selfPath(); err == nil && isHomebrewManaged(self) {
-			fmt.Printf("\nThis is a Homebrew install. To update, run:\n\n  brew upgrade lerd\n\n")
-			return nil
-		}
+	// The formula ships Linux bottles, so Linuxbrew counts the same way, which
+	// is also how uninstall already treats it.
+	if self, err := selfPath(); err == nil && isHomebrewManaged(self) {
+		fmt.Printf("\nThis is a Homebrew install. To update, run:\n\n  brew upgrade lerd\n\n")
+		return nil
 	}
 
 	// A deb/rpm install lives under /usr and is owned by the package manager;
@@ -446,6 +446,9 @@ func restartLerdUserServices() {
 func downloadReleaseBinary(version string) (string, func(), error) {
 	arch := runtime.GOARCH // "amd64" or "arm64"
 	ver := stripV(version)
+	if !lerdUpdate.ValidTag(ver) {
+		return "", func() {}, fmt.Errorf("refusing unsafe release version %q", version)
+	}
 
 	filename := fmt.Sprintf("lerd_%s_%s_%s.tar.gz", ver, runtime.GOOS, arch)
 

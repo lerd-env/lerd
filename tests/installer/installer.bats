@@ -174,15 +174,45 @@ teardown() {
   [ "${MISSING_PKGS[0]}" = "dnsmasq-base" ]
 }
 
-@test "check_nm_dnsmasq stays quiet when systemd-resolved is active" {
+@test "check_nm_dnsmasq stays quiet when systemd-resolved is the resolver" {
   function systemctl() { return 0; }
   export -f systemctl
   function host_has_dnsmasq() { return 1; }
   export -f host_has_dnsmasq
+  RESOLV_CONF="$HOME/resolv.conf"
+  printf 'nameserver 127.0.0.53\n' >"$RESOLV_CONF"
 
   MISSING_PKGS=()
   check_nm_dnsmasq >/dev/null 2>&1
   [ "${#MISSING_PKGS[@]}" -eq 0 ]
+}
+
+# Arch and CachyOS boot with systemd-resolved active while NetworkManager still
+# writes resolv.conf itself. lerd takes the NM dnsmasq path there, so skipping
+# the offer leaves `lerd install` dying on the missing binary later.
+@test "check_nm_dnsmasq queues dnsmasq when resolved runs but does not own resolv.conf" {
+  function systemctl() { return 0; }
+  export -f systemctl
+  function host_has_dnsmasq() { return 1; }
+  export -f host_has_dnsmasq
+  function distro_family() { echo "arch"; }
+  export -f distro_family
+  RESOLV_CONF="$HOME/resolv.conf"
+  printf 'nameserver 192.168.1.1\n' >"$RESOLV_CONF"
+
+  MISSING_PKGS=()
+  check_nm_dnsmasq >/dev/null 2>&1
+  [ "${#MISSING_PKGS[@]}" -eq 1 ]
+  [ "${MISSING_PKGS[0]}" = "dnsmasq" ]
+}
+
+@test "resolved_is_resolver ignores an unreadable resolv.conf" {
+  function systemctl() { return 0; }
+  export -f systemctl
+  RESOLV_CONF="$HOME/no-such-resolv.conf"
+
+  run resolved_is_resolver
+  [ "$status" -ne 0 ]
 }
 
 @test "check_nm_dnsmasq stays quiet when dnsmasq is already present" {

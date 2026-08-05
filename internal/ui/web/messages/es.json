@@ -1249,6 +1249,7 @@
   "publicShare_configureBase": "Set the public base domain",
   "publicShare_tunnelActive": "Stop the tunnel to share here",
   "publicShare_shareActive": "Stop the public share to use a tunnel",
+  "publicShare_stop": "Detener el uso compartido público",
   "share_busyElsewhere": "Stop the active share first",
   "publicBase_title": "Public base domain",
   "publicBase_body": "A domain you control, with a wildcard pointed at this machine (a netbird or reverse-proxy setup). Shared sites are reached at <site>.<base>, forwarded by your proxy to lerd.",

@@ -8,6 +8,8 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/pkg/distro"
 )
 
 // fakeProbes builds a probeFns where every rung is overridable but defaults
@@ -571,5 +573,50 @@ func TestParseDummyLinkRouting_matchesTheDomainAsAWholeToken(t *testing.T) {
 	}
 	if _, routed := parseDummyLinkRouting(withServer+"        DNS Domain: ~test\n", "test"); !routed {
 		t.Error("~test must satisfy the ~test route")
+	}
+}
+
+// The full dnsmasq package on the debian family starts its own resolver on :53,
+// which collides with the NetworkManager plugin the hint is trying to feed. Only
+// dnsmasq-base ships the binary alone, which is what install.sh queues too.
+func TestDnsmasqInstallHintPerFamily(t *testing.T) {
+	orig := detectDistro
+	t.Cleanup(func() { detectDistro = orig })
+
+	cases := []struct {
+		name string
+		d    *distro.Distro
+		want string
+	}{
+		{"ubuntu", &distro.Distro{ID: "ubuntu"}, "sudo apt install dnsmasq-base"},
+		{"mint via ID_LIKE", &distro.Distro{ID: "linuxmint", IDLike: "ubuntu debian"}, "sudo apt install dnsmasq-base"},
+		{"fedora", &distro.Distro{ID: "fedora"}, "sudo dnf install dnsmasq"},
+		{"cachyos via ID_LIKE", &distro.Distro{ID: "cachyos", IDLike: "arch"}, "sudo pacman -S dnsmasq"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			detectDistro = func() (*distro.Distro, error) { return tc.d, nil }
+			if got := dnsmasqInstallHint(); got != tc.want {
+				t.Errorf("dnsmasqInstallHint() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// An unrecognised host still gets a usable hint, and it must never name the
+// debian package that breaks .test resolution.
+func TestDnsmasqInstallHintFallsBackToEveryFamily(t *testing.T) {
+	orig := detectDistro
+	t.Cleanup(func() { detectDistro = orig })
+	detectDistro = func() (*distro.Distro, error) { return nil, errors.New("no os-release") }
+
+	got := dnsmasqInstallHint()
+	if !strings.Contains(got, "dnsmasq-base") || strings.Contains(got, "apt install dnsmasq ") {
+		t.Errorf("dnsmasqInstallHint() = %q, want the debian entry to name dnsmasq-base", got)
+	}
+	for _, mgr := range []string{"apt", "dnf", "pacman"} {
+		if !strings.Contains(got, mgr) {
+			t.Errorf("dnsmasqInstallHint() = %q, want it to cover %s", got, mgr)
+		}
 	}
 }

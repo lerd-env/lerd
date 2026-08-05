@@ -62,6 +62,55 @@ func TestLocalControlRejectsForwardedRequests(t *testing.T) {
 	}
 }
 
+// Authentication lets a proxied remote session reach handlers that are not on
+// the loopback-only list. Those handlers still guard themselves, and that guard
+// must apply the same forwarding test the middleware does: a proxy relaying a
+// remote browser connects from 127.0.0.1, so a peer-only check hands it host
+// authority the full-access opt-in was meant to withhold.
+func TestHostActionAuthorityRejectsProxiedRemoteWithoutFullAccess(t *testing.T) {
+	setupConfigDirFullAccess(t, "alice", "s3cret", false)
+
+	var authority bool
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		authority = hasHostActionAuthority(r)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/open-editor", nil)
+	req.RemoteAddr = "127.0.0.1:54321" // the reverse proxy, on the host itself
+	req.Host = "dashboard.example.ts.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	req.SetBasicAuth("alice", "s3cret")
+	withRemoteControlGate(next).ServeHTTP(httptest.NewRecorder(), req)
+
+	if authority {
+		t.Error("a proxied remote session was granted host-action authority with full access off")
+	}
+}
+
+// The same session gets that authority once the user opts in, or the opt-in
+// would do nothing for the setup it exists to serve.
+func TestHostActionAuthorityAllowsProxiedRemoteWithFullAccess(t *testing.T) {
+	setupConfigDirFullAccess(t, "alice", "s3cret", true)
+
+	var authority bool
+	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+		authority = hasHostActionAuthority(r)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/open-editor", nil)
+	req.RemoteAddr = "127.0.0.1:54321"
+	req.Host = "dashboard.example.ts.net"
+	req.Header.Set("X-Forwarded-For", "203.0.113.7")
+	req.Header.Set("X-Lerd-CSRF", "1")
+	req.SetBasicAuth("alice", "s3cret")
+	withRemoteControlGate(next).ServeHTTP(httptest.NewRecorder(), req)
+
+	if !authority {
+		t.Error("full access did not reach a proxied remote session")
+	}
+}
+
 // The unix socket carries no peer address and no forwarding headers; it is
 // reached only by host processes, so it stays authoritative.
 func TestLocalControlAcceptsUnixSocketWithForeignHost(t *testing.T) {

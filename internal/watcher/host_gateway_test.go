@@ -558,3 +558,48 @@ func TestWatchHostGateway_backsOffThePodmanLookupWhenSettled(t *testing.T) {
 		t.Error("podman lookup never ran; the address would never be refreshed")
 	}
 }
+
+// The constant has to mean what it says. Counting the ticks alongside the
+// inspects makes this exact rather than timing-dependent: whatever number of
+// ticks the loop got through, one in hostGatewayInspectEvery of them must have
+// inspected. An off-by-one here is 30 extra seconds of dead .test resolution
+// inside every container after an nginx recreation.
+func TestWatchHostGateway_inspectsOnTheStatedCadence(t *testing.T) {
+	var mu sync.Mutex
+	ticks, inspects := 0, 0
+	deps := gatewayCountingDeps(new(int))
+	deps.primaryLANIP = func() string {
+		mu.Lock()
+		ticks++
+		mu.Unlock()
+		return "192.168.1.10"
+	}
+	deps.freshNginxIP = func() string {
+		mu.Lock()
+		inspects++
+		mu.Unlock()
+		return "10.89.0.2"
+	}
+
+	orig := hostGatewayDepsForWatch
+	hostGatewayDepsForWatch = func() hostGatewayDeps { return deps }
+	t.Cleanup(func() { hostGatewayDepsForWatch = orig })
+
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() { defer close(done); WatchHostGateway(2*time.Millisecond, stop) }()
+	time.Sleep(300 * time.Millisecond)
+	close(stop)
+	<-done
+
+	mu.Lock()
+	gotTicks, gotInspects := ticks, inspects
+	mu.Unlock()
+	if gotTicks < 2*hostGatewayInspectEvery {
+		t.Fatalf("only %d ticks ran; too few to judge the cadence", gotTicks)
+	}
+	want := (gotTicks + hostGatewayInspectEvery - 1) / hostGatewayInspectEvery
+	if gotInspects != want {
+		t.Errorf("%d inspects over %d ticks, want %d (one per %d ticks)", gotInspects, gotTicks, want, hostGatewayInspectEvery)
+	}
+}

@@ -28,7 +28,7 @@ lerd worktree add --track -b feat-x origin/feat    # tracking branch
 
 After git completes, the wrapper:
 
-1. Polls until the watcher has installed dependencies (`composer install` + `npm ci`) and synced the worktree's `.env`. The `.env` is set up *before* installs so `npm` build steps that read `VITE_*` env vars compile against the right values.
+1. Polls until the watcher has installed dependencies (`composer install` + `npm ci`) and synced the worktree's env file. Which file that is comes from the framework definition's `env.file`, so it follows the framework rather than assuming `.env`: Symfony settles on `.env.local` and Magento on `app/etc/env.php`, while Laravel and CodeIgniter use `.env`. The env file is set up *before* installs so `npm` build steps that read `VITE_*` env vars compile against the right values.
 2. Prompts what should serve the worktree's frontend assets. The select lists every framework worker eligible to replace the build (asset workers with `replaces_build: true` and a passing `check`, e.g. `vite`), every production-build script declared in `package.json` (`build`, `prod`, `build:prod`, `build-prod`, `production`), and a Skip option. The default is the first asset worker that's already opted into the parent's `.lerd.yaml workers:`, then the first npm script, then skip. Picking an asset worker starts it as a per-worktree unit (with `persist=false`, so it doesn't get added to `workers:`); picking an npm script runs it once.
 3. Prompts how to set up the worktree's database, see [Per-worktree database](#per-worktree-database) below.
 4. If you pick "isolated empty", asks whether to run `php artisan migrate --force` against the new schema right away.

@@ -85,6 +85,43 @@ func TestNpmGlobalPrefixEnvDefaultsToLerdPrefix(t *testing.T) {
 	}
 }
 
+func TestUserNPMPrefixIgnoresLerdOwnPrefix(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, ".local", "share"))
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+
+	// lerd injects its own prefix into every npm/npx child, so a nested shim
+	// run inherits it and must not read it back as a user-configured prefix.
+	t.Setenv("npm_config_prefix", config.NodeGlobalDir())
+	if got := userNPMPrefix(); got != "" {
+		t.Errorf("userNPMPrefix() = %q, want empty for lerd's own prefix", got)
+	}
+
+	t.Setenv("npm_config_prefix", "")
+	t.Setenv("NPM_CONFIG_PREFIX", config.NodeGlobalDir())
+	if got := userNPMPrefix(); got != "" {
+		t.Errorf("userNPMPrefix() = %q, want empty for lerd's own prefix", got)
+	}
+}
+
+func TestNpmGlobalPrefixEnvStaysLerdOwnedWhenNested(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(tmp, ".local", "share"))
+	t.Setenv("npm_config_prefix", config.NodeGlobalDir())
+	t.Setenv("NPM_CONFIG_PREFIX", "")
+
+	env, lerdOwned := npmGlobalPrefixEnv()
+	if !lerdOwned {
+		t.Error("a nested shim run must stay lerd-owned so global wrappers still sync")
+	}
+	want := []string{"npm_config_prefix=" + config.NodeGlobalDir()}
+	if !reflect.DeepEqual(env, want) {
+		t.Errorf("env = %v, want %v", env, want)
+	}
+}
+
 func TestNodeGlobalPackages(t *testing.T) {
 	prefix := t.TempDir()
 	mods := filepath.Join(prefix, "lib", "node_modules")

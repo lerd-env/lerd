@@ -116,6 +116,9 @@ func TestIsHomebrewManaged(t *testing.T) {
 	}{
 		{"/opt/homebrew/Cellar/lerd/1.25.0/bin/lerd", true},
 		{"/usr/local/Cellar/lerd/1.25.0/bin/lerd", true},
+		// The formula ships Linux bottles too, so Linuxbrew must be recognised
+		// or `lerd update` would rename a new binary into brew's Cellar.
+		{"/home/linuxbrew/.linuxbrew/Cellar/lerd/1.31.0/bin/lerd", true},
 		{"/Users/me/.local/bin/lerd", false},
 		{"/home/me/.local/bin/lerd", false},
 		{"/usr/local/bin/lerd", false},
@@ -284,6 +287,32 @@ func TestDownloadReleaseBinary_serverError(t *testing.T) {
 	cleanup()
 	if err == nil {
 		t.Fatal("expected error for 404 download, got nil")
+	}
+}
+
+// The version reaches here from a release redirect, so the download must not
+// trust it: it is joined onto a temp dir as a filename and sent as a URL.
+func TestDownloadReleaseBinary_rejectsUnsafeVersion(t *testing.T) {
+	var requested int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		requested++
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	orig := githubDownloadBases
+	githubDownloadBases = func() []string { return []string{srv.URL} }
+	defer func() { githubDownloadBases = orig }()
+
+	for _, ver := range []string{"v../../etc/passwd", "v1.0.0/../..", "v1.0.0 rm -rf /"} {
+		_, cleanup, err := downloadReleaseBinary(ver)
+		cleanup()
+		if err == nil {
+			t.Errorf("version %q was accepted, want a refusal", ver)
+		}
+	}
+	if requested != 0 {
+		t.Errorf("an unsafe version reached the network %d times", requested)
 	}
 }
 

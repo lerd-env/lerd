@@ -14,6 +14,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
+	"github.com/geodro/lerd/pkg/distro"
 )
 
 // StepStatus is the outcome of a single rung in the layered DNS check.
@@ -242,7 +243,7 @@ func diagnose(tld string, p probeFns) Diagnostic {
 			Name:   "resolver hookup",
 			Status: StepFail,
 			Detail: kind + ": " + path + " (dnsmasq binary not found on PATH)",
-			Hint:   "sudo apt install dnsmasq / sudo dnf install dnsmasq / sudo pacman -S dnsmasq, then sudo systemctl restart NetworkManager",
+			Hint:   dnsmasqInstallHint() + ", then sudo systemctl restart NetworkManager",
 		})
 		return finalize(d)
 	}
@@ -410,6 +411,32 @@ var dnsmasqSbinPaths = []string{"/usr/sbin/dnsmasq", "/sbin/dnsmasq", "/usr/loca
 // file is linux-only and this one also serves the macOS path.
 func hostDnsmasqPresent() bool {
 	return dnsmasqFound(exec.LookPath, dnsmasqSbinPaths)
+}
+
+// detectDistro resolves the host distribution. Seam for tests.
+var detectDistro = distro.Detect
+
+// dnsmasqInstallAny covers a host whose family could not be resolved.
+const dnsmasqInstallAny = "sudo apt install dnsmasq-base / sudo dnf install dnsmasq / sudo pacman -S dnsmasq"
+
+// dnsmasqInstallHint names the command that installs the dnsmasq binary this
+// host needs, the same package install.sh queues. The debian family gets
+// dnsmasq-base: the full dnsmasq package also starts a resolver on :53, which
+// collides with the NetworkManager plugin the binary is being installed for.
+func dnsmasqInstallHint() string {
+	d, err := detectDistro()
+	if err != nil || d == nil {
+		return dnsmasqInstallAny
+	}
+	switch {
+	case d.IsDebian():
+		return "sudo apt install dnsmasq-base"
+	case d.IsFedora():
+		return "sudo dnf install dnsmasq"
+	case d.IsArch():
+		return "sudo pacman -S dnsmasq"
+	}
+	return dnsmasqInstallAny
 }
 
 func dnsmasqFound(lookPath func(string) (string, error), fallbacks []string) bool {

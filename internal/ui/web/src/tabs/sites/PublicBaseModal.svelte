@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import Modal from '$components/Modal.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -13,8 +14,10 @@
   let { open, base = '', error = '', busy = false, onclose, onsubmit }: Props = $props();
 
   let value = $state('');
+  // Seed only on the open transition (the base read untracked), so a
+  // background share-tools refresh never overwrites what the user is typing.
   $effect(() => {
-    if (open) value = base;
+    if (open) value = untrack(() => base);
   });
 
   const clean = $derived(value.trim().replace(/^\.+|\.+$/g, '').toLowerCase());

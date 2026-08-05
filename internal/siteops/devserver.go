@@ -11,3 +11,9 @@ import "github.com/geodro/lerd/internal/config"
 // (see internal/cli/devserver_wire.go); the default is a no-op so a binary that
 // does not link it, and every test in this package, behaves as before.
 var RefreshDevServers = func(*config.Site) {}
+
+// StopSiteShares closes any share listener the site still has open. Unlinking
+// drops the registry entry, so a listener left bound afterwards can never be
+// found again by name and survives until the daemon exits. Wired by the cli
+// package, which owns the proxies.
+var StopSiteShares = func(siteName string) {}

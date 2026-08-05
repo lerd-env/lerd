@@ -55,10 +55,13 @@ func TestCATrustedDarwinKeychain(t *testing.T) {
 		}
 	})
 
+	// An export that did not answer has said nothing about trust either way, and
+	// calling that untrusted announces a sudo prompt and a full interactive
+	// mkcert -install on a host where the export keeps failing.
 	t.Run("export unreadable", func(t *testing.T) {
 		adminTrustSettingsPlist = func() []byte { return nil }
-		if CATrusted() {
-			t.Fatal("an export that could not be read is not evidence of trust")
+		if !CATrusted() {
+			t.Fatal("an export that could not be read must not be reported as untrusted")
 		}
 	})
 }

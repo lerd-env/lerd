@@ -72,7 +72,9 @@ func writeTunnelRecords(recs []tunnelRecord) {
 	if os.MkdirAll(filepath.Dir(path), 0755) != nil {
 		return
 	}
-	os.WriteFile(path, data, 0644) //nolint:errcheck
+	// 0600: the recorded command lines carry a Pinggy token as the SSH user,
+	// the same secret the config file is kept private for.
+	os.WriteFile(path, data, 0600) //nolint:errcheck
 }
 
 // recordTunnel notes a started tunnel, storing the command line so a later reap

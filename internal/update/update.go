@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/geodro/lerd/internal/origin"
@@ -36,13 +37,28 @@ func FetchLatestVersion() (string, error) {
 // followed to completion instead of reading a single Location (#1296).
 const maxRedirectHops = 5
 
+// redirectTransport is the transport the redirect walk uses. Overridable in
+// tests so an https hop can be served locally.
+var redirectTransport http.RoundTripper
+
+// tagPattern is everything a release tag may contain. The tag ends up in a
+// download URL and in an archive filename joined onto a temp dir, so a tag
+// carrying a separator, an escape or a shell character is refused outright.
+var tagPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
+
+// ValidTag reports whether tag is safe to interpolate into a download URL and
+// an archive path.
+func ValidTag(tag string) bool { return tagPattern.MatchString(tag) }
+
 func fetchLatestFrom(base string) (string, error) {
 	client := &http.Client{
+		Transport: redirectTransport,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
 	}
 	url := base + "/latest"
+	secure := strings.HasPrefix(strings.ToLower(url), "https://")
 	for hop := 0; hop < maxRedirectHops; hop++ {
 		req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
 		if err != nil {
@@ -56,23 +72,43 @@ func fetchLatestFrom(base string) (string, error) {
 		}
 		resp.Body.Close()
 
-		if resp.StatusCode != http.StatusFound && resp.StatusCode != http.StatusMovedPermanently {
+		if !isRedirect(resp.StatusCode) {
 			return "", fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
 		}
 		location, err := resp.Location()
 		if err != nil {
 			return "", fmt.Errorf("no Location header in redirect from %s", url)
 		}
+		// A chain that has been over https may not drop back to plaintext, and
+		// no hop may leave http(s) at all.
+		scheme := strings.ToLower(location.Scheme)
+		if scheme != "https" && (secure || scheme != "http") {
+			return "", fmt.Errorf("refusing %s redirect from %s to %s", scheme, url, location)
+		}
+		secure = secure || scheme == "https"
+
 		if strings.Contains(location.String(), "/tag/") {
 			parts := strings.Split(location.String(), "/tag/")
 			if len(parts) != 2 || parts[1] == "" {
 				return "", fmt.Errorf("unexpected release URL format: %s", location)
+			}
+			if !ValidTag(parts[1]) {
+				return "", fmt.Errorf("refusing unsafe release tag %q from %s", parts[1], location)
 			}
 			return parts[1], nil
 		}
 		url = location.String()
 	}
 	return "", fmt.Errorf("no release tag after %d redirects from %s/latest", maxRedirectHops, base)
+}
+
+func isRedirect(code int) bool {
+	switch code {
+	case http.StatusMovedPermanently, http.StatusFound, http.StatusSeeOther,
+		http.StatusTemporaryRedirect, http.StatusPermanentRedirect:
+		return true
+	}
+	return false
 }
 
 // GithubReleaseForTest is exported only so tests in other packages can build
@@ -131,7 +167,7 @@ func fetchPrereleaseFrom(base string) (string, error) {
 	}
 
 	for _, r := range releases {
-		if r.Prerelease && !r.Draft && r.TagName != "" {
+		if r.Prerelease && !r.Draft && ValidTag(r.TagName) {
 			return r.TagName, nil
 		}
 	}

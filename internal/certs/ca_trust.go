@@ -67,6 +67,10 @@ func rootCADER() []byte {
 // system: actually configured as a trusted root, not merely present in a
 // keychain or store. Callers use it to skip the sudo announcement (and
 // mkcert's chatty banner) on a reinstall where the CA is already trusted.
+//
+// A platform store that could not be read is not a store that said "untrusted":
+// same rule as CAPresentButUntrusted, and without it a host whose export keeps
+// failing is walked through the privileged reinstall on every run.
 func CATrusted() bool {
 	der := rootCADER()
 	if der == nil {
@@ -77,10 +81,13 @@ func CATrusted() bool {
 			return true
 		}
 	}
-	if platformTrustCheck != nil {
-		return platformTrustCheck(der)
+	if platformTrustCheck == nil {
+		return false
 	}
-	return false
+	if platformTrustReadable != nil && !platformTrustReadable() {
+		return true
+	}
+	return platformTrustCheck(der)
 }
 
 // CAPresentButUntrusted reports the drifted state that let a reinstall

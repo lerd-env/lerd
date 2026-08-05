@@ -226,8 +226,10 @@
 
   // The button acts on the state it shows: a globe stops whichever public
   // exposure is live (a tunnel, or the reverse-proxy share), a wifi icon
-  // toggles the LAN share.
+  // toggles the LAN share. A share in flight owns the button, otherwise a
+  // click would start a second share next to the one still opening.
   function onButtonClick() {
+    if (shareBusy) return;
     if (tunnelOn) stopT();
     else if (publicShared) togglePublic();
     else onToggleLan();
@@ -246,6 +248,7 @@
   let publicBusy = $state(false);
   // A site is shared one way at a time. Each section can still stop its own
   // share, but starting one is blocked while any other is live or opening.
+  const shareBusy = $derived(lanBusy || tunnelBusy || stopBusy || publicBusy);
   const lanBlocked = $derived(tunnelOn || tunnelBusy || publicShared || publicBusy);
   const publicBlocked = $derived(tunnelOn || tunnelBusy || lanOn || lanBusy);
   const tunnelBlocked = $derived(publicShared || publicBusy || lanOn || lanBusy);
@@ -300,11 +303,14 @@
     bind:this={btnEl}
     type="button"
     onclick={onButtonClick}
+    disabled={shareBusy}
     aria-label={tunnelOn
       ? m.share_stopTunnel()
-      : lanOn
-        ? m.sites_controls_lanToggle_on()
-        : m.sites_controls_lanToggle_off()}
+      : publicShared
+        ? m.publicShare_stop()
+        : lanOn
+          ? m.sites_controls_lanToggle_on()
+          : m.sites_controls_lanToggle_off()}
     aria-haspopup="menu"
     aria-expanded={open}
     class="{visibleClass} w-8 h-8 items-center justify-center rounded-md transition-colors {tunnelOn
@@ -315,7 +321,7 @@
           ? 'text-teal-500 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-900/20'
           : 'text-gray-500 dark:text-gray-400 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
   >
-    {#if lanBusy || tunnelBusy || stopBusy || publicBusy}
+    {#if shareBusy}
       <Icon name="spinner" class="w-4 h-4 animate-spin" />
     {:else if tunnelOn || publicShared}
       <Icon name="globe" class="w-4 h-4" />

@@ -85,7 +85,7 @@ func TestLANShareE2E_appWebsocket_noVite(t *testing.T) {
 	be := wsEchoBackend("nginx")
 	defer be.Close()
 
-	h := newLANShareHandler(realMainProxy(t, be.URL))
+	h := newLANShareHandler(realMainProxy(t, be.URL), reachLAN)
 	srv := httptest.NewServer(h)
 	defer srv.Close()
 	host := mustHost(t, srv.URL)
@@ -113,7 +113,7 @@ func TestLANShareE2E_appWebsocket_viteActive(t *testing.T) {
 	defer vite.Close()
 	vitePort := mustExtractPort(t, vite.URL)
 
-	h := newLANShareHandler(realMainProxy(t, be.URL))
+	h := newLANShareHandler(realMainProxy(t, be.URL), reachLAN)
 	h.setActiveVitePort(vitePort)
 	srv := httptest.NewServer(h)
 	defer srv.Close()

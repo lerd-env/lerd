@@ -4097,10 +4097,15 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "lan:refresh":
-		// Re-bind the share proxy to the current site config. Called from
+		// Re-bind the share proxies to the current site config. Called from
 		// CLI commands (secure/unsecure) that change the backend port the
-		// proxy targets so the running listener picks up the change.
+		// proxies target so the running listeners pick up the change. Public
+		// shares dial the same backend, so they refresh on the same signal.
 		if err := cli.LANShareRefreshIfRunning(site.Name); err != nil {
+			writeJSON(w, SiteActionResponse{Error: err.Error()})
+			return
+		}
+		if err := cli.PublicShareRefreshIfRunning(site.Name); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

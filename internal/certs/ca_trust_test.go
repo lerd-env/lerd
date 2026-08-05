@@ -83,6 +83,26 @@ func TestCATrusted(t *testing.T) {
 		}
 	})
 
+	// A store that could not answer has not said the CA is untrusted. Reporting
+	// it untrusted announces a sudo prompt and a full interactive mkcert
+	// -install on every single install and update run.
+	t.Run("platform trust state unreadable", func(t *testing.T) {
+		origReadable := platformTrustReadable
+		t.Cleanup(func() { platformTrustReadable = origReadable })
+		caRootFunc = func() (string, error) { return caDir, nil }
+		caTrustPaths = nil
+		platformTrustCheck = func(der []byte) bool { return false }
+		platformTrustReadable = func() bool { return false }
+		if !CATrusted() {
+			t.Fatal("an unreadable trust store must not be reported as untrusted")
+		}
+
+		platformTrustReadable = func() bool { return true }
+		if CATrusted() {
+			t.Fatal("a store that answered untrusted must be reported as untrusted")
+		}
+	})
+
 	t.Run("no rootCA", func(t *testing.T) {
 		caRootFunc = func() (string, error) { return t.TempDir(), nil }
 		caTrustPaths = []string{filepath.Join(bundleDir, "present.crt")}

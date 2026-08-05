@@ -165,7 +165,14 @@ func execWorktreeAdd(args map[string]any) (any, *rpcError) {
 	// creating it; wait=false is for a caller that only wants the checkout.
 	if path := addedWorktreePath(site, before); path != "" {
 		resp["path"] = path
-		if wantsWorktreeWait(args) {
+		switch {
+		case !wantsWorktreeWait(args):
+		case !watcherRunningFn():
+			// Nothing will ever provision the tree, so waiting would just burn
+			// the whole timeout before saying so.
+			resp["provisioned"] = false
+			resp["note"] = "lerd-watcher is not running, so setup will not start; run `lerd start`, then call action=wait"
+		default:
 			code, waitOut := worktreeWaitFn(path, worktreeWaitTimeout(args))
 			resp["provisioned"] = code == 0
 			if code != 0 {
@@ -327,6 +334,12 @@ func runIn(dir, name string, args ...string) (string, error) {
 // worktreeWaitFn is the seam the wait goes through, so tests need neither a
 // lerd binary on PATH nor a running watcher.
 var worktreeWaitFn = shellWorktreeWait
+
+// watcherRunningFn reports whether the watcher is up. A seam so tests don't
+// depend on the caller's systemd state.
+var watcherRunningFn = func() bool {
+	return exec.Command("systemctl", "--user", "is-active", "--quiet", "lerd-watcher").Run() == nil
+}
 
 // shellWorktreeWait defers to `lerd worktree wait`, which is the only check that
 // accounts for the install lock and not just the pipeline's outputs. Shelling

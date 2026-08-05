@@ -53,6 +53,16 @@ describe('LANServicesSetting', () => {
     expect(container.textContent).toContain('loopback only');
   });
 
+  // Read-only state is a three-way pill: reachable, armed but inert, off.
+  it('reads the three service states without dashboard-control authority', () => {
+    accessMode.set({ localControl: false, lanExposed: true, checked: true });
+    setLAN({ exposed: true, servicesEnabled: true, servicesReachable: true });
+    expect(render(LANServicesSetting).container.textContent).toContain('enabled');
+
+    setLAN({ exposed: false, servicesEnabled: true, servicesReachable: false });
+    expect(render(LANServicesSetting).container.textContent).toContain('inert');
+  });
+
   it('separates itself from the exposure controls when nested', () => {
     setLAN({ exposed: true });
     const { container } = render(LANServicesSetting, { props: { nested: true } });

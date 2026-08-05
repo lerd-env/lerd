@@ -2,6 +2,7 @@
   import { lan, toggleLANServices } from '$stores/lan';
   import { accessMode } from '$stores/accessMode';
   import Toggle from '$components/Toggle.svelte';
+  import StatusPill from '$components/StatusPill.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -32,22 +33,15 @@
         onclick={() => toggleLANServices(!$lan.servicesEnabled)}
       />
     {:else}
-      <span class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$lan.servicesReachable
-        ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-        : $lan.servicesEnabled
-          ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
-          : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}">
-        <span class="w-1.5 h-1.5 rounded-full {$lan.servicesReachable
-          ? 'bg-emerald-500'
-          : $lan.servicesEnabled
-            ? 'bg-amber-500'
-            : 'bg-gray-400'}"></span>
-        {$lan.servicesReachable
+      <StatusPill
+        size="sm"
+        tone={$lan.servicesReachable ? 'ok' : $lan.servicesEnabled ? 'warn' : 'muted'}
+        label={$lan.servicesReachable
           ? m.system_lan_services_enabled()
           : $lan.servicesEnabled
             ? m.system_remote_status_inert()
             : m.system_lan_loopback()}
-      </span>
+      />
     {/if}
   </div>
   <p class="text-xs text-gray-500 dark:text-gray-400">

@@ -18,7 +18,7 @@ import (
 // into lerd's own data dir. Empty when the user has none.
 func userNPMPrefix() string {
 	for _, key := range []string{"npm_config_prefix", "NPM_CONFIG_PREFIX"} {
-		if v := os.Getenv(key); v != "" {
+		if v := os.Getenv(key); v != "" && !isLerdNPMPrefix(key, v) {
 			return expandHomePath(v)
 		}
 	}
@@ -40,6 +40,19 @@ func userNPMPrefix() string {
 		}
 	}
 	return ""
+}
+
+// isNPMPrefixVar reports whether an env var name is npm's prefix setting. npm
+// reads it case-insensitively, and so does nvm's nvm_die_on_prefix guard.
+func isNPMPrefixVar(name string) bool {
+	return strings.EqualFold(name, "npm_config_prefix")
+}
+
+// isLerdNPMPrefix reports whether an env entry is lerd's own injected prefix.
+// Every npm/npx child carries it, so nested runs must not read it back as a
+// user-configured prefix.
+func isLerdNPMPrefix(name, val string) bool {
+	return isNPMPrefixVar(name) && val == config.NodeGlobalDir()
 }
 
 // expandHomePath resolves a leading ~ the way npm does for .npmrc values.
@@ -162,7 +175,7 @@ func reinstallNodeGlobals(npm string, specs []string) error {
 	env := make([]string, 0, len(os.Environ())+1)
 	for _, kv := range os.Environ() {
 		name, val, _ := strings.Cut(kv, "=")
-		if (name == "npm_config_prefix" || name == "NPM_CONFIG_PREFIX") && val == config.NodeGlobalDir() {
+		if isLerdNPMPrefix(name, val) {
 			continue
 		}
 		if strings.EqualFold(name, "PATH") {

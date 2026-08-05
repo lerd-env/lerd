@@ -98,7 +98,9 @@ func WatchHostGateway(interval time.Duration, stop <-chan struct{}) {
 				continue
 			}
 			if inspect {
-				ticksToInspect = hostGatewayInspectEvery
+				// This tick was the inspect, so only the ticks after it are
+				// skipped; counting the full interval here would add one.
+				ticksToInspect = hostGatewayInspectEvery - 1
 			} else {
 				ticksToInspect--
 			}

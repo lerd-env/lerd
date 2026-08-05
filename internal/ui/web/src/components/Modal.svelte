@@ -23,8 +23,12 @@
           : 'max-w-lg'
   );
 
+  // An open modal owns Escape. Marking the event handled lets layers
+  // underneath (full-screen editors, hover menus) leave this keypress alone.
   function onKey(e: KeyboardEvent) {
-    if (e.key === 'Escape' && open) onclose();
+    if (e.key !== 'Escape' || !open) return;
+    e.preventDefault();
+    onclose();
   }
 
   onMount(() => window.addEventListener('keydown', onKey));

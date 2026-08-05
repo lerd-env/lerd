@@ -217,7 +217,7 @@ func shimLeadingEnv(env []string) []string {
 		// Drop npm_config_prefix from the inherited environment so managers that
 		// activate inside the child (nvm) never see it before `nvm use`. ApplyEnv
 		// re-adds it after activation when needed.
-		if name, _, ok := strings.Cut(kv, "="); ok && name == "npm_config_prefix" {
+		if name, _, ok := strings.Cut(kv, "="); ok && isNPMPrefixVar(name) {
 			continue
 		}
 		out = append(out, kv)

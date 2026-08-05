@@ -144,6 +144,38 @@ describe('ShareMenu', () => {
     );
   });
 
+  // While a tunnel is opening neither tunnelOn nor publicShared is true yet, so
+  // an unguarded trigger would fall through and start a LAN share alongside it.
+  it('holds the trigger inert while a tunnel is opening', async () => {
+    fetchCalls = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        fetchCalls.push(url);
+        if (url.includes('tunnel:start')) return new Promise<Response>(() => {});
+        return new Response(JSON.stringify(toolsPayload), { status: 200 });
+      })
+    );
+    const fn = vi.fn();
+    const { container } = render(Harness, { props: { site, onToggleLan: fn } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByText('Serveo')).toBeInTheDocument());
+    await fireEvent.click(screen.getByText('Serveo').closest('button')!);
+    await waitFor(() => expect(fetchCalls.some((u) => u.includes('tunnel:start'))).toBe(true));
+
+    const trigger = screen.getByLabelText('Share on LAN');
+    expect(trigger).toBeDisabled();
+    await fireEvent.click(trigger);
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('announces stopping the public share while one is live', async () => {
+    const shared = { ...site, public_shared: true, public_share_url: 'https://app.dev.example.com' } as unknown as Site;
+    render(Harness, { props: { site: shared } });
+    expect(screen.getByLabelText('Stop public share')).toBeInTheDocument();
+  });
+
   it('closes on Escape', async () => {
     const { container } = render(Harness, { props: { site } });
     await openMenu(container);

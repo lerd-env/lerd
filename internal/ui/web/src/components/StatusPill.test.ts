@@ -22,6 +22,15 @@ describe('StatusPill', () => {
     expect(onclick).toHaveBeenCalledOnce();
   });
 
+  it('renders the compact size for dense settings rows', () => {
+    const { container } = render(StatusPill, { props: { tone: 'ok', label: 'enabled', size: 'sm' } });
+    const cls = container.querySelector('span')!.className.split(/\s+/);
+    expect(cls).toContain('text-[10px]');
+    expect(cls).toContain('px-2');
+    expect(cls).toContain('py-0.5');
+    expect(cls).not.toContain('text-xs');
+  });
+
   it('applies error tone classes', () => {
     const { container } = render(StatusPill, { props: { tone: 'error', label: 'Down' } });
     expect(container.querySelector('span')!.className).toMatch(/text-red-600|bg-red-100/);

@@ -253,6 +253,28 @@ describe('SiteTinkerTab snippets menu', () => {
     expect(input.value).toBe('');
   });
 
+  // Escape belongs to the topmost layer: the confirmation takes it, full
+  // screen only gets it once nothing is stacked on top.
+  it('lets a modal on top take Escape without dropping out of full screen', async () => {
+    vi.mocked(fetchTinkerSnippets).mockResolvedValue([seedSnippet]);
+    const { getByLabelText, queryByRole, getByRole, container } = render(SiteTinkerTab, { props: { site } });
+    await tick();
+    await fireEvent.click(getByLabelText('Enter full screen'));
+    const root = container.firstElementChild as HTMLElement;
+    await openMenu(getByLabelText);
+    await fireEvent.click(getByLabelText('Delete snippet'));
+    await tick();
+    expect(getByRole('heading', { name: 'Delete snippet' })).toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    await tick();
+    expect(queryByRole('heading', { name: 'Delete snippet' })).not.toBeInTheDocument();
+    expect(root.className).toContain('fixed');
+
+    await fireEvent.keyDown(window, { key: 'Escape' });
+    expect(root.className).not.toContain('fixed');
+  });
+
   it('keeps the save dialog open with the error when saving fails', async () => {
     localStorage.setItem('tinker:app.test:draft', 'User::count();');
     vi.mocked(saveTinkerSnippet).mockResolvedValue({ ok: false, error: 'writing snippet: disk full' });

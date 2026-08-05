@@ -1,6 +1,10 @@
 package cli
 
 import (
+	"errors"
+	"fmt"
+	"net"
+	"net/http"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -58,5 +62,75 @@ func TestSetWorktreePublicPort_setAndClear(t *testing.T) {
 	site, _ = config.FindSite("s")
 	if _, ok := site.WorktreePublicPorts["feat"]; ok {
 		t.Errorf("port should be cleared, got %v", site.WorktreePublicPorts)
+	}
+}
+
+// A failed bind must not leave the chosen port in the registry. Persisting it
+// first meant every later start retried the same dead port and the site could
+// never be shared publicly again.
+func TestPublicShareStartLeavesNoPortBehindWhenTheBindFails(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	if _, err := SetPublicBaseDomain("dev.example.com"); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{
+		Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Occupy the port the assigner will hand out, so the bind fails.
+	blocker, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", publicSharePortBase))
+	if err != nil {
+		t.Skipf("cannot occupy port %d: %v", publicSharePortBase, err)
+	}
+	defer blocker.Close()
+
+	if _, err := PublicShareStart("myapp"); err == nil {
+		t.Fatal("PublicShareStart succeeded despite an occupied port")
+	}
+
+	site, err := config.FindSite("myapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.PublicPort != 0 {
+		t.Errorf("PublicPort = %d after a failed bind, want 0", site.PublicPort)
+	}
+}
+
+// A site may only be shared one way at a time. The daemon enforced it on start
+// but the CLI's port-reservation path did not, so a LAN port could be persisted
+// onto a publicly shared site and both listeners bound on the next restore.
+func TestLANShareEnsurePortRefusesAPubliclySharedSite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	if err := config.AddSite(config.Site{
+		Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	publicShareMu.Lock()
+	publicShareServers["myapp"] = &http.Server{}
+	publicShareMu.Unlock()
+	defer func() {
+		publicShareMu.Lock()
+		delete(publicShareServers, "myapp")
+		publicShareMu.Unlock()
+	}()
+
+	if _, err := LANShareEnsurePort("myapp"); !errors.Is(err, errShareBusy) {
+		t.Errorf("LANShareEnsurePort error = %v, want errShareBusy", err)
+	}
+	site, err := config.FindSite("myapp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if site.LANPort != 0 {
+		t.Errorf("LANPort = %d, want 0: no port should be reserved for a busy site", site.LANPort)
 	}
 }

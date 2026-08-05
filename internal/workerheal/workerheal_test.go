@@ -741,3 +741,87 @@ func TestDetect_ActivatingNonOrphanIsNotFlagged(t *testing.T) {
 		t.Errorf("got %v, want nothing: a starting worker is not unhealthy", unitNames(got))
 	}
 }
+
+// A stat that fails for any reason other than the path being absent says
+// nothing about the checkout: an unreadable parent, an sshfs mount that dropped,
+// a disk not mounted yet. Calling that an orphan hands the unit to the pruner,
+// which deletes its unit files, so anything short of ENOENT must keep it.
+func TestDefaultDirExists_KeepsUnitWhenStatFailsForAnotherReason(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "notadir")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// Stat through a regular file yields ENOTDIR, which is not ErrNotExist.
+	if !defaultDirExists(filepath.Join(file, "featx")) {
+		t.Error("a non-ENOENT stat error read as a missing checkout")
+	}
+	if defaultDirExists(filepath.Join(dir, "gone")) {
+		t.Error("an absent path must read as missing")
+	}
+	if !defaultDirExists(dir) {
+		t.Error("an existing directory must read as present")
+	}
+	if defaultDirExists(file) {
+		t.Error("a regular file is not a checkout")
+	}
+}
+
+// Same rule seen from Detect: an unreadable worktree path is still a worker,
+// reported by whatever systemd says about it, never as an orphan.
+func TestDetect_UnstatableWorktreeDirIsNotOrphaned(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "notadir")
+	if err := os.WriteFile(file, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	stubEnv(t,
+		[]string{"myapp"}, nil,
+		map[string]string{"lerd-vite-myapp-featx.service": "failed"},
+		nil,
+	)
+	prevMeta := unitMetaFn
+	unitMetaFn = func() map[string]siteinfo.UnitMeta {
+		return map[string]siteinfo.UnitMeta{
+			"lerd-vite-myapp-featx.service": {WorkingDir: filepath.Join(file, "featx")},
+		}
+	}
+	t.Cleanup(func() { unitMetaFn = prevMeta })
+
+	got, err := Detect()
+	if err != nil {
+		t.Fatalf("Detect: %v", err)
+	}
+	if len(got) != 1 || got[0].State != "failed" {
+		t.Fatalf("got %v with state %q, want one failed entry", unitNames(got), stateOf(got))
+	}
+}
+
+// Every surface that offers a heal has to describe the same set the heal will
+// touch, or the banner outlives the button.
+func TestHealable_DropsOrphans(t *testing.T) {
+	in := []UnhealthyWorker{
+		{Unit: "lerd-vite-myapp-featx", State: StateOrphaned},
+		{Unit: "lerd-queue-myapp", State: "failed"},
+	}
+	got := Healable(in)
+	if len(got) != 1 || got[0].Unit != "lerd-queue-myapp" {
+		t.Fatalf("got %v, want only the failed worker", unitNames(got))
+	}
+	if len(Healable(nil)) != 0 {
+		t.Error("nil in, empty out")
+	}
+}
+
+// An orphan can never be started, so spending a journal read on it is a fork
+// per orphan per snapshot for a line nobody can act on.
+func TestEnrich_SkipsOrphans(t *testing.T) {
+	prev := lastErrorFn
+	lastErrorFn = func(unit string) string { t.Fatalf("journal read for %q", unit); return "" }
+	t.Cleanup(func() { lastErrorFn = prev })
+
+	got := Enrich([]UnhealthyWorker{{Unit: "lerd-vite-myapp-featx", State: StateOrphaned}})
+	if got[0].LastError != "" {
+		t.Errorf("LastError = %q, want empty", got[0].LastError)
+	}
+}

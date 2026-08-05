@@ -44,6 +44,7 @@ func UnlinkSiteCore(site *config.Site, parkedDirs []string) error {
 	if StopSiteWorkers != nil {
 		StopSiteWorkers(site)
 	}
+	StopSiteShares(site.Name)
 
 	_ = nginx.RemoveVhost(site.PrimaryDomain())
 

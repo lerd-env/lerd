@@ -15,6 +15,7 @@
   import { autostartEnabled, loadAutostart, toggleAutostart } from '$stores/autostart';
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
   import Toggle from '$components/Toggle.svelte';
+  import StatusPill from '$components/StatusPill.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
   import LANServicesSetting from './LANServicesSetting.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
@@ -219,10 +220,11 @@
             title={$autostartEnabled ? m.system_autostart_toggleOff() : m.system_autostart_toggleOn()}
           />
         {:else}
-          <span class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$autostartEnabled ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}">
-            <span class="w-1.5 h-1.5 rounded-full {$autostartEnabled ? 'bg-emerald-500' : 'bg-gray-400'}"></span>
-            {$autostartEnabled ? m.common_enabled() : m.common_disabled()}
-          </span>
+          <StatusPill
+            size="sm"
+            tone={$autostartEnabled ? 'ok' : 'muted'}
+            label={$autostartEnabled ? m.common_enabled() : m.common_disabled()}
+          />
         {/if}
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_autostart_description()}</p>
@@ -239,10 +241,11 @@
             title={$idleEnabled ? m.system_idle_toggleOff() : m.system_idle_toggleOn()}
           />
         {:else}
-          <span class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$idleEnabled ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}">
-            <span class="w-1.5 h-1.5 rounded-full {$idleEnabled ? 'bg-emerald-500' : 'bg-gray-400'}"></span>
-            {$idleEnabled ? m.common_enabled() : m.common_disabled()}
-          </span>
+          <StatusPill
+            size="sm"
+            tone={$idleEnabled ? 'ok' : 'muted'}
+            label={$idleEnabled ? m.common_enabled() : m.common_disabled()}
+          />
         {/if}
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_idle_description()}</p>
@@ -272,10 +275,11 @@
     <SettingsCard>
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_lan_title()}</span>
-        <span class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$lan.exposed ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}">
-          <span class="w-1.5 h-1.5 rounded-full {$lan.exposed ? 'bg-emerald-500' : 'bg-gray-400'}"></span>
-          {$lan.exposed ? m.system_lan_exposed() : m.system_lan_loopback()}
-        </span>
+        <StatusPill
+          size="sm"
+          tone={$lan.exposed ? 'ok' : 'muted'}
+          label={$lan.exposed ? m.system_lan_exposed() : m.system_lan_loopback()}
+        />
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
         {#if $lan.exposed}
@@ -395,20 +399,15 @@
     <SettingsCard>
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_remote_title()}</span>
-        <span
-          class="inline-flex items-center gap-1.5 text-[10px] font-medium px-2 py-0.5 rounded-full {$remoteControl.enabled && $lan.exposed
-            ? 'bg-emerald-100 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400'
-            : $remoteControl.enabled && !$lan.exposed
-              ? 'bg-amber-100 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400'
-              : 'bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-gray-400'}"
-        >
-          <span class="w-1.5 h-1.5 rounded-full {$remoteControl.enabled && $lan.exposed
-            ? 'bg-emerald-500'
-            : $remoteControl.enabled && !$lan.exposed
-              ? 'bg-amber-500'
-              : 'bg-gray-400'}"></span>
-          {$remoteControl.enabled && $lan.exposed ? m.system_remote_status_active() : $remoteControl.enabled && !$lan.exposed ? m.system_remote_status_inert() : m.system_remote_status_disabled()}
-        </span>
+        <StatusPill
+          size="sm"
+          tone={$remoteControl.enabled ? ($lan.exposed ? 'ok' : 'warn') : 'muted'}
+          label={$remoteControl.enabled
+            ? $lan.exposed
+              ? m.system_remote_status_active()
+              : m.system_remote_status_inert()
+            : m.system_remote_status_disabled()}
+        />
       </div>
       <p class="text-xs text-gray-500 dark:text-gray-400 mb-3">
         {#if $status.dns?.enabled === false}

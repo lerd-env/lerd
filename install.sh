@@ -182,12 +182,23 @@ host_has_dnsmasq() {
   return 1
 }
 
+# Overridable so the tests can point the resolver check at a fixture.
+RESOLV_CONF="${RESOLV_CONF:-/etc/resolv.conf}"
+
+# systemd-resolved counts as the resolver only when resolv.conf actually routes
+# through it, the same test internal/dns makes. A host where resolved is running
+# but NetworkManager still writes resolv.conf takes the NM dnsmasq path instead.
+resolved_is_resolver() {
+  systemctl is-active --quiet systemd-resolved 2>/dev/null || return 1
+  grep -qE '127\.0\.0\.53|systemd-resolved' "$RESOLV_CONF" 2>/dev/null
+}
+
 # NetworkManager without systemd-resolved resolves .test through NM's dnsmasq
 # plugin, which needs the host dnsmasq binary that nothing pulls in on Arch.
 # Queue it here so the consent prompt covers it instead of lerd stopping later.
 check_nm_dnsmasq() {
   systemctl is-active --quiet NetworkManager 2>/dev/null || return 0
-  systemctl is-active --quiet systemd-resolved 2>/dev/null && return 0
+  resolved_is_resolver && return 0
   if host_has_dnsmasq; then
     success "dnsmasq found (NetworkManager's DNS plugin runs it)"
     return

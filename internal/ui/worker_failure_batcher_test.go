@@ -278,3 +278,22 @@ func TestQueueWorkerFailureNotifications_allOrphanedDispatchesNothing(t *testing
 		t.Errorf("dispatch calls = %d, want 0", calls)
 	}
 }
+
+// A delta of nothing but orphans queues nothing, so arming the window there
+// burns it: a real failure arriving late in that window would be announced
+// after a few seconds of settle instead of the full delay, naming a worker
+// systemd was still in the middle of restarting.
+func TestQueueWorkerFailureNotifications_OrphanOnlyDeltaLeavesTheWindowUnarmed(t *testing.T) {
+	installBatchTestSink(t, time.Hour)
+
+	queueWorkerFailureNotifications([]workerheal.UnhealthyWorker{
+		uw("lerd-vite-ws-feat-x.service", "ws.test", "vite", workerheal.StateOrphaned),
+	})
+
+	workerFailureBatchMu.Lock()
+	armed := workerFailureFlushTimer != nil
+	workerFailureBatchMu.Unlock()
+	if armed {
+		t.Error("an orphan-only delta armed the settle window")
+	}
+}

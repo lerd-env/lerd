@@ -59,6 +59,24 @@ func TestShimLeadingEnv_MatchesPathCaseInsensitively(t *testing.T) {
 	}
 }
 
+func TestShimLeadingEnv_DropsNPMPrefixInEitherSpelling(t *testing.T) {
+	out := shimLeadingEnv([]string{
+		"npm_config_prefix=/home/u/.npm-global",
+		"NPM_CONFIG_PREFIX=/home/u/.npm-global",
+		"FOO=bar",
+	})
+	for _, kv := range out {
+		if name, _, ok := strings.Cut(kv, "="); ok && strings.EqualFold(name, "npm_config_prefix") {
+			// nvm's nvm_die_on_prefix matches case-insensitively and aborts
+			// `nvm use` when the prefix sits outside $NVM_DIR.
+			t.Errorf("inherited npm prefix must be dropped before activation, got %q", kv)
+		}
+	}
+	if !envHas(out, "FOO=bar") {
+		t.Errorf("unrelated vars were not preserved: %v", out)
+	}
+}
+
 func envHas(list []string, want string) bool {
 	for _, s := range list {
 		if s == want {

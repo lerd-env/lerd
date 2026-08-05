@@ -8,6 +8,7 @@ import (
 	gitpkg "github.com/geodro/lerd/internal/git"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/siteops"
 )
 
 // A public share is the reverse-proxy twin of a LAN share: the same in-process
@@ -77,15 +78,6 @@ func PublicShareStart(siteName string) (string, error) {
 		return "", errShareBusy
 	}
 
-	port := site.PublicPort
-	if port == 0 {
-		port = assignPublicSharePort(siteName, "")
-		site.PublicPort = port
-		if err := config.AddSite(*site); err != nil {
-			return "", fmt.Errorf("saving public port: %w", err)
-		}
-	}
-
 	host := config.PublicShareHost(siteName, base)
 	publicShareMu.Lock()
 	if _, running := publicShareServers[siteName]; running {
@@ -94,9 +86,24 @@ func PublicShareStart(siteName string) (string, error) {
 	}
 	publicShareMu.Unlock()
 
+	port := site.PublicPort
+	if port == 0 {
+		port = assignPublicSharePort(siteName, "")
+	}
+
+	// The port is persisted only once it is bound. Saving first would leave a
+	// dead port in the registry after a failed bind, and every later start
+	// would retry that same port instead of picking a free one.
 	srv, err := startPublicShareProxyFor(site.PrimaryDomain(), port, site.Secured)
 	if err != nil {
 		return "", err
+	}
+	if site.PublicPort != port {
+		site.PublicPort = port
+		if err := config.AddSite(*site); err != nil {
+			srv.Close()
+			return "", fmt.Errorf("saving public port: %w", err)
+		}
 	}
 	publicShareMu.Lock()
 	publicShareServers[siteName] = srv
@@ -137,12 +144,12 @@ func PublicShareStartWorktree(siteName, branch string) (string, error) {
 		return "", errShareBusy
 	}
 
-	port := site.WorktreePublicPorts[branch]
-	if port == 0 {
-		port = assignPublicSharePort(siteName, branch)
-		if err := setWorktreePublicPort(siteName, branch, port); err != nil {
-			return "", err
-		}
+	// Resolve through live git detection rather than composing the domain from
+	// the raw branch: an unknown branch would otherwise bind a port whose Host
+	// only ever reaches nginx's default 404 vhost.
+	worktreeDomain, err := siteops.WorktreeDomain(site, branch)
+	if err != nil {
+		return "", err
 	}
 
 	host := config.PublicShareWorktreeHost(siteName, gitpkg.SanitizeBranch(branch), base)
@@ -154,10 +161,20 @@ func PublicShareStartWorktree(siteName, branch string) (string, error) {
 	}
 	publicShareMu.Unlock()
 
-	worktreeDomain := branch + "." + site.PrimaryDomain()
+	port := site.WorktreePublicPorts[branch]
+	if port == 0 {
+		port = assignPublicSharePort(siteName, branch)
+	}
+
 	srv, err := startPublicShareProxyFor(worktreeDomain, port, site.Secured)
 	if err != nil {
 		return "", err
+	}
+	if site.WorktreePublicPorts[branch] != port {
+		if err := setWorktreePublicPort(siteName, branch, port); err != nil {
+			srv.Close()
+			return "", err
+		}
 	}
 	publicShareMu.Lock()
 	publicShareServers[key] = srv
@@ -249,7 +266,57 @@ func startPublicShareProxyFor(domain string, port int, secured bool) (*http.Serv
 			httpsPort = cfg.Nginx.HTTPSPort
 		}
 	}
-	return startLANShareProxy(domain, port, httpPort, httpsPort, secured)
+	return startLANShareProxy(domain, port, httpPort, httpsPort, secured, reachPublic)
+}
+
+// PublicShareRefreshIfRunning re-binds any running public proxy for the site to
+// its current config. Securing a site changes the backend port the proxy dials,
+// and a stale target makes nginx redirect to the canonical https URL, which the
+// proxy rewrites back to the public host: an endless redirect until restarted.
+// No-op when nothing is running. Mirrors LANShareRefreshIfRunning.
+func PublicShareRefreshIfRunning(siteName string) error {
+	if PublicShareRunning(siteName) {
+		closePublicShareServer(siteName)
+		if _, err := PublicShareStart(siteName); err != nil {
+			return fmt.Errorf("restarting public share for %s: %w", siteName, err)
+		}
+	}
+	for _, branch := range publicWorktreeBranches(siteName) {
+		if !PublicShareWorktreeRunning(siteName, branch) {
+			continue
+		}
+		closePublicShareServer(publicWorktreeKey(siteName, branch))
+		if _, err := PublicShareStartWorktree(siteName, branch); err != nil {
+			return fmt.Errorf("restarting worktree public share %s/%s: %w", siteName, branch, err)
+		}
+	}
+	return nil
+}
+
+// PublicShareStopServer closes the running proxy without clearing the site's
+// stored port, so a pause can release the listener and unpause can bring the
+// same URL back. Mirrors LANShareStopServer.
+func PublicShareStopServer(siteName string) {
+	closePublicShareServer(siteName)
+	for _, branch := range publicWorktreeBranches(siteName) {
+		closePublicShareServer(publicWorktreeKey(siteName, branch))
+	}
+}
+
+// publicWorktreeBranches lists the branches of a site that carry a stored
+// public port.
+func publicWorktreeBranches(siteName string) []string {
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return nil
+	}
+	branches := make([]string, 0, len(site.WorktreePublicPorts))
+	for branch, port := range site.WorktreePublicPorts {
+		if port != 0 {
+			branches = append(branches, branch)
+		}
+	}
+	return branches
 }
 
 func closePublicShareServer(key string) {
