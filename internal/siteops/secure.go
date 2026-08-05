@@ -100,6 +100,10 @@ func SetSecuredCascade(site *config.Site, secured bool) ([]string, error) {
 	if err := nginxReloadFn(); err != nil {
 		return nil, fmt.Errorf("reloading nginx: %w", err)
 	}
+	// The command prints the new URL as its result, so it must not return while
+	// the previous vhost is still answering: nginx reload is asynchronous, and
+	// opening that URL straight away is the obvious next thing to do.
+	waitSchemeServedFn(site.PrimaryDomain(), secured)
 	_ = notifyDaemonFn(site.PrimaryDomain(), "stripe:refresh")
 	_ = notifyDaemonFn(site.PrimaryDomain(), "lan:refresh")
 	RefreshDevServers(site)
