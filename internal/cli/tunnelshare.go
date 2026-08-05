@@ -79,6 +79,9 @@ type ShareToolsInfo struct {
 	// NgrokTokenSet reports only whether a token is stored. The token itself is
 	// a credential and never leaves the machine through this endpoint.
 	NgrokTokenSet bool `json:"ngrok_token_set,omitempty"`
+	// PublicBaseDomain is the domain a public (reverse-proxy) share is served
+	// under, as "<site>.<base>". Empty when none is configured.
+	PublicBaseDomain string `json:"public_base_domain,omitempty"`
 }
 
 var shareToolMeta = map[string]struct{ label, installURL string }{
@@ -105,6 +108,7 @@ func ShareTools() ShareToolsInfo {
 		BaseDomain:         baseDomain,
 		BaseDomainAnswered: answered,
 		NgrokTokenSet:      ngrokToken != "",
+		PublicBaseDomain:   PublicBaseDomain(),
 	}
 	for _, t := range shareTools {
 		meta := shareToolMeta[t.name]
@@ -261,6 +265,21 @@ func TunnelStatus(siteName, branch string) (TunnelInfo, bool) {
 	return tunnelStatusByKey(tunnelKey(siteName, branch))
 }
 
+// TunnelActive reports whether a tunnel is running OR still opening for the site
+// (or worktree). Unlike TunnelStatus it is true during the open window before a
+// URL arrives, so a competing public share can be refused for that window too.
+func TunnelActive(siteName, branch string) bool {
+	key := tunnelKey(siteName, branch)
+	tunnelsMu.Lock()
+	_, inProc := tunnels[key]
+	tunnelsMu.Unlock()
+	if inProc {
+		return true
+	}
+	_, ok := cliTunnelStatus(key)
+	return ok
+}
+
 // resolveShareBaseDomain settles which base domain a start serves under. One
 // given for this run only works with Cloudflare Tunnel, the same way --domain
 // does; the configured one simply does not apply to the other tools.
@@ -342,6 +361,12 @@ func setShareToken(token string, field func(*config.GlobalConfig) *string) error
 // "<site>.<base domain>" through a Cloudflare named tunnel for this run;
 // empty falls back to the configured one.
 func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) {
+	// A site is exposed one way at a time: refuse a tunnel while a reverse-proxy
+	// public share or a LAN share is live for the same target.
+	if (branch == "" && (PublicShareRunning(siteName) || LANShareRunning(siteName))) ||
+		(branch != "" && (PublicShareWorktreeRunning(siteName, branch) || LANShareWorktreeRunning(siteName, branch))) {
+		return "", errShareBusy
+	}
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return "", err

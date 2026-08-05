@@ -580,53 +580,68 @@ func ensureCloudflareTunnel(siteName, domain string, interactive bool) (string, 
 	if err != nil && !reused {
 		return "", fmt.Errorf("cloudflared tunnel create %s: %w\n%s", name, err, out)
 	}
-	if reused {
-		if err := checkTunnelCredentials(name); err != nil {
-			return "", err
+	// A tunnel that exists on the account but has no local credentials file
+	// (the ~/.cloudflared creds were cleared, or it was created on another
+	// machine) cannot be run and "create" won't overwrite it. Recover by
+	// deleting it and creating a fresh one, which writes new local credentials,
+	// rather than failing and asking the user to do it by hand.
+	if reused && credentialsMissing(name) {
+		if interactive {
+			fmt.Printf("Cloudflare tunnel %q has no local credentials; recreating it.\n", name)
+		}
+		if out, derr := exec.Command(hostbin.Path("cloudflared"), "tunnel", "delete", name).CombinedOutput(); derr != nil {
+			return "", fmt.Errorf("recreating tunnel %s: could not delete the orphaned tunnel: %w\n%s", name, derr, out)
+		}
+		if out, cerr := exec.Command(hostbin.Path("cloudflared"), "tunnel", "create", name).CombinedOutput(); cerr != nil {
+			return "", fmt.Errorf("recreating tunnel %s: create after delete failed: %w\n%s", name, cerr, out)
 		}
 	}
 
-	// Re-routing a hostname that already points here is a no-op, but cloudflared
-	// refuses to overwrite a record aimed elsewhere, so tolerate that and let the
-	// user verify where it points.
+	// Point the hostname at this tunnel. A record that already exists for a lerd
+	// share hostname is a stale one from an earlier tunnel: cloudflared refuses to
+	// overwrite it, and a stale CNAME to a gone tunnel is exactly Cloudflare error
+	// 1033. So on "already exists" retry with --overwrite-dns to repoint it at the
+	// current tunnel rather than leaving the site unreachable.
 	out, err = exec.Command(hostbin.Path("cloudflared"), "tunnel", "route", "dns", name, domain).CombinedOutput()
-	if err != nil {
-		if strings.Contains(string(out), "already exists") || strings.Contains(string(out), "already configured") {
-			if interactive {
-				fmt.Printf("DNS record for %s already exists, make sure it CNAMEs to tunnel %q.\n", domain, name)
-			}
-		} else {
-			return "", fmt.Errorf("cloudflared tunnel route dns %s %s: %w\n%s", name, domain, err, out)
+	if err != nil && (strings.Contains(string(out), "already exists") || strings.Contains(string(out), "already configured")) {
+		if interactive {
+			fmt.Printf("DNS record for %s already exists; repointing it at tunnel %q.\n", domain, name)
 		}
-	} else if interactive && strings.Contains(string(out), "Added CNAME") {
+		out, err = exec.Command(hostbin.Path("cloudflared"), "tunnel", "route", "dns", "--overwrite-dns", name, domain).CombinedOutput()
+	}
+	if err != nil {
+		return "", fmt.Errorf("cloudflared tunnel route dns %s %s: %w\n%s", name, domain, err, out)
+	}
+	if interactive && strings.Contains(string(out), "Added CNAME") {
 		fmt.Printf("Routed %s to tunnel %q. The record is new, so give it a moment: opening it too early can leave your resolver caching the miss for up to 30 minutes.\n", domain, name)
 	}
 	return name, nil
 }
 
-// checkTunnelCredentials verifies the credentials file for an existing tunnel is
-// present locally. Without it "tunnel run" dies with an opaque cloudflared error,
-// which is what happens when the tunnel was created on another machine.
-func checkTunnelCredentials(name string) error {
+// credentialsMissing reports whether an existing named tunnel has no local
+// credentials file. Without it "tunnel run" dies with an opaque cloudflared
+// error, which is what happens when the tunnel was created on another machine or
+// the ~/.cloudflared credentials were cleared. Callers recover by recreating the
+// tunnel. Unknowable states (list fails, no cert) report false, so recovery is
+// only attempted when the missing file is certain.
+func credentialsMissing(name string) bool {
 	out, err := exec.Command(hostbin.Path("cloudflared"), "tunnel", "list", "--name", name, "--output", "json").Output()
 	if err != nil {
-		return nil // cannot tell, let "tunnel run" be the judge
+		return false
 	}
 	var tunnels []struct {
 		ID string `json:"id"`
 	}
 	if err := json.Unmarshal(out, &tunnels); err != nil || len(tunnels) == 0 {
-		return nil
+		return false
 	}
 	cert := cloudflaredCertPath()
 	if cert == "" {
-		return nil
+		return false
 	}
 	creds := filepath.Join(filepath.Dir(cert), tunnels[0].ID+".json")
-	if _, err := os.Stat(creds); err == nil {
-		return nil
-	}
-	return fmt.Errorf("tunnel %q exists on your Cloudflare account but its credentials file is missing at %s: copy it from the machine that created the tunnel, or run \"cloudflared tunnel delete %s\" and share again", name, creds, name)
+	_, err = os.Stat(creds)
+	return err != nil
 }
 
 // startHostProxy starts a local HTTP reverse proxy on a random loopback port.

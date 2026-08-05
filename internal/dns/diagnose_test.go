@@ -2,6 +2,9 @@ package dns
 
 import (
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -12,16 +15,17 @@ import (
 // failure paths.
 func fakeProbes() probeFns {
 	return probeFns{
-		containerRunning: func() bool { return true },
-		dnsmasqConfigOK:  func(string) (bool, string) { return true, "ok" },
-		portOpen:         func(string, int) bool { return true },
-		dnsmasqAnswer:    func(string) (string, error) { return "127.0.0.1", nil },
-		resolverHookup:   func() (string, bool, string) { return "drop-in", true, "/etc/x" },
-		interfaceRouting: func(string) (string, bool, bool, error) { return "eth0", true, true, nil },
-		dummyLinkRouting: func(string) (bool, bool) { return true, true },
-		systemLookup:     func(string) ([]string, error) { return []string{"127.0.0.1"}, nil },
-		vpnActive:        func() bool { return false },
-		lanExposedIP:     func() string { return "" },
+		containerRunning:   func() bool { return true },
+		dnsmasqConfigOK:    func(string) (bool, string) { return true, "ok" },
+		portOpen:           func(string, int) bool { return true },
+		dnsmasqAnswer:      func(string) (string, error) { return "127.0.0.1", nil },
+		resolverHookup:     func() (string, bool, string) { return "drop-in", true, "/etc/x" },
+		interfaceRouting:   func(string) (string, bool, bool, error) { return "eth0", true, true, nil },
+		dummyLinkRouting:   func(string) (bool, bool) { return true, true },
+		systemLookup:       func(string) ([]string, error) { return []string{"127.0.0.1"}, nil },
+		vpnActive:          func() bool { return false },
+		lanExposedIP:       func() string { return "" },
+		hostDnsmasqPresent: func() bool { return true },
 	}
 }
 
@@ -216,6 +220,62 @@ func TestDiagnose_resolverHookupMissingHintsInstall(t *testing.T) {
 	}
 	if !strings.Contains(d.Steps[4].Hint, "lerd install") {
 		t.Errorf("hint %q should suggest lerd install", d.Steps[4].Hint)
+	}
+}
+
+func TestDiagnose_nmDnsmasqBinaryMissingReportsFail(t *testing.T) {
+	p := fakeProbes()
+	p.resolverHookup = func() (string, bool, string) {
+		return nmDnsmasqKind, true, "/etc/NetworkManager/dnsmasq.d/lerd.conf"
+	}
+	p.hostDnsmasqPresent = func() bool { return false }
+	d := diagnose("test", p)
+	step := findStep(d, "resolver hookup")
+	if step == nil || step.Status != StepFail {
+		t.Fatalf("resolver hookup step = %+v, want fail", step)
+	}
+	if !strings.Contains(step.Hint, "dnsmasq") {
+		t.Errorf("hint %q should mention installing dnsmasq", step.Hint)
+	}
+}
+
+func TestDiagnose_nmDnsmasqBinaryPresentReportsOK(t *testing.T) {
+	p := fakeProbes()
+	p.resolverHookup = func() (string, bool, string) {
+		return nmDnsmasqKind, true, "/etc/NetworkManager/dnsmasq.d/lerd.conf"
+	}
+	p.hostDnsmasqPresent = func() bool { return true }
+	d := diagnose("test", p)
+	step := findStep(d, "resolver hookup")
+	if step == nil || step.Status != StepOK {
+		t.Errorf("resolver hookup step = %+v, want ok", step)
+	}
+}
+
+func TestDnsmasqFound_onPath(t *testing.T) {
+	ok := dnsmasqFound(func(string) (string, error) { return "/usr/bin/dnsmasq", nil }, nil)
+	if !ok {
+		t.Error("dnsmasqFound = false, want true when LookPath succeeds")
+	}
+}
+
+func TestDnsmasqFound_sbinFallback(t *testing.T) {
+	// Debian puts dnsmasq in /usr/sbin, which a normal user's PATH omits;
+	// the guard must still see it there.
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "dnsmasq")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	notFound := func(string) (string, error) { return "", exec.ErrNotFound }
+	if !dnsmasqFound(notFound, []string{filepath.Join(dir, "missing"), bin}) {
+		t.Error("dnsmasqFound = false, want true via sbin fallback stat")
+	}
+	if dnsmasqFound(notFound, []string{filepath.Join(dir, "missing")}) {
+		t.Error("dnsmasqFound = true, want false when PATH and fallbacks all miss")
+	}
+	if dnsmasqFound(notFound, []string{dir}) {
+		t.Error("dnsmasqFound = true, want false for a directory at the fallback path")
 	}
 }
 

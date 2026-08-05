@@ -63,6 +63,10 @@ type probeFns struct {
 	// lanExposedIP is the LAN IP dnsmasq hands out under lan:expose, or "" when
 	// off, so the answer checks accept it as legitimate (see probe.go Check).
 	lanExposedIP func() string
+	// hostDnsmasqPresent reports whether dnsmasq is on PATH. Only meaningful
+	// for the nmDnsmasqKind hookup, where NetworkManager needs it to act on
+	// the config lerd writes.
+	hostDnsmasqPresent func() bool
 }
 
 // exposedIP is the LAN IP dnsmasq publishes under lan:expose, or "" when the
@@ -231,6 +235,17 @@ func diagnose(tld string, p probeFns) Diagnostic {
 
 	// Rung 5 — resolver hookup file.
 	kind, exists, path := p.resolverHookup()
+	if exists && kind == nmDnsmasqKind && p.hostDnsmasqPresent != nil && !p.hostDnsmasqPresent() {
+		// Config file is real, but with no dnsmasq binary to run it
+		// NetworkManager silently keeps using upstream DNS instead.
+		d.Steps = append(d.Steps, Step{
+			Name:   "resolver hookup",
+			Status: StepFail,
+			Detail: kind + ": " + path + " (dnsmasq binary not found on PATH)",
+			Hint:   "sudo apt install dnsmasq / sudo dnf install dnsmasq / sudo pacman -S dnsmasq, then sudo systemctl restart NetworkManager",
+		})
+		return finalize(d)
+	}
 	if exists {
 		d.Steps = append(d.Steps, Step{Name: "resolver hookup", Status: StepOK, Detail: kind + ": " + path})
 	} else {
@@ -371,17 +386,42 @@ func findListenerCmd(port int) string {
 // defaultProbes wires the production implementations for each rung.
 func defaultProbes() probeFns {
 	return probeFns{
-		containerRunning: defaultContainerRunning,
-		dnsmasqConfigOK:  defaultDnsmasqConfigOK,
-		portOpen:         defaultPortOpen,
-		dnsmasqAnswer:    defaultDnsmasqAnswer,
-		resolverHookup:   defaultResolverHookup,
-		interfaceRouting: defaultInterfaceRouting,
-		dummyLinkRouting: defaultDummyLinkRouting,
-		systemLookup:     defaultSystemLookup,
-		vpnActive:        VPNActive,
-		lanExposedIP:     defaultLanExposedIP,
+		containerRunning:   defaultContainerRunning,
+		dnsmasqConfigOK:    defaultDnsmasqConfigOK,
+		portOpen:           defaultPortOpen,
+		dnsmasqAnswer:      defaultDnsmasqAnswer,
+		resolverHookup:     defaultResolverHookup,
+		interfaceRouting:   defaultInterfaceRouting,
+		dummyLinkRouting:   defaultDummyLinkRouting,
+		systemLookup:       defaultSystemLookup,
+		vpnActive:          VPNActive,
+		lanExposedIP:       defaultLanExposedIP,
+		hostDnsmasqPresent: hostDnsmasqPresent,
 	}
+}
+
+// dnsmasqSbinPaths are the usual dnsmasq locations outside PATH. Debian-style
+// user PATHs omit the sbin dirs, but NetworkManager still finds the binary
+// there via its compile-time path, so PATH alone would false-negative.
+var dnsmasqSbinPaths = []string{"/usr/sbin/dnsmasq", "/sbin/dnsmasq", "/usr/local/sbin/dnsmasq"}
+
+// hostDnsmasqPresent reports whether the dnsmasq binary exists on PATH or in
+// one of the sbin locations. Lives here rather than setup.go because that
+// file is linux-only and this one also serves the macOS path.
+func hostDnsmasqPresent() bool {
+	return dnsmasqFound(exec.LookPath, dnsmasqSbinPaths)
+}
+
+func dnsmasqFound(lookPath func(string) (string, error), fallbacks []string) bool {
+	if _, err := lookPath("dnsmasq"); err == nil {
+		return true
+	}
+	for _, p := range fallbacks {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultLanExposedIP returns the host's primary LAN IP when lan:expose is on,

@@ -136,6 +136,12 @@ type GlobalConfig struct {
 		// without it a Pinggy share gets an ephemeral free-tier URL. Set via
 		// "lerd share:token pinggy".
 		PinggyToken string `yaml:"pinggy_token,omitempty" mapstructure:"pinggy_token"`
+		// PublicBaseDomain is the domain a "public" share is served under, as
+		// "<site>.<base>". A public share is a reverse-proxy share: lerd runs a
+		// Host-rewriting proxy on a stable port and the user points their own
+		// proxy (netbird, nginx, ...) at "<site>.<base>" → that port. A domain
+		// the user controls, never a bare TLD. Set via the dashboard's share menu.
+		PublicBaseDomain string `yaml:"public_base_domain,omitempty" mapstructure:"public_base_domain"`
 	} `yaml:"share,omitempty" mapstructure:"share"`
 	Nginx struct {
 		HTTPPort  int `yaml:"http_port"  mapstructure:"http_port"`

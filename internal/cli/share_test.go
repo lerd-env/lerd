@@ -423,13 +423,17 @@ func fakeCloudflared(t *testing.T, createOut string, createExit int, routeOut st
 	t.Helper()
 	dir := t.TempDir()
 	logFile := filepath.Join(dir, "calls.log")
+	// The route case succeeds once --overwrite-dns is passed, mirroring cloudflared
+	// repointing an existing record, so a "route retries with overwrite" flow ends
+	// in success.
 	script := fmt.Sprintf(`#!/bin/sh
 echo "$@" >> %q
 case "$1 $2" in
 "tunnel login") : > "$HOME/.cloudflared/cert.pem";;
 "tunnel create") echo %q; exit %d;;
 "tunnel list") printf '[{"id":"%s","name":"%%s"}]\n' "$4";;
-"tunnel route") echo %q; exit %d;;
+"tunnel route")
+  case "$*" in *--overwrite-dns*) echo routed; exit 0;; *) echo %q; exit %d;; esac;;
 esac
 `, logFile, createOut, createExit, fakeTunnelID, routeOut, routeExit)
 	if err := os.WriteFile(filepath.Join(dir, "cloudflared"), []byte(script), 0755); err != nil {
@@ -531,20 +535,76 @@ func TestEnsureCloudflareTunnel_toleratesExistingTunnelAndRoute(t *testing.T) {
 	}
 }
 
-func TestEnsureCloudflareTunnel_existingTunnelMissingCredentials(t *testing.T) {
+// A tunnel that exists on the account with no local credentials is recovered
+// automatically: lerd deletes the orphaned tunnel and creates a fresh one,
+// rather than failing and asking the user to do it by hand.
+func TestEnsureCloudflareTunnel_missingCredentialsRecreatesTunnel(t *testing.T) {
 	certWithoutTunnelCredentials(t)
-	fakeCloudflared(t, "tunnel with name already exists", 1, "routed", 0)
+	logFile := fakeCloudflaredRecovering(t)
 
-	_, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
-	if err == nil {
-		t.Fatal("expected an error, got nil")
+	name, err := ensureCloudflareTunnel("mysite", "dev.example.com", true)
+	if err != nil {
+		t.Fatalf("expected auto-recovery, got error: %v", err)
 	}
-	if !strings.Contains(err.Error(), "credentials file is missing") {
-		t.Errorf("error = %v, want it to name the missing credentials file", err)
+	if name != "lerd-mysite" {
+		t.Errorf("name = %q, want lerd-mysite", name)
 	}
-	if !strings.Contains(err.Error(), fakeTunnelID+".json") {
-		t.Errorf("error = %v, want it to name the expected credentials path", err)
+	calls := readCalls(t, logFile)
+	if !strings.Contains(calls, "tunnel delete lerd-mysite") {
+		t.Errorf("the orphaned tunnel was not deleted:\n%s", calls)
 	}
+	// Two creates: the first hits "already exists", the recovery one succeeds.
+	if strings.Count(calls, "tunnel create lerd-mysite") < 2 {
+		t.Errorf("the tunnel was not recreated after delete:\n%s", calls)
+	}
+	// The DNS record still points at the deleted tunnel, so the route must
+	// force it onto the new one (else Cloudflare serves error 1033).
+	if !strings.Contains(calls, "tunnel route dns --overwrite-dns lerd-mysite dev.example.com") {
+		t.Errorf("recreated tunnel's DNS was not force-repointed:\n%s", calls)
+	}
+}
+
+// A normal (non-recovery) route must not force-overwrite the DNS, so a record a
+// user aimed elsewhere is respected.
+func TestEnsureCloudflareTunnel_normalRouteDoesNotOverwriteDNS(t *testing.T) {
+	certWithTunnelCredentials(t)
+	logFile := fakeCloudflared(t, "created", 0, "routed", 0)
+
+	if _, err := ensureCloudflareTunnel("mysite", "dev.example.com", true); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if strings.Contains(readCalls(t, logFile), "--overwrite-dns") {
+		t.Errorf("a normal share must not overwrite DNS:\n%s", readCalls(t, logFile))
+	}
+}
+
+// fakeCloudflaredRecovering is a stateful fake: "tunnel create" reports the
+// tunnel already exists until a "tunnel delete" has run (detected in the call
+// log), after which it succeeds, as a real recreate would once the orphan is gone.
+func fakeCloudflaredRecovering(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	logFile := filepath.Join(dir, "calls.log")
+	marker := filepath.Join(dir, "deleted")
+	// Only shell builtins: the fake runs with a PATH holding just this dir, so
+	// external tools (touch, grep) are unavailable. ": > file" creates the
+	// marker via redirection, "[ -f ]" tests it, mirroring the login case.
+	script := fmt.Sprintf(`#!/bin/sh
+echo "$@" >> %q
+case "$1 $2" in
+"tunnel create")
+  if [ -f %q ]; then echo created; exit 0; else echo "tunnel with name already exists"; exit 1; fi;;
+"tunnel delete") : > %q;;
+"tunnel list") printf '[{"id":"%s","name":"%%s"}]\n' "$4";;
+"tunnel route")
+  case "$*" in *--overwrite-dns*) echo routed; exit 0;; *) echo "record with that host already exists"; exit 1;; esac;;
+esac
+`, logFile, marker, marker, fakeTunnelID)
+	if err := os.WriteFile(filepath.Join(dir, "cloudflared"), []byte(script), 0755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir)
+	return logFile
 }
 
 func TestEnsureCloudflareTunnel_freshRouteWarnsAboutPropagation(t *testing.T) {
