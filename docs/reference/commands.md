@@ -87,7 +87,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd group db <share\|separate>` | Switch the current secondary between sharing the main's database and keeping its own |
 | `lerd group remove` | Ungroup the current secondary, restoring a standalone domain |
 | `lerd group list` | List all site groups and their members |
-| `lerd workspace add <name>` | Create an empty workspace, a display-only grouping of sites. See [Workspaces](../usage/sites.md#workspaces) |
+| `lerd workspace add <name>` | Create an empty workspace, a display-only grouping of sites. See [Workspaces](../usage/workspaces.md) |
 | `lerd workspace rename <old> <new>` | Rename a workspace, keeping its sites |
 | `lerd workspace rm <name>` | Delete a workspace; its sites stay linked and become ungrouped |
 | `lerd workspace assign <site> <workspace\|none>` | Move a site into a workspace, or out of one with `none`; assign a group main, not a secondary |

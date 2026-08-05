@@ -10,7 +10,7 @@ Beyond serving PHP sites, lerd ships a set of tools for working with them. Every
 
 - [Web UI](/features/web-ui) is the browser dashboard at `lerd.localhost`, for sites, services, logs, databases and workers.
 - [TUI](/features/tui) is the terminal dashboard, informative with reversible quick actions.
-- [Commands](/features/commands) covers the CLI surface and per-framework custom commands.
+- [Framework Commands](/usage/framework-commands) covers the per-framework admin actions and custom commands.
 - [System tray](/features/system-tray) puts start, stop and site shortcuts in your desktop tray.
 - [MCP server](/features/mcp) exposes lerd to AI assistants so they can inspect and drive your environment.
 
@@ -27,6 +27,7 @@ Beyond serving PHP sites, lerd ships a set of tools for working with them. Every
 
 - [Logs](/features/logs) tails application, Nginx and container logs in one place.
 - [Queries](/features/queries) shows database queries per request.
+- [Request timing](/features/request-timing) charts response times and slow routes from your site's live traffic.
 - [Profiler](/features/profiler) captures request timings and hands off to SPX.
 - [Tinker](/features/tinker) is an in-browser REPL against your application.
 - [Dumps](/features/dumps) collects `dump()` output from your code.
