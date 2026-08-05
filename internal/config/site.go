@@ -779,14 +779,34 @@ func FindSiteByPath(path string) (*Site, error) {
 		return nil, err
 	}
 
-	target := CanonicalPath(path)
 	for _, s := range reg.Sites {
-		if CanonicalPath(s.Path) == target {
+		if SamePath(s.Path, path) {
 			s := s
 			return &s, nil
 		}
 	}
 	return nil, fmt.Errorf("site with path %q not found", path)
+}
+
+// SamePath reports whether two paths name the same directory. Identity is asked
+// of the filesystem rather than derived from the strings, because resolving
+// symlinks only folds together the spellings that go through a link: a
+// case-insensitive volume, which is the macOS default, spells one directory many
+// ways and CanonicalPath keeps each of them. Comparing those as strings is what
+// let one project register as two sites.
+//
+// Falls back to the canonical strings when either path cannot be stat'd, so a
+// registry entry whose directory has since been deleted still matches itself.
+func SamePath(a, b string) bool {
+	if a == "" || b == "" {
+		return a == b
+	}
+	if fa, err := os.Stat(a); err == nil {
+		if fb, err := os.Stat(b); err == nil {
+			return os.SameFile(fa, fb)
+		}
+	}
+	return CanonicalPath(a) == CanonicalPath(b)
 }
 
 // CanonicalPath resolves symlinks in p so two spellings of the same directory

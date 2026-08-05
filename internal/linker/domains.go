@@ -33,8 +33,8 @@ func FreeSiteName(desired, path string) string {
 		if err != nil || existing == nil {
 			return candidate // name is free
 		}
-		if config.CanonicalPath(existing.Path) == config.CanonicalPath(path) {
-			return candidate // same site being re-registered (symlink spellings included, #930)
+		if config.SamePath(existing.Path, path) {
+			return candidate // same site being re-registered (symlink and case spellings included, #930)
 		}
 	}
 }
@@ -58,7 +58,7 @@ func FilterConflictingDomains(desired []string, ownPath string, allSites []confi
 			continue
 		}
 		owner, taken := owners[d]
-		if taken && owner != ownPath {
+		if taken && !config.SamePath(owner, ownPath) {
 			removed = append(removed, d)
 			continue
 		}
@@ -94,7 +94,7 @@ func ResolveDomains(desired []string, baseName, ownPath, tld string) (kept, remo
 		if IsReservedDomain(domain) {
 			continue
 		}
-		if existing, _ := config.FindSite(candidate); existing != nil && existing.Path != ownPath {
+		if existing, _ := config.FindSite(candidate); existing != nil && !config.SamePath(existing.Path, ownPath) {
 			continue
 		}
 		owners, _ := FilterConflictingDomains([]string{domain}, ownPath, sites)

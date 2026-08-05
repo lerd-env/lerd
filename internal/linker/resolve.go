@@ -204,7 +204,7 @@ func relinkSecured(path string) bool {
 		return false
 	}
 	for _, existing := range reg.Sites {
-		if existing.Path == path && existing.Secured {
+		if existing.Secured && config.SamePath(existing.Path, path) {
 			return true
 		}
 	}
@@ -231,18 +231,18 @@ func OwningWorktree(dir string) (*config.Site, string, bool) {
 	if err != nil {
 		return nil, "", false
 	}
-	// Compare canonical paths, as the registry lookup does: a checkout under a
+	// Compare directories, as the registry lookup does: a checkout under a
 	// symlinked parent (/var on macOS, /home on ostree) is spelled one way in
-	// the registry and git's metadata and another by os.Getwd.
-	target := config.CanonicalPath(dir)
+	// the registry and git's metadata and another by os.Getwd, and a
+	// case-insensitive volume spells it several more.
 	for i := range reg.Sites {
 		s := &reg.Sites[i]
-		if s.Ignored || config.CanonicalPath(s.Path) == target {
+		if s.Ignored || config.SamePath(s.Path, dir) {
 			continue
 		}
 		wts, _ := gitpkg.DetectWorktrees(s.Path, s.PrimaryDomain())
 		for _, wt := range wts {
-			if config.CanonicalPath(wt.Path) == target {
+			if config.SamePath(wt.Path, dir) {
 				return s, wt.Branch, true
 			}
 		}

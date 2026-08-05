@@ -779,7 +779,7 @@ func (e *EnrichedSite) enrichDomainConflicts() {
 			continue
 		}
 		owner := ""
-		if owning, _ := config.IsDomainUsed(full); owning != nil && owning.Path != e.Path {
+		if owning, _ := config.IsDomainUsed(full); owning != nil && !config.SamePath(owning.Path, e.Path) {
 			owner = owning.Name
 		}
 		e.ConflictingDomains = append(e.ConflictingDomains, ConflictingDomain{

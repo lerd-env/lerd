@@ -4259,7 +4259,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if oldDomain != newDomain {
-			if existing, eErr := config.IsDomainUsed(newDomain); eErr == nil && existing != nil && existing.Path != site.Path {
+			if existing, eErr := config.IsDomainUsed(newDomain); eErr == nil && existing != nil && !config.SamePath(existing.Path, site.Path) {
 				writeJSON(w, SiteActionResponse{Error: "domain " + newDomain + " is already used by site " + existing.Name})
 				return
 			}

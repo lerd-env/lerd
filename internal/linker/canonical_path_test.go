@@ -55,3 +55,69 @@ func TestResolve_refusesASecondNameForAnAlreadyLinkedPath(t *testing.T) {
 		t.Errorf("re-linking under the same name failed: %v", err)
 	}
 }
+
+// caseFoldingVolume reports whether dir sits on a filesystem that treats two
+// spellings of one name as the same file. The macOS default, not the Linux one,
+// and a per-volume property, so it is asked of the directory in use.
+func caseFoldingVolume(t *testing.T, dir string) bool {
+	t.Helper()
+	probe := filepath.Join(dir, "casefold-probe")
+	if err := os.Mkdir(probe, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(probe)
+	_, err := os.Stat(filepath.Join(dir, "CASEFOLD-PROBE"))
+	return err == nil
+}
+
+// Re-linking one directory through a differently-cased spelling has to land on
+// the site that is already there, in the name axis and the domain axis alike.
+// Disambiguating either one invents a second identity for a single project.
+func TestReLinkThroughCaseVariantSpellingKeepsNameAndDomain(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	parent := t.TempDir()
+	if !caseFoldingVolume(t, parent) {
+		t.Skip("volume is case-sensitive; the two spellings are genuinely different directories")
+	}
+	lower := filepath.Join(parent, "app")
+	if err := os.Mkdir(lower, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	upper := filepath.Join(parent, "APP")
+	if err := config.AddSite(config.Site{Name: "app", Path: lower, Domains: []string{"app.test"}}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := FreeSiteName("app", upper); got != "app" {
+		t.Errorf("FreeSiteName through the case variant = %q, want %q", got, "app")
+	}
+	kept, removed := ResolveDomains([]string{"app.test"}, "app", upper, "test")
+	if len(removed) != 0 {
+		t.Errorf("ResolveDomains removed %v, want nothing: the domain is this directory's own", removed)
+	}
+	if len(kept) != 1 || kept[0] != "app.test" {
+		t.Errorf("ResolveDomains kept %v, want [app.test]", kept)
+	}
+}
+
+// The same question asked of the filter directly: a site's own domain is not a
+// conflict just because the caller spelled the path differently.
+func TestFilterConflictingDomains_ownPathCaseVariant(t *testing.T) {
+	parent := t.TempDir()
+	if !caseFoldingVolume(t, parent) {
+		t.Skip("volume is case-sensitive; the two spellings are genuinely different directories")
+	}
+	lower := filepath.Join(parent, "app")
+	if err := os.Mkdir(lower, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sites := []config.Site{{Name: "app", Path: lower, Domains: []string{"app.test"}}}
+
+	kept, removed := FilterConflictingDomains([]string{"app.test"}, filepath.Join(parent, "APP"), sites)
+	if len(removed) != 0 {
+		t.Errorf("removed %v, want nothing: that domain belongs to this very directory", removed)
+	}
+	if len(kept) != 1 {
+		t.Errorf("kept %v, want the domain retained", kept)
+	}
+}

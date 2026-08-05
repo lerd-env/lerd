@@ -173,7 +173,7 @@ func devServerAddress(site *config.Site, sitePath string) (devServerAddr, error)
 }
 
 func isSiteItself(site *config.Site, sitePath string) bool {
-	return config.CanonicalPath(sitePath) == config.CanonicalPath(site.Path)
+	return config.SamePath(sitePath, site.Path)
 }
 
 // worktreeForPath resolves a checkout directory to the worktree git knows about.
@@ -183,7 +183,7 @@ func worktreeForPath(site *config.Site, sitePath string) (gitpkg.Worktree, bool)
 		return gitpkg.Worktree{}, false
 	}
 	for _, wt := range wts {
-		if config.CanonicalPath(wt.Path) == config.CanonicalPath(sitePath) {
+		if config.SamePath(wt.Path, sitePath) {
 			return wt, true
 		}
 	}
