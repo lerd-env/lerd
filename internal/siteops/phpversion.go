@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -14,11 +15,17 @@ import (
 	"github.com/geodro/lerd/internal/podman"
 )
 
+// fpmReadyTimeout bounds the wait for a freshly started FPM container. Long
+// enough for a cold container on a slow disk, short enough that a broken image
+// cannot hold the command open.
+const fpmReadyTimeout = 30 * time.Second
+
 // Indirection points so tests can drive the funnel's decisions without the
 // framework store or a real FrankenPHP build.
 var (
 	finishFrankenPHPFn = FinishFrankenPHPLink
 	imageGapFn         = imageGap
+	ensureFPMReadyFn   = podman.EnsureFPMReady
 	imageStaleFn       = podman.FPMImageStale
 	imageExistsFn      = podman.FPMImageExists
 	detectWorktreesFn  = gitpkg.DetectWorktrees
@@ -166,6 +173,12 @@ func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (
 	if err := nginxReloadFn(); err != nil {
 		return res, fmt.Errorf("reloading nginx: %w", err)
 	}
+
+	// The vhost now points at the new version's backend, so the site 502s until
+	// that container is accepting connections. Waiting here means the first
+	// request after a switch is served, which matters most the first time a
+	// freshly built version is used and nothing has started it yet.
+	_ = ensureFPMReadyFn(res.Version, fpmReadyTimeout)
 
 	// Changing version starts no systemd unit, so the shared hook would not
 	// otherwise fire and every open dashboard would keep showing the old
