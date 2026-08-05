@@ -2,6 +2,9 @@ package dns
 
 import (
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -246,6 +249,33 @@ func TestDiagnose_nmDnsmasqBinaryPresentReportsOK(t *testing.T) {
 	step := findStep(d, "resolver hookup")
 	if step == nil || step.Status != StepOK {
 		t.Errorf("resolver hookup step = %+v, want ok", step)
+	}
+}
+
+func TestDnsmasqFound_onPath(t *testing.T) {
+	ok := dnsmasqFound(func(string) (string, error) { return "/usr/bin/dnsmasq", nil }, nil)
+	if !ok {
+		t.Error("dnsmasqFound = false, want true when LookPath succeeds")
+	}
+}
+
+func TestDnsmasqFound_sbinFallback(t *testing.T) {
+	// Debian puts dnsmasq in /usr/sbin, which a normal user's PATH omits;
+	// the guard must still see it there.
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "dnsmasq")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	notFound := func(string) (string, error) { return "", exec.ErrNotFound }
+	if !dnsmasqFound(notFound, []string{filepath.Join(dir, "missing"), bin}) {
+		t.Error("dnsmasqFound = false, want true via sbin fallback stat")
+	}
+	if dnsmasqFound(notFound, []string{filepath.Join(dir, "missing")}) {
+		t.Error("dnsmasqFound = true, want false when PATH and fallbacks all miss")
+	}
+	if dnsmasqFound(notFound, []string{dir}) {
+		t.Error("dnsmasqFound = true, want false for a directory at the fallback path")
 	}
 }
 

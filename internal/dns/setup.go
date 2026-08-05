@@ -236,11 +236,9 @@ var isNetworkManagerActive = func() bool {
 	return cmd.Run() == nil
 }
 
-// dnsmasqBinaryPresent reports whether dnsmasq is on PATH.
-var dnsmasqBinaryPresent = func() bool {
-	_, err := exec.LookPath("dnsmasq")
-	return err == nil
-}
+// dnsmasqBinaryPresent reports whether the dnsmasq binary is installed; see
+// hostDnsmasqPresent in diagnose.go for the PATH + sbin lookup.
+var dnsmasqBinaryPresent = hostDnsmasqPresent
 
 // ResolverHint returns a user-facing hint for restarting the active DNS resolver.
 func ResolverHint() string {

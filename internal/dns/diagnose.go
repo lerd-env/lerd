@@ -386,23 +386,42 @@ func findListenerCmd(port int) string {
 // defaultProbes wires the production implementations for each rung.
 func defaultProbes() probeFns {
 	return probeFns{
-		containerRunning: defaultContainerRunning,
-		dnsmasqConfigOK:  defaultDnsmasqConfigOK,
-		portOpen:         defaultPortOpen,
-		dnsmasqAnswer:    defaultDnsmasqAnswer,
-		resolverHookup:   defaultResolverHookup,
-		interfaceRouting: defaultInterfaceRouting,
-		dummyLinkRouting: defaultDummyLinkRouting,
-		systemLookup:     defaultSystemLookup,
-		vpnActive:        VPNActive,
-		lanExposedIP:     defaultLanExposedIP,
-		// Not setup.go's dnsmasqBinaryPresent: that file is linux-only and this
-		// one also serves the macOS path.
-		hostDnsmasqPresent: func() bool {
-			_, err := exec.LookPath("dnsmasq")
-			return err == nil
-		},
+		containerRunning:   defaultContainerRunning,
+		dnsmasqConfigOK:    defaultDnsmasqConfigOK,
+		portOpen:           defaultPortOpen,
+		dnsmasqAnswer:      defaultDnsmasqAnswer,
+		resolverHookup:     defaultResolverHookup,
+		interfaceRouting:   defaultInterfaceRouting,
+		dummyLinkRouting:   defaultDummyLinkRouting,
+		systemLookup:       defaultSystemLookup,
+		vpnActive:          VPNActive,
+		lanExposedIP:       defaultLanExposedIP,
+		hostDnsmasqPresent: hostDnsmasqPresent,
 	}
+}
+
+// dnsmasqSbinPaths are the usual dnsmasq locations outside PATH. Debian-style
+// user PATHs omit the sbin dirs, but NetworkManager still finds the binary
+// there via its compile-time path, so PATH alone would false-negative.
+var dnsmasqSbinPaths = []string{"/usr/sbin/dnsmasq", "/sbin/dnsmasq", "/usr/local/sbin/dnsmasq"}
+
+// hostDnsmasqPresent reports whether the dnsmasq binary exists on PATH or in
+// one of the sbin locations. Lives here rather than setup.go because that
+// file is linux-only and this one also serves the macOS path.
+func hostDnsmasqPresent() bool {
+	return dnsmasqFound(exec.LookPath, dnsmasqSbinPaths)
+}
+
+func dnsmasqFound(lookPath func(string) (string, error), fallbacks []string) bool {
+	if _, err := lookPath("dnsmasq"); err == nil {
+		return true
+	}
+	for _, p := range fallbacks {
+		if fi, err := os.Stat(p); err == nil && fi.Mode().IsRegular() {
+			return true
+		}
+	}
+	return false
 }
 
 // defaultLanExposedIP returns the host's primary LAN IP when lan:expose is on,
