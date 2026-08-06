@@ -382,6 +382,8 @@ curl -fsSL https://lerd.sh/install.sh | bash
 ```
 
 Everything from 1.26 onwards resolves the organisation move on its own, so this is a one-time step.
+
+On Homebrew, apt, dnf, or if you'd rather not pipe a script anywhere, [Updating from a version before 1.26](getting-started/updating-from-pre-1.26.md) has the route for each.
 :::
 
 ::: details Error: NetworkUpdate is not supported for backend CNI: invalid argument

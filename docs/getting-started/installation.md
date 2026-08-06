@@ -166,6 +166,10 @@ wget -qO- https://lerd.sh/install.sh | bash -s -- --update
 
 :::
 
+::: warning Running something older than 1.26?
+`lerd update` fails on builds from before the project moved to the lerd-env organisation, with an error about an unexpected release URL. [Updating from a version before 1.26](./updating-from-pre-1.26) gets you across in one step.
+:::
+
 ---
 
 ### Uninstall
