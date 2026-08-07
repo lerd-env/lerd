@@ -368,10 +368,7 @@ var runViteBuildAt = func(site *config.Site, dir string) {
 
 // sitePublicDir is the site's public document root relative to its project root.
 func sitePublicDir(site *config.Site) string {
-	if site.PublicDir != "" {
-		return site.PublicDir
-	}
-	return "public"
+	return config.PublicDirFor(*site)
 }
 
 // viteManifestExists reports whether a built Vite manifest is present, covering

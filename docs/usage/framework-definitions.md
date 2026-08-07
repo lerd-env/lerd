@@ -427,6 +427,8 @@ If no framework matches and no `--public-dir` is specified, lerd tries these can
 
 `public` → `web` → `webroot` → `pub` → `www` → `htdocs` → `.` (project root)
 
+Serving a site resolves the root again from three places, in this order: the `public_dir` the project commits in its `.lerd.yaml`, the root recorded for the site when it was linked, and the framework definition's `public_dir`. The recorded one gives way to the definition's in one case, when it holds no `index.php` and the definition's does. A root lerd guessed is only as good as the moment it was guessed in, and a project linked before `composer install` has an empty document root to walk, so the guess lands on the project root and would otherwise pin the site there long after the real root appeared.
+
 ## Log viewer
 
 Frameworks can define application log file locations so they appear in the UI's **App Logs** tab. The tab only appears when matching log files actually exist on disk; for example, WordPress defines `wp-content/debug.log` but the tab stays hidden until `WP_DEBUG_LOG` is enabled. Custom frameworks can add their own:

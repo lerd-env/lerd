@@ -36,14 +36,7 @@ func runWhich(_ *cobra.Command, _ []string) error {
 	phpVersion, _ := phpDet.DetectVersion(cwd)
 	nodeVersion, _ := nodeDet.DetectVersion(cwd)
 
-	publicDir := site.PublicDir
-	if publicDir == "" {
-		if fw, ok := config.GetFramework(site.Framework); ok && fw.PublicDir != "" {
-			publicDir = fw.PublicDir
-		} else {
-			publicDir = "public"
-		}
-	}
+	publicDir := config.PublicDirFor(*site)
 
 	docRoot := filepath.Join(site.Path, publicDir)
 	nginxConf := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
