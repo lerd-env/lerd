@@ -469,10 +469,7 @@ func runSetup(allSteps, skipOpen bool) error {
 		feedback.Begin()
 		if err := huh.NewForm(
 			huh.NewGroup(
-				huh.NewMultiSelect[string]().
-					Title("Setup steps").
-					Options(huh.NewOptions(options...)...).
-					Value(&selected),
+				newMultiSelect("Setup steps", "", options, &selected),
 			),
 		).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return err

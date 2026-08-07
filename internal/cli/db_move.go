@@ -391,11 +391,11 @@ func dbMoveWizard(reg *config.SiteRegistry, from, to string) (string, string, []
 	}
 	selected := append([]string(nil), siteOpts...)
 	if err := huh.NewForm(huh.NewGroup(
-		huh.NewMultiSelect[string]().
-			Title(fmt.Sprintf("Which sites to move from %s to %s?", from, to)).
-			Description("All selected by default; deselect any you want to leave behind.").
-			Options(huh.NewOptions(siteOpts...)...).
-			Value(&selected),
+		newMultiSelect(
+			fmt.Sprintf("Which sites to move from %s to %s?", from, to),
+			"All selected by default; deselect any you want to leave behind.",
+			siteOpts, &selected,
+		),
 	)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 		return "", "", nil, err
 	}
