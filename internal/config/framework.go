@@ -532,9 +532,31 @@ type FrameworkServiceDetect struct {
 	ValuePrefix string `yaml:"value_prefix,omitempty"`
 }
 
-// Resolve returns the env file path and format to use for the given project directory.
-// It returns the primary file if it exists, otherwise the fallback.
-// Defaults to ".env" with "dotenv" format if nothing is configured.
+// ResolveWrite returns the env file lerd writes for a project, and its format.
+// A definition that names a primary file means that file is lerd's to write,
+// whether or not it exists yet, and any fallback is a read source for detecting
+// an already-configured project: Drupal keeps its database in a $databases
+// array its own installer writes into settings.php, and lerd writing there
+// appends constants Drupal never reads while the .env its install command
+// sources is never created. A definition naming no primary at all has only its
+// fallback, and that fallback is the configuration itself, which is WordPress's
+// wp-config.php and is written as normal.
+func (e FrameworkEnvConf) ResolveWrite(projectDir string) (file, format string) {
+	if e.File == "" {
+		return e.Resolve(projectDir)
+	}
+	format = e.Format
+	if format == "" {
+		format = "dotenv"
+	}
+	return e.File, format
+}
+
+// Resolve returns the env file path and format to read for the given project
+// directory. It returns the primary file if it exists, otherwise the fallback.
+// Defaults to ".env" with "dotenv" format if nothing is configured. Writers
+// want ResolveWrite, which never answers with a fallback a framework only
+// publishes so an existing project can be read.
 func (e FrameworkEnvConf) Resolve(projectDir string) (file, format string) {
 	primary := e.File
 	if primary == "" {

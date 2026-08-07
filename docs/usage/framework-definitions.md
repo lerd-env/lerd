@@ -42,7 +42,7 @@ env:
   file: .env                        # primary env file
   example_file: .env.example        # copied to file if missing
   format: dotenv                    # dotenv | php-const | php-array
-  fallback_file: wp-config.php      # used when file doesn't exist
+  fallback_file: wp-config.php      # read when file doesn't exist (never written)
   fallback_format: php-const        # format for fallback_file
   url_key: APP_URL                  # env key holding the app URL (or "none")
   worktree_url_keys:                # keys set to a worktree's own base URL
@@ -69,6 +69,14 @@ env:
         - DB_USERNAME=root
         - DB_PASSWORD=lerd
 ```
+
+### Which file lerd writes
+
+`file` is the env file lerd writes, and `lerd env` creates it when it is not there yet, from `example_file` when the definition names one and empty otherwise. `fallback_file` is only ever read, so a project that is already configured is detected through the file it actually has.
+
+That distinction matters for a framework whose own configuration is not the file lerd writes. Drupal keeps its database in a `$databases` array its installer writes into `settings.php`, and its `site:install` command sources a `.env` at the project root to build the `--db-url` it hands drush. So the definition names `.env` as its `file` and `settings.php` as a read-only `fallback_file`: lerd writes the former, Drupal writes the latter, and neither trips over the other.
+
+A definition that names no `file` at all has only its fallback, and then that fallback *is* the configuration and lerd writes it. That is WordPress, whose `wp-config.php` is the whole story.
 
 ### Env file formats
 

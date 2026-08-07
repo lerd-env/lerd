@@ -294,7 +294,7 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 	var worktreeURLKeys []string
 	if fwName, ok := config.DetectFrameworkForDir(mainRepoPath); ok {
 		if fw, ok := config.GetFrameworkForDir(fwName, mainRepoPath); ok {
-			file, f := fw.Env.Resolve(mainRepoPath)
+			file, f := fw.Env.ResolveWrite(mainRepoPath)
 			if !filepath.IsLocal(file) {
 				return
 			}

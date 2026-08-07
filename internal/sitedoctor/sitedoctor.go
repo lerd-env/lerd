@@ -156,7 +156,12 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		resp.add(c)
 	}
 	if hasEnvConfig(fw) {
-		if c, ok := checkEnvPresent(path, envFile, fwExampleFile(fw)); ok {
+		// The file that has to exist is the one lerd writes, not whichever one it
+		// can currently read: a Drupal project with no .env is read through the
+		// settings.php its installer wrote, and reporting that as the env file
+		// present would hide the missing one lerd and drush both need.
+		writeFile, _ := fw.Env.ResolveWrite(path)
+		if c, ok := checkEnvPresent(path, writeFile, fwExampleFile(fw)); ok {
 			resp.add(c)
 		}
 		if c, ok := checkServiceWiring(path, envFile, fw); ok {

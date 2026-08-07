@@ -336,7 +336,7 @@ func worktreeEnvFile(worktreePath string) string {
 	if !ok {
 		return fallback
 	}
-	file, _ := fw.Env.Resolve(site.Path)
+	file, _ := fw.Env.ResolveWrite(site.Path)
 	if file == "" || !filepath.IsLocal(file) {
 		return fallback
 	}

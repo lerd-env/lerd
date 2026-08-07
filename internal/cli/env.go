@@ -530,7 +530,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		return fmt.Errorf("'lerd env' is not supported for %s\nConfigure the env section in the framework YAML to enable it", fw.Label)
 	}
 
-	envRelPath, envFormat := fw.Env.Resolve(cwd)
+	// The file lerd writes is the one the framework declares as its own, created
+	// below when it isn't there yet. A fallback a definition publishes so an
+	// already-configured project can be read is never written: Drupal's
+	// settings.php holds a $databases array its installer writes, and appending
+	// constants to it wires nothing while leaving the .env its install command
+	// sources uncreated.
+	envRelPath, envFormat := fw.Env.ResolveWrite(cwd)
 	envPath := filepath.Join(cwd, envRelPath)
 
 	exampleRelPath := fw.Env.ExampleFile
