@@ -361,7 +361,8 @@ func startServicesForSite(sitePath string) {
 // notice (using siteName) only when at least one service actually needs starting.
 // Pass an empty siteName to suppress the header.
 func startServicesForSiteNoticed(sitePath, siteName string) {
-	envData, err := os.ReadFile(filepath.Join(sitePath, ".env"))
+	envFile, _ := config.EnvFileFor(sitePath)
+	envData, err := os.ReadFile(filepath.Join(sitePath, envFile))
 	if err != nil {
 		return
 	}
