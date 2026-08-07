@@ -5,13 +5,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
-	"path/filepath"
 	"sort"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
@@ -58,11 +55,12 @@ type dbOwner struct {
 }
 
 // databaseSiteIndex maps each database name in the given engine to the site that
-// owns it, read from sites' .env DB_DATABASE and from the isolated databases
-// worktrees have registered. A "<db>_testing" database maps to the same owner as
-// "<db>", so both link to the same place. When a group shares one database across
-// a main site and its secondaries, the database belongs to the group main, so a
-// secondary that merely shares it never wins over the main.
+// owns it, resolved through each site's framework declaration and from the
+// isolated databases worktrees have registered. A "<db>_testing" database maps
+// to the same owner as "<db>", so both link to the same place. When a group
+// shares one database across a main site and its secondaries, the database
+// belongs to the group main, so a secondary that merely shares it never wins
+// over the main.
 func databaseSiteIndex(service string) map[string]dbOwner {
 	reg, err := config.LoadSites()
 	if err != nil {
@@ -84,12 +82,12 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 			continue
 		}
 		domains[s.Name] = s.PrimaryDomain()
-		vals := envfile.ReadValues(filepath.Join(s.Path, ".env"))
 		db := ""
-		if strings.TrimPrefix(strings.TrimSpace(vals["DB_HOST"]), "lerd-") == service {
-			db = strings.TrimSpace(vals["DB_DATABASE"])
-		} else {
-			db = dsnDatabaseFor(vals, service)
+		for _, t := range config.DBTargetsFor(s.Path) {
+			if t.Service == service {
+				db = t.Database
+				break
+			}
 		}
 		if db == "" {
 			continue
@@ -113,43 +111,6 @@ func databaseSiteIndex(service string) map[string]dbOwner {
 		claim(e.DBName+"_testing", owner, true)
 	}
 	return idx
-}
-
-// dsnDatabaseFor picks the database a project's env points at on the given
-// service through a DSN. Engines wired through a single connection string
-// (mongodb://…@lerd-mongo:27017/mydb) carry no DB_HOST. Keys are visited in
-// sorted order: a project with more than one DSN against the same engine would
-// otherwise be attributed to a different database on every snapshot, since Go
-// randomises map iteration.
-func dsnDatabaseFor(vals map[string]string, service string) string {
-	keys := make([]string, 0, len(vals))
-	for k := range vals {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		if db := dsnDatabase(vals[k], service); db != "" {
-			return db
-		}
-	}
-	return ""
-}
-
-// dsnDatabase returns the database a DSN-style env value targets on the given
-// service, or empty when the value is not a URL pointed at lerd-<service>.
-func dsnDatabase(value, service string) string {
-	if !strings.Contains(value, "lerd-"+service) {
-		return ""
-	}
-	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || u.Hostname() != "lerd-"+service {
-		return ""
-	}
-	db := strings.TrimPrefix(u.Path, "/")
-	if strings.Contains(db, "/") {
-		return ""
-	}
-	return db
 }
 
 // isDatabaseEngine reports whether a service belongs on the Databases surface: a
