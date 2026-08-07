@@ -411,7 +411,7 @@ This is distinct from the per-site [nginx override](nginx-overrides.md) in `cust
 
 ## Framework detection
 
-Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry.
+Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry, and fall back to detecting one for a site whose registry entry holds no framework, so a site registered before its definition existed picks it up on the next read rather than needing a relink. A project that names a framework no definition can be found for keeps that name: it is registered and labelled as what it says it is, without the public dir or PHP range a definition would have supplied.
 
 Detection order:
 

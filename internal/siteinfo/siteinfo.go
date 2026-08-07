@@ -312,7 +312,16 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 	var hasFw bool
 
 	if flags&EnrichFramework != 0 || flags&EnrichWorkers != 0 || flags&EnrichLogs != 0 || flags&EnrichFavicon != 0 {
-		fw, hasFw = config.GetFrameworkForDir(s.Framework, s.Path)
+		// The registry holds a copy of the name, written once when the site was
+		// linked and never revisited, so a site registered while its definition
+		// could not resolve carries nothing. The project itself is the committed
+		// truth, so ask it rather than reading the site as frameworkless.
+		if e.FrameworkName == "" {
+			if name, ok := config.DetectFrameworkForDir(s.Path); ok {
+				e.FrameworkName = name
+			}
+		}
+		fw, hasFw = config.GetFrameworkForDir(e.FrameworkName, s.Path)
 		if hasFw {
 			e.FrameworkVersion = fw.Version
 			if fw.VersionGuessed {
@@ -329,8 +338,8 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 	}
 
 	if flags&EnrichFramework != 0 {
-		e.FrameworkLabel = frameworkLabel(s.Framework, s.Path, fw, hasFw)
-		e.AppName = LaravelAppName(s.Framework, s.Path)
+		e.FrameworkLabel = frameworkLabel(e.FrameworkName, s.Path, fw, hasFw)
+		e.AppName = LaravelAppName(e.FrameworkName, s.Path)
 	}
 
 	if flags&EnrichVersions != 0 {
@@ -366,7 +375,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 	}
 
 	if flags&EnrichFavicon != 0 {
-		e.HasFavicon = DetectFavicon(s.Path, s.PublicDir, s.Framework, fw, hasFw) != ""
+		e.HasFavicon = DetectFavicon(s.Path, s.PublicDir, e.FrameworkName, fw, hasFw) != ""
 	}
 
 	return e
