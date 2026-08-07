@@ -323,14 +323,12 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		}
 		fw, hasFw = config.GetFrameworkForDir(e.FrameworkName, s.Path)
 		if hasFw {
-			e.FrameworkVersion = fw.Version
-			if fw.VersionGuessed {
-				// Report the project's real version, not the borrowed
-				// definition's, and don't enforce that definition's PHP range.
-				if fw.DetectedVersion != "" {
-					e.FrameworkVersion = fw.DetectedVersion
-				}
-			} else {
+			// The version reported is the one the project runs, whichever
+			// definition lerd had to borrow to serve it. The PHP range is a
+			// separate question: it holds unless the definition predates the
+			// project so far that its ceiling would be wrong.
+			e.FrameworkVersion = frameworkVersionOf(fw)
+			if !fw.VersionGuessed {
 				e.FrameworkPHPMin = fw.PHP.Min
 				e.FrameworkPHPMax = fw.PHP.Max
 			}
@@ -705,10 +703,7 @@ func (e *EnrichedSite) enrichGit() {
 				info.LANPort = entry.Port
 			}
 			if fw, ok := config.GetFrameworkForDir(e.FrameworkName, wt.Path); ok {
-				info.FrameworkVersion = fw.Version
-				if fw.VersionGuessed && fw.DetectedVersion != "" {
-					info.FrameworkVersion = fw.DetectedVersion
-				}
+				info.FrameworkVersion = frameworkVersionOf(fw)
 				info.FrameworkLabel = frameworkLabel(e.FrameworkName, wt.Path, fw, true)
 				info.FrameworkWorkers = enrichWorktreeWorkers(e.Name, wt.Path, fw)
 			} else {
@@ -804,19 +799,28 @@ func (e *EnrichedSite) enrichLogs(fw *config.Framework, hasFw bool) {
 	e.HasAppLogs = hasLogFiles(hasFw, fw, e.Path)
 }
 
+// frameworkVersionOf is the version a site runs, which is the project's own
+// whenever it differs from the definition serving it. A WordPress 7 site read
+// "WordPress 6" because the borrowed definition's version was reported instead,
+// and a definition is borrowed in both directions: below the oldest published
+// one and past the newest.
+func frameworkVersionOf(fw *config.Framework) string {
+	if fw == nil {
+		return ""
+	}
+	if fw.DetectedVersion != "" {
+		return fw.DetectedVersion
+	}
+	return fw.Version
+}
+
 func frameworkLabel(name, path string, fw *config.Framework, hasFw bool) string {
 	if name == "" {
 		return ""
 	}
 	if hasFw {
-		// A guessed version is labelled by the version detected from the project,
-		// not the borrowed definition's, so a Laravel 6 project reads "Laravel 6"
-		// rather than "Laravel 10".
-		if fw.VersionGuessed && fw.DetectedVersion != "" {
-			return fw.Label + " " + fw.DetectedVersion
-		}
-		if fw.Version != "" {
-			return fw.Label + " " + fw.Version
+		if v := frameworkVersionOf(fw); v != "" {
+			return fw.Label + " " + v
 		}
 		return fw.Label
 	}

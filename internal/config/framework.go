@@ -1090,7 +1090,6 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 	//     lowest one (not the latest) and mark it guessed, so callers relax PHP
 	//     clamping (a Laravel 6 project must still allow PHP 7.4).
 	guessed := false
-	guessedVersion := ""
 	if base == nil && version != "" {
 		if clamped := clampFrameworkVersion(name, version); clamped != "" {
 			clampedPath := filepath.Join(StoreFrameworksDir(), name+"@"+clamped+".yaml")
@@ -1102,7 +1101,6 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 			}
 			if base != nil {
 				guessed = true
-				guessedVersion = version
 			}
 		}
 	}
@@ -1129,9 +1127,17 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 	}
 
 	if base != nil {
+		// A project served by a definition of another version reports its own,
+		// whichever direction it was borrowed from: a WordPress 7 site read
+		// "WordPress 6" because only the legacy clamp recorded it. VersionGuessed
+		// stays the narrower claim, that the borrowed definition's PHP range must
+		// not constrain the project, which is true when it predates every
+		// definition and not when it postdates them all.
 		if guessed {
 			base.VersionGuessed = true
-			base.DetectedVersion = guessedVersion
+		}
+		if version != "" && version != base.Version {
+			base.DetectedVersion = version
 		}
 		base = mergeUserOverlay(base)
 		base = mergeBuiltinFrankenPHP(base)
