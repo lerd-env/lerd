@@ -68,3 +68,15 @@ func TestCheckEnvPresent_passesOnceThePrimaryExists(t *testing.T) {
 		}
 	}
 }
+
+// The finding has to name the remedy. Leaving it at "it is missing" starts the
+// debugging session lerd exists to save.
+func TestEnvMissingDetail_namesTheCommandThatCreatesIt(t *testing.T) {
+	if d := envMissingDetail(".env", ""); !strings.Contains(d, "lerd env") {
+		t.Errorf("detail = %q, want the command that creates it", d)
+	}
+	d := envMissingDetail(".env", ".env.example")
+	if !strings.Contains(d, "lerd env") || !strings.Contains(d, ".env.example") {
+		t.Errorf("detail = %q, want the command and the example it copies", d)
+	}
+}
