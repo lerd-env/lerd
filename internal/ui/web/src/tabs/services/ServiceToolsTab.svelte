@@ -56,7 +56,13 @@
             />
           </div>
           {#if errors[shim.tool]}
-            <p class="text-[10px] text-red-500 break-words max-w-[220px]">{errors[shim.tool]}</p>
+            <p
+              class="text-[10px] font-medium text-red-500 dark:text-red-400 break-words max-w-[220px]"
+              role="status"
+              aria-live="polite"
+            >
+              {errors[shim.tool]}
+            </p>
           {/if}
         </div>
       {/each}

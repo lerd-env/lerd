@@ -100,7 +100,10 @@ describe('services store', () => {
     expect(calls.some((c) => c[0] === '/api/services')).toBe(true);
   });
 
-  it('setServiceShim surfaces a server error without reloading', async () => {
+  // A shim toggle typically fails because the shim dir no longer matches what
+  // the dashboard is showing, so the failure refreshes too: the control then
+  // sits where the server says it does, next to the reason it did not move.
+  it('setServiceShim surfaces a server error and refreshes', async () => {
     const calls: string[] = [];
     globalThis.fetch = vi.fn(async (url: unknown) => {
       calls.push(String(url));
@@ -112,7 +115,7 @@ describe('services store', () => {
     const res = await setServiceShim('mysql', { tool: 'mysqldump', enabled: true });
     expect(res.ok).toBe(false);
     expect(res.error).toBe('boom');
-    expect(calls.includes('/api/services')).toBe(false);
+    expect(calls.includes('/api/services')).toBe(true);
   });
 
   it('setServicePorts POSTs the published port and extra ports as JSON', async () => {

@@ -262,6 +262,10 @@ export async function setServiceShim(
       await loadServices();
       return { ok: true };
     }
+    // A toggle usually fails because the shim dir no longer holds what the
+    // dashboard is showing, so refresh on the way out as well: the control ends
+    // up where the server says it belongs, beside the reason it did not move.
+    await loadServices();
     return { ok: false, error: data.error || m.common_failed() };
   } catch (e) {
     return { ok: false, error: String(e) };
