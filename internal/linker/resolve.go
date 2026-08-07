@@ -213,15 +213,25 @@ func relinkSecured(path string) bool {
 
 // ResolveFramework names the framework for dir. The store fallback asks the
 // user which definition to install, so it is only reachable when the caller can
-// put a question on screen.
+// put a question on screen. A project that names a framework no definition can
+// be found for is still that framework, and the name is returned unresolved
+// rather than dropped, so the registry records what the project committed
+// instead of nothing at all. The false then says only that no definition backs
+// it, which is what keeps the caller from taking a public dir or a PHP range
+// from one that isn't there.
 func ResolveFramework(dir string, allowStoreFallback bool) (string, bool) {
 	if name, ok := config.DetectFrameworkForDir(dir); ok {
 		return name, true
 	}
-	if !allowStoreFallback {
-		return "", false
+	if allowStoreFallback {
+		if name, ok := store.DetectFrameworkWithStore(dir); ok {
+			return name, true
+		}
 	}
-	return store.DetectFrameworkWithStore(dir)
+	if proj, err := config.LoadProjectConfig(dir); err == nil {
+		return proj.Framework, false
+	}
+	return "", false
 }
 
 // OwningWorktree returns the site dir is a git worktree of, so a checkout under

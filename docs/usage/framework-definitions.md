@@ -31,6 +31,8 @@ When loading a framework definition for a project, the version is resolved in or
 
 When `composer.lock` shows a different version than `.lerd.yaml`, the pinned version is auto-updated.
 
+A project whose own major version has no definition published for it still gets one. Sitting below the published range, it is served the oldest definition and flagged as guessed, so that definition's PHP range is reported rather than enforced and a Laravel 6 project is still allowed PHP 7.4. Sitting above the range, or in a gap inside it, it is served the newest definition, the same one an install that already had definitions on disk would have fallen back to, so a WordPress 7 site is treated as a WordPress site rather than as no framework at all. A version the store's cached index does not list is never requested, since that fetch can only fail; an install that has never reached the store has no index to rule anything out and asks for the project's own version as before.
+
 ## Environment setup
 
 The `env` section in a framework definition controls how `lerd env` works:
@@ -75,8 +77,15 @@ env:
 | `dotenv` | `KEY=value` lines | `DB_HOST` |
 | `php-const` | `define('KEY', 'value')` calls, as in WordPress's `wp-config.php` | `DB_HOST` |
 | `php-array` | a PHP file that `return`s a nested array, as in Magento's `app/etc/env.php` | dotted path, `db.connection.default.host` |
+| `php-vars` | a PHP file of top-level assignments, as in Drupal's `web/sites/default/settings.php` | dotted path rooted at the variable, `databases.default.default.host` |
+
+`php-vars` is for a framework that configures itself through assignments rather than a returned array. `databases.default.default.host` addresses `$databases['default']['default']['host']`, and writing rewrites only the statements whose values change, leaving the rest of the file, which for Drupal is hundreds of lines of guidance the user may have edited, byte for byte. A key no statement covers is appended as one of its own. That is how lerd writes the file Drupal actually reads: its installer puts the `$databases` array in `settings.php` and reads it back on every request, so connection values left anywhere else wire nothing.
 
 The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento. A rewrite that would not change anything is skipped, so a file already holding every value lerd wants keeps its mtime.
+
+### Wiring the doctor checks
+
+A service a project picks in its `.lerd.yaml` is expected to appear in the env file, and the doctor says so when it does not: it asks whether the file references the `lerd-<service>` container, which is a text question every format answers, so a WordPress site's `wp-config.php` and a Magento site's `app/etc/env.php` are held to it exactly as a `.env` is. Only services this section declares are checked, since those are the ones lerd knows how to wire; a `phpmyadmin` picked alongside `mysql` is picked for its own sake and is never expected in a project's config. A drop-in is checked against the block it stands in for, by family or by its preset's `env_role`, so a project on MariaDB is measured against your `mysql` block. A service listed in `.env.lerd_override`'s `LERD_EXTERNAL_SERVICES`, and `sqlite`, which has no container at all, are both left alone.
 
 ### Drop-in services
 
@@ -306,11 +315,11 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 
 ## Doctor checks
 
-The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
 
 Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, and an optional `fix`.
 
-`fix` names one of the framework's own `commands:` entries, by `name`. That indirection is the whole design: the doctor never grows its own mutation endpoints, it just points at a command the framework already exposes, and the UI renders a Fix button that runs it. A `fix` naming a command that does not exist, or one whose `check` rule failed, simply renders no button, and nothing validates the reference, so check your spelling. Four universal keys are also accepted, for the fixes that are not framework-specific: `composer_install`, `composer_update`, `npm_install` and `npm_audit_fix`.
+`fix` names one of the framework's own `commands:` entries, by `name`. That indirection is the whole design: the doctor never grows its own mutation endpoints, it just points at a command the framework already exposes, and the UI renders a Fix button that runs it. A `fix` naming a command that does not exist, or one whose `check` rule failed, simply renders no button, and nothing validates the reference, so check your spelling. Five universal keys are also accepted, for the fixes that are not framework-specific: `composer_install`, `composer_update`, `npm_install`, `npm_audit_fix` and `vhost_regenerate`. The first four run in the site's container like any command; `vhost_regenerate` rewrites the site's vhost on the host and reloads nginx, and is the fix the vhost check carries.
 
 The Fix button runs the command through the same gate as everywhere else, so a fix pointing at a `confirm: true` command still asks first, and the doctor re-checks only once the command has actually run.
 
@@ -411,7 +420,7 @@ This is distinct from the per-site [nginx override](nginx-overrides.md) in `cust
 
 ## Framework detection
 
-Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry.
+Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry, and fall back to detecting one for a site whose registry entry holds no framework, so a site registered before its definition existed picks it up on the next read rather than needing a relink. A project that names a framework no definition can be found for keeps that name: it is registered and labelled as what it says it is, without the public dir or PHP range a definition would have supplied.
 
 Detection order:
 
@@ -426,6 +435,8 @@ The first match wins. Detection rules are OR-based, any single matching rule is 
 If no framework matches and no `--public-dir` is specified, lerd tries these candidate directories in order, accepting the first that contains an `index.php`:
 
 `public` → `web` → `webroot` → `pub` → `www` → `htdocs` → `.` (project root)
+
+Serving a site resolves the root again from three places, in this order: the `public_dir` the project commits in its `.lerd.yaml`, the root recorded for the site when it was linked, and the framework definition's `public_dir`. The recorded one gives way to the definition's in one case, when it holds no `index.php` and the definition's does. A root lerd guessed is only as good as the moment it was guessed in, and a project linked before `composer install` has an empty document root to walk, so the guess lands on the project root and would otherwise pin the site there long after the real root appeared.
 
 ## Log viewer
 

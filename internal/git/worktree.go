@@ -375,6 +375,8 @@ func EnsureWorktreeEnv(mainRepoPath, worktreePath, worktreeDomain string, secure
 		_ = envfile.ApplyPhpConstUpdates(worktreeEnv, updates)
 	case "php-array":
 		_ = envfile.ApplyPhpArrayUpdates(worktreeEnv, updates)
+	case "php-vars":
+		_ = envfile.ApplyPhpVarsUpdates(worktreeEnv, updates)
 	default:
 		_ = envfile.ApplyUpdates(worktreeEnv, updates)
 	}

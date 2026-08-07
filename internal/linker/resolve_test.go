@@ -258,3 +258,27 @@ func TestResolve_publicDirFromTheProjectWinsOverDetection(t *testing.T) {
 		t.Errorf("public dir = %q, want public_html — the watcher must honour it too", plan.Site.PublicDir)
 	}
 }
+
+// A project naming a framework no definition can be found for is still that
+// framework. Dropping the name registered the site as frameworkless, and since
+// nothing revisits the registry afterwards, it stayed that way even once the
+// definition landed.
+func TestResolveFramework_keepsTheNameAProjectCommitsWithoutADefinition(t *testing.T) {
+	dir := projectDir(t, "blog", "framework: nosuchframework\n")
+
+	name, known := ResolveFramework(dir, false)
+	if name != "nosuchframework" {
+		t.Errorf("name = %q, want the committed nosuchframework", name)
+	}
+	if known {
+		t.Error("known = true, want false with no definition behind the name")
+	}
+}
+
+func TestResolveFramework_namesNothingForAProjectThatDeclaresNothing(t *testing.T) {
+	dir := projectDir(t, "static", "")
+
+	if name, known := ResolveFramework(dir, false); name != "" || known {
+		t.Errorf("ResolveFramework = (%q, %v), want empty and unknown", name, known)
+	}
+}

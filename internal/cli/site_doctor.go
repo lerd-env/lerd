@@ -16,12 +16,12 @@ import (
 // app-level health checks for a single site (distinct from `lerd doctor`, which
 // diagnoses the lerd environment).
 func NewSiteDoctorCmd() *cobra.Command {
-	var asJSON bool
+	var asJSON, fix bool
 	cmd := &cobra.Command{
 		Use:          "site:doctor [domain]",
 		Short:        "Run app-level health checks for a site",
 		Long:         "Run app-level health checks (env, dependencies, security audit, framework specifics) for a site. Defaults to the site in the current directory; pass a domain to target another.",
-		Example:      "  lerd site:doctor\n  lerd site:doctor acme.test\n  lerd site:doctor --json",
+		Example:      "  lerd site:doctor\n  lerd site:doctor acme.test\n  lerd site:doctor --json\n  lerd site:doctor --fix",
 		Args:         cobra.MaximumNArgs(1),
 		SilenceUsage: true,
 		RunE: func(_ *cobra.Command, args []string) error {
@@ -29,19 +29,23 @@ func NewSiteDoctorCmd() *cobra.Command {
 			if len(args) == 1 {
 				domain = args[0]
 			}
-			return runSiteDoctor(domain, asJSON)
+			return runSiteDoctor(domain, asJSON, fix)
 		},
 	}
 	cmd.Flags().BoolVar(&asJSON, "json", false, "Output the report as JSON")
+	cmd.Flags().BoolVar(&fix, "fix", false, "Apply the findings lerd can resolve on its own (a drifted nginx vhost), then re-check")
 	return cmd
 }
 
-func runSiteDoctor(domain string, asJSON bool) error {
+func runSiteDoctor(domain string, asJSON, fix bool) error {
 	path, fwName, label, err := resolveSiteDoctorTarget(domain)
 	if err != nil {
 		return err
 	}
 	resp := sitedoctor.RunForPath(context.Background(), path, fwName)
+	if fix {
+		resp = applySiteDoctorFixes(path, fwName, resp, asJSON)
+	}
 
 	if asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -53,6 +57,31 @@ func runSiteDoctor(domain string, asJSON bool) error {
 		os.Exit(1)
 	}
 	return nil
+}
+
+// applySiteDoctorFixes resolves the findings lerd can act on by itself and
+// returns a fresh report. Only host-side fixes qualify: the composer and npm
+// ones run in the site's container behind a run lock and stream their output,
+// which belongs to the surfaces that can show it.
+func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet bool) sitedoctor.Response {
+	fixed := false
+	for _, c := range resp.Checks {
+		if c.Fix != sitedoctor.FixVhostRegenerate {
+			continue
+		}
+		if err := sitedoctor.FixVhost(path); err != nil {
+			feedback.Warn("regenerating the vhost: %v", err)
+			continue
+		}
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
+		}
+		fixed = true
+	}
+	if !fixed {
+		return resp
+	}
+	return sitedoctor.RunForPath(context.Background(), path, fwName)
 }
 
 // resolveSiteDoctorTarget returns the project path, framework name, and a label
