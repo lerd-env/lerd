@@ -468,6 +468,12 @@ type EnvKeyGeneration struct {
 // framework gets. Keeping it declarative means new frameworks need no Go change.
 type FrameworkDoctor struct {
 	Checks []DoctorCheck `yaml:"checks,omitempty"`
+	// MigrateCommand names the command from the framework's own command set that
+	// applies the schema, so the universal database checks can offer it as their
+	// fix. Every framework spells it differently (Laravel "migrate", Symfony
+	// "doctrine:migrations:migrate", Drupal "updb"), and a framework with no such
+	// command simply declares none and its findings carry no fix.
+	MigrateCommand string `yaml:"migrate_command,omitempty"`
 }
 
 // DoctorCheck is one declarative health check; Type selects the evaluator

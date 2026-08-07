@@ -186,7 +186,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		// A known-broken database turns a migration check into "couldn't run" noise
 		// that just repeats the database finding's remedy, so skip a command check
 		// whose fix is the same migrate command; unrelated command checks still run.
-		if dbBroken && spec.Type == "command" && spec.Fix == sqliteFixCommand {
+		if dbBroken && spec.Type == "command" && spec.Fix != "" && spec.Fix == migrateFix(fw) {
 			continue
 		}
 		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, envFormat, spec) })
@@ -431,12 +431,7 @@ func checkSQLiteDatabase(path, envPath string, fw *config.Framework) (Check, boo
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(path, dbFile)
 	}
-	// Only offer the migrate button when the framework actually has that command,
-	// so the CLI/TUI don't print a fix that maps to nothing.
-	fix := ""
-	if frameworkHasCommand(fw, sqliteFixCommand) {
-		fix = sqliteFixCommand
-	}
+	fix := migrateFix(fw)
 	info, err := os.Stat(abs)
 	switch {
 	case err != nil && os.IsNotExist(err):
@@ -451,10 +446,21 @@ func checkSQLiteDatabase(path, envPath string, fw *config.Framework) (Check, boo
 	return Check{Name: "sqlite_database", Status: StatusOK}, true
 }
 
-// sqliteFixCommand names the framework command the doctor offers to populate an
-// empty or missing SQLite database. Laravel's "migrate" creates the schema (and,
-// on current versions, the file); frameworks without a matching command get no fix.
-const sqliteFixCommand = "migrate"
+// migrateFix returns the framework command the doctor offers to populate an
+// empty or missing database, which is whichever of its own commands the
+// definition declares as the one that applies the schema. Laravel calls it
+// "migrate", Symfony "doctrine:migrations:migrate", Drupal "updb", so nothing
+// but the definition can say. A framework declaring none, or naming a command
+// it does not have, gets no fix rather than a button that maps to nothing.
+func migrateFix(fw *config.Framework) string {
+	if fw == nil || fw.Doctor == nil || fw.Doctor.MigrateCommand == "" {
+		return ""
+	}
+	if !frameworkHasCommand(fw, fw.Doctor.MigrateCommand) {
+		return ""
+	}
+	return fw.Doctor.MigrateCommand
+}
 
 // frameworkHasCommand reports whether fw declares a command of the given name, so
 // a doctor fix only points at something the site can actually run.

@@ -67,10 +67,6 @@ func checkServerDatabase(_ string, envPath string, fw *config.Framework) (Check,
 		}
 	}
 
-	fix := ""
-	if frameworkHasCommand(fw, sqliteFixCommand) {
-		fix = sqliteFixCommand
-	}
-	return Check{Name: "server_database", Status: StatusFail, Fix: fix,
+	return Check{Name: "server_database", Status: StatusFail, Fix: migrateFix(fw),
 		Detail: fmt.Sprintf("Database %q does not exist on %s — create it with lerd db:create %s, then run migrations.", dbName, service, dbName)}, true
 }

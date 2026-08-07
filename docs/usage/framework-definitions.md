@@ -243,6 +243,7 @@ commands:
 
 # Site doctor checks, run after the universal baseline every framework gets (optional)
 doctor:
+  migrate_command: doctrine:migrations:migrate   # the command that applies the schema
   checks:
     - name: storage_link              # stable id
       type: symlink                   # env_key_set | env_combo | symlink | command
@@ -307,6 +308,8 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 ## Doctor checks
 
 The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+
+The section also takes a `migrate_command`, naming whichever of the framework's own `commands:` applies the schema. The universal database checks offer it as their fix, so an empty or missing database is reported with the button that fills it. Every framework spells it differently (Laravel `migrate`, Symfony `doctrine:migrations:migrate`, Drupal `updb`), so nothing but the definition can say; a framework that declares none, or names a command it does not have, gets a finding with no fix rather than a button that maps to nothing.
 
 Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, and an optional `fix`.
 

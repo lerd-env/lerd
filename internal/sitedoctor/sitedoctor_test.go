@@ -324,11 +324,15 @@ func TestRun_SkipsCommandChecksWhenDatabaseBroken(t *testing.T) {
 	dir := t.TempDir()
 	writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n") // default db file missing
 	fw := &config.Framework{
-		Name: "laravel",
-		Env:  config.FrameworkEnvConf{File: ".env"},
-		Doctor: &config.FrameworkDoctor{Checks: []config.DoctorCheck{
-			{Name: "migrations", Type: "command", Command: "echo Pending", FailIfOutputContains: "Pending", Fix: "migrate", Label: "Migrations"},
-		}},
+		Name:     "laravel",
+		Env:      config.FrameworkEnvConf{File: ".env"},
+		Commands: []config.FrameworkCommand{{Name: "migrate"}},
+		Doctor: &config.FrameworkDoctor{
+			MigrateCommand: "migrate",
+			Checks: []config.DoctorCheck{
+				{Name: "migrations", Type: "command", Command: "echo Pending", FailIfOutputContains: "Pending", Fix: "migrate", Label: "Migrations"},
+			},
+		},
 	}
 	resp := Run(context.Background(), dir, fw)
 	names := map[string]string{}
@@ -635,7 +639,10 @@ func TestRun_phpConstFramework(t *testing.T) {
 }
 
 func TestCheckSQLiteDatabase(t *testing.T) {
-	migrateFW := &config.Framework{Commands: []config.FrameworkCommand{{Name: "migrate"}}}
+	migrateFW := &config.Framework{
+		Commands: []config.FrameworkCommand{{Name: "migrate"}},
+		Doctor:   &config.FrameworkDoctor{MigrateCommand: "migrate"},
+	}
 
 	t.Run("missing file fails with migrate fix", func(t *testing.T) {
 		dir := t.TempDir()
