@@ -263,6 +263,23 @@ func parsePhpReturn(src string) (*phpValue, error) {
 	return nil, nil
 }
 
+// hasLiteral reports whether the cursor sits on one of PHP's keyword literals,
+// which are case-insensitive: Drupal's settings.php writes FALSE, and reading
+// that as an unsupported value would drop the whole statement.
+func (p *phpParser) hasLiteral(w string) bool {
+	if len(p.src)-p.pos < len(w) {
+		return false
+	}
+	if !strings.EqualFold(p.src[p.pos:p.pos+len(w)], w) {
+		return false
+	}
+	if p.pos > 0 && isIdentByte(p.src[p.pos-1]) {
+		return false
+	}
+	after := p.pos + len(w)
+	return after >= len(p.src) || !isIdentByte(p.src[after])
+}
+
 // hasWord reports whether the cursor sits on w as a standalone identifier.
 func (p *phpParser) hasWord(w string) bool {
 	if !strings.HasPrefix(p.src[p.pos:], w) {
@@ -324,14 +341,14 @@ func (p *phpParser) parseValue() (*phpValue, error) {
 	case c == '\'' || c == '"':
 		s, err := p.parseString()
 		return &phpValue{kind: phpString, str: s}, err
-	case p.hasWord("true"), p.hasWord("false"):
+	case p.hasLiteral("true"), p.hasLiteral("false"):
 		w := "true"
-		if p.hasWord("false") {
+		if p.hasLiteral("false") {
 			w = "false"
 		}
 		p.pos += len(w)
 		return &phpValue{kind: phpBool, str: w}, nil
-	case p.hasWord("null"):
+	case p.hasLiteral("null"):
 		p.pos += len("null")
 		return &phpValue{kind: phpNull}, nil
 	case c == '-' || c == '.' || c >= '0' && c <= '9':
@@ -430,9 +447,9 @@ func (p *phpParser) parseString() (string, error) {
 }
 
 // Values reads every key/value pair from an env file in the given format
-// ("dotenv", "php-const", "php-array"). An unreadable file yields an empty
-// (non-nil) map, so callers need no error path for a project whose env file
-// isn't there yet. Prefer this over Reader when several keys are wanted, or
+// ("dotenv", "php-const", "php-array", "php-vars"). An unreadable file yields
+// an empty (non-nil) map, so callers need no error path for a project whose env
+// file isn't there yet. Prefer this over Reader when several keys are wanted, or
 // when the absence of a key has to be told apart from an empty value.
 func Values(path, format string) map[string]string {
 	var (
@@ -444,6 +461,8 @@ func Values(path, format string) map[string]string {
 		values, err = ReadPhpConst(path)
 	case "php-array":
 		values, err = ReadPhpArray(path)
+	case "php-vars":
+		values, err = ReadPhpVars(path)
 	default:
 		return ReadValues(path)
 	}
@@ -454,8 +473,9 @@ func Values(path, format string) map[string]string {
 }
 
 // Reader returns a key lookup for an env file in the given format ("dotenv",
-// "php-const", "php-array"). An unreadable file yields a reader that returns
-// empty strings, so callers need no error path for a missing env file.
+// "php-const", "php-array", "php-vars"). An unreadable file yields a reader
+// that returns empty strings, so callers need no error path for a missing env
+// file.
 func Reader(path, format string) func(key string) string {
 	if format == "dotenv" || format == "" {
 		return func(key string) string { return ReadKey(path, key) }

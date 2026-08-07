@@ -50,6 +50,8 @@ func applyDBEnvUpdate(path, format string, updates map[string]string) error {
 		return envfile.ApplyPhpConstUpdates(path, updates)
 	case "php-array":
 		return envfile.ApplyPhpArrayUpdates(path, updates)
+	case "php-vars":
+		return envfile.ApplyPhpVarsUpdates(path, updates)
 	default:
 		return envfile.ApplyUpdates(path, updates)
 	}

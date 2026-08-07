@@ -77,6 +77,9 @@ env:
 | `dotenv` | `KEY=value` lines | `DB_HOST` |
 | `php-const` | `define('KEY', 'value')` calls, as in WordPress's `wp-config.php` | `DB_HOST` |
 | `php-array` | a PHP file that `return`s a nested array, as in Magento's `app/etc/env.php` | dotted path, `db.connection.default.host` |
+| `php-vars` | a PHP file of top-level assignments, as in Drupal's `web/sites/default/settings.php` | dotted path rooted at the variable, `databases.default.default.host` |
+
+`php-vars` is for a framework that configures itself through assignments rather than a returned array. `databases.default.default.host` addresses `$databases['default']['default']['host']`, and writing rewrites only the statements whose values change, leaving the rest of the file, which for Drupal is hundreds of lines of guidance the user may have edited, byte for byte. A key no statement covers is appended as one of its own. That is how lerd writes the file Drupal actually reads: its installer puts the `$databases` array in `settings.php` and reads it back on every request, so connection values left anywhere else wire nothing.
 
 The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento. A rewrite that would not change anything is skipped, so a file already holding every value lerd wants keeps its mtime.
 
