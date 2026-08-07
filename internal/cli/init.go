@@ -302,10 +302,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 			Title("Database").
 			Options(dbOptions...).
 			Value(&dbChoice),
-		huh.NewMultiSelect[string]().
-			Title("Services").
-			Options(huh.NewOptions(nonDBServiceOptions...)...).
-			Value(&nonDBSelected),
+		newMultiSelect("Services", "", nonDBServiceOptions, &nonDBSelected),
 	)
 
 	formGroups := []*huh.Group{huh.NewGroup(firstGroupFields...)}
@@ -329,11 +326,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 
 	if len(customWorkerNames) > 0 {
 		formGroups = append(formGroups, huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title("Custom workers").
-				Description("Deselect to remove from .lerd.yaml").
-				Options(huh.NewOptions(customWorkerNames...)...).
-				Value(&keepCustomWorkers),
+			newMultiSelect("Custom workers", "Deselect to remove from .lerd.yaml", customWorkerNames, &keepCustomWorkers),
 		))
 	}
 
@@ -410,11 +403,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	if len(workerOptions) > 0 {
 		workerGroups := []*huh.Group{
 			huh.NewGroup(
-				huh.NewMultiSelect[string]().
-					Title("Workers").
-					Description("Auto-start when linking").
-					Options(huh.NewOptions(workerOptions...)...).
-					Value(&selectedWorkers),
+				newMultiSelect("Workers", "Auto-start when linking", workerOptions, &selectedWorkers),
 			),
 		}
 		if err := huh.NewForm(workerGroups...).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
@@ -595,10 +584,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 
 	if len(serviceOptions) > 0 {
 		if err := huh.NewForm(huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title("Services").
-				Options(huh.NewOptions(serviceOptions...)...).
-				Value(&selectedServices),
+			newMultiSelect("Services", "", serviceOptions, &selectedServices),
 		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
@@ -616,11 +602,7 @@ func runCustomContainerWizard(cwd string, defaults *config.ProjectConfig, gcfg *
 		copy(keepCustomWorkers, customWorkerNames)
 
 		if err := huh.NewForm(huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title("Custom workers").
-				Description("Deselect to remove from .lerd.yaml").
-				Options(huh.NewOptions(customWorkerNames...)...).
-				Value(&keepCustomWorkers),
+			newMultiSelect("Custom workers", "Deselect to remove from .lerd.yaml", customWorkerNames, &keepCustomWorkers),
 		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
@@ -807,10 +789,7 @@ func runHostProxyWizard(cwd string, defaults *config.ProjectConfig, gcfg *config
 	selectedServices := defaults.ServiceNames()
 	if len(serviceOptions) > 0 {
 		if err := huh.NewForm(huh.NewGroup(
-			huh.NewMultiSelect[string]().
-				Title("Services").
-				Options(huh.NewOptions(serviceOptions...)...).
-				Value(&selectedServices),
+			newMultiSelect("Services", "", serviceOptions, &selectedServices),
 		)).WithTheme(huh.ThemeFunc(huh.ThemeCatppuccin)).Run(); err != nil {
 			return nil, err
 		}
