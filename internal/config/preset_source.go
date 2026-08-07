@@ -8,8 +8,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/geodro/lerd/internal/atomicfile"
 )
 
 // presetStaleAfter is how long a cached store preset is served before EnsurePreset
@@ -140,7 +138,7 @@ func SaveStorePreset(name string, data []byte) error {
 		return err
 	}
 	guardRealWrite(filepath.Join(dir, name+".yaml"))
-	if _, err := atomicfile.WriteIfChanged(filepath.Join(dir, name+".yaml"), data, 0o644); err != nil {
+	if err := publishStoreFile(filepath.Join(dir, name+".yaml"), data, 0o644); err != nil {
 		return err
 	}
 	presetCache.Delete(name)

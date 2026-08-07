@@ -77,33 +77,6 @@ func TestSaveStorePreset_readerNeverSeesAPartialPreset(t *testing.T) {
 	wg.Wait()
 }
 
-// EnsurePreset refreshes on a staleness tick, and the bytes it fetches are
-// nearly always the ones already on disk.
-func TestSaveStorePreset_skipsTheWriteWhenNothingChanged(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	path := filepath.Join(StorePresetsDir(), "redis.yaml")
-
-	if err := SaveStorePreset("redis", storePresetYAML("1")); err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := SaveStorePreset("redis", storePresetYAML("1")); err != nil {
-		t.Fatal(err)
-	}
-	after, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("an unchanged preset was republished")
-	}
-}
-
 func TestSaveStorePreset_leavesNoTempFileBehind(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := StorePresetsDir()

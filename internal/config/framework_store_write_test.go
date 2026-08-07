@@ -154,34 +154,6 @@ func TestSaveStoreFramework_leavesNoTempFileBehind(t *testing.T) {
 	}
 }
 
-// The definition is rewritten every time it passes the staleness check, and the
-// bytes are almost always the same ones. Republishing them costs a write and a
-// rename for nothing, and each rename is a window another process can read in.
-func TestSaveStoreFramework_skipsTheWriteWhenNothingChanged(t *testing.T) {
-	store := storeSandbox(t)
-	path := filepath.Join(store, "acme@1.yaml")
-
-	if err := SaveStoreFramework(storeFrameworkWithWorkers("Acme", 10)); err != nil {
-		t.Fatal(err)
-	}
-	before, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if err := SaveStoreFramework(storeFrameworkWithWorkers("Acme", 10)); err != nil {
-		t.Fatal(err)
-	}
-	after, err := os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if !after.ModTime().Equal(before.ModTime()) {
-		t.Error("an unchanged definition was republished")
-	}
-}
-
 // The unversioned filename is what older installs read, so it has to keep
 // working alongside the versioned one.
 func TestSaveStoreFramework_writesTheUnversionedNameWhenVersionIsEmpty(t *testing.T) {

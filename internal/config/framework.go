@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/geodro/lerd/internal/atomicfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1763,8 +1762,7 @@ func SaveStoreFramework(fw *Framework) error {
 	if fw.Version != "" {
 		filename = fw.Name + "@" + fw.Version + ".yaml"
 	}
-	_, err = atomicfile.WriteIfChanged(filepath.Join(dir, filename), data, 0644)
-	return err
+	return publishStoreFile(filepath.Join(dir, filename), data, 0644)
 }
 
 // RemoveUserFramework silently removes a user-defined framework YAML if it exists.
