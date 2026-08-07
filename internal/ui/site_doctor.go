@@ -55,6 +55,13 @@ func handleDoctorRun(w http.ResponseWriter, r *http.Request, site *config.Site) 
 // install/update, npm install, npm audit fix) and streams its output as SSE,
 // reusing the command runner's stream and per-site run lock.
 func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Site, key string) {
+	// Regenerating a vhost writes on the host and reloads nginx, so it never
+	// reaches the container shell the package-manager fixes stream through.
+	if key == sitedoctor.FixVhostRegenerate {
+		err := sitedoctor.FixVhost(site.Path)
+		streamHostAction(w, "regenerated the vhost for "+site.PrimaryDomain()+" and reloaded nginx", err)
+		return
+	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]
 	if !ok {
 		writeJSON(w, map[string]any{"error": "unknown doctor fix: " + key})

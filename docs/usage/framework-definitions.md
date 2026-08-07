@@ -306,11 +306,11 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 
 ## Doctor checks
 
-The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
 
 Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, and an optional `fix`.
 
-`fix` names one of the framework's own `commands:` entries, by `name`. That indirection is the whole design: the doctor never grows its own mutation endpoints, it just points at a command the framework already exposes, and the UI renders a Fix button that runs it. A `fix` naming a command that does not exist, or one whose `check` rule failed, simply renders no button, and nothing validates the reference, so check your spelling. Four universal keys are also accepted, for the fixes that are not framework-specific: `composer_install`, `composer_update`, `npm_install` and `npm_audit_fix`.
+`fix` names one of the framework's own `commands:` entries, by `name`. That indirection is the whole design: the doctor never grows its own mutation endpoints, it just points at a command the framework already exposes, and the UI renders a Fix button that runs it. A `fix` naming a command that does not exist, or one whose `check` rule failed, simply renders no button, and nothing validates the reference, so check your spelling. Five universal keys are also accepted, for the fixes that are not framework-specific: `composer_install`, `composer_update`, `npm_install`, `npm_audit_fix` and `vhost_regenerate`. The first four run in the site's container like any command; `vhost_regenerate` rewrites the site's vhost on the host and reloads nginx, and is the fix the vhost check carries.
 
 The Fix button runs the command through the same gate as everywhere else, so a fix pointing at a `confirm: true` command still asks first, and the doctor re-checks only once the command has actually run.
 

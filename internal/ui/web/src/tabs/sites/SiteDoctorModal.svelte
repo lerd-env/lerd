@@ -120,13 +120,16 @@
     wasOpen = open;
   });
 
-  // Universal package-manager fixes run through the doctor fix endpoint rather
-  // than a framework command. The key matches sitedoctor's fix constants.
+  // Universal fixes run through the doctor fix endpoint rather than a framework
+  // command: the package-manager ones in the site's container, the vhost one on
+  // the host. The keys match sitedoctor's fix constants and the values are the
+  // labels their runs are shown under.
   const DOCTOR_FIX: Record<string, string> = {
-    composer_install: 'composer install',
-    composer_update: 'composer update',
-    npm_install: 'npm install',
-    npm_audit_fix: 'npm audit fix'
+    composer_install: 'Run composer install',
+    composer_update: 'Run composer update',
+    npm_install: 'Run npm install',
+    npm_audit_fix: 'Run npm audit fix',
+    vhost_regenerate: 'Regenerate nginx vhost'
   };
 
   async function runFix(check: DoctorCheck) {
@@ -136,7 +139,7 @@
       // Both paths drive the global CommandRunModal so the user sees streamed
       // output; once the run finishes we re-check.
       if (check.fix in DOCTOR_FIX) {
-        await executeDoctorFix(site.domain, check.fix, 'Run ' + DOCTOR_FIX[check.fix], branch);
+        await executeDoctorFix(site.domain, check.fix, DOCTOR_FIX[check.fix], branch);
       } else {
         const cmd = commands.find((c) => c.name === check.fix);
         if (!cmd) return;

@@ -396,83 +396,44 @@ func serverNamesWithWildcards(domains []string) string {
 	return strings.Join(parts, " ")
 }
 
-// GenerateVhost renders the HTTP vhost template and writes it to conf.d.
-func GenerateVhost(site config.Site, phpVersion string) error {
-	tmplData, err := GetTemplate("vhost.conf.tmpl")
-	if err != nil {
-		return err
-	}
-
-	tmpl, err := template.New("vhost").Parse(string(tmplData))
-	if err != nil {
-		return err
-	}
-
-	publicDir := resolvePublicDir(site)
-	serverNames := serverNamesWithWildcards(site.Domains)
-
-	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
-	devBase, devPort := detectSiteDevServer(site)
-	fpmContainer := podman.FPMContainerName(site, phpVersion)
-	data := VhostData{
-		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNames,
-		Path:            site.Path,
-		PHPVersion:      phpVersion,
-		PHPVersionShort: phpShort(phpVersion),
-		FPMContainer:    fpmContainer,
-		PublicDir:       publicDir,
-		Proxy:           hasProxy,
-		ProxyPath:       proxyPath,
-		ProxyPort:       proxyPort,
-		UpstreamHost:    hostProxyUpstream(),
-		DevServerBase:   devBase,
-		DevServerPort:   devPort,
-		LerdSite:        site.Name,
-		Profiling:       profilerEnabled(),
-		RequestTimeout:  resolveRequestTimeout(site.Path),
-		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
-	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-
+// writeSiteConf writes a rendered vhost into conf.d under name.
+func writeSiteConf(name string, rendered []byte) error {
 	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
 		return err
 	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
+	confPath := filepath.Join(config.NginxConfD(), name)
 	config.GuardRealWrite(confPath)
 	return os.WriteFile(confPath, rendered, 0644)
 }
 
-// GenerateSSLVhost renders the SSL vhost template and writes it to conf.d.
-func GenerateSSLVhost(site config.Site, phpVersion string) error {
-	tmplData, err := GetTemplate("vhost-ssl.conf.tmpl")
-	if err != nil {
-		return err
+// renderFPMVhost renders the vhost for a site served by fastcgi, over HTTP or,
+// with ssl set, HTTPS. Both are the same document root, upstream and framework
+// snippet; only the template and the certificate differ.
+func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, error) {
+	name := "vhost.conf.tmpl"
+	if ssl {
+		name = "vhost-ssl.conf.tmpl"
 	}
-
-	tmpl, err := template.New("vhost-ssl").Parse(string(tmplData))
+	tmplData, err := GetTemplate(name)
 	if err != nil {
-		return err
+		return nil, err
+	}
+	tmpl, err := template.New(strings.TrimSuffix(name, ".conf.tmpl")).Parse(string(tmplData))
+	if err != nil {
+		return nil, err
 	}
 
 	publicDir := resolvePublicDir(site)
-	serverNames := serverNamesWithWildcards(site.Domains)
-
 	proxyPath, proxyPort, hasProxy := detectSiteProxy(site)
 	devBase, devPort := detectSiteDevServer(site)
 	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNames,
+		ServerNames:     serverNamesWithWildcards(site.Domains),
 		Path:            site.Path,
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
-		CertDomain:      site.PrimaryDomain(),
 		PublicDir:       publicDir,
 		Proxy:           hasProxy,
 		ProxyPath:       proxyPath,
@@ -485,155 +446,100 @@ func GenerateSSLVhost(site config.Site, phpVersion string) error {
 		RequestTimeout:  resolveRequestTimeout(site.Path),
 		FrameworkNginx:  resolveFrameworkNginx(site, publicDir, fpmContainer),
 	}
+	if ssl {
+		data.CertDomain = site.PrimaryDomain()
+	}
+	return renderVhost(tmpl, data)
+}
 
-	rendered, err := renderVhost(tmpl, data)
+// GenerateVhost renders the HTTP vhost template and writes it to conf.d.
+func GenerateVhost(site config.Site, phpVersion string) error {
+	rendered, err := renderFPMVhost(site, phpVersion, false)
 	if err != nil {
 		return err
 	}
+	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
+}
 
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+// GenerateSSLVhost renders the SSL vhost template and writes it to conf.d.
+func GenerateSSLVhost(site config.Site, phpVersion string) error {
+	rendered, err := renderFPMVhost(site, phpVersion, true)
+	if err != nil {
 		return err
 	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
+}
+
+// renderContainerVhost renders the vhost for a site nginx reverse-proxies to a
+// container, which is FrankenPHP and custom-container sites alike: only the
+// container name, the port and whether the backend speaks TLS differ.
+func renderContainerVhost(site config.Site, container string, port int, backendSSL, ssl bool) ([]byte, error) {
+	name := "vhost-custom.conf.tmpl"
+	if ssl {
+		name = "vhost-custom-ssl.conf.tmpl"
+	}
+	tmplData, err := GetTemplate(name)
+	if err != nil {
+		return nil, err
+	}
+	tmpl, err := template.New(strings.TrimSuffix(name, ".conf.tmpl")).Parse(string(tmplData))
+	if err != nil {
+		return nil, err
+	}
+
+	data := VhostData{
+		Domain:          site.PrimaryDomain(),
+		ServerNames:     serverNamesWithWildcards(site.Domains),
+		CustomContainer: container,
+		CustomPort:      port,
+		BackendSSL:      backendSSL,
+		RequestTimeout:  resolveRequestTimeout(site.Path),
+	}
+	if ssl {
+		data.CertDomain = site.PrimaryDomain()
+	}
+	return renderVhost(tmpl, data)
 }
 
 // GenerateFrankenPHPVhost renders the HTTP vhost template for a FrankenPHP
 // site. Nginx reverse-proxies to the per-site lerd-fp-<name>:8000 container
 // using the shared custom-container template.
 func GenerateFrankenPHPVhost(site config.Site) error {
-	tmplData, err := GetTemplate("vhost-custom.conf.tmpl")
+	rendered, err := renderContainerVhost(site, podman.FrankenPHPContainerName(site.Name), podman.FrankenPHPPort, false, false)
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("vhost-custom").Parse(string(tmplData))
-	if err != nil {
-		return err
-	}
-
-	data := VhostData{
-		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNamesWithWildcards(site.Domains),
-		CustomContainer: podman.FrankenPHPContainerName(site.Name),
-		CustomPort:      podman.FrankenPHPPort,
-		RequestTimeout:  resolveRequestTimeout(site.Path),
-	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
 }
 
 // GenerateFrankenPHPSSLVhost renders the HTTPS vhost template for a FrankenPHP site.
 func GenerateFrankenPHPSSLVhost(site config.Site) error {
-	tmplData, err := GetTemplate("vhost-custom-ssl.conf.tmpl")
+	rendered, err := renderContainerVhost(site, podman.FrankenPHPContainerName(site.Name), podman.FrankenPHPPort, false, true)
 	if err != nil {
 		return err
 	}
-	tmpl, err := template.New("vhost-custom-ssl").Parse(string(tmplData))
-	if err != nil {
-		return err
-	}
-
-	data := VhostData{
-		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNamesWithWildcards(site.Domains),
-		CertDomain:      site.PrimaryDomain(),
-		CustomContainer: podman.FrankenPHPContainerName(site.Name),
-		CustomPort:      podman.FrankenPHPPort,
-		RequestTimeout:  resolveRequestTimeout(site.Path),
-	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
 }
 
 // GenerateCustomVhost renders the HTTP vhost template for a custom container
 // site and writes it to conf.d. Nginx reverse-proxies to the container instead
 // of using fastcgi_pass.
 func GenerateCustomVhost(site config.Site) error {
-	tmplData, err := GetTemplate("vhost-custom.conf.tmpl")
+	rendered, err := renderContainerVhost(site, podman.CustomContainerName(site.Name), site.ContainerPort, site.ContainerSSL, false)
 	if err != nil {
 		return err
 	}
-
-	tmpl, err := template.New("vhost-custom").Parse(string(tmplData))
-	if err != nil {
-		return err
-	}
-
-	data := VhostData{
-		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNamesWithWildcards(site.Domains),
-		CustomContainer: podman.CustomContainerName(site.Name),
-		CustomPort:      site.ContainerPort,
-		BackendSSL:      site.ContainerSSL,
-		RequestTimeout:  resolveRequestTimeout(site.Path),
-	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+".conf")
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return writeSiteConf(site.PrimaryDomain()+".conf", rendered)
 }
 
 // GenerateCustomSSLVhost renders the SSL vhost template for a custom container
 // site and writes it to conf.d.
 func GenerateCustomSSLVhost(site config.Site) error {
-	tmplData, err := GetTemplate("vhost-custom-ssl.conf.tmpl")
+	rendered, err := renderContainerVhost(site, podman.CustomContainerName(site.Name), site.ContainerPort, site.ContainerSSL, true)
 	if err != nil {
 		return err
 	}
-
-	tmpl, err := template.New("vhost-custom-ssl").Parse(string(tmplData))
-	if err != nil {
-		return err
-	}
-
-	data := VhostData{
-		Domain:          site.PrimaryDomain(),
-		ServerNames:     serverNamesWithWildcards(site.Domains),
-		CertDomain:      site.PrimaryDomain(),
-		CustomContainer: podman.CustomContainerName(site.Name),
-		CustomPort:      site.ContainerPort,
-		BackendSSL:      site.ContainerSSL,
-		RequestTimeout:  resolveRequestTimeout(site.Path),
-	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-	confPath := filepath.Join(config.NginxConfD(), site.PrimaryDomain()+"-ssl.conf")
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return writeSiteConf(site.PrimaryDomain()+"-ssl.conf", rendered)
 }
 
 // hostProxyUpstream returns the host address nginx proxies a host-proxy site to.
@@ -663,13 +569,23 @@ func GenerateHostProxySSLVhost(site config.Site) error {
 }
 
 func generateHostProxyVhost(site config.Site, tmplName, confName string, ssl bool) error {
-	tmplData, err := GetTemplate(tmplName)
+	rendered, err := renderHostProxyVhost(site, tmplName, ssl)
 	if err != nil {
 		return err
 	}
+	return writeSiteConf(confName, rendered)
+}
+
+// renderHostProxyVhost renders the vhost for a site nginx proxies to a process
+// on the host rather than to a container.
+func renderHostProxyVhost(site config.Site, tmplName string, ssl bool) ([]byte, error) {
+	tmplData, err := GetTemplate(tmplName)
+	if err != nil {
+		return nil, err
+	}
 	tmpl, err := template.New(tmplName).Parse(string(tmplData))
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	data := VhostData{
@@ -683,18 +599,7 @@ func generateHostProxyVhost(site config.Site, tmplName, confName string, ssl boo
 	if ssl {
 		data.CertDomain = site.PrimaryDomain()
 	}
-
-	rendered, err := renderVhost(tmpl, data)
-	if err != nil {
-		return err
-	}
-
-	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
-		return err
-	}
-	confPath := filepath.Join(config.NginxConfD(), confName)
-	config.GuardRealWrite(confPath)
-	return os.WriteFile(confPath, rendered, 0644)
+	return renderVhost(tmpl, data)
 }
 
 // GenerateWorktreeVhostFor picks GenerateWorktreeSSLVhost or GenerateWorktreeVhost
