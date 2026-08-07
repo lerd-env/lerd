@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/atomicfile"
 	"gopkg.in/yaml.v3"
 )
 
@@ -1742,6 +1743,13 @@ func GetConsoleCommand(projectDir string) (string, error) {
 // SaveStoreFramework writes a store-installed framework definition to StoreFrameworksDir().
 // If the framework has a Version field, the file is named <name>@<version>.yaml.
 // Otherwise it is named <name>.yaml (backwards compatible).
+//
+// The write is atomic because the store has several writers and more readers:
+// the fetch hook fires from any GetFrameworkForDir, which the watcher, the
+// dashboard poll and the vhost renderer all reach, and the CLI hits it from
+// link and framework add. A definition cut above the workers key still parses,
+// so a torn read hands back a valid looking framework with nothing to run
+// rather than the error that would fall through to the fallback.
 func SaveStoreFramework(fw *Framework) error {
 	dir := StoreFrameworksDir()
 	if err := os.MkdirAll(dir, 0755); err != nil {
@@ -1755,7 +1763,8 @@ func SaveStoreFramework(fw *Framework) error {
 	if fw.Version != "" {
 		filename = fw.Name + "@" + fw.Version + ".yaml"
 	}
-	return os.WriteFile(filepath.Join(dir, filename), data, 0644)
+	_, err = atomicfile.WriteIfChanged(filepath.Join(dir, filename), data, 0644)
+	return err
 }
 
 // RemoveUserFramework silently removes a user-defined framework YAML if it exists.
