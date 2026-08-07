@@ -574,6 +574,7 @@ func installQuadlets(t *testing.T, names ...string) {
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := filepath.Join(cfg, "containers", "systemd")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
@@ -629,6 +630,35 @@ func TestEnrichServices(t *testing.T) {
 		if !svcMap["redis"] {
 			t.Error("expected installed redis to still be detected")
 		}
+	})
+
+	// A project whose configuration lives outside a dotenv file references its
+	// services just the same, so the badges have to come from the file the
+	// framework declares.
+	t.Run("reads the env file the framework declares", func(t *testing.T) {
+		installQuadlets(t, "mysql")
+		storeDir := config.StoreFrameworksDir()
+		if err := os.MkdirAll(storeDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		def := "name: wordpress\nlabel: WordPress\nenv:\n  fallback_file: wp-config.php\n  fallback_format: php-const\n"
+		if err := os.WriteFile(filepath.Join(storeDir, "wordpress.yaml"), []byte(def), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		dir := t.TempDir()
+		os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("framework: wordpress\n"), 0644)
+		os.WriteFile(filepath.Join(dir, "wp-config.php"), []byte("<?php\ndefine( 'DB_HOST', 'lerd-mysql' );\n"), 0644)
+
+		e := &EnrichedSite{Path: dir}
+		e.enrichServices()
+
+		for _, s := range e.Services {
+			if s == "mysql" {
+				return
+			}
+		}
+		t.Errorf("services = %v, want mysql detected from wp-config.php", e.Services)
 	})
 
 	t.Run("no .env file returns empty", func(t *testing.T) {

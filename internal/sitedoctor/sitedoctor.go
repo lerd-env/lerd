@@ -42,6 +42,10 @@ const (
 	FixComposerUpdate  = "composer_update"
 	FixNpmInstall      = "npm_install"
 	FixNpmAuditFix     = "npm_audit_fix"
+	// FixVhostRegenerate is not a container command like the others: it rewrites
+	// the site's vhost on the host and reloads nginx, so the fix endpoint runs it
+	// through FixVhost rather than through the container shell.
+	FixVhostRegenerate = "vhost_regenerate"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the
@@ -155,6 +159,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		if c, ok := checkEnvPresent(path, envFile, fwExampleFile(fw)); ok {
 			resp.add(c)
 		}
+		if c, ok := checkServiceWiring(path, envFile, fw); ok {
+			resp.add(c)
+		}
 	}
 	// The env drift and app-key checks parse the file as dotenv, so skip them for
 	// frameworks that store config another way (WordPress's wp-config.php, etc.).
@@ -196,6 +203,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		resp.add(c)
 	}
 	if c, ok := checkPHPVersion(path, fw); ok {
+		resp.add(c)
+	}
+	if c, ok := checkVhost(path); ok {
 		resp.add(c)
 	}
 	if c, ok := checkSlowRoutes(path); ok {
@@ -336,6 +346,7 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 var universalLabels = map[string]string{
 	"required_services": "Required Services",
 	"env_present":       "Env File",
+	"service_wiring":    "Service Wiring",
 	"app_key":           "App Key",
 	"env_drift":         "Env Drift",
 	"sqlite_database":   "Database",
@@ -345,6 +356,7 @@ var universalLabels = map[string]string{
 	"node_deps":         "Node Dependencies",
 	"node_audit":        "Node Audit",
 	"php_version":       "PHP Version",
+	"vhost":             "Nginx Vhost",
 	"slow_routes":       "Response Time",
 }
 

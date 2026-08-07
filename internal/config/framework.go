@@ -1047,8 +1047,10 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 	}
 
 	// 3. Auto-fetch from the store: either the file is missing, or it's older
-	//    than 24 hours and may have been updated upstream.
-	if version != "" && frameworkFetchHook != nil {
+	//    than 24 hours and may have been updated upstream. A version the cached
+	//    index says the store does not publish is never asked for, since that
+	//    request can only 404; the nearest published definition is resolved below.
+	if version != "" && frameworkFetchHook != nil && frameworkVersionPublished(name, version) {
 		shouldFetch := base == nil
 		if !shouldFetch && versionedPath != "" {
 			if info, err := os.Stat(versionedPath); err == nil {
@@ -1089,6 +1091,19 @@ func GetFrameworkForDir(name, projectDir string) (*Framework, bool) {
 	}
 	if base == nil {
 		base = loadBestVersionedFramework(name, "")
+	}
+
+	// 4b. Nothing on disk and no definition for the project's own version:
+	//     fetch the newest one the store publishes, the same definition the
+	//     on-disk fallback above would have served. A WordPress 7 project is
+	//     still a WordPress project, and without this it resolves nothing at all
+	//     on a machine that has never installed the framework.
+	if base == nil && frameworkFetchHook != nil {
+		if latest := latestPublishedFrameworkVersion(name); latest != "" {
+			if fetched, err := frameworkFetchHook(name, latest); err == nil && fetched != nil {
+				base = fetched
+			}
+		}
 	}
 
 	if base != nil {
@@ -1255,19 +1270,74 @@ func cloneFrameworkMutable(in *Framework) *Framework {
 // store definition (<name>@<version>.yaml) exists locally, sorted ascending.
 // Only numeric versions are considered, since clamping compares them as ints.
 func availableFrameworkVersions(name string) []int {
+	seen := map[int]bool{}
+	var vers []int
+	add := func(v string) {
+		n, err := strconv.Atoi(v)
+		if err != nil || seen[n] {
+			return
+		}
+		seen[n] = true
+		vers = append(vers, n)
+	}
+
 	pattern := filepath.Join(StoreFrameworksDir(), name+"@*.yaml")
 	matches, _ := filepath.Glob(pattern)
 	prefix := name + "@"
-	var vers []int
 	for _, p := range matches {
-		base := strings.TrimSuffix(filepath.Base(p), ".yaml")
-		v := strings.TrimPrefix(base, prefix)
-		if n, err := strconv.Atoi(v); err == nil {
-			vers = append(vers, n)
+		add(strings.TrimPrefix(strings.TrimSuffix(filepath.Base(p), ".yaml"), prefix))
+	}
+	// The published list too, so a machine that has installed nothing for this
+	// framework can still tell where a project's version sits against what
+	// exists, and clamp to a definition it has yet to fetch.
+	if e := cachedStoreEntryByName(name); e != nil {
+		for _, v := range e.Versions {
+			add(v)
 		}
 	}
+
 	sort.Ints(vers)
 	return vers
+}
+
+// frameworkVersionPublished reports whether the store's cached index lists a
+// version, so a request that could only 404 is never made. An index that is
+// absent (a machine that has never reached the store) or that doesn't know the
+// framework rules nothing out, and the version is asked for.
+func frameworkVersionPublished(name, version string) bool {
+	e := cachedStoreEntryByName(name)
+	if e == nil || len(e.Versions) == 0 {
+		return true
+	}
+	for _, v := range e.Versions {
+		if v == version {
+			return true
+		}
+	}
+	return false
+}
+
+// latestPublishedFrameworkVersion returns the newest version the cached index
+// publishes for a framework, preferring the index's own latest over the highest
+// it lists. Empty when there is no cached index to read.
+func latestPublishedFrameworkVersion(name string) string {
+	e := cachedStoreEntryByName(name)
+	if e == nil {
+		return ""
+	}
+	if e.Latest != "" {
+		return e.Latest
+	}
+	highest := 0
+	for _, v := range e.Versions {
+		if n, err := strconv.Atoi(v); err == nil && n > highest {
+			highest = n
+		}
+	}
+	if highest == 0 {
+		return ""
+	}
+	return strconv.Itoa(highest)
 }
 
 // clampFrameworkVersion returns the lowest available definition version for a

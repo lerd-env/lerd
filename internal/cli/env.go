@@ -317,7 +317,7 @@ func emptyEnvFile(envFormat string) []byte {
 	switch envFormat {
 	case "php-array":
 		return []byte("<?php\nreturn [];\n")
-	case "php-const":
+	case "php-const", "php-vars":
 		return []byte("<?php\n")
 	default:
 		return []byte("")
@@ -586,6 +586,8 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		envMap, err = envfile.ReadPhpConst(envPath)
 	case "php-array":
 		envMap, err = envfile.ReadPhpArray(envPath)
+	case "php-vars":
+		envMap, err = envfile.ReadPhpVars(envPath)
 	default:
 		envMap, err = parseEnvMap(envPath)
 	}
@@ -907,10 +909,11 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 		family := config.FamilyOf(svc)
 		isDB := family == "mysql" || family == "mariadb" || family == "postgres"
-		// Only php-array addresses its keys by dotted path, so it alone cannot take a
-		// preset's env_vars. A php-const file's keys are flat and dotenv-shaped, so
-		// they land there as they always have.
-		dottedEnv := envFormat == "php-array"
+		// The dotted-path formats cannot take a preset's env_vars, which are flat
+		// and Laravel-shaped: there is nowhere in a nested config for a bare
+		// DB_HOST to go. A php-const file's keys are flat, so they land there as
+		// they always have.
+		dottedEnv := envFormat == "php-array" || envFormat == "php-vars"
 
 		// A service with nothing to wire (an admin dashboard) is only ever started.
 		if len(svc.EnvVars) == 0 {
@@ -1042,6 +1045,8 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			writeErr = envfile.ApplyPhpConstUpdates(envPath, updates)
 		case "php-array":
 			writeErr = envfile.ApplyPhpArrayUpdates(envPath, updates)
+		case "php-vars":
+			writeErr = envfile.ApplyPhpVarsUpdates(envPath, updates)
 		default:
 			writeErr = envfile.ApplyUpdates(envPath, updates)
 		}

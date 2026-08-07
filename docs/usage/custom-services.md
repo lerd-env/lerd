@@ -259,7 +259,7 @@ Custom service containers are given a 5-second graceful stop window before podma
 
 ## Pinning services
 
-By default, lerd can auto-stop services that no active site references in its `.env`. Use `pin` to keep a service running regardless of which sites are active:
+By default, lerd can auto-stop services that no active site references, either in its `.lerd.yaml` or in the env file its framework declares (`.env`, `wp-config.php`, `app/etc/env.php`, whichever the definition names). Use `pin` to keep a service running regardless of which sites are active:
 
 ```bash
 lerd service pin mysql    # always keep MySQL running
@@ -294,7 +294,7 @@ phpmyadmin           active  [custom]
   depends on: mysql
 ```
 
-- **no sites using this service**: the service was auto-stopped because no active site's `.env` references it
+- **no sites using this service**: the service was auto-stopped because no active site references it, in its `.lerd.yaml` or in the env file its framework declares
 - **depends on: ...**: the service has declared dependencies (see "Service dependencies" below)
 
 ## Service dependencies

@@ -69,6 +69,7 @@ func GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion string, entrypo
 	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/lerd:ro\n", config.DumpsAssetsDir())
 	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/php/conf.d/97-lerd-dump.ini:ro\n", config.DumpsIniFile())
 	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/php/conf.d/96-lerd-devtools.ini:ro\n", config.DevtoolsIniFile())
+	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/php/conf.d/94-lerd-mail.ini:ro\n", config.MailIniFile())
 	fmt.Fprintf(&b, "Volume=%s:/usr/local/etc/php/conf.d/99-xdebug.ini:ro\n", config.PHPConfFile(phpVersion))
 	// Per-site user php.ini override, edited from the site's config modal. Scoped
 	// to this site (not the shared per-version file), since a FrankenPHP site runs
@@ -144,6 +145,7 @@ func WriteFrankenPHPQuadletDiff(siteName, projectPath, phpVersion string, entryp
 	_ = EnsureXdebugIni(phpVersion)
 	_ = EnsureDumpAssets()
 	_ = EnsureDevtoolsAssets()
+	_ = EnsureMailAssets()
 	content, err := GenerateFrankenPHPQuadlet(siteName, projectPath, phpVersion, entrypoint, env)
 	if err != nil {
 		return false, err
