@@ -341,6 +341,8 @@ lerd shims add mysqldump      # put it back
 
 The same per-tool toggles are on each database service's Tools tab in the web UI. When two services of the same family are installed (say mysql and mariadb, which both provide `mysqldump`), one owns the shim and runs it; the others show that tool disabled on their Tools tab so it is managed in one place.
 
+Whether a tool reads as installed is answered by the shim dir itself rather than by the choice you made, so a tool counts as on only while its shim is really there. If the name is already taken in `~/.local/share/lerd/bin` by a file lerd did not write, it is left alone and adding the shim fails with that path instead of being recorded as on, both from the command and from the toggle in the web UI. Remove the file and add the shim again.
+
 ## Recovering after a service reinstall
 
 `lerd service reinstall <name> --reset-data` wipes the database server's data dir (rename-aside, recoverable) and then walks every active site that depends on the service to recreate the database it expects via `CREATE DATABASE IF NOT EXISTS`. Database name resolution is the same as `lerd env`: `.lerd.yaml` `db.database` first, then `.env` `DB_DATABASE`, then a name derived from the site name.

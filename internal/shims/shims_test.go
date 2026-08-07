@@ -219,6 +219,132 @@ func TestDecideLeavesConflictUndecidedWithoutPrompter(t *testing.T) {
 	}
 }
 
+// installMysql sets up an isolated data/config home with a single installed
+// service exposing the mysql client tools, so the Set/Reconcile tests below run
+// against real Targets() without a podman backend.
+func installMysql(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir()) // host has neither tool
+
+	svc := &config.CustomService{Name: "mysql-8", Image: "docker.io/library/mysql:8.4.4",
+		Ports: []string{"3306:3306"}, ClientShims: []config.ClientShim{{Name: "mysql"}, {Name: "mysqldump"}}}
+	if err := config.SaveCustomService(svc); err != nil {
+		t.Fatalf("SaveCustomService: %v", err)
+	}
+	prev := services.Mgr
+	services.Mgr = &fakeMgr{installed: map[string]bool{"lerd-mysql-8": true}}
+	t.Cleanup(func() { services.Mgr = prev })
+}
+
+// A toggle must report what actually happened: when the target path is held by
+// a file lerd will not overwrite, Set fails, says so, and records nothing, so
+// the tool cannot come back as enabled from a decision whose shim never landed.
+func TestSetFailsAndRecordsNothingWhenThePathIsOccupied(t *testing.T) {
+	installMysql(t)
+	binDir := config.BinDir()
+	_ = os.MkdirAll(binDir, 0755)
+	occupied := filepath.Join(binDir, "mysql")
+	_ = os.WriteFile(occupied, []byte("#!/bin/sh\necho mine\n"), 0755)
+
+	err := Set("mysql", true)
+	if err == nil {
+		t.Fatal("Set must fail when the shim path holds a file lerd does not own")
+	}
+	if !strings.Contains(err.Error(), "mysql") {
+		t.Errorf("error should name the tool, got %q", err)
+	}
+	if _, decided := decision("mysql"); decided {
+		t.Error("a failed write must leave the decision unrecorded")
+	}
+	data, _ := os.ReadFile(occupied)
+	if string(data) != "#!/bin/sh\necho mine\n" {
+		t.Error("the occupying file must be left intact")
+	}
+	for _, info := range ServiceShims("mysql-8") {
+		if info.Tool == "mysql" && info.Enabled {
+			t.Error("a tool with no shim on disk must not report as enabled")
+		}
+	}
+}
+
+func TestSetWritesTheShimThenRecordsTheDecision(t *testing.T) {
+	installMysql(t)
+	if err := Set("mysqldump", true); err != nil {
+		t.Fatalf("Set(true): %v", err)
+	}
+	shim := filepath.Join(config.BinDir(), "mysqldump")
+	if !isShimFile(shim) {
+		t.Fatal("enabling should have written the shim")
+	}
+	if e, d := decision("mysqldump"); !d || !e {
+		t.Fatalf("want decided+enabled, got decided=%v enabled=%v", d, e)
+	}
+
+	if err := Set("mysqldump", false); err != nil {
+		t.Fatalf("Set(false): %v", err)
+	}
+	if _, err := os.Stat(shim); !os.IsNotExist(err) {
+		t.Error("disabling should have removed the shim")
+	}
+	if e, d := decision("mysqldump"); !d || e {
+		t.Fatalf("want decided+disabled, got decided=%v enabled=%v", d, e)
+	}
+}
+
+// Enabled follows the shim on disk, not the recorded intent: a decision left
+// over from a write that never landed reads as not installed.
+func TestEnabledFollowsTheShimOnDisk(t *testing.T) {
+	installMysql(t)
+	_ = setDecision("mysql", true)
+
+	for _, info := range List() {
+		if info.Tool == "mysql" && info.Enabled {
+			t.Error("List: a recorded decision with no shim must not read as enabled")
+		}
+	}
+
+	_ = os.MkdirAll(config.BinDir(), 0755)
+	_ = os.WriteFile(filepath.Join(config.BinDir(), "mysql"), []byte(script("lerd", "mysql")), 0755)
+	found := false
+	for _, info := range ServiceShims("mysql-8") {
+		if info.Tool == "mysql" {
+			found = true
+			if !info.Enabled {
+				t.Error("ServiceShims: a shim present on disk must read as enabled")
+			}
+		}
+	}
+	if !found {
+		t.Fatal("mysql should be listed among the service's shims")
+	}
+}
+
+// The reconcile is not allowed to be quiet about a shim it could not write: it
+// reports the skip and leaves the decision unrecorded so the next run retries.
+func TestReconcileReportsAnOccupiedPath(t *testing.T) {
+	installMysql(t)
+	binDir := config.BinDir()
+	_ = os.MkdirAll(binDir, 0755)
+	_ = os.WriteFile(filepath.Join(binDir, "mysql"), []byte("#!/bin/sh\necho mine\n"), 0755)
+
+	err := Reconcile(nil)
+	if err == nil || !strings.Contains(err.Error(), "mysql") {
+		t.Fatalf("Reconcile should report the skipped tool, got %v", err)
+	}
+	if _, decided := decision("mysql"); decided {
+		t.Error("a skipped write must leave the decision unrecorded")
+	}
+	// The other tool of the same service is unaffected by the skip.
+	if !isShimFile(filepath.Join(binDir, "mysqldump")) {
+		t.Error("a skip on one tool must not stop the rest of the reconcile")
+	}
+	if e, d := decision("mysqldump"); !d || !e {
+		t.Errorf("the written tool should be recorded, got decided=%v enabled=%v", d, e)
+	}
+}
+
 // Targets() keeps only the first installed service as a tool's shared
 // "owner"; ToolCandidates must return every installed service exposing the
 // tool, so a caller can disambiguate among several same-family instances

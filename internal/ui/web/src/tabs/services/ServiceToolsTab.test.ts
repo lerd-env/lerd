@@ -29,13 +29,14 @@ describe('ServiceToolsTab', () => {
     expect(setServiceShim).toHaveBeenCalledWith('postgres', { tool: 'psql', enabled: true });
   });
 
-  it('marks a tool failed when its toggle rejects', async () => {
-    setServiceShim.mockResolvedValue({ ok: false, error: 'boom' });
-    const { getByRole } = render(ServiceToolsTab, { props: { svc: svc() } });
+  it('marks a tool failed and says why when its toggle rejects', async () => {
+    setServiceShim.mockResolvedValue({ ok: false, error: 'psql already exists and is not a lerd shim' });
+    const { getByRole, findByText } = render(ServiceToolsTab, { props: { svc: svc() } });
     const toggle = getByRole('button');
     await fireEvent.click(toggle);
     // A failed toggle marks that tool failing, which the control shows in red.
     expect(toggle.className).toContain('bg-red-500');
+    expect(await findByText('psql already exists and is not a lerd shim')).toBeTruthy();
   });
 
   it('disables a tool managed by another service', () => {

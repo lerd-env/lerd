@@ -11,6 +11,7 @@
 package shims
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -181,13 +182,13 @@ func ServiceShims(name string) []Info {
 		if cs.Name == "" {
 			continue
 		}
-		enabled, decided := decision(cs.Name)
+		_, decided := decision(cs.Name)
 		out = append(out, Info{
 			Tool:    cs.Name,
 			Service: name,
 			Owner:   targets[cs.Name].Service,
 			HostHas: hostHasTool(cs.Name),
-			Enabled: enabled,
+			Enabled: installed(cs.Name),
 			Decided: decided,
 		})
 	}
@@ -267,12 +268,12 @@ func List() []Info {
 	sort.Strings(tools)
 	out := make([]Info, 0, len(tools))
 	for _, t := range tools {
-		enabled, decided := decision(t)
+		_, decided := decision(t)
 		out = append(out, Info{
 			Tool:    t,
 			Service: targets[t].Service,
 			HostHas: hostHasTool(t),
-			Enabled: enabled,
+			Enabled: installed(t),
 			Decided: decided,
 		})
 	}
@@ -281,23 +282,34 @@ func List() []Info {
 
 // Set is the single entry point for an explicit shim decision, shared by the
 // CLI (`lerd shims add/remove`) and the web UI toggle. It validates that an
-// installed service actually exposes the tool, records the decision, and
-// reconciles so the change takes effect at once. It never prompts.
+// installed service actually exposes the tool, applies the change to the shim
+// dir, and only records the decision once that succeeded, so a toggle that
+// could not be carried out never reads back as done. It never prompts.
 func Set(tool string, enabled bool) error {
 	if _, ok := Targets()[tool]; !ok {
 		return fmt.Errorf("no installed service exposes the %q client tool", tool)
 	}
-	if err := setDecision(tool, enabled); err != nil {
+	lerdBin, err := os.Executable()
+	if err != nil {
 		return err
 	}
-	return Reconcile(nil)
+	binDir := config.BinDir()
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		return err
+	}
+	if err := apply(lerdBin, binDir, tool, enabled); err != nil {
+		return err
+	}
+	return recordDecision(tool, enabled)
 }
 
 // Reconcile brings the host shim dir in line with the tools the installed
 // services expose and the recorded decisions. prompt resolves a host-conflict
 // on first sight; pass nil on non-interactive paths (a removal, an update
 // reconcile) to leave conflicts undecided. Shims for tools no longer exposed by
-// any installed service are pruned.
+// any installed service are pruned. A tool it could not carry out is reported
+// rather than skipped quietly, and its decision stays unrecorded so the next
+// run tries again.
 func Reconcile(prompt Prompter) error {
 	lerdBin, err := os.Executable()
 	if err != nil {
@@ -309,41 +321,54 @@ func Reconcile(prompt Prompter) error {
 	}
 
 	targets := Targets()
+	var errs []error
 	for tool := range targets {
-		enabled, _ := decide(tool, prompt)
-		shimPath := filepath.Join(binDir, tool)
-		if enabled {
-			if canWriteShim(shimPath) {
-				_ = os.WriteFile(shimPath, []byte(script(lerdBin, tool)), 0755)
+		enabled, decided := decide(tool, prompt)
+		if err := apply(lerdBin, binDir, tool, enabled); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if decided {
+			if err := recordDecision(tool, enabled); err != nil {
+				errs = append(errs, err)
 			}
-		} else {
-			removeIfShim(shimPath)
 		}
 	}
 	pruneOrphans(targets)
-	return nil
+	return errors.Join(errs...)
+}
+
+// apply brings one tool's shim in line with a resolved decision: write it when
+// enabled, take ours away when not. An enable whose target path is held by a
+// file lerd will not overwrite is an error rather than a silent skip, so the
+// caller can say why the tool did not appear on PATH.
+func apply(lerdBin, binDir, tool string, enabled bool) error {
+	path := filepath.Join(binDir, tool)
+	if !enabled {
+		return removeIfShim(path)
+	}
+	if !canWriteShim(path) {
+		return fmt.Errorf("%s already exists and is not a lerd shim, so the %s shim was not installed; remove that file first", path, tool)
+	}
+	return os.WriteFile(path, []byte(script(lerdBin, tool)), 0755)
 }
 
 // decide resolves whether a tool's shim should be installed. A recorded decision
 // wins. Otherwise, when the host lacks the tool there is no conflict so the shim
-// is enabled automatically; when the host already has it, prompt decides (and
-// the answer is recorded). A nil prompt leaves the conflict undecided.
+// is enabled automatically; when the host already has it, prompt decides. A nil
+// prompt leaves the conflict undecided. Recording the answer is the caller's
+// job, once the shim it implies is actually on disk.
 func decide(tool string, prompt Prompter) (enabled, decided bool) {
 	if e, d := decision(tool); d {
 		return e, true
 	}
 	if !hostHasTool(tool) {
-		_ = setDecision(tool, true)
 		return true, true
 	}
 	if prompt == nil {
 		return false, false
 	}
-	e, d := prompt(tool)
-	if d {
-		_ = setDecision(tool, e)
-	}
-	return e, d
+	return prompt(tool)
 }
 
 // hostHasTool reports whether the user already has the named tool on their PATH,
@@ -376,10 +401,18 @@ func canWriteShim(path string) bool {
 
 // removeIfShim deletes path only when it is one of lerd's client shims, so the
 // reconcile never removes a user's own binary of the same name.
-func removeIfShim(path string) {
-	if isShimFile(path) {
-		_ = os.Remove(path)
+func removeIfShim(path string) error {
+	if !isShimFile(path) {
+		return nil
 	}
+	return os.Remove(path)
+}
+
+// installed reports whether a tool's shim is actually on disk, which is what
+// "enabled" means to a caller. Reading the recorded decision instead would
+// surface a tool as on whose shim never got written.
+func installed(tool string) bool {
+	return isShimFile(filepath.Join(config.BinDir(), tool))
 }
 
 // pruneOrphans removes generated shims whose tool is no longer exposed by any
@@ -401,8 +434,9 @@ func pruneOrphans(targets map[string]Target) {
 		}
 		path := filepath.Join(binDir, tool)
 		if isShimFile(path) {
-			_ = os.Remove(path)
-			_ = forgetDecision(tool)
+			if err := os.Remove(path); err == nil {
+				_ = forgetDecision(tool)
+			}
 		}
 	}
 }
@@ -437,6 +471,15 @@ func decision(tool string) (enabled, decided bool) {
 	}
 	v, ok := m[tool]
 	return v, ok
+}
+
+// recordDecision stores a resolved decision, skipping the write when the file
+// already says the same thing so a routine reconcile leaves it untouched.
+func recordDecision(tool string, enabled bool) error {
+	if e, d := decision(tool); d && e == enabled {
+		return nil
+	}
+	return setDecision(tool, enabled)
 }
 
 func setDecision(tool string, enabled bool) error {

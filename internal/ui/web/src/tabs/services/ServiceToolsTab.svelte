@@ -11,14 +11,16 @@
   const shims = $derived(svc.client_shims ?? []);
 
   let pending = $state<Record<string, boolean>>({});
-  let failed = $state<Record<string, boolean>>({});
+  let errors = $state<Record<string, string>>({});
 
   async function toggle(tool: string, enabled: boolean) {
     pending = { ...pending, [tool]: true };
-    failed = { ...failed, [tool]: false };
+    errors = { ...errors, [tool]: '' };
     const res = await setServiceShim(svc.name, { tool, enabled });
     pending = { ...pending, [tool]: false };
-    if (!res.ok) failed = { ...failed, [tool]: true };
+    // A toggle that could not be carried out says why, rather than springing
+    // back with nothing to explain it.
+    if (!res.ok) errors = { ...errors, [tool]: res.error || m.common_failed() };
   }
 </script>
 
@@ -47,12 +49,15 @@
               on={shim.enabled}
               tone={shim.host_has ? 'amber' : 'emerald'}
               loading={pending[shim.tool]}
-              failing={failed[shim.tool]}
+              failing={Boolean(errors[shim.tool])}
               disabled={managedElsewhere}
               title={managedElsewhere ? m.services_tools_providedBy({ service: shim.owner ?? '' }) : shim.tool}
               onclick={() => toggle(shim.tool, !shim.enabled)}
             />
           </div>
+          {#if errors[shim.tool]}
+            <p class="text-[10px] text-red-500 break-words max-w-[220px]">{errors[shim.tool]}</p>
+          {/if}
         </div>
       {/each}
     </div>
