@@ -31,6 +31,8 @@ When loading a framework definition for a project, the version is resolved in or
 
 When `composer.lock` shows a different version than `.lerd.yaml`, the pinned version is auto-updated.
 
+A project whose own major version has no definition published for it still gets one. Sitting below the published range, it is served the oldest definition and flagged as guessed, so that definition's PHP range is reported rather than enforced and a Laravel 6 project is still allowed PHP 7.4. Sitting above the range, or in a gap inside it, it is served the newest definition, the same one an install that already had definitions on disk would have fallen back to, so a WordPress 7 site is treated as a WordPress site rather than as no framework at all. A version the store's cached index does not list is never requested, since that fetch can only fail; an install that has never reached the store has no index to rule anything out and asks for the project's own version as before.
+
 ## Environment setup
 
 The `env` section in a framework definition controls how `lerd env` works:
