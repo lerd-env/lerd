@@ -72,6 +72,26 @@ func TestCountSitesUsingService_EnvFallback(t *testing.T) {
 	}
 }
 
+// A project that keeps its configuration outside a dotenv file is still using
+// the service it points at, so the count has to read the file the framework
+// declares rather than the .env that isn't there.
+func TestCountSitesUsingService_FrameworkDeclaredEnvFile(t *testing.T) {
+	setConfigDir(t)
+	installStoreFramework(t, wordpressStoreDef())
+
+	siteDir := t.TempDir()
+	writeProjectFile(t, siteDir, ".lerd.yaml", "framework: wordpress\n")
+	writeProjectFile(t, siteDir, "wp-config.php", "<?php\ndefine( 'DB_NAME', 'blog' );\ndefine( 'DB_HOST', 'lerd-mysql' );\n")
+
+	if err := AddSite(Site{Name: "blog", Domains: []string{"blog.test"}, Path: siteDir}); err != nil {
+		t.Fatalf("AddSite: %v", err)
+	}
+
+	if count := CountSitesUsingService("mysql"); count != 1 {
+		t.Errorf("CountSitesUsingService(mysql) = %d, want 1", count)
+	}
+}
+
 func TestCountSitesUsingService_LerdYAMLTakesPriority(t *testing.T) {
 	setDataDir(t)
 

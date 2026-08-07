@@ -31,6 +31,8 @@ When loading a framework definition for a project, the version is resolved in or
 
 When `composer.lock` shows a different version than `.lerd.yaml`, the pinned version is auto-updated.
 
+A project whose own major version has no definition published for it still gets one. Sitting below the published range, it is served the oldest definition and flagged as guessed, so that definition's PHP range is reported rather than enforced and a Laravel 6 project is still allowed PHP 7.4. Sitting above the range, or in a gap inside it, it is served the newest definition, the same one an install that already had definitions on disk would have fallen back to, so a WordPress 7 site is treated as a WordPress site rather than as no framework at all. A version the store's cached index does not list is never requested, since that fetch can only fail; an install that has never reached the store has no index to rule anything out and asks for the project's own version as before.
+
 ## Environment setup
 
 The `env` section in a framework definition controls how `lerd env` works:
@@ -411,7 +413,7 @@ This is distinct from the per-site [nginx override](nginx-overrides.md) in `cust
 
 ## Framework detection
 
-Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry.
+Framework detection only runs during `lerd link`, `lerd init`, `lerd env`, `lerd setup`, and `lerd park`. All other commands read the saved framework from the site registry, and fall back to detecting one for a site whose registry entry holds no framework, so a site registered before its definition existed picks it up on the next read rather than needing a relink. A project that names a framework no definition can be found for keeps that name: it is registered and labelled as what it says it is, without the public dir or PHP range a definition would have supplied.
 
 Detection order:
 
