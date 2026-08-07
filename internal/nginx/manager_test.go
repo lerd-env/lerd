@@ -1442,3 +1442,42 @@ func TestEnsureLerdVhost_darwinProxiesHostContainersInternal(t *testing.T) {
 		t.Errorf("expected catch-all 'return 444' in:\n%s", content)
 	}
 }
+
+// A site pinned to a document root that has nothing to serve answers 403 for
+// every request. The framework definition knows where that framework serves
+// from, so a recorded root with no index.php gives way to one that has it.
+func TestGenerateVhost_rootsAtTheDefinitionWhenTheRecordedRootCannotServe(t *testing.T) {
+	confD := setupConfD(t)
+
+	fwDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(fwDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: drupalish\nlabel: Drupalish\npublic_dir: web\n"
+	if err := os.WriteFile(filepath.Join(fwDir, "drupalish.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	sitePath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(sitePath, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sitePath, "web", "index.php"), []byte("<?php\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	site := config.Site{
+		Name:      "drupal",
+		Domains:   []string{"drupal.test"},
+		Path:      sitePath,
+		Framework: "drupalish",
+		PublicDir: ".",
+	}
+	if err := GenerateVhost(site, "8.4"); err != nil {
+		t.Fatalf("GenerateVhost: %v", err)
+	}
+	content := readConf(t, filepath.Join(confD, "drupal.test.conf"))
+	if !strings.Contains(content, `root "`+sitePath+`/web"`) {
+		t.Errorf("vhost should root at web/, got:\n%s", content)
+	}
+}
