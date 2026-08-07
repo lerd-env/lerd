@@ -157,54 +157,21 @@ func resolveDB(cwd, flagService, flagDatabase string) (*dbEnv, error) {
 	return env, nil
 }
 
-// resolveDBFromFramework detects the framework for cwd and uses its service
-// detection rules to identify which DB service is in use and what database name
-// to connect to. Returns nil when no framework is detected or no DB service matches.
+// resolveDBFromFramework resolves the site's database through its framework
+// declaration: the env file the definition names, in the format it names, at the
+// keys it names. Returns nil when no framework declares a database service the
+// project's env file matches, leaving the caller to its own inference.
 func resolveDBFromFramework(cwd string) *dbEnv {
-	fwName, ok := config.DetectFrameworkForDir(cwd)
+	target, ok := config.DBTargetFor(cwd)
 	if !ok {
 		return nil
 	}
-	fw, ok := config.GetFrameworkForDir(fwName, cwd)
-	if !ok || len(fw.Env.Services) == 0 {
-		return nil
-	}
-
-	envRelPath, envFormat := fw.Env.Resolve(cwd)
-	readKey := makeEnvReader(filepath.Join(cwd, envRelPath), envFormat)
-
-	// Build a map of only the keys referenced in detect rules (avoid reading the whole file).
-	detectKeys := map[string]string{}
-	for _, def := range fw.Env.Services {
-		for _, rule := range def.Detect {
-			if _, seen := detectKeys[rule.Key]; !seen {
-				detectKeys[rule.Key] = readKey(rule.Key)
-			}
-		}
-	}
-
-	// Check known DB services in priority order.
-	for _, svc := range []string{"mysql", "postgres"} {
-		def, ok := fw.Env.Services[svc]
-		if !ok || !frameworkServiceDetected(def, detectKeys) {
-			continue
-		}
-		env := serviceToDBEnv(svc)
-		// Target the exact service the site points at (an alternate like mariadb
-		// or postgres-18), not just the family's canonical service.
-		if s := lerdServiceFromHost(readKey("DB_HOST")); s != "" {
-			env.service = s
-		}
-		// Resolve database name from the framework's env file.
-		env.database = readKey("DB_DATABASE")
-		if env.database == "" {
-			if urlEnv := parseDBURL(readKey("DATABASE_URL")); urlEnv != nil {
-				env.database = urlEnv.database
-			}
-		}
-		return env
-	}
-	return nil
+	// serviceToDBEnv carries the container's admin credentials and dialect for
+	// the exact service the site points at, an alternate like mariadb or
+	// postgres-18 included.
+	env := serviceToDBEnv(target.Service)
+	env.database = target.Database
+	return env
 }
 
 // resolveDBLenient is like resolveDB but does not require a database name to be

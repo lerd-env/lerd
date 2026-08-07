@@ -50,3 +50,37 @@ func TestResolveDBFromFramework_ReadsStoreEnvFile(t *testing.T) {
 		t.Errorf("database = %q, want shop (parsed from DATABASE_URL in .env.local)", env.database)
 	}
 }
+
+// db:shell, db:create and db:import all resolve through the same path, so a
+// WordPress site has to reach its database through wp-config.php and DB_NAME
+// rather than the .env and DB_DATABASE it has never had.
+func TestResolveDB_WordPressSite(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	storeDef := "name: wordpress\nlabel: WordPress\nenv:\n  fallback_file: wp-config.php\n  fallback_format: php-const\n  services:\n    mysql:\n      detect:\n        - key: DB_HOST\n      vars:\n        - DB_NAME={{site}}\n        - DB_HOST=lerd-mysql\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "wordpress.yaml"), []byte(storeDef), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".lerd.yaml"), []byte("framework: wordpress\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	wpConfig := "<?php\ndefine( 'DB_NAME', 'blog' );\ndefine( 'DB_HOST', 'lerd-mysql' );\n"
+	if err := os.WriteFile(filepath.Join(dir, "wp-config.php"), []byte(wpConfig), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	env, err := resolveDB(dir, "", "")
+	if err != nil {
+		t.Fatalf("resolveDB: %v", err)
+	}
+	if env.service != "mysql" || env.database != "blog" {
+		t.Errorf("resolveDB = %+v, want service mysql on database blog", env)
+	}
+}

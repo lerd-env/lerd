@@ -429,10 +429,12 @@ func (p *phpParser) parseString() (string, error) {
 	return "", fmt.Errorf("unterminated string")
 }
 
-// Reader returns a key lookup for an env file in the given format ("dotenv",
-// "php-const", "php-array"). An unreadable file yields a reader that returns
-// empty strings, so callers need no error path for a missing env file.
-func Reader(path, format string) func(key string) string {
+// Values reads every key/value pair from an env file in the given format
+// ("dotenv", "php-const", "php-array"). An unreadable file yields an empty
+// (non-nil) map, so callers need no error path for a project whose env file
+// isn't there yet. Prefer this over Reader when several keys are wanted, or
+// when the absence of a key has to be told apart from an empty value.
+func Values(path, format string) map[string]string {
 	var (
 		values map[string]string
 		err    error
@@ -443,10 +445,21 @@ func Reader(path, format string) func(key string) string {
 	case "php-array":
 		values, err = ReadPhpArray(path)
 	default:
-		return func(key string) string { return ReadKey(path, key) }
+		return ReadValues(path)
 	}
 	if err != nil {
-		return func(string) string { return "" }
+		return map[string]string{}
 	}
+	return values
+}
+
+// Reader returns a key lookup for an env file in the given format ("dotenv",
+// "php-const", "php-array"). An unreadable file yields a reader that returns
+// empty strings, so callers need no error path for a missing env file.
+func Reader(path, format string) func(key string) string {
+	if format == "dotenv" || format == "" {
+		return func(key string) string { return ReadKey(path, key) }
+	}
+	values := Values(path, format)
 	return func(key string) string { return values[key] }
 }
