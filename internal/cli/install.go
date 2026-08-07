@@ -737,6 +737,9 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		if err := podman.EnsureDevtoolsAssets(); err != nil {
 			fmt.Printf("  WARN: writing devtools assets: %v\n", err)
 		}
+		if err := podman.EnsureMailAssets(); err != nil {
+			fmt.Printf("  WARN: writing mail assets: %v\n", err)
+		}
 	}
 
 	// 7. Pull images before touching DNS so registry lookups use the system

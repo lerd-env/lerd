@@ -920,6 +920,9 @@ func WriteFPMQuadlet(version string) error {
 	if err := EnsureDevtoolsAssets(); err != nil {
 		return fmt.Errorf("ensuring devtools assets: %w", err)
 	}
+	if err := EnsureMailAssets(); err != nil {
+		return fmt.Errorf("ensuring mail assets: %w", err)
+	}
 
 	if err := ensureFPMHostsFile(); err != nil {
 		return err
@@ -971,6 +974,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.DumpsDir}}", config.DumpsAssetsDir())
 	content = strings.ReplaceAll(content, "{{.DumpsIniPath}}", config.DumpsIniFile())
 	content = strings.ReplaceAll(content, "{{.DevtoolsIniPath}}", config.DevtoolsIniFile())
+	content = strings.ReplaceAll(content, "{{.MailIniPath}}", config.MailIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())

@@ -191,6 +191,8 @@ Captured emails can pop a notification with the subject and sender; clicking the
 
 ### RustFS, per-site buckets
 
+Mail sent through PHP's own `mail()` reaches Mailpit too, without any project configuration. The FPM image's `sendmail` is BusyBox's, which talks to `127.0.0.1:25` and finds nothing listening inside the container, so lerd writes a `sendmail_path` pointing at the mail catcher it runs and mounts it into every PHP container. That covers the frameworks that send through `mail()` rather than SMTP, Drupal and WordPress among them, which would otherwise report that mail could not be sent with nothing to show for it. A `sendmail_path` you set yourself in the shared or per-version `php.ini` wins, since lerd's file loads before both.
+
 RustFS is an S3-compatible object storage service (a drop-in replacement for MinIO). When `lerd env` detects it is needed (via `FILESYSTEM_DISK=s3` or `AWS_ENDPOINT` in `.env`), it automatically:
 
 1. Creates a bucket named after the site handle, sanitised to match the S3 naming rules (lowercase, digits, hyphens, dots only, max 63 chars). Underscores in the handle are rewritten as hyphens, so `admin_astrolov` becomes bucket `admin-astrolov`.

@@ -328,6 +328,15 @@ func DevtoolsIniFile() string {
 	return filepath.Join(DevtoolsAssetsDir(), "96-lerd-devtools.ini")
 }
 
+// MailIniFile is the host path for the conf.d ini that points PHP's mail() at
+// the mail catcher lerd runs. The FPM image's sendmail is BusyBox's, which
+// connects to 127.0.0.1:25 by default and finds nothing listening inside the
+// container, so every framework sending through mail() fails until this names
+// the catcher.
+func MailIniFile() string {
+	return filepath.Join(DataDir(), "php", "mail", "94-lerd-mail.ini")
+}
+
 // DevtoolsWorkersFlagFile is the sentinel that opts worker (queue/scheduler)
 // queries into capture. Absent (default) = workers skipped. Lives beside the
 // devtools enable flag under the /usr/local/etc/lerd mount; toggling it never
