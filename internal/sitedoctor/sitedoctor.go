@@ -159,6 +159,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		if c, ok := checkEnvPresent(path, envFile, fwExampleFile(fw)); ok {
 			resp.add(c)
 		}
+		if c, ok := checkServiceWiring(path, envFile, fw); ok {
+			resp.add(c)
+		}
 	}
 	// The env drift and app-key checks parse the file as dotenv, so skip them for
 	// frameworks that store config another way (WordPress's wp-config.php, etc.).
@@ -343,6 +346,7 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 var universalLabels = map[string]string{
 	"required_services": "Required Services",
 	"env_present":       "Env File",
+	"service_wiring":    "Service Wiring",
 	"app_key":           "App Key",
 	"env_drift":         "Env Drift",
 	"sqlite_database":   "Database",

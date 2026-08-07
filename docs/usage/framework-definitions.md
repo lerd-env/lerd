@@ -80,6 +80,10 @@ env:
 
 The `php-array` reader flattens the returned array to dotted keys, and the writer sets a dotted path, creating the intermediate arrays when they are missing. Scalar types are preserved, so an int stays an int and a bool stays a bool. The file is reparsed and reprinted rather than patched line by line, which is what Magento's own `DeploymentConfig\Writer` does, so comments in it are not preserved by lerd or by Magento. A rewrite that would not change anything is skipped, so a file already holding every value lerd wants keeps its mtime.
 
+### Wiring the doctor checks
+
+A service a project picks in its `.lerd.yaml` is expected to appear in the env file, and the doctor says so when it does not: it asks whether the file references the `lerd-<service>` container, which is a text question every format answers, so a WordPress site's `wp-config.php` and a Magento site's `app/etc/env.php` are held to it exactly as a `.env` is. Only services this section declares are checked, since those are the ones lerd knows how to wire; a `phpmyadmin` picked alongside `mysql` is picked for its own sake and is never expected in a project's config. A drop-in is checked against the block it stands in for, by family or by its preset's `env_role`, so a project on MariaDB is measured against your `mysql` block. A service listed in `.env.lerd_override`'s `LERD_EXTERNAL_SERVICES`, and `sqlite`, which has no container at all, are both left alone.
+
 ### Drop-in services
 
 A service preset publishes its connection under Laravel's key names (`DB_HOST`, `REDIS_HOST`), because that is what most projects read. Your framework may not: Drupal reads `DB_NAME` and `DB_USER`, Symfony and CakePHP read a `DATABASE_URL`, Magento addresses its config by dotted path. Those keys are the ones you declare under `env.services`, and they are what lerd writes.
@@ -308,7 +312,7 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 
 ## Doctor checks
 
-The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
 
 Each check carries a `name` (a stable id), a `type` that selects the evaluator, an optional `label` for display, an optional `detail` that overrides the generated message, an optional `severity`, and an optional `fix`.
 
