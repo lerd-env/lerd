@@ -11,14 +11,16 @@ import (
 )
 
 // registerSite sandboxes the registry and nginx conf.d and registers one site
-// at a project directory of its own.
+// at a project directory of its own. The path is resolved the way the registry
+// resolves it, so the returned site renders the same vhost the stored one does
+// on a host whose temp directory is reached through a symlink.
 func registerSite(t *testing.T, site config.Site) config.Site {
 	t.Helper()
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	site.Path = t.TempDir()
+	site.Path = config.CanonicalPath(t.TempDir())
 	if err := config.AddSite(site); err != nil {
 		t.Fatalf("AddSite: %v", err)
 	}

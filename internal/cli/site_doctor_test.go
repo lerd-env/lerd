@@ -53,7 +53,7 @@ func TestApplySiteDoctorFixes_regeneratesADriftedVhost(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", tmp)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: t.TempDir(), PHPVersion: "8.3"}
+	site := config.Site{Name: "myapp", Domains: []string{"myapp.test"}, Path: config.CanonicalPath(t.TempDir()), PHPVersion: "8.3"}
 	if err := config.AddSite(site); err != nil {
 		t.Fatalf("AddSite: %v", err)
 	}
