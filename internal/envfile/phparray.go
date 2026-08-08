@@ -463,8 +463,12 @@ func Values(path, format string) map[string]string {
 		values, err = ReadPhpArray(path)
 	case "php-vars":
 		values, err = ReadPhpVars(path)
-	default:
+	case "", FormatDotenv:
 		return ReadValues(path)
+	default:
+		// A format from a newer store than this binary knows. Reading it as
+		// dotenv would invent keys out of whatever the file happens to contain.
+		return map[string]string{}
 	}
 	if err != nil {
 		return map[string]string{}
