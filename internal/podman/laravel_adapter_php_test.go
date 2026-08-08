@@ -125,3 +125,38 @@ require ADAPTER;
 		t.Errorf("ctx.type = %q, want cli", e.Ctx.Type)
 	}
 }
+
+// TestLaravelAdapterPHP_SkipsViewsBladeCompiledForItself checks that a render
+// whose template is the compiled artefact, which is what an inline or anonymous
+// component resolves to, is left out, while a template in the project is kept.
+func TestLaravelAdapterPHP_SkipsViewsBladeCompiledForItself(t *testing.T) {
+	type ev struct {
+		Data struct {
+			Name string `json:"name"`
+		} `json:"data"`
+	}
+	lines := runLaravelAdapterPHP(t, `<?php
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+$compiled = \Lerd\LaravelAdapter\compiled_view_dir(['config' => ['view.compiled' => '/app/storage/framework/views']]);
+$renders = [
+    '/app/storage/framework/views/dca1a29b69452d307c2c30a7b9cc0a6e.php' => '__components::dca1a29b69452d307c2c30a7b9cc0a6e',
+    '/app/resources/views/app.blade.php'                                => 'app',
+];
+foreach ($renders as $path => $name) {
+    if (!\Lerd\LaravelAdapter\is_synthetic_view($path, $compiled)) {
+        \Lerd\LaravelAdapter\emit('view', ['name' => $name]);
+    }
+}
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d view events, want only the project's own template: %v", len(lines), lines)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if e.Data.Name != "app" {
+		t.Errorf("view name = %q, want app", e.Data.Name)
+	}
+}

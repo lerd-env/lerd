@@ -208,6 +208,36 @@ function emit(string $kind, array $data): void
     emit_with($kind, $data, $bt['src'], $bt['trace']);
 }
 
+// compiled_view_dir returns where Blade writes compiled templates, read from
+// the app's own config so a project that moves the cache is still understood.
+function compiled_view_dir($app): string
+{
+    try {
+        $dir = $app['config']['view.compiled'] ?? '';
+    } catch (\Throwable $_) {
+        return '';
+    }
+    if (!is_string($dir) || $dir === '') {
+        return '';
+    }
+    return rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+}
+
+// is_synthetic_view reports whether a render is one Blade made for itself
+// rather than a template in the project.
+//
+// An inline or anonymous component has no source file, so Blade registers it
+// under a hashed name and its path is the compiled artefact. Reporting those
+// fills the view lens with md5 names and cache paths, none of which is
+// something the developer wrote or can open.
+function is_synthetic_view(string $path, string $compiledDir): bool
+{
+    if ($path === '' || $compiledDir === '') {
+        return false;
+    }
+    return strncmp($path, $compiledDir, strlen($compiledDir)) === 0;
+}
+
 // addrs flattens a Symfony Mime address list to plain "name@host" strings.
 function addrs($list): array
 {
@@ -338,13 +368,19 @@ try {
         });
     }
 
-    // Views — name + path + the top-level data keys passed in.
+    // Views — name + path + the top-level data keys passed in, skipping the
+    // ones Blade compiled for itself.
     $view = $app['view'] ?? null;
     if ($view) {
-        $view->composer('*', static function ($v) {
+        $compiled = compiled_view_dir($app);
+        $view->composer('*', static function ($v) use ($compiled) {
+            $path = method_exists($v, 'getPath') ? (string) $v->getPath() : '';
+            if (is_synthetic_view($path, $compiled)) {
+                return;
+            }
             emit('view', [
                 'name'      => method_exists($v, 'getName') ? (string) $v->getName() : '',
-                'path'      => method_exists($v, 'getPath') ? (string) $v->getPath() : '',
+                'path'      => $path,
                 'data_keys' => method_exists($v, 'getData') ? array_keys($v->getData()) : [],
             ]);
         });
