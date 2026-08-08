@@ -82,6 +82,14 @@ func (t *nPlusOneTracker) observe(ev dumps.Event) *push.Notification {
 	if !ok || q.SQL == "" {
 		return nil
 	}
+	// A static asset is not a route anyone can optimise, and a framework that
+	// builds its aggregates through PHP runs queries serving one. Worse, each
+	// aggregate carries its own hash, so every request is a route the tracker
+	// has not warned about yet and the warnings arrive one per asset. The
+	// timing view already drops them by the same test.
+	if _, path, found := strings.Cut(ev.Ctx.Request, " "); found && reqstats.IsStaticAsset(path) {
+		return nil
+	}
 	route := routeKeyForQuery(ev)
 
 	t.mu.Lock()
