@@ -104,14 +104,13 @@ func handleDoctorServiceFix(w http.ResponseWriter, r *http.Request, site *config
 	}
 	fw, _ := config.GetFrameworkForDir(site.Framework, path)
 
-	installing := key == sitedoctor.FixInstallServices
-	var names []string
-	if installing {
-		names = sitedoctor.MissingDeclaredServices(path, fw)
-	} else {
-		names = sitedoctor.StoppedDeclaredServices(path, fw)
-	}
-	if len(names) == 0 {
+	// Both keys do the whole job: install what is absent, start what is
+	// stopped. They differ only in the label the button carries, which names
+	// whichever the check found, and a site with one of each would otherwise
+	// need the fix pressed twice.
+	missing := sitedoctor.MissingDeclaredServices(path, fw)
+	stopped := sitedoctor.StoppedDeclaredServices(path, fw)
+	if len(missing)+len(stopped) == 0 {
 		streamHostAction(w, "every service this site declares is already installed and running", nil)
 		return
 	}
@@ -129,25 +128,30 @@ func handleDoctorServiceFix(w http.ResponseWriter, r *http.Request, site *config
 		return
 	}
 	var failed error
-	for _, name := range names {
-		var err error
-		if installing {
-			send("stdout", "installing "+name)
-			_, err = serviceops.InstallPresetStreaming(name, "", func(ev serviceops.PhaseEvent) {
-				if line := installPhaseLine(name, ev); line != "" {
-					send("stdout", line)
-				}
-			})
-		} else {
-			send("stdout", "starting "+name)
-			err = serviceops.StartService(name)
-		}
+	for _, name := range missing {
+		send("stdout", "installing "+name)
+		_, err := serviceops.InstallPresetStreaming(name, "", func(ev serviceops.PhaseEvent) {
+			if line := installPhaseLine(name, ev); line != "" {
+				send("stdout", line)
+			}
+		})
 		if err != nil {
 			send("stderr", name+": "+err.Error())
 			failed = err
 			break
 		}
 		send("stdout", name+" is running")
+	}
+	if failed == nil {
+		for _, name := range stopped {
+			send("stdout", "starting "+name)
+			if err := serviceops.StartService(name); err != nil {
+				send("stderr", name+": "+err.Error())
+				failed = err
+				break
+			}
+			send("stdout", name+" is running")
+		}
 	}
 	exit := 0
 	if failed != nil {

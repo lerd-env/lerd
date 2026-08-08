@@ -60,43 +60,35 @@ func runSiteDoctor(domain string, asJSON, fix bool) error {
 	return nil
 }
 
-// installMissingServices installs the services the site declares that this
-// machine has never had. It reports whether anything was installed, so a run
-// where every install failed does not claim to have fixed something, and it
-// stops at the first failure rather than pulling several images to fail the
-// same way.
-func installMissingServices(path string, fw *config.Framework, quiet bool) (bool, error) {
-	installed := false
+// readyDeclaredServices brings every service the site declares to running:
+// installing the ones this machine never had and starting the ones that are
+// merely stopped. It reports whether anything changed, so a run where every
+// attempt failed does not claim to have fixed something, and it stops at the
+// first failure rather than pulling several images to fail the same way.
+func readyDeclaredServices(path string, fw *config.Framework, quiet bool) (bool, error) {
+	changed := false
 	for _, name := range sitedoctor.MissingDeclaredServices(path, fw) {
 		if !quiet {
 			fmt.Printf("  %s\n", feedback.Dim("installing "+name))
 		}
 		if _, err := serviceops.InstallPresetStreaming(name, "", func(serviceops.PhaseEvent) {}); err != nil {
-			return installed, fmt.Errorf("%s: %w", name, err)
+			return changed, fmt.Errorf("installing %s: %w", name, err)
 		}
-		installed = true
+		changed = true
 		if !quiet {
 			fmt.Printf("  %s\n\n", feedback.Dim(name+" is installed and running"))
 		}
 	}
-	return installed, nil
-}
-
-// startStoppedServices starts the services the site declares that are
-// installed and not running, reporting whether anything started so a run where
-// every start failed does not claim to have fixed something.
-func startStoppedServices(path string, fw *config.Framework, quiet bool) (bool, error) {
-	started := false
 	for _, name := range sitedoctor.StoppedDeclaredServices(path, fw) {
 		if err := serviceops.StartService(name); err != nil {
-			return started, fmt.Errorf("%s: %w", name, err)
+			return changed, fmt.Errorf("starting %s: %w", name, err)
 		}
-		started = true
+		changed = true
 		if !quiet {
 			fmt.Printf("  %s\n\n", feedback.Dim("started "+name))
 		}
 	}
-	return started, nil
+	return changed, nil
 }
 
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
@@ -117,22 +109,13 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
 			}
 			fixed = true
-		case sitedoctor.FixInstallServices:
+		case sitedoctor.FixInstallServices, sitedoctor.FixStartServices:
 			fw, _ := config.GetFrameworkForDir(fwName, path)
-			installed, err := installMissingServices(path, fw, quiet)
+			ready, err := readyDeclaredServices(path, fw, quiet)
 			if err != nil {
-				feedback.Warn("installing services: %v", err)
+				feedback.Warn("%v", err)
 			}
-			if installed {
-				fixed = true
-			}
-		case sitedoctor.FixStartServices:
-			fw, _ := config.GetFrameworkForDir(fwName, path)
-			started, err := startStoppedServices(path, fw, quiet)
-			if err != nil {
-				feedback.Warn("starting services: %v", err)
-			}
-			if started {
+			if ready {
 				fixed = true
 			}
 		case sitedoctor.FixEnvSync:
