@@ -69,6 +69,7 @@
   import { loadDoctor, type DoctorCheck, type DoctorReport } from '$stores/doctor';
   import { loadCommands, launchCommand, runSettled, executeDoctorFix, type Command } from '$stores/commands';
   import { goToTab } from '$stores/route';
+  import { pendingEnvDuplicates } from '$stores/modals';
   import { activeWorktreeDomain, type Site } from '$stores/sites';
   import { m } from '../../paraglide/messages.js';
 
@@ -134,6 +135,14 @@
 
   async function runFix(check: DoctorCheck) {
     if (!check.fix || fixing) return;
+    // Duplicate keys are resolved by the user, not by lerd: only the project
+    // knows which value it meant. Send them to the editor with its resolver
+    // open rather than running anything.
+    if (check.fix === ENV_DUPLICATES_FIX) {
+      pendingEnvDuplicates.set(true);
+      openEnv();
+      return;
+    }
     fixing = check.name;
     try {
       // Both paths drive the global CommandRunModal so the user sees streamed
@@ -195,8 +204,14 @@
   const allClear = $derived(Boolean(report) && report!.failures === 0 && report!.warnings === 0);
   const okCount = $derived(report ? report.checks.filter((c) => c.status === 'ok').length : 0);
 
+  // A fix lerd carries out itself, versus one the user resolves in the editor.
+  const ENV_DUPLICATES_FIX = 'env_duplicates_resolve';
+
   const canFix = (check: DoctorCheck): boolean =>
-    Boolean(check.fix) && (check.fix! in DOCTOR_FIX || commands.some((c) => c.name === check.fix));
+    Boolean(check.fix) &&
+    (check.fix === ENV_DUPLICATES_FIX ||
+      check.fix! in DOCTOR_FIX ||
+      commands.some((c) => c.name === check.fix));
 
   // Env drift has no automated fix; offer a pencil that jumps to the Env tab so
   // the user can reconcile .env by hand. Only when there's actually a warning.

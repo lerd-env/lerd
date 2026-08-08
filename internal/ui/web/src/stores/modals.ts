@@ -1,40 +1,41 @@
-import { writable } from 'svelte/store';
-import type { Site, EnvProposeEntry } from './sites';
+import { writable } from "svelte/store";
+import type { Site, EnvProposeEntry } from "./sites";
 
 export type ModalKind =
-  | 'domain'
-  | 'group'
-  | 'link'
-  | 'preset'
-  | 'remoteControl'
-  | 'lanProgress'
-  | 'worktreeAdd'
-  | 'worktreeRemove'
-  | 'phpAdd'
-  | 'phpRebuild'
-  | 'envSave'
-  | 'envRestore'
-  | 'envPropose'
-  | 'nginxSave'
-  | 'nginxRestore'
-  | 'nginxReset'
-  | 'nginxGlobalSave'
-  | 'nginxGlobalRestore'
-  | 'nginxGlobalReset'
-  | 'phpIniSave'
-  | 'phpIniRestore'
-  | 'phpIniReset'
-  | 'phpRemove'
-  | 'tuningSave'
-  | 'tuningRestore'
-  | 'tuningReset'
-  | 'workspaceDelete'
-  | 'siteUnlink'
-  | 'serviceInstall'
-  | 'error'
+  | "domain"
+  | "group"
+  | "link"
+  | "preset"
+  | "remoteControl"
+  | "lanProgress"
+  | "worktreeAdd"
+  | "worktreeRemove"
+  | "phpAdd"
+  | "phpRebuild"
+  | "envSave"
+  | "envRestore"
+  | "envPropose"
+  | "envDuplicates"
+  | "nginxSave"
+  | "nginxRestore"
+  | "nginxReset"
+  | "nginxGlobalSave"
+  | "nginxGlobalRestore"
+  | "nginxGlobalReset"
+  | "phpIniSave"
+  | "phpIniRestore"
+  | "phpIniReset"
+  | "phpRemove"
+  | "tuningSave"
+  | "tuningRestore"
+  | "tuningReset"
+  | "workspaceDelete"
+  | "siteUnlink"
+  | "serviceInstall"
+  | "error"
   | null;
 
-export type LANAction = 'expose' | 'unexpose';
+export type LANAction = "expose" | "unexpose";
 
 export interface EnvSaveTarget {
   domain: string;
@@ -59,6 +60,20 @@ export interface EnvProposeTarget {
   /** Called with the keys the user ticked; the tab stages just those into the
    *  editor buffer for review before saving. */
   onAdd: (keys: string[]) => void;
+}
+
+/** A key an env file sets more than once, with every live occurrence. */
+export interface EnvDuplicateEntry {
+  key: string;
+  occurrences: { line: number; value: string }[];
+}
+
+export interface EnvDuplicatesTarget {
+  file: string;
+  duplicates: EnvDuplicateEntry[];
+  /** Called with the occurrence to keep per key; the tab drops the others from
+   *  the editor buffer for review before saving. */
+  onResolve: (choices: { key: string; line: number }[]) => void;
 }
 
 export interface NginxSaveTarget {
@@ -182,6 +197,7 @@ export interface ModalState {
   envSave?: EnvSaveTarget;
   envRestore?: EnvRestoreTarget;
   envPropose?: EnvProposeTarget;
+  envDuplicates?: EnvDuplicatesTarget;
   nginxSave?: NginxSaveTarget;
   nginxRestore?: NginxRestoreTarget;
   nginxReset?: NginxResetTarget;
@@ -207,123 +223,178 @@ export const modal = writable<ModalState>({ kind: null });
 // The dashboard reports failures in a modal rather than a native alert(), which
 // browsers block, style inconsistently, and freeze the page on.
 export function openErrorModal(message: string, title?: string) {
-  modal.set({ kind: 'error', error: { message, title } });
+  modal.set({ kind: "error", error: { message, title } });
 }
 
 export function openWorkspaceDeleteModal(target: WorkspaceDeleteTarget) {
-  modal.set({ kind: 'workspaceDelete', workspaceDelete: target });
+  modal.set({ kind: "workspaceDelete", workspaceDelete: target });
 }
 
 export function openSiteUnlinkModal(target: SiteUnlinkTarget) {
-  modal.set({ kind: 'siteUnlink', siteUnlink: target });
+  modal.set({ kind: "siteUnlink", siteUnlink: target });
 }
 
 export function openServiceInstallModal(name: string) {
-  modal.set({ kind: 'serviceInstall', serviceInstall: { name } });
+  modal.set({ kind: "serviceInstall", serviceInstall: { name } });
 }
 
 export function openDomainModal(site: Site) {
-  modal.set({ kind: 'domain', site });
+  modal.set({ kind: "domain", site });
 }
 
 export function openGroupModal(site: Site) {
-  modal.set({ kind: 'group', site });
+  modal.set({ kind: "group", site });
 }
 
 export function openLinkModal() {
-  modal.set({ kind: 'link' });
+  modal.set({ kind: "link" });
 }
 
 export function openPresetModal() {
-  modal.set({ kind: 'preset' });
+  modal.set({ kind: "preset" });
 }
 
 export function openRemoteControlModal(onSuccess?: () => void) {
-  modal.set({ kind: 'remoteControl', onSuccess });
+  modal.set({ kind: "remoteControl", onSuccess });
 }
 
 export function openLANProgressModal(lanAction: LANAction) {
-  modal.set({ kind: 'lanProgress', lanAction });
+  modal.set({ kind: "lanProgress", lanAction });
 }
 
 export function openWorktreeAddModal(site: Site) {
-  modal.set({ kind: 'worktreeAdd', site });
+  modal.set({ kind: "worktreeAdd", site });
 }
 
 export function openWorktreeRemoveModal(site: Site, branch: string) {
-  modal.set({ kind: 'worktreeRemove', site, branch });
+  modal.set({ kind: "worktreeRemove", site, branch });
 }
 
 export function openPhpAddModal() {
-  modal.set({ kind: 'phpAdd' });
+  modal.set({ kind: "phpAdd" });
 }
 
 export function openPhpRebuildModal(version: string) {
-  modal.set({ kind: 'phpRebuild', phpRebuild: { version } });
+  modal.set({ kind: "phpRebuild", phpRebuild: { version } });
 }
 
-export function openEnvSaveModal(target: EnvSaveTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'envSave', envSave: target, onSuccess });
+export function openEnvSaveModal(
+  target: EnvSaveTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "envSave", envSave: target, onSuccess });
 }
 
-export function openEnvRestoreModal(target: EnvRestoreTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'envRestore', envRestore: target, onSuccess });
+export function openEnvRestoreModal(
+  target: EnvRestoreTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "envRestore", envRestore: target, onSuccess });
 }
 
 export function openEnvProposeModal(target: EnvProposeTarget) {
-  modal.set({ kind: 'envPropose', envPropose: target });
+  modal.set({ kind: "envPropose", envPropose: target });
 }
 
-export function openNginxSaveModal(target: NginxSaveTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxSave', nginxSave: target, onSuccess });
+/** Set when a surface other than the env tab asks for the duplicate resolver:
+ *  the doctor sends the user to the tab, and the tab opens the modal once its
+ *  content has loaded, since only it holds the buffer the choices apply to. */
+export const pendingEnvDuplicates = writable(false);
+
+export function openEnvDuplicatesModal(target: EnvDuplicatesTarget) {
+  modal.set({ kind: "envDuplicates", envDuplicates: target });
 }
 
-export function openNginxRestoreModal(target: NginxRestoreTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxRestore', nginxRestore: target, onSuccess });
+export function openNginxSaveModal(
+  target: NginxSaveTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "nginxSave", nginxSave: target, onSuccess });
 }
 
-export function openNginxResetModal(target: NginxResetTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxReset', nginxReset: target, onSuccess });
+export function openNginxRestoreModal(
+  target: NginxRestoreTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "nginxRestore", nginxRestore: target, onSuccess });
 }
 
-export function openNginxGlobalSaveModal(target: NginxGlobalSaveTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxGlobalSave', nginxGlobalSave: target, onSuccess });
+export function openNginxResetModal(
+  target: NginxResetTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "nginxReset", nginxReset: target, onSuccess });
 }
 
-export function openNginxGlobalRestoreModal(target: NginxGlobalRestoreTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxGlobalRestore', nginxGlobalRestore: target, onSuccess });
+export function openNginxGlobalSaveModal(
+  target: NginxGlobalSaveTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "nginxGlobalSave", nginxGlobalSave: target, onSuccess });
 }
 
-export function openNginxGlobalResetModal(target: NginxGlobalResetTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'nginxGlobalReset', nginxGlobalReset: target, onSuccess });
+export function openNginxGlobalRestoreModal(
+  target: NginxGlobalRestoreTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({
+    kind: "nginxGlobalRestore",
+    nginxGlobalRestore: target,
+    onSuccess,
+  });
 }
 
-export function openPhpIniSaveModal(target: PhpIniSaveTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'phpIniSave', phpIniSave: target, onSuccess });
+export function openNginxGlobalResetModal(
+  target: NginxGlobalResetTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "nginxGlobalReset", nginxGlobalReset: target, onSuccess });
 }
 
-export function openPhpIniRestoreModal(target: PhpIniRestoreTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'phpIniRestore', phpIniRestore: target, onSuccess });
+export function openPhpIniSaveModal(
+  target: PhpIniSaveTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "phpIniSave", phpIniSave: target, onSuccess });
 }
 
-export function openPhpIniResetModal(target: PhpIniResetTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'phpIniReset', phpIniReset: target, onSuccess });
+export function openPhpIniRestoreModal(
+  target: PhpIniRestoreTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "phpIniRestore", phpIniRestore: target, onSuccess });
+}
+
+export function openPhpIniResetModal(
+  target: PhpIniResetTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "phpIniReset", phpIniReset: target, onSuccess });
 }
 
 export function openPhpRemoveModal(target: PhpRemoveTarget) {
-  modal.set({ kind: 'phpRemove', phpRemove: target });
+  modal.set({ kind: "phpRemove", phpRemove: target });
 }
 
-export function openTuningSaveModal(target: TuningSaveTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'tuningSave', tuningSave: target, onSuccess });
+export function openTuningSaveModal(
+  target: TuningSaveTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "tuningSave", tuningSave: target, onSuccess });
 }
 
-export function openTuningRestoreModal(target: TuningRestoreTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'tuningRestore', tuningRestore: target, onSuccess });
+export function openTuningRestoreModal(
+  target: TuningRestoreTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "tuningRestore", tuningRestore: target, onSuccess });
 }
 
-export function openTuningResetModal(target: TuningResetTarget, onSuccess?: () => void) {
-  modal.set({ kind: 'tuningReset', tuningReset: target, onSuccess });
+export function openTuningResetModal(
+  target: TuningResetTarget,
+  onSuccess?: () => void,
+) {
+  modal.set({ kind: "tuningReset", tuningReset: target, onSuccess });
 }
 
 export function closeModal() {
