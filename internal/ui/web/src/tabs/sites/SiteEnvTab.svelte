@@ -11,7 +11,13 @@
     type SiteEnvBackup,
     type EnvProposeEntry
   } from '$stores/sites';
-  import { openEnvSaveModal, openEnvRestoreModal, openEnvProposeModal } from '$stores/modals';
+  import {
+    openEnvSaveModal,
+    openEnvRestoreModal,
+    openEnvProposeModal,
+    openEnvDuplicatesModal,
+    pendingEnvDuplicates
+  } from '$stores/modals';
   import { status } from '$stores/status';
   import { addedLineNumbers } from '$lib/diff';
   import { homeShorten } from '$lib/path';
@@ -61,12 +67,30 @@
   // then changing your mind updates the banner immediately.
   const duplicates = $derived(loading || error ? [] : findDuplicates(text));
 
-  // Keeping an occurrence drops the others from the buffer. That leaves an
-  // ordinary unsaved change the user reviews and saves with the normal button,
-  // the same way a staged missing key does.
-  function keepDuplicate(key: string, line: number) {
-    text = keepOnly(text, key, line);
+  // Resolving in the modal drops the other occurrences from the buffer. That
+  // leaves an ordinary unsaved change the user reviews and saves with the normal
+  // button, the same way a staged missing key does. Choices are applied from the
+  // bottom up so each removal leaves the earlier line numbers valid.
+  function applyDuplicateChoices(choices: { key: string; line: number }[]) {
+    let next = text;
+    for (const c of [...choices].sort((a, b) => b.line - a.line)) {
+      next = keepOnly(next, c.key, c.line);
+    }
+    text = next;
   }
+
+  function reviewDuplicates() {
+    openEnvDuplicatesModal({ file, duplicates, onResolve: applyDuplicateChoices });
+  }
+
+  // The doctor sends the user here with the resolver already asked for; open it
+  // once the file has actually loaded, and clear the request either way so it
+  // never fires twice.
+  $effect(() => {
+    if (!$pendingEnvDuplicates || loading) return;
+    pendingEnvDuplicates.set(false);
+    if (duplicates.length > 0) reviewDuplicates();
+  });
   const latestBackup = $derived(backups[0]);
   // Which editor lines are unsaved insertions, recomputed live from the diff
   // against the on-disk content so the green markers track edits (a line the
@@ -357,29 +381,24 @@
     </div>
   </div>
 
-  {#each duplicates as dupe (dupe.key)}
-    <div class="px-3 py-1.5 bg-amber-50 dark:bg-amber-900/15 border-b border-amber-200 dark:border-amber-900/40">
-      <div class="text-xs text-amber-700 dark:text-amber-300">
-        {m.envEditor_duplicateBanner({ key: dupe.key, n: dupe.occurrences.length })}
-      </div>
-      <div class="mt-1 flex flex-col gap-1">
-        {#each dupe.occurrences as occ (occ.line)}
-          <div class="flex items-center justify-between gap-3">
-            <code class="text-[11px] truncate text-amber-800 dark:text-amber-200" title={occ.value}
-              >{occ.line + 1}: {occ.value || "''"}</code
-            >
-            <button
-              type="button"
-              onclick={() => keepDuplicate(dupe.key, occ.line)}
-              class="text-xs px-2 py-0.5 rounded-sm border border-amber-300 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/25 whitespace-nowrap shrink-0"
-            >
-              {m.envEditor_duplicateKeep()}
-            </button>
-          </div>
-        {/each}
+  {#if duplicates.length > 0}
+    <div
+      class="flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/15 border-b border-amber-200 dark:border-amber-900/40"
+    >
+      <span class="text-xs text-amber-700 dark:text-amber-300">
+        {m.envEditor_duplicateBanner({ n: duplicates.length })}
+      </span>
+      <div class="flex items-center gap-2 shrink-0">
+        <button
+          type="button"
+          onclick={reviewDuplicates}
+          class="text-xs px-2 py-1 rounded-sm border border-amber-300 dark:border-amber-900/50 text-amber-800 dark:text-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/25 whitespace-nowrap"
+        >
+          {m.envEditor_duplicateReview()}
+        </button>
       </div>
     </div>
-  {/each}
+  {/if}
 
   {#if canPropose}
     <div class="flex items-center justify-between gap-3 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/15 border-b border-amber-200 dark:border-amber-900/40">

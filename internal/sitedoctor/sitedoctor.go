@@ -46,6 +46,10 @@ const (
 	// the site's vhost on the host and reloads nginx, so the fix endpoint runs it
 	// through FixVhost rather than through the container shell.
 	FixVhostRegenerate = "vhost_regenerate"
+	// FixEnvDuplicates is resolved by the user rather than by lerd: only the
+	// project knows which of two values it meant, so the dashboard opens the env
+	// editor's resolver on it instead of running anything.
+	FixEnvDuplicates = "env_duplicates_resolve"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the

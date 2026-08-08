@@ -46,6 +46,7 @@ func checkEnvDuplicates(path, envFile, envFormat string) (Check, bool) {
 	return Check{
 		Name:   "env_duplicates",
 		Status: StatusWarn,
+		Fix:    FixEnvDuplicates,
 		Detail: strings.Join(parts, "; ") + " — in " + envFile +
 			", and a framework reading the last value uses a different one than lerd does; keep the one you meant",
 	}, true
