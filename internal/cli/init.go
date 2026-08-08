@@ -412,11 +412,7 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 		}
 	}
 
-	// Recombine the database pick and the non-DB multi-select into a single
-	// services list for serialization. dbChoice is always one of sqlite/mysql/postgres.
-	selectedServices := make([]string, 0, len(nonDBSelected)+1)
-	selectedServices = append(selectedServices, dbChoice)
-	selectedServices = append(selectedServices, nonDBSelected...)
+	selectedServices := persistedServices(dbChoice, nonDBSelected)
 
 	// Only embed the framework definition in .lerd.yaml for user-defined
 	// frameworks that aren't available from the store. Built-in (laravel) and
@@ -850,6 +846,22 @@ var dbFamilyLabels = map[string]string{
 
 // formatDBOptionLabel returns "MySQL (lerd-mysql)" for the canonical family
 // member or "MySQL 5.7 (lerd-mysql-5-7)" for a versioned alternate.
+// persistedServices recombines the database pick and the non-database
+// multi-select into the services list written to .lerd.yaml.
+//
+// SQLite is left out. It has no preset, no container and nothing to install, so
+// an entry for it is one every surface then has to explain away, down to a card
+// offering to install something that cannot exist. The project's own
+// configuration already says it is on SQLite, and that is what lerd reads to
+// answer which database a site uses.
+func persistedServices(dbChoice string, nonDB []string) []string {
+	out := make([]string, 0, len(nonDB)+1)
+	if dbChoice != "" && dbChoice != "sqlite" {
+		out = append(out, dbChoice)
+	}
+	return append(out, nonDB...)
+}
+
 // frameworkSupportsSQLite reports whether a framework can be wired to a file
 // database, which the definition says by declaring a sqlite service alongside
 // its others. A project with no framework at all keeps the option: nothing has
