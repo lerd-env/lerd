@@ -1048,11 +1048,41 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		}
 	}
 
-	// 5. Rewrite the env file preserving order, comments, and blank lines
+	// 5. Rewrite the env file preserving order, comments, and blank lines.
+	//    Whether the connection actually moved is worked out before writing, by
+	//    comparing what is about to be written against what the file already
+	//    said: a run that changes nothing must not clear a cache for nothing.
+	changedConnection := false
+	for k, v := range updates {
+		if old, had := envMap[k]; had && old != v && dbConnectionKey(fw, k) {
+			changedConnection = true
+			break
+		}
+	}
 	if len(updates) > 0 {
 		writeErr := envfile.ApplyUpdatesIn(envPath, envFormat, updates)
 		if writeErr != nil {
 			return fmt.Errorf("writing %s: %w", envRelPath, writeErr)
+		}
+	}
+
+	// 5b. A framework caches the container definitions it builds from this
+	//     configuration, so one built against the old database outlives the
+	//     rewrite and answers every request with an error about something it can
+	//     no longer find. Clearing is best effort: a project whose dependencies
+	//     are not installed has nothing to clear, and a failure here is worth a
+	//     warning rather than failing the whole run.
+	if changedConnection && fw.CacheCommand != "" && fw.Console != "" {
+		if _, statErr := os.Stat(filepath.Join(cwd, "vendor")); statErr == nil {
+			envInfo("  Clearing the framework cache after the connection change...\n")
+			var cacheErr error
+			// Through the console binary the definition names, the same way the
+			// application key is generated, so a framework that does not spell
+			// it "artisan" works too.
+			envInterrupt(func() { cacheErr = consoleIn(cwd, fw.Console, fw.CacheCommand) })
+			if cacheErr != nil {
+				feedback.Warn("%s failed: %v", fw.CacheCommand, cacheErr)
+			}
 		}
 	}
 
@@ -1326,6 +1356,23 @@ func generateRandomKey(prefix string) string {
 	key := make([]byte, 32)
 	crand.Read(key) //nolint:errcheck
 	return prefix + base64.StdEncoding.EncodeToString(key)
+}
+
+// dbConnectionKey reports whether an env key belongs to one of the database
+// services the framework declares, so a changed APP_URL or mail setting does not
+// count as the site moving database.
+func dbConnectionKey(fw *config.Framework, key string) bool {
+	for name, def := range fw.Env.Services {
+		if !config.IsDBServiceName(name) {
+			continue
+		}
+		for _, kv := range def.Vars {
+			if k, _, found := strings.Cut(kv, "="); found && strings.TrimSpace(k) == key {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // consoleExecArgs builds the podman exec args to run a framework console
