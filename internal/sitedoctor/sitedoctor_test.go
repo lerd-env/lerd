@@ -647,7 +647,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 	t.Run("missing file fails with migrate fix", func(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
-		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW)
 		if !ok || c.Status != StatusFail || c.Fix != "migrate" {
 			t.Fatalf("missing default sqlite db should fail with a migrate fix, got ok=%v %+v", ok, c)
 		}
@@ -658,7 +658,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
 		mustMkdir(t, filepath.Join(dir, "database"))
 		writeEnv(t, filepath.Join(dir, "database"), "database.sqlite", "")
-		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW)
 		if !ok || c.Status != StatusFail || c.Fix != "migrate" {
 			t.Fatalf("empty sqlite db should fail with a migrate fix, got ok=%v %+v", ok, c)
 		}
@@ -667,7 +667,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 	t.Run("no migrate command means no fix offered", func(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
-		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), &config.Framework{})
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", &config.Framework{})
 		if !ok || c.Status != StatusFail || c.Fix != "" {
 			t.Fatalf("a framework without a migrate command must not offer a fix, got ok=%v %+v", ok, c)
 		}
@@ -678,7 +678,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
 		mustMkdir(t, filepath.Join(dir, "database"))
 		writeEnv(t, filepath.Join(dir, "database"), "database.sqlite", "SQLite format 3\x00")
-		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW)
 		if !ok || c.Status != StatusOK {
 			t.Fatalf("populated sqlite db should pass, got ok=%v %+v", ok, c)
 		}
@@ -687,7 +687,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 	t.Run("non-sqlite connection is skipped", func(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, ".env", "DB_CONNECTION=mysql\n")
-		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW); ok {
 			t.Error("a non-sqlite connection must not produce a database check")
 		}
 	})
@@ -695,7 +695,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 	t.Run("in-memory database is skipped", func(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\nDB_DATABASE=:memory:\n")
-		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW); ok {
+		if _, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW); ok {
 			t.Error("an in-memory sqlite database has no file to check")
 		}
 	})
@@ -704,7 +704,7 @@ func TestCheckSQLiteDatabase(t *testing.T) {
 		dir := t.TempDir()
 		dbPath := filepath.Join(dir, "custom.sqlite")
 		writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\nDB_DATABASE="+dbPath+"\n")
-		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), migrateFW)
+		c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", migrateFW)
 		if !ok || c.Status != StatusFail {
 			t.Fatalf("missing absolute sqlite db should fail, got ok=%v %+v", ok, c)
 		}

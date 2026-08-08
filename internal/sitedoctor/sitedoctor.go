@@ -171,16 +171,21 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	// The env drift and app-key checks parse the file as dotenv, so skip them for
 	// frameworks that store config another way (WordPress's wp-config.php, etc.).
 	dbBroken := false
+	// The SQLite check reads whichever keys the framework declares, in whatever
+	// format it declares them, so a project configured through a PHP settings
+	// file is checked like any other.
+	if c, ok := checkSQLiteDatabase(path, envPath, envFormat, fw); ok {
+		resp.add(c)
+		dbBroken = c.Status == StatusFail
+	}
+	// The app-key and drift checks parse the file as dotenv (one diffs it against
+	// a committed example), so they stay for the frameworks that keep one.
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
 			resp.add(c)
 		}
 		if c, ok := checkEnvDrift(path, envPath, filepath.Join(path, exampleFile)); ok {
 			resp.add(c)
-		}
-		if c, ok := checkSQLiteDatabase(path, envPath, fw); ok {
-			resp.add(c)
-			dbBroken = c.Status == StatusFail
 		}
 		if c, ok := checkServerDatabase(path, envPath, fw); ok {
 			resp.add(c)
@@ -438,21 +443,12 @@ func checkAppKey(envPath string, fw *config.Framework) (Check, bool) {
 // ("no such table"), which migrate:status can't surface: it reports the missing
 // migrations table, so the remedy would point at migrate rather than the absent
 // file. Skipped unless DB_CONNECTION is sqlite; an in-memory database has none.
-func checkSQLiteDatabase(path, envPath string, fw *config.Framework) (Check, bool) {
-	if !strings.EqualFold(strings.TrimSpace(envfile.ReadKey(envPath, "DB_CONNECTION")), "sqlite") {
+func checkSQLiteDatabase(path, envPath, envFormat string, fw *config.Framework) (Check, bool) {
+	dbFile, ok := declaredSQLiteFile(envPath, envFormat, fw)
+	if !ok || dbFile == ":memory:" {
 		return Check{}, false
 	}
-	dbFile := strings.TrimSpace(envfile.ReadKey(envPath, "DB_DATABASE"))
-	if dbFile == ":memory:" {
-		return Check{}, false
-	}
-	if dbFile == "" {
-		dbFile = filepath.Join("database", "database.sqlite") // Laravel default
-	}
-	abs := dbFile
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(path, dbFile)
-	}
+	abs := sqliteFilePath(path, dbFile)
 	fix := migrateFix(fw)
 	info, err := os.Stat(abs)
 	switch {

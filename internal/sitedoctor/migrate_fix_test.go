@@ -55,7 +55,7 @@ func TestCheckSQLiteDatabase_offersTheFrameworksOwnMigrateCommand(t *testing.T) 
 	dir := t.TempDir()
 	writeEnv(t, dir, ".env", "DB_CONNECTION=sqlite\n")
 
-	c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), symfony)
+	c, ok := checkSQLiteDatabase(dir, filepath.Join(dir, ".env"), "dotenv", symfony)
 	if !ok || c.Status != StatusFail {
 		t.Fatalf("check = %+v (ok=%v), want a failure", c, ok)
 	}
