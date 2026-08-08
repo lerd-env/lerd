@@ -58,8 +58,9 @@ func checkServiceWiring(path, envFile string, fw *config.Framework) (Check, bool
 	return Check{
 		Name:   "service_wiring",
 		Status: StatusWarn,
+		Fix:    FixEnvSync,
 		Detail: strings.Join(unwired, ", ") + " picked in .lerd.yaml, but nothing in " + envFile +
-			" points at it — the app is using something else, or was never wired up",
+			" points at it — run `lerd env` to write the connection, which repoints the app at that service",
 	}, true
 }
 
