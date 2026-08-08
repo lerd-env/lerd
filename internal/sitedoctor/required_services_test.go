@@ -7,27 +7,42 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+// withStubs pins what lerd has installed and what is running. installed is
+// keyed by unit name ("lerd-redis") as the status map is, and a test about a
+// stale unit overrides the install answer with withServiceInstalled.
 func withStubs(t *testing.T, installed map[string]bool, status map[string]string) {
 	t.Helper()
-	origInstalled, origStatus := quadletInstalledFn, unitStatusFn
-	quadletInstalledFn = func(unit string) bool { return installed[unit] }
+	origStatus := unitStatusFn
 	unitStatusFn = func(unit string) (string, error) { return status[unit], nil }
-	t.Cleanup(func() { quadletInstalledFn, unitStatusFn = origInstalled, origStatus })
+	t.Cleanup(func() { unitStatusFn = origStatus })
+
+	names := map[string]bool{}
+	for unit, ok := range installed {
+		names[strings.TrimPrefix(unit, "lerd-")] = ok
+	}
+	withServiceInstalled(t, names)
+}
+
+func withServiceInstalled(t *testing.T, installed map[string]bool) {
+	t.Helper()
+	orig := serviceInstalledFn
+	serviceInstalledFn = func(name string) bool { return installed[name] }
+	t.Cleanup(func() { serviceInstalledFn = orig })
 }
 
 func TestRequiredServicesSkippedWhenNoneDeclared(t *testing.T) {
 	withStubs(t, nil, nil)
-	if _, ok := checkRequiredServices(&config.Framework{}); ok {
+	if _, ok := checkRequiredServices(t.TempDir(), &config.Framework{}); ok {
 		t.Error("a framework requiring nothing should produce no check")
 	}
-	if _, ok := checkRequiredServices(nil); ok {
+	if _, ok := checkRequiredServices(t.TempDir(), nil); ok {
 		t.Error("nil framework should produce no check")
 	}
 }
 
 func TestRequiredServicesOKWhenInstalledAndActive(t *testing.T) {
 	withStubs(t, map[string]bool{"lerd-opensearch": true}, map[string]string{"lerd-opensearch": "active"})
-	c, ok := checkRequiredServices(&config.Framework{Requires: []string{"opensearch"}})
+	c, ok := checkRequiredServices(t.TempDir(), &config.Framework{Requires: []string{"opensearch"}})
 	if !ok || c.Status != StatusOK {
 		t.Fatalf("got %+v", c)
 	}
@@ -36,7 +51,7 @@ func TestRequiredServicesOKWhenInstalledAndActive(t *testing.T) {
 // Not installed is a hard failure: the app cannot boot without it.
 func TestRequiredServicesFailsWhenNotInstalled(t *testing.T) {
 	withStubs(t, nil, nil)
-	c, ok := checkRequiredServices(&config.Framework{Label: "Magento", Requires: []string{"opensearch"}})
+	c, ok := checkRequiredServices(t.TempDir(), &config.Framework{Label: "Magento", Requires: []string{"opensearch"}})
 	if !ok || c.Status != StatusFail {
 		t.Fatalf("got %+v", c)
 	}
@@ -49,7 +64,7 @@ func TestRequiredServicesFailsWhenNotInstalled(t *testing.T) {
 // and lerd starts it on the next link anyway.
 func TestRequiredServicesWarnsWhenStopped(t *testing.T) {
 	withStubs(t, map[string]bool{"lerd-opensearch": true}, map[string]string{"lerd-opensearch": "inactive"})
-	c, ok := checkRequiredServices(&config.Framework{Requires: []string{"opensearch"}})
+	c, ok := checkRequiredServices(t.TempDir(), &config.Framework{Requires: []string{"opensearch"}})
 	if !ok || c.Status != StatusWarn {
 		t.Fatalf("got %+v", c)
 	}
@@ -66,7 +81,7 @@ func TestRequiredServicesRemedyCoversEveryService(t *testing.T) {
 		map[string]bool{"lerd-opensearch": true, "lerd-redis": true},
 		map[string]string{"lerd-opensearch": "inactive", "lerd-redis": "inactive"},
 	)
-	c, _ := checkRequiredServices(&config.Framework{Requires: []string{"opensearch", "redis"}})
+	c, _ := checkRequiredServices(t.TempDir(), &config.Framework{Requires: []string{"opensearch", "redis"}})
 	if c.Status != StatusWarn {
 		t.Fatalf("got %s, want warn: %+v", c.Status, c)
 	}
@@ -77,7 +92,7 @@ func TestRequiredServicesRemedyCoversEveryService(t *testing.T) {
 	}
 
 	withStubs(t, nil, nil)
-	c, _ = checkRequiredServices(&config.Framework{Label: "Magento", Requires: []string{"opensearch", "redis"}})
+	c, _ = checkRequiredServices(t.TempDir(), &config.Framework{Label: "Magento", Requires: []string{"opensearch", "redis"}})
 	for _, want := range []string{"lerd service preset opensearch", "lerd service preset redis"} {
 		if !strings.Contains(c.Detail, want) {
 			t.Errorf("detail %q must contain %q", c.Detail, want)
@@ -91,7 +106,7 @@ func TestRequiredServicesMissingOutranksStopped(t *testing.T) {
 		map[string]bool{"lerd-redis": true},
 		map[string]string{"lerd-redis": "inactive"},
 	)
-	c, _ := checkRequiredServices(&config.Framework{Requires: []string{"redis", "opensearch"}})
+	c, _ := checkRequiredServices(t.TempDir(), &config.Framework{Requires: []string{"redis", "opensearch"}})
 	if c.Status != StatusFail {
 		t.Fatalf("got %s, want fail: %+v", c.Status, c)
 	}

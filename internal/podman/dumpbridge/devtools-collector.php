@@ -178,6 +178,58 @@ function context(): array
     });
 }
 
+// installed_dirs returns every directory Composer put a package in, read once
+// per process from the project's installed map. The root package is excluded:
+// it is the project itself, and everything sits under it.
+function installed_dirs(): array
+{
+    static $dirs = null;
+    if ($dirs !== null) {
+        return $dirs;
+    }
+    $dirs = [];
+    $dir = $_SERVER['DOCUMENT_ROOT'] ?? '';
+    if ($dir === '') {
+        $dir = getcwd() ?: '';
+    }
+    for ($up = 0; $up < 8 && $dir !== '' && $dir !== DIRECTORY_SEPARATOR; $up++) {
+        $map = $dir . '/vendor/composer/installed.php';
+        if (is_file($map)) {
+            $installed = @include $map;
+            $root = isset($installed['root']['install_path']) ? realpath($installed['root']['install_path']) : false;
+            foreach ($installed['versions'] ?? [] as $pkg) {
+                $path = isset($pkg['install_path']) ? realpath($pkg['install_path']) : false;
+                if ($path !== false && $path !== $root) {
+                    $dirs[] = $path . DIRECTORY_SEPARATOR;
+                }
+            }
+            break;
+        }
+        $dir = dirname($dir);
+    }
+    return $dirs;
+}
+
+// is_dependency reports whether a file belongs to something the project
+// installed rather than to code its developer wrote.
+//
+// The test used to be the literal path /vendor/, which misses a framework whose
+// own core is a package placed elsewhere: Drupal core installs at web/core, so
+// every query resolved to the database layer inside it and nothing lerd
+// reported about a query said which code had run it.
+function is_dependency(string $file): bool
+{
+    if (strpos($file, '/vendor/') !== false) {
+        return true;
+    }
+    foreach (installed_dirs() as $dir) {
+        if (strpos($file, $dir) === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function backtrace(): array
 {
     $bt = debug_backtrace(\DEBUG_BACKTRACE_IGNORE_ARGS, 50);
@@ -202,7 +254,7 @@ function backtrace(): array
         if ($fallback === null) {
             $fallback = ['file' => $file, 'line' => $line];
         }
-        if ($src === null && strpos($file, '/vendor/') === false) {
+        if ($src === null && !is_dependency($file)) {
             $src = ['file' => $file, 'line' => $line];
         }
     }
@@ -225,6 +277,90 @@ function emit(string $kind, array $data): void
         ]);
     } catch (\Throwable $_) {
     }
+}
+
+// preview_value renders one view variable as a short label, enough to tell a
+// string from a 40-item collection from a model.
+//
+// The values themselves are not shipped: view data is a whole page payload on
+// an Inertia app and routinely holds the authenticated user, so the shape is
+// both the useful part and the safe one.
+function preview_value($v): string
+{
+    if ($v === null) {
+        return 'null';
+    }
+    if (is_bool($v)) {
+        return $v ? 'true' : 'false';
+    }
+    if (is_int($v) || is_float($v)) {
+        return (string) $v;
+    }
+    if (is_string($v)) {
+        return strlen($v) > 160 ? '"' . substr($v, 0, 157) . '..."' : '"' . $v . '"';
+    }
+    if (is_array($v)) {
+        return 'array(' . count($v) . ')';
+    }
+    if ($v instanceof \Closure) {
+        return 'Closure';
+    }
+    if (is_object($v)) {
+        $class = get_class($v);
+        $pos = strrpos($class, '\\');
+        $short = $pos === false ? $class : substr($class, $pos + 1);
+        if ($v instanceof \Countable) {
+            try {
+                return $short . '(' . count($v) . ')';
+            } catch (\Throwable $_) {
+                return $short;
+            }
+        }
+        return $short;
+    }
+    return gettype($v);
+}
+
+// preview_data labels the variables a template was actually given, capped so
+// one view with a large context cannot dominate the buffer. Whatever the
+// environment injects into every template is subtracted, along with the
+// underscore-prefixed names the engine reserves, so what is left is what the
+// developer passed to this one.
+function preview_data($data, array $globals = []): array
+{
+    $out = [];
+    if (!is_array($data)) {
+        return $out;
+    }
+    foreach ($data as $k => $v) {
+        if (count($out) >= 40) {
+            break;
+        }
+        $key = (string) $k;
+        if (strncmp($key, '_', 1) === 0 || array_key_exists($key, $globals)) {
+            continue;
+        }
+        try {
+            $out[$key] = preview_value($v);
+        } catch (\Throwable $_) {
+            $out[$key] = '?';
+        }
+    }
+    return $out;
+}
+
+// twig_globals is what the environment adds to every template, so it can be
+// told apart from this template's own context.
+function twig_globals($env): array
+{
+    try {
+        if (is_object($env) && method_exists($env, 'getGlobals')) {
+            $g = $env->getGlobals();
+            return is_array($g) ? $g : [];
+        }
+    } catch (\Throwable $_) {
+    }
+    return [];
 }
 
 function addrs($list): array
@@ -280,8 +416,8 @@ function view($env, $name, $context): void
         }
     } catch (\Throwable $_) {
     }
-    $keys = is_array($context) ? array_map('strval', array_keys($context)) : [];
-    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => $keys]);
+    $preview = preview_data($context, twig_globals($env));
+    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => array_keys($preview), 'data_preview' => $preview]);
 }
 
 // event captures one Symfony event dispatch. $event is the event object, $name

@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/spf13/cobra"
 )
@@ -59,24 +60,74 @@ func runSiteDoctor(domain string, asJSON, fix bool) error {
 	return nil
 }
 
+// readyDeclaredServices brings every service the site declares to running:
+// installing the ones this machine never had and starting the ones that are
+// merely stopped. It reports whether anything changed, so a run where every
+// attempt failed does not claim to have fixed something, and it stops at the
+// first failure rather than pulling several images to fail the same way.
+func readyDeclaredServices(path string, fw *config.Framework, quiet bool) (bool, error) {
+	changed := false
+	for _, name := range sitedoctor.MissingDeclaredServices(path, fw) {
+		if !quiet {
+			fmt.Printf("  %s\n", feedback.Dim("installing "+name))
+		}
+		if _, err := serviceops.InstallPresetStreaming(name, "", func(serviceops.PhaseEvent) {}); err != nil {
+			return changed, fmt.Errorf("installing %s: %w", name, err)
+		}
+		changed = true
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim(name+" is installed and running"))
+		}
+	}
+	for _, name := range sitedoctor.StoppedDeclaredServices(path, fw) {
+		if err := serviceops.StartService(name); err != nil {
+			return changed, fmt.Errorf("starting %s: %w", name, err)
+		}
+		changed = true
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim("started "+name))
+		}
+	}
+	return changed, nil
+}
+
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
-// returns a fresh report. Only host-side fixes qualify: the composer and npm
-// ones run in the site's container behind a run lock and stream their output,
+// returns a fresh report: a drifted vhost is rewritten, and a service picked but
+// not wired has its connection written. The composer and npm ones are left out;
+// they run in the site's container behind a run lock and stream their output,
 // which belongs to the surfaces that can show it.
 func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet bool) sitedoctor.Response {
 	fixed := false
 	for _, c := range resp.Checks {
-		if c.Fix != sitedoctor.FixVhostRegenerate {
-			continue
+		switch c.Fix {
+		case sitedoctor.FixVhostRegenerate:
+			if err := sitedoctor.FixVhost(path); err != nil {
+				feedback.Warn("regenerating the vhost: %v", err)
+				continue
+			}
+			if !quiet {
+				fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
+			}
+			fixed = true
+		case sitedoctor.FixInstallServices, sitedoctor.FixStartServices:
+			fw, _ := config.GetFrameworkForDir(fwName, path)
+			ready, err := readyDeclaredServices(path, fw, quiet)
+			if err != nil {
+				feedback.Warn("%v", err)
+			}
+			if ready {
+				fixed = true
+			}
+		case sitedoctor.FixEnvSync:
+			if err := runLerdEnv(path); err != nil {
+				feedback.Warn("writing the env: %v", err)
+				continue
+			}
+			if !quiet {
+				fmt.Printf("  %s\n\n", feedback.Dim("wrote the connection values for the services this project picks"))
+			}
+			fixed = true
 		}
-		if err := sitedoctor.FixVhost(path); err != nil {
-			feedback.Warn("regenerating the vhost: %v", err)
-			continue
-		}
-		if !quiet {
-			fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
-		}
-		fixed = true
 	}
 	if !fixed {
 		return resp

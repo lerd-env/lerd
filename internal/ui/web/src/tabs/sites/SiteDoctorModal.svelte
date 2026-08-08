@@ -130,7 +130,10 @@
     composer_update: 'Run composer update',
     npm_install: 'Run npm install',
     npm_audit_fix: 'Run npm audit fix',
-    vhost_regenerate: 'Regenerate nginx vhost'
+    env_sync: 'Run lerd env (writes the connection and repoints the app)',
+    vhost_regenerate: 'Regenerate nginx vhost',
+    services_install: 'Install the missing services',
+    services_start: 'Start the stopped services'
   };
 
   async function runFix(check: DoctorCheck) {

@@ -63,6 +63,15 @@ type Framework struct {
 	// dropdown. See FrameworkCommand for the schema. Projects extend or
 	// override this list in .lerd.yaml; use ResolveCommands to merge.
 	Commands []FrameworkCommand `yaml:"commands,omitempty"`
+	// CacheCommand is the console subcommand that clears the framework's
+	// compiled caches, run through Console the way key generation is. lerd runs it after rewriting a project's connection: a
+	// framework caches the container definitions built from that configuration,
+	// and one built against the old database survives the swap and answers every
+	// request with an error about an entity type it can no longer find. A
+	// framework declaring none is left alone.
+	CacheCommand string `yaml:"cache_command,omitempty"`
+	// Notifications turns off warnings that cannot apply to this framework.
+	Notifications *FrameworkNotifications `yaml:"notifications,omitempty"`
 	// Console is the console command to run (without 'php' prefix).
 	// Example: "artisan", "bin/console"
 	Console string `yaml:"console,omitempty"`
@@ -468,6 +477,28 @@ func (f *Framework) HasEnvConfig() bool {
 	}
 	e := f.Env
 	return e.File != "" || e.FallbackFile != "" || e.ExampleFile != "" || e.KeyGeneration != nil || len(e.Services) > 0
+}
+
+// FrameworkNotifications lets a definition decline a warning that says nothing
+// useful about sites built on it.
+type FrameworkNotifications struct {
+	// NPlusOne, set false, stops the repeated-query warning for this
+	// framework's sites. It is for the frameworks whose own request pipeline
+	// does the querying: on a content management system the entity, config and
+	// cache layers issue the repeats, so the warning names a loop inside the
+	// framework that nobody using it can change. Where the queries come from
+	// the code a developer writes, which is most application frameworks, it
+	// stays on.
+	NPlusOne *bool `yaml:"nplusone,omitempty"`
+}
+
+// WarnsNPlusOne reports whether repeated-query warnings apply to a framework's
+// sites, which they do unless the definition says otherwise.
+func (f *Framework) WarnsNPlusOne() bool {
+	if f == nil || f.Notifications == nil || f.Notifications.NPlusOne == nil {
+		return true
+	}
+	return *f.Notifications.NPlusOne
 }
 
 // EnvKeyGeneration describes how to generate an application encryption key.

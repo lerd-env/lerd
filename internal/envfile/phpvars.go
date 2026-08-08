@@ -134,7 +134,7 @@ func ApplyPhpVarsUpdates(path string, updates map[string]string) error {
 			return err
 		}
 	}
-	return os.WriteFile(path, []byte(out), 0o644)
+	return writeFile(path, []byte(out), 0o644)
 }
 
 func sameValues(a, b map[string]string) bool {

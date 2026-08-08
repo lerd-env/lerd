@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -22,6 +23,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	phpkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // Check statuses, mirroring the MCP doctor's check shape so the diagnostics
@@ -50,6 +52,18 @@ const (
 	// project knows which of two values it meant, so the dashboard opens the env
 	// editor's resolver on it instead of running anything.
 	FixEnvDuplicates = "env_duplicates_resolve"
+	// FixInstallServices installs the services a site declares and the machine
+	// has never had, on the host like the vhost fix rather than in the site
+	// container, since installing a service is not something a site can do from
+	// the inside.
+	FixInstallServices = "services_install"
+	// FixStartServices starts the services a site declares that are installed
+	// and stopped, the same host-side shape as installing them.
+	FixStartServices = "services_start"
+	// FixEnvSync writes the connection values for the services a project picks
+	// into the env file its framework declares, which is what `lerd env` does
+	// and what resolves a service picked but not wired.
+	FixEnvSync = "env_sync"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the
@@ -60,6 +74,9 @@ var DoctorFixCommands = map[string]string{
 	FixComposerUpdate:  "composer update",
 	FixNpmInstall:      "npm install",
 	FixNpmAuditFix:     "npm audit fix",
+	// Not a package manager, but the same shape: a command run in the project
+	// directory with lerd's own bin dir on PATH, streaming what it did.
+	FixEnvSync: "lerd env",
 }
 
 // commandTimeout bounds each container exec a check makes (declared command
@@ -156,7 +173,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	envFile, envFormat, exampleFile := envSetup(fw, path)
 	envPath := filepath.Join(path, envFile)
 
-	if c, ok := checkRequiredServices(fw); ok {
+	if c, ok := checkRequiredServices(path, fw); ok {
 		resp.add(c)
 	}
 	if hasEnvConfig(fw) {
@@ -187,16 +204,18 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	if c, ok := checkEnvDuplicates(path, envFile, envFormat); ok {
 		resp.add(c)
 	}
+	// Whether the site's database exists is answered through the framework
+	// declaration, so it is asked of every format, not only dotenv.
+	if c, ok := checkServerDatabase(path, fw); ok {
+		resp.add(c)
+		dbBroken = dbBroken || c.Status == StatusFail
+	}
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
 			resp.add(c)
 		}
 		if c, ok := checkEnvDrift(path, envPath, filepath.Join(path, exampleFile)); ok {
 			resp.add(c)
-		}
-		if c, ok := checkServerDatabase(path, envPath, fw); ok {
-			resp.add(c)
-			dbBroken = dbBroken || c.Status == StatusFail
 		}
 	}
 
@@ -261,25 +280,92 @@ func fwExampleFile(fw *config.Framework) string {
 
 // Seams so the required-service check can be tested without podman.
 var (
-	quadletInstalledFn = podman.QuadletInstalled
-	unitStatusFn       = podman.UnitStatus
+	unitStatusFn = podman.UnitStatus
+	// serviceInstalledFn answers "does lerd have this service", which is not
+	// the same question as "is there a quadlet for it": a removed custom
+	// service can leave the unit file behind, and starting that fails with an
+	// unknown service. It is what decides install versus start.
+	serviceInstalledFn = serviceops.ServiceInstalled
 )
 
-// checkRequiredServices reports the framework's declared required services that
-// are absent or stopped. Absent is a failure, since the app cannot boot without
-// it; stopped is a warning, since starting it is one command.
-func checkRequiredServices(fw *config.Framework) (Check, bool) {
-	if fw == nil || len(fw.Requires) == 0 {
+// declaredServices is everything a site says it needs: what its framework
+// requires and what its own .lerd.yaml picks. A project naming a service is as
+// good a declaration as a framework requiring one, and until now only the
+// second was checked, so a project picking redis on a machine that never
+// installed it produced no finding at all.
+//
+// SQLite is excluded because it is a file the project owns rather than
+// something lerd runs.
+func declaredServices(path string, fw *config.Framework) []string {
+	seen := map[string]bool{"sqlite": true}
+	var out []string
+	add := func(name string) {
+		name = strings.ToLower(strings.TrimSpace(name))
+		if name == "" || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+	if fw != nil {
+		for _, name := range fw.Requires {
+			add(name)
+		}
+	}
+	if proj, err := config.LoadProjectConfig(path); err == nil && proj != nil {
+		for _, name := range pickedServices(proj) {
+			add(name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// MissingDeclaredServices returns the services a site declares that this
+// machine has never installed, in the order the fix would install them. It is
+// exported because the fix has to work out the same set the check reported.
+func MissingDeclaredServices(path string, fw *config.Framework) []string {
+	var missing []string
+	for _, name := range declaredServices(path, fw) {
+		if !serviceInstalledFn(name) {
+			missing = append(missing, name)
+		}
+	}
+	return missing
+}
+
+// StoppedDeclaredServices returns the services a site declares that are
+// installed but not running. Exported for the same reason as the missing set:
+// the fix has to arrive at what the check reported.
+func StoppedDeclaredServices(path string, fw *config.Framework) []string {
+	var stopped []string
+	for _, name := range declaredServices(path, fw) {
+		if !serviceInstalledFn(name) {
+			continue
+		}
+		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
+			stopped = append(stopped, name)
+		}
+	}
+	return stopped
+}
+
+// checkRequiredServices reports the services a site declares that are absent or
+// stopped. Absent is a failure, since the app cannot boot without them, and it
+// carries a fix that installs them; stopped is a warning, since starting one is
+// a single command.
+func checkRequiredServices(path string, fw *config.Framework) (Check, bool) {
+	declared := declaredServices(path, fw)
+	if len(declared) == 0 {
 		return Check{}, false
 	}
 	var missing, stopped []string
-	for _, name := range fw.Requires {
-		unit := "lerd-" + name
-		if !quadletInstalledFn(unit) {
+	for _, name := range declared {
+		if !serviceInstalledFn(name) {
 			missing = append(missing, name)
 			continue
 		}
-		if status, _ := unitStatusFn(unit); status != "active" {
+		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
 			stopped = append(stopped, name)
 		}
 	}
@@ -288,14 +374,17 @@ func checkRequiredServices(fw *config.Framework) (Check, bool) {
 		return Check{
 			Name:   "required_services",
 			Status: StatusFail,
-			Detail: fmt.Sprintf("%s cannot run without %s. Install %s with %s.",
-				frameworkLabel(fw), strings.Join(missing, ", "), plural(len(missing), "it", "them"),
+			Fix:    FixInstallServices,
+			Detail: fmt.Sprintf("%s needs %s, which %s not installed. Install %s with %s.",
+				frameworkLabel(fw), strings.Join(missing, ", "), plural(len(missing), "is", "are"),
+				plural(len(missing), "it", "them"),
 				serviceCommands("lerd service preset", missing)),
 		}, true
 	case len(stopped) > 0:
 		return Check{
 			Name:   "required_services",
 			Status: StatusWarn,
+			Fix:    FixStartServices,
 			Detail: fmt.Sprintf("%s %s required but not running. Start %s with %s.",
 				strings.Join(stopped, ", "), plural(len(stopped), "is", "are"),
 				plural(len(stopped), "it", "them"),

@@ -244,3 +244,45 @@ require COLLECTOR;
 		t.Errorf("ctx.type = %q, want cli", e.Ctx.Type)
 	}
 }
+
+// TestCollectorPHP_AttributesPastComposerInstalledCode builds a project whose
+// framework core is a Composer package installed outside vendor/, the layout
+// Drupal uses, and checks the recorded source is the project's own code rather
+// than the framework layer that issued the query.
+func TestCollectorPHP_AttributesPastComposerInstalledCode(t *testing.T) {
+	type ev struct {
+		Src struct {
+			File string `json:"file"`
+		} `json:"src"`
+	}
+	lines := runCollectorPHP(t, `<?php
+$root = __DIR__ . '/app';
+@mkdir($root . '/vendor/composer', 0777, true);
+@mkdir($root . '/core/lib', 0777, true);
+@mkdir($root . '/modules/custom', 0777, true);
+file_put_contents($root . '/vendor/composer/installed.php', '<?php return ' . var_export([
+    'root' => ['install_path' => $root],
+    'versions' => [
+        'acme/core' => ['install_path' => $root . '/core'],
+    ],
+], true) . ';');
+file_put_contents($root . '/core/lib/Db.php', '<?php function acme_query() { \Lerd\Collector\http("GET", "https://api.test/widgets"); }');
+file_put_contents($root . '/modules/custom/Listing.php', '<?php function acme_listing() { acme_query(); }');
+
+$_SERVER['DOCUMENT_ROOT'] = $root;
+require COLLECTOR;
+require $root . '/core/lib/Db.php';
+require $root . '/modules/custom/Listing.php';
+acme_listing();
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	if !strings.HasSuffix(e.Src.File, "/modules/custom/Listing.php") {
+		t.Errorf("src.file = %q, want the project's own module, not the installed framework package", e.Src.File)
+	}
+}
