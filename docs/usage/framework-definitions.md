@@ -97,6 +97,12 @@ The `php-array` reader flattens the returned array to dotted keys, and the write
 
 A service a project picks in its `.lerd.yaml` is expected to appear in the env file, and the doctor says so when it does not: it asks whether the file references the `lerd-<service>` container, which is a text question every format answers, so a WordPress site's `wp-config.php` and a Magento site's `app/etc/env.php` are held to it exactly as a `.env` is. Only services this section declares are checked, since those are the ones lerd knows how to wire; a `phpmyadmin` picked alongside `mysql` is picked for its own sake and is never expected in a project's config. A drop-in is checked against the block it stands in for, by family or by its preset's `env_role`, so a project on MariaDB is measured against your `mysql` block. A service listed in `.env.lerd_override`'s `LERD_EXTERNAL_SERVICES`, and `sqlite`, which has no container at all, are both left alone.
 
+### Offering SQLite
+
+A framework that can run on a file database declares a `sqlite` service alongside its others, and that declaration is what puts SQLite in the database choice at `lerd init`. A framework declaring none is never offered it, since picking it would configure a project for a database its application cannot open. A project lerd recognises no framework for keeps the option: nothing has declared otherwise.
+
+Choosing it records nothing in `.lerd.yaml`. SQLite has no preset, no container and nothing to install, so a `services:` entry for it is one every surface then has to explain away, and the project's own configuration already says it is on SQLite, which is what lerd reads to answer that question. An entry left by an older lerd is ignored where it is found.
+
 ### Drop-in services
 
 A service preset publishes its connection under Laravel's key names (`DB_HOST`, `REDIS_HOST`), because that is what most projects read. Your framework may not: Drupal reads `DB_NAME` and `DB_USER`, Symfony and CakePHP read a `DATABASE_URL`, Magento addresses its config by dotted path. Those keys are the ones you declare under `env.services`, and they are what lerd writes.

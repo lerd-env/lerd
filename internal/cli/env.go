@@ -659,7 +659,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 		dbChoice := "sqlite"
 		if isInteractive() {
-			options, _ := buildDatabaseOptions()
+			options, _ := buildDatabaseOptions(fw)
 			dbForm := huh.NewForm(huh.NewGroup(
 				huh.NewSelect[string]().
 					Title("Database").
@@ -676,15 +676,20 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			envInfo("  Defaulting to SQLite (non-interactive). Run `lerd db set <service>` or call db_set to switch.\n")
 		}
 
-		// Persist the choice to .lerd.yaml so future runs don't re-ask, and
-		// flip the in-memory map so the service loop below picks it up.
-		proj, _ := config.LoadProjectConfig(cwd)
-		if proj == nil {
-			proj = &config.ProjectConfig{}
-		}
-		proj.Services = append(proj.Services, config.ProjectService{Name: dbChoice})
-		if err := config.SaveProjectConfig(cwd, proj); err != nil {
-			feedback.Warn("could not save .lerd.yaml: %v", err)
+		// A picked service is persisted so future runs don't re-ask. SQLite is
+		// not one: it has no preset, no container and nothing to install, and
+		// recording it produces a services entry every surface then has to
+		// explain away. The project's own config already says it is on SQLite,
+		// which is what lerd reads to answer that question anyway.
+		if dbChoice != "sqlite" {
+			proj, _ := config.LoadProjectConfig(cwd)
+			if proj == nil {
+				proj = &config.ProjectConfig{}
+			}
+			proj.Services = append(proj.Services, config.ProjectService{Name: dbChoice})
+			if err := config.SaveProjectConfig(cwd, proj); err != nil {
+				feedback.Warn("could not save .lerd.yaml: %v", err)
+			}
 		}
 		lerdYAMLServices[dbChoice] = true
 	}

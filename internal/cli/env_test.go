@@ -169,7 +169,8 @@ image: docker.io/pgvector/pgvector:pg18
 	if err := os.WriteFile(filepath.Join(tmp, "lerd", "services", "postgres-pgvector.yaml"), []byte(yaml), 0o644); err != nil {
 		t.Fatalf("write fake service: %v", err)
 	}
-	options, nameSet := buildDatabaseOptions()
+	// No framework, so nothing has declared that SQLite does not apply.
+	options, nameSet := buildDatabaseOptions(nil)
 	if !nameSet["sqlite"] || !nameSet["mysql"] || !nameSet["postgres"] {
 		t.Errorf("buildDatabaseOptions must always include the built-in trio, got %v", nameSet)
 	}

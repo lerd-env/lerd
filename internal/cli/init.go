@@ -194,7 +194,8 @@ func runWizard(cwd string, defaults *config.ProjectConfig) (*config.ProjectConfi
 	// accidentally selecting both mysql and postgres for the same project.
 	// Multi-version mysql/postgres alternates installed via presets show up as
 	// extra Database options instead of polluting the Services list.
-	dbOptions, dbNameSet := buildDatabaseOptions()
+	dbFramework, _ := config.GetFrameworkForDir(framework, cwd)
+	dbOptions, dbNameSet := buildDatabaseOptions(dbFramework)
 	defaultPresets := knownServices()
 	nonDBServiceOptions := make([]string, 0, len(defaultPresets))
 	for _, svc := range defaultPresets {
@@ -849,6 +850,18 @@ var dbFamilyLabels = map[string]string{
 
 // formatDBOptionLabel returns "MySQL (lerd-mysql)" for the canonical family
 // member or "MySQL 5.7 (lerd-mysql-5-7)" for a versioned alternate.
+// frameworkSupportsSQLite reports whether a framework can be wired to a file
+// database, which the definition says by declaring a sqlite service alongside
+// its others. A project with no framework at all keeps the option: nothing has
+// declared otherwise, and lerd should not decide for it.
+func frameworkSupportsSQLite(fw *config.Framework) bool {
+	if fw == nil || len(fw.Env.Services) == 0 {
+		return true
+	}
+	_, ok := fw.Env.Services["sqlite"]
+	return ok
+}
+
 func formatDBOptionLabel(name string) string {
 	family := name
 	version := ""
@@ -873,9 +886,20 @@ func formatDBOptionLabel(name string) string {
 // service name that lives in a database family (so the Services multi-select
 // can filter them out). Always includes sqlite. Built-in mysql and postgres
 // are always present; alternates and mongo show up only when installed.
-func buildDatabaseOptions() ([]huh.Option[string], map[string]bool) {
-	nameSet := map[string]bool{"sqlite": true}
-	options := []huh.Option[string]{huh.NewOption("SQLite (no service)", "sqlite")}
+func buildDatabaseOptions(fw *config.Framework) ([]huh.Option[string], map[string]bool) {
+	nameSet := map[string]bool{}
+	var options []huh.Option[string]
+
+	// SQLite is offered where it means something: a framework declares the
+	// service it can be wired through, and a project lerd recognises no
+	// framework for keeps the option because there is no declaration to consult
+	// and a file database is a reasonable answer for it. Offering it to a
+	// framework that cannot use it is how a project ends up picking a database
+	// its application will never open.
+	if frameworkSupportsSQLite(fw) {
+		nameSet["sqlite"] = true
+		options = append(options, huh.NewOption("SQLite (no service)", "sqlite"))
+	}
 
 	for _, name := range []string{"mysql", "postgres"} {
 		nameSet[name] = true

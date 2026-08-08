@@ -724,10 +724,17 @@ func (e *EnrichedSite) enrichServices() {
 
 	if projErr == nil && proj != nil {
 		for _, ps := range proj.Services {
-			if ps.Name != "" && !svcSet[ps.Name] {
-				e.Services = append(e.Services, ps.Name)
-				svcSet[ps.Name] = true
+			// A project already carrying sqlite in its services list is not
+			// carrying a service: it has no preset, no container and nothing to
+			// install, so a surface rendering it can only offer to install
+			// something that cannot exist. Projects written before lerd stopped
+			// recording it keep the entry, so it is ignored here rather than
+			// only at the source.
+			if ps.Name == "" || ps.Name == "sqlite" || svcSet[ps.Name] {
+				continue
 			}
+			e.Services = append(e.Services, ps.Name)
+			svcSet[ps.Name] = true
 		}
 	}
 
