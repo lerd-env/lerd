@@ -23,6 +23,7 @@ import (
 	"github.com/geodro/lerd/internal/envfile"
 	phpkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // Check statuses, mirroring the MCP doctor's check shape so the diagnostics
@@ -279,8 +280,12 @@ func fwExampleFile(fw *config.Framework) string {
 
 // Seams so the required-service check can be tested without podman.
 var (
-	quadletInstalledFn = podman.QuadletInstalled
-	unitStatusFn       = podman.UnitStatus
+	unitStatusFn = podman.UnitStatus
+	// serviceInstalledFn answers "does lerd have this service", which is not
+	// the same question as "is there a quadlet for it": a removed custom
+	// service can leave the unit file behind, and starting that fails with an
+	// unknown service. It is what decides install versus start.
+	serviceInstalledFn = serviceops.ServiceInstalled
 )
 
 // declaredServices is everything a site says it needs: what its framework
@@ -322,7 +327,7 @@ func declaredServices(path string, fw *config.Framework) []string {
 func MissingDeclaredServices(path string, fw *config.Framework) []string {
 	var missing []string
 	for _, name := range declaredServices(path, fw) {
-		if !quadletInstalledFn("lerd-" + name) {
+		if !serviceInstalledFn(name) {
 			missing = append(missing, name)
 		}
 	}
@@ -335,11 +340,10 @@ func MissingDeclaredServices(path string, fw *config.Framework) []string {
 func StoppedDeclaredServices(path string, fw *config.Framework) []string {
 	var stopped []string
 	for _, name := range declaredServices(path, fw) {
-		unit := "lerd-" + name
-		if !quadletInstalledFn(unit) {
+		if !serviceInstalledFn(name) {
 			continue
 		}
-		if status, _ := unitStatusFn(unit); status != "active" {
+		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
 			stopped = append(stopped, name)
 		}
 	}
@@ -357,12 +361,11 @@ func checkRequiredServices(path string, fw *config.Framework) (Check, bool) {
 	}
 	var missing, stopped []string
 	for _, name := range declared {
-		unit := "lerd-" + name
-		if !quadletInstalledFn(unit) {
+		if !serviceInstalledFn(name) {
 			missing = append(missing, name)
 			continue
 		}
-		if status, _ := unitStatusFn(unit); status != "active" {
+		if status, _ := unitStatusFn("lerd-" + name); status != "active" {
 			stopped = append(stopped, name)
 		}
 	}

@@ -103,3 +103,19 @@ func TestRequiredServices_offersToStartWhatIsStopped(t *testing.T) {
 		t.Errorf("fix = %q, want %q so the dashboard can start it rather than print a command", c.Fix, FixStartServices)
 	}
 }
+
+// A quadlet left behind by a removed custom service is not an install: starting
+// it fails with "unknown service", so the site needs it installed, not started.
+func TestDeclaredServices_aStaleQuadletWithNoServiceCountsAsMissing(t *testing.T) {
+	withStubs(t, map[string]bool{"lerd-phpmyadmin": true}, map[string]string{"lerd-phpmyadmin": "inactive"})
+	withServiceInstalled(t, map[string]bool{})
+	dir := writeProject(t, "services:\n  - phpmyadmin\n")
+
+	if got := StoppedDeclaredServices(dir, &config.Framework{}); len(got) != 0 {
+		t.Errorf("stopped = %v, want none: lerd cannot start a service it does not have", got)
+	}
+	got := MissingDeclaredServices(dir, &config.Framework{})
+	if len(got) != 1 || got[0] != "phpmyadmin" {
+		t.Errorf("missing = %v, want phpmyadmin", got)
+	}
+}

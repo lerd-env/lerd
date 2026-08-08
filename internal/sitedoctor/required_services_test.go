@@ -7,12 +7,27 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
+// withStubs pins what lerd has installed and what is running. installed is
+// keyed by unit name ("lerd-redis") as the status map is, and a test about a
+// stale unit overrides the install answer with withServiceInstalled.
 func withStubs(t *testing.T, installed map[string]bool, status map[string]string) {
 	t.Helper()
-	origInstalled, origStatus := quadletInstalledFn, unitStatusFn
-	quadletInstalledFn = func(unit string) bool { return installed[unit] }
+	origStatus := unitStatusFn
 	unitStatusFn = func(unit string) (string, error) { return status[unit], nil }
-	t.Cleanup(func() { quadletInstalledFn, unitStatusFn = origInstalled, origStatus })
+	t.Cleanup(func() { unitStatusFn = origStatus })
+
+	names := map[string]bool{}
+	for unit, ok := range installed {
+		names[strings.TrimPrefix(unit, "lerd-")] = ok
+	}
+	withServiceInstalled(t, names)
+}
+
+func withServiceInstalled(t *testing.T, installed map[string]bool) {
+	t.Helper()
+	orig := serviceInstalledFn
+	serviceInstalledFn = func(name string) bool { return installed[name] }
+	t.Cleanup(func() { serviceInstalledFn = orig })
 }
 
 func TestRequiredServicesSkippedWhenNoneDeclared(t *testing.T) {
