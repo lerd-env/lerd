@@ -128,10 +128,20 @@ func declaredEnvKeys(fw *config.Framework) map[string]bool {
 	return keys
 }
 
-// sqliteFilePath resolves a declared SQLite file against the project root.
-func sqliteFilePath(projectPath, dbFile string) string {
+// sqliteFilePaths returns where a declared SQLite file could be, because a
+// relative path is relative to whatever the application calls its root and the
+// frameworks disagree: Laravel resolves database/database.sqlite against the
+// project, Drupal resolves sites/default/files/.ht.sqlite against its document
+// root, which is a directory down. Both are checked, and a database found at
+// either is the site's, so a healthy 20 MB file is not reported missing because
+// lerd measured from the wrong end.
+func sqliteFilePaths(projectPath, publicDir, dbFile string) []string {
 	if filepath.IsAbs(dbFile) {
-		return dbFile
+		return []string{dbFile}
 	}
-	return filepath.Join(projectPath, dbFile)
+	paths := []string{filepath.Join(projectPath, dbFile)}
+	if publicDir != "" && publicDir != "." {
+		paths = append(paths, filepath.Join(projectPath, publicDir, dbFile))
+	}
+	return paths
 }

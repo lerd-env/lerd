@@ -448,20 +448,34 @@ func checkSQLiteDatabase(path, envPath, envFormat string, fw *config.Framework) 
 	if !ok || dbFile == ":memory:" {
 		return Check{}, false
 	}
-	abs := sqliteFilePath(path, dbFile)
 	fix := migrateFix(fw)
-	info, err := os.Stat(abs)
-	switch {
-	case err != nil && os.IsNotExist(err):
-		return Check{Name: "sqlite_database", Status: StatusFail, Fix: fix,
-			Detail: fmt.Sprintf("SQLite database file is missing at %s — create it and run migrations.", dbFile)}, true
-	case err != nil:
-		return Check{}, false // can't stat for some other reason; don't guess
-	case info.Size() == 0:
+	var empty bool
+	for _, abs := range sqliteFilePaths(path, publicDirOf(fw), dbFile) {
+		info, err := os.Stat(abs)
+		switch {
+		case err != nil:
+			continue // not here; the next candidate root may have it
+		case info.Size() == 0:
+			empty = true
+		default:
+			return Check{Name: "sqlite_database", Status: StatusOK}, true
+		}
+	}
+	if empty {
 		return Check{Name: "sqlite_database", Status: StatusFail, Fix: fix,
 			Detail: fmt.Sprintf("SQLite database at %s is empty — run migrations to create the schema.", dbFile)}, true
 	}
-	return Check{Name: "sqlite_database", Status: StatusOK}, true
+	return Check{Name: "sqlite_database", Status: StatusFail, Fix: fix,
+		Detail: fmt.Sprintf("SQLite database file is missing at %s — create it and run migrations.", dbFile)}, true
+}
+
+// publicDirOf is the document root a framework declares, the second place a
+// relative database path can be rooted.
+func publicDirOf(fw *config.Framework) string {
+	if fw == nil {
+		return ""
+	}
+	return fw.PublicDir
 }
 
 // migrateFix returns the framework command the doctor offers to populate an
