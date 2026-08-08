@@ -60,23 +60,33 @@ func runSiteDoctor(domain string, asJSON, fix bool) error {
 }
 
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
-// returns a fresh report. Only host-side fixes qualify: the composer and npm
-// ones run in the site's container behind a run lock and stream their output,
+// returns a fresh report: a drifted vhost is rewritten, and a service picked but
+// not wired has its connection written. The composer and npm ones are left out;
+// they run in the site's container behind a run lock and stream their output,
 // which belongs to the surfaces that can show it.
 func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet bool) sitedoctor.Response {
 	fixed := false
 	for _, c := range resp.Checks {
-		if c.Fix != sitedoctor.FixVhostRegenerate {
-			continue
+		switch c.Fix {
+		case sitedoctor.FixVhostRegenerate:
+			if err := sitedoctor.FixVhost(path); err != nil {
+				feedback.Warn("regenerating the vhost: %v", err)
+				continue
+			}
+			if !quiet {
+				fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
+			}
+			fixed = true
+		case sitedoctor.FixEnvSync:
+			if err := runLerdEnv(path); err != nil {
+				feedback.Warn("writing the env: %v", err)
+				continue
+			}
+			if !quiet {
+				fmt.Printf("  %s\n\n", feedback.Dim("wrote the connection values for the services this project picks"))
+			}
+			fixed = true
 		}
-		if err := sitedoctor.FixVhost(path); err != nil {
-			feedback.Warn("regenerating the vhost: %v", err)
-			continue
-		}
-		if !quiet {
-			fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
-		}
-		fixed = true
 	}
 	if !fixed {
 		return resp

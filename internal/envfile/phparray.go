@@ -104,7 +104,7 @@ func ApplyPhpArrayUpdates(path string, updates map[string]string) error {
 			return err
 		}
 	}
-	return os.WriteFile(path, []byte(b.String()), 0o644)
+	return writeFile(path, []byte(b.String()), 0o644)
 }
 
 func flatten(prefix string, v *phpValue, out map[string]string) {
