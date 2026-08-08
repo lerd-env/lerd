@@ -108,7 +108,7 @@ func ApplyUpdates(path string, updates map[string]string) error {
 	if out == string(original) {
 		return nil
 	}
-	return os.WriteFile(path, []byte(out), info.Mode().Perm())
+	return writeFile(path, []byte(out), info.Mode().Perm())
 }
 
 // validateEnvKey rejects keys that would corrupt .env structure if written

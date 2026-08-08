@@ -50,6 +50,10 @@ const (
 	// project knows which of two values it meant, so the dashboard opens the env
 	// editor's resolver on it instead of running anything.
 	FixEnvDuplicates = "env_duplicates_resolve"
+	// FixEnvSync writes the connection values for the services a project picks
+	// into the env file its framework declares, which is what `lerd env` does
+	// and what resolves a service picked but not wired.
+	FixEnvSync = "env_sync"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the
@@ -60,6 +64,9 @@ var DoctorFixCommands = map[string]string{
 	FixComposerUpdate:  "composer update",
 	FixNpmInstall:      "npm install",
 	FixNpmAuditFix:     "npm audit fix",
+	// Not a package manager, but the same shape: a command run in the project
+	// directory with lerd's own bin dir on PATH, streaming what it did.
+	FixEnvSync: "lerd env",
 }
 
 // commandTimeout bounds each container exec a check makes (declared command
@@ -187,16 +194,18 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	if c, ok := checkEnvDuplicates(path, envFile, envFormat); ok {
 		resp.add(c)
 	}
+	// Whether the site's database exists is answered through the framework
+	// declaration, so it is asked of every format, not only dotenv.
+	if c, ok := checkServerDatabase(path, fw); ok {
+		resp.add(c)
+		dbBroken = dbBroken || c.Status == StatusFail
+	}
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
 			resp.add(c)
 		}
 		if c, ok := checkEnvDrift(path, envPath, filepath.Join(path, exampleFile)); ok {
 			resp.add(c)
-		}
-		if c, ok := checkServerDatabase(path, envPath, fw); ok {
-			resp.add(c)
-			dbBroken = dbBroken || c.Status == StatusFail
 		}
 	}
 

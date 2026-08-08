@@ -63,6 +63,13 @@ type Framework struct {
 	// dropdown. See FrameworkCommand for the schema. Projects extend or
 	// override this list in .lerd.yaml; use ResolveCommands to merge.
 	Commands []FrameworkCommand `yaml:"commands,omitempty"`
+	// CacheCommand is the console subcommand that clears the framework's
+	// compiled caches, run through Console the way key generation is. lerd runs it after rewriting a project's connection: a
+	// framework caches the container definitions built from that configuration,
+	// and one built against the old database survives the swap and answers every
+	// request with an error about an entity type it can no longer find. A
+	// framework declaring none is left alone.
+	CacheCommand string `yaml:"cache_command,omitempty"`
 	// Console is the console command to run (without 'php' prefix).
 	// Example: "artisan", "bin/console"
 	Console string `yaml:"console,omitempty"`
