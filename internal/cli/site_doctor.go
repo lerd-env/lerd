@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/sitedoctor"
 	"github.com/spf13/cobra"
 )
@@ -59,6 +60,28 @@ func runSiteDoctor(domain string, asJSON, fix bool) error {
 	return nil
 }
 
+// installMissingServices installs the services the site declares that this
+// machine has never had. It reports whether anything was installed, so a run
+// where every install failed does not claim to have fixed something, and it
+// stops at the first failure rather than pulling several images to fail the
+// same way.
+func installMissingServices(path string, fw *config.Framework, quiet bool) (bool, error) {
+	installed := false
+	for _, name := range sitedoctor.MissingDeclaredServices(path, fw) {
+		if !quiet {
+			fmt.Printf("  %s\n", feedback.Dim("installing "+name))
+		}
+		if _, err := serviceops.InstallPresetStreaming(name, "", func(serviceops.PhaseEvent) {}); err != nil {
+			return installed, fmt.Errorf("%s: %w", name, err)
+		}
+		installed = true
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim(name+" is installed and running"))
+		}
+	}
+	return installed, nil
+}
+
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
 // returns a fresh report: a drifted vhost is rewritten, and a service picked but
 // not wired has its connection written. The composer and npm ones are left out;
@@ -77,6 +100,15 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
 			}
 			fixed = true
+		case sitedoctor.FixInstallServices:
+			fw, _ := config.GetFrameworkForDir(fwName, path)
+			installed, err := installMissingServices(path, fw, quiet)
+			if err != nil {
+				feedback.Warn("installing services: %v", err)
+			}
+			if installed {
+				fixed = true
+			}
 		case sitedoctor.FixEnvSync:
 			if err := runLerdEnv(path); err != nil {
 				feedback.Warn("writing the env: %v", err)

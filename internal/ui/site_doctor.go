@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/sitedoctor"
 )
 
@@ -62,6 +64,13 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 		streamHostAction(w, "regenerated the vhost for "+site.PrimaryDomain()+" and reloaded nginx", err)
 		return
 	}
+	// Installing a service is a host action too, and a streaming one: the
+	// pull can take minutes, so each phase is reported as it happens rather
+	// than the request sitting silent until it finishes.
+	if key == sitedoctor.FixInstallServices {
+		handleDoctorInstallServices(w, r, site)
+		return
+	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]
 	if !ok {
 		writeJSON(w, map[string]any{"error": "unknown doctor fix: " + key})
@@ -80,6 +89,80 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 	}
 	defer release()
 	streamShellRun(w, r.Context(), path, shell, false)
+}
+
+// handleDoctorInstallServices installs every service the site declares and the
+// machine does not have, one after another, streaming each install's phases.
+// It works the set out again rather than trusting the client, so the fix can
+// only ever install what the check would have reported.
+func handleDoctorInstallServices(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	branch := r.URL.Query().Get("branch")
+	path, ok := resolveDoctorPath(w, site, branch)
+	if !ok {
+		return
+	}
+	fw, _ := config.GetFrameworkForDir(site.Framework, path)
+	missing := sitedoctor.MissingDeclaredServices(path, fw)
+	if len(missing) == 0 {
+		streamHostAction(w, "every service this site declares is already installed", nil)
+		return
+	}
+
+	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), sitedoctor.FixInstallServices)
+	if !ok {
+		w.WriteHeader(http.StatusConflict)
+		writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})
+		return
+	}
+	defer release()
+
+	send, ok := sseSender(w)
+	if !ok {
+		return
+	}
+	var failed error
+	for _, name := range missing {
+		send("stdout", "installing "+name)
+		_, err := serviceops.InstallPresetStreaming(name, "", func(ev serviceops.PhaseEvent) {
+			if line := installPhaseLine(name, ev); line != "" {
+				send("stdout", line)
+			}
+		})
+		if err != nil {
+			send("stderr", name+": "+err.Error())
+			failed = err
+			break
+		}
+		send("stdout", name+" is installed and running")
+	}
+	exit := 0
+	if failed != nil {
+		exit = 1
+	}
+	body, _ := json.Marshal(map[string]any{"exit": exit, "durationMs": 0})
+	send("done", string(body))
+}
+
+// installPhaseLine renders one install phase as a line of output, skipping the
+// pull's own progress chatter, which arrives many times a second and says
+// nothing a doctor fix log needs.
+func installPhaseLine(name string, ev serviceops.PhaseEvent) string {
+	switch ev.Phase {
+	case "pulling_image":
+		if ev.Message != "" {
+			return ""
+		}
+		return name + ": pulling " + ev.Image
+	case "installing_config":
+		return name + ": writing config"
+	case "starting_deps":
+		return name + ": dependency " + ev.Dep + " " + ev.State
+	case "starting_unit":
+		return name + ": starting " + ev.Unit
+	case "waiting_ready":
+		return name + ": waiting for it to be ready"
+	}
+	return ""
 }
 
 // resolveDoctorPath returns the project path for the site, refusing an

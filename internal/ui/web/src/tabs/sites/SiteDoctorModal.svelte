@@ -131,7 +131,8 @@
     npm_install: 'Run npm install',
     npm_audit_fix: 'Run npm audit fix',
     env_sync: 'Run lerd env (writes the connection and repoints the app)',
-    vhost_regenerate: 'Regenerate nginx vhost'
+    vhost_regenerate: 'Regenerate nginx vhost',
+    services_install: 'Install the missing services'
   };
 
   async function runFix(check: DoctorCheck) {
