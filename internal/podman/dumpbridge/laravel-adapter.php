@@ -256,7 +256,7 @@ function preview_value($v): string
         return (string) $v;
     }
     if (is_string($v)) {
-        return strlen($v) > 48 ? '"' . substr($v, 0, 45) . '..."' : '"' . $v . '"';
+        return strlen($v) > 160 ? '"' . substr($v, 0, 157) . '..."' : '"' . $v . '"';
     }
     if (is_array($v)) {
         return 'array(' . count($v) . ')';
