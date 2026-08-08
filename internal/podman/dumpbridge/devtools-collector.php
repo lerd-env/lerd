@@ -279,6 +279,90 @@ function emit(string $kind, array $data): void
     }
 }
 
+// preview_value renders one view variable as a short label, enough to tell a
+// string from a 40-item collection from a model.
+//
+// The values themselves are not shipped: view data is a whole page payload on
+// an Inertia app and routinely holds the authenticated user, so the shape is
+// both the useful part and the safe one.
+function preview_value($v): string
+{
+    if ($v === null) {
+        return 'null';
+    }
+    if (is_bool($v)) {
+        return $v ? 'true' : 'false';
+    }
+    if (is_int($v) || is_float($v)) {
+        return (string) $v;
+    }
+    if (is_string($v)) {
+        return strlen($v) > 160 ? '"' . substr($v, 0, 157) . '..."' : '"' . $v . '"';
+    }
+    if (is_array($v)) {
+        return 'array(' . count($v) . ')';
+    }
+    if ($v instanceof \Closure) {
+        return 'Closure';
+    }
+    if (is_object($v)) {
+        $class = get_class($v);
+        $pos = strrpos($class, '\\');
+        $short = $pos === false ? $class : substr($class, $pos + 1);
+        if ($v instanceof \Countable) {
+            try {
+                return $short . '(' . count($v) . ')';
+            } catch (\Throwable $_) {
+                return $short;
+            }
+        }
+        return $short;
+    }
+    return gettype($v);
+}
+
+// preview_data labels the variables a template was actually given, capped so
+// one view with a large context cannot dominate the buffer. Whatever the
+// environment injects into every template is subtracted, along with the
+// underscore-prefixed names the engine reserves, so what is left is what the
+// developer passed to this one.
+function preview_data($data, array $globals = []): array
+{
+    $out = [];
+    if (!is_array($data)) {
+        return $out;
+    }
+    foreach ($data as $k => $v) {
+        if (count($out) >= 40) {
+            break;
+        }
+        $key = (string) $k;
+        if (strncmp($key, '_', 1) === 0 || array_key_exists($key, $globals)) {
+            continue;
+        }
+        try {
+            $out[$key] = preview_value($v);
+        } catch (\Throwable $_) {
+            $out[$key] = '?';
+        }
+    }
+    return $out;
+}
+
+// twig_globals is what the environment adds to every template, so it can be
+// told apart from this template's own context.
+function twig_globals($env): array
+{
+    try {
+        if (is_object($env) && method_exists($env, 'getGlobals')) {
+            $g = $env->getGlobals();
+            return is_array($g) ? $g : [];
+        }
+    } catch (\Throwable $_) {
+    }
+    return [];
+}
+
 function addrs($list): array
 {
     $out = [];
@@ -332,8 +416,8 @@ function view($env, $name, $context): void
         }
     } catch (\Throwable $_) {
     }
-    $keys = is_array($context) ? array_map('strval', array_keys($context)) : [];
-    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => $keys]);
+    $preview = preview_data($context, twig_globals($env));
+    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => array_keys($preview), 'data_preview' => $preview]);
 }
 
 // event captures one Symfony event dispatch. $event is the event object, $name

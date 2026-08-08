@@ -208,6 +208,133 @@ function emit(string $kind, array $data): void
     emit_with($kind, $data, $bt['src'], $bt['trace']);
 }
 
+// compiled_view_dir returns where Blade writes compiled templates, read from
+// the app's own config so a project that moves the cache is still understood.
+function compiled_view_dir($app): string
+{
+    try {
+        $dir = $app['config']['view.compiled'] ?? '';
+    } catch (\Throwable $_) {
+        return '';
+    }
+    if (!is_string($dir) || $dir === '') {
+        return '';
+    }
+    return rtrim($dir, DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR;
+}
+
+// is_synthetic_view reports whether a render is one Blade made for itself
+// rather than a template in the project.
+//
+// An inline or anonymous component has no source file, so Blade registers it
+// under a hashed name and its path is the compiled artefact. Reporting those
+// fills the view lens with md5 names and cache paths, none of which is
+// something the developer wrote or can open.
+function is_synthetic_view(string $path, string $compiledDir): bool
+{
+    if ($path === '' || $compiledDir === '') {
+        return false;
+    }
+    return strncmp($path, $compiledDir, strlen($compiledDir)) === 0;
+}
+
+// preview_value renders one view variable as a short label, enough to tell a
+// string from a 40-item collection from a model.
+//
+// The values themselves are not shipped: view data is a whole page payload on
+// an Inertia app and routinely holds the authenticated user, so the shape is
+// both the useful part and the safe one.
+function preview_value($v): string
+{
+    if ($v === null) {
+        return 'null';
+    }
+    if (is_bool($v)) {
+        return $v ? 'true' : 'false';
+    }
+    if (is_int($v) || is_float($v)) {
+        return (string) $v;
+    }
+    if (is_string($v)) {
+        return strlen($v) > 160 ? '"' . substr($v, 0, 157) . '..."' : '"' . $v . '"';
+    }
+    if (is_array($v)) {
+        return 'array(' . count($v) . ')';
+    }
+    if ($v instanceof \Closure) {
+        return 'Closure';
+    }
+    if (is_object($v)) {
+        $class = get_class($v);
+        $pos = strrpos($class, '\\');
+        $short = $pos === false ? $class : substr($class, $pos + 1);
+        if ($v instanceof \Countable) {
+            try {
+                return $short . '(' . count($v) . ')';
+            } catch (\Throwable $_) {
+                return $short;
+            }
+        }
+        return $short;
+    }
+    return gettype($v);
+}
+
+// preview_data labels the variables a template was actually given, capped so
+// one view with a large context cannot dominate the buffer.
+//
+// getData() merges three things: what the developer passed, what the factory
+// shares with every view, and what Blade adds while rendering. Only the first
+// says anything about this template, so the shared keys are subtracted and the
+// double-underscore ones Blade reserves for itself (__env, __laravel_slots,
+// __currentLoopData) are dropped.
+function preview_data($data, array $shared = []): array
+{
+    $out = [];
+    if (!is_array($data)) {
+        return $out;
+    }
+    // What Blade hands a component view to render it, alongside the props the
+    // developer wrote. Not shared, not underscored, and the same on every
+    // component, so neither rule above reaches them.
+    static $machinery = ['componentName', 'attributes', 'slot', 'component', 'constructor', 'ignoredParameterNames'];
+    foreach ($data as $k => $v) {
+        if (count($out) >= 40) {
+            break;
+        }
+        $key = (string) $k;
+        if (strncmp($key, '__', 2) === 0 || array_key_exists($key, $shared) || in_array($key, $machinery, true)) {
+            continue;
+        }
+        try {
+            $out[$key] = preview_value($v);
+        } catch (\Throwable $_) {
+            $out[$key] = '?';
+        }
+    }
+    return $out;
+}
+
+// shared_view_data is what the factory injects into every view, so it can be
+// told apart from what this one was passed. A factory that cannot be asked
+// yields nothing, and every variable is reported as the developer's.
+function shared_view_data($v): array
+{
+    try {
+        if (!method_exists($v, 'getFactory')) {
+            return [];
+        }
+        $factory = $v->getFactory();
+        if (!is_object($factory) || !method_exists($factory, 'getShared')) {
+            return [];
+        }
+        $shared = $factory->getShared();
+        return is_array($shared) ? $shared : [];
+    } catch (\Throwable $_) {
+        return [];
+    }
+}
+
 // addrs flattens a Symfony Mime address list to plain "name@host" strings.
 function addrs($list): array
 {
@@ -338,14 +465,23 @@ try {
         });
     }
 
-    // Views — name + path + the top-level data keys passed in.
+    // Views — name + path + the top-level data keys passed in, skipping the
+    // ones Blade compiled for itself.
     $view = $app['view'] ?? null;
     if ($view) {
-        $view->composer('*', static function ($v) {
+        $compiled = compiled_view_dir($app);
+        $view->composer('*', static function ($v) use ($compiled) {
+            $path = method_exists($v, 'getPath') ? (string) $v->getPath() : '';
+            if (is_synthetic_view($path, $compiled)) {
+                return;
+            }
+            $vars = method_exists($v, 'getData') ? $v->getData() : [];
+            $preview = preview_data($vars, shared_view_data($v));
             emit('view', [
-                'name'      => method_exists($v, 'getName') ? (string) $v->getName() : '',
-                'path'      => method_exists($v, 'getPath') ? (string) $v->getPath() : '',
-                'data_keys' => method_exists($v, 'getData') ? array_keys($v->getData()) : [],
+                'name'         => method_exists($v, 'getName') ? (string) $v->getName() : '',
+                'path'         => $path,
+                'data_keys'    => array_keys($preview),
+                'data_preview' => $preview,
             ]);
         });
     }
