@@ -418,6 +418,20 @@ type FrameworkEnvConf struct {
 	FallbackFile   string `yaml:"fallback_file,omitempty"`   // used when File doesn't exist
 	FallbackFormat string `yaml:"fallback_format,omitempty"` // format for FallbackFile
 
+	// AppFile is the file the application itself reads, for a framework whose
+	// configuration is not the dotenv file the older fields could describe:
+	// Drupal's database lives in a $databases array its installer writes into
+	// settings.php, and nothing lerd puts anywhere else reaches it.
+	//
+	// It is deliberately a new pair rather than a change to File and Format. The
+	// store reaches every install within a day, whatever binary it runs, so a
+	// definition that renamed the existing fields to a format an older release
+	// cannot parse would break those installs. An unknown field is ignored
+	// instead, leaving an older binary doing exactly what it does today while a
+	// current one writes the file the application actually reads.
+	AppFile   string `yaml:"app_file,omitempty"`
+	AppFormat string `yaml:"app_format,omitempty"`
+
 	// URLKey is the env key that holds the application URL (default: APP_URL).
 	URLKey string `yaml:"url_key,omitempty"`
 
@@ -542,6 +556,9 @@ type FrameworkServiceDetect struct {
 // fallback, and that fallback is the configuration itself, which is WordPress's
 // wp-config.php and is written as normal.
 func (e FrameworkEnvConf) ResolveWrite(projectDir string) (file, format string) {
+	if e.AppFile != "" {
+		return e.AppFile, e.appFormat()
+	}
 	if e.File == "" {
 		return e.Resolve(projectDir)
 	}
@@ -558,6 +575,15 @@ func (e FrameworkEnvConf) ResolveWrite(projectDir string) (file, format string) 
 // want ResolveWrite, which never answers with a fallback a framework only
 // publishes so an existing project can be read.
 func (e FrameworkEnvConf) Resolve(projectDir string) (file, format string) {
+	// The application's own configuration file, where a framework declares one,
+	// is what lerd reads as well as writes: it is the file the running site is
+	// configured by, and detection asking anything else would answer about a
+	// file nothing reads.
+	if e.AppFile != "" {
+		if _, err := os.Stat(filepath.Join(projectDir, e.AppFile)); err == nil {
+			return e.AppFile, e.appFormat()
+		}
+	}
 	primary := e.File
 	if primary == "" {
 		primary = ".env"
@@ -586,6 +612,15 @@ func (e FrameworkEnvConf) Resolve(projectDir string) (file, format string) {
 
 	// Return primary regardless (env.go will handle the missing file)
 	return primary, primaryFmt
+}
+
+// appFormat is the declared format of the application's own file, defaulting to
+// dotenv the way every other format field does.
+func (e FrameworkEnvConf) appFormat() string {
+	if e.AppFormat == "" {
+		return "dotenv"
+	}
+	return e.AppFormat
 }
 
 // laravelFramework is the built-in Laravel adapter, the default shipped stack.

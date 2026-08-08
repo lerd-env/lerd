@@ -1045,17 +1045,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 	// 5. Rewrite the env file preserving order, comments, and blank lines
 	if len(updates) > 0 {
-		var writeErr error
-		switch envFormat {
-		case "php-const":
-			writeErr = envfile.ApplyPhpConstUpdates(envPath, updates)
-		case "php-array":
-			writeErr = envfile.ApplyPhpArrayUpdates(envPath, updates)
-		case "php-vars":
-			writeErr = envfile.ApplyPhpVarsUpdates(envPath, updates)
-		default:
-			writeErr = envfile.ApplyUpdates(envPath, updates)
-		}
+		writeErr := envfile.ApplyUpdatesIn(envPath, envFormat, updates)
 		if writeErr != nil {
 			return fmt.Errorf("writing %s: %w", envRelPath, writeErr)
 		}

@@ -45,16 +45,7 @@ func liveWorktreeBranches(site *config.Site) map[string]bool {
 // matches its format, so php-array (Magento) and php-const (WordPress) files are
 // rewritten correctly rather than corrupted by the dotenv writer.
 func applyDBEnvUpdate(path, format string, updates map[string]string) error {
-	switch format {
-	case "php-const":
-		return envfile.ApplyPhpConstUpdates(path, updates)
-	case "php-array":
-		return envfile.ApplyPhpArrayUpdates(path, updates)
-	case "php-vars":
-		return envfile.ApplyPhpVarsUpdates(path, updates)
-	default:
-		return envfile.ApplyUpdates(path, updates)
-	}
+	return envfile.ApplyUpdatesIn(path, format, updates)
 }
 
 // SetWorktreeDBIsolated is the shared lifecycle helper used by both the HTTP

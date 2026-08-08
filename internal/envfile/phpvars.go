@@ -83,7 +83,14 @@ func ApplyPhpVarsUpdates(path string, updates map[string]string) error {
 	for _, key := range keys {
 		segs := strings.Split(key, ".")
 		if i, rest := ownerOf(assignments, segs); i >= 0 {
-			setPath(assignments[i].value, rest, updates[key])
+			if len(rest) == 0 {
+				// The statement assigns this very path, so its value is the one
+				// to replace: `$databases['default']['default']['host'] = 'x';`
+				// has nothing below it to descend into.
+				assignments[i].value = scalarValue(updates[key], assignments[i].value.kind)
+			} else {
+				setPath(assignments[i].value, rest, updates[key])
+			}
 			touched[i] = true
 			continue
 		}
@@ -142,17 +149,19 @@ func sameValues(a, b map[string]string) bool {
 	return true
 }
 
-// ownerOf returns the assignment that owns a key, which is the one whose own
-// path is the longest prefix of it, along with the segments left to set inside
-// that assignment's value. A file holding both `$databases = []` and
-// `$databases['default']['default'] = [...]` resolves to the second.
+// ownerOf returns the assignment that owns a key, along with the segments left
+// to set inside that assignment's value.
+//
+// PHP runs a file top to bottom, so where several assignments reach the same
+// path the last one is what the application ends up with, whether it is a whole
+// array replacing an earlier one or a leaf overriding it. Writing to any
+// earlier one leaves the value shadowed: the file would say what lerd wrote and
+// the application would go on using what came after it. So the match is the
+// last, not the most specific.
 func ownerOf(assignments []phpAssignment, segs []string) (int, []string) {
 	best, bestLen := -1, -1
 	for i, a := range assignments {
-		if len(a.path) >= len(segs) || len(a.path) <= bestLen {
-			continue
-		}
-		if a.value.kind != phpArray {
+		if len(a.path) > len(segs) || a.value.kind != phpArray && len(a.path) != len(segs) {
 			continue
 		}
 		match := true
