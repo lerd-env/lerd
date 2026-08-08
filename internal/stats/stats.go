@@ -75,9 +75,28 @@ func Read() Snapshot {
 	go func() { defer wg.Done(); hosts, _ = hostReaderFn() }()
 	wg.Wait()
 
-	rows := containers
-	// A container's quadlet unit (lerd-mysql.service, …) also surfaces in the
-	// host list; drop it so podman's measurement wins and it isn't counted twice.
+	// A container's quadlet unit (lerd-mysql.service, …) also surfaces in the host
+	// list. Fold the two into one row rather than counting it twice, and take the
+	// memory from the unit: podman reports the working set, which keeps the active
+	// page cache and reads high for anything that re-reads its files, while the
+	// host reader reports what the cgroup actually holds. One list summed into one
+	// total has to mean one thing. The unit also covers the rootless helpers podman
+	// starts per container (conmon, pasta), memory that is spent because the service
+	// runs and that podman's own number never shows. CPU and the limit stay podman's.
+	byUnit := make(map[string]ContainerStat, len(hosts))
+	for _, h := range hosts {
+		byUnit[h.Name] = h
+	}
+	rows := make([]ContainerStat, 0, len(containers)+len(hosts))
+	for _, c := range containers {
+		if h, ok := byUnit[c.Name]; ok && h.MemBytes > 0 {
+			c.MemBytes = h.MemBytes
+			if c.MemLimit > 0 {
+				c.MemPercent = float64(c.MemBytes) / float64(c.MemLimit) * 100
+			}
+		}
+		rows = append(rows, c)
+	}
 	isContainer := make(map[string]bool, len(containers))
 	for _, c := range containers {
 		isContainer[c.Name] = true

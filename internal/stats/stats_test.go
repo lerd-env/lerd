@@ -233,6 +233,51 @@ func TestRead_MergesHostProcesses(t *testing.T) {
 	}
 }
 
+// podman reports a container's working set, which keeps the active page cache,
+// while the host rows report what the cgroup actually holds. One list summed into
+// one total has to mean one thing, so a container's memory comes from its unit
+// cgroup when the host reader saw it; CPU and the limit stay podman's.
+func TestRead_ContainerMemoryComesFromTheUnitCgroup(t *testing.T) {
+	pinNumCPU(t, 1)
+	t.Cleanup(SetReader(func() ([]ContainerStat, error) {
+		return []ContainerStat{
+			{Name: "lerd-php84-fpm", CPUPercent: 1.5, MemBytes: 920_000_000, MemLimit: 33_000_000_000, MemPercent: 2.77},
+			// No unit in the host list (a container started outside a quadlet):
+			// podman's number is all there is, so it must survive untouched.
+			{Name: "lerd-stray", CPUPercent: 0.1, MemBytes: 50_000_000, MemLimit: 33_000_000_000, MemPercent: 0.15},
+		}, nil
+	}))
+	t.Cleanup(SetHostReader(func() ([]ContainerStat, error) {
+		return []ContainerStat{
+			{Name: "lerd-php84-fpm", CPUPercent: 9.9, MemBytes: 830_000_000, MemLimit: 33_000_000_000, MemPercent: 2.51},
+		}, nil
+	}))
+
+	resp := Read()
+	if len(resp.Containers) != 2 {
+		t.Fatalf("got %d rows, want 2 (the host unit merges into its container row)", len(resp.Containers))
+	}
+	fpm := resp.Containers[0]
+	if fpm.Name != "lerd-php84-fpm" {
+		t.Fatalf("first row = %q, want lerd-php84-fpm", fpm.Name)
+	}
+	if fpm.MemBytes != 830_000_000 {
+		t.Errorf("mem = %d, want 830000000 from the cgroup, not podman's 920000000", fpm.MemBytes)
+	}
+	if fpm.CPUPercent != 1.5 {
+		t.Errorf("cpu = %v, want podman's 1.5", fpm.CPUPercent)
+	}
+	if fpm.MemPercent < 2.51 || fpm.MemPercent > 2.52 {
+		t.Errorf("mem percent = %v, want ~2.515 recomputed from the new figure", fpm.MemPercent)
+	}
+	if stray := resp.Containers[1]; stray.MemBytes != 50_000_000 {
+		t.Errorf("container with no host unit: mem = %d, want podman's 50000000", stray.MemBytes)
+	}
+	if resp.TotalMemBytes != 880_000_000 {
+		t.Errorf("total mem = %d, want 880000000 (830+50)", resp.TotalMemBytes)
+	}
+}
+
 // The per-row CPU% is per-core, so the raw sum can exceed 100% on a multi-core
 // box. The headline total must be normalized to a host fraction (sum / cores) so
 // it reads as "% of the whole host", never an unexplained 300%.
