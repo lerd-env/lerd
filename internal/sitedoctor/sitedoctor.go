@@ -180,6 +180,9 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	}
 	// The app-key and drift checks parse the file as dotenv (one diffs it against
 	// a committed example), so they stay for the frameworks that keep one.
+	if c, ok := checkEnvDuplicates(path, envFile, envFormat); ok {
+		resp.add(c)
+	}
 	if envFormat == "dotenv" {
 		if c, ok := checkAppKey(envPath, fw); ok {
 			resp.add(c)
@@ -359,6 +362,7 @@ var universalLabels = map[string]string{
 	"service_wiring":    "Service Wiring",
 	"app_key":           "App Key",
 	"env_drift":         "Env Drift",
+	"env_duplicates":    "Env Keys",
 	"sqlite_database":   "Database",
 	"server_database":   "Database",
 	"composer_deps":     "Composer Dependencies",
