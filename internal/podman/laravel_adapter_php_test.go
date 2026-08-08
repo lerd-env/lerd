@@ -160,3 +160,52 @@ foreach ($renders as $path => $name) {
 		t.Errorf("view name = %q, want app", e.Data.Name)
 	}
 }
+
+// TestLaravelAdapterPHP_LabelsOnlyTheDevelopersViewData checks a view reports
+// what it was passed, not what the factory shares with every view or what Blade
+// adds to render it.
+func TestLaravelAdapterPHP_LabelsOnlyTheDevelopersViewData(t *testing.T) {
+	type ev struct {
+		Data struct {
+			Keys    []string          `json:"data_keys"`
+			Preview map[string]string `json:"data_preview"`
+		} `json:"data"`
+	}
+	lines := runLaravelAdapterPHP(t, `<?php
+define('LERD_DEVTOOLS_ON', true);
+require ADAPTER;
+$data = [
+    'page'            => [1, 2, 3, 4, 5, 6],
+    'title'           => 'Dashboard',
+    'app'             => new \stdClass(),        // shared with every view
+    'errors'          => new \stdClass(),        // shared with every view
+    '__env'           => new \stdClass(),        // Blade's own
+    '__laravel_slots' => [],                     // Blade's own
+    'componentName'   => 'app-layout',           // Blade's component machinery
+    'attributes'      => new \stdClass(),
+    'slot'            => new \stdClass(),
+];
+$shared = ['app' => null, 'errors' => null, '__env' => null];
+$preview = \Lerd\LaravelAdapter\preview_data($data, $shared);
+\Lerd\LaravelAdapter\emit('view', ['data_keys' => array_keys($preview), 'data_preview' => $preview]);
+`)
+	if len(lines) != 1 {
+		t.Fatalf("got %d events, want 1: %v", len(lines), lines)
+	}
+	var e ev
+	if err := json.Unmarshal([]byte(lines[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", lines[0], err)
+	}
+	want := map[string]string{"page": "array(6)", "title": `"Dashboard"`}
+	if len(e.Data.Preview) != len(want) {
+		t.Fatalf("preview = %v, want only the developer's own variables %v", e.Data.Preview, want)
+	}
+	for k, v := range want {
+		if e.Data.Preview[k] != v {
+			t.Errorf("preview[%q] = %q, want %q", k, e.Data.Preview[k], v)
+		}
+	}
+	if len(e.Data.Keys) != len(want) {
+		t.Errorf("data_keys = %v, want the same set the preview reports", e.Data.Keys)
+	}
+}

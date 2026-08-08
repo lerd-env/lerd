@@ -280,25 +280,59 @@ function preview_value($v): string
     return gettype($v);
 }
 
-// preview_data labels every variable a template was given, capped so one view
-// with a large context cannot dominate the buffer.
-function preview_data($data): array
+// preview_data labels the variables a template was actually given, capped so
+// one view with a large context cannot dominate the buffer.
+//
+// getData() merges three things: what the developer passed, what the factory
+// shares with every view, and what Blade adds while rendering. Only the first
+// says anything about this template, so the shared keys are subtracted and the
+// double-underscore ones Blade reserves for itself (__env, __laravel_slots,
+// __currentLoopData) are dropped.
+function preview_data($data, array $shared = []): array
 {
     $out = [];
     if (!is_array($data)) {
         return $out;
     }
+    // What Blade hands a component view to render it, alongside the props the
+    // developer wrote. Not shared, not underscored, and the same on every
+    // component, so neither rule above reaches them.
+    static $machinery = ['componentName', 'attributes', 'slot', 'component', 'constructor', 'ignoredParameterNames'];
     foreach ($data as $k => $v) {
         if (count($out) >= 40) {
             break;
         }
+        $key = (string) $k;
+        if (strncmp($key, '__', 2) === 0 || array_key_exists($key, $shared) || in_array($key, $machinery, true)) {
+            continue;
+        }
         try {
-            $out[(string) $k] = preview_value($v);
+            $out[$key] = preview_value($v);
         } catch (\Throwable $_) {
-            $out[(string) $k] = '?';
+            $out[$key] = '?';
         }
     }
     return $out;
+}
+
+// shared_view_data is what the factory injects into every view, so it can be
+// told apart from what this one was passed. A factory that cannot be asked
+// yields nothing, and every variable is reported as the developer's.
+function shared_view_data($v): array
+{
+    try {
+        if (!method_exists($v, 'getFactory')) {
+            return [];
+        }
+        $factory = $v->getFactory();
+        if (!is_object($factory) || !method_exists($factory, 'getShared')) {
+            return [];
+        }
+        $shared = $factory->getShared();
+        return is_array($shared) ? $shared : [];
+    } catch (\Throwable $_) {
+        return [];
+    }
 }
 
 // addrs flattens a Symfony Mime address list to plain "name@host" strings.
@@ -442,11 +476,12 @@ try {
                 return;
             }
             $vars = method_exists($v, 'getData') ? $v->getData() : [];
+            $preview = preview_data($vars, shared_view_data($v));
             emit('view', [
                 'name'         => method_exists($v, 'getName') ? (string) $v->getName() : '',
                 'path'         => $path,
-                'data_keys'    => array_keys(is_array($vars) ? $vars : []),
-                'data_preview' => preview_data($vars),
+                'data_keys'    => array_keys($preview),
+                'data_preview' => $preview,
             ]);
         });
     }

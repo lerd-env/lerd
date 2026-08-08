@@ -269,9 +269,12 @@ function preview_value($v): string
     return gettype($v);
 }
 
-// preview_data labels every variable a template was given, capped so one view
-// with a large context cannot dominate the buffer.
-function preview_data($data): array
+// preview_data labels the variables a template was actually given, capped so
+// one view with a large context cannot dominate the buffer. Whatever the
+// environment injects into every template is subtracted, along with the
+// underscore-prefixed names the engine reserves, so what is left is what the
+// developer passed to this one.
+function preview_data($data, array $globals = []): array
 {
     $out = [];
     if (!is_array($data)) {
@@ -281,13 +284,31 @@ function preview_data($data): array
         if (count($out) >= 40) {
             break;
         }
+        $key = (string) $k;
+        if (strncmp($key, '_', 1) === 0 || array_key_exists($key, $globals)) {
+            continue;
+        }
         try {
-            $out[(string) $k] = preview_value($v);
+            $out[$key] = preview_value($v);
         } catch (\Throwable $_) {
-            $out[(string) $k] = '?';
+            $out[$key] = '?';
         }
     }
     return $out;
+}
+
+// twig_globals is what the environment adds to every template, so it can be
+// told apart from this template's own context.
+function twig_globals($env): array
+{
+    try {
+        if (is_object($env) && method_exists($env, 'getGlobals')) {
+            $g = $env->getGlobals();
+            return is_array($g) ? $g : [];
+        }
+    } catch (\Throwable $_) {
+    }
+    return [];
 }
 
 function addrs($list): array
@@ -343,8 +364,8 @@ function view($env, $name, $context): void
         }
     } catch (\Throwable $_) {
     }
-    $keys = is_array($context) ? array_map('strval', array_keys($context)) : [];
-    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => $keys, 'data_preview' => preview_data($context)]);
+    $preview = preview_data($context, twig_globals($env));
+    emit('view', ['name' => $tpl, 'path' => $path, 'data_keys' => array_keys($preview), 'data_preview' => $preview]);
 }
 
 // event captures one Symfony event dispatch. $event is the event object, $name

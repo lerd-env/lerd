@@ -112,15 +112,6 @@
     if (v === 'miss' || v === 'forget') return AMBER;
     return SKY;
   }
-  // Label each variable a template was given, "page array(4)". Events captured
-  // before previews were shipped carry names only.
-  function viewVars(d: Record<string, any>): string[] {
-    const preview = d.data_preview as Record<string, string> | undefined;
-    const keys = (d.data_keys ?? []) as string[];
-    if (!preview) return keys;
-    return keys.map((k) => (preview[k] ? `${k} ${preview[k]}` : k));
-  }
-
   function httpTone(status: number): string {
     if (!status || status >= 500) return ROSE;
     if (status >= 400) return AMBER;
@@ -222,7 +213,21 @@
                       <button type="button" class="font-mono text-lerd-red hover:underline break-all" onclick={() => openInEditor(d.path, 1)} title={m.queries_openInEditor()}>{d.path}</button>
                     </div>
                   {/if}
-                  {#if wireKind === 'view' && d.data_keys?.length}<div class="text-gray-500 dark:text-gray-400">{m.views_data()}: {viewVars(d).join(', ')}</div>{/if}
+                  {#if wireKind === 'view' && d.data_keys?.length}
+                    <div>
+                      <div class="text-gray-400 mb-0.5">{m.views_data()}</div>
+                      <table class="w-full border-collapse font-mono">
+                        <tbody>
+                          {#each d.data_keys as k (k)}
+                            <tr class="border-t border-gray-100 dark:border-lerd-border/40 align-top">
+                              <td class="py-0.5 pr-3 text-gray-500 dark:text-gray-400 whitespace-nowrap w-px">{k}</td>
+                              <td class="py-0.5 break-all">{d.data_preview?.[k] ?? ''}</td>
+                            </tr>
+                          {/each}
+                        </tbody>
+                      </table>
+                    </div>
+                  {/if}
                   {#if wireKind === 'mail'}
                     <div class="text-gray-400 break-all">
                       {#if d.from?.length}from {d.from.join(', ')} · {/if}to {(d.to ?? []).join(', ')}{#if d.cc?.length} · cc {d.cc.join(', ')}{/if}
