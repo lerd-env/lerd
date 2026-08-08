@@ -193,7 +193,7 @@ The **Dashboard** tab is the terminal counterpart to the web UI's home page: a r
 - **Services**: total · running counts, then every core / custom service with state dot and version. Clicking a service jumps to the Services tab on that service.
 - **Workers**: active · asleep · failing counts, then every worker (site · kind) with its state, and the failing units with a `press H to heal` hint.
 - **System Health**: DNS (ok / degraded / down / disabled), Nginx, Watcher, and the running PHP FPM versions.
-- **Resources**: total CPU% and memory across lerd's footprint, then every container by load. Polled in the background every 3 s, matching the cache TTL the web UI uses; a `collecting…` placeholder shows until the first sample lands.
+- **Resources**: total CPU% and memory across lerd's footprint, then every container by load. Memory excludes reclaimable page cache, the same figure the [web dashboard](/features/web-ui) shows. Polled in the background every 3 s, matching the cache TTL the web UI uses; a `collecting…` placeholder shows until the first sample lands.
 - **Lerd**: version, an `update:` banner when a newer release is available, autostart, LAN expose, platform, and a **Recent activity** feed (site link/pause/resume/start/stop, service add/remove/start/stop, worker fail/heal, DNS transitions) derived live, mirroring the web UI's activity list.
 
 ## Settings view

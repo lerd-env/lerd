@@ -29,28 +29,81 @@ func TestReadCgroupStatKey(t *testing.T) {
 	}
 }
 
-func TestCgroupWorkingSet(t *testing.T) {
-	// cgroupWorkingSet prefixes /sys/fs/cgroup, so point it at a fake tree there
-	// is not possible without root; instead exercise the subtraction via the
-	// helpers it composes, which is where the logic lives.
-	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "memory.current"), []byte("730000000\n"), 0o644); err != nil {
+// fakeCgroup writes a memory.current/memory.stat pair into a fixture tree and
+// points cgroupRoot at it, returning the unit's cgroup path.
+func fakeCgroup(t *testing.T, current, stat string) string {
+	t.Helper()
+	root := t.TempDir()
+	cg := "/user.slice/user@1000.service/app.slice/lerd-ui.service"
+	dir := filepath.Join(root, cg)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "memory.stat"), []byte("inactive_file 600000000\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "memory.current"), []byte(current), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cur, err := readCgroupInt(filepath.Join(dir, "memory.current"))
-	if err != nil {
-		t.Fatal(err)
+	if stat != "" {
+		if err := os.WriteFile(filepath.Join(dir, "memory.stat"), []byte(stat), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
-	ws := cur - readCgroupStatKey(filepath.Join(dir, "memory.stat"), "inactive_file")
-	if ws != 130000000 {
-		t.Errorf("working set = %d, want 130000000 (current - inactive_file)", ws)
-	}
+	prev := cgroupRoot
+	cgroupRoot = root
+	t.Cleanup(func() { cgroupRoot = prev })
+	return cg
+}
 
-	// Empty cgroup path is the no-data signal: fall back to MemoryCurrent.
-	if _, ok := cgroupWorkingSet(""); ok {
-		t.Errorf("cgroupWorkingSet(\"\") should report ok=false")
+// The numbers are a real lerd-ui after three hours: 2 GB of memory.current, all
+// of it page cache the poller read twice so none of it is on the inactive list.
+// Subtracting only inactive_file leaves the whole 2 GB in the row.
+func TestCgroupMemoryHeld_ExcludesActiveCacheToo(t *testing.T) {
+	cg := fakeCgroup(t, "2048086016\n",
+		"anon 24117248\nfile 1942446080\nkernel 73400320\nshmem 0\ninactive_file 0\nactive_file 1942446080\n")
+
+	held, ok := cgroupMemoryHeld(cg)
+	if !ok {
+		t.Fatal("cgroupMemoryHeld reported no data for a populated cgroup")
+	}
+	if want := int64(105639936); held != want {
+		t.Errorf("held = %d, want %d (current - file, not current - inactive_file)", held, want)
+	}
+}
+
+// Shared memory is counted inside the file total but the kernel cannot drop it,
+// so it has to stay in the number a service is reported holding.
+func TestCgroupMemoryHeld_KeepsSharedMemory(t *testing.T) {
+	cg := fakeCgroup(t, "1000000000\n",
+		"anon 600000000\nfile 380000000\nshmem 80000000\nkernel 20000000\ninactive_file 300000000\n")
+
+	held, ok := cgroupMemoryHeld(cg)
+	if !ok {
+		t.Fatal("cgroupMemoryHeld reported no data for a populated cgroup")
+	}
+	if want := int64(700000000); held != want {
+		t.Errorf("held = %d, want %d (shmem stays counted)", held, want)
+	}
+}
+
+// memory.current and memory.stat are read separately and can disagree under a
+// racing reclaim; never report a negative row.
+func TestCgroupMemoryHeld_FallsBackWhenStatOutrunsCurrent(t *testing.T) {
+	cg := fakeCgroup(t, "100000\n", "file 900000\nshmem 0\n")
+
+	held, ok := cgroupMemoryHeld(cg)
+	if !ok || held != 100000 {
+		t.Errorf("held = %d ok = %v, want 100000 true (fall back to memory.current)", held, ok)
+	}
+}
+
+func TestCgroupMemoryHeld_NoData(t *testing.T) {
+	if _, ok := cgroupMemoryHeld(""); ok {
+		t.Error("empty cgroup path should report ok=false so the caller keeps MemoryCurrent")
+	}
+	root := t.TempDir()
+	prev := cgroupRoot
+	cgroupRoot = root
+	t.Cleanup(func() { cgroupRoot = prev })
+	if _, ok := cgroupMemoryHeld("/user.slice/gone.service"); ok {
+		t.Error("missing memory.current should report ok=false")
 	}
 }

@@ -24,9 +24,9 @@ const hostCmdTimeout = 3 * time.Second
 // readHostProcesses reports the resource usage of lerd's own host-side processes
 // (the lerd-ui/watcher/tray daemons and any host-side workers such as a Vite or
 // host-proxy dev server run via fnm) using systemd's per-unit cgroup accounting.
-// Memory is reported as the working set (page cache excluded) to match podman's
-// container metric. Container units appear here too — Read drops those by name so
-// the podman measurement wins. Linux only; the macOS stub returns nothing.
+// Memory is what the unit holds, page cache excluded. Container units appear here
+// too — Read merges their memory into the podman rows so every row in the list is
+// measured the same way. Linux only; the macOS stub returns nothing.
 func readHostProcesses() ([]ContainerStat, error) {
 	units := listLerdServices()
 	if len(units) == 0 {
@@ -113,11 +113,11 @@ func showProps(units []string) map[string]hostProps {
 	flush := func() {
 		if id != "" {
 			// systemd's MemoryCurrent is the raw cgroup memory.current, which counts
-			// reclaimable page cache; prefer the working set (cache excluded) so a
-			// daemon that reads big log files isn't reported holding memory it can
-			// release on demand, and so these rows match podman's container metric.
-			if ws, ok := cgroupWorkingSet(p.cgroup); ok {
-				p.memBytes = ws
+			// reclaimable page cache; prefer what the unit really holds so a daemon
+			// that reads big files isn't reported holding memory it can release on
+			// demand.
+			if held, ok := cgroupMemoryHeld(p.cgroup); ok {
+				p.memBytes = held
 			}
 			res[id] = p
 		}
@@ -152,26 +152,34 @@ func showProps(units []string) map[string]hostProps {
 	return res
 }
 
-// cgroupWorkingSet returns a unit's working-set memory: memory.current minus the
-// readily-reclaimable inactive file cache, the same accounting `podman stats`
-// uses for containers (and what cAdvisor/k8s call working set). This keeps the
-// host-process rows comparable to the container rows in the same list instead of
-// inflating them with page cache. Returns false when the cgroup v2 files aren't
-// present or readable, so the caller falls back to MemoryCurrent.
-func cgroupWorkingSet(cg string) (int64, bool) {
+// cgroupRoot is the cgroup v2 mount point. A var so tests can point the memory
+// read at a fixture tree instead of the live hierarchy.
+var cgroupRoot = "/sys/fs/cgroup"
+
+// cgroupMemoryHeld returns the memory a unit actually holds: memory.current less
+// the page cache the kernel can drop under pressure. Shared memory is counted in
+// the file total but cannot be dropped, so it stays in. Subtracting only
+// inactive_file (the cAdvisor/k8s working set, and what `podman stats` reports)
+// leaves the active cache in, and a poller that re-reads the same files every
+// tick has all of its cache on the active list, so fifty megabytes of process
+// read as two gigabytes. Returns false when the cgroup v2 files aren't present or
+// readable, so the caller falls back to MemoryCurrent.
+func cgroupMemoryHeld(cg string) (int64, bool) {
 	if cg == "" {
 		return 0, false
 	}
-	base := "/sys/fs/cgroup" + cg
+	base := cgroupRoot + cg
 	cur, err := readCgroupInt(base + "/memory.current")
 	if err != nil {
 		return 0, false
 	}
-	ws := cur - readCgroupStatKey(base+"/memory.stat", "inactive_file")
-	if ws < 0 {
-		ws = cur
+	stat := base + "/memory.stat"
+	cache := readCgroupStatKey(stat, "file") - readCgroupStatKey(stat, "shmem")
+	held := cur - cache
+	if held < 0 {
+		held = cur
 	}
-	return ws, true
+	return held, true
 }
 
 // readCgroupInt reads a single-integer cgroup file (e.g. memory.current).
