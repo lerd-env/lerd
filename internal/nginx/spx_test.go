@@ -1,6 +1,8 @@
 package nginx
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -76,5 +78,69 @@ func TestEnsureProfilerVhost_WritesVhost(t *testing.T) {
 		if !strings.Contains(content, want) {
 			t.Errorf("profiler vhost missing %q in:\n%s", want, content)
 		}
+	}
+}
+
+// The state marker is how a caller knows nginx has finished picking up a toggle:
+// it answers with the setting the serving configuration was generated from, so it
+// has to carry the current one and cost no PHP.
+func TestEnsureProfilerVhost_CarriesTheProfilerState(t *testing.T) {
+	confD := setupConfD(t)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	if err := EnsureProfilerVhost(); err != nil {
+		t.Fatalf("EnsureProfilerVhost: %v", err)
+	}
+	off := readConf(t, filepath.Join(confD, "_profiler.conf"))
+	if !strings.Contains(off, "location = "+ProfilerStatePath) {
+		t.Errorf("profiler vhost missing the %s marker in:\n%s", ProfilerStatePath, off)
+	}
+	if !strings.Contains(off, `return 200 "off"`) {
+		t.Errorf("marker should answer off while the profiler is off:\n%s", off)
+	}
+
+	cfg, _ := config.LoadGlobal()
+	cfg.Profiler.Enabled = true
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if err := EnsureProfilerVhost(); err != nil {
+		t.Fatalf("EnsureProfilerVhost: %v", err)
+	}
+	on := readConf(t, filepath.Join(confD, "_profiler.conf"))
+	if !strings.Contains(on, `return 200 "on"`) {
+		t.Errorf("marker should answer on once the profiler is armed:\n%s", on)
+	}
+}
+
+func TestServedProfilerState_ReadsWhatNginxAnswers(t *testing.T) {
+	for _, tc := range []struct {
+		body   string
+		wantOn bool
+		wantOK bool
+	}{
+		{"on", true, true},
+		{"off", false, true},
+		{"", false, false},
+	} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != ProfilerStatePath || r.Host != "profiler.localhost" {
+				http.NotFound(w, r)
+				return
+			}
+			_, _ = w.Write([]byte(tc.body))
+		}))
+		host := strings.TrimPrefix(srv.URL, "http://")
+		on, ok := servedProfilerStateAt(host)
+		if on != tc.wantOn || ok != tc.wantOK {
+			t.Errorf("body %q: got (%v, %v), want (%v, %v)", tc.body, on, ok, tc.wantOn, tc.wantOK)
+		}
+		srv.Close()
+	}
+
+	// An install whose vhost predates the marker 404s, and nginx being down is a
+	// dial error: both are "cannot tell", never a state.
+	if _, ok := servedProfilerStateAt("127.0.0.1:1"); ok {
+		t.Error("unreachable nginx should report ok=false, not a state")
 	}
 }

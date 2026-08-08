@@ -50,6 +50,51 @@ type reportMeta struct {
 	CLI        int    `json:"cli"`
 }
 
+// captureHost is a capture's host as callers know it. SPX records the Host
+// header, which carries the port whenever nginx does not serve on 80, while
+// callers match against the bare domain from the site registry.
+func captureHost(h string) string {
+	i := strings.LastIndex(h, ":")
+	if i < 0 {
+		return h
+	}
+	if _, err := strconv.Atoi(h[i+1:]); err != nil {
+		return h
+	}
+	return h[:i]
+}
+
+// CountCaptures reports how many captures dataDir holds for a host, optionally
+// narrowed to one normalized route. Only the .json sidecars are read, so it is
+// cheap enough to poll: the dashboard takes a count before it fires a request
+// and waits for it to rise, which is the moment the profile actually exists.
+func CountCaptures(dataDir, host, route string) int {
+	entries, err := os.ReadDir(dataDir)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, e := range entries {
+		name := e.Name()
+		if !strings.HasSuffix(name, ".json") {
+			continue
+		}
+		b, err := os.ReadFile(filepath.Join(dataDir, name))
+		if err != nil {
+			continue
+		}
+		var m reportMeta
+		if json.Unmarshal(b, &m) != nil || m.CLI != 0 || captureHost(m.HTTPHost) != host {
+			continue
+		}
+		if route != "" && reqstats.NormalizeRoute(m.HTTPMethod, m.HTTPURI) != route {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
 // ProfilesForRoutes scans dataDir once and, for each of the wanted normalized
 // routes served on one of hosts, parses the freshest matching capture into its
 // top hotspots. Routes with no capture (profiler was off, or the route was not
@@ -84,7 +129,7 @@ func ProfilesForRoutes(dataDir string, hosts, routes []string, topN int, minPct 
 			continue
 		}
 		var m reportMeta
-		if json.Unmarshal(b, &m) != nil || m.CLI != 0 || !hostSet[m.HTTPHost] {
+		if json.Unmarshal(b, &m) != nil || m.CLI != 0 || !hostSet[captureHost(m.HTTPHost)] {
 			continue
 		}
 		route := reqstats.NormalizeRoute(m.HTTPMethod, m.HTTPURI)

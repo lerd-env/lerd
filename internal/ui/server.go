@@ -277,6 +277,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/open-folder", withCORS(handleOpenFolder))
 	mux.HandleFunc("/api/profiler/toggle", withCORS(publishAfter(handleProfilerToggle, eventbus.KindProfilerStatus)))
 	mux.HandleFunc("/api/profiler/status", withCORS(handleProfilerStatus))
+	mux.HandleFunc("/api/profiler/captures", withCORS(handleProfilerCaptures))
 	mux.HandleFunc("/api/profiler/clear", withCORS(handleProfilerClear))
 	mux.HandleFunc("/_spx/", handleSpxProxy)
 	mux.HandleFunc("/_svc/", handleDashProxy)

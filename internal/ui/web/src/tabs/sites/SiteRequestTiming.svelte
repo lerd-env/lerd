@@ -7,7 +7,7 @@
     type RouteStat,
     type TimeRange
   } from '$stores/analytics';
-  import { profilerEnabled, setProfiler } from '$stores/profiler';
+  import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
   import { openProfiler } from '$stores/dashboard';
   import { debugCaptureEnabled } from '$stores/queries';
   import { debugLens, debugSearch } from '$stores/debugLens';
@@ -142,22 +142,54 @@
     'flex-1 min-w-0 grid grid-cols-[minmax(7rem,14rem)_1fr_auto] items-center gap-3';
 
   let arming = $state(false);
+  let profileStatus = $state('');
+  let profileFailed = $state(false);
   function routeUrl(r: RouteStat): string {
     if (r.method !== 'GET' || !r.example) return '';
     return `${site.tls ? 'https' : 'http'}://${targetDomain}${r.example}`;
   }
+  // Profiling a route arms the profiler, opens the route, and hands over to SPX.
+  // Each step waits for the one before it: arming only returns once nginx serves
+  // the profiling config, so the request cannot be answered by the configuration
+  // that has no profiler attached, and SPX only opens once the capture is on disk,
+  // so the report the user lands on is the request they just triggered. A route
+  // with no URL to open arms nothing, and a profiler this armed is put back after,
+  // rather than leaving every FPM site profiled.
   async function profileRoute(r: RouteStat) {
-    if (arming) return;
     const url = routeUrl(r);
-    const t = url ? window.open('', '_blank') : null;
+    if (arming || !url) return;
     arming = true;
+    profileFailed = false;
+    const armedHere = !$profilerEnabled;
     try {
-      if (!$profilerEnabled) await setProfiler(true);
-      if (t && url) t.location.href = url;
-      openProfiler();
+      const before = await captureCount(targetDomain, r.route);
+      if (armedHere) {
+        profileStatus = m.sites_reqstats_profileArming();
+        await setProfiler(true);
+      }
+      // Opened once, here, with the real URL. Holding a blank tab open across the
+      // arming wait leaves an about:blank the desktop is asked to find an
+      // application for when the dashboard runs as an app window.
+      window.open(url, '_blank');
+      profileStatus = m.sites_reqstats_profileWaiting();
+      if (await waitForCapture(targetDomain, r.route, before)) {
+        profileStatus = '';
+        openProfiler();
+      } else {
+        profileStatus = m.sites_reqstats_profileMissed();
+        profileFailed = true;
+      }
     } catch {
-      t?.close();
+      profileStatus = m.sites_reqstats_profileMissed();
+      profileFailed = true;
     } finally {
+      if (armedHere) {
+        try {
+          await setProfiler(false);
+        } catch {
+          /* it stays armed; the toggle is one click away */
+        }
+      }
       arming = false;
     }
   }
@@ -288,11 +320,13 @@
       <div class="flex flex-col gap-2">
         {#each slowest as r (r.method + r.route)}
           <div class="flex items-center gap-2">
-            {#if canProfile}
+            {#if canProfile && routeUrl(r)}
               <button type="button" onclick={() => profileRoute(r)} disabled={arming} use:tooltip={m.sites_reqstats_profile()}
                 class="{slowRowClass} text-left group disabled:opacity-60">
                 {@render slowRow(r, true)}
               </button>
+            {:else if canProfile}
+              <div class={slowRowClass} use:tooltip={m.sites_reqstats_profileOnly()}>{@render slowRow(r, false)}</div>
             {:else}
               <div class={slowRowClass}>{@render slowRow(r, false)}</div>
             {/if}
@@ -300,6 +334,11 @@
           </div>
         {/each}
       </div>
+      {#if profileStatus}
+        <div class="mt-2.5 text-[11px] {profileFailed ? 'text-amber-600 dark:text-amber-400' : 'text-gray-400 dark:text-gray-500'}">
+          {profileStatus}
+        </div>
+      {/if}
     </div>
 
     <!-- routes / recent -->

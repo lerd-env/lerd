@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -1631,6 +1632,14 @@ map $http_x_forwarded_host $spx_key {
 `, key)
 }
 
+// ProfilerStatePath is a marker location on the profiler.localhost vhost that
+// answers with the profiler setting the serving configuration was generated
+// from. Arming rewrites every FPM vhost and reloads nginx, and a reload drains
+// the old workers rather than swapping in place, so a request sent the instant
+// the reload returns can still be served with no profiler attached. Asking nginx
+// what it is serving is the only honest way to know the toggle has landed.
+const ProfilerStatePath = "/_lerd/profiler-state"
+
 // EnsureProfilerVhost writes the profiler.localhost vhost: a dedicated
 // hostname routed to a PHP-FPM container so SPX serves its report UI for the
 // dashboard's global Profiler entry, independent of any site.
@@ -1642,12 +1651,22 @@ func EnsureProfilerVhost() error {
 	if err != nil {
 		return err
 	}
+	state := "off"
+	if cfg.IsProfilerEnabled() {
+		state = "on"
+	}
 	// SCRIPT_FILENAME just needs a real file to exist; SPX intercepts the
 	// SPX_UI_URI request and serves its UI before dump-bridge.php runs.
 	content := fmt.Sprintf(`server {
     listen 80;
     listen [::]:80;
     server_name profiler.localhost;
+
+    location = %s {
+        access_log off;
+        default_type text/plain;
+        return 200 %q;
+    }
 
     location / {
         set $fpm "lerd-php%s-fpm";
@@ -1657,9 +1676,46 @@ func EnsureProfilerVhost() error {
         fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
     }
 }
-`, phpShort(cfg.PHP.DefaultVersion))
+`, ProfilerStatePath, state, phpShort(cfg.PHP.DefaultVersion))
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
+}
+
+// ServedProfilerState reports the profiler setting nginx is serving right now,
+// read from the marker location. ok is false when the answer cannot be trusted:
+// nginx down, or an install whose vhost predates the marker.
+func ServedProfilerState() (on bool, ok bool) {
+	httpPort := 80
+	if cfg, err := config.LoadGlobal(); err == nil && cfg.Nginx.HTTPPort > 0 {
+		httpPort = cfg.Nginx.HTTPPort
+	}
+	return servedProfilerStateAt(fmt.Sprintf("127.0.0.1:%d", httpPort))
+}
+
+// servedProfilerStateAt is ServedProfilerState against a given address, so the
+// probe can be tested without a running nginx.
+func servedProfilerStateAt(addr string) (on bool, ok bool) {
+	req, err := http.NewRequest(http.MethodGet, "http://"+addr+ProfilerStatePath, nil)
+	if err != nil {
+		return false, false
+	}
+	req.Host = "profiler.localhost"
+	resp, err := (&http.Client{Timeout: 2 * time.Second}).Do(req)
+	if err != nil {
+		return false, false
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16))
+	if err != nil || resp.StatusCode != http.StatusOK {
+		return false, false
+	}
+	switch strings.TrimSpace(string(body)) {
+	case "on":
+		return true, true
+	case "off":
+		return false, true
+	}
+	return false, false
 }
 
 // EnsureCustomD creates the user-override directory. Lerd never writes here

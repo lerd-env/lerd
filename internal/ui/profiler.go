@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/profiler"
+	"github.com/geodro/lerd/internal/spxreport"
 )
 
 // handleProfilerToggle turns the SPX profiler on or off globally. Loopback-
@@ -55,6 +56,25 @@ func buildProfilerStatusJSON() []byte {
 	cfg, _ := config.LoadGlobal()
 	b, _ := json.Marshal(map[string]bool{"enabled": cfg != nil && cfg.IsProfilerEnabled()})
 	return b
+}
+
+// handleProfilerCaptures reports how many SPX captures exist for a host, and
+// optionally for one normalized route. The dashboard reads it before firing a
+// request at a slow route and again while it waits, so it opens SPX once the
+// profile is on disk rather than the moment the request left.
+func handleProfilerCaptures(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	host := r.URL.Query().Get("host")
+	if host == "" {
+		writeJSON(w, map[string]int{"count": 0})
+		return
+	}
+	writeJSON(w, map[string]int{
+		"count": spxreport.CountCaptures(config.SpxDataDir(), host, r.URL.Query().Get("route")),
+	})
 }
 
 // handleProfilerClear deletes every captured SPX report. It requires

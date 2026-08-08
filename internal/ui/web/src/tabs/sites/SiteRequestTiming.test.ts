@@ -42,16 +42,30 @@ vi.mock('$stores/analytics', () => ({
   TIME_RANGES: ['15m', '1h', '24h', '7d']
 }));
 
-// The profiler is already armed, so profiling a route is just the navigation the
-// worktree test is about.
-vi.mock('$stores/profiler', () => ({
-  profilerEnabled: readable(true),
-  setProfiler: vi.fn()
-}));
+vi.mock('$stores/profiler', async () => {
+  const { writable } = await import('svelte/store');
+  return {
+    profilerEnabled: writable(true),
+    setProfiler: vi.fn(async () => {}),
+    captureCount: vi.fn(async () => 0),
+    waitForCapture: vi.fn(async () => true)
+  };
+});
 vi.mock('$stores/dashboard', () => ({ openProfiler: vi.fn() }));
 
 import SiteRequestTiming from './SiteRequestTiming.svelte';
+import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
+import { openProfiler } from '$stores/dashboard';
 import { m } from '../../paraglide/messages.js';
+
+// The profiler starts armed for the tests that are only about the navigation.
+function resetProfilerMocks(enabled = true) {
+  profilerEnabled.set(enabled);
+  vi.mocked(setProfiler).mockClear();
+  vi.mocked(captureCount).mockClear().mockResolvedValue(0);
+  vi.mocked(waitForCapture).mockClear().mockResolvedValue(true);
+  vi.mocked(openProfiler).mockClear();
+}
 
 describe('SiteRequestTiming Recent list', () => {
   it('renders same-millisecond, same-URI rows without a duplicate-key crash', async () => {
@@ -83,8 +97,9 @@ describe('SiteRequestTiming on a worktree', () => {
 
   it('loads the branch and opens routes on the worktree domain', async () => {
     loadSiteAnalytics.mockClear();
-    const opened = { location: { href: '' } };
-    vi.stubGlobal('open', vi.fn(() => opened));
+    resetProfilerMocks();
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
 
     const { findByRole } = render(SiteRequestTiming, {
       props: {
@@ -101,7 +116,7 @@ describe('SiteRequestTiming on a worktree', () => {
     // method and path it renders.
     await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
     await waitFor(() => {
-      expect(opened.location.href).toBe('https://feature-x.whitewaters.test/reports/7');
+      expect(open).toHaveBeenCalledWith('https://feature-x.whitewaters.test/reports/7', '_blank');
     });
   });
 });
@@ -113,15 +128,109 @@ describe('SiteRequestTiming on a localhost site', () => {
 
   it('profiles routes over http on an unsecured localhost site', async () => {
     loadSiteAnalytics.mockClear();
-    const opened = { location: { href: '' } };
-    vi.stubGlobal('open', vi.fn(() => opened));
+    resetProfilerMocks();
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
 
     const { findByRole } = render(SiteRequestTiming, { props: { site } });
 
     await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
     await waitFor(() => {
-      expect(opened.location.href).toBe('http://whitewaters.localhost/reports/7');
+      expect(open).toHaveBeenCalledWith('http://whitewaters.localhost/reports/7', '_blank');
     });
+  });
+});
+
+// Arming and firing the request are not enough on their own: the report only
+// exists once SPX has written it, so the handover to the profiler has to wait for
+// the capture rather than happen in the same tick as the navigation.
+describe('SiteRequestTiming profiling a slow route', () => {
+  const site = { domain: 'whitewaters.test', tls: true, can_profile: true };
+
+  it('opens the profiler only once the request has been captured', async () => {
+    resetProfilerMocks();
+    let landed: (v: boolean) => void = () => {};
+    vi.mocked(captureCount).mockResolvedValue(4);
+    vi.mocked(waitForCapture).mockReturnValue(new Promise<boolean>((r) => (landed = r)));
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+
+    const { findByRole, findByText } = render(SiteRequestTiming, { props: { site } });
+    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+
+    // The request is out and the wait is on, but SPX has nothing to show yet.
+    await findByText(m.sites_reqstats_profileWaiting());
+    expect(openProfiler).not.toHaveBeenCalled();
+    // One tab, opened at the real URL. A blank tab held open across the arming
+    // wait is an about:blank the desktop is asked to find an application for.
+    expect(open.mock.calls).toEqual([['https://whitewaters.test/reports/7', '_blank']]);
+    // The count taken before the request is what the wait measures against.
+    expect(waitForCapture).toHaveBeenCalledWith('whitewaters.test', 'GET /reports/:id', 4);
+
+    landed(true);
+    await waitFor(() => expect(openProfiler).toHaveBeenCalled());
+  });
+
+  it('reports a request the profiler never saw instead of opening an empty report list', async () => {
+    resetProfilerMocks();
+    vi.mocked(waitForCapture).mockResolvedValue(false);
+    vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
+
+    const { findByRole, findByText } = render(SiteRequestTiming, { props: { site } });
+    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+
+    await findByText(m.sites_reqstats_profileMissed());
+    expect(openProfiler).not.toHaveBeenCalled();
+  });
+
+  // The profiler is global and profiles every FPM site while it is on, which is a
+  // lot to leave behind for one click on one route.
+  it('puts the profiler back when the click was what armed it', async () => {
+    resetProfilerMocks(false);
+    vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
+
+    const { findByRole } = render(SiteRequestTiming, { props: { site } });
+    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+
+    await waitFor(() => expect(vi.mocked(setProfiler).mock.calls).toEqual([[true], [false]]));
+  });
+
+  it('leaves a profiler that was already armed alone', async () => {
+    resetProfilerMocks(true);
+    vi.stubGlobal('open', vi.fn(() => ({ location: { href: '' } })));
+
+    const { findByRole } = render(SiteRequestTiming, { props: { site } });
+    await fireEvent.click(await findByRole('button', { name: /GET.*\/reports\/:id/ }));
+
+    await waitFor(() => expect(openProfiler).toHaveBeenCalled());
+    expect(setProfiler).not.toHaveBeenCalled();
+  });
+});
+
+// A route with no example, or one that isn't a GET, has no URL to open. Arming is
+// global and rewrites every FPM vhost, so it must not happen for a click that
+// could only ever land on an empty report.
+describe('SiteRequestTiming on a route it cannot open', () => {
+  it('does not arm the profiler for a POST route', async () => {
+    resetProfilerMocks(false);
+    const post = {
+      ...analytics,
+      routes: [
+        { route: 'POST /checkout', method: 'POST', example: '/checkout', p50_millis: 40, p95_millis: 900, recent_p95_millis: 900, multiplier: 10, samples: 10 }
+      ]
+    } as Analytics;
+    loadSiteAnalytics.mockResolvedValueOnce(post);
+    const open = vi.fn();
+    vi.stubGlobal('open', open);
+
+    const { findAllByText, queryByRole } = render(SiteRequestTiming, {
+      props: { site: { domain: 'whitewaters.test', can_profile: true } }
+    });
+
+    await findAllByText('/checkout');
+    expect(queryByRole('button', { name: /POST.*\/checkout/ })).toBeNull();
+    expect(setProfiler).not.toHaveBeenCalled();
+    expect(open).not.toHaveBeenCalled();
   });
 });
 

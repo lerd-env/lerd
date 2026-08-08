@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	gitpkg "github.com/geodro/lerd/internal/git"
@@ -21,8 +22,20 @@ import (
 // under /_spx/; this URL opens it directly (lerd profile open, MCP status).
 const SpxUIURL = "http://profiler.localhost/?SPX_UI_URI=/"
 
-// nginxReloadFn is the nginx reload hook, swapped out in tests.
-var nginxReloadFn = nginx.Reload
+// nginxReloadFn is the nginx reload hook, and servedStateFn the readiness probe.
+// Both are swapped out in tests.
+var (
+	nginxReloadFn = nginx.Reload
+	servedStateFn = nginx.ServedProfilerState
+)
+
+// How long SetProfiling waits for nginx to serve the toggle it was just given,
+// and how often it asks. A reload settles in tens of milliseconds; the ceiling is
+// only there so a stopped or wedged nginx cannot hold the caller.
+var (
+	servingTimeout = 5 * time.Second
+	servingPoll    = 50 * time.Millisecond
+)
 
 // Result reports the outcome of a SetProfiling call.
 type Result struct {
@@ -48,10 +61,35 @@ func SetProfiling(on bool) (Result, error) {
 	if err := regenerateVhosts(); err != nil {
 		return Result{}, err
 	}
+	// The state marker rides along on the profiler vhost, so it has to be written
+	// before nginx is signalled or the probe below would confirm the old setting.
+	if err := nginx.EnsureProfilerVhost(); err != nil {
+		return Result{}, fmt.Errorf("writing profiler vhost: %w", err)
+	}
 	if err := nginxReloadFn(); err != nil {
 		return Result{}, fmt.Errorf("reloading nginx: %w", err)
 	}
+	waitUntilServing(on)
 	return Result{Enabled: on}, nil
+}
+
+// waitUntilServing blocks until nginx answers with the setting it was just
+// given. A reload signals nginx rather than swapping its configuration in place:
+// the old workers keep serving while the new ones start, so a request sent the
+// instant the reload returns can still be handled with no profiler attached, and
+// nothing profiles it. Gives up quietly at the deadline, since the setting was
+// applied either way and an unconfirmable probe is not a reason to fail.
+func waitUntilServing(on bool) {
+	deadline := time.Now().Add(servingTimeout)
+	for {
+		if served, ok := servedStateFn(); ok && served == on {
+			return
+		}
+		if !time.Now().Before(deadline) {
+			return
+		}
+		time.Sleep(servingPoll)
+	}
 }
 
 // ClearData deletes every captured SPX report from the profiler data

@@ -29,6 +29,38 @@ export async function setProfiler(enable: boolean): Promise<void> {
   profilerEnabled.set(Boolean(data.enabled));
 }
 
+// captureCount reports how many SPX profiles a host has for one route. Callers
+// take it before firing a request and watch it rise: that is the moment the
+// report exists, which is not the moment the request was sent.
+export async function captureCount(host: string, route: string): Promise<number> {
+  try {
+    const q = new URLSearchParams({ host, route });
+    const d = await apiJson<{ count: number }>(`/api/profiler/captures?${q}`);
+    return d.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+// waitForCapture resolves true once the route has one more profile than it had
+// at baseline, false if nothing lands in time. A request that misses the
+// profiler leaves the count where it was, which is the case worth reporting
+// rather than opening an SPX report list that cannot contain it.
+export async function waitForCapture(
+  host: string,
+  route: string,
+  baseline: number,
+  timeoutMillis = 20000,
+  pollMillis = 500
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMillis;
+  while (Date.now() < deadline) {
+    await new Promise((r) => setTimeout(r, pollMillis));
+    if ((await captureCount(host, route)) > baseline) return true;
+  }
+  return false;
+}
+
 // clearProfilerData deletes every captured SPX report and returns how many
 // were removed.
 export async function clearProfilerData(): Promise<number> {

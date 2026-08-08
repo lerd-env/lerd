@@ -72,6 +72,55 @@ func writeReport(t *testing.T, dir, key, meta string) {
 	}
 }
 
+// Counting captures is how the dashboard knows the request it just fired has
+// been profiled, so it can hand over to SPX with the report already on disk
+// instead of at the moment the request was sent.
+func TestCountCaptures(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "old", `{"exec_ts":1000,"http_method":"GET","http_host":"acme.test","http_request_uri":"/users/5","cli":0}`)
+	writeReport(t, dir, "new", `{"exec_ts":2000,"http_method":"GET","http_host":"acme.test","http_request_uri":"/users/9","cli":0}`)
+	writeReport(t, dir, "otherroute", `{"exec_ts":2500,"http_method":"GET","http_host":"acme.test","http_request_uri":"/checkout","cli":0}`)
+	writeReport(t, dir, "otherhost", `{"exec_ts":3000,"http_method":"GET","http_host":"evil.test","http_request_uri":"/users/1","cli":0}`)
+	writeReport(t, dir, "cli", `{"exec_ts":4000,"http_method":"","http_host":"","http_request_uri":"","cli":1}`)
+
+	// Both /users/5 and /users/9 normalize to the same route.
+	if n := CountCaptures(dir, "acme.test", "GET /users/:id"); n != 2 {
+		t.Errorf("count = %d, want 2", n)
+	}
+	if n := CountCaptures(dir, "acme.test", "GET /checkout"); n != 1 {
+		t.Errorf("count for a second route = %d, want 1", n)
+	}
+	// Another host's capture, and a CLI run, are not this route's traffic.
+	if n := CountCaptures(dir, "evil.test", "GET /users/:id"); n != 1 {
+		t.Errorf("host filter leaked: %d", n)
+	}
+	if n := CountCaptures(dir, "acme.test", "POST /checkout"); n != 0 {
+		t.Errorf("a route with no capture = %d, want 0", n)
+	}
+	// No route asked for means every capture the host produced.
+	if n := CountCaptures(dir, "acme.test", ""); n != 3 {
+		t.Errorf("host total = %d, want 3", n)
+	}
+	if n := CountCaptures(filepath.Join(dir, "gone"), "acme.test", ""); n != 0 {
+		t.Errorf("missing data dir = %d, want 0", n)
+	}
+}
+
+// SPX records the Host header, which carries the port whenever nginx does not
+// serve on 80, while callers match against the bare domain the site registry
+// holds. Without that, an install on another port matches nothing.
+func TestCaptureHostIgnoresThePort(t *testing.T) {
+	dir := t.TempDir()
+	writeReport(t, dir, "ported", `{"exec_ts":1000,"http_method":"GET","http_host":"acme.test:8080","http_request_uri":"/users/5","cli":0}`)
+
+	if n := CountCaptures(dir, "acme.test", "GET /users/:id"); n != 1 {
+		t.Errorf("count = %d, want 1 for a capture taken on a non-default port", n)
+	}
+	if _, ok := ProfilesForRoutes(dir, []string{"acme.test"}, []string{"GET /users/:id"}, 8, 1.0)["GET /users/:id"]; !ok {
+		t.Error("the route profile join must match the same capture")
+	}
+}
+
 func TestProfilesForRoutes(t *testing.T) {
 	dir := t.TempDir()
 	writeReport(t, dir, "old", `{"exec_ts":1000,"http_method":"GET","http_host":"acme.test","http_request_uri":"/users/5","cli":0}`)

@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 )
@@ -19,9 +20,15 @@ func tempXDG(t *testing.T) {
 
 func TestSetProfiling_GlobalToggle(t *testing.T) {
 	tempXDG(t)
-	old := nginxReloadFn
+	old, oldServed := nginxReloadFn, servedStateFn
 	nginxReloadFn = func() error { return nil }
-	defer func() { nginxReloadFn = old }()
+	// No nginx here, so answer the readiness probe from the config the toggle
+	// just wrote rather than waiting out the deadline on every call.
+	servedStateFn = func() (bool, bool) {
+		cfg, err := config.LoadGlobal()
+		return err == nil && cfg.IsProfilerEnabled(), true
+	}
+	defer func() { nginxReloadFn, servedStateFn = old, oldServed }()
 
 	if err := config.AddSite(config.Site{
 		Name: "myapp", Domains: []string{"myapp.test"},
@@ -58,6 +65,73 @@ func TestSetProfiling_GlobalToggle(t *testing.T) {
 	conf2, _ := os.ReadFile(filepath.Join(config.NginxConfD(), "myapp.test.conf"))
 	if strings.Contains(string(conf2), "SPX_ENABLED=1") {
 		t.Errorf("vhost still injects SPX_ENABLED after disable:\n%s", conf2)
+	}
+}
+
+// Arming has to hold the caller until nginx is serving the new configuration.
+// The reload only signals nginx: it drains the old workers while the new ones
+// come up, so a request sent the moment SetProfiling returns could still be
+// served by the configuration that has no profiler attached.
+func TestSetProfiling_WaitsUntilNginxServesTheNewState(t *testing.T) {
+	tempXDG(t)
+	oldReload, oldServed, oldPoll := nginxReloadFn, servedStateFn, servingPoll
+	reloadedAt := 0
+	calls := 0
+	nginxReloadFn = func() error { reloadedAt = calls; return nil }
+	// The first two probes still see the old configuration, as they would while
+	// the old workers drain.
+	servedStateFn = func() (bool, bool) {
+		calls++
+		if calls < 3 {
+			return false, true
+		}
+		return true, true
+	}
+	servingPoll = time.Millisecond
+	defer func() { nginxReloadFn, servedStateFn, servingPoll = oldReload, oldServed, oldPoll }()
+
+	if _, err := SetProfiling(true); err != nil {
+		t.Fatalf("enable: %v", err)
+	}
+	if calls < 3 {
+		t.Errorf("returned after %d probes, should have waited for the state to flip", calls)
+	}
+	if reloadedAt != 0 {
+		t.Errorf("probed before the reload was issued")
+	}
+
+	// The marker travels with the vhost the reload picks up, so it has to be
+	// rewritten before nginx is signalled, not after.
+	conf, err := os.ReadFile(filepath.Join(config.NginxConfD(), "_profiler.conf"))
+	if err != nil {
+		t.Fatalf("read profiler vhost: %v", err)
+	}
+	if !strings.Contains(string(conf), `return 200 "on"`) {
+		t.Errorf("profiler vhost marker not updated on arm:\n%s", conf)
+	}
+}
+
+// A probe that never confirms (nginx down, or a vhost that predates the marker)
+// must not fail the toggle or hang the caller: the setting was still applied.
+func TestSetProfiling_GivesUpWaitingWithoutFailing(t *testing.T) {
+	tempXDG(t)
+	oldReload, oldServed, oldTimeout, oldPoll := nginxReloadFn, servedStateFn, servingTimeout, servingPoll
+	nginxReloadFn = func() error { return nil }
+	servedStateFn = func() (bool, bool) { return false, false }
+	servingTimeout, servingPoll = 10*time.Millisecond, time.Millisecond
+	defer func() {
+		nginxReloadFn, servedStateFn, servingTimeout, servingPoll = oldReload, oldServed, oldTimeout, oldPoll
+	}()
+
+	done := make(chan error, 1)
+	go func() { _, err := SetProfiling(true); done <- err }()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("enable: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("SetProfiling hung waiting for a state that never arrives")
 	}
 }
 

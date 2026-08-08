@@ -28,6 +28,12 @@ In the dashboard, the System health card carries a Profiler toggle next to the d
 
 While the profiler is on, every HTTP request to every PHP-FPM site is profiled. Reload the sites you care about a few times, then open the Profiler view to read the reports. The report list refreshes itself while profiling is on, so new captures appear without a manual reload. Turn it off when you are done so the profiler is not adding overhead to every request.
 
+## Profiling one slow route
+
+The Request timing panel on a site makes each of its slowest routes clickable. The click arms the profiler, opens the route in a new tab, and switches the dashboard to the Profiler once that request's report is on disk. Every step waits for the one before it: arming regenerates each PHP-FPM vhost and reloads nginx, and a reload drains the old workers rather than swapping the configuration in place, so a request sent an instant too early is still served with no profiler attached and nothing profiles it. If nothing is captured within twenty seconds the panel says so, rather than handing you a report list that cannot contain your request.
+
+Only a GET route lerd has seen a real example URL for can be profiled this way, since anything else gives the click no address to open. If the profiler was off when you clicked, it is turned back off once the capture lands, so profiling one route costs you one request rather than leaving every PHP-FPM site profiled until you notice.
+
 ## Reading flame graphs
 
 The Profiler view embeds the SPX report UI, served by a dedicated `profiler.localhost` nginx vhost so it does not depend on any one site. Its landing page is SPX's control panel, the list of captured reports. SPX's Configuration form above the list is collapsed by default so the list takes the whole view; the **Show configuration** button in the header brings it back. Each report lists wall time, CPU time, memory, and the call tree. SPX's time-line view is an interactive flame graph: wide frames are where the time went. Click a frame to zoom, and use the flat-profile table to find the most expensive functions.
