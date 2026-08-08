@@ -67,8 +67,8 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 	// Installing a service is a host action too, and a streaming one: the
 	// pull can take minutes, so each phase is reported as it happens rather
 	// than the request sitting silent until it finishes.
-	if key == sitedoctor.FixInstallServices {
-		handleDoctorInstallServices(w, r, site)
+	if key == sitedoctor.FixInstallServices || key == sitedoctor.FixStartServices {
+		handleDoctorServiceFix(w, r, site, key)
 		return
 	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]
@@ -91,24 +91,32 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 	streamShellRun(w, r.Context(), path, shell, false)
 }
 
-// handleDoctorInstallServices installs every service the site declares and the
-// machine does not have, one after another, streaming each install's phases.
-// It works the set out again rather than trusting the client, so the fix can
-// only ever install what the check would have reported.
-func handleDoctorInstallServices(w http.ResponseWriter, r *http.Request, site *config.Site) {
+// handleDoctorServiceFix installs the services a site declares and the machine
+// does not have, or starts the ones that are installed and stopped, one after
+// another and streaming as it goes since an image pull takes minutes. It works
+// the set out again rather than trusting the client, so the fix can only ever
+// touch what the check would have reported.
+func handleDoctorServiceFix(w http.ResponseWriter, r *http.Request, site *config.Site, key string) {
 	branch := r.URL.Query().Get("branch")
 	path, ok := resolveDoctorPath(w, site, branch)
 	if !ok {
 		return
 	}
 	fw, _ := config.GetFrameworkForDir(site.Framework, path)
-	missing := sitedoctor.MissingDeclaredServices(path, fw)
-	if len(missing) == 0 {
-		streamHostAction(w, "every service this site declares is already installed", nil)
+
+	installing := key == sitedoctor.FixInstallServices
+	var names []string
+	if installing {
+		names = sitedoctor.MissingDeclaredServices(path, fw)
+	} else {
+		names = sitedoctor.StoppedDeclaredServices(path, fw)
+	}
+	if len(names) == 0 {
+		streamHostAction(w, "every service this site declares is already installed and running", nil)
 		return
 	}
 
-	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), sitedoctor.FixInstallServices)
+	release, busyWith, ok := tryAcquireRun(siteRunLockKey(site), key)
 	if !ok {
 		w.WriteHeader(http.StatusConflict)
 		writeJSON(w, map[string]any{"error": "another command is already running on this site: " + busyWith})
@@ -121,19 +129,25 @@ func handleDoctorInstallServices(w http.ResponseWriter, r *http.Request, site *c
 		return
 	}
 	var failed error
-	for _, name := range missing {
-		send("stdout", "installing "+name)
-		_, err := serviceops.InstallPresetStreaming(name, "", func(ev serviceops.PhaseEvent) {
-			if line := installPhaseLine(name, ev); line != "" {
-				send("stdout", line)
-			}
-		})
+	for _, name := range names {
+		var err error
+		if installing {
+			send("stdout", "installing "+name)
+			_, err = serviceops.InstallPresetStreaming(name, "", func(ev serviceops.PhaseEvent) {
+				if line := installPhaseLine(name, ev); line != "" {
+					send("stdout", line)
+				}
+			})
+		} else {
+			send("stdout", "starting "+name)
+			err = serviceops.StartService(name)
+		}
 		if err != nil {
 			send("stderr", name+": "+err.Error())
 			failed = err
 			break
 		}
-		send("stdout", name+" is installed and running")
+		send("stdout", name+" is running")
 	}
 	exit := 0
 	if failed != nil {

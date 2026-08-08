@@ -82,6 +82,23 @@ func installMissingServices(path string, fw *config.Framework, quiet bool) (bool
 	return installed, nil
 }
 
+// startStoppedServices starts the services the site declares that are
+// installed and not running, reporting whether anything started so a run where
+// every start failed does not claim to have fixed something.
+func startStoppedServices(path string, fw *config.Framework, quiet bool) (bool, error) {
+	started := false
+	for _, name := range sitedoctor.StoppedDeclaredServices(path, fw) {
+		if err := serviceops.StartService(name); err != nil {
+			return started, fmt.Errorf("%s: %w", name, err)
+		}
+		started = true
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim("started "+name))
+		}
+	}
+	return started, nil
+}
+
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
 // returns a fresh report: a drifted vhost is rewritten, and a service picked but
 // not wired has its connection written. The composer and npm ones are left out;
@@ -107,6 +124,15 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				feedback.Warn("installing services: %v", err)
 			}
 			if installed {
+				fixed = true
+			}
+		case sitedoctor.FixStartServices:
+			fw, _ := config.GetFrameworkForDir(fwName, path)
+			started, err := startStoppedServices(path, fw, quiet)
+			if err != nil {
+				feedback.Warn("starting services: %v", err)
+			}
+			if started {
 				fixed = true
 			}
 		case sitedoctor.FixEnvSync:

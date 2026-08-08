@@ -77,3 +77,29 @@ func TestRequiredServices_installedButStoppedIsStillJustAWarning(t *testing.T) {
 		t.Error("a stopped service should not be offered an install")
 	}
 }
+
+func TestStoppedDeclaredServices_namesWhatIsInstalledButNotRunning(t *testing.T) {
+	withStubs(t,
+		map[string]bool{"lerd-mysql": true, "lerd-phpmyadmin": true},
+		map[string]string{"lerd-mysql": "active", "lerd-phpmyadmin": "inactive"})
+	dir := writeProject(t, "services:\n  - mysql\n  - phpmyadmin\n")
+
+	got := StoppedDeclaredServices(dir, &config.Framework{})
+
+	if len(got) != 1 || got[0] != "phpmyadmin" {
+		t.Errorf("stopped = %v, want only phpmyadmin: mysql is running", got)
+	}
+}
+
+func TestRequiredServices_offersToStartWhatIsStopped(t *testing.T) {
+	withStubs(t, map[string]bool{"lerd-phpmyadmin": true}, map[string]string{"lerd-phpmyadmin": "inactive"})
+	dir := writeProject(t, "services:\n  - phpmyadmin\n")
+
+	c, ok := checkRequiredServices(dir, &config.Framework{})
+	if !ok {
+		t.Fatal("a site picking a service should produce a check")
+	}
+	if c.Fix != FixStartServices {
+		t.Errorf("fix = %q, want %q so the dashboard can start it rather than print a command", c.Fix, FixStartServices)
+	}
+}

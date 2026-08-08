@@ -56,6 +56,9 @@ const (
 	// container, since installing a service is not something a site can do from
 	// the inside.
 	FixInstallServices = "services_install"
+	// FixStartServices starts the services a site declares that are installed
+	// and stopped, the same host-side shape as installing them.
+	FixStartServices = "services_start"
 	// FixEnvSync writes the connection values for the services a project picks
 	// into the env file its framework declares, which is what `lerd env` does
 	// and what resolves a service picked but not wired.
@@ -326,6 +329,23 @@ func MissingDeclaredServices(path string, fw *config.Framework) []string {
 	return missing
 }
 
+// StoppedDeclaredServices returns the services a site declares that are
+// installed but not running. Exported for the same reason as the missing set:
+// the fix has to arrive at what the check reported.
+func StoppedDeclaredServices(path string, fw *config.Framework) []string {
+	var stopped []string
+	for _, name := range declaredServices(path, fw) {
+		unit := "lerd-" + name
+		if !quadletInstalledFn(unit) {
+			continue
+		}
+		if status, _ := unitStatusFn(unit); status != "active" {
+			stopped = append(stopped, name)
+		}
+	}
+	return stopped
+}
+
 // checkRequiredServices reports the services a site declares that are absent or
 // stopped. Absent is a failure, since the app cannot boot without them, and it
 // carries a fix that installs them; stopped is a warning, since starting one is
@@ -361,6 +381,7 @@ func checkRequiredServices(path string, fw *config.Framework) (Check, bool) {
 		return Check{
 			Name:   "required_services",
 			Status: StatusWarn,
+			Fix:    FixStartServices,
 			Detail: fmt.Sprintf("%s %s required but not running. Start %s with %s.",
 				strings.Join(stopped, ", "), plural(len(stopped), "is", "are"),
 				plural(len(stopped), "it", "them"),
