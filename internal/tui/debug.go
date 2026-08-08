@@ -488,9 +488,27 @@ type jobData struct {
 }
 
 type viewData struct {
-	Name     string   `json:"name"`
-	Path     string   `json:"path"`
-	DataKeys []string `json:"data_keys"`
+	Name        string            `json:"name"`
+	Path        string            `json:"path"`
+	DataKeys    []string          `json:"data_keys"`
+	DataPreview map[string]string `json:"data_preview"`
+}
+
+// vars labels each variable a template was given, "page array(4)", falling back
+// to bare names for an event captured before previews were shipped.
+func (d viewData) vars() []string {
+	if len(d.DataPreview) == 0 {
+		return d.DataKeys
+	}
+	out := make([]string, 0, len(d.DataKeys))
+	for _, k := range d.DataKeys {
+		if p, ok := d.DataPreview[k]; ok {
+			out = append(out, k+" "+p)
+			continue
+		}
+		out = append(out, k)
+	}
+	return out
 }
 
 type mailData struct {
@@ -608,8 +626,8 @@ func debugRowDetail(kind string, ev lerddumps.Event) []string {
 		if d.Path != "" {
 			out = append(out, "template: "+shortPath(d.Path))
 		}
-		if len(d.DataKeys) > 0 {
-			out = append(out, "data: "+strings.Join(d.DataKeys, ", "))
+		if vars := d.vars(); len(vars) > 0 {
+			out = append(out, "data: "+strings.Join(vars, ", "))
 		}
 	case lerddumps.KindMail:
 		var d mailData

@@ -238,6 +238,69 @@ function is_synthetic_view(string $path, string $compiledDir): bool
     return strncmp($path, $compiledDir, strlen($compiledDir)) === 0;
 }
 
+// preview_value renders one view variable as a short label, enough to tell a
+// string from a 40-item collection from a model.
+//
+// The values themselves are not shipped: view data is a whole page payload on
+// an Inertia app and routinely holds the authenticated user, so the shape is
+// both the useful part and the safe one.
+function preview_value($v): string
+{
+    if ($v === null) {
+        return 'null';
+    }
+    if (is_bool($v)) {
+        return $v ? 'true' : 'false';
+    }
+    if (is_int($v) || is_float($v)) {
+        return (string) $v;
+    }
+    if (is_string($v)) {
+        return strlen($v) > 48 ? '"' . substr($v, 0, 45) . '..."' : '"' . $v . '"';
+    }
+    if (is_array($v)) {
+        return 'array(' . count($v) . ')';
+    }
+    if ($v instanceof \Closure) {
+        return 'Closure';
+    }
+    if (is_object($v)) {
+        $class = get_class($v);
+        $pos = strrpos($class, '\\');
+        $short = $pos === false ? $class : substr($class, $pos + 1);
+        if ($v instanceof \Countable) {
+            try {
+                return $short . '(' . count($v) . ')';
+            } catch (\Throwable $_) {
+                return $short;
+            }
+        }
+        return $short;
+    }
+    return gettype($v);
+}
+
+// preview_data labels every variable a template was given, capped so one view
+// with a large context cannot dominate the buffer.
+function preview_data($data): array
+{
+    $out = [];
+    if (!is_array($data)) {
+        return $out;
+    }
+    foreach ($data as $k => $v) {
+        if (count($out) >= 40) {
+            break;
+        }
+        try {
+            $out[(string) $k] = preview_value($v);
+        } catch (\Throwable $_) {
+            $out[(string) $k] = '?';
+        }
+    }
+    return $out;
+}
+
 // addrs flattens a Symfony Mime address list to plain "name@host" strings.
 function addrs($list): array
 {
@@ -378,10 +441,12 @@ try {
             if (is_synthetic_view($path, $compiled)) {
                 return;
             }
+            $vars = method_exists($v, 'getData') ? $v->getData() : [];
             emit('view', [
-                'name'      => method_exists($v, 'getName') ? (string) $v->getName() : '',
-                'path'      => $path,
-                'data_keys' => method_exists($v, 'getData') ? array_keys($v->getData()) : [],
+                'name'         => method_exists($v, 'getName') ? (string) $v->getName() : '',
+                'path'         => $path,
+                'data_keys'    => array_keys(is_array($vars) ? $vars : []),
+                'data_preview' => preview_data($vars),
             ]);
         });
     }
