@@ -178,6 +178,58 @@ function context(): array
     });
 }
 
+// installed_dirs returns every directory Composer put a package in, read once
+// per process from the project's installed map. The root package is excluded:
+// it is the project itself, and everything sits under it.
+function installed_dirs(): array
+{
+    static $dirs = null;
+    if ($dirs !== null) {
+        return $dirs;
+    }
+    $dirs = [];
+    $dir = $_SERVER['DOCUMENT_ROOT'] ?? '';
+    if ($dir === '') {
+        $dir = getcwd() ?: '';
+    }
+    for ($up = 0; $up < 8 && $dir !== '' && $dir !== DIRECTORY_SEPARATOR; $up++) {
+        $map = $dir . '/vendor/composer/installed.php';
+        if (is_file($map)) {
+            $installed = @include $map;
+            $root = isset($installed['root']['install_path']) ? realpath($installed['root']['install_path']) : false;
+            foreach ($installed['versions'] ?? [] as $pkg) {
+                $path = isset($pkg['install_path']) ? realpath($pkg['install_path']) : false;
+                if ($path !== false && $path !== $root) {
+                    $dirs[] = $path . DIRECTORY_SEPARATOR;
+                }
+            }
+            break;
+        }
+        $dir = dirname($dir);
+    }
+    return $dirs;
+}
+
+// is_dependency reports whether a file belongs to something the project
+// installed rather than to code its developer wrote.
+//
+// The test used to be the literal path /vendor/, which misses a framework whose
+// own core is a package placed elsewhere: Drupal core installs at web/core, so
+// every query resolved to the database layer inside it and nothing lerd
+// reported about a query said which code had run it.
+function is_dependency(string $file): bool
+{
+    if (strpos($file, '/vendor/') !== false) {
+        return true;
+    }
+    foreach (installed_dirs() as $dir) {
+        if (strpos($file, $dir) === 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 function backtrace(): array
 {
     $bt = debug_backtrace(\DEBUG_BACKTRACE_IGNORE_ARGS, 50);
@@ -202,7 +254,7 @@ function backtrace(): array
         if ($fallback === null) {
             $fallback = ['file' => $file, 'line' => $line];
         }
-        if ($src === null && strpos($file, '/vendor/') === false) {
+        if ($src === null && !is_dependency($file)) {
             $src = ['file' => $file, 'line' => $line];
         }
     }

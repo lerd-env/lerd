@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dumps"
 	"github.com/geodro/lerd/internal/push"
 	"github.com/geodro/lerd/internal/reqstats"
@@ -46,13 +47,39 @@ type nPlusOneTracker struct {
 	perReq map[string]map[string]int // rid -> fingerprint -> count
 	order  []string                  // rid insertion order, for eviction
 	warned map[string]bool           // route key -> already warned
+	warns  map[string]bool           // site -> its framework wants the warning
 }
 
 func newNPlusOneTracker() *nPlusOneTracker {
 	return &nPlusOneTracker{
 		perReq: map[string]map[string]int{},
 		warned: map[string]bool{},
+		warns:  map[string]bool{},
 	}
+}
+
+// siteWarns reports whether the site's framework wants repeated-query warnings.
+// A content management system issues the repeats from its own entity, config
+// and cache layers, so the warning names a loop inside the framework rather
+// than anything the developer wrote, and its definition says so.
+//
+// Resolved once per site: this is asked of every query event, and the answer
+// changes about as often as a site changes framework.
+func (t *nPlusOneTracker) siteWarns(site string) bool {
+	if site == "" {
+		return true
+	}
+	if v, ok := t.warns[site]; ok {
+		return v
+	}
+	warns := true
+	if s, err := config.FindSite(site); err == nil && s != nil {
+		if fw, ok := config.GetFrameworkForDir(s.Framework, s.Path); ok {
+			warns = fw.WarnsNPlusOne()
+		}
+	}
+	t.warns[site] = warns
+	return warns
 }
 
 // routeKeyForQuery collapses a query event to the "route or script" the warning
@@ -94,7 +121,7 @@ func (t *nPlusOneTracker) observe(ev dumps.Event) *push.Notification {
 
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.warned[route] {
+	if t.warned[route] || !t.siteWarns(ev.Ctx.Site) {
 		return nil
 	}
 	m := t.perReq[ev.Ctx.RID]

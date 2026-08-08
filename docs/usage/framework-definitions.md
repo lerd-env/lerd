@@ -330,6 +330,17 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 
 `lerd check` validates a definition's commands, and it is the fastest way to catch a typo: an unknown `output` is an error, and an unknown `icon` is a warning.
 
+## Declining a warning
+
+A definition can turn off a warning that says nothing useful about sites built on it:
+
+```yaml
+notifications:
+  nplusone: false                 # this framework's own layers issue the repeats
+```
+
+The repeated-query warning is the case that needs it. On a content management system the entity, config and cache layers issue the repeats during an ordinary request, so the warning names a loop inside the framework that nobody using it can change, and browsing an admin fires one after another. Where the queries come from the code a developer writes, which is most application frameworks, it stays on and is worth having, so a definition saying nothing keeps it.
+
 ## Doctor checks
 
 The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
