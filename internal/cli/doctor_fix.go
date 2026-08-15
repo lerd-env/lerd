@@ -6,7 +6,9 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/podman"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
 
@@ -20,6 +22,7 @@ const (
 	fixNetworkWait  = "network-wait"
 	fixInstall      = "install"
 	fixCleanup      = "cleanup"
+	fixContainerDNS = "container-dns"
 )
 
 // Repairs that need elevated privilege. They are named so the auto tier can be
@@ -46,6 +49,21 @@ var reCheckReport = RunDoctorReport
 // tests override so the network-wait fix can be exercised without touching the
 // host's systemd, and to prove it routes here rather than into `lerd start`.
 var ensureNoNetworkWaitStallFn = lerdSystemd.EnsureNoNetworkWaitStall
+
+// resyncContainerDNSFn re-points the lerd network at the host's current
+// resolvers; a seam so the fix can be exercised without a live podman network.
+var resyncContainerDNSFn = resyncContainerDNS
+
+// resyncContainerDNS is the same repair the watcher performs when the host's
+// resolver set changes, which is all a stale forwarder needs. Deliberately not
+// `lerd restart`: that reconfigures the host resolver through sudo, which the
+// auto tier promises never to do.
+func resyncContainerDNS() error {
+	if err := podman.EnsureNetworkDNS("lerd", dns.ReadContainerDNS()); err != nil {
+		return err
+	}
+	return podman.ReloadNetworks()
+}
 
 // IsHeavyFix reports whether a fix always warrants an extra confirmation.
 func IsHeavyFix(fix *DoctorFix) bool {
@@ -174,6 +192,9 @@ func ApplyDoctorFix(fix *DoctorFix, out io.Writer) error {
 		return runSelf(out, "install")
 	case fixCleanup:
 		return runSelf(out, "cleanup", "--yes")
+	case fixContainerDNS:
+		fmt.Fprintln(out, "re-pointing the lerd network at the current resolvers")
+		return resyncContainerDNSFn()
 	default:
 		return fmt.Errorf("unknown fix %q", fix.Key)
 	}

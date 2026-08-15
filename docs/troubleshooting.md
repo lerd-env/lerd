@@ -19,7 +19,7 @@ lerd doctor --fix --yes       # apply without prompting (heavy fixes still confi
 lerd doctor --fix --dry-run   # list what would be repaired, change nothing
 ```
 
-The fixes fall into three groups. lerd applies the safe ones itself, creating a missing data or config directory, enabling linger so services survive logout, installing the network-online drop-in, rebuilding a missing PHP image, and, after you confirm the heavier ones, reinstalling the services or reclaiming podman disk. Anything that needs `sudo` lerd never runs for you; it prints the exact command to copy. That covers installing podman, crun, fuse-overlayfs, the rootless network helpers or adding a subuid range, and also `lerd dns:repair` and `lerd wsl:setup`, which rewrite the resolver and podman configuration through `sudo` and so are yours to run even though lerd knows the command. Findings that are external state, a foreign process already holding port 80, a config file with a syntax error, are left untouched with their hint. The same safe, non-heavy repairs are available to AI assistants through the MCP `diag` tool's `doctor_fix` action, which therefore never elevates on your behalf.
+The fixes fall into three groups. lerd applies the safe ones itself, creating a missing data or config directory, enabling linger so services survive logout, installing the network-online drop-in, re-pointing the lerd network at your current DNS resolvers, rebuilding a missing PHP image, and, after you confirm the heavier ones, reinstalling the services or reclaiming podman disk. Anything that needs `sudo` lerd never runs for you; it prints the exact command to copy. That covers installing podman, crun, fuse-overlayfs, the rootless network helpers or adding a subuid range, and also `lerd dns:repair` and `lerd wsl:setup`, which rewrite the resolver and podman configuration through `sudo` and so are yours to run even though lerd knows the command. Findings that are external state, a foreign process already holding port 80, a config file with a syntax error, are left untouched with their hint. The same safe, non-heavy repairs are available to AI assistants through the MCP `diag` tool's `doctor_fix` action, which therefore never elevates on your behalf.
 
 Reclaimable disk is listed separately as optional, because nothing is wrong when there is disk to reclaim. It runs the same interactive reclaim as `lerd cleanup`, so it takes the deep scope and can remove an unreferenced catalog image whoever pulled it, and the size doctor quotes is that same deep scope. If you run other podman workloads on the machine, run [`lerd cleanup --safe`](usage/cleanup.md) yourself instead. Optional fixes never count towards what a re-check reports as still outstanding.
 
@@ -476,6 +476,26 @@ export LERD_DISABLE_IPV6=1
 ```
 
 Either path writes `~/.local/share/lerd/ipv6-probe-failed-lerd`, which `EnsureNetwork` honors on every code path (initial create, migration, recreate). To re-enable dual-stack, delete that marker file and re-run `lerd install`.
+:::
+
+::: details Composer downloads fail with "Could not resolve host"
+Symptom: `composer install` or `composer require` fails on package after package with `Could not resolve host: api.github.com`, or `Resolving timed out`, while the same hostname resolves fine in your own shell. Composer's closing message blames a misconfigured DNS resolver.
+
+Cause: composer runs inside the PHP-FPM container, not on the host, so it resolves through the lerd network's forwarders rather than your `/etc/resolv.conf`. When those forwarders go stale, typically after the host changes network or a VPN comes up while lerd's watcher isn't running, the host keeps resolving normally and only the containers go dark.
+
+`lerd doctor` reports this as `container internet DNS`, and the repair needs no `sudo`, so `--fix` applies it:
+
+```bash
+lerd doctor
+lerd doctor --fix
+```
+
+The fix re-points the lerd network at the host's current resolvers and reloads it, which is the same thing the watcher does automatically when it notices the resolver set change. To see what the containers are being handed:
+
+```bash
+podman network inspect lerd --format '{{.DNSServers}}'
+podman exec lerd-nginx getent hosts raw.githubusercontent.com
+```
 :::
 
 ::: details Every DNS lookup inside a lerd container stalls ~5 seconds

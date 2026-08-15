@@ -416,6 +416,19 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 	}
 
+	// The other direction: everything above proves .test resolves back to this
+	// host, which says nothing about a container reaching the internet, and that
+	// is the lookup composer and the rest of the in-container tooling make.
+	checkContainerExternalDNS(containerDNSProbe{
+		report:      rep,
+		ok:          ok,
+		fail:        fail,
+		warn:        warn,
+		containerUp: services.Mgr.IsActive,
+		resolve:     resolveInContainer,
+		host:        containerDNSProbeHost(),
+	})
+
 	// ── Ports ────────────────────────────────────────────────────────────────
 	section = "Ports"
 	fmt.Fprintln(w, "\n[Ports]")
