@@ -62,3 +62,26 @@ func TestCheckServerDatabase_readsAPHPSettingsFile(t *testing.T) {
 		t.Errorf("check = %+v, want ok once the database exists", c)
 	}
 }
+
+// Asking one engine for its databases costs a container exec, and the doctor's
+// site sweep asks the same engine once per site, so the answer is reused.
+func TestCachedDatabases_ReusesOneLookupPerEngine(t *testing.T) {
+	calls := 0
+	restore := stubDatabaseLister(func(string) ([]string, error) {
+		calls++
+		return []string{"shop"}, nil
+	})
+	defer restore()
+
+	for range 3 {
+		if names, err := cachedDatabases("mysql"); err != nil || len(names) != 1 {
+			t.Fatalf("got %v, %v", names, err)
+		}
+	}
+	if calls != 1 {
+		t.Errorf("looked the engine up %d times, want 1", calls)
+	}
+	if _, err := cachedDatabases("postgres"); err != nil || calls != 2 {
+		t.Errorf("a second engine must be its own lookup: calls=%d err=%v", calls, err)
+	}
+}

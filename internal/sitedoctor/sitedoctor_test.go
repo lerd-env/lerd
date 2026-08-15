@@ -718,7 +718,7 @@ func TestDependencyCheckTasks_SkipsComposerAuditWithoutVendor(t *testing.T) {
 	t.Run("composer.json without vendor: deps only, no audit", func(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, "composer.json", "{}")
-		if got := len(dependencyCheckTasks(context.Background(), dir, nil)); got != 1 {
+		if got := len(dependencyCheckTasks(context.Background(), dir, nil, Options{})); got != 1 {
 			t.Errorf("want 1 task (deps only), got %d", got)
 		}
 	})
@@ -727,7 +727,7 @@ func TestDependencyCheckTasks_SkipsComposerAuditWithoutVendor(t *testing.T) {
 		dir := t.TempDir()
 		writeEnv(t, dir, "composer.json", "{}")
 		mustMkdir(t, filepath.Join(dir, "vendor"))
-		if got := len(dependencyCheckTasks(context.Background(), dir, nil)); got != 2 {
+		if got := len(dependencyCheckTasks(context.Background(), dir, nil, Options{})); got != 2 {
 			t.Errorf("want 2 tasks (deps + audit), got %d", got)
 		}
 	})

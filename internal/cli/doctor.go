@@ -568,6 +568,27 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 		}
 	}
 
+	// ── Sites ────────────────────────────────────────────────────────────────
+	// The broad command has to be broad: an environment that passes every check
+	// above while three sites are failing is not a healthy machine. Each site
+	// gets the cheap half of `lerd site:doctor`, which is named for the detail.
+	section = "Sites"
+	fmt.Fprintln(w, "\n[Sites]")
+	swept := sweepSites()
+	if len(swept) == 0 {
+		ok("no linked sites to check")
+	}
+	for _, s := range swept {
+		switch {
+		case s.Failures > 0:
+			fail("site "+s.Label, s.Summary, "run: lerd site:doctor "+s.Label)
+		case s.Warnings > 0:
+			warn("site "+s.Label, s.Summary+", run: lerd site:doctor "+s.Label)
+		default:
+			ok("site " + s.Label)
+		}
+	}
+
 	// ── Version Info ─────────────────────────────────────────────────────────
 	section = "Version Info"
 	fmt.Fprintln(w, "\n[Version Info]")

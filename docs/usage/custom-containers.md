@@ -92,7 +92,7 @@ container:
   ssl: true
 ```
 
-Nginx will use `proxy_pass https://` and skip certificate verification (`proxy_ssl_verify off`) since the container cert is self-signed. Run `lerd check` to confirm the setting is recognised.
+Nginx will use `proxy_pass https://` and skip certificate verification (`proxy_ssl_verify off`) since the container cert is self-signed. Run `lerd site:doctor` to confirm the setting is recognised.
 
 ## Hot reload
 

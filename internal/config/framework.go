@@ -327,7 +327,7 @@ const (
 var ValidCommandOutputs = []string{CommandOutputSilent, CommandOutputText, CommandOutputURL, CommandOutputTerminal}
 
 // KnownCommandIcons is the curated icon vocabulary. .lerd.yaml entries with an
-// icon outside this set fail `lerd check`. Keep in sync with the UI Icon
+// icon outside this set warn in `lerd site:doctor`. Keep in sync with the UI Icon
 // component so an icon present here always resolves to a visual on screen.
 var KnownCommandIcons = []string{
 	"broom", "database", "refresh", "link", "check", "list",

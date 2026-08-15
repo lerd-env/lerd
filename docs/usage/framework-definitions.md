@@ -392,7 +392,7 @@ The `commands:` list is the framework's own verbs: the things you would otherwis
 
 `broom`, `database`, `refresh`, `link`, `check`, `list`, `key`, `edit`, `arrow-down`, `arrow-up`, `play`, `terminal`
 
-`lerd check` validates a definition's commands, and it is the fastest way to catch a typo: an unknown `output` is an error, and an unknown `icon` is a warning.
+`lerd site:doctor` validates a definition's commands, and it is the fastest way to catch a typo: an unknown `output` is an error, and an unknown `icon` is a warning.
 
 ## Declining a warning
 
@@ -407,7 +407,7 @@ The repeated-query warning is the case that needs it. On a content management sy
 
 ## Doctor checks
 
-The `doctor:` section adds framework-specific health checks to the ones every site gets for free (env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
+The `doctor:` section adds framework-specific health checks to the ones every site gets for free (a valid `.lerd.yaml`, env file present, every picked service wired into it, dependencies installed and locked, audit clean, PHP version in range, nginx vhost current). They run on `lerd site:doctor` and in the dashboard's doctor panel. Keeping them declarative is what stops the doctor from growing a Go branch per framework.
 
 The section also takes a `migrate_command`, naming whichever of the framework's own `commands:` applies the schema. The universal database checks offer it as their fix, so an empty or missing database is reported with the button that fills it. Every framework spells it differently (Laravel `migrate`, Symfony `doctrine:migrations:migrate`, Drupal `updb`), so nothing but the definition can say; a framework that declares none, or names a command it does not have, gets a finding with no fix rather than a button that maps to nothing.
 

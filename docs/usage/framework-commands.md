@@ -63,7 +63,7 @@ The merge rules are:
 - A project entry with a new `name` is **appended** after the framework set.
 - Framework entries whose `check:` rule fails are dropped before the merge.
 
-Validation runs as part of `lerd check`. Invalid `output:` values, unknown icons, duplicate names, and missing commands all surface there.
+Validation runs as part of `lerd site:doctor`. Invalid `output:` values, unknown icons, duplicate names, and missing commands all surface there.
 
 Because a `.lerd.yaml` `commands:` entry comes from the project (an untrusted cloned repo), lerd asks before running one on your host: the first run via `lerd run` or the dashboard shows the exact command and prompts, and the approval is remembered per site so later runs don't re-prompt. `lerd run --yes` bypasses the prompt, and `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them) in the global config changes the default. Framework-provided commands (store, built-in, user overlay) run without this prompt.
 
@@ -84,9 +84,9 @@ commands:
     # `disabled: true` is only meaningful in .lerd.yaml; ignored in framework yamls
 ```
 
-**Known icons**: `broom`, `database`, `refresh`, `link`, `check`, `list`, `key`, `edit`, `arrow-down`, `arrow-up`, `play`, `terminal`. An unknown icon falls back to a generic glyph; `lerd check` warns.
+**Known icons**: `broom`, `database`, `refresh`, `link`, `check`, `list`, `key`, `edit`, `arrow-down`, `arrow-up`, `play`, `terminal`. An unknown icon falls back to a generic glyph; `lerd site:doctor` warns.
 
-**Output values:** invalid values fail `lerd check`. Defaults to `text`.
+**Output values:** invalid values fail `lerd site:doctor`. Defaults to `text`.
 
 **Check rules**: reuse `FrameworkRule`. The two common forms are `composer: <package>` (the package must be in `composer.json`) and `file: <path>` (the file must exist relative to the project root).
 
@@ -99,7 +99,7 @@ When the lerd MCP server is registered, an AI assistant can:
 - `command_add(site, name, command, ...)`: write a new entry into `.lerd.yaml`'s `commands:` block. Same `name` as a framework default replaces it. Use `disabled: true` to suppress a framework default
 - `command_remove(site, name)`: delete a project entry
 
-Agents should prefer `commands_run` over invoking `php artisan` / `drush` / `wp` directly so per-project overrides are honored, and `command_add` over hand-editing yaml so the entry passes the same validation `lerd check` runs.
+Agents should prefer `commands_run` over invoking `php artisan` / `drush` / `wp` directly so per-project overrides are honored, and `command_add` over hand-editing yaml so the entry passes the same validation `lerd site:doctor` runs.
 
 ## CLI
 

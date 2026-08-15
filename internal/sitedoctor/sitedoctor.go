@@ -112,20 +112,26 @@ func (d *Response) add(c Check) {
 	d.Checks = append(d.Checks, c)
 }
 
-// Run builds the doctor report for the project at path using fw to drive both
-// the universal baseline and the framework's declarative checks. fw may be nil
-// (an unknown framework) — only the file/dependency baseline runs then. The
-// cheap checks read files; command and audit checks touch the container.
 // RunForPath resolves the framework definition for a project path and runs the
-// doctor, so the CLI, MCP, and Web UI share one path -> framework -> Run chain
-// instead of re-deriving it three ways. fwName is the site's recorded framework
-// when known; pass "" to detect it from the path.
+// doctor, so the CLI, MCP, and Web UI share one path -> framework -> Run chain.
+// fwName is the site's recorded framework; pass "" to detect it from the path.
 func RunForPath(ctx context.Context, path, fwName string) Response {
+	return runForPath(ctx, path, fwName, Options{})
+}
+
+// RunQuickForPath is RunForPath without the checks that shell into the site
+// container or read the timing snapshot, so `lerd doctor` can sweep every linked
+// site without turning into a minute-long command.
+func RunQuickForPath(ctx context.Context, path, fwName string) Response {
+	return runForPath(ctx, path, fwName, Options{Quick: true})
+}
+
+func runForPath(ctx context.Context, path, fwName string, opts Options) Response {
 	if fwName == "" {
 		fwName, _ = config.DetectFrameworkForDir(path)
 	}
 	fw, _ := config.GetFrameworkForDir(fwName, path)
-	return Run(ctx, path, fw)
+	return RunWith(ctx, path, fw, opts)
 }
 
 // AppliesForPath reports whether the doctor has any check to run for the project
@@ -160,6 +166,11 @@ func Applies(path string, fw *config.Framework) bool {
 	if fileExists(filepath.Join(path, "package.json")) {
 		return true
 	}
+	// A .lerd.yaml is itself something to validate, so a project carrying one
+	// always has a report worth opening.
+	if fileExists(filepath.Join(path, projectConfigFile)) {
+		return true
+	}
 	// A committed dotenv example drives the env_drift check even with no framework,
 	// so a bare proxy carrying one still has something to report.
 	if _, format, exampleFile := envSetup(fw, path); format == "dotenv" && fileExists(filepath.Join(path, exampleFile)) {
@@ -168,8 +179,27 @@ func Applies(path string, fw *config.Framework) bool {
 	return false
 }
 
+// Options tunes how much of the report Run produces.
+type Options struct {
+	// Quick drops the checks that shell into the site container (the framework
+	// command checks, composer validate, the composer and npm audits) and the
+	// request-timing lookup, leaving the file-and-config ones.
+	Quick bool
+}
+
+// Run builds the doctor report for the project at path using fw to drive both
+// the universal baseline and the framework's declarative checks. fw may be nil
+// (an unknown framework), and then only the file/dependency baseline runs.
 func Run(ctx context.Context, path string, fw *config.Framework) Response {
+	return RunWith(ctx, path, fw, Options{})
+}
+
+// RunWith is Run honouring opts, so a caller can ask for the cheap checks only.
+func RunWith(ctx context.Context, path string, fw *config.Framework, opts Options) Response {
 	resp := Response{Checks: []Check{}}
+	if c, ok := checkProjectConfig(path, fw); ok {
+		resp.add(c)
+	}
 	envFile, envFormat, exampleFile := envSetup(fw, path)
 	envPath := filepath.Join(path, envFile)
 
@@ -226,6 +256,11 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	var tasks []func() (Check, bool)
 	for _, spec := range frameworkChecks(fw) {
 		spec := spec
+		// A command check is an exec into the site's container, which is what the
+		// quick pass exists to avoid.
+		if opts.Quick && spec.Type == "command" {
+			continue
+		}
 		// A known-broken database turns a migration check into "couldn't run" noise
 		// that just repeats the database finding's remedy, so skip a command check
 		// whose fix is the same migrate command; unrelated command checks still run.
@@ -234,7 +269,7 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 		}
 		tasks = append(tasks, func() (Check, bool) { return runDeclaredCheck(ctx, path, envPath, envFormat, spec) })
 	}
-	tasks = append(tasks, dependencyCheckTasks(ctx, path, fw)...)
+	tasks = append(tasks, dependencyCheckTasks(ctx, path, fw, opts)...)
 	for _, c := range runChecksConcurrently(tasks) {
 		resp.add(c)
 	}
@@ -244,8 +279,10 @@ func Run(ctx context.Context, path string, fw *config.Framework) Response {
 	if c, ok := checkVhost(path); ok {
 		resp.add(c)
 	}
-	if c, ok := checkSlowRoutes(path); ok {
-		resp.add(c)
+	if !opts.Quick {
+		if c, ok := checkSlowRoutes(path); ok {
+			resp.add(c)
+		}
 	}
 	applyLabels(&resp)
 	return resp
@@ -458,6 +495,7 @@ func runDeclaredCheck(ctx context.Context, path, envPath, envFormat string, spec
 // universalLabels maps the built-in check names to their display labels. The
 // declared framework checks carry their own labels from the store.
 var universalLabels = map[string]string{
+	"project_config":    "Project Config",
 	"required_services": "Required Services",
 	"env_present":       "Env File",
 	"service_wiring":    "Service Wiring",
@@ -994,17 +1032,23 @@ func runChecksConcurrently(tasks []func() (Check, bool)) []Check {
 // tasks. Each is skipped when its manifest is absent, and the composer audit is
 // skipped when vendor/ is missing (checkComposerDeps already flags that, and the
 // audit can only degrade to "unknown" without installed packages).
-func dependencyCheckTasks(ctx context.Context, path string, fw *config.Framework) []func() (Check, bool) {
+func dependencyCheckTasks(ctx context.Context, path string, fw *config.Framework, opts Options) []func() (Check, bool) {
 	var tasks []func() (Check, bool)
 	if fileExists(filepath.Join(path, "composer.json")) && !composerDisabled(fw) {
-		tasks = append(tasks, func() (Check, bool) { return checkComposerDeps(ctx, path), true })
-		if dirExists(filepath.Join(path, "vendor")) {
-			tasks = append(tasks, func() (Check, bool) { return checkComposerAudit(ctx, path), true })
+		if opts.Quick {
+			tasks = append(tasks, func() (Check, bool) { return checkComposerDepsFiles(path), true })
+		} else {
+			tasks = append(tasks, func() (Check, bool) { return checkComposerDeps(ctx, path), true })
+			if dirExists(filepath.Join(path, "vendor")) {
+				tasks = append(tasks, func() (Check, bool) { return checkComposerAudit(ctx, path), true })
+			}
 		}
 	}
 	if fileExists(filepath.Join(path, "package.json")) {
 		tasks = append(tasks, func() (Check, bool) { return checkNodeDeps(path), true })
-		tasks = append(tasks, func() (Check, bool) { return checkNodeAudit(ctx, path), true })
+		if !opts.Quick {
+			tasks = append(tasks, func() (Check, bool) { return checkNodeAudit(ctx, path), true })
+		}
 	}
 	return tasks
 }
@@ -1019,11 +1063,8 @@ func composerDisabled(fw *config.Framework) bool {
 // lock file has drifted from composer.json. Degrades to "unknown" when composer
 // can't run.
 func checkComposerDeps(ctx context.Context, path string) Check {
-	if !dirExists(filepath.Join(path, "vendor")) {
-		return Check{Name: "composer_deps", Status: StatusWarn, Detail: "Composer dependencies aren't installed, run composer install.", Fix: FixComposerInstall}
-	}
-	if !fileExists(filepath.Join(path, "composer.lock")) {
-		return Check{Name: "composer_deps", Status: StatusWarn, Detail: "No composer.lock is committed, run composer install to create one.", Fix: FixComposerInstall}
+	if c := checkComposerDepsFiles(path); c.Status != StatusOK {
+		return c
 	}
 	cctx, cancel := context.WithTimeout(ctx, commandTimeout)
 	defer cancel()
@@ -1033,6 +1074,19 @@ func checkComposerDeps(ctx context.Context, path string) Check {
 	}
 	if composerLockStale(out) {
 		return Check{Name: "composer_deps", Status: StatusWarn, Detail: "composer.lock is out of date with composer.json, run composer update.", Fix: FixComposerUpdate}
+	}
+	return Check{Name: "composer_deps", Status: StatusOK}
+}
+
+// checkComposerDepsFiles is the part of the composer check that reads files
+// only. Its OK is "nothing visibly wrong here", which the full check then puts
+// to composer itself.
+func checkComposerDepsFiles(path string) Check {
+	if !dirExists(filepath.Join(path, "vendor")) {
+		return Check{Name: "composer_deps", Status: StatusWarn, Detail: "Composer dependencies aren't installed, run composer install.", Fix: FixComposerInstall}
+	}
+	if !fileExists(filepath.Join(path, "composer.lock")) {
+		return Check{Name: "composer_deps", Status: StatusWarn, Detail: "No composer.lock is committed, run composer install to create one.", Fix: FixComposerInstall}
 	}
 	return Check{Name: "composer_deps", Status: StatusOK}
 }

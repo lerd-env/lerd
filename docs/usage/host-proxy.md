@@ -41,7 +41,7 @@ Lerd starts the dev server, generates the proxy vhost, and serves the domain. Op
 
 ## Configuration
 
-The `proxy` section in `.lerd.yaml` is mutually exclusive with `container:` (a site is one or the other, and `lerd check` rejects setting both).
+The `proxy` section in `.lerd.yaml` is mutually exclusive with `container:` (a site is one or the other, and `lerd site:doctor` rejects setting both).
 
 | Field | Required | Default | Description |
 |-------|----------|---------|-------------|

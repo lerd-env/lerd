@@ -188,7 +188,7 @@ When `lerd link` runs and workers are configured but not yet running, it prompts
 
 Toggling workers from the CLI (`lerd queue:start`, `lerd schedule:stop`, etc.) or the web UI syncs the running state back to `.lerd.yaml` when the file exists.
 
-`lerd check` validates that listed workers are valid for the detected framework.
+`lerd site:doctor` validates that listed workers are valid for the detected framework.
 
 `lerd status` includes a Workers section showing all active, restarting, or failed workers across sites. In the web UI, failing workers show a pulsing red toggle and their log tab appears with a "!" indicator.
 

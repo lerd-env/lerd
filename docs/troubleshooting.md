@@ -3,11 +3,19 @@
 When something isn't working, start with the built-in diagnostics:
 
 ```bash
-lerd doctor   # full check: podman, systemd, DNS, ports, images, config
+lerd doctor   # full check: podman, systemd, DNS, ports, images, config, sites
 lerd status   # quick health snapshot of all running services
 ```
 
 `lerd doctor` reports OK/FAIL/WARN for each check with a hint for every failure.
+
+It finishes with a `[Sites]` section, one line per linked site, so the broad command is actually broad: an environment that passes everything else while three sites are down is not a healthy machine. Each site runs the cheap half of [`lerd site:doctor`](reference/commands.md), the file-and-config checks, and the line names the command to run for the detail:
+
+```bash
+lerd site:doctor acme.test
+```
+
+The expensive checks, `composer audit`, `npm audit`, and the response-time lookup, only run there, so the sweep stays quick however many sites you have. `lerd site:doctor` also validates the project's `.lerd.yaml`, which is what `lerd check` used to do on its own; `check` still works as a deprecated alias for it.
 
 ## Repairing findings automatically
 

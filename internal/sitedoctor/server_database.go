@@ -3,6 +3,8 @@ package sitedoctor
 import (
 	"fmt"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/serviceops"
@@ -27,7 +29,47 @@ var listDatabases = func(service string) ([]string, error) {
 func stubDatabaseLister(fn func(string) ([]string, error)) func() {
 	prev := listDatabases
 	listDatabases = fn
-	return func() { listDatabases = prev }
+	forgetDatabases()
+	return func() {
+		listDatabases = prev
+		forgetDatabases()
+	}
+}
+
+// dbListTTL bounds how long one engine's database list is reused. `lerd doctor`
+// sweeps every site, and without this each one pays its own container exec to
+// ask the same engine the same question.
+const dbListTTL = 5 * time.Second
+
+type dbListEntry struct {
+	names []string
+	err   error
+	at    time.Time
+}
+
+var dbListCache = struct {
+	sync.Mutex
+	entries map[string]dbListEntry
+}{entries: map[string]dbListEntry{}}
+
+// cachedDatabases is listDatabases with the recent answer reused. The lock is
+// held across the lookup on purpose: concurrent callers asking for the same
+// engine wait for the one exec instead of each starting their own.
+func cachedDatabases(service string) ([]string, error) {
+	dbListCache.Lock()
+	defer dbListCache.Unlock()
+	if e, ok := dbListCache.entries[service]; ok && time.Since(e.at) < dbListTTL {
+		return e.names, e.err
+	}
+	names, err := listDatabases(service)
+	dbListCache.entries[service] = dbListEntry{names: names, err: err, at: time.Now()}
+	return names, err
+}
+
+func forgetDatabases() {
+	dbListCache.Lock()
+	defer dbListCache.Unlock()
+	dbListCache.entries = map[string]dbListEntry{}
 }
 
 // checkServerDatabase fails when the site's database does not exist on the
@@ -49,7 +91,7 @@ func checkServerDatabase(path string, fw *config.Framework) (Check, bool) {
 	}
 	checked := false
 	for _, t := range targets {
-		names, err := listDatabases(t.Service)
+		names, err := cachedDatabases(t.Service)
 		if err != nil {
 			// The engine is down or unreachable. Reporting that as a missing
 			// schema would send the user to create a database that may exist.
