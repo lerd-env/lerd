@@ -15,3 +15,9 @@ import "github.com/geodro/lerd/internal/config"
 var workerSupportedOnPlatform = func(_ config.FrameworkWorker) (bool, string) {
 	return true, ""
 }
+
+// enableArmsBootOnly is true on Linux: `systemctl --user enable` only writes the
+// default.target.wants symlink, so skipping it while autostart is off costs the
+// unit nothing at runtime. A package var, like workerSupportedOnPlatform, so a
+// test can exercise both platforms' behaviour from either build.
+var enableArmsBootOnly = true

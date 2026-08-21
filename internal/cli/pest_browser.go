@@ -43,16 +43,17 @@ const playwrightBinRel = "node_modules/.bin/playwright"
 // host HOME, and musl chromium crashes writing its config into the bind-mounted
 // host home, so the browser needs an isolated, writable home. The find globs the
 // cache (an undocumented Playwright layout, but the only handle Pest leaves us),
-// so it stays correct across browser revisions; if a future Playwright renames
-// the binaries the install fails loudly via `test "$n" -gt 0`.
+// so it stays correct across browser revisions. The count guard only catches a
+// rename of every name at once: headless_shell was missed for a while because
+// chrome still matched, leaving headless runs on a glibc binary musl can't exec.
 var pestBrowserShim = fmt.Sprintf(`set -e
 cache="${PLAYWRIGHT_BROWSERS_PATH:-%s}"
 if [ ! -d "$cache" ]; then echo "no Playwright browser cache at $cache" >&2; exit 1; fi
-find "$cache" -type f \( -name chrome-headless-shell -o -name chrome \) -print0 2>/dev/null | while IFS= read -r -d '' b; do
+find "$cache" -type f \( -name chrome-headless-shell -o -name headless_shell -o -name chrome \) -print0 2>/dev/null | while IFS= read -r -d '' b; do
   printf '#!/bin/sh\nexport HOME=/root\nexec /usr/bin/chromium --no-sandbox "$@"\n' > "$b"
   chmod +x "$b"
 done
-n=$(find "$cache" -type f \( -name chrome-headless-shell -o -name chrome \) 2>/dev/null | wc -l)
+n=$(find "$cache" -type f \( -name chrome-headless-shell -o -name headless_shell -o -name chrome \) 2>/dev/null | wc -l)
 echo "  shimmed $n browser binary(ies) to system chromium"
 test "$n" -gt 0
 `, pestBrowserCachePath)
@@ -119,8 +120,9 @@ printf '%%s\n' "$plan" | while IFS="$(printf '\t')" read -r dir url mirror; do
   mkdir -p "$dir"
   unzip -q -o "$zip" -d "$dir"
   rm -f "$zip"
-  find "$dir" -type f \( -name 'chrome' -o -name 'chrome-headless-shell' -o -name 'chrome_sandbox' \
-    -o -name 'chrome_crashpad_handler' -o -name 'ffmpeg-linux' -o -name '*.sh' \) -exec chmod +x {} +
+  find "$dir" -type f \( -name 'chrome' -o -name 'chrome-headless-shell' -o -name 'headless_shell' \
+    -o -name 'chrome_sandbox' -o -name 'chrome_crashpad_handler' -o -name 'ffmpeg-linux' \
+    -o -name '*.sh' \) -exec chmod +x {} +
   touch "$dir/INSTALLATION_COMPLETE"
 done
 `, pestBrowserCachePath, pestBrowserPlanAwk)
@@ -425,7 +427,7 @@ func doctorPestBrowser(version string, w io.Writer) error {
 	check(playwrightOK, "playwright npm package installed", "lerd npm install playwright")
 
 	shimOK := podman.Cmd("exec", container, "sh", "-c",
-		`fs=$(find "${PLAYWRIGHT_BROWSERS_PATH:-`+pestBrowserCachePath+`}" -type f \( -name chrome-headless-shell -o -name chrome \) 2>/dev/null); [ -n "$fs" ] || exit 1; for b in $fs; do head -1 "$b" | grep -q '#!/bin/sh' || exit 1; done`).Run() == nil
+		`fs=$(find "${PLAYWRIGHT_BROWSERS_PATH:-`+pestBrowserCachePath+`}" -type f \( -name chrome-headless-shell -o -name headless_shell -o -name chrome \) 2>/dev/null); [ -n "$fs" ] || exit 1; for b in $fs; do head -1 "$b" | grep -q '#!/bin/sh' || exit 1; done`).Run() == nil
 	check(shimOK, "Playwright browser shimmed to musl chromium", "lerd pest:browser install")
 
 	// The checks above can pass while `lerd test` still fails: pest-plugin-browser

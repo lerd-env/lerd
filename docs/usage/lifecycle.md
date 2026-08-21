@@ -171,6 +171,8 @@ lerd autostart disable     # stop booting on login
 
 `lerd autostart enable` runs `systemctl --user enable` on the full set; `lerd autostart disable` runs the matching `disable`. The dashboard's enabled state is the canonical "is autostart on" indicator surfaced by the UI and tray.
 
+The switch is sticky. A worker you enable later, while autostart is off, stays disarmed as well, so it cannot come back on the next boot ahead of the databases and caches it needs and crash-restart against them.
+
 The same toggle also appears in the **System Tray** menu under **Autostart**; see [System Tray](../features/system-tray.md).
 
 The tray unit (`lerd-tray.service`) is wired to `graphical-session.target` and so requires a desktop environment that reaches that target on login: GNOME, KDE Plasma, and any compositor launched through `uwsm` (Omarchy's Hyprland setup included). Bare Hyprland / Sway / i3 launched without `uwsm` won't autostart the tray; see [System Tray, Autostart](../features/system-tray.md#autostart) for the workaround. Every other lerd unit uses `default.target` and is unaffected.

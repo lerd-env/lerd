@@ -421,7 +421,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 		if err := podman.DaemonReloadFn(); err != nil {
 			feedback.Warn("daemon-reload: %v", err)
 		}
-		if err := services.Mgr.Enable(lifecycleTarget); err != nil {
+		if err := syncWorkerBootArming(lifecycleTarget); err != nil {
 			feedback.Warn("enable: %v", err)
 		}
 	}

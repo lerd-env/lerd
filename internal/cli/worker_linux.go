@@ -251,7 +251,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 		if w.Schedule != "" {
 			enableTarget = unitName + ".timer"
 		}
-		if err := services.Mgr.Enable(enableTarget); err != nil {
+		if err := syncWorkerBootArming(enableTarget); err != nil {
 			feedback.Warn("enable %s: %v", enableTarget, err)
 		}
 	}

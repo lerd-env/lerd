@@ -20,3 +20,10 @@ var workerSupportedOnPlatform = func(w config.FrameworkWorker) (bool, string) {
 	}
 	return true, ""
 }
+
+// enableArmsBootOnly is false on macOS: launchctl enable also lifts the disabled
+// flag that blocks bootstrapping a label at all, so skipping it would stop the
+// worker from starting now, not just at the next login. A package var, like
+// workerSupportedOnPlatform, so a test can exercise both platforms' behaviour
+// from either build.
+var enableArmsBootOnly = false

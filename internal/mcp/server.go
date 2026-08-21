@@ -648,7 +648,7 @@ WantedBy=default.target
 	if err := podman.DaemonReloadFn(); err != nil {
 		return toolErr("daemon-reload: " + err.Error()), nil
 	}
-	_ = lerdSystemd.EnableService(unitName)
+	_ = lerdSystemd.SyncBootArming(unitName)
 	if err := lerdSystemd.StartService(unitName); err != nil {
 		return toolErr("starting reverb: " + err.Error()), nil
 	}
@@ -715,7 +715,7 @@ WantedBy=default.target
 	if err := podman.DaemonReloadFn(); err != nil {
 		return toolErr("daemon-reload: " + err.Error()), nil
 	}
-	_ = lerdSystemd.EnableService(unitName)
+	_ = lerdSystemd.SyncBootArming(unitName)
 	if err := lerdSystemd.StartService(unitName); err != nil {
 		return toolErr("starting horizon: " + err.Error()), nil
 	}
@@ -777,7 +777,7 @@ WantedBy=default.target
 	if err := podman.DaemonReloadFn(); err != nil {
 		return toolErr("daemon-reload: " + err.Error()), nil
 	}
-	_ = lerdSystemd.EnableService(unitName)
+	_ = lerdSystemd.SyncBootArming(unitName)
 	if err := lerdSystemd.StartService(unitName); err != nil {
 		return toolErr("starting scheduler: " + err.Error()), nil
 	}
@@ -864,7 +864,7 @@ WantedBy=default.target
 	if err := podman.DaemonReloadFn(); err != nil {
 		return toolErr("daemon-reload: " + err.Error()), nil
 	}
-	_ = lerdSystemd.EnableService(unitName)
+	_ = lerdSystemd.SyncBootArming(unitName)
 	if err := lerdSystemd.StartService(unitName); err != nil {
 		return toolErr("starting stripe listener: " + err.Error()), nil
 	}

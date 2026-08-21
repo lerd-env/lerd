@@ -206,13 +206,23 @@ func TestPestBrowserSupportedVersion(t *testing.T) {
 	}
 }
 
-// The shim must shim both browser binaries and use a NUL-delimited find so paths
-// with spaces or newlines can't corrupt the rewrite.
+// The shim must shim every browser binary and use a NUL-delimited find so paths
+// with spaces or newlines can't corrupt the rewrite. headless_shell is the name
+// the chromium_headless_shell build ships, and missing it leaves a glibc binary
+// that musl cannot exec while the count guard still passes on chrome alone.
 func TestPestBrowserShim_HandlesBothBinariesSafely(t *testing.T) {
-	for _, want := range []string{"-name chrome-headless-shell", "-name chrome", "-print0", "read -r -d ''"} {
+	for _, want := range []string{"-name chrome-headless-shell", "-name chrome", "-name headless_shell", "-print0", "read -r -d ''"} {
 		if !strings.Contains(pestBrowserShim, want) {
 			t.Errorf("shim missing %q:\n%s", want, pestBrowserShim)
 		}
+	}
+}
+
+// The extractor marks the binaries executable by name, so it has to know the
+// same set the shim rewrites or headless_shell lands without the +x bit.
+func TestPestBrowserExtract_ChmodsHeadlessShell(t *testing.T) {
+	if !strings.Contains(pestBrowserInstall, "-name 'headless_shell'") {
+		t.Errorf("extractor does not chmod headless_shell:\n%s", pestBrowserInstall)
 	}
 }
 
