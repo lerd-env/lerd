@@ -346,7 +346,9 @@ func regenerateWorktreeHostWorkers(site *config.Site, fw *config.Framework, phpV
 // already on the right runtime. persist=false keeps .lerd.yaml untouched (Vite
 // is a build-replacer that's intentionally not persisted). Best-effort.
 func regenerateWorkerUnit(siteName, sitePath, phpVersion, workerName string, wDef config.FrameworkWorker, unitName string) {
-	if !services.Mgr.IsEnabled(unitName) {
+	// Running counts as installed too: with autostart off a worker is deliberately
+	// not armed for boot, and skipping it here would leave it on the old runtime.
+	if !services.Mgr.IsEnabled(unitName) && !services.Mgr.IsActive(unitName) {
 		return
 	}
 	// Snapshot the unit before rewriting so we only restart it when its

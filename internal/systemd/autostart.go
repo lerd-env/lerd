@@ -55,3 +55,15 @@ func IsAutostartEnabled() bool {
 	}
 	return !cfg.Autostart.Disabled
 }
+
+// SyncBootArming enables a unit for start at login, or disables it while
+// autostart is off. A unit written after `lerd autostart disable` must not
+// re-arm login start: at the next boot it comes up with no lerd services behind
+// it and systemd restarts it forever. Disabling only drops the wants symlink, so
+// a unit that is already running keeps running.
+func SyncBootArming(name string) error {
+	if !IsAutostartEnabled() {
+		return DisableService(name)
+	}
+	return EnableService(name)
+}

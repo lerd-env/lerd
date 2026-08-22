@@ -198,7 +198,7 @@ WantedBy=default.target
 		if err := podman.DaemonReloadFn(); err != nil {
 			return fmt.Errorf("daemon-reload: %w", err)
 		}
-		if err := services.Mgr.Enable(unitName); err != nil {
+		if err := syncWorkerBootArming(unitName); err != nil {
 			feedback.Warn("enable: %v", err)
 		}
 	}

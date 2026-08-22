@@ -91,3 +91,35 @@ func TestRestoreWorker_worktreePath_writesSuffixedUnit(t *testing.T) {
 		t.Errorf("expected ws/main label in unit content for worktree, got %q", mgr.writes[0].content)
 	}
 }
+
+// TestRestoreWorker_autostartDisabled_doesNotArmBoot pins issue #1531: a worker
+// unit written while autostart is off must not be enabled. Enabling drops the
+// default.target.wants symlink back in, so the next boot starts the worker with
+// no lerd services behind it and systemd restarts it forever.
+func TestRestoreWorker_autostartDisabled_doesNotArmBoot(t *testing.T) {
+	registerSite(t, "ws", "/p/ws")
+	setAutostart(t, false)
+	mgr := &captureWriteMgr{writeChange: true}
+	swapServiceMgr(t, mgr)
+
+	restoreWorker("ws", "/p/ws", "8.4", "horizon", config.FrameworkWorker{Command: "php artisan horizon"})
+
+	if len(mgr.enabled) != 0 {
+		t.Errorf("enabled %v, want nothing enabled while autostart is off", mgr.enabled)
+	}
+}
+
+// The gate must not swallow the normal case: with autostart on, a freshly
+// written worker unit is still armed for login start.
+func TestRestoreWorker_autostartEnabled_armsBoot(t *testing.T) {
+	registerSite(t, "ws", "/p/ws")
+	setAutostart(t, true)
+	mgr := &captureWriteMgr{writeChange: true}
+	swapServiceMgr(t, mgr)
+
+	restoreWorker("ws", "/p/ws", "8.4", "horizon", config.FrameworkWorker{Command: "php artisan horizon"})
+
+	if len(mgr.enabled) != 1 || mgr.enabled[0] != "lerd-horizon-ws" {
+		t.Errorf("enabled %v, want [lerd-horizon-ws]", mgr.enabled)
+	}
+}

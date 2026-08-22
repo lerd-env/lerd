@@ -121,20 +121,32 @@ func RebuildPHPVersion(version string, w io.Writer) error {
 		fmt.Fprintf(w, "  WARN: storing PHP-FPM image hash: %v\n", err)
 	}
 	fmt.Fprintln(w, "Restarting containers...")
+	running := runningInContainerWorkers()
 	applyPHPImageChange(version)
-	restartInContainerWorkers()
+	restartInContainerWorkers(running)
 	fmt.Fprintf(w, "PHP %s image rebuilt.\n", version)
 	return nil
 }
 
-// restartInContainerWorkers restarts the workers that run inside FPM containers
-// via podman exec. BindsTo stops them when the FPM container stops but does not
-// bring them back when it returns, so a rebuild has to do it explicitly.
-func restartInContainerWorkers() {
+// runningInContainerWorkers snapshots which of the declared podman-exec worker
+// units are running. Callers take it before restarting an FPM container: BindsTo
+// stops those workers along with the container, so afterwards there is no way
+// left to tell which ones the user actually had up.
+func runningInContainerWorkers() []string {
+	var out []string
 	for _, unit := range append(append(lifecycle.RegisteredReverbUnits(), lifecycle.RegisteredQueueUnits()...), lifecycle.RegisteredScheduleUnits()...) {
-		if !lerdSystemd.IsServiceActive(unit) && !lerdSystemd.IsServiceEnabled(unit) {
-			continue
+		if lerdSystemd.IsServiceActive(unit) {
+			out = append(out, unit)
 		}
+	}
+	return out
+}
+
+// restartInContainerWorkers brings back the workers a snapshot found running.
+// BindsTo stops them when the FPM container stops but does not bring them back
+// when it returns, so a rebuild has to do it explicitly.
+func restartInContainerWorkers(units []string) {
+	for _, unit := range units {
 		if err := lerdSystemd.RestartService(unit); err != nil {
 			feedback.Warn("restart %s: %v", unit, err)
 		} else {
@@ -235,6 +247,7 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		label = "PHP " + versions[0] + " image"
 	}
 	feedback.Line("restarting containers")
+	running := runningInContainerWorkers()
 	for _, v := range versions {
 		unit := "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
 		if err := podman.RestartUnit(unit); err != nil {
@@ -244,7 +257,7 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	restartInContainerWorkers()
+	restartInContainerWorkers(running)
 
 	feedback.Done(label + " rebuilt")
 	return nil

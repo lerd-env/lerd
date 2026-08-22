@@ -5,7 +5,21 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/logcolor"
+	"github.com/geodro/lerd/internal/services"
+	lerdSystemd "github.com/geodro/lerd/internal/systemd"
 )
+
+// syncWorkerBootArming arms a worker unit for start at login, or disarms it
+// while autostart is off. A worker enabled after `lerd autostart disable` comes
+// back at the next boot with no lerd services behind it and restarts forever,
+// and disarming clears a link an older build left behind. Callers start the unit
+// themselves, so disarming never stops a worker from running now.
+func syncWorkerBootArming(target string) error {
+	if enableArmsBootOnly && !lerdSystemd.IsAutostartEnabled() {
+		return services.Mgr.Disable(target)
+	}
+	return services.Mgr.Enable(target)
+}
 
 // workerColorArgs returns the `podman exec` colour flags with a trailing space
 // so unit templates can splice them in front of the container name, or an empty
