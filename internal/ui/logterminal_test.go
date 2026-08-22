@@ -23,6 +23,11 @@ func TestUnitForLogPath(t *testing.T) {
 		{"/api/stripe/alpha/logs", "lerd-stripe-alpha"},
 		{"/api/worker/alpha/vite/logs", "lerd-vite-alpha"},
 		{"/api/worker/alpha-feature/app/logs", "lerd-app-alpha-feature"},
+		// Custom worker names are free-form in .lerd.yaml, so underscores and
+		// capitals have to survive the route back to their unit.
+		{"/api/worker/alpha/all_queue/logs", "lerd-all_queue-alpha"},
+		{"/api/worker/my_app/all_queue/logs", "lerd-all_queue-my_app"},
+		{"/api/worker/alpha/AllQueue/logs", "lerd-AllQueue-alpha"},
 	}
 	for _, c := range cases {
 		got, ok := unitForLogPath(c.path)
@@ -117,7 +122,7 @@ func TestHandleLogTerminal_ReportsMissingEmulator(t *testing.T) {
 // function, so an unroutable path must 404 rather than stream a bogus unit.
 func TestHandleUnitLogStream_RejectsUnknownPath(t *testing.T) {
 	rec := httptest.NewRecorder()
-	handleUnitLogStream(rec, httptest.NewRequest(http.MethodGet, "/api/queue/Bad_Site/logs", nil))
+	handleUnitLogStream(rec, httptest.NewRequest(http.MethodGet, "/api/queue/bad;site/logs", nil))
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("status = %d, want 404", rec.Code)
 	}

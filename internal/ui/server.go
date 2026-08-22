@@ -5197,7 +5197,10 @@ func handleLogs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-var allowedQueueUnit = regexp.MustCompile(`^[a-z0-9-]+$`)
+// allowedQueueUnit validates a site or worker segment of a log stream path.
+// Custom worker names in .lerd.yaml and site handles are free-form apart from
+// whitespace, so underscores and capitals have to pass or their logs 404.
+var allowedQueueUnit = regexp.MustCompile(`^[A-Za-z0-9_-]+$`)
 
 // SettingsResponse is the response for GET /api/settings.
 type SettingsResponse struct {
