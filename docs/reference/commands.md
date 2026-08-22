@@ -263,39 +263,6 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 
 See [Importing from Laravel Sail](/usage/import-sail) for full documentation.
 
-## Queue workers
-
-| Command | Description |
-|---|---|
-| `lerd queue:start` | Start a queue worker for the current project |
-| `lerd queue:stop` | Stop the queue worker for the current project |
-
-## Horizon
-
-For projects that use `laravel/horizon`, lerd detects it automatically from `composer.json`.
-
-| Command | Description |
-|---|---|
-| `lerd horizon:start` | Start Laravel Horizon for the current project as a persistent background service |
-| `lerd horizon:stop` | Stop Horizon |
-| `lerd horizon:reload [on\|off]` | Toggle Horizon auto-reload on file changes for the current site; with no argument prints the current state. Needs the `chokidar` npm package |
-
-## Reverb
-
-Requires [Laravel Broadcasting](https://laravel.com/docs/13.x/broadcasting) with the `laravel/reverb` package, lerd detects it automatically from `composer.json`.
-
-| Command | Description |
-|---|---|
-| `lerd reverb:start` | Start the Reverb WebSocket server for the current project as a persistent background service |
-| `lerd reverb:stop` | Stop the Reverb server |
-
-## Schedule
-
-| Command | Description |
-|---|---|
-| `lerd schedule:start` | Start the task scheduler (`schedule:work`) for the current project as a persistent background service |
-| `lerd schedule:stop` | Stop the task scheduler |
-
 ## Framework workers
 
 | Command | Description |
@@ -303,6 +270,22 @@ Requires [Laravel Broadcasting](https://laravel.com/docs/13.x/broadcasting) with
 | `lerd worker start <name>` | Start any named framework worker for the current project |
 | `lerd worker stop <name>` | Stop a named framework worker |
 | `lerd worker list` | List all workers defined for the current project's framework |
+
+Each worker also gets commands under its own name, generated from the current project's framework definition, in both the `name:verb` and `name verb` spellings:
+
+| Command | Description |
+|---|---|
+| `lerd queue:start` | Start a queue worker for the current project |
+| `lerd queue:stop` | Stop the queue worker for the current project |
+| `lerd horizon:start` | Start Laravel Horizon for the current project as a persistent background service |
+| `lerd horizon:stop` | Stop Horizon |
+| `lerd horizon:reload [on\|off]` | Toggle Horizon auto-reload on file changes for the current site; with no argument prints the current state. Needs the `chokidar` npm package |
+| `lerd reverb:start` | Start the Reverb WebSocket server for the current project as a persistent background service |
+| `lerd reverb:stop` | Stop the Reverb server |
+| `lerd schedule:start` | Start the task scheduler (`schedule:work`) for the current project as a persistent background service |
+| `lerd schedule:stop` | Stop the task scheduler |
+
+Which of these exist depends on what the project's framework declares, so a Symfony project gets `lerd messenger:start` and a Laravel one without `laravel/reverb` still gets `reverb:start` (it refuses with the missing package). A `:reload` command appears for workers whose definition has a reload variant, and start commands carry a flag per `tune_command` placeholder, so `lerd queue:start --help` is the authority on what your project accepts. See [framework workers](../usage/framework-workers.md).
 
 ## Idle-suspend
 

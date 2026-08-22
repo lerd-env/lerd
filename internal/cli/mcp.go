@@ -34,7 +34,7 @@ the MCP configuration injected by 'lerd mcp:inject'.`,
 			// Inject the cross-platform queue lifecycle so the MCP queue tools
 			// derive the command from the framework instead of hardcoding artisan.
 			mcp.QueueStartFn = queueStartTuned
-			mcp.QueueStopFn = QueueStopForSite
+			mcp.QueueStopFn = func(siteName string) error { return StopFrameworkWorker(siteName, "queue") }
 			return mcp.Serve()
 		},
 	}

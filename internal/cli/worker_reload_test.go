@@ -101,10 +101,10 @@ func TestWatcherNeedsPolling_WSLMntGate(t *testing.T) {
 	}
 }
 
-func TestApplyHorizonReload_ChokidarGate(t *testing.T) {
+func TestApplyWorkerReload_ChokidarGate(t *testing.T) {
 	t.Run("enabling without chokidar refuses and does not persist", func(t *testing.T) {
 		site := siteWithReload(t, false, false)
-		err := ApplyHorizonReload("nosite", site, "8.3", true)
+		err := ApplyWorkerReload("nosite", site, "8.3", "horizon", true)
 		if err == nil {
 			t.Fatal("expected an error when enabling reload without chokidar")
 		}
@@ -118,8 +118,8 @@ func TestApplyHorizonReload_ChokidarGate(t *testing.T) {
 
 	t.Run("enabling with chokidar persists the preference", func(t *testing.T) {
 		site := siteWithReload(t, false, true)
-		if err := ApplyHorizonReload("nosite", site, "8.3", true); err != nil {
-			t.Fatalf("ApplyHorizonReload: %v", err)
+		if err := ApplyWorkerReload("nosite", site, "8.3", "horizon", true); err != nil {
+			t.Fatalf("ApplyWorkerReload: %v", err)
 		}
 		if !config.ProjectReloadsWorker(site, "horizon") {
 			t.Error("horizon should be opted into reload after enabling with chokidar")
@@ -128,8 +128,8 @@ func TestApplyHorizonReload_ChokidarGate(t *testing.T) {
 
 	t.Run("disabling never requires chokidar", func(t *testing.T) {
 		site := siteWithReload(t, true, false)
-		if err := ApplyHorizonReload("nosite", site, "8.3", false); err != nil {
-			t.Fatalf("ApplyHorizonReload disable: %v", err)
+		if err := ApplyWorkerReload("nosite", site, "8.3", "horizon", false); err != nil {
+			t.Fatalf("ApplyWorkerReload disable: %v", err)
 		}
 		if config.ProjectReloadsWorker(site, "horizon") {
 			t.Error("horizon should be off after disabling")

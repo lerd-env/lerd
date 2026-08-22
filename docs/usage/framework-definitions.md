@@ -238,6 +238,22 @@ workers:
                                   # appends `--poll` since the container cannot observe
                                   # host filesystem events. Laravel's horizon worker sets
                                   # it to `php artisan horizon:listen`.
+    tune_command: ""              # parameterized variant of `command` (optional). Every
+                                  # {placeholder} becomes a flag on the worker's generated
+                                  # start command, so
+                                  # `messenger:consume {transport} --limit={limit}` gives
+                                  # `lerd messenger:start --transport --limit`. Each flag's
+                                  # default is read back out of `command`, so the values are
+                                  # declared once; a placeholder `command` does not spell has
+                                  # no default and must be passed.
+    restart_command: ""           # graceful in-container restart, e.g.
+                                  # `php artisan queue:restart` (optional)
+    requires_service: {}           # a lerd service the worker cannot run without (optional):
+                                  #   name: redis
+                                  #   when_env: QUEUE_CONNECTION=redis
+                                  # `when_env` narrows the requirement to sites whose .env
+                                  # carries that KEY=VALUE. lerd refuses the start and names
+                                  # the service instead of letting the worker crash-loop.
     restart: always               # always | on-failure (default: always)
     schedule: ""                  # systemd OnCalendar expression (optional). When set, the
                                   # worker is run as a Type=oneshot service triggered by a

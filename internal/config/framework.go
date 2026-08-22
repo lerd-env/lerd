@@ -199,10 +199,19 @@ type FrameworkWorker struct {
 	// framework definition rather than rewriting Command in Go means the store
 	// stays the single source of truth for what actually runs.
 	ReloadCommand string `yaml:"reload_command,omitempty"`
-	// TuneCommand is the parameterized variant of Command for `lerd queue:start`,
-	// a template with {queue}/{tries}/{timeout} placeholders so each framework
-	// declares its own flag syntax. Empty falls back to Command verbatim.
+	// TuneCommand is the parameterized variant of Command, a template whose
+	// {placeholder} tokens become the flags of the worker's generated start
+	// command: `--queue={queue} --tries={tries}` gives `lerd queue:start
+	// --queue --tries`. Each flag's default is read back from Command, so the
+	// definition declares both the syntax and the values. Empty falls back to
+	// Command verbatim.
 	TuneCommand string `yaml:"tune_command,omitempty"`
+	// RequiresService names a lerd service the worker cannot run without, so a
+	// start refuses with an actionable message instead of leaving the process to
+	// crash-loop on a DNS error. WhenEnv narrows the requirement to sites whose
+	// .env sets that key, since a queue worker only needs Redis when the site's
+	// queue connection is Redis.
+	RequiresService *WorkerService `yaml:"requires_service,omitempty"`
 	// RestartCommand gracefully restarts the queue worker in-container (e.g.
 	// Laravel's "php artisan queue:restart"). Empty means no graceful restart.
 	RestartCommand string `yaml:"restart_command,omitempty"`
@@ -249,6 +258,14 @@ type WorkerProxy struct {
 	Path        string `yaml:"path"`                   // URL path to proxy (e.g. "/app")
 	PortEnvKey  string `yaml:"port_env_key,omitempty"` // env key holding the port (e.g. "REVERB_SERVER_PORT")
 	DefaultPort int    `yaml:"default_port,omitempty"` // fallback port if env key is missing (default: 8080)
+}
+
+// WorkerService is a running lerd service a worker depends on. WhenEnv is a
+// "KEY=VALUE" pair the site's .env has to carry for the dependency to apply, so
+// Laravel's queue worker can require Redis only where QUEUE_CONNECTION=redis.
+type WorkerService struct {
+	Name    string `yaml:"name"`
+	WhenEnv string `yaml:"when_env,omitempty"`
 }
 
 // WorkerHealth declares how to tell whether a worker's server is actually
@@ -793,6 +810,10 @@ var laravelFramework = &Framework{
 			RestartCommand: "php artisan queue:restart",
 			Restart:        "always",
 			ExcludeCheck:   &FrameworkRule{Composer: "laravel/horizon"}, // horizon supersedes queue
+			RequiresService: &WorkerService{
+				Name:    "redis",
+				WhenEnv: "QUEUE_CONNECTION=redis",
+			},
 		},
 		"schedule": {
 			Label:   "Task Scheduler",

@@ -122,16 +122,7 @@ func runCheck(_ *cobra.Command, _ []string) error {
 			fwName := cfg.Framework
 			fw, hasFw := config.GetFrameworkForDir(fwName, cwd)
 
-			hasQueue := false
-			hasHorizon := false
 			for _, w := range cfg.Workers {
-				if w == "queue" {
-					hasQueue = true
-				}
-				if w == "horizon" {
-					hasHorizon = true
-				}
-
 				// Stripe and the host-proxy app worker are lerd built-ins, run
 				// through their own units and never declared by a framework.
 				if config.IsBuiltinWorker(w) {
@@ -155,21 +146,34 @@ func runCheck(_ *cobra.Command, _ []string) error {
 					errors++
 					continue
 				}
-				if wDef.Check != nil && !config.MatchesRule(cwd, *wDef.Check) {
+				switch {
+				case wDef.Check != nil && !config.MatchesRule(cwd, *wDef.Check):
 					ckWarn("worker: %s — prerequisite not met (check rule failed)\n", w)
 					warnings++
-				} else {
+				case wDef.ExcludeCheck != nil && config.MatchesRule(cwd, *wDef.ExcludeCheck):
+					ckWarn("worker: %s — superseded by %s, it will be skipped\n", w, describeRule(*wDef.ExcludeCheck))
+					warnings++
+				default:
 					ckOK("worker: %s\n", w)
 				}
 			}
 
-			if hasQueue && hasHorizon {
-				ckWarn("workers: both queue and horizon are listed — horizon manages queues, queue worker will be skipped\n")
-				warnings++
-			}
-			if hasQueue && SiteHasHorizon(cwd) {
-				ckWarn("workers: queue is listed but laravel/horizon is installed — horizon will be started instead\n")
-				warnings++
+			// Two listed workers where one declares it stops the other: the
+			// pairing comes from the definitions, so nothing here has to know
+			// that horizon is what manages a Laravel site's queues.
+			if hasFw {
+				for _, w := range cfg.Workers {
+					wDef, ok := fw.Workers[w]
+					if !ok {
+						continue
+					}
+					for _, other := range wDef.ConflictsWith {
+						if slices.Contains(cfg.Workers, other) {
+							ckWarn("workers: both %s and %s are listed — %s stops %s when it starts\n", other, w, w, other)
+							warnings++
+						}
+					}
+				}
 			}
 		}
 	}

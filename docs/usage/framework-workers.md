@@ -10,7 +10,22 @@ Each framework can define **workers**: long-running processes managed as systemd
 | `lerd worker stop <name>` | Stop a named worker |
 | `lerd worker list` | List all workers defined for this project's framework |
 
-The shortcut commands `lerd queue:start`, `lerd schedule:start`, `lerd reverb:start`, and `lerd horizon:start` are aliases; they look up the worker from the framework definition and delegate to the generic handler. They work for any framework that defines a worker with that name.
+Every worker also gets commands under its own name, generated from the framework definition rather than written by hand: `lerd queue:start`, `lerd horizon:stop`, `lerd reverb start` and so on, in both the `name:verb` and `name verb` spellings. They run the same implementation `lerd worker start` does, so a worker added to the store arrives with its own commands and no lerd release. Outside a linked project there is no framework to read them from, so they aren't there.
+
+A worker whose definition has a `reload_command` also gets `lerd <name>:reload [on|off]`, which toggles restart-on-file-change for the current project and restarts the worker when it is already running. With no argument it prints the current state.
+
+**Tuning flags**: a worker with a `tune_command` gets a flag per placeholder on its start command, so Laravel's `--queue={queue} --tries={tries} --timeout={timeout}` becomes `lerd queue:start --queue emails --tries 5`. Each default is read back out of the plain `command`, so nothing is duplicated, and a framework that spells its queue differently (CodeIgniter takes it positionally and has no timeout flag) gets exactly the flags it declares. Passing no flags runs the declared command verbatim.
+
+**Required services**: a worker can name a service it cannot run without, optionally scoped to sites whose `.env` carries a given key. Laravel's queue worker requires Redis on `QUEUE_CONNECTION=redis`, so starting it with `lerd-redis` down says which service to start instead of leaving the worker to crash-loop on a DNS error:
+
+```yaml
+workers:
+  queue:
+    command: php artisan queue:work
+    requires_service:
+      name: redis
+      when_env: QUEUE_CONNECTION=redis
+```
 
 ## Worker features
 

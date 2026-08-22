@@ -8,55 +8,9 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envfile"
-	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
-	"github.com/spf13/cobra"
 )
-
-// NewQueueCmd returns the queue parent command with start/stop subcommands.
-func NewQueueCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "queue",
-		Short: "Manage queue workers for the current site",
-	}
-	cmd.AddCommand(newQueueStartCmd("start"))
-	cmd.AddCommand(newQueueStopCmd("stop"))
-	return cmd
-}
-
-// NewQueueStartCmd returns the standalone queue:start command.
-func NewQueueStartCmd() *cobra.Command { return newQueueStartCmd("queue:start") }
-
-// NewQueueStopCmd returns the standalone queue:stop command.
-func NewQueueStopCmd() *cobra.Command { return newQueueStopCmd("queue:stop") }
-
-func newQueueStartCmd(use string) *cobra.Command {
-	var queue string
-	var tries int
-	var timeout int
-
-	cmd := &cobra.Command{
-		Use:   use,
-		Short: "Start a queue worker for the current site as a systemd service",
-		RunE: func(_ *cobra.Command, _ []string) error {
-			return runQueueStart(queue, tries, timeout)
-		},
-	}
-	cmd.Flags().StringVar(&queue, "queue", "default", "Queue name to process")
-	cmd.Flags().IntVar(&tries, "tries", 3, "Number of times to attempt a job before logging it as failed")
-	cmd.Flags().IntVar(&timeout, "timeout", 60, "Seconds a job may run before timing out")
-	return cmd
-}
-
-func newQueueStopCmd(use string) *cobra.Command {
-	return &cobra.Command{
-		Use:   use,
-		Short: "Stop the queue worker for the current site",
-		RunE:  func(_ *cobra.Command, _ []string) error { return runQueueStop() },
-	}
-}
 
 func queueSiteName(cwd string) (string, error) {
 	reg, err := config.LoadSites()
@@ -73,123 +27,16 @@ func queueSiteName(cwd string) (string, error) {
 	return name, nil
 }
 
-func runQueueStart(queue string, tries, timeout int) error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	if err := requireFrameworkWorker(cwd, "queue"); err != nil {
-		return err
-	}
-
-	siteName, err := queueSiteName(cwd)
-	if err != nil {
-		return err
-	}
-
-	phpVersion, err := phpDet.DetectVersion(cwd)
-	if err != nil {
-		cfg, _ := config.LoadGlobal()
-		phpVersion = cfg.PHP.DefaultVersion
-	}
-
-	if err := queueStartTuned(siteName, cwd, phpVersion, queue, tries, timeout); err != nil {
-		return err
-	}
-	if site, err := config.FindSite(siteName); err == nil && !site.Paused {
-		_ = config.SetProjectWorkers(site.Path, CollectRunningWorkerNames(site))
-	}
-	return nil
-}
-
-func runQueueStop() error {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return err
-	}
-
-	if err := requireFrameworkWorker(cwd, "queue"); err != nil {
-		return err
-	}
-
-	siteName, err := queueSiteName(cwd)
-	if err != nil {
-		return err
-	}
-
-	if err := QueueStopForSite(siteName); err != nil {
-		return err
-	}
-	if site, err := config.FindSite(siteName); err == nil && !site.Paused {
-		_ = config.SetProjectWorkers(site.Path, CollectRunningWorkerNames(site))
-	}
-	return nil
-}
-
-// renderQueueCommand substitutes {queue}/{tries}/{timeout} into the worker's
-// TuneCommand template (each framework declares its own flag syntax), falling
-// back to the plain Command when no template is defined.
-func renderQueueCommand(w config.FrameworkWorker, queue string, tries, timeout int) string {
-	if w.TuneCommand == "" {
-		return w.Command
-	}
-	return strings.NewReplacer(
-		"{queue}", queue,
-		"{tries}", strconv.Itoa(tries),
-		"{timeout}", strconv.Itoa(timeout),
-	).Replace(w.TuneCommand)
-}
-
-// queueStartTuned starts the queue worker with a specific queue/tries/timeout by
-// rendering the framework's TuneCommand. Used by `lerd queue:start` and, via the
-// mcp.QueueStartFn hook, by the MCP queue_start tool.
+// queueStartTuned adapts the MCP queue_start tool, which offers the three knobs
+// Laravel's queue worker takes, to the generic tuned start. The names match the
+// placeholders a framework's tune_command declares; a definition that declares
+// fewer (CodeIgniter has no per-job timeout) ignores the rest.
 func queueStartTuned(siteName, sitePath, phpVersion, queue string, tries, timeout int) error {
-	// The queue name is interpolated into the worker command; whitespace or a
-	// newline could inject extra arguments or a systemd directive.
-	if strings.ContainsAny(queue, " \t\r\n") {
-		return fmt.Errorf("invalid queue name: must not contain whitespace")
-	}
-	// Pre-flight: if the site uses Redis as its queue connection, make sure
-	// lerd-redis is actually running. Without it the queue worker fails immediately
-	// with a cryptic PHP "getaddrinfo for lerd-redis failed" DNS error.
-	envPath := filepath.Join(sitePath, ".env")
-	if envfile.ReadKey(envPath, "QUEUE_CONNECTION") == "redis" {
-		if running, _ := podman.ContainerRunning("lerd-redis"); !running {
-			return fmt.Errorf("queue worker requires Redis (QUEUE_CONNECTION=redis in .env) but lerd-redis is not running\nStart it first: lerd services start redis")
-		}
-	}
-
-	fw, ok := config.GetFrameworkForDir(siteFrameworkName(siteName), sitePath)
-	if !ok {
-		return fmt.Errorf("no framework found for site %q", siteName)
-	}
-	worker, ok := fw.Workers["queue"]
-	if !ok {
-		return fmt.Errorf("framework %q has no worker named \"queue\"", fw.Label)
-	}
-
-	// Derive the command from the framework definition instead of hardcoding
-	// Laravel's artisan syntax, so non-Laravel frameworks (e.g. CodeIgniter's
-	// `php spark queue:work`) run their own worker command.
-	workerCopy := worker
-	workerCopy.Command = renderQueueCommand(worker, queue, tries, timeout)
-
-	return WorkerStartForSite(siteName, sitePath, phpVersion, "queue", workerCopy, true)
-}
-
-// QueueStartForSite starts a queue worker for the given site using the command
-// from the framework definition.
-func QueueStartForSite(siteName, sitePath, phpVersion string) error {
-	fw, ok := config.GetFrameworkForDir(siteFrameworkName(siteName), sitePath)
-	if !ok {
-		return fmt.Errorf("no framework found for site %q", siteName)
-	}
-	worker, ok := fw.Workers["queue"]
-	if !ok {
-		return fmt.Errorf("framework %q has no worker named \"queue\"", fw.Label)
-	}
-	return WorkerStartForSite(siteName, sitePath, phpVersion, "queue", worker, true)
+	return StartFrameworkWorkerTuned(siteName, sitePath, phpVersion, "queue", map[string]string{
+		"queue":   queue,
+		"tries":   strconv.Itoa(tries),
+		"timeout": strconv.Itoa(timeout),
+	})
 }
 
 // QueueRestartForSite gracefully restarts the queue worker by running the
@@ -234,9 +81,4 @@ func QueueRestartForSite(siteName, sitePath, phpVersion string) error {
 	}
 	fmt.Printf("Queue worker signaled to restart for %s\n", siteName)
 	return nil
-}
-
-// QueueStopForSite stops and removes the queue worker for the named site.
-func QueueStopForSite(siteName string) error {
-	return WorkerStopForSite(siteName, "", "queue")
 }

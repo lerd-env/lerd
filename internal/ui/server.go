@@ -2462,7 +2462,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	if !isCustom && strings.HasPrefix(name, "schedule-") {
 		siteName := strings.TrimPrefix(name, "schedule-")
 		if action == "stop" {
-			opErr := cli.ScheduleStopForSite(siteName)
+			opErr := cli.StopFrameworkWorker(siteName, "schedule")
 			resp := ServiceActionResponse{
 				ServiceResponse: ServiceResponse{Name: name, Status: "inactive", EnvVars: map[string]string{}, ScheduleWorkerSite: siteName},
 				OK:              opErr == nil,
@@ -2482,7 +2482,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	if !isCustom && strings.HasPrefix(name, "horizon-") {
 		siteName := strings.TrimPrefix(name, "horizon-")
 		if action == "stop" {
-			opErr := cli.HorizonStopForSite(siteName)
+			opErr := cli.StopFrameworkWorker(siteName, "horizon")
 			resp := ServiceActionResponse{
 				ServiceResponse: ServiceResponse{Name: name, Status: "inactive", EnvVars: map[string]string{}, HorizonSite: siteName},
 				OK:              opErr == nil,
@@ -2502,7 +2502,7 @@ func handleServiceAction(w http.ResponseWriter, r *http.Request) {
 	if !isCustom && strings.HasPrefix(name, "reverb-") {
 		siteName := strings.TrimPrefix(name, "reverb-")
 		if action == "stop" {
-			opErr := cli.ReverbStopForSite(siteName)
+			opErr := cli.StopFrameworkWorker(siteName, "reverb")
 			resp := ServiceActionResponse{
 				ServiceResponse: ServiceResponse{Name: name, Status: "inactive", EnvVars: map[string]string{}, ReverbSite: siteName},
 				OK:              opErr == nil,
@@ -4014,12 +4014,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}
-		go cli.HorizonStartForSite(site.Name, site.Path, phpVersion) //nolint:errcheck
+		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "horizon") //nolint:errcheck
 		go syncLerdYAMLWorkersDelayed(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "horizon:stop":
-		if err := cli.HorizonStopForSite(site.Name); err != nil {
+		if err := cli.StopFrameworkWorker(site.Name, "horizon"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
@@ -4034,7 +4034,7 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}
-		if err := cli.ApplyHorizonReload(site.Name, site.Path, phpVersion, enabled); err != nil {
+		if err := cli.ApplyWorkerReload(site.Name, site.Path, phpVersion, "horizon", enabled); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
@@ -4071,12 +4071,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}
-		go cli.QueueStartForSite(site.Name, site.Path, phpVersion) //nolint:errcheck
+		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "queue") //nolint:errcheck
 		go syncLerdYAMLWorkersDelayed(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "queue:stop":
-		if err := cli.QueueStopForSite(site.Name); err != nil {
+		if err := cli.StopFrameworkWorker(site.Name, "queue"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
@@ -4121,12 +4121,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}
-		go cli.ScheduleStartForSite(site.Name, site.Path, phpVersion) //nolint:errcheck
+		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "schedule") //nolint:errcheck
 		go syncLerdYAMLWorkersDelayed(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "schedule:stop":
-		if err := cli.ScheduleStopForSite(site.Name); err != nil {
+		if err := cli.StopFrameworkWorker(site.Name, "schedule"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}
@@ -4140,12 +4140,12 @@ func handleSiteAction(w http.ResponseWriter, r *http.Request) {
 		if detected, err := phpPkg.DetectVersion(site.Path); err == nil && detected != "" {
 			phpVersion = detected
 		}
-		go cli.ReverbStartForSite(site.Name, site.Path, phpVersion) //nolint:errcheck
+		go cli.StartFrameworkWorker(site.Name, site.Path, phpVersion, "reverb") //nolint:errcheck
 		go syncLerdYAMLWorkersDelayed(site)
 		writeJSON(w, SiteActionResponse{OK: true})
 		return
 	case "reverb:stop":
-		if err := cli.ReverbStopForSite(site.Name); err != nil {
+		if err := cli.StopFrameworkWorker(site.Name, "reverb"); err != nil {
 			writeJSON(w, SiteActionResponse{Error: err.Error()})
 			return
 		}

@@ -11,7 +11,7 @@ Lerd can run framework-defined workers as persistent systemd user services. Work
 | `lerd queue start` | Same as `queue:start` (subcommand form) |
 | `lerd queue stop` | Same as `queue:stop` (subcommand form) |
 
-Works for any framework that defines a `queue` worker: Laravel (`php artisan queue:work`, built-in) and CodeIgniter (`php spark queue:work`, once `codeigniter4/queue` is installed). The `--queue`, `--tries`, and `--timeout` flags are rendered into each framework's own syntax, so `lerd queue:start --queue emails --tries 5` runs the right command either way.
+These commands are generated from the framework definition, so they exist for any framework that defines a `queue` worker: Laravel (`php artisan queue:work`) and CodeIgniter (`php spark queue:work`, once `codeigniter4/queue` is installed). The flags come from the definition too and are rendered into each framework's own syntax, so `lerd queue:start --queue emails --tries 5` runs the right command either way. The same holds for every other worker a framework declares, `schedule`, `reverb`, `horizon` and whatever the store adds next.
 
 ---
 
@@ -81,20 +81,24 @@ Workers are defined in framework YAML definitions at `~/.config/lerd/frameworks/
 
 ## Options for `queue:start`
 
+The flags come from the framework's own `tune_command`, one per placeholder, with the defaults read out of the command the definition already runs. For Laravel that is:
+
 | Flag | Default | Description |
 |---|---|---|
 | `--queue` | `default` | Queue name to process |
 | `--tries` | `3` | Max attempts before marking a job as failed |
 | `--timeout` | `60` | Seconds a job may run before timing out |
 
+CodeIgniter takes the queue positionally and has no per-job timeout, so there `queue:start` offers `--queue` and `--tries` only. Run `lerd queue:start --help` to see what your project's framework declares.
+
 ---
 
 ## Redis requirement
 
-If `QUEUE_CONNECTION=redis` is set in the project's `.env`, lerd verifies that `lerd-redis` is running before starting the worker. If it is not, you will see:
+Laravel's queue worker declares that it needs the `redis` service when the project's `.env` sets `QUEUE_CONNECTION=redis`, so lerd checks `lerd-redis` before starting it. If it is not running, you will see:
 
 ```
-queue worker requires Redis (QUEUE_CONNECTION=redis in .env) but lerd-redis is not running
+worker "queue" needs the redis service, which is not running
 Start it first: lerd services start redis
 ```
 

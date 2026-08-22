@@ -39,31 +39,7 @@ func newWorkerStartCmd() *cobra.Command {
 		Use:   "start <name>",
 		Short: "Start a framework worker as a systemd service",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			workerName := args[0]
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			site, fw, phpVersion, err := resolveSiteAndFramework(cwd)
-			if err != nil {
-				return err
-			}
-			worker, ok := fw.Workers[workerName]
-			if !ok {
-				return fmt.Errorf("framework %q has no worker named %q\nRun 'lerd worker list' to see available workers", fw.Label, workerName)
-			}
-			if worker.Check != nil && !config.MatchesRule(cwd, *worker.Check) {
-				return fmt.Errorf("worker %q requires a dependency that is not installed\nCheck the framework definition for required packages", workerName)
-			}
-			if err := WorkerStartForSite(site.Name, cwd, phpVersion, workerName, worker, true); err != nil {
-				return err
-			}
-			if !site.Paused {
-				_ = config.SetProjectWorkers(site.Path, CollectRunningWorkerNames(site))
-			}
-			return nil
-		},
+		RunE:  func(_ *cobra.Command, args []string) error { return runWorkerStart(args[0], nil) },
 	}
 }
 
@@ -72,32 +48,7 @@ func newWorkerStopCmd() *cobra.Command {
 		Use:   "stop <name>",
 		Short: "Stop a framework worker",
 		Args:  cobra.ExactArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			workerName := args[0]
-			cwd, err := os.Getwd()
-			if err != nil {
-				return err
-			}
-			site, fw, _, err := resolveSiteAndFramework(cwd)
-			if err != nil {
-				return err
-			}
-			// Allow stopping orphaned workers that have a running unit
-			// but are no longer in the framework definition.
-			if _, ok := fw.Workers[workerName]; !ok {
-				unitName := "lerd-" + workerName + "-" + site.Name
-				if !isServiceActiveOrRestarting(unitName) {
-					return fmt.Errorf("framework %q has no worker named %q\nRun 'lerd worker list' to see available workers", fw.Label, workerName)
-				}
-			}
-			if err := WorkerStopForSite(site.Name, cwd, workerName); err != nil {
-				return err
-			}
-			if !site.Paused {
-				_ = config.SetProjectWorkers(site.Path, CollectRunningWorkerNames(site))
-			}
-			return nil
-		},
+		RunE:  func(_ *cobra.Command, args []string) error { return runWorkerStop(args[0]) },
 	}
 }
 
@@ -201,21 +152,6 @@ func resolveSiteAndFramework(cwd string) (*config.Site, *config.Framework, strin
 	return site, fw, phpVersion, nil
 }
 
-// requireFrameworkWorker returns an error if the site's framework doesn't define the named worker.
-func requireFrameworkWorker(cwd, workerName string) error {
-	_, fw, _, err := resolveSiteAndFramework(cwd)
-	if err != nil {
-		return err
-	}
-	if fw.Workers == nil {
-		return fmt.Errorf("framework %q has no workers defined", fw.Label)
-	}
-	if _, ok := fw.Workers[workerName]; !ok {
-		return fmt.Errorf("framework %q has no worker named %q\nRun 'lerd worker list' to see available workers", fw.Label, workerName)
-	}
-	return nil
-}
-
 // resolveWorkerCommand returns the command to run for a worker, substituting the
 // worker's reload variant (restart on file changes) when the project opted the
 // worker into reload mode and the framework declares the variant. The variant
@@ -236,7 +172,7 @@ func requireFrameworkWorker(cwd, workerName string) error {
 // package from the project's node_modules; when chokidar is missing we keep the
 // standard command and tell the user how to enable the watcher rather than
 // letting the worker fail to boot. Enabling reload from the CLI or UI refuses
-// up front when chokidar is absent (see ApplyHorizonReload), so this fallback
+// up front when chokidar is absent (see ApplyWorkerReload), so this fallback
 // only bites if the package is removed after the fact.
 func resolveWorkerCommand(sitePath, workerName string, w config.FrameworkWorker) string {
 	// A worker execs its command straight from its unit, so the framework's

@@ -174,19 +174,6 @@ func main() {
 	root.AddCommand(cli.NewOpenCmd())
 	root.AddCommand(cli.NewCodeCmd())
 	root.AddCommand(cli.NewDashboardCmd())
-	root.AddCommand(cli.NewQueueCmd())
-	root.AddCommand(cli.NewQueueStartCmd())
-	root.AddCommand(cli.NewQueueStopCmd())
-	root.AddCommand(cli.NewScheduleCmd())
-	root.AddCommand(cli.NewScheduleStartCmd())
-	root.AddCommand(cli.NewScheduleStopCmd())
-	root.AddCommand(cli.NewReverbCmd())
-	root.AddCommand(cli.NewReverbStartCmd())
-	root.AddCommand(cli.NewReverbStopCmd())
-	root.AddCommand(cli.NewHorizonCmd())
-	root.AddCommand(cli.NewHorizonStartCmd())
-	root.AddCommand(cli.NewHorizonStopCmd())
-	root.AddCommand(cli.NewHorizonReloadCmd())
 	root.AddCommand(cli.NewOctaneCmd())
 	root.AddCommand(cli.NewOctaneReloadCmd())
 	root.AddCommand(cli.NewAutostartCmd())
@@ -264,6 +251,17 @@ func main() {
 	root.AddCommand(cli.NewRemoteControlFullAccessCmd())
 	root.AddCommand(newWatchCmd())
 	root.AddCommand(newServeUICmd())
+
+	// queue:start, horizon:reload and the rest are generated from the workers the
+	// current project's framework declares, so a worker added to the store gets
+	// its own commands without a binary release. Building them reads the
+	// definition from disk and may refresh it from the store, so an invocation
+	// that already matches a registered command never pays for it.
+	if cli.WantsFrameworkWorkerCmds(root, os.Args[1:]) {
+		for _, cmd := range cli.NewFrameworkWorkerCmds() {
+			root.AddCommand(cmd)
+		}
+	}
 
 	maybeDispatchVendorBin(root)
 

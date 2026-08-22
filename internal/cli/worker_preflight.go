@@ -3,10 +3,14 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envfile"
 	nodeDet "github.com/geodro/lerd/internal/node"
+	"github.com/geodro/lerd/internal/podman"
 )
 
 // validateWorkerUnitFields refuses any value that would break out of its line
@@ -66,6 +70,9 @@ func workerStartPreflight(sitePath, workerName string, w config.FrameworkWorker)
 	if msg := hostWorkerNoNodeMsg(workerName, sitePath, w); msg != "" {
 		return errors.New(msg)
 	}
+	if msg := missingRequiredServiceMsg(workerName, sitePath, w); msg != "" {
+		return errors.New(msg)
+	}
 	if w.Check != nil && !config.MatchesRule(sitePath, *w.Check) {
 		if msg := hostWorkerNotReadyMsg(workerName, sitePath, w); msg != "" {
 			return errors.New(msg)
@@ -80,6 +87,38 @@ func workerStartPreflight(sitePath, workerName string, w config.FrameworkWorker)
 			workerName, describeRule(*w.ExcludeCheck))
 	}
 	return nil
+}
+
+// missingRequiredServiceMsg returns an actionable message when the worker
+// declares a service it needs and that service isn't running. A Laravel queue
+// worker on QUEUE_CONNECTION=redis is the case this exists for: without the
+// gate it boots and dies on a PHP "getaddrinfo for lerd-redis failed", which
+// says nothing about what to start. The requirement and the env condition that
+// scopes it both come from the definition; core only reads them.
+func missingRequiredServiceMsg(workerName, sitePath string, w config.FrameworkWorker) string {
+	name := requiredServiceFor(sitePath, w)
+	if name == "" {
+		return ""
+	}
+	if running, _ := podman.ContainerRunning("lerd-" + name); running {
+		return ""
+	}
+	return fmt.Sprintf("worker %q needs the %s service, which is not running\nStart it first: lerd services start %s", workerName, name, name)
+}
+
+// requiredServiceFor returns the service the worker needs on this site, or ""
+// when it declares none or its env condition doesn't hold here.
+func requiredServiceFor(sitePath string, w config.FrameworkWorker) string {
+	if w.RequiresService == nil || w.RequiresService.Name == "" {
+		return ""
+	}
+	if cond := w.RequiresService.WhenEnv; cond != "" {
+		key, want, ok := strings.Cut(cond, "=")
+		if !ok || envfile.ReadKey(filepath.Join(sitePath, ".env"), key) != want {
+			return ""
+		}
+	}
+	return w.RequiresService.Name
 }
 
 // hostWorkerNotReadyMsg returns an actionable message for a host worker (vite et
