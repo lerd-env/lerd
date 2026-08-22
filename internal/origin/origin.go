@@ -78,12 +78,18 @@ func ToolsManifestURLs() []string {
 // normal install trusts.
 func ExtraToolHosts() []string { return splitList(os.Getenv("LERD_TOOLS_HOSTS")) }
 
-// ChangelogURLs lists raw changelog URLs.
-func ChangelogURLs() []string {
+// ChangelogURLs lists raw changelog URLs for the given tag. An empty tag
+// falls back to main. The changelog lives at docs/changelog.md; the root
+// CHANGELOG.md is a symlink that raw.githubusercontent does not follow.
+func ChangelogURLs(tag string) []string {
 	if list := splitList(os.Getenv("LERD_CHANGELOG_URL")); len(list) > 0 {
 		return list
 	}
-	return []string{"https://raw.githubusercontent.com/" + mainRepo + "/main/CHANGELOG.md"}
+	ref := "main"
+	if tag != "" {
+		ref = "v" + strings.TrimPrefix(tag, "v")
+	}
+	return []string{"https://raw.githubusercontent.com/" + mainRepo + "/" + ref + "/docs/changelog.md"}
 }
 
 // BaseImageRefs lists GHCR refs for a prebuilt PHP-FPM base image, where phpShort

@@ -14,7 +14,7 @@ func TestAllEndpointsServeLerdEnv(t *testing.T) {
 		"releases":        ReleaseBaseURLs(),
 		"downloads":       ReleaseDownloadBases(),
 		"api":             ReleaseAPIBaseURLs(),
-		"changelog":       ChangelogURLs(),
+		"changelog":       ChangelogURLs(""),
 		"baseimage":       BaseImageRefs("85", "h"),
 	}
 	for name, got := range lists {
@@ -72,5 +72,29 @@ func TestEnvOverrideIgnoredWhenEmpty(t *testing.T) {
 	got := StoreBaseURLs()
 	if len(got) == 0 || !strings.Contains(got[0], "lerd-env") {
 		t.Fatalf("empty override must fall back to the lerd-env default, got %v", got)
+	}
+}
+
+// ChangelogURLs pins to docs/changelog.md at the given tag, not the root
+// symlink at main, since raw.githubusercontent does not follow symlinks.
+func TestChangelogURLsAtTag(t *testing.T) {
+	got := ChangelogURLs("1.33.1")
+	if len(got) != 1 {
+		t.Fatalf("got %d URLs, want 1", len(got))
+	}
+	want := "https://raw.githubusercontent.com/lerd-env/lerd/v1.33.1/docs/changelog.md"
+	if got[0] != want {
+		t.Errorf("got %q, want %q", got[0], want)
+	}
+}
+
+func TestChangelogURLsEmptyTagFallsBackToMain(t *testing.T) {
+	got := ChangelogURLs("")
+	if len(got) != 1 {
+		t.Fatalf("got %d URLs, want 1", len(got))
+	}
+	want := "https://raw.githubusercontent.com/lerd-env/lerd/main/docs/changelog.md"
+	if got[0] != want {
+		t.Errorf("got %q, want %q", got[0], want)
 	}
 }

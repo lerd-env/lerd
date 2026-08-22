@@ -118,13 +118,14 @@ func WriteUpdateCache(version string) {
 	})
 }
 
-// FetchChangelog downloads CHANGELOG.md from GitHub and returns the sections
-// for versions strictly greater than currentVersion and <= latestVersion.
-// Returns an empty string and a non-nil error when the fetch fails.
+// FetchChangelog downloads docs/changelog.md from GitHub at the latestVersion
+// tag and returns the sections for versions strictly greater than currentVersion
+// and <= latestVersion. Returns an empty string and a non-nil error when the
+// fetch fails.
 func FetchChangelog(currentVersion, latestVersion string) (string, error) {
 	client := &http.Client{Timeout: 10 * time.Second}
 	var errs []string
-	for _, url := range changelogURLs() {
+	for _, url := range changelogURLs(latestVersion) {
 		body, err := fetchChangelogFrom(client, url)
 		if err != nil {
 			errs = append(errs, err.Error())
@@ -187,6 +188,67 @@ func extractChangelogSections(changelog, currentVersion, latestVersion string) s
 	}
 
 	return strings.TrimSpace(result.String())
+}
+
+// SummarizeChangelog condenses full changelog sections into a short list of
+// entry headlines with their issue numbers, keeping the ### section headers.
+// Long prose paragraphs and the ## [version] header are dropped.
+func SummarizeChangelog(sections string) string {
+	var result strings.Builder
+	for _, line := range strings.Split(sections, "\n") {
+		if strings.HasPrefix(line, "### ") {
+			if result.Len() > 0 {
+				result.WriteByte('\n')
+			}
+			result.WriteString(line)
+			result.WriteByte('\n')
+			continue
+		}
+		if !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		if summary := summarizeEntry(line); summary != "" {
+			result.WriteString(summary)
+			result.WriteByte('\n')
+		}
+	}
+	return strings.TrimSpace(result.String())
+}
+
+// summarizeEntry extracts the bold headline and first (#NNN) issue ref from a
+// changelog bullet, e.g. "- **Foo bar** (#123). Long prose..." -> "- Foo bar (#123)".
+func summarizeEntry(line string) string {
+	rest := strings.TrimPrefix(line, "- ")
+	var headline string
+	if strings.HasPrefix(rest, "**") {
+		end := strings.Index(rest[2:], "**")
+		if end < 0 {
+			return ""
+		}
+		headline = rest[2 : 2+end]
+		rest = rest[2+end+2:]
+	}
+	var issueRef string
+	if idx := strings.Index(rest, "(#"); idx >= 0 {
+		if end := strings.IndexByte(rest[idx:], ')'); end >= 0 {
+			issueRef = rest[idx : idx+end+1]
+		}
+	}
+	if headline == "" && issueRef == "" {
+		return ""
+	}
+	if headline == "" {
+		if idx := strings.IndexByte(rest, '.'); idx >= 0 {
+			headline = strings.TrimSpace(rest[:idx])
+		} else {
+			headline = strings.TrimSpace(rest)
+		}
+	}
+	out := "- " + headline
+	if issueRef != "" {
+		out += " " + issueRef
+	}
+	return out
 }
 
 // VersionGreaterThan returns true if a > b, comparing "X.Y.Z[-pre]" version

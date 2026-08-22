@@ -40,11 +40,12 @@ func runWhatsnew(_ *cobra.Command, _ []string) error {
 	}
 
 	fmt.Printf("What's new in %s (you have %s):\n\n", latest, version.Version)
-	if changelog == "" {
+	summary := lerdUpdate.SummarizeChangelog(changelog)
+	if summary == "" {
 		fmt.Println("No changelog entries found.")
 		return nil
 	}
-	for _, line := range strings.Split(changelog, "\n") {
+	for _, line := range strings.Split(summary, "\n") {
 		fmt.Println(line)
 	}
 	return nil
