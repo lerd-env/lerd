@@ -61,11 +61,22 @@ func TestAppFile_theOlderFieldsStillDescribeTheOldBehaviour(t *testing.T) {
 	}
 }
 
-// A declared application file that is not there yet is still where lerd writes,
-// so a fresh project gets one rather than having its values put elsewhere.
-func TestAppFile_writtenEvenBeforeItExists(t *testing.T) {
+// A declared application file that its installer has not written yet is not
+// lerd's to create: the framework reads the skeleton left in its place as a site
+// already configured and fails instead of serving the installer, so the values
+// go to the plain file the definition names until the installer has run.
+func TestAppFile_waitsForTheInstallerWhenAPlainFileIsDeclared(t *testing.T) {
 	env := FrameworkEnvConf{File: ".env", AppFile: "app/etc/config.php", AppFormat: "php-vars"}
-	if file, format := env.ResolveWrite(t.TempDir()); file != "app/etc/config.php" || format != "php-vars" {
+	if file, format := env.ResolveWrite(t.TempDir()); file != ".env" || format != "dotenv" {
+		t.Errorf("ResolveWrite = (%q, %q), want the plain env file", file, format)
+	}
+}
+
+// With no plain file to fall back on the application file is the configuration,
+// which is WordPress's wp-config.php, and lerd creates it as it always has.
+func TestAppFile_writtenBeforeItExistsWhenItIsTheOnlyFile(t *testing.T) {
+	env := FrameworkEnvConf{AppFile: "wp-config.php", AppFormat: "php-const"}
+	if file, format := env.ResolveWrite(t.TempDir()); file != "wp-config.php" || format != "php-const" {
 		t.Errorf("ResolveWrite = (%q, %q), want the application file", file, format)
 	}
 }

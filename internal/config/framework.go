@@ -611,8 +611,16 @@ type FrameworkServiceDetect struct {
 // fallback, and that fallback is the configuration itself, which is WordPress's
 // wp-config.php and is written as normal.
 func (e FrameworkEnvConf) ResolveWrite(projectDir string) (file, format string) {
+	// The app file is lerd's to write once the installer has created it, and not
+	// before: the framework reads the skeleton lerd would leave there as a site
+	// already configured, so it stops serving the installer that would have
+	// written the file and fails on the values that are missing. A definition
+	// naming a plain file has somewhere to write in the meantime; one naming only
+	// the app file is written as normal, since that file is the configuration.
 	if e.AppFile != "" {
-		return e.AppFile, e.appFormat()
+		if _, err := os.Stat(filepath.Join(projectDir, e.AppFile)); err == nil || e.File == "" {
+			return e.AppFile, e.appFormat()
+		}
 	}
 	if e.File == "" {
 		return e.Resolve(projectDir)

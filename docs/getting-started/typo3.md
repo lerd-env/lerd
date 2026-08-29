@@ -124,7 +124,7 @@ The command behind it differs by major, because TYPO3 changed its installer:
 Either way `lerd run setup` is the command you type.
 
 ::: warning TYPO3 writes its own config file
-`lerd env` never creates `config/system/settings.php` (or `LocalConfiguration.php` on 10 and 11). TYPO3's installer writes it, and to TYPO3 an empty one is not a blank slate but a claim that the site is already configured: while the file is absent the site serves the TYPO3 installer, and an empty one makes it fail outright. So `lerd env` reports that it is skipping the file and leaves it alone.
+`lerd env` never creates `config/system/settings.php` (or `LocalConfiguration.php` on 10 and 11). TYPO3's installer writes it, and to TYPO3 an empty one is not a blank slate but a claim that the site is already configured: while the file is absent the site serves the TYPO3 installer, and an empty one makes it fail outright. So until the installer has written it, `lerd env` leaves the file alone and writes the project's `.env` instead, which is also where the database it creates for you is recorded.
 
 Once the installer has written it, `lerd env` wires your services into it as usual, `DB.Connections.Default.*` for the database and `MAIL.*` for Mailpit, and re-running `lerd env` after adding a service is safe.
 :::
