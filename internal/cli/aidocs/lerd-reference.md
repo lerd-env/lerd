@@ -56,13 +56,15 @@ Actions: `start`, `stop`, `restart`, `pin`, `unpin`, `update`, `rollback`, `migr
 - `config_*` read/write/restore/reset a service's runtime tuning override
 
 #### `db` — databases
-Actions: `list`, `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete`, `extension_list`, `extension_add`.
+Actions: `list`, `set`, `move`, `create`, `export`, `import`, `snapshot`, `snapshots`, `restore`, `snapshot_delete`, `snapshot_keep`, `auto`, `auto_set`, `extension_list`, `extension_add`.
 - `list` reports an engine's databases with sizes; `service` picks the engine, else it resolves from the project. No introspect command, nothing to report
 - `set` picks the project DB (`database`: sqlite, mysql, postgres, or a family alternate like mariadb / postgres-pgvector / postgres-timescaledb / mysql-5-7); persists to `.lerd.yaml`, writes the keys the framework declares for that engine, starts the service, creates the DB + `_testing`. sqlite is a wiring the framework declares, not a service: nothing is installed or started and it is not among the site's services, so never report it as stopped or missing. Moving between engines clears the framework's cache, which otherwise serves errors from definitions built against the old database
 - `move` migrates sites between two installed same-family services (`from`/`to`, `sites: [...]` or `all: true`) and repoints each `.env`; source data is left intact
 - `create`/`export`/`import` auto-detect service and database; pass `service` to override. `import` drops a hosted provider's ownership/DEFINER statements (which can never apply here) and creates any extension the dump's types need; pass `fresh: true` to empty the database first so a dump replaces what is there instead of colliding with it. What an engine can list and act on is declared in its preset, so this is not a mysql/postgres-only set
 - `extension_list`/`extension_add` are postgres-only. An `import` already creates whatever extension the dump's types reach for, so use these to see what the engine offers and what the database has, or to add one (`extension: postgis`) before any dump arrives
 - `snapshot`/`snapshots`/`restore`/`snapshot_delete` are named, restorable snapshots (MySQL/MariaDB/PostgreSQL); `restore` is destructive; `all_databases` covers the whole service
+- `auto` reads the scheduled-snapshot policy and each site's standing with it; `auto_set` writes it (`enabled`, `every`, `keep`, `keep_for`, `selection`), or one site's opt-in with `site` + `mode` (on/off/default; `enabled: false` stops every site). `selection` is opt-in (default: none unless included) or opt-out (all unless excluded), so an empty covered list is the policy, not a fault. On by default, taking nothing until a database opts in; the watcher takes them, not a tool call
+- retention only ever drops snapshots the schedule took, never one taken by hand. `snapshots` reports `auto`, `kept` and an automatic one's `expires_at` (`estimated: true` when that date moves with the schedule rather than being an age cutoff); `snapshot_keep` pins one so retention leaves it alone (`kept: false` releases it). Check the expiry before offering a snapshot as a rollback point
 
 #### `env` — the file the framework actually reads
 Actions: `setup`, `check`, `override`.

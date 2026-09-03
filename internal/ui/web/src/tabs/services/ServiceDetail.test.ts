@@ -8,6 +8,7 @@ vi.mock('./ServiceHeader.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./PresetSuggestionBanner.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./ServiceDatabasesTab.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('./ServiceEntitiesTab.svelte', () => import('./ServiceDetail.stub.svelte'));
+vi.mock('./ServiceSnapshotsTab.svelte', () => import('./ServiceDetail.stub.svelte'));
 vi.mock('$components/LogViewer.svelte', () => import('./ServiceDetail.stub.svelte'));
 
 import ServiceDetail from './ServiceDetail.svelte';
@@ -36,6 +37,19 @@ describe('ServiceDetail databases tab', () => {
     accessMode.set({ localControl: false, lanExposed: true, checked: true });
     const { queryByRole } = render(ServiceDetail, { props: { svc: dbService() } });
     expect(queryByRole('button', { name: 'Databases' })).toBeNull();
+  });
+
+  // Snapshots belong to the databases the engine holds, so the tab follows the
+  // same authority and the same is_database guard.
+  it('shows the Snapshots tab beside Databases', () => {
+    const { getByRole } = render(ServiceDetail, { props: { svc: dbService() } });
+    expect(getByRole('button', { name: 'Snapshots' })).toBeInTheDocument();
+  });
+
+  it('hides the Snapshots tab on a service that holds no databases', () => {
+    const svc = { ...dbService(), is_database: false };
+    const { queryByRole } = render(ServiceDetail, { props: { svc } });
+    expect(queryByRole('button', { name: 'Snapshots' })).toBeNull();
   });
 });
 

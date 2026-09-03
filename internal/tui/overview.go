@@ -169,7 +169,7 @@ func ovCellOf(k detailKind) ovCell {
 	switch k {
 	case kindDomain, kindDomainAdd:
 		return ovCellDomains
-	case kindPHP, kindNode, kindHTTPS, kindLANShare:
+	case kindPHP, kindNode, kindHTTPS, kindLANShare, kindAutoSnapshot:
 		return ovCellToggles
 	}
 	return ovCellNone

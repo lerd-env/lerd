@@ -4258,7 +4258,7 @@ func execDBSnapshots(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	data, _ := json.MarshalIndent(snaps, "", "  ")
+	data, _ := json.MarshalIndent(snapshotsWithRetention(snaps), "", "  ")
 	return toolOK(string(data)), nil
 }
 

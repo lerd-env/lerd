@@ -342,6 +342,29 @@ type GlobalConfig struct {
 		// DefaultIdleSuspendTimeout; read it via IdleSuspendTimeout.
 		Timeout string `yaml:"timeout,omitempty" mapstructure:"timeout"`
 	} `yaml:"idle_suspend,omitempty" mapstructure:"idle_suspend"`
+	AutoSnapshot struct {
+		// Enabled turns on scheduled database snapshots: every AutoSnapshotEvery,
+		// each covered site's database is dumped through the same machinery
+		// `lerd db:snapshot` uses. On by default, which dumps nothing on its own
+		// because Selection defaults to opt-in: a database is covered once it is
+		// opted in. Not omitempty, so turning it off persists as an explicit
+		// false rather than reading back as the default.
+		Enabled bool `yaml:"enabled" mapstructure:"enabled"`
+		// Every is the gap between scheduled snapshots as a Go duration string
+		// ("24h"). Read it via AutoSnapshotEvery.
+		Every string `yaml:"every,omitempty" mapstructure:"every"`
+		// Keep is how many automatic snapshots survive per database, newest
+		// first. Negative means no count limit, for a policy that expires by age
+		// alone. Read it via AutoSnapshotKeep.
+		Keep int `yaml:"keep,omitempty" mapstructure:"keep"`
+		// KeepFor expires automatic snapshots older than this duration, on top of
+		// Keep. Empty means age alone never expires one.
+		KeepFor string `yaml:"keep_for,omitempty" mapstructure:"keep_for"`
+		// Selection decides what an unconfigured site does: "opt_in" (the
+		// default) covers nothing until a site is included, "opt_out" covers
+		// every site until one is excluded. Read it via AutoSnapshotSelection.
+		Selection string `yaml:"selection,omitempty" mapstructure:"selection"`
+	} `yaml:"auto_snapshot,omitempty" mapstructure:"auto_snapshot"`
 	// AutoCleanup lets the watcher periodically reclaim orphaned lerd images
 	// (safe tier only, never service images). On by default; set false to turn
 	// off the daily sweep. Read it via AutoCleanupEnabled for nil-safety.
@@ -452,6 +475,9 @@ func defaultConfig() *GlobalConfig {
 	cfg.DNS.Enabled = true
 	cfg.DNS.TLD = "test"
 	cfg.AutoCleanup = true
+	// The schedule ships on, and opt-in keeps it from dumping anything until a
+	// database is asked for.
+	cfg.AutoSnapshot.Enabled = true
 
 	home, _ := os.UserHomeDir()
 	cfg.ParkedDirectories = []string{home + "/Lerd"}
@@ -1206,7 +1232,7 @@ func (c *GlobalConfig) SetNotificationTarget(target string) {
 // NotifyKinds is the canonical set of notification categories, mirroring the
 // web UI's ALL_KINDS, in display order.
 var NotifyKinds = []string{
-	"mail", "worker_failed", "op_done", "update_available", "nplusone", "slow_route", "dump",
+	"mail", "worker_failed", "op_done", "snapshot", "update_available", "nplusone", "slow_route", "dump",
 }
 
 // nativeKindDefault is the built-in on/off for a category the user has not set.

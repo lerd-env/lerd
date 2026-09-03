@@ -52,6 +52,7 @@ var helpReference = []helpSection{
 		rows: [][2]string{
 			{"↑ ↓", "move between the databases of every installed engine"},
 			{"n", "take a snapshot of the focused database"},
+			{"K", "keep an automatic snapshot, or put it back under retention"},
 			{"R", "re-list the engines (each listing queries inside its container)"},
 			{"", "restore, drop, import and export overwrite data and stay in the CLI"},
 		},

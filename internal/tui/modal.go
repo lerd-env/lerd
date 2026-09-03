@@ -284,6 +284,8 @@ func (m *Model) renderPickerModal(w, h int) string {
 		title = "Select PHP version"
 	case kindNode, kindWorktreeNode:
 		title = "Select Node version"
+	case kindSnapshotKeep:
+		title = "Keep a snapshot"
 	default:
 		title = "Select"
 	}

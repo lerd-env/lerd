@@ -21,6 +21,9 @@
     inherited?: boolean;     // dashed violet border (used by PHP/Node version pickers)
     inheritedSuffix?: string;
     width?: 'auto' | 'full'; // trigger sizing; 'full' fills container (form-style)
+    // joined drops the left rounding and border so the trigger reads as the
+    // right half of a control group (a number input plus its unit).
+    joined?: boolean;
     minMenuWidth?: number;   // px; default 160
     align?: 'left' | 'right';
     // Drawn before each option and before the trigger's label, given the
@@ -38,6 +41,7 @@
     inherited = false,
     inheritedSuffix = '',
     width = 'auto',
+    joined = false,
     minMenuWidth = 160,
     align = 'left',
     optionIcon
@@ -235,7 +239,7 @@
   });
 </script>
 
-<div class="relative inline-block {width === 'full' ? 'w-full' : ''}">
+<div class="relative inline-block {width === 'full' ? 'w-full' : ''} {joined ? 'flex-1 min-w-0' : ''}">
   <button
     bind:this={triggerEl}
     type="button"
@@ -246,7 +250,9 @@
     aria-haspopup="listbox"
     aria-expanded={open}
     aria-controls={menuId}
-    class="{width === 'full' ? 'w-full' : ''} inline-flex items-center justify-between gap-1.5 h-7 px-2.5 rounded-md border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed {inherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
+    class="{width === 'full' ? 'w-full' : ''} {joined
+      ? 'rounded-l-none border-l-0'
+      : ''} inline-flex items-center justify-between gap-1.5 h-7 px-2.5 rounded-md border bg-white dark:bg-lerd-card hover:border-lerd-red hover:text-lerd-red transition-colors text-xs font-medium text-gray-700 dark:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed {inherited ? 'border-dashed border-violet-300 dark:border-violet-700' : 'border-gray-200 dark:border-lerd-border'}"
   >
     {#if optionIcon && value}
       <span class="shrink-0 flex items-center justify-center w-4">{@render optionIcon(value)}</span>

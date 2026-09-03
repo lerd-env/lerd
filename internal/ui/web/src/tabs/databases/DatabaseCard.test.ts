@@ -1,7 +1,16 @@
-import { render, fireEvent, within } from '@testing-library/svelte';
+import { render, fireEvent, waitFor, within } from '@testing-library/svelte';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import DatabaseCard from './DatabaseCard.svelte';
 import type { DatabaseEngine, DatabaseEntry } from '$stores/databases';
+import { autoSnapshot } from '$stores/autoSnapshot';
+
+const { setSiteAutoSnapshot } = vi.hoisted(() => ({
+  setSiteAutoSnapshot: vi.fn(async () => ({ ok: true }))
+}));
+vi.mock('$stores/autoSnapshot', async (orig) => {
+  const actual = (await orig()) as object;
+  return { ...actual, setSiteAutoSnapshot };
+});
 
 const { dropDatabase, exportUrl, importDatabase } = vi.hoisted(() => ({
   dropDatabase: vi.fn(async () => ({ ok: true })),
@@ -62,6 +71,34 @@ describe('DatabaseCard', () => {
     dropDatabase.mockClear();
     exportUrl.mockClear();
     importDatabase.mockClear();
+    setSiteAutoSnapshot.mockClear();
+    autoSnapshot.set({ enabled: false, every: '24h0m0s', keep: 7, keep_for: '', selection: 'opt_out', sites: [] });
+  });
+
+  // The icon's presence is the whole answer, so it appears only while the
+  // schedule actually covers this database.
+  it('marks a database the schedule covers, and toggles it from the card', async () => {
+    // No site points at it: nothing to include, so no control.
+    const off = render(DatabaseCard, { props: { engine, entry: parent } });
+    expect(off.queryByLabelText(/schedule/)).toBeNull();
+    off.unmount();
+
+    autoSnapshot.set({
+      enabled: true,
+      every: '24h0m0s',
+      keep: 7,
+      keep_for: '',
+      selection: 'opt_out',
+      sites: [
+        { site: 'havenly', service: 'mysql', database: 'havenly', mode: '', covered: true }
+      ]
+    });
+    const on = render(DatabaseCard, { props: { engine, entry: parent } });
+    const control = on.getByLabelText('Leave this database out of the schedule');
+    expect(control.getAttribute('aria-pressed')).toBe('true');
+
+    await fireEvent.click(control);
+    await waitFor(() => expect(setSiteAutoSnapshot).toHaveBeenCalledWith('havenly', 'off'));
   });
 
   it('shows no segment when the entry has no testing sibling', () => {
