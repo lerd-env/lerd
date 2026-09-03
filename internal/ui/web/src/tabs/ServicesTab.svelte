@@ -4,6 +4,7 @@
   import EmptyState from '$components/EmptyState.svelte';
   import Icon from '$components/Icon.svelte';
   import ListRow from '$components/ListRow.svelte';
+  import { autoSnapshot, loadAutoSnapshot } from '$stores/autoSnapshot';
   import ListGroupHeader from '$components/ListGroupHeader.svelte';
   import StatusDot from '$components/StatusDot.svelte';
   import LoadingRow from '$components/LoadingRow.svelte';
@@ -19,8 +20,13 @@
   import { CATEGORY_LABELS } from '$lib/presetCategories';
   import { openPresetModal } from '$stores/modals';
   import { m } from '../paraglide/messages.js';
+  import { onMount } from 'svelte';
+
+  onMount(loadAutoSnapshot);
 
   const selected = $derived($routeRest);
+  // One mark for the whole Databases group: is the schedule reaching anything.
+  const autoSnapshotOn = $derived($autoSnapshot.sites.some((s) => s.covered));
 
   function select(name: string) {
     goToTab('services', name);
@@ -52,7 +58,20 @@
     <EmptyState title={m.services_empty()} size="sm" />
   {:else}
     {#each $coreServiceGroups as group, gi (group.key)}
-      <ListGroupHeader label={CATEGORY_LABELS[group.key]()} divider={gi > 0} />
+      {#snippet snapshotMark()}
+        <span
+          class="shrink-0 {autoSnapshotOn ? 'text-emerald-600 dark:text-emerald-500' : 'text-gray-300 dark:text-gray-600'}"
+          title={autoSnapshotOn ? m.snapshots_auto_railOn() : m.snapshots_auto_railOff()}
+          aria-label={autoSnapshotOn ? m.snapshots_auto_railOn() : m.snapshots_auto_railOff()}
+        >
+          <Icon name="clock" class="w-3 h-3" />
+        </span>
+      {/snippet}
+      <ListGroupHeader
+        label={CATEGORY_LABELS[group.key]()}
+        divider={gi > 0}
+        trailing={group.key === 'databases' ? snapshotMark : undefined}
+      />
       {#each group.items as svc (svc.name)}
         {#snippet leading()}<StatusDot color={svc.status === 'active' ? 'green' : 'gray'} />{/snippet}
         {#snippet trailing()}

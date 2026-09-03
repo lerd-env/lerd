@@ -9,6 +9,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dbview"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/stats"
 	zone "github.com/lrstanley/bubblezone/v2"
 )
@@ -239,11 +240,24 @@ func databaseDetailContentLines(m *Model, innerW int) []string {
 	case len(db.Snapshots) == 0:
 		add(dimStyle.Render("  none yet, press ") + accentStyle.Render("n") + dimStyle.Render(" to take one"))
 	default:
-		for _, s := range db.Snapshots {
+		cfg, _ := config.LoadGlobal()
+		expiries := serviceops.SnapshotExpiries(serviceops.RetentionPolicy{
+			Keep:    cfg.AutoSnapshotKeep(),
+			KeepFor: cfg.AutoSnapshotKeepFor(),
+			Every:   cfg.AutoSnapshotEvery(),
+		}, db.Snapshots)
+		now := time.Now()
+		for i, s := range db.Snapshots {
 			line := "  " + accentStyle.Render("·") + " " + padRight(truncatePlain(s.Name, 24), 24) + " "
 			line += dimStyle.Render(s.Created.Local().Format("2006-01-02 15:04") + "  " + stats.FormatBytes(s.SizeBytes))
 			if s.GitBranch != "" {
 				line += dimStyle.Render("  " + s.GitBranch)
+			}
+			if s.Auto {
+				line += dimStyle.Render("  auto")
+				if label := expiries[i].Label(now); label != "" {
+					line += dimStyle.Render(" " + label)
+				}
 			}
 			add(line)
 		}
@@ -251,7 +265,7 @@ func databaseDetailContentLines(m *Model, innerW int) []string {
 	add("")
 
 	add(sectionStyle.Render("Actions"))
-	add(dimStyle.Render("  n snapshot"))
+	add(dimStyle.Render("  n snapshot   K keep an automatic snapshot"))
 	add(dimStyle.Render("  restore, drop, import and export overwrite data and live in the CLI:"))
 	add(dimStyle.Render("  ") + accentStyle.Render("lerd db:restore") + dimStyle.Render(" · ") + accentStyle.Render("lerd db:import") + dimStyle.Render(" · ") + accentStyle.Render("lerd db:export"))
 	return out

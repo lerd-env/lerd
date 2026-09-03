@@ -25,6 +25,11 @@ type Snapshot struct {
 	SizeBytes    int64     `json:"size_bytes"`
 	Site         string    `json:"site,omitempty"`
 	GitBranch    string    `json:"git_branch,omitempty"`
+	// Auto marks a snapshot the scheduler took rather than the user. Only these
+	// are ever pruned by retention, and only while Kept is false.
+	Auto bool `json:"auto,omitempty"`
+	// Kept pins an automatic snapshot so retention leaves it alone.
+	Kept bool `json:"kept,omitempty"`
 }
 
 // SnapshotTarget identifies the live database a snapshot is taken from or
@@ -41,6 +46,9 @@ type SnapshotTarget struct {
 type SnapshotMeta struct {
 	Site      string
 	GitBranch string
+	// Auto stamps the snapshot as one the scheduler took, which is what puts it
+	// under retention.
+	Auto bool
 }
 
 const (
@@ -345,6 +353,7 @@ func CreateSnapshot(t SnapshotTarget, name string, ctx SnapshotMeta, emit func(P
 		SizeBytes:    size,
 		Site:         ctx.Site,
 		GitBranch:    ctx.GitBranch,
+		Auto:         ctx.Auto,
 	}
 	if err := writeSnapshotMeta(dir, snap); err != nil {
 		_ = os.RemoveAll(dir)

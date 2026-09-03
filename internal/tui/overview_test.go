@@ -33,7 +33,7 @@ func TestDetailRows_NavOrderMatchesRenderOrder(t *testing.T) {
 	}
 	want := []detailKind{
 		kindDomain, kindDomain, kindDomainAdd, // Domains
-		kindPHP, kindNode, kindHTTPS, kindLANShare, // Toggles
+		kindPHP, kindNode, kindHTTPS, kindLANShare, kindAutoSnapshot, // Toggles
 		kindWorker,                      // Workers
 		kindWorktreeDB, kindWorktreeLAN, // Worktrees
 		kindWorktreePHP, kindWorktreeNode, //

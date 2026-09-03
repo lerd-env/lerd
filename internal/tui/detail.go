@@ -65,6 +65,8 @@ const (
 	kindWorktreeLAN
 	kindWorktreePHP
 	kindWorktreeNode
+	kindSnapshotKeep
+	kindAutoSnapshot
 )
 
 // detailRows returns the rows the detail view draws, in the order the Overview
@@ -89,6 +91,7 @@ func detailRows(s *siteinfo.EnrichedSite) []detailRow {
 		rows = append(rows, detailRow{kind: kindHTTPS})
 	}
 	rows = append(rows, detailRow{kind: kindLANShare})
+	rows = append(rows, detailRow{kind: kindAutoSnapshot})
 	if s.HasQueueWorker {
 		rows = append(rows, detailRow{kind: kindWorker, workerName: "queue"})
 	}
@@ -195,6 +198,10 @@ func (m *Model) detailToggleSelected(s *siteinfo.EnrichedSite, rows []detailRow,
 		}
 		m.setStatus("starting LAN share for "+s.Name+"…", 5*time.Second)
 		return runLerd(s.Path, "lan", "share")
+	case kindAutoSnapshot:
+		mode, label := nextAutoSnapshotMode(s.AutoSnapshot)
+		m.setStatus("automatic snapshots for "+s.Name+": "+label+"…", 5*time.Second)
+		return runLerd(s.Path, "db:snapshot:auto", "site", s.Name, mode)
 	case kindPHP:
 		m.openPHPPicker(s)
 		return nil
@@ -755,10 +762,42 @@ func overviewToggles(site *siteinfo.EnrichedSite, rows []detailRow, sel func(int
 			b.add(renderDetailRow(s, onOffGlyph(site.Secured), "HTTPS", onOffText(site.Secured)), s)
 		case kindLANShare:
 			b.add(renderDetailRow(s, onOffGlyph(site.LANPort > 0), "LAN share", lanShareText(site.LANPort)), s)
+		case kindAutoSnapshot:
+			covered := autoSnapshotCovered(site.AutoSnapshot)
+			b.add(renderDetailRow(s, onOffGlyph(covered), "Auto snapshots", autoSnapshotModeText(site.AutoSnapshot)), s)
 		}
 	}
 	b.plain("")
 	return b.section(ovHalf)
+}
+
+// nextAutoSnapshotMode cycles a site through follow → always → never, which is
+// what a single toggle key can offer for a tri-state.
+func nextAutoSnapshotMode(mode string) (next, label string) {
+	switch mode {
+	case config.AutoSnapshotOn:
+		return config.AutoSnapshotOff, "never"
+	case config.AutoSnapshotOff:
+		return "default", "following the global policy"
+	}
+	return config.AutoSnapshotOn, "always"
+}
+
+// autoSnapshotCovered reports whether the site is on the schedule right now,
+// resolving its override against the global policy.
+func autoSnapshotCovered(mode string) bool {
+	cfg, _ := config.LoadGlobal()
+	return cfg.AutoSnapshotModeCovers(mode)
+}
+
+func autoSnapshotModeText(mode string) string {
+	switch mode {
+	case config.AutoSnapshotOn:
+		return dimStyle.Render("always")
+	case config.AutoSnapshotOff:
+		return dimStyle.Render("never")
+	}
+	return dimStyle.Render("follows policy")
 }
 
 func overviewServices(m *Model, site *siteinfo.EnrichedSite, w int) []ovSection {

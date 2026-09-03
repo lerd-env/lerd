@@ -103,6 +103,8 @@ func TestWriteReadSnapshotMeta(t *testing.T) {
 		SizeBytes:    184320,
 		Site:         "myapp",
 		GitBranch:    "feature/orders",
+		Auto:         true,
+		Kept:         true,
 	}
 	if err := writeSnapshotMeta(dir, want); err != nil {
 		t.Fatalf("writeSnapshotMeta: %v", err)

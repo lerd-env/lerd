@@ -8,6 +8,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/siteinfo"
 )
 
@@ -133,6 +134,55 @@ func (m *Model) closePicker() {
 	m.pickerCursor = 0
 	m.pickerWorktreePath = ""
 	m.pickerWorktreeName = ""
+	m.pickerSnapshotNames = nil
+	m.pickerSnapshotKept = nil
+	m.pickerSnapshotService = ""
+	m.pickerSnapshotDB = ""
+}
+
+// openSnapshotKeepPicker lists the selected database's automatic snapshots so
+// one can be kept for good, or put back under retention. Manual snapshots are
+// left out: retention never touches them, so there is nothing to keep them from.
+func (m *Model) openSnapshotKeepPicker() {
+	eng, db := m.currentDatabase()
+	if db == nil {
+		return
+	}
+	cfg, _ := config.LoadGlobal()
+	policy := serviceops.RetentionPolicy{
+		Keep:    cfg.AutoSnapshotKeep(),
+		KeepFor: cfg.AutoSnapshotKeepFor(),
+		Every:   cfg.AutoSnapshotEvery(),
+	}
+	expiries := serviceops.SnapshotExpiries(policy, db.Snapshots)
+	now := time.Now()
+
+	var options, names []string
+	var kept []bool
+	for i, snap := range db.Snapshots {
+		if !snap.Auto {
+			continue
+		}
+		line := truncatePlain(snap.Name, 28)
+		if label := expiries[i].Label(now); label != "" {
+			line += "  " + label
+		}
+		options = append(options, line)
+		names = append(names, snap.Name)
+		kept = append(kept, snap.Kept)
+	}
+	if len(options) == 0 {
+		m.setStatus("no automatic snapshots to keep", 3*time.Second)
+		return
+	}
+	m.pickerKind = kindSnapshotKeep
+	m.pickerOptions = options
+	m.pickerSnapshotNames = names
+	m.pickerSnapshotKept = kept
+	m.pickerDisabled = nil
+	m.pickerCursor = 0
+	m.pickerSnapshotService = eng.Service
+	m.pickerSnapshotDB = db.Name
 }
 
 // applyPicker runs `lerd isolate` or `lerd isolate:node` for the selected
@@ -141,6 +191,11 @@ func (m *Model) closePicker() {
 func (m *Model) applyPicker() tea.Cmd {
 	if m.pickerKind == kindInfo || len(m.pickerOptions) == 0 {
 		return nil
+	}
+	// The keep picker is a database action, so it runs before the site guard the
+	// version pickers need.
+	if m.pickerKind == kindSnapshotKeep {
+		return m.applySnapshotKeepPicker()
 	}
 	s := m.currentSite()
 	if s == nil {
@@ -186,6 +241,28 @@ func (m *Model) applyPicker() tea.Cmd {
 		return runLerd(path, "isolate:node", ver)
 	}
 	return nil
+}
+
+// applySnapshotKeepPicker toggles keep on the highlighted snapshot through the
+// same CLI verb a user would type, so the TUI and the CLI cannot drift.
+func (m *Model) applySnapshotKeepPicker() tea.Cmd {
+	if m.pickerCursor >= len(m.pickerSnapshotNames) {
+		m.closePicker()
+		return nil
+	}
+	name := m.pickerSnapshotNames[m.pickerCursor]
+	kept := m.pickerSnapshotKept[m.pickerCursor]
+	service, database := m.pickerSnapshotService, m.pickerSnapshotDB
+	m.closePicker()
+
+	args := []string{"db:snapshot:keep", name, "--service", service, "--database", database}
+	if kept {
+		args = append(args, "--off")
+		m.setStatus("putting "+name+" back under retention…", 5*time.Second)
+	} else {
+		m.setStatus("keeping "+name+"…", 5*time.Second)
+	}
+	return runLerd("", args...)
 }
 
 // listNodeMajors returns the installed Node major versions as reported by the

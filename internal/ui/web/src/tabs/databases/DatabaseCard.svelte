@@ -15,6 +15,7 @@
     type DatabaseEntry
   } from '$stores/databases';
   import { services, serviceLabel } from '$stores/services';
+  import { autoSnapshot, setSiteAutoSnapshot } from '$stores/autoSnapshot';
   import { databaseAdminFor, openDatabaseAdmin } from '$stores/dashboard';
   import { goToTab } from '$stores/route';
   import DatabaseSnapshotsModal from './DatabaseSnapshotsModal.svelte';
@@ -98,6 +99,21 @@
   // reads as staging's data rather than as another database of the parent site.
   const ownerDomain = $derived(active.branch ? `${active.branch}.${active.site}` : active.site);
   const snapshotCount = $derived(active.snapshots?.length ?? 0);
+  // Shown only while the schedule actually covers this database, so the icon's
+  // presence is the answer rather than something to decode.
+  const scheduled = $derived(
+    $autoSnapshot.sites.find((s) => s.service === engine.service && s.database === active.name)
+  );
+  let schedulingBusy = $state(false);
+
+  // The indicator is the control: one click from the grid includes or excludes
+  // this database, which is the whole per-database choice.
+  async function toggleScheduled() {
+    if (!scheduled || schedulingBusy) return;
+    schedulingBusy = true;
+    await setSiteAutoSnapshot(scheduled.site, scheduled.covered ? 'off' : 'on');
+    schedulingBusy = false;
+  }
   // The installed admin tool that can open this specific database (phpMyAdmin,
   // Adminer, Mongo Express); null when none is installed or can't deep-link.
   const admin = $derived.by(() => {
@@ -187,6 +203,21 @@
       <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={active.name}>{active.name}</p>
       <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
         <span class="shrink-0 tabular-nums">{formatBytes(active.size_bytes)}</span>
+        {#if scheduled}
+          <button
+            type="button"
+            onclick={toggleScheduled}
+            disabled={schedulingBusy}
+            aria-pressed={scheduled.covered}
+            use:tooltip={scheduled.covered ? m.snapshots_auto_exclude() : m.snapshots_auto_include()}
+            aria-label={scheduled.covered ? m.snapshots_auto_exclude() : m.snapshots_auto_include()}
+            class="shrink-0 rounded-sm transition-colors {scheduled.covered
+              ? 'text-emerald-600 dark:text-emerald-500'
+              : 'text-gray-300 dark:text-gray-600 hover:text-emerald-600 dark:hover:text-emerald-500'}"
+          >
+            <Icon name="clock" class="w-3 h-3" />
+          </button>
+        {/if}
         {#if active.site}
           <!-- The separator travels with the domain so it never strands at the
                end of the size line when the two wrap onto separate rows. -->
@@ -273,7 +304,7 @@
         <Icon name="camera" class="w-3.5 h-3.5" />
         {#if snapshotCount > 0}
           <span
-            class="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-lerd-red text-white text-[9px] font-semibold flex items-center justify-center"
+            class="absolute -top-0.5 -right-0.5 min-w-3.5 h-3.5 px-0.5 rounded-full bg-emerald-500 text-white text-[9px] font-semibold flex items-center justify-center"
           >{snapshotCount}</span>
         {/if}
       </button>
