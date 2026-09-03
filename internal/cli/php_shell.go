@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envpass"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
@@ -50,6 +51,7 @@ func phpShellExecArgs(container, workDir string) []string {
 	args := append([]string{"exec", "-it"}, terminalColorEnvArgs()...)
 	if workDir != "" {
 		args = append(args, "-w", workDir)
+		args = append(args, envpass.Args(workDir, os.Environ())...)
 	}
 	return append(args, container, "sh", "-c", phpShellInnerScript())
 }
