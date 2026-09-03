@@ -255,6 +255,33 @@ For ordinary web requests under `--on-demand`, use the [Xdebug Helper](https://x
 
 ---
 
+## External environment providers
+
+Secrets managers and environment tools run a command with an ephemeral environment, `ghostable env run --env local -- lerd php artisan migrate`, `op run -- lerd test`, `doppler run -- lerd artisan queue:work`. The variables reach the `lerd` process, but podman forwards no host environment into a container, so without a contract they stop at the boundary.
+
+lerd forwards them on request, by name. The provider (or your shell) sets `LERD_PASSTHROUGH_ENV` to the names it injected, comma or space separated, glob patterns allowed:
+
+```bash
+LERD_PASSTHROUGH_ENV="APP_KEY,DB_PASSWORD,STRIPE_*" \
+  doppler run -- lerd php artisan migrate
+```
+
+lerd expands the patterns against its own environment and hands podman a bare `--env NAME` for each match, so podman reads the value out of lerd's environment. No secret is written to `.env`, to `.lerd.yaml`, or into the argument list where `ps` would show it.
+
+The semantics are the ones systemd's `PassEnvironment=`, ssh's `SendEnv` and sudo's `env_keep` already use. Names that match nothing are skipped silently. `PATH`, `HOME`, `COMPOSER_HOME` and anything starting with `LD_` or `LERD_` are never forwarded: lerd sets those for the container itself.
+
+When your provider exports into the shell rather than wrapping a command (direnv, sops, a shell function), there is no wrapper to carry the variable. Declare the names in the project's `.lerd.yaml` instead:
+
+```yaml
+env_passthrough:
+  - STRIPE_*
+  - DB_PASSWORD
+```
+
+Both sources are merged. Forwarding applies to the commands you invoke yourself, `lerd php`, framework console commands, composer, tests, tinker, `lerd shell`, and the MCP exec tools. Web requests served by PHP-FPM and long-running workers are not covered; their environment belongs in the site's `.env`.
+
+---
+
 ## Debug bridge
 
 Calls to `dump()` and `dd()` can be captured into the lerd dashboard, TUI, and MCP tools instead of (or alongside) the response. Enable with:

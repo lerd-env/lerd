@@ -88,3 +88,22 @@ func TestPhpShellInnerScript_LeavesPathToTheContainer(t *testing.T) {
 		t.Errorf("inner script = %q, want the container's own $PATH kept", phpShellInnerScript())
 	}
 }
+
+// An interactive shell is a one-shot command like any other, so a provider's
+// declared variables have to reach it too, forwarded by name.
+func TestPhpShellExecArgsForwardsPassthroughEnv(t *testing.T) {
+	t.Setenv("LERD_PASSTHROUGH_ENV", "APP_KEY,DB_PASSWORD")
+	t.Setenv("APP_KEY", "base64:abc")
+	t.Setenv("DB_PASSWORD", "secret")
+
+	args := phpShellExecArgs("lerd-php86-fpm", "/srv/app")
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--env APP_KEY --env DB_PASSWORD") {
+		t.Errorf("phpShellExecArgs() = %q, missing the forwarded variables", joined)
+	}
+	for _, a := range args {
+		if a == "secret" || strings.Contains(a, "DB_PASSWORD=") {
+			t.Errorf("phpShellExecArgs() leaked a value into argv: %q", a)
+		}
+	}
+}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/logcolor"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -217,6 +218,10 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	for _, e := range agentenv.Passthrough(os.Environ()) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
+	// Forward the host variables an external environment provider (a secrets
+	// manager, direnv) injected into lerd's own process. Names only: podman
+	// reads each value out of lerd's environment, so no secret is in argv.
+	cmdArgs = append(cmdArgs, envpass.Args(cwd, os.Environ())...)
 	for _, e := range extraEnv {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}

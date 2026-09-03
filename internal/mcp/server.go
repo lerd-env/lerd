@@ -21,6 +21,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/envpass"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/logsource"
 	"github.com/geodro/lerd/internal/nginx"
@@ -348,6 +349,7 @@ func execArtisan(args map[string]any) (any, *rpcError) {
 	for _, e := range agentenv.MCPInject(os.Environ()) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
+	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
 	cmdArgs = append(cmdArgs, container, "php", consoleCmd)
 	cmdArgs = append(cmdArgs, artisanArgs...)
 
@@ -898,6 +900,7 @@ func execComposer(args map[string]any) (any, *rpcError) {
 	for _, e := range agentenv.MCPInject(os.Environ()) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
+	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
 	cmdArgs = append(cmdArgs, container, "composer")
 	cmdArgs = append(cmdArgs, composerArgs...)
 
@@ -973,6 +976,7 @@ func execVendorRun(args map[string]any) (any, *rpcError) {
 	for _, e := range agentenv.MCPInject(os.Environ()) {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
+	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
 	cmdArgs = append(cmdArgs, container, "php", "vendor/bin/"+bin)
 	cmdArgs = append(cmdArgs, binArgs...)
 
