@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/geodro/lerd/internal/certs"
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/desktopapp"
 	"github.com/geodro/lerd/internal/dns"
@@ -1074,6 +1075,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		fmt.Printf("    WARN: %v\n", err)
 	}
 	ok()
+	noteShadowedComposer()
 
 	if wantLerdNode {
 		ensureDefaultNode()
@@ -1402,7 +1404,7 @@ func installLaravelInstaller() error {
 		composerHome = filepath.Join(xdgConfig, "composer")
 	}
 
-	composerPhar := filepath.Join(config.BinDir(), "composer.phar")
+	composerPhar := composer.PharPath()
 	// --no-interaction prevents composer from blocking on plugin trust prompts
 	// (e.g. "Do you trust 'symfony/flex' to execute code?") which would hang
 	// the installer with no visible output.
@@ -1753,7 +1755,7 @@ func addShellShims(manageNode bool) error {
 	// land in lerd's bin dir as wrappers (mirroring the npm flow), falling
 	// back to a direct `lerd php composer.phar` invocation when the lerd
 	// binary is not reachable (containers where the glibc binary can't run).
-	composerShim := shimPreamble(lerdBin) + fmt.Sprintf("if [ -x \"$LERD\" ]; then\n  exec \"$LERD\" composer \"$@\"\nfi\nexec \"$LERD\" php %s/.local/share/lerd/bin/composer.phar \"$@\"\n", home)
+	composerShim := shimPreamble(lerdBin) + fmt.Sprintf("if [ -x \"$LERD\" ]; then\n  exec \"$LERD\" composer \"$@\"\nfi\nexec \"$LERD\" php %q \"$@\"\n", composer.PharPath())
 	if err := os.WriteFile(filepath.Join(binDir, "composer"), []byte(composerShim), 0755); err != nil {
 		return fmt.Errorf("writing composer shim: %w", err)
 	}

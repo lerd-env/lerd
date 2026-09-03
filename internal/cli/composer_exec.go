@@ -33,8 +33,7 @@ func runComposer(args []string) error {
 	if err != nil {
 		return err
 	}
-	composerPhar := filepath.Join(config.BinDir(), "composer.phar")
-	phpArgs := append([]string{composerPhar}, args...)
+	phpArgs := append([]string{composer.PharPath()}, args...)
 	code, runErr := RunPHPCaptureEnv(cwd, phpArgs, []string{composer.ProcessTimeoutEnv()})
 
 	// Sync regardless of composer exit status, so a `composer global remove`

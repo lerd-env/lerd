@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/imagepull"
 	"github.com/geodro/lerd/internal/origin"
@@ -1029,6 +1030,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.SpxIniPath}}", config.SpxIniFile())
 	content = strings.ReplaceAll(content, "{{.SpxDataDir}}", config.SpxDataDir())
 	content = strings.ReplaceAll(content, "{{.HostNameLine}}", hostNameLine())
+	content = strings.ReplaceAll(content, "{{.ComposerMountLine}}", composerMountLine())
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
 	return content, nil
@@ -1060,7 +1062,7 @@ func RewriteFPMQuadlets() error {
 		// An unchanged file is not proof the container has the mounts: an
 		// earlier writer in the same run may have written them without ever
 		// restarting the unit (#914).
-		if changed || UnitMissingMounts(unitName, extraPaths) {
+		if changed || UnitMissingMounts(unitName, extraPaths) || composerMountDrifted(unitName) {
 			changedUnits = append(changedUnits, unitName)
 		}
 	}
@@ -1125,6 +1127,29 @@ func hostNameLine() string {
 }
 
 // applyShellMounts substitutes shell-related template fields.
+// composerMountLine binds lerd's composer.phar onto the container's composer.
+// The image carries its own, frozen at build time and never rebuilt for a tag
+// that already exists, so without this a shell inside the container runs a
+// different composer than every lerd command does. Empty when the phar is not
+// downloaded yet, because a bind mount with no source makes podman create a
+// directory and there would be no composer in the container at all.
+func composerMountLine() string {
+	phar := composer.PharPath()
+	if _, err := os.Stat(phar); err != nil {
+		return ""
+	}
+	return "Volume=" + phar + ":/usr/local/bin/composer:ro"
+}
+
+// composerMountDrifted reports a running container that predates the composer
+// mount its quadlet now carries. The per-version writer updates the file without
+// restarting anything, so without this the mount would sit in the unit and the
+// container would keep serving the image's composer until something else
+// restarted it (#914 in a different shape).
+func composerMountDrifted(unit string) bool {
+	return composerMountLine() != "" && UnitMissingComposerMount(unit)
+}
+
 func applyShellMounts(content, versionShort string) string {
 	content = strings.ReplaceAll(content, "{{.ZshHistoryDir}}", zshHistoryDir(versionShort))
 	content = strings.ReplaceAll(content, "{{.BunVolumeDir}}", BunVolumeDir())

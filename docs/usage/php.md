@@ -58,6 +58,8 @@ Because the `php` shim runs inside the PHP-FPM container, `php artisan`, `lerd a
 
 Prefer typing `lerd php` explicitly and keeping `php` pointed at a host install? Run `lerd path:disable`: it removes lerd's shims dir from your shell PATH and keeps installs and updates from re-adding it, while every `lerd …` command works unchanged (child processes lerd spawns still resolve the shims internally). `lerd path:enable` reverses it. One thing to know either way: the shimmed `php` runs inside the container, so a PHP script that `exec()`s host tools sees the container's PATH, not your shell's — with the shim disabled, a host `php` behaves like any other host process.
 
+Composer works the same way, with one thing worth knowing: lerd runs its own `composer.phar`, downloaded to `~/.local/share/lerd/bin/` at install and pinned in the tools manifest, and it runs it with the container's PHP. That is the copy behind `composer` on your PATH, behind `lerd composer`, behind the setup steps and behind the MCP composer tool, so an assistant and your terminal are never on two different versions of it, and a bumped pin reaches every install without an image rebuild. The FPM image ships a composer of its own, frozen at the day the image was built, so lerd's phar is bind-mounted over it and `composer` typed inside `lerd shell` is the same one again. If you already had a composer of your own on the host, it stays exactly where it is and `lerd install` says so; `lerd path:disable` puts it back in front.
+
 ### Shortcuts and `vendor/bin` fallback
 
 For common workflows there are a few built-in shortcuts:

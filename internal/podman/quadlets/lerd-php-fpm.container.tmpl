@@ -21,6 +21,10 @@ Volume=%h:%h:rw
 # the user's passphrase-protected keys. Named volume, auto-created by podman;
 # empty until `lerd auth ssh` starts the agent sidecar.
 Volume=lerd-ssh-agent:/ssh-agent
+# lerd's own composer over the one baked into the image, so `composer` typed in
+# a shell here is the version every lerd command runs. Left out when the phar is
+# missing, since podman would put a directory in its place.
+{{.ComposerMountLine}}
 Volume={{.XdebugIniPath}}:/usr/local/etc/php/conf.d/99-xdebug.ini:ro
 Volume={{.UserIniPath}}:/usr/local/etc/php/conf.d/98-lerd-user.ini:ro
 Volume={{.SharedIniPath}}:/usr/local/etc/php/conf.d/95-lerd-shared.ini:ro
