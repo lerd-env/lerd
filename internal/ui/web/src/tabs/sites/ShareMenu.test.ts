@@ -405,6 +405,30 @@ describe('ShareMenu ngrok token', () => {
     expect(screen.getByTestId('share-token-clear')).toBeInTheDocument();
   });
 
+  // The flags are configuration rather than a credential, so the field shows
+  // what is stored and a save carries only what changed.
+  it('shows the stored ngrok flags and saves an edit without touching the token', async () => {
+    const bodies = mockShareFetch({ ...toolsPayload, ngrok_args: '--host-header=rewrite' });
+    const { container } = render(Harness, { props: { site } });
+    await openMenu(container);
+    await waitFor(() => expect(screen.getByTestId('share-token-cog')).toBeInTheDocument());
+    await fireEvent.click(screen.getByTestId('share-token-cog'));
+
+    const input = screen.getByTestId('share-ngrok-args-input') as HTMLInputElement;
+    expect(input.value).toBe('--host-header=rewrite');
+    await fireEvent.input(input, { target: { value: '--compression' } });
+    await fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() =>
+      expect(
+        bodies.some((b) => {
+          const sent = JSON.parse(b);
+          return sent.ngrok_args === '--compression' && sent.ngrok_token === undefined;
+        })
+      ).toBe(true)
+    );
+  });
+
   it('clears the stored token', async () => {
     const bodies = mockShareFetch({ ...toolsPayload, ngrok_token_set: true });
     const { container } = render(Harness, { props: { site } });

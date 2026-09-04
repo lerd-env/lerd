@@ -136,6 +136,10 @@ type GlobalConfig struct {
 		// without it a Pinggy share gets an ephemeral free-tier URL. Set via
 		// "lerd share:token pinggy".
 		PinggyToken string `yaml:"pinggy_token,omitempty" mapstructure:"pinggy_token"`
+		// NgrokArgs are extra flags every ngrok share passes to ngrok, for the
+		// features lerd has no setting of its own for (a host-header rewrite,
+		// a traffic policy file). Set via "lerd share:ngrok-args".
+		NgrokArgs string `yaml:"ngrok_args,omitempty" mapstructure:"ngrok_args"`
 		// PublicBaseDomain is the domain a "public" share is served under, as
 		// "<site>.<base>". A public share is a reverse-proxy share: lerd runs a
 		// Host-rewriting proxy on a stable port and the user points their own

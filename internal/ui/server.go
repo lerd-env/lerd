@@ -3472,6 +3472,9 @@ func handleShareTools(w http.ResponseWriter, r *http.Request) {
 			// NgrokToken is only present when the token form was submitted, so
 			// a base-domain save cannot clear a stored token by omitting it.
 			NgrokToken *string `json:"ngrok_token"`
+			// NgrokArgs rides along with the token form, and is optional in the
+			// same way: absent means "leave the stored flags alone".
+			NgrokArgs *string `json:"ngrok_args"`
 			// PublicBaseDomain is only present when the public-share base form
 			// was submitted, for the same reason.
 			PublicBaseDomain *string `json:"public_base_domain"`
@@ -3487,6 +3490,16 @@ func handleShareTools(w http.ResponseWriter, r *http.Request) {
 			}
 			writeJSON(w, SiteActionResponse{OK: true})
 			return
+		}
+		if body.NgrokArgs != nil {
+			if err := cli.SetShareNgrokArgs(*body.NgrokArgs); err != nil {
+				writeJSON(w, SiteActionResponse{Error: err.Error()})
+				return
+			}
+			if body.NgrokToken == nil {
+				writeJSON(w, SiteActionResponse{OK: true})
+				return
+			}
 		}
 		if body.NgrokToken != nil {
 			if err := cli.SetShareNgrokToken(*body.NgrokToken); err != nil {

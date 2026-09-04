@@ -14,11 +14,13 @@ For sharing on your local network instead of the public internet, see [LAN shari
 | `lerd share --localhost-run` | Force localhost.run (SSH, no signup) |
 | `lerd share --serveo` | Force serveo.net (SSH, no signup) |
 | `lerd share --pinggy` | Force Pinggy (SSH, no signup) |
-| `lerd share --domain <hostname>` | Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel) |
+| `lerd share --domain <hostname>` | Serve on your own hostname: a Cloudflare-managed one (implies Cloudflare Tunnel), or with `--ngrok` a domain reserved on your ngrok account |
 | `lerd share --token <token>` | Auth token for this run, overriding the stored one (ngrok, or Pinggy with `--pinggy`) |
+| `lerd share --ngrok-args "<flags>"` | Flags passed straight to ngrok for this run, overriding the stored ones |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool (`ngrok`, `cloudflare`, `expose`, `serveo`, `localhost-run`, `pinggy`, or `auto`) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under (`none` forgets it) |
 | `lerd share:token [provider] [token]` | Show whether auth tokens are stored, or set one (`none` forgets it); a bare token means ngrok |
+| `lerd share:ngrok-args [flags]` | Show or set the extra flags every ngrok share passes to ngrok (`none` forgets them) |
 
 The three SSH tunnels need nothing installed beyond `ssh` itself and no account. Pinggy's free tier hands out an ephemeral URL per run; a token from the [Pinggy dashboard](https://dashboard.pinggy.io), stored with `lerd share:token pinggy <token>`, gives it a stable subdomain instead.
 
@@ -46,6 +48,51 @@ The token is a credential. It is stored in `~/.config/lerd/config.yaml`, which i
 How the container reaches that local proxy depends on the platform, because the proxy is a host process either way. On Linux the container shares the host's own network namespace, so the proxy really is on loopback and ngrok is given the port. On macOS the container runs inside the podman machine VM, whose loopback is not the host's, so it is pointed at `host.containers.internal` instead. Sharing the VM's network namespace there would dial the VM, where nothing is listening, and every request would come back as ngrok's `ERR_NGROK_8012`.
 
 The container runs as `lerd-ngrok-<site>` (with the branch appended for a worktree), so a running tunnel appears alongside lerd's other containers in the dashboard's resource usage. The name is also how it is cleaned up. A container does not die with the process that started it: podman's supervisor is reparented out of the client's process tree and cgroup, so killing `lerd-ui` outright would otherwise leave the site publicly tunnelled. Stopping a tunnel removes the container by name rather than signalling a process, and every `lerd-ui` start sweeps any tunnel container a previous run left behind.
+
+## ngrok on your own terms
+
+ngrok has features lerd has no setting of its own for, and rather than grow a
+lerd flag per ngrok flag they are passed straight through:
+
+```bash
+lerd share:ngrok-args --host-header=rewrite                    # every ngrok share
+lerd share:ngrok-args --traffic-policy-file=/home/me/pol.yml   # a traffic policy
+lerd share --ngrok-args "--compression"                        # this run only
+lerd share:ngrok-args none                                     # forget them
+```
+
+Stored flags apply to every ngrok share, from the CLI and from the dashboard
+alike, which is where the cog next to ngrok in the share menu sets them next to
+the auth token. `--ngrok-args` wins for a single run without replacing them.
+
+Two kinds of flag are refused rather than accepted and quietly undone. `--log`
+and `--log-format` are lerd's: a dashboard share reads the public URL out of
+ngrok's JSON log, and a run that reshapes that log never reports one. `--url`,
+`--domain` and `--hostname` are refused alongside `lerd share --domain`, because
+a share that silently ignored one of them would hand back a URL nobody is
+expecting. A file a flag points at has to exist, so a mistyped path fails at the
+command rather than as an opaque ngrok start error.
+
+On a machine without ngrok installed, where lerd runs the published image, a
+host path means nothing inside the container. lerd mounts the file the flag
+points at read-only and repoints the flag at the mount, so the same stored flags
+work on both routes.
+
+### A reserved ngrok domain
+
+`--domain` means the same thing for ngrok as it does for Cloudflare Tunnel, a
+public URL that survives the next run, except the domain has to be reserved on
+your ngrok account first:
+
+```bash
+lerd share --ngrok --domain myapp.ngrok.app
+```
+
+ngrok is asked for explicitly here on purpose. A Cloudflare named tunnel is
+created on the spot, so `--domain` on its own still means Cloudflare; an ngrok
+domain that was never reserved would only fail once the tunnel starts. The base
+domain from `lerd share:domain` stays Cloudflare-only, since no other tool can
+hand out a subdomain of a domain you own.
 
 ## Tunnels from the dashboard
 
