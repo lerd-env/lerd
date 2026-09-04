@@ -112,6 +112,12 @@ type ProjectConfig struct {
 	// {{site}} (database-safe name). When APP_URL is present here it takes
 	// precedence over the default scheme://domain rewrite.
 	EnvOverrides map[string]string `yaml:"env_overrides,omitempty"`
+	// WorktreeInclude lists paths, relative to the project root, that are
+	// copied from the main repo into a new worktree when the worktree does not
+	// already have them. Untracked files (local credentials, storage fixtures)
+	// never come across with `git worktree add`, so a project names the ones it
+	// needs here. Paths that escape the project root are ignored.
+	WorktreeInclude []string `yaml:"worktree_include,omitempty"`
 	// RequestTimeout overrides the nginx request timeout for this project, in
 	// seconds. Zero inherits the global nginx.request_timeout (default 60s).
 	// Raise it for apps with deliberately long-running requests.
@@ -145,7 +151,8 @@ func (c *ProjectConfig) IsEmpty() bool {
 		len(c.WorkerOptions) == 0 && len(c.Commands) == 0 && !c.Secured &&
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
-		!c.DBIsolated && len(c.EnvOverrides) == 0 && c.RequestTimeout == 0 && c.Stripe == nil &&
+		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
+		c.RequestTimeout == 0 && c.Stripe == nil &&
 		c.MCPInject == nil
 }
 
@@ -467,6 +474,9 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 		for k, v := range in.EnvOverrides {
 			out.EnvOverrides[k] = v
 		}
+	}
+	if in.WorktreeInclude != nil {
+		out.WorktreeInclude = append([]string(nil), in.WorktreeInclude...)
 	}
 	if in.Container != nil {
 		cp := *in.Container

@@ -172,6 +172,8 @@ func readCheckoutPath(wtDir string) string {
 //     copy (near-instant on btrfs, xfs-reflink, APFS; plain copy on ext4),
 //     then reconciled against the worktree's own lockfiles via
 //     composer install / npm ci.
+//   - paths listed in the main repo's .lerd.yaml worktree_include are copied
+//     across, for gitignored files the app needs to run
 //   - .env is copied from the main repo with APP_URL rewritten to http(s)://<worktreeDomain>
 //
 // Copying (rather than symlinking) is required because PHP resolves __DIR__
@@ -231,6 +233,8 @@ func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secur
 		}
 	}
 
+	copyWorktreeIncludes(mainRepoPath, worktreePath)
+
 	// .env must be in place BEFORE InstallDependencies, since the JS build
 	// step reads VITE_* env vars at compile time. Without this, the worktree
 	// ships with assets compiled against missing env (Reverb host empty,
@@ -242,6 +246,47 @@ func EnsureWorktreeDeps(mainRepoPath, worktreePath, worktreeDomain string, secur
 			_, _ = io.WriteString(out, "[WARN] worktree dependency install: "+err.Error()+"\n")
 		} else {
 			_, _ = os.Stderr.WriteString("[WARN] worktree dependency install: " + err.Error() + "\n")
+		}
+	}
+}
+
+// copyWorktreeIncludes copies every path the main repo's .lerd.yaml lists in
+// worktree_include into the worktree, when the worktree doesn't already have
+// it. Gitignored files a project needs to run (local credentials, storage
+// fixtures) are invisible to `git worktree add`, so the project names them
+// there. A path that escapes the project root is skipped: .lerd.yaml is
+// committed, and cloning a repo must never pull files from elsewhere on the
+// machine into a checkout.
+func copyWorktreeIncludes(mainRepoPath, worktreePath string) {
+	cfg, _ := config.LoadProjectConfig(mainRepoPath)
+	if cfg == nil {
+		return
+	}
+	for _, entry := range cfg.WorktreeInclude {
+		rel := strings.TrimSpace(entry)
+		if rel == "" || !filepath.IsLocal(rel) {
+			continue
+		}
+		src := filepath.Join(mainRepoPath, rel)
+		info, err := os.Lstat(src)
+		if err != nil {
+			continue
+		}
+		dst := filepath.Join(worktreePath, rel)
+		if _, err := os.Lstat(dst); err == nil {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+			_, _ = os.Stderr.WriteString("[WARN] mkdir for worktree_include " + rel + ": " + err.Error() + "\n")
+			continue
+		}
+		if info.IsDir() {
+			err = CopyTree(src, dst)
+		} else {
+			err = copyFileWithMode(src, dst, info.Mode().Perm())
+		}
+		if err != nil {
+			_, _ = os.Stderr.WriteString("[WARN] copy worktree_include " + rel + ": " + err.Error() + "\n")
 		}
 	}
 }
