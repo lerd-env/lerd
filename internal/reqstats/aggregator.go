@@ -73,6 +73,12 @@ type Aggregator struct {
 	sites   map[string]*siteAgg
 	resolve SiteResolver
 	now     func() time.Time // injectable clock, for deterministic decay in tests
+	// excluded holds the routes the user has silenced, keyed by bare site name.
+	// It gates both ends: a new record is dropped, and samples taken before the
+	// exclusion are skipped when a snapshot is built, so a silenced route stops
+	// reaching the slow-route notifier and the doctor at once rather than after
+	// its window ages out.
+	excluded map[string]map[string]bool
 }
 
 type siteAgg struct {
@@ -96,6 +102,22 @@ func New(resolve SiteResolver) *Aggregator {
 	return &Aggregator{sites: map[string]*siteAgg{}, resolve: resolve, now: time.Now}
 }
 
+// SetExcluded replaces the set of silenced routes, keyed by bare site name. The
+// watcher refreshes it from the durable store, the one place exclusions live.
+func (a *Aggregator) SetExcluded(excluded map[string]map[string]bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.excluded = excluded
+}
+
+// isExcluded reports whether a route is silenced for a stats key, resolving a
+// "<site>/<branch>" worktree key to its site so one exclusion covers every
+// branch. Caller holds the lock.
+func (a *Aggregator) isExcluded(key, route string) bool {
+	site, _ := SplitKey(key)
+	return a.excluded[site][route]
+}
+
 // Record ingests one access record, resolving its host to a site and appending
 // the request time to that site's overall and per-route windows. Records for an
 // unknown host, or once a site is at its route cap for a new route, are dropped.
@@ -117,6 +139,9 @@ func (a *Aggregator) Record(r AccessRecord) {
 
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if a.isExcluded(site, route) {
+		return
+	}
 	now := a.now()
 	at := now.UnixNano()
 	sa := a.sites[site]
@@ -205,6 +230,9 @@ func (a *Aggregator) snapshotLocked(site string, sa *siteAgg) SiteStats {
 		UpdatedAt:    sa.updated,
 	}
 	for route, r := range sa.routes {
+		if a.isExcluded(site, route) {
+			continue
+		}
 		vals := r.times.values(cutoff)
 		if len(vals) == 0 {
 			continue // no recent samples: the route has gone quiet, drop it

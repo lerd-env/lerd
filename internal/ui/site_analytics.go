@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"net/http"
 	"time"
 
@@ -68,6 +69,10 @@ type analyticsResponse struct {
 	reqstats.Analytics
 	Range  string          `json:"range"`
 	Recent []recentRequest `json:"recent"`
+	// Excluded are the routes the user has silenced for this site. They carry in
+	// the same payload as the data they are missing from, so the dashboard never
+	// renders a view whose exclusions it hasn't caught up with.
+	Excluded []string `json:"excluded"`
 }
 
 // analyticsRange maps a range label to its window, defaulting to the last hour
@@ -91,6 +96,9 @@ func analyticsRange(s string) (time.Duration, string) {
 //
 //	GET /api/sites/{domain}/analytics[?range=15m|1h|24h|7d][&branch=<sanitized>]
 func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest []string) bool {
+	if len(rest) == 2 && rest[0] == "analytics" {
+		return analyticsMutateRoute(w, r, domain, rest[1])
+	}
 	if len(rest) != 1 || rest[0] != "analytics" || r.Method != http.MethodGet {
 		return false
 	}
@@ -114,7 +122,11 @@ func analyticsRoute(w http.ResponseWriter, r *http.Request, domain string, rest 
 		return true
 	}
 	recent, _ := store.Recent(key, 20)
-	out := analyticsResponse{Analytics: a, Range: rangeLabel, Recent: make([]recentRequest, 0, len(recent))}
+	excluded, _ := store.ExcludedRoutes(key)
+	if excluded == nil {
+		excluded = []string{}
+	}
+	out := analyticsResponse{Analytics: a, Range: rangeLabel, Recent: make([]recentRequest, 0, len(recent)), Excluded: excluded}
 	for _, rec := range recent {
 		out.Recent = append(out.Recent, recentRequest{
 			AtMillis: rec.At.UnixMilli(),
@@ -141,7 +153,92 @@ func emptyAnalytics(key, rangeLabel string) analyticsResponse {
 			Throughput:   []reqstats.ThroughputPoint{},
 			Routes:       []reqstats.RouteStat{},
 		},
-		Range:  rangeLabel,
-		Recent: []recentRequest{},
+		Range:    rangeLabel,
+		Recent:   []recentRequest{},
+		Excluded: []string{},
 	}
+}
+
+// removeRequest is the body of a removal: which route to forget, optionally
+// narrowed to the single request at AtMillis on URI (how the recent list
+// identifies a row), and whether to stop recording the route from now on.
+type removeRequest struct {
+	Branch   string `json:"branch"`
+	Route    string `json:"route"`
+	AtMillis int64  `json:"at_millis"`
+	URI      string `json:"uri"`
+	Exclude  bool   `json:"exclude"`
+}
+
+// analyticsMutateRoute serves the write side of the request-timing view: dropping
+// recorded history and managing the routes lerd stops watching. Returns true when
+// it owns the request.
+//
+//	POST   /api/sites/{domain}/analytics/remove    {route, at_millis?, uri?, exclude, branch}
+//	DELETE /api/sites/{domain}/analytics/excludes?route=<route>[&branch=<sanitized>]
+func analyticsMutateRoute(w http.ResponseWriter, r *http.Request, domain, action string) bool {
+	switch {
+	case action == "remove" && r.Method == http.MethodPost:
+	case action == "excludes" && r.Method == http.MethodDelete:
+	default:
+		return false
+	}
+	site, err := config.FindSiteByDomain(domain)
+	if err != nil {
+		http.Error(w, "site not found: "+domain, http.StatusNotFound)
+		return true
+	}
+	store, err := getAnalyticsStore()
+	if err != nil {
+		http.Error(w, "request history is unavailable", http.StatusServiceUnavailable)
+		return true
+	}
+
+	if action == "excludes" {
+		route := r.URL.Query().Get("route")
+		if route == "" {
+			http.Error(w, "route is required", http.StatusBadRequest)
+			return true
+		}
+		key := reqstats.Key(site.Name, r.URL.Query().Get("branch"))
+		if err := store.UnexcludeRoute(key, route); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return true
+		}
+		writeJSON(w, map[string]any{"ok": true})
+		return true
+	}
+
+	var req removeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return true
+	}
+	if req.Route == "" {
+		http.Error(w, "route is required", http.StatusBadRequest)
+		return true
+	}
+	key := reqstats.Key(site.Name, req.Branch)
+
+	// A recent row names one request, so only that row goes; the route lists name
+	// the whole route, so its history goes. Excluding is independent of either, and
+	// applies from here on rather than reaching back over what is left.
+	var removed int64
+	if req.AtMillis > 0 {
+		removed, err = store.DeleteRequest(key, req.AtMillis, req.URI)
+	} else {
+		removed, err = store.DeleteRoute(key, req.Route)
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return true
+	}
+	if req.Exclude {
+		if err := store.ExcludeRoute(key, req.Route); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return true
+		}
+	}
+	writeJSON(w, map[string]any{"ok": true, "removed": removed})
+	return true
 }

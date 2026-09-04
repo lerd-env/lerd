@@ -145,7 +145,7 @@ CREATE TABLE IF NOT EXISTS requests (
 CREATE INDEX IF NOT EXISTS idx_requests_site_at ON requests(site, at_ms);
 -- The site-first index cannot serve a bare at_ms range, which is what every
 -- whole-window reader (UsageBySite, the prune) asks for.
-CREATE INDEX IF NOT EXISTS idx_requests_at ON requests(at_ms);`
+CREATE INDEX IF NOT EXISTS idx_requests_at ON requests(at_ms);` + excludeSchema
 
 // Close releases the database handle.
 func (s *Store) Close() error { return s.db.Close() }
@@ -187,10 +187,15 @@ func (s *Store) Prune(before time.Time) (int64, error) {
 
 // DeleteSite removes every stored request for a site, covering both its bare key
 // and its "<site>/<branch>" worktree rows, so an unlinked site leaves no traffic
-// behind in the durable store. Returns how many rows were removed.
+// behind in the durable store. Its route exclusions go with it, so relinking the
+// same name later starts from a clean slate. Returns how many request rows were
+// removed.
 func (s *Store) DeleteSite(site string) (int64, error) {
 	res, err := s.db.Exec(`DELETE FROM requests WHERE site = ? OR instr(site, ?) = 1`, site, site+"/")
 	if err != nil {
+		return 0, err
+	}
+	if _, err := s.db.Exec(`DELETE FROM route_excludes WHERE site = ?`, site); err != nil {
 		return 0, err
 	}
 	return res.RowsAffected()
@@ -274,6 +279,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 		return nil, err
 	}
 	defer rows.Close()
+	excluded := s.excludedSet(site)
 	var out []Record
 	for rows.Next() {
 		if len(out) >= limit {
@@ -285,7 +291,7 @@ func (s *Store) Recent(site string, limit int) ([]Record, error) {
 		if err := rows.Scan(&atMs, &r.Route, &r.Method, &r.Status, &r.Millis, &r.URI, &cold); err != nil {
 			return nil, err
 		}
-		if !IsAppRequest(r.Status, r.URI, r.Millis) {
+		if !IsAppRequest(r.Status, r.URI, r.Millis) || excluded[r.Route] {
 			continue
 		}
 		r.At = time.UnixMilli(atMs)
@@ -309,6 +315,7 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 	}
 	defer rows.Close()
 
+	excluded := s.excludedSet(site)
 	a := Analytics{Site: site, Distribution: emptyBuckets(), Throughput: []ThroughputPoint{}, Routes: []RouteStat{}}
 	var warm []float64
 	type agg struct {
@@ -328,8 +335,9 @@ func (s *Store) SiteAnalytics(site string, since, until time.Time) (Analytics, e
 			return Analytics{}, err
 		}
 		// New ones aren't recorded; filtering on read also drops any already stored
-		// before the ingest filter existed.
-		if !IsAppRequest(status, uri, ms) {
+		// before the ingest filter existed, and any left over from before the user
+		// excluded the route.
+		if !IsAppRequest(status, uri, ms) || excluded[route] {
 			continue
 		}
 		// Cold starts count toward the total, status, and throughput, but are kept
