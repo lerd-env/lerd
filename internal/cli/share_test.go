@@ -309,17 +309,32 @@ func TestPickShareTool_domain_impliesCloudflare(t *testing.T) {
 
 func TestPickShareTool_domain_withOtherTool(t *testing.T) {
 	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
-	for _, p := range [][5]bool{
-		{true, false, false, false, false},
-		{false, true, false, false, false},
-		{false, false, true, false, false},
-		{false, false, false, true, false},
-		{false, false, false, false, true},
+	for _, p := range [][4]bool{
+		{true, false, false, false},
+		{false, true, false, false},
+		{false, false, true, false},
+		{false, false, false, true},
 	} {
-		_, err := pickShareTool(p[0], false, p[1], p[2], p[3], p[4], "dev.example.com", "", "", "")
-		if err == nil || !strings.Contains(err.Error(), "--domain only works with Cloudflare Tunnel") {
-			t.Errorf("pickShareTool%v: error = %v, want '--domain only works with Cloudflare Tunnel'", p, err)
+		_, err := pickShareTool(false, false, p[0], p[1], p[2], p[3], "dev.example.com", "", "", "")
+		if err == nil || !strings.Contains(err.Error(), "--domain works with Cloudflare Tunnel or ngrok") {
+			t.Errorf("pickShareTool%v: error = %v, want '--domain works with Cloudflare Tunnel or ngrok'", p, err)
 		}
+	}
+}
+
+// ngrok reserves domains of its own, so --domain means the same thing there: a
+// public URL that survives the next run.
+func TestPickShareTool_domain_withExplicitNgrok(t *testing.T) {
+	t.Setenv("PATH", fakeBin(t, "ngrok", "cloudflared"))
+	tool, err := pickShareTool(true, false, false, false, false, false, "myapp.ngrok.app", "", "", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if tool.mode != shareModeNgrok {
+		t.Errorf("mode = %v, want shareModeNgrok", tool.mode)
+	}
+	if tool.ngrok.domain != "myapp.ngrok.app" {
+		t.Errorf("ngrok.domain = %q, want myapp.ngrok.app", tool.ngrok.domain)
 	}
 }
 

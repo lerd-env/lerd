@@ -37,6 +37,7 @@ func NewShareCmd() *cobra.Command {
 	var usePinggy bool
 	var domain string
 	var token string
+	var ngrokArgs string
 
 	cmd := &cobra.Command{
 		Use:   "share [site]",
@@ -59,13 +60,19 @@ A default tool can be set with "lerd share:tool"; flags override it per run.
 --domain selects Cloudflare Tunnel on its own: a named tunnel is created (or
 reused) and the given hostname is routed to it, so the site is served on your
 own domain instead of a random trycloudflare.com URL. The domain's DNS must be
-managed by Cloudflare.
+managed by Cloudflare. With --ngrok it pins the tunnel to a domain reserved on
+your ngrok account instead, which has to exist there already.
 
 A base domain set with "lerd share:domain" does the same without the flag: a
-Cloudflare share is served on "<site>.<base domain>".`,
+Cloudflare share is served on "<site>.<base domain>".
+
+--ngrok-args passes flags straight to ngrok for this run, for the features lerd
+has no setting of its own for (--host-header=rewrite, --traffic-policy-file).
+"lerd share:ngrok-args" stores them for every share, including from the
+dashboard.`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, usePinggy, domain, token)
+			return runShare(args, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, usePinggy, domain, token, ngrokArgs)
 		},
 	}
 
@@ -77,6 +84,7 @@ Cloudflare share is served on "<site>.<base domain>".`,
 	cmd.Flags().BoolVar(&usePinggy, "pinggy", false, "Use Pinggy (SSH, no signup)")
 	cmd.Flags().StringVar(&domain, "domain", "", "Serve on your own Cloudflare-managed hostname (implies Cloudflare Tunnel)")
 	cmd.Flags().StringVar(&token, "token", "", "Auth token for this run, overriding the stored one (ngrok, or Pinggy with --pinggy)")
+	cmd.Flags().StringVar(&ngrokArgs, "ngrok-args", "", "Extra flags passed straight to ngrok for this run, overriding the stored ones")
 	return cmd
 }
 
@@ -131,7 +139,7 @@ func pinggySSHProvider(token string) sshProvider {
 	return p
 }
 
-func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, usePinggy bool, domain, token string) error {
+func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, usePinggy bool, domain, token, ngrokArgs string) error {
 	site, branch, err := resolveShareSite(args)
 	if err != nil {
 		return err
@@ -165,6 +173,9 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 
 	tool, err := pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRun, usePinggy, domain, cfg.Share.DefaultTool, ngrokToken, pinggyToken)
 	if err != nil {
+		return err
+	}
+	if err := applyNgrokArgs(tool, ngrokArgs, cfg.Share.NgrokArgs); err != nil {
 		return err
 	}
 
@@ -202,8 +213,11 @@ func runShare(args []string, useNgrok, useCloudflare, useExpose, useServeo, useL
 	// the tool's output through the recorder to catch the URL it announces.
 	key := tunnelKey(site.Name, branch)
 	state := tunnelState{Site: site.Name, Branch: branch, Tool: shareToolCanonicalName(tool), PID: os.Getpid()}
-	if tool.domain != "" {
+	switch {
+	case tool.domain != "":
 		state.URL = "https://" + tool.domain
+	case tool.ngrok.domain != "":
+		state.URL = ngrokURL(tool.ngrok.domain)
 	}
 	recorder := newTunnelStateWriter(key, state)
 	defer recorder.clear()
@@ -455,14 +469,18 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 	}
 	fromDefault := false
 
-	// --domain only means anything for Cloudflare Tunnel, so it picks the tool
-	// itself and outranks the configured default. Another explicit tool flag is
-	// a real conflict, so say so instead of silently overriding it.
+	// --domain is a hostname the user owns, which Cloudflare Tunnel and ngrok can
+	// both serve. With no tool flag it picks Cloudflare and outranks the
+	// configured default, because a named tunnel needs nothing reserved up front
+	// while an ngrok domain has to exist on the account. Another explicit tool
+	// flag is a real conflict, so say so instead of silently overriding it.
 	if domain != "" {
-		if count > 0 && !useCloudflare {
-			return nil, fmt.Errorf("--domain only works with Cloudflare Tunnel, drop the other tool flag")
+		if count > 0 && !useCloudflare && !useNgrok {
+			return nil, fmt.Errorf("--domain works with Cloudflare Tunnel or ngrok, drop the other tool flag")
 		}
-		useCloudflare = true
+		if !useNgrok {
+			useCloudflare = true
+		}
 	} else if count == 0 && defaultTool != "" {
 		// No tool flag: fall back to the configured default before auto-detecting.
 		fromDefault = true
@@ -489,6 +507,7 @@ func pickShareTool(useNgrok, useCloudflare, useExpose, useServeo, useLocalhostRu
 		if err != nil {
 			return nil, fmt.Errorf("%w%s", err, defaultToolHint(fromDefault))
 		}
+		runner.domain = domain
 		return &shareTool{mode: shareModeNgrok, ngrok: runner, ngrokToken: ngrokToken}, nil
 	}
 	if useCloudflare {

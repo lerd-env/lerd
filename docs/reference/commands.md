@@ -79,9 +79,11 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
-| `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel) |
+| `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel); with `--ngrok` it pins the tunnel to a domain reserved on your ngrok account instead |
+| `lerd share --ngrok-args "<flags>"` | Pass flags straight to ngrok for this run, overriding the stored ones |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool for `lerd share` (`auto` restores auto-detection) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under, as `<site>.<domain>` (`none` forgets it) |
+| `lerd share:ngrok-args [flags]` | Show or set the extra flags every ngrok share passes to ngrok, from the CLI and the dashboard alike (`none` forgets them) |
 | `lerd share:token [provider] [token]` | Show whether auth tokens are stored, or set one (`none` forgets it). A bare token means ngrok, which can then run as a container without being installed; `pinggy <token>` gives Pinggy shares a stable subdomain |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
 | `lerd secure --renew [name]` | Reissue a secured site's TLS cert on demand, resetting its expiry |

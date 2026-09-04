@@ -5,7 +5,7 @@
     loadShareTools,
     loadSites,
     saveShareDomain,
-    saveShareNgrokToken,
+    saveShareNgrok,
     startTunnel,
     stopTunnel
   } from '$stores/sites';
@@ -144,11 +144,11 @@
   let tokenError = $state('');
   let tokenBusy = $state(false);
 
-  async function submitToken(token: string) {
+  async function submitToken(p: { token?: string; args?: string }) {
     tokenBusy = true;
     tokenError = '';
     try {
-      const res = await saveShareNgrokToken(token);
+      const res = await saveShareNgrok(p);
       if (!res.ok) {
         tokenError = res.error || m.common_requestFailed();
         return;
@@ -579,6 +579,7 @@
 <ShareTokenModal
   open={tokenModal}
   tokenSet={toolsInfo?.ngrok_token_set ?? false}
+  ngrokArgs={toolsInfo?.ngrok_args ?? ''}
   error={tokenError}
   busy={tokenBusy}
   onclose={() => (tokenModal = false)}

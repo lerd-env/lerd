@@ -229,6 +229,7 @@ func main() {
 	root.AddCommand(cli.NewShareToolCmd())
 	root.AddCommand(cli.NewShareDomainCmd())
 	root.AddCommand(cli.NewShareTokenCmd())
+	root.AddCommand(cli.NewShareNgrokArgsCmd())
 	root.AddCommand(cli.NewDomainCmd())
 	root.AddCommand(cli.NewGroupCmd())
 	root.AddCommand(cli.NewWorkspaceCmd())
