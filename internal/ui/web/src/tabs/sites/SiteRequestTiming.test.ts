@@ -32,13 +32,18 @@ const analytics: Analytics = {
   recent: [
     { at_millis: 1783501663287, method: 'POST', route: 'POST /broadcasting/auth', uri: '/broadcasting/auth', status: 200, millis: 4, cold: false },
     { at_millis: 1783501663287, method: 'POST', route: 'POST /broadcasting/auth', uri: '/broadcasting/auth', status: 200, millis: 6, cold: false }
-  ]
+  ],
+  excluded: []
 };
 
 const loadSiteAnalytics = vi.fn(async () => analytics);
+const removeRecorded = vi.fn(async () => {});
+const unexcludeRoute = vi.fn(async () => {});
 
 vi.mock('$stores/analytics', () => ({
   loadSiteAnalytics: (...args: unknown[]) => loadSiteAnalytics(...(args as [])),
+  removeRecorded: (...args: unknown[]) => removeRecorded(...(args as [])),
+  unexcludeRoute: (...args: unknown[]) => unexcludeRoute(...(args as [])),
   TIME_RANGES: ['15m', '1h', '24h', '7d']
 }));
 
@@ -231,6 +236,95 @@ describe('SiteRequestTiming on a route it cannot open', () => {
     expect(queryByRole('button', { name: /POST.*\/checkout/ })).toBeNull();
     expect(setProfiler).not.toHaveBeenCalled();
     expect(open).not.toHaveBeenCalled();
+  });
+});
+
+// Removing history is destructive and the checkbox in the same modal is what
+// makes it permanent, so the confirmation has to be what sends either one.
+describe('SiteRequestTiming removing recorded traffic', () => {
+  const site = { domain: 'whitewaters.test', tls: true, can_profile: true };
+
+  function resetRemoveMocks() {
+    loadSiteAnalytics.mockClear().mockResolvedValue(analytics);
+    removeRecorded.mockClear();
+    unexcludeRoute.mockClear();
+  }
+
+  it('drops a route only after the modal is confirmed', async () => {
+    resetRemoveMocks();
+    const { findAllByRole, findByRole } = render(SiteRequestTiming, { props: { site } });
+
+    const buttons = await findAllByRole('button', { name: m.sites_timing_removeRow() });
+    await fireEvent.click(buttons[0]);
+    expect(removeRecorded).not.toHaveBeenCalled();
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_removeConfirm() }));
+    await waitFor(() => {
+      expect(removeRecorded).toHaveBeenCalledWith('whitewaters.test', {
+        route: 'GET /reports/:id',
+        branch: '',
+        exclude: false
+      });
+    });
+  });
+
+  it('sends the exclusion when the checkbox is ticked', async () => {
+    resetRemoveMocks();
+    const { findAllByRole, findByRole } = render(SiteRequestTiming, { props: { site } });
+
+    await fireEvent.click((await findAllByRole('button', { name: m.sites_timing_removeRow() }))[0]);
+    await fireEvent.click(await findByRole('checkbox'));
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_removeConfirm() }));
+
+    await waitFor(() => {
+      expect(removeRecorded).toHaveBeenCalledWith('whitewaters.test', {
+        route: 'GET /reports/:id',
+        branch: '',
+        exclude: true
+      });
+    });
+  });
+
+  // A recent row is one request, so its button must name that request and not
+  // sweep away every other hit on the same route.
+  it('removes a single request from the recent list', async () => {
+    resetRemoveMocks();
+    const { getByRole, findByText, findAllByRole, findByRole } = render(SiteRequestTiming, {
+      props: { site }
+    });
+    await findByText(m.sites_timing_recent());
+    await fireEvent.click(getByRole('button', { name: m.sites_timing_recent() }));
+
+    const buttons = await findAllByRole('button', { name: m.sites_timing_removeRow() });
+    await fireEvent.click(buttons[buttons.length - 1]);
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_removeConfirm() }));
+
+    await waitFor(() => {
+      expect(removeRecorded).toHaveBeenCalledWith('whitewaters.test', {
+        route: 'POST /broadcasting/auth',
+        branch: '',
+        exclude: false,
+        uri: '/broadcasting/auth',
+        at_millis: 1783501663287
+      });
+    });
+  });
+
+  // Excluded routes are a rare housekeeping list, so they live behind the cog
+  // rather than as a card sitting under the panel on every visit.
+  it('lists excluded routes behind the cog and puts one back under observation', async () => {
+    resetRemoveMocks();
+    loadSiteAnalytics.mockResolvedValue({ ...analytics, excluded: ['GET /health'] } as Analytics);
+
+    const { findByRole, queryByText } = render(SiteRequestTiming, { props: { site } });
+    await findByRole('button', { name: m.sites_timing_excludedManage() });
+    expect(queryByText('GET /health')).toBeNull();
+
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_excludedManage() }));
+    await fireEvent.click(await findByRole('button', { name: m.sites_timing_unexclude() }));
+    await waitFor(() => {
+      expect(unexcludeRoute).toHaveBeenCalledWith('whitewaters.test', 'GET /health', '');
+    });
   });
 });
 
