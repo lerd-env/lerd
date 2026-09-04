@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"charm.land/huh/v2"
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/feedback"
@@ -717,7 +718,7 @@ func composerInContainer(dir string, args ...string) error {
 	podman.EnsurePathMounted(dir, version)
 
 	home := os.Getenv("HOME")
-	composerPhar := filepath.Join(config.BinDir(), "composer.phar")
+	composerPhar := composer.PharPath()
 
 	cmdArgs := []string{"exec", "-i", "-w", dir,
 		"--env", "HOME=" + home,

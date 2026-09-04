@@ -3,7 +3,12 @@
 // tools alike — so they stay consistent.
 package composer
 
-import "os"
+import (
+	"os"
+	"path/filepath"
+
+	"github.com/geodro/lerd/internal/config"
+)
 
 // DefaultProcessTimeout raises composer's per-process timeout from its 300s
 // default to 30 minutes. Composer kills any script that outruns this, and the
@@ -22,4 +27,14 @@ func ProcessTimeoutEnv() string {
 		return "COMPOSER_PROCESS_TIMEOUT=" + v
 	}
 	return "COMPOSER_PROCESS_TIMEOUT=" + DefaultProcessTimeout
+}
+
+// PharPath returns lerd's own composer, the phar under lerd's bin dir that
+// every lerd code path runs with the container's PHP. The FPM image carries a
+// composer of its own, but it is frozen at image build time and an existing tag
+// is never rebuilt, where a bumped pin reaches the phar through the tools
+// manifest within a day, so the phar is the one lerd runs and the image's copy
+// is there for a shell opened inside the container.
+func PharPath() string {
+	return filepath.Join(config.BinDir(), "composer.phar")
 }
