@@ -58,9 +58,10 @@ Whether you use `lerd worktree add` or the bare `git` command, the daemon's watc
 
 1. Wait for `HEAD` to be a final ref or SHA, git writes `gitdir`/`HEAD` over multiple steps and the watcher must avoid acting on a half-written detached state.
 2. Seed `vendor/` and `node_modules/` from the main repo when the worktree's `composer.lock` / JS lockfile matches main's, using reflinks where the filesystem supports them (btrfs, xfs-reflink, APFS) and a plain copy elsewhere.
-3. Sync the framework's env file from main with its base-URL key rewritten to the worktree's vhost domain. The file, its format and the key all come from the framework definition, so Laravel gets `.env` / `APP_URL`, Symfony `.env.local` / `DEFAULT_URI`, CodeIgniter `config/.env` / `app.baseURL`, and the PHP-config frameworks are seeded through their own writers: WordPress's `wp-config.php` (rewriting `WP_HOME`) and Magento's `app/etc/env.php` (carried across for its database credentials). Magento keeps its base URL in the database rather than in a single env key, so it declares `worktree_url_keys` instead, and the seeded `env.php` overrides the database with the worktree's own domain. Writing that base URL changes the config hash Magento keeps in the database, so its definition also declares a [`worktree` block](../usage/framework-definitions.md#yaml-schema): the worktree gets its own database cloned from main, and `app:config:import` runs against it once the file and the database are both in place. When `.lerd.yaml` defines `env_overrides`, those dotenv templates are resolved on top (see [env overrides](#env-overrides) below).
-4. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
-5. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
+3. Copy any path the main repo's `.lerd.yaml` lists in `worktree_include`, for gitignored files the app needs that git doesn't check out (see [extra files](#extra-files-in-a-worktree) below).
+4. Sync the framework's env file from main with its base-URL key rewritten to the worktree's vhost domain. The file, its format and the key all come from the framework definition, so Laravel gets `.env` / `APP_URL`, Symfony `.env.local` / `DEFAULT_URI`, CodeIgniter `config/.env` / `app.baseURL`, and the PHP-config frameworks are seeded through their own writers: WordPress's `wp-config.php` (rewriting `WP_HOME`) and Magento's `app/etc/env.php` (carried across for its database credentials). Magento keeps its base URL in the database rather than in a single env key, so it declares `worktree_url_keys` instead, and the seeded `env.php` overrides the database with the worktree's own domain. Writing that base URL changes the config hash Magento keeps in the database, so its definition also declares a [`worktree` block](../usage/framework-definitions.md#yaml-schema): the worktree gets its own database cloned from main, and `app:config:import` runs against it once the file and the database are both in place. When `.lerd.yaml` defines `env_overrides`, those dotenv templates are resolved on top (see [env overrides](#env-overrides) below).
+5. Run `composer install` (skipped when the marker is at-or-newer than `composer.lock`) and `npm ci` / `pnpm install --frozen-lockfile` / `yarn install --immutable` / `bun install --frozen-lockfile` (skipped under the same marker rule).
+6. Generate the worktree's nginx vhost. It inherits the parent site's framework, so the document root follows the framework's `public_dir` (`pub` for Magento, `web` for Drupal, `webroot` for CakePHP) rather than assuming `public`, and any [nginx snippet](../usage/framework-definitions.md#framework-nginx-config) the framework declares is spliced in, expanded against the worktree's own checkout.
 
 Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's heavy, project-specific, and can fail silently. `lerd worktree add` runs it interactively after asking; using bare `git worktree add` you run it yourself.
 
@@ -71,6 +72,7 @@ Frontend build (`npm run build`) is **not** part of the watcher pipeline, it's h
 | `vendor/` | Reflink/copy from main when `composer.lock` matches; otherwise skip and let `composer install` build from scratch (no stale autoload entries). |
 | `node_modules/` | Same lockfile-match guard against `pnpm-lock.yaml` / `yarn.lock` / `bun.lock*` / `package-lock.json` / `npm-shrinkwrap.json` (whichever exists). |
 | `public/build/` | Not seeded. Run `npm run dev` (Vite dev server, hot reload) or `npm run build` (static manifest) inside the worktree. |
+| `worktree_include` paths | Copied from main when the worktree doesn't already have them; see [extra files in a worktree](#extra-files-in-a-worktree). |
 | env file | The framework's env file (Laravel `.env`, Symfony `.env.local`, CakePHP `config/.env`) copied from main; the framework's base-URL key (`APP_URL`, `DEFAULT_URI`, `app.baseURL`) rewritten to `http(s)://<branch>.<site>.test` (or resolved via `env_overrides` when defined). Realigned on every subsequent watcher pass so a branch rename keeps the value current. |
 
 ::: info Why not symlink?
@@ -136,6 +138,21 @@ Values can use template placeholders or be plain static strings. When a worktree
 When `APP_URL` is present in `env_overrides` it takes precedence over the default `scheme://domain` rewrite. Without `env_overrides`, behaviour is unchanged.
 
 `DB_DATABASE` is the one templated key the worktree-DB isolation flow owns: when the worktree is marked `db_isolated: true` in its own `.lerd.yaml` (set by `lerd db:isolate` or the dashboard's Isolated DB toggle), the watcher leaves the `DB_DATABASE` value alone on subsequent ticks instead of re-rendering it from the parent's `env_overrides` template. Switching isolation back off restores the parent's value and the template applies again on the next pass.
+
+## Extra files in a worktree
+
+`git worktree add` only checks out tracked files, so anything gitignored that the app needs to boot stays behind in the main checkout. Beyond the framework's env file (which lerd already carries across), list those paths in the main repo's `.lerd.yaml`:
+
+```yaml
+worktree_include:
+    - auth.json
+    - storage/oauth-private.key
+    - .config/local/
+```
+
+Paths are relative to the project root and can be files or directories. Each one is copied from the main repo into the worktree when the worktree does not already have it, so a file you edit inside a worktree is never overwritten by a later watcher pass, and a path the main repo doesn't have is simply skipped. Missing parent directories are created.
+
+Paths that resolve outside the project root (`../secrets`, or an absolute path) are ignored. `.lerd.yaml` is committed and travels with the repository, so cloning a project must never be able to pull files from elsewhere on the machine into a checkout.
 
 ---
 
