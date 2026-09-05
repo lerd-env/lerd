@@ -133,8 +133,11 @@ type VhostData struct {
 	// FPMContainer is the container nginx fastcgi's to: the shared
 	// lerd-php<ver>-fpm, or a per-site container for custom-FPM sites.
 	FPMContainer string
-	CertDomain   string // domain whose cert files to use (defaults to Domain)
-	PublicDir    string // document root subdirectory, e.g. "public", "web", "."
+	// FPMPort is the port on FPMContainer nginx fastcgi's to: 9000 for a
+	// container, the version's host listener for a native site.
+	FPMPort    int
+	CertDomain string // domain whose cert files to use (defaults to Domain)
+	PublicDir  string // document root subdirectory, e.g. "public", "web", "."
 	// ProxyPaths are the URL paths a worker's server answers on (e.g. "/app",
 	// "/apps"), one location block each. Empty when the site has no proxy.
 	ProxyPaths      []string
@@ -468,7 +471,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 	publicDir := resolvePublicDir(site)
 	proxyPaths, proxyPort, _ := detectSiteProxy(site)
 	devBase, devPort := detectSiteDevServer(site)
-	fpmContainer := podman.FPMContainerName(site, phpVersion)
+	fpmContainer, fpmPort := fpmUpstream(&site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
 		ServerNames:     serverNamesWithWildcards(site.Domains),
@@ -476,6 +479,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		PublicDir:       publicDir,
 		ProxyPaths:      proxyPaths,
 		ProxyPort:       proxyPort,
@@ -690,11 +694,11 @@ func worktreeSite(domain, path, siteName string) config.Site {
 
 // worktreeVhostConfig resolves the framework-dependent parts of a worktree
 // vhost, the same three the main-site generators resolve for the parent.
-func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, fpmContainer, frameworkNginx string) {
+func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, fpmContainer, frameworkNginx string, fpmPort int) {
 	site := worktreeSite(domain, path, siteName)
 	publicDir = resolvePublicDir(site)
-	fpmContainer = podman.FPMContainerName(site, phpVersion)
-	return publicDir, fpmContainer, resolveFrameworkNginx(site, publicDir, fpmContainer)
+	fpmContainer, fpmPort = fpmUpstream(&site, phpVersion)
+	return publicDir, fpmContainer, resolveFrameworkNginx(site, publicDir, fpmContainer), fpmPort
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -710,7 +714,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		return err
 	}
 
-	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	publicDir, fpmContainer, frameworkNginx, fpmPort := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
@@ -719,6 +723,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
@@ -756,7 +761,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		return err
 	}
 
-	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	publicDir, fpmContainer, frameworkNginx, fpmPort := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
@@ -765,6 +770,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		CertDomain:      parentDomain,
 		PublicDir:       publicDir,
 		LerdSite:        siteName,

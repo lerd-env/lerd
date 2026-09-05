@@ -39,6 +39,7 @@ import (
 	"github.com/geodro/lerd/internal/eventbus"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/nginx"
 	lerdNode "github.com/geodro/lerd/internal/node"
 	phpPkg "github.com/geodro/lerd/internal/php"
@@ -303,6 +304,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/tray", withCORS(handleSettingsTray))
 	mux.HandleFunc("/api/settings/start-on-open", withCORS(handleSettingsStartOnOpen))
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
+	mux.HandleFunc("/api/settings/php-runtime", withCORS(handleSettingsPHPRuntime))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
@@ -742,7 +744,9 @@ func buildStatus() StatusResponse {
 	var phpStatuses []PHPStatus
 	for _, v := range versions {
 		short := strings.ReplaceAll(v, ".", "")
-		running := podman.Cache.Running("lerd-php" + short + "-fpm")
+		running := phpVersionRunning(v, nativeRuntimeActive(),
+			func(string) bool { return podman.Cache.Running("lerd-php" + short + "-fpm") },
+			nativeListenerRunning)
 		xdebugMode := ""
 		var ports []string
 		if cfg != nil {
@@ -940,18 +944,21 @@ type SiteResponse struct {
 	Services []string `json:"services,omitempty"`
 	// DBDatabase is the site's DB_DATABASE, so the overview's database card can
 	// open the admin tool straight to this site's database.
-	DBDatabase       string `json:"db_database,omitempty"`
-	LANPort          int    `json:"lan_port,omitempty"`
-	LANShareURL      string `json:"lan_share_url,omitempty"`
-	PublicShared     bool   `json:"public_shared,omitempty"`
-	PublicShareURL   string `json:"public_share_url,omitempty"`
-	TunnelURL        string `json:"tunnel_url,omitempty"`
-	TunnelTool       string `json:"tunnel_tool,omitempty"`
-	TunnelExternal   bool   `json:"tunnel_external,omitempty"`
-	CustomContainer  bool   `json:"custom_container,omitempty"`
-	ContainerPort    int    `json:"container_port,omitempty"`
-	ContainerImage   string `json:"container_image,omitempty"`
-	Runtime          string `json:"runtime,omitempty"`
+	DBDatabase      string `json:"db_database,omitempty"`
+	LANPort         int    `json:"lan_port,omitempty"`
+	LANShareURL     string `json:"lan_share_url,omitempty"`
+	PublicShared    bool   `json:"public_shared,omitempty"`
+	PublicShareURL  string `json:"public_share_url,omitempty"`
+	TunnelURL       string `json:"tunnel_url,omitempty"`
+	TunnelTool      string `json:"tunnel_tool,omitempty"`
+	TunnelExternal  bool   `json:"tunnel_external,omitempty"`
+	CustomContainer bool   `json:"custom_container,omitempty"`
+	ContainerPort   int    `json:"container_port,omitempty"`
+	ContainerImage  string `json:"container_image,omitempty"`
+	Runtime         string `json:"runtime,omitempty"`
+	// PHPLogUnit is the unit the site's PHP log tab streams. Under the native
+	// runtime that is the host listener's launchd log, not a container.
+	PHPLogUnit       string `json:"php_log_unit,omitempty"`
 	RuntimeWorker    bool   `json:"runtime_worker,omitempty"`
 	HostProxy        bool   `json:"host_proxy,omitempty"`
 	HostPort         int    `json:"host_port,omitempty"`
@@ -1209,11 +1216,16 @@ func buildSites() ([]SiteResponse, error) {
 			ContainerPort:        e.ContainerPort,
 			ContainerImage:       e.ContainerImage,
 			Runtime:              e.Runtime,
-			RuntimeWorker:        e.RuntimeWorker,
-			HostProxy:            e.HostPort > 0,
-			HostPort:             e.HostPort,
-			HostHasDevServer:     e.HostPort > 0 && e.HostCommand != "",
-			DoctorApplicable:     sitedoctor.AppliesForPath(e.Path, e.FrameworkName),
+			PHPLogUnit: phpLogUnit(
+				config.Site{Name: e.Name, Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort},
+				e.PHPVersion,
+				nativeRuntimeActive(),
+			),
+			RuntimeWorker:    e.RuntimeWorker,
+			HostProxy:        e.HostPort > 0,
+			HostPort:         e.HostPort,
+			HostHasDevServer: e.HostPort > 0 && e.HostCommand != "",
+			DoctorApplicable: sitedoctor.AppliesForPath(e.Path, e.FrameworkName),
 			CanProfile: profiler.ProfilableSite(config.Site{
 				Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort,
 			}, e.UsesPHP),
@@ -2914,11 +2926,9 @@ func buildVersionResponse(currentVersion string, info *lerdUpdate.UpdateInfo) Ve
 }
 
 func handlePHPVersions(w http.ResponseWriter, _ *http.Request) {
-	versions, _ := phpPkg.ListInstalled()
-	if versions == nil {
-		versions = []string{}
-	}
-	writeJSON(w, versions)
+	writeJSON(w, installedPHPVersions(nativeRuntimeActive(),
+		func() []string { v, _ := phpPkg.ListInstalled(); return v },
+		nativephp.ListInstalled))
 }
 
 func handleNodeVersions(w http.ResponseWriter, _ *http.Request) {
@@ -5361,6 +5371,8 @@ type SettingsResponse struct {
 	StartOnDashboardOpen      bool     `json:"start_on_dashboard_open"`
 	WorkerExecMode            string   `json:"worker_exec_mode"`
 	WorkerModeApplies         bool     `json:"worker_mode_applies"` // true on macOS only
+	PHPRuntime                string   `json:"php_runtime"`
+	PHPRuntimeApplies         bool     `json:"php_runtime_applies"` // true on macOS only
 	IdleSuspendEnabled        bool     `json:"idle_suspend_enabled"`
 	IdleSuspendTimeoutMinutes int      `json:"idle_suspend_timeout_minutes"`
 	DNSEnabled                bool     `json:"dns_enabled"`
@@ -5391,6 +5403,8 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
 		StartOnDashboardOpen:      startOnOpen,
 		WorkerExecMode:            mode,
+		PHPRuntime:                cfg.PHPRuntimeMode(),
+		PHPRuntimeApplies:         runtime.GOOS == "darwin",
 		WorkerModeApplies:         runtime.GOOS == "darwin",
 		IdleSuspendEnabled:        idleEnabled,
 		IdleSuspendTimeoutMinutes: idleMinutes,
@@ -6419,4 +6433,34 @@ func syncLerdYAMLWorkersDelayed(site *config.Site) {
 	if !site.Paused {
 		_ = config.SetProjectWorkers(site.Path, cli.CollectDeclaredWorkerNames(site))
 	}
+}
+
+// handleSettingsPHPRuntime switches the install between the container and
+// native PHP runtimes. Install-wide rather than per site: the FPM container is
+// shared by every site on a PHP version, so sites cannot be moved one at a time.
+func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Mode string `json:"mode"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	if body.Mode != config.PHPRuntimeContainer && body.Mode != config.PHPRuntimeNative {
+		writeJSON(w, map[string]any{"ok": false, "error": "unknown runtime"})
+		return
+	}
+	if body.Mode == config.PHPRuntimeNative && runtime.GOOS != "darwin" {
+		writeJSON(w, map[string]any{"ok": false, "error": "the native runtime is macOS only"})
+		return
+	}
+	if err := cli.ApplyPHPRuntime(body.Mode); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true})
 }

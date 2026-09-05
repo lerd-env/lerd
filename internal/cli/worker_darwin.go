@@ -13,6 +13,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/nativephp"
 	nodeDet "github.com/geodro/lerd/internal/node"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
@@ -66,7 +67,12 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 		return false, nil
 	}
 	if host {
-		return writeWorkerHostUnit(unitName, sitePath, command, restart)
+		return writeWorkerHostUnit(unitName, sitePath, command, restart, "")
+	}
+	// A native site runs every PHP process on the host, workers included, so its
+	// workers take the host path with the native php ahead of BinDir's shim.
+	if site, err := config.FindSite(siteName); err == nil && site != nil && site.IsNative() {
+		return writeWorkerHostUnit(unitName, sitePath, command, restart, nativephp.ShimDir(phpVersion))
 	}
 
 	cfg, _ := config.LoadGlobal()
@@ -91,7 +97,7 @@ func writeWorkerUnitFile(unitName, label, siteName, sitePath, phpVersion, comman
 //
 // Lives under run/workers alongside the exec-mode guard scripts so
 // removeWorkerExecArtifacts cleans both up on stop.
-func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, error) {
+func writeWorkerHostUnit(unitName, sitePath, command, restart, phpBinDir string) (bool, error) {
 	workersDir := filepath.Join(config.RunDir(), "workers")
 	if err := os.MkdirAll(workersDir, 0755); err != nil {
 		return false, fmt.Errorf("creating worker run dir: %w", err)
@@ -125,7 +131,7 @@ func writeWorkerHostUnit(unitName, sitePath, command, restart string) (bool, err
 		}
 	}
 
-	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, extraBinDirs, pidFile)
+	script := buildDarwinHostWorkerGuardScript(execPrefix, config.BinDir(), sitePath, command, workerBinDirs(phpBinDir, extraBinDirs), pidFile)
 	if err := os.WriteFile(scriptPath, []byte(script), 0755); err != nil {
 		return false, fmt.Errorf("writing host worker guard script: %w", err)
 	}
@@ -320,4 +326,18 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 		label = workerName
 	}
 	writeWorkerUnitFile(unitName, label, displaySite, sitePath, phpVersion, command, restart, w.Schedule, fpmUnit, requiredServiceUnit(sitePath, w), w.Host) //nolint:errcheck
+}
+
+// workerBinDirs puts a native site's php ahead of any language-manager dirs on
+// a host worker's PATH. BinDir's own php is the shim into the container, so
+// without the native dir first a native site's workers would run containerised.
+func workerBinDirs(phpBinDir, extraBinDirs string) string {
+	switch {
+	case phpBinDir == "":
+		return extraBinDirs
+	case extraBinDirs == "":
+		return phpBinDir
+	default:
+		return phpBinDir + ":" + extraBinDirs
+	}
 }

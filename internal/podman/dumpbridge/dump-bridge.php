@@ -17,16 +17,25 @@
 // `mixed`/`never` hints, no `match`, no arrow functions, no nullsafe.
 
 namespace {
+    // Where the bridge's own assets live. The container mounts them at a fixed
+    // path; a PHP running on the host has no such directory, so the location is
+    // read from the ini and only falls back to the container path. get_cfg_var
+    // rather than ini_get: the directive belongs to no extension, and ini_get
+    // returns false for those.
+    $lerdAssets = \get_cfg_var('lerd.assets_dir');
+    if (!\is_string($lerdAssets) || $lerdAssets === '') {
+        $lerdAssets = '/usr/local/etc/lerd';
+    }
     // Fast no-op when the toggle file is absent. One stat() per request in the
     // disabled case; the return stops the whole prepend so nothing below loads.
-    if (!@file_exists('/usr/local/etc/lerd/enabled.flag')) {
+    if (!@file_exists($lerdAssets.'/enabled.flag')) {
         return;
     }
     // The shared transport lives in the collector. Pull it in if some other
     // seam hasn't already; without it we can't ship, so stand down and let
     // Symfony's stock dump()/dd() stay in charge rather than half-capture.
     if (!\function_exists('Lerd\\Collector\\send')) {
-        @include_once '/usr/local/etc/lerd/devtools-collector.php';
+        @include_once $lerdAssets.'/devtools-collector.php';
     }
     if (!\function_exists('Lerd\\Collector\\send')) {
         return;

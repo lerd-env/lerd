@@ -16,11 +16,29 @@ import (
 // and `laravel new` shims have a working FPM container even on a fresh install
 // with zero registered sites. Other installed versions are only started when
 // at least one site references them; unused versions are left stopped.
+// FPMContainersWanted reports whether this install is served by the shared FPM
+// containers. False under the native runtime, where PHP runs on the host and
+// starting them would undo the teardown the switch performed.
+func FPMContainersWanted() bool {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return true
+	}
+	return cfg.PHPRuntimeMode() != config.PHPRuntimeNative
+}
+
 func CoreUnits() []string {
 	cfg, _ := config.LoadGlobal()
 	units := []string{"lerd-nginx"}
 	if cfg == nil || cfg.DNS.Enabled {
 		units = append([]string{"lerd-dns"}, units...)
+	}
+	// Under the native runtime PHP runs on the host, so the shared FPM
+	// containers have nothing to serve and starting them would undo the
+	// teardown the runtime switch performed. nginx still serves every site and
+	// stays either way.
+	if !FPMContainersWanted() {
+		return units
 	}
 	active := ActivePHPVersions()
 	if cfg != nil && cfg.PHP.DefaultVersion != "" {

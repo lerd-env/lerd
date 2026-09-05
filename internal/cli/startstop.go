@@ -559,6 +559,11 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	units := append(lifecycle.CoreUnits(), lifecycle.InstalledServiceUnits()...)
 	checkPortConflicts(units)
 
+	// Under the native runtime the FPM containers are deliberately absent from
+	// CoreUnits, so the host listeners are what nginx will fastcgi to. Bring
+	// them up here or a fresh start leaves every site with nothing serving.
+	startNativeRuntime()
+
 	// Build or pull any missing images before starting containers.
 	report(StartEvent{Phase: "step", Step: "images"})
 	ensureImages()

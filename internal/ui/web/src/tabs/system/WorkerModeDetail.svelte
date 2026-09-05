@@ -10,6 +10,7 @@
     type WorkerExecMode
   } from '$stores/workerMode';
   import Modal from '$components/Modal.svelte';
+  import ModeOptionCard from '$components/ModeOptionCard.svelte';
   import { m } from '../../paraglide/messages.js';
 
   onMount(loadWorkerMode);
@@ -83,7 +84,7 @@
 </script>
 
 {#if $workerModeApplies}
-  <div class="flex-1 overflow-y-auto">
+  <div>
     <div class="flex flex-wrap items-center justify-between gap-y-2 p-3 border-b border-gray-100 dark:border-lerd-border">
       <span class="font-semibold text-gray-900 dark:text-white text-base">{m.system_workerMode_title()}</span>
       <span
@@ -99,53 +100,23 @@
     <div class="p-3 space-y-4">
       <p class="text-sm text-gray-600 dark:text-gray-400">{m.system_workerMode_description()}</p>
 
-      <button
-        type="button"
+      <ModeOptionCard
+        selected={draft === 'exec'}
+        disabled={$workerModeLoading}
+        accent="emerald"
+        title={m.system_workerMode_exec_title()}
+        description={m.system_workerMode_exec_description()}
         onclick={() => pick('exec')}
-        disabled={$workerModeLoading}
-        aria-pressed={draft === 'exec'}
-        class="w-full text-left flex items-start gap-3 p-3 rounded-sm border-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed {draft === 'exec'
-          ? 'border-emerald-500 dark:border-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 ring-1 ring-emerald-500/20'
-          : 'border-gray-200 dark:border-lerd-border hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-50 dark:hover:bg-white/3'}"
-      >
-        <span
-          class="mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full border-2 shrink-0 {draft === 'exec'
-            ? 'border-emerald-500 dark:border-emerald-400'
-            : 'border-gray-300 dark:border-gray-500'}"
-        >
-          {#if draft === 'exec'}
-            <span class="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-          {/if}
-        </span>
-        <span class="flex-1">
-          <span class="block text-sm font-medium {draft === 'exec' ? 'text-emerald-900 dark:text-emerald-200' : 'text-gray-800 dark:text-gray-200'}">{m.system_workerMode_exec_title()}</span>
-          <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{m.system_workerMode_exec_description()}</span>
-        </span>
-      </button>
+      />
 
-      <button
-        type="button"
-        onclick={() => pick('container')}
+      <ModeOptionCard
+        selected={draft === 'container'}
         disabled={$workerModeLoading}
-        aria-pressed={draft === 'container'}
-        class="w-full text-left flex items-start gap-3 p-3 rounded-sm border-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed {draft === 'container'
-          ? 'border-sky-500 dark:border-sky-400 bg-sky-50 dark:bg-sky-500/10 ring-1 ring-sky-500/20'
-          : 'border-gray-200 dark:border-lerd-border hover:border-gray-300 dark:hover:border-white/20 hover:bg-gray-50 dark:hover:bg-white/3'}"
-      >
-        <span
-          class="mt-0.5 inline-flex items-center justify-center w-4 h-4 rounded-full border-2 shrink-0 {draft === 'container'
-            ? 'border-sky-500 dark:border-sky-400'
-            : 'border-gray-300 dark:border-gray-500'}"
-        >
-          {#if draft === 'container'}
-            <span class="w-2 h-2 rounded-full bg-sky-500 dark:bg-sky-400"></span>
-          {/if}
-        </span>
-        <span class="flex-1">
-          <span class="block text-sm font-medium {draft === 'container' ? 'text-sky-900 dark:text-sky-200' : 'text-gray-800 dark:text-gray-200'}">{m.system_workerMode_container_title()}</span>
-          <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">{m.system_workerMode_container_description()}</span>
-        </span>
-      </button>
+        accent="sky"
+        title={m.system_workerMode_container_title()}
+        description={m.system_workerMode_container_description()}
+        onclick={() => pick('container')}
+      />
 
       <div class="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-lerd-card/50 rounded-sm px-3 py-2 border border-gray-200 dark:border-lerd-border">
         <span class="font-medium text-gray-700 dark:text-gray-300">{m.system_workerMode_note_label()}</span>

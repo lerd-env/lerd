@@ -39,11 +39,11 @@ func runLaravelAdapterPHP(t *testing.T, body string) []string {
 	if err := os.WriteFile(preflight, []byte("<?php echo file_exists("+phpQuote(adapterPath)+") ? 'Y' : 'N';"), 0o644); err != nil {
 		t.Fatalf("write preflight: %v", err)
 	}
-	if out, _ := exec.Command(php, preflight).CombinedOutput(); !strings.Contains(string(out), "Y") {
+	if out, _ := exec.Command(php, noBridge(preflight)...).CombinedOutput(); !strings.Contains(string(out), "Y") {
 		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
 	}
 
-	sock := filepath.Join(dir, "a.sock")
+	sock := shortSocketPath(t)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -75,7 +75,7 @@ func runLaravelAdapterPHP(t *testing.T, body string) []string {
 	}
 
 	// The adapter resolves its target through get_cfg_var, not the env var.
-	cmd := exec.Command(php, "-d", "lerd.devtools_host=unix://"+sock, scriptPath)
+	cmd := exec.Command(php, "-d", "auto_prepend_file=", "-d", "lerd.devtools_host=unix://"+sock, scriptPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("php run failed: %v\n%s", err, out)
 	}

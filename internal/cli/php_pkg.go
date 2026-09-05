@@ -54,6 +54,9 @@ func newPhpPkgAddCmd() *cobra.Command {
 			"The version you are on is rebuilt now; other versions rebuild the next time they are used.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:pkg"); err != nil {
+				return err
+			}
 			pkgs, err := podman.ParseApkDeps(strings.Join(args, " "))
 			if err != nil {
 				return err
@@ -129,6 +132,9 @@ func newPhpPkgRemoveCmd() *cobra.Command {
 		Short: "Remove extra Alpine packages from every PHP-FPM image",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:pkg"); err != nil {
+				return err
+			}
 			if err := rejectPerVersionFlag(cmd); err != nil {
 				return err
 			}
@@ -166,6 +172,9 @@ func newPhpPkgListCmd() *cobra.Command {
 		Short: "List your extra Alpine packages and where they did not install",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := nativeImageCommandRefusal("php:pkg"); err != nil {
+				return err
+			}
 			cfg, err := config.LoadGlobal()
 			if err != nil {
 				return err

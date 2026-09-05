@@ -102,6 +102,8 @@ func runRuntime(cmd *cobra.Command, args []string) error {
 			wantWorker = false
 		}
 		return switchToFrankenPHP(site, wantWorker)
+	case "native":
+		return fmt.Errorf("the native runtime is install-wide, not per site: the FPM container is shared by every site on a PHP version. Use 'lerd php:runtime native'")
 	default:
 		return fmt.Errorf("unknown runtime %q — use 'fpm' or 'frankenphp'", target)
 	}
@@ -160,6 +162,9 @@ func runtimeLabel(site *config.Site) string {
 			return "frankenphp (worker mode)"
 		}
 		return "frankenphp"
+	}
+	if site.IsNative() {
+		return "native"
 	}
 	return "fpm"
 }

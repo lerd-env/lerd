@@ -252,6 +252,7 @@ export default defineConfig({
             { text: 'Environment Setup', link: '/features/env-setup' },
             { text: 'Git Worktrees', link: '/features/git-worktrees' },
             { text: 'FrankenPHP runtime', link: '/features/frankenphp' },
+            { text: 'Native PHP runtime', link: '/features/native-runtime' },
           ],
         },
         {

@@ -49,11 +49,11 @@ func runCollectorPHP(t *testing.T, body string) []string {
 	if err := os.WriteFile(preflight, []byte("<?php echo file_exists("+phpQuote(collectorPath)+") ? 'Y' : 'N';"), 0o644); err != nil {
 		t.Fatalf("write preflight: %v", err)
 	}
-	if out, _ := exec.Command(php, preflight).CombinedOutput(); !strings.Contains(string(out), "Y") {
+	if out, _ := exec.Command(php, noBridge(preflight)...).CombinedOutput(); !strings.Contains(string(out), "Y") {
 		t.Skip("php cannot read host files (containerised/sandboxed wrapper); native php needed")
 	}
 
-	sock := filepath.Join(dir, "c.sock")
+	sock := shortSocketPath(t)
 	ln, err := net.Listen("unix", sock)
 	if err != nil {
 		t.Fatalf("listen: %v", err)
@@ -84,7 +84,7 @@ func runCollectorPHP(t *testing.T, body string) []string {
 		t.Fatalf("write script: %v", err)
 	}
 
-	cmd := exec.Command(php, scriptPath)
+	cmd := exec.Command(php, noBridge(scriptPath)...)
 	cmd.Env = append(os.Environ(), "LERD_DEVTOOLS_HOST=unix://"+sock)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("php run failed: %v\n%s", err, out)
@@ -285,4 +285,27 @@ acme_listing();
 	if !strings.HasSuffix(e.Src.File, "/modules/custom/Listing.php") {
 		t.Errorf("src.file = %q, want the project's own module, not the installed framework package", e.Src.File)
 	}
+}
+
+// noBridge runs a script with lerd's debug bridge switched off. The harness
+// loads its own copy of the collector on purpose, and under the native runtime
+// the bridge is auto-prepended into every PHP process, so without this the two
+// copies collide on Lerd\Collector\host(). Not a product problem: nothing else
+// includes the collector by hand.
+func noBridge(script string) []string {
+	return []string{"-d", "auto_prepend_file=", script}
+}
+
+// shortSocketPath returns a socket path under the macOS 104-byte sun_path
+// limit. t.TempDir() embeds the test name, and these names are long enough that
+// the socket fails to bind with "invalid argument", which reads as a broken
+// collector rather than a path that is simply too long.
+func shortSocketPath(t *testing.T) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "lerdc")
+	if err != nil {
+		t.Fatalf("temp dir: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	return filepath.Join(dir, "c.sock")
 }

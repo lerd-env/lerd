@@ -848,7 +848,10 @@ func (m *darwinServiceManager) Start(name string) error {
 	// Service units use RunAtLoad=true so bootstrap already started them — no kick needed.
 	content, _ := os.ReadFile(p)
 	if strings.Contains(string(content), "<key>RunAtLoad</key>") {
-		return nil // service unit already started by bootstrap
+		// RunAtLoad is supposed to start it, but launchd does not always
+		// oblige: after an abrupt teardown the job loads and stays at "not
+		// running", and returning here reported a start that never happened.
+		return ensureStarted(name, unitRunning, kickstartUnit)
 	}
 	// Container unit: run podman directly (with concurrency limit) instead of
 	// launchctl kickstart. kickstart lets launchd fire all podman run processes
@@ -1112,4 +1115,35 @@ func (m *darwinServiceManager) AllUnitStates() map[string]string {
 		out[name+".service"] = state
 	}
 	return out
+}
+
+// ensureStarted kicks a job that bootstrap left loaded but idle, and leaves a
+// running one alone so a healthy worker is never restarted for nothing. The
+// launchctl calls are injected so the decision is testable without a domain.
+func ensureStarted(name string, running func(string) bool, kick func(string) error) error {
+	if running(name) {
+		return nil
+	}
+	if err := kick(name); err != nil {
+		return fmt.Errorf("launchctl kickstart %s: %w", name, err)
+	}
+	return nil
+}
+
+// unitRunning reports whether launchd has the job running rather than merely
+// loaded.
+func unitRunning(name string) bool {
+	out, err := launchctl("print", uidDomain()+"/"+plistLabel(name))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(out), "state = running")
+}
+
+func kickstartUnit(name string) error {
+	out, err := launchctl("kickstart", uidDomain()+"/"+plistLabel(name))
+	if err != nil && !strings.Contains(string(out), "already running") {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }

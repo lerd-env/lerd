@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
+	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/linker"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -390,6 +391,13 @@ var (
 
 // ensureFPMQuadletTo is like ensureFPMQuadlet but writes build output to w.
 func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
+	// Under the native runtime PHP runs on the host, so there is no FPM
+	// container to ensure and starting one here would undo the teardown the
+	// runtime switch performed. This is the path `lerd start` reaches through
+	// site restore, which is why the containers came back on every start.
+	if !lifecycle.FPMContainersWanted() {
+		return nil
+	}
 	versionShort := strings.ReplaceAll(phpVersion, ".", "")
 	unitName := "lerd-php" + versionShort + "-fpm"
 

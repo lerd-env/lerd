@@ -32,6 +32,13 @@ import (
 // through the loopback ports those services publish rather than container DNS.
 const hostProxyLoopback = "127.0.0.1"
 
+// usesLoopbackServices reports whether a site's PHP runs on the host rather than
+// in a container, which decides how it reaches lerd services: loopback and the
+// published host ports instead of container DNS names.
+func usesLoopbackServices(site *config.Site) bool {
+	return site.IsHostProxy() || site.IsNative()
+}
+
 // rewriteEnvForHostProxy adapts lerd's computed service connection values for a
 // host-proxy app. Bare "lerd-*" hostnames become 127.0.0.1, and *_PORT values
 // map from the container port to the service's published host port (e.g. mariadb
@@ -52,7 +59,46 @@ func rewriteEnvForHostProxy(updates map[string]string, serviceNames []string) {
 			}
 		}
 	}
-	applyHostProxyEnv(updates, containerToHost)
+	// Which container port each service listens on, so a host-only value can
+	// keep a port that has no sibling key to live in.
+	serviceContainerPort := map[string]string{}
+	for _, name := range names {
+		for _, mapping := range servicePortMappings(name) {
+			if _, container, ok := splitHostContainerPort(mapping); ok {
+				if _, seen := serviceContainerPort[name]; !seen {
+					serviceContainerPort[name] = container
+				}
+			}
+		}
+	}
+	applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort)
+}
+
+// loopbackServiceNames lists the services whose container port must be mapped
+// to the published host port. Every known service is included, not just the
+// ones a .lerd.yaml declares: a project without that file still has a DSN
+// naming lerd-mysql:3306, and leaving it out of the map rewrites the host to
+// loopback while keeping the container's port, which on a machine running its
+// own MySQL on 3306 connects successfully to the wrong database. Mapping a
+// service the project does not use costs nothing, since only tokens actually
+// present in the values are rewritten.
+func loopbackServiceNames(declared map[string]bool, known []string) []string {
+	seen := make(map[string]bool, len(declared)+len(known))
+	names := make([]string, 0, len(declared)+len(known))
+	add := func(n string) {
+		if n == "" || seen[n] {
+			return
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+	for n := range declared {
+		add(n)
+	}
+	for _, n := range known {
+		add(n)
+	}
+	return names
 }
 
 // hostProxyConnKey reports whether an env key names a service connection target
@@ -62,6 +108,16 @@ func rewriteEnvForHostProxy(updates map[string]string, serviceNames []string) {
 func hostProxyConnKey(k string) bool {
 	for _, suf := range []string{"_HOST", "_PORT", "_URL", "_DSN", "_ENDPOINT", "_SERVER"} {
 		if strings.HasSuffix(k, suf) {
+			return true
+		}
+	}
+	// Frameworks that keep configuration in a PHP array address it with dotted
+	// paths instead (TYPO3 writes DB.Connections.Default.host). Match the last
+	// segment so those are covered without loosening the guard for everything
+	// else: a key like DB.Connections.Default.charset still has to be left be.
+	if idx := strings.LastIndex(k, "."); idx >= 0 {
+		switch strings.ToLower(k[idx+1:]) {
+		case "host", "port", "url", "dsn", "endpoint", "server":
 			return true
 		}
 	}
@@ -78,14 +134,24 @@ var lerdContainerHostRe = regexp.MustCompile(`lerd-[a-z0-9-]+(?::\d+)?`)
 // port, and a discrete *_PORT value with no host alongside is remapped too.
 // Split from rewriteEnvForHostProxy so the logic is testable without services.
 func applyHostProxyEnv(updates, containerToHost map[string]string) {
+	applyHostProxyEnvWithPorts(updates, containerToHost, nil)
+}
+
+// applyHostProxyEnvWithPorts is applyHostProxyEnv plus the container port each
+// service listens on, which is what lets a bare host token keep a port that
+// would otherwise be lost. Frameworks differ here: Laravel splits DB_HOST and
+// DB_PORT, while WordPress writes the port into DB_HOST and has no DB_PORT
+// constant at all, so a bare rewrite there silently retargets the app at
+// whatever owns the container's port on the host.
+func applyHostProxyEnvWithPorts(updates, containerToHost, serviceContainerPort map[string]string) {
 	for k, v := range updates {
 		if !hostProxyConnKey(k) {
 			continue
 		}
 		nv := lerdContainerHostRe.ReplaceAllStringFunc(v, func(m string) string {
-			_, port, found := strings.Cut(m, ":")
+			name, port, found := strings.Cut(m, ":")
 			if !found {
-				return hostProxyLoopback
+				return hostProxyLoopback + bareHostPortSuffix(k, name, updates, containerToHost, serviceContainerPort)
 			}
 			if mapped, ok := containerToHost[port]; ok {
 				port = mapped
@@ -96,14 +162,51 @@ func applyHostProxyEnv(updates, containerToHost map[string]string) {
 			updates[k] = nv
 			continue
 		}
-		// No host token to anchor on: a standalone *_PORT (e.g. DB_PORT=3306)
-		// still needs remapping to its published host port.
-		if strings.HasSuffix(k, "_PORT") {
+		// No host token to anchor on: a standalone port key (DB_PORT=3306, or
+		// TYPO3's DB.Connections.Default.port) still needs remapping.
+		if isPortKey(k) {
 			if mapped, ok := containerToHost[v]; ok {
 				updates[k] = mapped
 			}
 		}
 	}
+}
+
+// isPortKey reports whether a key holds a bare port number, in either the
+// SCREAMING_SNAKE or the dotted php-array spelling.
+func isPortKey(k string) bool {
+	if strings.HasSuffix(k, "_PORT") {
+		return true
+	}
+	idx := strings.LastIndex(k, ".")
+	return idx >= 0 && strings.EqualFold(k[idx+1:], "port")
+}
+
+// bareHostPortSuffix returns ":<port>" when a host-only value has to carry the
+// published port itself, and "" when it must not. It carries the port only if
+// the service is published somewhere other than its container port and no
+// sibling *_PORT key is there to hold it.
+func bareHostPortSuffix(key, token string, updates, containerToHost, serviceContainerPort map[string]string) string {
+	svc := strings.TrimPrefix(token, "lerd-")
+	container, ok := serviceContainerPort[svc]
+	if !ok {
+		return ""
+	}
+	host, ok := containerToHost[container]
+	if !ok || host == container {
+		return ""
+	}
+	if sibling, found := strings.CutSuffix(key, "_HOST"); found {
+		if _, has := updates[sibling+"_PORT"]; has {
+			return ""
+		}
+	}
+	if idx := strings.LastIndex(key, "."); idx >= 0 && strings.EqualFold(key[idx+1:], "host") {
+		if _, has := updates[key[:idx+1]+"port"]; has {
+			return ""
+		}
+	}
+	return ":" + host
 }
 
 // servicePortMappings returns the "host:container" port mappings a service
@@ -1054,14 +1157,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		envInfo("  Setting %s=%s\n", urlKey, url)
 	}
 
-	// 4d. Host-proxy apps run on the host, so point service connections at
-	// loopback and the published host ports instead of container DNS names.
-	if site.IsHostProxy() {
-		names := make([]string, 0, len(lerdYAMLServices))
-		for n := range lerdYAMLServices {
-			names = append(names, n)
-		}
-		rewriteEnvForHostProxy(updates, names)
+	// 4d. Apps whose PHP runs on the host reach services over loopback and the
+	// published host ports instead of container DNS names.
+	if usesLoopbackServices(site) {
+		rewriteEnvForHostProxy(updates, loopbackServiceNames(lerdYAMLServices, knownServices()))
 	}
 
 	// 4e. Apply personal .env.lerd_override values last so they win over lerd's

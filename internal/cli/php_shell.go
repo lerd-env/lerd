@@ -105,6 +105,10 @@ func runPhpShell(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	if err := nativeShellRefusal(cwd); err != nil {
+		return err
+	}
+
 	container := fpmContainerForDir(cwd, version)
 
 	version, container, err = ensureFPMRunning(cwd, version, container)

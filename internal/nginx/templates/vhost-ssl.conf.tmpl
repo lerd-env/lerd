@@ -60,7 +60,7 @@ server {
 
     location ~ \.php$ {
         set $fpm "{{.FPMContainer}}";
-        fastcgi_pass $fpm:9000;
+        fastcgi_pass $fpm:{{.FPMPort}};
         fastcgi_index index.php;
         fastcgi_read_timeout {{.RequestTimeout}}s;
         fastcgi_send_timeout {{.RequestTimeout}}s;

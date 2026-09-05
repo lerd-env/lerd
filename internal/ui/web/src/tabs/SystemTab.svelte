@@ -14,6 +14,7 @@
   import { accessMode } from '$stores/accessMode';
   import { lerdStart, lerdStop, lerdStarting, lerdStopping } from '$stores/lerdLifecycle';
   import { workerExecMode, workerModeApplies, loadWorkerMode } from '$stores/workerMode';
+  import { phpRuntime, phpRuntimeApplies, loadPHPRuntime } from '$stores/phpRuntime';
   import { status as dumpsStatusValue, refreshStatus as refreshDumpsStatus } from '$stores/dumps';
   import { notifyPrefs, permissionState, autoSubscribeDisabled, notifyDelivery } from '$lib/notify';
   import { onMount } from 'svelte';
@@ -21,6 +22,7 @@
 
   onMount(() => {
     loadWorkerMode();
+    loadPHPRuntime();
     void refreshDumpsStatus();
   });
 
@@ -119,10 +121,10 @@
     {/snippet}
     <ListRow active={selected === 'dump-bridge'} onclick={() => select('dump-bridge')} leading={dumpBridgeDot} trailing={dumpBridgeTrailing}>{m.debug_title()}</ListRow>
 
-    {#if $workerModeApplies}
-      {#snippet workerModeDot()}<StatusDot color={$workerExecMode === 'container' ? 'sky' : 'emerald'} />{/snippet}
-      <ListRow active={selected === 'workermode'} onclick={() => select('workermode')} leading={workerModeDot}>
-        {m.system_workerMode_listLabel()}
+    {#if $phpRuntimeApplies || $workerModeApplies}
+      {#snippet runtimeDot()}<StatusDot color={$phpRuntime === 'native' ? 'emerald' : 'sky'} />{/snippet}
+      <ListRow active={selected === 'runtime'} onclick={() => select('runtime')} leading={runtimeDot}>
+        {m.system_runtime_listLabel()}
       </ListRow>
     {/if}
 

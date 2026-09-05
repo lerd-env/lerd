@@ -235,6 +235,7 @@ func main() {
 	root.AddCommand(cli.NewFrameworkCmd())
 	root.AddCommand(cli.NewWorkerCmd())
 	root.AddCommand(cli.NewWorkersCmd())
+	root.AddCommand(cli.NewPHPRuntimeCmd())
 	root.AddCommand(cli.NewNewCmd())
 	root.AddCommand(cli.NewSetupCmd())
 	root.AddCommand(cli.NewMinioMigrateCmd())
