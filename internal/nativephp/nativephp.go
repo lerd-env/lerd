@@ -160,11 +160,13 @@ func FPMConfig(version, errorLog string) (string, error) {
 	// refuse it. The pool is still reachable only from this machine: the port is
 	// not published anywhere and the VM is local.
 	fmt.Fprintf(&b, "listen = %d\n", port)
-	b.WriteString("pm = dynamic\n")
+	// ondemand rather than dynamic: a laptop leaves sites untouched for hours,
+	// and dynamic holds start_servers children resident per version the whole
+	// time. The master owns the opcache shared memory, so a pool that has
+	// fallen to zero costs a fork on the next request and nothing more.
+	b.WriteString("pm = ondemand\n")
 	b.WriteString("pm.max_children = 20\n")
-	b.WriteString("pm.start_servers = 4\n")
-	b.WriteString("pm.min_spare_servers = 2\n")
-	b.WriteString("pm.max_spare_servers = 6\n")
+	b.WriteString("pm.process_idle_timeout = 60s\n")
 	b.WriteString("clear_env = no\n")
 	return b.String(), nil
 }

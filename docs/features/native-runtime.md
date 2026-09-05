@@ -31,6 +31,8 @@ Switching rewrites each site's `.env` so its services point at the loopback addr
 
 Each PHP version gets one native listener, the same way the FPM container is shared. It is supervised by launchd as `lerd-native-php<version>` and writes to `~/Library/Logs/lerd/`.
 
+The pools run on demand: a version nothing has asked for in a minute drops to zero worker processes instead of holding several resident, which matters on a laptop where sites sit untouched for hours. The first request after that pays a fork, not a warm-up, because the master process owns the opcache shared memory and keeps it across idle periods.
+
 FrankenPHP sites, custom containers and host-proxy sites are unaffected either way: they never used the shared FPM container.
 
 ## Installing and updating

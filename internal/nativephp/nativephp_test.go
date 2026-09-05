@@ -305,3 +305,30 @@ func TestOverrideLoadsDevtoolsOnlyWhenPresent(t *testing.T) {
 		t.Errorf("lerd_devtools is a module, not a zend extension:\n%s", got)
 	}
 }
+
+// A dev laptop leaves sites idle for hours, and pm=dynamic keeps start_servers
+// workers resident per version the whole time. ondemand lets an untouched pool
+// fall to zero children; the master holds the opcache shared memory, so nothing
+// is re-warmed when one is forked again.
+func TestFPMConfigLetsIdlePoolsFallToZero(t *testing.T) {
+	got, err := FPMConfig("8.4", "/tmp/x.log")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "pm = ondemand") {
+		t.Errorf("want an ondemand pool, got:\n%s", got)
+	}
+	if !strings.Contains(got, "pm.process_idle_timeout") {
+		t.Error("ondemand without an idle timeout never reaps a worker")
+	}
+	// ondemand ignores these, and leaving them in reads as if they applied.
+	for _, dead := range []string{"pm.start_servers", "pm.min_spare_servers", "pm.max_spare_servers"} {
+		if strings.Contains(got, dead) {
+			t.Errorf("%s has no meaning under ondemand:\n%s", dead, got)
+		}
+	}
+	// The ceiling still has to be there, or one site can fork without bound.
+	if !strings.Contains(got, "pm.max_children") {
+		t.Error("a pool with no ceiling can fork without bound")
+	}
+}
