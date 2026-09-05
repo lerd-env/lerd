@@ -122,7 +122,11 @@ func ApplyPHPRuntime(mode string) error {
 				return errors.New(msg)
 			}
 		}
+		pins := &pinnedTools{}
 		for _, v := range versionsInUse(versions) {
+			if err := ensureNativePHPInstalled(pins, v, os.Stdout); err != nil {
+				return err
+			}
 			if err := nativephp.EnsureInstalled(v, nativephp.FPMBinaryPath(v)); err != nil {
 				return err
 			}

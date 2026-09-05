@@ -85,11 +85,20 @@ func overrideIni(version string) string {
 // 8.4 module will not load into 8.5, and offering it would warn on every
 // request while the lens stayed empty.
 func DevtoolsExtensionPath(version string) string {
-	path := filepath.Join(config.BinDir(), "lerd_devtools-"+version+".so")
+	path := filepath.Join(ModulesDir(version), "lerd_devtools-"+version+".so")
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}
 	return path
+}
+
+// ModulesDir holds the shared objects a native build ships beside its binary.
+// Per version, because they are named for the extension and not for the PHP
+// they were built against: one directory would leave every version loading
+// whichever xdebug.so was installed last, and a module only loads into the ABI
+// it was compiled for.
+func ModulesDir(version string) string {
+	return filepath.Join(config.DataDir(), "native-php", version, "modules")
 }
 
 func overrideIniWith(devtoolsSO string) string {
@@ -169,17 +178,24 @@ func BinaryPath(version string) string {
 	return filepath.Join(config.BinDir(), "php-native-"+version)
 }
 
+// EnsureSupported rejects a version no native build will ever exist for. A
+// permanent limit is not a missing download, and the two need different words
+// or the reader waits for a build that is never coming.
+func EnsureSupported(version string) error {
+	if !Supported(version) {
+		return fmt.Errorf("php %s has no native runtime (needs %s or newer); move the site up or keep this install on the container runtime", version, MinVersion)
+	}
+	return nil
+}
+
 // EnsureInstalled reports whether the native runtime for a version is usable,
 // naming what is missing rather than letting nginx fastcgi into a dead port.
 func EnsureInstalled(version, binary string) error {
 	if _, err := PortFor(version); err != nil {
 		return err
 	}
-	// An unsupported version is a permanent limit, not a missing download, and
-	// the two need different words or the reader waits for a build that is
-	// never coming.
-	if !Supported(version) {
-		return fmt.Errorf("php %s has no native runtime (needs %s or newer); move the site up or keep this install on the container runtime", version, MinVersion)
+	if err := EnsureSupported(version); err != nil {
+		return err
 	}
 	info, err := os.Stat(binary)
 	if err != nil {

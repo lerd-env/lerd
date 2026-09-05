@@ -153,6 +153,7 @@ func main() {
 	root.AddCommand(cli.NewJSRuntimeCmd())
 	root.AddCommand(cli.NewPhpListCmd())
 	root.AddCommand(cli.NewPhpRebuildCmd())
+	root.AddCommand(cli.NewPhpUpdateCmd())
 	root.AddCommand(cli.NewPhpCmd())
 	root.AddCommand(cli.NewPhpShellCmd())
 	root.AddCommand(cli.NewConsoleCmd())

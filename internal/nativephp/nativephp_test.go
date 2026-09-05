@@ -288,7 +288,7 @@ func TestOverrideLoadsDevtoolsOnlyWhenPresent(t *testing.T) {
 		t.Errorf("no extension present, so nothing should be loaded:\n%s", got)
 	}
 
-	so := filepath.Join(config.BinDir(), "lerd_devtools-8.4.so")
+	so := filepath.Join(ModulesDir("8.4"), "lerd_devtools-8.4.so")
 	if err := os.MkdirAll(filepath.Dir(so), 0755); err != nil {
 		t.Fatal(err)
 	}
