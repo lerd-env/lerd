@@ -50,3 +50,23 @@ func TestSiteServedNatively(t *testing.T) {
 		}
 	}
 }
+
+// The native runtime is macOS only. Refusing to set it on Linux is not enough:
+// a config.yaml carrying runtime: native onto a Linux box (a synced home, a
+// copied dotfile) would stop its FPM containers and point every vhost at a host
+// listener that does not exist there. The mode is decided by the platform, not
+// only by what is stored.
+func TestPHPRuntimeModeIsContainerOffDarwin(t *testing.T) {
+	cfg := &GlobalConfig{}
+	cfg.PHP.Runtime = PHPRuntimeNative
+
+	if got := cfg.phpRuntimeModeOn("linux"); got != PHPRuntimeContainer {
+		t.Errorf("linux = %q, want %q whatever the config says", got, PHPRuntimeContainer)
+	}
+	if got := cfg.phpRuntimeModeOn("windows"); got != PHPRuntimeContainer {
+		t.Errorf("windows = %q, want %q", got, PHPRuntimeContainer)
+	}
+	if got := cfg.phpRuntimeModeOn("darwin"); got != PHPRuntimeNative {
+		t.Errorf("darwin = %q, want %q", got, PHPRuntimeNative)
+	}
+}
