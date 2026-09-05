@@ -100,7 +100,7 @@ func TestNativeRuntimeApplies(t *testing.T) {
 		want         bool
 	}{
 		{"darwin", "arm64", true},
-		{"darwin", "amd64", false},
+		{"darwin", "amd64", true},
 		{"linux", "arm64", false},
 		{"linux", "amd64", false},
 	}

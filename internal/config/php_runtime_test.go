@@ -71,12 +71,11 @@ func TestPHPRuntimeModeIsContainerOffDarwin(t *testing.T) {
 	}
 }
 
-// An Intel Mac has no native binary either, so a config carried onto one from
-// an Apple silicon machine must not stop its FPM containers.
-func TestPHPRuntimeModeIsContainerOnIntelMacs(t *testing.T) {
+// Builds ship for both macOS architectures, so an Intel Mac is native-capable.
+func TestPHPRuntimeModeAllowsIntelMacs(t *testing.T) {
 	cfg := &GlobalConfig{}
 	cfg.PHP.Runtime = PHPRuntimeNative
-	if got := cfg.phpRuntimeModeOn("darwin", "amd64"); got != PHPRuntimeContainer {
-		t.Errorf("intel mac = %q, want %q whatever the config says", got, PHPRuntimeContainer)
+	if got := cfg.phpRuntimeModeOn("darwin", "amd64"); got != PHPRuntimeNative {
+		t.Errorf("intel mac = %q, want %q", got, PHPRuntimeNative)
 	}
 }

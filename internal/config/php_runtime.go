@@ -26,11 +26,11 @@ func (c *GlobalConfig) PHPRuntimeMode() string {
 // there would stop the FPM containers and point every vhost at a listener that
 // does not exist.
 func (c *GlobalConfig) phpRuntimeModeOn(goos, goarch string) string {
-	// Builds exist for Apple silicon only, so an Intel Mac is as incapable of
-	// the native runtime as Linux is, and for the same practical reason: there
-	// is no binary. Deciding it here rather than at each caller is what makes
-	// a config carried onto an unsupported machine harmless.
-	if c == nil || goos != "darwin" || goarch != "arm64" {
+	// Both macOS architectures have builds, so the platform is the whole test.
+	// goarch is still taken rather than read here, so restricting it later is a
+	// one-line change at a single chokepoint.
+	_ = goarch
+	if c == nil || goos != "darwin" {
 		return PHPRuntimeContainer
 	}
 	if c.PHP.Runtime == PHPRuntimeNative {

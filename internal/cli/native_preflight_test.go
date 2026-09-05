@@ -40,3 +40,20 @@ func TestUnsupportedSitesSilentWhenAllSupported(t *testing.T) {
 		t.Errorf("expected no refusal, got: %s", msg)
 	}
 }
+
+// Native builds are published for Apple silicon only. An Intel Mac would
+// otherwise be offered the switch and then told a binary is "not installed",
+// which reads as something to go and fetch rather than a platform that has
+// none.
+func TestNativeAvailableOnBothMacArchitectures(t *testing.T) {
+	if reason := nativeUnavailableOn("darwin", "amd64"); reason != "" {
+		t.Errorf("Intel Macs have builds and must be allowed, got: %s", reason)
+	}
+
+	if reason := nativeUnavailableOn("darwin", "arm64"); reason != "" {
+		t.Errorf("Apple silicon must be allowed, got: %s", reason)
+	}
+	if reason := nativeUnavailableOn("linux", "arm64"); reason == "" {
+		t.Error("linux must still be refused whatever the arch")
+	}
+}
