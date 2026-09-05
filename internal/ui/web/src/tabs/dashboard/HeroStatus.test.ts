@@ -54,6 +54,17 @@ describe('HeroStatus', () => {
     setStatus();
   });
 
+  // The Lerd card announces an available update, with a way to dismiss the
+  // noise by scrolling past it. A banner that cannot be dismissed would say
+  // the same thing twice above every other card.
+  it('leaves an available update to the lerd card', () => {
+    version.set({ current: '1.0.0', latest: '1.1.0', hasUpdate: true } as never);
+    const { queryByText } = render(HeroStatus);
+
+    expect(queryByText(/1\.1\.0 is available/i)).toBeNull();
+    expect(queryByText(/open terminal/i)).toBeNull();
+  });
+
   // The whole point of the banner: the stack is down and the user should not
   // have to find a terminal to bring it back.
   it('offers a start button when core services are down', async () => {

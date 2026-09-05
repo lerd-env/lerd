@@ -7,7 +7,6 @@
     healTotalCount,
     loadWorkerHealth
   } from '$stores/workerHealth';
-  import { version } from '$stores/version';
   import { coreServices } from '$stores/services';
   import { sites } from '$stores/sites';
   import { status, statusLoaded, dnsState } from '$stores/status';
@@ -22,13 +21,11 @@
     lerdStartDone,
     lerdStartTotal
   } from '$stores/lerdLifecycle';
-  import { apiFetch } from '$lib/api';
   import { m } from '../../paraglide/messages.js';
 
-  type HeroPriority = 'error' | 'updates' | 'ok';
+  type HeroPriority = 'error' | 'ok';
 
   const failingWorkers = $derived($unhealthyWorkers.length);
-  const hasLerdUpdate = $derived($version.hasUpdate);
 
   const coreDown = $derived.by(() => {
     if (!$statusLoaded) return [] as string[];
@@ -44,7 +41,6 @@
 
   const priority = $derived.by((): HeroPriority => {
     if (failingWorkers > 0 || coreDown.length > 0) return 'error';
-    if (hasLerdUpdate) return 'updates';
     return 'ok';
   });
 
@@ -52,20 +48,9 @@
   const sitesTotal = $derived($sites.length);
   const servicesActive = $derived($coreServices.filter((s) => s.status === 'active').length);
 
-  let updateTerminalLoading = $state(false);
-
   async function onHeal() {
     await healAll();
     await loadWorkerHealth();
-  }
-
-  async function onUpdateLerd() {
-    updateTerminalLoading = true;
-    try {
-      await apiFetch('/api/lerd/update-terminal', { method: 'POST' });
-    } finally {
-      updateTerminalLoading = false;
-    }
   }
 
   // The stage ids the start stream emits, mapped to their own message. A unit
@@ -147,28 +132,6 @@
           {:else}
             {m.dashboard_workers_healAll()}
           {/if}
-        </button>
-      {/if}
-    </div>
-  </div>
-{:else if priority === 'updates'}
-  <div class="rounded-xl border-l-4 border-l-yellow-500 border border-yellow-200 dark:border-yellow-500/30 bg-yellow-50 dark:bg-yellow-500/10 px-3 py-3">
-    <div class="flex flex-wrap items-center gap-3">
-      <svg class="w-5 h-5 shrink-0 text-yellow-600 dark:text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/>
-      </svg>
-      <div class="flex-1 min-w-0">
-        <p class="text-sm font-semibold text-yellow-900 dark:text-yellow-200">
-          {m.dashboard_hero_lerdUpdate({ version: $version.latest })}
-        </p>
-      </div>
-      {#if $accessMode.localControl}
-        <button
-          onclick={onUpdateLerd}
-          disabled={updateTerminalLoading}
-          class="shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-yellow-600 hover:bg-yellow-700 text-white disabled:opacity-50 transition-colors"
-        >
-          {updateTerminalLoading ? m.system_lerd_openingTerminal() : m.system_lerd_openTerminal()}
         </button>
       {/if}
     </div>

@@ -8,12 +8,12 @@
   import { lan } from '$stores/lan';
   import { accessMode } from '$stores/accessMode';
   import { goToTab } from '$stores/route';
+  import { openChangelogModal } from '$stores/modals';
   import { apiFetch } from '$lib/api';
   import { m } from '../../paraglide/messages.js';
 
   let updateTerminalLoading = $state(false);
   let updateTerminalError = $state('');
-  let changelogOpen = $state(false);
 
   async function openUpdateTerminal() {
     updateTerminalLoading = true;
@@ -74,18 +74,14 @@
         {#if $version.changelog}
           <button
             type="button"
-            onclick={() => (changelogOpen = !changelogOpen)}
+            onclick={openChangelogModal}
             class="inline-flex items-center gap-1 text-[11px] font-medium text-yellow-700/80 dark:text-yellow-300/80 hover:text-yellow-800 dark:hover:text-yellow-200 transition-colors"
-            aria-expanded={changelogOpen}
           >
-            <svg class="w-3 h-3 transition-transform {changelogOpen ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
             </svg>
-            {changelogOpen ? m.dashboard_lerd_hideChangelog() : m.dashboard_lerd_viewChangelog()}
+            {m.dashboard_lerd_viewChangelog()}
           </button>
-          {#if changelogOpen}
-            <pre class="text-[11px] leading-relaxed font-mono text-yellow-900/90 dark:text-yellow-100/90 bg-yellow-100/40 dark:bg-yellow-500/10 border border-yellow-200/60 dark:border-yellow-500/20 rounded-md p-2 max-h-[180px] overflow-y-auto whitespace-pre-wrap">{$version.changelog}</pre>
-          {/if}
         {/if}
       </div>
     </div>

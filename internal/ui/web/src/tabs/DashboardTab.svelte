@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { version } from '$stores/version';
   import { sites } from '$stores/sites';
   import { coreServices } from '$stores/services';
   import { unhealthyWorkers } from '$stores/workerHealth';
@@ -27,7 +26,6 @@
       $status.dns.ok &&
       $status.nginx.running &&
       $status.watcher_running &&
-      !$version.hasUpdate &&
       !$coreServices.some((s) => s.update_available)
   );
 </script>
