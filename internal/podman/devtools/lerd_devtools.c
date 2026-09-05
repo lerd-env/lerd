@@ -827,7 +827,11 @@ static void lerd_view_end(zend_execute_data *execute_data, zval *retval)
  * stand down there. The collector decides which events are app-level noise. */
 static void lerd_event_end(zend_execute_data *execute_data, zval *retval)
 {
-	if (!LERD_G(active) || lerd_laravel || (lerd_is_worker && !LERD_G(capture_workers))) {
+	/* No worker gate here: Messenger reports what a worker does with a message
+	 * through this dispatcher, and the collector turns those three events into
+	 * job events. It drops every other event from a worker unless the user
+	 * opted into full worker capture. */
+	if (!LERD_G(active) || lerd_laravel) {
 		return;
 	}
 	/* dispatch() ends with `return $event;`, so the engine moves the $event CV
@@ -843,6 +847,16 @@ static void lerd_event_end(zend_execute_data *execute_data, zval *retval)
 	}
 	if (!event) {
 		return;
+	}
+	/* In a worker without the full opt-in only Messenger's own worker events
+	 * are worth the trip into PHP; the collector would drop the rest. */
+	if (lerd_is_worker && !LERD_G(capture_workers)) {
+		static const char worker_evt[] = "Symfony\\Component\\Messenger\\Event\\Worker";
+		zend_class_entry *ce = Z_OBJCE_P(event);
+		if (ZSTR_LEN(ce->name) < sizeof(worker_evt) - 1 ||
+			strncasecmp(ZSTR_VAL(ce->name), worker_evt, sizeof(worker_evt) - 1) != 0) {
+			return;
+		}
 	}
 	zval *name = ZEND_CALL_NUM_ARGS(execute_data) >= 2 ? ZEND_CALL_ARG(execute_data, 2) : NULL;
 	lerd_ensure_collector();
@@ -868,7 +882,8 @@ static void lerd_event_end(zend_execute_data *execute_data, zval *retval)
 static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
 {
 	(void)retval;
-	if (!LERD_G(active) || lerd_laravel || (lerd_is_worker && !LERD_G(capture_workers))) {
+	/* Jobs are captured from workers regardless of the opt-in, see LERD_DEVTOOLS_JOBS. */
+	if (!LERD_G(active) || lerd_laravel) {
 		return;
 	}
 	if (ZEND_CALL_NUM_ARGS(execute_data) < 1) {
@@ -887,6 +902,189 @@ static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
 	}
 	zval_ptr_dtor(&fname);
 	zval_ptr_dtor(&args[0]);
+}
+
+/* Store-declared capture seams. lerd writes one line per observed method to
+ * devtools-seams.conf from the framework store, so a framework's queue can be
+ * reported without this file (or any Go code) naming the framework. Read once
+ * at MINIT; a new seam reaches a running container on its next restart, like
+ * the ini next to it.
+ *
+ * Line format: kind|match|target|method|name, where match is class, implements
+ * or extends. The name expression is passed through to the collector, which is
+ * where the extraction vocabulary lives. */
+#define LERD_MAX_SEAMS 64
+#define LERD_SEAMS_FILE "/usr/local/etc/lerd/devtools-seams.conf"
+
+typedef struct {
+	/* 'c' matches the declaring class by name; 'i' covers both implements and
+	 * extends, which are the same instanceof test once the class is loaded. */
+	char match;
+	char target[192];	/* the class, interface or parent to match */
+	char method[64];
+} lerd_seam;
+
+static lerd_seam lerd_seams[LERD_MAX_SEAMS];
+static int lerd_nseams = 0;
+
+/* copy_field copies one pipe-delimited field, returning the start of the next
+ * one, or NULL when the line has no more. */
+static const char *copy_field(const char *p, char *out, size_t cap)
+{
+	size_t n = 0;
+	while (*p && *p != '|' && *p != '\n' && *p != '\r') {
+		if (n + 1 < cap) {
+			out[n++] = *p;
+		}
+		p++;
+	}
+	out[n] = '\0';
+	return (*p == '|') ? p + 1 : NULL;
+}
+
+static void load_seams(void)
+{
+	FILE *f = fopen(LERD_SEAMS_FILE, "r");
+	if (!f) {
+		return;
+	}
+	char line[512];
+	while (lerd_nseams < LERD_MAX_SEAMS && fgets(line, sizeof(line), f)) {
+		if (line[0] == '#' || line[0] == '\n' || line[0] == '\0') {
+			continue;
+		}
+		char kind[16], match[16];
+		const char *p = copy_field(line, kind, sizeof(kind));
+		if (!p || strcmp(kind, "job") != 0) {
+			continue;
+		}
+		p = copy_field(p, match, sizeof(match));
+		if (!p) {
+			continue;
+		}
+		lerd_seam *seam = &lerd_seams[lerd_nseams];
+		p = copy_field(p, seam->target, sizeof(seam->target));
+		if (!p) {
+			continue;
+		}
+		copy_field(p, seam->method, sizeof(seam->method));
+		if (seam->target[0] == '\0' || seam->method[0] == '\0') {
+			continue;
+		}
+		seam->match = (strcmp(match, "implements") == 0 || strcmp(match, "extends") == 0) ? 'i' : 'c';
+		lerd_nseams++;
+	}
+	fclose(f);
+}
+
+/* seam_matches reports whether an observed method's declaring class is one this
+ * seam covers. An interface or parent is resolved without autoloading: the
+ * class being executed is loaded already, so anything it inherits from is too. */
+static int seam_matches(const lerd_seam *seam, zend_class_entry *scope)
+{
+	if (seam->match == 'c') {
+		return strcasecmp(ZSTR_VAL(scope->name), seam->target) == 0;
+	}
+	if (strcasecmp(ZSTR_VAL(scope->name), seam->target) == 0) {
+		return 1;
+	}
+	zend_string *name = zend_string_init(seam->target, strlen(seam->target), 0);
+	zend_class_entry *ce = zend_lookup_class_ex(name, NULL, ZEND_FETCH_CLASS_NO_AUTOLOAD);
+	zend_string_release(name);
+	return (ce && instanceof_function(scope, ce)) ? 1 : 0;
+}
+
+/* lerd_seam_begin reports a store-declared job starting. The name expression is
+ * resolved in PHP, so the arguments and $this travel over as they are. */
+static void lerd_seam_begin(zend_execute_data *execute_data)
+{
+	if (!LERD_G(active)) {
+		return;
+	}
+	zend_function *fn = execute_data->func;
+	lerd_ensure_collector();
+
+	zval args;
+	array_init(&args);
+	uint32_t n = ZEND_CALL_NUM_ARGS(execute_data);
+	for (uint32_t i = 1; i <= n && i <= 8; i++) {
+		zval *a = ZEND_CALL_ARG(execute_data, i);
+		if (!a || Z_TYPE_P(a) == IS_UNDEF) {
+			continue;
+		}
+		if (Z_TYPE_P(a) == IS_REFERENCE) {
+			a = Z_REFVAL_P(a);
+		}
+		zval copy;
+		ZVAL_COPY(&copy, a);
+		/* Keyed by position so the store's "arg:1" means the first argument
+		 * even when an earlier one was skipped. */
+		add_index_zval(&args, i, &copy);
+	}
+
+	zval fname, rv, a[4];
+	ZVAL_STRINGL(&fname, "Lerd\\Collector\\seam_begin", sizeof("Lerd\\Collector\\seam_begin") - 1);
+	ZVAL_STR_COPY(&a[0], fn->common.scope->name);
+	ZVAL_STR_COPY(&a[1], fn->common.function_name);
+	if (Z_TYPE(execute_data->This) == IS_OBJECT) {
+		ZVAL_COPY(&a[2], &execute_data->This);
+	} else {
+		ZVAL_NULL(&a[2]);
+	}
+	ZVAL_COPY_VALUE(&a[3], &args);
+	if (call_user_function(NULL, NULL, &fname, &rv, 4, a) == SUCCESS) {
+		zval_ptr_dtor(&rv);
+	}
+	zval_ptr_dtor(&fname);
+	for (int i = 0; i < 4; i++) {
+		zval_ptr_dtor(&a[i]);
+	}
+}
+
+/* lerd_seam_end closes the job the matching begin opened. The observer runs on
+ * the way out of a throwing call too, which is what tells a failed job from a
+ * finished one. */
+static void lerd_seam_end(zend_execute_data *execute_data, zval *retval)
+{
+	(void)retval;
+	if (!LERD_G(active)) {
+		return;
+	}
+	zend_function *fn = execute_data->func;
+	lerd_ensure_collector();
+	zval fname, rv, a[4];
+	ZVAL_STRINGL(&fname, "Lerd\\Collector\\seam_end", sizeof("Lerd\\Collector\\seam_end") - 1);
+	ZVAL_STR_COPY(&a[0], fn->common.scope->name);
+	ZVAL_STR_COPY(&a[1], fn->common.function_name);
+	ZVAL_BOOL(&a[2], EG(exception) != NULL);
+	/* Why the job failed is the useful half of the report, so the throwable's
+	 * own message travels with it. */
+	ZVAL_EMPTY_STRING(&a[3]);
+	if (EG(exception)) {
+		zval msg_rv;
+		zval *msg = zend_read_property(EG(exception)->ce, EG(exception), "message", sizeof("message") - 1, 1, &msg_rv);
+		if (msg && Z_TYPE_P(msg) == IS_STRING) {
+			zval_ptr_dtor(&a[3]);
+			ZVAL_STR_COPY(&a[3], Z_STR_P(msg));
+		}
+	}
+	/* No userland call runs with an exception in flight, and a job that threw
+	 * is the case most worth reporting, so the throwable is set aside for the
+	 * length of the call and put back untouched. */
+	zend_object *pending = EG(exception);
+	if (pending) {
+		EG(exception) = NULL;
+	}
+	if (call_user_function(NULL, NULL, &fname, &rv, 4, a) == SUCCESS) {
+		zval_ptr_dtor(&rv);
+	}
+	if (pending) {
+		EG(exception) = pending;
+	}
+	zval_ptr_dtor(&fname);
+	for (int i = 0; i < 4; i++) {
+		zval_ptr_dtor(&a[i]);
+	}
 }
 
 /* lerd_http_begin captures one outgoing Symfony HttpClient request. We hook the
@@ -984,6 +1182,16 @@ static zend_observer_fcall_handlers lerd_observer_init(zend_execute_data *execut
 	if (match) {
 		h.begin = lerd_obs_begin;
 		h.end = lerd_obs_end;
+		return h;
+	}
+	/* Store-declared seams come last, so a built-in one always wins and store
+	 * data can never claim a method this file already knows what to do with. */
+	for (int i = 0; i < lerd_nseams; i++) {
+		if (strcasecmp(fname, lerd_seams[i].method) == 0 && seam_matches(&lerd_seams[i], scope)) {
+			h.begin = lerd_seam_begin;
+			h.end = lerd_seam_end;
+			return h;
+		}
 	}
 	return h;
 }
@@ -1004,6 +1212,7 @@ PHP_MINIT_FUNCTION(lerd_devtools)
 	REGISTER_INI_ENTRIES();
 #ifdef LERD_OBSERVE
 	detect_worker();
+	load_seams();
 	zend_observer_fcall_register(lerd_observer_init);
 #endif
 	return SUCCESS;
@@ -1044,10 +1253,24 @@ PHP_RINIT_FUNCTION(lerd_devtools)
 	}
 	/* Expose the per-request capture decision + worker name to the Laravel
 	 * adapter (PHP), so it applies the same on/off and worker policy as the
-	 * engine-level path without re-deriving it. Request-scoped constants. */
+	 * engine-level path without re-deriving it. Request-scoped constants.
+	 *
+	 * LERD_DEVTOOLS_JOBS is the same decision minus the worker gate, because a
+	 * worker's jobs are the one thing worth reporting from it by default: they
+	 * are the queue's own feedback, and gating them behind the opt-in left a
+	 * processing queue looking like nothing was happening. Everything else a
+	 * worker does stays behind the opt-in, since it polls constantly.
+	 *
+	 * It is a second constant rather than a looser ON so that an adapter older
+	 * than this extension keeps standing down in a worker, which is what it has
+	 * always done. Widening ON instead would have an old adapter register every
+	 * listener inside a queue worker during the window between the image
+	 * rebuild and the asset write. */
 	{
-		zend_bool on = LERD_G(active) && LERD_G(want_query) && (!lerd_is_worker || LERD_G(capture_workers));
-		zend_register_bool_constant("LERD_DEVTOOLS_ON", sizeof("LERD_DEVTOOLS_ON") - 1, on, 0, module_number);
+		zend_bool full = LERD_G(active) && LERD_G(want_query) && (!lerd_is_worker || LERD_G(capture_workers));
+		zend_bool jobs = LERD_G(active) && LERD_G(want_query);
+		zend_register_bool_constant("LERD_DEVTOOLS_ON", sizeof("LERD_DEVTOOLS_ON") - 1, full, 0, module_number);
+		zend_register_bool_constant("LERD_DEVTOOLS_JOBS", sizeof("LERD_DEVTOOLS_JOBS") - 1, jobs, 0, module_number);
 		zend_register_string_constant("LERD_DEVTOOLS_WORKER", sizeof("LERD_DEVTOOLS_WORKER") - 1, lerd_worker_cmd, 0, module_number);
 		/* The agnostic collector groups its events with this request's queries. */
 		zend_register_string_constant("LERD_DEVTOOLS_RID", sizeof("LERD_DEVTOOLS_RID") - 1, LERD_G(rid), 0, module_number);

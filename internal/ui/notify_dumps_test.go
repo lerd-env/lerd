@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -31,7 +32,7 @@ func TestRunDumpsNotifier_OnlyNotifiesDumpKind(t *testing.T) {
 	src := &fakeSubscriber{evs: []dumps.Event{
 		{ID: "q1", Kind: dumps.KindQuery, Ctx: dumps.Context{Site: "a"}},
 		{ID: "d1", Kind: dumps.KindDump, Ctx: dumps.Context{Site: "b"}},
-		{ID: "j1", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "c"}},
+		{ID: "j1", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "c"}, Data: json.RawMessage(`{"status":"processed"}`)},
 	}}
 	runDumpsNotifier(src)
 
@@ -176,5 +177,53 @@ func TestNotificationForDump_URLResolvesNameToDomain(t *testing.T) {
 	n := notificationForDump(evt)
 	if n.URL != "#sites/harborlist.test/dumps" {
 		t.Errorf("URL = %q, want #sites/harborlist.test/dumps", n.URL)
+	}
+}
+
+// TestRunDumpsNotifier_NotifiesFailedJobs checks a job that ends in a failed
+// state interrupts, while the states it passes through on the way do not: a
+// draining queue would otherwise report nothing at all.
+func TestRunDumpsNotifier_NotifiesFailedJobs(t *testing.T) {
+	var got []push.Notification
+	prev := notifyDispatch
+	notifyDispatch = func(n push.Notification) { got = append(got, n) }
+	t.Cleanup(func() { notifyDispatch = prev })
+
+	src := &fakeSubscriber{evs: []dumps.Event{
+		{ID: "j1", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "acme"}, Data: json.RawMessage(`{"class":"App\\Jobs\\SendInvoice","status":"queued"}`)},
+		{ID: "j2", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "acme"}, Data: json.RawMessage(`{"class":"App\\Jobs\\SendInvoice","status":"processing"}`)},
+		{ID: "j3", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "acme"}, Data: json.RawMessage(`{"class":"App\\Jobs\\SendInvoice","status":"failed","exception":"mailer refused the message"}`)},
+		// The retry of the same job is the same failure, not a second one.
+		{ID: "j4", Kind: dumps.KindJob, Ctx: dumps.Context{Site: "acme"}, Data: json.RawMessage(`{"class":"App\\Jobs\\SendInvoice","status":"failed","exception":"mailer refused the message"}`)},
+	}}
+	runDumpsNotifier(src)
+
+	if len(got) != 1 {
+		t.Fatalf("got %d notifications, want one for the failed job: %+v", len(got), got)
+	}
+	n := got[0]
+	if n.Kind != "job_failed" {
+		t.Errorf("Kind = %q, want job_failed", n.Kind)
+	}
+	if n.Params["job"] != `App\Jobs\SendInvoice` {
+		t.Errorf("Params.job = %q", n.Params["job"])
+	}
+	if !strings.Contains(n.Body, "mailer refused the message") {
+		t.Errorf("Body = %q, want the exception in it", n.Body)
+	}
+	if n.Data["id"] != "j3" {
+		t.Errorf("Data.id = %q, want the failed event", n.Data["id"])
+	}
+}
+
+// TestNotificationForFailedJob_FallsBackWithoutDetail checks a job event with
+// nothing but a status still reads as something rather than an empty body.
+func TestNotificationForFailedJob_FallsBackWithoutDetail(t *testing.T) {
+	n := notificationForFailedJob(dumps.Event{ID: "x", Kind: dumps.KindJob, Data: json.RawMessage(`{"status":"failed"}`)})
+	if n.Params["site"] != "(unknown site)" {
+		t.Errorf("Params.site = %q", n.Params["site"])
+	}
+	if n.Params["job"] != "a queued job" || n.Params["error"] == "" {
+		t.Errorf("job/error = %q/%q, want readable fallbacks", n.Params["job"], n.Params["error"])
 	}
 }

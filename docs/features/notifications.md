@@ -39,6 +39,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | --- | --- | --- | --- |
 | `mail` | Mailpit captures an outgoing email | on | normal |
 | `worker_failed` | A queue / horizon / reverb / schedule / stripe worker needs healing: it entered the `failed` state, or it's still enabled yet found stopped (drift, e.g. an FPM restart knocked it out). The dashboard banner surfaces both and offers a one-click heal | on | high |
+| `job_failed` | A queued job ends in the `failed` state, in a queue worker or wherever else it ran. Deduped per site and job class over a five-second window, so a job that is retried three times in a row is reported once | on | high |
 | `nplusone` | A request (or worker invocation) runs the same query shape 3+ times, a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
 | `slow_route` | A route's p95 response time is running well above the site's typical time, from the watcher's request-timing snapshot. Edge-triggered: fires once when a route goes slow and rearms once it drops back within the typical band, so a later slowdown notifies again | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
@@ -47,7 +48,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 
 The diagnostic categories (`nplusone`, `slow_route`) report a problem lerd found in your app rather than an action that completed, so the toast and the notification centre draw them as amber warnings, between the blue informational entries and the red failures.
 
-Clicking a debug notification (`dump`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.
+Clicking a debug notification (`dump`, `job_failed`, `nplusone`, `slow_route`) opens the originating site's **Debug** tab, where the event and its surrounding context are. The site is resolved from the event's site name, or from the request domain when the bridge never saw one; if neither resolves, the click lands on the sites list rather than the global debug bridge view.
 
 Each category can be toggled individually under **System → Notifications**, along with a master switch that turns every category off in one click. Preferences are stored client-side in `localStorage` and mirrored to the server via the push subscription, closed-PWA push respects the toggles even when the dashboard isn't running.
 

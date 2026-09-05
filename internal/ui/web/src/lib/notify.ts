@@ -19,6 +19,7 @@ const AUTO_SUB_KEY = 'lerd:notify:auto-subscribe';
 export type NotifyKind =
   | 'mail'
   | 'worker_failed'
+  | 'job_failed'
   | 'op_done'
   | 'update_available'
   | 'nplusone'
@@ -28,6 +29,7 @@ export type NotifyKind =
 export const ALL_KINDS: NotifyKind[] = [
   'mail',
   'worker_failed',
+  'job_failed',
   'op_done',
   'update_available',
   'nplusone',
@@ -45,6 +47,9 @@ const DEFAULTS: NotifyPrefs = {
   kinds: {
     mail: true,
     worker_failed: true,
+    // A queued job that fails is a real failure the queue would otherwise
+    // swallow, and it is deduped per job class, so it is on by default.
+    job_failed: true,
     op_done: true,
     update_available: true,
     // N+1 warnings are deduped once per route/worker per session, so they

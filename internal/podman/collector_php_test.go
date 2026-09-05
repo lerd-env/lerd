@@ -26,6 +26,13 @@ import (
 // container wrapper on a dev box).
 func runCollectorPHP(t *testing.T, body string) []string {
 	t.Helper()
+	return runCollectorPHPIn(t, t.TempDir(), body)
+}
+
+// runCollectorPHPIn is runCollectorPHP with the working directory supplied, for
+// a test that has to put a seam file next to the collector before it runs.
+func runCollectorPHPIn(t *testing.T, dir string, body string) []string {
+	t.Helper()
 	php, err := exec.LookPath("php")
 	if err != nil {
 		t.Skip("php not installed")
@@ -35,7 +42,6 @@ func runCollectorPHP(t *testing.T, body string) []string {
 	if err != nil {
 		t.Fatalf("DevtoolsCollectorPHP: %v", err)
 	}
-	dir := t.TempDir()
 	collectorPath := filepath.Join(dir, "devtools-collector.php")
 	if err := os.WriteFile(collectorPath, []byte(collector), 0o644); err != nil {
 		t.Fatalf("write collector: %v", err)
@@ -85,7 +91,10 @@ func runCollectorPHP(t *testing.T, body string) []string {
 	}
 
 	cmd := exec.Command(php, scriptPath)
-	cmd.Env = append(os.Environ(), "LERD_DEVTOOLS_HOST=unix://"+sock)
+	cmd.Env = append(os.Environ(),
+		"LERD_DEVTOOLS_HOST=unix://"+sock,
+		"LERD_DEVTOOLS_SEAMS="+filepath.Join(dir, "devtools-seams.conf"),
+	)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("php run failed: %v\n%s", err, out)
 	}
@@ -284,5 +293,275 @@ acme_listing();
 	}
 	if !strings.HasSuffix(e.Src.File, "/modules/custom/Listing.php") {
 		t.Errorf("src.file = %q, want the project's own module, not the installed framework package", e.Src.File)
+	}
+}
+
+// TestCollectorPHP_MessengerWorkerLifecycle checks that Messenger's worker
+// events become job events with the status the worker reached, since the bus
+// seam alone only ever says a message was dispatched.
+func TestCollectorPHP_MessengerWorkerLifecycle(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace Symfony\Component\Messenger {
+    class Envelope {
+        private $m; private $stamps;
+        function __construct($m, array $stamps = []) { $this->m = $m; $this->stamps = $stamps; }
+        function getMessage() { return $this->m; }
+        function last($fqcn) { return $this->stamps[$fqcn] ?? null; }
+    }
+}
+namespace Symfony\Component\Messenger\Stamp { class ReceivedStamp {} }
+namespace Symfony\Component\Messenger\Event {
+    class WorkerMessageReceivedEvent {
+        protected $e; protected $r;
+        function __construct($e, $r) { $this->e = $e; $this->r = $r; }
+        function getEnvelope() { return $this->e; }
+        function getReceiverName() { return $this->r; }
+    }
+    class WorkerMessageHandledEvent extends WorkerMessageReceivedEvent {}
+    class WorkerMessageFailedEvent extends WorkerMessageReceivedEvent {
+        private $t;
+        function __construct($e, $r, $t) { parent::__construct($e, $r); $this->t = $t; }
+        function getThrowable() { return $this->t; }
+    }
+}
+namespace App\Message { class SendInvoice {} }
+namespace {
+    require COLLECTOR;
+    $env = new \Symfony\Component\Messenger\Envelope(new \App\Message\SendInvoice());
+    \Lerd\Collector\event(new \Symfony\Component\Messenger\Event\WorkerMessageReceivedEvent($env, 'async'), null);
+    usleep(20000);
+    \Lerd\Collector\event(new \Symfony\Component\Messenger\Event\WorkerMessageHandledEvent($env, 'async'), null);
+    \Lerd\Collector\event(new \Symfony\Component\Messenger\Event\WorkerMessageFailedEvent($env, 'async', new \RuntimeException('smtp down')), null);
+    // The worker hands the envelope it received back to the bus to run the
+    // handler; that is not a new dispatch and must not be reported as one.
+    $received = new \Symfony\Component\Messenger\Envelope(
+        new \App\Message\SendInvoice(),
+        ['Symfony\\Component\\Messenger\\Stamp\\ReceivedStamp' => new \Symfony\Component\Messenger\Stamp\ReceivedStamp()]
+    );
+    \Lerd\Collector\job($received);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Ctx  struct {
+			RID string `json:"rid"`
+		} `json:"ctx"`
+		Data struct {
+			Class     string  `json:"class"`
+			Status    string  `json:"status"`
+			Queue     string  `json:"queue"`
+			TimeMS    float64 `json:"time_ms"`
+			Exception string  `json:"exception"`
+		} `json:"data"`
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d events, want the three worker states only: %v", len(got), got)
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		if e.Kind != "job" {
+			t.Errorf("kind = %q, want job", e.Kind)
+		}
+		if e.Data.Class != "App\\Message\\SendInvoice" {
+			t.Errorf("class = %q, want the message inside the envelope", e.Data.Class)
+		}
+		if e.Data.Queue != "async" {
+			t.Errorf("queue = %q, want async", e.Data.Queue)
+		}
+		events = append(events, e)
+	}
+	for i, want := range []string{"processing", "processed", "failed"} {
+		if events[i].Data.Status != want {
+			t.Errorf("event %d status = %q, want %q", i, events[i].Data.Status, want)
+		}
+	}
+	if events[1].Data.TimeMS <= 0 {
+		t.Errorf("processed time_ms = %v, want the time the worker spent on it", events[1].Data.TimeMS)
+	}
+	if events[2].Data.Exception != "smtp down" {
+		t.Errorf("failed exception = %q, want smtp down", events[2].Data.Exception)
+	}
+	if events[0].Ctx.RID == "" {
+		t.Error("ctx.rid is empty, each message needs its own group")
+	}
+}
+
+// TestCollectorPHP_WorkerReportsJobsOnly checks the capture policy a worker runs
+// under when the user has not opted into full worker capture: its jobs are
+// reported, everything else it dispatches is not.
+func TestCollectorPHP_WorkerReportsJobsOnly(t *testing.T) {
+	got := runCollectorPHP(t, `<?php
+namespace Symfony\Component\Messenger {
+    class Envelope {
+        private $m;
+        function __construct($m) { $this->m = $m; }
+        function getMessage() { return $this->m; }
+    }
+}
+namespace Symfony\Component\Messenger\Event {
+    class WorkerMessageHandledEvent {
+        private $e;
+        function __construct($e) { $this->e = $e; }
+        function getEnvelope() { return $this->e; }
+    }
+}
+namespace App\Message { class SendInvoice {} }
+namespace {
+    define('LERD_DEVTOOLS_ON', false);
+    define('LERD_DEVTOOLS_JOBS', true);
+    require COLLECTOR;
+    \Lerd\Collector\event(new \stdClass(), 'App\\Domain\\OrderPlaced');
+    \Lerd\Collector\event(new \Symfony\Component\Messenger\Event\WorkerMessageHandledEvent(
+        new \Symfony\Component\Messenger\Envelope(new \App\Message\SendInvoice())
+    ), null);
+}
+`)
+	if len(got) != 1 {
+		t.Fatalf("got %d events, want only the job: %v", len(got), got)
+	}
+	var e struct {
+		Kind string `json:"kind"`
+		Data struct {
+			Status string `json:"status"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(got[0]), &e); err != nil {
+		t.Fatalf("bad JSON line %q: %v", got[0], err)
+	}
+	if e.Kind != "job" || e.Data.Status != "processed" {
+		t.Errorf("got %s/%s, want job/processed", e.Kind, e.Data.Status)
+	}
+}
+
+// TestCollectorPHP_StoreSeamReportsAJob checks a store-declared seam turns one
+// observed call into a job that starts and then finishes or fails, with the
+// name resolved through the declared expression rather than hardcoded.
+func TestCollectorPHP_StoreSeamReportsAJob(t *testing.T) {
+	dir := t.TempDir()
+	seams := "# header\n" +
+		"job|implements|Fixture\\Queue\\JobInterface|process|this\n" +
+		"job|class|Fixture_Action|execute|this.method:get_hook\n"
+	if err := os.WriteFile(filepath.Join(dir, "devtools-seams.conf"), []byte(seams), 0o644); err != nil {
+		t.Fatalf("write seams: %v", err)
+	}
+	got := runCollectorPHPIn(t, dir, `<?php
+namespace Fixture\Queue { interface JobInterface { public function process(); } }
+namespace App\Enums {
+    enum ProgramStatus: string { case Published = 'Published'; }
+    enum Priority: int { case High = 9; }
+}
+namespace App\Models {
+    class Program {
+        private $attributes; private $hidden;
+        public function __construct(array $a, array $h = []) { $this->attributes = $a; $this->hidden = $h; }
+        public function getAttributes() { return $this->attributes; }
+        public function getHidden() { return $this->hidden; }
+        public function getKey() { return $this->attributes['id'] ?? null; }
+    }
+}
+namespace App\Jobs {
+    trait Dispatchable { public $connection; public $delay; }
+    class Base { protected $frameworkPlumbing = 'ignore me'; }
+    class SendInvoice extends Base implements \Fixture\Queue\JobInterface {
+        use Dispatchable;
+        public $orderId = 42;
+        protected $recipient = 'a@b.test';
+        private $lines = [1, 2, 3];
+        public $program;
+        public $status;
+        public $priority;
+        public function process() {}
+    }
+}
+namespace {
+    class Fixture_Action { public function get_hook() { return 'scheduled_payment'; } public function execute() {} }
+    require COLLECTOR;
+    $job = new \App\Jobs\SendInvoice();
+    $job->program = new \App\Models\Program(['id' => 17, 'name' => 'Spring 2026', 'secret_token' => 'nope'], ['secret_token']);
+    $job->status = \App\Enums\ProgramStatus::Published;
+    $job->priority = \App\Enums\Priority::High;
+    \Lerd\Collector\seam_begin('App\\Jobs\\SendInvoice', 'process', $job, []);
+    usleep(15000);
+    \Lerd\Collector\seam_end('App\\Jobs\\SendInvoice', 'process', false);
+
+    $action = new \Fixture_Action();
+    \Lerd\Collector\seam_begin('Fixture_Action', 'execute', $action, []);
+    \Lerd\Collector\seam_end('Fixture_Action', 'execute', true, 'the gateway refused');
+
+    // A call no seam claims must not close somebody else's job.
+    \Lerd\Collector\seam_begin('App\\Unrelated', 'process', new \stdClass(), []);
+    \Lerd\Collector\seam_end('App\\Unrelated', 'process', false);
+}
+`)
+
+	type ev struct {
+		Kind string `json:"kind"`
+		Ctx  struct {
+			RID string `json:"rid"`
+		} `json:"ctx"`
+		Data struct {
+			Class     string            `json:"class"`
+			Status    string            `json:"status"`
+			TimeMS    float64           `json:"time_ms"`
+			Exception string            `json:"exception"`
+			Payload   map[string]string `json:"payload"`
+		} `json:"data"`
+	}
+	if len(got) != 4 {
+		t.Fatalf("got %d events, want two per claimed seam and none for the unclaimed one: %v", len(got), got)
+	}
+	var events []ev
+	for _, line := range got {
+		var e ev
+		if err := json.Unmarshal([]byte(line), &e); err != nil {
+			t.Fatalf("bad JSON line %q: %v", line, err)
+		}
+		if e.Kind != "job" {
+			t.Errorf("kind = %q, want job", e.Kind)
+		}
+		events = append(events, e)
+	}
+	if events[0].Data.Class != "App\\Jobs\\SendInvoice" || events[0].Data.Status != "processing" {
+		t.Errorf("first event = %q/%q, want the job class and processing", events[0].Data.Class, events[0].Data.Status)
+	}
+	if events[1].Data.Status != "processed" || events[1].Data.TimeMS <= 0 {
+		t.Errorf("second event = %q/%v, want processed and a duration", events[1].Data.Status, events[1].Data.TimeMS)
+	}
+	// The accessor names the job by what it runs, not by the class running it.
+	if events[2].Data.Class != "scheduled_payment" {
+		t.Errorf("third event class = %q, want the resolved hook name", events[2].Data.Class)
+	}
+	if events[3].Data.Status != "failed" || events[3].Data.Exception != "the gateway refused" {
+		t.Errorf("fourth event = %q/%q, want failed with the throwable's message", events[3].Data.Status, events[3].Data.Exception)
+	}
+	if events[0].Ctx.RID == events[2].Ctx.RID {
+		t.Error("each job needs its own group, got one rid for both")
+	}
+	// What the job holds, at every state, with scalars kept and neither the
+	// base class's property nor the trait's counted as the job's own.
+	for _, i := range []int{0, 1} {
+		want := map[string]string{
+			"orderId":      "42",
+			"recipient":    `"a@b.test"`,
+			"lines":        "array(3)",
+			"program":      "Program #17",
+			"program.id":   "17",
+			"program.name": `"Spring 2026"`,
+			"status":       "ProgramStatus::Published",
+			"priority":     "Priority::High (9)",
+		}
+		if len(events[i].Data.Payload) != len(want) {
+			t.Fatalf("event %d payload = %v, want %v", i, events[i].Data.Payload, want)
+		}
+		for k, v := range want {
+			if events[i].Data.Payload[k] != v {
+				t.Errorf("event %d payload[%s] = %q, want %q", i, k, events[i].Data.Payload[k], v)
+			}
+		}
 	}
 }
