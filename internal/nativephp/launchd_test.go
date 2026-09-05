@@ -66,12 +66,32 @@ func TestUnitLabel(t *testing.T) {
 // no-op when the listener is already up. Bootstrapping an already-loaded job
 // fails with "Bootstrap failed: 5", which surfaced as a warning per version on
 // a perfectly healthy install.
+// Loaded is not running. A job launchd holds but has not started must still be
+// kicked, or Ensure reports success while nothing serves and every request
+// 502s. This is the same distinction the worker start path gets wrong.
+func TestLoadedButIdleJobIsStarted(t *testing.T) {
+	var kicked []string
+	err := bootLaunchdUnitWith("lerd-native-php84", "/tmp/x.plist",
+		func(string) bool { return true },  // loaded
+		func(string) bool { return false }, // but not running
+		func(label, path string) error { return nil },
+		func(label string) error { kicked = append(kicked, label); return nil })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(kicked) != 1 {
+		t.Errorf("a loaded-but-idle job must be started, got %v", kicked)
+	}
+}
+
 func TestBootstrapIsSkippedWhenAlreadyLoaded(t *testing.T) {
 	var booted []string
 	loaded := true
 	err := bootLaunchdUnitWith("lerd-native-php84", "/tmp/x.plist",
 		func(string) bool { return loaded },
-		func(label, path string) error { booted = append(booted, label); return nil })
+		func(string) bool { return true }, // already running
+		func(label, path string) error { booted = append(booted, label); return nil },
+		func(string) error { return nil })
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -80,10 +100,16 @@ func TestBootstrapIsSkippedWhenAlreadyLoaded(t *testing.T) {
 	}
 
 	loaded = false
+	var kickedAfterBootstrap []string
 	if err := bootLaunchdUnitWith("lerd-native-php84", "/tmp/x.plist",
 		func(string) bool { return loaded },
-		func(label, path string) error { booted = append(booted, label); return nil }); err != nil {
+		func(string) bool { return false }, // RunAtLoad did not start it
+		func(label, path string) error { booted = append(booted, label); return nil },
+		func(label string) error { kickedAfterBootstrap = append(kickedAfterBootstrap, label); return nil }); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(kickedAfterBootstrap) != 1 {
+		t.Errorf("a freshly bootstrapped job that did not start must be kicked, got %v", kickedAfterBootstrap)
 	}
 	if len(booted) != 1 {
 		t.Errorf("an absent job must be bootstrapped, got %v", booted)

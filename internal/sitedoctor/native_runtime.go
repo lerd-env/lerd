@@ -100,6 +100,6 @@ func nativeQueryCaptureCheck(present bool) Check {
 
 // nativeHasQueryCapture reports whether the native runtime can capture queries,
 // which it can once the build ships the collector extension beside the binary.
-func nativeHasQueryCapture(string) bool {
-	return nativephp.DevtoolsExtensionPath() != ""
+func nativeHasQueryCapture(version string) bool {
+	return nativephp.DevtoolsExtensionPath(version) != ""
 }

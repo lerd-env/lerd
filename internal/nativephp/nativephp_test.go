@@ -220,7 +220,7 @@ func TestEnsureShimCreatesAndRepoints(t *testing.T) {
 // auto_prepend_file it cannot open, so the override re-points the bridge and
 // its assets at the host copies rather than turning capture off.
 func TestOverrideIniPointsTheBridgeAtHostPaths(t *testing.T) {
-	got := overrideIni()
+	got := overrideIni("8.4")
 	if strings.Contains(got, "/usr/local/etc/lerd") {
 		t.Errorf("override must not carry container paths:\n%s", got)
 	}
@@ -284,16 +284,24 @@ func TestOverrideLoadsDevtoolsOnlyWhenPresent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if got := overrideIniWith(""); strings.Contains(got, "lerd_devtools") {
+	if got := overrideIni("8.4"); strings.Contains(got, "lerd_devtools") {
 		t.Errorf("no extension present, so nothing should be loaded:\n%s", got)
 	}
 
-	so := filepath.Join(tmp, "lerd_devtools.so")
+	so := filepath.Join(config.BinDir(), "lerd_devtools-8.4.so")
+	if err := os.MkdirAll(filepath.Dir(so), 0755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(so, []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	got := overrideIniWith(so)
-	if !strings.Contains(got, "zend_extension="+so) {
+	got := overrideIni("8.4")
+	// lerd_devtools registers a zend_module_entry, so it loads with extension=.
+	// zend_extension= is for the other kind and PHP refuses the module outright.
+	if !strings.Contains(got, "extension="+so) {
 		t.Errorf("a present extension must be loaded:\n%s", got)
+	}
+	if strings.Contains(got, "zend_extension="+so) {
+		t.Errorf("lerd_devtools is a module, not a zend extension:\n%s", got)
 	}
 }

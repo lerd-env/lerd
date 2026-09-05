@@ -72,16 +72,20 @@ func OverrideDir(version string) string {
 // prepend and the bridge's own asset lookup are moved to their host copies.
 // The capture socket is reached over loopback rather than the container's host
 // gateway, since here PHP is already on the host.
-func overrideIni() string {
-	return overrideIniWith(DevtoolsExtensionPath())
+func overrideIni(version string) string {
+	return overrideIniWith(DevtoolsExtensionPath(version))
 }
 
 // DevtoolsExtensionPath is where a native build's query-capture extension lives
 // when the build ships one. It is the engine-level collector behind the Debug
 // window's query lens, compiled into the PHP image and shipped beside the
 // binary here, the same way xdebug is.
-func DevtoolsExtensionPath() string {
-	path := filepath.Join(config.BinDir(), "lerd_devtools.so")
+//
+// Named per version because a PHP module is built against one PHP's ABI: an
+// 8.4 module will not load into 8.5, and offering it would warn on every
+// request while the lens stayed empty.
+func DevtoolsExtensionPath(version string) string {
+	path := filepath.Join(config.BinDir(), "lerd_devtools-"+version+".so")
 	if _, err := os.Stat(path); err != nil {
 		return ""
 	}
@@ -101,11 +105,14 @@ func overrideIniWith(devtoolsSO string) string {
 
 // devtoolsLine loads the query-capture extension when the build shipped one.
 // Naming a file that is not there would make PHP warn on every single request.
+// It registers a zend_module_entry, so it loads with extension= despite using
+// the zend_observer API internally; zend_extension= is for the other kind and
+// PHP refuses the module outright.
 func devtoolsLine(path string) string {
 	if path == "" {
 		return ""
 	}
-	return "zend_extension=" + path + "\n"
+	return "extension=" + path + "\n"
 }
 
 // WriteOverrides materialises the override fragment for a version.
@@ -115,7 +122,7 @@ func WriteOverrides(version string) error {
 	if err := os.MkdirAll(dir, 0755); err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "zz-native.ini"), []byte(overrideIni()), 0644)
+	return os.WriteFile(filepath.Join(dir, "zz-native.ini"), []byte(overrideIni(version)), 0644)
 }
 
 // IniScanDir joins IniScanDirs into the PHP_INI_SCAN_DIR value PHP expects.

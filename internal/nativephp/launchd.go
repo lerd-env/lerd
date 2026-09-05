@@ -153,16 +153,37 @@ func domainTarget(label string) string {
 // every start, not only on a runtime switch, so bootstrapping unconditionally
 // reported "Bootstrap failed: 5" once per PHP version on a healthy install.
 func bootLaunchdUnit(label, path string) error {
-	return bootLaunchdUnitWith(label, path, unitLoaded, bootstrapUnit)
+	return bootLaunchdUnitWith(label, path, unitLoaded, unitRunning, bootstrapUnit, restartUnit)
 }
 
 // bootLaunchdUnitWith is bootLaunchdUnit with its launchctl calls injected, so
 // the skip-when-loaded decision is testable without touching the real domain.
-func bootLaunchdUnitWith(label, path string, loaded func(string) bool, bootstrap func(string, string) error) error {
-	if loaded(label) {
+func bootLaunchdUnitWith(label, path string, loaded, running func(string) bool,
+	bootstrap func(string, string) error, kick func(string) error) error {
+	if !loaded(label) {
+		if err := bootstrap(label, path); err != nil {
+			return err
+		}
+		// bootstrap relies on RunAtLoad, which launchd does not always honour:
+		// the job loads and sits idle while nginx fastcgi's into a dead port.
+		if running(label) {
+			return nil
+		}
+		return kick(label)
+	}
+	// Loaded is not running: launchd can hold a job it has not started, and
+	// returning here would report success while nothing answered on the port.
+	if running(label) {
 		return nil
 	}
-	return bootstrap(label, path)
+	return kick(label)
+}
+
+// unitRunning reports whether launchd has the job running rather than merely
+// loaded.
+func unitRunning(label string) bool {
+	out, err := exec.Command("launchctl", "print", domainTarget(label)).CombinedOutput()
+	return err == nil && strings.Contains(string(out), "state = running")
 }
 
 // unitLoaded reports whether launchd already has the job in the user domain.
