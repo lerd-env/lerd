@@ -90,3 +90,23 @@ func TestPHPInstallRefusedUnderNative(t *testing.T) {
 		t.Errorf("container mode must allow the install, got: %v", err)
 	}
 }
+
+// The dashboard hides the runtime toggle where it cannot apply. Gating on the
+// OS alone would still offer it on an Intel Mac, where no binary exists, and
+// the switch would fail after the user had already chosen it.
+func TestNativeRuntimeApplies(t *testing.T) {
+	cases := []struct {
+		goos, goarch string
+		want         bool
+	}{
+		{"darwin", "arm64", true},
+		{"darwin", "amd64", false},
+		{"linux", "arm64", false},
+		{"linux", "amd64", false},
+	}
+	for _, c := range cases {
+		if got := nativeRuntimeApplies(c.goos, c.goarch); got != c.want {
+			t.Errorf("%s/%s = %v, want %v", c.goos, c.goarch, got, c.want)
+		}
+	}
+}

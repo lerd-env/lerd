@@ -79,3 +79,11 @@ func nativeInstallRefusal(native bool, version string) error {
 	}
 	return fmt.Errorf("cannot install PHP %s under the native runtime: it needs a prebuilt native binary, not a container image. Switch with 'lerd php:runtime container' to install one", version)
 }
+
+// nativeRuntimeApplies reports whether this machine could use the native
+// runtime at all, which is what decides whether the dashboard offers the
+// toggle. Builds exist for Apple silicon only, so gating on the OS alone would
+// offer the switch on an Intel Mac and fail after the choice was made.
+func nativeRuntimeApplies(goos, goarch string) bool {
+	return goos == "darwin" && goarch == "arm64"
+}
