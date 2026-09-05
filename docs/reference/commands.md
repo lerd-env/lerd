@@ -27,6 +27,7 @@
 | `lerd status` | Health summary: DNS, nginx, PHP-FPM containers, watcher, services, cert expiry, LAN exposure and dashboard remote access; shows a notice if an update is available |
 | `lerd which` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
 | `lerd about` | Show version, build info, and project URL |
+| `lerd licenses` | Print the third-party license notices bundled with lerd, the copyright notices and license terms of every Go module linked into the binary and every npm package used to build the embedded dashboard |
 | `lerd man [page]` | Browse the built-in documentation in the terminal; pass a page name to jump directly (e.g. `lerd man sites`) |
 | `lerd tui` | Open a btop-style terminal dashboard with live site / service / worker status, per-site detail pane, inline domain and version editing, shell drop-in, log tailing, filter + sort, and global settings |
 | `lerd check` | Deprecated alias for `lerd site:doctor`, which validates `.lerd.yaml` as one check inside the site's health report |
