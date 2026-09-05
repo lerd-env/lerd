@@ -14,6 +14,7 @@ import (
 
 	"github.com/geodro/lerd/internal/applog"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -210,7 +211,18 @@ func FPMContainer(site *config.Site) string {
 	if detected, err := phpDet.DetectVersion(site.Path); err == nil && detected != "" {
 		v = detected
 	}
-	return "lerd-php" + strings.ReplaceAll(v, ".", "") + "-fpm"
+	cfg, err := config.LoadGlobal()
+	return fpmTarget(site, v, err == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative)
+}
+
+// fpmTarget names the unit a site's PHP log comes from. Under the native
+// runtime the shared container is stopped on purpose, so reading it would show
+// a log frozen at the moment of the switch rather than what is serving now.
+func fpmTarget(site *config.Site, version string, native bool) string {
+	if native && !site.IsFrankenPHP() && !site.IsCustomFPM() && !site.IsCustomContainer() && !site.IsHostProxy() {
+		return nativephp.UnitLabel(version)
+	}
+	return "lerd-php" + strings.ReplaceAll(version, ".", "") + "-fpm"
 }
 
 func fpmSource(site *config.Site, container string) Source {

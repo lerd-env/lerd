@@ -115,3 +115,36 @@ func TestImageOnlyCommandsAllowedInContainerMode(t *testing.T) {
 		t.Errorf("container mode must allow php:ext, got: %v", err)
 	}
 }
+
+// Tinker execs into the FPM container. Under the native runtime that container
+// is stopped, and ensuring it would start the one the mode just tore down, so
+// tinker has to run the host binary in the project directory instead.
+func TestNativeTinkerCommand(t *testing.T) {
+	cmd := nativeTinkerCommand("/bin/php-native-8.4", "/srv/shop", "8.4",
+		[]string{"-d", "memory_limit=512M", "artisan", "tinker"},
+		[]string{"LERD_SITE=shop"})
+	if cmd.Dir != "/srv/shop" {
+		t.Errorf("Dir = %q, want the project dir", cmd.Dir)
+	}
+	if cmd.Path != "/bin/php-native-8.4" {
+		t.Errorf("Path = %q, want the native binary", cmd.Path)
+	}
+	if len(cmd.Args) < 2 || cmd.Args[1] != "-d" {
+		t.Errorf("Args = %v, want the php arguments preserved", cmd.Args)
+	}
+	var sawSite, sawScan bool
+	for _, e := range cmd.Env {
+		if e == "LERD_SITE=shop" {
+			sawSite = true
+		}
+		if strings.HasPrefix(e, "PHP_INI_SCAN_DIR=") {
+			sawScan = true
+		}
+	}
+	if !sawSite {
+		t.Error("caller env must survive; it carries the site for the debug bridge")
+	}
+	if !sawScan {
+		t.Error("PHP_INI_SCAN_DIR must be set so php:ini applies to tinker too")
+	}
+}

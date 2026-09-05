@@ -177,3 +177,30 @@ func bootstrapUnit(label, path string) error {
 	}
 	return nil
 }
+
+// Reload restarts a version's native FPM so a changed php.ini reaches the
+// processes handling requests. Ensure is deliberately a no-op for a listener
+// that is already up, which is right on start and wrong after an ini edit.
+func Reload(version string) error {
+	if err := Ensure(version); err != nil {
+		return err
+	}
+	return reloadWith(UnitLabel(version), unitLoaded, restartUnit)
+}
+
+// reloadWith is Reload's decision with its launchctl calls injected. A listener
+// that is not loaded was just started by Ensure and needs no kick.
+func reloadWith(label string, loaded func(string) bool, restart func(string) error) error {
+	if !loaded(label) {
+		return nil
+	}
+	return restart(label)
+}
+
+func restartUnit(label string) error {
+	out, err := exec.Command("launchctl", "kickstart", "-k", domainTarget(label)).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("launchctl kickstart -k %s: %v: %s", label, err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}

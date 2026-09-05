@@ -89,3 +89,19 @@ func TestBootstrapIsSkippedWhenAlreadyLoaded(t *testing.T) {
 		t.Errorf("an absent job must be bootstrapped, got %v", booted)
 	}
 }
+
+// An ini change only reaches requests once FPM reloads, and Ensure is
+// deliberately a no-op for an already-running listener, so the ini path needs
+// a restart rather than an ensure.
+func TestReloadRestartsARunningListener(t *testing.T) {
+	var kicked []string
+	err := reloadWith("lerd-native-php84",
+		func(string) bool { return true },
+		func(label string) error { kicked = append(kicked, label); return nil })
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(kicked) != 1 {
+		t.Errorf("a running listener must be restarted, got %v", kicked)
+	}
+}

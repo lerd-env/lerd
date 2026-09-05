@@ -32,6 +32,9 @@ func newPhpPortsAddCmd() *cobra.Command {
 		Short: "Publish a host:container port and restart the version's FPM",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:ports"); err != nil {
+				return err
+			}
 			flagVer, _ := cmd.Flags().GetString("php")
 			version, err := phpPkgVersion(flagVer)
 			if err != nil {
@@ -66,6 +69,9 @@ func newPhpPortsRemoveCmd() *cobra.Command {
 		Short: "Unpublish a host port and restart the version's FPM",
 		Args:  cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:ports"); err != nil {
+				return err
+			}
 			flagVer, _ := cmd.Flags().GetString("php")
 			version, err := phpPkgVersion(flagVer)
 			if err != nil {
@@ -96,6 +102,9 @@ func newPhpPortsListCmd() *cobra.Command {
 		Short: "List extra host ports published for a PHP version",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := nativeImageCommandRefusal("php:ports"); err != nil {
+				return err
+			}
 			flagVer, _ := cmd.Flags().GetString("php")
 			version, err := phpPkgVersion(flagVer)
 			if err != nil {

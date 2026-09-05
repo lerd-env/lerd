@@ -92,3 +92,10 @@ func nativeImageCommandRefusal(command string) error {
 	}
 	return fmt.Errorf("%s needs the container runtime: the native PHP has its extensions compiled in and no image to add packages to. Switch with 'lerd php:runtime container', or keep the site on a version whose native build already carries what you need", command)
 }
+
+// nativeTinkerCommand builds the tinker invocation for the native runtime: the
+// host binary, run in the project, with the same php arguments and environment
+// the container path would have passed through podman exec.
+func nativeTinkerCommand(binary, sitePath, phpVersion string, phpArgs, env []string) *exec.Cmd {
+	return nativeExecCommand(binary, sitePath, phpArgs, phpVersion, env...)
+}

@@ -15,6 +15,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -86,11 +87,15 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	}
 	container := fpmContainerForDir(sitePath, version)
 
-	if err := ensureFPMStarted(version, container); err != nil {
-		return res, err
+	// Under the native runtime there is no container to start or mount into,
+	// and ensuring one here would start exactly what the runtime switch
+	// stopped. The services still have to be up either way.
+	if _, native := nativeRuntimeVersion(sitePath); !native {
+		if err := ensureFPMStarted(version, container); err != nil {
+			return res, err
+		}
+		podman.EnsurePathMounted(sitePath, version)
 	}
-
-	podman.EnsurePathMounted(sitePath, version)
 	ensureServicesForCwd(sitePath)
 
 	tinkerSpec := config.GetTinkerForDir(sitePath)
@@ -163,7 +168,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	}
 
 	var stdout, stderr bytes.Buffer
-	cmd := podman.CmdContext(ctx, argv...)
+	cmd := tinkerCmd(ctx, sitePath, version, argv, envArgs)
 	if stdinPipe != "" {
 		cmd.Stdin = strings.NewReader(stdinPipe)
 	}
@@ -573,4 +578,51 @@ func writeTinkerScript(sitePath, code, mode string) (string, error) {
 		return "", err
 	}
 	return full, nil
+}
+
+// tinkerCmd runs tinker on whichever runtime is serving. The container path
+// takes the podman argv built above; the native path drops the exec prefix and
+// runs the host binary in the project, since there is no container to enter and
+// ensuring one would start what the runtime switch stopped.
+func tinkerCmd(ctx context.Context, sitePath, version string, argv, envArgs []string) *exec.Cmd {
+	nv, ok := nativeRuntimeVersion(sitePath)
+	if !ok {
+		return podman.CmdContext(ctx, argv...)
+	}
+	binary := nativephp.BinaryPath(nv)
+	if err := nativephp.EnsureInstalled(nv, binary); err != nil {
+		// No native binary for this version: fall back so the error surfaces
+		// from the run with its usual message rather than from here.
+		return podman.CmdContext(ctx, argv...)
+	}
+	_ = nativephp.WriteOverrides(nv)
+
+	phpArgs := phpArgsFromExecArgv(argv)
+	cmd := exec.CommandContext(ctx, binary, phpArgs...)
+	cmd.Dir = sitePath
+	cmd.Env = append(os.Environ(), "PHP_INI_SCAN_DIR="+nativephp.IniScanDir(nv))
+	cmd.Env = append(cmd.Env, envFromExecArgs(envArgs)...)
+	return cmd
+}
+
+// phpArgsFromExecArgv strips the podman exec prefix and the container name,
+// leaving the php arguments the container would have run.
+func phpArgsFromExecArgv(argv []string) []string {
+	for i := 0; i < len(argv)-1; i++ {
+		if argv[i] == "php" {
+			return argv[i+1:]
+		}
+	}
+	return nil
+}
+
+// envFromExecArgs turns podman's "--env K=V" pairs back into plain KEY=VALUE.
+func envFromExecArgs(envArgs []string) []string {
+	var out []string
+	for i := 0; i < len(envArgs)-1; i++ {
+		if envArgs[i] == "--env" {
+			out = append(out, envArgs[i+1])
+		}
+	}
+	return out
 }
