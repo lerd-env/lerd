@@ -96,7 +96,7 @@ func nativeVersionsToUpdate(args []string) ([]string, error) {
 			return nil, err
 		}
 		if _, err := os.Stat(nativephp.BinaryPath(v)); err != nil {
-			return nil, fmt.Errorf("php %s is not installed natively; add it with 'lerd use %s'", v, v)
+			return nil, fmt.Errorf("php %s has no native build installed; add it with 'lerd use %s'", v, v)
 		}
 		return []string{v}, nil
 	}
