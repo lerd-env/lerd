@@ -26,7 +26,7 @@ LDFLAGS    = -s -w \
              -X $(PKG).Commit=$(COMMIT) \
              -X $(PKG).Date=$(DATE)
 
-.PHONY: build build-tray build-ui install-ui-deps test-ui install install-installer test clean release release-snapshot
+.PHONY: build build-tray build-ui install-ui-deps test-ui install install-installer licenses test clean release release-snapshot
 
 UI_INSTALL_STAMP = $(UI_DIR)/node_modules/.package-lock.json
 
@@ -72,6 +72,11 @@ install: build build-tray
 install-installer:
 	install -Dm755 install.sh $(INSTALL_DIR)/lerd-installer
 	@echo "Installed $(INSTALL_DIR)/lerd-installer"
+
+# Regenerates the third-party notices embedded in the binary. Needs the UI
+# dependencies installed, since the npm tree is half of what gets disclosed.
+licenses: $(UI_INSTALL_STAMP)
+	go run ./tools/licensegen
 
 test:
 	go test ./...
