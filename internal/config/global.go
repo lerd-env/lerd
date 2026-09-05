@@ -1206,7 +1206,7 @@ func (c *GlobalConfig) SetNotificationTarget(target string) {
 // NotifyKinds is the canonical set of notification categories, mirroring the
 // web UI's ALL_KINDS, in display order.
 var NotifyKinds = []string{
-	"mail", "worker_failed", "op_done", "update_available", "nplusone", "slow_route", "dump",
+	"mail", "worker_failed", "job_failed", "op_done", "update_available", "nplusone", "slow_route", "dump",
 }
 
 // nativeKindDefault is the built-in on/off for a category the user has not set.

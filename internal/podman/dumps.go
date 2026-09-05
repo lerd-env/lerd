@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -56,6 +57,48 @@ func DumpBridgeIni() (string, error) {
 	return out, nil
 }
 
+// DevtoolsSeamsConf renders every job seam the framework store declares, one
+// per line as kind|match|target|method|name.
+//
+// The union of all frameworks is written rather than only the linked ones: a
+// seam names classes that exist solely in the app that has them, so a line for
+// a framework this machine doesn't run can never fire, and the file needs no
+// regeneration when a site is linked.
+func DevtoolsSeamsConf() string {
+	var lines []string
+	seen := map[string]bool{}
+	for _, fw := range config.ListFrameworks() {
+		if fw == nil || fw.Devtools == nil {
+			continue
+		}
+		for _, seam := range fw.Devtools.Jobs {
+			match, target := seam.Target()
+			name := seam.Name
+			if name == "" {
+				name = "this"
+			}
+			if target == "" || seam.Method == "" {
+				continue
+			}
+			line := strings.Join([]string{"job", match, target, seam.Method, name}, "|")
+			// A field carrying the separator or a newline would shift every
+			// field after it, so drop the seam rather than write a broken line.
+			if strings.ContainsAny(target+seam.Method+name, "|\n\r") || seen[line] {
+				continue
+			}
+			seen[line] = true
+			lines = append(lines, line)
+		}
+	}
+	sort.Strings(lines)
+	out := "# lerd devtools capture seams, generated from the framework store.\n" +
+		"# kind|match|target|method|name, read once per PHP process.\n"
+	for _, l := range lines {
+		out += l + "\n"
+	}
+	return out
+}
+
 // WriteDumpBridgeAssets writes the bridge PHP file and the conf.d ini to
 // their host paths under DataDir()/php/dumps/. Idempotent: a regular file
 // whose contents already match the embed is left untouched. Replaces a
@@ -91,6 +134,7 @@ func WriteDumpBridgeAssets() error {
 		{config.DumpsIniFile(), iniContent},
 		{config.LaravelAdapterFile(), string(adapterContent)},
 		{config.DevtoolsCollectorFile(), string(collectorContent)},
+		{config.DevtoolsSeamsFile(), DevtoolsSeamsConf()},
 	} {
 		if info, err := os.Stat(asset.path); err == nil {
 			if info.IsDir() {
@@ -118,6 +162,7 @@ func RemoveDumpAssets() error {
 		config.DumpsIniFile(),
 		config.LaravelAdapterFile(),
 		config.DevtoolsCollectorFile(),
+		config.DevtoolsSeamsFile(),
 		config.DumpsEnabledFlagFile(),
 		config.DevtoolsWorkersFlagFile(),
 		// Legacy: the devtools collector used to have its own enable sentinel
@@ -143,7 +188,7 @@ func RemoveDumpAssets() error {
 // regardless of Dumps.Enabled because the FPM quadlet always mounts these
 // paths; the bridge's runtime sentinel check controls active behaviour.
 func EnsureDumpAssets() error {
-	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.LaravelAdapterFile(), config.DevtoolsCollectorFile()} {
+	for _, p := range []string{config.DumpsBridgeFile(), config.DumpsIniFile(), config.LaravelAdapterFile(), config.DevtoolsCollectorFile(), config.DevtoolsSeamsFile()} {
 		if info, err := os.Stat(p); err == nil && info.IsDir() {
 			if rmErr := os.RemoveAll(p); rmErr != nil {
 				return fmt.Errorf("removing stale dump asset directory %s: %w", p, rmErr)

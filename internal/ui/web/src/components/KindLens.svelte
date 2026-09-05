@@ -38,6 +38,9 @@
 
   let localText = $state('');
   let textInput = $state('');
+  // Jobs report a whole lifecycle (queued, processing, then the outcome), so
+  // that lens gets a status filter to cut three rows per job down to one.
+  let statusFilter = $state('');
 
   onMount(() => {
     startDumpsStream();
@@ -57,14 +60,14 @@
   // Debug tabs; unscoped keeps a local search.
   const effectiveText = $derived(scoped ? $debugSearch : localText);
   const groups = $derived(
-    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers))
+    buildKindGroups($debugEvents, wireKind, scoped ? siteScope : $queryFilterSite, effectiveText, scoped, $queryFilterWorker, Boolean($devtoolsStatus?.workers), statusFilter)
   );
 
   // Only the newest LENS_PAGE rows render; the rest arrive as the user
   // reaches the end. Changing a filter or tab starts the window over.
   let limit = $state(LENS_PAGE);
   const win = $derived(windowGroups(groups, (g) => g.events, limit));
-  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}`);
+  const filterKey = $derived(`${wireKind}|${scoped ? siteScope : $queryFilterSite}|${effectiveText}|${$queryFilterWorker}|${statusFilter}`);
   $effect(() => {
     filterKey;
     limit = LENS_PAGE;
@@ -93,12 +96,42 @@
     }
   }
 
+  const jobStatuses = $derived(
+    wireKind !== 'job'
+      ? []
+      : Array.from(
+          new Set(
+            $debugEvents
+              .filter((ev) => ev.kind === 'job')
+              .map((ev) => (ev.data as { status?: string } | undefined)?.status)
+              .filter((v): v is string => Boolean(v))
+          )
+        ).sort()
+  );
+
+  // A Laravel job's payload is only readable where it was dispatched, so the
+  // worker's rows borrow it from the queued row they share a uuid with. The
+  // other frameworks put it on every row and never reach this.
+  const payloadByUuid = $derived(
+    wireKind !== 'job'
+      ? new Map<string, Record<string, string>>()
+      : new Map(
+          $debugEvents
+            .filter((ev) => ev.kind === 'job')
+            .map((ev) => (ev.data ?? {}) as { uuid?: string; payload?: Record<string, string> })
+            .filter((d) => Boolean(d.uuid && d.payload))
+            .map((d) => [d.uuid as string, d.payload as Record<string, string>])
+        )
+  );
+
   let expanded = $state<Record<string, boolean>>({});
   const toggleRow = (id: string) => (expanded[id] = !expanded[id]);
   function localTime(ts: string): string {
     const d = new Date(ts);
     return isNaN(d.getTime()) ? ts : d.toLocaleTimeString();
   }
+
+  const fmtMs = (n: number) => (n < 10 ? n.toFixed(2) : n.toFixed(1));
 
   const EMERALD = 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300';
   const ROSE = 'bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300';
@@ -137,7 +170,17 @@
         onchange={(v) => queryFilterSite.set(v)}
       />
     {/if}
-    {#if $devtoolsStatus?.workers && $knownWorkerCommands.length > 0}
+    {#if jobStatuses.length > 1}
+      <Dropdown
+        value={statusFilter}
+        options={[
+          { value: '', label: m.jobs_filter_allStatuses() },
+          ...jobStatuses.map((s) => ({ value: s, label: s }))
+        ]}
+        onchange={(v) => (statusFilter = v)}
+      />
+    {/if}
+    {#if $knownWorkerCommands.length > 0}
       <Dropdown
         value={$queryFilterWorker}
         options={[
@@ -147,12 +190,14 @@
         onchange={(v) => queryFilterWorker.set(v)}
       />
     {/if}
-    <LensToggle
-      label={m.queries_show_workers()}
-      checked={Boolean($devtoolsStatus?.workers)}
-      disabled={togglingWorkers}
-      onchange={onToggleWorkers}
-    />
+    {#if wireKind !== 'job'}
+      <LensToggle
+        label={m.queries_show_workers()}
+        checked={Boolean($devtoolsStatus?.workers)}
+        disabled={togglingWorkers}
+        onchange={onToggleWorkers}
+      />
+    {/if}
     <TestEventsToggle />
     <button type="button" class="text-xs rounded-sm border border-gray-300 dark:border-lerd-border px-2 py-1 hover:bg-gray-50 dark:hover:bg-white/5" onclick={() => clearDumps()}>{m.common_clear()}</button>
   </div>
@@ -195,7 +240,7 @@
                   {:else}{d.name}{/if}
                 </span>
                 <span class="flex items-center gap-1 shrink-0">
-                  {#if wireKind === 'job'}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.status)}">{d.status}</span>
+                  {#if wireKind === 'job'}{#if d.time_ms}<span class="text-[11px] tabular-nums text-gray-400 dark:text-gray-500">{fmtMs(d.time_ms)} ms</span>{/if}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'cache'}<span class="text-[10px] rounded-sm px-1 py-0.5 {tone(d.op)}">{d.op}</span>
                   {:else if wireKind === 'http' && d.status}<span class="text-[10px] tabular-nums rounded-sm px-1 py-0.5 {httpTone(d.status)}">{d.status}</span>
                   {:else if wireKind === 'http'}<span class="text-[10px] rounded-sm px-1 py-0.5 {d.failed ? ROSE : SKY}">{d.failed ? 'failed' : m.http_sent()}</span>
@@ -205,7 +250,14 @@
               {#if expanded[ev.id]}
                 <div class="px-2.5 pb-2 pt-1 border-t border-gray-100 dark:border-lerd-border/50 text-[11px] space-y-1.5">
                   {#if wireKind === 'job' && d.exception}<div class="text-rose-600 dark:text-rose-400 break-all">{d.exception}</div>{/if}
-                  {#if wireKind === 'job' && d.connection}<div class="text-gray-400">{d.connection}</div>{/if}
+                  {#if wireKind === 'job'}
+                    {@const bits = [
+                      d.connection ?? '',
+                      d.queue ? `${m.jobs_queue()}: ${d.queue}` : '',
+                      d.attempts ? `${m.jobs_attempts()}: ${d.attempts}` : ''
+                    ].filter(Boolean)}
+                    {#if bits.length}<div class="text-gray-400">{bits.join(' · ')}</div>{/if}
+                  {/if}
                   {#if wireKind === 'cache' && d.store}<div class="text-gray-400">store: {d.store}</div>{/if}
                   {#if wireKind === 'view' && d.path}
                     <div>
@@ -227,6 +279,25 @@
                         </tbody>
                       </table>
                     </div>
+                  {/if}
+                  {#if wireKind === 'job'}
+                    {@const payload = d.payload ?? (d.uuid ? payloadByUuid.get(d.uuid) : undefined)}
+                    {#if payload && Object.keys(payload).length}
+                      <div>
+                        <div class="text-gray-400 mb-0.5">{m.jobs_payload()}</div>
+                        <table class="w-full border-collapse font-mono">
+                          <tbody>
+                            {#each Object.entries(payload) as [k, v] (k)}
+                              <tr class="border-t border-gray-100 dark:border-lerd-border/40 align-top">
+                                <!-- A dotted key is one level inside the value above it, so it reads as its child. -->
+                                <td class="py-0.5 pr-3 text-gray-500 dark:text-gray-400 whitespace-nowrap w-px {k.includes('.') ? 'pl-3' : ''}">{k}</td>
+                                <td class="py-0.5 break-all">{v}</td>
+                              </tr>
+                            {/each}
+                          </tbody>
+                        </table>
+                      </div>
+                    {/if}
                   {/if}
                   {#if wireKind === 'mail'}
                     <div class="text-gray-400 break-all">

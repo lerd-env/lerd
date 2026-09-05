@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"strings"
 	"sync"
 	"time"
@@ -97,6 +98,61 @@ func notificationForDump(evt dumps.Event) push.Notification {
 	}
 }
 
+// notificationForFailedJob reports one queued job that ended in a failed state.
+// A worker draining a queue is otherwise silent, so this is the one job event
+// worth interrupting for.
+func notificationForFailedJob(evt dumps.Event) push.Notification {
+	site := evt.Ctx.Site
+	if site == "" {
+		site = "(unknown site)"
+	}
+	var d struct {
+		Class     string `json:"class"`
+		Status    string `json:"status"`
+		Queue     string `json:"queue"`
+		Exception string `json:"exception"`
+	}
+	_ = json.Unmarshal(evt.Data, &d)
+	job := d.Class
+	if job == "" {
+		job = "a queued job"
+	}
+	reason := dumpPreview(d.Exception)
+	if reason == "" {
+		reason = "no exception message was captured"
+	}
+	return push.Notification{
+		Kind:     "job_failed",
+		TitleKey: "notify_job_failed_title",
+		Title:    "Job failed on " + site,
+		BodyKey:  "notify_job_failed_body",
+		Body:     job + ": " + reason,
+		Params: map[string]string{
+			"site":  site,
+			"job":   job,
+			"error": reason,
+		},
+		Tag:     "lerd-job-failed-" + site + "-" + job,
+		URL:     debugRouteForContext(evt.Ctx),
+		Data:    map[string]string{"site": site, "id": evt.ID},
+		Urgency: "high",
+		TTL:     300,
+	}
+}
+
+// failedJobStatus is the job status that warrants a notification. Every other
+// state a job passes through is progress, which the Debug window already shows.
+const failedJobStatus = "failed"
+
+// jobStatus reads the status off a job event without decoding the rest.
+func jobStatus(evt dumps.Event) string {
+	var d struct {
+		Status string `json:"status"`
+	}
+	_ = json.Unmarshal(evt.Data, &d)
+	return d.Status
+}
+
 // notifyDispatch is the dispatch seam runDumpsNotifier uses, swappable in
 // tests to capture what would have been notified.
 var notifyDispatch = dispatchNotification
@@ -110,6 +166,9 @@ func runDumpsNotifier(src dumpsSubscriber) {
 	}
 	ch, _ := src.Subscribe()
 	d := newDumpDebouncer(dumpDebounceWindow)
+	// Jobs debounce on their own clock: a job that fails is usually retried, so
+	// the same class failing three times in a row is one thing to be told about.
+	jobs := newDumpDebouncer(dumpDebounceWindow)
 	np := newNPlusOneTracker()
 	for evt := range ch {
 		switch evt.Kind {
@@ -123,6 +182,14 @@ func runDumpsNotifier(src dumpsSubscriber) {
 			// warning per route/script.
 			if n := np.observe(evt); n != nil {
 				notifyDispatch(*n)
+			}
+		case dumps.KindJob:
+			if jobStatus(evt) != failedJobStatus {
+				continue
+			}
+			n := notificationForFailedJob(evt)
+			if jobs.allow(n.Tag) {
+				notifyDispatch(n)
 			}
 		}
 	}

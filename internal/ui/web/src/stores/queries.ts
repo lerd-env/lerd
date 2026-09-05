@@ -145,8 +145,10 @@ export const queryFilterWorker = writable<string>('');
 // dropdown shown when worker capture is enabled.
 export const knownWorkerCommands: Readable<string[]> = derived(dumps, ($dumps) => {
   const set = new Set<string>();
+  // Any kind, not just queries: jobs are captured from workers even with the
+  // query opt-in off, so a Jobs lens needs the per-worker filter too.
   for (const ev of $dumps) {
-    if (ev.kind === 'query' && ev.ctx.worker) set.add(ev.ctx.worker);
+    if (ev.ctx.worker) set.add(ev.ctx.worker);
   }
   return Array.from(set).sort();
 });
