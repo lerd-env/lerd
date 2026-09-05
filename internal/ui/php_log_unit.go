@@ -67,3 +67,15 @@ func installedPHPVersions(native bool, container, host func() []string) []string
 	}
 	return out
 }
+
+// nativeInstallRefusal returns the error a PHP install should fail with under
+// the native runtime. Installing here means fetching a prebuilt binary rather
+// than building an image, and until those are published there is nothing to
+// fetch; building the image anyway would produce an artifact this runtime
+// never uses.
+func nativeInstallRefusal(native bool, version string) error {
+	if !native {
+		return nil
+	}
+	return fmt.Errorf("cannot install PHP %s under the native runtime: it needs a prebuilt native binary, not a container image. Switch with 'lerd php:runtime container' to install one", version)
+}

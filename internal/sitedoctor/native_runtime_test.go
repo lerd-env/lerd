@@ -52,3 +52,20 @@ func TestNativeExtensionCheck(t *testing.T) {
 		t.Errorf("detail should not name a satisfied extension, got %q", missing.Detail)
 	}
 }
+
+// The Debug window's query lens is engine-level capture from the lerd_devtools
+// extension, which is compiled into the PHP image and absent from the native
+// binary. Left unsaid, the lens just stays empty and reads as a broken feature.
+func TestNativeQueryCaptureCheck(t *testing.T) {
+	c := nativeQueryCaptureCheck(false)
+	if c.Status != StatusWarn {
+		t.Errorf("missing capture should warn, got %q", c.Status)
+	}
+	if !strings.Contains(strings.ToLower(c.Detail), "quer") {
+		t.Errorf("detail should mention queries, got %q", c.Detail)
+	}
+
+	if got := nativeQueryCaptureCheck(true).Status; got != StatusOK {
+		t.Errorf("present capture should be OK, got %q", got)
+	}
+}

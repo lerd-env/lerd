@@ -73,13 +73,39 @@ func OverrideDir(version string) string {
 // The capture socket is reached over loopback rather than the container's host
 // gateway, since here PHP is already on the host.
 func overrideIni() string {
+	return overrideIniWith(DevtoolsExtensionPath())
+}
+
+// DevtoolsExtensionPath is where a native build's query-capture extension lives
+// when the build ships one. It is the engine-level collector behind the Debug
+// window's query lens, compiled into the PHP image and shipped beside the
+// binary here, the same way xdebug is.
+func DevtoolsExtensionPath() string {
+	path := filepath.Join(config.BinDir(), "lerd_devtools.so")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
+}
+
+func overrideIniWith(devtoolsSO string) string {
 	assets := config.DumpsAssetsDir()
 	return "; lerd: native runtime overrides. Auto-generated, do not edit.\n" +
 		"auto_prepend_file=" + config.DumpsBridgeFile() + "\n" +
 		"lerd.assets_dir=" + assets + "\n" +
 		"lerd.dump_host=tcp://127.0.0.1:9913\n" +
 		"lerd.devtools_host=tcp://127.0.0.1:9913\n" +
-		"lerd.devtools_flag=" + filepath.Join(assets, "enabled.flag") + "\n"
+		"lerd.devtools_flag=" + filepath.Join(assets, "enabled.flag") + "\n" +
+		devtoolsLine(devtoolsSO)
+}
+
+// devtoolsLine loads the query-capture extension when the build shipped one.
+// Naming a file that is not there would make PHP warn on every single request.
+func devtoolsLine(path string) string {
+	if path == "" {
+		return ""
+	}
+	return "zend_extension=" + path + "\n"
 }
 
 // WriteOverrides materialises the override fragment for a version.

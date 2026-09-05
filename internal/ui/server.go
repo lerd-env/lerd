@@ -5064,6 +5064,10 @@ func handlePHPInstall(w http.ResponseWriter, r *http.Request) {
 		done(map[string]any{"ok": false, "error": "unsupported PHP version"})
 		return
 	}
+	if err := nativeInstallRefusal(nativeRuntimeActive(), version); err != nil {
+		done(map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
 	// Reject a second concurrent install of the same version so two clients can't
 	// race on the same image build and quadlet file.
 	if _, busy := phpBuildInFlight.LoadOrStore(version, struct{}{}); busy {

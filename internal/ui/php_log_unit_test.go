@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -73,5 +74,19 @@ func TestInstalledPHPVersionsFollowsTheRuntime(t *testing.T) {
 	// Never nil: the UI renders the list directly.
 	if got := installedPHPVersions(true, containerList, func() []string { return nil }); got == nil {
 		t.Error("expected an empty slice rather than nil")
+	}
+}
+
+// Installing from the settings page builds a container image. Under the native
+// runtime that is the wrong artifact entirely, and building one silently would
+// leave the user waiting on an image nothing will serve from.
+func TestPHPInstallRefusedUnderNative(t *testing.T) {
+	if err := nativeInstallRefusal(true, "8.6"); err == nil {
+		t.Error("native runtime must refuse a container image build")
+	} else if !strings.Contains(err.Error(), "8.6") {
+		t.Errorf("the refusal should name the version, got: %v", err)
+	}
+	if err := nativeInstallRefusal(false, "8.6"); err != nil {
+		t.Errorf("container mode must allow the install, got: %v", err)
 	}
 }

@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Aceasta rescrie .env-ul fiecărui site, regenerează vhost-urile, șterge cache-urile de configurare ale framework-ului și repornește workerii. Site-urile sunt indisponibile pentru scurt timp.",
   "system_runtime_listLabel": "Runtime",
   "sites_tabs_nativePhp": "PHP nativ",
-  "dashboard_health_phpNative": "PHP nativ"
+  "dashboard_health_phpNative": "PHP nativ",
+  "system_php_ext_nativeFixed": "Runtime-ul nativ are extensiile compilate în binar, așa că nu sunt pachete de gestionat aici. Treci la runtime-ul container dacă ai nevoie să adaugi unul.",
+  "system_php_ext_modulesHelpNative": "Raportat de php -m din binarul nativ PHP {version}."
 }

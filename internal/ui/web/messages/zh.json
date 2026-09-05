@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "此操作会重写每个站点的 .env、重新生成 vhost、清除框架配置缓存并重启队列进程。站点会短暂不可用。",
   "system_runtime_listLabel": "运行时",
   "sites_tabs_nativePhp": "原生 PHP",
-  "dashboard_health_phpNative": "原生 PHP"
+  "dashboard_health_phpNative": "原生 PHP",
+  "system_php_ext_nativeFixed": "原生运行时已将扩展编译进二进制文件，因此这里没有可管理的软件包。如需添加，请切换到容器运行时。",
+  "system_php_ext_modulesHelpNative": "由原生 PHP {version} 二进制文件的 php -m 报告。"
 }

@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Thao tác này ghi lại .env của mọi trang, tạo lại vhost, xóa bộ nhớ đệm cấu hình framework và khởi động lại worker. Các trang sẽ tạm thời không truy cập được.",
   "system_runtime_listLabel": "Môi trường",
   "sites_tabs_nativePhp": "PHP gốc",
-  "dashboard_health_phpNative": "PHP gốc"
+  "dashboard_health_phpNative": "PHP gốc",
+  "system_php_ext_nativeFixed": "Môi trường gốc biên dịch sẵn các tiện ích mở rộng vào tệp nhị phân, nên ở đây không có gói nào để quản lý. Chuyển sang môi trường vùng chứa nếu bạn cần thêm.",
+  "system_php_ext_modulesHelpNative": "Được báo cáo bởi php -m từ tệp nhị phân PHP {version} gốc."
 }

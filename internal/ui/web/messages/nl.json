@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Dit herschrijft de .env van elke site, genereert de vhosts opnieuw, wist de framework-configuratiecaches en herstart de workers. Sites zijn even niet bereikbaar.",
   "system_runtime_listLabel": "Runtime",
   "sites_tabs_nativePhp": "Native PHP",
-  "dashboard_health_phpNative": "Native PHP"
+  "dashboard_health_phpNative": "Native PHP",
+  "system_php_ext_nativeFixed": "De native runtime heeft zijn extensies in het binary gecompileerd, dus hier zijn geen pakketten te beheren. Schakel over naar de containerruntime als je er een nodig hebt.",
+  "system_php_ext_modulesHelpNative": "Gerapporteerd door php -m van het native PHP {version}-binary."
 }

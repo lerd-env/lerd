@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Bu, her sitenin .env dosyasını yeniden yazar, vhost'ları yeniden oluşturur, framework yapılandırma önbelleklerini siler ve işçileri yeniden başlatır. Siteler kısa süre erişilemez olur.",
   "system_runtime_listLabel": "Çalışma zamanı",
   "sites_tabs_nativePhp": "Yerel PHP",
-  "dashboard_health_phpNative": "Yerel PHP"
+  "dashboard_health_phpNative": "Yerel PHP",
+  "system_php_ext_nativeFixed": "Yerel çalışma zamanı uzantıları ikili dosyaya derlenmiş halde taşır, bu yüzden burada yönetilecek paket yoktur. Eklemeniz gerekirse kapsayıcı çalışma zamanına geçin.",
+  "system_php_ext_modulesHelpNative": "Yerel PHP {version} ikili dosyasındaki php -m tarafından bildirildi."
 }

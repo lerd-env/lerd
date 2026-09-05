@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "各サイトの .env を書き換え、vhost を再生成し、フレームワークの設定キャッシュを破棄してワーカーを再起動します。実行中サイトは一時的に利用できません。",
   "system_runtime_listLabel": "ランタイム",
   "sites_tabs_nativePhp": "ネイティブ PHP",
-  "dashboard_health_phpNative": "ネイティブ PHP"
+  "dashboard_health_phpNative": "ネイティブ PHP",
+  "system_php_ext_nativeFixed": "ネイティブランタイムは拡張機能がバイナリに組み込まれているため、ここで管理するパッケージはありません。追加が必要な場合はコンテナランタイムに切り替えてください。",
+  "system_php_ext_modulesHelpNative": "ネイティブ PHP {version} バイナリの php -m による報告です。"
 }

@@ -37,8 +37,16 @@ FrankenPHP sites, custom containers and host-proxy sites are unaffected either w
 
 `php:ini` still edits the same files: the native runtime reads the shared, per-version, mail and xdebug fragments through `PHP_INI_SCAN_DIR`, so a setting applies whichever runtime you are on. Xdebug works, shipped as a loadable extension alongside the binary. `dump()` and `dd()` capture works too, with the bridge reading its assets from their host copies. nginx keeps serving and terminating TLS, so HTTPS, domains, worktrees and site groups are untouched.
 
+## What is captured
+
+`dump()` and `dd()` work: the debug bridge is plain PHP and reads its assets from their host copies. Xdebug works too, shipped as a loadable extension beside the binary.
+
+The Debug window's **query lens does not capture on this runtime yet**. Those queries come from an engine-level extension the PHP image compiles in, and the native build does not ship it. The site doctor says so rather than leaving the lens silently empty, and `lerd php:runtime container` restores it.
+
 ## Known gaps
 
 The extension set is fixed at build time, so `lerd php:ext add` has nothing to add to. A project needing an extension the native build does not carry should stay on container mode; the site doctor reports the drift before you hit it at runtime.
 
 `pcov` cannot be built into a static PHP at all, so coverage runs need container mode. Xdebug is unaffected: it ships as a loadable extension alongside the binary and `xdebug:on` works as it always has.
+
+`lerd php:ext` and `lerd php:pkg` refuse here, and `lerd shell` says there is no container to enter rather than starting one. Installing a PHP version from the dashboard also refuses: that needs a prebuilt native binary rather than a container image.

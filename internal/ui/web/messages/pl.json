@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Spowoduje to ponowne zapisanie pliku .env każdej strony, wygenerowanie vhostów, wyczyszczenie pamięci podręcznej konfiguracji i ponowne uruchomienie workerów. Strony będą przez chwilę niedostępne.",
   "system_runtime_listLabel": "Środowisko",
   "sites_tabs_nativePhp": "Natywny PHP",
-  "dashboard_health_phpNative": "Natywny PHP"
+  "dashboard_health_phpNative": "Natywny PHP",
+  "system_php_ext_nativeFixed": "Natywne środowisko ma rozszerzenia wkompilowane w plik binarny, więc nie ma tu pakietów do zarządzania. Przełącz się na środowisko kontenerowe, jeśli musisz coś dodać.",
+  "system_php_ext_modulesHelpNative": "Zgłoszone przez php -m z natywnego pliku binarnego PHP {version}."
 }

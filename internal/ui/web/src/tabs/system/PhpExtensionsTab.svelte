@@ -3,6 +3,13 @@
   import EmptyState from '$components/EmptyState.svelte';
   import { fetchPhpExtensions, type PhpExtensionsReport, type PhpSetState } from '$stores/phpVersions';
   import { m } from '../../paraglide/messages.js';
+  import { phpRuntime, loadPHPRuntime } from '$stores/phpRuntime';
+  import { onMount } from 'svelte';
+
+  // The native runtime has no image behind it, so the package and rebuild
+  // language here would describe something that does not exist.
+  const isNative = $derived($phpRuntime === 'native');
+  onMount(loadPHPRuntime);
 
   interface Props {
     version: string;
@@ -54,7 +61,11 @@
         </p>
       {/if}
 
-      {#if declaredCount === 0}
+      {#if isNative}
+        <!-- The native binary has its extensions compiled in and no image to
+             install packages into, so declaring either is not a thing here. -->
+        <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_php_ext_nativeFixed()}</p>
+      {:else if declaredCount === 0}
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_php_ext_none()}</p>
       {:else}
         {#each [{ label: m.system_php_ext_declared(), set: report.extensions }, { label: m.system_php_ext_packages(), set: report.packages }] as group (group.label)}
@@ -82,7 +93,11 @@
         <span class="text-sm font-medium text-gray-800 dark:text-gray-200">
           {m.system_php_ext_modules({ count: modules.length })}
         </span>
-        <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_php_ext_modulesHelp({ version })}</p>
+        <p class="text-xs text-gray-500 dark:text-gray-400">
+          {isNative
+            ? m.system_php_ext_modulesHelpNative({ version })
+            : m.system_php_ext_modulesHelp({ version })}
+        </p>
         <div class="flex flex-wrap gap-1.5">
           {#each modules as mod (mod)}
             <Badge tone="neutral">{mod}</Badge>

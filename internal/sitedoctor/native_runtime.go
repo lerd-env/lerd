@@ -80,5 +80,26 @@ func checkNativeRuntime(path string) ([]Check, bool) {
 			checks = append(checks, nativeExtensionCheck(required, available))
 		}
 	}
+	checks = append(checks, nativeQueryCaptureCheck(nativeHasQueryCapture(site.PHPVersion)))
 	return checks, true
+}
+
+// nativeQueryCaptureCheck reports whether the Debug window's query lens can
+// capture anything. That capture is engine-level, from the lerd_devtools
+// extension the PHP image compiles in; the native build does not carry it yet,
+// and an empty lens with no explanation reads as a broken feature rather than
+// a runtime that does not provide it.
+func nativeQueryCaptureCheck(present bool) Check {
+	if present {
+		return Check{Name: "query capture", Status: StatusOK,
+			Detail: "the Debug window can capture queries on this runtime"}
+	}
+	return Check{Name: "query capture", Status: StatusWarn,
+		Detail: "the native runtime cannot capture queries for the Debug window; dump() and dd() still work, and 'lerd php:runtime container' restores the query lens"}
+}
+
+// nativeHasQueryCapture reports whether the native runtime can capture queries,
+// which it can once the build ships the collector extension beside the binary.
+func nativeHasQueryCapture(string) bool {
+	return nativephp.DevtoolsExtensionPath() != ""
 }

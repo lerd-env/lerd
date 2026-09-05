@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Ini menulis ulang .env setiap situs, membuat ulang vhost, menghapus cache konfigurasi framework, dan memulai ulang worker. Situs sesaat tidak tersedia.",
   "system_runtime_listLabel": "Runtime",
   "sites_tabs_nativePhp": "PHP native",
-  "dashboard_health_phpNative": "PHP native"
+  "dashboard_health_phpNative": "PHP native",
+  "system_php_ext_nativeFixed": "Runtime native memiliki ekstensi yang dikompilasi ke dalam binernya, jadi tidak ada paket untuk dikelola di sini. Beralihlah ke runtime kontainer jika perlu menambahkan.",
+  "system_php_ext_modulesHelpNative": "Dilaporkan oleh php -m dari biner PHP {version} native."
 }

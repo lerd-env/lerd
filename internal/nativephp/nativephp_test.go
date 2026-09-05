@@ -276,3 +276,24 @@ func TestListInstalledFindsNativeBinaries(t *testing.T) {
 		}
 	}
 }
+
+// Query capture is an engine-level extension. When the build ships one next to
+// the binary the runtime has to load it, and when it does not the ini must stay
+// silent rather than naming a file PHP would warn about on every request.
+func TestOverrideLoadsDevtoolsOnlyWhenPresent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if got := overrideIniWith(""); strings.Contains(got, "lerd_devtools") {
+		t.Errorf("no extension present, so nothing should be loaded:\n%s", got)
+	}
+
+	so := filepath.Join(tmp, "lerd_devtools.so")
+	if err := os.WriteFile(so, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	got := overrideIniWith(so)
+	if !strings.Contains(got, "zend_extension="+so) {
+		t.Errorf("a present extension must be loaded:\n%s", got)
+	}
+}

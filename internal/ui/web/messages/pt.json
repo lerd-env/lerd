@@ -1420,5 +1420,7 @@
   "system_phpRuntime_confirm": "Isto reescreve o .env de cada site, regenera os vhosts, limpa as caches de configuração da framework e reinicia os workers. Os sites ficam brevemente indisponíveis.",
   "system_runtime_listLabel": "Runtime",
   "sites_tabs_nativePhp": "PHP nativo",
-  "dashboard_health_phpNative": "PHP nativo"
+  "dashboard_health_phpNative": "PHP nativo",
+  "system_php_ext_nativeFixed": "O runtime nativo tem as extensões compiladas no binário, por isso não há pacotes a gerir aqui. Muda para o runtime de contentor se precisares de adicionar algum.",
+  "system_php_ext_modulesHelpNative": "Reportado por php -m a partir do binário nativo do PHP {version}."
 }
