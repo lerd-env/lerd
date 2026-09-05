@@ -2,6 +2,9 @@ package config
 
 import "testing"
 
+// Pinned to darwin rather than the running platform: this is about what the
+// stored value means, and everywhere else the answer is container regardless,
+// which TestPHPRuntimeModeIsContainerOffDarwin covers.
 func TestPHPRuntimeMode(t *testing.T) {
 	cases := []struct {
 		configured string
@@ -15,13 +18,13 @@ func TestPHPRuntimeMode(t *testing.T) {
 	for _, c := range cases {
 		cfg := &GlobalConfig{}
 		cfg.PHP.Runtime = c.configured
-		if got := cfg.PHPRuntimeMode(); got != c.want {
+		if got := cfg.phpRuntimeModeOn("darwin", "arm64"); got != c.want {
 			t.Errorf("PHPRuntimeMode(%q) = %q, want %q", c.configured, got, c.want)
 		}
 	}
 	// A nil config is an unconfigured install, which serves from containers.
 	var nilCfg *GlobalConfig
-	if got := nilCfg.PHPRuntimeMode(); got != PHPRuntimeContainer {
+	if got := nilCfg.phpRuntimeModeOn("darwin", "arm64"); got != PHPRuntimeContainer {
 		t.Errorf("nil config = %q, want %q", got, PHPRuntimeContainer)
 	}
 }
