@@ -216,6 +216,10 @@ If a historical `AWS_BUCKET` value with underscores (or other S3-invalid charact
 
 `AWS_URL` points to the public bucket URL (browser-reachable). `AWS_ENDPOINT` is the internal container address used by PHP.
 
+If a bucket a site points at is not there, `lerd site:doctor` reports it under **Bucket** with a fix that creates it. Such a site serves every page fine and fails on the first upload, which is exactly the kind of thing that reads as an application bug. The check is driven by the service preset rather than by any framework: the preset names the `.env` key holding the entity a site owns (`owner_env: AWS_BUCKET` for RustFS), and only a project whose env also points at the lerd service is measured against it, so one configured for real AWS is left alone.
+
+`lerd env` writes the `.env` even when it could not create the database or bucket behind it, and then exits non-zero naming what is missing. It used to warn in passing and exit 0, which left a file claiming storage that was never created.
+
 ### Migrating from MinIO to RustFS
 
 RustFS exposes the same S3 API as MinIO with the same default credentials, no application changes are needed after migration.

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	crand "crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -528,11 +529,26 @@ var serviceDetectors = map[string]func(map[string]string) bool{
 	},
 }
 
+// envProvisionFailure turns the per-site state an env run could not create into
+// the error the run ends with. The .env has already been written by then, which
+// is what makes the silent version dangerous: the file names a database or a
+// bucket that does not exist, and the app is the first thing to find out.
+func envProvisionFailure(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf(".env was written but service state is missing, rerun `lerd env` once the service is reachable: %w", errors.Join(errs...))
+}
+
 func runEnv(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+
+	// State lerd was asked to create for this site and could not. Collected
+	// rather than warned about in passing, so the run exits non-zero.
+	var provisionErrs []error
 
 	// Determine framework-specific env file path and format
 	site, err := ensureSiteForCwd()
@@ -780,12 +796,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
-					feedback.Warn("could not start %s: %v", svc, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err))
 				} else {
 					for _, name := range []string{dbName, dbName + "_testing"} {
 						created, err := createDatabase(svc, name)
 						if err != nil {
-							feedback.Warn("could not create database %q: %v", name, err)
+							provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 						} else if created {
 							envInfo("  Created database %q\n", name)
 						} else {
@@ -810,7 +826,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				}
 				created, err := createS3Bucket(bucketName)
 				if err != nil {
-					feedback.Warn("could not create bucket %q: %v", bucketName, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("bucket %q: %w", bucketName, err))
 				} else if created {
 					envInfo("  Created bucket %q\n", bucketName)
 				} else {
@@ -860,12 +876,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
-					feedback.Warn("could not start %s: %v", svc, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err))
 				} else {
 					for _, name := range []string{dbName, dbName + "_testing"} {
 						created, err := createDatabase(svc, name)
 						if err != nil {
-							feedback.Warn("could not create database %q: %v", name, err)
+							provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 						} else if created {
 							envInfo("  Created database %q\n", name)
 						} else {
@@ -894,7 +910,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				// up, or rustfs was already running before lerd env ran.
 				created, err := createS3Bucket(bucketName)
 				if err != nil {
-					feedback.Warn("could not create bucket %q: %v", bucketName, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("bucket %q: %w", bucketName, err))
 				} else if created {
 					envInfo("  Created bucket %q\n", bucketName)
 				} else {
@@ -993,14 +1009,18 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			continue
 		}
 		if err := ensureServiceRunning(svc.Name); err != nil {
-			feedback.Warn("could not start %s: %v", svc.Name, err)
+			if isDB {
+				provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc.Name, err))
+			} else {
+				feedback.Warn("could not start %s: %v", svc.Name, err)
+			}
 			continue
 		}
 		if isDB {
 			for _, name := range []string{dbName, dbName + "_testing"} {
 				created, err := createDatabase(svc.Name, name)
 				if err != nil {
-					feedback.Warn("could not create database %q: %v", name, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 				} else if created {
 					envInfo("  Created database %q\n", name)
 				} else {
@@ -1167,6 +1187,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// rather than leaving it on coordinates that no longer answer.
 	if syncIDEDataSource(site.Path).wrote() {
 		envInfo("  IDE database connection updated in .idea\n")
+	}
+
+	if err := envProvisionFailure(provisionErrs); err != nil {
+		return err
 	}
 
 	envInfo("Done.\n")
