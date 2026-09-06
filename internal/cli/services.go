@@ -870,6 +870,8 @@ func newServiceReinstallCmd() *cobra.Command {
 					feedback.Note(e.Message)
 				case "reprovisioning_skipped":
 					feedback.Note("reprovisioning skipped: " + e.Message)
+				case "reprovisioning_failed":
+					feedback.Warn("reprovisioning linked sites: %s", e.Message)
 				}
 			}
 			opts := serviceops.ReinstallOptions{ResetData: resetData, SkipSnapshot: noSnapshot}

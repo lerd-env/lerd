@@ -1269,8 +1269,9 @@ func s3BucketName(name string) string { return serviceops.S3BucketName(name) }
 func createS3Bucket(name string) (bool, error) { return serviceops.EnsureS3Bucket(name) }
 
 // ensureServiceRunning starts the service if it is not already active, then
-// waits until it is ready to accept connections before returning.
-func ensureServiceRunning(name string) error {
+// waits until it is ready to accept connections before returning. A var so the
+// link and env flows can be driven in tests without a live podman.
+var ensureServiceRunning = func(name string) error {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status != "active" {
