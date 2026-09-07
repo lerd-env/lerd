@@ -52,6 +52,8 @@
       'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
     sqlite_database:
       'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4',
+    server_bucket:
+      'M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4',
     env_present:
       'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
     composer_deps:
@@ -139,6 +141,7 @@
     services_install: 'Install the missing services',
     services_start: 'Start the stopped services',
     database_create: 'Create the missing database',
+    bucket_create: 'Create the missing bucket',
     stale_workers_remove: 'Remove the stale worker units'
   };
 

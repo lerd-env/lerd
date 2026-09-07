@@ -21,6 +21,7 @@ export type NotifyKind =
   | 'worker_failed'
   | 'job_failed'
   | 'op_done'
+  | 'snapshot'
   | 'update_available'
   | 'nplusone'
   | 'slow_route'
@@ -31,6 +32,7 @@ export const ALL_KINDS: NotifyKind[] = [
   'worker_failed',
   'job_failed',
   'op_done',
+  'snapshot',
   'update_available',
   'nplusone',
   'slow_route',
@@ -51,6 +53,9 @@ const DEFAULTS: NotifyPrefs = {
     // swallow, and it is deduped per job class, so it is on by default.
     job_failed: true,
     op_done: true,
+    // One line per finished schedule run, and only when it took something, so
+    // it stays quiet on a machine with nothing opted in.
+    snapshot: true,
     update_available: true,
     // N+1 warnings are deduped once per route/worker per session, so they
     // stay low-volume and useful; on by default, matching prior behaviour

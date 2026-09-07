@@ -31,6 +31,8 @@ func NewDbCmd() *cobra.Command {
 	cmd.AddCommand(newDbSnapshotsCmd("snapshots"))
 	cmd.AddCommand(newDbRestoreCmd("restore"))
 	cmd.AddCommand(newDbSnapshotRmCmd("snapshot:rm"))
+	cmd.AddCommand(newDbSnapshotKeepCmd("snapshot:keep"))
+	cmd.AddCommand(newDbSnapshotAutoCmd("snapshot:auto"))
 	cmd.AddCommand(newDbMoveCmd("move"))
 	cmd.AddCommand(newDbExtensionCmd("extension"))
 	return cmd

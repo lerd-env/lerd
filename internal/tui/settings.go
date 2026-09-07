@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"fmt"
 	"runtime"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -26,6 +28,7 @@ const (
 	settingsAutostart
 	settingsXdebug
 	settingsWorkerMode
+	settingsAutoSnapshot
 )
 
 func (m *Model) settingsRows() []settingsRow {
@@ -47,6 +50,11 @@ func (m *Model) settingsRows() []settingsRow {
 		kind:  settingsAutostart,
 		label: "Autostart lerd on login",
 		on:    lerdSystemd.IsAutostartEnabled(),
+	})
+	rows = append(rows, settingsRow{
+		kind:  settingsAutoSnapshot,
+		label: autoSnapshotSettingLabel(cfg),
+		on:    cfg.AutoSnapshotEnabled(),
 	})
 
 	// Worker runtime mode: macOS only. On Linux workers always run via
@@ -119,6 +127,13 @@ func (m *Model) settingsToggle(rows []settingsRow) tea.Cmd {
 		}
 		m.setStatus("xdebug "+verb+" PHP "+row.phpVersion+"…", 5*time.Second)
 		return runLerd("", "xdebug", verb, row.phpVersion)
+	case settingsAutoSnapshot:
+		verb := "on"
+		if row.on {
+			verb = "off"
+		}
+		m.setStatus("automatic snapshots "+verb+"…", 5*time.Second)
+		return runLerd("", "db:snapshot:auto", verb)
 	case settingsWorkerMode:
 		// Toggle between exec (off) and container (on). Mirrors
 		// `lerd workers mode <value>`. Does not stop running workers —
@@ -131,6 +146,32 @@ func (m *Model) settingsToggle(rows []settingsRow) tea.Cmd {
 		return runLerd("", "workers", "mode", target)
 	}
 	return nil
+}
+
+// autoSnapshotSettingLabel names the schedule on the row, so the cadence and the
+// retention are readable without opening anything.
+func autoSnapshotSettingLabel(cfg *config.GlobalConfig) string {
+	if !cfg.AutoSnapshotEnabled() {
+		return "Automatic database snapshots"
+	}
+	scope := "all sites"
+	if cfg.AutoSnapshotSelection() == config.AutoSnapshotOptIn {
+		scope = "opted-in sites"
+	}
+	return fmt.Sprintf("Automatic database snapshots (every %s, keeping %d, %s)",
+		compactEvery(cfg.AutoSnapshotEvery()), cfg.AutoSnapshotKeep(), scope)
+}
+
+// compactEvery drops the empty trailing units Go leaves on a whole-hour duration.
+func compactEvery(d time.Duration) string {
+	out := d.String()
+	if strings.HasSuffix(out, "m0s") {
+		out = strings.TrimSuffix(out, "0s")
+	}
+	if strings.HasSuffix(out, "h0m") {
+		out = strings.TrimSuffix(out, "0m")
+	}
+	return out
 }
 
 func managedServiceLANLabel(cfg *config.GlobalConfig) string {

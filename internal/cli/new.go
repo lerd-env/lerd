@@ -144,7 +144,7 @@ func scaffoldPlan(create, target string, extraArgs []string) scaffold {
 	}
 	return scaffold{
 		inContainer: true,
-		args:        append([]string{filepath.Join(config.BinDir(), "composer.phar")}, tail...),
+		args:        append([]string{composer.PharPath()}, tail...),
 	}
 }
 

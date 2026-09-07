@@ -89,6 +89,10 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 		handleDoctorDatabaseFix(w, r, site)
 		return
 	}
+	if key == sitedoctor.FixCreateBucket {
+		handleDoctorBucketFix(w, r, site)
+		return
+	}
 	shell, ok := sitedoctor.DoctorFixCommands[key]
 	if !ok {
 		writeJSON(w, map[string]any{"error": "unknown doctor fix: " + key})
@@ -204,6 +208,35 @@ func handleDoctorDatabaseFix(w http.ResponseWriter, r *http.Request, site *confi
 		// check as well as this one's.
 		sitedoctor.ForgetDatabases(t.Service)
 		created = append(created, t.Database+" on "+t.Service)
+	}
+	streamHostAction(w, "created "+strings.Join(created, ", "), failed)
+}
+
+// handleDoctorBucketFix creates the entities the site claims on a service that
+// does not hold them, through the create action the service declares.
+func handleDoctorBucketFix(w http.ResponseWriter, r *http.Request, site *config.Site) {
+	path, ok := resolveDoctorPath(w, site, r.URL.Query().Get("branch"))
+	if !ok {
+		return
+	}
+	missing := sitedoctor.MissingOwnedEntities(path)
+	if len(missing) == 0 {
+		streamHostAction(w, "nothing to create: every bucket this site points at exists, or its service could not be reached", nil)
+		return
+	}
+	var created []string
+	var failed error
+	for _, t := range missing {
+		spec := serviceops.EntityFor(t.Service, t.Kind)
+		if spec == nil {
+			continue
+		}
+		if err := serviceops.RunEntityAction(t.Service, spec, "create", t.Name); err != nil {
+			failed = fmt.Errorf("creating %s on %s: %w", t.Name, t.Service, err)
+			break
+		}
+		sitedoctor.ForgetEntities(t.Service)
+		created = append(created, t.Name+" on "+t.Service)
 	}
 	streamHostAction(w, "created "+strings.Join(created, ", "), failed)
 }

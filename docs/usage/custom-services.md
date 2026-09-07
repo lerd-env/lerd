@@ -57,13 +57,15 @@ lerd service reinstall postgres --reset-data   # same version, fresh data
 - A service update produced data incompatible with the new image and you want a clean slate.
 - The container has drifted into a bad state and a full quadlet rewrite would be cleaner than a restart.
 
-`--reset-data` adds a data-dir rename-aside (same recovery semantics as `--purge`, including the pre-wipe snapshot, named `pre-reset-data-<timestamp>` here) and **automatically reprovisions linked-site state** on the freshly installed service:
+`--reset-data` adds a data-dir rename-aside (same recovery semantics as `--purge`, including the pre-wipe snapshot, named `pre-reset-data-<timestamp>` here).
+
+Every reinstall **reprovisions linked-site state** on the service that comes back, with or without `--reset-data`. So does starting a service, which is where a two-step install (`lerd service preset <name>` then `lerd service start <name>`) first has something running to provision against:
 
 - For database families (mysql, mariadb, postgres): each linked site's expected database is created via `CREATE DATABASE IF NOT EXISTS`. The database name comes from `.lerd.yaml` `db.database`, then `.env` `DB_DATABASE`, then the site name with hyphens converted to underscores.
 - For object-storage families (rustfs): each linked site's expected bucket is created via `mc mb`. The bucket name comes from `.env` `AWS_BUCKET`, otherwise derived from the site name.
 - For cache services (redis, memcached): no per-site state to recreate, so reprovisioning is a no-op.
 
-If a single linked site fails to reprovision (e.g. malformed `.env`), the reinstall continues with the remaining sites and reports the joined errors at the end.
+Every entity is looked up before it is created, so reprovisioning a service whose data survived leaves it untouched and reports nothing. If a single linked site fails to reprovision (e.g. malformed `.env`), the run continues with the remaining sites and reports the joined errors at the end.
 
 ## Tuning a service
 

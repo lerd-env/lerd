@@ -1,4 +1,4 @@
-import { apiJson } from '$lib/api';
+import { apiFetch, apiJson } from '$lib/api';
 
 export interface RouteStat {
   route: string;
@@ -50,6 +50,9 @@ export interface Analytics {
   throughput: ThroughputPoint[];
   routes: RouteStat[];
   recent: RecentRequest[];
+  // Routes the user has silenced: nothing new is recorded on them and nothing
+  // already stored for them appears above.
+  excluded: string[];
 }
 
 export type TimeRange = '15m' | '1h' | '24h' | '7d';
@@ -65,4 +68,31 @@ export async function loadSiteAnalytics(
   const params = new URLSearchParams({ range });
   if (branch) params.set('branch', branch);
   return apiJson<Analytics>(`/api/sites/${encodeURIComponent(domain)}/analytics?${params.toString()}`);
+}
+
+// removeRecorded drops recorded history: one request when atMillis is given (how
+// the recent list identifies a row), otherwise the route's whole history. Setting
+// exclude also stops lerd recording the route from here on.
+export async function removeRecorded(
+  domain: string,
+  body: { route: string; branch?: string; at_millis?: number; uri?: string; exclude?: boolean }
+): Promise<void> {
+  const res = await apiFetch(`/api/sites/${encodeURIComponent(domain)}/analytics/remove`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
+}
+
+// unexcludeRoute puts a silenced route back under observation. Its old requests
+// were never recorded, so it reappears only as new traffic arrives.
+export async function unexcludeRoute(domain: string, route: string, branch = ''): Promise<void> {
+  const params = new URLSearchParams({ route });
+  if (branch) params.set('branch', branch);
+  const res = await apiFetch(
+    `/api/sites/${encodeURIComponent(domain)}/analytics/excludes?${params.toString()}`,
+    { method: 'DELETE' }
+  );
+  if (!res.ok) throw new Error((await res.text()) || res.statusText);
 }

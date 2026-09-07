@@ -3,8 +3,10 @@ package update
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // TestFetchLatestVersion_followsRenameRedirectChain pins the fix for #1296:
@@ -131,5 +133,204 @@ func TestFetchLatestVersion_capsRedirectChain(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "redirect") {
 		t.Errorf("error should mention redirects, got: %v", err)
+	}
+}
+
+// A token only ever goes to the real GitHub API over https. A
+// LERD_RELEASES_API_URL override points at a mirror or a test rig, and the
+// user's credentials must not follow it there.
+func TestTokenFor_onlyAuthenticatesTheRealGitHubAPI(t *testing.T) {
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "ghp_secret")
+	tests := []struct {
+		url  string
+		want string
+	}{
+		{"https://api.github.com/repos/lerd-env/lerd/releases", "ghp_secret"},
+		{"https://API.GitHub.com/repos/lerd-env/lerd/releases", "ghp_secret"},
+		{"http://api.github.com/repos/lerd-env/lerd/releases", ""},
+		{"https://api.github.com.evil.test/repos/lerd-env/lerd/releases", ""},
+		{"https://mirror.example.test/repos/lerd-env/lerd/releases", ""},
+	}
+	for _, tt := range tests {
+		if got := tokenFor(tt.url); got != tt.want {
+			t.Errorf("tokenFor(%q) = %q, want %q", tt.url, got, tt.want)
+		}
+	}
+}
+
+// GH_TOKEN stands in when GITHUB_TOKEN is unset, and blank-but-set counts as
+// no token at all.
+func TestTokenFor_fallsBackToGHToken(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "   ")
+	t.Setenv("GH_TOKEN", "gho_secret")
+	if got := tokenFor("https://api.github.com/repos/lerd-env/lerd/releases"); got != "gho_secret" {
+		t.Errorf("tokenFor() = %q, want gho_secret", got)
+	}
+}
+
+// The pre-release fetch must not leak the token to an overridden API base.
+func TestFetchLatestPrerelease_sendsNoTokenToAnOverriddenAPI(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "ghp_secret")
+	t.Setenv("GH_TOKEN", "gho_secret")
+
+	var auth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"tag_name":"v1.32.0-beta.1","prerelease":true}]`))
+	}))
+	defer srv.Close()
+	defer stubURLs(&APIBaseURLs, []string{srv.URL})()
+
+	got, err := FetchLatestPrerelease()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "v1.32.0-beta.1" {
+		t.Errorf("FetchLatestPrerelease() = %q, want v1.32.0-beta.1", got)
+	}
+	if auth != "" {
+		t.Errorf("Authorization header sent to a non-GitHub host: %q", auth)
+	}
+}
+
+// An exhausted quota reads as a bare HTTP 403 unless the headers are read
+// (#1640): the message has to name the rate limit, say when it comes back, and
+// point at the token that raises it.
+func TestFetchLatestPrerelease_reportsAnExhaustedRateLimit(t *testing.T) {
+	t.Setenv("GITHUB_TOKEN", "")
+	t.Setenv("GH_TOKEN", "")
+
+	reset := time.Now().Add(46 * time.Minute).Unix()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.Header().Set("X-RateLimit-Reset", strconv.FormatInt(reset, 10))
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	defer stubURLs(&APIBaseURLs, []string{srv.URL})()
+
+	_, err := FetchLatestPrerelease()
+	if err == nil {
+		t.Fatal("expected an error when the rate limit is exhausted")
+	}
+	for _, want := range []string{"rate limit exhausted", "46 min", "GITHUB_TOKEN"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+}
+
+// A 429 carrying the same headers is the secondary-limit form of the same
+// failure and gets the same message.
+func TestFetchLatestPrerelease_reportsATooManyRequestsLimit(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer srv.Close()
+	defer stubURLs(&APIBaseURLs, []string{srv.URL})()
+
+	_, err := FetchLatestPrerelease()
+	if err == nil || !strings.Contains(err.Error(), "rate limit exhausted") {
+		t.Fatalf("expected a rate-limit error, got: %v", err)
+	}
+}
+
+// A 403 with quota left is not a rate-limit problem and keeps the plain status
+// error, so a real permission failure is not misdiagnosed.
+func TestFetchLatestPrerelease_keepsPlainStatusErrorWithQuotaLeft(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-RateLimit-Remaining", "57")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+	defer stubURLs(&APIBaseURLs, []string{srv.URL})()
+
+	_, err := FetchLatestPrerelease()
+	if err == nil {
+		t.Fatal("expected an error for HTTP 403")
+	}
+	if strings.Contains(err.Error(), "rate limit") {
+		t.Errorf("403 with quota left should not read as a rate limit, got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "HTTP 403") {
+		t.Errorf("error should carry the status, got: %v", err)
+	}
+}
+
+// A stale or revoked token in the environment used to turn an update that
+// would have worked anonymously into a bare HTTP 401, so a rejected token is
+// dropped and the call is made again as nobody.
+func TestReleasesJSON_retriesWithoutARejectedToken(t *testing.T) {
+	var auths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auths = append(auths, r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"tag_name":"v1.34.0-beta.3","prerelease":true}]`))
+	}))
+	defer srv.Close()
+
+	body, err := releasesJSON(srv.URL+"/releases", "ghp_expired")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(string(body), "v1.34.0-beta.3") {
+		t.Errorf("body should carry the release list, got: %s", body)
+	}
+	want := []string{"Bearer ghp_expired", ""}
+	if len(auths) != len(want) || auths[0] != want[0] || auths[1] != want[1] {
+		t.Errorf("requests sent %q, want %q", auths, want)
+	}
+}
+
+// Without a token there is nothing to retry without, so a 401 is reported as
+// it arrives rather than doubling every failed call.
+func TestReleasesJSON_doesNotRetryAnAnonymous401(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	if _, err := releasesJSON(srv.URL+"/releases", ""); err == nil {
+		t.Fatal("expected an error for HTTP 401")
+	}
+	if calls != 1 {
+		t.Errorf("made %d requests, want 1", calls)
+	}
+}
+
+// When the retry fails too, the message has to say the token was rejected,
+// otherwise the rate-limit advice reads as nonsense to someone who already set
+// GITHUB_TOKEN.
+func TestReleasesJSON_namesTheRejectedTokenWhenTheRetryFailsToo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, err := releasesJSON(srv.URL+"/releases", "ghp_expired")
+	if err == nil {
+		t.Fatal("expected an error when both calls fail")
+	}
+	for _, want := range []string{"rate limit exhausted", "GITHUB_TOKEN"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "rejected") {
+		t.Errorf("error should say the token was rejected, got: %v", err)
 	}
 }
