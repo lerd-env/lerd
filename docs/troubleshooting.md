@@ -449,6 +449,8 @@ lerd update --beta
 ```
 
 The token needs no scopes, public release metadata is all lerd reads, and it is only ever sent to `api.github.com` over https, never to a mirror configured through `LERD_RELEASES_API_URL`.
+
+A token that has expired or been revoked costs you nothing: GitHub answers it with a 401, and lerd drops the token and asks again anonymously, so the check still works on the 60 requests an hour every IP gets.
 :::
 
 ::: details Error: NetworkUpdate is not supported for backend CNI: invalid argument
