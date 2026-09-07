@@ -2,6 +2,7 @@ package composer
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
 
@@ -29,5 +30,14 @@ func TestProcessTimeoutEnv_EmptyHostValueFallsBack(t *testing.T) {
 	want := "COMPOSER_PROCESS_TIMEOUT=" + DefaultProcessTimeout
 	if got != want {
 		t.Errorf("empty host value should fall back to default: got %q", got)
+	}
+}
+
+func TestPharPathFollowsBinDir(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	want := filepath.Join(tmp, "lerd", "bin", "composer.phar")
+	if got := PharPath(); got != want {
+		t.Errorf("got %q, want %q", got, want)
 	}
 }

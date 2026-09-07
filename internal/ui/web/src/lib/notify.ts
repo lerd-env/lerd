@@ -20,6 +20,7 @@ export type NotifyKind =
   | 'mail'
   | 'worker_failed'
   | 'op_done'
+  | 'snapshot'
   | 'update_available'
   | 'nplusone'
   | 'slow_route'
@@ -29,6 +30,7 @@ export const ALL_KINDS: NotifyKind[] = [
   'mail',
   'worker_failed',
   'op_done',
+  'snapshot',
   'update_available',
   'nplusone',
   'slow_route',
@@ -46,6 +48,9 @@ const DEFAULTS: NotifyPrefs = {
     mail: true,
     worker_failed: true,
     op_done: true,
+    // One line per finished schedule run, and only when it took something, so
+    // it stays quiet on a machine with nothing opted in.
+    snapshot: true,
     update_available: true,
     // N+1 warnings are deduped once per route/worker per session, so they
     // stay low-volume and useful; on by default, matching prior behaviour

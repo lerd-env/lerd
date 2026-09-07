@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -32,6 +33,7 @@ func consoleCmdArgs(cwd, container, consoleCmd string, tty bool, args []string) 
 		execFlags = append(execFlags, "-t")
 	}
 	cmdArgs := append(execFlags, terminalColorEnvArgs()...)
+	cmdArgs = append(cmdArgs, envpass.Args(cwd, os.Environ())...)
 	cmdArgs = append(cmdArgs, "-w", cwd, container, "php", consoleCmd)
 	return append(cmdArgs, args...)
 }

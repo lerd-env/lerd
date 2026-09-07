@@ -29,9 +29,13 @@ type Site struct {
 	// Pinned excludes the site from idle-suspend: its workers stay running even
 	// when the global idle policy is on, so a site you want always-warm never
 	// sleeps.
-	Pinned    bool   `yaml:"pinned,omitempty"`
-	Framework string `yaml:"framework,omitempty"`
-	PublicDir string `yaml:"public_dir,omitempty"`
+	Pinned bool `yaml:"pinned,omitempty"`
+	// AutoSnapshot overrides the global automatic-snapshot policy for this site:
+	// "on" always snapshots it, "off" never does, and the empty default follows
+	// the global config. See AutoSnapshotCovers.
+	AutoSnapshot string `yaml:"auto_snapshot,omitempty"`
+	Framework    string `yaml:"framework,omitempty"`
+	PublicDir    string `yaml:"public_dir,omitempty"`
 	// AppURL, when set, is the per-machine override for APP_URL in the
 	// project's env file. Lower priority than ProjectConfig.AppURL (which is
 	// committed to the repo) and higher priority than the default generator
@@ -221,6 +225,7 @@ type siteYAML struct {
 	Paused                bool                `yaml:"paused,omitempty"`
 	PausedWorkers         []string            `yaml:"paused_workers,omitempty"`
 	Pinned                bool                `yaml:"pinned,omitempty"`
+	AutoSnapshot          string              `yaml:"auto_snapshot,omitempty"`
 	Framework             string              `yaml:"framework,omitempty"`
 	PublicDir             string              `yaml:"public_dir,omitempty"`
 	AppURL                string              `yaml:"app_url,omitempty"`
@@ -258,6 +263,7 @@ func (s Site) toYAML() siteYAML {
 		Paused:                s.Paused,
 		PausedWorkers:         s.PausedWorkers,
 		Pinned:                s.Pinned,
+		AutoSnapshot:          s.AutoSnapshot,
 		Framework:             s.Framework,
 		PublicDir:             s.PublicDir,
 		AppURL:                s.AppURL,
@@ -300,6 +306,7 @@ func (sy siteYAML) toSite() Site {
 		Paused:                sy.Paused,
 		PausedWorkers:         sy.PausedWorkers,
 		Pinned:                sy.Pinned,
+		AutoSnapshot:          sy.AutoSnapshot,
 		Framework:             sy.Framework,
 		PublicDir:             sy.PublicDir,
 		AppURL:                sy.AppURL,

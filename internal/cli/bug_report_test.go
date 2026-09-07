@@ -490,3 +490,32 @@ func TestEnvAllowlist_excludesSecrets(t *testing.T) {
 		}
 	}
 }
+
+func TestDumpConfigFiles_includesPerSiteProjectConfig(t *testing.T) {
+	linked := t.TempDir()
+	bare := t.TempDir()
+	setupAnonFixtures(t, "", `sites:
+  - name: alpha
+    domains: [alpha.test]
+    path: `+linked+`
+  - name: beta
+    domains: [beta.test]
+    path: `+bare+`
+`)
+	if err := os.WriteFile(filepath.Join(linked, ".lerd.yaml"), []byte("workers:\n  - queue\n  - horizon\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	var buf bytes.Buffer
+	dumpConfigFiles(&buf)
+	out := buf.String()
+
+	for _, want := range []string{filepath.Join(linked, ".lerd.yaml"), "workers:", "- horizon"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q:\n%s", want, out)
+		}
+	}
+	if !strings.Contains(out, filepath.Join(bare, ".lerd.yaml")+"\n(no .lerd.yaml for this site)") {
+		t.Errorf("site without a project file should say so:\n%s", out)
+	}
+}

@@ -8,6 +8,7 @@
   import ServiceToolsTab from './ServiceToolsTab.svelte';
   import ServicePortsTab from './ServicePortsTab.svelte';
   import ServiceDatabasesTab from './ServiceDatabasesTab.svelte';
+  import ServiceSnapshotsTab from './ServiceSnapshotsTab.svelte';
   import ServiceEntitiesTab from './ServiceEntitiesTab.svelte';
   import PresetSuggestionBanner from './PresetSuggestionBanner.svelte';
   import { isServiceWorker, type Service } from '$stores/services';
@@ -19,7 +20,7 @@
   }
   let { svc }: Props = $props();
 
-  type TabId = 'databases' | 'entities' | 'logs' | 'env' | 'config' | 'tools' | 'ports';
+  type TabId = 'databases' | 'snapshots' | 'entities' | 'logs' | 'env' | 'config' | 'tools' | 'ports';
   // A database engine opens on its Databases tab, since the databases it holds
   // are the primary thing to look at; every other service opens on logs. The
   // default is applied by the effect below on first run (shownService starts
@@ -36,6 +37,8 @@
   // dashboards receive that authority.
   const hasDatabases = $derived(svc.is_database && $accessMode.localControl);
   const hasEntities = $derived((svc.entity_kinds?.length ?? 0) > 0 && $accessMode.localControl);
+  // Snapshots are the databases tab's own subject, so the tab follows it.
+  const hasSnapshots = $derived(hasDatabases);
   // A single declared kind names its own tab (Buckets, Keyspaces); several
   // fold under a generic label.
   const entitiesLabel = $derived.by(() => {
@@ -45,6 +48,7 @@
   });
   const tabs = $derived<TabItem<TabId>[]>([
     { id: 'databases', label: m.databases_title(), hidden: !hasDatabases },
+    { id: 'snapshots', label: m.snapshots_title(), hidden: !hasSnapshots },
     { id: 'entities', label: entitiesLabel, hidden: !hasEntities },
     { id: 'logs', label: m.services_tabs_logs() },
     { id: 'env', label: m.services_env_title(), hidden: !hasEnv },
@@ -65,6 +69,7 @@
       return;
     }
     if (active === 'databases' && !hasDatabases) active = fallback;
+    if (active === 'snapshots' && !hasSnapshots) active = fallback;
     if (active === 'entities' && !hasEntities) active = fallback;
     if (active === 'env' && !hasEnv) active = fallback;
     if (active === 'config' && !svc.tunable) active = fallback;
@@ -100,6 +105,8 @@
   <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
   {#if active === 'databases'}
     <ServiceDatabasesTab {svc} />
+  {:else if active === 'snapshots'}
+    <ServiceSnapshotsTab {svc} />
   {:else if active === 'entities'}
     <ServiceEntitiesTab {svc} />
   {:else if active === 'logs'}

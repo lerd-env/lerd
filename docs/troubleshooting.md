@@ -39,7 +39,7 @@ If you need help on the [issue tracker](https://github.com/lerd-env/lerd/issues)
 lerd bug-report
 ```
 
-This writes a single plain-text file (default: `./lerd-bug-report-<timestamp>.txt`) containing the full `lerd doctor` output, your `config.yaml` and `sites.yaml`, the state of every `lerd-*` systemd unit, recent journal and container logs for lerd's own infra units, listening sockets on the lerd ports, and a curated set of environment variables.
+This writes a single plain-text file (default: `./lerd-bug-report-<timestamp>.txt`) containing the full `lerd doctor` output, your `config.yaml`, `sites.yaml` and every linked site's `.lerd.yaml`, the state of every `lerd-*` systemd unit, recent journal and container logs for lerd's own infra units, listening sockets on the lerd ports, and a curated set of environment variables.
 
 What gets filtered before it lands on disk:
 
@@ -434,6 +434,23 @@ curl -fsSL https://lerd.sh/install.sh | bash
 Everything from 1.26 onwards resolves the organisation move on its own, so this is a one-time step.
 
 On Homebrew, apt, dnf, or if you'd rather not pipe a script anywhere, [Updating from a version before 1.26](getting-started/updating-from-pre-1.26.md) has the route for each.
+:::
+
+::: details Error: could not fetch latest pre-release: GitHub API rate limit exhausted
+Symptom: `lerd update --beta` stops with `GitHub API rate limit exhausted for https://api.github.com/repos/lerd-env/lerd/releases, it resets in 46 min`.
+
+Cause: pre-releases are not covered by the `/releases/latest` redirect the stable channel follows, so the beta check asks the GitHub API instead. An anonymous API call is charged to a bucket of 60 requests an hour shared by everything on your IP, and any other tooling on the machine can empty it before lerd gets there. The stable channel is unaffected.
+
+Fix: wait for the reset the message names, or authenticate the call. Lerd sends `GITHUB_TOKEN` or `GH_TOKEN` if either is set in the environment, which raises the ceiling to 5,000 requests an hour:
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+lerd update --beta
+```
+
+The token needs no scopes, public release metadata is all lerd reads, and it is only ever sent to `api.github.com` over https, never to a mirror configured through `LERD_RELEASES_API_URL`.
+
+A token that has expired or been revoked costs you nothing: GitHub answers it with a 401, and lerd drops the token and asks again anonymously, so the check still works on the 60 requests an hour every IP gets.
 :::
 
 ::: details Error: NetworkUpdate is not supported for backend CNI: invalid argument

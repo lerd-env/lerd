@@ -327,4 +327,4 @@ Where a digest is given the download is checked against it and rejected on a mis
 | Uninstall a service entirely (data preserved) | `lerd service remove <name>` |
 | Uninstall and wipe data (snapshots the databases first) | `lerd service remove <name> --purge` |
 | Reinstall a service in place | `lerd service reinstall <name>` |
-| Reinstall with fresh data + reprovision linked sites (snapshots the databases first) | `lerd service reinstall <name> --reset-data` |
+| Reinstall with fresh data (snapshots the databases first) | `lerd service reinstall <name> --reset-data` |

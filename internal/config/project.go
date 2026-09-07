@@ -118,6 +118,12 @@ type ProjectConfig struct {
 	// never come across with `git worktree add`, so a project names the ones it
 	// needs here. Paths that escape the project root are ignored.
 	WorktreeInclude []string `yaml:"worktree_include,omitempty"`
+	// EnvPassthrough lists host environment variable names, glob patterns
+	// allowed, that lerd forwards from its own process into the one-shot
+	// commands it runs in the container. For an environment a provider like
+	// direnv or sops exports into the shell, where there is no wrapper command
+	// to carry LERD_PASSTHROUGH_ENV. Names only, never values.
+	EnvPassthrough []string `yaml:"env_passthrough,omitempty"`
 	// RequestTimeout overrides the nginx request timeout for this project, in
 	// seconds. Zero inherits the global nginx.request_timeout (default 60s).
 	// Raise it for apps with deliberately long-running requests.
@@ -152,6 +158,7 @@ func (c *ProjectConfig) IsEmpty() bool {
 		c.AppURL == "" && c.DB.Service == "" && c.DB.Database == "" &&
 		c.Container == nil && c.Proxy == nil && c.Runtime == "" && !c.RuntimeWorker &&
 		!c.DBIsolated && len(c.EnvOverrides) == 0 && len(c.WorktreeInclude) == 0 &&
+		len(c.EnvPassthrough) == 0 &&
 		c.RequestTimeout == 0 && c.Stripe == nil &&
 		c.MCPInject == nil
 }
@@ -468,6 +475,9 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 			}
 			out.WorkerOptions[k] = opts
 		}
+	}
+	if in.EnvPassthrough != nil {
+		out.EnvPassthrough = append([]string(nil), in.EnvPassthrough...)
 	}
 	if in.EnvOverrides != nil {
 		out.EnvOverrides = make(map[string]string, len(in.EnvOverrides))

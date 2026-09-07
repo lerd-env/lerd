@@ -10,6 +10,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/linker"
+	"github.com/geodro/lerd/internal/serviceops"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -214,7 +215,7 @@ func runLink(args []string) error {
 	printLinkSummary(site, start, res.WroteIDEDataSource)
 
 	if plan.Mode != linker.ModeFPM {
-		return linkApplyServices(cwd, proj)
+		return linkApplyServices(cwd, site, proj)
 	}
 
 	// Warn before the setup prompt below: an ext-* requirement the image cannot
@@ -246,7 +247,7 @@ func runLink(args []string) error {
 		}
 	}
 
-	return linkApplyServices(cwd, proj)
+	return linkApplyServices(cwd, site, proj)
 }
 
 // printLinkSummary prints the green success line and an aligned details block,
@@ -383,8 +384,9 @@ func frameworkLabelOf(fw *config.Framework) string {
 	return fw.Name
 }
 
-// linkApplyServices installs and starts services declared in .lerd.yaml.
-// Shared by both the standard PHP link path and the custom container path.
+// linkApplyServices installs and starts services declared in .lerd.yaml, then
+// ensures the per-site state each one owns for this site (its database, its
+// bucket). Shared by both the standard PHP link path and the custom container path.
 // approveInlineService surfaces a brand-new inline service defined in a
 // project's .lerd.yaml and confirms it before lerd installs and runs it as a
 // container, since the image and command come from the (possibly cloned) repo.
@@ -406,7 +408,11 @@ func approveInlineService(svc *config.CustomService) bool {
 	return promptConfirm("Install and start it?")
 }
 
-func linkApplyServices(cwd string, proj *config.ProjectConfig) error {
+// linkEnsureSiteState is the seam the link tests swap for the real per-site
+// provisioning, which needs a running service behind it.
+var linkEnsureSiteState = serviceops.EnsureSiteState
+
+func linkApplyServices(cwd string, site config.Site, proj *config.ProjectConfig) error {
 	if proj == nil {
 		return nil
 	}
@@ -477,6 +483,16 @@ func linkApplyServices(cwd string, proj *config.ProjectConfig) error {
 		}
 		if err := ensureServiceRunning(svc.Name); err != nil {
 			feedback.Warn("service %s: %v", svc.Name, err)
+			continue
+		}
+		// The site is being wired to this service now, so its database or bucket
+		// has to exist before the app first reaches for it. EnsureSiteState looks
+		// the entity up before creating it, so a relink costs a lookup.
+		detail, err := linkEnsureSiteState(svc.Name, site)
+		if err != nil {
+			feedback.Warn("service %s: %v", svc.Name, err)
+		} else if detail != "" {
+			fmt.Printf("  %s\n", detail)
 		}
 	}
 	return nil

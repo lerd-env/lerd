@@ -10,10 +10,20 @@
     takeSnapshot,
     restoreSnapshot,
     deleteSnapshot,
+    keepSnapshot,
     type DatabaseEngine,
     type DatabaseEntry
   } from '$stores/databases';
   import DatabaseOpStatus from './DatabaseOpStatus.svelte';
+  import Toggle from '$components/Toggle.svelte';
+  import SnapshotSettingsModal from '../../modals/SnapshotSettingsModal.svelte';
+  import {
+    autoSnapshot,
+    loadAutoSnapshot,
+    setSiteAutoSnapshot,
+    type AutoSnapshotSite
+  } from '$stores/autoSnapshot';
+  import { onMount } from 'svelte';
   import ImportIssuesModal from './ImportIssuesModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
@@ -34,6 +44,28 @@
 
   let name = $state('');
   let busy = $state('');
+  let showSettings = $state(false);
+
+  onMount(loadAutoSnapshot);
+
+  // This database's own standing with the schedule, resolved through the site
+  // that owns it: the policy is global, the opt-in is the site's.
+  const scheduled = $derived<AutoSnapshotSite | undefined>(
+    $autoSnapshot.sites.find((s) => s.service === engine.service && s.database === entry.name)
+  );
+  function when(iso?: string): string {
+    if (!iso) return m.snapshots_auto_never();
+    return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+
+  // An explicit click is an explicit choice, so it writes "on" or "off" rather
+  // than clearing back to the policy: switching the global mode later must not
+  // move a database the user has already decided about.
+  async function toggleScheduled() {
+    if (!scheduled) return;
+    const res = await setSiteAutoSnapshot(scheduled.site, scheduled.covered ? 'off' : 'on');
+    if (!res.ok) status = { tone: 'error', message: res.error || m.common_failed() };
+  }
   // The running or last-finished operation, so a restore that takes a while
   // says what it is doing instead of only spinning on its button.
   let status = $state<{
@@ -131,6 +163,31 @@
     confirmAction = '';
   }
 
+  // An automatic snapshot says when retention drops it, and a kept one says it
+  // never will, so the list answers "will this still be here tomorrow" on sight.
+  function expiryLabel(snap: Snapshot): string {
+    if (!snap.auto) return '';
+    if (snap.kept) return m.databases_snapshotKept();
+    if (!snap.expires_at) return m.databases_snapshotAuto();
+    const when = new Date(snap.expires_at).toLocaleString(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+    return snap.estimated
+      ? m.databases_snapshotExpiresAbout({ when })
+      : m.databases_snapshotExpires({ when });
+  }
+
+  async function toggleKeep(snap: Snapshot) {
+    const kept = !snap.kept;
+    await run(
+      snap.name,
+      kept ? m.databases_keepingSnapshot() : m.databases_releasingSnapshot(),
+      kept ? m.databases_snapshotKeptDone() : m.databases_snapshotReleasedDone(),
+      () => keepSnapshot(engine.service, entry.name, snap.name, kept)
+    );
+  }
+
   async function remove(snapshot: string) {
     await run(
       snapshot,
@@ -168,6 +225,54 @@
       </DatabaseOpStatus>
     {/if}
 
+    <div class="rounded-lg border border-gray-100 dark:border-lerd-border px-3 py-2.5">
+      <div class="flex items-center justify-between gap-2">
+        <div class="min-w-0">
+          <p class="flex items-center gap-1.5 text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Icon
+              name="clock"
+              class="w-3.5 h-3.5 shrink-0 {scheduled?.covered ? 'text-lerd-red' : 'text-gray-300 dark:text-gray-600'}"
+            />
+            {m.snapshots_auto_title()}
+          </p>
+          {#if !scheduled}
+            <p class="text-[11px] text-gray-400 dark:text-gray-500">{m.snapshots_auto_noSiteForDatabase()}</p>
+          {:else if scheduled.covered}
+            <!-- Two rows: the pair of full timestamps runs past the dialog on
+                 one line, and the block sits next to the mode control. -->
+            <p class="text-[11px] text-gray-400 dark:text-gray-500">
+              {m.snapshots_auto_last()}: {when(scheduled.last)}
+            </p>
+            <p class="text-[11px] text-gray-400 dark:text-gray-500">
+              {m.snapshots_auto_next()}: {when(scheduled.next)}
+            </p>
+          {:else}
+            <p class="text-[11px] text-gray-400 dark:text-gray-500">{m.common_disabled()}</p>
+          {/if}
+        </div>
+        <div class="flex items-center gap-1.5 shrink-0">
+          {#if scheduled}
+            <!-- Named for what it does to this database, so it is never read
+                 as the schedule's own on/off switch in the settings dialog. -->
+            <Toggle
+              on={scheduled.covered}
+              title={scheduled.covered ? m.snapshots_auto_exclude() : m.snapshots_auto_include()}
+              onclick={toggleScheduled}
+            />
+          {/if}
+          <button
+            type="button"
+            onclick={() => (showSettings = true)}
+            use:tooltip={m.snapshots_auto_settings()}
+            aria-label={m.snapshots_auto_settings()}
+            class="flex items-center justify-center w-7 h-7 rounded-md text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+          >
+            <Icon name="system" class="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+
     {#if snapshots.length === 0}
       <p class="text-sm text-gray-400 dark:text-gray-500">{m.databases_noSnapshots()}</p>
     {:else}
@@ -178,9 +283,24 @@
             <div class="min-w-0 flex-1">
               <p class="truncate text-sm font-medium text-gray-800 dark:text-gray-200" title={snap.name}>{snapshotBaseName(snap.name)}</p>
               <p class="text-[11px] text-gray-400 dark:text-gray-500">
-                {#if snapDateLabel(snap)}{snapDateLabel(snap)} · {/if}{formatBytes(snap.size_bytes)}
+                {#if snapDateLabel(snap)}{snapDateLabel(snap)} · {/if}{formatBytes(snap.size_bytes)}{#if expiryLabel(snap)} · {expiryLabel(snap)}{/if}
               </p>
             </div>
+            {#if snap.auto}
+              <button
+                type="button"
+                onclick={() => toggleKeep(snap)}
+                disabled={Boolean(busy)}
+                use:tooltip={snap.kept ? m.databases_snapshotRelease() : m.databases_snapshotKeep()}
+                aria-label={snap.kept ? m.databases_snapshotRelease() : m.databases_snapshotKeep()}
+                aria-pressed={Boolean(snap.kept)}
+                class="flex items-center justify-center w-7 h-7 rounded-md transition-colors {snap.kept
+                  ? 'text-lerd-red'
+                  : 'text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5'}"
+              >
+                <Icon name="bookmark" class="w-3.5 h-3.5" />
+              </button>
+            {/if}
             <a
               href={snapshotExportUrl(engine.service, entry.name, snap.name)}
               use:tooltip={m.databases_export()}
@@ -227,6 +347,10 @@
     <DetailButton onclick={safeClose} disabled={Boolean(busy)}>{m.common_cancel()}</DetailButton>
   {/snippet}
 </Modal>
+
+{#if showSettings}
+  <SnapshotSettingsModal onclose={() => (showSettings = false)} />
+{/if}
 
 {#if showIssues && status?.issues}
   <ImportIssuesModal
