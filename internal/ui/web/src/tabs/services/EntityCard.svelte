@@ -106,17 +106,7 @@
   {#snippet header()}
     <Icon name="cube" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
-      {#if row.url}
-        <a
-          href={row.url}
-          target="_blank"
-          rel="noopener"
-          class="block truncate text-sm font-semibold text-gray-800 hover:underline dark:text-gray-100"
-          title={row.url}>{row.name}</a
-        >
-      {:else}
-        <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={row.name}>{row.name}</p>
-      {/if}
+      <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={row.name}>{row.name}</p>
       <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
         {#each kind.columns as col, i (col.key)}
           {#if i > 0}<span class="shrink-0" aria-hidden="true">·</span>{/if}
@@ -135,6 +125,21 @@
               class="min-w-0 truncate text-sky-600 dark:text-sky-400 hover:underline"
               title={row.site}
             >{row.site}</button>
+          </span>
+        {/if}
+        {#if row.url}
+          <!-- The address itself, not the name: the name is what the entity is
+               called, the link is where it answers, and they are not the same
+               once the service is served on its own domain. -->
+          <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+            <span class="shrink-0" aria-hidden="true">·</span>
+            <a
+              href={row.url}
+              target="_blank"
+              rel="noopener"
+              class="min-w-0 truncate text-sky-600 dark:text-sky-400 hover:underline"
+              title={row.url}>{row.url}</a
+            >
           </span>
         {/if}
       </p>
