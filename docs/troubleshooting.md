@@ -436,6 +436,21 @@ Everything from 1.26 onwards resolves the organisation move on its own, so this 
 On Homebrew, apt, dnf, or if you'd rather not pipe a script anywhere, [Updating from a version before 1.26](getting-started/updating-from-pre-1.26.md) has the route for each.
 :::
 
+::: details Error: could not fetch latest pre-release: GitHub API rate limit exhausted
+Symptom: `lerd update --beta` stops with `GitHub API rate limit exhausted for https://api.github.com/repos/lerd-env/lerd/releases, it resets in 46 min`.
+
+Cause: pre-releases are not covered by the `/releases/latest` redirect the stable channel follows, so the beta check asks the GitHub API instead. An anonymous API call is charged to a bucket of 60 requests an hour shared by everything on your IP, and any other tooling on the machine can empty it before lerd gets there. The stable channel is unaffected.
+
+Fix: wait for the reset the message names, or authenticate the call. Lerd sends `GITHUB_TOKEN` or `GH_TOKEN` if either is set in the environment, which raises the ceiling to 5,000 requests an hour:
+
+```bash
+export GITHUB_TOKEN=$(gh auth token)
+lerd update --beta
+```
+
+The token needs no scopes, public release metadata is all lerd reads, and it is only ever sent to `api.github.com` over https, never to a mirror configured through `LERD_RELEASES_API_URL`.
+:::
+
 ::: details Error: NetworkUpdate is not supported for backend CNI: invalid argument
 Your system is likely configured to use the older CNI backend, which lacks support for the requested network operation. Edit or create the Podman configuration file at `/etc/containers/containers.conf` and add or modify the `network_backend` setting to `netavark`:
 
