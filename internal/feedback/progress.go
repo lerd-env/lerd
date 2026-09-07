@@ -184,5 +184,5 @@ func (p *Progress) draw(frame string) {
 	if frame != "" {
 		line += " " + paint(spinStyle, frame)
 	}
-	fmt.Fprintf(target(), "\r\033[2K%s", line)
+	fmt.Fprint(target(), "\r\033[2K"+fitLine(line))
 }

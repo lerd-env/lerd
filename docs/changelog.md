@@ -7,6 +7,18 @@ Lerd uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [1.34.3] - 2026-09-07
+
+A patch for an install that stopped dead at a question. On a machine that already carries a database client of its own, the install asks whether lerd's shim should shadow it, and that question is the first thing in the run to read the keyboard after the progress views have had it. Each of those views left a reader behind with nothing to do but still queued on the terminal, so the answer typed at the question went to one of them and the newline ending it to another, and the install sat waiting for input that had already been taken. Answering again did nothing, because the same thing happened to the next keystroke.
+
+### Fixed
+
+- **`lerd install` and `lerd update` froze at the client shim question** (#1707). The progress views read the terminal so Ctrl+O can toggle their output, and each one closed the descriptor it was reading when it finished, on the assumption that this ends the read. It does not: a read already waiting on a terminal is not interrupted by closing the descriptor under it, so every view left its reader parked there for the rest of the run, and an install starts several of them. The shim question is the only one asked after them, which is why it was the one that hung, and why it only happened on a host that owns one of the client tools itself, since that is what makes the question worth asking at all. Where fewer readers had piled up it did not hang, it read the answer as a no and carried on, so an install could also quietly decide against shims nobody had declined. The reader polls before each read now and stopping it waits until it is gone, which also retires the rule that install questions had to be asked before the first progress view.
+
+- **A progress line wider than the terminal left a copy of itself behind on every frame** (#1709). The bars repaint by returning to the start of the line and clearing it, which replaces what was there only while the line fits. A longer one wraps, and the repaint then returns to and clears just the row the cursor ended on, so the wrapped remainder stays and the next frame lands under it. Refreshing forty store definitions in a narrow window filled the screen with near-identical lines, which is also what a captured install log carried into a bug report. Repainted lines are now cut to the width of the terminal, and left whole when there is no width to fit, so a redirected log reads as it always did.
+
+- **Ctrl+C stopped working for the rest of an install after the first step that needed sudo** (#1709). A step that hands the terminal over stops watching it, and took the terminal back afterwards without starting to watch again. Raw mode is what keeps Ctrl+C from reaching the process as a signal, so with the view rendering and nothing reading, there was no longer anything able to interrupt the run at all.
+
 ## [1.34.2] - 2026-09-04
 
 A patch about reading a project rather than guessing at it. Two of these fixes come out of the same blind spot: lerd asked composer.json what a project has and never opened composer.lock, so a package pulled in underneath another one read as absent while its code sat in vendor, and a constraint spanning two majors placed the project on the lower one however new the release it actually runs. A stock Tempest project was offered neither its migration step nor its command monitor, a Symfony project never saw the Messenger worker it had installed all along, and a Laravel project written as `^11.0 || ^12.0` was served the Laravel 11 definition along with that definition's PHP range, workers and commands.

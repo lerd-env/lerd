@@ -42,8 +42,6 @@ func runUninstall(force bool) error {
 		}
 	}
 
-	// Ask about data removal up front — the StepRunner puts stdin into raw
-	// mode and its reader goroutine would consume bytes meant for this prompt.
 	removeData := force || confirmRemoveData()
 
 	// Global npm packages the npm shim captured into lerd's prefix would

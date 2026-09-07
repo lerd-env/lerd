@@ -10,6 +10,7 @@ require (
 	github.com/SherClockHolmes/webpush-go v1.4.0
 	github.com/charmbracelet/x/ansi v0.11.7
 	github.com/coreos/go-systemd/v22 v22.7.0
+	github.com/creack/pty v1.1.24
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/getlantern/systray v1.2.2
 	github.com/godbus/dbus/v5 v5.2.2

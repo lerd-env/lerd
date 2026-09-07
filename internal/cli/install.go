@@ -1597,8 +1597,7 @@ func detectNvm() bool {
 	return nodeDet.ScriptPresent()
 }
 
-// confirmInstallPrompt asks a [Y/n] question. Must be called before any
-// RunParallel invocation, which leaves a goroutine reading from os.Stdin.
+// confirmInstallPrompt asks a [Y/n] question.
 func confirmInstallPrompt(question string) bool {
 	return confirmInstallPromptDefault(question, true)
 }
