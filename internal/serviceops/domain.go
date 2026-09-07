@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -86,13 +88,23 @@ func ValidateServiceDomain(service, domain string) (string, error) {
 // SetServiceDomain gives a service a domain and serves it there: the vhost, its
 // certificate and the hosts entry the app containers resolve through all follow
 // from the one call, so the name works from both sides the moment it returns.
-func SetServiceDomain(service, domain string) (string, error) {
+// A port of 0 leaves the choice to the preset, then to the service's primary.
+func SetServiceDomain(service, domain string, port int) (string, error) {
 	if !config.IsDefaultPreset(service) && !ServiceInstalled(service) {
 		return "", fmt.Errorf("%q is not a built-in or installed service", service)
 	}
 	resolved, err := ValidateServiceDomain(service, domain)
 	if err != nil {
 		return "", err
+	}
+	// A port the service does not listen on writes a vhost that answers nothing,
+	// which is indistinguishable from the domain not working at all.
+	if port > 0 {
+		declared := serviceContainerPorts(service)
+		if len(declared) > 0 && !slices.Contains(declared, port) {
+			return "", fmt.Errorf("service %q does not expose port %d (it exposes %s)",
+				service, port, joinPorts(declared))
+		}
 	}
 	cfg, err := config.LoadGlobal()
 	if err != nil {
@@ -101,6 +113,7 @@ func SetServiceDomain(service, domain string) (string, error) {
 	svcCfg := cfg.Services[service]
 	previous := svcCfg.Domain
 	svcCfg.Domain = resolved
+	svcCfg.DomainPort = port
 	// Choosing a domain is the opposite of turning it off, so it clears the
 	// record that would keep the preset's default away.
 	svcCfg.DomainOptOut = false
@@ -180,7 +193,7 @@ func ApplyServiceDomain(service string) error {
 	if domain == "" {
 		return nil
 	}
-	port := servicePrimaryPort(service)
+	port := serviceDomainPort(service)
 	if port == 0 {
 		return fmt.Errorf("service %q declares no port to proxy to", service)
 	}
@@ -309,11 +322,28 @@ func ApplyServiceDomains() error {
 	return nil
 }
 
-// servicePrimaryPort is the container-internal port nginx proxies to. The
-// published host port is deliberately not used: nginx reaches the service
+// ServiceDomainPort is serviceDomainPort for callers outside this package: the
+// port a service's domain actually proxies to, so a surface can show it rather
+// than leave the user guessing which of a multi-port service answers.
+func ServiceDomainPort(service string) int { return serviceDomainPort(service) }
+
+// serviceDomainPort is the container-internal port nginx proxies the domain to.
+// The published host port is deliberately not used: nginx reaches the service
 // across the podman network, where the container port is what listens.
-func servicePrimaryPort(service string) int {
-	if sc := config.ServiceConfigFor(service); sc.Port > 0 {
+//
+// The user's own choice wins, then the preset's, then the service's primary
+// port. That last fallback is a guess and only right when the first mapping
+// happens to be the HTTP one, which is why a multi-port preset says so.
+func serviceDomainPort(service string) int {
+	sc := config.ServiceConfigFor(service)
+	if sc.DomainPort > 0 {
+		return sc.DomainPort
+	}
+	preset, perr := config.LoadPreset(service)
+	if perr == nil && preset != nil && preset.DomainPort > 0 {
+		return preset.DomainPort
+	}
+	if sc.Port > 0 {
 		return sc.Port
 	}
 	if svc, err := config.LoadCustomService(service); err == nil && svc != nil {
@@ -323,10 +353,57 @@ func servicePrimaryPort(service string) int {
 	}
 	// The global config entry is seeded later than the install that adopts the
 	// domain, so at that moment the only place the port exists is the preset.
-	if preset, err := config.LoadPreset(service); err == nil && preset != nil {
+	if perr == nil && preset != nil {
 		return config.MappingContainerPort(firstMapping(preset.Ports))
 	}
 	return 0
+}
+
+// serviceContainerPorts lists every container port a service declares, so a
+// requested one can be checked against what actually listens rather than being
+// written into a vhost that answers nothing.
+func serviceContainerPorts(service string) []int {
+	var ports []int
+	add := func(p int) {
+		if p <= 0 {
+			return
+		}
+		for _, seen := range ports {
+			if seen == p {
+				return
+			}
+		}
+		ports = append(ports, p)
+	}
+	if sc := config.ServiceConfigFor(service); sc.Port > 0 {
+		add(sc.Port)
+		for containerPort := range sc.PublishedPorts {
+			add(containerPort)
+		}
+		for _, mapping := range sc.ExtraPorts {
+			add(config.MappingContainerPort(mapping))
+		}
+	}
+	if svc, err := config.LoadCustomService(service); err == nil && svc != nil {
+		for _, mapping := range svc.Ports {
+			add(config.MappingContainerPort(mapping))
+		}
+	}
+	if preset, err := config.LoadPreset(service); err == nil && preset != nil {
+		for _, mapping := range preset.Ports {
+			add(config.MappingContainerPort(mapping))
+		}
+	}
+	return ports
+}
+
+// joinPorts renders a port list for an error the user has to act on.
+func joinPorts(ports []int) string {
+	out := make([]string, 0, len(ports))
+	for _, p := range ports {
+		out = append(out, strconv.Itoa(p))
+	}
+	return strings.Join(out, ", ")
 }
 
 func firstMapping(ports []string) string {

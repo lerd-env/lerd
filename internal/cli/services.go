@@ -92,6 +92,7 @@ func NewServiceCmd() *cobra.Command {
 // newServiceDomainCmd returns the `service domain` command.
 func newServiceDomainCmd() *cobra.Command {
 	var remove bool
+	var port int
 	cmd := &cobra.Command{
 		Use:   "domain <service> [domain]",
 		Short: "Serve a service on its own domain, reachable from the app and the browser",
@@ -108,6 +109,12 @@ it: an S3 presigned URL carries its host inside the signature, so the app and
 the browser have to agree on one name before the URL is signed, and rewriting
 the host afterwards invalidates the signature. A service domain is that shared
 name, resolving to nginx from inside the app container and from the host alike.
+
+A service exposing more than one port declares which one its domain serves, and
+lerd falls back to the primary otherwise. Override it with --port when the
+service is yours or the preset says nothing:
+
+    lerd service domain rustfs console.rustfs.test --port 9001
 
 Run with no domain to show the current one, or --remove to stop serving it. The
 service stays reachable at lerd-<name> on the podman network either way.`,
@@ -129,14 +136,14 @@ service stays reachable at lerd-<name> on the podman network either way.`,
 			}
 			if len(args) == 1 {
 				if current := config.ServiceDomain(name); current != "" {
-					fmt.Printf("%s is served at https://%s\n", name, current)
+					fmt.Printf("%s is served at https://%s -> port %d\n", name, current, serviceops.ServiceDomainPort(name))
 					return nil
 				}
 				fmt.Printf("%s has no domain. Give it one with: lerd service domain %s %s\n",
 					name, name, serviceops.DefaultServiceDomain(name))
 				return nil
 			}
-			domain, err := serviceops.SetServiceDomain(name, args[1])
+			domain, err := serviceops.SetServiceDomain(name, args[1], port)
 			if err != nil {
 				return err
 			}
@@ -146,6 +153,7 @@ service stays reachable at lerd-<name> on the podman network either way.`,
 		},
 	}
 	cmd.Flags().BoolVar(&remove, "remove", false, "Stop serving the service on its domain")
+	cmd.Flags().IntVar(&port, "port", 0, "Container port the domain proxies to (default: the preset's, then the service's primary)")
 	return cmd
 }
 

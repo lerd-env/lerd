@@ -43,7 +43,10 @@ type ServiceConfig struct {
 	// DomainOptOut records that the user took the domain away deliberately, so
 	// the preset's default is not handed back on the next start. Without it
 	// `service domain --remove` would be undone by the very next reconcile.
-	DomainOptOut  bool   `yaml:"domain_opt_out,omitempty" mapstructure:"domain_opt_out"`
+	DomainOptOut bool `yaml:"domain_opt_out,omitempty" mapstructure:"domain_opt_out"`
+	// DomainPort overrides the container port the domain proxies to. 0 = the
+	// preset's choice, then the service's primary port.
+	DomainPort    int    `yaml:"domain_port,omitempty" mapstructure:"domain_port"`
 	PreviousImage string `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
 	// LastOp records the most recent mutation kind ("update" or "migrate") so
 	// the rollback flow can refuse a swap that would race the new image

@@ -232,6 +232,14 @@ Removing it is recorded, so the preset's default is not handed back on the next 
 
 The domain is a name both sides resolve: nginx serves it over HTTPS with a certificate from lerd's own CA, and the hosts file mounted into every PHP container points it at nginx, so the app signs for the same host the browser opens. A bare name is qualified with lerd's TLD, so `storage` means `storage.test`, and a domain outside that TLD is refused because nothing else resolves on both sides. The service stays reachable at `lerd-<name>` on the podman network throughout.
 
+A service exposing more than one port declares which one its domain serves, so Mailpit's `mailpit.test` would land on its web UI rather than on the SMTP port that happens to be listed first. Override it with `--port` when the preset says nothing:
+
+```bash
+lerd service domain rustfs console.rustfs.test --port 9001
+```
+
+A port the service does not expose is refused rather than written into a vhost that answers nothing.
+
 A subdomain of a site works just as well if you prefer the storage to sit under the app it belongs to, `lerd service domain rustfs rustfs.myapp.test`. lerd runs one RustFS for every site, so the default is a name of its own rather than one borrowed from a project, and per-site subdomains share a namespace with grouped sites and worktree domains; but nothing stops you naming it that way.
 
 Setting or removing a domain sweeps the sites that use the service and rewrites their env files right away, so the change reaches the projects instead of waiting for each to run `lerd env` itself. That matters most on removal: without the sweep every project would be left pointing at a name that no longer resolves.

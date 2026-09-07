@@ -242,7 +242,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
 | `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge] [--no-snapshot]` | Stop and remove a service (custom or default). With `--purge`, snapshot every database on it, then rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`). `--no-snapshot` skips the snapshot |
-| `lerd service domain <service> [domain] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. With no domain, show the current one |
+| `lerd service domain <service> [domain] [--port N] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. With no domain, show the current one |
 | `lerd service reinstall <name> [--reset-data] [--no-snapshot]` | Stop, remove, and reinstall at the current version, then recreate any linked site's missing database or bucket on it. With `--reset-data`, snapshot every database on it and rename the data dir aside first. `--no-snapshot` skips the snapshot |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |
 

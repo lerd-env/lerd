@@ -22,3 +22,6 @@ env_vars:
 category: mail
 icon: mail
 color: "#00b786"
+
+# The web UI, not the SMTP port a domain would otherwise land on.
+domain_port: 8025

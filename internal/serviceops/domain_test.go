@@ -104,7 +104,7 @@ func TestSetServiceDomain_PersistsAndServesIt(t *testing.T) {
 	domainTestConfig(t)
 	rec := stubDomainSeams(t)
 
-	domain, err := SetServiceDomain("rustfs", "rustfs")
+	domain, err := SetServiceDomain("rustfs", "rustfs", 0)
 	if err != nil {
 		t.Fatalf("SetServiceDomain: %v", err)
 	}
@@ -133,10 +133,10 @@ func TestSetServiceDomain_RenameDropsTheOldVhost(t *testing.T) {
 	domainTestConfig(t)
 	rec := stubDomainSeams(t)
 
-	if _, err := SetServiceDomain("rustfs", "rustfs"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "rustfs", 0); err != nil {
 		t.Fatalf("first SetServiceDomain: %v", err)
 	}
-	if _, err := SetServiceDomain("rustfs", "storage"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "storage", 0); err != nil {
 		t.Fatalf("second SetServiceDomain: %v", err)
 	}
 	if len(rec.removed) != 1 || rec.removed[0] != "rustfs.test" {
@@ -148,7 +148,7 @@ func TestRemoveServiceDomain_ClearsConfigAndVhost(t *testing.T) {
 	domainTestConfig(t)
 	rec := stubDomainSeams(t)
 
-	if _, err := SetServiceDomain("rustfs", "rustfs"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "rustfs", 0); err != nil {
 		t.Fatalf("SetServiceDomain: %v", err)
 	}
 	if err := RemoveServiceDomain("rustfs"); err != nil {
@@ -217,7 +217,7 @@ func TestAdoptDefaultServiceDomains_RespectsAnExplicitRemoval(t *testing.T) {
 	UnitInstalledFn = func(string) bool { return true }
 	t.Cleanup(func() { UnitInstalledFn = prev })
 
-	if _, err := SetServiceDomain("rustfs", "rustfs"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "rustfs", 0); err != nil {
 		t.Fatalf("SetServiceDomain: %v", err)
 	}
 	if err := RemoveServiceDomain("rustfs"); err != nil {
@@ -254,13 +254,13 @@ func TestSetServiceDomain_ClearsAnEarlierOptOut(t *testing.T) {
 	UnitInstalledFn = func(string) bool { return true }
 	t.Cleanup(func() { UnitInstalledFn = prev })
 
-	if _, err := SetServiceDomain("rustfs", "rustfs"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "rustfs", 0); err != nil {
 		t.Fatalf("SetServiceDomain: %v", err)
 	}
 	if err := RemoveServiceDomain("rustfs"); err != nil {
 		t.Fatalf("RemoveServiceDomain: %v", err)
 	}
-	if _, err := SetServiceDomain("rustfs", "storage"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "storage", 0); err != nil {
 		t.Fatalf("second SetServiceDomain: %v", err)
 	}
 	if config.ServiceConfigFor("rustfs").DomainOptOut {
@@ -277,7 +277,7 @@ func TestClearServiceDomain_DoesNotRecordARefusal(t *testing.T) {
 	UnitInstalledFn = func(string) bool { return true }
 	t.Cleanup(func() { UnitInstalledFn = prev })
 
-	if _, err := SetServiceDomain("rustfs", "rustfs"); err != nil {
+	if _, err := SetServiceDomain("rustfs", "rustfs", 0); err != nil {
 		t.Fatalf("SetServiceDomain: %v", err)
 	}
 	if err := ClearServiceDomain("rustfs"); err != nil {
@@ -294,7 +294,7 @@ func TestClearServiceDomain_DoesNotRecordARefusal(t *testing.T) {
 // The global config entry for a default preset is seeded later than the install
 // that adopts its domain, so resolving the port only from config left the vhost
 // unwritten and the domain answering nowhere until the user set it by hand.
-func TestServicePrimaryPort_FallsBackToThePreset(t *testing.T) {
+func TestServiceDomainPort_FallsBackToThePreset(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -311,7 +311,60 @@ func TestServicePrimaryPort_FallsBackToThePreset(t *testing.T) {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
 
-	if got := servicePrimaryPort("rustfs"); got != 9000 {
+	if got := serviceDomainPort("rustfs"); got != 9000 {
 		t.Errorf("port = %d, want 9000 from the preset", got)
+	}
+}
+
+// A multi-port service says which port its domain serves, because guessing the
+// first mapping lands on SMTP for a mail catcher whose web UI is the point.
+func TestServiceDomainPort_PrefersThePresetDeclaration(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if cfg.Services == nil {
+		cfg.Services = map[string]config.ServiceConfig{}
+	}
+	// The primary port is the SMTP one, which is what the old resolver returned.
+	cfg.Services["mailpit"] = config.ServiceConfig{Port: 1025}
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+	if got := serviceDomainPort("mailpit"); got != 8025 {
+		t.Errorf("port = %d, want the preset's 8025", got)
+	}
+}
+
+// An explicit choice outranks the preset, for a service whose useful port only
+// the user knows.
+func TestServiceDomainPort_UserChoiceWins(t *testing.T) {
+	domainTestConfig(t)
+	stubDomainSeams(t)
+
+	if _, err := SetServiceDomain("rustfs", "console.rustfs.test", 9001); err != nil {
+		t.Fatalf("SetServiceDomain: %v", err)
+	}
+	if got := serviceDomainPort("rustfs"); got != 9001 {
+		t.Errorf("port = %d, want the requested 9001", got)
+	}
+}
+
+// A port nothing listens on writes a vhost that answers nothing, which reads as
+// the domain simply not working rather than as the typo it is.
+func TestSetServiceDomain_RejectsAPortTheServiceDoesNotExpose(t *testing.T) {
+	domainTestConfig(t)
+	stubDomainSeams(t)
+
+	_, err := SetServiceDomain("rustfs", "rustfs.test", 1234)
+	if err == nil {
+		t.Fatal("expected a port the service does not expose to be refused")
+	}
+	if !strings.Contains(err.Error(), "9000") {
+		t.Errorf("the error should name the ports it does expose, got %v", err)
 	}
 }

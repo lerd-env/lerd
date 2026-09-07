@@ -97,6 +97,11 @@ type Preset struct {
 	// binary that predates this field ignores it and keeps behaving as it does
 	// today, which is why the default ships here rather than in Go.
 	Domain string `yaml:"domain,omitempty"`
+	// DomainPort is the container port the domain is served from, for a service
+	// exposing more than one. Without it the first mapping is assumed, which is
+	// the API for an object store but the SMTP port for a mail catcher whose web
+	// UI is the thing worth a hostname.
+	DomainPort int `yaml:"domain_port,omitempty"`
 	// DataVersionFile names a file inside the service's data dir whose contents
 	// identify the version that wrote the data (postgres PG_VERSION, mariadb
 	// mariadb_upgrade_info). It is matched against Versions[].Tag so a data dir
