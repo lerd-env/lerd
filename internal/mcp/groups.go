@@ -142,6 +142,9 @@ var groupDispatch = map[string]map[string]handlerFn{
 		"snapshots":       execDBSnapshots,
 		"restore":         execDBRestore,
 		"snapshot_delete": execDBSnapshotDelete,
+		"snapshot_keep":   execDBSnapshotKeep,
+		"auto":            execDBAuto,
+		"auto_set":        execDBAutoSet,
 		"extension_list":  execDBExtensionList,
 		"extension_add":   execDBExtensionAdd,
 	},
@@ -379,11 +382,11 @@ func serviceTool() mcpTool {
 func dbTool() mcpTool {
 	return mcpTool{
 		Name:        "db",
-		Description: "Database operations. action: list (an engine's databases), set (pick sqlite/mysql/postgres/alternate), move (same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete, extension_list, extension_add. extension_* are postgres-only; an import already creates what a dump reaches for, so use these to inspect or to add one up front.",
+		Description: "Database operations. action: list (an engine's databases), set (pick sqlite/mysql/postgres/alternate), move (same-family services), create, export, import, snapshot, snapshots, restore (destructive), snapshot_delete, snapshot_keep, auto, auto_set, extension_list, extension_add. auto reads the scheduled-snapshot policy and what it covers; auto_set writes it (selection opt-out covers every site, opt-in none), or one site's opt-in with site+mode. snapshot_keep exempts a snapshot from retention, which only drops automatic ones. extension_* are postgres-only; an import already creates what a dump reaches for, so use these to inspect or to add one up front.",
 		InputSchema: mcpSchema{
 			Type: "object",
 			Properties: map[string]mcpProp{
-				"action":        {Type: "string", Enum: []string{"list", "set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete", "extension_list", "extension_add"}},
+				"action":        {Type: "string", Enum: []string{"list", "set", "move", "create", "export", "import", "snapshot", "snapshots", "restore", "snapshot_delete", "snapshot_keep", "auto", "auto_set", "extension_list", "extension_add"}},
 				"path":          {Type: "string", Description: "Project root. Defaults to cwd."},
 				"database":      {Type: "string", Description: "set: db engine. Others: db name (default DB_DATABASE)."},
 				"from":          {Type: "string", Description: "move: source service."},
@@ -397,6 +400,14 @@ func dbTool() mcpTool {
 				"name":          {Type: "string", Description: "snapshot ops: snapshot name. create: db name."},
 				"service":       {Type: "string", Description: "list/snapshot: service override."},
 				"all_databases": {Type: "boolean", Description: "snapshot ops: whole service."},
+				"kept":          {Type: "boolean", Description: "snapshot_keep: false returns it to retention."},
+				"enabled":       {Type: "boolean", Description: "auto_set: schedule on/off."},
+				"every":         {Type: "string", Description: "auto_set: interval (6h, 24h)."},
+				"keep":          {Type: "number", Description: "auto_set: kept per db (-1 = no limit)."},
+				"keep_for":      {Type: "string", Description: "auto_set: max age (168h)."},
+				"selection":     {Type: "string", Description: "auto_set: opt-out or opt-in."},
+				"site":          {Type: "string", Description: "auto_set: set this site's override, not the policy."},
+				"mode":          {Type: "string", Description: "auto_set with site: on, off, default."},
 			},
 			Required: []string{"action"},
 		},

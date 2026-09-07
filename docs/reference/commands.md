@@ -27,6 +27,7 @@
 | `lerd status` | Health summary: DNS, nginx, PHP-FPM containers, watcher, services, cert expiry, LAN exposure and dashboard remote access; shows a notice if an update is available |
 | `lerd which` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
 | `lerd about` | Show version, build info, and project URL |
+| `lerd licenses` | Print the third-party license notices bundled with lerd, the copyright notices and license terms of every Go module linked into the binary and every npm package used to build the embedded dashboard |
 | `lerd man [page]` | Browse the built-in documentation in the terminal; pass a page name to jump directly (e.g. `lerd man sites`) |
 | `lerd tui` | Open a btop-style terminal dashboard with live site / service / worker status, per-site detail pane, inline domain and version editing, shell drop-in, log tailing, filter + sort, and global settings |
 | `lerd check` | Deprecated alias for `lerd site:doctor`, which validates `.lerd.yaml` as one check inside the site's health report |
@@ -79,9 +80,11 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
-| `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel) |
+| `lerd share --domain <hostname>` | Expose the site on your own Cloudflare-managed hostname via a named tunnel (implies Cloudflare Tunnel); with `--ngrok` it pins the tunnel to a domain reserved on your ngrok account instead |
+| `lerd share --ngrok-args "<flags>"` | Pass flags straight to ngrok for this run, overriding the stored ones |
 | `lerd share:tool [tool]` | Show or set the default tunnel tool for `lerd share` (`auto` restores auto-detection) |
 | `lerd share:domain [domain]` | Show or set the base domain a Cloudflare share is served under, as `<site>.<domain>` (`none` forgets it) |
+| `lerd share:ngrok-args [flags]` | Show or set the extra flags every ngrok share passes to ngrok, from the CLI and the dashboard alike (`none` forgets them) |
 | `lerd share:token [provider] [token]` | Show whether auth tokens are stored, or set one (`none` forgets it). A bare token means ngrok, which can then run as a container without being installed; `pinggy <token>` gives Pinggy shares a stable subdomain |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
 | `lerd secure --renew [name]` | Reissue a secured site's TLS cert on demand, resetting its expiry |
@@ -241,7 +244,8 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
 | `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge] [--no-snapshot]` | Stop and remove a service (custom or default). With `--purge`, snapshot every database on it, then rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`). `--no-snapshot` skips the snapshot |
-| `lerd service reinstall <name> [--reset-data] [--no-snapshot]` | Stop, remove, and reinstall at the current version. With `--reset-data`, snapshot every database on it, rename the data dir aside, and recreate linked sites' databases or buckets on the fresh service. `--no-snapshot` skips the snapshot |
+| `lerd service domain <service> [domain] [--port N] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. With no domain, show the current one |
+| `lerd service reinstall <name> [--reset-data] [--no-snapshot]` | Stop, remove, and reinstall at the current version, then recreate any linked site's missing database or bucket on it. With `--reset-data`, snapshot every database on it and rename the data dir aside first. `--no-snapshot` skips the snapshot |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |
 
 ## Database
@@ -256,6 +260,8 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd db:snapshots [--all]` | List stored database snapshots |
 | `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
 | `lerd db:snapshot:rm <name> [-A]` | Delete a stored database snapshot |
+| `lerd db:snapshot:keep <name> [--off]` | Keep an automatic snapshot for good, exempt from retention |
+| `lerd db:snapshot:auto status\|on\|off\|site` | Configure scheduled database snapshots, globally or per site |
 | `lerd db:move [--from svc] [--to svc] [--all\|--site name]` | Move sites' databases between two installed services in the same family and repoint their `.env`; wizard when run without flags |
 
 ## Import

@@ -72,6 +72,7 @@ Dots follow the same convention everywhere: green `●` running, grey `○` stop
 | `b` | Run `lerd service rollback <name>` to swap the focused service back to its previous version; pairs with `u` as the symmetric undo |
 | `H` | Run `lerd worker heal` to restart every failing framework worker in one pass. The header pill shows the count and the keybind is most relevant when it's lit |
 | `n` | Take a snapshot of the focused database (Databases tab). Adding a snapshot takes nothing away, which is why it is the one database action the TUI runs |
+| `K` | Keep an automatic snapshot of the focused database, or put it back under retention (Databases tab) |
 
 ### Logs
 
@@ -189,17 +190,17 @@ Sections, top to bottom:
 - **Services used**: every service referenced in `.lerd.yaml` with its live state, so you can see at a glance whether redis / mysql / etc. are up for this site.
 - **Workers**: queue, schedule, horizon, reverb, and any custom framework workers, each with a running / failing indicator. `space` on a worker row toggles it (calls `lerd queue start/stop`, etc.).
 - **Worktrees**: every git worktree with its branch, domain, and path when the site uses them. Each worktree row carries its own controls, PHP / Node version pickers, LAN-share toggle, isolated-DB toggle, and per-worktree framework worker toggles (e.g. vite), so a branch's runtime can be tuned without affecting the parent. `space` on a worktree-scoped row toggles the matching state via the same CLI commands the parent rows use, just with the worktree's path threaded through.
-- **Toggles**: HTTPS (runs `lerd secure` / `lerd unsecure`), LAN share (runs `lerd lan share` / `unshare`, shows the full `http://<lan-ip>:<port>` URL when enabled), PHP version (opens an inline picker from installed versions → `lerd isolate <ver>`; a FrankenPHP site only lists the versions FrankenPHP publishes an image for, so the picker never offers one that would silently downgrade), Node version (picker backed by `fnm list` → `lerd isolate:node <ver>`; when a host bun is installed the list also carries a `bun` entry that pins the site's JS runtime via `lerd js:runtime bun`, and picking a Node version while pinned to bun clears the pin first so the dev worker actually switches back).
+- **Toggles**: automatic snapshots (cycles the site between following the global policy, always and never, via `lerd db:snapshot:auto site`), HTTPS (runs `lerd secure` / `lerd unsecure`), LAN share (runs `lerd lan share` / `unshare`, shows the full `http://<lan-ip>:<port>` URL when enabled), PHP version (opens an inline picker from installed versions → `lerd isolate <ver>`; a FrankenPHP site only lists the versions FrankenPHP publishes an image for, so the picker never offers one that would silently downgrade), Node version (picker backed by `fnm list` → `lerd isolate:node <ver>`; when a host bun is installed the list also carries a `bun` entry that pins the site's JS runtime via `lerd js:runtime bun`, and picking a Node version while pinned to bun clears the pin first so the dev worker actually switches back).
 
 ## Databases tab
 
 The **Databases** tab is the terminal counterpart to the web UI's Databases page. The left column lists every installed engine (mysql, mariadb, postgres, mongo, and any store-published engine that declares databases of its own) and, under each, the databases it holds with their size and snapshot count. A stopped engine says so instead of listing; an engine whose listing query failed reads `unreadable`.
 
-The detail pane shows the selected database: the engine it lives in, its size, the site that owns it (with the branch, when it is a worktree's isolated database), and every snapshot with its timestamp, size and the git branch it was taken on.
+The detail pane shows the selected database: the engine it lives in, its size, the site that owns it (with the branch, when it is a worktree's isolated database), and every snapshot with its timestamp, size and the git branch it was taken on. A snapshot the schedule took is marked `auto` and carries when retention will drop it.
 
 Listing a database queries inside the engine's container, so the tab loads once on arrival and is then cached; `R` re-lists.
 
-Only one action runs from here. `n` takes a snapshot of the focused database, which adds a file and takes nothing away, the same shape as starting a service. Restore, drop, import and export overwrite or destroy data, so per the TUI scope rule they stay in the CLI as `lerd db:restore`, `lerd db:import` and `lerd db:export`.
+Two actions run from here, both of which only ever add or preserve. `n` takes a snapshot of the focused database, the same shape as starting a service. `K` opens a picker of that database's [automatic snapshots](../usage/database.md#automatic-snapshots) and keeps the highlighted one for good, or puts a kept one back under retention. Restore, drop, import and export overwrite or destroy data, so per the TUI scope rule they stay in the CLI as `lerd db:restore`, `lerd db:import` and `lerd db:export`.
 
 ## Dashboard tab
 
@@ -218,6 +219,7 @@ Press `S` (on the Sites tab) to swap the detail pane for global settings. Naviga
 
 - **LAN expose**: flip every container to 0.0.0.0 binds (`lerd lan expose on/off`).
 - **Autostart on login**: `lerd autostart enable/disable`.
+- **Automatic database snapshots**: `lerd db:snapshot:auto on/off`. The row names the schedule and how many snapshots are kept per database while it is on.
 - **Xdebug**: one toggle per installed PHP version; rebuilds the FPM container.
 
 `S` again (or `esc`) returns to Site detail.

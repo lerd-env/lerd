@@ -439,6 +439,15 @@ doctor:
       check:                          # drop the check unless the rule matches (optional)
         composer: nativephp/electron
 
+# Where the Debug window's engine-level capture should observe this framework
+# (optional). Jobs are the only kind so far: one entry per method that runs a
+# queued job, reported as processing then processed or failed, timed.
+devtools:
+  jobs:
+    - implements: Drupal\Core\Queue\QueueWorkerInterface   # or class: / extends:
+      method: processItem
+      name: this                    # this | arg:N, optionally .method:getHook / .prop:queue
+
 # Extra nginx config spliced into the site's server block (optional)
 nginx:
   snippet: |
@@ -455,6 +464,16 @@ worktree:
 ```
 
 An app that keeps deployment state in its database cannot share the parent's. Magento hashes its file config and stores the hash in the database, so seeding a worktree's own base URL into `env.php` makes the store refuse to serve until `app:config:import` re-syncs it, and running that import against a shared database would rewrite the hash out from under the parent site. `db_isolation: required` therefore skips the prompt and isolates, `db_source: main` clones the parent's data (an empty schema is useless to a store that cannot bootstrap itself), and `commands` run afterwards, in the worktree, through the framework's own `console` binary.
+
+## Queued job seams
+
+A queue is the one part of a framework the Debug window cannot reach through a shared library: Laravel dispatches its own events, Symfony has Messenger, and everyone else runs jobs through a class only that framework knows. Rather than teach the extension each name, a definition declares the method that runs a job and lerd renders every framework's declarations into one file the extension reads at startup.
+
+Exactly one of `class`, `implements` or `extends` selects what the seam applies to. `implements` is usually the right one: a framework's queue almost always defines an interface every job implements, so a single line covers whatever the project queues. The extension resolves the interface without autoloading, which is safe because the class being executed is loaded already and so is everything it inherits from.
+
+`name` says where the job's label comes from, and defaults to `this`. The vocabulary is deliberately small: `this` or `arg:N` names the subject, and an optional `.method:getHook` or `.prop:queue` reads one value off it. A subject with no accessor yields its class, which is what a queued job is normally called; WordPress is the exception, where every job is an `ActionScheduler_Action` and the useful name is the hook it runs, so its seam reads `name: this.method:get_hook`.
+
+Nothing about a seam is compiled in, so adding one is a store change that reaches every install within a day. A container already running picks up a new seam when it next restarts.
 
 ## The framework's own mark
 

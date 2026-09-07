@@ -266,6 +266,15 @@ func runPhpRebuild(cmd *cobra.Command, args []string) error {
 		feedback.Warn("could not store image hash: %v", err)
 	}
 
+	// The image carries the extension; the files it reads at startup (the debug
+	// bridge, the collector, the store-declared capture seams) live on the host
+	// and are written by the binary. Refresh them before the containers come
+	// back up, or a rebuilt image runs against whatever the previous version
+	// left behind.
+	if err := podman.EnsureDumpAssets(); err != nil {
+		feedback.Warn("could not write debug assets: %v", err)
+	}
+
 	label := "PHP-FPM images"
 	if len(versions) == 1 {
 		label = "PHP " + versions[0] + " image"

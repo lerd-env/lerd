@@ -11,7 +11,7 @@
     disableRemoteControl,
     setRemoteFullAccess
   } from '$stores/remoteControl';
-  import { openRemoteControlModal, openLANProgressModal, type LANAction } from '$stores/modals';
+  import { openRemoteControlModal, openLANProgressModal, openChangelogModal, type LANAction } from '$stores/modals';
   import {
     autostartEnabled,
     loadAutostart,
@@ -23,6 +23,8 @@
   } from '$stores/autostart';
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
   import Toggle from '$components/Toggle.svelte';
+  import DetailButton from '$components/DetailButton.svelte';
+  import Icon from '$components/Icon.svelte';
   import StatusPill from '$components/StatusPill.svelte';
   import SettingsCard from '$components/SettingsCard.svelte';
   import LANServicesSetting from './LANServicesSetting.svelte';
@@ -181,34 +183,38 @@
           <p class="text-xs text-gray-500 dark:text-gray-400">
             {@html m.system_lerd_updateHint({ cmd: '<code class="bg-gray-100 dark:bg-white/10 px-1.5 py-0.5 rounded-sm font-mono">lerd update</code>' })}
           </p>
-          {#if $accessMode.localControl}
-            <button
-              onclick={openUpdateTerminal}
-              disabled={updateTerminalLoading}
-              class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-colors"
-            >
-              {#if updateTerminalLoading}
-                <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
-                  <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
-                </svg>
-                {m.system_lerd_openingTerminal()}
-              {:else}
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                </svg>
-                {m.system_lerd_openTerminal()}
-              {/if}
-            </button>
-          {/if}
+          <div class="flex flex-wrap items-center gap-2">
+            {#if $accessMode.localControl}
+              <button
+                onclick={openUpdateTerminal}
+                disabled={updateTerminalLoading}
+                class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-colors"
+              >
+                {#if updateTerminalLoading}
+                  <svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"/>
+                  </svg>
+                  {m.system_lerd_openingTerminal()}
+                {:else}
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                  {m.system_lerd_openTerminal()}
+                {/if}
+              </button>
+            {/if}
+            {#if $version.changelog}
+              <DetailButton onclick={openChangelogModal}>
+                {#snippet icon()}
+                  <Icon name="docs" class="w-3.5 h-3.5" />
+                {/snippet}
+                {m.system_lerd_whatsNew()}
+              </DetailButton>
+            {/if}
+          </div>
           {#if updateTerminalError}
             <p class="text-xs text-red-500">{updateTerminalError}</p>
-          {/if}
-          {#if $version.changelog}
-            <div>
-              <p class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-2">{m.system_lerd_whatsNew()}</p>
-              <pre class="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-white/3 rounded-lg p-3 overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed border border-gray-100 dark:border-lerd-border">{$version.changelog}</pre>
-            </div>
           {/if}
         </div>
       {/if}

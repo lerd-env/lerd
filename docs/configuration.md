@@ -40,6 +40,12 @@ share:
                             # localhost-run or pinggy. Written by lerd
                             # share:tool; omitted (the default) means
                             # auto-detect.
+  ngrok_args: --host-header=rewrite
+                            # optional. Extra flags every ngrok share passes to
+                            # ngrok, for the ngrok features lerd has no setting
+                            # of its own for (a host-header rewrite, a traffic
+                            # policy file). Written by lerd share:ngrok-args;
+                            # lerd share --ngrok-args wins for a single run.
 nginx:
   http_port: 80        # host ports nginx publishes. Change these when another
   https_port: 443      # service already owns 80/443; nginx still listens on
@@ -160,6 +166,8 @@ A portable, self-contained description of a project's local environment. Created
 | `domains` | Site hostnames, with or without the TLD (e.g. `[myapp, api]` or `[myapp.test, api.test]`, both register the same pair). The first entry is the primary; additional entries become aliases. Conflict-filtered domains stay in this list on disk but are not registered. A hostname may not contain whitespace, a slash, or nginx punctuation (`{`, `}`, `;`, `#`), since it is written into the generated vhost's `server_name` |
 | `app_url` | Override for `APP_URL` (or the framework's URL key) written to `.env`. Highest priority, it beats the per-machine `sites.yaml` override and the default `<scheme>://<primary-domain>` generator. Use for custom path prefixes, ports, or unrelated hostnames you want shared across machines |
 | `env_overrides` | Map of env var names to templated or static values applied to `.env` on `lerd setup` and to per-worktree `.env` files when worktrees are created. Values may use <code v-pre>{{domain}}</code>, <code v-pre>{{scheme}}</code>, <code v-pre>{{site}}</code>, <code v-pre>{{branch}}</code>, and <code v-pre>{{parent}}</code> placeholders, or be plain strings. When `APP_URL` is in `env_overrides` it takes precedence over the default rewrite; declared keys override defaults, undeclared defaults still apply. The one exception is `DB_DATABASE` on a worktree whose `db_isolated` is true: the isolation flow owns that key and the watcher won't re-render it from the parent's template until isolation is turned back off. See [Env overrides](./features/git-worktrees.md#env-overrides) |
+| `worktree_include` | Paths, relative to the project root, copied from the main repo into every new worktree, for gitignored files the app needs to run (`auth.json`, a `storage/oauth-private.key`, a local config folder). Files and directories both work; a path the worktree already has is left alone, and a path that escapes the project root is ignored. See [Extra files in a worktree](./features/git-worktrees.md#extra-files-in-a-worktree) |
+| `env_passthrough` | Host environment variable names, glob patterns allowed, forwarded from lerd's own process into the one-shot commands it runs in the container (`lerd php`, console commands, composer, tests, tinker, `lerd shell`, MCP). Names only, never values. For an environment exported into the shell by a provider like direnv or sops; a provider that wraps the command sets `LERD_PASSTHROUGH_ENV` instead. See [External environment providers](./usage/php.md#external-environment-providers) |
 | `services` | Services to start on apply. Accepts built-in names, custom service names, or full inline definitions |
 | `workers` | Active worker names for the site (e.g. `queue`, `horizon`, `schedule`, `reverb`, `stripe`). Automatically kept in sync by start/stop commands. Used by `lerd start` to restore workers after reinstall |
 | `worker_options` | Values for a worker's tunable options, keyed by worker name then option (e.g. `queue: {queue: high,default,low}`). Written by `lerd queue:start --queue …` and by the dashboard's worker gear; read by every later start, so the project's own queues and limits survive a restart, a reinstall and a fresh clone. See [Worker options](./usage/queue-workers.md#worker-options) |

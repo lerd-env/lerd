@@ -25,7 +25,8 @@ export function buildKindGroups(
   text = '',
   hideSitePrefix = false,
   worker = '',
-  showWorkers = true
+  showWorkers = true,
+  status = ''
 ): DebugGroup[] {
   const needle = text ? text.toLowerCase() : '';
   const groups = new Map<string, DebugGroup>();
@@ -33,9 +34,12 @@ export function buildKindGroups(
     if (ev.kind !== kind) continue;
     if (site && ev.ctx.site !== site) continue;
     // "Show worker queries" off hides worker-emitted events from the view,
-    // not just future capture, matching buildQueryGroups.
-    if (!showWorkers && ev.ctx.worker) continue;
+    // not just future capture, matching buildQueryGroups. Jobs are exempt: a
+    // worker's jobs are captured whatever that toggle says, because they are
+    // the only feedback a queue being drained gives.
+    if (!showWorkers && kind !== 'job' && ev.ctx.worker) continue;
     if (worker && ev.ctx.worker !== worker) continue;
+    if (status && (ev.data as { status?: string } | undefined)?.status !== status) continue;
     if (needle && !kindHaystack(ev).includes(needle)) continue;
     const key = groupKey(ev);
     let g = groups.get(key);

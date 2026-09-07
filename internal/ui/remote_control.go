@@ -161,13 +161,15 @@ const csrfHeader = "X-Lerd-CSRF"
 // can't control) that can't carry the header, and each already has its own
 // source protection: /api/remote-setup has a token + RFC1918 + lockout gate,
 // the mailpit webhook is restricted to host-NAT'd source IPs, the internal
-// notify bridge (POSTed over loopback by out-of-process CLI/MCP commands) has
-// its own loopback gate and only triggers a dashboard refresh, and the
-// per-site unpause is POSTed from the paused-site holding page on the site's
-// own domain and is non-destructive.
+// notify bridge (POSTed over loopback by out-of-process CLI/MCP commands) and
+// the snapshot-run bridge (POSTed the same way by the watcher) have their own
+// loopback gate and only raise a notification, and the per-site unpause is
+// POSTed from the paused-site holding page on the site's own domain and is
+// non-destructive.
 func csrfExemptPath(path string) bool {
 	switch path {
-	case "/api/remote-setup", "/api/webhooks/mailpit", "/api/internal/notify":
+	case "/api/remote-setup", "/api/webhooks/mailpit", "/api/internal/notify",
+		"/api/internal/snapshot-run":
 		return true
 	}
 	return strings.HasPrefix(path, "/api/sites/") && strings.HasSuffix(path, "/unpause")
