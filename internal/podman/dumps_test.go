@@ -202,3 +202,60 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+// TestDevtoolsSeamsConf_RendersStoreSeams checks a framework's declared job
+// seams reach the file the extension reads, so a queue can be reported from
+// store data alone.
+func TestDevtoolsSeamsConf_RendersStoreSeams(t *testing.T) {
+	withTempXDG(t)
+	dir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("mkdir store frameworks: %v", err)
+	}
+	yaml := `name: fixturefw
+label: FixtureFW
+public_dir: public
+devtools:
+  jobs:
+    - implements: Fixture\Queue\JobInterface
+      method: process
+    - class: Fixture_Action
+      method: execute
+      name: this.method:get_hook
+    - class: Fixture\Broken|Pipe
+      method: run
+`
+	if err := os.WriteFile(filepath.Join(dir, "fixturefw@1.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("write framework: %v", err)
+	}
+
+	got := DevtoolsSeamsConf()
+	for _, want := range []string{
+		"job|implements|Fixture\\Queue\\JobInterface|process|this",
+		"job|class|Fixture_Action|execute|this.method:get_hook",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("seam file missing %q:\n%s", want, got)
+		}
+	}
+	// A field carrying the separator would shift every field after it.
+	if strings.Contains(got, "Fixture\\Broken") {
+		t.Errorf("a seam whose target holds the separator must be dropped:\n%s", got)
+	}
+}
+
+// TestWriteDumpBridgeAssets_WritesSeamsFile checks the seam file lands next to
+// the collector, since the extension reads it from that mount by a fixed path.
+func TestWriteDumpBridgeAssets_WritesSeamsFile(t *testing.T) {
+	withTempXDG(t)
+	if err := WriteDumpBridgeAssets(); err != nil {
+		t.Fatalf("WriteDumpBridgeAssets: %v", err)
+	}
+	b, err := os.ReadFile(config.DevtoolsSeamsFile())
+	if err != nil {
+		t.Fatalf("reading seam file: %v", err)
+	}
+	if !strings.HasPrefix(string(b), "# lerd devtools capture seams") {
+		t.Errorf("seam file missing its header:\n%s", b)
+	}
+}

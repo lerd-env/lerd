@@ -19,6 +19,7 @@ const AUTO_SUB_KEY = 'lerd:notify:auto-subscribe';
 export type NotifyKind =
   | 'mail'
   | 'worker_failed'
+  | 'job_failed'
   | 'op_done'
   | 'snapshot'
   | 'update_available'
@@ -29,6 +30,7 @@ export type NotifyKind =
 export const ALL_KINDS: NotifyKind[] = [
   'mail',
   'worker_failed',
+  'job_failed',
   'op_done',
   'snapshot',
   'update_available',
@@ -47,6 +49,9 @@ const DEFAULTS: NotifyPrefs = {
   kinds: {
     mail: true,
     worker_failed: true,
+    // A queued job that fails is a real failure the queue would otherwise
+    // swallow, and it is deduped per job class, so it is on by default.
+    job_failed: true,
     op_done: true,
     // One line per finished schedule run, and only when it took something, so
     // it stays quiet on a machine with nothing opted in.

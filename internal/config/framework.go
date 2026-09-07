@@ -104,6 +104,11 @@ type Framework struct {
 	// doctor runs in addition to the universal defaults (env, dependency, and
 	// audit checks every framework gets). See FrameworkDoctor.
 	Doctor *FrameworkDoctor `yaml:"doctor,omitempty"`
+
+	// Devtools declares where the lerd_devtools extension should observe this
+	// framework for the Debug window, so a framework's queue can be reported
+	// without any Go code knowing its name.
+	Devtools *FrameworkDevtools `yaml:"devtools,omitempty"`
 	// Nginx, when set, declares extra server-block config the framework needs
 	// (Magento's /setup, /static, and /media handling). See FrameworkNginx.
 	Nginx *FrameworkNginx `yaml:"nginx,omitempty"`
@@ -111,6 +116,38 @@ type Framework struct {
 	// (Magento 2.4 has no MySQL catalog search engine, so it needs opensearch).
 	// Link installs and starts them; the doctor reports one that goes missing.
 	Requires []string `yaml:"requires,omitempty"`
+}
+
+// FrameworkDevtools declares engine-level capture seams. Jobs are the only kind
+// so far: one entry per method that runs a queued job, which the extension
+// observes and reports as processing then processed or failed.
+type FrameworkDevtools struct {
+	Jobs []DevtoolsSeam `yaml:"jobs,omitempty"`
+}
+
+// DevtoolsSeam is one observed method. Exactly one of Class, Implements or
+// Extends selects which classes it applies to, and Name says where the job's
+// name comes from: "this" or "arg:N", each optionally with a ".method:getHook"
+// or ".prop:queue" accessor. An object with no accessor yields its class.
+type DevtoolsSeam struct {
+	Class      string `yaml:"class,omitempty"`
+	Implements string `yaml:"implements,omitempty"`
+	Extends    string `yaml:"extends,omitempty"`
+	Method     string `yaml:"method"`
+	Name       string `yaml:"name,omitempty"`
+}
+
+// Target is the class, interface or parent this seam matches on, with the kind
+// of match it is: "class", "implements" or "extends".
+func (s DevtoolsSeam) Target() (kind, name string) {
+	switch {
+	case s.Implements != "":
+		return "implements", s.Implements
+	case s.Extends != "":
+		return "extends", s.Extends
+	default:
+		return "class", s.Class
+	}
 }
 
 // FrameworkNginx carries a raw nginx block spliced into the site's server block

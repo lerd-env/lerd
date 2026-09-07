@@ -60,7 +60,7 @@ Non-Laravel apps (and queries that run before the framework boots) still fall ba
 
 Beyond queries, the same adapter feeds additional Debug sub-tabs:
 
-- **Jobs** *(Laravel)*: queued jobs as they finish, with status (processed/failed), connection, and the exception on failure.
+- **Jobs** *(Laravel)*: the whole life of a queued job, `queued` where it was dispatched, then `processing`, then `processed` or `failed` in the worker, with the queue, the connection, the attempt count, how long the job took, and the exception on failure. The `queued` row also carries what the job was handed, see [job payloads](#job-payloads).
 - **Views**: every template rendered, with its source path and the top-level data keys passed in. Each variable is labelled with what it holds, `page array(4)`, `user User`, `title "Dashboard"`, so the shape is visible without opening anything, with a string kept whole up to 160 characters and truncated past that. The values are not shipped: a view's data is the whole page payload on an Inertia app and routinely holds the authenticated user, so a label is both the useful part and the safe one. A render Blade compiled for itself is left out: an inline or anonymous component has no source file, so it appears under a hashed `__components::` name pointing into the compiled cache, and a template a developer wrote never lives there. The cache location comes from the app's own `view.compiled` config, so a project that moves it is still understood.
 - **Mail**: outgoing messages captured before send, with subject, recipients, and a sandboxed HTML preview.
 - **Cache** *(Laravel)*: hit / miss / write / forget events with the key and store. Framework-internal keys (the queue restart/pause signals, scheduler overlap mutexes, and reverb/horizon/pulse/telescope pub-sub) are filtered out so the tab shows the application's own cache use rather than background machinery, this matters most with worker capture on, where those keys are polled constantly.
@@ -77,18 +77,60 @@ Queries, Mail and Views are captured **agnostically** at the shared library ever
 - **Mail**: observed at `Symfony\Component\Mailer\Mailer::send`, the de-facto mail library used directly by Symfony and wrapped by Laravel. The collector reads the `Symfony\Component\Mime\Email` for subject, recipients and body.
 - **Views**: observed at `Twig\Environment::render` / `display`, the de-facto Symfony view layer. The collector resolves the on-disk `.twig` source path through Twig's loader the same way Blade's `getPath()` does, and skips the dev-only `@WebProfiler` toolbar.
 - **Events**: observed at `Symfony\Component\EventDispatcher\EventDispatcher::dispatch` (the debug `TraceableEventDispatcher` delegates to it, so each dispatch is seen once). The collector keeps application events and drops the framework lifecycle noise (`kernel.*`, `console.*`, and the `Symfony\`/`Twig\`/`Doctrine\` component internals), mirroring the Laravel `Illuminate\*` filter.
-- **Jobs**: observed at `Symfony\Component\Messenger\MessageBus::dispatch` (the debug `TraceableMessageBus` delegates to it). Each message dispatched to the bus is recorded with its class; an `Envelope` is unwrapped to the real message. Status is `dispatched` because the bus only signals that a message was queued. This fires in the web request, unlike Laravel's adapter which reports jobs as a worker finishes them, so the two read slightly differently.
+- **Jobs**: observed at `Symfony\Component\Messenger\MessageBus::dispatch` (the debug `TraceableMessageBus` delegates to it). Each message dispatched to the bus is recorded with its class; an `Envelope` is unwrapped to the real message, and one carrying a `ReceivedStamp` is skipped because that is the worker handing a message it already received back to the bus, not a new dispatch. Status is `dispatched`, since the bus only signals that a message was queued, and the message's own properties ride along as the payload. What the worker then does with it comes from `WorkerMessageReceivedEvent`, `WorkerMessageHandledEvent` and `WorkerMessageFailedEvent`, which arrive through the same dispatcher seam and are reported as `processing`, `processed` and `failed` with the receiver name as the queue and the time the message took.
 - **HTTP**: observed at `Symfony\Component\HttpClient\CurlHttpClient::request` / `NativeHttpClient::request` (the default factory yields one of these; decorators delegate down to them). Captured at the *begin* of the call because `request()` rewrites its own `$url` argument internally. Symfony responses are lazy, so no status code is known at call time, the row shows the method and URL with a `sent` marker rather than a status, whereas Laravel's adapter (which listens after the response arrives) shows the real code.
 
 Cache still comes solely from the Laravel adapter. Symfony spreads cache across many adapter classes with the read path living in a trait, so there's no single canonical seam to observe; the only single-class option is the dev-only `TraceableAdapter`, which is also extremely noisy (the framework hammers its system pools every request). It's deferred rather than captured half-complete. The Debug sub-tabs reflect this: a Symfony site shows Dumps, Queries, Mail, Views, Events, Jobs and HTTP; a Laravel site shows all of them.
+
+## Job payloads
+
+A job row expands to show what the job was given:
+
+```
+program        Program #17
+program.id     17
+program.name   "Spring 2026"
+program.status "active"
+email          "client@example.test"
+items          array(12)
+```
+
+Scalars are kept whole and everything else is labelled by what it is, the same rule the Views lens follows and for the same reason: a queued job routinely holds the authenticated user, and the shape is the useful half without the tokens. Only properties declared on the job's own class are read, so a job extending a framework base class, or using a trait like Laravel's `Queueable`, reports what its author passed rather than the thirteen properties the trait brings.
+
+An enum reads as its case, `ProgramStatus::Published`, with the backing value appended only when it differs from the case name (`Priority::High (9)`). A bare class name would say nothing, and the case is what the code works with.
+
+A model is the case that made this worth doing. `program Program` says nothing about which program, so an object is named by its key where it has one and then described one level down under dotted keys. For a model those are its stored attributes, read from what is already loaded and never through an accessor, an appended attribute or a relation, so opening a job row cannot put a query on the database. That also means an attribute is reported as it is stored: a column cast to an enum shows the string in the database rather than the enum instance, which is what the queue is actually carrying. Whatever the model hides, a password or a remember token, is left out on its own say-so. For anything else they are the properties its class declares. Only one level: a model inside a model reads as `owner User #3` and stops there, so an object graph can never be walked. A payload is capped at 60 entries and any one object at 20.
+
+Where the payload comes from depends on what there is to read:
+
+- **Laravel** reports it on the `queued` row only. Once a job is on the queue it is a serialized blob, and reading that back in the worker would re-hydrate every model the job holds through `SerializesModels`, firing the queries a debug lens must never cause. The `queued` row therefore carries the payload and the job's uuid, and the worker's rows carry the same uuid, so one job's four states tie together.
+- **Symfony** reports it on every state, since Messenger hands the worker the message object itself.
+- **Store seams** report the first argument where the observed method takes one, which is how a queue passes an item (Drupal's `processItem($data)` shows `id 999999`), and the job object's own properties where it does not.
+
+## Queued jobs (store-declared seams)
+
+Laravel and Symfony aside, a framework's queue is reported from data rather than code. A framework definition in the store declares which method runs a queued job:
+
+```yaml
+devtools:
+  jobs:
+    - implements: Drupal\Core\Queue\QueueWorkerInterface
+      method: processItem
+```
+
+lerd renders every framework's declarations into `devtools-seams.conf` next to the collector, and the extension reads it at startup. It observes the declared method, reporting `processing` on the way in and `processed` on the way out, or `failed` (carrying the throwable's message) when the call is unwinding with an exception, timed and grouped per job the same way Laravel's and Symfony's are. Because nothing is compiled in, a new framework's queue is a store change that reaches every install within a day, with no binary release. A running FPM container picks up a new seam on its next restart, like the ini beside it.
+
+A seam matches on `class`, `implements` or `extends`, and the optional `name` says where the job's label comes from: `this` (the default) or `arg:N`, either followed by `.method:getHook` or `.prop:queue`. An object with no accessor yields its class, which is what a job is usually called. Ship the seams today: CakePHP (`Cake\Queue\Job\JobInterface::execute`), CodeIgniter (`CodeIgniter\Queue\Interfaces\JobInterface::process`), Drupal (`Drupal\Core\Queue\QueueWorkerInterface::processItem`), TYPO3 (`TYPO3\CMS\Scheduler\Task\AbstractTask::execute`) and WordPress (Action Scheduler, labelled by the hook it runs). Magento and Tempest are not covered yet: neither has a per-message seam that can be named with confidence without checking it against a real install.
 
 ## Queue workers (opt-in)
 
 Long-running queue and scheduler workers (`queue:work`, `horizon`, `schedule:work`, `messenger:consume`) poll the database constantly, so capturing them by default would flood the in-memory buffer and bury the web-request queries you're actually debugging. Worker capture is therefore **off by default**: web requests and one-off CLI commands (artisan, tinker, migrations) are always captured, but worker processes are skipped unless you opt in.
 
-Turn it on with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens: Queries, Jobs, Views, Mail, Cache, Events, HTTP). Checking it arms worker capture by writing the `devtools-workers.flag` sentinel; from then on each worker invocation is captured and grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together.
+Jobs are the exception, and are captured from a worker whatever this toggle says. A worker's jobs are the queue's own feedback rather than noise about it, and hiding them behind the opt-in is what left a queue being drained looking like nothing was happening at all. The Jobs lens therefore carries no worker checkbox; it offers a status filter instead, because one job now reports every state it passes through.
 
-Unchecking **Show worker queries** does two things: it stops capturing worker output going forward, and it immediately hides the worker rows already buffered in the view, so the lenses fall back to web and CLI activity without waiting for a buffer clear. The toggle is independent of the main Debug on/off switch.
+Turn it on with the **Show worker queries** checkbox in the Debug window toolbar (present on every lens but Jobs: Queries, Views, Mail, Cache, Events, HTTP). Checking it arms worker capture by writing the `devtools-workers.flag` sentinel; from then on each worker invocation is captured and grouped on its own, labelled by the worker command, and a per-command filter dropdown appears so you can narrow to one worker. The Laravel adapter resets the request id on every `JobProcessing`, so each queued job is its own group rather than a worker's jobs lumping together.
+
+Unchecking **Show worker queries** does two things: it stops capturing worker output going forward, and it immediately hides the worker rows already buffered in the view, so the lenses fall back to web and CLI activity without waiting for a buffer clear. Jobs stay put through both. The toggle is independent of the main Debug on/off switch.
 
 ## Test runs (hidden by default)
 

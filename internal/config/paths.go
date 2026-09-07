@@ -270,6 +270,13 @@ func DevtoolsCollectorFile() string {
 	return filepath.Join(DumpsAssetsDir(), "devtools-collector.php")
 }
 
+// DevtoolsSeamsFile is the host path for the store-declared capture seams the
+// extension reads at startup, one line per observed method. Lives beside the
+// collector in the dumps assets dir, mounted at /usr/local/etc/lerd.
+func DevtoolsSeamsFile() string {
+	return filepath.Join(DumpsAssetsDir(), "devtools-seams.conf")
+}
+
 // LaravelAdapterFile is the host path for the Laravel devtools adapter, loaded
 // by the lerd_devtools extension at Application::boot. It lives in the dumps
 // assets dir because that directory is bind-mounted into FPM at
