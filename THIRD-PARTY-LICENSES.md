@@ -1,0 +1,1 @@
+internal/licenses/THIRD-PARTY-LICENSES.md

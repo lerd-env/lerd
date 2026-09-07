@@ -159,6 +159,14 @@ func RemoveService(name string, opts RemoveOptions, emit func(PhaseEvent)) error
 		}
 	}
 
+	// A domain outlives nothing: its vhost would keep answering for a service
+	// that is gone, and the certificate would go on being renewed.
+	if config.ServiceDomain(name) != "" {
+		if err := ClearServiceDomain(name); err != nil {
+			emit(PhaseEvent{Phase: "removing_domain", Message: err.Error()})
+		}
+	}
+
 	emit(PhaseEvent{Phase: "removing_quadlet", Unit: unit})
 	if err := removeQuadletFn(unit); err != nil {
 		return fmt.Errorf("remove quadlet %s: %w", unit, err)

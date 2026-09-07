@@ -1094,6 +1094,12 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	refreshGlobalMCPSkills()
 	refreshProjectMCPSkills()
 
+	// A service whose preset declares a domain takes it here as well as at start.
+	// An update runs this path, and plenty of machines never see a `lerd start`
+	// between one release and the next, so leaving it to start alone would mean
+	// the fix arrives for some users and not others.
+	adoptDefaultServiceDomains()
+
 	// Record which version this environment is set up for, so a binary a
 	// package manager swaps underneath it is recognised on the next command.
 	writeInstalledVersion(version.Version)

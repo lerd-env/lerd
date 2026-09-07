@@ -331,4 +331,8 @@ Lerd stands on a set of excellent open-source projects it bundles or fetches to 
 
 ## License
 
-MIT
+lerd is MIT licensed, see [LICENSE](LICENSE).
+
+The binary also carries code from the Go modules it links and the npm packages the dashboard is built from. Their copyright notices and license terms are reproduced in [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md), which ships in every release archive and is embedded in the binary itself, so `lerd licenses` prints it on any machine. The file is generated from the real dependency graph by `make licenses`, and CI fails when it drifts.
+
+The tools lerd downloads onto your machine at runtime, listed above, are not redistributed by lerd and keep their own licenses where they are installed.

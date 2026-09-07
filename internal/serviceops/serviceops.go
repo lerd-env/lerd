@@ -393,8 +393,27 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 	if err := waitReadyFn(svc.Name, 60*time.Second); err != nil {
 		return svc, err
 	}
+
+	// A service installed after its sites were linked comes up empty, and
+	// nothing else would ever create the databases and buckets those sites
+	// already point at. Best-effort: one unprovisionable site must not fail an
+	// install that otherwise succeeded.
+	if err := installReprovFn(svc.Name, emit); err != nil {
+		emit(PhaseEvent{Phase: "reprovisioning_failed", Message: err.Error()})
+	}
+	// A service that needs a domain needs it from the moment it exists, not from
+	// the next start: the first thing the user does with a fresh object store is
+	// point an app at it, and a URL signed before the name exists is already
+	// wrong.
+	for _, adopted := range AdoptDefaultServiceDomains() {
+		emit(PhaseEvent{Phase: "domain_adopted", Message: adopted + ": " + config.ServiceDomain(adopted)})
+	}
 	return svc, nil
 }
+
+// installReprovFn is the seam InstallPresetStreaming uses to recreate per-site
+// state on the freshly installed service; swapped in tests.
+var installReprovFn = ReprovisionLinkedSites
 
 // InstallPresetByName materialises a bundled preset as a custom service.
 // version selects a tag for multi-version presets; empty falls back to the
@@ -409,6 +428,9 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 	if err := registerPreset(svc); err != nil {
 		return nil, err
 	}
+	// Same reason as the streaming path: the name has to exist before anything
+	// signs a URL against it.
+	AdoptDefaultServiceDomains()
 	return svc, nil
 }
 
