@@ -34,7 +34,14 @@ func siteUsingRustfs(t *testing.T, name string) string {
 	if err := config.AddSite(config.Site{Name: name, Domains: []string{name + ".test"}, Path: dir}); err != nil {
 		t.Fatalf("AddSite: %v", err)
 	}
-	return dir
+	// The registry stores the resolved path, and on macOS the temp dir is a
+	// symlink (/var/folders -> /private/var/folders), so the raw path the test
+	// created would never match what comes back out.
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatalf("EvalSymlinks: %v", err)
+	}
+	return resolved
 }
 
 // A domain that never reaches the projects pointing at the service does
