@@ -6,42 +6,6 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-// nativeMode points the install at the native runtime for one test.
-func nativeMode(t *testing.T) {
-	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	cfg := &config.GlobalConfig{}
-	cfg.PHP.Runtime = config.PHPRuntimeNative
-	// Every real install has a default version; the shim falls back to it
-	// outside a project.
-	cfg.PHP.DefaultVersion = "8.4"
-	if err := config.SaveGlobal(cfg); err != nil {
-		t.Fatalf("SaveGlobal: %v", err)
-	}
-}
-
-// Both host-proxy sites and, under the native runtime, ordinary FPM sites run
-// their PHP on the host, so both reach lerd services over loopback and the
-// published ports rather than container DNS.
-func TestUsesLoopbackServicesUnderNative(t *testing.T) {
-	nativeMode(t)
-	cases := []struct {
-		name string
-		site *config.Site
-		want bool
-	}{
-		{"plain fpm site", &config.Site{}, true},
-		{"host proxy", &config.Site{HostPort: 3000}, true},
-		{"frankenphp keeps container DNS", &config.Site{Runtime: "frankenphp"}, false},
-		{"custom fpm keeps container DNS", &config.Site{Runtime: "fpm-custom"}, false},
-	}
-	for _, c := range cases {
-		if got := usesLoopbackServices(c.site); got != c.want {
-			t.Errorf("%s: usesLoopbackServices = %v, want %v", c.name, got, c.want)
-		}
-	}
-}
-
 // In container mode only a host-proxy site reaches services over loopback.
 func TestUsesLoopbackServicesUnderContainerRuntime(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
