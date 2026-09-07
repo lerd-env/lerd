@@ -875,6 +875,20 @@ func execStripeConfig(args map[string]any) (any, *rpcError) {
 		siteName, config.StripeWebhookPath(site.Path))), nil
 }
 
+// composerExecArgs builds the podman exec argv for a composer run in a project's
+// container. It runs lerd's own phar rather than the composer the image carries,
+// so an assistant and the CLI are on the same version of it, and forwards the
+// host variables an external environment provider asked lerd to pass on.
+func composerExecArgs(container, workdir string, env, composerArgs []string) []string {
+	args := []string{"exec", "-w", workdir, "--env", composer.ProcessTimeoutEnv()}
+	for _, e := range env {
+		args = append(args, "--env", e)
+	}
+	args = append(args, envpass.Args(workdir, os.Environ())...)
+	args = append(args, container, "php", composer.PharPath())
+	return append(args, composerArgs...)
+}
+
 func execComposer(args map[string]any) (any, *rpcError) {
 	projectPath := resolvedPath(args)
 	if projectPath == "" {
@@ -896,13 +910,7 @@ func execComposer(args map[string]any) (any, *rpcError) {
 		return errBody, nil
 	}
 
-	cmdArgs := []string{"exec", "-w", projectPath, "--env", composer.ProcessTimeoutEnv()}
-	for _, e := range agentenv.MCPInject(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	cmdArgs = append(cmdArgs, envpass.Args(projectPath, os.Environ())...)
-	cmdArgs = append(cmdArgs, container, "composer")
-	cmdArgs = append(cmdArgs, composerArgs...)
+	cmdArgs := composerExecArgs(container, projectPath, agentenv.MCPInject(os.Environ()), composerArgs)
 
 	var out bytes.Buffer
 	cmd := podman.Cmd(cmdArgs...)
@@ -3795,7 +3803,7 @@ func runComposerInstallIfNeeded(projectPath string, out *bytes.Buffer) error {
 	container := phpDet.FPMContainerForDir(projectPath, phpVersion)
 
 	out.WriteString("\n\n--- composer install ---\n")
-	cmd := podman.Cmd("exec", "-w", projectPath, "--env", composer.ProcessTimeoutEnv(), container, "composer", "install", "--no-interaction")
+	cmd := podman.Cmd(composerExecArgs(container, projectPath, nil, []string{"install", "--no-interaction"})...)
 	cmd.Stdout = out
 	cmd.Stderr = out
 	return cmd.Run()
@@ -4262,7 +4270,7 @@ func execDBSnapshots(args map[string]any) (any, *rpcError) {
 	if err != nil {
 		return toolErr(err.Error()), nil
 	}
-	data, _ := json.MarshalIndent(snaps, "", "  ")
+	data, _ := json.MarshalIndent(snapshotsWithRetention(snaps), "", "  ")
 	return toolOK(string(data)), nil
 }
 

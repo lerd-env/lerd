@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dbview"
@@ -38,11 +39,42 @@ type dbEngineResponse struct {
 // the domain of the linked site that owns the database, when one does, and
 // Branch names the worktree when the database is that branch's isolated one.
 type dbEntryResponse struct {
-	Name      string                `json:"name"`
-	SizeBytes int64                 `json:"size_bytes"`
-	Site      string                `json:"site,omitempty"`
-	Branch    string                `json:"branch,omitempty"`
-	Snapshots []serviceops.Snapshot `json:"snapshots"`
+	Name      string             `json:"name"`
+	SizeBytes int64              `json:"size_bytes"`
+	Site      string             `json:"site,omitempty"`
+	Branch    string             `json:"branch,omitempty"`
+	Snapshots []snapshotResponse `json:"snapshots"`
+}
+
+// snapshotResponse is a stored snapshot plus what retention has in store for it,
+// computed from the live policy rather than stored, so a schedule the user just
+// changed is reflected the next time the list is drawn.
+type snapshotResponse struct {
+	serviceops.Snapshot
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	RunsLeft  int        `json:"runs_left,omitempty"`
+	Estimated bool       `json:"estimated,omitempty"`
+}
+
+// withRetention pairs each snapshot with its expiry under the current policy.
+func withRetention(snaps []serviceops.Snapshot) []snapshotResponse {
+	cfg, _ := config.LoadGlobal()
+	expiries := serviceops.SnapshotExpiries(serviceops.RetentionPolicy{
+		Keep:    cfg.AutoSnapshotKeep(),
+		KeepFor: cfg.AutoSnapshotKeepFor(),
+		Every:   cfg.AutoSnapshotEvery(),
+	}, snaps)
+
+	out := make([]snapshotResponse, 0, len(snaps))
+	for i, snap := range snaps {
+		row := snapshotResponse{Snapshot: snap, RunsLeft: expiries[i].RunsLeft, Estimated: expiries[i].Estimated}
+		if !expiries[i].At.IsZero() {
+			at := expiries[i].At
+			row.ExpiresAt = &at
+		}
+		out = append(out, row)
+	}
+	return out
 }
 
 // testingDBSuffix names the paired testing database lerd creates alongside every
@@ -87,10 +119,10 @@ func databaseEngine(name string, siteIndex map[string]dbview.Owner) dbEngineResp
 			Site:      db.Owner.Domain,
 			Branch:    db.Owner.Branch,
 			// A database with no snapshots must serialize as a list, not null.
-			Snapshots: []serviceops.Snapshot{},
+			Snapshots: []snapshotResponse{},
 		}
 		if len(db.Snapshots) > 0 {
-			entry.Snapshots = db.Snapshots
+			entry.Snapshots = withRetention(db.Snapshots)
 		}
 		eng.Databases = append(eng.Databases, entry)
 	}
@@ -141,6 +173,12 @@ func handleDatabaseAction(w http.ResponseWriter, r *http.Request) {
 	}
 	if action == "snapshot" && len(parts) == 3 && parts[2] == "export" && r.Method == http.MethodGet {
 		handleSnapshotExport(w, r, service)
+		return
+	}
+	// Keeping a snapshot only rewrites its sidecar on disk, so it works whether
+	// or not the engine is up.
+	if action == "snapshot" && len(parts) == 3 && parts[2] == "keep" && r.Method == http.MethodPost {
+		handleSnapshotKeep(w, r, service)
 		return
 	}
 	if status, _ := podman.UnitStatus("lerd-" + service); status != "active" {
@@ -289,11 +327,27 @@ func handleSnapshotCreate(w http.ResponseWriter, r *http.Request, service string
 		return
 	}
 	target := serviceops.SnapshotTarget{Service: service, Family: config.FamilyOfName(service), Database: database}
-	if _, err := serviceops.CreateSnapshot(target, name, serviceops.SnapshotMeta{}, nil); err != nil {
+	meta := serviceops.SnapshotMeta{Site: snapshotSiteName(service, database)}
+	if _, err := serviceops.CreateSnapshot(target, name, meta, nil); err != nil {
 		writeDBError(w, err.Error())
 		return
 	}
 	writeDBOK(w)
+}
+
+// snapshotSiteName resolves the site a database belongs to, by name rather than
+// by domain: the scheduler and the CLI both record the name, and a column that
+// mixed the two would read as two different sites for one project.
+func snapshotSiteName(service, database string) string {
+	owner := databaseSiteIndexes()[service][database]
+	if owner.Domain == "" {
+		return ""
+	}
+	site, err := config.FindSiteByDomain(owner.Domain)
+	if err != nil {
+		return ""
+	}
+	return site.Name
 }
 
 func handleSnapshotRestore(w http.ResponseWriter, r *http.Request, service string) {
@@ -324,6 +378,28 @@ func handleSnapshotDelete(w http.ResponseWriter, r *http.Request, service string
 		return
 	}
 	if err := serviceops.DeleteSnapshot(service, database, name, false); err != nil {
+		writeDBError(w, err.Error())
+		return
+	}
+	writeDBOK(w)
+}
+
+// handleSnapshotKeep pins an automatic snapshot so retention leaves it alone, or
+// releases it back under retention.
+func handleSnapshotKeep(w http.ResponseWriter, r *http.Request, service string) {
+	var body struct {
+		Database string `json:"database"`
+		Name     string `json:"name"`
+		Kept     bool   `json:"kept"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Name == "" {
+		writeDBError(w, "a database and snapshot name are required")
+		return
+	}
+	if !requireDatabaseName(w, body.Database) {
+		return
+	}
+	if err := serviceops.SetSnapshotKept(service, body.Database, body.Name, false, body.Kept); err != nil {
 		writeDBError(w, err.Error())
 		return
 	}

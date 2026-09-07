@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -48,7 +49,8 @@ func WriteContainerHostsWith(hostIP, nginxIP string) error {
 		return fmt.Errorf("loading sites: %w", err)
 	}
 
-	content := renderContainerHosts(reg, hostIP, nginxIP)
+	serviceDomains := config.ServiceDomains()
+	content := renderContainerHosts(reg, hostIP, nginxIP, serviceDomains)
 	hostsPath := config.ContainerHostsFile()
 	if err := os.MkdirAll(filepath.Dir(hostsPath), 0755); err != nil {
 		return err
@@ -60,13 +62,13 @@ func WriteContainerHostsWith(hostIP, nginxIP string) error {
 	// Write the browser-testing variant: same domains but resolved to
 	// lerd-nginx's IP on the Podman network so Chromium inside Selenium
 	// (or similar containers) can reach sites via HTTP/HTTPS.
-	return writeBrowserHosts(reg, nginxIP)
+	return writeBrowserHosts(reg, nginxIP, serviceDomains)
 }
 
 // renderContainerHosts builds the /etc/hosts contents for PHP-FPM containers.
 // .test domains go to nginxIP (direct bridge), host.containers.internal to
 // hostIP (host gateway for Xdebug and other host-side services).
-func renderContainerHosts(reg *config.SiteRegistry, hostIP, nginxIP string) string {
+func renderContainerHosts(reg *config.SiteRegistry, hostIP, nginxIP string, serviceDomains map[string]string) string {
 	var sb strings.Builder
 	sb.WriteString("127.0.0.1 localhost\n")
 	sb.WriteString("::1 localhost\n")
@@ -77,14 +79,32 @@ func renderContainerHosts(reg *config.SiteRegistry, hostIP, nginxIP string) stri
 			fmt.Fprintf(&sb, "%s %s\n", nginxIP, domain)
 		}
 	}
+	writeServiceDomains(&sb, nginxIP, serviceDomains)
 	return sb.String()
+}
+
+// writeServiceDomains adds the hostnames services are served on. An app reaches
+// a service by container name, but a hostname the browser will also be given
+// has to resolve to nginx from inside the app container too: a presigned URL
+// carries its host in the signature, so both sides have to use the same name.
+func writeServiceDomains(sb *strings.Builder, nginxIP string, serviceDomains map[string]string) {
+	// Sorted so two runs of the same configuration produce the same file and the
+	// diff that decides whether anything changed stays meaningful.
+	names := make([]string, 0, len(serviceDomains))
+	for name := range serviceDomains {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		fmt.Fprintf(sb, "%s %s\n", nginxIP, serviceDomains[name])
+	}
 }
 
 // writeBrowserHosts writes the browser-testing hosts file, mapping all .test
 // domains to nginxIP. When nginx isn't running the caller passes loopback and
 // the file stays well-formed (safe no-op — Selenium simply can't reach sites
 // until nginx starts).
-func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string) error {
+func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string, serviceDomains map[string]string) error {
 	var sb strings.Builder
 	sb.WriteString("127.0.0.1 localhost\n")
 	sb.WriteString("::1 localhost\n")
@@ -94,6 +114,7 @@ func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string) error {
 			fmt.Fprintf(&sb, "%s %s\n", nginxIP, domain)
 		}
 	}
+	writeServiceDomains(&sb, nginxIP, serviceDomains)
 
 	browserPath := config.BrowserHostsFile()
 	if err := os.MkdirAll(filepath.Dir(browserPath), 0755); err != nil {

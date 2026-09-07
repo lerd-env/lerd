@@ -14,6 +14,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/freeport"
+	"github.com/geodro/lerd/internal/hostbin"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 )
@@ -643,10 +644,22 @@ func TestDetectSystemNode_findsNvmDirEvenWhenPathIsEmpty(t *testing.T) {
 	}
 }
 
+// detectNvm resolves the nvm dir through the global config first and, on macOS,
+// through the Homebrew prefixes, so without this the assertions read whatever
+// the developer's own machine has installed.
+func isolateNvmLookup(t *testing.T) {
+	t.Helper()
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	prev := hostbin.ExtraDirs
+	hostbin.ExtraDirs = func() []string { return nil }
+	t.Cleanup(func() { hostbin.ExtraDirs = prev })
+}
+
 // An nvm with no Node versions in it is invisible to detectSystemNode, so
 // detectNvm is what makes the management question reach that user at all.
 func TestDetectNvm(t *testing.T) {
 	t.Run("empty nvm dir under NVM_DIR counts", func(t *testing.T) {
+		isolateNvmLookup(t)
 		tmp := t.TempDir()
 		t.Setenv("NVM_DIR", tmp)
 		if detectNvm() {
@@ -661,6 +674,7 @@ func TestDetectNvm(t *testing.T) {
 	})
 
 	t.Run("falls back to ~/.nvm", func(t *testing.T) {
+		isolateNvmLookup(t)
 		tmp := t.TempDir()
 		t.Setenv("NVM_DIR", "")
 		t.Setenv("HOME", tmp)

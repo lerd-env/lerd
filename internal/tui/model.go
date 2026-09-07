@@ -174,6 +174,14 @@ type Model struct {
 	pickerCursor       int
 	pickerWorktreePath string
 	pickerWorktreeName string
+	// pickerSnapshotNames is parallel to pickerOptions for the keep picker,
+	// holding the real snapshot name behind each annotated line.
+	pickerSnapshotNames []string
+	// pickerSnapshotKept is parallel to it: whether that snapshot is already
+	// kept, which decides whether applying pins or releases it.
+	pickerSnapshotKept    []bool
+	pickerSnapshotService string
+	pickerSnapshotDB      string
 
 	// Domain-input state: when active, typing adds characters to the
 	// pending domain name; enter runs `lerd domain add`, esc cancels.
@@ -837,6 +845,15 @@ func (m *Model) handleMainKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		// action; every other database operation overwrites or destroys.
 		if m.activeTab == tabDatabases {
 			return m, m.actionDatabaseSnapshot()
+		}
+		return m, nil
+
+	case "K":
+		// Keeping a snapshot only exempts it from retention, so it belongs with
+		// the other reversible quick actions.
+		if m.activeTab == tabDatabases {
+			m.openSnapshotKeepPicker()
+			return m, nil
 		}
 		return m, nil
 

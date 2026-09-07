@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/geodro/lerd/internal/envfile"
 )
@@ -68,6 +69,7 @@ func SitesUsingService(name string) []Site {
 	if err != nil {
 		return nil
 	}
+	domain := ServiceDomain(name)
 	var out []Site
 	for _, s := range reg.Sites {
 		if s.Ignored || s.Paused {
@@ -89,6 +91,15 @@ func SitesUsingService(name string) []Site {
 		envFile, _ := EnvFileFor(s.Path)
 		if data, err := os.ReadFile(filepath.Join(s.Path, envFile)); err == nil {
 			if envfile.ReferencesContainer(string(data), name) {
+				out = append(out, s)
+				continue
+			}
+			// A site whose env was rewritten to the service's domain no longer
+			// names the container at all, so without this it drops out of every
+			// sweep that keeps it wired: the one that would put the container
+			// name back when the domain goes away, and the provisioning that
+			// keeps its database or bucket there.
+			if domain != "" && strings.Contains(string(data), domain) {
 				out = append(out, s)
 			}
 		}
@@ -159,4 +170,32 @@ func ServiceExtraPorts(name string) []string {
 		return sc.ExtraPorts
 	}
 	return nil
+}
+
+// ServiceDomain returns the hostname a service is served on, empty when it has
+// none. Readers that hand a URL to a browser use it: the container name a
+// service is otherwise reached at resolves nowhere outside the podman network.
+func ServiceDomain(name string) string {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return ""
+	}
+	return cfg.Services[name].Domain
+}
+
+// ServiceDomains returns every configured service domain keyed by service name.
+// The hosts file and the vhost sweep both walk it, so neither has to know which
+// services opted in.
+func ServiceDomains() map[string]string {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for name, sc := range cfg.Services {
+		if sc.Domain != "" {
+			out[name] = sc.Domain
+		}
+	}
+	return out
 }

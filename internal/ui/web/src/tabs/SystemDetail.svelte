@@ -11,6 +11,7 @@
   import LerdDetail from './system/LerdDetail.svelte';
   import ToolsDetail from './system/ToolsDetail.svelte';
   import WorkerModeDetail from './system/WorkerModeDetail.svelte';
+  import SnapshotsDetail from './system/SnapshotsDetail.svelte';
 
   const selected = $derived($routeRest || 'lerd');
   const phpVersion = $derived(selected.startsWith('php-') ? selected.slice(4) : '');
@@ -34,6 +35,8 @@
   <NodePage />
 {:else if selected === 'workermode'}
   <WorkerModeDetail />
+{:else if selected === 'snapshots'}
+  <SnapshotsDetail />
 {:else if selected === 'tools'}
   <ToolsDetail />
 {:else}

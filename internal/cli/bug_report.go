@@ -172,16 +172,39 @@ func section(w io.Writer, title string) {
 
 func dumpConfigFiles(w io.Writer) {
 	for _, p := range []string{config.GlobalConfigFile(), config.SitesFile()} {
-		fmt.Fprintf(w, "── %s\n", p)
-		data, err := os.ReadFile(p)
-		if err != nil {
-			fmt.Fprintf(w, "(unreadable: %v)\n\n", err)
+		dumpConfigFile(w, p, "")
+	}
+	// The registry says a site exists; only its .lerd.yaml says which
+	// workers, options and services it declares, which is what tells a lost
+	// declaration apart from a worker that failed to start.
+	reg, err := config.LoadSites()
+	if err != nil || reg == nil {
+		return
+	}
+	for _, s := range reg.Sites {
+		if s.Path == "" {
 			continue
 		}
-		fmt.Fprintln(w, string(data))
-		if !bytes.HasSuffix(data, []byte("\n")) {
-			fmt.Fprintln(w)
+		dumpConfigFile(w, filepath.Join(s.Path, ".lerd.yaml"), "(no .lerd.yaml for this site)")
+	}
+}
+
+// dumpConfigFile writes one config file verbatim under its path. missing, when
+// set, replaces the error line for a file that simply is not there.
+func dumpConfigFile(w io.Writer, path, missing string) {
+	fmt.Fprintf(w, "── %s\n", path)
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if missing != "" && os.IsNotExist(err) {
+			fmt.Fprintf(w, "%s\n\n", missing)
+			return
 		}
+		fmt.Fprintf(w, "(unreadable: %v)\n\n", err)
+		return
+	}
+	fmt.Fprintln(w, string(data))
+	if !bytes.HasSuffix(data, []byte("\n")) {
+		fmt.Fprintln(w)
 	}
 }
 

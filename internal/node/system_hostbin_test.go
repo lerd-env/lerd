@@ -5,6 +5,14 @@ import (
 	"testing"
 )
 
+// emptyPathDir stands in for a daemon PATH that carries no Node. A literal
+// /usr/bin:/bin would pick up a distro-packaged node and make the assertions
+// depend on what the machine running the tests has installed.
+func emptyPathDir(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(t.TempDir(), "sysbin")
+}
+
 // withBrewPrefix points the unit PATH list at a fixture standing in for
 // /opt/homebrew/bin, which a launchd daemon never has on PATH.
 func withBrewPrefix(t *testing.T, dir string) {
@@ -36,7 +44,7 @@ func TestSystemNodeBinDirs_findsHomebrewUnderDaemonPATH(t *testing.T) {
 	writeExec(t, stale, "node")
 	writeExec(t, stale, "npm")
 
-	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+	t.Setenv("PATH", emptyPathDir(t))
 
 	dirs := SystemNodeBinDirs()
 	if len(dirs) != 1 || dirs[0] != brew {
@@ -59,7 +67,7 @@ func TestSystemNodeBinDirs_stillFallsBackToNvm(t *testing.T) {
 	writeExec(t, nvmBin, "node")
 	writeExec(t, nvmBin, "npm")
 
-	t.Setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+	t.Setenv("PATH", emptyPathDir(t))
 
 	dirs := SystemNodeBinDirs()
 	if len(dirs) != 1 || dirs[0] != nvmBin {
