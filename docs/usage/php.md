@@ -59,6 +59,8 @@ Because the `php` shim runs inside the PHP-FPM container, `php artisan`, `lerd a
 
 Prefer typing `lerd php` explicitly and keeping `php` pointed at a host install? Run `lerd path:disable`: it removes lerd's shims dir from your shell PATH and keeps installs and updates from re-adding it, while every `lerd …` command works unchanged (child processes lerd spawns still resolve the shims internally). `lerd path:enable` reverses it. One thing to know either way: the shimmed `php` runs inside the container, so a PHP script that `exec()`s host tools sees the container's PATH, not your shell's — with the shim disabled, a host `php` behaves like any other host process.
 
+Composer works the same way, with one thing worth knowing: lerd runs its own `composer.phar`, downloaded to `~/.local/share/lerd/bin/` at install and pinned in the tools manifest, and it runs it with the container's PHP. That is the copy behind `composer` on your PATH, behind `lerd composer`, behind the setup steps and behind the MCP composer tool, so an assistant and your terminal are never on two different versions of it, and a bumped pin reaches every install without an image rebuild. The FPM image ships a composer of its own, frozen at the day the image was built, so lerd's phar is bind-mounted over it and `composer` typed inside `lerd shell` is the same one again. If you already had a composer of your own on the host, it stays exactly where it is and `lerd install` says so; `lerd path:disable` puts it back in front.
+
 ### Shortcuts and `vendor/bin` fallback
 
 For common workflows there are a few built-in shortcuts:
@@ -253,6 +255,33 @@ lerd xdebug pause --pid 1234      # break the IDE into that process
 `pause` uses Xdebug's [control socket](https://xdebug.org/docs/xdebugctl) (Xdebug >= 3.3, baked into lerd's FPM images) via the `xdebugctl` tool. It is the practical way to debug a **queue/Horizon worker, a scheduled task, or a CLI script**: processes where you can't set a trigger cookie. Run it from a project directory (or pass a site name); lerd resolves the site's container, scopes the candidate list to that site's own processes, and tells the running process to connect to your IDE on port `9003`. The worker must have been started *after* Xdebug was enabled, and your IDE must be listening. Because `xdebugctl` ships only in the shared FPM image, `pause` is PHP-FPM only; FrankenPHP and custom-container sites run their own image without it (the regular `lerd xdebug on` toggle still works on them).
 
 For ordinary web requests under `--on-demand`, use the [Xdebug Helper](https://xdebug.org/docs/step_debug#browser-extensions) browser extension (or append `?XDEBUG_TRIGGER=1`) to trigger a session per page.
+
+---
+
+## External environment providers
+
+Secrets managers and environment tools run a command with an ephemeral environment, `ghostable env run --env local -- lerd php artisan migrate`, `op run -- lerd test`, `doppler run -- lerd artisan queue:work`. The variables reach the `lerd` process, but podman forwards no host environment into a container, so without a contract they stop at the boundary.
+
+lerd forwards them on request, by name. The provider (or your shell) sets `LERD_PASSTHROUGH_ENV` to the names it injected, comma or space separated, glob patterns allowed:
+
+```bash
+LERD_PASSTHROUGH_ENV="APP_KEY,DB_PASSWORD,STRIPE_*" \
+  doppler run -- lerd php artisan migrate
+```
+
+lerd expands the patterns against its own environment and hands podman a bare `--env NAME` for each match, so podman reads the value out of lerd's environment. No secret is written to `.env`, to `.lerd.yaml`, or into the argument list where `ps` would show it.
+
+The semantics are the ones systemd's `PassEnvironment=`, ssh's `SendEnv` and sudo's `env_keep` already use. Names that match nothing are skipped silently. `PATH`, `HOME`, `COMPOSER_HOME` and anything starting with `LD_` or `LERD_` are never forwarded: lerd sets those for the container itself.
+
+When your provider exports into the shell rather than wrapping a command (direnv, sops, a shell function), there is no wrapper to carry the variable. Declare the names in the project's `.lerd.yaml` instead:
+
+```yaml
+env_passthrough:
+  - STRIPE_*
+  - DB_PASSWORD
+```
+
+Both sources are merged. Forwarding applies to the commands you invoke yourself, `lerd php`, framework console commands, composer, tests, tinker, `lerd shell`, and the MCP exec tools. Web requests served by PHP-FPM and long-running workers are not covered; their environment belongs in the site's `.env`.
 
 ---
 

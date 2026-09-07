@@ -17,6 +17,7 @@ import (
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
+	"github.com/geodro/lerd/internal/services"
 )
 
 // A host dev server normally advertises its own address, so everything it
@@ -213,7 +214,7 @@ func regenSiteOrWorktreeVhost(site *config.Site, sitePath string) {
 // devServerEnsurePort pins the site's dev server to a stable host port and
 // saves it, so the vhost generated later proxies somewhere the tool will
 // actually be listening.
-func devServerEnsurePort(siteName, sitePath string, defaultPort int) (int, error) {
+func devServerEnsurePort(siteName, sitePath, workerName string, defaultPort int) (int, error) {
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return 0, err
@@ -225,8 +226,11 @@ func devServerEnsurePort(siteName, sitePath string, defaultPort int) (int, error
 		current = site.WorktreeDevPorts[key]
 	}
 	// A pinned port that something else has taken would make the tool refuse to
-	// start rather than drift, so an unusable pin is re-picked here.
-	if current != 0 && freeport.Bindable(current) {
+	// start rather than drift, so an unusable pin is re-picked here. The site's
+	// own dev server holding it is not something else: this runs on every start,
+	// and moving the vhost off the port the tool is already serving would leave
+	// the page asking for assets on one nothing answers on.
+	if current != 0 && (freeport.Bindable(current) || devServerHoldsPort(siteName, sitePath, workerName)) {
 		return current, nil
 	}
 	port := assignDevServerPort(siteName, key, defaultPort)
@@ -282,7 +286,7 @@ func assignDevServerPort(excludeSiteName, excludeWorktree string, defaultPort in
 // devServerSetup pins the port, writes the generated config and regenerates the
 // site's vhost so nginx proxies the prefix. It returns the arguments to append
 // to the worker command, empty when the project is not shaped for this.
-func devServerSetup(siteName, sitePath string, tool *config.DevServerTool) (string, error) {
+func devServerSetup(siteName, sitePath, workerName string, tool *config.DevServerTool) (string, error) {
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return "", err
@@ -297,7 +301,7 @@ func devServerSetup(siteName, sitePath string, tool *config.DevServerTool) (stri
 	if err != nil || wrapper == "" {
 		return "", err
 	}
-	port, err := devServerEnsurePort(siteName, sitePath, tool.DefaultPort)
+	port, err := devServerEnsurePort(siteName, sitePath, workerName, tool.DefaultPort)
 	if err != nil {
 		return "", err
 	}
@@ -400,7 +404,7 @@ func rewriteDevServerWrapper(sitePath string, tool *config.DevServerTool, addr d
 // every path that writes a worker unit points the tool at the generated config
 // and the pinned port. Anything the mechanism cannot apply cleanly leaves the
 // command as it was.
-func devServerCommand(siteName, sitePath, command string, host bool) string {
+func devServerCommand(siteName, sitePath, workerName, command string, host bool) string {
 	if !host {
 		return command
 	}
@@ -408,7 +412,7 @@ func devServerCommand(siteName, sitePath, command string, host bool) string {
 	if tool == nil {
 		return command
 	}
-	args, err := devServerSetup(siteName, sitePath, tool)
+	args, err := devServerSetup(siteName, sitePath, workerName, tool)
 	if err != nil {
 		feedback.Warn("dev server stays on its own port: %v", err)
 		return command
@@ -417,4 +421,14 @@ func devServerCommand(siteName, sitePath, command string, host bool) string {
 		return command
 	}
 	return command + " " + args
+}
+
+// devServerHoldsPort reports whether the site's own dev server worker is the
+// one sitting on its pinned port, which is the difference between a pin that
+// has drifted and a pin that is doing its job.
+func devServerHoldsPort(siteName, sitePath, workerName string) bool {
+	if workerName == "" || services.Mgr == nil {
+		return false
+	}
+	return services.Mgr.IsActive(WorkerUnitName(siteName, sitePath, workerName))
 }

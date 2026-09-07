@@ -15,6 +15,7 @@
   import { lerdStart, lerdStop, lerdStarting, lerdStopping } from '$stores/lerdLifecycle';
   import { workerExecMode, workerModeApplies, loadWorkerMode } from '$stores/workerMode';
   import { phpRuntime, phpRuntimeApplies, loadPHPRuntime } from '$stores/phpRuntime';
+  import { autoSnapshot, loadAutoSnapshot } from '$stores/autoSnapshot';
   import { status as dumpsStatusValue, refreshStatus as refreshDumpsStatus } from '$stores/dumps';
   import { notifyPrefs, permissionState, autoSubscribeDisabled, notifyDelivery } from '$lib/notify';
   import { onMount } from 'svelte';
@@ -24,6 +25,7 @@
     loadWorkerMode();
     loadPHPRuntime();
     void refreshDumpsStatus();
+    void loadAutoSnapshot();
   });
 
   const selected = $derived($routeRest || 'lerd');
@@ -127,6 +129,11 @@
         {m.system_runtime_listLabel()}
       </ListRow>
     {/if}
+
+    {#snippet snapshotsDot()}<StatusDot color={$autoSnapshot.enabled ? 'green' : 'gray'} />{/snippet}
+    <ListRow active={selected === 'snapshots'} onclick={() => select('snapshots')} leading={snapshotsDot}>
+      {m.snapshots_title()}
+    </ListRow>
 
     {#snippet watcherDot()}<StatusDot color={$status.watcher_running ? 'green' : 'gray'} />{/snippet}
     <ListRow active={selected === 'watcher'} onclick={() => select('watcher')} leading={watcherDot}>{m.system_watcher()}</ListRow>

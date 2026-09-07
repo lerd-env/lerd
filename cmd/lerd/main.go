@@ -177,6 +177,7 @@ func main() {
 	root.AddCommand(cli.NewCheckCmd())
 	root.AddCommand(cli.NewRunCmd())
 	root.AddCommand(cli.NewAboutCmd())
+	root.AddCommand(cli.NewLicensesCmd())
 	root.AddCommand(cli.NewWhatsnewCmd())
 	root.AddCommand(cli.NewManCmd())
 	root.AddCommand(cli.NewDoctorCmd())
@@ -205,6 +206,8 @@ func main() {
 	root.AddCommand(cli.NewDbSnapshotsCmd())
 	root.AddCommand(cli.NewDbRestoreCmd())
 	root.AddCommand(cli.NewDbSnapshotRmCmd())
+	root.AddCommand(cli.NewDbSnapshotKeepCmd())
+	root.AddCommand(cli.NewDbSnapshotAutoCmd())
 	root.AddCommand(cli.NewDbMoveCmd())
 	root.AddCommand(cli.NewDbExtensionCmd())
 	root.AddCommand(cli.NewClientExecCmd())
@@ -230,6 +233,7 @@ func main() {
 	root.AddCommand(cli.NewShareToolCmd())
 	root.AddCommand(cli.NewShareDomainCmd())
 	root.AddCommand(cli.NewShareTokenCmd())
+	root.AddCommand(cli.NewShareNgrokArgsCmd())
 	root.AddCommand(cli.NewDomainCmd())
 	root.AddCommand(cli.NewGroupCmd())
 	root.AddCommand(cli.NewWorkspaceCmd())
@@ -615,6 +619,12 @@ func newWatchCmd() *cobra.Command {
 			// so rebuild leftovers and stale base images don't pile up. Gated by
 			// the auto_cleanup config; never touches service images (--deep).
 			go watcher.WatchCleanup(time.Hour)
+
+			// Take the scheduled database snapshots of every site the
+			// automatic-snapshot policy covers, and prune what retention has
+			// expired. Off unless the user turns it on; the hourly tick only
+			// decides whether the configured schedule is due.
+			go watcher.WatchAutoSnapshot(time.Hour)
 
 			// Keep the cached framework store index fresh so offline detection and
 			// listing resolve the full catalogue without a network round trip.

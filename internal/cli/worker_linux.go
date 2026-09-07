@@ -241,7 +241,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 	// The unit is rewritten here on every `lerd start`, so the dev server flags
 	// have to be rebuilt with it or the worker comes back on its own port and
 	// the site's page is refused the assets it asks for.
-	command = devServerCommand(siteName, sitePath, command, w.Host)
+	command = devServerCommand(siteName, sitePath, workerName, command, w.Host)
 
 	fpmUnit := resolveWorkerFPMUnit(siteName, phpVersion)
 	unitName, displaySite := workerNames(siteName, sitePath, workerName)

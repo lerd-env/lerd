@@ -15,6 +15,7 @@ import (
 
 	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/nativephp"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -126,6 +127,7 @@ func RunTinker(ctx context.Context, sitePath, siteName, branch, code string) (Ti
 	for _, e := range agentenv.Passthrough(os.Environ()) {
 		envArgs = append(envArgs, "--env", e)
 	}
+	envArgs = append(envArgs, envpass.Args(sitePath, os.Environ())...)
 	if siteName != "" {
 		envArgs = append(envArgs, "--env", "LERD_SITE="+siteName)
 	}

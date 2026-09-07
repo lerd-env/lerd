@@ -397,7 +397,13 @@ func appendGroupedLens(m *Model, focused bool, innerW int, out []string) ([]stri
 		if buffered == 0 {
 			add(dimStyle.Render("  no " + lensNoun(kind) + " captured yet"))
 			add("")
-			add("  " + dimStyle.Render("enable with ") + accentStyle.Render("T") + dimStyle.Render("; worker events also need ") + accentStyle.Render("w"))
+			hint := "  " + dimStyle.Render("enable with ") + accentStyle.Render("T")
+			// Jobs are captured from workers whatever the worker toggle says,
+			// so pointing at it there would send the reader somewhere useless.
+			if kind != lerddumps.KindJob {
+				hint += dimStyle.Render("; worker events also need ") + accentStyle.Render("w")
+			}
+			add(hint)
 		} else {
 			add(dimStyle.Render("  no " + lensNoun(kind) + " match this filter"))
 		}
@@ -481,10 +487,32 @@ func lensNoun(kind string) string {
 // Light decoders for the kind-specific Data payloads the lerd_devtools
 // adapters emit; only the fields the lens rows render are pulled out.
 type jobData struct {
-	Class      string `json:"class"`
-	Status     string `json:"status"`
-	Connection string `json:"connection"`
-	Exception  string `json:"exception"`
+	Class      string            `json:"class"`
+	Status     string            `json:"status"`
+	Queue      string            `json:"queue"`
+	Attempts   int               `json:"attempts"`
+	TimeMS     float64           `json:"time_ms"`
+	Connection string            `json:"connection"`
+	Exception  string            `json:"exception"`
+	Payload    map[string]string `json:"payload"`
+}
+
+// payloadLine renders what a job was handed as one "key value" line, in a
+// stable order so the same job reads the same way twice.
+func (d jobData) payloadLine() string {
+	if len(d.Payload) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(d.Payload))
+	for k := range d.Payload {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+" "+d.Payload[k])
+	}
+	return "payload: " + strings.Join(parts, ", ")
 }
 
 type viewData struct {
@@ -554,7 +582,11 @@ func debugRowMain(kind string, ev lerddumps.Event, dup map[string]int) string {
 	case lerddumps.KindJob:
 		var d jobData
 		_ = json.Unmarshal(ev.Data, &d)
-		return d.Class + "  " + statusTag(d.Status)
+		line := d.Class + "  " + statusTag(d.Status)
+		if d.TimeMS > 0 {
+			line += "  " + dimStyle.Render(fmtMS(d.TimeMS)+"ms")
+		}
+		return line
 	case lerddumps.KindView:
 		var d viewData
 		_ = json.Unmarshal(ev.Data, &d)
@@ -614,8 +646,17 @@ func debugRowDetail(kind string, ev lerddumps.Event) []string {
 	case lerddumps.KindJob:
 		var d jobData
 		_ = json.Unmarshal(ev.Data, &d)
+		if d.Queue != "" {
+			out = append(out, "queue: "+d.Queue)
+		}
+		if d.Attempts > 0 {
+			out = append(out, fmt.Sprintf("attempts: %d", d.Attempts))
+		}
 		if d.Connection != "" {
 			out = append(out, "connection: "+d.Connection)
+		}
+		if line := d.payloadLine(); line != "" {
+			out = append(out, oneLine(line))
 		}
 		if d.Exception != "" {
 			out = append(out, "exception: "+oneLine(d.Exception))

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -113,6 +114,28 @@ func createMissingDatabases(path string, quiet bool) (bool, error) {
 	return created, nil
 }
 
+// createMissingBuckets creates the entities the site claims on a service that
+// does not hold them. The create command comes from the service's own
+// declaration, so nothing here knows what a bucket is.
+func createMissingBuckets(path string, quiet bool) (bool, error) {
+	created := false
+	for _, t := range sitedoctor.MissingOwnedEntities(path) {
+		spec := serviceops.EntityFor(t.Service, t.Kind)
+		if spec == nil {
+			continue
+		}
+		if err := serviceops.RunEntityAction(t.Service, spec, "create", t.Name); err != nil {
+			return created, fmt.Errorf("creating %s on %s: %w", t.Name, t.Service, err)
+		}
+		created = true
+		sitedoctor.ForgetEntities(t.Service)
+		if !quiet {
+			fmt.Printf("  %s\n\n", feedback.Dim("created the "+t.Name+" "+strings.ToLower(t.Label)+" on "+t.Service))
+		}
+	}
+	return created, nil
+}
+
 // applySiteDoctorFixes resolves the findings lerd can act on by itself and
 // returns a fresh report: a drifted vhost is rewritten, a database the engine
 // does not hold is created, and a service picked but not wired has its
@@ -158,6 +181,14 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 			}
 		case sitedoctor.FixCreateDatabase:
 			created, err := createMissingDatabases(path, quiet)
+			if err != nil {
+				feedback.Warn("%v", err)
+			}
+			if created {
+				fixed = true
+			}
+		case sitedoctor.FixCreateBucket:
+			created, err := createMissingBuckets(path, quiet)
 			if err != nil {
 				feedback.Warn("%v", err)
 			}

@@ -622,6 +622,13 @@ func startLerd(emit func(StartEvent), skip []string) error {
 		}
 	}
 
+	// A service domain is served by no site, so nothing else rebuilds its vhost
+	// or renews its certificate; do it before the repair sweep so a cert that
+	// aged out is reissued rather than found missing.
+	if err := serviceops.ApplyServiceDomains(); err != nil {
+		fmt.Printf("  WARN: %v\n", err)
+	}
+
 	// Pre-flight: repair SSL vhosts with missing cert files so nginx can start.
 	if repairs := nginx.RepairVhosts(); len(repairs) > 0 {
 		for _, r := range repairs {
@@ -738,6 +745,12 @@ func startLerd(emit func(StartEvent), skip []string) error {
 	if err := podman.WriteContainerHosts(); err != nil {
 		fmt.Printf("  WARN: browser hosts file: %v\n", err)
 	}
+
+	// A service whose URLs reach a browser is broken until it has a name both
+	// sides resolve, so the domain its preset declares is taken here rather than
+	// waiting for the user to find a command. Runs after the services are up
+	// because the env sweep that follows provisions against them.
+	adoptDefaultServiceDomains()
 
 	// Sync the pasta DNS proxy (169.254.1.1) as the aardvark-dns upstream for the lerd
 	// network. This address chains through systemd-resolved, which resolves both .test

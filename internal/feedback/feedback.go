@@ -302,13 +302,26 @@ func (s *Step) spin() {
 	}
 }
 
+// fitLine cuts a repainted line to the terminal width. A line wider than the
+// terminal wraps, and a repaint returns to and clears only the row the cursor
+// ended on, so the wrapped remainder is left behind and each frame adds a line
+// instead of replacing one. One column is kept spare so a full-width line does
+// not leave the cursor past the edge and wrap regardless. An unknown width
+// (piped or redirected) has nothing to fit into and is left whole.
+func fitLine(line string) string {
+	if w := tableWidth(); w > 1 {
+		return ansi.Truncate(line, w-1, "…")
+	}
+	return line
+}
+
 func (s *Step) frame(f string) {
 	mu.Lock()
 	defer mu.Unlock()
 	if s.paused {
 		return
 	}
-	fmt.Fprintf(s.dst(), "\r\033[2K%s%s %s %s", pad, paint(dimStyle, "→"), paint(dimStyle, s.msg), paint(spinStyle, f))
+	fmt.Fprint(s.dst(), "\r\033[2K"+fitLine(pad+paint(dimStyle, "→")+" "+paint(dimStyle, s.msg)+" "+paint(spinStyle, f)))
 }
 
 // Interrupt suspends the step's spinner and clears its line so fn can print
@@ -812,7 +825,7 @@ func (l *Live) draw(frame string) {
 	if frame != "" {
 		line += " " + paint(spinStyle, frame)
 	}
-	fmt.Fprintf(target(), "\r\033[2K%s", line)
+	fmt.Fprint(target(), "\r\033[2K"+fitLine(line))
 }
 
 // Interrupt suspends the spinner and clears its line so fn can print standalone

@@ -4,6 +4,7 @@ import (
 	"bufio"
 	crand "crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -99,6 +100,85 @@ func loopbackServiceNames(declared map[string]bool, known []string) []string {
 		add(n)
 	}
 	return names
+}
+
+// applyServiceDomainEnv repoints URL-shaped values at the domain a service is
+// served on. A service with a domain is one whose URLs leave the machine's own
+// processes and reach a browser, and the container name lerd otherwise writes
+// resolves nowhere out there. Only values carrying a scheme are touched, so a
+// bare connection host (REDIS_HOST=lerd-redis) is left where it belongs.
+func applyServiceDomainEnv(updates map[string]string, domains map[string]string, ports map[string]int) {
+	if len(domains) == 0 {
+		return
+	}
+	// Sorted so a value naming two services rewrites the same way every run.
+	names := make([]string, 0, len(domains))
+	for name := range domains {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for key, value := range updates {
+		if !strings.Contains(value, "://") {
+			continue
+		}
+		rewritten := value
+		for _, name := range names {
+			target := "https://" + domains[name]
+			rewritten = strings.ReplaceAll(rewritten, "http://lerd-"+name, target)
+			if port := ports[name]; port > 0 {
+				host := fmt.Sprintf(":%d", port)
+				rewritten = strings.ReplaceAll(rewritten, "http://localhost"+host, target)
+				rewritten = strings.ReplaceAll(rewritten, "http://127.0.0.1"+host, target)
+			}
+		}
+		// The container port survives the host swap ("https://rustfs.test:9000"),
+		// and nginx serves the domain on 443; strip what the scheme now implies.
+		rewritten = stripServiceDomainPorts(rewritten, domains)
+		if rewritten != value {
+			updates[key] = rewritten
+		}
+	}
+}
+
+// stripServiceDomainPorts removes an explicit port left on a service domain by
+// the rewrite above. Scoped to the domains lerd itself just substituted, so a
+// port on any other host in the value is untouched.
+func stripServiceDomainPorts(value string, domains map[string]string) string {
+	for _, domain := range domains {
+		prefix := "https://" + domain + ":"
+		for {
+			i := strings.Index(value, prefix)
+			if i < 0 {
+				break
+			}
+			rest := value[i+len(prefix):]
+			j := 0
+			for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+				j++
+			}
+			if j == 0 {
+				break
+			}
+			value = value[:i+len("https://"+domain)] + rest[j:]
+		}
+	}
+	return value
+}
+
+// serviceDomainPorts pairs each service that has a domain with the host port it
+// publishes, so a value written against localhost is recognised too.
+func serviceDomainPorts(domains map[string]string) map[string]int {
+	ports := map[string]int{}
+	for name := range domains {
+		sc := config.ServiceConfigFor(name)
+		if sc.PublishedPort > 0 {
+			ports[name] = sc.PublishedPort
+			continue
+		}
+		ports[name] = sc.Port
+	}
+	return ports
 }
 
 // hostProxyConnKey reports whether an env key names a service connection target
@@ -631,11 +711,26 @@ var serviceDetectors = map[string]func(map[string]string) bool{
 	},
 }
 
+// envProvisionFailure turns the per-site state an env run could not create into
+// the error the run ends with. The .env has already been written by then, which
+// is what makes the silent version dangerous: the file names a database or a
+// bucket that does not exist, and the app is the first thing to find out.
+func envProvisionFailure(errs []error) error {
+	if len(errs) == 0 {
+		return nil
+	}
+	return fmt.Errorf(".env was written but service state is missing, rerun `lerd env` once the service is reachable: %w", errors.Join(errs...))
+}
+
 func runEnv(_ *cobra.Command, _ []string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
 		return err
 	}
+
+	// State lerd was asked to create for this site and could not. Collected
+	// rather than warned about in passing, so the run exits non-zero.
+	var provisionErrs []error
 
 	// Determine framework-specific env file path and format
 	site, err := ensureSiteForCwd()
@@ -883,12 +978,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			}
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
-					feedback.Warn("could not start %s: %v", svc, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err))
 				} else {
 					for _, name := range []string{dbName, dbName + "_testing"} {
 						created, err := createDatabase(svc, name)
 						if err != nil {
-							feedback.Warn("could not create database %q: %v", name, err)
+							provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 						} else if created {
 							envInfo("  Created database %q\n", name)
 						} else {
@@ -913,7 +1008,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				}
 				created, err := createS3Bucket(bucketName)
 				if err != nil {
-					feedback.Warn("could not create bucket %q: %v", bucketName, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("bucket %q: %w", bucketName, err))
 				} else if created {
 					envInfo("  Created bucket %q\n", bucketName)
 				} else {
@@ -963,12 +1058,12 @@ func runEnv(_ *cobra.Command, _ []string) error {
 
 			if isDB {
 				if err := ensureServiceRunning(svc); err != nil {
-					feedback.Warn("could not start %s: %v", svc, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc, err))
 				} else {
 					for _, name := range []string{dbName, dbName + "_testing"} {
 						created, err := createDatabase(svc, name)
 						if err != nil {
-							feedback.Warn("could not create database %q: %v", name, err)
+							provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 						} else if created {
 							envInfo("  Created database %q\n", name)
 						} else {
@@ -997,7 +1092,7 @@ func runEnv(_ *cobra.Command, _ []string) error {
 				// up, or rustfs was already running before lerd env ran.
 				created, err := createS3Bucket(bucketName)
 				if err != nil {
-					feedback.Warn("could not create bucket %q: %v", bucketName, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("bucket %q: %w", bucketName, err))
 				} else if created {
 					envInfo("  Created bucket %q\n", bucketName)
 				} else {
@@ -1096,14 +1191,18 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			continue
 		}
 		if err := ensureServiceRunning(svc.Name); err != nil {
-			feedback.Warn("could not start %s: %v", svc.Name, err)
+			if isDB {
+				provisionErrs = append(provisionErrs, fmt.Errorf("%s did not start, so its databases were not created: %w", svc.Name, err))
+			} else {
+				feedback.Warn("could not start %s: %v", svc.Name, err)
+			}
 			continue
 		}
 		if isDB {
 			for _, name := range []string{dbName, dbName + "_testing"} {
 				created, err := createDatabase(svc.Name, name)
 				if err != nil {
-					feedback.Warn("could not create database %q: %v", name, err)
+					provisionErrs = append(provisionErrs, fmt.Errorf("database %q: %w", name, err))
 				} else if created {
 					envInfo("  Created database %q\n", name)
 				} else {
@@ -1161,6 +1260,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 	// published host ports instead of container DNS names.
 	if usesLoopbackServices(site) {
 		rewriteEnvForHostProxy(updates, loopbackServiceNames(lerdYAMLServices, knownServices()))
+	}
+
+	// 4d-bis. A service served on its own domain is reachable at that name from
+	// the app container and the browser alike, which is the only shape that
+	// works for a URL whose host is inside its signature.
+	if domains := config.ServiceDomains(); len(domains) > 0 {
+		applyServiceDomainEnv(updates, domains, serviceDomainPorts(domains))
 	}
 
 	// 4e. Apply personal .env.lerd_override values last so they win over lerd's
@@ -1268,6 +1374,10 @@ func runEnv(_ *cobra.Command, _ []string) error {
 		envInfo("  IDE database connection updated in .idea\n")
 	}
 
+	if err := envProvisionFailure(provisionErrs); err != nil {
+		return err
+	}
+
 	envInfo("Done.\n")
 	return nil
 }
@@ -1368,8 +1478,9 @@ func s3BucketName(name string) string { return serviceops.S3BucketName(name) }
 func createS3Bucket(name string) (bool, error) { return serviceops.EnsureS3Bucket(name) }
 
 // ensureServiceRunning starts the service if it is not already active, then
-// waits until it is ready to accept connections before returning.
-func ensureServiceRunning(name string) error {
+// waits until it is ready to accept connections before returning. A var so the
+// link and env flows can be driven in tests without a live podman.
+var ensureServiceRunning = func(name string) error {
 	unit := "lerd-" + name
 	status, _ := podman.UnitStatus(unit)
 	if status != "active" {

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 
 	"github.com/geodro/lerd/internal/certs"
+	"github.com/geodro/lerd/internal/composer"
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
@@ -84,11 +85,10 @@ func ensureMkcertCA(unattended bool) {
 func removeSystemTrustAnchor() {}
 
 func downloadBinaries(w io.Writer) error {
-	binDir := config.BinDir()
 	var pins pinnedTools
 
 	// composer
-	composerPharPath := filepath.Join(binDir, "composer.phar")
+	composerPharPath := composer.PharPath()
 	if _, err := os.Stat(composerPharPath); os.IsNotExist(err) {
 		if err := replaceTool(&pins, "composer", composerPharPath, w); err != nil {
 			return fmt.Errorf("composer download: %w", err)

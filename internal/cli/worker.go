@@ -312,7 +312,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 
 	// A host worker that starts a known dev server is pinned to a port and
 	// pointed at a generated config, so it answers on the site's own domain.
-	command = devServerCommand(siteName, sitePath, command, w.Host)
+	command = devServerCommand(siteName, sitePath, workerName, command, w.Host)
 
 	// Workers exec into the container that hosts the site's runtime —
 	// custom container, FrankenPHP, or shared FPM. resolveWorkerFPMUnit

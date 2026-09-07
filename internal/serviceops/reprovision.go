@@ -17,11 +17,59 @@ var (
 	reprovBucket = EnsureS3Bucket
 )
 
-// ReprovisionLinkedSites recreates per-site state on a freshly installed
-// service after a reset-data reinstall. For db families (mysql/mariadb/postgres)
-// it ensures each linked site's database exists. For object-storage families
-// (rustfs) it ensures each linked site's bucket exists. Other families are a
-// no-op (cache services hold no client-owned state).
+// familyHoldsSiteState reports whether a service family owns state that belongs
+// to an individual site: a database for the db engines, a bucket for object
+// storage. Cache and search families hold nothing a site expects to find again.
+func familyHoldsSiteState(family string) bool {
+	switch family {
+	case "mysql", "mariadb", "postgres", "rustfs":
+		return true
+	}
+	return false
+}
+
+// EnsureSiteState creates the state a stateful service holds for one site: a
+// database for the db families, a bucket for object storage. Both creators look
+// the entity up before creating it, so this is idempotent and safe to call on
+// every install, reinstall and link. Returns a short description of what was
+// created, empty when the state was already there or the family holds none.
+func EnsureSiteState(serviceName string, s config.Site) (string, error) {
+	switch ServiceFamily(serviceName) {
+	case "mysql", "mariadb", "postgres":
+		dbName := resolveDBName(s)
+		if dbName == "" {
+			return "", fmt.Errorf("could not resolve db name")
+		}
+		created, err := reprovDB(serviceName, dbName)
+		if err != nil {
+			return "", fmt.Errorf("create db %s: %w", dbName, err)
+		}
+		if !created {
+			return "", nil
+		}
+		return "created db " + dbName, nil
+
+	case "rustfs":
+		bucket := resolveBucketName(s)
+		if bucket == "" {
+			return "", fmt.Errorf("could not resolve bucket name")
+		}
+		created, err := reprovBucket(bucket)
+		if err != nil {
+			return "", fmt.Errorf("create bucket %s: %w", bucket, err)
+		}
+		if !created {
+			return "", nil
+		}
+		return "created bucket " + bucket, nil
+	}
+	return "", nil
+}
+
+// ReprovisionLinkedSites recreates per-site state on a service that has just
+// been installed or reinstalled, so every site already linked to it finds its
+// database or bucket where it expects. Idempotent through EnsureSiteState:
+// existing state is left alone and reported as nothing done.
 //
 // Per-site failures are collected and joined; the loop continues so one
 // misconfigured site doesn't block the rest.
@@ -31,9 +79,7 @@ func ReprovisionLinkedSites(serviceName string, emit func(PhaseEvent)) error {
 	}
 
 	family := ServiceFamily(serviceName)
-	switch family {
-	case "mysql", "mariadb", "postgres", "rustfs":
-	default:
+	if !familyHoldsSiteState(family) {
 		emit(PhaseEvent{Phase: "reprovisioning_skipped", Message: fmt.Sprintf("family %q has no per-site state to recreate", family)})
 		return nil
 	}
@@ -47,30 +93,13 @@ func ReprovisionLinkedSites(serviceName string, emit func(PhaseEvent)) error {
 
 	var errs []error
 	for _, s := range sites {
-		switch family {
-		case "mysql", "mariadb", "postgres":
-			dbName := resolveDBName(s)
-			if dbName == "" {
-				errs = append(errs, fmt.Errorf("%s: could not resolve db name", s.Name))
-				continue
-			}
-			if _, err := reprovDB(serviceName, dbName); err != nil {
-				errs = append(errs, fmt.Errorf("%s: create db %s: %w", s.Name, dbName, err))
-				continue
-			}
-			emit(PhaseEvent{Phase: "reprovisioning_site", Message: fmt.Sprintf("%s: created db %s", s.Name, dbName)})
-
-		case "rustfs":
-			bucket := resolveBucketName(s)
-			if bucket == "" {
-				errs = append(errs, fmt.Errorf("%s: could not resolve bucket name", s.Name))
-				continue
-			}
-			if _, err := reprovBucket(bucket); err != nil {
-				errs = append(errs, fmt.Errorf("%s: create bucket %s: %w", s.Name, bucket, err))
-				continue
-			}
-			emit(PhaseEvent{Phase: "reprovisioning_site", Message: fmt.Sprintf("%s: created bucket %s", s.Name, bucket)})
+		detail, err := EnsureSiteState(serviceName, s)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", s.Name, err))
+			continue
+		}
+		if detail != "" {
+			emit(PhaseEvent{Phase: "reprovisioning_site", Message: fmt.Sprintf("%s: %s", s.Name, detail)})
 		}
 	}
 

@@ -45,6 +45,11 @@ and test against, but the pull request goes to **lerd-env/frameworks**.
      `command`) with a `fix:` command and a human `detail:` string
    - `commands` — dashboard/TUI custom commands with `icon` and `confirm` where
      destructive
+   - `devtools.jobs` — the method that runs a queued job, so the Debug window
+     reports the framework's queue. One entry with `implements` (usually the
+     job interface), `class` or `extends`, plus `method` and an optional `name`
+     expression. Nothing about it is compiled in, see the queued job seams
+     section of `docs/usage/framework-definitions.md`.
    - `tinker`, `logs`, `console`, `composer`, `npm`
 
 3. **Give it its mark and its colour.** `color:` is the framework's brand tint, a

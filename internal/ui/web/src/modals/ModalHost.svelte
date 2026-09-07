@@ -30,6 +30,7 @@
   import ConfirmTuningResetModal from './ConfirmTuningResetModal.svelte';
   import ConfirmSiteUnlinkModal from './ConfirmSiteUnlinkModal.svelte';
   import ConfirmServiceInstallModal from './ConfirmServiceInstallModal.svelte';
+  import ChangelogModal from './ChangelogModal.svelte';
   import ErrorModal from './ErrorModal.svelte';
   import ConfirmDownloadModal from './ConfirmDownloadModal.svelte';
 </script>
@@ -94,6 +95,8 @@
   <ConfirmSiteUnlinkModal />
 {:else if $modal.kind === 'serviceInstall' && $modal.serviceInstall}
   <ConfirmServiceInstallModal />
+{:else if $modal.kind === 'changelog'}
+  <ChangelogModal />
 {:else if $modal.kind === 'error' && $modal.error}
   <ErrorModal />
 {/if}
