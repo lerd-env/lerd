@@ -79,6 +79,9 @@ type ShareToolsInfo struct {
 	// NgrokTokenSet reports only whether a token is stored. The token itself is
 	// a credential and never leaves the machine through this endpoint.
 	NgrokTokenSet bool `json:"ngrok_token_set,omitempty"`
+	// NgrokArgs are the extra flags every ngrok share passes to ngrok. Not a
+	// credential, so unlike the token it is read back for the form to show.
+	NgrokArgs string `json:"ngrok_args,omitempty"`
 	// PublicBaseDomain is the domain a public (reverse-proxy) share is served
 	// under, as "<site>.<base>". Empty when none is configured.
 	PublicBaseDomain string `json:"public_base_domain,omitempty"`
@@ -96,11 +99,11 @@ var shareToolMeta = map[string]struct{ label, installURL string }{
 // ShareTools reports every supported tunnel tool, which ones are installed,
 // and what the auto pick would use right now.
 func ShareTools() ShareToolsInfo {
-	defaultTool, baseDomain, answered, ngrokToken := "", "", false, ""
+	defaultTool, baseDomain, answered, ngrokToken, ngrokArgs := "", "", false, "", ""
 	if cfg, err := config.LoadGlobal(); err == nil {
 		defaultTool = cfg.Share.DefaultTool
 		baseDomain, answered = cfg.Share.BaseDomain, cfg.Share.BaseDomainAnswered
-		ngrokToken = cfg.Share.NgrokToken
+		ngrokToken, ngrokArgs = cfg.Share.NgrokToken, cfg.Share.NgrokArgs
 	}
 	info := ShareToolsInfo{
 		Default:            defaultTool,
@@ -108,6 +111,7 @@ func ShareTools() ShareToolsInfo {
 		BaseDomain:         baseDomain,
 		BaseDomainAnswered: answered,
 		NgrokTokenSet:      ngrokToken != "",
+		NgrokArgs:          ngrokArgs,
 		PublicBaseDomain:   PublicBaseDomain(),
 	}
 	for _, t := range shareTools {
@@ -321,6 +325,31 @@ func SetShareBaseDomain(baseDomain string, remember bool) error {
 	return config.SaveGlobal(cfg)
 }
 
+// SetShareNgrokArgs stores the extra flags every ngrok share passes to ngrok,
+// or clears them when empty. They are checked here rather than at share time,
+// so a typo is caught while it is still being typed.
+func SetShareNgrokArgs(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw != "" {
+		args, err := splitNgrokArgs(raw)
+		if err != nil {
+			return err
+		}
+		if err := validateNgrokArgs(args, false); err != nil {
+			return err
+		}
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	if cfg.Share.NgrokArgs == raw {
+		return nil
+	}
+	cfg.Share.NgrokArgs = raw
+	return config.SaveGlobal(cfg)
+}
+
 // SetShareNgrokToken stores the ngrok auth token, or clears it when empty.
 func SetShareNgrokToken(token string) error {
 	return setShareToken(token, func(cfg *config.GlobalConfig) *string { return &cfg.Share.NgrokToken })
@@ -389,6 +418,9 @@ func TunnelStart(siteName, branch, toolName, baseDomain string) (string, error) 
 	}
 	tool, err := resolveTunnelTool(toolName, cfg.Share.DefaultTool, cfg.Share.NgrokToken, cfg.Share.PinggyToken)
 	if err != nil {
+		return "", err
+	}
+	if err := applyNgrokArgs(tool, "", cfg.Share.NgrokArgs); err != nil {
 		return "", err
 	}
 	base, err := resolveShareBaseDomain(tool, baseDomain, cfg.Share.BaseDomain)

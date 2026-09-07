@@ -40,6 +40,12 @@ share:
                             # localhost-run or pinggy. Written by lerd
                             # share:tool; omitted (the default) means
                             # auto-detect.
+  ngrok_args: --host-header=rewrite
+                            # optional. Extra flags every ngrok share passes to
+                            # ngrok, for the ngrok features lerd has no setting
+                            # of its own for (a host-header rewrite, a traffic
+                            # policy file). Written by lerd share:ngrok-args;
+                            # lerd share --ngrok-args wins for a single run.
 nginx:
   http_port: 80        # host ports nginx publishes. Change these when another
   https_port: 443      # service already owns 80/443; nginx still listens on
