@@ -59,7 +59,7 @@ lerd service reinstall postgres --reset-data   # same version, fresh data
 
 `--reset-data` adds a data-dir rename-aside (same recovery semantics as `--purge`, including the pre-wipe snapshot, named `pre-reset-data-<timestamp>` here).
 
-Every reinstall **reprovisions linked-site state** on the service that comes back, with or without `--reset-data`, and so does a fresh install of a service whose sites are already linked:
+Every reinstall **reprovisions linked-site state** on the service that comes back, with or without `--reset-data`. So does starting a service, which is where a two-step install (`lerd service preset <name>` then `lerd service start <name>`) first has something running to provision against:
 
 - For database families (mysql, mariadb, postgres): each linked site's expected database is created via `CREATE DATABASE IF NOT EXISTS`. The database name comes from `.lerd.yaml` `db.database`, then `.env` `DB_DATABASE`, then the site name with hyphens converted to underscores.
 - For object-storage families (rustfs): each linked site's expected bucket is created via `mc mb`. The bucket name comes from `.env` `AWS_BUCKET`, otherwise derived from the site name.
