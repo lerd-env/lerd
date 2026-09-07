@@ -195,7 +195,7 @@ Captured emails can pop a notification with the subject and sender; clicking the
 
 Mail sent through PHP's own `mail()` reaches Mailpit too, without any project configuration. The FPM image's `sendmail` is BusyBox's, which talks to `127.0.0.1:25` and finds nothing listening inside the container, so lerd writes a `sendmail_path` pointing at the mail catcher it runs and mounts it into every PHP container. That covers the frameworks that send through `mail()` rather than SMTP, Drupal and WordPress among them, which would otherwise report that mail could not be sent with nothing to show for it. A `sendmail_path` you set yourself in the shared or per-version `php.ini` wins, since lerd's file loads before both.
 
-RustFS is an S3-compatible object storage service (a drop-in replacement for MinIO). When `lerd env` detects it is needed (via `FILESYSTEM_DISK=s3` or `AWS_ENDPOINT` in `.env`), it automatically:
+RustFS is an S3-compatible object storage service (a drop-in replacement for MinIO). A site's bucket is ensured at every point the site and the service are brought together: `lerd link` when `.lerd.yaml` lists rustfs, `lerd env` when it detects rustfs is needed (via `FILESYSTEM_DISK=s3` or `AWS_ENDPOINT` in `.env`), and any install or reinstall of the service itself, which walks every already linked site. The bucket is looked up before it is created, so the repeats cost a lookup. In each case lerd:
 
 1. Creates a bucket named after the site handle, sanitised to match the S3 naming rules (lowercase, digits, hyphens, dots only, max 63 chars). Underscores in the handle are rewritten as hyphens, so `admin_astrolov` becomes bucket `admin-astrolov`.
 2. Sets the bucket to **public access** (suitable for local development)
@@ -215,6 +215,10 @@ AWS_USE_PATH_STYLE_ENDPOINT=true
 If a historical `AWS_BUCKET` value with underscores (or other S3-invalid characters) is present from an earlier lerd run or Sail import, `lerd env` will sanitise it in place on the next run.
 
 `AWS_URL` points to the public bucket URL (browser-reachable). `AWS_ENDPOINT` is the internal container address used by PHP.
+
+If a bucket a site points at is not there, `lerd site:doctor` reports it under **Bucket** with a fix that creates it. Such a site serves every page fine and fails on the first upload, which is exactly the kind of thing that reads as an application bug. The check is driven by the service preset rather than by any framework: the preset names the `.env` key holding the entity a site owns (`owner_env: AWS_BUCKET` for RustFS), and only a project whose env also points at the lerd service is measured against it, so one configured for real AWS is left alone.
+
+`lerd env` writes the `.env` even when it could not create the database or bucket behind it, and then exits non-zero naming what is missing. It used to warn in passing and exit 0, which left a file claiming storage that was never created.
 
 ### Migrating from MinIO to RustFS
 

@@ -127,9 +127,34 @@ func newServiceStartCmd() *cobra.Command {
 				return err
 			}
 			svcStep.OK("")
+			// `service preset` registers without starting, and tells the user to
+			// come here next, so this is where a two-step install first has a
+			// running service to provision against. Nothing else in that path
+			// would ever create the databases and buckets its linked sites
+			// already point at.
+			reprovisionOnStart(name)
 			printEnvVars(name)
 			return nil
 		},
+	}
+}
+
+// reprovisionOnStartFn is the seam the start path provisions through, swapped in
+// tests so the reporting can be asserted without a service to provision against.
+var reprovisionOnStartFn = serviceops.ReprovisionLinkedSites
+
+// reprovisionOnStart recreates the per-site state a freshly started service is
+// missing. Idempotent through the same lookups the reinstall path uses, so a
+// service that already holds everything reports nothing and costs one lookup a
+// site.
+func reprovisionOnStart(name string) {
+	emit := func(e serviceops.PhaseEvent) {
+		if e.Phase == "reprovisioning_site" {
+			feedback.Note(e.Message)
+		}
+	}
+	if err := reprovisionOnStartFn(name, emit); err != nil {
+		feedback.Warn("reprovisioning linked sites: %v", err)
 	}
 }
 
@@ -870,6 +895,8 @@ func newServiceReinstallCmd() *cobra.Command {
 					feedback.Note(e.Message)
 				case "reprovisioning_skipped":
 					feedback.Note("reprovisioning skipped: " + e.Message)
+				case "reprovisioning_failed":
+					feedback.Warn("reprovisioning linked sites: %s", e.Message)
 				}
 			}
 			opts := serviceops.ReinstallOptions{ResetData: resetData, SkipSnapshot: noSnapshot}

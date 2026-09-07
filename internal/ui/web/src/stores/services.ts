@@ -376,6 +376,8 @@ function phaseLabel(phase: string): string {
       return 'Reprovisioning…';
     case 'reprovisioning_skipped':
       return 'Reprovisioning skipped';
+    case 'reprovisioning_failed':
+      return 'Reprovisioning failed';
     case 'starting_unit':
       return 'Starting…';
     case 'installing_config':

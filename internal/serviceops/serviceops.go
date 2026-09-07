@@ -393,8 +393,20 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 	if err := waitReadyFn(svc.Name, 60*time.Second); err != nil {
 		return svc, err
 	}
+
+	// A service installed after its sites were linked comes up empty, and
+	// nothing else would ever create the databases and buckets those sites
+	// already point at. Best-effort: one unprovisionable site must not fail an
+	// install that otherwise succeeded.
+	if err := installReprovFn(svc.Name, emit); err != nil {
+		emit(PhaseEvent{Phase: "reprovisioning_failed", Message: err.Error()})
+	}
 	return svc, nil
 }
+
+// installReprovFn is the seam InstallPresetStreaming uses to recreate per-site
+// state on the freshly installed service; swapped in tests.
+var installReprovFn = ReprovisionLinkedSites
 
 // InstallPresetByName materialises a bundled preset as a custom service.
 // version selects a tag for multi-version presets; empty falls back to the
