@@ -99,9 +99,9 @@ const reinstallSnapshotLabel = "pre-reset-data"
 // has already been deleted.
 //
 // When opts.ResetData is true every database on the service is snapshotted
-// first, the data dir is renamed-aside (recoverable as .pre-remove-<ts>), and
-// ReprovisionLinkedSites is invoked after the install completes so dependent
-// sites' DBs/buckets exist on the fresh service.
+// first and the data dir is renamed-aside (recoverable as .pre-remove-<ts>).
+// ReprovisionLinkedSites runs after the install either way, so dependent sites'
+// DBs and buckets exist on the service that comes back.
 func ReinstallService(name string, opts ReinstallOptions, emit func(PhaseEvent)) error {
 	if emit == nil {
 		emit = func(PhaseEvent) {}
@@ -146,10 +146,11 @@ func ReinstallService(name string, opts ReinstallOptions, emit func(PhaseEvent))
 		reinstallFamilyRegenFn(name)
 	}
 
-	if opts.ResetData {
-		if err := reinstallReprovFn(name, emit); err != nil {
-			return fmt.Errorf("reinstall: reprovision step: %w", err)
-		}
+	// Every reinstall, not only a data-resetting one: the service comes back on
+	// whatever data dir survived, and a bucket or database that went missing
+	// outside lerd is exactly what a reinstall is expected to put right.
+	if err := reinstallReprovFn(name, emit); err != nil {
+		return fmt.Errorf("reinstall: reprovision step: %w", err)
 	}
 	return nil
 }

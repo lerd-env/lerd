@@ -108,7 +108,10 @@ func TestReinstallService_PreservesVersionFromCustomServiceYAML(t *testing.T) {
 	}
 }
 
-func TestReinstallService_NoResetData_SkipsReprovision(t *testing.T) {
+// A plain reinstall reprovisions too: state that went missing outside lerd is
+// what the user is reinstalling to get back, and the creators check before they
+// create, so a service whose data survived is left untouched.
+func TestReinstallService_NoResetData_StillCallsReprovision(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
@@ -119,8 +122,8 @@ func TestReinstallService_NoResetData_SkipsReprovision(t *testing.T) {
 	if err := ReinstallService("mariadb", ReinstallOptions{}, func(PhaseEvent) {}); err != nil {
 		t.Fatalf("ReinstallService: %v", err)
 	}
-	if len(rec.reprovCalls) != 0 {
-		t.Errorf("reprovision must not run when resetData=false, got %v", rec.reprovCalls)
+	if len(rec.reprovCalls) != 1 || rec.reprovCalls[0] != "mariadb" {
+		t.Errorf("expected reprovision('mariadb'), got %v", rec.reprovCalls)
 	}
 }
 

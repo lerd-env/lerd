@@ -127,6 +127,21 @@
             >{row.site}</button>
           </span>
         {/if}
+        {#if row.url}
+          <!-- The address itself, not the name: the name is what the entity is
+               called, the link is where it answers, and they are not the same
+               once the service is served on its own domain. -->
+          <span class="inline-flex min-w-0 max-w-full items-center gap-1.5">
+            <span class="shrink-0" aria-hidden="true">·</span>
+            <a
+              href={row.url}
+              target="_blank"
+              rel="noopener"
+              class="min-w-0 truncate text-sky-600 dark:text-sky-400 hover:underline"
+              title={row.url}>{row.url}</a
+            >
+          </span>
+        {/if}
       </p>
     </div>
   {/snippet}

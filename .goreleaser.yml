@@ -101,6 +101,9 @@ archives:
     files:
       - README.md
       - install.sh
+      - LICENSE
+      - src: internal/licenses/THIRD-PARTY-LICENSES.md
+        strip_parent: true
 
   - id: lerd-arm64
     ids: [lerd-arm64]
@@ -109,6 +112,9 @@ archives:
     files:
       - README.md
       - install.sh
+      - LICENSE
+      - src: internal/licenses/THIRD-PARTY-LICENSES.md
+        strip_parent: true
 
   - id: lerd-darwin-amd64
     ids: [lerd-darwin-amd64]
@@ -117,6 +123,9 @@ archives:
     files:
       - README.md
       - install.sh
+      - LICENSE
+      - src: internal/licenses/THIRD-PARTY-LICENSES.md
+        strip_parent: true
 
   - id: lerd-darwin-arm64
     ids: [lerd-darwin-arm64]
@@ -125,6 +134,9 @@ archives:
     files:
       - README.md
       - install.sh
+      - LICENSE
+      - src: internal/licenses/THIRD-PARTY-LICENSES.md
+        strip_parent: true
       - src: dist-tray/lerd-tray-darwin-arm64/lerd-tray
         dst: lerd-tray
         info:

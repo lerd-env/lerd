@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	neturl "net/url"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/origin"
 )
@@ -145,6 +149,10 @@ func fetchPrereleaseFrom(base string) (string, error) {
 	}
 	req.Header.Set("User-Agent", "lerd-cli")
 	req.Header.Set("Accept", "application/vnd.github+json")
+	token := tokenFor(url)
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -153,6 +161,9 @@ func fetchPrereleaseFrom(base string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		if err := rateLimitError(url, resp, token != ""); err != nil {
+			return "", err
+		}
 		return "", fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
 	}
 
@@ -172,6 +183,50 @@ func fetchPrereleaseFrom(base string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no pre-release found from %s", url)
+}
+
+// githubAPIHost is the only host a token may be sent to. A
+// LERD_RELEASES_API_URL override points at a mirror or a test rig, and the
+// user's credentials have no business going there.
+const githubAPIHost = "api.github.com"
+
+// tokenFor returns the GitHub token to authenticate rawURL with, or "" when
+// none is set or the URL is not the real GitHub API over https. An
+// authenticated call gets 5,000 requests an hour instead of the 60 the whole
+// machine shares anonymously.
+func tokenFor(rawURL string) string {
+	u, err := neturl.Parse(rawURL)
+	if err != nil || !strings.EqualFold(u.Scheme, "https") || !strings.EqualFold(u.Hostname(), githubAPIHost) {
+		return ""
+	}
+	for _, name := range []string{"GITHUB_TOKEN", "GH_TOKEN"} {
+		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// rateLimitError turns an exhausted-quota response into an error that says so
+// and when the quota comes back, instead of a bare HTTP 403 that reads like a
+// broken network. It returns nil for any other failure.
+func rateLimitError(url string, resp *http.Response, authenticated bool) error {
+	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests {
+		return nil
+	}
+	if resp.Header.Get("X-RateLimit-Remaining") != "0" {
+		return nil
+	}
+	msg := fmt.Sprintf("GitHub API rate limit exhausted for %s", url)
+	if sec, err := strconv.ParseInt(resp.Header.Get("X-RateLimit-Reset"), 10, 64); err == nil {
+		if d := time.Until(time.Unix(sec, 0)); d > 0 {
+			msg += fmt.Sprintf(", it resets in %d min", int((d+time.Minute-1)/time.Minute))
+		}
+	}
+	if !authenticated {
+		msg += "; set GITHUB_TOKEN to raise the limit"
+	}
+	return fmt.Errorf("%s", msg)
 }
 
 // StripV removes a leading "v" from a version string.

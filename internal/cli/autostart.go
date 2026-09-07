@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -118,6 +119,9 @@ func ApplyAutostart(disabled bool) error {
 	_ = exec.Command("systemctl", "--user", "daemon-reload").Run()
 
 	units := lerdSystemd.AutostartUserUnits()
+	if !disabled {
+		units = unitsToArm(units)
+	}
 	for _, u := range units {
 		name := strings.TrimSuffix(u, ".service")
 		if disabled {
@@ -127,6 +131,17 @@ func ApplyAutostart(disabled bool) error {
 		}
 	}
 	return nil
+}
+
+// unitsToArm drops the tray from the login set while the tray preference is
+// off. Autostart arms every lerd unit it finds on disk, and the tray is the one
+// the user can switch off on its own, so without this an autostart enable puts
+// back at the next boot a surface they removed.
+func unitsToArm(units []string) []string {
+	if trayEnabled() {
+		return units
+	}
+	return slices.DeleteFunc(slices.Clone(units), func(u string) bool { return u == "lerd-tray.service" })
 }
 
 // rewriteQuadletsForAutostart walks every lerd-*.container in the user's
