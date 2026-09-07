@@ -23,7 +23,7 @@ lerd php:runtime container   # back to the containers
 lerd php:runtime             # show the current runtime
 ```
 
-Or from the dashboard: **System → PHP runtime**.
+Or from the dashboard: **System → PHP runtime**. Confirming a move to native offers to remove the PHP-FPM images at the same time, which reclaims the disk they hold; they are built again if you ever switch back. The offer is only made in that direction, since on the container runtime those images are what serves every site.
 
 The setting is install-wide, not per site. The FPM container is shared by every site on a PHP version, so sites cannot be moved one at a time.
 

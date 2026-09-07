@@ -6465,6 +6465,9 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 	}
 	var body struct {
 		Mode string `json:"mode"`
+		// Removing the FPM images is a separate decision from the switch, and
+		// only offered when moving to native, where nothing serves from them.
+		RemoveImages bool `json:"remove_images"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		http.Error(w, "invalid body", http.StatusBadRequest)
@@ -6482,5 +6485,16 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
-	writeJSON(w, map[string]any{"ok": true})
+	// After the switch, never instead of it: the runtime has already moved, so
+	// a reclaim that cannot finish is reported without failing the switch.
+	out := map[string]any{"ok": true}
+	if body.RemoveImages && body.Mode == config.PHPRuntimeNative {
+		versions, _ := phpPkg.ListInstalled()
+		removed, rmErr := cli.RemoveFPMImages(versions)
+		out["images_removed"] = removed
+		if rmErr != nil {
+			out["images_error"] = rmErr.Error()
+		}
+	}
+	writeJSON(w, out)
 }

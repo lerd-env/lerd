@@ -1517,5 +1517,8 @@
   "sites_tabs_nativePhp": "Native PHP",
   "dashboard_health_phpNative": "Native PHP",
   "system_php_ext_nativeFixed": "De native runtime heeft zijn extensies in het binary gecompileerd, dus hier zijn geen pakketten te beheren. Schakel over naar de containerruntime als je er een nodig hebt.",
-  "system_php_ext_modulesHelpNative": "Gerapporteerd door php -m van het native PHP {version}-binary."
+  "system_php_ext_modulesHelpNative": "Gerapporteerd door php -m van het native PHP {version}-binary.",
+  "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
 }

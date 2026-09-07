@@ -9,7 +9,7 @@
     type PHPRuntime
   } from '$stores/phpRuntime';
   import ModeOptionCard from '$components/ModeOptionCard.svelte';
-  import Modal from '$components/Modal.svelte';
+  import ConfirmModal from '$components/ConfirmModal.svelte';
   import { m } from '../../paraglide/messages.js';
 
   // The page around this pane shows the worker-runtime choice only when the
@@ -31,6 +31,10 @@
   const dirty = $derived(draft !== $phpRuntime);
   let confirmOpen = $state(false);
   let applyError = $state('');
+  // Only offered when moving to native: on the container runtime those images
+  // are what serves every site.
+  let removeImages = $state(false);
+  let imagesNote = $state('');
 
   function pick(mode: PHPRuntime) {
     if ($phpRuntimeLoading) return;
@@ -40,12 +44,21 @@
 
   async function apply() {
     applyError = '';
-    const res = await setPHPRuntime(draft);
+    imagesNote = '';
+    const res = await setPHPRuntime(draft, removeImages && draft === 'native');
     if (!res.ok) {
       applyError = res.error || '';
       return;
     }
+    // The runtime has moved either way, so a reclaim that could not finish is
+    // reported without making the switch look failed.
+    if (res.imagesError) {
+      imagesNote = res.imagesError;
+    } else if (res.imagesRemoved) {
+      imagesNote = m.system_phpRuntime_imagesRemoved({ count: String(res.imagesRemoved) });
+    }
     confirmOpen = false;
+    removeImages = false;
   }
 </script>
 
@@ -100,30 +113,35 @@
     </div>
   </div>
 
-  <Modal open={confirmOpen} title={m.system_phpRuntime_title()} onclose={() => !$phpRuntimeLoading && (confirmOpen = false)}>
-    <div class="p-4 space-y-3">
-      <p class="text-sm text-gray-700 dark:text-gray-300">{m.system_phpRuntime_confirm()}</p>
-      {#if applyError}
-        <p class="text-sm text-red-600 dark:text-red-400">{applyError}</p>
+  <ConfirmModal
+    open={confirmOpen}
+    title={m.system_phpRuntime_title()}
+    body={m.system_phpRuntime_confirm()}
+    confirmLabel={$phpRuntimeLoading ? m.system_phpRuntime_applying() : m.system_phpRuntime_apply()}
+    loading={$phpRuntimeLoading}
+    onconfirm={apply}
+    onclose={() => (confirmOpen = false)}
+  >
+    {#snippet extra()}
+      {#if draft === 'native'}
+        <label class="flex items-start gap-2 cursor-pointer">
+          <input
+            type="checkbox"
+            bind:checked={removeImages}
+            disabled={$phpRuntimeLoading}
+            class="mt-0.5 rounded border-gray-300 dark:border-lerd-border text-lerd-red focus:ring-lerd-red"
+          />
+          <span class="text-sm">
+            <span class="text-gray-800 dark:text-gray-200">{m.system_phpRuntime_removeImages()}</span>
+            <span class="block text-xs text-gray-500 dark:text-gray-400">
+              {m.system_phpRuntime_removeImagesHint()}
+            </span>
+          </span>
+        </label>
       {/if}
-      <div class="flex justify-end gap-2">
-        <button
-          type="button"
-          class="px-3 py-1.5 rounded-lg text-sm font-medium bg-gray-100 hover:bg-gray-200 dark:bg-white/5 dark:hover:bg-white/10 text-gray-700 dark:text-gray-300 disabled:opacity-50 transition-colors"
-          disabled={$phpRuntimeLoading}
-          onclick={() => (confirmOpen = false)}
-        >
-          {m.common_cancel()}
-        </button>
-        <button
-          type="button"
-          class="px-3 py-1.5 rounded-lg text-sm font-medium bg-lerd-red hover:bg-lerd-redhov text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-          disabled={$phpRuntimeLoading}
-          onclick={apply}
-        >
-          {$phpRuntimeLoading ? m.system_phpRuntime_applying() : m.system_phpRuntime_apply()}
-        </button>
-      </div>
-    </div>
-  </Modal>
+      {#if applyError}
+        <p class="mt-2 text-sm text-red-600 dark:text-red-400">{applyError}</p>
+      {/if}
+    {/snippet}
+  </ConfirmModal>
 {/if}

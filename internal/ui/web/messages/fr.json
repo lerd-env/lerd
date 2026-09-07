@@ -1517,5 +1517,8 @@
   "sites_tabs_nativePhp": "PHP natif",
   "dashboard_health_phpNative": "PHP natif",
   "system_php_ext_nativeFixed": "L'environnement natif a ses extensions compilées dans le binaire, il n'y a donc pas de paquets à gérer ici. Passez à l'environnement conteneur si vous devez en ajouter un.",
-  "system_php_ext_modulesHelpNative": "Rapporté par php -m depuis le binaire natif PHP {version}."
+  "system_php_ext_modulesHelpNative": "Rapporté par php -m depuis le binaire natif PHP {version}.",
+  "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
 }

@@ -1517,5 +1517,8 @@
   "sites_tabs_nativePhp": "Natywny PHP",
   "dashboard_health_phpNative": "Natywny PHP",
   "system_php_ext_nativeFixed": "Natywne środowisko ma rozszerzenia wkompilowane w plik binarny, więc nie ma tu pakietów do zarządzania. Przełącz się na środowisko kontenerowe, jeśli musisz coś dodać.",
-  "system_php_ext_modulesHelpNative": "Zgłoszone przez php -m z natywnego pliku binarnego PHP {version}."
+  "system_php_ext_modulesHelpNative": "Zgłoszone przez php -m z natywnego pliku binarnego PHP {version}.",
+  "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
 }

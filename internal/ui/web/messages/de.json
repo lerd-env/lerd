@@ -1517,5 +1517,8 @@
   "sites_tabs_nativePhp": "Natives PHP",
   "dashboard_health_phpNative": "Natives PHP",
   "system_php_ext_nativeFixed": "Die native Laufzeit hat ihre Erweiterungen fest im Binary, es gibt hier also keine Pakete zu verwalten. Wechsle zur Container-Laufzeit, wenn du eine hinzufügen musst.",
-  "system_php_ext_modulesHelpNative": "Von php -m des nativen PHP-{version}-Binaries gemeldet."
+  "system_php_ext_modulesHelpNative": "Von php -m des nativen PHP-{version}-Binaries gemeldet.",
+  "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
 }

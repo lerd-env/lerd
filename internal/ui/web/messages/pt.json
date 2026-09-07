@@ -1517,5 +1517,8 @@
   "sites_tabs_nativePhp": "PHP nativo",
   "dashboard_health_phpNative": "PHP nativo",
   "system_php_ext_nativeFixed": "O runtime nativo tem as extensões compiladas no binário, por isso não há pacotes a gerir aqui. Muda para o runtime de contentor se precisares de adicionar algum.",
-  "system_php_ext_modulesHelpNative": "Reportado por php -m a partir do binário nativo do PHP {version}."
+  "system_php_ext_modulesHelpNative": "Reportado por php -m a partir do binário nativo do PHP {version}.",
+  "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
 }

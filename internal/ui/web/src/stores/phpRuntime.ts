@@ -32,17 +32,29 @@ export async function loadPHPRuntime() {
 
 // The switch rewrites every site's .env, vhost and workers and stops or starts
 // the FPM containers, so it is slow enough to need its own loading state.
-export async function setPHPRuntime(mode: PHPRuntime) {
+export async function setPHPRuntime(mode: PHPRuntime, removeImages = false) {
   phpRuntimeLoading.set(true);
   try {
     const res = await apiFetch('/api/settings/php-runtime', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ mode })
+      body: JSON.stringify({ mode, remove_images: removeImages })
     });
-    const data = (await res.json()) as { ok?: boolean; error?: string };
+    const data = (await res.json()) as {
+      ok?: boolean;
+      error?: string;
+      images_removed?: number;
+      images_error?: string;
+    };
     if (data.ok) phpRuntime.set(mode);
-    return { ok: Boolean(data.ok), error: data.error };
+    // The reclaim runs after the switch, so it can fail on its own without the
+    // switch having failed. Reported separately for that reason.
+    return {
+      ok: Boolean(data.ok),
+      error: data.error,
+      imagesRemoved: data.images_removed ?? 0,
+      imagesError: data.images_error
+    };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : m.common_requestFailed() };
   } finally {
