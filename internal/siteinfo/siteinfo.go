@@ -99,6 +99,9 @@ type EnrichedSite struct {
 	PausedWorkers []string
 	PublicDir     string
 	AppURL        string
+	// AutoSnapshot is the site's automatic-snapshot override: "on", "off", or
+	// empty to follow the global policy.
+	AutoSnapshot string
 
 	// Framework
 	FrameworkName    string
@@ -292,6 +295,7 @@ func Enrich(s config.Site, flags EnrichFlag) EnrichedSite {
 		PausedWorkers:         s.PausedWorkers,
 		PublicDir:             s.PublicDir,
 		AppURL:                s.AppURL,
+		AutoSnapshot:          s.AutoSnapshot,
 		LANPort:               s.LANPort,
 		ContainerPort:         s.ContainerPort,
 		ContainerSSL:          s.ContainerSSL,

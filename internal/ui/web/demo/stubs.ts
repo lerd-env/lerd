@@ -364,6 +364,7 @@ function analyticsFor(domain: string, range: string): unknown {
       millis: r.millis,
       cold: !!r.cold,
     })),
+    excluded: [],
   };
 }
 

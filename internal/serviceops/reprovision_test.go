@@ -284,3 +284,123 @@ func TestReprovisionLinkedSites_EmitsPerSiteEvent(t *testing.T) {
 		t.Errorf("expected reprovisioning_site phase mentioning site-x, got %v", events)
 	}
 }
+
+func TestEnsureSiteState_ObjectStorage_CreatesBucketFromEnv(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	rec := stubReprovProvision(t)
+
+	dir := mkSiteWithEnv(t, "uploads", "AWS_BUCKET=Uploads_App\nlerd-rustfs\n")
+
+	detail, err := EnsureSiteState("rustfs", config.Site{Name: "uploads", Path: dir})
+	if err != nil {
+		t.Fatalf("EnsureSiteState: %v", err)
+	}
+	if detail != "created bucket uploads-app" {
+		t.Errorf("detail = %q, want %q", detail, "created bucket uploads-app")
+	}
+	if len(rec.bucketCalls) != 1 || rec.bucketCalls[0] != "uploads-app" {
+		t.Errorf("expected sanitised bucket call, got %v", rec.bucketCalls)
+	}
+}
+
+func TestEnsureSiteState_ObjectStorage_FallsBackToSiteName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	rec := stubReprovProvision(t)
+
+	detail, err := EnsureSiteState("rustfs", config.Site{Name: "no-env-site", Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("EnsureSiteState: %v", err)
+	}
+	if detail != "created bucket no-env-site" {
+		t.Errorf("detail = %q, want %q", detail, "created bucket no-env-site")
+	}
+	if len(rec.bucketCalls) != 1 || rec.bucketCalls[0] != "no-env-site" {
+		t.Errorf("expected bucket call for the site name, got %v", rec.bucketCalls)
+	}
+}
+
+// The bucket already being there is the common case on every relink and every
+// reinstall of a service whose data survived; it must read as nothing done.
+func TestEnsureSiteState_ExistingBucket_ReportsNothingCreated(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	stubReprovProvision(t)
+	prev := reprovBucket
+	reprovBucket = func(string) (bool, error) { return false, nil }
+	t.Cleanup(func() { reprovBucket = prev })
+
+	detail, err := EnsureSiteState("rustfs", config.Site{Name: "already-there", Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("EnsureSiteState: %v", err)
+	}
+	if detail != "" {
+		t.Errorf("detail = %q, want empty for an existing bucket", detail)
+	}
+}
+
+func TestEnsureSiteState_DBFamily_CreatesDatabase(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	rec := stubReprovProvision(t)
+
+	dir := mkSiteWithEnv(t, "shop", "DB_HOST=lerd-postgres\nDB_DATABASE=shop_main\n")
+
+	detail, err := EnsureSiteState("postgres", config.Site{Name: "shop", Path: dir})
+	if err != nil {
+		t.Fatalf("EnsureSiteState: %v", err)
+	}
+	if detail != "created db shop_main" {
+		t.Errorf("detail = %q, want %q", detail, "created db shop_main")
+	}
+	if len(rec.dbCalls) != 1 || rec.dbCalls[0].Name != "shop_main" {
+		t.Errorf("expected db call for shop_main, got %v", rec.dbCalls)
+	}
+}
+
+func TestEnsureSiteState_CacheFamily_NoOp(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	rec := stubReprovProvision(t)
+
+	detail, err := EnsureSiteState("redis", config.Site{Name: "cache-app", Path: t.TempDir()})
+	if err != nil {
+		t.Fatalf("EnsureSiteState: %v", err)
+	}
+	if detail != "" {
+		t.Errorf("detail = %q, want empty for a stateless family", detail)
+	}
+	if len(rec.dbCalls) != 0 || len(rec.bucketCalls) != 0 {
+		t.Errorf("redis should touch nothing, got dbs=%v buckets=%v", rec.dbCalls, rec.bucketCalls)
+	}
+}
+
+// State that was already there must not be announced, so a reinstall of a
+// service whose data survived stays quiet instead of claiming it rebuilt it.
+func TestReprovisionLinkedSites_ExistingState_EmitsNoPerSiteEvent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+	stubReprovProvision(t)
+	prev := reprovDB
+	reprovDB = func(string, string) (bool, error) { return false, nil }
+	t.Cleanup(func() { reprovDB = prev })
+
+	mkSiteWithLerdYAML(t, "site-y", "mariadb")
+
+	var events []PhaseEvent
+	if err := ReprovisionLinkedSites("mariadb", func(e PhaseEvent) { events = append(events, e) }); err != nil {
+		t.Fatalf("ReprovisionLinkedSites: %v", err)
+	}
+	for _, e := range events {
+		if e.Phase == "reprovisioning_site" {
+			t.Errorf("unexpected per-site event for pre-existing state: %+v", e)
+		}
+	}
+}

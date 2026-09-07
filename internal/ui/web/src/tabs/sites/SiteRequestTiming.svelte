@@ -2,11 +2,17 @@
   import { onMount } from 'svelte';
   import {
     loadSiteAnalytics,
+    removeRecorded,
+    unexcludeRoute,
     TIME_RANGES,
     type Analytics,
+    type RecentRequest,
     type RouteStat,
     type TimeRange
   } from '$stores/analytics';
+  import ConfirmModal from '$components/ConfirmModal.svelte';
+  import Modal from '$components/Modal.svelte';
+  import Icon from '$components/Icon.svelte';
   import { profilerEnabled, setProfiler, captureCount, waitForCapture } from '$stores/profiler';
   import { openProfiler } from '$stores/dashboard';
   import { debugCaptureEnabled } from '$stores/queries';
@@ -67,6 +73,58 @@
     return () => clearInterval(poll);
   });
 
+  // A pending removal, held until the modal is confirmed. A route removal drops
+  // the route's whole history; a request removal drops the single recent row it
+  // was raised from, which is the only place a request has its own identity.
+  type Pending =
+    | { kind: 'route'; route: string; label: string }
+    | { kind: 'request'; route: string; uri: string; at: number; label: string };
+  let pending = $state<Pending | null>(null);
+  let alsoExclude = $state(false);
+  let removing = $state(false);
+  let removeError = $state('');
+  let excludesOpen = $state(false);
+
+  function askRemoveRoute(r: RouteStat) {
+    pending = { kind: 'route', route: r.route, label: r.route };
+    alsoExclude = false;
+    removeError = '';
+  }
+  function askRemoveRequest(r: RecentRequest) {
+    pending = { kind: 'request', route: r.route, uri: r.uri, at: r.at_millis, label: r.uri };
+    alsoExclude = false;
+    removeError = '';
+  }
+
+  async function confirmRemove() {
+    if (!pending || removing) return;
+    removing = true;
+    try {
+      await removeRecorded(site.domain, {
+        route: pending.route,
+        branch: activeWorktreeBranch,
+        exclude: alsoExclude,
+        ...(pending.kind === 'request' ? { uri: pending.uri, at_millis: pending.at } : {})
+      });
+      pending = null;
+      await load();
+    } catch {
+      removeError = m.sites_timing_removeFailed();
+    } finally {
+      removing = false;
+    }
+  }
+
+  async function watchAgain(route: string) {
+    try {
+      await unexcludeRoute(site.domain, route, activeWorktreeBranch);
+      await load();
+    } catch {
+      removeError = m.sites_timing_removeFailed();
+    }
+  }
+
+  const excluded = $derived(data?.excluded ?? []);
   const hasData = $derived(!!data && data.samples > 0);
   const errorCount = $derived((data?.status.c4xx ?? 0) + (data?.status.c5xx ?? 0));
   const errorRate = $derived(data && data.samples ? (errorCount / data.samples) * 100 : 0);
@@ -216,6 +274,18 @@
   <span class="text-xs font-semibold tabular-nums text-right {SEV_TEXT[sev(recentP95(r))]}">{fmtMs(recentP95(r))}</span>
 {/snippet}
 
+{#snippet removeBtn(onclick: () => void)}
+  <button
+    type="button"
+    onclick={(e) => { e.stopPropagation(); onclick(); }}
+    use:tooltip={m.sites_timing_removeRow()}
+    aria-label={m.sites_timing_removeRow()}
+    class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+  >
+    <Icon name="trash" class="w-3.5 h-3.5" />
+  </button>
+{/snippet}
+
 {#snippet inspectBtn(routeKey: string)}
   {#if $debugCaptureEnabled}
     <button
@@ -238,16 +308,30 @@
     <h3 class="text-[11px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500">
       {m.sites_reqstats_title()}
     </h3>
-    <div class="inline-flex rounded-md border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-white/5 p-0.5">
-      {#each TIME_RANGES as rg (rg)}
-        <button
-          type="button"
-          onclick={() => (range = rg)}
-          class="px-2 py-0.5 text-[11px] rounded-sm transition-colors {range === rg
-            ? 'bg-white dark:bg-lerd-card text-gray-800 dark:text-gray-100 font-medium shadow-sm'
-            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
-        >{rg}</button>
-      {/each}
+    <div class="flex items-center gap-1.5">
+      <div class="inline-flex rounded-md border border-gray-200 dark:border-lerd-border bg-gray-50 dark:bg-white/5 p-0.5">
+        {#each TIME_RANGES as rg (rg)}
+          <button
+            type="button"
+            onclick={() => (range = rg)}
+            class="px-2 py-0.5 text-[11px] rounded-sm transition-colors {range === rg
+              ? 'bg-white dark:bg-lerd-card text-gray-800 dark:text-gray-100 font-medium shadow-sm'
+              : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'}"
+          >{rg}</button>
+        {/each}
+      </div>
+      <button
+        type="button"
+        onclick={() => (excludesOpen = true)}
+        use:tooltip={m.sites_timing_excludedManage()}
+        aria-label={m.sites_timing_excludedManage()}
+        class="relative shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+      >
+        <Icon name="system" class="w-3.5 h-3.5" />
+        {#if excluded.length > 0}
+          <span class="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 rounded-full bg-lerd-red"></span>
+        {/if}
+      </button>
     </div>
   </div>
 
@@ -331,6 +415,7 @@
               <div class={slowRowClass}>{@render slowRow(r, false)}</div>
             {/if}
             {@render inspectBtn(r.route)}
+            {@render removeBtn(() => askRemoveRoute(r))}
           </div>
         {/each}
       </div>
@@ -361,6 +446,7 @@
                 <th class="text-left font-semibold px-3 py-2 w-24">{m.sites_timing_latency()}</th>
                 <th class="text-right font-semibold px-3 py-2">{m.sites_timing_requests()}</th>
                 {#if $debugCaptureEnabled}<th class="px-2 py-2 w-8"></th>{/if}
+                <th class="px-2 py-2 w-8"></th>
               </tr>
             </thead>
             <tbody>
@@ -381,6 +467,7 @@
                   </td>
                   <td class="px-3 py-2 text-right tabular-nums text-gray-600 dark:text-gray-300">{r.samples.toLocaleString()}</td>
                   {#if $debugCaptureEnabled}<td class="px-2 py-2 text-right">{@render inspectBtn(r.route)}</td>{/if}
+                  <td class="px-2 py-2 text-right">{@render removeBtn(() => askRemoveRoute(r))}</td>
                 </tr>
               {/each}
             </tbody>
@@ -398,10 +485,64 @@
               {/if}
               <span class="shrink-0 font-mono text-[11px] font-semibold {statusClass(r.status)}">{r.status}</span>
               <span class="shrink-0 tabular-nums font-medium text-right w-16 {r.cold ? 'text-gray-400 dark:text-gray-500' : SEV_TEXT[sev(r.millis)]}">{fmtMs(r.millis)}</span>
+              {@render removeBtn(() => askRemoveRequest(r))}
             </div>
           {/each}
         </div>
       {/if}
     </div>
   {/if}
+
+  {#if removeError}
+    <div class="mt-2 text-[11px] text-amber-600 dark:text-amber-400">{removeError}</div>
+  {/if}
 </section>
+
+<Modal open={excludesOpen} title={m.sites_timing_excluded()} onclose={() => (excludesOpen = false)}>
+  <div class="px-5 py-4">
+    <p class="text-[11px] text-gray-500 dark:text-gray-400">{m.sites_timing_excludedHint()}</p>
+    {#if excluded.length === 0}
+      <p class="mt-3 text-sm text-gray-400 dark:text-gray-500">{m.sites_timing_excludedNone()}</p>
+    {:else}
+      <div class="mt-3 flex flex-col gap-1.5">
+        {#each excluded as route (route)}
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-xs text-gray-700 dark:text-gray-200 truncate flex-1 min-w-0">{route}</span>
+            <button
+              type="button"
+              onclick={() => watchAgain(route)}
+              use:tooltip={m.sites_timing_unexclude()}
+              aria-label={m.sites_timing_unexclude()}
+              class="shrink-0 w-6 h-6 flex items-center justify-center rounded text-gray-400 dark:text-gray-500 hover:text-lerd-red hover:bg-gray-100 dark:hover:bg-white/5 transition-colors"
+            >
+              <Icon name="refresh" class="w-3.5 h-3.5" />
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+  </div>
+</Modal>
+
+<ConfirmModal
+  open={pending !== null}
+  title={pending?.kind === 'request' ? m.sites_timing_removeRequestTitle() : m.sites_timing_removeRouteTitle()}
+  body={pending?.kind === 'request'
+    ? m.sites_timing_removeRequestBody({ uri: pending.label })
+    : m.sites_timing_removeRouteBody({ route: pending?.label ?? '' })}
+  confirmLabel={m.sites_timing_removeConfirm()}
+  danger
+  loading={removing}
+  onconfirm={confirmRemove}
+  onclose={() => { if (!removing) pending = null; }}
+>
+  {#snippet extra()}
+    <label class="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300 cursor-pointer">
+      <input type="checkbox" bind:checked={alsoExclude} class="mt-0.5 accent-lerd-red" />
+      <span>
+        {m.sites_timing_excludeRoute({ route: pending?.route ?? '' })}
+        <span class="block text-[11px] text-gray-500 dark:text-gray-400">{m.sites_timing_excludeHint()}</span>
+      </span>
+    </label>
+  {/snippet}
+</ConfirmModal>

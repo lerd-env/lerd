@@ -73,7 +73,7 @@ func TestParseNginxIP(t *testing.T) {
 // it can never produce and rewrites the file on every tick.
 func TestParseNginxIP_RoundTripsRenderContainerHosts(t *testing.T) {
 	reg := &config.SiteRegistry{Sites: []config.Site{{Domains: []string{"blog.test"}}}}
-	rendered := renderContainerHosts(reg, "169.254.1.2", "10.89.7.11")
+	rendered := renderContainerHosts(reg, "169.254.1.2", "10.89.7.11", nil)
 	if got := parseNginxIP([]byte(rendered)); got != "10.89.7.11" {
 		t.Errorf("parseNginxIP(rendered) = %q, want %q", got, "10.89.7.11")
 	}
@@ -87,7 +87,7 @@ func TestReadNginxIPFromFile_MissingFile(t *testing.T) {
 }
 
 func TestRenderContainerHosts_EmptyRegistry(t *testing.T) {
-	got := renderContainerHosts(&config.SiteRegistry{}, "169.254.1.2", "10.89.0.2")
+	got := renderContainerHosts(&config.SiteRegistry{}, "169.254.1.2", "10.89.0.2", nil)
 	want := "127.0.0.1 localhost\n" +
 		"::1 localhost\n" +
 		"169.254.1.2 host.containers.internal host.docker.internal\n"
@@ -102,7 +102,7 @@ func TestRenderContainerHosts_SitesPointAtNginx(t *testing.T) {
 		{Name: "bar", Domains: []string{"bar.test", "admin-bar.test"}},
 	}}
 
-	got := renderContainerHosts(reg, "169.254.1.2", "10.89.0.2")
+	got := renderContainerHosts(reg, "169.254.1.2", "10.89.0.2", nil)
 
 	// host.containers.internal must use the host gateway, never nginx.
 	if !strings.Contains(got, "169.254.1.2 host.containers.internal host.docker.internal\n") {
@@ -125,7 +125,7 @@ func TestRenderContainerHosts_DistinctIPs(t *testing.T) {
 	reg := &config.SiteRegistry{Sites: []config.Site{
 		{Name: "x", Domains: []string{"x.test"}},
 	}}
-	got := renderContainerHosts(reg, "169.254.1.2", "10.89.0.2")
+	got := renderContainerHosts(reg, "169.254.1.2", "10.89.0.2", nil)
 
 	if strings.Contains(got, "169.254.1.2 x.test") {
 		t.Errorf("x.test must not resolve to host gateway:\n%s", got)
@@ -136,7 +136,7 @@ func TestRenderContainerHosts_DistinctIPs(t *testing.T) {
 }
 
 func TestRenderContainerHosts_PreservesLoopback(t *testing.T) {
-	got := renderContainerHosts(&config.SiteRegistry{}, "1.2.3.4", "5.6.7.8")
+	got := renderContainerHosts(&config.SiteRegistry{}, "1.2.3.4", "5.6.7.8", nil)
 	if !strings.HasPrefix(got, "127.0.0.1 localhost\n::1 localhost\n") {
 		t.Errorf("loopback entries missing or out of order:\n%s", got)
 	}

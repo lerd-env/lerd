@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
@@ -273,8 +274,16 @@ func snapshotGitBranch(cwd string) string {
 }
 
 func printSnapshotTable(snaps []serviceops.Snapshot) {
+	cfg, _ := config.LoadGlobal()
+	expiries := serviceops.SnapshotExpiries(serviceops.RetentionPolicy{
+		Keep:    cfg.AutoSnapshotKeep(),
+		KeepFor: cfg.AutoSnapshotKeepFor(),
+		Every:   cfg.AutoSnapshotEvery(),
+	}, snaps)
+	now := time.Now()
+
 	rows := make([][]string, 0, len(snaps))
-	for _, s := range snaps {
+	for i, s := range snaps {
 		db := s.Database
 		if s.AllDatabases {
 			db = "(all)"
@@ -285,9 +294,23 @@ func printSnapshotTable(snaps []serviceops.Snapshot) {
 		}
 		rows = append(rows, []string{
 			s.Name, s.Created.Local().Format("2006-01-02 15:04"), db, humanSize(s.SizeBytes), branch,
+			snapshotRetentionCell(s, expiries[i], now),
 		})
 	}
-	feedback.Table([]string{"NAME", "CREATED", "DATABASE", "SIZE", "BRANCH"}, rows)
+	feedback.Table([]string{"NAME", "CREATED", "DATABASE", "SIZE", "BRANCH", "RETENTION"}, rows)
+}
+
+// snapshotRetentionCell says both where a snapshot came from and when it goes
+// away, since an automatic snapshot with no expiry left to show would otherwise
+// read exactly like one taken by hand.
+func snapshotRetentionCell(s serviceops.Snapshot, e serviceops.SnapshotExpiry, now time.Time) string {
+	if !s.Auto {
+		return "manual"
+	}
+	if label := e.Label(now); label != "" {
+		return "auto, " + label
+	}
+	return "auto"
 }
 
 // humanSize renders a byte count in binary units.

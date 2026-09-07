@@ -89,6 +89,19 @@ type Preset struct {
 	// installs. Existing users with a saved image override are untouched —
 	// they progress through the Update / Upgrade buttons instead.
 	TrackLatest bool `yaml:"track_latest,omitempty"`
+	// Domain is the hostname label this service should be served on by default,
+	// qualified with the user's TLD (rustfs -> rustfs.test). A service declares
+	// it when its own URLs reach a browser: an S3 presigned URL carries its host
+	// inside the signature, so the app and the browser must agree on one name
+	// before the URL is signed, and the container name resolves in neither. A
+	// binary that predates this field ignores it and keeps behaving as it does
+	// today, which is why the default ships here rather than in Go.
+	Domain string `yaml:"domain,omitempty"`
+	// DomainPort is the container port the domain is served from, for a service
+	// exposing more than one. Without it the first mapping is assumed, which is
+	// the API for an object store but the SMTP port for a mail catcher whose web
+	// UI is the thing worth a hostname.
+	DomainPort int `yaml:"domain_port,omitempty"`
 	// DataVersionFile names a file inside the service's data dir whose contents
 	// identify the version that wrote the data (postgres PG_VERSION, mariadb
 	// mariadb_upgrade_info). It is matched against Versions[].Tag so a data dir
