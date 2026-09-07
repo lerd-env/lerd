@@ -166,7 +166,8 @@ func adoptDefaultServiceDomains() {
 		// Resolved after the adoption on purpose: the sites still name the
 		// container at this point, which is what the lookup matches on.
 		sites := config.SitesUsingService(service)
-		fmt.Printf("  %s is now served at https://%s\n", service, config.ServiceDomain(service))
+		step := feedback.Start("serving " + feedback.Val(service) + " at https://" + config.ServiceDomain(service))
+		step.OK("")
 		syncServiceDomainSites(service, sites)
 	}
 }
@@ -188,14 +189,27 @@ func syncServiceDomainSites(service string, sites []config.Site) {
 	if len(sites) == 0 {
 		return
 	}
-	fmt.Printf("Updating .env for %d site(s) that use %s:\n", len(sites), service)
+	bar := feedback.StartProgress(
+		fmt.Sprintf("rewriting .env for %d site%s using %s", len(sites), pluralS(len(sites)), service),
+		len(sites))
 	for _, site := range sites {
 		if err := domainSyncEnvFn(site.Path, io.Discard); err != nil {
-			feedback.Warn("%s: %v", site.Name, err)
+			bar.Failed(site.Name, err.Error())
 			continue
 		}
-		fmt.Printf("  %s\n", site.Name)
+		bar.Step(site.Name)
 	}
+	bar.Done(envSyncTally(bar.Completed(), bar.Failures()))
+}
+
+// envSyncTally summarises the sweep the way the store refresh does: the count
+// alone when every site took the change, and the failures named when some did
+// not, since a site left on the old address is the thing worth noticing.
+func envSyncTally(done, failed int) string {
+	if failed == 0 {
+		return fmt.Sprintf("%d updated", done)
+	}
+	return fmt.Sprintf("%d updated, %d failed", done, failed)
 }
 
 func newServiceStartCmd() *cobra.Command {

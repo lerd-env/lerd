@@ -94,3 +94,14 @@ func TestSyncServiceDomainSites_ContinuesPastAFailure(t *testing.T) {
 		t.Errorf("expected both attempted, got %v", *dirs)
 	}
 }
+
+// The tally is what the user reads instead of a list of site names, so it has
+// to say plainly when a site was left behind on the old address.
+func TestEnvSyncTally(t *testing.T) {
+	if got := envSyncTally(7, 0); got != "7 updated" {
+		t.Errorf("tally = %q, want %q", got, "7 updated")
+	}
+	if got := envSyncTally(5, 2); got != "5 updated, 2 failed" {
+		t.Errorf("tally = %q, want %q", got, "5 updated, 2 failed")
+	}
+}
