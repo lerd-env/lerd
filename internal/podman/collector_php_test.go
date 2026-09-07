@@ -296,13 +296,15 @@ acme_listing();
 	}
 }
 
-// noBridge runs a script with lerd's debug bridge switched off. The harness
-// loads its own copy of the collector on purpose, and under the native runtime
-// the bridge is auto-prepended into every PHP process, so without this the two
-// copies collide on Lerd\Collector\host(). Not a product problem: nothing else
+// noBridge runs a script with the host's own lerd instrumentation kept out of
+// it. The harness loads its own copy of the collector on purpose, and on a
+// machine running lerd the php.ini loads the engine collector into every
+// process and auto-prepends the debug bridge, so without this the two copies
+// collide on Lerd\Collector\host() and the host's captures arrive on the
+// socket beside the ones under test. Not a product problem: nothing else
 // includes the collector by hand.
 func noBridge(script string) []string {
-	return []string{"-d", "auto_prepend_file=", script}
+	return []string{"-n", "-d", "auto_prepend_file=", script}
 }
 
 // shortSocketPath returns a socket path under the macOS 104-byte sun_path

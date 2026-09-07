@@ -75,7 +75,13 @@ func runLaravelAdapterPHP(t *testing.T, body string) []string {
 	}
 
 	// The adapter resolves its target through get_cfg_var, not the env var.
-	cmd := exec.Command(php, "-d", "auto_prepend_file=", "-d", "lerd.devtools_host=unix://"+sock, scriptPath)
+	// -n so the php.ini of the machine running the tests is ignored. On one
+	// that runs lerd, that ini loads the engine collector into every php, and
+	// it reports to whatever lerd.devtools_host names, which here is this
+	// test's socket, so its captures arrive alongside the adapter's own. The
+	// adapter is plain PHP the script requires, so it is unaffected.
+	cmd := exec.Command(php, "-n", "-d", "auto_prepend_file=",
+		"-d", "lerd.devtools_host=unix://"+sock, scriptPath)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("php run failed: %v\n%s", err, out)
 	}
