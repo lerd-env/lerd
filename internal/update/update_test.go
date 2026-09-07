@@ -259,3 +259,78 @@ func TestFetchLatestPrerelease_keepsPlainStatusErrorWithQuotaLeft(t *testing.T) 
 		t.Errorf("error should carry the status, got: %v", err)
 	}
 }
+
+// A stale or revoked token in the environment used to turn an update that
+// would have worked anonymously into a bare HTTP 401, so a rejected token is
+// dropped and the call is made again as nobody.
+func TestReleasesJSON_retriesWithoutARejectedToken(t *testing.T) {
+	var auths []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auths = append(auths, r.Header.Get("Authorization"))
+		if r.Header.Get("Authorization") != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"tag_name":"v1.34.0-beta.3","prerelease":true}]`))
+	}))
+	defer srv.Close()
+
+	body, err := releasesJSON(srv.URL+"/releases", "ghp_expired")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(string(body), "v1.34.0-beta.3") {
+		t.Errorf("body should carry the release list, got: %s", body)
+	}
+	want := []string{"Bearer ghp_expired", ""}
+	if len(auths) != len(want) || auths[0] != want[0] || auths[1] != want[1] {
+		t.Errorf("requests sent %q, want %q", auths, want)
+	}
+}
+
+// Without a token there is nothing to retry without, so a 401 is reported as
+// it arrives rather than doubling every failed call.
+func TestReleasesJSON_doesNotRetryAnAnonymous401(t *testing.T) {
+	calls := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	if _, err := releasesJSON(srv.URL+"/releases", ""); err == nil {
+		t.Fatal("expected an error for HTTP 401")
+	}
+	if calls != 1 {
+		t.Errorf("made %d requests, want 1", calls)
+	}
+}
+
+// When the retry fails too, the message has to say the token was rejected,
+// otherwise the rate-limit advice reads as nonsense to someone who already set
+// GITHUB_TOKEN.
+func TestReleasesJSON_namesTheRejectedTokenWhenTheRetryFailsToo(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("X-RateLimit-Remaining", "0")
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer srv.Close()
+
+	_, err := releasesJSON(srv.URL+"/releases", "ghp_expired")
+	if err == nil {
+		t.Fatal("expected an error when both calls fail")
+	}
+	for _, want := range []string{"rate limit exhausted", "GITHUB_TOKEN"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error should mention %q, got: %v", want, err)
+		}
+	}
+	if !strings.Contains(err.Error(), "rejected") {
+		t.Errorf("error should say the token was rejected, got: %v", err)
+	}
+}

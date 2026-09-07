@@ -2,6 +2,7 @@ package update
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -143,31 +144,7 @@ func FetchLatestPrerelease() (string, error) {
 
 func fetchPrereleaseFrom(base string) (string, error) {
 	url := base + "/releases"
-	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("User-Agent", "lerd-cli")
-	req.Header.Set("Accept", "application/vnd.github+json")
-	token := tokenFor(url)
-	if token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		if err := rateLimitError(url, resp, token != ""); err != nil {
-			return "", err
-		}
-		return "", fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
-	}
-
-	body, err := io.ReadAll(resp.Body)
+	body, err := releasesJSON(url, tokenFor(url))
 	if err != nil {
 		return "", err
 	}
@@ -183,6 +160,57 @@ func fetchPrereleaseFrom(base string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no pre-release found from %s", url)
+}
+
+// errRejectedToken marks the 401 GitHub answers with when the token it was
+// given has expired or been revoked.
+var errRejectedToken = errors.New("rejected token")
+
+// releasesJSON reads the release list, and when GitHub rejects the token it
+// asks again as nobody: a stale GITHUB_TOKEN left in a shell must not cost an
+// update that would have worked anonymously.
+func releasesJSON(url, token string) ([]byte, error) {
+	body, err := getReleases(url, token, token == "")
+	if token != "" && errors.Is(err, errRejectedToken) {
+		body, err = getReleases(url, "", false)
+		if err != nil {
+			err = fmt.Errorf("%w (GitHub rejected the token in GITHUB_TOKEN or GH_TOKEN)", err)
+		}
+	}
+	return body, err
+}
+
+// getReleases makes one call. suggestToken says whether a failure may point at
+// the token that raises the rate limit, which is wrong to offer to someone who
+// already has one set and had it turned down.
+func getReleases(url, token string, suggestToken bool) ([]byte, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil) //nolint:noctx
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "lerd-cli")
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		if err := rateLimitError(url, resp, suggestToken); err != nil {
+			return nil, err
+		}
+		if resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf("%w: HTTP 401 from %s", errRejectedToken, url)
+		}
+		return nil, fmt.Errorf("unexpected status from %s: HTTP %d", url, resp.StatusCode)
+	}
+
+	return io.ReadAll(resp.Body)
 }
 
 // githubAPIHost is the only host a token may be sent to. A
@@ -210,7 +238,7 @@ func tokenFor(rawURL string) string {
 // rateLimitError turns an exhausted-quota response into an error that says so
 // and when the quota comes back, instead of a bare HTTP 403 that reads like a
 // broken network. It returns nil for any other failure.
-func rateLimitError(url string, resp *http.Response, authenticated bool) error {
+func rateLimitError(url string, resp *http.Response, suggestToken bool) error {
 	if resp.StatusCode != http.StatusForbidden && resp.StatusCode != http.StatusTooManyRequests {
 		return nil
 	}
@@ -223,7 +251,7 @@ func rateLimitError(url string, resp *http.Response, authenticated bool) error {
 			msg += fmt.Sprintf(", it resets in %d min", int((d+time.Minute-1)/time.Minute))
 		}
 	}
-	if !authenticated {
+	if suggestToken {
 		msg += "; set GITHUB_TOKEN to raise the limit"
 	}
 	return fmt.Errorf("%s", msg)
