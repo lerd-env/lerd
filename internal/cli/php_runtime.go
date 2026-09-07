@@ -94,6 +94,19 @@ func phpRuntimeFromArgs(args []string) (mode string, show bool, err error) {
 		args[0], config.PHPRuntimeContainer, config.PHPRuntimeNative)
 }
 
+// switchableToNative reports whether the runtime switch should touch a site.
+// A paused or ignored site keeps the vhost it already has, and rewriting one is
+// worse than useless: an ignored secured site whose certificate has been
+// removed still renders an SSL vhost naming it, and a certificate nginx cannot
+// load fails the entire configuration, so every reload afterwards is refused
+// and every other site goes on serving the runtime it was on before.
+func switchableToNative(s *config.Site) bool {
+	if s.Paused || s.Ignored {
+		return false
+	}
+	return s.ServedNatively(config.PHPRuntimeNative)
+}
+
 // fpmUnitsFor maps PHP versions to the shared FPM container units serving them.
 func fpmUnitsFor(versions []string) []string {
 	units := make([]string, 0, len(versions))
@@ -145,8 +158,8 @@ func ApplyPHPRuntime(mode string) error {
 	stopped := map[string][]string{}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if !s.ServedNatively(config.PHPRuntimeNative) {
-			continue // never used the shared FPM container
+		if !switchableToNative(s) {
+			continue // never used the shared FPM container, or is not being served
 		}
 		running := collectRunningWorkers(s)
 		stopped[s.Name] = running
@@ -185,7 +198,7 @@ func ApplyPHPRuntime(mode string) error {
 
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if !s.ServedNatively(config.PHPRuntimeNative) {
+		if !switchableToNative(s) {
 			continue
 		}
 		if err := regenerateSiteVhost(s); err != nil {
@@ -199,7 +212,13 @@ func ApplyPHPRuntime(mode string) error {
 		})
 		startWorkersForSite(s, stopped[s.Name], s.PHPVersion)
 	}
-	_ = nginx.Reload()
+	// A refused reload leaves nginx serving the runtime it had before, so every
+	// site answers 502 while the switch reports success. One unloadable
+	// certificate anywhere is enough to cause it, so say so rather than
+	// swallowing it.
+	if err := nginx.Reload(); err != nil {
+		feedback.Warn("nginx did not reload (%v); it is still serving the previous runtime, so sites will answer 502 until 'nginx -t' passes", err)
+	}
 
 	// Only now is the old runtime idle. Stopping it before nginx was reloaded
 	// left every vhost pointing at something that had just gone away, so the
@@ -231,7 +250,7 @@ func versionsInUse(installed []string) []string {
 	used := map[string]bool{}
 	for i := range sites.Sites {
 		s := &sites.Sites[i]
-		if s.ServedNatively(config.PHPRuntimeNative) && s.PHPVersion != "" {
+		if switchableToNative(s) && s.PHPVersion != "" {
 			used[s.PHPVersion] = true
 		}
 	}
@@ -278,7 +297,7 @@ func unsupportedSitesMessage(sites []config.Site) string {
 	seen := map[string]bool{}
 	for i := range sites {
 		s := &sites[i]
-		if !s.ServedNatively(config.PHPRuntimeNative) || nativephp.Supported(s.PHPVersion) {
+		if !switchableToNative(s) || nativephp.Supported(s.PHPVersion) {
 			continue
 		}
 		entry := s.Name + " (php " + s.PHPVersion + ")"
