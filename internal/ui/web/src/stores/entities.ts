@@ -25,6 +25,9 @@ export interface EntityRow {
   values?: string[];
   // Domain of the linked site that owns this entity, when one does.
   site?: string;
+  // Where the entity is addressable: the service's domain when it has one,
+  // otherwise its published loopback port.
+  url?: string;
 }
 
 export interface EntityKind {

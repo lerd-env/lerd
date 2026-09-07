@@ -81,6 +81,22 @@ func TestDoctorFixRun_CreateDatabaseIsAHostAction(t *testing.T) {
 	}
 }
 
+// Creating a missing bucket runs against the service rather than the site's
+// container, so it is routed the same way the schema one is.
+func TestDoctorFixRun_CreateBucketIsAHostAction(t *testing.T) {
+	registerSite(t, "acme", "acme.test")
+	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/doctor/fix/bucket_create/run", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
+	rec := httptest.NewRecorder()
+	handleSiteAction(rec, req)
+	if strings.Contains(rec.Body.String(), "unknown doctor fix") {
+		t.Fatalf("the create-bucket fix should be handled, got %q", rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "event: done") {
+		t.Errorf("expected a done event, got %q", rec.Body.String())
+	}
+}
+
 func TestDoctorFixRun_NonLoopbackForbidden(t *testing.T) {
 	registerSite(t, "acme", "acme.test")
 	req := httptest.NewRequest(http.MethodPost, "/api/sites/acme.test/doctor/fix/composer_install/run", nil)

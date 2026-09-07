@@ -176,6 +176,7 @@ func main() {
 	root.AddCommand(cli.NewCheckCmd())
 	root.AddCommand(cli.NewRunCmd())
 	root.AddCommand(cli.NewAboutCmd())
+	root.AddCommand(cli.NewLicensesCmd())
 	root.AddCommand(cli.NewWhatsnewCmd())
 	root.AddCommand(cli.NewManCmd())
 	root.AddCommand(cli.NewDoctorCmd())

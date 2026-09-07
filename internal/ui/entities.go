@@ -46,6 +46,25 @@ type entityRowResponse struct {
 	Name   string   `json:"name"`
 	Values []string `json:"values"`
 	Site   string   `json:"site,omitempty"`
+	// URL is where the entity is addressable, empty when the service exposes no
+	// browsable base for it. It follows the service's domain when it has one, so
+	// the list shows the address an app and a browser actually share rather than
+	// a container name that resolves in neither.
+	URL string `json:"url,omitempty"`
+}
+
+// entityBaseURL is the address prefix an entity a site owns is reachable at:
+// the service's own domain when it has one, otherwise the published loopback
+// port. Empty when the service publishes nothing to reach it on.
+func entityBaseURL(service string) string {
+	if url := serviceops.ServiceDomainURL(service); url != "" {
+		return url
+	}
+	ports := config.ServiceConfigFor(service).HostPorts()
+	if len(ports) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("http://localhost:%d", ports[0])
 }
 
 // entityOwnerIndex maps entity names to the domain of the site whose .env
@@ -177,12 +196,22 @@ func entityOverview(service string, specs []config.EntitySpec) []entityKindRespo
 				kind.Error = err.Error()
 			} else {
 				owners := entityOwnerIndex(service, spec.OwnerEnv)
+				// Only an entity a site addresses by name has a URL to show; the
+				// declaration says which kinds those are.
+				base := ""
+				if spec.OwnerEnv != "" {
+					base = entityBaseURL(service)
+				}
 				for _, row := range rows {
 					values := row.Values
 					if values == nil {
 						values = []string{}
 					}
-					kind.Rows = append(kind.Rows, entityRowResponse{Name: row.Name, Values: values, Site: owners[row.Name]})
+					url := ""
+					if base != "" {
+						url = base + "/" + row.Name
+					}
+					kind.Rows = append(kind.Rows, entityRowResponse{Name: row.Name, Values: values, Site: owners[row.Name], URL: url})
 				}
 			}
 		}
