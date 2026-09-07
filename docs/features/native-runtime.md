@@ -62,7 +62,7 @@ The binaries land in `~/.local/share/lerd/bin` as `php-native-<version>`, with t
 
 `dump()` and `dd()` work: the debug bridge is plain PHP and reads its assets from their host copies. Xdebug and pcov ship as loadable extensions beside the binary, so `xdebug:on` and coverage runs behave as they always have, and SPX is compiled in, so the profiler works too.
 
-The Debug window's **query lens does not capture until your build ships the collector**. Those queries come from `lerd_devtools`, an engine-level extension the PHP image compiles in. The runtime loads it automatically when it is present beside the binary, and until then the site doctor says so rather than leaving the lens silently empty. `lerd php:runtime container` restores it in the meantime.
+The Debug window's query lens captures too. Those queries come from `lerd_devtools`, an engine-level extension the PHP image compiles in; the published builds ship it as a loadable object beside the binary, built against that exact PHP, and the runtime loads it automatically. A build that does not carry one leaves the lens empty, and the site doctor says so rather than letting it look broken.
 
 ## Known gaps
 
@@ -70,6 +70,6 @@ The extension set is fixed at build time, so `lerd php:ext add` has nothing to a
 
 Extensions that cannot be compiled into a static binary, Xdebug and pcov among them, ship as loadable `.so` files beside it instead. That is a packaging detail rather than a limitation: both load and behave normally.
 
-`lerd php:ext` and `lerd php:pkg` refuse here, and `lerd shell` says there is no container to enter rather than starting one.
+`lerd php:ext` and `lerd php:pkg` refuse here, and `lerd shell` says there is no container to enter rather than starting one. `lerd doctor` follows the runtime as well: it reports the builds installed on the host instead of the FPM images, since there are none to inspect and the rebuild it would otherwise name refuses here.
 
 A version with no published native build cannot be installed at all, and the native runtime needs PHP 8.1 or newer. Switching names the sites standing in the way rather than failing one at a time.
