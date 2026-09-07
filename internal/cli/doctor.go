@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,11 +17,13 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/feedback"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/origin"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/services"
 	lerdSystemd "github.com/geodro/lerd/internal/systemd"
+	"github.com/geodro/lerd/internal/tools"
 	lerdUpdate "github.com/geodro/lerd/internal/update"
 	"github.com/geodro/lerd/internal/version"
 	"github.com/geodro/lerd/internal/wsl"
@@ -548,6 +551,29 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 	if len(phpVersions) == 0 {
 		warn("PHP versions", "none installed — run: lerd use 8.4")
 	}
+	// The native runtime has no images, and the rebuild these findings point at
+	// refuses there, so it is checked against the published builds instead.
+	if cfg, cerr := config.LoadGlobal(); cerr == nil && cfg.PHPRuntimeMode() == config.PHPRuntimeNative {
+		pins := tools.Load(context.Background())
+		for _, v := range phpVersions {
+			_, statErr := os.Stat(nativephp.BinaryPath(v))
+			status, detail := nativeBuildFinding(statErr == nil,
+				tools.InstalledVersion(nativeTool(v)), pins.Tools[nativeTool(v)].Version)
+			switch status {
+			case "fail":
+				hint := "lerd use " + v
+				if pins.Tools[nativeTool(v)].Version == "" {
+					hint = "keep this version on the container runtime"
+				}
+				fail(fmt.Sprintf("native PHP %s", v), detail, hint)
+			case "warn":
+				warn(fmt.Sprintf("native PHP %s", v), detail+", run: lerd php:update "+v)
+			default:
+				ok(fmt.Sprintf("native PHP %s", v))
+			}
+		}
+		phpVersions = nil
+	}
 	for _, v := range phpVersions {
 		short := strings.ReplaceAll(v, ".", "")
 		image := "lerd-php" + short + "-fpm:local"
@@ -693,4 +719,22 @@ func checkDirWritable(dir string) error {
 // checkPortConflicts in startstop.go for batch checks.
 func PortInUseIn(port, output string) bool {
 	return strings.Contains(output, ":"+port+" ")
+}
+
+// nativeBuildFinding decides what doctor says about one version's native build.
+// A pin that could not be fetched leaves an installed build alone: being
+// offline is not a reason to call a working PHP stale.
+func nativeBuildFinding(present bool, installed, pinned string) (status, detail string) {
+	if !present {
+		if pinned == "" {
+			return "fail", "no native build is published for this version"
+		}
+		return "fail", "not installed"
+	}
+	// A build installed before lerd recorded patches carries no stamp. It is on
+	// disk and serving, so the only honest thing is to leave it alone.
+	if installed != "" && pinned != "" && pinned != installed {
+		return "warn", "a newer build is published (" + pinned + ")"
+	}
+	return "ok", ""
 }
