@@ -401,6 +401,13 @@ func InstallPresetStreaming(name, version string, emit func(PhaseEvent)) (*confi
 	if err := installReprovFn(svc.Name, emit); err != nil {
 		emit(PhaseEvent{Phase: "reprovisioning_failed", Message: err.Error()})
 	}
+	// A service that needs a domain needs it from the moment it exists, not from
+	// the next start: the first thing the user does with a fresh object store is
+	// point an app at it, and a URL signed before the name exists is already
+	// wrong.
+	for _, adopted := range AdoptDefaultServiceDomains() {
+		emit(PhaseEvent{Phase: "domain_adopted", Message: adopted + ": " + config.ServiceDomain(adopted)})
+	}
 	return svc, nil
 }
 
@@ -421,6 +428,9 @@ func InstallPresetByName(name, version string) (*config.CustomService, error) {
 	if err := registerPreset(svc); err != nil {
 		return nil, err
 	}
+	// Same reason as the streaming path: the name has to exist before anything
+	// signs a URL against it.
+	AdoptDefaultServiceDomains()
 	return svc, nil
 }
 

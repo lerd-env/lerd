@@ -106,7 +106,17 @@
   {#snippet header()}
     <Icon name="cube" class="w-4 h-4 mt-0.5 shrink-0 text-gray-300 dark:text-gray-600" />
     <div class="min-w-0 flex-1">
-      <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={row.name}>{row.name}</p>
+      {#if row.url}
+        <a
+          href={row.url}
+          target="_blank"
+          rel="noopener"
+          class="block truncate text-sm font-semibold text-gray-800 hover:underline dark:text-gray-100"
+          title={row.url}>{row.name}</a
+        >
+      {:else}
+        <p class="truncate text-sm font-semibold text-gray-800 dark:text-gray-100" title={row.name}>{row.name}</p>
+      {/if}
       <p class="flex flex-wrap items-center gap-x-1.5 text-xs text-gray-400 dark:text-gray-500">
         {#each kind.columns as col, i (col.key)}
           {#if i > 0}<span class="shrink-0" aria-hidden="true">·</span>{/if}

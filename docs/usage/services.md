@@ -216,6 +216,35 @@ If a historical `AWS_BUCKET` value with underscores (or other S3-invalid charact
 
 `AWS_URL` points to the public bucket URL (browser-reachable). `AWS_ENDPOINT` is the internal container address used by PHP.
 
+### Serving a service on its own domain
+
+An app reaches a service by container name, `lerd-rustfs`, which resolves only inside the podman network. That is fine until something hands the browser a URL built from it. An S3 presigned URL carries its host inside the signature, so rewriting the host afterwards produces `SignatureDoesNotMatch`; the app and the browser have to agree on one name *before* the URL is signed. `AWS_URL` cannot solve it either, because stock Laravel signs against the endpoint, not the public base.
+
+RustFS ships with one: its preset declares `domain: rustfs`, so an install that has it takes `rustfs.test` on the next start and the sites using it are repointed in the same pass. That is deliberate rather than opt-in, because a service whose URLs reach a browser is broken without a name both sides resolve, and a fix nobody runs is not a fix.
+
+```bash
+lerd service domain rustfs storage.test  # choose a different name
+lerd service domain rustfs               # show the current domain
+lerd service domain rustfs --remove      # stop serving it there
+```
+
+Removing it is recorded, so the preset's default is not handed back on the next start; naming one by hand clears that again. Any preset can declare a default the same way, which is why the value lives in the store and reaches every install without a release.
+
+The domain is a name both sides resolve: nginx serves it over HTTPS with a certificate from lerd's own CA, and the hosts file mounted into every PHP container points it at nginx, so the app signs for the same host the browser opens. A bare name is qualified with lerd's TLD, so `storage` means `storage.test`, and a domain outside that TLD is refused because nothing else resolves on both sides. The service stays reachable at `lerd-<name>` on the podman network throughout.
+
+A subdomain of a site works just as well if you prefer the storage to sit under the app it belongs to, `lerd service domain rustfs rustfs.myapp.test`. lerd runs one RustFS for every site, so the default is a name of its own rather than one borrowed from a project, and per-site subdomains share a namespace with grouped sites and worktree domains; but nothing stops you naming it that way.
+
+Setting or removing a domain sweeps the sites that use the service and rewrites their env files right away, so the change reaches the projects instead of waiting for each to run `lerd env` itself. That matters most on removal: without the sweep every project would be left pointing at a name that no longer resolves.
+
+Once a service has a domain, `lerd env` writes it into the sites that use the service: the container URL and the `localhost` published-port URL both become the domain, and the port the scheme now implies is dropped. Values that are not URLs are left alone, so a bare `REDIS_HOST=lerd-redis` keeps pointing at the container.
+
+```ini
+AWS_ENDPOINT=https://rustfs.test
+AWS_URL=https://rustfs.test/my-project
+```
+
+The vhost sends no CORS headers, so a browser fetching across origins (a direct-to-S3 upload from the site's own page) still needs them added; server-side uploads and plain `<img>` or download links are unaffected.
+
 If a bucket a site points at is not there, `lerd site:doctor` reports it under **Bucket** with a fix that creates it. Such a site serves every page fine and fails on the first upload, which is exactly the kind of thing that reads as an application bug. The check is driven by the service preset rather than by any framework: the preset names the `.env` key holding the entity a site owns (`owner_env: AWS_BUCKET` for RustFS), and only a project whose env also points at the lerd service is measured against it, so one configured for real AWS is left alone.
 
 `lerd env` writes the `.env` even when it could not create the database or bucket behind it, and then exits non-zero naming what is missing. It used to warn in passing and exit 0, which left a file claiming storage that was never created.

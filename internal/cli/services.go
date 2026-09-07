@@ -84,8 +84,110 @@ func NewServiceCmd() *cobra.Command {
 	cmd.AddCommand(newServicePinCmd())
 	cmd.AddCommand(newServiceUnpinCmd())
 	cmd.AddCommand(newServicePortCmd())
+	cmd.AddCommand(newServiceDomainCmd())
 
 	return cmd
+}
+
+// newServiceDomainCmd returns the `service domain` command.
+func newServiceDomainCmd() *cobra.Command {
+	var remove bool
+	cmd := &cobra.Command{
+		Use:   "domain <service> [domain]",
+		Short: "Serve a service on its own domain, reachable from the app and the browser",
+		Long: `Give a service a hostname nginx serves it on, over HTTPS:
+
+    lerd service domain rustfs rustfs.test
+
+serves lerd-rustfs at https://rustfs.test. A bare name is qualified with lerd's
+TLD, so "storage" means storage.test.
+
+An app reaches a service by container name, which resolves nowhere outside the
+podman network. That is fine until something hands the browser a URL built from
+it: an S3 presigned URL carries its host inside the signature, so the app and
+the browser have to agree on one name before the URL is signed, and rewriting
+the host afterwards invalidates the signature. A service domain is that shared
+name, resolving to nginx from inside the app container and from the host alike.
+
+Run with no domain to show the current one, or --remove to stop serving it. The
+service stays reachable at lerd-<name> on the podman network either way.`,
+		Args: cobra.RangeArgs(1, 2),
+		RunE: func(_ *cobra.Command, args []string) error {
+			name := args[0]
+			feedback.Begin()
+			// Resolved before the change: a site is recognised by whichever
+			// address its env currently names, so removing the domain first
+			// would lose every site the domain itself is what wired.
+			affected := config.SitesUsingService(name)
+			if remove {
+				if err := serviceops.RemoveServiceDomain(name); err != nil {
+					return err
+				}
+				feedback.Done("removed the domain for " + feedback.Val(name))
+				syncServiceDomainSites(name, affected)
+				return nil
+			}
+			if len(args) == 1 {
+				if current := config.ServiceDomain(name); current != "" {
+					fmt.Printf("%s is served at https://%s\n", name, current)
+					return nil
+				}
+				fmt.Printf("%s has no domain. Give it one with: lerd service domain %s %s\n",
+					name, name, serviceops.DefaultServiceDomain(name))
+				return nil
+			}
+			domain, err := serviceops.SetServiceDomain(name, args[1])
+			if err != nil {
+				return err
+			}
+			feedback.Done("serving " + feedback.Val(name) + " at https://" + domain)
+			syncServiceDomainSites(name, affected)
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&remove, "remove", false, "Stop serving the service on its domain")
+	return cmd
+}
+
+// adoptDefaultServiceDomains takes the domain each preset declares for a service
+// that has none, then rewrites the env of the sites using it. Together those two
+// are what make the fix arrive with an update: the domain is provisioned and the
+// projects pointing at the service are repointed at it in the same pass.
+func adoptDefaultServiceDomains() {
+	for _, service := range serviceops.AdoptDefaultServiceDomains() {
+		// Resolved after the adoption on purpose: the sites still name the
+		// container at this point, which is what the lookup matches on.
+		sites := config.SitesUsingService(service)
+		fmt.Printf("  %s is now served at https://%s\n", service, config.ServiceDomain(service))
+		syncServiceDomainSites(service, sites)
+	}
+}
+
+// domainSyncEnvFn is the seam the domain sweep re-execs the env step through,
+// swapped in tests so the sweep can be driven without a real project to write.
+var domainSyncEnvFn = runLerdEnvTo
+
+// syncServiceDomainSites rewrites the env of every site that uses the service,
+// so a domain that just appeared or just went away reaches the projects pointing
+// at it. Without this a domain does nothing until each project runs `lerd env`
+// itself, and removing one leaves every project on a name that resolves nowhere.
+// It re-execs the env step rather than editing the values here, so both
+// directions are computed by the one path that owns them. The sites are resolved
+// by the caller before the domain changes, since a site wired to the domain
+// names the container nowhere and would vanish from the list the moment the
+// domain does.
+func syncServiceDomainSites(service string, sites []config.Site) {
+	if len(sites) == 0 {
+		return
+	}
+	fmt.Printf("Updating .env for %d site(s) that use %s:\n", len(sites), service)
+	for _, site := range sites {
+		if err := domainSyncEnvFn(site.Path, io.Discard); err != nil {
+			feedback.Warn("%s: %v", site.Name, err)
+			continue
+		}
+		fmt.Printf("  %s\n", site.Name)
+	}
 }
 
 func newServiceStartCmd() *cobra.Command {
@@ -602,6 +704,9 @@ stopped, removed, exposed, or pinned with the usual service subcommands.`,
 				return err
 			}
 			fmt.Printf("Installed preset %q. Start it with: lerd service start %s\n", svc.Name, svc.Name)
+			if domain := config.ServiceDomain(svc.Name); domain != "" {
+				fmt.Printf("Served at: https://%s\n", domain)
+			}
 			if svc.Dashboard != "" {
 				fmt.Printf("Dashboard: %s\n", svc.Dashboard)
 			}
@@ -897,6 +1002,8 @@ func newServiceReinstallCmd() *cobra.Command {
 					feedback.Note("reprovisioning skipped: " + e.Message)
 				case "reprovisioning_failed":
 					feedback.Warn("reprovisioning linked sites: %s", e.Message)
+				case "domain_adopted":
+					feedback.Note("serving on its own domain: " + e.Message)
 				}
 			}
 			opts := serviceops.ReinstallOptions{ResetData: resetData, SkipSnapshot: noSnapshot}

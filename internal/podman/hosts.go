@@ -77,7 +77,18 @@ func renderContainerHosts(reg *config.SiteRegistry, hostIP, nginxIP string) stri
 			fmt.Fprintf(&sb, "%s %s\n", nginxIP, domain)
 		}
 	}
+	writeServiceDomains(&sb, nginxIP)
 	return sb.String()
+}
+
+// writeServiceDomains adds the hostnames services are served on. An app reaches
+// a service by container name, but a hostname the browser will also be given
+// has to resolve to nginx from inside the app container too: a presigned URL
+// carries its host in the signature, so both sides have to use the same name.
+func writeServiceDomains(sb *strings.Builder, nginxIP string) {
+	for _, domain := range config.ServiceDomains() {
+		fmt.Fprintf(sb, "%s %s\n", nginxIP, domain)
+	}
 }
 
 // writeBrowserHosts writes the browser-testing hosts file, mapping all .test
@@ -94,6 +105,7 @@ func writeBrowserHosts(reg *config.SiteRegistry, nginxIP string) error {
 			fmt.Fprintf(&sb, "%s %s\n", nginxIP, domain)
 		}
 	}
+	writeServiceDomains(&sb, nginxIP)
 
 	browserPath := config.BrowserHostsFile()
 	if err := os.MkdirAll(filepath.Dir(browserPath), 0755); err != nil {

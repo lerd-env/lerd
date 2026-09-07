@@ -126,3 +126,41 @@ func TestForgetEntities_DropsTheCachedList(t *testing.T) {
 		t.Fatalf("expected ok after the cache was dropped, got %+v", c)
 	}
 }
+
+// Once a project is wired to the service's domain its env names the container
+// nowhere, and a check that looked only for the container name would stop
+// judging exactly the projects the domain was turned on for.
+func TestCheckServerBucket_StillJudgesASiteWiredToTheDomain(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatalf("LoadGlobal: %v", err)
+	}
+	if cfg.Services == nil {
+		cfg.Services = map[string]config.ServiceConfig{}
+	}
+	sc := cfg.Services["rustfs"]
+	sc.Domain = "rustfs.test"
+	cfg.Services["rustfs"] = sc
+	if err := config.SaveGlobal(cfg); err != nil {
+		t.Fatalf("SaveGlobal: %v", err)
+	}
+
+	dir := t.TempDir()
+	env := "FILESYSTEM_DISK=s3\nAWS_BUCKET=uploads\nAWS_ENDPOINT=https://rustfs.test\n"
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte(env), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	restore := stubEntityLister(func(string, *config.EntitySpec) ([]string, error) {
+		return []string{"other"}, nil
+	})
+	defer restore()
+
+	c, produced := checkServerBucket(dir)
+	if !produced || c.Status != StatusFail {
+		t.Fatalf("check = %+v (produced=%v), want the missing bucket reported", c, produced)
+	}
+}
