@@ -455,6 +455,23 @@ func fpmVersionsToEnsure(defaultVersion string, sites []config.Site) []string {
 	return out
 }
 
+// ensuredFPMVersions is the set install builds images for: the default version
+// plus what registered sites run. Read from config rather than passed around so
+// the freshness check and the build cannot drift apart, which is what made
+// every install rebuild the versions it had just built.
+func ensuredFPMVersions() []string {
+	cfg, _ := config.LoadGlobal()
+	defaultPHP := ""
+	if cfg != nil {
+		defaultPHP = cfg.PHP.DefaultVersion
+	}
+	var sites []config.Site
+	if reg, err := config.LoadSites(); err == nil && reg != nil {
+		sites = reg.Sites
+	}
+	return fpmVersionsToEnsure(defaultPHP, sites)
+}
+
 // fpmEnsurePlan splits versions into the ones with an image to build and the
 // ones already current, which have nothing to show.
 func fpmEnsurePlan(versions []string) (build, quiet []string) {
