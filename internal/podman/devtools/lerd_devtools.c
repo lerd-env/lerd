@@ -13,7 +13,23 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_ENTRY("lerd.devtools_host", "", PHP_INI_ALL, OnUpdateString, host, zend_lerd_devtools_globals, lerd_devtools_globals)
 	STD_PHP_INI_ENTRY("lerd.devtools_kinds", "query", PHP_INI_ALL, OnUpdateString, kinds, zend_lerd_devtools_globals, lerd_devtools_globals)
 	STD_PHP_INI_ENTRY("lerd.devtools_flag", "/usr/local/etc/lerd/devtools.flag", PHP_INI_ALL, OnUpdateString, flag, zend_lerd_devtools_globals, lerd_devtools_globals)
+	/* The PHP-side assets sit at a fixed path inside the image, and nowhere
+	 * near it when PHP runs on the host under the native runtime. Every asset
+	 * below is resolved from here so one setting moves them all. */
+	STD_PHP_INI_ENTRY("lerd.assets_dir", "/usr/local/etc/lerd", PHP_INI_ALL, OnUpdateString, assets, zend_lerd_devtools_globals, lerd_devtools_globals)
 PHP_INI_END()
+
+/* lerd_asset writes <assets_dir>/<name> into buf. Falls back to the image path
+ * when the directive is empty, so a container keeps working unchanged. */
+static const char *lerd_asset(char *buf, size_t len, const char *name)
+{
+	const char *dir = LERD_G(assets);
+	if (!dir || !*dir) {
+		dir = "/usr/local/etc/lerd";
+	}
+	snprintf(buf, len, "%s/%s", dir, name);
+	return buf;
+}
 
 /* The capture path only exists where the zend_observer API does (PHP 8.0+).
  * On the legacy tier the module still loads so the image build succeeds; it
@@ -732,13 +748,21 @@ static void lerd_boot_end(zend_execute_data *execute_data, zval *retval)
 	if (lerd_laravel || !LERD_G(active) || !LERD_G(want_query)) {
 		return;
 	}
+	char path[512], code[768];
+	lerd_asset(path, sizeof(path), "laravel-adapter.php");
+	/* Only stand the PDO observer down once the adapter is actually there to
+	 * replace it. Claiming queries and then failing to load left the request
+	 * with neither, which is what a missing assets directory used to do. */
+	if (access(path, F_OK) != 0) {
+		return;
+	}
 	lerd_laravel = 1; /* set first: stops the PDO observer double-capturing */
-	zend_eval_string(
+	snprintf(code, sizeof(code),
 		"if (function_exists('app') && !defined('LERD_LARAVEL_ADAPTER')) {"
 		" define('LERD_LARAVEL_ADAPTER', 1);"
-		" @include '/usr/local/etc/lerd/laravel-adapter.php';"
-		"}",
-		NULL, "lerd-laravel-adapter");
+		" @include '%s';"
+		"}", path);
+	zend_eval_string(code, NULL, "lerd-laravel-adapter");
 }
 
 /* The agnostic collector is a framework-neutral PHP file that extracts and
@@ -750,11 +774,15 @@ static void lerd_ensure_collector(void)
 		return;
 	}
 	LERD_G(collector_loaded) = 1;
-	zend_eval_string(
-		"if (!function_exists('Lerd\\\\Collector\\\\emit')) {"
-		" @include '/usr/local/etc/lerd/devtools-collector.php';"
-		"}",
-		NULL, "lerd-collector-load");
+	{
+		char path[512], code[768];
+		lerd_asset(path, sizeof(path), "devtools-collector.php");
+		snprintf(code, sizeof(code),
+			"if (!function_exists('Lerd\\\\Collector\\\\emit')) {"
+			" @include '%s';"
+			"}", path);
+		zend_eval_string(code, NULL, "lerd-collector-load");
+	}
 }
 
 /* lerd_mail_end captures one outgoing mail. Laravel claims mail via its own
@@ -914,7 +942,7 @@ static void lerd_job_end(zend_execute_data *execute_data, zval *retval)
  * or extends. The name expression is passed through to the collector, which is
  * where the extraction vocabulary lives. */
 #define LERD_MAX_SEAMS 64
-#define LERD_SEAMS_FILE "/usr/local/etc/lerd/devtools-seams.conf"
+#define LERD_SEAMS_NAME "devtools-seams.conf"
 
 typedef struct {
 	/* 'c' matches the declaring class by name; 'i' covers both implements and
@@ -944,7 +972,8 @@ static const char *copy_field(const char *p, char *out, size_t cap)
 
 static void load_seams(void)
 {
-	FILE *f = fopen(LERD_SEAMS_FILE, "r");
+	char seams[512];
+	FILE *f = fopen(lerd_asset(seams, sizeof(seams), LERD_SEAMS_NAME), "r");
 	if (!f) {
 		return;
 	}
@@ -1240,7 +1269,11 @@ PHP_RINIT_FUNCTION(lerd_devtools)
 	lerd_laravel = 0;
 	LERD_G(active) = (LERD_G(flag) && LERD_G(flag)[0] && access(LERD_G(flag), F_OK) == 0) ? 1 : 0;
 	LERD_G(want_query) = (LERD_G(kinds) && strstr(LERD_G(kinds), "query")) ? 1 : 0;
-	LERD_G(capture_workers) = (access("/usr/local/etc/lerd/devtools-workers.flag", F_OK) == 0) ? 1 : 0;
+	{
+		char wf[512];
+		lerd_asset(wf, sizeof(wf), "devtools-workers.flag");
+		LERD_G(capture_workers) = (access(wf, F_OK) == 0) ? 1 : 0;
+	}
 	/* One id per RINIT: per HTTP request under FPM, per process under CLI. The
 	 * dashboard groups queries by this so every request is its own group, even
 	 * two hits to the same URL on the same reused pool worker. time+pid+seq is

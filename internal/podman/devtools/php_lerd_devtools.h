@@ -22,6 +22,7 @@ ZEND_BEGIN_MODULE_GLOBALS(lerd_devtools)
 	char *host;       /* lerd.devtools_host: unix:///… or tcp://host:port */
 	char *kinds;      /* lerd.devtools_kinds: comma list, e.g. "query"    */
 	char *flag;       /* lerd.devtools_flag: sentinel path, stat per req  */
+	char *assets;     /* lerd.assets_dir: where the PHP-side assets live  */
 	zend_bool active; /* flag present this request (cached at RINIT)      */
 	zend_bool want_query;
 	zend_bool capture_workers; /* devtools-workers.flag present (RINIT)    */
