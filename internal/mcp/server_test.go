@@ -273,8 +273,17 @@ func TestToolList_underSizeCeiling(t *testing.T) {
 	// so an assistant without the property writes into the file nginx ignores,
 	// then 23250 → 23550 for the `confirm` an image download is disclosed for, on
 	// the two tools whose actions can pull: without it the assistant cannot
-	// answer the disclosure and the operation it was asked for never runs.
-	const ceiling = 23550
+	// answer the disclosure and the operation it was asked for never runs, then
+	// 23550 → 24350 for scheduled snapshots: db gained auto, auto_set and
+	// snapshot_keep with the six properties they read, and without them an
+	// assistant can neither see that a database is being snapshotted on a
+	// schedule nor stop a snapshot the user wants kept from expiring. The db
+	// description and the new property descriptions were written tight to keep
+	// the rise to what the three actions actually cost, then 24350 → 24500 for
+	// the schedule's `selection`: without it an assistant cannot tell an opt-in
+	// policy that covers nothing from an opt-out one that covers every site, and
+	// would read an empty covered list as a broken schedule.
+	const ceiling = 24500
 	got, err := json.Marshal(toolList())
 	if err != nil {
 		t.Fatalf("marshal tool list: %v", err)

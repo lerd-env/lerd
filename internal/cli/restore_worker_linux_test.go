@@ -3,6 +3,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -121,5 +123,43 @@ func TestRestoreWorker_autostartEnabled_armsBoot(t *testing.T) {
 
 	if len(mgr.enabled) != 1 || mgr.enabled[0] != "lerd-horizon-ws" {
 		t.Errorf("enabled %v, want [lerd-horizon-ws]", mgr.enabled)
+	}
+}
+
+// TestRestoreWorker_devServer_keepsTheGeneratedConfig pins issue #1685: the
+// unit `lerd start` rewrites must carry the dev server flags, or the worker
+// comes back on its own port with no generated config and the site's page is
+// refused every asset it asks for.
+func TestRestoreWorker_devServer_keepsTheGeneratedConfig(t *testing.T) {
+	site := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(site, "node_modules", "vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{
+		"vite.config.js": "export default {};\n",
+		"package.json":   `{"scripts":{"dev":"vite"}}`,
+	} {
+		if err := os.WriteFile(filepath.Join(site, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	registerSite(t, "ws", site)
+	mgr := &captureWriteMgr{writeChange: true}
+	swapServiceMgr(t, mgr)
+
+	w := config.FrameworkWorker{Command: "npm run dev", Host: true, Label: "Vite"}
+	restoreWorker("ws", site, "8.4", "vite", w)
+
+	if len(mgr.writes) == 0 {
+		t.Fatal("expected at least one WriteServiceUnitIfChanged call")
+	}
+	content := mgr.writes[0].content
+	for _, want := range []string{"--config node_modules/.lerd/vite.config.mjs", "--port ", "--strictPort"} {
+		if !strings.Contains(content, want) {
+			t.Errorf("expected %q in unit content, got %q", want, content)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(site, "node_modules", ".lerd", "vite.config.mjs")); err != nil {
+		t.Errorf("expected the generated config on disk: %v", err)
 	}
 }

@@ -1,0 +1,40 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{.Domain}};
+
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{.Domain}};
+
+    ssl_certificate /etc/nginx/certs/{{.Domain}}.crt;
+    ssl_certificate_key /etc/nginx/certs/{{.Domain}}.key;
+
+    # An object store streams whole files both ways, so the body cap comes off
+    # and neither direction is spooled to disk on the way through.
+    client_max_body_size 0;
+    proxy_request_buffering off;
+    proxy_buffering off;
+
+    location / {
+        # Through a variable, the same way the custom-container vhosts do it: a
+        # literal upstream is resolved when the config loads, so a reload while
+        # the service container is absent is rejected outright and takes every
+        # other vhost in the file down with it.
+        set $backend "{{.UpstreamHost}}";
+        proxy_pass http://$backend:{{.UpstreamPort}};
+        # The upstream signs requests against the Host it is given, so this has
+        # to stay the name the client signed for, not the container's.
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_http_version 1.1;
+        proxy_read_timeout {{.RequestTimeout}}s;
+        proxy_connect_timeout 5s;
+    }
+}

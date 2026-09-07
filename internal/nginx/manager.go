@@ -1019,6 +1019,39 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 	return os.WriteFile(confPath, rendered, 0644)
 }
 
+// GenerateServiceProxyVhost writes the vhost that serves a service on its own
+// domain: HTTP when ssl is false, HTTPS with an HTTP redirect in front when it
+// is. It is the plain proxy vhost with TLS, kept separate so the LAN proxy above
+// keeps its narrower shape.
+func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ssl bool) error {
+	if !ssl {
+		return GenerateProxyVhost(domain, upstreamHost, upstreamPort)
+	}
+	tmplData, err := GetTemplate("vhost-proxy-ssl.conf.tmpl")
+	if err != nil {
+		return err
+	}
+	tmpl, err := template.New("vhost-proxy-ssl").Parse(string(tmplData))
+	if err != nil {
+		return err
+	}
+	rendered, err := renderProxyVhost(tmpl, proxyVhostData{
+		Domain:         domain,
+		UpstreamHost:   upstreamHost,
+		UpstreamPort:   upstreamPort,
+		RequestTimeout: resolveRequestTimeout("", ""),
+	})
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(config.NginxConfD(), 0755); err != nil {
+		return err
+	}
+	confPath := filepath.Join(config.NginxConfD(), domain+".conf")
+	config.GuardRealWrite(confPath)
+	return os.WriteFile(confPath, rendered, 0644)
+}
+
 // ErrNotRunning reports that lerd-nginx is down, so there is no process to
 // signal. The on-disk config is still authoritative: whoever starts nginx next
 // reads it. Callers that only need the config correct (the install reconcile,
@@ -1129,6 +1162,11 @@ func RepairVhosts() []VhostRepair {
 		return nil
 	}
 
+	serviceDomains := map[string]bool{}
+	for _, domain := range config.ServiceDomains() {
+		serviceDomains[domain] = true
+	}
+
 	var repairs []VhostRepair
 	dirty := false
 
@@ -1138,6 +1176,11 @@ func RepairVhosts() []VhostRepair {
 		}
 		// Skip internal configs (default catch-all and lerd dashboard proxy).
 		if entry.Name() == "_default.conf" || entry.Name() == "lerd.localhost.conf" {
+			continue
+		}
+		// A service domain is served by no site, so the orphan rule below would
+		// delete the vhost that makes it answer at all.
+		if serviceDomains[strings.TrimSuffix(entry.Name(), ".conf")] {
 			continue
 		}
 

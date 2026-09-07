@@ -5,6 +5,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -37,6 +38,10 @@ var (
 	lastPrune   time.Time
 	reqLastSeen = map[string]time.Time{} // per-site last request time, for cold-start detection
 	coldGap     time.Duration            // a gap this long or longer marks the next request a cold start
+	// reqExcluded mirrors the store's route exclusions so the flush can sieve a
+	// silenced route out without a query per request. Refreshed on the save tick,
+	// just before the sieve reads it.
+	reqExcluded map[string]map[string]bool
 )
 
 // reqStatsSaveInterval is how often the request-timing snapshot is flushed to
@@ -85,6 +90,7 @@ func StartIdle(notify func(), sourceWatcher func(stop <-chan struct{}) error) {
 		if seen, err := st.LastSeenBySite(); err == nil {
 			reqLastSeen = seen
 		}
+		refreshReqExcludes()
 	}
 	// A request after the site has been idle at least this long is a cold start;
 	// tie it to the idle-suspend timeout, the point lerd already treats a site as
@@ -216,6 +222,7 @@ func runReqStatsSaver() {
 		if reqAggregator == nil {
 			continue
 		}
+		refreshReqExcludes()
 		snap := reqAggregator.Snapshot()
 		_ = reqstats.SaveSnapshot(snap, config.RequestStatsFile())
 		flushReqStore()
@@ -237,6 +244,13 @@ func flushReqStore() {
 	batch := reqBuf
 	reqBuf = nil
 	reqBufMu.Unlock()
+	// The sieve is the only thing keeping an excluded route out of the store, and
+	// it runs after the set was refreshed on this tick, so the buffer is judged by
+	// what the user wants now: an exclusion reaches back over the seconds already
+	// taken in, and lifting one lets them through instead of dropping them.
+	batch = slices.DeleteFunc(batch, func(r reqstats.Record) bool {
+		return isExcludedRoute(r.Site, r.Route)
+	})
 	if len(batch) > 0 {
 		_ = reqStore.Insert(batch)
 	}
@@ -244,6 +258,37 @@ func flushReqStore() {
 		_, _ = reqStore.Prune(now.Add(-reqstats.Retention))
 		lastPrune = now
 	}
+}
+
+// refreshReqExcludes reloads the route exclusions the dashboard writes into the
+// store, which is the only channel between the two processes. Failure leaves the
+// previous set in place rather than un-silencing every route on a transient
+// read error.
+func refreshReqExcludes() {
+	if reqStore == nil {
+		return
+	}
+	all, err := reqStore.AllExcludedRoutes()
+	if err != nil {
+		return
+	}
+	reqBufMu.Lock()
+	reqExcluded = all
+	reqBufMu.Unlock()
+	if reqAggregator != nil {
+		reqAggregator.SetExcluded(all)
+	}
+}
+
+// isExcludedRoute reports whether the user has silenced a route for a stats key,
+// resolving a worktree key to its site so one exclusion covers every branch.
+// Read at flush time, never at ingest: a record has to be buffered to still be
+// there when a lifted exclusion arrives mid-tick.
+func isExcludedRoute(key, route string) bool {
+	site, _ := reqstats.SplitKey(key)
+	reqBufMu.Lock()
+	defer reqBufMu.Unlock()
+	return reqExcluded[site][route]
 }
 
 // accessFeedRetryInterval is how often startAccessFeed retries a failed bind so
