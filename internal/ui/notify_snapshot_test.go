@@ -67,3 +67,20 @@ func TestHandleInternalSnapshotNotify(t *testing.T) {
 		t.Errorf("status = %d, want 204", rec.Code)
 	}
 }
+
+// The watcher posts from its own process with nothing but a content type, so
+// the cross-origin gate has to let the path through or the finished run is
+// silently swallowed and no notification is ever raised.
+func TestSnapshotRunSurvivesTheCSRFGate(t *testing.T) {
+	setupConfigDirRaw(t, "", "", false)
+
+	next := &nextHandler{}
+	req := loopbackPost(`{"databases":2,"sites":1}`)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	withRemoteControlGate(next).ServeHTTP(rec, req)
+
+	if !next.called {
+		t.Errorf("the watcher's notification was blocked (status %d)", rec.Code)
+	}
+}
