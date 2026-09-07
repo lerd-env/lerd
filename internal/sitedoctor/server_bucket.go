@@ -135,7 +135,7 @@ func OwnedEntitiesFor(path string) []OwnedEntity {
 	}
 	var out []OwnedEntity
 	for _, service := range servicesDeclaringOwnedEntities() {
-		if !envReferencesService(vals, service) {
+		if !envReferencesService(vals, service, config.ServiceDomain(service)) {
 			continue
 		}
 		for _, spec := range serviceops.ServiceEntities(service) {
@@ -153,10 +153,16 @@ func OwnedEntitiesFor(path string) []OwnedEntity {
 }
 
 // envReferencesService reports whether any value in the env file points at the
-// service's container, the same test that links an entity row to its site.
-func envReferencesService(vals map[string]string, service string) bool {
+// service, by its container name or by the domain it is served on. A project
+// rewritten to the domain names the container nowhere, and checking only the
+// container name would quietly stop judging exactly the projects the domain was
+// turned on for.
+func envReferencesService(vals map[string]string, service, domain string) bool {
 	for _, v := range vals {
 		if strings.Contains(v, "lerd-"+service) {
+			return true
+		}
+		if domain != "" && strings.Contains(v, domain) {
 			return true
 		}
 	}

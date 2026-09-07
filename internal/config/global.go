@@ -34,7 +34,20 @@ type ServiceConfig struct {
 	// default. Keyed on the container port because that is the stable identity
 	// when the host side moves.
 	PublishedPorts map[int]int `yaml:"published_ports,omitempty" mapstructure:"published_ports"`
-	PreviousImage  string      `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
+	// Domain is the hostname nginx serves this service on, empty when the
+	// service is only reachable at lerd-<name>:<port>. It exists because a
+	// presigned S3 URL carries its host inside the signature: the app and the
+	// browser have to agree on one name before the URL is signed, and no name
+	// they both resolve exists otherwise.
+	Domain string `yaml:"domain,omitempty" mapstructure:"domain"`
+	// DomainOptOut records that the user took the domain away deliberately, so
+	// the preset's default is not handed back on the next start. Without it
+	// `service domain --remove` would be undone by the very next reconcile.
+	DomainOptOut bool `yaml:"domain_opt_out,omitempty" mapstructure:"domain_opt_out"`
+	// DomainPort overrides the container port the domain proxies to. 0 = the
+	// preset's choice, then the service's primary port.
+	DomainPort    int    `yaml:"domain_port,omitempty" mapstructure:"domain_port"`
+	PreviousImage string `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
 	// LastOp records the most recent mutation kind ("update" or "migrate") so
 	// the rollback flow can refuse a swap that would race the new image
 	// against the post-migrate (fresh) data dir. Empty means no recent op or a
@@ -537,6 +550,11 @@ func MappingHostPort(mapping string) int {
 	n, _ := strconv.Atoi(strings.TrimSpace(host))
 	return n
 }
+
+// MappingContainerPort is mappingContainerPort for callers outside this package:
+// the port a service listens on inside its container, which is what anything
+// reaching it across the podman network connects to.
+func MappingContainerPort(mapping string) int { return mappingContainerPort(mapping) }
 
 // mappingContainerPort extracts the container (internal) port from a podman port
 // mapping — the last numeric segment after stripping an optional "/proto" suffix.

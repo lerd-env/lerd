@@ -56,6 +56,85 @@ func rewriteEnvForHostProxy(updates map[string]string, serviceNames []string) {
 	applyHostProxyEnv(updates, containerToHost)
 }
 
+// applyServiceDomainEnv repoints URL-shaped values at the domain a service is
+// served on. A service with a domain is one whose URLs leave the machine's own
+// processes and reach a browser, and the container name lerd otherwise writes
+// resolves nowhere out there. Only values carrying a scheme are touched, so a
+// bare connection host (REDIS_HOST=lerd-redis) is left where it belongs.
+func applyServiceDomainEnv(updates map[string]string, domains map[string]string, ports map[string]int) {
+	if len(domains) == 0 {
+		return
+	}
+	// Sorted so a value naming two services rewrites the same way every run.
+	names := make([]string, 0, len(domains))
+	for name := range domains {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for key, value := range updates {
+		if !strings.Contains(value, "://") {
+			continue
+		}
+		rewritten := value
+		for _, name := range names {
+			target := "https://" + domains[name]
+			rewritten = strings.ReplaceAll(rewritten, "http://lerd-"+name, target)
+			if port := ports[name]; port > 0 {
+				host := fmt.Sprintf(":%d", port)
+				rewritten = strings.ReplaceAll(rewritten, "http://localhost"+host, target)
+				rewritten = strings.ReplaceAll(rewritten, "http://127.0.0.1"+host, target)
+			}
+		}
+		// The container port survives the host swap ("https://rustfs.test:9000"),
+		// and nginx serves the domain on 443; strip what the scheme now implies.
+		rewritten = stripServiceDomainPorts(rewritten, domains)
+		if rewritten != value {
+			updates[key] = rewritten
+		}
+	}
+}
+
+// stripServiceDomainPorts removes an explicit port left on a service domain by
+// the rewrite above. Scoped to the domains lerd itself just substituted, so a
+// port on any other host in the value is untouched.
+func stripServiceDomainPorts(value string, domains map[string]string) string {
+	for _, domain := range domains {
+		prefix := "https://" + domain + ":"
+		for {
+			i := strings.Index(value, prefix)
+			if i < 0 {
+				break
+			}
+			rest := value[i+len(prefix):]
+			j := 0
+			for j < len(rest) && rest[j] >= '0' && rest[j] <= '9' {
+				j++
+			}
+			if j == 0 {
+				break
+			}
+			value = value[:i+len("https://"+domain)] + rest[j:]
+		}
+	}
+	return value
+}
+
+// serviceDomainPorts pairs each service that has a domain with the host port it
+// publishes, so a value written against localhost is recognised too.
+func serviceDomainPorts(domains map[string]string) map[string]int {
+	ports := map[string]int{}
+	for name := range domains {
+		sc := config.ServiceConfigFor(name)
+		if sc.PublishedPort > 0 {
+			ports[name] = sc.PublishedPort
+			continue
+		}
+		ports[name] = sc.Port
+	}
+	return ports
+}
+
 // hostProxyConnKey reports whether an env key names a service connection target
 // (a host, port, URL, DSN, or endpoint). The host-proxy rewrite only touches
 // these so an unrelated value that happens to contain a "lerd-" token (e.g.
@@ -1082,6 +1161,13 @@ func runEnv(_ *cobra.Command, _ []string) error {
 			names = append(names, n)
 		}
 		rewriteEnvForHostProxy(updates, names)
+	}
+
+	// 4d-bis. A service served on its own domain is reachable at that name from
+	// the app container and the browser alike, which is the only shape that
+	// works for a URL whose host is inside its signature.
+	if domains := config.ServiceDomains(); len(domains) > 0 {
+		applyServiceDomainEnv(updates, domains, serviceDomainPorts(domains))
 	}
 
 	// 4e. Apply personal .env.lerd_override values last so they win over lerd's
