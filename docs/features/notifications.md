@@ -42,6 +42,7 @@ In native mode, clicking a notification opens the [Lerd desktop app](https://ler
 | `nplusone` | A request (or worker invocation) runs the same query shape 3+ times, a likely N+1. Fires at most once per route/script per session so it warns without nagging | on | normal |
 | `slow_route` | A route's p95 response time is running well above the site's typical time, from the watcher's request-timing snapshot. Edge-triggered: fires once when a route goes slow and rearms once it drops back within the typical band, so a later slowdown notifies again | on | normal |
 | `op_done` / `op_failed` | A streaming service operation (install, migrate, reinstall, update, rollback) finishes | on | normal / high |
+| `snapshot` | A scheduled [snapshot run](../usage/database.md#automatic-snapshots) finishes, naming how many databases it took and on how many sites | on | low |
 | `update_available` | Something installed has fallen behind: a newer image tag for a service, a republished PHP base image, or a host tool (Composer, fnm, mkcert) whose pin has moved. One notification per item, when it first goes stale | on | low |
 | `dump` | A `ray()` / `dump()` / var-dump packet arrives | **off** | low |
 
@@ -75,6 +76,8 @@ With the **browser** sink (the default), two delivery paths run in parallel:
 Both paths receive the same JSON payload: `{kind, title, title_key, body, body_key, params, tag, url, data, icon}`. The SW uses `title`/`body` directly (no DOM, no Paraglide); the page uses `title_key`/`body_key` with `params` for proper localisation.
 
 ## Localisation
+
+A snapshot run only notifies when it actually took something: a tick the schedule threw away, or a policy that covers no database, stays silent. There is deliberately no notification when a run *starts*, since it is unattended and there is nothing to do about it while it works. The watcher runs the schedule in its own process, so it hands the finished run to lerd-ui over a loopback-only endpoint rather than reaching the desktop bus itself, which keeps every notification behind the one category filter.
 
 Notification copy is translatable. Every category has paraglide keys under `notify_*` in `internal/ui/web/messages/<locale>.json`, `notify_mail_title`, `notify_worker_failed_body`, `notify_op_done_title`, etc. The page side resolves them through Paraglide using the user's selected locale. The server-side English fallback is always sent in `title`/`body` so the SW (which has no DOM and no Paraglide bundle) can still render correctly when the tab is closed.
 

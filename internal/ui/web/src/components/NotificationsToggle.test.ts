@@ -8,6 +8,7 @@ const allKinds: Record<NotifyKind, boolean> = {
   mail: true,
   worker_failed: true,
   op_done: true,
+  snapshot: true,
   update_available: true,
   nplusone: true,
   dump: false,

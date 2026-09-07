@@ -10,7 +10,13 @@ import (
 // not touch a running container, so this is the only honest answer to "can it
 // reach this path".
 func containerMounts(name string) (bool, []string) {
-	out, err := Run("inspect", "--format={{.State.Running}}#{{range .Mounts}}{{.Source}}|{{end}}", name)
+	return containerMountField(name, "Source")
+}
+
+// containerMountField is containerMounts for one field of the mount list, so a
+// check can ask by destination where asking by source would answer wrongly.
+func containerMountField(name, field string) (bool, []string) {
+	out, err := Run("inspect", "--format={{.State.Running}}#{{range .Mounts}}{{."+field+"}}|{{end}}", name)
 	if err != nil {
 		return false, nil
 	}
@@ -65,4 +71,26 @@ func mountCovers(sources []string, path string) bool {
 		}
 	}
 	return false
+}
+
+// composerMountTarget is where the FPM quadlet puts lerd's own composer, over
+// the copy the image was built with.
+const composerMountTarget = "/usr/local/bin/composer"
+
+// UnitMissingComposerMount reports whether a running container still carries the
+// image's composer where its quadlet now mounts lerd's. It asks by destination
+// because the whole-home mount already covers the phar's source path, so the
+// source-based check would call this one present on a container that has never
+// had it.
+func UnitMissingComposerMount(unit string) bool {
+	running, destinations := containerMountField(unit, "Destination")
+	if !running {
+		return false
+	}
+	for _, d := range destinations {
+		if d == composerMountTarget {
+			return false
+		}
+	}
+	return true
 }
