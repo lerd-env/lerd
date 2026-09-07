@@ -8,6 +8,16 @@ export interface Snapshot {
   created: string;
   database: string;
   size_bytes: number;
+  // The site the snapshot was taken for, when one was known at the time.
+  site?: string;
+  // Taken by the schedule rather than by hand, which is what puts it under
+  // retention; kept exempts it again.
+  auto?: boolean;
+  kept?: boolean;
+  // When retention drops it, and whether that date moves with the schedule.
+  expires_at?: string;
+  runs_left?: number;
+  estimated?: boolean;
 }
 
 export interface DatabaseEntry {
@@ -135,6 +145,21 @@ export function deleteSnapshot(service: string, database: string, name: string):
   return post(service, `/api/databases/${encodeURIComponent(service)}/snapshot/delete`, {
     database,
     name
+  });
+}
+
+// keepSnapshot pins an automatic snapshot so retention leaves it alone, or
+// releases it back under retention.
+export function keepSnapshot(
+  service: string,
+  database: string,
+  name: string,
+  kept: boolean
+): Promise<Result> {
+  return post(service, `/api/databases/${encodeURIComponent(service)}/snapshot/keep`, {
+    database,
+    name,
+    kept
   });
 }
 

@@ -15,6 +15,8 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `lerd db:snapshots [--all]` | List stored snapshots |
 | `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
 | `lerd db:snapshot:rm <name> [-A]` | Delete a stored snapshot |
+| `lerd db:snapshot:keep <name> [--off]` | Keep an automatic snapshot for good, exempt from retention |
+| `lerd db:snapshot:auto status\|on\|off\|site` | Configure scheduled snapshots, globally or per site |
 | `lerd db create [name]` | Same as `db:create` (subcommand form) |
 | `lerd db import [-s service] [-d name] <file.sql>` | Same as `db:import` (subcommand form) |
 | `lerd db export [-s service] [-d name]` | Same as `db:export` (subcommand form) |
@@ -23,6 +25,8 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `lerd db snapshots` | Same as `db:snapshots` (subcommand form) |
 | `lerd db restore <name>` | Same as `db:restore` (subcommand form) |
 | `lerd db snapshot:rm <name>` | Same as `db:snapshot:rm` (subcommand form) |
+| `lerd db snapshot:keep <name>` | Same as `db:snapshot:keep` (subcommand form) |
+| `lerd db snapshot:auto ...` | Same as `db:snapshot:auto` (subcommand form) |
 
 ### Flags
 
@@ -35,6 +39,11 @@ Database commands work with any project type: Laravel, Symfony, NestJS, Next.js,
 | `--force` | `-f` | Skip the `db:restore` confirmation prompt |
 | `--fresh` | | Empty the database before loading, so the dump replaces it (`db:import`) |
 | `--all` | | List snapshots across every database on the service (`db:snapshots`) |
+| `--off` | | Put a kept snapshot back under retention (`db:snapshot:keep`) |
+| `--every <duration>` | | Schedule interval for `db:snapshot:auto on` (e.g. `6h`) |
+| `--keep <n>` | | Automatic snapshots kept per database, `-1` for no limit (`db:snapshot:auto on`) |
+| `--keep-for <duration>` | | Also drop automatic snapshots older than this (`db:snapshot:auto on`) |
+| `--selection <mode>` | | `opt-in` (default) covers no site until one is included, `opt-out` covers every site until one is excluded (`db:snapshot:auto on`) |
 
 A named snapshot (`lerd db:snapshot nightly`) gets a UTC timestamp appended to its name, e.g. `nightly-20260719-135558`, so taking the same name twice never collides. Reference the full stamped name shown by `db:snapshots` when restoring or removing it.
 
@@ -55,6 +64,24 @@ Each database engine's detail page in the web UI (Services → pick MySQL, Maria
 The same "open in the admin tool" affordance is on the database service card in a site's own overview (a database-icon button), so from a site you can jump straight into that site's database in phpMyAdmin, Adminer or Mongo Express.
 
 Which operations an engine offers follows what its preset declares: each card button (export, import, snapshots, drop) and the create field appear only when the engine's preset declares the matching action, so an engine that can list and drop but not dump shows exactly that. A document engine like MongoDB lists its databases and exposes the connection string and admin link, and gains the rest the moment its published preset declares the actions, with no lerd release. A stopped engine shows a prompt to start it rather than an empty grid. A running one shows a loading line while its databases are on their way, since reading an engine that has not answered yet as a stopped one would ask you to start something that is already up, and a request that never lands says so with a retry instead.
+
+### Snapshots tab (web UI)
+
+Next to the Databases tab, every database engine carries a **Snapshots** tab: the engine's whole snapshot history as one table rather than a card at a time, newest first, with the site and database each snapshot came from, when it was taken, its size, and what retention will do with it (nothing for one you took by hand, a date for an automatic one, *kept for good* for one you pinned).
+
+The card above the table states the schedule at a glance: how often it runs (a count and a unit), how many snapshots it keeps per database, any maximum age, whether it is opt-in or opt-out, how many of the engine's databases are covered, and what its snapshots cost on disk. Changing any of it opens the **snapshot settings** dialog, so there is one place the schedule is edited rather than a second set of controls per engine.
+
+Two filters narrow the table, by **site** and by **when it was taken** (last 24 hours, 7 days, 30 days, or older than 30), and a long history is paged twenty rows at a time. Each row carries four actions: keep an automatic snapshot (or put it back under retention), download it as a dump, restore it, and delete it. Restore and delete both ask first, naming what they are about to overwrite or remove.
+
+A checkbox in front of each row, and one in the table header, select snapshots for removal together. The header checkbox covers the rows on screen, never one the filters or the paging are hiding, while what you picked on another page stays picked, which is what the removal count reflects.
+
+The site column names the site that owns the database, so a snapshot taken by hand and one taken by the schedule read as the same project rather than as a domain and a name.
+
+The tab's header says how many of the engine's databases are on the schedule and opens the **snapshot settings** dialog, the same one reachable from any database's snapshots dialog and from **System → Snapshots**: the schedule, whether databases are opted in or opted out by default, how many snapshots to keep per database, and an optional maximum age. It is one global policy, so it reads the same wherever it is opened.
+
+**Which databases are covered is set per database**, and the quickest way is the clock next to a database's size on the Databases grid: it is lit while the schedule covers that database, dimmed while it does not, and clicking it includes or excludes it in one go. The same switch, with a line saying when the schedule last ran and next runs, is in that database's snapshots dialog. A database no linked site points at carries neither, since the schedule resolves its targets through sites.
+
+Clicking that switch records an explicit yes or no for the database, so changing the selection mode afterwards leaves it where you put it. `lerd db:snapshot:auto site <name> default` hands one back to the policy.
 
 The whole tab is loopback only. Reaching the dashboard over the LAN, even as a remote-control client with valid credentials, the tab is not offered at all and every database endpoint behind it answers 403, because this surface both reads a database out in full and drops or overwrites it, and the raw `.env` view is already held to the same rule for carrying the credentials to it. Drive databases from the machine lerd runs on.
 
@@ -157,6 +184,59 @@ The snapshot has to come off a running engine, so lerd starts the service if it 
 ### Reserved names
 
 `db:snapshot` rejects names that look like command verbs (`list`, `rm`, `delete`, `restore`, …), so `lerd db snapshot list` errors with a hint instead of silently creating a snapshot literally named "list". Use `lerd db:snapshots` to list.
+
+### Automatic snapshots
+
+lerd can take these same snapshots on a schedule, so a `migrate:fresh` on the wrong database is a restore away rather than a lost afternoon. **The schedule ships on, in opt-in mode**, which means it dumps nothing until you name a database: turning it on is one click per database rather than a setting to discover.
+
+```bash
+lerd db:snapshot:auto status                     # the policy, and when each database was last taken
+lerd db:snapshot:auto on --every 24h --keep 7    # daily, keeping the last 7 per database
+lerd db:snapshot:auto off                        # stop the schedule entirely
+```
+
+An automatic snapshot is an ordinary snapshot: same directory, same `meta.json`, restored and deleted with the same commands. It is only marked as automatic, which is what puts it under retention. **Retention never touches a snapshot you took by hand**, so a `pre-migration` you made yourself is safe whatever the schedule does.
+
+The watcher checks every hour whether the schedule is due, and skips a database whose engine is stopped rather than starting containers behind your back; the next check picks it up once the engine is running again. Two sites sharing one database are snapshotted once, not twice.
+
+#### Which sites are covered
+
+The schedule works either way round, set by its **selection mode**:
+
+- **Opt in** (the default) snapshots nothing until you name the databases you want.
+- **Opt out** snapshots every site's database, and you exclude the ones you don't want.
+
+```bash
+lerd db:snapshot:auto on --selection opt-in     # nothing until a site opts in
+lerd db:snapshot:auto on --selection opt-out    # everything except what opts out
+```
+
+A site follows that mode unless you say otherwise: under opt-out you exclude a noisy site, under opt-in you include the two that matter. The schedule's own switch still gates everything, so turning it off stops every site, including one that opted in.
+
+```bash
+lerd db:snapshot:auto site on         # this site, always (run from the project directory)
+lerd db:snapshot:auto site shop off   # that site, never
+lerd db:snapshot:auto site shop default
+```
+
+#### Knowing it ran
+
+A finished run raises a **Snapshots taken** notification naming how many databases it took and on how many sites, in its own category so it can be muted on its own (System → Notifications). It stays quiet when a run takes nothing, and nothing is announced when a run starts.
+
+#### Retention, and keeping one for good
+
+`--keep <n>` keeps the last *n* automatic snapshots per database; `--keep-for <duration>` also drops any older than that. Whichever fires first wins. `db:snapshots` shows what each snapshot's fate is in a **RETENTION** column: `manual` for one you took, `auto, ~3d` for one the count rule will drop in about three days (an estimate, because it moves with the schedule), `auto, 5h` for an exact age cutoff, and `auto, kept` for one that is never dropped.
+
+To rescue an automatic snapshot from retention:
+
+```bash
+lerd db:snapshot:keep auto-20260903-101500          # keep it for good
+lerd db:snapshot:keep auto-20260903-101500 --off    # back under retention
+```
+
+A kept snapshot takes no slot in the rolling window, so pinning one does not shrink the set of automatic snapshots you keep.
+
+The same policy is in the web UI under **System → Snapshots** and on each database engine's [Snapshots tab](#snapshots-tab-web-ui), in the TUI's Settings pane and on a site's toggles, and over MCP through the `db` tool's `auto`, `auto_set` and `snapshot_keep` actions.
 
 ### What an export carries
 
