@@ -104,7 +104,8 @@ func Ensure(version string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(conf, []byte(body), 0644); err != nil {
+	confChanged, err := writeIfChanged(conf, body)
+	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(logDir(), 0755); err != nil {
@@ -121,13 +122,15 @@ func Ensure(version string) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return err
 	}
-	existing, _ := os.ReadFile(path)
-	if string(existing) != plist {
-		if err := os.WriteFile(path, []byte(plist), 0644); err != nil {
-			return err
-		}
-		// The job is running the old definition, so it has to be replaced
-		// rather than left alone by the already-loaded check below.
+	plistChanged, err := writeIfChanged(path, plist)
+	if err != nil {
+		return err
+	}
+	// A running pool holds both its definition and the config it was started
+	// with, so either moving means the job is serving something that is no
+	// longer on disk and has to be replaced rather than left alone by the
+	// already-loaded check below.
+	if plistChanged || confChanged {
 		_ = exec.Command("launchctl", "bootout", domainTarget(label)).Run()
 	}
 	return bootLaunchdUnit(label, path)
@@ -224,4 +227,18 @@ func restartUnit(label string) error {
 		return fmt.Errorf("launchctl kickstart -k %s: %v: %s", label, err, strings.TrimSpace(string(out)))
 	}
 	return nil
+}
+
+// writeIfChanged writes body to path when it differs from what is there,
+// reporting whether it did. Callers restart on the back of that, so rewriting
+// identical content must not look like a change.
+func writeIfChanged(path, body string) (bool, error) {
+	existing, err := os.ReadFile(path)
+	if err == nil && string(existing) == body {
+		return false, nil
+	}
+	if err := os.WriteFile(path, []byte(body), 0644); err != nil {
+		return false, err
+	}
+	return true, nil
 }
