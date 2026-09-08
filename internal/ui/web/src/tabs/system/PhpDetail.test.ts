@@ -4,6 +4,23 @@ import { readable, writable } from 'svelte/store';
 import { tick } from 'svelte';
 import { vi } from 'vitest';
 
+const phpRuntimeStore = vi.hoisted(() => {
+  // Plain store object for the same reason statusStore is one: the import
+  // cannot be awaited inside a hoisted factory.
+  let value = 'container';
+  const subs = new Set<(v: string) => void>();
+  return {
+    subscribe(fn: (v: string) => void) {
+      fn(value);
+      subs.add(fn);
+      return () => subs.delete(fn);
+    },
+    set(v: string) {
+      value = v;
+      subs.forEach((fn) => fn(value));
+    }
+  };
+});
 const statusStore = vi.hoisted(() => {
   // Plain store object rather than svelte/store: the import cannot be awaited
   // in a hoisted block, and PhpDetail only ever subscribes.
@@ -25,6 +42,10 @@ const statusStore = vi.hoisted(() => {
 vi.mock('$stores/status', async (orig) => {
   const actual = (await orig()) as object;
   return { ...actual, status: statusStore, loadStatus: vi.fn() };
+});
+vi.mock('$stores/phpRuntime', async (orig) => {
+  const actual = (await orig()) as object;
+  return { ...actual, phpRuntime: phpRuntimeStore, loadPHPRuntime: vi.fn() };
 });
 vi.mock('$stores/sites', async (orig) => {
   const actual = (await orig()) as object;
@@ -118,5 +139,23 @@ describe('PhpDetail', () => {
     setStatus({ running: true });
     await tick();
     expect(screen.getByText('Terminal').closest('button')).not.toBeDisabled();
+  });
+
+  // Those ports are published on the FPM container's quadlet. A host pool
+  // listens on the port its version owns and there is nothing to map, so the
+  // tab would offer a setting that changes nothing.
+  it('hides the ports tab on the native runtime', async () => {
+    phpRuntimeStore.set('native');
+    render(PhpDetail, { props: { version: '8.4' } });
+    await tick();
+    expect(screen.queryByText('Ports')).toBeNull();
+    phpRuntimeStore.set('container');
+  });
+
+  it('keeps the ports tab on the container runtime', async () => {
+    phpRuntimeStore.set('container');
+    render(PhpDetail, { props: { version: '8.4' } });
+    await tick();
+    expect(screen.queryByText('Ports')).not.toBeNull();
   });
 });
