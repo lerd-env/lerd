@@ -17,7 +17,7 @@ func TestGenerateServiceProxyVhost_ForwardsTheRequestedHostOverTLS(t *testing.T)
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, true); err != nil {
+	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, true, false); err != nil {
 		t.Fatalf("GenerateServiceProxyVhost: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(config.NginxConfD(), "rustfs.test.conf"))
@@ -45,7 +45,7 @@ func TestGenerateServiceProxyVhost_PlainHTTPWhenNotSecured(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, false); err != nil {
+	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, false, false); err != nil {
 		t.Fatalf("GenerateServiceProxyVhost: %v", err)
 	}
 	body, err := os.ReadFile(filepath.Join(config.NginxConfD(), "rustfs.test.conf"))
@@ -78,7 +78,7 @@ func TestRepairVhosts_KeepsAServiceDomainVhost(t *testing.T) {
 		t.Fatalf("SaveGlobal: %v", err)
 	}
 
-	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, true); err != nil {
+	if err := GenerateServiceProxyVhost("rustfs.test", "lerd-rustfs", 9000, true, false); err != nil {
 		t.Fatalf("GenerateServiceProxyVhost: %v", err)
 	}
 	conf := filepath.Join(config.NginxConfD(), "rustfs.test.conf")

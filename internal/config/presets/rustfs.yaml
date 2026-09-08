@@ -81,3 +81,7 @@ introspect:
 # signed, so this service is served on rustfs.test rather than only at its
 # container name. Remove it with: lerd service domain rustfs --remove
 domain: rustfs
+# A presigned upload is issued by the app but sent by the browser, which asks
+# before it sends and gives up if the answer does not name the page's origin.
+# Turn it off with: lerd service domain rustfs --no-cors
+domain_cors: true
