@@ -26,7 +26,8 @@ vi.mock('$lib/monaco', () => ({
       KeyMod: { CtrlCmd: 2048 },
       KeyCode: { Enter: 3 }
     }),
-  lerdThemeName: () => 'lerd-dark'
+  lerdThemeName: () => 'lerd-dark',
+  applyEditorAccent: () => {}
 }));
 
 vi.mock('$lib/lsp', () => ({

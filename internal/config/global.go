@@ -263,6 +263,13 @@ type GlobalConfig struct {
 		// Toggled via `lerd remote-control full-access on/off`, which only
 		// the local dashboard or a local shell can do.
 		RemoteFullAccess bool `yaml:"remote_full_access,omitempty" mapstructure:"remote_full_access"`
+
+		// Theme is the dashboard colour theme, by id: a built-in one or a file
+		// in ThemesDir. It lives here rather than in the browser so a phone on
+		// the LAN and the desktop next to it agree on what lerd looks like.
+		// Empty = the default theme. The light/dark mode stays per browser,
+		// since that follows the room someone is sitting in.
+		Theme string `yaml:"theme,omitempty" mapstructure:"theme"`
 	} `yaml:"ui,omitempty" mapstructure:"ui"`
 	Workers struct {
 		// ExecMode controls how framework workers (queue, schedule, horizon,

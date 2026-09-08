@@ -312,6 +312,9 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/php-runtime", withCORS(handleSettingsPHPRuntime))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
+	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
+	mux.HandleFunc("/api/themes", withCORS(handleThemes))
+	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
 	mux.HandleFunc("/api/workers/stop", withCORS(handleWorkersStop))
@@ -334,7 +337,13 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/manifest.webmanifest", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/manifest+json")
 		base := "http://" + r.Host
-		w.Write([]byte(`{"name":"Lerd","short_name":"Lerd","description":"Local Laravel development environment","start_url":"` + base + `/","display":"standalone","background_color":"#0d0d0d","theme_color":"#FF2D20","protocol_handlers":[{"protocol":"web+lerd","url":"` + base + `/?lerd=%s"}],"icons":[{"src":"` + base + `/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-maskable-192.png","sizes":"192x192","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}`)) //nolint:errcheck
+		// The dashboard appends its theme's tones so an install picks up the
+		// colours in use rather than the brand default. The browser reads these
+		// once at install, which is why they arrive on the URL rather than being
+		// looked up: the choice lives in the browser, not on this side.
+		theme := manifestColor(r.URL.Query().Get("theme_color"), "#ff2d20")
+		background := manifestColor(r.URL.Query().Get("background_color"), "#0d0d0d")
+		w.Write([]byte(`{"name":"Lerd","short_name":"Lerd","description":"Local Laravel development environment","start_url":"` + base + `/","display":"standalone","background_color":"` + background + `","theme_color":"` + theme + `","protocol_handlers":[{"protocol":"web+lerd","url":"` + base + `/?lerd=%s"}],"icons":[{"src":"` + base + `/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"` + base + `/icons/icon-maskable-192.png","sizes":"192x192","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon-maskable-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"},{"src":"` + base + `/icons/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any"}]}`)) //nolint:errcheck
 	})
 	mux.HandleFunc("/icons/icon.svg", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/svg+xml")
@@ -5419,6 +5428,7 @@ type SettingsResponse struct {
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
 	TrayEnabled               bool     `json:"tray_enabled"`
+	Theme                     string   `json:"theme"` // dashboard colour theme id, empty = the default
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -5429,6 +5439,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	dnsEnabled := true
 	startOnOpen := false
 	trayEnabled := true
+	theme := ""
 	var dnsUpstream []string
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
@@ -5438,6 +5449,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		dnsUpstream = cfg.DNS.Upstream
 		startOnOpen = cfg.Autostart.OnDashboardOpen
 		trayEnabled = cfg.IsTrayEnabled()
+		theme = cfg.UI.Theme
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
@@ -5452,6 +5464,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		DNSUpstream:               dnsUpstream,
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
 		TrayEnabled:               trayEnabled,
+		Theme:                     theme,
 	})
 }
 

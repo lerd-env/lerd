@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -17,10 +18,13 @@ import (
 func NewRestartCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "restart [site]",
-		Short: "Restart the container for the current or named site",
-		Args:  cobra.MaximumNArgs(1),
+		Short: "Restart a site's container, not lerd itself",
+		Long: `Restart the container serving one site: its PHP-FPM, custom container or dev server.
+
+Run it from inside the site's directory, or name the site. This does not restart lerd; for that, use 'lerd stop' then 'lerd start', or 'lerd service restart <name>' for a single service.`,
+		Args: cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
-			name, err := resolveSiteName(args)
+			name, err := restartTargetName(args, siteRegistered)
 			if err != nil {
 				return err
 			}
@@ -28,6 +32,26 @@ func NewRestartCmd() *cobra.Command {
 			return RestartSite(name)
 		},
 	}
+}
+
+// restartTargetName resolves the site to restart, and says what the command is
+// for when the directory is not one. Falling through to the directory name
+// reported `site "Downloads" not found`, which reads as a site that went
+// missing rather than as a command that has to be pointed at one.
+func restartTargetName(args []string, exists func(string) bool) (string, error) {
+	name, err := resolveSiteName(args)
+	if err != nil {
+		return "", err
+	}
+	if len(args) == 0 && !exists(name) {
+		return "", errors.New("no site registered for this directory: run 'lerd restart' inside a site, or name one with 'lerd restart <site>'. It restarts that site's container, not lerd itself; for lerd run 'lerd stop' and then 'lerd start'")
+	}
+	return name, nil
+}
+
+func siteRegistered(name string) bool {
+	_, err := config.FindSite(name)
+	return err == nil
 }
 
 // hostProxyStopTimeout bounds how long an explicit restart waits for the old
