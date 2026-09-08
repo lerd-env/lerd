@@ -42,6 +42,16 @@ The default landing page is a **Dashboard** with at-a-glance widgets across site
 
 On mobile the dashboard, list, and detail panels are full-screen with a bottom tab bar for navigation that includes Dashboard alongside Sites, Services, and System, plus an Apps entry holding what the rail's dashboard launchers hold on a wide screen, as a grid of cards drawing the same preset marks in their brand colours.
 
+### Theme
+
+Light, dark and follow-the-system live in the icon rail's theme switcher. The
+colours themselves are a separate choice: **System → Lerd → Theme** picks between
+`lerd`, the bright brand red, `muted`, a softer accent for anyone who finds the
+default too sharp, and the classic editor schemes (Solarized Dark, Monokai,
+Cobalt, Dracula, Nord, Gruvbox Dark). You can add your own by writing a small
+YAML file, either by hand or through the import button; see
+[Dashboard themes](/features/dashboard-themes).
+
 ### Language
 
 The dashboard ships in fourteen languages: English, German, Spanish, French, Indonesian, Dutch, Portuguese, Turkish, Simplified Chinese, Japanese, Romanian, Italian, Polish, and Vietnamese. The first time you open the dashboard, the language is autodetected from your browser's preferred locale (Paraglide reads `navigator.language` and picks the closest match, falling back to English). To change it later, open **System → Lerd** and use the language picker in the settings section; the choice persists in `localStorage` so subsequent sessions open in the same language. Strings are wired through Paraglide; new keys fall back to English when a locale hasn't been translated yet.

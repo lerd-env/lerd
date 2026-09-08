@@ -24,6 +24,7 @@ describe('theme store', () => {
   beforeEach(() => {
     localStorage.clear();
     document.documentElement.className = '';
+    document.documentElement.removeAttribute('style');
     vi.resetModules();
   });
 
@@ -39,6 +40,55 @@ describe('theme store', () => {
 
     media.setDark(false);
     expect(document.documentElement.classList.contains('dark')).toBe(false);
+  });
+
+  it('paints the chosen theme onto the root element and remembers it', async () => {
+    mockMatchMedia(false);
+    localStorage.setItem('lerd-theme', 'light');
+    const { initTheme, palette } = await import('./theme');
+    initTheme();
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+
+    palette.set('muted');
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#b04a42');
+    expect(document.documentElement.style.getPropertyValue('--lerd-card')).toBe('#1a1a1c');
+    expect(localStorage.getItem('lerd-palette')).toBe('muted');
+  });
+
+  it('swaps the accent for the tone that reads on the mode in effect', async () => {
+    const media = mockMatchMedia(false);
+    localStorage.setItem('lerd-theme', 'auto');
+    localStorage.setItem('lerd-palette', 'muted');
+    const { initTheme } = await import('./theme');
+    initTheme();
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#b04a42');
+
+    media.setDark(true);
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#d98d84');
+  });
+
+  it('falls back to the default when the chosen theme is gone', async () => {
+    mockMatchMedia(false);
+    localStorage.setItem('lerd-palette', 'deleted-by-hand');
+    const { initTheme } = await import('./theme');
+    initTheme();
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+  });
+
+  it('repaints when a theme arrives from the daemon after the first paint', async () => {
+    mockMatchMedia(false);
+    localStorage.setItem('lerd-theme', 'light');
+    localStorage.setItem('lerd-palette', 'ocean');
+    const { initTheme, palettes } = await import('./theme');
+    const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
+    initTheme();
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#ff2d20');
+
+    palettes.set([
+      ...BUILTIN_PALETTES,
+      resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!
+    ]);
+    expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#3b7ea1');
   });
 
   it('explicit dark ignores the system preference', async () => {

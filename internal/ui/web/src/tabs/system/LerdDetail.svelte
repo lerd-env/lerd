@@ -29,6 +29,10 @@
   import SettingsCard from '$components/SettingsCard.svelte';
   import LANServicesSetting from './LANServicesSetting.svelte';
   import LanguageSwitcher from '$components/LanguageSwitcher.svelte';
+  import PaletteSwitcher from '$components/PaletteSwitcher.svelte';
+  import ImportThemeModal from './ImportThemeModal.svelte';
+  import { palettes } from '$stores/theme';
+  import { paletteErrors, removePalette } from '$stores/palettes';
   import { apiFetch, apiBase } from '$lib/api';
   import { escapeHtml } from '$lib/html';
   import { m } from '../../paraglide/messages.js';
@@ -44,6 +48,9 @@
     loadAutostart();
     loadIdle();
   });
+
+  const userPalettes = $derived($palettes.filter((p) => p.source === 'user'));
+  let importThemeOpen = $state(false);
 
   let idleBusy = $state(false);
   let idleMinutesInput = $state(30);
@@ -231,13 +238,47 @@
       </div>
     </SettingsCard>
 
+    <!-- Theme and language are one card: both are how the dashboard presents
+         itself, and as two cards they left an odd count in the two-column grid. -->
     <SettingsCard>
       <div class="flex items-center justify-between mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_theme_title()}</span>
+        <PaletteSwitcher />
       </div>
-      <div class="flex items-center justify-between gap-4">
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_theme_description()}</p>
+      {#each userPalettes as p (p.id)}
+        <div class="flex items-center justify-between gap-3 mt-2 text-xs">
+          <span class="flex items-center gap-2 text-gray-600 dark:text-gray-300">
+            <span class="palette-swatch w-3 h-3 rounded-full shrink-0 border border-black/10 dark:border-white/15" style="--swatch:{p.accent};--swatch-dark:{p.accentDark}"></span>
+            <span class="font-mono">{p.id}</span>
+          </span>
+          {#if $accessMode.localControl}
+            <button
+              type="button"
+              onclick={() => removePalette(p.id)}
+              class="text-gray-400 hover:text-lerd-red transition-colors"
+              title={m.system_theme_remove()}
+            >
+              <Icon name="trash" class="w-3.5 h-3.5" />
+            </button>
+          {/if}
+        </div>
+      {/each}
+      {#each $paletteErrors as e (e.file)}
+        <p class="mt-2 text-xs text-red-600 dark:text-red-400"><span class="font-mono">{e.file}</span>: {e.error}</p>
+      {/each}
+      {#if $accessMode.localControl}
+        <div class="mt-3">
+          <DetailButton onclick={() => (importThemeOpen = true)}>{m.system_theme_importAction()}</DetailButton>
+        </div>
+      {/if}
+
+      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-lerd-border">
+        <div class="flex items-center justify-between gap-4 mb-2">
+          <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+          <LanguageSwitcher />
+        </div>
         <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
-        <LanguageSwitcher />
       </div>
     </SettingsCard>
     </div>
@@ -576,3 +617,5 @@
     {/if}
   </div>
 </div>
+
+<ImportThemeModal open={importThemeOpen} onclose={() => (importThemeOpen = false)} />

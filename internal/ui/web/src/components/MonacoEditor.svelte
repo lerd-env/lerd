@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { get } from 'svelte/store';
   import { onMount } from 'svelte';
-  import { theme } from '$stores/theme';
-  import { loadMonaco, lerdThemeName, type MonacoModule } from '$lib/monaco';
+  import { palette, theme } from '$stores/theme';
+  import { applyEditorAccent, loadMonaco, lerdThemeName, type MonacoModule } from '$lib/monaco';
   import type * as Monaco from 'monaco-editor';
 
   interface Props {
@@ -46,6 +47,7 @@
 
   onMount(() => {
     let unsubTheme: (() => void) | undefined;
+    let unsubPalette: (() => void) | undefined;
     let vvCleanup: (() => void) | undefined;
     void (async () => {
       const monaco = await loadMonaco();
@@ -115,9 +117,17 @@
         onChange?.(next);
       });
 
-      // Self-contained theme decision so it stays correct regardless of
-      // subscriber ordering against the theme store's own DOM toggle.
-      unsubTheme = theme.subscribe((t) => monaco.editor.setTheme(lerdThemeName(t)));
+      // Both the mode and the chosen theme move the accent, so the editor
+      // themes are rebuilt before being re-applied under the same name. The
+      // light/dark decision is made here rather than read off the DOM class, so
+      // it stays correct regardless of subscriber ordering against the theme
+      // store's own toggle.
+      const retheme = () => {
+        applyEditorAccent();
+        monaco.editor.setTheme(lerdThemeName(get(theme)));
+      };
+      unsubTheme = theme.subscribe(retheme);
+      unsubPalette = palette.subscribe(retheme);
 
       onReady?.({ editor: ed, monaco });
     })();
@@ -125,6 +135,7 @@
     return () => {
       disposed = true;
       unsubTheme?.();
+      unsubPalette?.();
       vvCleanup?.();
       editor?.dispose();
       editor = undefined;

@@ -2,7 +2,8 @@
 
 ```
 ~/.config/lerd/
-└── config.yaml
+├── config.yaml
+└── themes/                          # dashboard themes (see features/dashboard-themes.md)
 
 ~/.config/containers/systemd/        # Podman Quadlet units (auto-loaded)
 ~/.config/systemd/user/

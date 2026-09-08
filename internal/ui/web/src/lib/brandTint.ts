@@ -43,7 +43,7 @@ export function brandTintStyle(color: string | undefined | null): string {
   return t ? `--mark-tint:${t.light};--mark-tint-dark:${t.dark}` : '';
 }
 
-function parseHex(color: string | undefined | null): [number, number, number] | null {
+export function parseHex(color: string | undefined | null): [number, number, number] | null {
   const v = (color || '').trim().toLowerCase();
   if (!/^#([0-9a-f]{3}|[0-9a-f]{6})$/.test(v)) return null;
   const full =
@@ -55,7 +55,7 @@ function parseHex(color: string | undefined | null): [number, number, number] | 
   ];
 }
 
-function toHex(rgb: [number, number, number]): string {
+export function toHex(rgb: [number, number, number]): string {
   return '#' + rgb.map((c) => Math.round(c).toString(16).padStart(2, '0')).join('');
 }
 
@@ -68,7 +68,7 @@ export function luminance(rgb: [number, number, number]): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-function mix(rgb: [number, number, number], target: number, amount: number): [number, number, number] {
+export function mix(rgb: [number, number, number], target: number, amount: number): [number, number, number] {
   return rgb.map((c) => c + (target - c) * amount) as [number, number, number];
 }
 

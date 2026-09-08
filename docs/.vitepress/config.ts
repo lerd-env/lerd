@@ -237,6 +237,7 @@ export default defineConfig({
           text: 'Interfaces',
           items: [
             { text: 'Web UI', link: '/features/web-ui' },
+            { text: 'Dashboard themes', link: '/features/dashboard-themes' },
             { text: 'Terminal Dashboard', link: '/features/tui' },
             { text: 'System Tray', link: '/features/system-tray' },
             { text: 'Omarchy Bar Widget', link: '/features/omarchy-glance' },

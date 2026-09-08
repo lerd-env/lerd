@@ -308,6 +308,8 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
+	mux.HandleFunc("/api/themes", withCORS(handleThemes))
+	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
 	mux.HandleFunc("/api/workers/heal", withCORS(handleWorkersHeal))
 	mux.HandleFunc("/api/workers/stop", withCORS(handleWorkersStop))
