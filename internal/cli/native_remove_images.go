@@ -23,7 +23,15 @@ func RemoveFPMImages(versions []string) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
+	return removeFPMImages(cfg.PHPRuntimeMode(), versions)
+}
+
+// removeFPMImages is RemoveFPMImages with the runtime handed to it, so what it
+// decides can be checked on any platform. The exported one reads the mode, and
+// off macOS that is always container, which would otherwise leave this testable
+// on one platform only.
+func removeFPMImages(mode string, versions []string) (int, error) {
+	if mode != config.PHPRuntimeNative {
 		return 0, fmt.Errorf("the PHP-FPM images are what serves every site on the container runtime; switch to the native runtime before removing them")
 	}
 

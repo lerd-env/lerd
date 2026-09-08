@@ -7,31 +7,15 @@ import (
 	"github.com/geodro/lerd/internal/config"
 )
 
-func nativeConfig(t *testing.T, mode string) {
-	t.Helper()
-	t.Setenv("HOME", t.TempDir())
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	cfg, err := config.LoadGlobal()
-	if err != nil {
-		t.Fatal(err)
-	}
-	cfg.PHP.Runtime = mode
-	if err := config.SaveGlobal(cfg); err != nil {
-		t.Fatal(err)
-	}
-}
-
 // The images are what serves every site under the container runtime, so
 // removing them is only ever safe once PHP is running on the host.
 func TestRemoveFPMImagesRefusesUnderTheContainerRuntime(t *testing.T) {
-	nativeConfig(t, config.PHPRuntimeContainer)
 	var called []string
 	orig := removeFPMImageFn
 	removeFPMImageFn = func(v string) error { called = append(called, v); return nil }
 	t.Cleanup(func() { removeFPMImageFn = orig })
 
-	if _, err := RemoveFPMImages([]string{"8.3", "8.4"}); err == nil {
+	if _, err := removeFPMImages(config.PHPRuntimeContainer, []string{"8.3", "8.4"}); err == nil {
 		t.Error("removing the images that are serving must be refused")
 	}
 	if len(called) != 0 {
@@ -40,13 +24,12 @@ func TestRemoveFPMImagesRefusesUnderTheContainerRuntime(t *testing.T) {
 }
 
 func TestRemoveFPMImagesRemovesEachInstalledVersion(t *testing.T) {
-	nativeConfig(t, config.PHPRuntimeNative)
 	var called []string
 	orig := removeFPMImageFn
 	removeFPMImageFn = func(v string) error { called = append(called, v); return nil }
 	t.Cleanup(func() { removeFPMImageFn = orig })
 
-	n, err := RemoveFPMImages([]string{"8.3", "8.4"})
+	n, err := removeFPMImages(config.PHPRuntimeNative, []string{"8.3", "8.4"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -58,7 +41,6 @@ func TestRemoveFPMImagesRemovesEachInstalledVersion(t *testing.T) {
 // One image that will not go is not a reason to keep the rest: the point is to
 // reclaim the disk, and a partial reclaim still does that.
 func TestRemoveFPMImagesKeepsGoingAfterAFailure(t *testing.T) {
-	nativeConfig(t, config.PHPRuntimeNative)
 	orig := removeFPMImageFn
 	removeFPMImageFn = func(v string) error {
 		if v == "8.3" {
@@ -68,7 +50,7 @@ func TestRemoveFPMImagesKeepsGoingAfterAFailure(t *testing.T) {
 	}
 	t.Cleanup(func() { removeFPMImageFn = orig })
 
-	n, err := RemoveFPMImages([]string{"8.3", "8.4", "8.5"})
+	n, err := removeFPMImages(config.PHPRuntimeNative, []string{"8.3", "8.4", "8.5"})
 	if err == nil {
 		t.Error("the one that failed should be reported")
 	}
