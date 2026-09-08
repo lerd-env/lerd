@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,6 +33,9 @@ type scaffoldChoice struct {
 	// nothing about it is known yet, and it is offered rather than hidden.
 	sawDefinition bool
 	creatable     bool
+	// scaffolds answers, for each major a definition was read for, whether that
+	// major can start a project. A major missing from it was never inspected.
+	scaffolds map[string]bool
 }
 
 // canScaffold reports whether the wizard should offer this framework. Not every
@@ -39,7 +43,18 @@ type scaffoldChoice struct {
 // is not a composer create-project at all, and offering one only to refuse it
 // after the questions is worse than never listing it.
 func (c scaffoldChoice) canScaffold() bool {
-	return c.creatable || !c.sawDefinition
+	if c.creatable || !c.sawDefinition {
+		return true
+	}
+	// A major whose definition is not installed says nothing either way, so the
+	// framework is only dropped once every major it publishes has been read and
+	// none of them can scaffold.
+	for _, v := range c.Versions {
+		if _, inspected := c.scaffolds[v]; !inspected {
+			return true
+		}
+	}
+	return false
 }
 
 // scaffoldCatalogue lists the frameworks `lerd new` can scaffold. It reads the
@@ -83,8 +98,14 @@ func scaffoldCatalogue() []scaffoldChoice {
 		c := add(info.Name, info.Label)
 		c.Versions = appendVersion(c.Versions, info.Version)
 		c.sawDefinition = true
+		c.scaffolds = config.FrameworkScaffoldSupport(info.Name)
 		if info.Create != "" {
 			c.creatable = true
+		}
+		for _, scaffolds := range c.scaffolds {
+			if scaffolds {
+				c.creatable = true
+			}
 		}
 	}
 	sort.Strings(localOnly)
@@ -96,6 +117,7 @@ func scaffoldCatalogue() []scaffoldChoice {
 			continue
 		}
 		sortFrameworkVersionsDesc(c.Versions)
+		c.Versions = versionsThatScaffold(c.Versions, c.scaffolds)
 		if c.Latest == "" && len(c.Versions) > 0 {
 			c.Latest = c.Versions[0]
 		}
@@ -140,6 +162,21 @@ func appendVersion(versions []string, v string) []string {
 		}
 	}
 	return append(versions, v)
+}
+
+// versionsThatScaffold drops the majors whose definition was read here and
+// carries no create command, so the wizard never asks a question it would only
+// refuse to act on. A major with no definition here stays: nothing is known
+// about it yet, and it is fetched when picked.
+func versionsThatScaffold(versions []string, scaffolds map[string]bool) []string {
+	out := make([]string, 0, len(versions))
+	for _, v := range versions {
+		if canScaffold, inspected := scaffolds[v]; inspected && !canScaffold {
+			continue
+		}
+		out = append(out, v)
+	}
+	return out
 }
 
 // sortFrameworkVersionsDesc orders majors newest first, numerically, so 9 sits
@@ -258,6 +295,9 @@ func askScaffoldFramework(catalogue []scaffoldChoice) (string, string, error) {
 	}
 
 	version := choice.Latest
+	if !slices.Contains(choice.Versions, version) {
+		version = choice.Versions[0]
+	}
 	if err := huh.NewForm(huh.NewGroup(
 		huh.NewSelect[string]().
 			Title(choice.Label + " version").
