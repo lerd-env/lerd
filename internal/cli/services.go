@@ -93,6 +93,7 @@ func NewServiceCmd() *cobra.Command {
 func newServiceDomainCmd() *cobra.Command {
 	var remove bool
 	var port int
+	var cors, noCORS bool
 	cmd := &cobra.Command{
 		Use:   "domain <service> [domain]",
 		Short: "Serve a service on its own domain, reachable from the app and the browser",
@@ -116,12 +117,25 @@ service is yours or the preset says nothing:
 
     lerd service domain rustfs console.rustfs.test --port 9001
 
+A page that talks to the service directly, rather than through the app, needs
+the browser preflight answered: a presigned upload is issued by the app but sent
+by the browser, which asks first and sends nothing if the answer does not name
+the origin it came from. Services that work this way ask for it themselves, and
+--cors turns it on for one that does not, --no-cors off for one that does:
+
+    lerd service domain rustfs --cors
+
+Only origins lerd serves are answered, never "*".
+
 Run with no domain to show the current one, or --remove to stop serving it. The
 service stays reachable at lerd-<name> on the podman network either way.`,
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
 			name := args[0]
 			feedback.Begin()
+			if cors && noCORS {
+				return fmt.Errorf("--cors and --no-cors ask for opposite things; pass one")
+			}
 			// Resolved before the change: a site is recognised by whichever
 			// address its env currently names, so removing the domain first
 			// would lose every site the domain itself is what wired.
@@ -134,9 +148,20 @@ service stays reachable at lerd-<name> on the podman network either way.`,
 				syncServiceDomainSites(name, affected)
 				return nil
 			}
+			// --cors alone changes the answer on the domain the service already
+			// has, so it does not have to be renamed to its current value to
+			// turn the preflight on.
+			if len(args) == 1 && (cors || noCORS) {
+				if err := serviceops.SetServiceDomainCORS(name, cors); err != nil {
+					return err
+				}
+				feedback.Done(corsDoneMessage(name, cors))
+				return nil
+			}
 			if len(args) == 1 {
 				if current := config.ServiceDomain(name); current != "" {
-					fmt.Printf("%s is served at https://%s -> port %d\n", name, current, serviceops.ServiceDomainPort(name))
+					fmt.Printf("%s is served at https://%s -> port %d%s\n", name, current,
+						serviceops.ServiceDomainPort(name), corsSuffix(name))
 					return nil
 				}
 				fmt.Printf("%s has no domain. Give it one with: lerd service domain %s %s\n",
@@ -147,14 +172,37 @@ service stays reachable at lerd-<name> on the podman network either way.`,
 			if err != nil {
 				return err
 			}
-			feedback.Done("serving " + feedback.Val(name) + " at https://" + domain)
+			if cors || noCORS {
+				if err := serviceops.SetServiceDomainCORS(name, cors); err != nil {
+					return err
+				}
+			}
+			feedback.Done("serving " + feedback.Val(name) + " at https://" + domain + corsSuffix(name))
 			syncServiceDomainSites(name, affected)
 			return nil
 		},
 	}
 	cmd.Flags().BoolVar(&remove, "remove", false, "Stop serving the service on its domain")
 	cmd.Flags().IntVar(&port, "port", 0, "Container port the domain proxies to (default: the preset's, then the service's primary)")
+	cmd.Flags().BoolVar(&cors, "cors", false, "Answer browser preflights on the domain, for a page that uploads to the service directly")
+	cmd.Flags().BoolVar(&noCORS, "no-cors", false, "Stop answering browser preflights on a service whose preset asks for them")
 	return cmd
+}
+
+// corsSuffix names the preflight answer wherever the domain is reported, so the
+// state is visible without opening config.yaml to find it.
+func corsSuffix(service string) string {
+	if serviceops.ServiceDomainCORS(service) {
+		return ", answering browser preflights"
+	}
+	return ""
+}
+
+func corsDoneMessage(service string, enabled bool) string {
+	if enabled {
+		return "answering browser preflights on " + feedback.Val(service)
+	}
+	return "no longer answering browser preflights on " + feedback.Val(service)
 }
 
 // adoptDefaultServiceDomains takes the domain each preset declares for a service
