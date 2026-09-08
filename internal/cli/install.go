@@ -989,11 +989,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 		// new binary against stale images. Gated by autostartOn because
 		// php:rebuild restarts FPM and worker units unconditionally.
 		activeFPM, _ := phpDet.ListInstalled()
+		// A rebuild is an image operation, and php:rebuild refuses outright on
+		// the native runtime, so an install there ended on a failure for work
+		// that should never have been attempted.
 		// Judged against the versions install actually builds. An installed
 		// version nothing serves is never ensured here, so its image keeps an
 		// older recipe for as long as it stays unused, and checking it turned
 		// every install into a full rebuild of the ones just built.
-		if podman.NeedsFPMRebuild(ensuredFPMVersions()) || podman.NeedsFrankenPHPRebuild(activeFrankenPHPVersions()) {
+		if lifecycle.FPMContainersWanted() &&
+			(podman.NeedsFPMRebuild(ensuredFPMVersions()) || podman.NeedsFrankenPHPRebuild(activeFrankenPHPVersions())) {
 			feedback.Header("Rebuilding PHP images")
 			self, err := os.Executable()
 			if err != nil {

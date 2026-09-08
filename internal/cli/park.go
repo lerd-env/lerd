@@ -490,6 +490,14 @@ func fpmEnsurePlan(versions []string) (build, quiet []string) {
 // disclosed first; before this they streamed raw podman build output into the
 // middle of the install log, past the point where the disclosure is printed.
 func ensureFPMQuadlets(versions []string) {
+	// On the native runtime there are no images to build. Announcing four of
+	// them and then doing nothing, which is what the per-version no-op below
+	// amounted to, said the opposite of what was happening. The host builds
+	// are what an install has to bring up to date instead.
+	if !lifecycle.FPMContainersWanted() {
+		ensureNativePHPBuilds(versions)
+		return
+	}
 	build, quiet := fpmEnsurePlan(versions)
 
 	for _, v := range quiet {
