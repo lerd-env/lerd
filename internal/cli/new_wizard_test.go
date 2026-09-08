@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/geodro/lerd/internal/config"
@@ -113,6 +114,68 @@ func TestScaffoldCatalogue_KeepsPublishedFrameworksItCannotInspect(t *testing.T)
 	if scaffoldChoiceByName(got, "tempest") == nil {
 		t.Errorf("catalogue = %v, want the uninstalled tempest still offered",
 			catalogueNames(got))
+	}
+}
+
+// A framework whose newest major ships no project skeleton keeps the majors that
+// do. Dropping the whole name would hide every version it can still scaffold,
+// and offering the major it cannot only refuses the run after every question.
+func TestScaffoldCatalogue_OffersOnlyTheMajorsThatScaffold(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	writeStoreIndex(t, `{"frameworks":[
+	  {"name":"lumen","label":"Lumen","versions":["11","10"],"latest":"11"}
+	]}`)
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "lumen", Label: "Lumen", Version: "11", PublicDir: "public",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "lumen", Label: "Lumen", Version: "10", PublicDir: "public",
+		Create: "composer create-project laravel/lumen",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := scaffoldCatalogue()
+	lumen := scaffoldChoiceByName(got, "lumen")
+	if lumen == nil {
+		t.Fatalf("catalogue = %v, want lumen offered: major 10 scaffolds", catalogueNames(got))
+	}
+	if slices.Contains(lumen.Versions, "11") {
+		t.Errorf("versions = %v, want 11 left out: it ships no skeleton", lumen.Versions)
+	}
+	if !slices.Contains(lumen.Versions, "10") {
+		t.Errorf("versions = %v, want 10 offered", lumen.Versions)
+	}
+}
+
+// A major this machine holds no definition for says nothing about whether it can
+// scaffold, so the one installed major failing to is no reason to drop the rest.
+func TestScaffoldCatalogue_KeepsMajorsItHasNotRead(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	writeStoreIndex(t, `{"frameworks":[
+	  {"name":"lumen","label":"Lumen","versions":["11","10"],"latest":"11"}
+	]}`)
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "lumen", Label: "Lumen", Version: "11", PublicDir: "public",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	got := scaffoldCatalogue()
+	lumen := scaffoldChoiceByName(got, "lumen")
+	if lumen == nil {
+		t.Fatalf("catalogue = %v, want lumen offered: major 10 was never read", catalogueNames(got))
+	}
+	if !slices.Contains(lumen.Versions, "10") {
+		t.Errorf("versions = %v, want the uninspected 10 offered", lumen.Versions)
 	}
 }
 

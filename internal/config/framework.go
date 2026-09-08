@@ -1165,7 +1165,48 @@ func GetFrameworkForScaffold(name, version string) (*Framework, bool) {
 	if base == nil || (base.Create == "" && builtinFramework(name) != nil) {
 		return GetFramework(name)
 	}
+	// A framework's newest major can ship no project skeleton at all while the
+	// ones before it do. Only a run that pinned that major asked for it, so an
+	// unpinned one starts from the newest definition that can still scaffold.
+	if base.Create == "" && version == "" {
+		if creatable := newestScaffoldableFramework(name); creatable != nil {
+			base = creatable
+		}
+	}
 	return mergeBuiltinTinker(mergeBuiltinFrankenPHP(mergeUserOverlay(base))), true
+}
+
+// newestScaffoldableFramework returns the highest major of a framework whose
+// definition carries a create command, or nil when none does. It walks the
+// majors this install knows of, published as well as installed, since a machine
+// that has only ever fetched the newest definition has nothing older on disk.
+func newestScaffoldableFramework(name string) *Framework {
+	vers := availableFrameworkVersions(name)
+	for i := len(vers) - 1; i >= 0; i-- {
+		v := strconv.Itoa(vers[i])
+		fw := loadFrameworkYAML(filepath.Join(StoreFrameworksDir(), name+"@"+v+".yaml"))
+		if fw == nil && frameworkFetchHook != nil {
+			fw, _ = frameworkFetchHook(name, v)
+		}
+		if fw != nil && fw.Create != "" {
+			return fw
+		}
+	}
+	return nil
+}
+
+// FrameworkScaffoldSupport reports, for every major this install holds a
+// definition of, whether that definition can start a project. Scaffolding is a
+// question per major rather than per framework: the newest one can ship no
+// skeleton while the ones before it do.
+func FrameworkScaffoldSupport(name string) map[string]bool {
+	out := map[string]bool{}
+	for _, path := range versionedFrameworkPaths(name) {
+		if fw := loadFrameworkYAML(path); fw != nil && fw.Version != "" {
+			out[fw.Version] = fw.Create != ""
+		}
+	}
+	return out
 }
 
 // loadBaseFramework returns the base definition for a framework:

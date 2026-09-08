@@ -102,6 +102,13 @@ type Preset struct {
 	// the API for an object store but the SMTP port for a mail catcher whose web
 	// UI is the thing worth a hostname.
 	DomainPort int `yaml:"domain_port,omitempty"`
+	// DomainCORS asks for the browser preflight to be answered on the domain. A
+	// service declares it when a page talks to it directly rather than through
+	// the app: a presigned upload is issued by the app but sent by the browser,
+	// which will not send it at all until the preflight is answered from an
+	// origin the page was served from. Like the domain itself it lives here so
+	// the answer travels with the service definition.
+	DomainCORS bool `yaml:"domain_cors,omitempty"`
 	// DataVersionFile names a file inside the service's data dir whose contents
 	// identify the version that wrote the data (postgres PG_VERSION, mariadb
 	// mariadb_upgrade_info). It is matched against Versions[].Tag so a data dir

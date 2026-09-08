@@ -27,6 +27,7 @@
 | `lerd status` | Health summary: DNS, nginx, PHP-FPM containers, watcher, services, cert expiry, LAN exposure and dashboard remote access; shows a notice if an update is available |
 | `lerd which` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
 | `lerd about` | Show version, build info, and project URL |
+| `lerd version` | Print the installed version, the same line as `lerd --version` |
 | `lerd licenses` | Print the third-party license notices bundled with lerd, the copyright notices and license terms of every Go module linked into the binary and every npm package used to build the embedded dashboard |
 | `lerd man [page]` | Browse the built-in documentation in the terminal; pass a page name to jump directly (e.g. `lerd man sites`) |
 | `lerd tui` | Open a btop-style terminal dashboard with live site / service / worker status, per-site detail pane, inline domain and version editing, shell drop-in, log tailing, filter + sort, and global settings |
@@ -77,6 +78,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
 | `lerd unlink [name]` | Stop serving the site; defaults to the site in the current directory, and naming one is the way to unlink a site whose directory has moved or been deleted |
 | `lerd sites` | Table view of all registered sites |
+| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups; `--list` shows what is kept |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
@@ -91,7 +93,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd unsecure [name]` | Remove TLS and switch back to HTTP, updates `APP_URL` in `.env` |
 | `lerd pause [name]` | Pause a site: stop workers (and custom container if applicable), replace vhost with landing page |
 | `lerd unpause [name]` | Resume a paused site: start container, restore vhost, restart workers |
-| `lerd restart [name]` | Restart the container for the current or named site (custom container or PHP-FPM) |
+| `lerd restart [name]` | Restart the container serving one site (custom container, FrankenPHP, PHP-FPM or dev server). Run it inside the site's directory or name the site; it does not restart lerd, for that use `lerd stop` then `lerd start` |
 | `lerd rebuild [name]` | Rebuild the custom container image from Containerfile and restart |
 | `lerd nginx show [site]` | Print the site's custom nginx override; `--path` prints the file path instead of its content |
 | `lerd nginx edit [site]` | Open the override in `$EDITOR`, then validate it with `nginx -t` and reload on save |
@@ -244,7 +246,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
 | `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge] [--no-snapshot]` | Stop and remove a service (custom or default). With `--purge`, snapshot every database on it, then rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`). `--no-snapshot` skips the snapshot |
-| `lerd service domain <service> [domain] [--port N] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. With no domain, show the current one |
+| `lerd service domain <service> [domain] [--port N] [--cors\|--no-cors] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. `--cors` answers browser preflights, for a page that uploads to the service directly. With no domain, show the current one |
 | `lerd service reinstall <name> [--reset-data] [--no-snapshot]` | Stop, remove, and reinstall at the current version, then recreate any linked site's missing database or bucket on it. With `--reset-data`, snapshot every database on it and rename the data dir aside first. `--no-snapshot` skips the snapshot |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |
 
