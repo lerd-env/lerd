@@ -46,7 +46,15 @@ type ServiceConfig struct {
 	DomainOptOut bool `yaml:"domain_opt_out,omitempty" mapstructure:"domain_opt_out"`
 	// DomainPort overrides the container port the domain proxies to. 0 = the
 	// preset's choice, then the service's primary port.
-	DomainPort    int    `yaml:"domain_port,omitempty" mapstructure:"domain_port"`
+	DomainPort int `yaml:"domain_port,omitempty" mapstructure:"domain_port"`
+	// DomainCORS turns the browser preflight answer on for a service whose
+	// preset does not ask for it, and DomainCORSOptOut turns it off for one that
+	// does. Two fields rather than one because the preset owns the default and
+	// silence has to stay distinguishable from a deliberate no, the same reason
+	// DomainOptOut sits beside Domain.
+	DomainCORS       bool `yaml:"domain_cors,omitempty" mapstructure:"domain_cors"`
+	DomainCORSOptOut bool `yaml:"domain_cors_opt_out,omitempty" mapstructure:"domain_cors_opt_out"`
+
 	PreviousImage string `yaml:"previous_image,omitempty" mapstructure:"previous_image"`
 	// LastOp records the most recent mutation kind ("update" or "migrate") so
 	// the rollback flow can refuse a swap that would race the new image
