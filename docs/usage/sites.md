@@ -13,6 +13,7 @@ This page covers getting a project registered and served: the init wizard, linki
 | `lerd link [domain]` | Register the current directory as a site (domain name without TLD, defaults to directory name). On a fresh project in an interactive terminal it runs the `lerd init` wizard first |
 | `lerd unlink` | Unlink the current directory site (removes all domains) |
 | `lerd sites` | Table view of all registered sites |
+| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in the configured editor |
 | `lerd secure [name]` | Issue a mkcert TLS cert and enable HTTPS, updates `APP_URL` in `.env` |
@@ -226,6 +227,20 @@ success.
 When you unlink a site that lives inside a parked directory, the vhost is removed but the registry entry is kept and marked as *ignored*; the watcher will not re-register it on its next scan. Running `lerd link` in that directory clears the ignored flag and restores the site.
 
 Either way, unlinking also drops the site's per-site [request-timing](../features/request-timing.md) and idle state: its rows in the durable request store, its entries in the persisted request-timing and idle-activity snapshots, and the running watcher's in-memory copy, so an unlinked site leaves no stale traffic history behind. A site's git worktrees are covered too.
+
+---
+
+## Registry backups
+
+Every registered site lives in `~/.local/share/lerd/sites.yaml`. Lerd copies that file aside before each change that rewrites it, keeping the last ten versions in `~/.local/share/lerd/sites.bkp/`, so a registry that comes back short does not mean linking everything again. A rewrite that changes nothing is not backed up, which keeps the window covering real edits rather than the last few minutes of background activity.
+
+```bash
+lerd sites:restore --list     # what is kept, with the number of sites in each
+lerd sites:restore            # put the newest one back
+lerd sites:restore sites-20260908-141530.000.yaml
+```
+
+Restoring rewrites `sites.yaml` and regenerates the nginx vhosts for the sites that came back. The registry it replaced is backed up in turn, so restoring the wrong version is undone by restoring again. Containers and workers are not touched, run `lerd start` afterwards to bring them back up.
 
 ---
 

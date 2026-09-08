@@ -77,6 +77,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
 | `lerd unlink [name]` | Stop serving the site; defaults to the site in the current directory, and naming one is the way to unlink a site whose directory has moved or been deleted |
 | `lerd sites` | Table view of all registered sites |
+| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups; `--list` shows what is kept |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
@@ -244,7 +245,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd service preset [name]` | List presets, or install one (use `--version` for multi-version presets); a store-only preset is fetched on demand |
 | `lerd service search [query]` | Browse the external service-preset store; filter by name, description, or family |
 | `lerd service remove <name> [--purge] [--no-snapshot]` | Stop and remove a service (custom or default). With `--purge`, snapshot every database on it, then rename the data dir aside (recoverable as `<name>.pre-remove-<ts>`). `--no-snapshot` skips the snapshot |
-| `lerd service domain <service> [domain] [--port N] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. With no domain, show the current one |
+| `lerd service domain <service> [domain] [--port N] [--cors\|--no-cors] [--remove]` | Serve a service on its own HTTPS domain, resolvable from the app container and the browser alike. `--port` picks the container port for a service exposing several. `--cors` answers browser preflights, for a page that uploads to the service directly. With no domain, show the current one |
 | `lerd service reinstall <name> [--reset-data] [--no-snapshot]` | Stop, remove, and reinstall at the current version, then recreate any linked site's missing database or bucket on it. With `--reset-data`, snapshot every database on it and rename the data dir aside first. `--no-snapshot` skips the snapshot |
 | `lerd minio:migrate` | Migrate existing MinIO data to RustFS |
 

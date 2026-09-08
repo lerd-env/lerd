@@ -253,7 +253,22 @@ AWS_ENDPOINT=https://rustfs.test
 AWS_URL=https://rustfs.test/my-project
 ```
 
-The vhost sends no CORS headers, so a browser fetching across origins (a direct-to-S3 upload from the site's own page) still needs them added; server-side uploads and plain `<img>` or download links are unaffected.
+#### Uploading to the service from the browser
+
+A presigned upload is issued by the app but sent by the browser, and it goes to a different origin than the page it was issued to. The browser asks the service for permission first, and sends nothing at all unless the answer names that page's origin. Server-side uploads and plain `<img>` or download links never ask, so they were never affected.
+
+RustFS's preset asks for the preflight to be answered, so an install that has its domain gets it. For a service whose preset says nothing, or one of your own:
+
+```bash
+lerd service domain rustfs --cors      # answer preflights on the domain
+lerd service domain rustfs --no-cors   # stop answering them
+```
+
+The origin is reflected rather than answered with `*`: the vhost matches the request's `Origin` against the hosts lerd serves and echoes it back, so `https://myapp.test` is answered and a page on the open internet is not. A wildcard would let any site the browser happens to have open read the service over JS. An origin lerd does not serve leaves the header off entirely, which the browser refuses exactly as it would with nothing configured.
+
+Whatever the service says about CORS itself is dropped before lerd's answer is added. An object store that sends its own `Access-Control-Allow-Origin` would otherwise leave two on the response, and a browser rejects that outright rather than picking one. If you would rather configure CORS on the bucket, turn lerd's off with `--no-cors` and the service's own headers pass through untouched.
+
+The preflight answer reflects the headers the browser asked for rather than replying `*`, which Safari does not accept, and `ETag` is exposed because a multipart upload confirms each part by the ETag it comes back with.
 
 If a bucket a site points at is not there, `lerd site:doctor` reports it under **Bucket** with a fix that creates it. Such a site serves every page fine and fails on the first upload, which is exactly the kind of thing that reads as an application bug. The check is driven by the service preset rather than by any framework: the preset names the `.env` key holding the entity a site owns (`owner_env: AWS_BUCKET` for RustFS), and only a project whose env also points at the lerd service is measured against it, so one configured for real AWS is left alone.
 

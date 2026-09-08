@@ -200,7 +200,7 @@ func ApplyServiceDomain(service string) error {
 	if err := domainIssueCertFn(domain); err != nil {
 		return fmt.Errorf("issuing certificate for %s: %w", domain, err)
 	}
-	if err := domainVhostFn(domain, "lerd-"+service, port, true); err != nil {
+	if err := domainVhostFn(domain, "lerd-"+service, port, true, serviceDomainCORS(service)); err != nil {
 		return fmt.Errorf("writing vhost for %s: %w", domain, err)
 	}
 	if err := domainWriteHostsFn(); err != nil {
@@ -326,6 +326,48 @@ func ApplyServiceDomains() error {
 // port a service's domain actually proxies to, so a surface can show it rather
 // than leave the user guessing which of a multi-port service answers.
 func ServiceDomainPort(service string) int { return serviceDomainPort(service) }
+
+// ServiceDomainCORS is serviceDomainCORS for callers outside this package.
+func ServiceDomainCORS(service string) bool { return serviceDomainCORS(service) }
+
+// serviceDomainCORS reports whether the domain answers the browser preflight.
+// The user's own choice wins in either direction, then the preset's, which is
+// where a service that a page talks to directly says so. Silence is not a no:
+// only DomainCORSOptOut is, which is what keeps a preset default from being
+// handed back to a user who turned it off.
+func serviceDomainCORS(service string) bool {
+	sc := config.ServiceConfigFor(service)
+	if sc.DomainCORSOptOut {
+		return false
+	}
+	if sc.DomainCORS {
+		return true
+	}
+	preset, err := config.LoadPreset(service)
+	return err == nil && preset != nil && preset.DomainCORS
+}
+
+// SetServiceDomainCORS records the user's answer on the preflight and re-renders
+// the vhost so it takes effect without a restart. A service with no domain has
+// no vhost to carry it, so the choice is refused rather than saved somewhere it
+// would silently do nothing.
+func SetServiceDomainCORS(service string, enabled bool) error {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return err
+	}
+	if cfg.Services[service].Domain == "" {
+		return fmt.Errorf("service %q has no domain to answer preflights on", service)
+	}
+	svcCfg := cfg.Services[service]
+	svcCfg.DomainCORS = enabled
+	svcCfg.DomainCORSOptOut = !enabled
+	cfg.Services[service] = svcCfg
+	if err := config.SaveGlobal(cfg); err != nil {
+		return err
+	}
+	return ApplyServiceDomain(service)
+}
 
 // serviceDomainPort is the container-internal port nginx proxies the domain to.
 // The published host port is deliberately not used: nginx reaches the service

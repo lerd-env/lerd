@@ -30,7 +30,8 @@
 ├── vapid-public.key                 # Web Push public key, served to browsers
 ├── push-subscriptions.json          # Browser push subscriptions + per-category prefs (mode 0600)
 ├── nginx-trust-token                # Per-install secret for lerd.localhost → lerd-ui proxy
-└── sites.yaml
+├── sites.yaml
+└── sites.bkp/                      # last 10 versions of sites.yaml (lerd sites:restore)
 ```
 
 All directories follow the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/). Lerd never writes to system directories except during `lerd install` (DNS setup) which requires `sudo`.

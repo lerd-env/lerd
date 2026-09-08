@@ -156,6 +156,12 @@ func SitesFile() string {
 	return filepath.Join(DataDir(), "sites.yaml")
 }
 
+// SitesBackupDir holds the rolling copies of sites.yaml taken before each
+// change, so a registry that loses its sites can be put back.
+func SitesBackupDir() string {
+	return filepath.Join(DataDir(), "sites.bkp")
+}
+
 // GlobalConfigFile returns the path to config.yaml.
 func GlobalConfigFile() string {
 	return filepath.Join(ConfigDir(), "config.yaml")

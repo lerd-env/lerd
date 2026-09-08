@@ -390,13 +390,9 @@ func LoadSites() (*SiteRegistry, error) {
 		return nil, err
 	}
 
-	var raw siteRegistryYAML
-	if err := yaml.Unmarshal(data, &raw); err != nil {
+	reg, err := decodeSiteRegistry(data)
+	if err != nil {
 		return nil, err
-	}
-	reg := &SiteRegistry{Sites: make([]Site, len(raw.Sites))}
-	for i, sy := range raw.Sites {
-		reg.Sites[i] = sy.toSite()
 	}
 
 	if statErr == nil {
@@ -405,6 +401,20 @@ func LoadSites() (*SiteRegistry, error) {
 		sitesCacheAt = info.ModTime()
 		sitesCacheSz = info.Size()
 		sitesCacheMu.Unlock()
+	}
+	return reg, nil
+}
+
+// decodeSiteRegistry parses sites.yaml bytes, shared by the live file and the
+// rolling backups so both go through one schema.
+func decodeSiteRegistry(data []byte) (*SiteRegistry, error) {
+	var raw siteRegistryYAML
+	if err := yaml.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
+	reg := &SiteRegistry{Sites: make([]Site, len(raw.Sites))}
+	for i, sy := range raw.Sites {
+		reg.Sites[i] = sy.toSite()
 	}
 	return reg, nil
 }
@@ -457,6 +467,7 @@ func SaveSites(reg *SiteRegistry) error {
 	if err != nil {
 		return err
 	}
+	backupSitesFile(data)
 	if err := writeFileAtomic(SitesFile(), data, 0644); err != nil {
 		return err
 	}
