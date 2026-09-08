@@ -21,6 +21,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -1858,28 +1859,7 @@ func EnsureProfilerVhost() error {
 	if cfg.IsProfilerEnabled() {
 		state = "on"
 	}
-	// SCRIPT_FILENAME just needs a real file to exist; SPX intercepts the
-	// SPX_UI_URI request and serves its UI before dump-bridge.php runs.
-	content := fmt.Sprintf(`server {
-    listen 80;
-    listen [::]:80;
-    server_name profiler.localhost;
-
-    location = %s {
-        access_log off;
-        default_type text/plain;
-        return 200 %q;
-    }
-
-    location / {
-        set $fpm "lerd-php%s-fpm";
-        fastcgi_pass $fpm:9000;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME /usr/local/etc/lerd/dump-bridge.php;
-        fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
-    }
-}
-`, ProfilerStatePath, state, phpShort(cfg.PHP.DefaultVersion))
+	content := profilerVhost(cfg.PHPRuntimeMode(), cfg.PHP.DefaultVersion, ProfilerStatePath, state)
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
 }
@@ -1954,4 +1934,50 @@ func RewriteNginxQuadlet() (changed bool, err error) {
 	content = podman.ApplyNginxPorts(content, httpPort, httpsPort)
 	content = podman.InjectExtraVolumes(content, podman.ExtraVolumePaths())
 	return podman.WriteQuadletDiff("lerd-nginx", content)
+}
+
+// profilerVhost renders the profiler.localhost vhost for the runtime serving
+// PHP. Under the native runtime nothing listens on the FPM container, so a
+// vhost naming it answered 502 for SPX's own dashboard, and the bridge it names
+// as SCRIPT_FILENAME lives at a path that only exists inside the image.
+//
+// SCRIPT_FILENAME just needs a real file to exist: SPX intercepts the
+// SPX_UI_URI request and serves its UI before the bridge runs.
+func profilerVhost(mode, defaultVersion, statePath, state string) string {
+	upstream := fmt.Sprintf(`set $fpm "lerd-php%s-fpm";
+        fastcgi_pass $fpm:9000;`, phpShort(defaultVersion))
+	script := "/usr/local/etc/lerd/dump-bridge.php"
+	if mode == config.PHPRuntimeNative {
+		// An unparseable version falls back to the container, the same way a
+		// site vhost does, so a bad value can never render port 0 and fail the
+		// whole configuration.
+		if port, err := nativephp.PortFor(defaultVersion); err == nil {
+			upstream = fmt.Sprintf(`set $fpm "%s";
+        fastcgi_pass $fpm:%d;`, hostGateway, port)
+			script = config.DumpsBridgeFile()
+		}
+	}
+	return fmt.Sprintf(`server {
+    listen 80;
+    listen [::]:80;
+    server_name profiler.localhost;
+
+    location = %s {
+        access_log off;
+        default_type text/plain;
+        return 200 %q;
+    }
+
+    location / {
+        %s
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME %s;
+        # The bridge is auto-prepended into every request, and it is also the
+        # script named above, so without this it is loaded twice and the second
+        # load fatals on redeclaring its own functions.
+        fastcgi_param PHP_VALUE "auto_prepend_file=";
+        fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
+    }
+}
+`, statePath, state, upstream, script)
 }
