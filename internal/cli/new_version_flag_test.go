@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // runNewCmdVersion parses args through the real command and reports both
@@ -60,5 +62,53 @@ func TestRunNewRejectsVersionWithoutFramework(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "--framework") {
 		t.Errorf("error = %v, want it to name the missing flag", err)
+	}
+}
+
+// A major that ships no project skeleton while others do is not a broken
+// definition, and telling the user to add a create field sends them to fix a
+// file that is right. It names the run that would work instead.
+func TestScaffoldUnavailableError_PointsAtTheMajorsThatScaffold(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "lumen", Label: "Lumen", Version: "11", PublicDir: "public",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "lumen", Label: "Lumen", Version: "10", PublicDir: "public",
+		Create: "composer create-project laravel/lumen",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := scaffoldUnavailableError("lumen", "11")
+	if !strings.Contains(err.Error(), "--framework-version") {
+		t.Errorf("error = %v, want it to name the flag to drop", err)
+	}
+	if strings.Contains(err.Error(), "create") {
+		t.Errorf("error = %v, want no advice to edit the definition", err)
+	}
+}
+
+// A framework no major of which can scaffold is a definition question after all,
+// and the message stays the one that says so.
+func TestScaffoldUnavailableError_KeepsTheDefinitionAdvice(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	if err := config.SaveStoreFramework(&config.Framework{
+		Name: "wordpress", Label: "WordPress", Version: "6", PublicDir: ".",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	err := scaffoldUnavailableError("wordpress", "6")
+	if !strings.Contains(err.Error(), "create") {
+		t.Errorf("error = %v, want the definition advice", err)
 	}
 }

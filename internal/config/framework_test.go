@@ -277,6 +277,46 @@ func TestGetFrameworkForScaffold_BuiltinSurvivesADefinitionThatCannotScaffold(t 
 	}
 }
 
+// A framework's newest major can ship no project skeleton at all while the ones
+// before it do, and a run that pinned nothing did not ask for that major. It
+// scaffolds from the newest one that can rather than refusing the framework.
+func TestGetFrameworkForScaffold_FallsBackToTheNewestMajorThatScaffolds(t *testing.T) {
+	setConfigDir(t)
+
+	const create = "composer create-project laravel/lumen:^10.0"
+	installStoreFramework(t, &Framework{Name: "lumen", Label: "Lumen", Version: "11", PublicDir: "public"})
+	installStoreFramework(t, &Framework{Name: "lumen", Label: "Lumen", Version: "10", PublicDir: "public", Create: create})
+
+	got, ok := GetFrameworkForScaffold("lumen", "")
+	if !ok {
+		t.Fatal("GetFrameworkForScaffold(lumen): not found")
+	}
+	if got.Create != create {
+		t.Errorf("Create = %q, want %q", got.Create, create)
+	}
+	if got.Version != "10" {
+		t.Errorf("Version = %q, want the newest major that scaffolds, 10", got.Version)
+	}
+}
+
+// A pinned major is the one asked for. Answering it with an older skeleton would
+// lay down a project of a different major than the one requested.
+func TestGetFrameworkForScaffold_KeepsAPinnedMajorThatCannotScaffold(t *testing.T) {
+	setConfigDir(t)
+
+	installStoreFramework(t, &Framework{Name: "lumen", Label: "Lumen", Version: "11", PublicDir: "public"})
+	installStoreFramework(t, &Framework{Name: "lumen", Label: "Lumen", Version: "10", PublicDir: "public",
+		Create: "composer create-project laravel/lumen:^10.0"})
+
+	got, ok := GetFrameworkForScaffold("lumen", "11")
+	if !ok {
+		t.Fatal("GetFrameworkForScaffold(lumen, 11): not found")
+	}
+	if got.Create != "" {
+		t.Errorf("Create = %q, want none: major 11 ships no skeleton", got.Create)
+	}
+}
+
 // An unreachable store leaves the built-in as the scaffold definition, so
 // `lerd new` still works offline.
 func TestGetFrameworkForScaffold_FallsBackToBuiltin(t *testing.T) {
