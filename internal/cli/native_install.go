@@ -67,6 +67,11 @@ func unpackNativePHP(stage, version, patch string) error {
 			return err
 		}
 	}
+	// SPX serves its control panel from files rather than from the extension.
+	// Installed once rather than per version: the panel is the same whichever
+	// PHP is running, and the ini that points at it names one directory.
+	installSpxWebUI(stage)
+
 	// Stamped last: the stamp is only true once every file it describes is in
 	// place, and it is ignored anyway when it predates the binary beside it.
 	return tools.WriteStamp(nativeTool(version), patch)
@@ -142,4 +147,30 @@ func ensureNativePHPInstalled(pins *pinnedTools, version string, w io.Writer) er
 	feedback.Line("php " + version + " has no native build installed yet")
 	_, err := installNativePHP(pins, version, w)
 	return err
+}
+
+// installSpxWebUI moves the SPX control panel out of an extracted build. A
+// build that carries none leaves whatever is already installed alone, so an
+// older panel keeps working rather than disappearing.
+func installSpxWebUI(stage string) {
+	src := filepath.Join(stage, "share", "php-spx", "assets", "web-ui")
+	if _, err := os.Stat(filepath.Join(src, "index.html")); err != nil {
+		return
+	}
+	dest := config.SpxWebUIDir()
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return
+	}
+	old := dest + ".old"
+	os.RemoveAll(old)
+	if _, err := os.Stat(dest); err == nil {
+		if err := os.Rename(dest, old); err != nil {
+			return
+		}
+	}
+	if err := os.Rename(src, dest); err != nil {
+		os.Rename(old, dest) //nolint:errcheck
+		return
+	}
+	os.RemoveAll(old)
 }

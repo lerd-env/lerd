@@ -115,6 +115,7 @@ func overrideIniWith(devtoolsSO string) string {
 		"lerd.devtools_flag=" + filepath.Join(assets, "enabled.flag") + "\n" +
 		// SPX writes its profiles to a path that exists only inside the image.
 		"spx.data_dir=" + config.SpxDataDir() + "\n" +
+		spxWebUILine() +
 		devtoolsLine(devtoolsSO)
 }
 
@@ -337,3 +338,16 @@ func ListInstalled() []string {
 // build. Shared so the CLI that installs it and the dashboard that reports on
 // it cannot disagree about what the stamp beside the binary is called.
 func ToolName(version string) string { return "php-native-" + version }
+
+// spxWebUILine points SPX at the control panel installed on the host. SPX ships
+// the panel as files rather than inside the extension, and the path it was
+// built with is inside the image, so without this it answers its own dashboard
+// with "File not found.". Emitted only when the files are actually there:
+// naming an empty directory would replace a wrong path with a missing one.
+func spxWebUILine() string {
+	dir := config.SpxWebUIDir()
+	if _, err := os.Stat(filepath.Join(dir, "index.html")); err != nil {
+		return ""
+	}
+	return "spx.http_ui_assets_dir=" + dir + "\n"
+}

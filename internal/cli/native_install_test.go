@@ -125,3 +125,42 @@ func TestNativeUpdatePlan(t *testing.T) {
 		})
 	}
 }
+
+// SPX ships its control panel as files beside the binary. They are installed
+// once, not per version, since the panel is the same for all of them and the
+// ini names a single directory.
+func TestUnpackNativePHPInstallsTheSPXWebUI(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stage := stageNativeBuild(t, "8.4")
+	ui := filepath.Join(stage, "share", "php-spx", "assets", "web-ui")
+	if err := os.MkdirAll(ui, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ui, "index.html"), []byte("panel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := unpackNativePHP(stage, "8.4", "8.4.25"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(config.SpxWebUIDir(), "index.html")); err != nil {
+		t.Errorf("the SPX control panel was not installed: %v", err)
+	}
+}
+
+// A build that carries no panel must not wipe the one already installed.
+func TestUnpackNativePHPKeepsAnExistingSPXWebUI(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	if err := os.MkdirAll(config.SpxWebUIDir(), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	kept := filepath.Join(config.SpxWebUIDir(), "index.html")
+	if err := os.WriteFile(kept, []byte("panel"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := unpackNativePHP(stageNativeBuild(t, "8.4"), "8.4", "8.4.25"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(kept); err != nil {
+		t.Errorf("a build without the panel removed the installed one: %v", err)
+	}
+}
