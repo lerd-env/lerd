@@ -96,4 +96,26 @@ describe('palettes store', () => {
     expect(get(palettes).some((p) => p.id === 'lagoon')).toBe(true);
     expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
   });
+
+  it('adopts a theme another device switched to, without writing it back', async () => {
+    const fetchMock = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    // initTheme paints, so it needs the media query the jsdom default lacks.
+    (window as unknown as { matchMedia: unknown }).matchMedia = vi.fn(() => ({
+      matches: false,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    }));
+    const { watchThemeChanges } = await import('./palettes');
+    const { initTheme, palette } = await import('./theme');
+    const { wsMessage } = await import('$lib/ws');
+    initTheme();
+    const stop = watchThemeChanges();
+
+    wsMessage.set({ type: 'theme', theme: 'gruvbox' });
+
+    expect(get(palette)).toBe('gruvbox');
+    expect(fetchMock).not.toHaveBeenCalled();
+    stop();
+  });
 });

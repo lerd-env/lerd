@@ -166,3 +166,34 @@ func TestHandleSettingsThemeRefusesJunk(t *testing.T) {
 		t.Errorf("cfg.UI.Theme = %q, want empty", cfg.UI.Theme)
 	}
 }
+
+func TestAssembleSnapshot_IncludesThemeField(t *testing.T) {
+	frame := assembleSnapshot(nil, nil, nil, nil, nil, nil, nil, nil, []byte(`"nord"`), []string{"theme"})
+	var decoded struct {
+		Type  string `json:"type"`
+		Theme string `json:"theme"`
+	}
+	if err := json.Unmarshal(frame, &decoded); err != nil {
+		t.Fatalf("decode %s: %v", frame, err)
+	}
+	if decoded.Type != "theme" || decoded.Theme != "nord" {
+		t.Errorf("frame = %s", frame)
+	}
+}
+
+func TestBroadcastThemeReachesEveryPeer(t *testing.T) {
+	b := &wsBroker{peers: make(map[chan wsMessage]struct{})}
+	one, two := b.add(), b.add()
+
+	b.broadcastTheme("gruvbox")
+
+	for i, ch := range []chan wsMessage{one, two} {
+		msg := <-ch
+		if len(msg.Kinds) != 1 || msg.Kinds[0] != "theme" {
+			t.Fatalf("peer %d kinds = %v", i, msg.Kinds)
+		}
+		if string(msg.Theme) != `"gruvbox"` {
+			t.Errorf("peer %d theme = %s", i, msg.Theme)
+		}
+	}
+}

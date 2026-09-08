@@ -7,6 +7,7 @@ import {
 } from '$lib/palettes';
 import { writable } from 'svelte/store';
 import { adoptTheme, palettes } from '$stores/theme';
+import { wsMessage } from '$lib/ws';
 import { m } from '../paraglide/messages.js';
 
 // Theme files the daemon could not parse. They stay visible so the author of a
@@ -70,4 +71,14 @@ export async function removePalette(id: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// A switch on one device reaches the others over the socket they already hold
+// open, so two dashboards side by side never disagree about what lerd looks
+// like. adoptTheme rather than palette.set, so the value that arrived is not
+// written straight back to the config it came from.
+export function watchThemeChanges() {
+  return wsMessage.subscribe((msg) => {
+    if (msg?.theme !== undefined) adoptTheme(msg.theme);
+  });
 }

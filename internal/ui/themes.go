@@ -99,6 +99,7 @@ func handleSettingsTheme(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}
+	broker.broadcastTheme(id)
 	writeJSON(w, map[string]any{"ok": true, "theme": id})
 }
 

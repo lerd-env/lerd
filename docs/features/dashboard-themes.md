@@ -6,8 +6,9 @@ and the theme in **System → lerd → Theme**.
 
 The theme is stored in `~/.config/lerd/config.yaml` under `ui.theme`, so every
 device that opens the dashboard shows the same lerd, a phone on the LAN included.
-The light/dark mode stays per browser, since that follows the room you are
-sitting in rather than the install.
+Switching it on one device repaints the others straight away, over the socket
+they already hold open, with no reload. The light/dark mode stays per browser,
+since that follows the room you are sitting in rather than the install.
 
 ## Built-in themes
 

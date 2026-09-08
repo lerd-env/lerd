@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"net/http"
 	"sync"
 
@@ -61,6 +62,7 @@ type wsMessage struct {
 	DevtoolsStatus   []byte
 	ProfilerStatus   []byte
 	Notification     []byte
+	Theme            []byte
 }
 
 var broker = &wsBroker{peers: make(map[chan wsMessage]struct{})}
@@ -98,6 +100,18 @@ func (b *wsBroker) hasPeers() bool {
 // the payload's own `kind` field (mail, worker_failed, op_done, …).
 func (b *wsBroker) broadcastNotification(payload []byte) {
 	b.broadcast(wsMessage{Kinds: []string{"notification"}, Notification: payload})
+}
+
+// broadcastTheme tells every open dashboard which theme the config now holds,
+// so a switch on one device repaints the others rather than waiting for their
+// next load. It rides the same inline path as a notification: the payload is
+// one string, and rebuilding a snapshot to carry it would be all cost.
+func (b *wsBroker) broadcastTheme(id string) {
+	payload, err := json.Marshal(id)
+	if err != nil {
+		return
+	}
+	b.broadcast(wsMessage{Kinds: []string{"theme"}, Theme: payload})
 }
 
 func (b *wsBroker) broadcast(msg wsMessage) {
