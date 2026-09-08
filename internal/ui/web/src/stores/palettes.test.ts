@@ -16,7 +16,7 @@ describe('palettes store', () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(
         JSON.stringify({
-          themes: [{ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' }],
+          themes: [{ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' }],
           errors: [{ file: 'broken.yaml', error: 'accent: not a hex colour' }]
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
@@ -29,8 +29,27 @@ describe('palettes store', () => {
     await loadPalettes();
 
     expect(get(palettes)).toHaveLength(BUILTIN_PALETTES.length + 1);
-    expect(get(palettes).at(-1)).toMatchObject({ id: 'ocean', accent: '#3b7ea1', source: 'user' });
+    expect(get(palettes).at(-1)).toMatchObject({ id: 'lagoon', accent: '#3b7ea1', source: 'user' });
     expect(get(paletteErrors)).toHaveLength(1);
+  });
+
+  it('lets a file replace the built-in it is named after', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ themes: [{ id: 'nord', name: 'My Nord', accent: '#112233' }] }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ) as unknown as typeof fetch;
+    const { loadPalettes } = await import('./palettes');
+    const { palettes } = await import('./theme');
+    const { BUILTIN_PALETTES } = await import('$lib/palettes');
+
+    await loadPalettes();
+
+    const nord = get(palettes).filter((p) => p.id === 'nord');
+    expect(nord).toHaveLength(1);
+    expect(nord[0].name).toBe('My Nord');
+    expect(get(palettes)).toHaveLength(BUILTIN_PALETTES.length);
   });
 
   it('drops a theme the daemon sent with an unusable colour', async () => {
@@ -58,14 +77,14 @@ describe('palettes store', () => {
     ) as unknown as typeof fetch;
     const { importPalette } = await import('./palettes');
 
-    expect(await importPalette('ocean', 'name: Ocean')).toBe('accent: not a hex colour');
+    expect(await importPalette('lagoon', 'name: Lagoon')).toBe('accent: not a hex colour');
   });
 
   it('reloads the list after an import succeeds', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (init?.method === 'POST') return new Response(JSON.stringify({ ok: true }), { status: 200 });
       return new Response(
-        JSON.stringify({ themes: [{ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' }] }),
+        JSON.stringify({ themes: [{ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' }] }),
         { status: 200, headers: { 'Content-Type': 'application/json' } }
       );
     });
@@ -73,8 +92,8 @@ describe('palettes store', () => {
     const { importPalette } = await import('./palettes');
     const { palettes } = await import('./theme');
 
-    expect(await importPalette('ocean', 'name: Ocean\naccent: "#3b7ea1"')).toBe('');
-    expect(get(palettes).some((p) => p.id === 'ocean')).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(await importPalette('lagoon', 'name: Lagoon\naccent: "#3b7ea1"')).toBe('');
+    expect(get(palettes).some((p) => p.id === 'lagoon')).toBe(true);
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(true);
   });
 });

@@ -1337,6 +1337,7 @@
   "system_theme_importNameLabel": "名称",
   "system_theme_importTitle": "导入主题",
   "system_theme_remove": "删除主题",
+  "system_theme_removeConfirm": "删除",
   "system_theme_title": "主题",
   "system_title": "系统",
   "system_tld": "TLD",

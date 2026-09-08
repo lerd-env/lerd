@@ -1,4 +1,5 @@
 import { get, writable } from 'svelte/store';
+import { apiFetch } from '$lib/api';
 import {
   BUILTIN_PALETTES,
   DEFAULT_PALETTE_ID,
@@ -58,6 +59,16 @@ export const theme = writable<Theme>('auto');
 export const palette = writable<string>(DEFAULT_PALETTE_ID);
 export const palettes = writable<Palette[]>(BUILTIN_PALETTES);
 
+// The theme the config is known to hold, so a change made here can be told
+// apart from the config's own value arriving.
+let saved = DEFAULT_PALETTE_ID;
+
+// adoptTheme takes the choice the daemon reported without writing it back.
+export function adoptTheme(id: string) {
+  saved = id;
+  palette.set(id);
+}
+
 export function initTheme() {
   const initial = read();
   theme.set(initial);
@@ -67,9 +78,17 @@ export function initTheme() {
     localStorage.setItem(KEY, t);
     apply(t);
   });
+  saved = get(palette);
   palette.subscribe((p) => {
     localStorage.setItem(PALETTE_KEY, p);
     apply(get(theme));
+    // The config is the source of truth, so a choice made here is written back.
+    // Only a real change is sent: adoptTheme moves this mark first, so the value
+    // read out of the config on load is never echoed straight back to it.
+    if (p !== saved) {
+      saved = p;
+      void saveTheme(p);
+    }
   });
   // Themes arrive after the first paint, and one of them may be the chosen
   // one, so a new list has to repaint rather than wait for the next mode flip.
@@ -79,5 +98,15 @@ export function initTheme() {
   // its current value is a no-op that never notifies subscribers.
   window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
     apply(get(theme));
+  });
+}
+
+function saveTheme(id: string) {
+  return apiFetch('/api/settings/theme', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ theme: id })
+  }).catch(() => {
+    /* the browser keeps its own copy either way */
   });
 }

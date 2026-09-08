@@ -79,7 +79,7 @@ describe('theme store', () => {
   it('repaints when a theme arrives from the daemon after the first paint', async () => {
     mockMatchMedia(false);
     localStorage.setItem('lerd-theme', 'light');
-    localStorage.setItem('lerd-palette', 'ocean');
+    localStorage.setItem('lerd-palette', 'lagoon');
     const { initTheme, palettes } = await import('./theme');
     const { BUILTIN_PALETTES, resolvePalette } = await import('$lib/palettes');
     initTheme();
@@ -87,7 +87,7 @@ describe('theme store', () => {
 
     palettes.set([
       ...BUILTIN_PALETTES,
-      resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!
+      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' })!
     ]);
     expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#3b7ea1');
   });
@@ -112,6 +112,21 @@ describe('theme store', () => {
     media.setDark(true);
     expect(meta()).toBe('#d98d84');
     expect(manifest()).toContain('background_color=%23111113');
+  });
+
+  it('writes a choice back to the config, but not the one the config gave it', async () => {
+    mockMatchMedia(false);
+    const fetchMock = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { initTheme, palette, adoptTheme } = await import('./theme');
+    initTheme();
+
+    adoptTheme('nord');
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    palette.set('muted');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls[0][0]).toContain('/api/settings/theme');
   });
 
   it('explicit dark ignores the system preference', async () => {

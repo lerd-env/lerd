@@ -50,7 +50,8 @@ export const DEFAULT_PALETTE_ID = 'lerd';
 // built-in #ff2d20 and its #e02419 hover.
 const HOVER_STEP = 0.12;
 
-// The editor schemes are their published palettes. The desktop ones are read
+// lerd, muted and Ocean are the dashboard's own. The editor schemes are their
+// published palettes. The desktop ones are read
 // from what those desktops actually ship, not from memory of them: Breeze from
 // Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
 // macOS from Apple's documented system blue and window background. All three
@@ -80,6 +81,19 @@ export const BUILTIN_PALETTES: Palette[] = [
     card: '#1a1a1c',
     border: '#2a2a2d',
     muted: '#45454a',
+    source: 'builtin'
+  },
+  {
+    id: 'ocean',
+    name: 'Ocean',
+    accent: '#2f6a89',
+    accentHover: '#275872',
+    accentDark: '#5fa8cc',
+    accentHoverDark: '#7cbcda',
+    bg: '#0d1418',
+    card: '#131e24',
+    border: '#1d2c34',
+    muted: '#33474f',
     source: 'builtin'
   },
   {

@@ -1,8 +1,13 @@
 # Dashboard themes
 
-The dashboard ships eleven themes and takes as many of your own as you care to
+The dashboard ships twelve themes and takes as many of your own as you care to
 write. A theme is independent of light/dark: you pick the mode in the icon rail,
-and the theme in **System → lerd → Theme**. Both are remembered per browser.
+and the theme in **System → lerd → Theme**.
+
+The theme is stored in `~/.config/lerd/config.yaml` under `ui.theme`, so every
+device that opens the dashboard shows the same lerd, a phone on the LAN included.
+The light/dark mode stays per browser, since that follows the room you are
+sitting in rather than the install.
 
 ## Built-in themes
 
@@ -10,6 +15,7 @@ and the theme in **System → lerd → Theme**. Both are remembered per browser.
 |---|---|---|
 | `lerd` | the bright brand red | `#0d0d0d` |
 | `muted` | a desaturated brick | `#111113` |
+| Ocean | a calm steel blue | `#0d1418` |
 | Solarized Dark | Solarized blue | `#002b36` |
 | Monokai | Monokai pink | `#272822` |
 | Cobalt | Cobalt orange | `#193549` |
@@ -36,19 +42,19 @@ in dark mode, and in light mode you get their accent on the usual white.
 ## Writing your own
 
 Drop a YAML file into `~/.config/lerd/themes/`. The file name is the theme's id,
-so `ocean.yaml` becomes the theme `ocean`. Only `name` and `accent` are
+so `lagoon.yaml` becomes the theme `lagoon`. Only `name` and `accent` are
 required; every other tone is derived from the accent, and the surfaces fall
 back to the built-in ones.
 
 ```yaml
-name: Ocean
+name: Lagoon
 accent: "#3b7ea1"
 ```
 
 The full set of fields:
 
 ```yaml
-name: Ocean                 # what the picker shows
+name: Lagoon                # what the picker shows
 accent: "#3b7ea1"           # buttons, active tabs, links, focus rings (light mode)
 accent_hover: "#336b8a"     # the accent's hover tone (light mode)
 accent_dark: "#7fb6d4"      # the accent in dark mode
@@ -65,6 +71,9 @@ value is handed to the browser as a custom property, and only a literal colour
 may come out of a file and decide how the page paints. The four surface fields
 apply to dark mode only, where light mode draws on white and the standard greys.
 
+A file named after a built-in replaces it rather than appearing twice, so you can
+keep the name and change the colours.
+
 Reload the dashboard and the theme appears in the picker. A file with a mistake
 in it is listed under the picker with the reason, rather than quietly missing.
 
@@ -72,7 +81,7 @@ in it is listed under the picker with the reason, rather than quietly missing.
 
 **System → lerd → Import theme** takes a file or pasted YAML and writes it into
 `~/.config/lerd/themes/` for you, then selects it. The trash icon beside a theme
-removes its file.
+asks before it deletes the file.
 
 ## Installed as an app
 

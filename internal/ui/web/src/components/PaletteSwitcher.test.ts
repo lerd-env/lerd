@@ -31,11 +31,11 @@ describe('PaletteSwitcher', () => {
   it('names a user theme by its own name', async () => {
     palettes.set([
       ...BUILTIN_PALETTES,
-      resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!
+      resolvePalette({ id: 'lagoon', name: 'Lagoon', accent: '#3b7ea1' })!
     ]);
     const { getByRole, getByText } = render(PaletteSwitcher);
     await fireEvent.click(getByRole('button'));
 
-    expect(getByText('Ocean')).toBeInTheDocument();
+    expect(getByText('Lagoon')).toBeInTheDocument();
   });
 });

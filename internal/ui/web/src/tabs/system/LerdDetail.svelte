@@ -51,6 +51,9 @@
 
   const userPalettes = $derived($palettes.filter((p) => p.source === 'user'));
   let importThemeOpen = $state(false);
+  // Removing a theme deletes the file, and one stray click on a row that is only
+  // a swatch and a name is too easy. The row asks first.
+  let removingPalette = $state('');
 
   let idleBusy = $state(false);
   let idleMinutesInput = $state(30);
@@ -253,14 +256,29 @@
             <span class="font-mono">{p.id}</span>
           </span>
           {#if $accessMode.localControl}
-            <button
-              type="button"
-              onclick={() => removePalette(p.id)}
-              class="text-gray-400 hover:text-lerd-red transition-colors"
-              title={m.system_theme_remove()}
-            >
-              <Icon name="trash" class="w-3.5 h-3.5" />
-            </button>
+            {#if removingPalette === p.id}
+              <span class="flex items-center gap-2">
+                <button
+                  type="button"
+                  onclick={() => { removePalette(p.id); removingPalette = ''; }}
+                  class="font-medium text-red-600 dark:text-red-400 hover:underline"
+                >{m.system_theme_removeConfirm()}</button>
+                <button
+                  type="button"
+                  onclick={() => (removingPalette = '')}
+                  class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                >{m.common_cancel()}</button>
+              </span>
+            {:else}
+              <button
+                type="button"
+                onclick={() => (removingPalette = p.id)}
+                class="text-gray-400 hover:text-lerd-red transition-colors"
+                title={m.system_theme_remove()}
+              >
+                <Icon name="trash" class="w-3.5 h-3.5" />
+              </button>
+            {/if}
           {/if}
         </div>
       {/each}

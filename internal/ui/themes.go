@@ -3,6 +3,7 @@ package ui
 import (
 	"encoding/json"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
@@ -66,3 +67,42 @@ func manifestColor(v, fallback string) string {
 	}
 	return fallback
 }
+
+// handleSettingsTheme persists which theme the dashboard is on. It lives in the
+// global config rather than in the browser so every device that opens the
+// dashboard agrees on what lerd looks like; the light/dark mode stays local,
+// since that follows the room rather than the install.
+func handleSettingsTheme(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Theme string `json:"theme"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "invalid body"})
+		return
+	}
+	id := strings.TrimSpace(body.Theme)
+	if id != "" && !validThemeName.MatchString(id) {
+		writeJSON(w, map[string]any{"ok": false, "error": "invalid theme name"})
+		return
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "loading config"})
+		return
+	}
+	cfg.UI.Theme = id
+	if err := config.SaveGlobal(cfg); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "theme": id})
+}
+
+// validThemeName is the shape a theme id may take, whether it names a built-in
+// or a file. The value is written to the config and handed back to every client,
+// so it is kept to the same slug a file could be called.
+var validThemeName = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*$`)

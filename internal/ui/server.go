@@ -308,6 +308,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/worker-mode", withCORS(handleSettingsWorkerMode))
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
+	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
@@ -5391,6 +5392,7 @@ type SettingsResponse struct {
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
 	TrayEnabled               bool     `json:"tray_enabled"`
+	Theme                     string   `json:"theme"` // dashboard colour theme id, empty = the default
 }
 
 func handleSettings(w http.ResponseWriter, _ *http.Request) {
@@ -5401,6 +5403,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	dnsEnabled := true
 	startOnOpen := false
 	trayEnabled := true
+	theme := ""
 	var dnsUpstream []string
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
@@ -5410,6 +5413,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		dnsUpstream = cfg.DNS.Upstream
 		startOnOpen = cfg.Autostart.OnDashboardOpen
 		trayEnabled = cfg.IsTrayEnabled()
+		theme = cfg.UI.Theme
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
@@ -5422,6 +5426,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		DNSUpstream:               dnsUpstream,
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
 		TrayEnabled:               trayEnabled,
+		Theme:                     theme,
 	})
 }
 

@@ -84,6 +84,13 @@ host_proxy:
                           # "start this command on your host?" confirmation.
                           # Default false so a command from a cloned repo is
                           # never run unconfirmed. See usage/host-proxy.md.
+ui:
+  theme: nord             # optional. The dashboard colour theme, by id: a built-in
+                          # one or a file in ~/.config/lerd/themes. It lives here
+                          # rather than in the browser so every device that opens
+                          # the dashboard shows the same lerd. Empty means the
+                          # default theme. Set from the dashboard's System page.
+                          # See features/dashboard-themes.md.
 tray:
   disabled: false         # optional. Set true (or run lerd tray off) to keep the
                           # system tray applet out of lerd start and lerd install,

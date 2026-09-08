@@ -117,3 +117,52 @@ func TestManifestColorAcceptsOnlyHex(t *testing.T) {
 		}
 	}
 }
+
+func TestHandleSettingsThemePersists(t *testing.T) {
+	isolateThemesDir(t)
+
+	body, _ := json.Marshal(map[string]string{"theme": "nord"})
+	rec := httptest.NewRecorder()
+	handleSettingsTheme(rec, httptest.NewRequest(http.MethodPost, "/api/settings/theme", bytes.NewReader(body)))
+
+	if !strings.Contains(rec.Body.String(), "\"ok\":true") {
+		t.Fatalf("expected ok=true, got %s", rec.Body.String())
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.UI.Theme != "nord" {
+		t.Errorf("cfg.UI.Theme = %q, want nord", cfg.UI.Theme)
+	}
+}
+
+func TestHandleSettingsThemeAcceptsTheDefaultBack(t *testing.T) {
+	isolateThemesDir(t)
+
+	for _, want := range []string{"nord", ""} {
+		body, _ := json.Marshal(map[string]string{"theme": want})
+		rec := httptest.NewRecorder()
+		handleSettingsTheme(rec, httptest.NewRequest(http.MethodPost, "/api/settings/theme", bytes.NewReader(body)))
+		cfg, _ := config.LoadGlobal()
+		if cfg.UI.Theme != want {
+			t.Fatalf("cfg.UI.Theme = %q, want %q", cfg.UI.Theme, want)
+		}
+	}
+}
+
+func TestHandleSettingsThemeRefusesJunk(t *testing.T) {
+	isolateThemesDir(t)
+
+	body, _ := json.Marshal(map[string]string{"theme": "../../etc/passwd"})
+	rec := httptest.NewRecorder()
+	handleSettingsTheme(rec, httptest.NewRequest(http.MethodPost, "/api/settings/theme", bytes.NewReader(body)))
+
+	if !strings.Contains(rec.Body.String(), "\"ok\":false") {
+		t.Fatalf("expected ok=false, got %s", rec.Body.String())
+	}
+	cfg, _ := config.LoadGlobal()
+	if cfg.UI.Theme != "" {
+		t.Errorf("cfg.UI.Theme = %q, want empty", cfg.UI.Theme)
+	}
+}

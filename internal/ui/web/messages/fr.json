@@ -1337,6 +1337,7 @@
   "system_theme_importNameLabel": "Nom",
   "system_theme_importTitle": "Importer un thème",
   "system_theme_remove": "Supprimer le thème",
+  "system_theme_removeConfirm": "Supprimer",
   "system_theme_title": "Thème",
   "system_title": "Système",
   "system_tld": "TLD",
