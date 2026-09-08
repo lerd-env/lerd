@@ -4,13 +4,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Every chrome tone goes through a second custom property so the chosen theme
+   can move it at runtime (see $stores/theme). The indirection is what makes the
+   override reach the whole stylesheet: a utility with an opacity modifier
+   (bg-lerd-red/10) inlines the theme value rather than referencing it, and a
+   literal hex there could never follow the theme. The fallbacks are the default
+   theme, so the stylesheet stands on its own before any script runs. */
 @theme {
-  --color-lerd-red: #ff2d20;
-  --color-lerd-redhov: #e02419;
-  --color-lerd-bg: #0d0d0d;
-  --color-lerd-card: #161616;
-  --color-lerd-border: #262626;
-  --color-lerd-muted: #404040;
+  --color-lerd-red: var(--lerd-accent, #ff2d20);
+  --color-lerd-redhov: var(--lerd-accent-hover, #e02419);
+  --color-lerd-bg: var(--lerd-bg, #0d0d0d);
+  --color-lerd-card: var(--lerd-card, #161616);
+  --color-lerd-border: var(--lerd-border, #262626);
+  --color-lerd-muted: var(--lerd-muted, #404040);
 
   --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
 }
@@ -285,6 +291,16 @@ button {
   height: 100%;
   fill: currentColor;
   stroke: none;
+}
+
+/* A theme swatch shows the tone the dashboard would actually paint, and a dark
+   scheme's accent is not the same colour in both modes. Same shape as
+   .mark-tint: the value arrives as a custom property and CSS picks per mode. */
+.palette-swatch {
+  background-color: var(--swatch);
+}
+.dark .palette-swatch {
+  background-color: var(--swatch-dark);
 }
 
 /* A framework mark sits inline beside its label. Inside a badge it takes the

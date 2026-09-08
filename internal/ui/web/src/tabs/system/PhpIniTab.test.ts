@@ -18,7 +18,8 @@ vi.mock('$lib/monaco', () => ({
         defineTheme: () => {}
       }
     }),
-  lerdThemeName: () => 'lerd-dark'
+  lerdThemeName: () => 'lerd-dark',
+  applyEditorAccent: () => {}
 }));
 
 const { getPhpIni, loadPhpIniBackups, loadPhpIniBackupContent } = vi.hoisted(() => ({

@@ -700,3 +700,8 @@ func ContainerHostsFile() string {
 func BrowserHostsFile() string {
 	return filepath.Join(DataDir(), "browser-hosts")
 }
+
+// ThemesDir returns the directory for user-defined dashboard theme YAML files.
+func ThemesDir() string {
+	return filepath.Join(ConfigDir(), "themes")
+}

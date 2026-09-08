@@ -28,7 +28,11 @@ vi.mock('$lib/monaco', () => {
       defineTheme: () => {}
     }
   };
-  return { loadMonaco: () => Promise.resolve(monaco), lerdThemeName: () => 'lerd-dark' };
+  return {
+    loadMonaco: () => Promise.resolve(monaco),
+    lerdThemeName: () => 'lerd-dark',
+    applyEditorAccent: () => {}
+  };
 });
 
 const flush = () => new Promise((r) => setTimeout(r, 0));

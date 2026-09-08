@@ -28,6 +28,8 @@ export interface WsMessage {
   devtools_status?: unknown;
   profiler_status?: unknown;
   notification?: NotificationEvent;
+  // The theme the config now holds, sent when another device switched it.
+  theme?: string;
 }
 
 export const wsConnected = writable<boolean>(false);
