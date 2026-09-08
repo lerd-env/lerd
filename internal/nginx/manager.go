@@ -976,6 +976,26 @@ type proxyVhostData struct {
 	UpstreamHost   string
 	UpstreamPort   int
 	RequestTimeout int
+	// CORS answers the browser preflight on this domain, and CORSOrigin is the
+	// nginx regex deciding which origins are answered for.
+	CORS       bool
+	CORSOrigin string
+}
+
+// tldLabel is what a TLD may look like before it is interpolated into the CORS
+// origin regex. It comes from user config, and a value that was never a TLD
+// would otherwise build a pattern matching more than the hosts lerd serves.
+var tldLabel = regexp.MustCompile(`^[a-zA-Z0-9]([a-zA-Z0-9.-]*[a-zA-Z0-9])?$`)
+
+// corsOriginPattern builds the regex matching every origin lerd serves: any host
+// under the configured TLD, on either scheme, with or without an explicit port,
+// since nginx's own ports are configurable. Reflecting these rather than
+// answering "*" keeps a page on the open internet from reading a local service.
+func corsOriginPattern(tld string) string {
+	if !tldLabel.MatchString(tld) {
+		tld = "test"
+	}
+	return `^https?://[^/]+\.` + strings.ReplaceAll(tld, ".", `\.`) + `(:[0-9]+)?$`
 }
 
 // renderProxyVhost is renderVhost for the LAN proxy template, which carries its
@@ -1028,8 +1048,9 @@ func GenerateProxyVhost(domain, upstreamHost string, upstreamPort int) error {
 // GenerateServiceProxyVhost writes the vhost that serves a service on its own
 // domain: HTTP when ssl is false, HTTPS with an HTTP redirect in front when it
 // is. It is the plain proxy vhost with TLS, kept separate so the LAN proxy above
-// keeps its narrower shape.
-func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ssl bool) error {
+// keeps its narrower shape. cors additionally answers the browser preflight, for
+// a service a page talks to directly rather than through the app.
+func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
 	if !ssl {
 		return GenerateProxyVhost(domain, upstreamHost, upstreamPort)
 	}
@@ -1046,6 +1067,8 @@ func GenerateServiceProxyVhost(domain, upstreamHost string, upstreamPort int, ss
 		UpstreamHost:   upstreamHost,
 		UpstreamPort:   upstreamPort,
 		RequestTimeout: resolveRequestTimeout("", ""),
+		CORS:           cors,
+		CORSOrigin:     corsOriginPattern(config.EffectiveTLD()),
 	})
 	if err != nil {
 		return err

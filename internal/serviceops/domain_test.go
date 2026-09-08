@@ -13,6 +13,7 @@ type domainCalls struct {
 	certs       []string
 	removedCert []string
 	vhosts      []string
+	cors        []bool
 	removed     []string
 	hosts       int
 	reloads     int
@@ -28,8 +29,9 @@ func stubDomainSeams(t *testing.T) *domainCalls {
 		rec.certs = append(rec.certs, domain)
 		return nil
 	}
-	domainVhostFn = func(domain, upstreamHost string, upstreamPort int, ssl bool) error {
+	domainVhostFn = func(domain, upstreamHost string, upstreamPort int, ssl, cors bool) error {
 		rec.vhosts = append(rec.vhosts, fmt.Sprint(domain, "|", upstreamHost, "|", upstreamPort, "|", ssl))
+		rec.cors = append(rec.cors, cors)
 		return nil
 	}
 	domainRemoveVhostFn = func(domain string) error {
