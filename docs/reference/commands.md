@@ -27,6 +27,7 @@
 | `lerd status` | Health summary: DNS, nginx, PHP-FPM containers, watcher, services, cert expiry, LAN exposure and dashboard remote access; shows a notice if an update is available |
 | `lerd which` | Show resolved PHP version, Node version, document root, and nginx config for the current site |
 | `lerd about` | Show version, build info, and project URL |
+| `lerd version` | Print the installed version, the same line as `lerd --version` |
 | `lerd licenses` | Print the third-party license notices bundled with lerd, the copyright notices and license terms of every Go module linked into the binary and every npm package used to build the embedded dashboard |
 | `lerd man [page]` | Browse the built-in documentation in the terminal; pass a page name to jump directly (e.g. `lerd man sites`) |
 | `lerd tui` | Open a btop-style terminal dashboard with live site / service / worker status, per-site detail pane, inline domain and version editing, shell drop-in, log tailing, filter + sort, and global settings |
@@ -92,7 +93,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd unsecure [name]` | Remove TLS and switch back to HTTP, updates `APP_URL` in `.env` |
 | `lerd pause [name]` | Pause a site: stop workers (and custom container if applicable), replace vhost with landing page |
 | `lerd unpause [name]` | Resume a paused site: start container, restore vhost, restart workers |
-| `lerd restart [name]` | Restart the container for the current or named site (custom container or PHP-FPM) |
+| `lerd restart [name]` | Restart the container serving one site (custom container, FrankenPHP, PHP-FPM or dev server). Run it inside the site's directory or name the site; it does not restart lerd, for that use `lerd stop` then `lerd start` |
 | `lerd rebuild [name]` | Rebuild the custom container image from Containerfile and restart |
 | `lerd nginx show [site]` | Print the site's custom nginx override; `--path` prints the file path instead of its content |
 | `lerd nginx edit [site]` | Open the override in `$EDITOR`, then validate it with `nginx -t` and reload on save |
