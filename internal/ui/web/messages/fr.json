@@ -1497,7 +1497,7 @@
   "worktreeMgr_removing": "Suppression…",
   "worktreeMgr_runMigrations": "Lancer les migrations après la création",
   "worktreeMgr_title": "Gérer les worktrees",
-  "sites_controls_nativeRuntime": "PHP natif",
+  "sites_controls_nativeRuntime": "PHP",
   "sites_controls_nativeRuntimeOnTitle": "PHP s'exécute sur l'hôte pour ce site. Cliquez pour le replacer dans un conteneur.",
   "sites_controls_nativeRuntimeOffTitle": "Exécuter le PHP de ce site sur l'hôte plutôt que dans un conteneur (bêta, macOS uniquement). Plus rapide en charge ; dump()/dd() nécessite le mode conteneur.",
   "sites_controls_runtimeToggleFailed": "Impossible de changer d'environnement d'exécution : {error}",
@@ -1514,11 +1514,13 @@
   "system_phpRuntime_applying": "Application…",
   "system_phpRuntime_confirm": "Ceci réécrit le .env de chaque site, régénère les vhosts, vide les caches de configuration du framework et redémarre les workers. Les sites sont brièvement indisponibles.",
   "system_runtime_listLabel": "Exécution",
-  "sites_tabs_nativePhp": "PHP natif",
-  "dashboard_health_phpNative": "PHP natif",
+  "sites_tabs_nativePhp": "PHP",
+  "dashboard_health_phpNative": "PHP",
   "system_php_ext_nativeFixed": "L'environnement natif a ses extensions compilées dans le binaire, il n'y a donc pas de paquets à gérer ici. Passez à l'environnement conteneur si vous devez en ajouter un.",
   "system_php_ext_modulesHelpNative": "Rapporté par php -m depuis le binaire natif PHP {version}.",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
-  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
+  "system_php_updateBuild": "Update build",
+  "system_php_updateBuildTitle": "Download the newest published build for this version"
 }

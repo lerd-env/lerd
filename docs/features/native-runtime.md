@@ -1,4 +1,4 @@
-# Native PHP runtime (beta)
+# Native runtime (beta)
 
 On macOS your project lives on the host and is mounted into the Podman VM, so a containerised PHP crosses that boundary for every file it reads. The native runtime removes the boundary: PHP-FPM, the CLI, composer and the workers all run directly on the host, while nginx and the services stay in containers.
 

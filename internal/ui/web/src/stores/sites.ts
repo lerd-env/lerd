@@ -962,7 +962,7 @@ export function fpmContainer(s: Site): string {
 }
 
 export function fpmTabLabel(s: Site): string {
-  if (s.runtime === 'native') return 'Native PHP';
+  if (s.runtime === 'native') return 'PHP';
   if (s.custom_container) return 'Container';
   if (s.runtime === 'frankenphp') return 'FrankenPHP';
   if (s.runtime === 'fpm-custom') return 'Custom FPM';

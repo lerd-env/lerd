@@ -1497,7 +1497,7 @@
   "worktreeMgr_removing": "Se elimină…",
   "worktreeMgr_runMigrations": "Execută migrările după creare",
   "worktreeMgr_title": "Gestionează worktree-urile",
-  "sites_controls_nativeRuntime": "PHP nativ",
+  "sites_controls_nativeRuntime": "PHP",
   "sites_controls_nativeRuntimeOnTitle": "PHP rulează pe host pentru acest site. Apasă pentru a-l muta înapoi într-un container.",
   "sites_controls_nativeRuntimeOffTitle": "Rulează PHP-ul acestui site pe host în loc de container (beta, doar macOS). Mai rapid sub încărcare; dump()/dd() necesită modul container.",
   "sites_controls_runtimeToggleFailed": "Nu s-a putut schimba runtime-ul: {error}",
@@ -1514,11 +1514,13 @@
   "system_phpRuntime_applying": "Se aplică…",
   "system_phpRuntime_confirm": "Aceasta rescrie .env-ul fiecărui site, regenerează vhost-urile, șterge cache-urile de configurare ale framework-ului și repornește workerii. Site-urile sunt indisponibile pentru scurt timp.",
   "system_runtime_listLabel": "Runtime",
-  "sites_tabs_nativePhp": "PHP nativ",
-  "dashboard_health_phpNative": "PHP nativ",
+  "sites_tabs_nativePhp": "PHP",
+  "dashboard_health_phpNative": "PHP",
   "system_php_ext_nativeFixed": "Runtime-ul nativ are extensiile compilate în binar, așa că nu sunt pachete de gestionat aici. Treci la runtime-ul container dacă ai nevoie să adaugi unul.",
   "system_php_ext_modulesHelpNative": "Raportat de php -m din binarul nativ PHP {version}.",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
-  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
+  "system_php_updateBuild": "Update build",
+  "system_php_updateBuildTitle": "Download the newest published build for this version"
 }

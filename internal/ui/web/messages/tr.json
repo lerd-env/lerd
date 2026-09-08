@@ -1497,7 +1497,7 @@
   "worktreeMgr_removing": "Kaldırılıyor…",
   "worktreeMgr_runMigrations": "Oluşturduktan sonra migration'ları çalıştır",
   "worktreeMgr_title": "Worktree'leri yönet",
-  "sites_controls_nativeRuntime": "Yerel PHP",
+  "sites_controls_nativeRuntime": "PHP",
   "sites_controls_nativeRuntimeOnTitle": "Bu site için PHP ana makinede çalışıyor. Kapsayıcıya geri taşımak için tıklayın.",
   "sites_controls_nativeRuntimeOffTitle": "Bu sitenin PHP'sini kapsayıcı yerine ana makinede çalıştır (beta, yalnızca macOS). Yük altında daha hızlı; dump()/dd() kapsayıcı modunu gerektirir.",
   "sites_controls_runtimeToggleFailed": "Çalışma zamanı değiştirilemedi: {error}",
@@ -1514,11 +1514,13 @@
   "system_phpRuntime_applying": "Uygulanıyor…",
   "system_phpRuntime_confirm": "Bu, her sitenin .env dosyasını yeniden yazar, vhost'ları yeniden oluşturur, framework yapılandırma önbelleklerini siler ve işçileri yeniden başlatır. Siteler kısa süre erişilemez olur.",
   "system_runtime_listLabel": "Çalışma zamanı",
-  "sites_tabs_nativePhp": "Yerel PHP",
-  "dashboard_health_phpNative": "Yerel PHP",
+  "sites_tabs_nativePhp": "PHP",
+  "dashboard_health_phpNative": "PHP",
   "system_php_ext_nativeFixed": "Yerel çalışma zamanı uzantıları ikili dosyaya derlenmiş halde taşır, bu yüzden burada yönetilecek paket yoktur. Eklemeniz gerekirse kapsayıcı çalışma zamanına geçin.",
   "system_php_ext_modulesHelpNative": "Yerel PHP {version} ikili dosyasındaki php -m tarafından bildirildi.",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
-  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
+  "system_php_updateBuild": "Update build",
+  "system_php_updateBuildTitle": "Download the newest published build for this version"
 }

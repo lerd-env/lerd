@@ -1497,7 +1497,7 @@
   "worktreeMgr_removing": "Rimozione…",
   "worktreeMgr_runMigrations": "Esegui le migrazioni dopo la creazione",
   "worktreeMgr_title": "Gestisci worktree",
-  "sites_controls_nativeRuntime": "PHP nativo",
+  "sites_controls_nativeRuntime": "PHP",
   "sites_controls_nativeRuntimeOnTitle": "PHP viene eseguito sull'host per questo sito. Fai clic per riportarlo in un container.",
   "sites_controls_nativeRuntimeOffTitle": "Esegui il PHP di questo sito sull'host anziché in un container (beta, solo macOS). Più veloce sotto carico; dump()/dd() richiede la modalità container.",
   "sites_controls_runtimeToggleFailed": "Impossibile cambiare il runtime: {error}",
@@ -1514,11 +1514,13 @@
   "system_phpRuntime_applying": "Applicazione…",
   "system_phpRuntime_confirm": "Questo riscrive il .env di ogni sito, rigenera i vhost, svuota le cache di configurazione del framework e riavvia i worker. I siti sono brevemente non disponibili.",
   "system_runtime_listLabel": "Runtime",
-  "sites_tabs_nativePhp": "PHP nativo",
-  "dashboard_health_phpNative": "PHP nativo",
+  "sites_tabs_nativePhp": "PHP",
+  "dashboard_health_phpNative": "PHP",
   "system_php_ext_nativeFixed": "Il runtime nativo ha le estensioni compilate nel binario, quindi qui non ci sono pacchetti da gestire. Passa al runtime container se devi aggiungerne uno.",
   "system_php_ext_modulesHelpNative": "Riportato da php -m dal binario nativo PHP {version}.",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
-  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
+  "system_php_updateBuild": "Update build",
+  "system_php_updateBuildTitle": "Download the newest published build for this version"
 }

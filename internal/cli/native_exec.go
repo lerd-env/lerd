@@ -90,7 +90,7 @@ func nativeImageCommandRefusal(command string) error {
 	if err != nil || cfg.PHPRuntimeMode() != config.PHPRuntimeNative {
 		return nil
 	}
-	return fmt.Errorf("%s needs the container runtime: the native PHP has its extensions compiled in and no image to add packages to. Switch with 'lerd php:runtime container', or keep the site on a version whose native build already carries what you need", command)
+	return fmt.Errorf("%s needs the container runtime: PHP runs from a binary here, with its extensions compiled in and no image to add packages to. Switch with 'lerd php:runtime container', or keep the site on a version whose native build already carries what you need", command)
 }
 
 // nativeTinkerCommand builds the tinker invocation for the native runtime: the

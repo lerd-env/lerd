@@ -565,11 +565,11 @@ func runDoctorInto(w io.Writer, useColor bool) (DoctorReport, error) {
 				if pins.Tools[nativeTool(v)].Version == "" {
 					hint = "keep this version on the container runtime"
 				}
-				fail(fmt.Sprintf("native PHP %s", v), detail, hint)
+				fail(fmt.Sprintf("PHP %s", v), detail, hint)
 			case "warn":
-				warn(fmt.Sprintf("native PHP %s", v), detail+", run: lerd php:update "+v)
+				warn(fmt.Sprintf("PHP %s", v), detail+", run: lerd php:update "+v)
 			default:
-				ok(fmt.Sprintf("native PHP %s", v))
+				ok(fmt.Sprintf("PHP %s", v))
 			}
 		}
 		phpVersions = nil

@@ -1497,7 +1497,7 @@
   "worktreeMgr_removing": "Usuwanie…",
   "worktreeMgr_runMigrations": "Uruchom migracje po utworzeniu",
   "worktreeMgr_title": "Zarządzaj worktrees",
-  "sites_controls_nativeRuntime": "Natywny PHP",
+  "sites_controls_nativeRuntime": "PHP",
   "sites_controls_nativeRuntimeOnTitle": "PHP dla tej strony działa na hoście. Kliknij, aby przenieść go z powrotem do kontenera.",
   "sites_controls_nativeRuntimeOffTitle": "Uruchom PHP tej strony na hoście zamiast w kontenerze (beta, tylko macOS). Szybciej pod obciążeniem; dump()/dd() wymaga trybu kontenera.",
   "sites_controls_runtimeToggleFailed": "Nie udało się zmienić środowiska uruchomieniowego: {error}",
@@ -1514,11 +1514,13 @@
   "system_phpRuntime_applying": "Stosowanie…",
   "system_phpRuntime_confirm": "Spowoduje to ponowne zapisanie pliku .env każdej strony, wygenerowanie vhostów, wyczyszczenie pamięci podręcznej konfiguracji i ponowne uruchomienie workerów. Strony będą przez chwilę niedostępne.",
   "system_runtime_listLabel": "Środowisko",
-  "sites_tabs_nativePhp": "Natywny PHP",
-  "dashboard_health_phpNative": "Natywny PHP",
+  "sites_tabs_nativePhp": "PHP",
+  "dashboard_health_phpNative": "PHP",
   "system_php_ext_nativeFixed": "Natywne środowisko ma rozszerzenia wkompilowane w plik binarny, więc nie ma tu pakietów do zarządzania. Przełącz się na środowisko kontenerowe, jeśli musisz coś dodać.",
   "system_php_ext_modulesHelpNative": "Zgłoszone przez php -m z natywnego pliku binarnego PHP {version}.",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
   "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
-  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s)."
+  "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
+  "system_php_updateBuild": "Update build",
+  "system_php_updateBuildTitle": "Download the newest published build for this version"
 }

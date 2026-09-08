@@ -50,7 +50,7 @@ func runNativePHPUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if len(versions) == 0 {
-		feedback.Line("no native PHP versions installed")
+		feedback.Line("no PHP versions installed")
 		return nil
 	}
 	w := cmd.OutOrStdout()

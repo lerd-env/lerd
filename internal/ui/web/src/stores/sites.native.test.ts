@@ -29,6 +29,6 @@ describe('native runtime', () => {
   it('a native site reports no fpm container and its own label', async () => {
     const { fpmContainer, fpmTabLabel } = await import('./sites');
     expect(fpmContainer({ domain: 'a.test', name: 'a', runtime: 'native', php_version: '8.4' })).toBe('');
-    expect(fpmTabLabel({ domain: 'a.test', runtime: 'native' })).toBe('Native PHP');
+    expect(fpmTabLabel({ domain: 'a.test', runtime: 'native' })).toBe('PHP');
   });
 });

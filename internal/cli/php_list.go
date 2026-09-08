@@ -56,7 +56,7 @@ func runPhpList(_ *cobra.Command, _ []string) error {
 // printPHPVersions renders an installed-versions list, marking the default.
 func printPHPVersions(versions []string, defaultVersion string) error {
 	if len(versions) == 0 {
-		fmt.Println("No native PHP versions installed.")
+		fmt.Println("No PHP versions installed.")
 		return nil
 	}
 	fmt.Println("Installed PHP versions:")
