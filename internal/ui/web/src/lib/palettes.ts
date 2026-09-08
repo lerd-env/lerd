@@ -50,6 +50,11 @@ export const DEFAULT_PALETTE_ID = 'lerd';
 // built-in #ff2d20 and its #e02419 hover.
 const HOVER_STEP = 0.12;
 
+// The editor schemes are their published palettes. The desktop ones are read
+// from what those desktops actually ship, not from memory of them: Breeze from
+// Plasma 6.7's BreezeDark.colors, Adwaita from libadwaita 1.9's named colours,
+// macOS from Apple's documented system blue and window background. All three
+// have been darkened since the values most write-ups still quote.
 export const BUILTIN_PALETTES: Palette[] = [
   {
     id: 'lerd',
@@ -162,36 +167,36 @@ export const BUILTIN_PALETTES: Palette[] = [
     accentHover: '#12556f',
     accentDark: '#3daee9',
     accentHoverDark: '#5fbdee',
-    bg: '#232629',
-    card: '#31363b',
-    border: '#3f454b',
-    muted: '#7f8c8d',
+    bg: '#141618',
+    card: '#202326',
+    border: '#292c30',
+    muted: '#3a3f45',
     source: 'builtin'
   },
   {
     id: 'adwaita',
     name: 'Adwaita',
-    accent: '#1a5fb4',
-    accentHover: '#164e94',
+    accent: '#1c71d8',
+    accentHover: '#1a5fb4',
     accentDark: '#3584e4',
-    accentHoverDark: '#5195e8',
-    bg: '#1e1e1e',
-    card: '#303030',
-    border: '#3d3d3d',
-    muted: '#77767b',
+    accentHoverDark: '#62a0ea',
+    bg: '#1d1d20',
+    card: '#252529',
+    border: '#2e2e32',
+    muted: '#39393d',
     source: 'builtin'
   },
   {
     id: 'macos',
     name: 'macOS',
-    accent: '#0057b8',
-    accentHover: '#00489b',
+    accent: '#0066cc',
+    accentHover: '#0052a3',
     accentDark: '#0a84ff',
     accentHoverDark: '#3d9dff',
     bg: '#1e1e1e',
-    card: '#2c2c2e',
-    border: '#38383a',
-    muted: '#98989d',
+    card: '#282828',
+    border: '#3a3a3a',
+    muted: '#4a4a4a',
     source: 'builtin'
   }
 ];

@@ -16,12 +16,17 @@ and the theme in **System → lerd → Theme**. Both are remembered per browser.
 | Dracula | Dracula purple | `#282a36` |
 | Nord | Nord frost | `#2e3440` |
 | Gruvbox Dark | Gruvbox orange | `#282828` |
-| Breeze | Plasma blue | `#232629` |
-| Adwaita | Adwaita blue | `#1e1e1e` |
+| Breeze | Plasma blue | `#141618` |
+| Adwaita | Adwaita blue | `#1d1d20` |
 | macOS | the system blue | `#1e1e1e` |
 
 `lerd` is the default. `muted` is there for anyone who finds the default red too
 sharp, especially on a bright screen.
+
+The desktop themes are taken from what those desktops ship today, not from the
+values most write-ups still quote: Breeze from Plasma 6.7's `BreezeDark.colors`,
+Adwaita from libadwaita 1.9's named colours, macOS from Apple's documented system
+blue and window background. All three have been darkened over the years.
 
 Each theme carries a light tone and a dark tone for its accent, so switching
 between light and dark keeps the colour readable on whichever surface the mode
