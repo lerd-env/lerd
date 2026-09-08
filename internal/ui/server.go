@@ -743,11 +743,18 @@ func buildStatus() StatusResponse {
 	nginxRunning := podman.Cache.Running("lerd-nginx")
 	watcherRunning := services.Mgr.IsActive("lerd-watcher")
 
-	versions, _ := phpPkg.ListInstalled()
+	versions, _ := phpPkg.InstalledForRuntime()
 	var phpStatuses []PHPStatus
+	native := nativeRuntimeActive()
+	// Loaded once rather than per version: the pins are what says whether a
+	// host build is behind, and they are the same for all of them.
+	var pins *tools.Manifest
+	if native {
+		pins = nativePins()
+	}
 	for _, v := range versions {
 		short := strings.ReplaceAll(v, ".", "")
-		running := phpVersionRunning(v, nativeRuntimeActive(),
+		running := phpVersionRunning(v, native,
 			func(string) bool { return podman.Cache.Running("lerd-php" + short + "-fpm") },
 			nativeListenerRunning)
 		xdebugMode := ""
@@ -756,11 +763,19 @@ func buildStatus() StatusResponse {
 			xdebugMode = cfg.GetXdebugMode(v)
 			ports = cfg.PHP.FPMPorts[v]
 		}
-		baseStale := false
-		if base := podman.BaseImageFreshness(v); base != nil {
-			baseStale = base.Stale
+		// The image and its base describe nothing that is serving under the
+		// native runtime, where the patch is the build on the host and an
+		// update is a newer one having been published.
+		patch, updateAvailable := "", false
+		if native {
+			patch, updateAvailable = nativePHPStatusFor(pins, v)
+		} else {
+			patch = podman.FPMPHPVersion(v)
+			if base := podman.BaseImageFreshness(v); base != nil {
+				updateAvailable = base.Stale
+			}
 		}
-		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: podman.FPMPHPVersion(v), Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports, UpdateAvailable: baseStale})
+		phpStatuses = append(phpStatuses, PHPStatus{Version: v, Patch: patch, Running: running, XdebugEnabled: xdebugMode != "", XdebugMode: xdebugMode, Ports: ports, UpdateAvailable: updateAvailable})
 	}
 
 	phpDefault := ""
@@ -4930,17 +4945,13 @@ func handlePHPVersionAction(w http.ResponseWriter, r *http.Request) {
 		}
 		writeJSON(w, map[string]any{"ok": true, "php_default": version})
 	case "start":
-		short := strings.ReplaceAll(version, ".", "")
-		unit := "lerd-php" + short + "-fpm"
-		if err := podman.StartUnit(unit); err != nil {
+		if err := startPHPVersion(nativeRuntimeActive(), version); err != nil {
 			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}
 		writeJSON(w, map[string]any{"ok": true})
 	case "stop":
-		short := strings.ReplaceAll(version, ".", "")
-		unit := "lerd-php" + short + "-fpm"
-		if err := podman.StopUnit(unit); err != nil {
+		if err := stopPHPVersion(nativeRuntimeActive(), version); err != nil {
 			writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
 			return
 		}

@@ -18,6 +18,7 @@
   import { sites, sitesByPhp } from '$stores/sites';
   import { xdebugOn, xdebugOff, XDEBUG_MODES, type XdebugMode } from '$stores/xdebug';
   import { openPhpRemoveModal, openPhpRebuildModal } from '$stores/modals';
+  import { phpRuntime, loadPHPRuntime } from '$stores/phpRuntime';
   import { notifyLocalInfo } from '$lib/notify';
   import { m } from '../../paraglide/messages.js';
 
@@ -33,6 +34,12 @@
   const xdebugEnabled = $derived(Boolean(fpm?.xdebug_enabled));
   const xdebugMode = $derived<XdebugMode>((fpm?.xdebug_mode as XdebugMode) || 'debug');
   const container = $derived('lerd-php' + version.replace('.', '') + '-fpm');
+  // Under the native runtime the version's output comes from the launchd pool
+  // on the host. Streaming the container instead reported it as not running,
+  // which is true and useless: nothing has served from it since the switch.
+  const logUnit = $derived(
+    $phpRuntime === 'native' ? 'lerd-native-php' + version.replace('.', '') : container
+  );
   const sitesUsing = $derived($sites.filter((s) => s.php_version === version).map((s) => s.domain));
   const baseUpdate = $derived(Boolean(fpm?.update_available));
 
@@ -180,7 +187,35 @@
     }
   });
 
+  // On the native runtime there is no image to rebuild and no container to
+  // enter, and an update is a newer build being published rather than a base
+  // image moving. Offering those actions there names work that cannot be done.
+  const native = $derived($phpRuntime === 'native');
+
+  const updateAction = $derived<ButtonMenuAction>({
+    id: 'update',
+    icon: rebuildIcon,
+    label: m.system_php_updateBuild(),
+    title: m.system_php_updateBuildTitle(),
+    disabled: !baseUpdate,
+    onclick: () => openPhpRebuildModal(version)
+  });
+
   const versionActions = $derived.by<ButtonMenuAction[]>(() => {
+    if (native) {
+      const nativeActs: ButtonMenuAction[] = [updateAction];
+      if (!isDefault) {
+        nativeActs.push({
+          id: 'remove',
+          tone: 'danger',
+          icon: trashIcon,
+          label: m.common_remove(),
+          title: siteCount > 0 ? m.system_php_removeWarn({ count: siteCount }) : m.system_php_removeTitle(),
+          onclick: () => openPhpRemoveModal({ version, siteCount })
+        });
+      }
+      return nativeActs;
+    }
     const acts: ButtonMenuAction[] = [];
     // Rebuild is only worth a button of its own when the base has actually
     // moved, the way an available service update is; with nothing to pick up it
@@ -339,7 +374,7 @@
 
 <DetailTabs {tabs} {active} onchange={(id) => (active = id)} actions={detailActions} />
 {#if active === 'logs' && running}
-  <LogViewer path={'/api/logs/' + container} />
+  <LogViewer path={'/api/logs/' + logUnit} />
 {:else if active === 'config'}
   <PhpIniTab {version} />
 {:else if active === 'ports'}

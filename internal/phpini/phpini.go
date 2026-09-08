@@ -69,7 +69,10 @@ func Valid(scope string) bool {
 		s, err := config.FindSite(name)
 		return err == nil && s != nil && s.IsFrankenPHP()
 	}
-	installed, _ := phpPkg.ListInstalled()
+	// The versions this install can serve, which under the native runtime are
+	// the host builds. Asking the container list there rejected a version the
+	// dashboard had just offered, so its ini tab answered 404.
+	installed, _ := phpPkg.InstalledForRuntime()
 	return slices.Contains(installed, scope)
 }
 
