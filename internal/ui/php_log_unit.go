@@ -7,18 +7,19 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/nativephp"
-	"github.com/geodro/lerd/internal/podman"
 )
 
-// phpLogUnit names the unit the site's PHP log tab streams. Under the native
-// runtime the shared FPM container is stopped by design, so the tab has to read
-// the host listener's launchd log instead of a container that is not there.
-// FrankenPHP and custom-FPM sites keep their own container either way.
+// phpLogUnit names the unit the site's PHP log tab streams, and only under the
+// native runtime: the shared FPM container is stopped by design there, so the
+// tab has to read the host listener's launchd log instead of a container that
+// is not there. Empty otherwise, which leaves the dashboard naming the
+// container itself. Naming one here instead answered for every site with the
+// shared FPM, which is not what a FrankenPHP or custom-container site reads.
 func phpLogUnit(site config.Site, phpVersion string, native bool) string {
-	if native && !site.IsFrankenPHP() && !site.IsCustomFPM() && !site.IsCustomContainer() && !site.IsHostProxy() {
+	if native && site.ServedNatively(config.PHPRuntimeNative) {
 		return nativephp.UnitLabel(phpVersion)
 	}
-	return podman.FPMContainerName(site, phpVersion)
+	return ""
 }
 
 // nativeRuntimeActive reports whether this install serves PHP from the host.

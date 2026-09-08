@@ -11,11 +11,25 @@ import (
 // no container to read from, and the host FPM writes to its own launchd log, so
 // the tab has to be pointed there instead of at a container that is stopped.
 func TestPHPLogUnit(t *testing.T) {
-	if got := phpLogUnit(config.Site{Name: "shop"}, "8.4", false); got != "lerd-php84-fpm" {
-		t.Errorf("container mode = %q, want lerd-php84-fpm", got)
-	}
 	if got := phpLogUnit(config.Site{Name: "shop"}, "8.4", true); got != "lerd-native-php84" {
 		t.Errorf("native mode = %q, want lerd-native-php84", got)
+	}
+}
+
+// In container mode the dashboard already knows which container a site is
+// served by, and each kind has its own name. Answering here with the shared FPM
+// for all of them pointed a FrankenPHP or custom-container site's log tab at a
+// container that is not the one serving it.
+func TestPHPLogUnitIsEmptyInContainerMode(t *testing.T) {
+	for _, site := range []config.Site{
+		{Name: "shop"},
+		{Name: "shop", Runtime: "frankenphp"},
+		{Name: "shop", Runtime: "fpm-custom"},
+		{Name: "shop", ContainerPort: 8080},
+	} {
+		if got := phpLogUnit(site, "8.4", false); got != "" {
+			t.Errorf("%+v: container mode = %q, want the dashboard to name it", site, got)
+		}
 	}
 }
 
@@ -28,7 +42,7 @@ func TestPHPLogUnitLeavesOwnContainerSitesAlone(t *testing.T) {
 		{Name: "shop", ContainerPort: 8080},
 		{Name: "shop", HostPort: 3000},
 	} {
-		if got := phpLogUnit(site, "8.4", true); got == "lerd-native-php84" {
+		if got := phpLogUnit(site, "8.4", true); got != "" {
 			t.Errorf("%+v must not read the native log, got %q", site, got)
 		}
 	}

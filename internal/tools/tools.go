@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -145,11 +146,19 @@ type source struct {
 	cache string
 }
 
+// nativePinsGOOS is the platform the native builds are published for. A var so
+// the merge can be tested from any machine.
+var nativePinsGOOS = runtime.GOOS
+
 func sources() []source {
-	return []source{
-		{origin.ToolsManifestURLs(), manifestCachePath()},
-		{origin.NativePHPManifestURLs(), nativeCachePath()},
+	srcs := []source{{origin.ToolsManifestURLs(), manifestCachePath()}}
+	// The builds only run on macOS, so anywhere else these pins name downloads
+	// that can never be installed, and fetching them is a daily request for a
+	// manifest nothing will read.
+	if nativePinsGOOS == "darwin" {
+		srcs = append(srcs, source{origin.NativePHPManifestURLs(), nativeCachePath()})
 	}
+	return srcs
 }
 
 // Refresh reloads the manifest with the disk cache bypassed, for the manual

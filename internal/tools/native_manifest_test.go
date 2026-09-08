@@ -24,6 +24,7 @@ const nativePin = `tools:
 // the first rather than replace it.
 func TestLoadMergesTheNativePHPManifest(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	onDarwin(t)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte(nativePin)) //nolint:errcheck
 	}))
@@ -52,9 +53,43 @@ func TestLoadMergesTheNativePHPManifest(t *testing.T) {
 // working, the same way an unreachable tools manifest does.
 func TestLoadSurvivesAnAbsentNativeManifest(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	onDarwin(t)
 	t.Setenv("LERD_TOOLS_URL", "http://127.0.0.1:1/tools.yaml")
 	t.Setenv("LERD_NATIVE_PHP_URL", "http://127.0.0.1:1/native-php.yaml")
 	if _, ok := Load(context.Background()).Tools["composer"]; !ok {
 		t.Error("an unreachable native manifest broke the embedded pins")
+	}
+}
+
+// onDarwin pretends this is a Mac, which is where the native pins are fetched.
+func onDarwin(t *testing.T) {
+	t.Helper()
+	prev := nativePinsGOOS
+	nativePinsGOOS = "darwin"
+	t.Cleanup(func() { nativePinsGOOS = prev })
+}
+
+// The builds exist for macOS only, so every other platform would be fetching a
+// manifest it can never install anything from, once a day, forever.
+func TestNativePinsAreNotFetchedOffDarwin(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	hits := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		hits++
+		w.Write([]byte(nativePin)) //nolint:errcheck
+	}))
+	defer srv.Close()
+	t.Setenv("LERD_TOOLS_URL", "http://127.0.0.1:1/tools.yaml")
+	t.Setenv("LERD_NATIVE_PHP_URL", srv.URL)
+
+	prev := nativePinsGOOS
+	nativePinsGOOS = "linux"
+	defer func() { nativePinsGOOS = prev }()
+
+	if _, ok := Load(context.Background()).Tools["php-native-8.4"]; ok {
+		t.Error("the native pins reached a platform with no builds")
+	}
+	if hits != 0 {
+		t.Errorf("the native manifest was fetched %d times off darwin", hits)
 	}
 }

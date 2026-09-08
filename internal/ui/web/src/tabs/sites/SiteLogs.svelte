@@ -90,8 +90,8 @@
 
   const streamPath = $derived.by(() => {
     if (active === 'fpm') {
-      // The daemon names the unit: a container in container mode, the host
-      // listener under the native runtime.
+      // The daemon names the unit only under the native runtime, where the log
+      // is a host listener's rather than a container's.
       const c = site.php_log_unit || fpmContainer(site);
       return c ? '/api/logs/' + c : '';
     }

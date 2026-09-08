@@ -1049,6 +1049,8 @@ func buildSites() ([]SiteResponse, error) {
 	// Traffic per site key, read once per snapshot, so the sites list can order by
 	// what has actually been used rather than by log-file mtime.
 	siteUsage := loadSiteUsage()
+	// Read once rather than per site: it is an install-wide setting.
+	nativeRuntime := nativeRuntimeActive()
 
 	// Per-site list of workers the engine suspended, so the dashboard can keep
 	// showing their dots dimmed instead of dropping them.
@@ -1237,7 +1239,7 @@ func buildSites() ([]SiteResponse, error) {
 			PHPLogUnit: phpLogUnit(
 				config.Site{Name: e.Name, Runtime: e.Runtime, ContainerPort: e.ContainerPort, HostPort: e.HostPort},
 				e.PHPVersion,
-				nativeRuntimeActive(),
+				nativeRuntime,
 			),
 			RuntimeWorker:    e.RuntimeWorker,
 			HostProxy:        e.HostPort > 0,
