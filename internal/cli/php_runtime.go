@@ -189,6 +189,11 @@ func ApplyPHPRuntime(mode string) error {
 			}
 		}
 	} else {
+		// The images may not be there any more: moving PHP to the host offers
+		// to remove them, and a version with no image has nothing to start, so
+		// coming back would leave every site it serves answering 502. Build or
+		// pull whatever is missing before anything is asked to start.
+		ensureFPMQuadlets(versionsInUse(versions))
 		for _, unit := range fpmUnitsFor(versions) {
 			if err := podman.StartUnit(unit); err != nil {
 				feedback.Warn("starting %s: %v", unit, err)

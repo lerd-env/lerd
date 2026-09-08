@@ -1519,7 +1519,7 @@
   "system_php_ext_nativeFixed": "ネイティブランタイムは拡張機能がバイナリに組み込まれているため、ここで管理するパッケージはありません。追加が必要な場合はコンテナランタイムに切り替えてください。",
   "system_php_ext_modulesHelpNative": "ネイティブ PHP {version} バイナリの php -m による報告です。",
   "system_phpRuntime_removeImages": "Also remove the PHP-FPM images",
-  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. They are rebuilt automatically if you switch back.",
+  "system_phpRuntime_removeImagesHint": "Frees the disk they hold. Switching back rebuilds them, which takes a few minutes.",
   "system_phpRuntime_imagesRemoved": "Removed {count} PHP-FPM image(s).",
   "system_php_updateBuild": "Update build",
   "system_php_updateBuildTitle": "Download the newest published build for this version"
