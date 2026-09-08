@@ -159,6 +159,13 @@ the release that lands on disk is the one you asked for rather than whatever is
 newest, and the PHP range, workers and env wiring the definition brings match the
 code beside them.
 
+Not every major has a skeleton to start from. A framework can outlive the project
+template it shipped with, and the definition for such a major carries no create
+command at all. The version question leaves those majors out, and a run that
+pinned none scaffolds from the newest one that still has a skeleton, so the
+project on disk is a release that really exists. Asking for that major by name
+with `--framework-version` says so rather than quietly building an older one.
+
 The command then carries the project the rest of the way: it links the new
 directory, which routes a project with no `.lerd.yaml` through the
 [init wizard](/usage/sites) for PHP version, HTTPS and services, and offers setup

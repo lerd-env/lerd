@@ -195,6 +195,20 @@ func runScaffold(plan scaffold, workDir, version string) error {
 	return cmd.Run()
 }
 
+// scaffoldUnavailableError explains a framework lerd cannot start a project
+// from. A major that ships no project skeleton while the ones before it do is
+// not a broken definition, so it names the run that would work instead.
+func scaffoldUnavailableError(name, version string) error {
+	if version != "" {
+		for _, scaffolds := range config.FrameworkScaffoldSupport(name) {
+			if scaffolds {
+				return fmt.Errorf("%s %s ships no project skeleton — leave --framework-version off to scaffold the newest major that does", name, version)
+			}
+		}
+	}
+	return fmt.Errorf("framework %q has no create command — add a 'create' field to its YAML definition", name)
+}
+
 func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) error {
 	interactive := isInteractive()
 
@@ -246,7 +260,7 @@ func runNew(target, frameworkName, frameworkVersion string, extraArgs []string) 
 		return fmt.Errorf("unknown framework %q — run 'lerd framework list' to see available frameworks", frameworkName)
 	}
 	if fw.Create == "" {
-		return fmt.Errorf("framework %q has no create command — add a 'create' field to its YAML definition", frameworkName)
+		return scaffoldUnavailableError(frameworkName, frameworkVersion)
 	}
 
 	if err := prepareScaffoldParent(target); err != nil {
