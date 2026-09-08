@@ -106,3 +106,14 @@ func TestHandleThemeItemRefusesTraversal(t *testing.T) {
 		t.Fatalf("expected ok=false, got %s", rec.Body.String())
 	}
 }
+
+func TestManifestColorAcceptsOnlyHex(t *testing.T) {
+	if got := manifestColor("#3B7EA1", "#ff2d20"); got != "#3b7ea1" {
+		t.Errorf("manifestColor(hex) = %q", got)
+	}
+	for _, bad := range []string{"", "rebeccapurple", `red"},"name":"evil`, "url(x)"} {
+		if got := manifestColor(bad, "#ff2d20"); got != "#ff2d20" {
+			t.Errorf("manifestColor(%q) = %q, want the fallback", bad, got)
+		}
+	}
+}

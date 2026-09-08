@@ -55,3 +55,14 @@ func handleThemeItem(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, map[string]any{"ok": true, "id": id})
 }
+
+// manifestColor keeps a colour the dashboard put on the manifest URL to a plain
+// hex, falling back to the brand default. The value lands inside a JSON literal
+// the browser reads as the installed app's chrome, so nothing but a colour may
+// reach it.
+func manifestColor(v, fallback string) string {
+	if c := config.NormalizeBrandColor(v); c != "" {
+		return c
+	}
+	return fallback
+}

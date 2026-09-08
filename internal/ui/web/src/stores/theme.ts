@@ -27,10 +27,28 @@ function apply(theme: Theme) {
   const dark = theme === 'dark' || (theme === 'auto' && prefersDark);
   document.documentElement.classList.toggle('dark', dark);
 
-  const vars = paletteVars(paletteById(get(palettes), get(palette)), dark);
+  const p = paletteById(get(palettes), get(palette));
+  const vars = paletteVars(p, dark);
   for (const [name, value] of Object.entries(vars)) {
     document.documentElement.style.setProperty(name, value);
   }
+  applyAppChrome(p, dark);
+}
+
+// Installed as an app, the window and the launch splash are painted by the
+// browser rather than by the page, from the theme-color meta and the manifest.
+// The meta follows a theme switch straight away; the manifest is read once at
+// install, so the current tones ride along on its URL and the app someone
+// installs matches what they were looking at.
+function applyAppChrome(p: Palette, dark: boolean) {
+  const accent = dark ? p.accentDark : p.accent;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', accent);
+
+  const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (!link) return;
+  const q = new URLSearchParams({ theme_color: accent, background_color: dark ? p.bg : '#ffffff' });
+  link.href = `/manifest.webmanifest?${q}`;
 }
 
 export const theme = writable<Theme>('auto');

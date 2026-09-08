@@ -47,8 +47,8 @@ On mobile the dashboard, list, and detail panels are full-screen with a bottom t
 Light, dark and follow-the-system live in the icon rail's theme switcher. The
 colours themselves are a separate choice: **System → Lerd → Theme** picks between
 `lerd`, the bright brand red, `muted`, a softer accent for anyone who finds the
-default too sharp, and the classic editor schemes (Solarized Dark, Monokai,
-Cobalt, Dracula, Nord, Gruvbox Dark). You can add your own by writing a small
+default too sharp, the classic editor schemes (Solarized Dark, Monokai, Cobalt,
+Dracula, Nord, Gruvbox Dark) and the desktop ones (Breeze, Adwaita, macOS). You can add your own by writing a small
 YAML file, either by hand or through the import button; see
 [Dashboard themes](/features/dashboard-themes).
 

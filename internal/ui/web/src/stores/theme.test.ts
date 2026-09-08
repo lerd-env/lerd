@@ -25,6 +25,7 @@ describe('theme store', () => {
     localStorage.clear();
     document.documentElement.className = '';
     document.documentElement.removeAttribute('style');
+    document.head.innerHTML = '';
     vi.resetModules();
   });
 
@@ -89,6 +90,28 @@ describe('theme store', () => {
       resolvePalette({ id: 'ocean', name: 'Ocean', accent: '#3b7ea1' })!
     ]);
     expect(document.documentElement.style.getPropertyValue('--lerd-accent')).toBe('#3b7ea1');
+  });
+
+  it('paints the installed app chrome from the theme in effect', async () => {
+    const media = mockMatchMedia(false);
+    document.head.innerHTML =
+      '<meta name="theme-color" content="#FF2D20"><link rel="manifest" href="/manifest.webmanifest">';
+    localStorage.setItem('lerd-theme', 'auto');
+    localStorage.setItem('lerd-palette', 'muted');
+    const { initTheme } = await import('./theme');
+    initTheme();
+
+    const meta = () => document.querySelector('meta[name="theme-color"]')!.getAttribute('content');
+    const manifest = () =>
+      document.querySelector<HTMLLinkElement>('link[rel="manifest"]')!.getAttribute('href')!;
+
+    expect(meta()).toBe('#b04a42');
+    expect(manifest()).toContain('theme_color=%23b04a42');
+    expect(manifest()).toContain('background_color=%23ffffff');
+
+    media.setDark(true);
+    expect(meta()).toBe('#d98d84');
+    expect(manifest()).toContain('background_color=%23111113');
   });
 
   it('explicit dark ignores the system preference', async () => {

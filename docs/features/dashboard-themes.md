@@ -1,6 +1,6 @@
 # Dashboard themes
 
-The dashboard ships eight themes and takes as many of your own as you care to
+The dashboard ships eleven themes and takes as many of your own as you care to
 write. A theme is independent of light/dark: you pick the mode in the icon rail,
 and the theme in **System → lerd → Theme**. Both are remembered per browser.
 
@@ -16,14 +16,17 @@ and the theme in **System → lerd → Theme**. Both are remembered per browser.
 | Dracula | Dracula purple | `#282a36` |
 | Nord | Nord frost | `#2e3440` |
 | Gruvbox Dark | Gruvbox orange | `#282828` |
+| Breeze | Plasma blue | `#232629` |
+| Adwaita | Adwaita blue | `#1e1e1e` |
+| macOS | the system blue | `#1e1e1e` |
 
 `lerd` is the default. `muted` is there for anyone who finds the default red too
 sharp, especially on a bright screen.
 
 Each theme carries a light tone and a dark tone for its accent, so switching
 between light and dark keeps the colour readable on whichever surface the mode
-paints. The classic schemes are dark schemes: their backgrounds apply in dark
-mode, and in light mode you get their accent on the usual white.
+paints. The editor and desktop schemes are dark schemes: their backgrounds apply
+in dark mode, and in light mode you get their accent on the usual white.
 
 ## Writing your own
 
@@ -65,3 +68,19 @@ in it is listed under the picker with the reason, rather than quietly missing.
 **System → lerd → Import theme** takes a file or pasted YAML and writes it into
 `~/.config/lerd/themes/` for you, then selects it. The trash icon beside a theme
 removes its file.
+
+## Installed as an app
+
+Installed from the browser, the window and the launch splash are painted by the
+browser rather than by the page. The title bar tint follows the theme as soon as
+you switch, and the manifest carries the current tones so the app you install
+matches what you were looking at. The splash is read once at install, so a theme
+switch afterwards reaches it only when the browser next refreshes the manifest.
+
+## Asking an assistant for one
+
+There is no MCP tool for this, deliberately: a theme is a personal choice, and
+nothing should be able to repaint your dashboard without you. The file is the
+interface instead. An assistant with access to your files can write a theme into
+`~/.config/lerd/themes/` the same way it writes any other file, when you ask it
+to and not otherwise. Point it at the schema above and reload the dashboard.

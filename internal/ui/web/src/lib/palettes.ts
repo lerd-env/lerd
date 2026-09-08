@@ -154,6 +154,45 @@ export const BUILTIN_PALETTES: Palette[] = [
     border: '#3c3836',
     muted: '#928374',
     source: 'builtin'
+  },
+  {
+    id: 'breeze',
+    name: 'Breeze',
+    accent: '#17698f',
+    accentHover: '#12556f',
+    accentDark: '#3daee9',
+    accentHoverDark: '#5fbdee',
+    bg: '#232629',
+    card: '#31363b',
+    border: '#3f454b',
+    muted: '#7f8c8d',
+    source: 'builtin'
+  },
+  {
+    id: 'adwaita',
+    name: 'Adwaita',
+    accent: '#1a5fb4',
+    accentHover: '#164e94',
+    accentDark: '#3584e4',
+    accentHoverDark: '#5195e8',
+    bg: '#1e1e1e',
+    card: '#303030',
+    border: '#3d3d3d',
+    muted: '#77767b',
+    source: 'builtin'
+  },
+  {
+    id: 'macos',
+    name: 'macOS',
+    accent: '#0057b8',
+    accentHover: '#00489b',
+    accentDark: '#0a84ff',
+    accentHoverDark: '#3d9dff',
+    bg: '#1e1e1e',
+    card: '#2c2c2e',
+    border: '#38383a',
+    muted: '#98989d',
+    source: 'builtin'
   }
 ];
 
