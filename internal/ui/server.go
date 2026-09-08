@@ -22,6 +22,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	_ "embed"
@@ -37,6 +38,7 @@ import (
 	"github.com/geodro/lerd/internal/dns"
 	"github.com/geodro/lerd/internal/envfile"
 	"github.com/geodro/lerd/internal/eventbus"
+	"github.com/geodro/lerd/internal/feedback"
 	gitpkg "github.com/geodro/lerd/internal/git"
 	"github.com/geodro/lerd/internal/grouping"
 	"github.com/geodro/lerd/internal/nativephp"
@@ -5278,6 +5280,11 @@ func runNodeMgmtCmd(w http.ResponseWriter, r *http.Request, sub string, extra ..
 
 var validVersion = regexp.MustCompile(`^[0-9]+(\.[0-9]+)*$`)
 
+// phpRuntimeSwitching keeps two switches from overlapping: the feedback
+// redirect the stream depends on is package-wide, and the switch itself rewrites
+// every site.
+var phpRuntimeSwitching atomic.Bool
+
 func handleInstallNodeVersion(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
@@ -6494,14 +6501,28 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, map[string]any{"ok": false, "error": "the native runtime is macOS only"})
 		return
 	}
-	if err := cli.ApplyPHPRuntime(body.Mode); err != nil {
-		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+	// Streamed rather than answered once: a switch rewrites every site and can
+	// spend minutes building images that were removed, and a spinner with
+	// nothing behind it reads as a hang.
+	sw, done, ok := startPHPBuildStream(w)
+	if !ok {
+		http.Error(w, "streaming not supported", http.StatusInternalServerError)
 		return
 	}
+	if !phpRuntimeSwitching.CompareAndSwap(false, true) {
+		done(map[string]any{"ok": false, "error": "a runtime switch is already running"})
+		return
+	}
+	defer phpRuntimeSwitching.Store(false)
+
+	// The switch reports through the feedback package, so that is what the
+	// stream carries. Package-wide, which the guard above keeps to one at once.
+	restore := feedback.Redirect(sw)
+	err := cli.ApplyPHPRuntime(body.Mode)
 	// After the switch, never instead of it: the runtime has already moved, so
 	// a reclaim that cannot finish is reported without failing the switch.
-	out := map[string]any{"ok": true}
-	if body.RemoveImages && body.Mode == config.PHPRuntimeNative {
+	out := map[string]any{"ok": err == nil}
+	if err == nil && body.RemoveImages && body.Mode == config.PHPRuntimeNative {
 		versions, _ := phpPkg.ListInstalled()
 		removed, rmErr := cli.RemoveFPMImages(versions)
 		out["images_removed"] = removed
@@ -6509,5 +6530,10 @@ func handleSettingsPHPRuntime(w http.ResponseWriter, r *http.Request) {
 			out["images_error"] = rmErr.Error()
 		}
 	}
-	writeJSON(w, out)
+	restore()
+	sw.flushTail()
+	if err != nil {
+		out["error"] = err.Error()
+	}
+	done(out)
 }

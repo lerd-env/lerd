@@ -35,6 +35,9 @@
   // are what serves every site.
   let removeImages = $state(false);
   let imagesNote = $state('');
+  // A switch can spend minutes rebuilding images that were removed, so what it
+  // is doing is shown rather than left behind a spinner.
+  let progress = $state<string[]>([]);
 
   function pick(mode: PHPRuntime) {
     if ($phpRuntimeLoading) return;
@@ -45,7 +48,11 @@
   async function apply() {
     applyError = '';
     imagesNote = '';
-    const res = await setPHPRuntime(draft, removeImages && draft === 'native');
+    progress = [];
+    const res = await setPHPRuntime(draft, removeImages && draft === 'native', (line) => {
+      // Bounded: an image build is chatty and only the tail is worth showing.
+      progress = [...progress, line].slice(-8);
+    });
     if (!res.ok) {
       applyError = res.error || '';
       return;
@@ -59,6 +66,7 @@
     }
     confirmOpen = false;
     removeImages = false;
+    progress = [];
   }
 </script>
 
@@ -138,6 +146,9 @@
             </span>
           </span>
         </label>
+      {/if}
+      {#if progress.length > 0}
+        <pre class="mt-3 max-h-40 overflow-y-auto rounded-lg bg-gray-50 dark:bg-white/5 p-2 text-[11px] leading-relaxed text-gray-600 dark:text-gray-400 whitespace-pre-wrap">{progress.join('\n')}</pre>
       {/if}
       {#if applyError}
         <p class="mt-2 text-sm text-red-600 dark:text-red-400">{applyError}</p>

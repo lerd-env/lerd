@@ -940,9 +940,13 @@ func (s *Summary) Print() {
 	}
 }
 
-// SetTestWriter redirects output to w in plain mode (no colour) and returns a
-// restore func. Intended for tests in this and other packages.
-func SetTestWriter(w io.Writer) func() {
+// Redirect sends output to w in plain mode (no colour) and returns a restore
+// func. For streaming a long operation to a client that would otherwise watch a
+// spinner with nothing behind it: the work reports through this package, and
+// this is where it reports to.
+//
+// Package-wide, so a caller has to keep two of these from overlapping.
+func Redirect(w io.Writer) func() {
 	mu.Lock()
 	prevOut, prevColor := out, colorOn.Load()
 	out = w
@@ -955,6 +959,9 @@ func SetTestWriter(w io.Writer) func() {
 		mu.Unlock()
 	}
 }
+
+// SetTestWriter is Redirect, named for the tests that were its first caller.
+func SetTestWriter(w io.Writer) func() { return Redirect(w) }
 
 // SetAnimated forces Animated() to on (or off) and returns a restore func.
 // Pair it with SetTestWriter so a test can exercise an animated code path while
