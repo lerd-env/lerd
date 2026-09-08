@@ -135,6 +135,7 @@ func main() {
 	root.AddCommand(cli.NewRebuildCmd())
 	root.AddCommand(cli.NewUnparkCmd())
 	root.AddCommand(cli.NewSitesCmd())
+	root.AddCommand(cli.NewSitesRestoreCmd())
 	root.AddCommand(cli.NewSecureCmd())
 	root.AddCommand(cli.NewUnsecureCmd())
 	root.AddCommand(cli.NewUseCmd())

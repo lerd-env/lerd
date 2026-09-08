@@ -77,6 +77,7 @@ Setup steps include common tasks (composer install, npm install, lerd env) plus 
 | `lerd link [name] --domain foo.test` | Register with a custom domain |
 | `lerd unlink [name]` | Stop serving the site; defaults to the site in the current directory, and naming one is the way to unlink a site whose directory has moved or been deleted |
 | `lerd sites` | Table view of all registered sites |
+| `lerd sites:restore [backup]` | Put the site registry back from one of its automatic backups; `--list` shows what is kept |
 | `lerd open [name]` | Open the site in the default browser |
 | `lerd code [name]` | Open the site's directory in your editor: the `editor` command from `~/.config/lerd/config.yaml` if set, otherwise the first known GUI editor found on PATH. Run from inside a git worktree it opens the worktree itself |
 | `lerd share [name]` | Expose the site publicly via ngrok, cloudflared, or Expose (auto-detected); `--serveo`, `--localhost-run` and `--pinggy` pick the SSH tunnels that need no signup |
