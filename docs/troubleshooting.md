@@ -623,3 +623,19 @@ lerd machine reset
 
 This stops the VM, removes it, and re-initialises it. Databases and site data are preserved (they live on the host); container images are rebuilt automatically on the next `lerd start`. See [Start, Stop & Autostart → `lerd machine reset`](usage/lifecycle.md#lerd-machine-reset-macos).
 :::
+
+::: details A project on an external drive is created inside the VM (macOS)
+Symptom: on macOS, `lerd new` on a path outside your home directory reports the project as created, then the run warns `chdir /Volumes/<drive>/<project>: no such file or directory` and the folder is nowhere on the drive.
+
+Cause: on macOS every bind mount is resolved inside the Podman Machine VM, and the VM only sees the host trees it was given when it was created. A drive mounted under `/Volumes` is often not among them, so the container sees an empty directory at that path, composer writes the whole project into the VM, and it never lands on the disk.
+
+lerd now checks that the container is really looking at your directory before it scaffolds, and stops with an explanation instead of creating a project you cannot find.
+
+Machines lerd creates share `/Users`, `/private`, `/var/folders` and `/Volumes` with the VM, but a machine created before lerd asked for `/Volumes` (or one created by hand with `podman machine init`) keeps Podman's own defaults and never got it. Podman writes the guest mount units once at init, so this cannot be repaired by editing the machine config; recreate the VM instead:
+
+```bash
+lerd machine reset
+```
+
+`lerd start` points this out on its own when something is already served from outside your home directory. If the drive is still invisible after a reset, macOS is withholding access to it from the VM process rather than lerd failing to ask; keep the project under your home directory.
+:::

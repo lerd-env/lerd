@@ -143,11 +143,14 @@ func stubMountSeams(t *testing.T, autoMountable, visible bool) *string {
 	t.Helper()
 	mounted := new(string)
 	origMount, origAuto, origVisible := ensurePathMounted, pathAutoMountable, pathVisible
+	origSees := containerSeesHostDir
 	ensurePathMounted = func(path, phpVersion string) { *mounted = path }
 	pathAutoMountable = func(path string) bool { return autoMountable }
 	pathVisible = func(path, phpVersion string) bool { return visible }
+	containerSeesHostDir = func(path, phpVersion string) bool { return true }
 	t.Cleanup(func() {
 		ensurePathMounted, pathAutoMountable, pathVisible = origMount, origAuto, origVisible
+		containerSeesHostDir = origSees
 	})
 	return mounted
 }

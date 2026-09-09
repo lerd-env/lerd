@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -123,41 +124,120 @@ func machineInitArgs(name string, targetMemoryMiB int64, provider string) []stri
 	return args
 }
 
-// machineMissingHomeMount reports whether the named machine's config lacks the
-// host home mount, i.e. it was initialised by the lerd <= 1.24.0 bug. Returns
-// false on any read/parse error so we never recreate a machine we can't
-// positively diagnose as broken.
-//
-// This must be repaired by recreating the VM, not by editing the config:
-// Podman writes the guest's virtiofs .mount units once at init via Ignition and
-// `machine start` never regenerates them, so adding /Users to the config JSON
-// attaches the host-side device but leaves the guest with no mount unit; the
-// path still never appears inside the VM.
-func machineMissingHomeMount(name string) bool {
+// machineMountSources returns the host paths the named machine shares with the
+// VM. The second result is false when the config cannot be read or carries no
+// mount list at all, which every caller treats as "cannot tell" rather than
+// "shares nothing", so a machine we cannot diagnose is never touched.
+func machineMountSources(name string) ([]string, bool) {
 	path := getMachineJSONPath(name)
 	if path == "" {
-		return false
+		return nil, false
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		return nil, false
 	}
 	var config map[string]any
 	if err := json.Unmarshal(data, &config); err != nil {
-		return false
+		return nil, false
 	}
 	mounts, ok := config["Mounts"].([]any)
 	if !ok {
-		return false
+		return nil, false
 	}
+	var sources []string
 	for _, mAny := range mounts {
 		if m, ok := mAny.(map[string]any); ok {
-			if src, _ := m["Source"].(string); src == homeMachineMount {
-				return false // home mount present
+			if src, _ := m["Source"].(string); src != "" {
+				sources = append(sources, src)
 			}
 		}
 	}
-	return true
+	return sources, true
+}
+
+// machineMissingMounts lists the required host trees the named machine never
+// had shared with it, in requiredMachineMounts order. A machine created before
+// lerd asked for /Volumes keeps Podman's own defaults and so is missing it,
+// which is why a project on an external drive resolves to an empty directory
+// inside the VM (issue #1725).
+//
+// Any of these must be repaired by recreating the VM, not by editing the
+// config: Podman writes the guest's virtiofs .mount units once at init via
+// Ignition and `machine start` never regenerates them, so adding a path to the
+// config JSON attaches the host-side device but leaves the guest with no mount
+// unit; the path still never appears inside the VM.
+func machineMissingMounts(name string) []string {
+	sources, ok := machineMountSources(name)
+	if !ok {
+		return nil
+	}
+	shared := make(map[string]bool, len(sources))
+	for _, s := range sources {
+		shared[s] = true
+	}
+	var missing []string
+	for _, m := range requiredMachineMounts {
+		if !shared[m] {
+			missing = append(missing, m)
+		}
+	}
+	return missing
+}
+
+// machineMissingHomeMount reports whether the named machine's config lacks the
+// host home mount, i.e. it was initialised by the lerd <= 1.24.0 bug. This is
+// the one missing mount worth recreating a machine over unasked, because such a
+// machine can start no container at all.
+func machineMissingHomeMount(name string) bool {
+	return slices.Contains(machineMissingMounts(name), homeMachineMount)
+}
+
+// outOfHomeServedPaths returns the site and parked directories that live
+// outside the host home, which are exactly the paths a missing machine mount
+// can strand. Used to keep the advisory below off the screen of the installs
+// it has nothing to say to.
+func outOfHomeServedPaths() []string {
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return nil
+	}
+	var candidates []string
+	if cfg, err := config.LoadGlobal(); err == nil && cfg != nil {
+		candidates = append(candidates, cfg.ParkedDirectories...)
+	}
+	if reg, err := config.LoadSites(); err == nil {
+		for i := range reg.Sites {
+			candidates = append(candidates, reg.Sites[i].Path)
+		}
+	}
+	return outOfHomePaths(home, candidates)
+}
+
+// outOfHomePaths keeps the paths that sit outside home, which is the whole of
+// the rule above with the config lookups taken out of it.
+func outOfHomePaths(home string, candidates []string) []string {
+	prefix := strings.TrimSuffix(home, "/") + "/"
+	var out []string
+	for _, p := range candidates {
+		if p != "" && p != home && !strings.HasPrefix(p, prefix) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// noteMissingMachineMounts points at `lerd machine reset` when an existing
+// machine is missing a mount other than the home one. It is a line rather than
+// a recreate: the machine works, and rebuilding every container image behind
+// the user's back to add a path most installs never use is the wrong trade. It
+// stays quiet unless something is actually served from outside the home, since
+// that is the only case where the missing mount changes anything.
+func noteMissingMachineMounts(missing []string) {
+	if len(missing) == 0 || len(outOfHomeServedPaths()) == 0 {
+		return
+	}
+	feedback.Note(fmt.Sprintf("This Podman Machine does not share %s with the VM, so anything served from there is invisible to the containers. Run 'lerd machine reset' to recreate it with every mount; databases and site data are preserved.", strings.Join(missing, ", ")))
 }
 
 // recreateBrokenMachine destroys and re-initialises a machine that is missing
@@ -276,9 +356,12 @@ func ensurePodmanMachineRunning() error {
 		// init bug and can't be repaired in place (Ignition writes the guest
 		// mount units once at init; a config edit + restart won't add /Users).
 		// Recreate it, then fall through to start.
-		if machineMissingHomeMount(m.name) {
+		missingMounts := machineMissingMounts(m.name)
+		if slices.Contains(missingMounts, homeMachineMount) {
 			recreateBrokenMachine(m.name, m.running, targetMemoryMiB)
 		} else {
+			noteMissingMachineMounts(missingMounts)
+
 			needsRootful := !m.rootful
 			needsMemory := false
 			if inspectMem, err := machineQuery("machine", "inspect",
