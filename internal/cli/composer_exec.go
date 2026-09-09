@@ -72,3 +72,26 @@ func composerHomeDir() string {
 func composerGlobalBinDir() string {
 	return filepath.Join(composerHomeDir(), "vendor", "bin")
 }
+
+// composerHomeDirs lists every directory composer may be using as its home on
+// this machine, not just the one lerd would pick.
+//
+// composer only takes the XDG location when something asks it to: an XDG_
+// variable in the environment, or /etc/xdg on disk. With neither, which is the
+// normal case on macOS, it uses ~/.composer. A machine can therefore end up
+// with global packages in both, installed by composer runs that disagreed, and
+// looking in one of them finds a tool that is really in the other.
+func composerHomeDirs() []string {
+	if v := os.Getenv("COMPOSER_HOME"); v != "" {
+		return []string{v}
+	}
+	home, _ := os.UserHomeDir()
+	if home == "" {
+		return []string{composerHomeDir()}
+	}
+	dirs := []string{composerHomeDir()}
+	if legacy := filepath.Join(home, ".composer"); legacy != dirs[0] {
+		dirs = append(dirs, legacy)
+	}
+	return dirs
+}

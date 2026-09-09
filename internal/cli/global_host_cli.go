@@ -27,7 +27,17 @@ func runGlobalHostCLI(cwd string, args []string, extraEnv []string) (int, bool, 
 		return 0, false, nil
 	}
 	script := args[i]
-	if filepath.Dir(script) != composerGlobalBinDir() {
+	// Matched against every home composer may be using, not only the one lerd
+	// would pick: a tool installed under the other one is still a global tool,
+	// and looking in one place silently left it in the container.
+	composerHome := ""
+	for _, dir := range composerHomeDirs() {
+		if filepath.Dir(script) == filepath.Join(dir, "vendor", "bin") {
+			composerHome = dir
+			break
+		}
+	}
+	if composerHome == "" {
 		return 0, false, nil
 	}
 	// Under the native runtime PHP already runs on the host, so there is no
@@ -36,7 +46,9 @@ func runGlobalHostCLI(cwd string, args []string, extraEnv []string) (int, bool, 
 	if _, native := nativeRuntimeVersion(cwd); native {
 		return 0, false, nil
 	}
-	if !config.GlobalHostBinary(composerHomeDir(), filepath.Base(script)) {
+	// Asked of the home the binary actually came from, so the manifest read is
+	// the one that installed it.
+	if !config.GlobalHostBinary(composerHome, filepath.Base(script)) {
 		return 0, false, nil
 	}
 	// lerd's own pinned build rather than whatever php the machine happens to
