@@ -198,3 +198,85 @@ func TestEnsurePathMountedCoversCustomFPMSites(t *testing.T) {
 		t.Errorf("restarted %v, want lerd-cfpm-shop", lc.restarted)
 	}
 }
+
+// #1725 on macOS: a new Volume line reached the quadlet file but not the
+// launchd plist, so the restarted container came back without the mount and the
+// scaffold guard refused a path lerd had just been told to mount.
+func TestEnsurePathMountedSyncsPlatformUnits(t *testing.T) {
+	home := t.TempDir()
+	cfgHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	resetPathMountAttempts()
+
+	quadlets := filepath.Join(cfgHome, "containers", "systemd")
+	if err := os.MkdirAll(quadlets, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "[Container]\nVolume=%h:%h:rw\n"
+	for _, name := range []string{"lerd-php84-fpm", "lerd-nginx"} {
+		if err := os.WriteFile(filepath.Join(quadlets, name+".container"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fakeInspect(t, "true#/home/george|")
+	prevLC := UnitLifecycle
+	UnitLifecycle = &restartRecorder{}
+	t.Cleanup(func() { UnitLifecycle = prevLC })
+
+	var synced []string
+	prevHook := AfterQuadletWriteFn
+	AfterQuadletWriteFn = func(name, _ string) error {
+		synced = append(synced, name)
+		return nil
+	}
+	t.Cleanup(func() { AfterQuadletWriteFn = prevHook })
+
+	EnsurePathMounted("/Volumes/Dock", "8.4")
+
+	if len(synced) != 2 {
+		t.Fatalf("synced %v, want both lerd-php84-fpm and lerd-nginx", synced)
+	}
+}
+
+// The same stale plist as #1725, reached from the other side: the quadlet
+// already carries the Volume line, so only the plist and the container are
+// behind. Restarting without re-syncing brings the container back unmounted.
+func TestEnsurePathMountedSyncsPlatformUnitsOnDrift(t *testing.T) {
+	home := t.TempDir()
+	cfgHome := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	resetPathMountAttempts()
+
+	quadlets := filepath.Join(cfgHome, "containers", "systemd")
+	if err := os.MkdirAll(quadlets, 0755); err != nil {
+		t.Fatal(err)
+	}
+	content := "[Container]\nVolume=%h:%h:rw\nVolume=/Volumes/Dock:/Volumes/Dock:rw\n"
+	for _, name := range []string{"lerd-php84-fpm", "lerd-nginx"} {
+		if err := os.WriteFile(filepath.Join(quadlets, name+".container"), []byte(content), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	fakeInspect(t, "true#/home/george|")
+	prevLC := UnitLifecycle
+	UnitLifecycle = &restartRecorder{}
+	t.Cleanup(func() { UnitLifecycle = prevLC })
+
+	var synced []string
+	prevHook := AfterQuadletWriteFn
+	AfterQuadletWriteFn = func(name, _ string) error {
+		synced = append(synced, name)
+		return nil
+	}
+	t.Cleanup(func() { AfterQuadletWriteFn = prevHook })
+
+	EnsurePathMounted("/Volumes/Dock", "8.4")
+
+	if len(synced) != 2 {
+		t.Fatalf("synced %v, want both lerd-php84-fpm and lerd-nginx", synced)
+	}
+}

@@ -639,3 +639,18 @@ lerd machine reset
 
 `lerd start` points this out on its own when something is already served from outside your home directory. If the drive is still invisible after a reset, macOS is withholding access to it from the VM process rather than lerd failing to ask; keep the project under your home directory.
 :::
+
+::: details An external drive will not eject while lerd is running (macOS)
+Symptom: `diskutil unmount` or the eject button refuses with `dissented by PID ... com.apple.Virtualization.VirtualMachine`.
+
+Cause: the Podman Machine VM shares `/Volumes` for as long as it runs, so macOS treats every drive under it as in use. Stopping the containers is not enough, the VM itself has to go down:
+
+```bash
+lerd stop
+podman machine stop
+```
+
+The drive ejects after that, and `lerd start` brings the VM and your other sites back. Plugging the drive in again is picked up by a running VM on its own, no restart needed.
+
+While the drive is away, lerd starts normally and every other site is unaffected: the missing path is dropped from the container mounts and the site on the drive stops being served. Your files are untouched, but the site is removed from `lerd sites`, so bring it back with `lerd link` and, if it was on HTTPS, `lerd secure` from the project directory.
+:::
