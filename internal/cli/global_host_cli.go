@@ -27,28 +27,7 @@ func runGlobalHostCLI(cwd string, args []string, extraEnv []string) (int, bool, 
 		return 0, false, nil
 	}
 	script := args[i]
-	// Matched against every home composer may be using, not only the one lerd
-	// would pick: a tool installed under the other one is still a global tool,
-	// and looking in one place silently left it in the container.
-	composerHome := ""
-	for _, dir := range composerHomeDirs() {
-		if filepath.Dir(script) == filepath.Join(dir, "vendor", "bin") {
-			composerHome = dir
-			break
-		}
-	}
-	if composerHome == "" {
-		return 0, false, nil
-	}
-	// Under the native runtime PHP already runs on the host, so there is no
-	// boundary to escape and the native path is the one that knows which
-	// extensions and ini this machine's PHP was set up with.
-	if _, native := nativeRuntimeVersion(cwd); native {
-		return 0, false, nil
-	}
-	// Asked of the home the binary actually came from, so the manifest read is
-	// the one that installed it.
-	if !config.GlobalHostBinary(composerHome, filepath.Base(script)) {
+	if !globalHostCLIWantsHost(cwd, script) {
 		return 0, false, nil
 	}
 	// lerd's own pinned build rather than whatever php the machine happens to
@@ -76,4 +55,37 @@ func runGlobalHostCLI(cwd string, args []string, extraEnv []string) (int, bool, 
 		return 0, true, err
 	}
 	return 0, true, nil
+}
+
+// globalHostCLIWantsHost is the routing decision on its own: whether script is
+// a globally installed binary the store says cannot work inside the container.
+// Separated from the run so it can be exercised without fetching a PHP and
+// executing it, which says nothing about the decision it would be testing.
+func globalHostCLIWantsHost(cwd, script string) bool {
+	composerHome, ok := globalHostCLIHome(script)
+	if !ok {
+		return false
+	}
+	// Under the native runtime PHP already runs on the host, so there is no
+	// boundary to escape and the native path is the one that knows which
+	// extensions and ini this machine's PHP was set up with.
+	if _, native := nativeRuntimeVersion(cwd); native {
+		return false
+	}
+	// Asked of the home the binary actually came from, so the manifest read is
+	// the one that installed it.
+	return config.GlobalHostBinary(composerHome, filepath.Base(script))
+}
+
+// globalHostCLIHome returns the composer home script was installed under.
+// Matched against every home composer may be using, not only the one lerd would
+// pick: a tool installed under the other one is still a global tool, and
+// looking in one place silently left it in the container.
+func globalHostCLIHome(script string) (string, bool) {
+	for _, dir := range composerHomeDirs() {
+		if filepath.Dir(script) == filepath.Join(dir, "vendor", "bin") {
+			return dir, true
+		}
+	}
+	return "", false
 }
