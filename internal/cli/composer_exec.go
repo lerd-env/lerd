@@ -52,16 +52,23 @@ func runComposer(args []string) error {
 	return nil
 }
 
-// composerGlobalBinDir resolves the directory where composer drops binaries
-// for globally required packages, honouring COMPOSER_HOME and XDG.
-func composerGlobalBinDir() string {
+// composerHomeDir resolves composer's own home, honouring COMPOSER_HOME and
+// XDG. It is a composer project like any other: the manifest and lock naming
+// what `composer global require` installed live here.
+func composerHomeDir() string {
 	if v := os.Getenv("COMPOSER_HOME"); v != "" {
-		return filepath.Join(v, "vendor", "bin")
+		return v
 	}
 	home, _ := os.UserHomeDir()
 	xdg := os.Getenv("XDG_CONFIG_HOME")
 	if xdg == "" {
 		xdg = filepath.Join(home, ".config")
 	}
-	return filepath.Join(xdg, "composer", "vendor", "bin")
+	return filepath.Join(xdg, "composer")
+}
+
+// composerGlobalBinDir resolves the directory where composer drops binaries
+// for globally required packages.
+func composerGlobalBinDir() string {
+	return filepath.Join(composerHomeDir(), "vendor", "bin")
 }
