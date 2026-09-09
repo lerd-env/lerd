@@ -9,6 +9,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	phpDet "github.com/geodro/lerd/internal/php"
+	"github.com/geodro/lerd/internal/podman"
 	"github.com/geodro/lerd/internal/siteops"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,23 @@ func NewIsolateCmd() *cobra.Command {
 }
 
 var isolateForce bool
+
+// Seams so the provisioning decision can be tested without a podman build.
+var (
+	isolateImageExistsFn = podman.FPMImageExists
+	isolateProvisionFn   = func(version string) { ensureFPMQuadlets([]string{version}) }
+)
+
+// ensureIsolateImage builds the target version's image before the site is
+// repointed at it. The switch rewrites the vhost and reloads nginx, so a
+// version with no image left the site 502ing behind a command that had reported
+// success and only suggested php:rebuild afterwards.
+func ensureIsolateImage(version string) {
+	if isolateImageExistsFn(version) {
+		return
+	}
+	isolateProvisionFn(version)
+}
 
 // pinRefusal turns a refused pin into the command's own answer, naming the flag
 // that overrides it. Nothing was written, so the user is being told what to do
@@ -51,6 +69,7 @@ func runIsolate(_ *cobra.Command, args []string) error {
 	// Worktree path: the override travels with the branch, so the parent site's
 	// own version is left alone.
 	if site, branch, ok := FindParentSiteForWorktree(cwd); ok {
+		ensureIsolateImage(version)
 		res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Branch: branch, Force: isolateForce})
 		if err != nil {
 			return pinRefusal(err, args[0])
@@ -77,6 +96,7 @@ func runIsolate(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
+	ensureIsolateImage(version)
 	res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Force: isolateForce})
 	if err != nil {
 		return pinRefusal(err, args[0])

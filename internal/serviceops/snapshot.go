@@ -253,6 +253,41 @@ func ListSnapshots(service, database string, includeAll bool) ([]Snapshot, error
 	return out, nil
 }
 
+// resolveSnapshotName turns the name a user typed into the directory a snapshot
+// actually lives in. CreateSnapshot stamps every name with a UTC timestamp, so
+// the label someone chose is never the name on disk, and looking it up
+// literally is why restoring the snapshot just taken reported it missing. An
+// exact directory still wins; otherwise the newest snapshot carrying the label
+// answers, which is what repeating a label is for.
+func resolveSnapshotName(service, database, name string, allDatabases bool) (string, error) {
+	clean, err := sanitizeSnapshotName(name)
+	if err != nil {
+		return "", err
+	}
+	if _, err := os.Stat(snapshotDir(service, database, clean, allDatabases)); err == nil {
+		return clean, nil
+	}
+	entries, err := os.ReadDir(snapshotScopeDir(service, database, allDatabases))
+	if err != nil {
+		return "", fmt.Errorf("snapshot %q not found", name)
+	}
+	best := ""
+	for _, e := range entries {
+		if !e.IsDir() || !strings.HasPrefix(e.Name(), clean+"-") {
+			continue
+		}
+		// The stamp sorts lexically in time order, so the greatest name is the
+		// most recent without reading every snapshot's metadata back.
+		if e.Name() > best {
+			best = e.Name()
+		}
+	}
+	if best == "" {
+		return "", fmt.Errorf("snapshot %q not found", name)
+	}
+	return best, nil
+}
+
 // DeleteSnapshot removes a stored snapshot, erroring when it does not exist so
 // callers can report the miss clearly.
 func DeleteSnapshot(service, database, name string, allDatabases bool) error {
@@ -261,18 +296,11 @@ func DeleteSnapshot(service, database, name string, allDatabases bool) error {
 			return err
 		}
 	}
-	clean, err := sanitizeSnapshotName(name)
+	clean, err := resolveSnapshotName(service, database, name, allDatabases)
 	if err != nil {
 		return err
 	}
-	dir := snapshotDir(service, database, clean, allDatabases)
-	if _, err := os.Stat(dir); err != nil {
-		if os.IsNotExist(err) {
-			return fmt.Errorf("snapshot %q not found", name)
-		}
-		return err
-	}
-	return os.RemoveAll(dir)
+	return os.RemoveAll(snapshotDir(service, database, clean, allDatabases))
 }
 
 // CreateSnapshot dumps the target database (or every database when
@@ -412,7 +440,7 @@ func RestoreSnapshot(t SnapshotTarget, name string, emit func(PhaseEvent)) (Impo
 	if err != nil {
 		return ImportReport{}, err
 	}
-	clean, err := sanitizeSnapshotName(name)
+	clean, err := resolveSnapshotName(t.Service, t.Database, name, t.AllDatabases)
 	if err != nil {
 		return ImportReport{}, err
 	}

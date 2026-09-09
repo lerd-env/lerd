@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/linker"
 	"github.com/geodro/lerd/internal/serviceops"
+	"github.com/geodro/lerd/internal/siteops"
 	"github.com/geodro/lerd/internal/store"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
@@ -215,7 +216,7 @@ func runLink(args []string) error {
 	printLinkSummary(site, start, res.WroteIDEDataSource)
 
 	if plan.Mode != linker.ModeFPM {
-		return linkApplyServices(cwd, site, proj)
+		return linkApplyProject(cwd, site, proj)
 	}
 
 	// Warn before the setup prompt below: an ext-* requirement the image cannot
@@ -247,7 +248,7 @@ func runLink(args []string) error {
 		}
 	}
 
-	return linkApplyServices(cwd, site, proj)
+	return linkApplyProject(cwd, site, proj)
 }
 
 // printLinkSummary prints the green success line and an aligned details block,
@@ -411,6 +412,29 @@ func approveInlineService(svc *config.CustomService) bool {
 // linkEnsureSiteState is the seam the link tests swap for the real per-site
 // provisioning, which needs a running service behind it.
 var linkEnsureSiteState = serviceops.EnsureSiteState
+
+// linkShouldRestoreHTTPS reports whether a link has to put the site back on
+// HTTPS. The project file records how the site is served, so a link that
+// ignores it re-registers a secured project as plain HTTP, which is what an
+// uninstall followed by a fresh install did to every site on the machine.
+// External DNS has no certificate to issue, so there the record is left alone.
+func linkShouldRestoreHTTPS(projSecured, siteSecured, dnsManaged bool) bool {
+	return projSecured && !siteSecured && dnsManaged
+}
+
+// linkApplyProject applies what the project's .lerd.yaml declares about itself
+// once the site is registered: how it is served, then the services it needs.
+func linkApplyProject(cwd string, site config.Site, proj *config.ProjectConfig) error {
+	if proj != nil {
+		gcfg, _ := config.LoadGlobal()
+		if linkShouldRestoreHTTPS(proj.Secured, site.Secured, gcfg != nil && gcfg.DNSManaged()) {
+			if err := siteops.SetSecured(&site, true); err != nil {
+				feedback.Warn("restoring HTTPS for %s: %v", site.Name, err)
+			}
+		}
+	}
+	return linkApplyServices(cwd, site, proj)
+}
 
 func linkApplyServices(cwd string, site config.Site, proj *config.ProjectConfig) error {
 	if proj == nil {
