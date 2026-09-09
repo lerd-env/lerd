@@ -52,7 +52,7 @@ func TestRunGlobalHostCLI_findsABinaryInTheLegacyComposerHome(t *testing.T) {
 	seedGlobalPackage(t, legacy, "cloud")
 
 	bin := filepath.Join(legacy, "vendor", "bin", "cloud")
-	if _, took, _ := runGlobalHostCLI(t.TempDir(), []string{bin, "login"}, nil); !took {
+	if !globalHostCLIWantsHost(t.TempDir(), bin) {
 		t.Error("a global binary under ~/.composer must still be taken out of the container")
 	}
 }
@@ -69,7 +69,7 @@ func TestRunGlobalHostCLI_findsABinaryInTheXDGComposerHome(t *testing.T) {
 	seedGlobalPackage(t, xdg, "cloud")
 
 	bin := filepath.Join(xdg, "vendor", "bin", "cloud")
-	if _, took, _ := runGlobalHostCLI(t.TempDir(), []string{bin, "login"}, nil); !took {
+	if !globalHostCLIWantsHost(t.TempDir(), bin) {
 		t.Error("a global binary under the XDG home must be taken out of the container")
 	}
 }
@@ -85,10 +85,10 @@ func TestRunGlobalHostCLI_honoursComposerHomeExactly(t *testing.T) {
 
 	// The same name under a home COMPOSER_HOME did not name is not it.
 	other := filepath.Join(home, ".composer", "vendor", "bin", "cloud")
-	if _, took, _ := runGlobalHostCLI(t.TempDir(), []string{other, "login"}, nil); took {
+	if globalHostCLIWantsHost(t.TempDir(), other) {
 		t.Error("COMPOSER_HOME is explicit; another home must not be consulted")
 	}
-	if _, took, _ := runGlobalHostCLI(t.TempDir(), []string{filepath.Join(explicit, "vendor", "bin", "cloud")}, nil); !took {
+	if !globalHostCLIWantsHost(t.TempDir(), filepath.Join(explicit, "vendor", "bin", "cloud")) {
 		t.Error("the binary under COMPOSER_HOME must be taken")
 	}
 }
