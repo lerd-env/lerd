@@ -260,16 +260,17 @@ type FrameworkWorker struct {
 	// definitions under workers/<icon>.svg. Color is the tone it is inked in;
 	// a worker that declares none takes its framework's, which is what tells a
 	// Laravel queue apart from a Symfony one at a glance.
-	Icon          string         `yaml:"icon,omitempty"`
-	Color         string         `yaml:"color,omitempty"`
-	Restart       string         `yaml:"restart,omitempty"`        // always | on-failure (default: always)
-	Schedule      string         `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
-	Check         *FrameworkRule `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
-	ExcludeCheck  *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
-	ConflictsWith []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
-	Proxy         *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
-	Health        *WorkerHealth  `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
-	Host          bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
+	Icon          string           `yaml:"icon,omitempty"`
+	Color         string           `yaml:"color,omitempty"`
+	Restart       string           `yaml:"restart,omitempty"`        // always | on-failure (default: always)
+	Schedule      string           `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
+	Check         *FrameworkRule   `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
+	ExcludeCheck  *FrameworkRule   `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
+	ConflictsWith []string         `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
+	Proxy         *WorkerProxy     `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	DevServer     *WorkerDevServer `yaml:"dev_server,omitempty"`     // the dev server this worker starts
+	Health        *WorkerHealth    `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
+	Host          bool             `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 	// PerWorktree opts the worker into running independently per git worktree
 	// (lerd-<wname>-<site>-<wt>). Defaults to false; set true on workers that
 	// need a separate process per checkout (e.g. dev servers like vite).
@@ -291,6 +292,15 @@ func (w FrameworkWorker) IsPerWorktree() bool {
 	return w.PerWorktree != nil && *w.PerWorktree
 }
 
+// WorkerDevServer names the dev server a worker starts, for a worker that
+// starts it through something else: a framework's own console command reaches
+// vite as surely as `npm run dev` does, and reading the command cannot tell.
+// Declaring it here is what opts the framework into lerd's dev server handling
+// rather than lerd inferring it from a command string.
+type WorkerDevServer struct {
+	Tool string `yaml:"tool"` // the dev server, e.g. "vite"
+}
+
 // WorkerProxy describes an HTTP/WebSocket proxy that nginx should configure
 // for this worker. When present, nginx adds a location block that proxies
 // requests to the worker inside the PHP-FPM container.
@@ -303,7 +313,23 @@ type WorkerProxy struct {
 	Paths       []string `yaml:"paths,omitempty"`
 	PortEnvKey  string   `yaml:"port_env_key,omitempty"` // env key holding the port (e.g. "REVERB_SERVER_PORT")
 	DefaultPort int      `yaml:"default_port,omitempty"` // fallback port if env key is missing (default: 8080)
+	// Upstream names where the worker listens: "host" for a worker that runs on
+	// the host (host: true), "container" (the default) for one inside the site's
+	// FPM container. A host worker proxied to the container answers nothing.
+	Upstream string `yaml:"upstream,omitempty"`
+	// Port is "pinned" when lerd owns the port rather than reading it from the
+	// site's .env: it allocates one, keeps it clear of other sites and hands it
+	// to the worker through PortEnvKey. For a server configured from .env, leave
+	// this empty and name the key it reads.
+	Port string `yaml:"port,omitempty"`
 }
+
+// OnHost reports whether the worker's server listens on the host rather than
+// inside the site's FPM container.
+func (p *WorkerProxy) OnHost() bool { return p != nil && p.Upstream == "host" }
+
+// PinnedPort reports whether lerd allocates and owns this worker's port.
+func (p *WorkerProxy) PinnedPort() bool { return p != nil && p.Port == "pinned" }
 
 // WorkerService is a running lerd service a worker depends on. WhenEnv is a
 // "KEY=VALUE" pair the site's .env has to carry for the dependency to apply, so
@@ -2456,19 +2482,46 @@ func (fw *Framework) HasWorker(name, dir string) bool {
 	return true
 }
 
-// WorkerProxy returns the proxy configuration for the first worker that has one
-// and whose check rule passes for the project at dir. Returns nil if no proxy is configured.
-func (fw *Framework) DetectProxy(dir string) (*WorkerProxy, string) {
-	for name, w := range fw.Workers {
+// NamedProxy is one worker's proxy together with the worker it belongs to, so a
+// caller can find the port that worker was given.
+type NamedProxy struct {
+	Worker string
+	Proxy  *WorkerProxy
+}
+
+// DetectProxies returns every worker proxy whose check rule passes for the
+// project at dir, in worker-name order so a vhost renders the same way twice. A
+// project can run an asset server next to a websocket server, and each needs its
+// own location.
+func (fw *Framework) DetectProxies(dir string) []NamedProxy {
+	names := make([]string, 0, len(fw.Workers))
+	for name := range fw.Workers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out []NamedProxy
+	for _, name := range names {
+		w := fw.Workers[name]
 		if w.Proxy == nil {
 			continue
 		}
 		if w.Check != nil && !MatchesRule(dir, *w.Check) {
 			continue
 		}
-		return w.Proxy, name
+		out = append(out, NamedProxy{Worker: name, Proxy: w.Proxy})
 	}
-	return nil, ""
+	return out
+}
+
+// DetectProxy returns the first worker proxy that applies, for callers that
+// only need to know whether the project has one at all.
+func (fw *Framework) DetectProxy(dir string) (*WorkerProxy, string) {
+	found := fw.DetectProxies(dir)
+	if len(found) == 0 {
+		return nil, ""
+	}
+	return found[0].Proxy, found[0].Worker
 }
 
 // MatchesRule returns true if the given rule matches the project directory. It

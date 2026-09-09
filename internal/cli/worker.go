@@ -300,7 +300,8 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	}
 
 	// Handle proxy port assignment and command augmentation.
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" {
+	command = withPinnedWorkerPort(siteName, workerName, w, command)
+	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
 		envPath := filepath.Join(sitePath, ".env")
 		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
 		if port == "" {
@@ -312,7 +313,7 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 
 	// A host worker that starts a known dev server is pinned to a port and
 	// pointed at a generated config, so it answers on the site's own domain.
-	command = devServerCommand(siteName, sitePath, workerName, command, w.Host)
+	command = devServerCommand(siteName, sitePath, workerName, command, w)
 
 	// Workers exec into the container that hosts the site's runtime —
 	// custom container, FrankenPHP, or shared FPM. resolveWorkerFPMUnit
@@ -645,7 +646,11 @@ func resolveWorkerFPMUnit(siteName, phpVersion string) string {
 // Pass site.Path (or any path on the parent site) to stop the parent unit.
 func WorkerStopForSite(siteName, sitePath, workerName string) error {
 	unitName, displaySite := workerNames(siteName, sitePath, workerName)
-	return stopWorkerUnit(unitName, workerName, displaySite)
+	err := stopWorkerUnit(unitName, workerName, displaySite)
+	// The unit is down, so whatever is still running in the container is a
+	// leftover rather than a worker anything supervises.
+	killWorkerInContainer(siteName, sitePath, workerName)
+	return err
 }
 
 // StopWorkerUnit tears down a worker unit the caller has already resolved to a

@@ -62,9 +62,21 @@ workers:
         - /apps
       port_env_key: REVERB_SERVER_PORT  # env key holding the port
       default_port: 8080            # starting port for auto-assignment
+      upstream: container           # where the server listens: container (default) or host
+      port: pinned                  # optional: lerd owns the port instead of .env
 ```
 
 A server that answers on more than one path lists them all under `paths`, and each gets its own location block on the same port. Reverb is the case in point: the WebSocket connection lands on `/app` while the HTTP broadcasting API a server-side `ShouldBroadcast` event posts to lives on `/apps/{app_id}/events`, and a path left out falls through to PHP and answers 404. Where both are set, `paths` is the list that gets proxied and `path` is ignored, so a definition keeps `path` alongside it and still proxies on lerd versions released before `paths` existed.
+
+Every worker that declares a proxy gets its own locations, so an asset server and a websocket server run side by side on the same site rather than the first one declared taking it.
+
+`upstream` names where the server actually listens. The default, `container`, proxies to the site's own PHP-FPM container, which is where a worker without `host: true` runs. A worker marked `host: true` runs on your machine instead and is unreachable from inside that container, so its proxy needs `upstream: host` to be routed to the host address the vhost already knows.
+
+The port comes from one of two places. Naming a `port_env_key` suits a server configured from the site's `.env`: lerd assigns a free port on first start, writes it to that key, and appends `--port` to the command. `port: pinned` suits everything else: lerd owns the port, keeps it clear of every other site's pinned ports and dev servers, records it on the site so it survives restarts, and hands it to the worker as `KEY=port` in front of its command, where `KEY` is the `port_env_key` the definition names. The project's own config reads it from the environment, and nothing is written to `.env`.
+
+The environment reaches the process lerd starts and everything it spawns, including a command that re-enters the container on its way: lerd names the key for passthrough, so the `php` shim carries it into the site's runtime and a tool started through `php artisan something` binds the same port the vhost proxies to.
+
+Stopping a worker clears what it left inside the container. A command that re-enters the runtime leaves the real process there when its unit stops, holding whatever port it bound, so lerd sweeps the site's container for processes matching that worker's command and working directory and signals the process group, which is what catches the tool a console command started.
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 
@@ -111,6 +123,32 @@ Host workers auto-start in three places:
 Host workers run with lerd's bin dir prepended to `PATH`, so subprocesses spawned by `npm run dev` (for example Inertia's wayfinder Vite plugin shelling out to `php artisan`) reach lerd's `php`, `composer` and `laravel` shims and route into the containerised runtime. Stopping a host worker via the UI or `lerd worker stop` is now sticky: a HEAD-write event (commit, checkout, rebase, branch rename) inside a worktree no longer resurrects it, and on macOS the heal loop respects a missing plist as a user-stop signal instead of recreating it.
 
 On macOS the unit is a launchd plist (`~/Library/LaunchAgents/lerd-<worker>-<site>[-<branch>].plist`) backed by a guard script under `~/.local/share/lerd/run/workers/` that `cd`s into the site/worktree and `fnm exec`s the command. The guard records its own pid, which is the process group leader, and stopping the worker signals that whole group: launchd only signals the leader, so a worker that hands off to a launcher (`npm` to `electron-vite` to Electron) would otherwise leave the app running, reparented to init, with no unit left to stop it. The watcher self-heals the unit independently of the worker exec mode, host workers always need launchd-level supervision because they aren't behind podman's `--restart=always`. Scheduled workers (`schedule != ""`) still aren't supported on macOS; launchd's `StartCalendarInterval` isn't wired through the unit translator yet.
+
+**Declaring the dev server a worker starts**: lerd recognises a dev server by reading the worker's command, following one level of `npm run`. A framework that starts the same tool through its own console command is invisible to that, so the worker can say so instead:
+
+```yaml
+workers:
+  vite:
+    command: php artisan vite:watch theme-vampire
+    host: true
+    dev_server:
+      tool: vite
+```
+
+A declaration is believed whatever the command looks like, and it is what opts a framework in rather than lerd inferring it. Naming a tool lerd has no integration for changes nothing.
+
+Where the command starts the tool itself, lerd hands it a generated config and everything below applies unchanged. Where it does not, there is no flag to put that config on and the tool loads whatever the console command decides, so lerd writes the values instead, to `node_modules/.lerd/dev-server.mjs`, and the project imports them into its own config:
+
+```js
+import lerd from '../../node_modules/.lerd/dev-server.mjs';
+
+export default defineConfig({
+    server: { ...lerd.server },
+    // the rest of the project's config
+});
+```
+
+That file carries the site's origin, the hosts the server may answer for, the origins allowed to fetch from it, and the port, which is the worker's pinned proxy port when it declares one. lerd rewrites it and restarts the server whenever those addresses move, which is what `lerd secure`, `lerd domain add` and grouping all do, so the one thing a project cannot keep current by hand stops going stale.
 
 **Dev servers on the site's own domain**: A dev server normally advertises its own address, so a Vite app renders asset URLs pointing at `localhost:5173`. That address means nothing to anyone else, so the page arrives unstyled over a share tunnel, over [LAN sharing](/usage/lan-sharing), or on any host other than the one that started it.
 

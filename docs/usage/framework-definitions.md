@@ -382,6 +382,15 @@ workers:
         - /ws-api
       port_env_key: WS_PORT
       default_port: 8080
+      upstream: container         # where the server listens: container (default)
+                                  # or host, for a worker marked host: true
+      port: pinned                # optional: lerd owns the port, keeps it clear
+                                  # of other sites, and hands it to the worker as
+                                  # port_env_key in front of its command
+    dev_server:                   # the dev server this worker starts (optional)
+      tool: vite                  # believed whatever the command looks like, for
+                                  # a worker that reaches the tool through a
+                                  # framework's own console command
     host: false                   # run on the host via fnm instead of in the FPM
                                   # container (optional, default: false). Used for
                                   # HMR-sensitive Node tools (Vite, Tailwind watcher).
