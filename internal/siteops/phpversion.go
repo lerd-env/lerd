@@ -30,26 +30,50 @@ var (
 	imageExistsFn      = podman.FPMImageExists
 	detectWorktreesFn  = gitpkg.DetectWorktrees
 
-	// phpConstraintFor is what the site is allowed to run, as a composer-style
-	// constraint. The framework definition is the authority only when it is the
-	// real one for the project's version: a borrowed definition describes a
-	// different release (Laravel 6 served by the Laravel 10 def), and clamping to
-	// its range would refuse the version the project actually requires. In that
-	// case, and when no framework was recognised at all, the project's own
-	// composer.json is what it says it supports.
+	// phpConstraintsFor is everything the site has to satisfy at once. The
+	// framework definition's range is one claim, the project's own composer
+	// requirement is the other, and both hold. A borrowed definition describes a
+	// different release, so it is left out, and so is a real one whose range
+	// cannot be met alongside what the project requires: the
+	// definition describes the framework, composer describes the app that has to
+	// boot, and a version the app rejects fails at the first request. The two
+	// are compared as constraints, not against what is installed, so the answer
+	// does not change with the machine.
 	// getFrameworkFn is the definition lookup, a seam so the constraint choice
 	// can be tested without a framework store on disk.
 	getFrameworkFn = config.GetFrameworkForDir
 
-	phpConstraintFor = func(site *config.Site) string {
+	phpConstraintsFor = func(site *config.Site) []string {
+		project := php.ComposerPHPConstraint(site.Path)
+		framework := ""
 		if site.Framework != "" {
 			if fw, ok := getFrameworkFn(site.Framework, site.Path); ok && !fw.VersionGuessed {
-				return phpRangeConstraint(fw.PHP.Min, fw.PHP.Max)
+				framework = phpRangeConstraint(fw.PHP.Min, fw.PHP.Max)
 			}
 		}
-		return php.ComposerPHPConstraint(site.Path)
+		switch {
+		case framework == "":
+			return compactConstraints(project)
+		case project == "":
+			return compactConstraints(framework)
+		case !php.ConstraintsOverlap(framework, project):
+			return compactConstraints(project)
+		}
+		return compactConstraints(framework, project)
 	}
 )
+
+// compactConstraints drops the empty entries, so a caller can hand over whatever
+// it found without checking each one.
+func compactConstraints(constraints ...string) []string {
+	out := make([]string, 0, len(constraints))
+	for _, c := range constraints {
+		if c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
 
 // phpRangeConstraint renders a framework definition's min/max as the constraint
 // shape everything else in this path speaks.
@@ -69,14 +93,16 @@ func phpRangeConstraint(min, max string) string {
 type PHPVersionOpts struct {
 	// Branch targets a worktree of the site rather than the site itself.
 	Branch string
+	// Force applies a version the site's constraints refuse. The caller has
+	// told the user what they are overriding.
+	Force bool
 }
 
 // PHPVersionResult reports what the switch actually did, so each caller can
 // render it in its own idiom rather than the funnel printing for everyone.
 type PHPVersionResult struct {
 	Requested string // what the caller asked for
-	Version   string // what was applied, after clamping
-	Clamped   bool   // the framework's range overrode the request
+	Version   string // what was applied
 	Demoted   bool   // the site fell back from FrankenPHP to FPM
 
 	// Missing lists declared entries this version's image tried to load and
@@ -90,6 +116,27 @@ type PHPVersionResult struct {
 	NotInstalled bool
 }
 
+// PHPRangeError reports a version the site is not allowed to run, and what it
+// would have to satisfy to be allowed. It carries the facts rather than a
+// sentence, so each caller phrases the refusal in its own idiom.
+type PHPRangeError struct {
+	Site        string
+	Requested   string
+	Constraints []string
+	// Best is the newest installed version that satisfies every constraint, or
+	// "" when this machine has none.
+	Best string
+}
+
+func (e *PHPRangeError) Error() string {
+	msg := fmt.Sprintf("PHP %s is outside what %s can run (needs %s)",
+		e.Requested, e.Site, strings.Join(e.Constraints, " and "))
+	if e.Best != "" {
+		msg += fmt.Sprintf("; the closest installed version is %s", e.Best)
+	}
+	return msg
+}
+
 // SetSitePHPVersion switches a site (or one of its worktrees) to a PHP version
 // and runs every step that switch depends on. It is the single source of truth
 // for "what happens when a site changes PHP version"; CLI, UI, and MCP all call
@@ -97,8 +144,10 @@ type PHPVersionResult struct {
 //
 // Steps:
 //  1. Refuse runtimes that have no PHP version of their own.
-//  2. Clamp to the framework's supported range, so the pin never advertises a
-//     version the watcher clamps back on its next pass.
+//  2. Refuse a version the framework definition or the project's own composer
+//     requirement rules out, unless the caller forces it. Nothing is written on
+//     a refusal, so a request lerd cannot honour never reaches the files the
+//     project commits.
 //  3. Pin .php-version and .lerd.yaml.
 //  4. Persist site.PHPVersion to the registry.
 //  5. Re-link FrankenPHP, or fall back to FPM below its minimum version.
@@ -123,9 +172,13 @@ func SetSitePHPVersion(site *config.Site, version string, opts PHPVersionOpts) (
 		return res, fmt.Errorf("site %q is a host-proxy site, which runs your dev command on the host", site.Name)
 	}
 
-	if clamped := php.ClampToConstraint(version, phpConstraintFor(site)); clamped != version {
-		res.Version, res.Clamped = clamped, true
-		version = clamped
+	if constraints := phpConstraintsFor(site); !opts.Force && !php.SatisfiesAll(version, constraints...) {
+		return res, &PHPRangeError{
+			Site:        site.Name,
+			Requested:   version,
+			Constraints: constraints,
+			Best:        php.BestInstalledFor(constraints...),
+		}
 	}
 	gap := imageGapFn(version)
 	res.Missing, res.Stale, res.NotInstalled = gap.missing, gap.stale, gap.notInstalled

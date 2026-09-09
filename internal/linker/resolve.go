@@ -115,6 +115,9 @@ func Resolve(dir string, cfg *config.GlobalConfig, p Policy) (*Plan, error) {
 	phpVersion, nodeVersion := versions.PHP, versions.Node
 	if proj != nil && proj.PHPVersion != "" {
 		phpVersion = phpDet.ClampToRange(proj.PHPVersion, versions.PHPMin, versions.PHPMax)
+		if phpVersion != proj.PHPVersion {
+			plan.PHPPinned = proj.PHPVersion
+		}
 	}
 	// A version the framework's range moved us off is worth reporting, and when
 	// a better one could be installed the caller may offer to build it.

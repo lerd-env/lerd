@@ -111,3 +111,43 @@ func TestCleanupRelink_NoExisting(t *testing.T) {
 		t.Error("expected secured=false for non-existent path")
 	}
 }
+
+// The Winter CMS case. The definition is the real one for the Laravel major the
+// lock names, so its range applies, but the project itself requires more PHP
+// than that range allows. Nothing can satisfy both, and serving the framework's
+// cap gives a site that 500s on its own platform check, so the project wins.
+func TestDetectSiteVersions_ProjectRequirementOverrulesRange(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_DATA_HOME", tmp)
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0755); err != nil {
+		t.Fatalf("mkdir store: %v", err)
+	}
+	def := "name: laravel\nlabel: Laravel\nversion: \"9\"\npublic_dir: public\n" +
+		"php:\n  min: \"8.0\"\n  max: \"8.2\"\n" +
+		"detect:\n  - composer: laravel/framework\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "laravel@9.yaml"), []byte(def), 0644); err != nil {
+		t.Fatalf("write def: %v", err)
+	}
+
+	dir := t.TempDir()
+	composer := `{"require":{"php":">=8.4","laravel/framework":"^9.1"}}`
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0644); err != nil {
+		t.Fatalf("write composer: %v", err)
+	}
+
+	result := DetectSiteVersions(dir, "laravel", "8.5", "22")
+	if !result.RangeOverruled {
+		t.Error("RangeOverruled = false, want the definition's range set aside")
+	}
+	if result.PHPMin != "" || result.PHPMax != "" {
+		t.Errorf("range = %q-%q, want it dropped so the pin survives", result.PHPMin, result.PHPMax)
+	}
+	// No PHP is installed in the staged tree, so the answer is the lowest
+	// version the project's own requirement allows rather than a built image.
+	if result.PHP != "8.4" {
+		t.Errorf("PHP = %q, want 8.4, the floor the project requires", result.PHP)
+	}
+}

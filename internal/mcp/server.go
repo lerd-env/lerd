@@ -3899,9 +3899,6 @@ func execSitePHP(args map[string]any) (any, *rpcError) {
 	}
 
 	msg := fmt.Sprintf("PHP version for %s set to %s.", siteName, res.Version)
-	if res.Clamped {
-		msg = fmt.Sprintf("PHP version for %s set to %s: %s is outside the range its framework supports.", siteName, res.Version, res.Requested)
-	}
 	// The image gap is the whole reason a version switch loses an extension, so
 	// it is reported before the runtime-specific tail.
 	switch {
