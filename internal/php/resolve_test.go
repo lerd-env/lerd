@@ -42,10 +42,20 @@ func TestFPMContainerForDir_CustomFPMSite(t *testing.T) {
 	}
 }
 
-// A port-bearing custom site serves from its own container too. PHP tooling
-// invoked from the project must not fall back to the shared FPM image.
+// stubCustomImagePHP answers the image probe without building an image.
+func stubCustomImagePHP(t *testing.T, has bool) {
+	t.Helper()
+	orig := customImageHasPHPFn
+	t.Cleanup(func() { customImageHasPHPFn = orig })
+	customImageHasPHPFn = func(string) bool { return has }
+}
+
+// A port-bearing custom site whose image carries PHP serves its tooling from
+// its own container, so a project runtime is not silently replaced by the
+// shared one.
 func TestFPMContainerForDir_CustomContainerSite(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubCustomImagePHP(t, true)
 
 	site := filepath.Join(tempRoot(t), "app")
 	if err := os.MkdirAll(site, 0755); err != nil {
@@ -82,6 +92,26 @@ func TestFPMContainerForDir_UnregisteredDir(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 
 	if got, want := FPMContainerForDir(tempRoot(t), "8.3"), "lerd-php83-fpm"; got != want {
+		t.Errorf("FPMContainerForDir = %q, want %q", got, want)
+	}
+}
+
+// The section exists for Node, Python and Go sites as much as for PHP ones, and
+// execing php into an image without it fails at the OCI runtime. Those sites
+// keep the shared container, where the project is visible and php exists.
+func TestFPMContainerForDir_CustomContainerWithoutPHP(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	stubCustomImagePHP(t, false)
+
+	site := filepath.Join(tempRoot(t), "node-app")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "node-app", Path: site, ContainerPort: 3000}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := FPMContainerForDir(site, "8.5"), "lerd-php85-fpm"; got != want {
 		t.Errorf("FPMContainerForDir = %q, want %q", got, want)
 	}
 }

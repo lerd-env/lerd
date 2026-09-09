@@ -34,6 +34,10 @@ func GenerateCustomContainerQuadlet(siteName, projectPath string, port int) (str
 	b.WriteString("Network=lerd\n")
 	fmt.Fprintf(&b, "Volume=%s:/etc/hosts:ro,z\n", config.ContainerHostsFile())
 	fmt.Fprintf(&b, "Volume=%s:%s:rw\n", projectPath, projectPath)
+	// lerd's own tools are run by absolute host path (composer is a phar in
+	// this directory), so an image that carries PHP can only be handed the
+	// project's composer work if the directory is visible under the same path.
+	fmt.Fprintf(&b, "Volume=%s:%s:ro,z\n", config.BinDir(), config.BinDir())
 	fmt.Fprintf(&b, "PodmanArgs=--security-opt=label=disable --workdir=%s\n", projectPath)
 
 	b.WriteString("\n[Service]\n")

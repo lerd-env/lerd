@@ -87,22 +87,28 @@ func SiteRootFor(dir string) string {
 	return dir
 }
 
+// customImageHasPHPFn is a seam so the routing can be tested without an image.
+var customImageHasPHPFn = podman.CustomImageHasPHP
+
 // FPMContainerForDir resolves the PHP container an exec in dir must target: the
-// per-site container for custom sites, otherwise the shared
+// per-site container for custom sites that carry PHP, otherwise the shared
 // lerd-php<version>-fpm container. Like VersionForDir this is the single answer
 // the CLI and the MCP server share, so a command can never exec into a
 // different container than the one serving the same directory. A worktree
 // resolves through its parent site, so a checkout beside its project still
-// reaches the parent's custom image.
+// reaches the parent's custom image. A custom container built from an image
+// with no PHP in it (the Node and Python sites the section exists for) keeps
+// the shared container, where the project is visible through the home mount and
+// php is actually present.
 func FPMContainerForDir(dir, version string) string {
 	if _, parent, ok := WorktreeRootFor(dir); ok {
-		if parent.IsCustomContainer() {
+		if parent.IsCustomContainer() && customImageHasPHPFn(parent.Name) {
 			return podman.CustomContainerName(parent.Name)
 		}
 		return podman.FPMContainerName(*parent, version)
 	}
 	if site, _ := config.FindSiteByPath(SiteRootFor(dir)); site != nil {
-		if site.IsCustomContainer() {
+		if site.IsCustomContainer() && customImageHasPHPFn(site.Name) {
 			return podman.CustomContainerName(site.Name)
 		}
 		return podman.FPMContainerName(*site, version)

@@ -72,10 +72,18 @@ When you `lerd link` a project with a `container` section:
 4. Nginx is configured to `proxy_pass` to the container instead of `fastcgi_pass`
 5. Your project directory is bind-mounted into the container
 
-PHP commands such as `lerd php`, `lerd composer`, and `lerd console` also exec
-into this per-project container when the image provides the requested tool.
-This makes a custom PHP runtime available to both the application and its
-development commands; language-only images should use their native commands.
+`lerd php`, `lerd composer` and `lerd console` exec into this container when the
+image carries PHP, so a project that pins its own runtime gets that runtime for
+its development commands too, not just for the requests it serves. lerd probes
+the image once and remembers the answer against the image ID, so a rebuild is
+re-checked and nothing shells out on the path every `lerd php` takes.
+
+An image with no PHP in it, which is the usual case for a Node, Python or Go
+site, keeps the shared PHP container: the project is visible there through the
+home mount, and execing `php` into an image that has none fails at the runtime
+rather than with anything you can act on. Composer runs from lerd's own pinned
+phar either way, so lerd's bin directory is mounted read-only into the
+container.
 
 ## Services
 
