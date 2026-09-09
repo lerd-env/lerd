@@ -42,6 +42,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 ### PHP, Node and runtimes
 
 - 🐘 **Per-project PHP version.** 8.1 to 8.5, plus a frozen 7.4 / 8.0 legacy tier for projects on the old stack and 8.6 as a prerelease tier nothing picks for you, switched with one click. Custom extensions and Alpine packages are declared once and applied to every image lerd builds.
+- ⚡ **PHP on the host, on macOS.** A native runtime runs PHP-FPM, the CLI, composer and the workers directly on the host and leaves nginx and the services in containers, removing the bind-mount boundary a Mac pays on every file PHP reads. On a Laravel app with Horizon and Filament that took 62 requests per second to 238. Switch the whole install with `lerd php:runtime`; Linux never had the boundary and is unchanged.
 
 - ⚡ **FrankenPHP runtime.** Per site, as an alternative to shared PHP-FPM, with Laravel Octane and Symfony Runtime worker mode.
 
@@ -73,7 +74,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 ### Interfaces
 
-- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
+- 🖥️ **Built-in Web UI.** Sites and services dashboards, live widgets, a global Cmd+K command palette, install/remove of PHP and Node versions with a shell into any version's container, and the framework command you run all day pinned to the site's control row, in fourteen languages and eleven themes that follow you between machines. Reachable from another machine behind credentials, with the actions that touch the host staying local until you grant them.
 
 - ✨ **Start a project from the dashboard.** The `+` in Sites scaffolds a project from the framework store or links one you already have, asks what `lerd init` asks, then runs composer and the JS build in the modal. Close the tab mid-install and it picks back up.
 
