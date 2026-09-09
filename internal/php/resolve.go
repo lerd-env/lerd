@@ -87,8 +87,8 @@ func SiteRootFor(dir string) string {
 	return dir
 }
 
-// FPMContainerForDir resolves the FPM container an exec in dir must target: the
-// per-site container for custom-FPM sites, otherwise the shared
+// FPMContainerForDir resolves the PHP container an exec in dir must target: the
+// per-site container for custom sites, otherwise the shared
 // lerd-php<version>-fpm container. Like VersionForDir this is the single answer
 // the CLI and the MCP server share, so a command can never exec into a
 // different container than the one serving the same directory. A worktree
@@ -96,9 +96,15 @@ func SiteRootFor(dir string) string {
 // reaches the parent's custom image.
 func FPMContainerForDir(dir, version string) string {
 	if _, parent, ok := WorktreeRootFor(dir); ok {
+		if parent.IsCustomContainer() {
+			return podman.CustomContainerName(parent.Name)
+		}
 		return podman.FPMContainerName(*parent, version)
 	}
 	if site, _ := config.FindSiteByPath(SiteRootFor(dir)); site != nil {
+		if site.IsCustomContainer() {
+			return podman.CustomContainerName(site.Name)
+		}
 		return podman.FPMContainerName(*site, version)
 	}
 	return podman.SharedFPMContainerName(version)

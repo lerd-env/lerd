@@ -42,6 +42,24 @@ func TestFPMContainerForDir_CustomFPMSite(t *testing.T) {
 	}
 }
 
+// A port-bearing custom site serves from its own container too. PHP tooling
+// invoked from the project must not fall back to the shared FPM image.
+func TestFPMContainerForDir_CustomContainerSite(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
+
+	site := filepath.Join(tempRoot(t), "app")
+	if err := os.MkdirAll(site, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := config.AddSite(config.Site{Name: "app", Path: site, ContainerPort: 8474}); err != nil {
+		t.Fatal(err)
+	}
+
+	if got, want := FPMContainerForDir(site, "8.5"), "lerd-custom-app"; got != want {
+		t.Errorf("FPMContainerForDir = %q, want %q", got, want)
+	}
+}
+
 // An ordinary site stays on the shared per-version container.
 func TestFPMContainerForDir_SharedFPMSite(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
