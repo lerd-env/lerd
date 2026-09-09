@@ -17,6 +17,7 @@ import (
 
 	"github.com/geodro/lerd/internal/cfgedit"
 	"github.com/geodro/lerd/internal/config"
+	"github.com/geodro/lerd/internal/nativephp"
 	phpPkg "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
 )
@@ -68,7 +69,10 @@ func Valid(scope string) bool {
 		s, err := config.FindSite(name)
 		return err == nil && s != nil && s.IsFrankenPHP()
 	}
-	installed, _ := phpPkg.ListInstalled()
+	// The versions this install can serve, which under the native runtime are
+	// the host builds. Asking the container list there rejected a version the
+	// dashboard had just offered, so its ini tab answered 404.
+	installed, _ := phpPkg.InstalledForRuntime()
 	return slices.Contains(installed, scope)
 }
 
@@ -194,6 +198,26 @@ func restartFrankenPHPSite(name string) error {
 // A var for the same reason as installedVersions below: a test that left it live
 // would restart the developer's own FPM containers.
 var restartFPMUnit = func(version string) error {
+	cfg, err := config.LoadGlobal()
+	mode := config.PHPRuntimeContainer
+	if err == nil {
+		mode = cfg.PHPRuntimeMode()
+	}
+	return restartForRuntime(version, mode, restartContainerFPM, nativephp.Reload)
+}
+
+// restartForRuntime reloads whichever FPM is actually serving. Restarting the
+// container under the native runtime would be a silent no-op: the ini is
+// written, the stopped container is "restarted", and the setting never reaches
+// the process handling requests.
+func restartForRuntime(version, mode string, restartContainer, reloadNative func(string) error) error {
+	if mode == config.PHPRuntimeNative {
+		return reloadNative(version)
+	}
+	return restartContainer(version)
+}
+
+func restartContainerFPM(version string) error {
 	short := strings.ReplaceAll(version, ".", "")
 	return podman.RestartUnit("lerd-php" + short + "-fpm")
 }

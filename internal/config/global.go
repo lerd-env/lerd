@@ -118,6 +118,13 @@ type GlobalConfig struct {
 		// a "host:container" spec; the loopback/LAN bind is applied centrally on
 		// write. Managed via the PHP page's Ports tab (lerd php:ports).
 		FPMPorts map[string][]string `yaml:"fpm_ports,omitempty" mapstructure:"fpm_ports"`
+		// Runtime selects where PHP runs for every site the shared FPM
+		// container serves: "container" (default) or "native", which moves
+		// PHP-FPM, the CLI and the workers onto the macOS host. Global rather
+		// than per-site because the FPM container is shared by every site on a
+		// PHP version, so half a machine cannot be moved. Read it through
+		// PHPRuntimeMode().
+		Runtime string `yaml:"runtime,omitempty" mapstructure:"runtime"`
 	} `yaml:"php" mapstructure:"php"`
 	Node struct {
 		DefaultVersion string `yaml:"default_version" mapstructure:"default_version"`

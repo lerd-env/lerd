@@ -59,6 +59,11 @@ func VersionStatus(cfg *config.GlobalConfig, version string) Report {
 	r.Extensions.Declared = cfg.GetExtensions()
 	r.Packages.Declared = cfg.GetPackages()
 
+	// The native runtime has no image to measure against; the host build is
+	// what carries the extensions there.
+	if nativeRuntimeFn() {
+		return nativeVersionStatus(r, version)
+	}
 	if !imageExistsFn(version) {
 		return r
 	}
@@ -184,6 +189,18 @@ func (c *moduleCache) clear() {
 // its own `php -m`. Empty (not an error) for a version with no image: absence
 // of an image is not evidence about its contents.
 func Modules(version string) ([]string, error) {
+	// The host build answers for itself, and cheaply: reading it is running a
+	// binary, not starting a container, so it needs none of the caching below.
+	if nativeRuntimeFn() {
+		if !nativeBuiltFn(version) {
+			return nil, nil
+		}
+		lines, err := nativeModulesFn(version)
+		if err != nil {
+			return nil, err
+		}
+		return parseModules(strings.Join(lines, "\n")), nil
+	}
 	imageID := imageIDFn(version)
 	if imageID == "" {
 		return nil, nil

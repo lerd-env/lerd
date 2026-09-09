@@ -293,6 +293,11 @@ func RunWith(ctx context.Context, path string, fw *config.Framework, opts Option
 	if c, ok := checkPHPVersion(path, fw); ok {
 		resp.add(c)
 	}
+	if cs, ok := checkNativeRuntime(path); ok {
+		for _, c := range cs {
+			resp.add(c)
+		}
+	}
 	if c, ok := checkVhost(path); ok {
 		resp.add(c)
 	}

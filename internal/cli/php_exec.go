@@ -124,6 +124,15 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	// php.cli_ini gets it as -d on every PHP process lerd starts for it.
 	args = prependPHPIniArgs(phpIniArgsForDir(cwd), args)
 
+	// Under the native runtime PHP lives on the host next to the project, so
+	// there is no container to exec into and nothing to stage across a mount
+	// boundary. This covers directories that are not registered sites too: the
+	// shim runs everywhere, and starting an FPM container for it would undo the
+	// runtime it is meant to be serving.
+	if v, ok := nativeRuntimeVersion(cwd); ok {
+		return runNativePHP(cwd, v, args, extraEnv)
+	}
+
 	container := fpmContainerForDir(cwd, version)
 
 	version, container, err := ensureFPMRunning(cwd, version, container)

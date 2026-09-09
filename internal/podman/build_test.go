@@ -641,3 +641,35 @@ func TestBuildCustomExtBlock_SkipsBundledExtensions(t *testing.T) {
 		t.Errorf("a bundled extension must not pull runtime deps, got:\n%s", got)
 	}
 }
+
+// An installed version nothing serves is never built by install, so its image
+// keeps whatever recipe it was last built from. Judging the freshness of the
+// versions install does build by that one made every install rebuild all of
+// them, immediately after building them.
+func TestNeedsFPMRebuild_IgnoresVersionsOutsideTheGivenSet(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", tmp)
+	if err := os.MkdirAll(config.DataDir(), 0755); err != nil {
+		t.Fatal(err)
+	}
+	current, _ := ContainerfileHash()
+	_ = os.WriteFile(config.PHPImageHashFile(), []byte(current), 0644)
+
+	prevLabel := imageLabelFn
+	// 8.6 is installed but unused, so it still carries an older recipe.
+	imageLabelFn = func(image, key string) string {
+		if strings.Contains(image, "86") {
+			return "an-older-recipe"
+		}
+		return current
+	}
+	t.Cleanup(func() { imageLabelFn = prevLabel })
+
+	if NeedsFPMRebuild([]string{"8.4", "8.5"}) {
+		t.Error("a version outside the set being built must not force a rebuild of the ones in it")
+	}
+	// It still has to be caught when it is one of the versions install builds.
+	if !NeedsFPMRebuild([]string{"8.4", "8.6"}) {
+		t.Error("a stale image inside the set must still force a rebuild")
+	}
+}

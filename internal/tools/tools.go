@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -127,12 +128,37 @@ func (m *Manifest) Size(name, goos, goarch string) int64 {
 // every valid entry of the published tools.yaml when it is reachable.
 func Load(ctx context.Context) *Manifest {
 	m := embeddedManifest()
-	for name, t := range publishedTools(ctx) {
-		if t.valid() {
-			m.Tools[name] = t
+	for _, src := range sources() {
+		for name, t := range publishedTools(ctx, src) {
+			if t.valid() {
+				m.Tools[name] = t
+			}
 		}
 	}
 	return m
+}
+
+// source is one published manifest: where to fetch it and where its copy is
+// cached. The native PHP pins are a second one because the builds live in
+// their own repository, and they merge into the first rather than replacing it.
+type source struct {
+	urls  []string
+	cache string
+}
+
+// nativePinsGOOS is the platform the native builds are published for. A var so
+// the merge can be tested from any machine.
+var nativePinsGOOS = runtime.GOOS
+
+func sources() []source {
+	srcs := []source{{origin.ToolsManifestURLs(), manifestCachePath()}}
+	// The builds only run on macOS, so anywhere else these pins name downloads
+	// that can never be installed, and fetching them is a daily request for a
+	// manifest nothing will read.
+	if nativePinsGOOS == "darwin" {
+		srcs = append(srcs, source{origin.NativePHPManifestURLs(), nativeCachePath()})
+	}
+	return srcs
 }
 
 // Refresh reloads the manifest with the disk cache bypassed, for the manual
@@ -142,8 +168,10 @@ func Load(ctx context.Context) *Manifest {
 // the endpoint leaves the cached pins in place rather than reverting to the
 // embedded ones, so being offline never reads as "nothing to update".
 func Refresh(ctx context.Context) *Manifest {
-	if fetched, data := fetchPublished(ctx); fetched != nil {
-		writeCache(manifestCachePath(), data)
+	for _, src := range sources() {
+		if fetched, data := fetchPublished(ctx, src.urls); fetched != nil {
+			writeCache(src.cache, data)
+		}
 	}
 	return Load(ctx)
 }
@@ -152,17 +180,21 @@ func manifestCachePath() string {
 	return filepath.Join(config.DataDir(), "tools-manifest.yaml")
 }
 
+func nativeCachePath() string {
+	return filepath.Join(config.DataDir(), "native-php-manifest.yaml")
+}
+
 // publishedTools returns the published pins, preferring a fresh disk cache
 // over the network. A failed fetch re-stamps the cache mtime so a dead
 // endpoint is retried at most once per cacheTTL, with stale data (or the
 // embedded pins, via an empty marker) standing in until it answers again.
-func publishedTools(ctx context.Context) map[string]Tool {
-	path := manifestCachePath()
+func publishedTools(ctx context.Context, src source) map[string]Tool {
+	path := src.cache
 	if info, err := os.Stat(path); err == nil && time.Since(info.ModTime()) < cacheTTL {
 		data, _ := os.ReadFile(path)
 		return parseTools(data)
 	}
-	if fetched, data := fetchPublished(ctx); fetched != nil {
+	if fetched, data := fetchPublished(ctx, src.urls); fetched != nil {
 		writeCache(path, data)
 		return fetched
 	}
@@ -199,9 +231,9 @@ func embeddedManifest() *Manifest {
 
 // fetchPublished is best-effort: any network, status or parse problem returns
 // nils and the caller falls back to cached or embedded pins.
-func fetchPublished(ctx context.Context) (map[string]Tool, []byte) {
+func fetchPublished(ctx context.Context, urls []string) (map[string]Tool, []byte) {
 	client := &http.Client{Timeout: fetchTimeout}
-	for _, url := range origin.ToolsManifestURLs() {
+	for _, url := range urls {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			continue

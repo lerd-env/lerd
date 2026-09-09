@@ -21,6 +21,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/podman"
 )
 
@@ -164,8 +165,11 @@ type VhostData struct {
 	// FPMContainer is the container nginx fastcgi's to: the shared
 	// lerd-php<ver>-fpm, or a per-site container for custom-FPM sites.
 	FPMContainer string
-	CertDomain   string // domain whose cert files to use (defaults to Domain)
-	PublicDir    string // document root subdirectory, e.g. "public", "web", "."
+	// FPMPort is the port on FPMContainer nginx fastcgi's to: 9000 for a
+	// container, the version's host listener for a native site.
+	FPMPort    int
+	CertDomain string // domain whose cert files to use (defaults to Domain)
+	PublicDir  string // document root subdirectory, e.g. "public", "web", "."
 	// Proxies are the worker servers this site answers for, one location per
 	// path. A site can run more than one, an asset server next to a websocket
 	// server, and each has its own port and upstream.
@@ -501,7 +505,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 	publicDir := resolvePublicDir(site)
 	proxies := detectSiteProxies(site)
 	devBase, devPort := detectSiteDevServer(site)
-	fpmContainer := podman.FPMContainerName(site, phpVersion)
+	fpmContainer, fpmPort := fpmUpstream(&site, phpVersion)
 	data := VhostData{
 		Domain:          site.PrimaryDomain(),
 		ServerNames:     serverNamesWithWildcards(site.Domains),
@@ -509,6 +513,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		PublicDir:       publicDir,
 		Proxies:         proxies,
 		UpstreamHost:    hostProxyUpstream(),
@@ -722,11 +727,11 @@ func worktreeSite(domain, path, siteName string) config.Site {
 
 // worktreeVhostConfig resolves the framework-dependent parts of a worktree
 // vhost, the same three the main-site generators resolve for the parent.
-func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, fpmContainer, frameworkNginx string) {
+func worktreeVhostConfig(domain, path, phpVersion, siteName string) (publicDir, fpmContainer, frameworkNginx string, fpmPort int) {
 	site := worktreeSite(domain, path, siteName)
 	publicDir = resolvePublicDir(site)
-	fpmContainer = podman.FPMContainerName(site, phpVersion)
-	return publicDir, fpmContainer, resolveFrameworkNginx(site, publicDir, fpmContainer)
+	fpmContainer, fpmPort = fpmUpstream(&site, phpVersion)
+	return publicDir, fpmContainer, resolveFrameworkNginx(site, publicDir, fpmContainer), fpmPort
 }
 
 // GenerateWorktreeVhost renders the HTTP vhost template for a worktree checkout
@@ -742,7 +747,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		return err
 	}
 
-	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	publicDir, fpmContainer, frameworkNginx, fpmPort := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
@@ -751,6 +756,7 @@ func GenerateWorktreeVhost(domain, path, phpVersion, siteName, branch string) er
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		PublicDir:       publicDir,
 		LerdSite:        siteName,
 		LerdBranch:      branch,
@@ -788,7 +794,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		return err
 	}
 
-	publicDir, fpmContainer, frameworkNginx := worktreeVhostConfig(domain, path, phpVersion, siteName)
+	publicDir, fpmContainer, frameworkNginx, fpmPort := worktreeVhostConfig(domain, path, phpVersion, siteName)
 	devBase, devPort := detectWorktreeDevServer(siteName, path)
 	data := VhostData{
 		Domain:          domain,
@@ -797,6 +803,7 @@ func GenerateWorktreeSSLVhost(domain, path, phpVersion, parentDomain, siteName, 
 		PHPVersion:      phpVersion,
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
+		FPMPort:         fpmPort,
 		CertDomain:      parentDomain,
 		PublicDir:       publicDir,
 		LerdSite:        siteName,
@@ -1884,28 +1891,7 @@ func EnsureProfilerVhost() error {
 	if cfg.IsProfilerEnabled() {
 		state = "on"
 	}
-	// SCRIPT_FILENAME just needs a real file to exist; SPX intercepts the
-	// SPX_UI_URI request and serves its UI before dump-bridge.php runs.
-	content := fmt.Sprintf(`server {
-    listen 80;
-    listen [::]:80;
-    server_name profiler.localhost;
-
-    location = %s {
-        access_log off;
-        default_type text/plain;
-        return 200 %q;
-    }
-
-    location / {
-        set $fpm "lerd-php%s-fpm";
-        fastcgi_pass $fpm:9000;
-        include fastcgi_params;
-        fastcgi_param SCRIPT_FILENAME /usr/local/etc/lerd/dump-bridge.php;
-        fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
-    }
-}
-`, ProfilerStatePath, state, phpShort(cfg.PHP.DefaultVersion))
+	content := profilerVhost(cfg.PHPRuntimeMode(), cfg.PHP.DefaultVersion, ProfilerStatePath, state)
 	config.GuardRealWrite(filepath.Join(config.NginxConfD(), "_profiler.conf"))
 	return os.WriteFile(filepath.Join(config.NginxConfD(), "_profiler.conf"), []byte(content), 0644)
 }
@@ -1980,4 +1966,50 @@ func RewriteNginxQuadlet() (changed bool, err error) {
 	content = podman.ApplyNginxPorts(content, httpPort, httpsPort)
 	content = podman.InjectExtraVolumes(content, podman.ExtraVolumePaths())
 	return podman.WriteQuadletDiff("lerd-nginx", content)
+}
+
+// profilerVhost renders the profiler.localhost vhost for the runtime serving
+// PHP. Under the native runtime nothing listens on the FPM container, so a
+// vhost naming it answered 502 for SPX's own dashboard, and the bridge it names
+// as SCRIPT_FILENAME lives at a path that only exists inside the image.
+//
+// SCRIPT_FILENAME just needs a real file to exist: SPX intercepts the
+// SPX_UI_URI request and serves its UI before the bridge runs.
+func profilerVhost(mode, defaultVersion, statePath, state string) string {
+	upstream := fmt.Sprintf(`set $fpm "lerd-php%s-fpm";
+        fastcgi_pass $fpm:9000;`, phpShort(defaultVersion))
+	script := "/usr/local/etc/lerd/dump-bridge.php"
+	if mode == config.PHPRuntimeNative {
+		// An unparseable version falls back to the container, the same way a
+		// site vhost does, so a bad value can never render port 0 and fail the
+		// whole configuration.
+		if port, err := nativephp.PortFor(defaultVersion); err == nil {
+			upstream = fmt.Sprintf(`set $fpm "%s";
+        fastcgi_pass $fpm:%d;`, hostGateway, port)
+			script = config.DumpsBridgeFile()
+		}
+	}
+	return fmt.Sprintf(`server {
+    listen 80;
+    listen [::]:80;
+    server_name profiler.localhost;
+
+    location = %s {
+        access_log off;
+        default_type text/plain;
+        return 200 %q;
+    }
+
+    location / {
+        %s
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME %s;
+        # The bridge is auto-prepended into every request, and it is also the
+        # script named above, so without this it is loaded twice and the second
+        # load fatals on redeclaring its own functions.
+        fastcgi_param PHP_VALUE "auto_prepend_file=";
+        fastcgi_param HTTP_COOKIE "SPX_KEY=$spx_key";
+    }
+}
+`, statePath, state, upstream, script)
 }

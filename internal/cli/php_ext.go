@@ -40,6 +40,9 @@ func newPhpExtAddCmd() *cobra.Command {
 			"The version you are on is rebuilt and verified now; other versions rebuild the next time they are used.",
 		Args: cobra.RangeArgs(1, 2),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:ext"); err != nil {
+				return err
+			}
 			ext := args[0]
 			if !validExtNameRe.MatchString(ext) {
 				return fmt.Errorf("invalid extension name %q: must contain only letters, digits, hyphens, and underscores", ext)
@@ -129,6 +132,9 @@ func newPhpExtRemoveCmd() *cobra.Command {
 		Short: "Remove a custom PHP extension from every PHP version",
 		Args:  cobra.RangeArgs(1, 2),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:ext"); err != nil {
+				return err
+			}
 			ext := args[0]
 			if !validExtNameRe.MatchString(ext) {
 				return fmt.Errorf("invalid extension name %q: must contain only letters, digits, hyphens, and underscores", ext)
@@ -166,6 +172,9 @@ func newPhpExtListCmd() *cobra.Command {
 		Short: "List your custom PHP extensions and where they did not build",
 		Args:  cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := nativeImageCommandRefusal("php:ext"); err != nil {
+				return err
+			}
 			cfg, err := config.LoadGlobal()
 			if err != nil {
 				return err

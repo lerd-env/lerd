@@ -16,6 +16,7 @@ import (
 	"github.com/geodro/lerd/internal/download"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
+	"github.com/geodro/lerd/internal/nativephp"
 	"github.com/geodro/lerd/internal/tools"
 )
 
@@ -143,7 +144,26 @@ func versionGap(a, b string) int {
 // when it is missing or behind the pin, and answers where it is. Downloaded on
 // demand rather than at install time, because only a project whose bundled
 // runtime is short an extension ever needs it.
+// installedNativeHostPHP returns the native runtime's binary for a version when
+// one is installed. The native build is a full static PHP for the same version,
+// so a host command that needs an extension the bundled binary lacks can use it
+// directly instead of downloading a second, slimmer build alongside it.
+func installedNativeHostPHP(phpVersion string, path func(string) string) (string, bool) {
+	p := path(phpVersion)
+	info, err := os.Stat(p)
+	if err != nil || info.IsDir() || info.Mode()&0111 == 0 {
+		return "", false
+	}
+	return p, true
+}
+
 func ensureHostPHPBinary(w io.Writer, phpVersion string) (string, error) {
+	// Prefer the native runtime's binary when it is already installed: it is
+	// the same static PHP for the same version, with a wider extension set than
+	// the pinned fallback, so downloading that too would duplicate it.
+	if p, ok := installedNativeHostPHP(phpVersion, nativephp.BinaryPath); ok {
+		return p, nil
+	}
 	pins := &pinnedTools{m: tools.Load(context.Background())}
 	tool, ok := hostPHPTool(pins.m, phpVersion)
 	if !ok {

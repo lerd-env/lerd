@@ -8,6 +8,7 @@
 | `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Refuses a version the framework or the project's `composer.json` rules out; `--force` pins it anyway |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or add a version this machine does not have yet; `--local` builds from source instead of pulling a base |
+| `lerd php:update [version]` | Update PHP to the newest published patch. On the native runtime this downloads the new build and restarts the pools; on the container runtime it rebuilds the images from the newest base |
 | `lerd fetch [version...] [--local]` | Pull pre-built PHP FPM base images from ghcr.io; `--local` builds from source instead |
 | `lerd xdebug on [version] [--mode MODE] [--on-demand]` | Enable Xdebug for a PHP version with the given mode (default `debug`) and restart the FPM container. `--on-demand` sets `start_with_request=trigger` so nothing auto-connects |
 | `lerd xdebug off [version]` | Disable Xdebug and restart the FPM container |

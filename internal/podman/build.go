@@ -1482,3 +1482,9 @@ func EnsureSitePHPUserIni(siteName string) error {
 		"; max_execution_time = 60\n"
 	return os.WriteFile(path, []byte(content), 0644)
 }
+
+// RemoveFPMImage deletes the shared PHP-FPM image for a version. Used to
+// reclaim the disk those images hold once PHP runs on the host instead.
+func RemoveFPMImage(version string) error {
+	return execCommand(PodmanBin(), "rmi", "-f", FPMImageName(version)).Run()
+}

@@ -10,7 +10,7 @@
   import NodePage from './system/NodePage.svelte';
   import LerdDetail from './system/LerdDetail.svelte';
   import ToolsDetail from './system/ToolsDetail.svelte';
-  import WorkerModeDetail from './system/WorkerModeDetail.svelte';
+  import RuntimeDetail from './system/RuntimeDetail.svelte';
   import SnapshotsDetail from './system/SnapshotsDetail.svelte';
 
   const selected = $derived($routeRest || 'lerd');
@@ -33,8 +33,8 @@
   <PhpPage initialVersion={phpVersion} />
 {:else if selected === 'node' || selected === 'node-install' || selected.startsWith('node-')}
   <NodePage />
-{:else if selected === 'workermode'}
-  <WorkerModeDetail />
+{:else if selected === 'runtime' || selected === 'phpruntime' || selected === 'workermode'}
+  <RuntimeDetail />
 {:else if selected === 'snapshots'}
   <SnapshotsDetail />
 {:else if selected === 'tools'}

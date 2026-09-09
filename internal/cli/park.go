@@ -11,6 +11,7 @@ import (
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/geodro/lerd/internal/imagepull"
+	"github.com/geodro/lerd/internal/lifecycle"
 	"github.com/geodro/lerd/internal/linker"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -390,6 +391,13 @@ var (
 
 // ensureFPMQuadletTo is like ensureFPMQuadlet but writes build output to w.
 func ensureFPMQuadletTo(phpVersion string, w io.Writer) error {
+	// Under the native runtime PHP runs on the host, so there is no FPM
+	// container to ensure and starting one here would undo the teardown the
+	// runtime switch performed. This is the path `lerd start` reaches through
+	// site restore, which is why the containers came back on every start.
+	if !lifecycle.FPMContainersWanted() {
+		return nil
+	}
 	versionShort := strings.ReplaceAll(phpVersion, ".", "")
 	unitName := "lerd-php" + versionShort + "-fpm"
 
@@ -447,6 +455,23 @@ func fpmVersionsToEnsure(defaultVersion string, sites []config.Site) []string {
 	return out
 }
 
+// ensuredFPMVersions is the set install builds images for: the default version
+// plus what registered sites run. Read from config rather than passed around so
+// the freshness check and the build cannot drift apart, which is what made
+// every install rebuild the versions it had just built.
+func ensuredFPMVersions() []string {
+	cfg, _ := config.LoadGlobal()
+	defaultPHP := ""
+	if cfg != nil {
+		defaultPHP = cfg.PHP.DefaultVersion
+	}
+	var sites []config.Site
+	if reg, err := config.LoadSites(); err == nil && reg != nil {
+		sites = reg.Sites
+	}
+	return fpmVersionsToEnsure(defaultPHP, sites)
+}
+
 // fpmEnsurePlan splits versions into the ones with an image to build and the
 // ones already current, which have nothing to show.
 func fpmEnsurePlan(versions []string) (build, quiet []string) {
@@ -465,6 +490,14 @@ func fpmEnsurePlan(versions []string) (build, quiet []string) {
 // disclosed first; before this they streamed raw podman build output into the
 // middle of the install log, past the point where the disclosure is printed.
 func ensureFPMQuadlets(versions []string) {
+	// On the native runtime there are no images to build. Announcing four of
+	// them and then doing nothing, which is what the per-version no-op below
+	// amounted to, said the opposite of what was happening. The host builds
+	// are what an install has to bring up to date instead.
+	if !lifecycle.FPMContainersWanted() {
+		ensureNativePHPBuilds(versions)
+		return
+	}
 	build, quiet := fpmEnsurePlan(versions)
 
 	for _, v := range quiet {

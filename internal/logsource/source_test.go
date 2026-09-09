@@ -40,6 +40,9 @@ func sourceByName(srcs []Source, name string) (Source, bool) {
 }
 
 func TestSources_EnumeratesSiteAndGlobals(t *testing.T) {
+	// These assert the container-runtime target, so pin the runtime rather than
+	// reading whatever the developer's own install happens to be set to.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	name, path := seedSite(t)
 	srcs, err := Sources(name, path)
 	if err != nil {
@@ -119,6 +122,9 @@ func TestResolve_FindsKnownSource(t *testing.T) {
 }
 
 func TestFPMContainer_SiteTypes(t *testing.T) {
+	// These assert the container-runtime target, so pin the runtime rather than
+	// reading whatever the developer's own install happens to be set to.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	cases := []struct {
 		name string
 		site config.Site
@@ -145,6 +151,9 @@ func TestFPMContainer_SiteTypes(t *testing.T) {
 }
 
 func TestResolve_DirectSources(t *testing.T) {
+	// These assert the container-runtime target, so pin the runtime rather than
+	// reading whatever the developer's own install happens to be set to.
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	name, path := seedSite(t)
 	cases := []struct{ in, wantLocator string }{
 		{"fpm", ""}, // matched by pattern below

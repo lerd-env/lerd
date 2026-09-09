@@ -2,11 +2,19 @@ package cli
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/feedback"
 	"github.com/spf13/cobra"
 )
+
+// nativeInstallFn fetches a version's native build. A seam so the routing can
+// be tested without a download.
+var nativeInstallFn = func(version string, w io.Writer) error {
+	return ensureNativePHPInstalled(&pinnedTools{}, version, w)
+}
 
 // NewUseCmd returns the use command.
 func NewUseCmd() *cobra.Command {
@@ -36,6 +44,13 @@ func runUse(_ *cobra.Command, args []string) error {
 
 	feedback.Begin()
 	feedback.Done("default PHP set to " + feedback.Val(version))
+
+	// Under the native runtime there is no image to build, so the binary is
+	// what has to exist. Without this, `lerd use` set a default version that
+	// nothing on the machine could serve.
+	if cfg.PHPRuntimeMode() == config.PHPRuntimeNative {
+		return nativeInstallFn(version, os.Stdout)
+	}
 
 	// Ensure FPM quadlet exists for this version
 	if err := ensureFPMQuadlet(version); err != nil {

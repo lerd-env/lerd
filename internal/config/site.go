@@ -153,6 +153,22 @@ func (s *Site) IsFrankenPHP() bool {
 	return s.Runtime == "frankenphp"
 }
 
+// IsNative returns true when the site is served by a PHP-FPM running on the
+// host instead of in a container. nginx still speaks fastcgi to it, so the site
+// stays an FPM site in every other respect.
+//
+// The runtime is an install-wide setting, not a per-site one: the FPM container
+// is shared by every site on a PHP version, so half of them cannot be moved off
+// it. LoadGlobal is mtime-cached, which keeps this cheap enough for the vhost
+// and worker loops that call it per site.
+func (s *Site) IsNative() bool {
+	cfg, err := LoadGlobal()
+	if err != nil {
+		return false
+	}
+	return s.ServedNatively(cfg.PHPRuntimeMode())
+}
+
 // IsCustomFPM returns true when the site is a PHP project served by fastcgi
 // from its own per-site image, built from a Containerfile (a container: config
 // with no port). It is a normal PHP-FPM site whose container is per-site.

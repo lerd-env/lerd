@@ -73,7 +73,7 @@ func TestWriteWorkerHostUnit_writesGuardAndServiceUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	changed, err := writeWorkerHostUnit("lerd-vite-mysite", sitePath, "npm run dev", "always")
+	changed, err := writeWorkerHostUnit("lerd-vite-mysite", sitePath, "npm run dev", "always", "")
 	if err != nil {
 		t.Fatalf("writeWorkerHostUnit: %v", err)
 	}
@@ -138,7 +138,7 @@ func TestWriteWorkerHostUnit_servicesMgrErrorPropagates(t *testing.T) {
 	swapMgr(t, mgr)
 	swapDaemonReload(t)
 
-	_, err := writeWorkerHostUnit("lerd-vite-mysite", "/site", "npm run dev", "always")
+	_, err := writeWorkerHostUnit("lerd-vite-mysite", "/site", "npm run dev", "always", "")
 	if err == nil {
 		t.Fatalf("expected error from services.Mgr.WriteServiceUnit; got nil")
 	}
@@ -223,7 +223,7 @@ func TestWriteWorkerHostUnit_writesProcessGroupReap(t *testing.T) {
 	if err := os.MkdirAll(sitePath, 0755); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := writeWorkerHostUnit("lerd-native-mysite", sitePath, "php artisan native:serve", "on-failure"); err != nil {
+	if _, err := writeWorkerHostUnit("lerd-native-mysite", sitePath, "php artisan native:serve", "on-failure", ""); err != nil {
 		t.Fatalf("writeWorkerHostUnit: %v", err)
 	}
 

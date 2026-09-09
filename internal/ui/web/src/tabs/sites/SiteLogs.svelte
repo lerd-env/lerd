@@ -8,6 +8,9 @@
   function fpmTabLabelI18n(site: Site): string {
     if (site.custom_container) return m.sites_tabs_container();
     if (site.runtime === 'frankenphp') return m.sites_tabs_frankenphp();
+    // Under the native runtime this tab reads the host listener's log, not a
+    // container's, so calling it PHP-FPM would point at the wrong thing.
+    if (site.php_log_unit?.startsWith('lerd-native-php')) return m.sites_tabs_nativePhp();
     return m.sites_tabs_phpFpm();
   }
 
@@ -87,7 +90,9 @@
 
   const streamPath = $derived.by(() => {
     if (active === 'fpm') {
-      const c = fpmContainer(site);
+      // The daemon names the unit only under the native runtime, where the log
+      // is a host listener's rather than a container's.
+      const c = site.php_log_unit || fpmContainer(site);
       return c ? '/api/logs/' + c : '';
     }
     if (active === 'queue') return `/api/queue/${name}/logs`;

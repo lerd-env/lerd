@@ -37,6 +37,9 @@ func newPhpBunUpdateCmd() *cobra.Command {
 		Short: "Update the container's bun in place (bun upgrade)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:bun"); err != nil {
+				return err
+			}
 			version, err := bunDisplayVersion(args)
 			if err != nil {
 				return err
@@ -71,6 +74,9 @@ func newPhpBunInstallCmd() *cobra.Command {
 			"Run `bun upgrade` inside `lerd shell` to update it later; lerd does not pin a version.",
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:bun"); err != nil {
+				return err
+			}
 			version, err := phpExtVersion(args)
 			if err != nil {
 				return err
@@ -91,6 +97,9 @@ func newPhpBunRemoveCmd() *cobra.Command {
 			"bun lives in one host-backed volume shared across every PHP version, so this removes it everywhere at once; the container need not be running.",
 		Args: cobra.NoArgs,
 		RunE: func(_ *cobra.Command, _ []string) error {
+			if err := nativeImageCommandRefusal("php:bun"); err != nil {
+				return err
+			}
 			return removeContainerBun(os.Stdout)
 		},
 	}
@@ -251,6 +260,9 @@ func newPhpBunVersionCmd() *cobra.Command {
 		Short: "Show the bun version installed in the PHP-FPM container",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(_ *cobra.Command, args []string) error {
+			if err := nativeImageCommandRefusal("php:bun"); err != nil {
+				return err
+			}
 			version, err := bunDisplayVersion(args)
 			if err != nil {
 				return err

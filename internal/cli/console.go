@@ -68,6 +68,19 @@ func runConsole(_ *cobra.Command, args []string) error {
 		return err
 	}
 
+	// A native site has no FPM container to run the console in, and ensuring one
+	// below would start the very container the runtime switch just stopped.
+	if nv, ok := nativeRuntimeVersion(cwd); ok {
+		code, runErr := runNativePHP(cwd, nv, append([]string{consoleCmd}, args...), nil)
+		if runErr != nil {
+			return runErr
+		}
+		if code != 0 {
+			os.Exit(code)
+		}
+		return nil
+	}
+
 	container := fpmContainerForDir(cwd, version)
 
 	version, container, err = ensureFPMRunning(cwd, version, container)

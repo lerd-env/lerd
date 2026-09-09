@@ -329,6 +329,14 @@ func SpxDataDir() string {
 	return filepath.Join(DataDir(), "spx")
 }
 
+// SpxWebUIDir is where the SPX profiler's web UI lives on the host. SPX ships
+// it as files rather than inside the extension, and the image path it is built
+// with does not exist on a machine running PHP natively, so the copy lerd
+// installs beside its other assets is pointed at from the ini instead.
+func SpxWebUIDir() string {
+	return filepath.Join(DataDir(), "php-spx", "assets", "web-ui")
+}
+
 // DumpsListenNetwork reports the net.Listen network lerd-ui should bind
 // for the dump receiver. On macOS we fall back to TCP because unix
 // sockets don't traverse the podman-machine virtio-fs boundary as
