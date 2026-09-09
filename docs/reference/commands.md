@@ -156,7 +156,7 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerele
 | Command | Description |
 |---|---|
 | `lerd use <version>` | Set the global PHP version and build the FPM image if needed |
-| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if present, then re-links |
+| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if present, then re-links. A version with no image on the machine is built first |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or install a version this machine does not have (pulls pre-built base by default; `--local` builds from source) |
 | `lerd fetch [version...] [--local]` | Pull pre-built PHP FPM base images from ghcr.io for the given versions, or every released one when none are named; `--local` builds from source instead |
@@ -260,7 +260,7 @@ Switch the PHP runtime for the current site between shared PHP-FPM and per-site 
 | `lerd db:shell` | Open an interactive MySQL or PostgreSQL shell |
 | `lerd db:snapshot [name] [-A]` | Create a named, restorable snapshot of a database |
 | `lerd db:snapshots [--all]` | List stored database snapshots |
-| `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot |
+| `lerd db:restore <name> [-A] [-f]` | Restore a database from a stored snapshot. Snapshots are stored with a timestamp appended, so the name you gave `db:snapshot` resolves to the most recent snapshot carrying it |
 | `lerd db:snapshot:rm <name> [-A]` | Delete a stored database snapshot |
 | `lerd db:snapshot:keep <name> [--off]` | Keep an automatic snapshot for good, exempt from retention |
 | `lerd db:snapshot:auto status\|on\|off\|site` | Configure scheduled database snapshots, globally or per site |

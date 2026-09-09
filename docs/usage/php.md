@@ -5,7 +5,7 @@
 | Command | Description |
 |---|---|
 | `lerd use <version>` | Set the global PHP version and build the FPM image if needed |
-| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Refuses a version the framework or the project's `composer.json` rules out; `--force` pins it anyway |
+| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Builds the version's image first when the machine does not have it yet, so the site is never pointed at a runtime that cannot start. Refuses a version the framework or the project's `composer.json` rules out; `--force` pins it anyway |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or add a version this machine does not have yet; `--local` builds from source instead of pulling a base |
 | `lerd php:update [version]` | Update PHP to the newest published patch. On the native runtime this downloads the new build and restarts the pools; on the container runtime it rebuilds the images from the newest base |
