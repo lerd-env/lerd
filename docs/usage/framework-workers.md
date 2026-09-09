@@ -74,7 +74,9 @@ Every worker that declares a proxy gets its own locations, so an asset server an
 
 The port comes from one of two places. Naming a `port_env_key` suits a server configured from the site's `.env`: lerd assigns a free port on first start, writes it to that key, and appends `--port` to the command. `port: pinned` suits everything else: lerd owns the port, keeps it clear of every other site's pinned ports and dev servers, records it on the site so it survives restarts, and hands it to the worker as `KEY=port` in front of its command, where `KEY` is the `port_env_key` the definition names. The project's own config reads it from the environment, and nothing is written to `.env`.
 
-The environment reaches the process lerd starts and everything that process spawns on the host. A command that re-enters the container on its way, `php artisan something` for instance, does not carry it across: the `php` shim execs into the site's runtime with a clean environment, so a tool started that way still picks its own port and the proxy has to name that port instead.
+The environment reaches the process lerd starts and everything it spawns, including a command that re-enters the container on its way: lerd names the key for passthrough, so the `php` shim carries it into the site's runtime and a tool started through `php artisan something` binds the same port the vhost proxies to.
+
+Stopping a worker clears what it left inside the container. A command that re-enters the runtime leaves the real process there when its unit stops, holding whatever port it bound, so lerd sweeps the site's container for processes matching that worker's command and working directory and signals the process group, which is what catches the tool a console command started.
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 

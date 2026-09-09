@@ -646,7 +646,11 @@ func resolveWorkerFPMUnit(siteName, phpVersion string) string {
 // Pass site.Path (or any path on the parent site) to stop the parent unit.
 func WorkerStopForSite(siteName, sitePath, workerName string) error {
 	unitName, displaySite := workerNames(siteName, sitePath, workerName)
-	return stopWorkerUnit(unitName, workerName, displaySite)
+	err := stopWorkerUnit(unitName, workerName, displaySite)
+	// The unit is down, so whatever is still running in the container is a
+	// leftover rather than a worker anything supervises.
+	killWorkerInContainer(siteName, sitePath, workerName)
+	return err
 }
 
 // StopWorkerUnit tears down a worker unit the caller has already resolved to a

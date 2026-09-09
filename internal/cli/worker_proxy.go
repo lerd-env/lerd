@@ -7,6 +7,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/freeport"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
@@ -170,5 +171,9 @@ func withPinnedWorkerPort(siteName, workerName string, w config.FrameworkWorker,
 	// handed an empty string. Fill those in directly, and still export the key
 	// for a tool that reads its own config at runtime.
 	command = strings.NewReplacer("${"+key+"}", port, "$"+key, port).Replace(command)
-	return "env " + key + "=" + port + " " + command
+	// A command that re-enters the container through lerd's own shims (php
+	// artisan, and anything it starts) gets a clean environment there, so the
+	// key is named for passthrough as well: the shim forwards what it is told
+	// to forward, and the tool reads the same port on either side.
+	return "env " + key + "=" + port + " " + envpass.EnvVar + "=" + key + " " + command
 }

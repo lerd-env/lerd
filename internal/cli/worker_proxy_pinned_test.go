@@ -75,7 +75,7 @@ func TestWithPinnedWorkerPort_PrefixesTheCommand(t *testing.T) {
 	}
 	// env(1), not a bare assignment: a host worker's command is spliced after
 	// the version manager's exec, where a prefix would be read as a program name.
-	want := "env VITE_PORT=" + strconv.Itoa(stored.WorkerPorts["vite"]) + " php artisan vite:watch theme"
+	want := "env VITE_PORT=" + strconv.Itoa(stored.WorkerPorts["vite"]) + " LERD_PASSTHROUGH_ENV=VITE_PORT php artisan vite:watch theme"
 	if got != want {
 		t.Errorf("command = %q, want %q", got, want)
 	}
@@ -111,7 +111,7 @@ func TestWithPinnedWorkerPort_FillsThePortIntoTheCommand(t *testing.T) {
 		t.Fatal(err)
 	}
 	port := strconv.Itoa(stored.WorkerPorts["probe"])
-	want := "env PROBE_PORT=" + port + " python3 -m http.server " + port + " --bind " + port
+	want := "env PROBE_PORT=" + port + " LERD_PASSTHROUGH_ENV=PROBE_PORT python3 -m http.server " + port + " --bind " + port
 	if got != want {
 		t.Errorf("command = %q, want %q", got, want)
 	}
