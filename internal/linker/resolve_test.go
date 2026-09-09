@@ -282,3 +282,36 @@ func TestResolveFramework_namesNothingForAProjectThatDeclaresNothing(t *testing.
 		t.Errorf("ResolveFramework = (%q, %v), want empty and unknown", name, known)
 	}
 }
+
+// A pin the framework's range moves has to be visible. The link used to report
+// the version it landed on with nothing said about the request, so a project
+// pinning 8.5 and running 8.2 looked like it had been honoured.
+func TestResolve_reportsAPinTheFrameworkRangeMoved(t *testing.T) {
+	dir := projectDir(t, "legacy", "php_version: \"8.5\"\n")
+
+	storeDir := config.StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: laravel\nlabel: Laravel\nversion: \"9\"\npublic_dir: public\n" +
+		"php:\n  min: \"8.0\"\n  max: \"8.2\"\n" +
+		"detect:\n  - composer: laravel/framework\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "laravel@9.yaml"), []byte(def), 0644); err != nil {
+		t.Fatal(err)
+	}
+	composer := `{"require":{"php":"^8.0","laravel/framework":"^9.1"}}`
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	plan, err := Resolve(dir, testConfig(), CLIPolicy("", false, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if plan.PHPPinned != "8.5" {
+		t.Errorf("PHPPinned = %q, want the 8.5 the project asked for", plan.PHPPinned)
+	}
+	if plan.Site.PHPVersion == "8.5" {
+		t.Error("php = 8.5, want the framework's range to have moved it")
+	}
+}

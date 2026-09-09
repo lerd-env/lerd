@@ -197,7 +197,7 @@ The override is honoured wherever lerd materialises worktree state on disk: vhos
 
 Site-level resources stay shared and cannot be overridden per worktree: domain (derived from the parent), TLS certificate (parent's wildcard cert), LAN share port (worktree-scoped LAN share is a separate toggle), workers, and any custom container settings.
 
-On a site running its own per-site image (`runtime: fpm-custom`, built from a project Containerfile), a worktree is served from that image rather than the shared per-version container, and `lerd php` and `lerd composer` inside the checkout exec into it too. Whatever the Containerfile adds is therefore present on the branch exactly as it is on the parent, wherever the checkout lives.
+On a site running its own per-site image (`runtime: fpm-custom` or a port-bearing `container:` site), a worktree is served from that image rather than the shared per-version container, and `lerd php` and `lerd composer` inside the checkout exec into it too. Whatever the Containerfile adds is therefore present on the branch exactly as it is on the parent, wherever the checkout lives.
 
 ### Per-worktree database
 
