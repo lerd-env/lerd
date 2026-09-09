@@ -119,6 +119,11 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	if code, took, err := runDeclaredHostCommand(cwd, args, extraEnv); took {
 		return code, err
 	}
+	// The same for a CLI composer installed globally, which has no project and
+	// so no framework to declare it.
+	if code, took, err := runGlobalHostCLI(cwd, args, extraEnv); took {
+		return code, err
+	}
 	recordCwdActivity(cwd) // keep the site awake under idle-suspend while you work in the terminal
 	// The CLI SAPI ignores a project's .user.ini, so a framework declaring
 	// php.cli_ini gets it as -d on every PHP process lerd starts for it.

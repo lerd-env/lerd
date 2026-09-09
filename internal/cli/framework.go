@@ -134,6 +134,9 @@ func packageDeclares(p config.StorePackageInfo) string {
 	if len(p.Commands) > 0 {
 		parts = append(parts, strings.Join(p.Commands, ", "))
 	}
+	for _, b := range p.HostBinaries {
+		parts = append(parts, b+" on the host")
+	}
 	if p.Setup > 0 {
 		parts = append(parts, fmt.Sprintf("%d setup", p.Setup))
 	}

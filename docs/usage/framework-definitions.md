@@ -61,6 +61,20 @@ The layer is merged onto the resolved definition when the project has the packag
 
 Having the package means composer installed it, not that the project named it. The manifest is read first, and then `composer.lock`, which is the only place a dependency that arrived under a meta-package shows up, and the only place a package that another one `replace`s or `provide`s exists at all: `tempest/framework` stands in for `tempest/database`, so a stock Tempest project has that code installed while its `composer.json` names neither. A `check:` on a worker, command, setup step or doctor check is answered the same way, since what it is really asking is whether the thing it runs is there. Detection is the exception and reads the manifest alone: a library repo testing against Laravel has `laravel/framework` in its lock, and that must not make it a Laravel site.
 
+### A CLI composer installed globally
+
+`host_binaries` names the executables a package installs that cannot run through the shim at all:
+
+```yaml
+package: laravel/cloud-cli
+host_binaries:
+  - cloud
+```
+
+`composer global require` puts a binary on your PATH as a wrapper into the PHP container, which is what makes a globally required tool work at all. A CLI that authenticates over a browser callback is the one shape that cannot survive that: it binds a loopback listener on a port it picks per run, and the browser dialling `127.0.0.1` on the host reaches nothing, because the listener sits in the container's network namespace. Publishing a port ahead of time is no help when the port is chosen at runtime.
+
+A binary named here runs on lerd's own pinned PHP instead, downloaded to `~/.local/share/lerd/bin` the first time one is needed, at the version the directory you run it from resolves to. Nothing else about the call changes: same working directory, same environment, same arguments. It is matched by name against what `composer global require` installed, so it holds wherever composer put it and whatever `COMPOSER_HOME` is, and only for a package the global install actually carries. That is why this is a name rather than a `host_commands` pattern: a tool that belongs to no project has no framework to be resolved through, and no path that is the same on two machines.
+
 ### When a package major changes what lerd runs
 
 A package that has kept its interface is one file and says nothing about versions. When a major renames a command, moves a binary, or changes what a worker should run, that major gets a file of its own, `<vendor>-<name>@<major>.yaml`, and the index entry lists it:

@@ -48,7 +48,15 @@ type FrameworkPackage struct {
 	Commands   []FrameworkCommand         `yaml:"commands,omitempty"`
 	// HostCommands are the console commands this package's runtime cannot run
 	// inside the container, and the binary that runs them instead.
-	HostCommands []HostCommand       `yaml:"host_commands,omitempty"`
+	HostCommands []HostCommand `yaml:"host_commands,omitempty"`
+	// HostBinaries names the executables this package installs that cannot run
+	// through the shim at all, matched by name wherever composer put them. A CLI
+	// that authenticates over a browser callback binds a loopback listener on a
+	// port it picks per run, and the browser dialling 127.0.0.1 on the host
+	// reaches nothing, because the listener is in the container's namespace.
+	// Unlike HostCommands these belong to no project: composer installs them
+	// globally, so there is no framework to resolve them through.
+	HostBinaries []string            `yaml:"host_binaries,omitempty"`
 	Setup        []FrameworkSetupCmd `yaml:"setup,omitempty"`
 	Doctor       *FrameworkDoctor    `yaml:"doctor,omitempty"`
 	// Removes takes entries away from the resolved framework, for a major of the
@@ -57,6 +65,28 @@ type FrameworkPackage struct {
 	// staying silent: the copy a declaration was lifted out of is still in the
 	// framework's own version files, and silence there means keep it.
 	Removes *FrameworkPackageRemoves `yaml:"removes,omitempty"`
+}
+
+// GlobalHostBinary reports whether the store declares bin, an executable
+// composer installed globally under composerHome, as one that has to run on a
+// host PHP. Only packages the global install actually requires are consulted,
+// so a bin name never reaches for a definition this machine has no reason to
+// hold, and a basename collision between two packages cannot answer for one the
+// machine never installed.
+func GlobalHostBinary(composerHome, bin string) bool {
+	if composerHome == "" || bin == "" {
+		return false
+	}
+	for _, entry := range cachedStorePackages() {
+		if !ComposerHasInstalled(composerHome, entry.Name) {
+			continue
+		}
+		pkg := resolveStorePackage(entry, composerHome)
+		if pkg != nil && slices.Contains(pkg.HostBinaries, bin) {
+			return true
+		}
+	}
+	return false
 }
 
 // FrameworkPackageRemoves names entries, by the name each is declared under,
@@ -406,6 +436,10 @@ type StorePackageInfo struct {
 	Commands []string
 	Setup    int
 	Doctor   int
+	// HostBinaries are the globally installed binaries the package routes out of
+	// the container, the one declaration that contributes nothing to a framework
+	// and would otherwise leave the package looking empty in a listing.
+	HostBinaries []string
 }
 
 // ListStorePackages describes the package layer for projectDir, which may be
@@ -430,6 +464,7 @@ func ListStorePackages(projectDir string) []StorePackageInfo {
 			for _, c := range pkg.Commands {
 				info.Commands = append(info.Commands, c.Name)
 			}
+			info.HostBinaries = pkg.HostBinaries
 			info.Setup = len(pkg.Setup)
 			if pkg.Doctor != nil {
 				info.Doctor = len(pkg.Doctor.Checks)
