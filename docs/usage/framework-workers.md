@@ -122,6 +122,32 @@ Host workers run with lerd's bin dir prepended to `PATH`, so subprocesses spawne
 
 On macOS the unit is a launchd plist (`~/Library/LaunchAgents/lerd-<worker>-<site>[-<branch>].plist`) backed by a guard script under `~/.local/share/lerd/run/workers/` that `cd`s into the site/worktree and `fnm exec`s the command. The guard records its own pid, which is the process group leader, and stopping the worker signals that whole group: launchd only signals the leader, so a worker that hands off to a launcher (`npm` to `electron-vite` to Electron) would otherwise leave the app running, reparented to init, with no unit left to stop it. The watcher self-heals the unit independently of the worker exec mode, host workers always need launchd-level supervision because they aren't behind podman's `--restart=always`. Scheduled workers (`schedule != ""`) still aren't supported on macOS; launchd's `StartCalendarInterval` isn't wired through the unit translator yet.
 
+**Declaring the dev server a worker starts**: lerd recognises a dev server by reading the worker's command, following one level of `npm run`. A framework that starts the same tool through its own console command is invisible to that, so the worker can say so instead:
+
+```yaml
+workers:
+  vite:
+    command: php artisan vite:watch theme-vampire
+    host: true
+    dev_server:
+      tool: vite
+```
+
+A declaration is believed whatever the command looks like, and it is what opts a framework in rather than lerd inferring it. Naming a tool lerd has no integration for changes nothing.
+
+Where the command starts the tool itself, lerd hands it a generated config and everything below applies unchanged. Where it does not, there is no flag to put that config on and the tool loads whatever the console command decides, so lerd writes the values instead, to `node_modules/.lerd/dev-server.mjs`, and the project imports them into its own config:
+
+```js
+import lerd from '../../node_modules/.lerd/dev-server.mjs';
+
+export default defineConfig({
+    server: { ...lerd.server },
+    // the rest of the project's config
+});
+```
+
+That file carries the site's origin, the hosts the server may answer for, the origins allowed to fetch from it, and the port, which is the worker's pinned proxy port when it declares one. lerd rewrites it and restarts the server whenever those addresses move, which is what `lerd secure`, `lerd domain add` and grouping all do, so the one thing a project cannot keep current by hand stops going stale.
+
 **Dev servers on the site's own domain**: A dev server normally advertises its own address, so a Vite app renders asset URLs pointing at `localhost:5173`. That address means nothing to anyone else, so the page arrives unstyled over a share tunnel, over [LAN sharing](/usage/lan-sharing), or on any host other than the one that started it.
 
 lerd puts a supported dev server behind the site's own domain instead. Everything the tool serves lives under one prefix (`/@lerd-vite/`), which the site's vhost proxies to it, so the assets and the hot-reload websocket both travel on whatever hostname the visitor actually used. Nothing needs rewriting, because the client derives its host, port and protocol from the URL it was loaded from.

@@ -130,6 +130,43 @@ func writeDevServerWrapper(sitePath string, tool *config.DevServerTool, addr dev
 	return rel, nil
 }
 
+// devServerValuesBody renders the module a project imports when lerd cannot
+// hand the tool a config of its own. An empty path means the tool declares no
+// values module, or the project would commit the generated file.
+func devServerValuesBody(sitePath string, tool *config.DevServerTool, addr devServerAddr, port int) (string, string, error) {
+	if tool.ValuesPath == "" || tool.Values == "" {
+		return "", "", nil
+	}
+	if !pathIsIgnored(sitePath, tool.ValuesPath) {
+		return "", "", nil
+	}
+	literals, err := jsLiterals(addr.Origin, addr.Hosts, addr.Origins)
+	if err != nil {
+		return "", "", err
+	}
+	// The port is a number in the module, so it is rendered rather than encoded
+	// as a JavaScript string like the addresses around it.
+	args := append([]any{strconv.Itoa(port)}, literals...)
+	return tool.ValuesPath, fmt.Sprintf(tool.Values, args...), nil
+}
+
+// writeDevServerValues writes the values module and returns its site-relative
+// path, empty when the mechanism does not apply here.
+func writeDevServerValues(sitePath string, tool *config.DevServerTool, addr devServerAddr, port int) (string, error) {
+	rel, body, err := devServerValuesBody(sitePath, tool, addr, port)
+	if err != nil || rel == "" {
+		return "", err
+	}
+	full := filepath.Join(sitePath, rel)
+	if err := os.MkdirAll(filepath.Dir(full), 0755); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+		return "", err
+	}
+	return rel, nil
+}
+
 // devServerAddr is every address the site answers on, in the shape the generated
 // config needs: the one origin asset URLs resolve to, the hosts the server may
 // answer for, and the page origins allowed to fetch from it.
@@ -286,10 +323,17 @@ func assignDevServerPort(excludeSiteName, excludeWorktree string, defaultPort in
 // devServerSetup pins the port, writes the generated config and regenerates the
 // site's vhost so nginx proxies the prefix. It returns the arguments to append
 // to the worker command, empty when the project is not shaped for this.
-func devServerSetup(siteName, sitePath, workerName string, tool *config.DevServerTool) (string, error) {
+func devServerSetup(siteName, sitePath, workerName, command string, w config.FrameworkWorker, tool *config.DevServerTool) (string, error) {
 	site, err := config.FindSite(siteName)
 	if err != nil {
 		return "", err
+	}
+	// A command that starts the tool itself can be handed lerd's own config. One
+	// that reaches it through a framework's console command cannot: there is no
+	// flag to put it on, and the tool loads whatever config that command decides.
+	// Those projects import the values instead, and lerd keeps them current.
+	if config.DevServerToolFor(sitePath, command) == nil {
+		return "", devServerValuesSetup(siteName, sitePath, workerName, w, tool, site)
 	}
 	// A worktree fronts its own domain and runs its own dev server, so it gets
 	// its own origin and its own pinned port rather than the parent's.
@@ -307,6 +351,30 @@ func devServerSetup(siteName, sitePath, workerName string, tool *config.DevServe
 	}
 	regenSiteOrWorktreeVhost(site, sitePath)
 	return devServerArgs(tool, wrapper, port), nil
+}
+
+// devServerValuesSetup pins the port, writes the values module and regenerates
+// the vhost, for a dev server lerd cannot pass a config to. The port comes from
+// the worker's own pinned proxy when it declares one, so the location nginx
+// renders and the port the tool binds are the same number.
+func devServerValuesSetup(siteName, sitePath, workerName string, w config.FrameworkWorker, tool *config.DevServerTool, site *config.Site) error {
+	addr, err := devServerAddress(site, sitePath)
+	if err != nil {
+		return err
+	}
+	port := 0
+	if w.Proxy.PinnedPort() {
+		port = pinnedWorkerPort(siteName, workerName, w.Proxy.DefaultPort)
+	} else {
+		if port, err = devServerEnsurePort(siteName, sitePath, workerName, tool.DefaultPort); err != nil {
+			return err
+		}
+	}
+	if _, err := writeDevServerValues(sitePath, tool, addr, port); err != nil {
+		return err
+	}
+	regenSiteOrWorktreeVhost(site, sitePath)
+	return nil
 }
 
 // devServerArgs renders the store's flag syntax for the generated config and
@@ -352,9 +420,6 @@ func refreshDevServersAt(site *config.Site, sitePath string) {
 	if tool == nil {
 		return
 	}
-	if _, err := os.Stat(filepath.Join(sitePath, tool.WrapperPath)); err != nil {
-		return
-	}
 	addr, err := devServerAddress(site, sitePath)
 	if err != nil {
 		return
@@ -363,11 +428,20 @@ func refreshDevServersAt(site *config.Site, sitePath string) {
 	if !ok || fw == nil {
 		return
 	}
-	if !rewriteDevServerWrapper(sitePath, tool, addr) {
-		return
-	}
+	// The wrapper is one file for the whole checkout, so it is realigned once.
+	// The values module belongs to whichever worker asked for it, which is where
+	// its port comes from, so that one is realigned per worker below.
+	moved := rewriteDevServerWrapper(sitePath, tool, addr)
+
 	for name, w := range fw.Workers {
-		if !w.Host || config.DevServerToolFor(sitePath, resolveWorkerCommand(sitePath, name, w)) == nil {
+		if !w.Host || config.DevServerToolForWorker(sitePath, w, resolveWorkerCommand(sitePath, name, w)) == nil {
+			continue
+		}
+		stale := moved
+		if rewriteDevServerValues(site, sitePath, name, w, tool, addr) {
+			stale = true
+		}
+		if !stale {
 			continue
 		}
 		unit := WorkerUnitName(site.Name, sitePath, name)
@@ -378,6 +452,36 @@ func refreshDevServersAt(site *config.Site, sitePath string) {
 			feedback.Warn("restarting %s so it serves %s: %v", name, addr.Origin, err)
 		}
 	}
+}
+
+// rewriteDevServerValues updates a values module that is already on disk and
+// reports whether it had drifted. A project that never imported one has no file
+// here and gets none written behind its back.
+func rewriteDevServerValues(site *config.Site, sitePath, workerName string, w config.FrameworkWorker, tool *config.DevServerTool, addr devServerAddr) bool {
+	if tool.ValuesPath == "" {
+		return false
+	}
+	full := filepath.Join(sitePath, tool.ValuesPath)
+	current, err := os.ReadFile(full)
+	if err != nil {
+		return false
+	}
+	port := site.DevServerPort
+	if w.Proxy.PinnedPort() {
+		port = site.WorkerPorts[workerName]
+	}
+	if port == 0 {
+		return false
+	}
+	_, body, err := devServerValuesBody(sitePath, tool, addr, port)
+	if err != nil || body == "" || string(current) == body {
+		return false
+	}
+	if err := os.WriteFile(full, []byte(body), 0644); err != nil {
+		feedback.Warn("updating the generated dev server values: %v", err)
+		return false
+	}
+	return true
 }
 
 // rewriteDevServerWrapper updates an already generated config in place and
@@ -404,15 +508,15 @@ func rewriteDevServerWrapper(sitePath string, tool *config.DevServerTool, addr d
 // every path that writes a worker unit points the tool at the generated config
 // and the pinned port. Anything the mechanism cannot apply cleanly leaves the
 // command as it was.
-func devServerCommand(siteName, sitePath, workerName, command string, host bool) string {
-	if !host {
+func devServerCommand(siteName, sitePath, workerName, command string, w config.FrameworkWorker) string {
+	if !w.Host {
 		return command
 	}
-	tool := config.DevServerToolFor(sitePath, command)
+	tool := config.DevServerToolForWorker(sitePath, w, command)
 	if tool == nil {
 		return command
 	}
-	args, err := devServerSetup(siteName, sitePath, workerName, tool)
+	args, err := devServerSetup(siteName, sitePath, workerName, command, w, tool)
 	if err != nil {
 		feedback.Warn("dev server stays on its own port: %v", err)
 		return command

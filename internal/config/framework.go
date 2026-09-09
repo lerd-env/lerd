@@ -260,16 +260,17 @@ type FrameworkWorker struct {
 	// definitions under workers/<icon>.svg. Color is the tone it is inked in;
 	// a worker that declares none takes its framework's, which is what tells a
 	// Laravel queue apart from a Symfony one at a glance.
-	Icon          string         `yaml:"icon,omitempty"`
-	Color         string         `yaml:"color,omitempty"`
-	Restart       string         `yaml:"restart,omitempty"`        // always | on-failure (default: always)
-	Schedule      string         `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
-	Check         *FrameworkRule `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
-	ExcludeCheck  *FrameworkRule `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
-	ConflictsWith []string       `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
-	Proxy         *WorkerProxy   `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
-	Health        *WorkerHealth  `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
-	Host          bool           `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
+	Icon          string           `yaml:"icon,omitempty"`
+	Color         string           `yaml:"color,omitempty"`
+	Restart       string           `yaml:"restart,omitempty"`        // always | on-failure (default: always)
+	Schedule      string           `yaml:"schedule,omitempty"`       // systemd OnCalendar expression (e.g. "minutely"); when set, the worker is run as a Type=oneshot service triggered by a .timer rather than a long-running daemon. Use this for Laravel <=10 schedule:run, cron-style cleanup tasks, etc.
+	Check         *FrameworkRule   `yaml:"check,omitempty"`          // only show when check passes (file exists or composer package installed)
+	ExcludeCheck  *FrameworkRule   `yaml:"exclude_check,omitempty"`  // only show when check FAILS (e.g. queue is hidden when laravel/horizon is installed because horizon supersedes it)
+	ConflictsWith []string         `yaml:"conflicts_with,omitempty"` // workers to stop before starting this one (e.g. horizon conflicts_with queue)
+	Proxy         *WorkerProxy     `yaml:"proxy,omitempty"`          // WebSocket/HTTP proxy config for nginx
+	DevServer     *WorkerDevServer `yaml:"dev_server,omitempty"`     // the dev server this worker starts
+	Health        *WorkerHealth    `yaml:"health,omitempty"`         // reachability probe: process alive but server not accepting = unhealthy
+	Host          bool             `yaml:"host,omitempty"`           // run on the host via fnm instead of inside the PHP-FPM container
 	// PerWorktree opts the worker into running independently per git worktree
 	// (lerd-<wname>-<site>-<wt>). Defaults to false; set true on workers that
 	// need a separate process per checkout (e.g. dev servers like vite).
@@ -289,6 +290,15 @@ type FrameworkWorker struct {
 // worktree. Defaults to false; framework yamls opt in with per_worktree: true.
 func (w FrameworkWorker) IsPerWorktree() bool {
 	return w.PerWorktree != nil && *w.PerWorktree
+}
+
+// WorkerDevServer names the dev server a worker starts, for a worker that
+// starts it through something else: a framework's own console command reaches
+// vite as surely as `npm run dev` does, and reading the command cannot tell.
+// Declaring it here is what opts the framework into lerd's dev server handling
+// rather than lerd inferring it from a command string.
+type WorkerDevServer struct {
+	Tool string `yaml:"tool"` // the dev server, e.g. "vite"
 }
 
 // WorkerProxy describes an HTTP/WebSocket proxy that nginx should configure
