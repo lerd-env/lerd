@@ -36,3 +36,18 @@ func TestGlobalHostBinary_packageOutsideTheIndexIsIgnored(t *testing.T) {
 		t.Error("package outside the index must not be consulted")
 	}
 }
+
+// A package whose only declaration is a host binary contributes nothing to a
+// framework, so without this the listing shows it as declaring nothing at all.
+func TestListStorePackages_reportsHostBinaries(t *testing.T) {
+	_, composerHome := packageSandbox(t, []string{`{"name":"acme/cloud-cli"}`}, "acme/cloud-cli")
+	writePackage(t, "acme-cloud-cli", "package: acme/cloud-cli\nhost_binaries:\n  - cloud\n")
+
+	got := ListStorePackages(composerHome)
+	if len(got) != 1 {
+		t.Fatalf("listed %d packages, want 1", len(got))
+	}
+	if len(got[0].HostBinaries) != 1 || got[0].HostBinaries[0] != "cloud" {
+		t.Errorf("host binaries = %v, want [cloud]", got[0].HostBinaries)
+	}
+}

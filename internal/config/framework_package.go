@@ -436,6 +436,10 @@ type StorePackageInfo struct {
 	Commands []string
 	Setup    int
 	Doctor   int
+	// HostBinaries are the globally installed binaries the package routes out of
+	// the container, the one declaration that contributes nothing to a framework
+	// and would otherwise leave the package looking empty in a listing.
+	HostBinaries []string
 }
 
 // ListStorePackages describes the package layer for projectDir, which may be
@@ -460,6 +464,7 @@ func ListStorePackages(projectDir string) []StorePackageInfo {
 			for _, c := range pkg.Commands {
 				info.Commands = append(info.Commands, c.Name)
 			}
+			info.HostBinaries = pkg.HostBinaries
 			info.Setup = len(pkg.Setup)
 			if pkg.Doctor != nil {
 				info.Doctor = len(pkg.Doctor.Checks)
