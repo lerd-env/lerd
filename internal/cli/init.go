@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -54,6 +55,12 @@ func runInit(fresh bool) error {
 	feedback.Begin()
 
 	if initShouldRunWizard(hasExisting, fresh) {
+		// The wizard is a full-screen form and cannot open one without a
+		// terminal. Entering it anyway surfaced the form library's own
+		// "error opening TTY", which names nothing the user can act on.
+		if !initInteractiveFn() {
+			return errors.New("lerd init runs a wizard and needs a terminal\n       run 'lerd link' to register this project without one, or write .lerd.yaml yourself")
+		}
 		existing, err := config.LoadProjectConfig(cwd)
 		if err != nil {
 			return err
@@ -97,6 +104,9 @@ func runInit(fresh bool) error {
 func initShouldRunWizard(hasExisting, fresh bool) bool {
 	return !hasExisting || fresh
 }
+
+// initInteractiveFn is a seam so the no-terminal refusal can be tested.
+var initInteractiveFn = isInteractive
 
 // nodeVersionDefault prefills the Node field the way the PHP one above it is
 // prefilled: a version already saved in .lerd.yaml wins, otherwise the version
