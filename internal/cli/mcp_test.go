@@ -618,7 +618,11 @@ func TestIsLerdBuiltImage_matchers(t *testing.T) {
 // 34950 → 35000 for the line saying the schedule's own switch overrides a
 // site that opted in, which is the difference between "off" and "mostly off".
 func TestLerdReference_underSizeCeiling(t *testing.T) {
-	const ceiling = 35000
+	// Raised for 1.35.0, which adds the native runtime and the registry
+	// backups to the surface an assistant has to know about. Around 800 bytes
+	// of existing prose was compressed first, which is what the message below
+	// asks for before the number moves.
+	const ceiling = 35500
 	if got := len(lerdReference); got > ceiling {
 		t.Errorf("lerd-reference.md is %d bytes, ceiling is %d — trim before raising", got, ceiling)
 	}
