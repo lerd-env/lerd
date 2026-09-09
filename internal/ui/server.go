@@ -3866,9 +3866,6 @@ func handlePHPExtensions(w http.ResponseWriter, r *http.Request, version string)
 // never silently lands a site on an image missing its extensions.
 func phpSwitchWarning(res siteops.PHPVersionResult) string {
 	var parts []string
-	if res.Clamped {
-		parts = append(parts, fmt.Sprintf("PHP %s is outside the range this framework supports, so %s was used instead.", res.Requested, res.Version))
-	}
 	if res.Demoted {
 		parts = append(parts, fmt.Sprintf("FrankenPHP has no image for PHP %s, so the site was switched to FPM.", res.Version))
 	}

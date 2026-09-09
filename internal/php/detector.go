@@ -400,6 +400,54 @@ func ComposerPHPConstraint(dir string) string {
 	return strings.TrimSpace(composer.Require["php"])
 }
 
+// Satisfies reports whether version meets a composer-style constraint. An empty
+// constraint constrains nothing, so everything satisfies it.
+func Satisfies(version, constraint string) bool {
+	return constraint == "" || satisfiesConstraint(version, constraint)
+}
+
+// SatisfiesAll reports whether version meets every constraint given. Empty
+// constraints are skipped, so a project with no composer requirement is judged
+// on the framework definition alone.
+func SatisfiesAll(version string, constraints ...string) bool {
+	for _, c := range constraints {
+		if !Satisfies(version, c) {
+			return false
+		}
+	}
+	return true
+}
+
+// BestInstalledFor returns the newest installed version satisfying every
+// constraint, or "" when the constraints have no installed version in common.
+func BestInstalledFor(constraints ...string) string {
+	installed, err := ListInstalled()
+	if err != nil {
+		return ""
+	}
+	for i := len(installed) - 1; i >= 0; i-- {
+		if SatisfiesAll(installed[i], constraints...) {
+			return installed[i]
+		}
+	}
+	return ""
+}
+
+// ConstraintsOverlap reports whether any PHP version could satisfy every
+// constraint at once. It sweeps the whole plausible range of releases rather
+// than what is installed here, so the answer is about the constraints
+// themselves and does not change with the machine.
+func ConstraintsOverlap(constraints ...string) bool {
+	for major := 5; major <= 9; major++ {
+		for minor := 0; minor <= 9; minor++ {
+			if SatisfiesAll(fmt.Sprintf("%d.%d", major, minor), constraints...) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ClampToConstraint returns version when it satisfies constraint, else the best
 // installed version that does, else the constraint's own minimum. Unlike a
 // min/max range this keeps an alternation intact, so a project requiring

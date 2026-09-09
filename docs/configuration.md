@@ -163,7 +163,7 @@ A portable, self-contained description of a project's local environment. Created
 
 | Field | Description |
 |---|---|
-| `php_version` | PHP version for this project (highest priority, overrides `.php-version` and `composer.json`) |
+| `php_version` | PHP version for this project (highest priority, overrides `.php-version` and `composer.json`). The framework definition's range still applies, and `lerd link` reports when it moves the pin |
 | `node_version` | Node version (highest priority, overrides `.nvmrc`, `.node-version`, and `package.json`); writes `.node-version` on apply if the file does not already exist |
 | `framework` | Framework name (overrides auto-detection) |
 | `framework_def` | Full framework definition, embedded automatically for custom (non-Laravel) frameworks so the project is portable across machines |

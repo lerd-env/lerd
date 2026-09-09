@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -14,12 +15,27 @@ import (
 
 // NewIsolateCmd returns the isolate command.
 func NewIsolateCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "isolate <version>",
 		Short: "Pin the PHP version for the current directory",
 		Args:  cobra.ExactArgs(1),
 		RunE:  runIsolate,
 	}
+	cmd.Flags().BoolVar(&isolateForce, "force", false, "pin a version the framework or the project's composer.json rules out")
+	return cmd
+}
+
+var isolateForce bool
+
+// pinRefusal turns a refused pin into the command's own answer, naming the flag
+// that overrides it. Nothing was written, so the user is being told what to do
+// next rather than what was done to their project.
+func pinRefusal(err error, requested string) error {
+	var rangeErr *siteops.PHPRangeError
+	if !errors.As(err, &rangeErr) {
+		return err
+	}
+	return fmt.Errorf("%w\n       run 'lerd isolate %s --force' to pin it anyway", err, requested)
 }
 
 func runIsolate(_ *cobra.Command, args []string) error {
@@ -35,15 +51,12 @@ func runIsolate(_ *cobra.Command, args []string) error {
 	// Worktree path: the override travels with the branch, so the parent site's
 	// own version is left alone.
 	if site, branch, ok := FindParentSiteForWorktree(cwd); ok {
-		res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Branch: branch})
+		res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Branch: branch, Force: isolateForce})
 		if err != nil {
-			return err
+			return pinRefusal(err, args[0])
 		}
 		feedback.Begin()
 		feedback.Done("PHP pinned to " + feedback.Val(res.Version) + " · worktree " + branch + " of " + site.Name)
-		if res.Clamped {
-			feedback.Note(res.Requested + " isn't usable here; clamped to " + res.Version)
-		}
 		reportImageGap(res)
 		return nil
 	}
@@ -64,15 +77,12 @@ func runIsolate(_ *cobra.Command, args []string) error {
 		return nil
 	}
 
-	res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{})
+	res, err := siteops.SetSitePHPVersion(site, version, siteops.PHPVersionOpts{Force: isolateForce})
 	if err != nil {
-		return err
+		return pinRefusal(err, args[0])
 	}
 	feedback.Begin()
 	feedback.Done("PHP pinned to " + feedback.Val(res.Version))
-	if res.Clamped {
-		feedback.Note(res.Requested + " isn't usable here; clamped to " + res.Version + " and updated .lerd.yaml / .php-version")
-	}
 	if res.Demoted {
 		feedback.Note("FrankenPHP has no image for PHP " + res.Version + "; the site now runs on FPM")
 	}

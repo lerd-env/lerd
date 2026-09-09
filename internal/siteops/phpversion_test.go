@@ -1,6 +1,7 @@
 package siteops
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -62,15 +63,15 @@ func stubPHPVersionDeps(t *testing.T, min, max string) *int {
 	t.Helper()
 	reloads := 0
 	origReload := nginxReloadFn
-	origRange := phpConstraintFor
+	origRange := phpConstraintsFor
 	origGap := imageGapFn
 	t.Cleanup(func() {
 		nginxReloadFn = origReload
-		phpConstraintFor = origRange
+		phpConstraintsFor = origRange
 		imageGapFn = origGap
 	})
 	nginxReloadFn = func() error { reloads++; return nil }
-	phpConstraintFor = func(*config.Site) string { return phpRangeConstraint(min, max) }
+	phpConstraintsFor = func(*config.Site) []string { return compactConstraints(phpRangeConstraint(min, max)) }
 	imageGapFn = func(string) imageGapResult { return imageGapResult{} }
 	return &reloads
 }
@@ -95,8 +96,8 @@ func TestSetSitePHPVersion_appliesToParentSite(t *testing.T) {
 		t.Fatalf("SetSitePHPVersion: %v", err)
 	}
 
-	if res.Version != "8.2" || res.Clamped {
-		t.Errorf("result = %+v, want version 8.2 unclamped", res)
+	if res.Version != "8.2" {
+		t.Errorf("result = %+v, want version 8.2", res)
 	}
 	if got := readPHPVersionFile(t, site.Path); got != "8.2" {
 		t.Errorf(".php-version = %q, want 8.2", got)
@@ -116,28 +117,51 @@ func TestSetSitePHPVersion_appliesToParentSite(t *testing.T) {
 	}
 }
 
-// The framework's supported range wins over the request. MCP skipped this
-// check entirely before the funnel, so a site could pin a version the watcher
-// clamped straight back on its next pass.
-func TestSetSitePHPVersion_clampsToFrameworkRange(t *testing.T) {
+// The framework's supported range wins over the request, and a request it
+// refuses changes nothing at all: the registry, the .php-version pin and the
+// project's committed .lerd.yaml are all left as they were, so the user is told
+// what they cannot have rather than handed something they did not ask for.
+func TestSetSitePHPVersion_refusesOutsideFrameworkRange(t *testing.T) {
 	site := phpVersionTestSite(t, asFPM)
 	stubPHPVersionDeps(t, "8.3", "8.5")
 
-	res, err := SetSitePHPVersion(site, "8.1", PHPVersionOpts{})
+	_, err := SetSitePHPVersion(site, "8.1", PHPVersionOpts{})
+	var rangeErr *PHPRangeError
+	if !errors.As(err, &rangeErr) {
+		t.Fatalf("err = %v, want a PHPRangeError", err)
+	}
+	if rangeErr.Requested != "8.1" || len(rangeErr.Constraints) == 0 {
+		t.Errorf("error = %+v, want the request and what it had to satisfy", rangeErr)
+	}
+	if _, err := os.Stat(filepath.Join(site.Path, ".php-version")); !os.IsNotExist(err) {
+		t.Error("a refused pin wrote .php-version")
+	}
+	if site.PHPVersion != "8.4" {
+		t.Errorf("site.PHPVersion = %q, want the original 8.4", site.PHPVersion)
+	}
+	stored, err := config.FindSite("app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.PHPVersion != "8.4" {
+		t.Errorf("registry = %q, want the original 8.4", stored.PHPVersion)
+	}
+}
+
+// Forcing is the escape hatch, and it applies exactly what was asked for.
+func TestSetSitePHPVersion_forcePinsOutsideRange(t *testing.T) {
+	site := phpVersionTestSite(t, asFPM)
+	stubPHPVersionDeps(t, "8.3", "8.5")
+
+	res, err := SetSitePHPVersion(site, "8.1", PHPVersionOpts{Force: true})
 	if err != nil {
 		t.Fatalf("SetSitePHPVersion: %v", err)
 	}
-
-	if res.Version != "8.3" || res.Requested != "8.1" || !res.Clamped {
-		t.Errorf("result = %+v, want 8.1 clamped to 8.3", res)
+	if res.Version != "8.1" {
+		t.Errorf("version = %q, want the forced 8.1", res.Version)
 	}
-	// The pin file must carry the clamped version, not the request: a
-	// .php-version lerd overrides on every pass is a lie other tools trust.
-	if got := readPHPVersionFile(t, site.Path); got != "8.3" {
-		t.Errorf(".php-version = %q, want the clamped 8.3", got)
-	}
-	if site.PHPVersion != "8.3" {
-		t.Errorf("site.PHPVersion = %q, want 8.3", site.PHPVersion)
+	if got := readPHPVersionFile(t, site.Path); got != "8.1" {
+		t.Errorf(".php-version = %q, want 8.1", got)
 	}
 }
 
@@ -455,12 +479,12 @@ func TestPHPConstraintFor_GuessedFrameworkUsesComposer(t *testing.T) {
 	}
 
 	site := &config.Site{Name: "legacy", Path: dir, Framework: "laravel"}
-	got := phpConstraintFor(site)
-	if got != "^7.3|^8.0" {
-		t.Errorf("constraint = %q, want the project's own ^7.3|^8.0", got)
+	got := phpConstraintsFor(site)
+	if !reflect.DeepEqual(got, []string{"^7.3|^8.0"}) {
+		t.Errorf("constraints = %v, want the project's own ^7.3|^8.0", got)
 	}
-	if v := php.ClampToConstraint("7.4", got); v != "7.4" {
-		t.Errorf("7.4 was clamped to %q on a project that requires it", v)
+	if !php.SatisfiesAll("7.4", got...) {
+		t.Error("7.4 was refused on a project that requires it")
 	}
 }
 
@@ -483,8 +507,8 @@ func TestPHPConstraintFor_RealFrameworkStillGoverns(t *testing.T) {
 	}
 
 	site := &config.Site{Name: "modern", Path: dir, Framework: "laravel"}
-	if got := phpConstraintFor(site); got != ">=8.3 <=8.5" {
-		t.Errorf("constraint = %q, want the definition's own range", got)
+	if got := phpConstraintsFor(site); !reflect.DeepEqual(got, []string{">=8.3 <=8.5", "^7.3|^8.0"}) {
+		t.Errorf("constraints = %v, want the definition's range and the project's own", got)
 	}
 }
 
@@ -496,7 +520,34 @@ func TestPHPConstraintFor_NoFrameworkUsesComposer(t *testing.T) {
 		t.Fatal(err)
 	}
 	site := &config.Site{Name: "plain", Path: dir}
-	if got := phpConstraintFor(site); got != "^8.2" {
-		t.Errorf("constraint = %q, want ^8.2", got)
+	if got := phpConstraintsFor(site); !reflect.DeepEqual(got, []string{"^8.2"}) {
+		t.Errorf("constraints = %v, want ^8.2", got)
+	}
+}
+
+// A definition can be the real one for the framework and still be wrong for the
+// project in front of it: a Winter CMS install is detected as Laravel and served
+// the Laravel 9 definition, capped at 8.2, while its own composer.json requires
+// more than that. Nothing can satisfy both, so the project wins, since it is the
+// one that has to boot.
+func TestPHPConstraintsFor_ProjectWinsWhenRangeCannotServeIt(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"),
+		[]byte(`{"require":{"php":">=8.4"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	orig := getFrameworkFn
+	t.Cleanup(func() { getFrameworkFn = orig })
+	getFrameworkFn = func(string, string) (*config.Framework, bool) {
+		return &config.Framework{
+			Name: "laravel", Version: "9",
+			PHP: config.FrameworkPHP{Min: "8.0", Max: "8.2"},
+		}, true
+	}
+
+	site := &config.Site{Name: "winter", Path: dir, Framework: "laravel"}
+	if got := phpConstraintsFor(site); !reflect.DeepEqual(got, []string{">=8.4"}) {
+		t.Errorf("constraints = %v, want the project's own >=8.4", got)
 	}
 }
