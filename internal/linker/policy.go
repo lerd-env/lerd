@@ -124,6 +124,10 @@ type Plan struct {
 	// the one Site carries. Empty when the chosen version is already the best
 	// installed one, or when the policy forbids building images.
 	PHPSuggestion string
+	// PHPPinned is the version .lerd.yaml asked for when the framework's range
+	// moved the site off it, so the link can say so instead of reporting the
+	// version it landed on as though it had been the request.
+	PHPPinned string
 	// PHPMin and PHPMax are the framework's supported range, for the message
 	// that accompanies a clamped version. Both empty when unconstrained.
 	PHPMin, PHPMax string

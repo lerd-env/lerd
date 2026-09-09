@@ -5,7 +5,7 @@
 | Command | Description |
 |---|---|
 | `lerd use <version>` | Set the global PHP version and build the FPM image if needed |
-| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links |
+| `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if it exists, then re-links. Refuses a version the framework or the project's `composer.json` rules out; `--force` pins it anyway |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or add a version this machine does not have yet; `--local` builds from source instead of pulling a base |
 | `lerd php:update [version]` | Update PHP to the newest published patch. On the native runtime this downloads the new build and restarts the pools; on the container runtime it rebuilds the images from the newest base |
@@ -42,7 +42,11 @@ A git worktree resolves ahead of the site it belongs to. A worktree inherits its
 
 When a command needs a version that is not installed and you decline the install, lerd offers to switch to one you already have and pins the choice. Inside a worktree that pin is written on the checkout itself, so the switch travels with the branch and the parent site keeps the version it was on.
 
-So that the project agrees with what actually runs, `lerd link` pins the resolved version into `.php-version`, the same file `lerd isolate` and the dashboard's PHP dropdown write. A pin the framework does not support is rewritten to the version lerd runs, and a version outside the framework's range is clamped rather than accepted, so the file, the site registry and the container can never drift apart. Sites with no lerd-managed PHP version (host-proxy, and custom containers whose version comes from their Containerfile) are left untouched.
+So that the project agrees with what actually runs, `lerd link` pins the resolved version into `.php-version`, the same file `lerd isolate` and the dashboard's PHP dropdown write. A version outside the framework's range is clamped rather than accepted, so the file, the site registry and the container can never drift apart, and when the clamp moves a version `php_version` asked for, the link says so rather than reporting the version it landed on as the choice. Sites with no lerd-managed PHP version (host-proxy, and custom containers whose version comes from their Containerfile) are left untouched.
+
+`lerd isolate` answers differently, because there a human named the version: a request the framework range or the project's own `composer.json` rules out is refused and nothing is written, so a file the project commits is never edited to agree with a version its owner did not choose. The refusal names what the version had to satisfy and the closest installed version that does, and `--force` pins it regardless.
+
+A framework definition describes the framework, `composer.json` describes the application that has to boot, and both apply. Where the two cannot both be met, the project wins: an app served by a definition whose cap sits below what its own dependencies require would otherwise be linked onto a version that fails at the first request.
 
 ---
 
@@ -128,7 +132,7 @@ cd ~/Lerd/my-app
 lerd isolate 8.5
 ```
 
-This writes `.php-version: 8.5` (so CLI `php`, asdf, and other tools see the right version) and, when `.lerd.yaml` already exists in the project, also updates its `php_version` field to keep lerd's priority-1 override in sync. The site is re-linked automatically so nginx picks up the new version immediately.
+This writes `.php-version: 8.5` (so CLI `php`, asdf, and other tools see the right version) and, when `.lerd.yaml` already exists in the project, also updates its `php_version` field to keep lerd's priority-1 override in sync. The site is re-linked automatically so nginx picks up the new version immediately. If 8.5 is outside what the framework or the project supports, the pin is refused with both files left as they were, and `lerd isolate 8.5 --force` applies it anyway.
 
 The UI PHP version selector and the MCP `site` tool's `php` action follow the same rules; they always write both files when applicable.
 

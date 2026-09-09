@@ -16,10 +16,10 @@ server {
     ssl_certificate_key /etc/nginx/certs/{{.CertDomain}}.key;
 {{if .FrameworkNginx}}
 {{.FrameworkNginx}}
-{{end}}{{range .ProxyPaths}}
+{{end}}{{range .Proxies}}{{$proxy := .}}{{range .Paths}}
     location ~ ^{{.}}(/|$) {
-        set $proxybackend "{{$.FPMContainer}}";
-        proxy_pass http://$proxybackend:{{$.ProxyPort}};
+        set $proxybackend "{{if $proxy.OnHost}}{{$.UpstreamHost}}{{else}}{{$.FPMContainer}}{{end}}";
+        proxy_pass http://$proxybackend:{{$proxy.Port}};
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -30,8 +30,7 @@ server {
         proxy_read_timeout {{$.RequestTimeout}}s;
         proxy_send_timeout {{$.RequestTimeout}}s;
     }
-{{end}}
-{{if .DevServerBase}}
+{{end}}{{end}}{{if .DevServerBase}}
     location ^~ {{.DevServerBase}} {
         proxy_pass http://{{.UpstreamHost}}:{{.DevServerPort}};
         proxy_http_version 1.1;

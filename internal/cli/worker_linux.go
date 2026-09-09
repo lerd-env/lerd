@@ -229,7 +229,8 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" {
+	command = withPinnedWorkerPort(siteName, workerName, w, command)
+	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
 		envPath := filepath.Join(sitePath, ".env")
 		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
 		if port == "" {
@@ -241,7 +242,7 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 	// The unit is rewritten here on every `lerd start`, so the dev server flags
 	// have to be rebuilt with it or the worker comes back on its own port and
 	// the site's page is refused the assets it asks for.
-	command = devServerCommand(siteName, sitePath, workerName, command, w.Host)
+	command = devServerCommand(siteName, sitePath, workerName, command, w)
 
 	fpmUnit := resolveWorkerFPMUnit(siteName, phpVersion)
 	unitName, displaySite := workerNames(siteName, sitePath, workerName)

@@ -112,6 +112,11 @@ type Site struct {
 	// itself is configured globally (config.yaml idle_suspend), not per site.
 	IdleSuspendedWorkers []string `yaml:"idle_suspended_workers,omitempty"`
 
+	// WorkerPorts holds the port lerd allocated for each worker whose proxy
+	// asked for a pinned one, keyed by worker name. The vhost proxies to it and
+	// the worker unit is handed it, so both sides agree without the project
+	// having to name a port anywhere.
+	WorkerPorts map[string]int `yaml:"worker_ports,omitempty"`
 	// WorktreeDevPorts pins each worktree's dev server to its own host
 	// port, keyed by the worktree's directory base like the idle map. A
 	// worktree runs its own dev server, so it cannot share the parent's pin.
@@ -249,6 +254,7 @@ type siteYAML struct {
 	PublicPort            int                 `yaml:"public_port,omitempty"`
 	WorktreePublicPorts   map[string]int      `yaml:"worktree_public_ports,omitempty"`
 	DevServerPort         int                 `yaml:"dev_server_port,omitempty"`
+	WorkerPorts           map[string]int      `yaml:"worker_ports,omitempty"`
 	WorktreeDevPorts      map[string]int      `yaml:"worktree_dev_server_ports,omitempty"`
 	ContainerPort         int                 `yaml:"container_port,omitempty"`
 	ContainerSSL          bool                `yaml:"container_ssl,omitempty"`
@@ -287,6 +293,7 @@ func (s Site) toYAML() siteYAML {
 		PublicPort:            s.PublicPort,
 		WorktreePublicPorts:   s.WorktreePublicPorts,
 		DevServerPort:         s.DevServerPort,
+		WorkerPorts:           s.WorkerPorts,
 		WorktreeDevPorts:      s.WorktreeDevPorts,
 		ContainerPort:         s.ContainerPort,
 		ContainerSSL:          s.ContainerSSL,
@@ -330,6 +337,7 @@ func (sy siteYAML) toSite() Site {
 		PublicPort:            sy.PublicPort,
 		WorktreePublicPorts:   sy.WorktreePublicPorts,
 		DevServerPort:         sy.DevServerPort,
+		WorkerPorts:           sy.WorkerPorts,
 		WorktreeDevPorts:      sy.WorktreeDevPorts,
 		ContainerPort:         sy.ContainerPort,
 		ContainerSSL:          sy.ContainerSSL,

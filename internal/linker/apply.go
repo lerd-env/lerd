@@ -227,9 +227,18 @@ func offerBetterPHP(plan *Plan, p Policy, d Deps, r Reporter) error {
 	if plan.PHPMin == "" && plan.PHPMax == "" {
 		return nil
 	}
+	// A pin that was moved is reported whatever happens next: the file says one
+	// version and the site runs another, and only the link knows why.
+	if plan.PHPPinned != "" {
+		r.Line(fmt.Sprintf("PHP %s is pinned in .lerd.yaml and %s supports %s–%s, so this site runs on %s",
+			plan.PHPPinned, plan.FrameworkLabel, plan.PHPMin, plan.PHPMax, plan.Site.PHPVersion))
+	}
 	if plan.PHPSuggestion == "" || p.Prompt == nil || d.EnsureFPMQuadlet == nil {
-		r.Line(fmt.Sprintf("Using PHP %s (%s supports %s–%s)",
-			plan.Site.PHPVersion, plan.FrameworkLabel, plan.PHPMin, plan.PHPMax))
+		// The pin line above already named the version and the range.
+		if plan.PHPPinned == "" {
+			r.Line(fmt.Sprintf("Using PHP %s (%s supports %s–%s)",
+				plan.Site.PHPVersion, plan.FrameworkLabel, plan.PHPMin, plan.PHPMax))
+		}
 		return nil
 	}
 

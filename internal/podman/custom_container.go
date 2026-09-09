@@ -168,6 +168,7 @@ func BuildCustomImageTo(siteName, projectPath string, cfg *config.ContainerConfi
 
 // RemoveCustomImage removes the local image for a site's custom container.
 func RemoveCustomImage(siteName string) error {
+	ForgetCustomImageTools(siteName)
 	imageName := CustomImageName(siteName)
 	_ = execCommand(PodmanBin(), "rmi", "-f", imageName).Run()
 	return nil

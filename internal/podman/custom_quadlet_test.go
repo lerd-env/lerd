@@ -1,6 +1,7 @@
 package podman
 
 import (
+	"github.com/geodro/lerd/internal/config"
 	"strings"
 	"testing"
 )
@@ -20,6 +21,7 @@ func TestGenerateCustomContainerQuadlet(t *testing.T) {
 		{"network", "Network=lerd"},
 		{"project volume", "Volume=/home/user/projects/nestapp:/home/user/projects/nestapp:rw"},
 		{"hosts volume", "/etc/hosts:ro,z"},
+		{"lerd bin volume", config.BinDir() + ":" + config.BinDir() + ":ro,z"},
 		{"security opt", "--security-opt=label=disable"},
 		{"workdir", "--workdir=/home/user/projects/nestapp"},
 		{"restart", "Restart=always"},
