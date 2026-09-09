@@ -52,7 +52,7 @@ Each framework can declare how to launch FrankenPHP via a `frankenphp:` block in
 **Laravel** has two modes:
 
 - **Non-worker (`runtime_worker: false`, default)**: lerd runs `frankenphp php-server -r public/`. Each request boots Laravel from scratch; code edits take effect on the next request, same as FPM. You still get FrankenPHP's HTTP/2, HTTP/3, and TLS, but not Octane's per-request speedup.
-- **Worker (`runtime_worker: true`)**: lerd runs `php artisan octane:start --server=frankenphp --host=0.0.0.0 --port=8000 --workers=auto`. Octane keeps Laravel resident; requests skip the full bootstrap. Octane registers Symfony Console signal handlers which need the `pcntl` PHP extension; it is baked into lerd's derived FrankenPHP image (see the Extensions section) so the container boots straight into Octane.
+- **Worker (`runtime_worker: true`)**: lerd runs `php artisan octane:start --server=frankenphp --host=0.0.0.0 --port=8000 --workers=auto`. Octane keeps Laravel resident; requests skip the full bootstrap. Octane registers Symfony Console signal handlers which need the `pcntl` PHP extension; it is baked into lerd's derived FrankenPHP image (see the Extensions section) so the container boots straight into Octane. Worker mode therefore needs `laravel/octane` in the project: lerd refuses the switch when the package is not installed, rather than starting a container that exits on its first command.
 
 **Symfony** uses FrankenPHP's native worker flag:
 
