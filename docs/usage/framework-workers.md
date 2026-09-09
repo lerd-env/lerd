@@ -62,9 +62,19 @@ workers:
         - /apps
       port_env_key: REVERB_SERVER_PORT  # env key holding the port
       default_port: 8080            # starting port for auto-assignment
+      upstream: container           # where the server listens: container (default) or host
+      port: pinned                  # optional: lerd owns the port instead of .env
 ```
 
 A server that answers on more than one path lists them all under `paths`, and each gets its own location block on the same port. Reverb is the case in point: the WebSocket connection lands on `/app` while the HTTP broadcasting API a server-side `ShouldBroadcast` event posts to lives on `/apps/{app_id}/events`, and a path left out falls through to PHP and answers 404. Where both are set, `paths` is the list that gets proxied and `path` is ignored, so a definition keeps `path` alongside it and still proxies on lerd versions released before `paths` existed.
+
+Every worker that declares a proxy gets its own locations, so an asset server and a websocket server run side by side on the same site rather than the first one declared taking it.
+
+`upstream` names where the server actually listens. The default, `container`, proxies to the site's own PHP-FPM container, which is where a worker without `host: true` runs. A worker marked `host: true` runs on your machine instead and is unreachable from inside that container, so its proxy needs `upstream: host` to be routed to the host address the vhost already knows.
+
+The port comes from one of two places. Naming a `port_env_key` suits a server configured from the site's `.env`: lerd assigns a free port on first start, writes it to that key, and appends `--port` to the command. `port: pinned` suits everything else: lerd owns the port, keeps it clear of every other site's pinned ports and dev servers, records it on the site so it survives restarts, and hands it to the worker as `KEY=port` in front of its command, where `KEY` is the `port_env_key` the definition names. The project's own config reads it from the environment, and nothing is written to `.env`.
+
+The environment reaches the process lerd starts and everything that process spawns on the host. A command that re-enters the container on its way, `php artisan something` for instance, does not carry it across: the `php` shim execs into the site's runtime with a clean environment, so a tool started that way still picks its own port and the proxy has to name that port instead.
 
 Port assignment scans all proxy port env keys across all sites to prevent collisions between different workers and frameworks.
 

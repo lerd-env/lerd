@@ -300,7 +300,8 @@ func WorkerStartForSite(siteName, sitePath, phpVersion, workerName string, w con
 	}
 
 	// Handle proxy port assignment and command augmentation.
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" {
+	command = withPinnedWorkerPort(siteName, workerName, w, command)
+	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
 		envPath := filepath.Join(sitePath, ".env")
 		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
 		if port == "" {

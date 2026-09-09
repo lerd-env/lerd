@@ -3,9 +3,11 @@ package cli
 import (
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/freeport"
 	"github.com/geodro/lerd/internal/nginx"
 	phpDet "github.com/geodro/lerd/internal/php"
 )
@@ -91,4 +93,82 @@ func assignWorkerProxyPort(sitePath, envKey string, defaultPort int) int {
 		port++
 	}
 	return port
+}
+
+// pinnedWorkerPort returns the port lerd owns for this worker, allocating one on
+// first use and recording it on the site. A pinned port belongs to lerd rather
+// than to the project's .env, so it is kept clear of every other site's pinned
+// ports and dev servers, and it survives restarts: the vhost proxies to it and
+// the worker is handed the same number.
+func pinnedWorkerPort(siteName, workerName string, defaultPort int) int {
+	if defaultPort == 0 {
+		defaultPort = 8080
+	}
+	reg, err := config.LoadSites()
+	if err != nil {
+		return defaultPort
+	}
+
+	used := map[int]bool{}
+	for _, s := range reg.Sites {
+		if s.Name == siteName {
+			if p := s.WorkerPorts[workerName]; p > 0 {
+				return p
+			}
+		}
+		for name, p := range s.WorkerPorts {
+			if s.Name == siteName && name == workerName {
+				continue
+			}
+			used[p] = true
+		}
+		if s.DevServerPort != 0 {
+			used[s.DevServerPort] = true
+		}
+		for _, p := range s.WorktreeDevPorts {
+			used[p] = true
+		}
+	}
+
+	port := freeport.FirstFree(defaultPort, func(p int) bool {
+		return used[p] || !freeport.Bindable(p)
+	})
+	if port == 0 {
+		port = defaultPort
+	}
+
+	site, err := config.FindSite(siteName)
+	if err != nil {
+		return port
+	}
+	if site.WorkerPorts == nil {
+		site.WorkerPorts = map[string]int{}
+	}
+	site.WorkerPorts[workerName] = port
+	if err := config.AddSite(*site); err != nil {
+		return port
+	}
+	return port
+}
+
+// withPinnedWorkerPort hands the worker the port lerd picked, through the key
+// the definition names, so the tool's own config reads it from the environment
+// rather than lerd guessing a flag the command may not take.
+//
+// It goes through env(1) rather than a bare KEY=value prefix, because a prefix
+// is shell syntax and the command does not always start a shell line: a host
+// worker is spliced after the version manager's `fnm exec -- `, where the
+// assignment would be read as the name of the program to run.
+func withPinnedWorkerPort(siteName, workerName string, w config.FrameworkWorker, command string) string {
+	if !w.Proxy.PinnedPort() || w.Proxy.PortEnvKey == "" {
+		return command
+	}
+	port := strconv.Itoa(pinnedWorkerPort(siteName, workerName, w.Proxy.DefaultPort))
+	key := w.Proxy.PortEnvKey
+	// A command that takes the port as an argument writes it as $KEY, and the
+	// shell expands that before env(1) has set anything, so the tool would be
+	// handed an empty string. Fill those in directly, and still export the key
+	// for a tool that reads its own config at runtime.
+	command = strings.NewReplacer("${"+key+"}", port, "$"+key, port).Replace(command)
+	return "env " + key + "=" + port + " " + command
 }

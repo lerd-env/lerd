@@ -303,7 +303,23 @@ type WorkerProxy struct {
 	Paths       []string `yaml:"paths,omitempty"`
 	PortEnvKey  string   `yaml:"port_env_key,omitempty"` // env key holding the port (e.g. "REVERB_SERVER_PORT")
 	DefaultPort int      `yaml:"default_port,omitempty"` // fallback port if env key is missing (default: 8080)
+	// Upstream names where the worker listens: "host" for a worker that runs on
+	// the host (host: true), "container" (the default) for one inside the site's
+	// FPM container. A host worker proxied to the container answers nothing.
+	Upstream string `yaml:"upstream,omitempty"`
+	// Port is "pinned" when lerd owns the port rather than reading it from the
+	// site's .env: it allocates one, keeps it clear of other sites and hands it
+	// to the worker through PortEnvKey. For a server configured from .env, leave
+	// this empty and name the key it reads.
+	Port string `yaml:"port,omitempty"`
 }
+
+// OnHost reports whether the worker's server listens on the host rather than
+// inside the site's FPM container.
+func (p *WorkerProxy) OnHost() bool { return p != nil && p.Upstream == "host" }
+
+// PinnedPort reports whether lerd allocates and owns this worker's port.
+func (p *WorkerProxy) PinnedPort() bool { return p != nil && p.Port == "pinned" }
 
 // WorkerService is a running lerd service a worker depends on. WhenEnv is a
 // "KEY=VALUE" pair the site's .env has to carry for the dependency to apply, so
@@ -2456,19 +2472,46 @@ func (fw *Framework) HasWorker(name, dir string) bool {
 	return true
 }
 
-// WorkerProxy returns the proxy configuration for the first worker that has one
-// and whose check rule passes for the project at dir. Returns nil if no proxy is configured.
-func (fw *Framework) DetectProxy(dir string) (*WorkerProxy, string) {
-	for name, w := range fw.Workers {
+// NamedProxy is one worker's proxy together with the worker it belongs to, so a
+// caller can find the port that worker was given.
+type NamedProxy struct {
+	Worker string
+	Proxy  *WorkerProxy
+}
+
+// DetectProxies returns every worker proxy whose check rule passes for the
+// project at dir, in worker-name order so a vhost renders the same way twice. A
+// project can run an asset server next to a websocket server, and each needs its
+// own location.
+func (fw *Framework) DetectProxies(dir string) []NamedProxy {
+	names := make([]string, 0, len(fw.Workers))
+	for name := range fw.Workers {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out []NamedProxy
+	for _, name := range names {
+		w := fw.Workers[name]
 		if w.Proxy == nil {
 			continue
 		}
 		if w.Check != nil && !MatchesRule(dir, *w.Check) {
 			continue
 		}
-		return w.Proxy, name
+		out = append(out, NamedProxy{Worker: name, Proxy: w.Proxy})
 	}
-	return nil, ""
+	return out
+}
+
+// DetectProxy returns the first worker proxy that applies, for callers that
+// only need to know whether the project has one at all.
+func (fw *Framework) DetectProxy(dir string) (*WorkerProxy, string) {
+	found := fw.DetectProxies(dir)
+	if len(found) == 0 {
+		return nil, ""
+	}
+	return found[0].Proxy, found[0].Worker
 }
 
 // MatchesRule returns true if the given rule matches the project directory. It

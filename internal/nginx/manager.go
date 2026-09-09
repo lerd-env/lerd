@@ -43,30 +43,64 @@ import (
 // under it) and a missing leading slash is added (`^app(/|$)` can never match a
 // URI, which always starts with "/"). A proxy declaring no path at all names
 // nothing to proxy, and is reported as no proxy rather than capturing the site.
-func detectSiteProxy(site config.Site) (paths []string, port int, ok bool) {
+// VhostProxy is one worker's proxy: the paths it answers on, already
+// regex-escaped, the port it listens on, and whether it listens on the host
+// rather than inside the site's FPM container.
+type VhostProxy struct {
+	Paths  []string
+	Port   int
+	OnHost bool
+}
+
+func detectSiteProxies(site config.Site) []VhostProxy {
 	fw, fwOK := config.GetFrameworkForDir(site.Framework, site.Path)
 	if !fwOK {
-		return nil, 0, false
+		return nil
 	}
-	proxy, _ := fw.DetectProxy(site.Path)
-	if proxy == nil {
-		return nil, 0, false
+	var out []VhostProxy
+	for _, np := range fw.DetectProxies(site.Path) {
+		paths := proxyPaths(np.Proxy)
+		if len(paths) == 0 {
+			continue
+		}
+		out = append(out, VhostProxy{
+			Paths:  paths,
+			Port:   proxyPort(site, np),
+			OnHost: np.Proxy.OnHost(),
+		})
 	}
-	proxyPort := proxy.DefaultPort
-	if proxyPort == 0 {
-		proxyPort = 8080
+	return out
+}
+
+// proxyPort is the port this worker's server listens on: the one lerd pinned
+// for it, the one the site's .env names, or the definition's default.
+func proxyPort(site config.Site, np config.NamedProxy) int {
+	if np.Proxy.PinnedPort() {
+		if p := site.WorkerPorts[np.Worker]; p > 0 {
+			return p
+		}
 	}
-	if proxy.PortEnvKey != "" {
-		if v := envfile.ReadKey(filepath.Join(site.Path, ".env"), proxy.PortEnvKey); v != "" {
+	port := np.Proxy.DefaultPort
+	if port == 0 {
+		port = 8080
+	}
+	if np.Proxy.PortEnvKey != "" {
+		if v := envfile.ReadKey(filepath.Join(site.Path, ".env"), np.Proxy.PortEnvKey); v != "" {
 			if p, err := strconv.Atoi(v); err == nil && p > 0 {
-				proxyPort = p
+				port = p
 			}
 		}
 	}
+	return port
+}
+
+// proxyPaths normalises and escapes the declared paths.
+func proxyPaths(proxy *config.WorkerProxy) []string {
 	declared := proxy.Paths
 	if len(declared) == 0 {
 		declared = []string{proxy.Path}
 	}
+	var paths []string
 	for _, raw := range declared {
 		if raw == "" {
 			continue
@@ -80,10 +114,7 @@ func detectSiteProxy(site config.Site) (paths []string, port int, ok bool) {
 		}
 		paths = append(paths, regexp.QuoteMeta(p))
 	}
-	if len(paths) == 0 {
-		return nil, 0, false
-	}
-	return paths, proxyPort, true
+	return paths
 }
 
 // detectSiteDevServer returns the prefix and host port for a site whose
@@ -135,10 +166,10 @@ type VhostData struct {
 	FPMContainer string
 	CertDomain   string // domain whose cert files to use (defaults to Domain)
 	PublicDir    string // document root subdirectory, e.g. "public", "web", "."
-	// ProxyPaths are the URL paths a worker's server answers on (e.g. "/app",
-	// "/apps"), one location block each. Empty when the site has no proxy.
-	ProxyPaths      []string
-	ProxyPort       int    // port the worker listens on inside the PHP-FPM container
+	// Proxies are the worker servers this site answers for, one location per
+	// path. A site can run more than one, an asset server next to a websocket
+	// server, and each has its own port and upstream.
+	Proxies         []VhostProxy
 	CustomContainer string // container name for custom container sites (e.g. "lerd-custom-nestapp")
 	CustomPort      int    // port the app listens on inside the custom container
 	// DevServerBase is the URL prefix a host dev server serves everything
@@ -274,9 +305,11 @@ func (d VhostData) validate() error {
 			return fmt.Errorf("nginx %s %q contains %q, which would end the directive it lands in", name, v, string(v[i]))
 		}
 	}
-	for _, v := range d.ProxyPaths {
-		if i := strings.IndexAny(v, nginxValueForbidden); i >= 0 {
-			return fmt.Errorf("nginx proxy path %q contains %q, which would end the directive it lands in", v, string(v[i]))
+	for _, p := range d.Proxies {
+		for _, v := range p.Paths {
+			if i := strings.IndexAny(v, nginxValueForbidden); i >= 0 {
+				return fmt.Errorf("nginx proxy path %q contains %q, which would end the directive it lands in", v, string(v[i]))
+			}
 		}
 	}
 	// The paths reach the templates only through Root(), which quotes them, so
@@ -466,7 +499,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 	}
 
 	publicDir := resolvePublicDir(site)
-	proxyPaths, proxyPort, _ := detectSiteProxy(site)
+	proxies := detectSiteProxies(site)
 	devBase, devPort := detectSiteDevServer(site)
 	fpmContainer := podman.FPMContainerName(site, phpVersion)
 	data := VhostData{
@@ -477,8 +510,7 @@ func renderFPMVhost(site config.Site, phpVersion string, ssl bool) ([]byte, erro
 		PHPVersionShort: phpShort(phpVersion),
 		FPMContainer:    fpmContainer,
 		PublicDir:       publicDir,
-		ProxyPaths:      proxyPaths,
-		ProxyPort:       proxyPort,
+		Proxies:         proxies,
 		UpstreamHost:    hostProxyUpstream(),
 		DevServerBase:   devBase,
 		DevServerPort:   devPort,

@@ -229,7 +229,8 @@ func restoreWorker(siteName, sitePath, phpVersion, workerName string, w config.F
 			return
 		}
 	}
-	if w.Proxy != nil && w.Proxy.PortEnvKey != "" {
+	command = withPinnedWorkerPort(siteName, workerName, w, command)
+	if w.Proxy != nil && w.Proxy.PortEnvKey != "" && !w.Proxy.PinnedPort() {
 		envPath := filepath.Join(sitePath, ".env")
 		port := envfile.ReadKey(envPath, w.Proxy.PortEnvKey)
 		if port == "" {
