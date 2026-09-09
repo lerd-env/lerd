@@ -95,3 +95,76 @@ func TestSatisfiesConstraint_BothSpellingsOfOr(t *testing.T) {
 		}
 	}
 }
+
+// A framework definition's range describes the framework; composer.json
+// describes what this project actually boots on. Where they disagree the
+// project has to win, so the answer needs to be checkable on its own.
+func TestSatisfies(t *testing.T) {
+	cases := []struct {
+		version    string
+		constraint string
+		want       bool
+	}{
+		{"8.1", ">=8.1", true},
+		{"8.0", ">=8.1", false},
+		{"8.1", "^7.3|^8.0", true},
+		{"8.5", "", true},
+	}
+	for _, c := range cases {
+		if got := Satisfies(c.version, c.constraint); got != c.want {
+			t.Errorf("Satisfies(%q, %q) = %v, want %v", c.version, c.constraint, got, c.want)
+		}
+	}
+}
+
+// A project is governed by more than one constraint at a time: the framework
+// definition's range and its own composer requirement. Both have to hold.
+func TestSatisfiesAll(t *testing.T) {
+	cases := []struct {
+		version     string
+		constraints []string
+		want        bool
+	}{
+		{"8.1", []string{">=8.0 <=8.2", ">=8.1"}, true},
+		{"8.0", []string{">=8.0 <=8.2", ">=8.1"}, false},
+		{"8.5", []string{">=8.0 <=8.2", ">=8.1"}, false},
+		{"8.4", []string{"", ">=8.1"}, true},
+		{"8.4", nil, true},
+	}
+	for _, c := range cases {
+		if got := SatisfiesAll(c.version, c.constraints...); got != c.want {
+			t.Errorf("SatisfiesAll(%q, %v) = %v, want %v", c.version, c.constraints, got, c.want)
+		}
+	}
+}
+
+func TestBestInstalledFor(t *testing.T) {
+	installedPHP(t, "8.0", "8.1", "8.4", "8.5")
+
+	if got := BestInstalledFor(">=8.0 <=8.2", ">=8.1"); got != "8.1" {
+		t.Errorf("best = %q, want 8.1", got)
+	}
+	if got := BestInstalledFor(">=8.0 <=8.2", ">=8.4"); got != "" {
+		t.Errorf("best = %q, want nothing installed to satisfy both", got)
+	}
+	if got := BestInstalledFor("", ">=8.4"); got != "8.5" {
+		t.Errorf("best = %q, want 8.5", got)
+	}
+}
+
+// Whether two constraints can both be met is a property of the constraints, not
+// of this machine: a fresh install with no PHP built yet must reach the same
+// answer as a developer's box with five versions on it.
+func TestConstraintsOverlap(t *testing.T) {
+	installedPHP(t) // nothing installed at all
+
+	if !ConstraintsOverlap(">=8.0 <=8.2", ">=8.1") {
+		t.Error("overlap = false, want 8.1 and 8.2 to satisfy both")
+	}
+	if ConstraintsOverlap(">=8.0 <=8.2", ">=8.4") {
+		t.Error("overlap = true, want no version to satisfy both")
+	}
+	if !ConstraintsOverlap(">=8.3 <=8.5", "") {
+		t.Error("overlap = false, want an empty constraint to constrain nothing")
+	}
+}

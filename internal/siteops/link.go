@@ -26,6 +26,10 @@ type VersionResult struct {
 	// borrowed definition; its PHP range is not enforced (PHPMin/PHPMax stay
 	// empty) since it describes a different version than the project.
 	FrameworkGuessed bool
+	// RangeOverruled is true when a real definition's range was set aside
+	// because no installed version could satisfy it and the project's own
+	// composer requirement at once.
+	RangeOverruled bool
 }
 
 // DetectSiteVersions resolves the framework, PHP version (clamped to framework
@@ -45,6 +49,18 @@ func DetectSiteVersions(dir, framework, defaultPHP, defaultNode string) VersionR
 				result.PHPMin = fw.PHP.Min
 				result.PHPMax = fw.PHP.Max
 			}
+		}
+	}
+
+	// A definition can be the right one for the framework and still be the wrong
+	// authority for the project in front of it: a Winter CMS install is served
+	// the Laravel definition its lock names, capped below what its own
+	// composer.json requires. Where nothing installed satisfies both, the
+	// project wins, since it is the one that has to boot.
+	if project := phpDet.ComposerPHPConstraint(dir); project != "" && (result.PHPMin != "" || result.PHPMax != "") {
+		if !phpDet.ConstraintsOverlap(phpRangeConstraint(result.PHPMin, result.PHPMax), project) {
+			result.PHPMin, result.PHPMax = "", ""
+			result.RangeOverruled = true
 		}
 	}
 
