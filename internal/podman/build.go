@@ -1373,8 +1373,10 @@ func EnsurePathMounted(path, phpVersion string) {
 		if strings.Contains(string(existing), volumePrefix) {
 			// The quadlet is already right, but writing one never touches a
 			// running container: whoever wrote this line may have left the
-			// container running without the mount (#914).
+			// container running without the mount (#914). The platform unit can
+			// be behind for the same reason, so re-sync it before restarting.
 			if UnitMissingMounts(q.unitName, []string{path}) {
+				_, _ = WriteQuadletDiff(q.unitName, string(existing))
 				changedUnits = append(changedUnits, q.unitName)
 			}
 			continue
@@ -1384,7 +1386,10 @@ func EnsurePathMounted(path, phpVersion string) {
 		if updated == string(existing) {
 			continue
 		}
-		if writeErr := os.WriteFile(q.path, []byte(updated), 0644); writeErr != nil {
+		// WriteQuadletDiff, never a raw write: macOS turns each quadlet into a
+		// launchd plist on write, and a container restarted from a stale plist
+		// comes back without the new mount (#1725).
+		if changed, writeErr := WriteQuadletDiff(q.unitName, updated); writeErr != nil || !changed {
 			continue
 		}
 		changedUnits = append(changedUnits, q.unitName)
