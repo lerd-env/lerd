@@ -172,3 +172,58 @@ func TestCheckServiceWiring_skipsWhenTheEnvFileIsMissing(t *testing.T) {
 		t.Errorf("check = %+v, want none when the env file is absent", c)
 	}
 }
+
+// A site whose PHP runs on the host points at 127.0.0.1 and the service's
+// published port, so the container name the check used to look for is never
+// there and every picked service read as unwired, with a fix that rewrote the
+// same values and changed nothing.
+func TestCheckServiceWiring_loopbackWiringCounts(t *testing.T) {
+	dir := wiringProject(t, "services:\n  - redis\n", ".env",
+		"REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\n")
+	prev := hostPorts
+	t.Cleanup(func() { hostPorts = prev })
+	hostPorts = func(string) []string { return []string{"6379"} }
+
+	c, ok := checkServiceWiringOn(dir, ".env", wiringFramework(), true)
+	if !ok {
+		t.Fatal("the check must run for a project that picks a service")
+	}
+	if c.Status != StatusOK {
+		t.Errorf("status = %v (%s), want OK", c.Status, c.Detail)
+	}
+}
+
+// The same env on a containerised site is genuinely unwired: that PHP reaches
+// redis by container name, and loopback in its .env points at nothing.
+func TestCheckServiceWiring_loopbackWiringIsNotEnoughForAContainer(t *testing.T) {
+	dir := wiringProject(t, "services:\n  - redis\n", ".env",
+		"REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\n")
+	prev := hostPorts
+	t.Cleanup(func() { hostPorts = prev })
+	hostPorts = func(string) []string { return []string{"6379"} }
+
+	c, ok := checkServiceWiringOn(dir, ".env", wiringFramework(), false)
+	if !ok {
+		t.Fatal("the check must run for a project that picks a service")
+	}
+	if c.Status != StatusWarn {
+		t.Errorf("status = %v (%s), want a warning", c.Status, c.Detail)
+	}
+}
+
+// A loopback site still has to point somewhere: an env with neither the
+// container name nor the published port is the finding the check exists for.
+func TestCheckServiceWiring_loopbackStillReportsNothingPointingAtIt(t *testing.T) {
+	dir := wiringProject(t, "services:\n  - redis\n", ".env", "REDIS_HOST=elsewhere\n")
+	prev := hostPorts
+	t.Cleanup(func() { hostPorts = prev })
+	hostPorts = func(string) []string { return []string{"6379"} }
+
+	c, ok := checkServiceWiringOn(dir, ".env", wiringFramework(), true)
+	if !ok {
+		t.Fatal("the check must run for a project that picks a service")
+	}
+	if c.Status != StatusWarn || !strings.Contains(c.Detail, "redis") {
+		t.Errorf("status = %v (%s), want a warning naming redis", c.Status, c.Detail)
+	}
+}

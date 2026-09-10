@@ -429,3 +429,27 @@ func TestReadValues_firstOccurrenceWinsLikeReadKey(t *testing.T) {
 		t.Errorf("ReadKey DB_HOST = %q, want first", got)
 	}
 }
+
+// A site whose PHP runs on the host reaches a service on loopback and its
+// published port, or through the service's own domain, never through the
+// lerd-<service> container name.
+func TestReferencesLoopback(t *testing.T) {
+	env := "REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nAWS_ENDPOINT=https://rustfs.test\n# MAIL_PORT=1026\n"
+	cases := []struct {
+		name  string
+		ports []string
+		host  string
+		want  bool
+	}{
+		{"published port", []string{"6379"}, "", true},
+		{"service domain", nil, "rustfs.test", true},
+		{"port only in a comment", []string{"1026"}, "", false},
+		{"port that is a substring of another", []string{"637"}, "", false},
+		{"nothing points at it", []string{"7701"}, "meilisearch.test", false},
+	}
+	for _, c := range cases {
+		if got := ReferencesLoopback(env, c.ports, c.host); got != c.want {
+			t.Errorf("%s: ReferencesLoopback() = %v, want %v", c.name, got, c.want)
+		}
+	}
+}

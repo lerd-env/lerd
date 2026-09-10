@@ -8,6 +8,7 @@ import (
 
 	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/envfile"
+	"github.com/geodro/lerd/internal/serviceops"
 )
 
 // checkServiceWiring compares the services a project picks in its .lerd.yaml
@@ -22,6 +23,21 @@ import (
 // its config names the lerd-<service> container, which is a text question every
 // format answers the same way.
 func checkServiceWiring(path, envFile string, fw *config.Framework) (Check, bool) {
+	return checkServiceWiringOn(path, envFile, fw, siteReachesServicesOnLoopback(path))
+}
+
+// siteReachesServicesOnLoopback reports whether a site's PHP runs on the host,
+// which is where its env points at loopback and a published port rather than at
+// a container name.
+func siteReachesServicesOnLoopback(path string) bool {
+	site, err := config.FindSiteByPath(path)
+	if err != nil || site == nil {
+		return false
+	}
+	return site.IsNative() || site.IsHostProxy()
+}
+
+func checkServiceWiringOn(path, envFile string, fw *config.Framework, loopback bool) (Check, bool) {
 	if fw == nil || len(fw.Env.Services) == 0 {
 		return Check{}, false
 	}
@@ -48,9 +64,13 @@ func checkServiceWiring(path, envFile string, fw *config.Framework) (Check, bool
 		if !frameworkWiresService(fw, name) {
 			continue
 		}
-		if !envfile.ReferencesContainer(string(content), name) {
-			unwired = append(unwired, name)
+		if envfile.ReferencesContainer(string(content), name) {
+			continue
 		}
+		if loopback && envfile.ReferencesLoopback(string(content), hostPorts(name), config.ServiceDomain(name)) {
+			continue
+		}
+		unwired = append(unwired, name)
 	}
 	if len(unwired) == 0 {
 		return Check{Name: "service_wiring", Status: StatusOK, Detail: "every service the project picks is wired into " + envFile}, true
@@ -106,4 +126,20 @@ func frameworkWiresService(fw *config.Framework, name string) bool {
 		}
 	}
 	return false
+}
+
+// hostPorts is the published host ports of a service, as strings, so an env
+// value carrying one can be recognised. A mapping is "3411:3306", or
+// "127.0.0.1:3307:3306" when it names an address, so the host port is always
+// the field before the container port. A seam: tests name their own ports
+// rather than depending on an installed service store.
+var hostPorts = func(name string) []string {
+	var ports []string
+	for _, mapping := range serviceops.HostPortMappings(name) {
+		parts := strings.Split(strings.TrimSuffix(mapping, "/tcp"), ":")
+		if len(parts) >= 2 {
+			ports = append(ports, parts[len(parts)-2])
+		}
+	}
+	return ports
 }
