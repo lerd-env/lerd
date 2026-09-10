@@ -585,3 +585,23 @@ func RestorePublishedPorts(name string, snap PublishedPortSnapshot) error {
 	firePublishedPortShiftForced(name, snap.PublishedPort)
 	return nil
 }
+
+// HostPortMappings returns a service's "host:container" port specs, with any
+// published-port override applied. The address a host-side app uses to reach a
+// service is derived from these, and so is the check that asks whether an env
+// file already points there.
+func HostPortMappings(name string) []string {
+	var ports []string
+	if svc, err := config.LoadCustomService(name); err == nil && len(svc.Ports) > 0 {
+		ports = svc.Ports
+	} else if svc, err := config.DefaultPresetMeta(name); err == nil && len(svc.Ports) > 0 {
+		ports = svc.Ports
+	}
+	if len(ports) == 0 {
+		return nil
+	}
+	if pp := config.ServicePublishedPort(name); pp > 0 {
+		ports = podman.SetPrimaryHostPort(ports, pp)
+	}
+	return ports
+}
