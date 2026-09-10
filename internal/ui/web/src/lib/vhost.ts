@@ -36,5 +36,8 @@ export async function handOverToVhost(): Promise<void> {
   } catch {
     return;
   }
-  location.href = VHOST_URL;
+  // The hash carries the route, and every notification deep link arrives on
+  // this origin (the desktop app only ever loads the loopback address), so
+  // dropping it here would land every click on the plain dashboard.
+  location.href = VHOST_URL + '/' + location.hash;
 }

@@ -8,8 +8,8 @@ function opaque(): Response {
   return { type: 'opaque', ok: false, status: 0 } as Response;
 }
 
-function at(hostname: string, port: string) {
-  const href = { hostname, port, href: `http://${hostname}:${port}/` };
+function at(hostname: string, port: string, hash = '') {
+  const href = { hostname, port, hash, href: `http://${hostname}:${port}/${hash}` };
   Object.defineProperty(window, 'location', { value: href, writable: true, configurable: true });
 }
 
@@ -46,7 +46,16 @@ describe('vhost handover', () => {
   it('moves to the vhost once it answers', async () => {
     at('127.0.0.1', '7073');
     await handOverToVhost();
-    expect(window.location.href).toBe(VHOST_URL);
+    expect(window.location.href).toBe(VHOST_URL + '/');
+  });
+
+  // Every notification deep link lands here with its route in the hash (the
+  // desktop app always loads the loopback address), so the handover has to
+  // carry it across or the click ends on the plain dashboard.
+  it('carries the deep-link hash across to the vhost', async () => {
+    at('127.0.0.1', '7073', '#service/mailpit/view/abc123');
+    await handOverToVhost();
+    expect(window.location.href).toBe(VHOST_URL + '/#service/mailpit/view/abc123');
   });
 
   // nginx refusing the connection means the stack is still down, so staying
