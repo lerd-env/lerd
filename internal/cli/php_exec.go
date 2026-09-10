@@ -9,9 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/geodro/lerd/internal/agentenv"
 	"github.com/geodro/lerd/internal/config"
-	"github.com/geodro/lerd/internal/envpass"
 	"github.com/geodro/lerd/internal/logcolor"
 	phpDet "github.com/geodro/lerd/internal/php"
 	"github.com/geodro/lerd/internal/podman"
@@ -146,17 +144,6 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 	}
 
 	home := os.Getenv("HOME")
-	composerHome := os.Getenv("COMPOSER_HOME")
-	if composerHome == "" {
-		// Respect XDG: prefer ~/.config/composer, fall back to ~/.composer
-		xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-		if xdgConfig == "" {
-			xdgConfig = filepath.Join(home, ".config")
-		}
-		composerHome = filepath.Join(xdgConfig, "composer")
-	}
-	composerBin := filepath.Join(composerHome, "vendor", "bin")
-	projectVendorBin := filepath.Join(cwd, "vendor", "bin")
 
 	// A cwd the container can't reach (an ephemeral /tmp path, not parked and not
 	// listed under mounts:) makes `podman exec -w <cwd>` fail with an opaque crun
@@ -214,35 +201,13 @@ func RunPHPVersionCaptureEnv(cwd, version string, args []string, extraEnv []stri
 		execFlags = append(execFlags, "-t")
 	}
 
-	cmdArgs := append(execFlags, "-w", cwd,
-		"--env", "HOME="+home,
-		"--env", "COMPOSER_HOME="+composerHome,
-		"--env", "PATH="+projectVendorBin+":/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:"+composerBin,
-	)
-	cmdArgs = append(cmdArgs, debugSiteEnvArgs(cwd)...)
-	cmdArgs = append(cmdArgs, terminalColorEnvArgs()...)
-	// Forward SPX_* profiler vars from the host so `SPX_ENABLED=1 php ...` (or
-	// any shim'd tool like composer) reaches SPX inside the container. extraEnv
-	// is applied after, so an explicit caller like `lerd profile run` wins.
-	for _, e := range spxPassthroughEnv(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	// Forward AI agent detection vars so agent-detector (e.g. laravel/pao)
-	// still emits JSON when run inside the container.
-	for _, e := range agentenv.Passthrough(os.Environ()) {
-		cmdArgs = append(cmdArgs, "--env", e)
-	}
-	// Forward the host variables an external environment provider (a secrets
-	// manager, direnv) injected into lerd's own process. Names only: podman
-	// reads each value out of lerd's environment, so no secret is in argv.
-	cmdArgs = append(cmdArgs, envpass.Args(cwd, os.Environ())...)
+	cmdArgs := append(execFlags, "-w", cwd)
+	cmdArgs = append(cmdArgs, containerExecEnvArgs(cwd)...)
+	// extraEnv is applied last so an explicit caller like `lerd profile run`
+	// wins over the shared environment.
 	for _, e := range extraEnv {
 		cmdArgs = append(cmdArgs, "--env", e)
 	}
-	// Point composer/git at the shared ssh-agent when it's running, so private
-	// packages with passphrase-protected keys authenticate over SSH. No-op when
-	// the agent isn't up (falls back to the bind-mounted on-disk keys).
-	cmdArgs = append(cmdArgs, podman.SSHAuthSockEnv()...)
 	cmdArgs = append(cmdArgs, container, "php")
 	cmdArgs = append(cmdArgs, args...)
 

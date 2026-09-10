@@ -68,6 +68,11 @@ type Framework struct {
 	// dropdown. See FrameworkCommand for the schema. Projects extend or
 	// override this list in .lerd.yaml; use ResolveCommands to merge.
 	Commands []FrameworkCommand `yaml:"commands,omitempty"`
+	// VendorBinArgs are arguments lerd puts in front of a composer binary run
+	// through the vendor/bin fallback, keyed by the binary's name. wp-cli
+	// refuses to start as root and lerd's containers are root, so WordPress
+	// declares --allow-root here rather than making every user type it.
+	VendorBinArgs map[string][]string `yaml:"vendor_bin_args,omitempty" json:"vendor_bin_args,omitempty"`
 	// HostCommands names the console commands that must run on the host rather
 	// than in the container, and the binary that runs them. See HostCommand.
 	HostCommands []HostCommand `yaml:"host_commands,omitempty"`
@@ -1905,6 +1910,9 @@ func SanitizeProjectFrameworkDef(def *Framework) *Framework {
 	// auto_prepend_file would make every PHP process lerd runs execute a file from
 	// the repo, so php.ini directives come only from the trusted store.
 	safe.PHP.CLIIni = nil
+	// Injecting arguments into a binary the user asked for is the project
+	// steering a command it does not own, so only the trusted store may.
+	safe.VendorBinArgs = nil
 	return safe
 }
 
