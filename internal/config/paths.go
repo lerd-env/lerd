@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -63,11 +64,19 @@ func BinDir() string {
 // An empty inherited PATH yields the dir alone: a trailing separator would make
 // the shell search the working directory.
 func PathWithBinDir() string {
-	path := BinDir()
-	if existing := os.Getenv("PATH"); existing != "" {
-		path += string(os.PathListSeparator) + existing
+	parts := []string{BinDir()}
+	// A doctor fix or a custom command may call `lerd` itself, and the daemons
+	// that run those are started by launchd, whose PATH is the system default
+	// and carries neither ~/.local/bin nor the shim dir.
+	if exe, err := os.Executable(); err == nil {
+		if dir := filepath.Dir(exe); dir != "" && dir != BinDir() {
+			parts = append(parts, dir)
+		}
 	}
-	return path
+	if existing := os.Getenv("PATH"); existing != "" {
+		parts = append(parts, existing)
+	}
+	return strings.Join(parts, string(os.PathListSeparator))
 }
 
 // NodeGlobalDir is the npm prefix lerd points its node shim at, so

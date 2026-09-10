@@ -170,9 +170,12 @@ func TestDataSubDir(t *testing.T) {
 func TestPathWithBinDir_PrependsShimDir(t *testing.T) {
 	t.Setenv("PATH", "/usr/bin:/bin")
 	got := PathWithBinDir()
-	want := BinDir() + string(os.PathListSeparator) + "/usr/bin:/bin"
-	if got != want {
-		t.Errorf("PathWithBinDir() = %q, want %q", got, want)
+	sep := string(os.PathListSeparator)
+	if !strings.HasPrefix(got, BinDir()+sep) {
+		t.Errorf("PathWithBinDir() = %q, want it to start with %q", got, BinDir())
+	}
+	if !strings.HasSuffix(got, sep+"/usr/bin:/bin") {
+		t.Errorf("PathWithBinDir() = %q, want it to end with the inherited PATH", got)
 	}
 }
 
@@ -180,7 +183,33 @@ func TestPathWithBinDir_PrependsShimDir(t *testing.T) {
 // inherited PATH must not gain a trailing separator.
 func TestPathWithBinDir_EmptyPathHasNoTrailingSeparator(t *testing.T) {
 	t.Setenv("PATH", "")
-	if got := PathWithBinDir(); got != BinDir() {
-		t.Errorf("PathWithBinDir() = %q, want %q", got, BinDir())
+	got := PathWithBinDir()
+	if strings.HasSuffix(got, string(os.PathListSeparator)) {
+		t.Errorf("PathWithBinDir() = %q, want no trailing separator", got)
+	}
+	if !strings.HasPrefix(got, BinDir()) {
+		t.Errorf("PathWithBinDir() = %q, want it to start with %q", got, BinDir())
+	}
+}
+
+// A doctor fix, a worker or a custom command may call `lerd` itself. The
+// daemons that run those are started by launchd, whose PATH is the system
+// default and never carries ~/.local/bin, so the binary has to put its own
+// directory on the PATH it hands to a child.
+func TestPathWithBinDir_IncludesExecutableDir(t *testing.T) {
+	t.Setenv("PATH", "/usr/bin:/bin")
+	exe, err := os.Executable()
+	if err != nil {
+		t.Skip("no executable path on this platform")
+	}
+	dir := filepath.Dir(exe)
+	found := false
+	for _, p := range strings.Split(PathWithBinDir(), string(os.PathListSeparator)) {
+		if p == dir {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("PathWithBinDir() = %q, want it to contain %q", PathWithBinDir(), dir)
 	}
 }
