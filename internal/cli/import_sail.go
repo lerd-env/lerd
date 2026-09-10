@@ -74,7 +74,7 @@ func NewSailCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return RunPHP(cwd, append([]string{"vendor/bin/sail"}, args...))
+			return RunVendorBin(cwd, "vendor/bin/sail", args)
 		},
 	}
 	cmd.AddCommand(newImportSailCmd("import"))

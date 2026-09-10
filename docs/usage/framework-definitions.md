@@ -19,7 +19,7 @@ Workers from the user overlay and project `.lerd.yaml` are merged on top of stor
 `lerd install` seeds the store: it pulls the index early, so detection sees the whole published catalogue rather than only the frameworks compiled into the binary, then fetches every definition the index lists. A fresh machine therefore ends up with the same definitions an established one has, and resolves any of them offline, instead of collecting them one at a time as the projects that need each one turn up. The refresh keeps any definition you already have that the store has since stopped publishing, and the watcher refreshes the index every six hours. An install that cannot reach the store keeps working on the built-ins and seeds itself on the next run.
 
 ::: warning Untrusted projects
-A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, `requires:`, and `php.cli_ini` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
+A `.lerd.yaml` ships inside a project, so its embedded `framework_def` is treated as untrusted, and lerd strips its host-execution surfaces when restoring it into the store: `command`-type doctor checks, `host: true` workers, the whole `commands:` list, the `nginx:` block, `requires:`, `vendor_bin_args:`, and `php.cli_ini` are dropped, because each would otherwise run on your host, rewrite your nginx config, or start containers straight from a cloned repo. Those run only for frameworks that come from the store, a built-in, or your user overlay (`~/.config/lerd/frameworks/`); a definition already installed there is never overwritten by a project's embedded copy. In-container workers, env, symlink, and combo checks are inert and still work from a project definition.
 
 A project's own host extensions still work, just with consent: a `host: true` entry in top-level `custom_workers`, and any top-level `commands:` you run via `lerd run` or the dashboard, prompt once showing the exact command before they run on your host, and the approval is remembered per site. Set `host_commands.skip_confirmation: true` (or `host_commands.disabled: true` to refuse them outright) in the global config to change that.
 :::
@@ -249,6 +249,11 @@ php:
 detect:
   - file: symfony.lock
   - composer: symfony/framework-bundle
+
+# Arguments lerd puts in front of a vendor/bin binary, keyed by its name (optional)
+vendor_bin_args:
+  wp:
+    - --allow-root
 
 # Env file configuration
 env:
@@ -649,6 +654,26 @@ Workers get the directives too. They exec their command straight from a systemd 
 Set only what the CLI needs. Copying a framework's web values across is a trap: CLI `max_execution_time` defaults to `0`, meaning unlimited, so applying a web value of `600` would cap a long install at ten minutes.
 
 `PHP_VALUE`-style directives can set `auto_prepend_file`, which makes every PHP process execute a file from the repo, so `cli_ini` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
+
+## Arguments for a composer binary
+
+`lerd wp`, `lerd drush`, `lerd pest` and the rest come from the same place: an unknown subcommand that matches a file in the project's `vendor/bin` is run there, in the site's container, on the site's PHP.
+
+Some of those binaries need a flag before they will do anything at all. wp-cli refuses to start as root, and lerd's containers run as root, so every single `lerd wp` would otherwise have to carry `--allow-root`. The flag cannot be set anywhere else: wp-cli marks it `'file' => false` in its config spec, so no `wp-cli.yml` can hold it, and there is no environment variable for it.
+
+`vendor_bin_args` lets the definition carry it instead, keyed by the binary's name:
+
+```yaml
+vendor_bin_args:
+  wp:
+    - --allow-root
+```
+
+The arguments go in front of whatever you typed, which is where wp-cli and its lookalikes read global parameters. An argument you typed yourself is not added a second time, so `lerd wp --allow-root core version` stays exactly as written.
+
+Injecting arguments into a binary steers a command the project does not own, so, like host workers and `requires:`, `vendor_bin_args` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
+
+A binary whose `vendor/bin` entry is a shell wrapper rather than a PHP script, which is what wp-cli and drush both ship, is executed directly in the container instead of being handed to `php`. Nothing in the definition has to say so; lerd reads the shebang.
 
 ## Required services
 

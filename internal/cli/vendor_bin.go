@@ -41,7 +41,8 @@ func NewVendorBinCmd() *cobra.Command {
 			}
 			name := args[0]
 			rest := args[1:]
-			return RunPHP(cwd, append([]string{"vendor/bin/" + name}, rest...))
+			rest = applyVendorBinDefaults(vendorBinDefaultArgs(cwd, name), rest)
+			return RunVendorBin(cwd, filepath.Join("vendor", "bin", name), rest)
 		},
 	}
 }
