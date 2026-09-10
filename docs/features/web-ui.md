@@ -119,6 +119,7 @@ Selecting a site opens the detail panel with:
 - **Reverb toggle**: start or stop the Reverb WebSocket server; only shown when the project uses Reverb (detected via composer or `.env`)
 - **Framework worker toggles**: additional workers defined by the site's framework (e.g. Symfony `messenger`, Laravel `horizon`) appear as indigo toggles
 - **Stripe toggle**: start or stop the Stripe webhook listener
+- **Worker logs shortcut**: every worker toggle carries a small log-lines button on its right that opens the Logs tab with that worker's journal already selected, the same segment the queue's options gear sits in. The selected source lives in the address (`#sites/<domain>/logs/<worker>`), so a worker's logs can be linked and bookmarked directly
 - **Pause / Resume**: suspend a site's nginx vhost without unlinking it; the site stays registered and FPM keeps running. When a paused site is selected, the detail pane hides the overview/logs/tinker/dumps tabs and shows a centered Resume placeholder so it's obvious the site is offline on purpose rather than broken
 
   ![Paused site detail with the Resume placeholder](/assets/screenshots/site-detail-paused.png)

@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Pornește serverul de dezvoltare Vite",
   "sites_controls_viteToggle_on": "Oprește serverul de dezvoltare Vite",
+  "sites_controls_workerLogs": "Jurnale {label}",
   "sites_controls_workerOptions": "Opțiuni worker",
   "sites_controls_workerOptionsFailed": "Opțiunile workerului nu au putut fi salvate: {error}",
   "sites_controls_workerOptionsHint": "Se salvează în .lerd.yaml, ca tot proiectul să pornească același worker. Un câmp gol înseamnă valoarea implicită a framework-ului.",

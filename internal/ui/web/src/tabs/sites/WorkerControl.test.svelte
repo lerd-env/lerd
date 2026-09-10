@@ -8,14 +8,16 @@
     options?: WorkerOption[];
     onToggle?: () => void;
     onSaveOptions?: (values: Record<string, string>) => void;
+    onLogs?: () => void;
   }
   let {
     label = 'Queue',
     running = false,
     options = [],
     onToggle = () => {},
-    onSaveOptions = () => {}
+    onSaveOptions = () => {},
+    onLogs
   }: Props = $props();
 </script>
 
-<WorkerControl {label} {running} {options} {onToggle} {onSaveOptions} />
+<WorkerControl {label} {running} {options} {onToggle} {onSaveOptions} {onLogs} />

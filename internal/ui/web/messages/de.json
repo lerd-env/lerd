@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Vite-Dev-Server starten",
   "sites_controls_viteToggle_on": "Vite-Dev-Server stoppen",
+  "sites_controls_workerLogs": "{label}-Logs",
   "sites_controls_workerOptions": "Worker-Optionen",
   "sites_controls_workerOptionsFailed": "Worker-Optionen konnten nicht gespeichert werden: {error}",
   "sites_controls_workerOptionsHint": "Wird in .lerd.yaml gespeichert, damit das ganze Projekt denselben Worker startet. Ein leeres Feld nutzt den Framework-Standard.",

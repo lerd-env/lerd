@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Avvia il dev server di Vite",
   "sites_controls_viteToggle_on": "Ferma il dev server di Vite",
+  "sites_controls_workerLogs": "Log di {label}",
   "sites_controls_workerOptions": "Opzioni del worker",
   "sites_controls_workerOptionsFailed": "Impossibile salvare le opzioni del worker: {error}",
   "sites_controls_workerOptionsHint": "Salvato in .lerd.yaml, così tutto il progetto avvia lo stesso worker. Lascia il campo vuoto per usare il valore predefinito del framework.",

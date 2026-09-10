@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Vite 開発サーバーを開始",
   "sites_controls_viteToggle_on": "Vite 開発サーバーを停止",
+  "sites_controls_workerLogs": "{label} のログ",
   "sites_controls_workerOptions": "ワーカーのオプション",
   "sites_controls_workerOptionsFailed": "ワーカーのオプションを保存できませんでした: {error}",
   "sites_controls_workerOptionsHint": ".lerd.yaml に保存され、プロジェクト全体が同じワーカーを起動します。空欄にするとフレームワークの既定値を使います。",
