@@ -105,13 +105,25 @@ func TestVendorBinExecArgs_CarriesVendorBinOnPath(t *testing.T) {
 
 // Under the native runtime the wrapper runs on the host, where it still has to
 // find php (lerd's shim dir) and any sibling composer binary it shells out to.
-func TestNativeVendorBinPath_HasProjectBinAndShimDir(t *testing.T) {
+func TestHostVendorBinPath_HasProjectBinAndShimDir(t *testing.T) {
 	dir := t.TempDir()
-	got := nativeVendorBinPath(dir)
+	got := hostVendorBinPath(dir)
 	if !strings.HasPrefix(got, filepath.Join(dir, "vendor", "bin")+string(os.PathListSeparator)) {
 		t.Errorf("project vendor/bin must come first, got %q", got)
 	}
 	if !strings.Contains(got, config.BinDir()) {
 		t.Errorf("PATH %q missing lerd's shim dir %q", got, config.BinDir())
+	}
+}
+
+// A binary that isn't installed is named here rather than surfacing as an
+// exec failure that blames the shell.
+func TestRunHostVendorBin_MissingBinaryIsNamed(t *testing.T) {
+	err := RunHostVendorBin(t.TempDir(), "vendor/bin/sail", nil)
+	if err == nil {
+		t.Fatal("want an error for a binary that is not installed")
+	}
+	if !strings.Contains(err.Error(), "vendor/bin/sail") {
+		t.Errorf("error should name the binary, got %v", err)
 	}
 }

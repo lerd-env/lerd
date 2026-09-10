@@ -74,7 +74,9 @@ func NewSailCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return RunVendorBin(cwd, "vendor/bin/sail", args)
+			// Sail drives Docker Compose, so it runs on the host. lerd's PHP
+			// container has neither docker nor the bash sail's script asks for.
+			return RunHostVendorBin(cwd, "vendor/bin/sail", args)
 		},
 	}
 	cmd.AddCommand(newImportSailCmd("import"))

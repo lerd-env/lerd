@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -115,11 +116,7 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 	// Under the native runtime there is no container, and the wrapper resolves
 	// php off the host PATH lerd's shim dir already provides.
 	if _, native := nativeRuntimeVersion(cwd); native {
-		c := exec.Command(filepath.Join(cwd, rel), args...)
-		c.Dir = cwd
-		c.Env = append(os.Environ(), "PATH="+nativeVendorBinPath(cwd))
-		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
-		return runAndPropagate(c)
+		return RunHostVendorBin(cwd, rel, args)
 	}
 
 	container := fpmContainerForDir(cwd, version)
@@ -135,11 +132,27 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 	return runAndPropagate(cmd)
 }
 
-// nativeVendorBinPath is the PATH a wrapper gets on the host: the project's own
+// hostVendorBinPath is the PATH a wrapper gets on the host: the project's own
 // composer binaries first, so a wrapper calling a sibling finds it the way it
 // would in the container, then lerd's shim dir, which is where php comes from.
-func nativeVendorBinPath(cwd string) string {
+func hostVendorBinPath(cwd string) string {
 	return filepath.Join(cwd, "vendor", "bin") + string(os.PathListSeparator) + config.PathWithBinDir()
+}
+
+// RunHostVendorBin runs a composer binary on the host rather than in the
+// container. Used by the native runtime, where there is no container, and by
+// a binary that drives the host's own tooling and would find none of it inside
+// one. Missing is reported here, since exec would otherwise blame the shell.
+func RunHostVendorBin(cwd, rel string, args []string) error {
+	path := filepath.Join(cwd, rel)
+	if _, err := os.Stat(path); err != nil {
+		return fmt.Errorf("%s is not installed in this project: %w", rel, err)
+	}
+	c := exec.Command(path, args...)
+	c.Dir = cwd
+	c.Env = append(os.Environ(), "PATH="+hostVendorBinPath(cwd))
+	c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return runAndPropagate(c)
 }
 
 // runAndPropagate runs cmd and exits with the child's status, so a failing
