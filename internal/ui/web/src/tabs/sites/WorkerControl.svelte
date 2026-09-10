@@ -1,12 +1,14 @@
 <script lang="ts">
   import ToggleButton from '$components/ToggleButton.svelte';
+  import LogsButton from '$components/LogsButton.svelte';
   import WorkerOptionsModal from './WorkerOptionsModal.svelte';
   import { m } from '../../paraglide/messages.js';
   import type { WorkerOption } from '$stores/sites';
 
-  // A worker toggle plus the gear its definition earns: one field per
-  // tune_command placeholder. A worker that declares none renders as the plain
-  // toggle, so every worker row can go through this one component.
+  // A worker toggle plus the segments its definition earns: a gear with one
+  // field per tune_command placeholder, and a shortcut to its journal. A worker
+  // that earns neither renders as the plain toggle, so every worker row can go
+  // through this one component.
   interface Props {
     label: string;
     running: boolean;
@@ -19,6 +21,7 @@
     options?: WorkerOption[];
     onToggle: () => void;
     onSaveOptions?: (values: Record<string, string>) => void;
+    onLogs?: () => void;
   }
   let {
     label,
@@ -31,13 +34,17 @@
     title = '',
     options = [],
     onToggle,
-    onSaveOptions = () => {}
+    onSaveOptions = () => {},
+    onLogs
   }: Props = $props();
 
   let modalOpen = $state(false);
+
+  const hasGear = $derived(options.length > 0);
+  const segmented = $derived(hasGear || Boolean(onLogs));
 </script>
 
-{#if options.length === 0}
+<div class="inline-flex items-center">
   <ToggleButton
     {label}
     on={running}
@@ -47,28 +54,18 @@
     {loading}
     {disabled}
     {title}
+    rounding={segmented ? 'rounded-l-md border-r-0' : 'rounded-md'}
     onclick={onToggle}
   />
-{:else}
-  <div class="inline-flex items-center">
-    <ToggleButton
-      {label}
-      on={running}
-      {asleep}
-      {failing}
-      {unreachable}
-      {loading}
-      {disabled}
-      {title}
-      rounding="rounded-l-md border-r-0"
-      onclick={onToggle}
-    />
+  {#if hasGear}
     <button
       type="button"
       title={m.sites_controls_workerOptions()}
       aria-label={m.sites_controls_workerOptions()}
       onclick={() => (modalOpen = true)}
-      class="inline-flex items-center justify-center h-7 w-8 rounded-r-md border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-gray-400 dark:text-gray-500"
+      class="inline-flex items-center justify-center h-7 w-8 {onLogs
+        ? 'border-r-0'
+        : 'rounded-r-md'} border border-gray-200 dark:border-lerd-border bg-white dark:bg-lerd-card hover:bg-gray-50 dark:hover:bg-white/5 transition-colors text-gray-400 dark:text-gray-500"
     >
       <svg
         class="w-3.5 h-3.5"
@@ -85,8 +82,13 @@
         />
       </svg>
     </button>
-  </div>
+  {/if}
+  {#if onLogs}
+    <LogsButton {label} onclick={onLogs} />
+  {/if}
+</div>
 
+{#if hasGear}
   <WorkerOptionsModal
     open={modalOpen}
     {label}

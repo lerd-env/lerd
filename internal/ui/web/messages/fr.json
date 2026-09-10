@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Démarrer le serveur Vite",
   "sites_controls_viteToggle_on": "Arrêter le serveur Vite",
+  "sites_controls_workerLogs": "Journaux de {label}",
   "sites_controls_workerOptions": "Options du worker",
   "sites_controls_workerOptionsFailed": "Impossible d'enregistrer les options du worker : {error}",
   "sites_controls_workerOptionsHint": "Enregistré dans .lerd.yaml, pour que tout le projet lance le même worker. Laissez un champ vide pour la valeur par défaut du framework.",

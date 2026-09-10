@@ -3,6 +3,7 @@
   import DetailTabs, { type TabItem } from '$components/DetailTabs.svelte';
   import AppLogsTab from './AppLogsTab.svelte';
   import { type Site, fpmContainer } from '$stores/sites';
+  import { routeRest, goToTab } from '$stores/route';
   import { m } from '../../paraglide/messages.js';
 
   function fpmTabLabelI18n(site: Site): string {
@@ -72,6 +73,20 @@
 
   let active = $state<TabId>('app');
 
+  // A worker's toggle links straight at its journal (#sites/<domain>/logs/<id>),
+  // so the selected source lives in the hash and a tab click mirrors back into
+  // it. Without the mirror the link would go dead once the user picked another
+  // tab by hand: the hash would still name the old source and never change.
+  $effect(() => {
+    const source = $routeRest.split('/').slice(2).join('/');
+    if (source) active = source;
+  });
+
+  function selectSource(id: TabId) {
+    active = id;
+    goToTab('sites', `${site.domain}/logs/${id}`);
+  }
+
   // If the active tab isn't available, snap to the first one. Falling back to
   // '' (not 'fpm') matters for static sites with no tabs: defaulting to 'fpm'
   // would stream the shared FPM container's logs even though the tab is hidden.
@@ -117,7 +132,7 @@
 </script>
 
 <div class="flex-1 flex flex-col overflow-hidden min-h-0">
-  <DetailTabs {tabs} {active} onchange={(id) => (active = id)} />
+  <DetailTabs {tabs} {active} onchange={selectSource} />
   {#if active === 'app' && site.has_app_logs}
     {#key site.domain + '@' + activeWorktreeBranch}
       <AppLogsTab {site} branch={activeWorktreeBranch} />

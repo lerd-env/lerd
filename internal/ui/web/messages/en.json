@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Start Vite dev server",
   "sites_controls_viteToggle_on": "Stop Vite dev server",
+  "sites_controls_workerLogs": "{label} logs",
   "sites_controls_workerOptions": "Worker options",
   "sites_controls_workerOptionsFailed": "Could not save the worker options: {error}",
   "sites_controls_workerOptionsHint": "Saved to .lerd.yaml, so the whole project runs the same worker. Leave a field empty to use the framework default.",

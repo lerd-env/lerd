@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Vite dev sunucusunu başlat",
   "sites_controls_viteToggle_on": "Vite dev sunucusunu durdur",
+  "sites_controls_workerLogs": "{label} logları",
   "sites_controls_workerOptions": "Worker seçenekleri",
   "sites_controls_workerOptionsFailed": "Worker seçenekleri kaydedilemedi: {error}",
   "sites_controls_workerOptionsHint": ".lerd.yaml dosyasına kaydedilir, böylece tüm proje aynı worker’ı çalıştırır. Boş bırakılan alan framework varsayılanını kullanır.",

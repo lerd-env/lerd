@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "启动 Vite 开发服务器",
   "sites_controls_viteToggle_on": "停止 Vite 开发服务器",
+  "sites_controls_workerLogs": "{label} 日志",
   "sites_controls_workerOptions": "工作进程选项",
   "sites_controls_workerOptionsFailed": "无法保存工作进程选项：{error}",
   "sites_controls_workerOptionsHint": "保存在 .lerd.yaml 中，整个项目都会运行同一条命令。留空则使用框架默认值。",
