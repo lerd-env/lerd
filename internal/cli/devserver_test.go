@@ -500,3 +500,39 @@ func TestAssignDevServerPortLetsAWorktreeKeepItsOwnPort(t *testing.T) {
 		t.Fatalf("assignDevServerPort() = %d, want it to keep 5199", got)
 	}
 }
+
+// The wrapper must not import the project's config: doing so would make the
+// wrapper's own module format decide which build of every plugin the project
+// imports gets resolved, and a plugin whose two builds are not interchangeable
+// would then behave differently under lerd than under a plain run. The tool's
+// own loader is handed the path instead.
+func TestWriteDevServerWrapperDefersToTheToolsConfigLoader(t *testing.T) {
+	dir := gitRepo(t, "/node_modules\n")
+	if err := os.WriteFile(filepath.Join(dir, "vite.config.js"), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "node_modules", "vite"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tool := config.DevServerToolInstalled(dir)
+	if tool == nil {
+		t.Fatal("vite is not installed in the fixture")
+	}
+
+	rel, err := writeDevServerWrapper(dir, tool, securedAddr("myapp.test"))
+	if err != nil {
+		t.Fatalf("writeDevServerWrapper() error: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(dir, rel))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"loadConfigFromFile", `new URL("../../vite.config.js", import.meta.url)`} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("wrapper missing %s:\n%s", want, body)
+		}
+	}
+	if strings.Contains(string(body), `import projectConfig from`) {
+		t.Errorf("wrapper still imports the project config:\n%s", body)
+	}
+}
