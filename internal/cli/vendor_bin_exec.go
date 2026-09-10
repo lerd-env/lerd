@@ -117,7 +117,7 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 	if _, native := nativeRuntimeVersion(cwd); native {
 		c := exec.Command(filepath.Join(cwd, rel), args...)
 		c.Dir = cwd
-		c.Env = append(os.Environ(), "PATH="+config.PathWithBinDir())
+		c.Env = append(os.Environ(), "PATH="+nativeVendorBinPath(cwd))
 		c.Stdin, c.Stdout, c.Stderr = os.Stdin, os.Stdout, os.Stderr
 		return runAndPropagate(c)
 	}
@@ -133,6 +133,13 @@ func runVendorBinDirect(cwd, rel string, args []string) error {
 	cmd := podman.Cmd(vendorBinExecArgs(cwd, container, rel, args, term.IsTerminal(int(os.Stdin.Fd())))...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return runAndPropagate(cmd)
+}
+
+// nativeVendorBinPath is the PATH a wrapper gets on the host: the project's own
+// composer binaries first, so a wrapper calling a sibling finds it the way it
+// would in the container, then lerd's shim dir, which is where php comes from.
+func nativeVendorBinPath(cwd string) string {
+	return filepath.Join(cwd, "vendor", "bin") + string(os.PathListSeparator) + config.PathWithBinDir()
 }
 
 // runAndPropagate runs cmd and exits with the child's status, so a failing

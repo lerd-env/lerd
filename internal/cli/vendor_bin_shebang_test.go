@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/geodro/lerd/internal/config"
 )
 
 // writeVendorBin drops name into <dir>/vendor/bin with the given content and
@@ -98,5 +100,18 @@ func TestVendorBinExecArgs_CarriesVendorBinOnPath(t *testing.T) {
 	}
 	if !found {
 		t.Error("no PATH env flag in exec args")
+	}
+}
+
+// Under the native runtime the wrapper runs on the host, where it still has to
+// find php (lerd's shim dir) and any sibling composer binary it shells out to.
+func TestNativeVendorBinPath_HasProjectBinAndShimDir(t *testing.T) {
+	dir := t.TempDir()
+	got := nativeVendorBinPath(dir)
+	if !strings.HasPrefix(got, filepath.Join(dir, "vendor", "bin")+string(os.PathListSeparator)) {
+		t.Errorf("project vendor/bin must come first, got %q", got)
+	}
+	if !strings.Contains(got, config.BinDir()) {
+		t.Errorf("PATH %q missing lerd's shim dir %q", got, config.BinDir())
 	}
 }
