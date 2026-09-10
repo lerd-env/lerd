@@ -217,12 +217,12 @@ func ReferencesContainer(content, serviceName string) bool {
 	return false
 }
 
-// ReferencesLoopback reports whether an env file points at a service through
-// the host rather than through container DNS: the loopback address with the
-// service's published port, or the service's own domain. A site whose PHP runs
-// on the host (native runtime, host proxy) is wired that way, so looking only
-// for the lerd-<service> hostname reads every one of them as unwired.
-func ReferencesLoopback(content string, hostPorts []string, domain string) bool {
+// ReferencesHostWiring reports whether an env file points at a service through
+// the host rather than through container DNS: the service's published port, or
+// its own domain. A site whose PHP runs on the host (native runtime, host
+// proxy) is wired that way, so looking only for the lerd-<service> hostname
+// reads every one of them as unwired.
+func ReferencesHostWiring(content string, hostPorts []string, domain string) bool {
 	for _, line := range strings.Split(content, "\n") {
 		if strings.HasPrefix(strings.TrimSpace(line), "#") {
 			continue
@@ -231,8 +231,13 @@ func ReferencesLoopback(content string, hostPorts []string, domain string) bool 
 		if domain != "" && lineReferencesNeedle(line, domain) {
 			return true
 		}
+		_, value, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		for _, port := range hostPorts {
-			if port != "" && lineReferencesPort(line, port) {
+			if port != "" && valueReferencesPort(value, port) {
 				return true
 			}
 		}
@@ -240,25 +245,33 @@ func ReferencesLoopback(content string, hostPorts []string, domain string) bool 
 	return false
 }
 
-// lineReferencesPort reports whether line carries port as a whole number, so
-// 6379 is not found inside 16379 or 63790.
-func lineReferencesPort(line, port string) bool {
+// valueReferencesPort reports whether value addresses port: the whole value
+// (REDIS_PORT=6379) or the port field of a host:port (MEILISEARCH_HOST=
+// http://127.0.0.1:7701). Matching the digits anywhere instead would read an
+// APP_KEY or a password that happens to spell 6379 as a redis connection.
+func valueReferencesPort(value, port string) bool {
 	for i := 0; ; {
-		j := strings.Index(line[i:], port)
+		j := strings.Index(value[i:], port)
 		if j < 0 {
 			return false
 		}
 		start, end := i+j, i+j+len(port)
-		beforeOK := start == 0 || !isDigit(line[start-1])
-		afterOK := end >= len(line) || !isDigit(line[end])
-		if beforeOK && afterOK {
+		afterPortField := start == 0 || value[start-1] == ':'
+		endOfPortField := end >= len(value) || !isPortNeighbourByte(value[end])
+		if afterPortField && endOfPortField {
 			return true
 		}
 		i = start + 1
 	}
 }
 
-func isDigit(b byte) bool { return b >= '0' && b <= '9' }
+// isPortNeighbourByte reports whether b continues the field a port sits in, so
+// 6379 is not found inside 63790 or a base64 run.
+func isPortNeighbourByte(b byte) bool {
+	return (b >= '0' && b <= '9') ||
+		(b >= 'a' && b <= 'z') ||
+		(b >= 'A' && b <= 'Z')
+}
 
 // stripInlineComment drops a trailing "# ..." comment from an .env line. A '#'
 // only starts a comment when preceded by whitespace (dotenv convention), so a

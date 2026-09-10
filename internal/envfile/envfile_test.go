@@ -433,23 +433,35 @@ func TestReadValues_firstOccurrenceWinsLikeReadKey(t *testing.T) {
 // A site whose PHP runs on the host reaches a service on loopback and its
 // published port, or through the service's own domain, never through the
 // lerd-<service> container name.
-func TestReferencesLoopback(t *testing.T) {
-	env := "REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nAWS_ENDPOINT=https://rustfs.test\n# MAIL_PORT=1026\n"
+func TestReferencesHostWiring(t *testing.T) {
+	env := "REDIS_HOST=127.0.0.1\nREDIS_PORT=6379\nMEILISEARCH_HOST=http://127.0.0.1:7701\n" +
+		"AWS_ENDPOINT=https://rustfs.test\n# MAIL_PORT=1026\n"
 	cases := []struct {
 		name  string
 		ports []string
 		host  string
 		want  bool
 	}{
-		{"published port", []string{"6379"}, "", true},
+		{"published port as the whole value", []string{"6379"}, "", true},
+		{"published port in a url", []string{"7701"}, "", true},
 		{"service domain", nil, "rustfs.test", true},
 		{"port only in a comment", []string{"1026"}, "", false},
 		{"port that is a substring of another", []string{"637"}, "", false},
-		{"nothing points at it", []string{"7701"}, "meilisearch.test", false},
+		{"nothing points at it", []string{"3307"}, "meilisearch.test", false},
 	}
 	for _, c := range cases {
-		if got := ReferencesLoopback(env, c.ports, c.host); got != c.want {
-			t.Errorf("%s: ReferencesLoopback() = %v, want %v", c.name, got, c.want)
+		if got := ReferencesHostWiring(env, c.ports, c.host); got != c.want {
+			t.Errorf("%s: ReferencesHostWiring() = %v, want %v", c.name, got, c.want)
 		}
+	}
+}
+
+// A port is an address, not a number that happens to appear: a key or a
+// password carrying the digits is not a wiring, or a site would report a
+// service as reached because its APP_KEY spelled the port.
+func TestReferencesHostWiring_ignoresPortDigitsInsideAValue(t *testing.T) {
+	env := "APP_KEY=base64:Zk6379QpLm\nDB_PASSWORD=s3cret6379\nMAIL_FROM=team6379@example.test\n"
+	if ReferencesHostWiring(env, []string{"6379"}, "") {
+		t.Error("ReferencesHostWiring() = true, want false: no value points at the port")
 	}
 }

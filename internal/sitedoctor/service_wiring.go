@@ -67,7 +67,7 @@ func checkServiceWiringOn(path, envFile string, fw *config.Framework, loopback b
 		if envfile.ReferencesContainer(string(content), name) {
 			continue
 		}
-		if loopback && envfile.ReferencesLoopback(string(content), hostPorts(name), config.ServiceDomain(name)) {
+		if loopback && envfile.ReferencesHostWiring(string(content), hostPorts(name), config.ServiceDomain(name)) {
 			continue
 		}
 		unwired = append(unwired, name)
