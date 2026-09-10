@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Khởi động Vite dev server",
   "sites_controls_viteToggle_on": "Dừng Vite dev server",
+  "sites_controls_workerLogs": "Nhật ký {label}",
   "sites_controls_workerOptions": "Tùy chọn worker",
   "sites_controls_workerOptionsFailed": "Không lưu được tùy chọn worker: {error}",
   "sites_controls_workerOptionsHint": "Được lưu vào .lerd.yaml để cả dự án chạy cùng một worker. Để trống thì dùng mặc định của framework.",

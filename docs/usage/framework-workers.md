@@ -241,6 +241,8 @@ journalctl --user -u lerd-messenger-myapp -f
 
 In the dashboard, a worker keeps its Logs tab whatever state it is in, drawn muted while it is stopped. The journal outlives the unit, so the tab is still the place to read why a worker died after it has gone down, or after the health banner stopped it.
 
+Each worker's toggle carries a shortcut straight to that journal: the log-lines button on the right of the toggle opens the Logs tab with the worker's source already selected, without hunting through the tab strip.
+
 ## Managing custom workers
 
 Use `lerd worker add` to add project-specific or global custom workers without manually editing YAML:

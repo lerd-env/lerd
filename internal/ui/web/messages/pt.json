@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Iniciar servidor Vite",
   "sites_controls_viteToggle_on": "Parar servidor Vite",
+  "sites_controls_workerLogs": "Logs de {label}",
   "sites_controls_workerOptions": "Opções do worker",
   "sites_controls_workerOptionsFailed": "Não foi possível guardar as opções do worker: {error}",
   "sites_controls_workerOptionsHint": "Guardado em .lerd.yaml, para que todo o projeto execute o mesmo worker. Deixe o campo vazio para usar o valor por omissão do framework.",

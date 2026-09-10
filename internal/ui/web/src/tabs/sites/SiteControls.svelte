@@ -14,8 +14,10 @@
     toggleWorker,
     saveWorkerOptions,
     setWorktreeDBIsolated,
+    siteHasLogSources,
     loadSites
   } from '$stores/sites';
+  import { goToTab } from '$stores/route';
   import { loadServices } from '$stores/services';
   import { phpVersions, phpOptionsForSite } from '$stores/phpVersions';
   import { nodeVersions } from '$stores/nodeVersions';
@@ -49,6 +51,14 @@
   // Workers idle-suspend has stopped: shown as "asleep" on their toggles rather
   // than a plain "off", so they don't look broken.
   const asleepWorkers = $derived(new Set(site.idle_suspended_workers || []));
+
+  // Every worker toggle carries a shortcut to its own journal, deep-linking the
+  // Logs tab at that source. Left off when the site has no Logs tab to land on.
+  const canReadLogs = $derived(siteHasLogSources(site));
+  function logsFor(source: string): (() => void) | undefined {
+    if (!canReadLogs) return undefined;
+    return () => goToTab('sites', `${site.domain}/logs/${source}`);
+  }
 
   const effectivePhp = $derived(activeWorktree?.php_version ?? site.php_version ?? '');
   const effectiveNode = $derived(activeWorktree?.node_version ?? site.node_version ?? '');
@@ -380,14 +390,15 @@
         </span>
       {:else}
         {#each wtWorkers as w (w.name)}
-          <ToggleButton
+          <WorkerControl
             label={w.label || w.name}
-            on={Boolean(w.running)}
+            running={Boolean(w.running)}
             failing={Boolean(w.failing)}
             unreachable={Boolean(w.unreachable)}
             loading={isPending('worker:' + w.name)}
             disabled={isPending('worker:' + w.name)}
-            onclick={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w, activeWorktreeBranch))}
+            onToggle={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w, activeWorktreeBranch))}
+            onLogs={logsFor('worker:' + w.name)}
             title={w.running ? m.sites_controls_workerToggle_on({ label: w.label || w.name }) : m.sites_controls_workerToggle_off({ label: w.label || w.name })}
           />
         {/each}
@@ -404,6 +415,7 @@
           options={site.worker_options?.queue || []}
           onToggle={() => transition('queue', !site.queue_running, () => toggleQueue(site))}
           onSaveOptions={(values) => saveOptions('queue', values)}
+          onLogs={logsFor('queue')}
           title={site.queue_failing ? m.sites_controls_queueToggle_failing() : site.queue_running ? m.sites_controls_queueToggle_on() : m.sites_controls_queueToggle_off()}
         />
       {/if}
@@ -418,31 +430,34 @@
           reloadLoading={reloadRestarting}
           onToggle={() => transition('horizon', !site.horizon_running, () => toggleHorizon(site))}
           onToggleReload={onToggleHorizonReload}
+          onLogs={logsFor('horizon')}
         />
       {/if}
 
       {#if site.has_schedule_worker}
-        <ToggleButton
+        <WorkerControl
           label={m.sites_controls_schedule()}
-          on={Boolean(site.schedule_running)}
+          running={Boolean(site.schedule_running)}
           asleep={asleepWorkers.has('schedule')}
           failing={Boolean(site.schedule_failing)}
           loading={isPending('schedule')}
           disabled={isPending('schedule')}
-          onclick={() => transition('schedule', !site.schedule_running, () => toggleSchedule(site))}
+          onToggle={() => transition('schedule', !site.schedule_running, () => toggleSchedule(site))}
+          onLogs={logsFor('schedule')}
           title={site.schedule_running ? m.sites_controls_scheduleToggle_on() : m.sites_controls_scheduleToggle_off()}
         />
       {/if}
 
       {#if site.has_reverb}
-        <ToggleButton
+        <WorkerControl
           label={m.sites_controls_reverb()}
-          on={Boolean(site.reverb_running)}
+          running={Boolean(site.reverb_running)}
           asleep={asleepWorkers.has('reverb')}
           failing={Boolean(site.reverb_failing)}
           loading={isPending('reverb')}
           disabled={isPending('reverb')}
-          onclick={() => transition('reverb', !site.reverb_running, () => toggleReverb(site))}
+          onToggle={() => transition('reverb', !site.reverb_running, () => toggleReverb(site))}
+          onLogs={logsFor('reverb')}
           title={site.reverb_running ? m.sites_controls_reverbToggle_on() : m.sites_controls_reverbToggle_off()}
         />
       {/if}
@@ -455,6 +470,7 @@
           webhookPath={site.stripe_webhook_path}
           onToggle={() => transition('stripe', !site.stripe_running, () => toggleStripe(site))}
           onSaveConfig={(path) => setStripeConfig(site, path)}
+          onLogs={logsFor('stripe')}
         />
       {/if}
 
@@ -472,6 +488,7 @@
           options={site.worker_options?.[w.name] || []}
           onToggle={() => transition('worker:' + w.name, !w.running, () => toggleWorker(site, w))}
           onSaveOptions={(values) => saveOptions(w.name, values)}
+          onLogs={logsFor('worker:' + w.name)}
           title={isVite
             ? w.running
               ? m.sites_controls_viteToggle_on()

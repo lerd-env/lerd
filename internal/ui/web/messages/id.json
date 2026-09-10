@@ -919,6 +919,7 @@
   "sites_controls_vite": "Vite",
   "sites_controls_viteToggle_off": "Mulai server Vite",
   "sites_controls_viteToggle_on": "Hentikan server Vite",
+  "sites_controls_workerLogs": "Log {label}",
   "sites_controls_workerOptions": "Opsi worker",
   "sites_controls_workerOptionsFailed": "Gagal menyimpan opsi worker: {error}",
   "sites_controls_workerOptionsHint": "Disimpan di .lerd.yaml, jadi seluruh proyek menjalankan worker yang sama. Kosongkan untuk memakai bawaan framework.",
