@@ -20,18 +20,40 @@ const projectConfigFile = ".lerd.yaml"
 // check` used to be, folded in so one report answers whether the site is healthy
 // instead of the user running a second command to find out.
 func checkProjectConfig(path string, fw *config.Framework) (Check, bool) {
-	if !fileExists(filepath.Join(path, projectConfigFile)) {
+	local := localOverrideNote(path)
+	if !fileExists(filepath.Join(path, projectConfigFile)) && local == "" {
 		return Check{}, false
 	}
 	problems, warnings := ValidateProjectConfig(path, fw)
 	switch {
 	case len(problems) > 0:
-		return Check{Name: "project_config", Status: StatusFail, Detail: joinProblems(problems, warnings)}, true
+		return Check{Name: "project_config", Status: StatusFail, Detail: withNote(joinProblems(problems, warnings), local)}, true
 	case len(warnings) > 0:
-		return Check{Name: "project_config", Status: StatusWarn, Detail: joinProblems(nil, warnings)}, true
+		return Check{Name: "project_config", Status: StatusWarn, Detail: withNote(joinProblems(nil, warnings), local)}, true
 	default:
-		return Check{Name: "project_config", Status: StatusOK}, true
+		return Check{Name: "project_config", Status: StatusOK, Detail: local}, true
 	}
+}
+
+// localOverrideNote names the settings the untracked override file is currently
+// winning, so a domain or an isolated database that is not in the committed file
+// is visible instead of looking like lerd ignoring .lerd.yaml.
+func localOverrideNote(path string) string {
+	keys, err := config.LocalOverrideKeys(path)
+	if err != nil {
+		return fmt.Sprintf("%s is not valid YAML: %v", config.LocalOverrideFile, err)
+	}
+	if len(keys) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s overrides %s", config.LocalOverrideFile, strings.Join(keys, ", "))
+}
+
+func withNote(detail, note string) string {
+	if note == "" {
+		return detail
+	}
+	return detail + " · " + note
 }
 
 func joinProblems(problems, warnings []string) string {

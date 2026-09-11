@@ -349,9 +349,32 @@ func (s ProjectService) Resolve() (*CustomService, error) {
 // entries cache the absence so missing files don't cost a fresh stat+open
 // each time.
 type projectConfigCacheEntry struct {
-	cfg   *ProjectConfig // nil = file missing
-	mtime time.Time
-	size  int64
+	cfg   *ProjectConfig // nil = neither file exists
+	base  fileStamp
+	local fileStamp
+}
+
+// fileStamp is what the cache compares a file against: its absence, or its
+// mtime and size.
+type fileStamp struct {
+	exists bool
+	mtime  time.Time
+	size   int64
+}
+
+func (f fileStamp) same(o fileStamp) bool {
+	return f.exists == o.exists && f.size == o.size && f.mtime.Equal(o.mtime)
+}
+
+func stampOf(path string) (fileStamp, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fileStamp{}, nil
+		}
+		return fileStamp{}, err
+	}
+	return fileStamp{exists: true, mtime: info.ModTime(), size: info.Size()}, nil
 }
 
 var (
@@ -366,16 +389,23 @@ func invalidateProjectConfigCache(dir string) {
 	projectConfigCacheMu.Unlock()
 }
 
-// LoadProjectConfig reads .lerd.yaml from dir, returning an empty config if
-// the file does not exist.
+// LoadProjectConfig reads .lerd.yaml from dir, then applies the untracked
+// .lerd.local.yaml over it, returning an empty config if neither file exists.
 func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	path := filepath.Join(dir, ".lerd.yaml")
-	info, statErr := os.Stat(path)
+	localPath := LocalOverridePath(dir)
+	base, baseErr := stampOf(path)
+	if baseErr != nil {
+		return &ProjectConfig{}, baseErr
+	}
+	local, localErr := stampOf(localPath)
+	if localErr != nil {
+		return &ProjectConfig{}, localErr
+	}
 
 	projectConfigCacheMu.Lock()
 	entry, hit := projectConfigCache[path]
-	cacheValid := hit && (statErr != nil && entry.cfg == nil ||
-		statErr == nil && entry.mtime.Equal(info.ModTime()) && entry.size == info.Size())
+	cacheValid := hit && entry.base.same(base) && entry.local.same(local)
 	if cacheValid {
 		out := cloneProjectConfig(entry.cfg)
 		projectConfigCacheMu.Unlock()
@@ -386,29 +416,18 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	}
 	projectConfigCacheMu.Unlock()
 
-	if statErr != nil {
-		if os.IsNotExist(statErr) {
-			projectConfigCacheMu.Lock()
-			projectConfigCache[path] = projectConfigCacheEntry{}
-			projectConfigCacheMu.Unlock()
-			return &ProjectConfig{}, nil
-		}
-		return &ProjectConfig{}, statErr
+	if !base.exists && !local.exists {
+		projectConfigCacheMu.Lock()
+		projectConfigCache[path] = projectConfigCacheEntry{}
+		projectConfigCacheMu.Unlock()
+		return &ProjectConfig{}, nil
 	}
 
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return &ProjectConfig{}, nil
-		}
-		return &ProjectConfig{}, err
-	}
 	var cfg ProjectConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		// Most callers read this config with the error discarded, so hand them an
-		// empty one rather than a nil they would dereference, and name the file
-		// for the few that do report it.
-		return &ProjectConfig{}, fmt.Errorf("%s: %w", path, err)
+	for _, p := range []string{path, localPath} {
+		if err := decodeProjectFile(p, &cfg); err != nil {
+			return &ProjectConfig{}, err
+		}
 	}
 
 	if err := ValidatePublicDir(cfg.PublicDir); err != nil {
@@ -431,12 +450,29 @@ func LoadProjectConfig(dir string) (*ProjectConfig, error) {
 	}
 
 	projectConfigCacheMu.Lock()
-	projectConfigCache[path] = projectConfigCacheEntry{
-		cfg: &cfg, mtime: info.ModTime(), size: info.Size(),
-	}
+	projectConfigCache[path] = projectConfigCacheEntry{cfg: &cfg, base: base, local: local}
 	projectConfigCacheMu.Unlock()
 
 	return cloneProjectConfig(&cfg), nil
+}
+
+// decodeProjectFile decodes one config file over cfg, leaving keys the file
+// does not mention as they are. A missing file is not an error; a parse error
+// names the file, since callers only know the directory.
+func decodeProjectFile(path string, cfg *ProjectConfig) error {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if err := yaml.Unmarshal(data, cfg); err != nil {
+		// Most callers read this config with the error discarded, so they get an
+		// empty one rather than a nil they would dereference.
+		return fmt.Errorf("%s: %w", path, err)
+	}
+	return nil
 }
 
 // cloneProjectConfig returns a copy with mutable maps and slices freshly
@@ -516,10 +552,17 @@ func cloneProjectConfig(in *ProjectConfig) *ProjectConfig {
 // to match the store YAML and its lists are sorted for stable git diffs.
 func SaveProjectConfig(dir string, cfg *ProjectConfig) error {
 	normalizeProjectConfig(cfg)
+	var doc yaml.Node
+	if err := doc.Encode(cfg); err != nil {
+		return err
+	}
+	if err := restoreLocalOverrides(dir, &doc); err != nil {
+		return err
+	}
 	var buf bytes.Buffer
 	enc := yaml.NewEncoder(&buf)
 	enc.SetIndent(2)
-	if err := enc.Encode(cfg); err != nil {
+	if err := enc.Encode(&doc); err != nil {
 		return err
 	}
 	if err := enc.Close(); err != nil {

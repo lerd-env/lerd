@@ -186,6 +186,11 @@ func dumpConfigFiles(w io.Writer) {
 			continue
 		}
 		dumpConfigFile(w, filepath.Join(s.Path, ".lerd.yaml"), "(no .lerd.yaml for this site)")
+		// The override file is untracked, so a site behaving unlike its committed
+		// config only makes sense with this next to it.
+		if local := config.LocalOverridePath(s.Path); fileExistsAt(local) {
+			dumpConfigFile(w, local, "")
+		}
 	}
 }
 
