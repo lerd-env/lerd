@@ -62,3 +62,34 @@ func TestValidateProjectConfig_LabellessCommandWarnsOnly(t *testing.T) {
 		t.Errorf("warnings: got %v, want one about the empty label", warnings)
 	}
 }
+
+// Settings coming from the untracked override file are named in the report, so
+// a domain or an isolated database that is not in .lerd.yaml is still visible.
+func TestCheckProjectConfig_NamesLocalOverrides(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".lerd.yaml", "php_version: \"8.4\"\n")
+	writeEnv(t, dir, ".lerd.local.yaml", "db_isolated: true\ndomains:\n  - acme-branch\n")
+	c, ok := checkProjectConfig(dir, nil)
+	if !ok {
+		t.Fatal("expected a project_config check")
+	}
+	if c.Status == StatusFail {
+		t.Fatalf("status = %q, want a non-failing check: %s", c.Status, c.Detail)
+	}
+	for _, want := range []string{".lerd.local.yaml", "db_isolated", "domains"} {
+		if !strings.Contains(c.Detail, want) {
+			t.Errorf("detail %q does not mention %q", c.Detail, want)
+		}
+	}
+}
+
+// An override file on its own still gets validated; skipping on the absence of
+// .lerd.yaml would hide a project configured entirely from the local file.
+func TestCheckProjectConfig_LocalFileAlone(t *testing.T) {
+	dir := t.TempDir()
+	writeEnv(t, dir, ".lerd.local.yaml", "php_version: \"8,5\"\n")
+	c, ok := checkProjectConfig(dir, nil)
+	if !ok || c.Status != StatusFail {
+		t.Fatalf("got ok=%v status=%q, want a failing check", ok, c.Status)
+	}
+}

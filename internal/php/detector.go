@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 // DetectExtensions reads composer.json in dir and returns the list of PHP extensions
@@ -83,15 +82,10 @@ func SiteUsesPHP(s config.Site) bool {
 //  3. composer.json require.php semver (project requirement)
 //  4. global config default
 func DetectVersion(dir string) (string, error) {
-	// 1. .lerd.yaml — explicit lerd override takes top priority
-	lerdYaml := filepath.Join(dir, ".lerd.yaml")
-	if data, err := os.ReadFile(lerdYaml); err == nil {
-		var lerdCfg struct {
-			PHPVersion string `yaml:"php_version"`
-		}
-		if yaml.Unmarshal(data, &lerdCfg) == nil && lerdCfg.PHPVersion != "" {
-			return lerdCfg.PHPVersion, nil
-		}
+	// 1. .lerd.yaml, with .lerd.local.yaml over it — an explicit lerd override
+	//    takes top priority
+	if cfg, err := config.LoadProjectConfig(dir); err == nil && cfg.PHPVersion != "" {
+		return cfg.PHPVersion, nil
 	}
 
 	// 2. .php-version file — explicit per-project pin

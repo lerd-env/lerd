@@ -1200,7 +1200,9 @@ func execCheck(args map[string]any) (any, *rpcError) {
 	}
 
 	path := filepath.Join(projectPath, ".lerd.yaml")
-	if _, err := os.Stat(path); os.IsNotExist(err) {
+	_, baseErr := os.Stat(path)
+	_, localErr := os.Stat(config.LocalOverridePath(projectPath))
+	if os.IsNotExist(baseErr) && os.IsNotExist(localErr) {
 		return toolErr("no .lerd.yaml found in " + projectPath), nil
 	}
 

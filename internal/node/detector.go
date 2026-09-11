@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/geodro/lerd/internal/config"
-	"gopkg.in/yaml.v3"
 )
 
 // safeVersionPattern is the shape a version selector may have before it is
@@ -45,22 +44,17 @@ func DetectVersion(dir string) (string, error) {
 	return v, nil
 }
 
-// pinnedVersion returns the .lerd.yaml node_version override for dir, empty
+// pinnedVersion returns the node_version override for dir (.lerd.yaml, or
+// .lerd.local.yaml over it), empty
 // when there is none. Unlike .nvmrc and .node-version it is not reduced to a
 // numeric major, so a full pin survives. It still has to be version shaped: it
 // is repository content and ends up on a command line.
 func pinnedVersion(dir string) string {
-	data, err := os.ReadFile(filepath.Join(dir, ".lerd.yaml"))
+	cfg, err := config.LoadProjectConfig(dir)
 	if err != nil {
 		return ""
 	}
-	var lerdCfg struct {
-		NodeVersion string `yaml:"node_version"`
-	}
-	if yaml.Unmarshal(data, &lerdCfg) != nil {
-		return ""
-	}
-	return SafeVersion(lerdCfg.NodeVersion)
+	return SafeVersion(cfg.NodeVersion)
 }
 
 // UnpinnedVersion resolves the version dir gets while .lerd.yaml carries no
