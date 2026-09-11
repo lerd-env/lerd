@@ -336,3 +336,18 @@ func TestClampToRange(t *testing.T) {
 		}
 	}
 }
+
+// The untracked override file wins over the committed one here too, otherwise a
+// worktree pinning its own PHP would be served the repository's version.
+func TestDetectVersion_LocalOverride(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, ".lerd.yaml", "php_version: \"8.1\"\n")
+	writeFile(t, dir, ".lerd.local.yaml", "php_version: \"8.3\"\n")
+	got, err := DetectVersion(dir)
+	if err != nil {
+		t.Fatalf("detect: %v", err)
+	}
+	if got != "8.3" {
+		t.Errorf("DetectVersion = %q, want 8.3 from .lerd.local.yaml", got)
+	}
+}

@@ -218,3 +218,20 @@ func TestDetectVersion_nvmrcOverridesPackageJSON(t *testing.T) {
 		t.Errorf("got %q, want %q", got, "20")
 	}
 }
+
+// A worktree pinning its own Node in the untracked override file gets it, the
+// same way .lerd.yaml's pin outranks .nvmrc.
+func TestPinnedVersion_LocalOverride(t *testing.T) {
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		".lerd.yaml":       "node_version: \"20\"\n",
+		".lerd.local.yaml": "node_version: \"22\"\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := pinnedVersion(dir); got != "22" {
+		t.Errorf("pinnedVersion = %q, want 22 from .lerd.local.yaml", got)
+	}
+}

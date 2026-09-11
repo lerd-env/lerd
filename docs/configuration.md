@@ -370,3 +370,22 @@ The Lerd watcher also monitors `.lerd.yaml` for changes. When you switch branche
 `lerd isolate`, the UI PHP version selector, and the MCP `site` tool's `php` action all keep `php_version` in sync when this file exists.
 
 `lerd secure`, `lerd unsecure`, the UI HTTPS toggle, and the MCP `secure`/`unsecure` tools keep `secured` in sync when this file exists.
+
+### Local overrides: `.lerd.local.yaml`
+
+A second, untracked file next to `.lerd.yaml`. Every key it sets wins over the committed one, and nothing lerd writes ever moves those keys back into `.lerd.yaml`. Use it when a machine, or a temporary worktree, needs a setting the repository should not carry: an extra domain, an isolated database, a different PHP version for one branch.
+
+```yaml
+# .lerd.local.yaml
+domains:
+  - acme-checkout
+db_isolated: true
+```
+
+The file takes the same fields as `.lerd.yaml`, in the same shapes. Merging is per top-level key: a list replaces the committed list entirely, a map (`env_overrides`, `worker_options`) merges key by key, and everything the local file does not mention keeps the committed value. The file is optional and may exist on its own, without a `.lerd.yaml` next to it.
+
+Add it to `.gitignore`. Lerd never creates it, never writes to it, and will not clean it up for you.
+
+Because the committed file stays the source of truth for everything else, commands that persist a setting still write `.lerd.yaml`, and a save never leaks a locally overridden value into it. Changing a setting the local file owns, say running `lerd runtime frankenphp` while the local file pins `runtime`, does nothing and says so: the local file has to change for that value to change.
+
+`lerd site:doctor` names the overridden keys in its `project_config` line, so a domain or a database that is not in `.lerd.yaml` is visible rather than looking like lerd ignoring the committed file. The watcher monitors the local file exactly like `.lerd.yaml`, so editing it re-applies the PHP and Node versions on the spot.
