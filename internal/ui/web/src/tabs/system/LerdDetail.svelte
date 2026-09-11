@@ -37,6 +37,19 @@
   import { escapeHtml } from '$lib/html';
   import { m } from '../../paraglide/messages.js';
 
+  // A good-looking theme is the one thing people screenshot, so the share links
+  // carry the post ready to go; the handle and the tag stay out of translation.
+  const sharePost = $derived(m.system_theme_sharePost());
+  const shareOnX = $derived(
+    'https://x.com/intent/post?text=' + encodeURIComponent(sharePost + ' @lerdphp https://lerd.sh')
+  );
+  const shareOnBluesky = $derived(
+    'https://bsky.app/intent/compose?text=' + encodeURIComponent(sharePost + ' @lerdphp.bsky.social https://lerd.sh')
+  );
+  const shareOnReddit = $derived(
+    'https://www.reddit.com/r/lerd/submit?title=' + encodeURIComponent(sharePost) + '&text=' + encodeURIComponent('https://lerd.sh')
+  );
+
   // The remote dashboard always binds :7073; when LAN-exposed we surface the
   // address plus a scannable QR so a phone can jump straight in.
   const dashboardURL = $derived('http://' + $lan.lanIP + ':7073');
@@ -166,6 +179,9 @@
 
   <div class="p-3 space-y-3">
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <!-- The version card is short; it shares its column with language so the
+         row ends level with the taller theme card. -->
+    <div class="space-y-3">
     <SettingsCard>
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
@@ -241,8 +257,15 @@
       </div>
     </SettingsCard>
 
-    <!-- Theme and language are one card: both are how the dashboard presents
-         itself, and as two cards they left an odd count in the two-column grid. -->
+    <SettingsCard>
+      <div class="flex items-center justify-between gap-4 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+        <LanguageSwitcher />
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
+    </SettingsCard>
+    </div>
+
     <SettingsCard>
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_theme_title()}</span>
@@ -291,13 +314,18 @@
         </div>
       {/if}
 
-      <div class="mt-4 pt-4 border-t border-gray-100 dark:border-lerd-border">
-        <div class="flex items-center justify-between gap-4 mb-2">
-          <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
-          <LanguageSwitcher />
-        </div>
-        <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
+      <div class="flex items-start gap-2 text-xs text-gray-500 dark:text-gray-400 mt-3">
+        <Icon name="camera" class="w-3.5 h-3.5 shrink-0 mt-0.5 text-lerd-red" />
+        <p class="leading-relaxed">
+          {m.system_theme_shareBlurb()}
+          <a href={shareOnX} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">X</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href={shareOnBluesky} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Bluesky</a>
+          <span aria-hidden="true">&middot;</span>
+          <a href={shareOnReddit} target="_blank" rel="noopener" class="font-medium text-lerd-red hover:text-lerd-redhov underline-offset-2 hover:underline">Reddit</a>
+        </p>
       </div>
+
     </SettingsCard>
     </div>
 

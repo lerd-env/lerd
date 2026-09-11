@@ -43,4 +43,19 @@ describe('LerdDetail', () => {
 
     expect(screen.queryByRole('button', { name: /what's new/i })).toBeNull();
   });
+
+  it('prefills the theme share posts for X and Bluesky', () => {
+    render(LerdDetail);
+
+    const x = screen.getByRole('link', { name: 'X' }) as HTMLAnchorElement;
+    const bluesky = screen.getByRole('link', { name: 'Bluesky' }) as HTMLAnchorElement;
+
+    expect(x.href).toContain('x.com/intent/post?text=');
+    expect(decodeURIComponent(x.href)).toContain('@lerdphp');
+    expect(bluesky.href).toContain('bsky.app/intent/compose?text=');
+    expect(decodeURIComponent(bluesky.href)).toContain('@lerdphp.bsky.social');
+
+    const reddit = screen.getByRole('link', { name: 'Reddit' }) as HTMLAnchorElement;
+    expect(reddit.href).toContain('reddit.com/r/lerd/submit?title=');
+  });
 });
