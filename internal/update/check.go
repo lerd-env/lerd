@@ -34,7 +34,7 @@ type updateCheckState struct {
 // (no network, GitHub unreachable, etc.). Network fetches are rate-limited to once
 // per 24 hours via a cache file at config.UpdateCheckFile().
 func CachedUpdateCheck(currentVersion string) (*UpdateInfo, error) {
-	return evaluateUpdate(currentVersion, cachedLatest())
+	return evaluateUpdate(currentVersion, cachedLatest(currentVersion))
 }
 
 // ForceUpdateCheck queries GitHub for the latest release right away, ignoring the
@@ -42,7 +42,7 @@ func CachedUpdateCheck(currentVersion string) (*UpdateInfo, error) {
 // explicitly asks to check for updates and expects a live answer. Returns nil, nil
 // when already current or when the network fetch fails silently.
 func ForceUpdateCheck(currentVersion string) (*UpdateInfo, error) {
-	return evaluateUpdate(currentVersion, freshLatest())
+	return evaluateUpdate(currentVersion, freshLatest(currentVersion))
 }
 
 // evaluateUpdate compares currentVersion against a latest tag and returns update
@@ -58,10 +58,11 @@ func evaluateUpdate(currentVersion, latest string) (*UpdateInfo, error) {
 	if !VersionGreaterThan(lat, cur) {
 		return nil, nil
 	}
-	// Stable users should only be notified about stable updates. If the cached
-	// latest is a prerelease (timing window where /releases/latest redirected
-	// to a beta tag, or a release accidentally not marked prerelease), skip.
-	if IsPrerelease(lat) && !IsPrerelease(cur) {
+	// Stable users should only be notified about stable updates unless they
+	// opted into the beta line. If the cached latest is a prerelease (timing
+	// window where /releases/latest redirected to a beta tag, or a release
+	// accidentally not marked prerelease), skip.
+	if IsPrerelease(lat) && !FollowsBetas(cur) {
 		return nil, nil
 	}
 
@@ -74,21 +75,21 @@ func evaluateUpdate(currentVersion, latest string) (*UpdateInfo, error) {
 
 // cachedLatest returns the latest release version tag, using a 24-hour disk cache.
 // Returns "" on any error so callers degrade silently.
-func cachedLatest() string {
+func cachedLatest(currentVersion string) string {
 	if data, err := os.ReadFile(config.UpdateCheckFile()); err == nil {
 		var state updateCheckState
 		if json.Unmarshal(data, &state) == nil && time.Since(state.CheckedAt) < 24*time.Hour {
 			return state.LatestVersion
 		}
 	}
-	return freshLatest()
+	return freshLatest(currentVersion)
 }
 
 // freshLatest fetches the latest release tag from GitHub and refreshes the disk
 // cache with the result. Returns "" on any error so callers degrade silently.
-func freshLatest() string {
+func freshLatest(currentVersion string) string {
 	cacheFile := config.UpdateCheckFile()
-	latest, err := FetchLatestVersion()
+	latest, err := LatestFor(currentVersion)
 	if err != nil {
 		// Cache the failure for 1 hour to avoid hammering GitHub on every invocation.
 		writeCache(cacheFile, updateCheckState{

@@ -313,6 +313,7 @@ func Start(currentVersion string) error {
 	mux.HandleFunc("/api/settings/idle-suspend", withCORS(publishAfter(handleSettingsIdleSuspend, eventbus.KindSites)))
 	mux.HandleFunc("/api/settings/dns-upstream", withCORS(handleSettingsDNSUpstream))
 	mux.HandleFunc("/api/settings/theme", withCORS(handleSettingsTheme))
+	mux.HandleFunc("/api/settings/beta-updates", withCORS(handleSettingsBetaUpdates))
 	mux.HandleFunc("/api/themes", withCORS(handleThemes))
 	mux.HandleFunc("/api/themes/", withCORS(handleThemeItem))
 	mux.HandleFunc("/api/workers/health", withCORS(handleWorkersHealth))
@@ -5425,6 +5426,7 @@ type SettingsResponse struct {
 	DNSUpstream               []string `json:"dns_upstream"`          // pinned upstreams, empty = auto-detect
 	DNSUpstreamDetected       []string `json:"dns_upstream_detected"` // what auto-detection currently sees
 	TrayEnabled               bool     `json:"tray_enabled"`
+	BetaUpdates               bool     `json:"beta_updates"`
 	Theme                     string   `json:"theme"` // dashboard colour theme id, empty = the default
 }
 
@@ -5437,6 +5439,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 	startOnOpen := false
 	trayEnabled := true
 	theme := ""
+	betaUpdates := false
 	var dnsUpstream []string
 	if cfg != nil {
 		mode = cfg.WorkerExecMode()
@@ -5447,6 +5450,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		startOnOpen = cfg.Autostart.OnDashboardOpen
 		trayEnabled = cfg.IsTrayEnabled()
 		theme = cfg.UI.Theme
+		betaUpdates = cfg.IsBetaChannel()
 	}
 	writeJSON(w, SettingsResponse{
 		AutostartOnLogin:          lerdSystemd.IsAutostartEnabled(),
@@ -5462,6 +5466,7 @@ func handleSettings(w http.ResponseWriter, _ *http.Request) {
 		DNSUpstreamDetected:       dns.ReadUpstreamDNS(),
 		TrayEnabled:               trayEnabled,
 		Theme:                     theme,
+		BetaUpdates:               betaUpdates,
 	})
 }
 
@@ -5685,6 +5690,35 @@ func handleSettingsStartOnOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, map[string]any{"ok": true, "start_on_dashboard_open": body.Enabled})
+}
+
+// handleSettingsBetaUpdates opts a stable install into the prerelease line, so
+// the update notice and `lerd update` offer betas. Config only: the update check
+// reads the flag. An install already running a beta follows the beta line with
+// or without it.
+func handleSettingsBetaUpdates(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var body struct {
+		Enabled bool `json:"enabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid body", http.StatusBadRequest)
+		return
+	}
+	cfg, err := config.LoadGlobal()
+	if err != nil || cfg == nil {
+		writeJSON(w, map[string]any{"ok": false, "error": "loading config"})
+		return
+	}
+	cfg.SetBetaChannel(body.Enabled)
+	if err := config.SaveGlobal(cfg); err != nil {
+		writeJSON(w, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	writeJSON(w, map[string]any{"ok": true, "beta_updates": body.Enabled})
 }
 
 // uiUnit is the unit this process runs as, and runStart is cli.RunStart

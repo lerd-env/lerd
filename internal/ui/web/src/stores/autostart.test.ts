@@ -106,4 +106,30 @@ describe('autostart store', () => {
     expect(ok).toBe(false);
     expect(get(autostartEnabled)).toBe(false);
   });
+
+  it('loads beta_updates from /api/settings', async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ beta_updates: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ) as unknown as typeof fetch;
+    const { betaUpdates, loadAutostart } = await import('./autostart');
+    await loadAutostart();
+    expect(get(betaUpdates)).toBe(true);
+  });
+
+  it('toggleBetaUpdates POSTs and flips store on success', async () => {
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200 }));
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const { betaUpdates, toggleBetaUpdates } = await import('./autostart');
+    expect(get(betaUpdates)).toBe(false);
+    const ok = await toggleBetaUpdates(true);
+    expect(ok).toBe(true);
+    expect(get(betaUpdates)).toBe(true);
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe('/api/settings/beta-updates');
+    expect(init.method).toBe('POST');
+    expect(init.body).toBe(JSON.stringify({ enabled: true }));
+  });
 });

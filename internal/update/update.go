@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/geodro/lerd/internal/config"
 	"github.com/geodro/lerd/internal/origin"
 )
 
@@ -140,6 +141,47 @@ func FetchLatestPrerelease() (string, error) {
 		errs = append(errs, err.Error())
 	}
 	return "", fmt.Errorf("fetching latest pre-release: %s", strings.Join(errs, "; "))
+}
+
+// BetaChannel reports whether this install asked to be offered prereleases from
+// a stable version. Overridable in tests.
+var BetaChannel = func() bool {
+	cfg, err := config.LoadGlobal()
+	if err != nil {
+		return false
+	}
+	return cfg.IsBetaChannel()
+}
+
+// FollowsBetas reports whether currentVersion should be offered prereleases:
+// either it is one already, or the user opted the install into the beta line.
+func FollowsBetas(currentVersion string) bool {
+	return IsPrerelease(StripGitDescribe(StripV(currentVersion))) || BetaChannel()
+}
+
+// LatestFor returns the release tag a user on currentVersion should be offered.
+// A stable install only ever sees stable releases unless it opted into betas. An
+// install already on a beta keeps following the beta line, so the second beta of
+// a cycle arrives the same way the first one did instead of waiting for the user
+// to remember --beta; a stable release outranks the betas it supersedes, which is
+// what ends the run. A prerelease lookup that fails falls back to the stable
+// answer rather than costing the user an update that would have worked.
+func LatestFor(currentVersion string) (string, error) {
+	stable, err := FetchLatestVersion()
+	if err != nil {
+		return "", err
+	}
+	if !FollowsBetas(currentVersion) {
+		return stable, nil
+	}
+	pre, err := FetchLatestPrerelease()
+	if err != nil {
+		return stable, nil
+	}
+	if VersionGreaterThan(StripV(pre), StripV(stable)) {
+		return pre, nil
+	}
+	return stable, nil
 }
 
 func fetchPrereleaseFrom(base string) (string, error) {
