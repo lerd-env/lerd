@@ -184,6 +184,10 @@ wget -qO- https://lerd.sh/install.sh | bash -s -- --beta
 
 It works on a first install and alongside `--update`, and it takes the newest release of either kind, so once the stable version overtakes the beta line `--beta` installs the stable one. Running the installer without it on a machine already on a prerelease asks before moving you back to stable, rather than downgrading silently.
 
+Once you are on a beta you stay on the beta line without asking again: `lerd update` offers the next prerelease, and the update notice in the status line, the dashboard and the tray follows it too. The stable release of that cycle outranks the betas it supersedes, so it is what ends the run and puts you back on stable.
+
+To be offered betas while still on a stable version, turn on **Beta updates** on the dashboard's Lerd page, or run `lerd update:beta on` (`off` puts you back on stable-only, `lerd update:beta` reports where you are). It changes what you are offered, not what you are running: the next `lerd update` is what moves you, and the notice starts naming betas as soon as one is published.
+
 ::: warning Running something older than 1.26?
 `lerd update` fails on builds from before the project moved to the lerd-env organisation, with an error about an unexpected release URL. [Updating from a version before 1.26](./updating-from-pre-1.26) gets you across in one step.
 :::

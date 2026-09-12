@@ -235,6 +235,14 @@ type GlobalConfig struct {
 		// the button on the dashboard's own "core services down" banner.
 		OnDashboardOpen bool `yaml:"on_dashboard_open,omitempty" mapstructure:"on_dashboard_open"`
 	} `yaml:"autostart,omitempty" mapstructure:"autostart"`
+	Update struct {
+		// Beta opts a stable install into the prerelease line, so `lerd update`
+		// and the update notice offer betas as they are published. An install
+		// already running a beta follows the beta line on its own, so this flag
+		// is only about choosing to leave stable. Toggled via
+		// `lerd update:beta on / off` and the dashboard's Lerd page.
+		Beta bool `yaml:"beta,omitempty" mapstructure:"beta"`
+	} `yaml:"update,omitempty" mapstructure:"update"`
 	Shims struct {
 		// PathDisabled stops lerd from writing its bin dir (the php/composer/
 		// node shims) onto the shell PATH, for users who prefer typing
@@ -1322,6 +1330,17 @@ func (c *GlobalConfig) IsHighContrastTrayIcon() bool {
 // SaveGlobal; the tray re-reads it on every poll.
 func (c *GlobalConfig) SetHighContrastTrayIcon(enabled bool) {
 	c.Tray.HighContrastIcon = enabled
+}
+
+// IsBetaChannel reports whether this install asked to be offered prereleases
+// while running a stable version.
+func (c *GlobalConfig) IsBetaChannel() bool {
+	return c != nil && c.Update.Beta
+}
+
+// SetBetaChannel opts in or out of prerelease updates. Persist via SaveGlobal.
+func (c *GlobalConfig) SetBetaChannel(enabled bool) {
+	c.Update.Beta = enabled
 }
 
 // IsTrayEnabled reports whether lerd should run the tray applet at all. Stored

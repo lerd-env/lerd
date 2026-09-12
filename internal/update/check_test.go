@@ -38,6 +38,7 @@ func TestIsPrerelease(t *testing.T) {
 // no update notification is emitted.
 func TestCachedUpdateCheck_skipsPrereleaseForStableUsers(t *testing.T) {
 	withTempCache(t, "v1.20.0-beta.1")
+	defer stubBeta(false)()
 	info, err := CachedUpdateCheck("1.19.1")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -112,9 +113,40 @@ func TestForceUpdateCheck_bypassesCache(t *testing.T) {
 	}
 
 	// The live fetch should have rewritten the cache so later cached reads agree.
-	if got := cachedLatest(); got != "v1.20.0" {
+	if got := cachedLatest("1.19.1"); got != "v1.20.0" {
 		t.Errorf("cache after ForceUpdateCheck = %q, want v1.20.0", got)
 	}
+}
+
+// A stable install that ticked the beta box is told about the prerelease the
+// same check hides from everyone else.
+func TestCachedUpdateCheck_optedIntoBetasSeesPrerelease(t *testing.T) {
+	withTempCache(t, "v1.20.0-beta.1")
+	defer stubBeta(true)()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	defer stubTagURLs(&changelogURLs, []string{srv.URL + "/changelog"})()
+
+	info, err := CachedUpdateCheck("1.19.1")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if info == nil {
+		t.Fatal("an install opted into betas was not offered the prerelease")
+	}
+	if info.LatestVersion != "v1.20.0-beta.1" {
+		t.Errorf("LatestVersion = %q, want v1.20.0-beta.1", info.LatestVersion)
+	}
+}
+
+// stubBeta pins the beta opt-in for the duration of a test, so no check reads
+// the real config off the machine running the suite.
+func stubBeta(on bool) func() {
+	orig := BetaChannel
+	BetaChannel = func() bool { return on }
+	return func() { BetaChannel = orig }
 }
 
 // stubURLs swaps a package-level URL provider for the duration of a test and

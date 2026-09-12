@@ -19,7 +19,9 @@
     trayEnabled,
     toggleTray,
     startOnDashboardOpen,
-    toggleStartOnDashboardOpen
+    toggleStartOnDashboardOpen,
+    betaUpdates,
+    toggleBetaUpdates
   } from '$stores/autostart';
   import { idleEnabled, idleTimeoutMinutes, loadIdle, saveIdle } from '$stores/idle';
   import Toggle from '$components/Toggle.svelte';
@@ -117,6 +119,20 @@
     }
   }
 
+  let betaBusy = $state(false);
+  async function onToggleBetaUpdates() {
+    betaBusy = true;
+    try {
+      await toggleBetaUpdates(!$betaUpdates);
+    } finally {
+      betaBusy = false;
+    }
+    // The notice is filtered by channel, so the card is stale until re-checked.
+    // Deliberately not awaited inside the busy window: the check goes out to
+    // GitHub, and holding the switch disabled that long reads as a hung toggle.
+    loadVersion(true);
+  }
+
   let autostartBusy = $state(false);
   async function onToggleAutostart() {
     autostartBusy = true;
@@ -179,10 +195,12 @@
 
   <div class="p-3 space-y-3">
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-    <!-- The version card is short; it shares its column with language so the
-         row ends level with the taller theme card. -->
-    <div class="space-y-3">
-    <SettingsCard>
+    <!-- Both columns stack two cards so the row ends level: updates on the
+         left, appearance on the right. The cards stretch to share the row, or a
+         column that runs short leaves the page background showing through
+         beside a taller one. -->
+    <div class="flex flex-col gap-3">
+    <SettingsCard class="flex-1">
       <div class="flex items-center justify-between gap-3">
         <div class="min-w-0 text-sm">
           {#if $version.checked && !$version.hasUpdate}
@@ -257,16 +275,30 @@
       </div>
     </SettingsCard>
 
-    <SettingsCard>
-      <div class="flex items-center justify-between gap-4 mb-2">
-        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
-        <LanguageSwitcher />
+    <SettingsCard class="flex-1">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_betaUpdates_title()}</span>
+        {#if $accessMode.localControl}
+          <Toggle
+            on={$betaUpdates}
+            loading={betaBusy}
+            onclick={onToggleBetaUpdates}
+            title={$betaUpdates ? m.system_betaUpdates_toggleOff() : m.system_betaUpdates_toggleOn()}
+          />
+        {:else}
+          <StatusPill
+            size="sm"
+            tone={$betaUpdates ? 'ok' : 'muted'}
+            label={$betaUpdates ? m.common_enabled() : m.common_disabled()}
+          />
+        {/if}
       </div>
-      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_betaUpdates_description()}</p>
     </SettingsCard>
     </div>
 
-    <SettingsCard>
+    <div class="flex flex-col gap-3">
+    <SettingsCard class="flex-1">
       <div class="flex items-center justify-between mb-2">
         <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_theme_title()}</span>
         <PaletteSwitcher />
@@ -327,6 +359,15 @@
       </div>
 
     </SettingsCard>
+
+    <SettingsCard class="flex-1">
+      <div class="flex items-center justify-between gap-4 mb-2">
+        <span class="text-sm font-semibold text-gray-700 dark:text-gray-300">{m.system_language_title()}</span>
+        <LanguageSwitcher />
+      </div>
+      <p class="text-xs text-gray-500 dark:text-gray-400">{m.system_language_description()}</p>
+    </SettingsCard>
+    </div>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">

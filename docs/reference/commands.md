@@ -10,8 +10,9 @@
 | `lerd --no-pull <command>` | Global flag: skip image pulls and rebuilds unless the image is missing outright, so a metered connection is never spent refreshing something that already works. `LERD_OFFLINE=1` does the same for the dashboard, the watcher and the MCP server. Deferred PHP image rebuilds are picked up by the next `lerd php:rebuild` |
 | `lerd stop` | Stop nginx, PHP-FPM containers, and all running services; leaves the `lerd-dns` forwarder running as install-level plumbing so `.test` keeps resolving |
 | `lerd quit` | Stop all Lerd processes and containers including the UI, watcher, tray, and the `lerd-dns` forwarder; on macOS also stops the Podman Machine VM |
-| `lerd update` | Check for updates and update after confirmation; a package-managed install (apt, dnf, Homebrew) is deferred to that package manager |
-| `lerd update --beta` | Update to the latest pre-release build |
+| `lerd update` | Check for updates and update after confirmation; a package-managed install (apt, dnf, Homebrew) is deferred to that package manager. On a beta it follows the beta line until the stable release of that cycle overtakes it |
+| `lerd update --beta` | Update to the latest pre-release build, from a stable version |
+| `lerd update:beta on\|off` | Offer beta releases to a stable install; with no argument it reports where the install sits |
 | `lerd update --rollback` | Revert to the previously installed version |
 | `lerd whatsnew` | Show what changed between the installed version and the latest release |
 | `lerd uninstall` | Stop all containers and remove Lerd; a package-installed binary is left for apt/dnf/brew to remove |
