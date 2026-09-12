@@ -892,7 +892,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	ok()
 
-	if autostartOn {
+	if shouldRestartDaemon("lerd-watcher", autostartOn) {
 		step("Restarting watcher service")
 		if err := services.Mgr.Restart("lerd-watcher"); err != nil {
 			fmt.Printf("    WARN: %v\n", err)
@@ -913,7 +913,7 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	}
 	ok()
 
-	if autostartOn {
+	if shouldRestartDaemon("lerd-ui", autostartOn) {
 		step("Starting lerd-ui")
 		if err := services.Mgr.Restart("lerd-ui"); err != nil {
 			fmt.Printf("    WARN: %v\n", err)
@@ -1119,6 +1119,15 @@ func runInstall(cmd *cobra.Command, _ []string) error {
 	feedback.Note("Terminal:  " + feedback.Val("lerd tui"))
 	feedback.Begin()
 	return nil
+}
+
+// shouldRestartDaemon reports whether install has to bounce one of the
+// long-running lerd units onto the binary it just laid down. Autostart off
+// means install never starts a unit the user keeps stopped, but one they are
+// still running by hand would otherwise stay on the old binary for the rest of
+// the session, which is what `lerd update` used to fix on its own afterwards.
+func shouldRestartDaemon(name string, autostartOn bool) bool {
+	return autostartOn || services.Mgr.IsActive(name)
 }
 
 // writeUserServiceWithReload writes a user service unit file and reloads
