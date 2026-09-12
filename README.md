@@ -52,7 +52,7 @@ Lerd is built for PHP developers on Linux who want frictionless local developmen
 
 - 🪄 **No per-framework setup.** Workers, env values and the nginx vhost are configured for you when you link a project. "Env" means whatever file your framework actually reads: a `.env`, WordPress's `wp-config.php`, Magento's `env.php` or Drupal's `settings.php`, written in place. A worker's start command, its flags and their defaults come from the same definition, and the queues and limits you answer with are committed to the project's `.lerd.yaml` instead of being retyped on every start.
 
-- 🧩 **Framework store.** Community definitions for Laravel, Symfony, WordPress, Drupal, Magento, CakePHP, CodeIgniter, Statamic, Tempest and TYPO3, with versioned auto-detection back to the majors still on PHP 7.4. Anything belonging to a composer package rather than to a framework, a queue dashboard's worker, an installer's commands, is declared once for every framework that can require it. One published tomorrow arrives without a new lerd release.
+- 🧩 **Framework store.** Community definitions for Laravel, Lumen, Symfony, WordPress, Bedrock, Drupal, Magento, CakePHP, CodeIgniter, Statamic, Winter CMS, Tempest and TYPO3, with versioned auto-detection back to the majors still on PHP 7.4. Anything belonging to a composer package rather than to a framework, a queue dashboard's worker, an installer's commands, is declared once for every framework that can require it. One published tomorrow arrives without a new lerd release.
 
 ### Services and databases
 
