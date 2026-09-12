@@ -2517,9 +2517,32 @@ func (fw *Framework) DetectProxies(dir string) []NamedProxy {
 		if w.Check != nil && !MatchesRule(dir, *w.Check) {
 			continue
 		}
-		out = append(out, NamedProxy{Worker: name, Proxy: w.Proxy})
+		out = append(out, NamedProxy{Worker: name, Proxy: proxyForProject(dir, name, w)})
 	}
 	return out
+}
+
+// proxyForProject resolves a worker's proxy for one project: the paths a server
+// answers on can depend on the same value its command does, and Winter's vite
+// serves each package under a base named after it. Substituting the worker's
+// tune values here means one value routes the proxy and starts the server,
+// rather than the definition naming a path only one project can use. A copy,
+// since the definition is shared by every site running the framework.
+func proxyForProject(dir, name string, w FrameworkWorker) *WorkerProxy {
+	values := TuneValues(dir, name, w)
+	if len(values) == 0 {
+		return w.Proxy
+	}
+	p := *w.Proxy
+	p.Path = ExpandTunePlaceholders(p.Path, values)
+	if len(p.Paths) > 0 {
+		paths := make([]string, len(p.Paths))
+		for i, raw := range p.Paths {
+			paths[i] = ExpandTunePlaceholders(raw, values)
+		}
+		p.Paths = paths
+	}
+	return &p
 }
 
 // DetectProxy returns the first worker proxy that applies, for callers that

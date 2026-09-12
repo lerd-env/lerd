@@ -81,6 +81,43 @@ func tuneDefault(command, before, after string, from int) (string, int) {
 	return command[start : start+end], start + end
 }
 
+// TuneValues returns the values a project actually runs a worker with: the
+// defaults its tune_command declares, with whatever the project persisted for it
+// layered on top.
+func TuneValues(dir, name string, w FrameworkWorker) map[string]string {
+	flags := WorkerTuneFlags(w)
+	if len(flags) == 0 {
+		return nil
+	}
+	values := make(map[string]string, len(flags))
+	for _, f := range flags {
+		if f.Default != "" {
+			values[f.Name] = f.Default
+		}
+	}
+	for k, v := range ProjectWorkerOptions(dir, name) {
+		if v != "" {
+			values[k] = v
+		}
+	}
+	return values
+}
+
+// ExpandTunePlaceholders fills a worker's {placeholder} tokens in s. A token
+// with no value is left as it is, so a caller never silently routes somewhere
+// the worker is not.
+func ExpandTunePlaceholders(s string, values map[string]string) string {
+	if s == "" || len(values) == 0 {
+		return s
+	}
+	return tunePlaceholderRe.ReplaceAllStringFunc(s, func(token string) string {
+		if v := values[strings.Trim(token, "{}")]; v != "" {
+			return v
+		}
+		return token
+	})
+}
+
 // RenderTuneCommand substitutes values into the worker's tune_command. With
 // nothing overridden the plain command is returned verbatim, so a start with no
 // options runs exactly what the definition declares.
