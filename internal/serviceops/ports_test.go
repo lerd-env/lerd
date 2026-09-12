@@ -64,17 +64,17 @@ func TestValidateExtraPort(t *testing.T) {
 
 func TestRemovePort(t *testing.T) {
 	// Full spec removes every mapping on that host port.
-	got := removePort([]string{"3411:3306", "39580:80", "3411:3306"}, "3411:3306")
-	if len(got) != 1 || got[0] != "39580:80" {
+	got := removePort([]string{"3411:3306", "19580:80", "3411:3306"}, "3411:3306")
+	if len(got) != 1 || got[0] != "19580:80" {
 		t.Errorf("removePort(full spec) dropped wrong entries: %v", got)
 	}
-	// A bare host port removes the mapping too, so `expose --remove 39580` works.
-	got = removePort([]string{"3411:3306", "39580:80"}, "39580")
+	// A bare host port removes the mapping too, so `expose --remove 19580` works.
+	got = removePort([]string{"3411:3306", "19580:80"}, "19580")
 	if len(got) != 1 || got[0] != "3411:3306" {
-		t.Errorf("removePort(host only) should drop 39580:80: %v", got)
+		t.Errorf("removePort(host only) should drop 19580:80: %v", got)
 	}
 	// An unparseable target removes nothing.
-	if got := removePort([]string{"39580:80"}, ""); len(got) != 1 {
+	if got := removePort([]string{"19580:80"}, ""); len(got) != 1 {
 		t.Errorf("removePort(empty) should keep everything: %v", got)
 	}
 }
@@ -96,17 +96,17 @@ func TestSetPublishedPortNotInstalled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	res, err := SetPublishedPort("mysql", 33991)
+	res, err := SetPublishedPort("mysql", 13991)
 	if err != nil {
 		t.Fatalf("SetPublishedPort: %v", err)
 	}
 	if res.Installed {
 		t.Error("Installed = true for an uninstalled service")
 	}
-	if res.Actual != 33991 {
-		t.Errorf("Actual = %d, want 33991", res.Actual)
+	if res.Actual != 13991 {
+		t.Errorf("Actual = %d, want 13991", res.Actual)
 	}
-	if config.ServicePublishedPort("mysql") != 33991 {
+	if config.ServicePublishedPort("mysql") != 13991 {
 		t.Errorf("override not persisted, got %d", config.ServicePublishedPort("mysql"))
 	}
 }
@@ -118,10 +118,10 @@ func TestSetPublishedPortNoOp(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPort("mysql", 33991); err != nil {
+	if _, err := SetPublishedPort("mysql", 13991); err != nil {
 		t.Fatalf("first SetPublishedPort: %v", err)
 	}
-	res, err := SetPublishedPort("mysql", 33991)
+	res, err := SetPublishedPort("mysql", 13991)
 	if err != nil {
 		t.Fatalf("second SetPublishedPort: %v", err)
 	}
@@ -137,7 +137,7 @@ func TestSetExtraPortsDedup(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if err := SetExtraPorts("mysql", []string{"39580:80", "39580:80", " "}); err != nil {
+	if err := SetExtraPorts("mysql", []string{"19580:80", "19580:80", " "}); err != nil {
 		t.Fatalf("SetExtraPorts: %v", err)
 	}
 	cfg, err := config.LoadGlobal()
@@ -145,8 +145,8 @@ func TestSetExtraPortsDedup(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := cfg.Services["mysql"].ExtraPorts
-	if len(got) != 1 || got[0] != "39580:80" {
-		t.Errorf("ExtraPorts = %v, want [39580:80]", got)
+	if len(got) != 1 || got[0] != "19580:80" {
+		t.Errorf("ExtraPorts = %v, want [19580:80]", got)
 	}
 	if err := SetExtraPorts("mysql", []string{"bad"}); err == nil {
 		t.Error("SetExtraPorts(bad) = nil, want validation error")
@@ -159,13 +159,13 @@ func TestAddRemoveExtraPort(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if err := AddExtraPort("mysql", "39590:9000"); err != nil {
+	if err := AddExtraPort("mysql", "19590:9000"); err != nil {
 		t.Fatalf("AddExtraPort: %v", err)
 	}
 	if cfg, _ := config.LoadGlobal(); len(cfg.Services["mysql"].ExtraPorts) != 1 {
 		t.Fatalf("AddExtraPort did not persist: %v", cfg.Services["mysql"].ExtraPorts)
 	}
-	if err := RemoveExtraPort("mysql", "39590:9000"); err != nil {
+	if err := RemoveExtraPort("mysql", "19590:9000"); err != nil {
 		t.Fatalf("RemoveExtraPort: %v", err)
 	}
 	if cfg, _ := config.LoadGlobal(); len(cfg.Services["mysql"].ExtraPorts) != 0 {
@@ -177,7 +177,7 @@ func TestSetExtraPortsRejectsCustomName(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
-	if err := SetExtraPorts("not-a-preset", []string{"39580:80"}); err == nil {
+	if err := SetExtraPorts("not-a-preset", []string{"19580:80"}); err == nil {
 		t.Error("SetExtraPorts on a non-preset = nil, want error")
 	}
 }
@@ -189,15 +189,15 @@ func TestSetExtraPortsOptionalPreset(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
-	if err := SetExtraPorts("gotenberg", []string{"39580:80"}); err != nil {
+	if err := SetExtraPorts("gotenberg", []string{"19580:80"}); err != nil {
 		t.Fatalf("SetExtraPorts(gotenberg): %v", err)
 	}
 	cfg, err := config.LoadGlobal()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.Services["gotenberg"].ExtraPorts; len(got) != 1 || got[0] != "39580:80" {
-		t.Errorf("gotenberg ExtraPorts = %v, want [39580:80]", got)
+	if got := cfg.Services["gotenberg"].ExtraPorts; len(got) != 1 || got[0] != "19580:80" {
+		t.Errorf("gotenberg ExtraPorts = %v, want [19580:80]", got)
 	}
 }
 
@@ -230,18 +230,18 @@ func TestSetPublishedPortFreesRemovedServicePort(t *testing.T) {
 	if err := config.SaveCustomService(sib); err != nil {
 		t.Fatalf("SaveCustomService: %v", err)
 	}
-	if err := persistPublishedPort("sib", 33061); err != nil {
+	if err := persistPublishedPort("sib", 13061); err != nil {
 		t.Fatalf("persistPublishedPort: %v", err)
 	}
-	if _, err := SetPublishedPort("redis", 33061); !errors.Is(err, ErrPortReserved) {
-		t.Fatalf("while sib is installed on 33061, err = %v, want ErrPortReserved", err)
+	if _, err := SetPublishedPort("redis", 13061); !errors.Is(err, ErrPortReserved) {
+		t.Fatalf("while sib is installed on 13061, err = %v, want ErrPortReserved", err)
 	}
 
 	if err := config.RemoveCustomService("sib"); err != nil {
 		t.Fatalf("RemoveCustomService: %v", err)
 	}
-	if _, err := SetPublishedPort("redis", 33061); err != nil {
-		t.Fatalf("33061 must be free once sib is gone, got %v", err)
+	if _, err := SetPublishedPort("redis", 13061); err != nil {
+		t.Fatalf("13061 must be free once sib is gone, got %v", err)
 	}
 }
 
@@ -251,10 +251,10 @@ func TestSetPublishedPortRejectsOwnExtraPort(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
-	if err := SetExtraPorts("mysql", []string{"33950:3306"}); err != nil {
+	if err := SetExtraPorts("mysql", []string{"13950:3306"}); err != nil {
 		t.Fatal(err)
 	}
-	_, err := SetPublishedPort("mysql", 33950)
+	_, err := SetPublishedPort("mysql", 13950)
 	if !errors.Is(err, ErrPortInUse) {
 		t.Fatalf("SetPublishedPort onto own extra port err = %v, want ErrPortInUse", err)
 	}
@@ -291,7 +291,7 @@ func TestSetPublishedPortDefaultResetsNotCollides(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPort("mysql", 33071); err != nil {
+	if _, err := SetPublishedPort("mysql", 13071); err != nil {
 		t.Fatalf("move off default: %v", err)
 	}
 	res, err := SetPublishedPort("mysql", 3306) // mysql's preset default
@@ -353,7 +353,7 @@ func TestSetPublishedPortRollsBackOnStartFailure(t *testing.T) {
 		return nil // the rollback restart on the previous port succeeds
 	}
 
-	if _, err := SetPublishedPort("mysql", 33072); err == nil {
+	if _, err := SetPublishedPort("mysql", 13072); err == nil {
 		t.Fatal("a failed start must surface an error so the caller knows the change didn't take")
 	}
 	if startCalls != 2 {
@@ -372,15 +372,15 @@ func TestSetPublishedPortForSecondary(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	res, err := SetPublishedPortFor("mailpit", 8025, 38026)
+	res, err := SetPublishedPortFor("mailpit", 8025, 18026)
 	if err != nil {
 		t.Fatalf("SetPublishedPortFor: %v", err)
 	}
-	if res.Actual != 38026 {
-		t.Errorf("Actual = %d, want 38026", res.Actual)
+	if res.Actual != 18026 {
+		t.Errorf("Actual = %d, want 18026", res.Actual)
 	}
-	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 38026 {
-		t.Errorf("PublishedPorts[8025] = %d, want 38026", got)
+	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 18026 {
+		t.Errorf("PublishedPorts[8025] = %d, want 18026", got)
 	}
 	if config.ServicePublishedPort("mailpit") != 0 {
 		t.Error("moving a secondary must not touch the primary PublishedPort")
@@ -394,10 +394,10 @@ func TestSetPublishedPortForReset(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+	if _, err := SetPublishedPortFor("mailpit", 8025, 18026); err != nil {
 		t.Fatalf("initial move: %v", err)
 	}
-	repeat, err := SetPublishedPortFor("mailpit", 8025, 38026)
+	repeat, err := SetPublishedPortFor("mailpit", 8025, 18026)
 	if err != nil || !repeat.NoOp {
 		t.Errorf("repeat = %+v, err %v, want NoOp", repeat, err)
 	}
@@ -417,11 +417,11 @@ func TestSetPublishedPortForPrimaryDelegates(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPortFor("mailpit", 1025, 41025); err != nil {
+	if _, err := SetPublishedPortFor("mailpit", 1025, 21025); err != nil {
 		t.Fatalf("SetPublishedPortFor primary: %v", err)
 	}
-	if config.ServicePublishedPort("mailpit") != 41025 {
-		t.Errorf("primary override = %d, want 41025", config.ServicePublishedPort("mailpit"))
+	if config.ServicePublishedPort("mailpit") != 21025 {
+		t.Errorf("primary override = %d, want 21025", config.ServicePublishedPort("mailpit"))
 	}
 	if len(config.ServicePublishedPorts("mailpit")) != 0 {
 		t.Error("primary move must not write the secondary map")
@@ -435,7 +435,7 @@ func TestSetPublishedPortForRejects(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPortFor("mailpit", 9999, 38026); err == nil {
+	if _, err := SetPublishedPortFor("mailpit", 9999, 18026); err == nil {
 		t.Error("unknown container port = nil, want error")
 	}
 	if _, err := SetPublishedPortFor("mailpit", 8025, 70000); err == nil {
@@ -480,7 +480,7 @@ func TestSetPublishedPortForRollsBackOnStartFailure(t *testing.T) {
 		return nil // the rollback restart on the previous port succeeds
 	}
 
-	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err == nil {
+	if _, err := SetPublishedPortFor("mailpit", 8025, 18026); err == nil {
 		t.Fatal("a failed start must surface an error so the caller knows the move didn't take")
 	}
 	if startCalls != 2 {
@@ -510,7 +510,7 @@ func TestSetPublishedPortForResetNormalizesRequested(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
-	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+	if _, err := SetPublishedPortFor("mailpit", 8025, 18026); err != nil {
 		t.Fatalf("initial move: %v", err)
 	}
 	res, err := SetPublishedPortFor("mailpit", 8025, 8025) // pass the preset default
@@ -532,10 +532,10 @@ func TestSnapshotRestorePublishedPorts(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("XDG_DATA_HOME", tmp)
 
-	if _, err := SetPublishedPort("mailpit", 41025); err != nil {
+	if _, err := SetPublishedPort("mailpit", 21025); err != nil {
 		t.Fatalf("seed primary: %v", err)
 	}
-	if _, err := SetPublishedPortFor("mailpit", 8025, 38026); err != nil {
+	if _, err := SetPublishedPortFor("mailpit", 8025, 18026); err != nil {
 		t.Fatalf("seed secondary: %v", err)
 	}
 	snap, ok := SnapshotPublishedPorts("mailpit")
@@ -544,7 +544,7 @@ func TestSnapshotRestorePublishedPorts(t *testing.T) {
 	}
 
 	// Mutate away from the snapshot, then restore.
-	if _, err := SetPublishedPort("mailpit", 42025); err != nil {
+	if _, err := SetPublishedPort("mailpit", 22025); err != nil {
 		t.Fatalf("mutate primary: %v", err)
 	}
 	if _, err := SetPublishedPortFor("mailpit", 8025, 8025); err != nil {
@@ -553,11 +553,11 @@ func TestSnapshotRestorePublishedPorts(t *testing.T) {
 	if err := RestorePublishedPorts("mailpit", snap); err != nil {
 		t.Fatalf("RestorePublishedPorts: %v", err)
 	}
-	if got := config.ServicePublishedPort("mailpit"); got != 41025 {
-		t.Errorf("primary not restored, got %d want 41025", got)
+	if got := config.ServicePublishedPort("mailpit"); got != 21025 {
+		t.Errorf("primary not restored, got %d want 21025", got)
 	}
-	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 38026 {
-		t.Errorf("secondary not restored, got %d want 38026", got)
+	if got := config.ServicePublishedPorts("mailpit")[8025]; got != 18026 {
+		t.Errorf("secondary not restored, got %d want 18026", got)
 	}
 }
 
@@ -599,15 +599,15 @@ func TestRestorePublishedPorts_RefreshesHostProxyToRestoredPort(t *testing.T) {
 	OnPublishedPortShift = func(_ string, port int) { fired = append(fired, port) }
 	t.Cleanup(func() { OnPublishedPortShift = prevHook })
 
-	if _, err := SetPublishedPort("mysql", 33061); err != nil {
+	if _, err := SetPublishedPort("mysql", 13061); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	snap, ok := SnapshotPublishedPorts("mysql")
 	if !ok {
 		t.Fatal("snapshot !ok")
 	}
-	// The apply moved the primary and refreshed host-proxy .env to 33072.
-	if _, err := SetPublishedPort("mysql", 33072); err != nil {
+	// The apply moved the primary and refreshed host-proxy .env to 13072.
+	if _, err := SetPublishedPort("mysql", 13072); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 
@@ -615,11 +615,11 @@ func TestRestorePublishedPorts_RefreshesHostProxyToRestoredPort(t *testing.T) {
 	if err := RestorePublishedPorts("mysql", snap); err != nil {
 		t.Fatalf("restore: %v", err)
 	}
-	if got := config.ServicePublishedPort("mysql"); got != 33061 {
-		t.Fatalf("port not restored, got %d want 33061", got)
+	if got := config.ServicePublishedPort("mysql"); got != 13061 {
+		t.Fatalf("port not restored, got %d want 13061", got)
 	}
 	// Exactly one refresh, carrying the restored port, so host-proxy .env follows.
-	if len(fired) != 1 || fired[0] != 33061 {
-		t.Errorf("rollback must refresh host-proxy sites to the restored port; fired=%v want [33061]", fired)
+	if len(fired) != 1 || fired[0] != 13061 {
+		t.Errorf("rollback must refresh host-proxy sites to the restored port; fired=%v want [13061]", fired)
 	}
 }
