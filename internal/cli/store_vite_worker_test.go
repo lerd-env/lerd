@@ -25,7 +25,9 @@ var viteFromVersion = map[string]int{
 // Serving a dev server under the site's domain is a property of the tool, not of
 // the framework running it, so every definition that can run vite declares the
 // worker in one shape. The check gates it on vite being installed, which is what
-// keeps it invisible to a project that never added a dev server.
+// keeps it invisible to a project that never added a dev server. The command is
+// the one part that varies: a framework that starts vite through its own console
+// command says so with dev_server rather than running npm.
 func TestStoreFrameworks_DeclareViteWorker(t *testing.T) {
 	root := filepath.Join("..", "..", "lerd-frameworks", "frameworks")
 	dirs, err := os.ReadDir(root)
@@ -81,7 +83,14 @@ func TestStoreFrameworks_DeclareViteWorker(t *testing.T) {
 			if v.Restart != "on-failure" {
 				t.Errorf("%s: vite worker restart = %q, want on-failure", name, v.Restart)
 			}
-			if v.Command != "npm run dev" {
+			// A worker that declares the dev server it starts reaches vite
+			// through the framework's own console command, which is what
+			// dev_server is for, so its command is its own.
+			if v.DevServer != nil {
+				if v.DevServer.Tool != "vite" {
+					t.Errorf("%s: vite worker declares dev server %q", name, v.DevServer.Tool)
+				}
+			} else if v.Command != "npm run dev" {
 				t.Errorf("%s: vite worker command = %q, want npm run dev", name, v.Command)
 			}
 			if v.Check == nil || v.Check.File != "node_modules/vite" {
