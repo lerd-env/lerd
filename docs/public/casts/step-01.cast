@@ -47,3 +47,4 @@
 [2.33, "o", "\r\n"]
 [2.78, "o", "\u001b[38;5;245m\u2192 installing podman, fpm, nginx (rootless)\u2026\u001b[0m\r\n"]
 [3.23, "o", "\u001b[38;5;42m\u2713 lerd ready\u001b[0m\r\n"]
+[5.73, "o", "\u001b[0m"]

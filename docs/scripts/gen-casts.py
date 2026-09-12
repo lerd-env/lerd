@@ -40,6 +40,10 @@ class Cast:
         self.wait(dt)
         self.out(s + '\r\n')
 
+    def hold(self, dt):
+        self.wait(dt)
+        self.out(C['rst'])
+
     def write(self, name):
         header = {'version': 2, 'width': self.w, 'height': self.h,
                   'theme': {'fg': '#f4f4f5', 'bg': '#0d0d0d',
@@ -65,7 +69,7 @@ c.line('  ' + col('dim', 'PHP') + '    8.4.3  ·  ' + col('dim', 'FPM') + ' ' + 
 c.line('  ' + col('dim', 'DB') + '     mysql  ·  ' + col('dim', 'cache') + ' redis')
 c.line('')
 c.type('~/code/acme $ ', 'lerd open')
-c.wait(3.0)
+c.hold(4.0)
 c.write('hero.cast')
 
 # ---- quick-start: install, then `lerd link` (which runs init/setup/TLS itself) ----
@@ -73,7 +77,7 @@ s1 = Cast(70, 7)
 s1.type('$ ', 'curl -fsSL https://lerd.sh/install.sh | bash')
 s1.line(col('dim', '→ installing podman, fpm, nginx (rootless)…'))
 s1.line(col('ok', '✓ lerd ready'))
-s1.wait(2.5)
+s1.hold(2.5)
 s1.write('step-01.cast')
 
 s2 = Cast(70, 7)
@@ -83,7 +87,7 @@ s2.line(col('dim', '→ installing dependencies · running migrations'))
 s2.line(col('dim', '→ starting ') + col('amb', 'queue · schedule · reverb') + col('dim', ' workers'))
 s2.line(col('dim', '→ TLS via mkcert · ') + col('ok', '✓ trusted'))
 s2.line(col('ok', '✓ live at ') + col('url', 'https://acme.test'))
-s2.wait(3.0)
+s2.hold(3.0)
 s2.write('step-02.cast')
 
 # ---- mcp: a terminal Claude Code session driving lerd (16 content lines) ----
@@ -94,7 +98,7 @@ m.line(col('dim', '╰───────────────────�
 m.line('')
 m.line(col('pink', '> ') + 'Spin up a fresh Laravel site called ' + col('bold', 'billing') + ' on PHP 8.4 with Redis.', 0.6)
 m.line('')
-m.line(col('amb', '● ') + 'On it — scaffolding and linking now.', 0.7)
+m.line(col('amb', '● ') + 'On it, scaffolding and linking now.', 0.7)
 m.line('  ' + col('dim', '⎿ ') + col('vio', 'site.link') + col('dim', ' (lerd) … ') + col('ok', 'done'), 0.9)
 m.line('  Created ' + col('url', '~/code/billing') + ', detected Laravel 11, set PHP ' + col('bold', '8.4') + ', provisioned TLS.', 0.5)
 m.line('  ' + col('dim', '⎿ ') + col('vio', 'service.start redis') + col('dim', ' (lerd) … ') + col('ok', 'done'), 0.9)
@@ -104,7 +108,7 @@ m.line(col('pink', '> ') + 'Run the migrations and tail the queue.', 0.8)
 m.line('')
 m.line(col('amb', '● ') + col('dim', '⎿ ') + col('vio', 'exec.artisan migrate') + col('dim', ' (lerd) … ') + col('ok', 'done'), 0.9)
 m.line('  Ran 18 migrations in 240ms. Tailing ' + col('vio', 'queue') + ' + ' + col('vio', 'dump') + ' for you.', 0.5)
-m.wait(3.5)
+m.hold(5.0)
 m.write('mcp.cast')
 
 print('casts:', sorted(os.listdir(OUT)))

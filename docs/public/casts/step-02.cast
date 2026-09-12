@@ -15,3 +15,4 @@
 [2.105, "o", "\u001b[38;5;245m\u2192 starting \u001b[0m\u001b[38;5;215mqueue \u00b7 schedule \u00b7 reverb\u001b[0m\u001b[38;5;245m workers\u001b[0m\r\n"]
 [2.555, "o", "\u001b[38;5;245m\u2192 TLS via mkcert \u00b7 \u001b[0m\u001b[38;5;42m\u2713 trusted\u001b[0m\r\n"]
 [3.005, "o", "\u001b[38;5;42m\u2713 live at \u001b[0m\u001b[38;5;39mhttps://acme.test\u001b[0m\r\n"]
+[6.005, "o", "\u001b[0m"]

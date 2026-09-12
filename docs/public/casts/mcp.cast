@@ -12,7 +12,7 @@
 [1.77, "o", "\r\n"]
 [2.37, "o", "\u001b[38;5;211m> \u001b[0mSpin up a fresh Laravel site called \u001b[1mbilling\u001b[0m on PHP 8.4 with Redis.\r\n"]
 [2.82, "o", "\r\n"]
-[3.52, "o", "\u001b[38;5;215m\u25cf \u001b[0mOn it \u2014 scaffolding and linking now.\r\n"]
+[3.52, "o", "\u001b[38;5;215m\u25cf \u001b[0mOn it, scaffolding and linking now.\r\n"]
 [4.42, "o", "  \u001b[38;5;245m\u23bf \u001b[0m\u001b[38;5;141msite.link\u001b[0m\u001b[38;5;245m (lerd) \u2026 \u001b[0m\u001b[38;5;42mdone\u001b[0m\r\n"]
 [4.92, "o", "  Created \u001b[38;5;39m~/code/billing\u001b[0m, detected Laravel 11, set PHP \u001b[1m8.4\u001b[0m, provisioned TLS.\r\n"]
 [5.82, "o", "  \u001b[38;5;245m\u23bf \u001b[0m\u001b[38;5;141mservice.start redis\u001b[0m\u001b[38;5;245m (lerd) \u2026 \u001b[0m\u001b[38;5;42mdone\u001b[0m\r\n"]
@@ -22,3 +22,4 @@
 [8.02, "o", "\r\n"]
 [8.92, "o", "\u001b[38;5;215m\u25cf \u001b[0m\u001b[38;5;245m\u23bf \u001b[0m\u001b[38;5;141mexec.artisan migrate\u001b[0m\u001b[38;5;245m (lerd) \u2026 \u001b[0m\u001b[38;5;42mdone\u001b[0m\r\n"]
 [9.42, "o", "  Ran 18 migrations in 240ms. Tailing \u001b[38;5;141mqueue\u001b[0m + \u001b[38;5;141mdump\u001b[0m for you.\r\n"]
+[14.42, "o", "\u001b[0m"]
