@@ -85,6 +85,13 @@ func handleDoctorFixRun(w http.ResponseWriter, r *http.Request, site *config.Sit
 	// Creating a schema runs in the engine's container, not the site's, so it is
 	// a host action as well: the site the finding belongs to could not create it
 	// from the inside even with a shell.
+	// Holding the cache in memory rewrites the shared PHP unit and restarts it,
+	// which reaches every site on that version, so it is a host action too.
+	if key == sitedoctor.FixCacheInMemory {
+		err := lerdcli.EnableCacheInMemory(*site)
+		streamHostAction(w, "mounted the framework cache in memory for "+site.Name+" and restarted the shared PHP "+site.PHPVersion+" container", err)
+		return
+	}
 	if key == sitedoctor.FixCreateDatabase {
 		handleDoctorDatabaseFix(w, r, site)
 		return

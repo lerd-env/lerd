@@ -227,3 +227,33 @@ func TestSaveProjectConfig_warnsWhenLocalSwallowsTheChange(t *testing.T) {
 		t.Errorf("unexpected warning on an ordinary save: %q", out.String())
 	}
 }
+
+// A site with no .lerd.yaml still has a framework: lerd detects it from the
+// project the same way linking does, so the declared cache paths are found.
+func TestTmpfsPathsForDir_DetectsTheFrameworkWithoutAProjectConfig(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	t.Setenv("XDG_DATA_HOME", filepath.Join(home, ".local", "share"))
+
+	storeDir := StoreFrameworksDir()
+	if err := os.MkdirAll(storeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	def := "name: symfony\nlabel: Symfony\nversion: \"8\"\npublic_dir: public\n" +
+		"detect:\n  - composer: symfony/framework-bundle\n" +
+		"tmpfs_paths:\n  - var/cache\n"
+	if err := os.WriteFile(filepath.Join(storeDir, "symfony@8.yaml"), []byte(def), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dir := t.TempDir()
+	composer := `{"require":{"symfony/framework-bundle":"^8.0"}}`
+	if err := os.WriteFile(filepath.Join(dir, "composer.json"), []byte(composer), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := TmpfsPathsForDir(dir); len(got) != 1 || got[0] != "var/cache" {
+		t.Errorf("got %v, want [var/cache] without a .lerd.yaml", got)
+	}
+}

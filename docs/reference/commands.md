@@ -158,6 +158,7 @@ Supported PHP versions: **8.5**, **8.4**, **8.3**, **8.2**, **8.1**, the prerele
 |---|---|
 | `lerd use <version>` | Set the global PHP version and build the FPM image if needed |
 | `lerd isolate <version>` | Pin PHP version for cwd: writes `.php-version` and updates `.lerd.yaml` if present, then re-links. A version with no image on the machine is built first |
+| `lerd cache:memory [on\|off]` | macOS only: mount the framework's declared cache directories as tmpfs in the PHP container so the compiled cache stays off the bind mount. Writes the opt-in to the untracked `.lerd.local.yaml`. Restarts the shared container for every site on the PHP version; with no argument prints the current setting |
 | `lerd php:list` | List all installed PHP-FPM versions |
 | `lerd php:rebuild [version] [--local]` | Force-rebuild PHP-FPM images, or install a version this machine does not have (pulls pre-built base by default; `--local` builds from source) |
 | `lerd fetch [version...] [--local]` | Pull pre-built PHP FPM base images from ghcr.io for the given versions, or every released one when none are named; `--local` builds from source instead |

@@ -472,3 +472,23 @@ func IsDBServiceName(name string) bool {
 	}
 	return false
 }
+
+// TmpfsPathsForDir returns the cache directories the project's framework
+// declares, preferring the definition the project carries over the store copy.
+func TmpfsPathsForDir(dir string) []string {
+	proj, err := LoadProjectConfig(dir)
+	if err != nil || proj == nil {
+		proj = &ProjectConfig{}
+	}
+	if proj.FrameworkDef != nil && len(proj.FrameworkDef.TmpfsPaths) > 0 {
+		return proj.FrameworkDef.TmpfsPaths
+	}
+	name := proj.Framework
+	if name == "" {
+		name, _ = DetectFrameworkForDir(dir)
+	}
+	if fw, ok := GetFrameworkForDir(name, dir); ok && fw != nil {
+		return fw.TmpfsPaths
+	}
+	return nil
+}

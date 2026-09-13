@@ -56,7 +56,11 @@ type Framework struct {
 	// SourceDirs overrides which project directories the activity watcher treats
 	// as source for idle-suspend (a save there keeps the site awake). When empty,
 	// config.DefaultSourceDirs applies. Paths are relative to the project root.
-	SourceDirs []string                   `yaml:"source_dirs,omitempty"`
+	SourceDirs []string `yaml:"source_dirs,omitempty"`
+	// TmpfsPaths are the directories a framework compiles into that are worth
+	// holding in memory rather than on the macOS bind mount, relative to the
+	// project root. A site opts in with cache_in_memory in its .lerd.yaml.
+	TmpfsPaths []string                   `yaml:"tmpfs_paths,omitempty"`
 	Env        FrameworkEnvConf           `yaml:"env,omitempty"`
 	Composer   string                     `yaml:"composer,omitempty"` // auto | true | false
 	NPM        string                     `yaml:"npm,omitempty"`      // auto | true | false

@@ -142,7 +142,8 @@
     services_start: 'Start the stopped services',
     database_create: 'Create the missing database',
     bucket_create: 'Create the missing bucket',
-    stale_workers_remove: 'Remove the stale worker units'
+    stale_workers_remove: 'Remove the stale worker units',
+    cache_in_memory_enable: 'Hold the framework cache in memory (restarts the shared PHP container)'
   };
 
   async function runFix(check: DoctorCheck) {

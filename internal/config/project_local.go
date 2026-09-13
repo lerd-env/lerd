@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -159,4 +160,30 @@ func sameNode(a, b *yaml.Node) bool {
 func warnLocalOverride(keys []string) {
 	feedback.Warn("%s sets %s and keeps winning, so the new value was not saved. Change it there instead.",
 		LocalOverrideFile, strings.Join(keys, ", "))
+}
+
+// SetLocalOverride writes one boolean key into dir's .lerd.local.yaml, creating
+// the file if needed and leaving every other key it holds untouched. Use it for
+// a choice that belongs to this machine rather than the repo, which is why it
+// never touches the committed .lerd.yaml.
+func SetLocalOverride(dir, key string, value bool) error {
+	root, err := loadMapping(LocalOverridePath(dir))
+	if err != nil {
+		return err
+	}
+	if root == nil {
+		root = &yaml.Node{Kind: yaml.MappingNode}
+	}
+	setMappingValue(root, key, &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!bool", Value: fmt.Sprintf("%t", value)})
+
+	var buf bytes.Buffer
+	enc := yaml.NewEncoder(&buf)
+	enc.SetIndent(2)
+	if err := enc.Encode(root); err != nil {
+		return err
+	}
+	if err := enc.Close(); err != nil {
+		return err
+	}
+	return os.WriteFile(LocalOverridePath(dir), buf.Bytes(), 0o644)
 }

@@ -76,6 +76,10 @@ const (
 	// workers the site no longer declares, a host action for the same reason the
 	// vhost fix is one: the units live outside the container.
 	FixStaleWorkers = "stale_workers_remove"
+	// FixCacheInMemory mounts the cache paths the site's framework declares as
+	// tmpfs in the PHP container, a host action like the vhost one: it rewrites
+	// the shared container's unit, which no site can do from the inside.
+	FixCacheInMemory = "cache_in_memory_enable"
 )
 
 // DoctorFixCommands maps each universal fix key to the shell command run in the

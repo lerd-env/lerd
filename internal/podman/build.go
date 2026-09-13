@@ -1033,6 +1033,7 @@ func renderFPMQuadletContent(version string) (string, error) {
 	content = strings.ReplaceAll(content, "{{.ComposerMountLine}}", composerMountLine())
 	content = applyShellMounts(content, short)
 	content = InjectExtraVolumes(content, ExtraVolumePaths())
+	content = InjectTmpfs(content, TmpfsPathsFor(version))
 	return content, nil
 }
 

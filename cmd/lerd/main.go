@@ -153,6 +153,7 @@ func main() {
 	root.AddCommand(cli.NewNodeUnmanageCmd())
 	root.AddCommand(cli.NewNodeManagerCmd())
 	root.AddCommand(cli.NewJSRuntimeCmd())
+	root.AddCommand(cli.NewCacheMemoryCmd())
 	root.AddCommand(cli.NewPhpListCmd())
 	root.AddCommand(cli.NewPhpRebuildCmd())
 	root.AddCommand(cli.NewPhpUpdateCmd())

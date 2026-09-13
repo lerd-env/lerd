@@ -596,7 +596,7 @@ A top-level `cache_command` names the console subcommand that clears the framewo
 
 The Fix button runs the command through the same gate as everywhere else, so a fix pointing at a `confirm: true` command still asks first, and the doctor re-checks only once the command has actually run.
 
-There are four check types, each with its own fields.
+There are five check types, each with its own fields.
 
 `env_key_set` fails when a single env key is empty. It takes `env_key`, the key to read.
 
@@ -695,6 +695,21 @@ A definition lists those in `requires:`, naming service presets. On `lerd link` 
 The site doctor reports the same thing after the fact: a required service that is not installed is a failure, since the app cannot boot, and one that is installed but stopped is a warning, since starting it is a single command.
 
 A required service pulls an image and runs a container, so, like host workers and `nginx.snippet`, `requires:` is honoured only from the trusted store and from a user overlay. An embedded `framework_def` in a project's `.lerd.yaml` has it stripped.
+
+## Holding a compiled cache in memory
+
+On macOS the project directory reaches PHP over a virtiofs bind mount, so a framework that compiles its cache into the project pays that crossing on every read and write it does there. `tmpfs_paths` names the directories that are worth holding in memory instead, relative to the project root:
+
+```yaml
+tmpfs_paths:
+  - var/cache
+```
+
+Declaring a path does not mount anything. Opting in belongs to the site rather than the framework, since it is a trade-off one machine makes: `cache_in_memory: true` in the site's untracked `.lerd.local.yaml` turns it on, and `lerd cache:memory on` writes that key for you and git-ignores the file. It goes there rather than in the committed `.lerd.yaml` because this is a macOS-only choice about one machine's filesystem, which a teammate on Linux should not inherit from the repo. Each declared path is then resolved against the site root and added to the shared PHP-FPM container as a `Tmpfs=` mount, which FPM, the console and the workers all see, with no framework change and no environment variable the framework has to read.
+
+Three things follow from that and are worth knowing before turning it on. The FPM container is shared by every site on a PHP version, so enabling it for one site restarts that container for all of them. The cache lives and dies with the container, so the first request after a restart pays a full compile. And the host sees an empty directory where the cache used to be, which matters for a composer script or an editor tool that reads it from outside the container.
+
+The site doctor's `host_mounted_path` check carries this as its Fix button wherever the framework declares a path, so the usual way in is the dashboard telling you about the problem and offering to resolve it. The feature is macOS and container runtime only. On Linux the project and PHP already share a filesystem, and on the native runtime PHP is the host, so neither has a mount to escape. The `host_mounted_path` doctor check goes quiet on a site that has opted in.
 
 ## Framework nginx config
 

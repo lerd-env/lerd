@@ -118,6 +118,26 @@ describe('SiteDoctorModal', () => {
     expect(launchCommand).not.toHaveBeenCalled();
   });
 
+  // Mounting the cache as tmpfs rewrites the shared PHP unit, so it runs on the
+  // host through the fix endpoint rather than as a framework command.
+  it('holds the framework cache in memory through the fix endpoint', async () => {
+    loadDoctor.mockResolvedValue({
+      checks: [
+        { name: 'cache_on_bind_mount', label: 'Cache Directory', status: 'warn', detail: 'var/cache sits on the macOS bind mount', fix: 'cache_in_memory_enable' }
+      ],
+      failures: 0,
+      warnings: 1
+    });
+    loadCommands.mockResolvedValue([]);
+
+    render(SiteDoctorModal, { props: { open: true, site: site(), branch: '', onclose: () => {} } });
+
+    await fireEvent.click(await screen.findByRole('button', { name: 'Fix' }));
+
+    expect(executeDoctorFix).toHaveBeenCalledWith('acme.test', 'cache_in_memory_enable', 'Hold the framework cache in memory (restarts the shared PHP container)', '');
+    expect(launchCommand).not.toHaveBeenCalled();
+  });
+
   it('omits the Fix button when no matching command is available', async () => {
     loadDoctor.mockResolvedValue({
       checks: [{ name: 'storage_link', status: 'warn', detail: 'symlink missing', fix: 'storage:link' }],

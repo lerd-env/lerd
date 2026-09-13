@@ -155,6 +155,20 @@ func applySiteDoctorFixes(path, fwName string, resp sitedoctor.Response, quiet b
 				fmt.Printf("  %s\n\n", feedback.Dim("regenerated the site's nginx vhost"))
 			}
 			fixed = true
+		case sitedoctor.FixCacheInMemory:
+			site, err := config.FindSiteByPath(path)
+			if err != nil || site == nil {
+				feedback.Warn("holding the cache in memory: no site registered for %s", path)
+				continue
+			}
+			if err := EnableCacheInMemory(*site); err != nil {
+				feedback.Warn("holding the cache in memory: %v", err)
+				continue
+			}
+			if !quiet {
+				fmt.Printf("  %s\n\n", feedback.Dim("mounted the framework cache in memory and restarted the shared PHP container"))
+			}
+			fixed = true
 		case sitedoctor.FixInstallServices, sitedoctor.FixStartServices:
 			fw, _ := config.GetFrameworkForDir(fwName, path)
 			ready, err := readyDeclaredServices(path, fw, quiet)

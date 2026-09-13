@@ -536,6 +536,11 @@ func containerToPodmanArgs(c map[string][]string) ([]string, error) {
 	for _, vol := range c["Volume"] {
 		args = append(args, "-v", stripSELinuxVolOpts(expandSpecifiers(vol)))
 	}
+	// After the volumes: a tmpfs shadows the bind mount it sits inside, which is
+	// the whole point of it (a framework cache kept off the macOS mount).
+	for _, path := range c["Tmpfs"] {
+		args = append(args, "--tmpfs", expandSpecifiers(path))
+	}
 	for _, env := range c["Environment"] {
 		args = append(args, "-e", unquoteSystemdValue(env))
 	}

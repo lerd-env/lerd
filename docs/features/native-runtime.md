@@ -37,6 +37,8 @@ FrankenPHP sites, custom containers and host-proxy sites are unaffected either w
 
 If you stay on the container runtime, the site doctor points out the one directory that costs the most across that boundary. A framework that compiles its cache into the project, Symfony into `var/cache`, reads and writes it over the mount on every request, and the doctor's `Cache Directory` check tells you how to move it onto a container local path. The check only appears on macOS in container mode, since neither Linux nor the native runtime crosses a mount at all.
 
+Where the framework declares the path in the store, the check's Fix button (or `lerd cache:memory on`) goes further than advising: it mounts that directory as tmpfs inside the PHP container, so the compiled cache is written to memory and never reaches the mount. The opt-in lands in the site's untracked `.lerd.local.yaml`, since it is a choice about this machine rather than the repo. The cache dies with the container and the host sees an empty directory in its place, and since the FPM container is shared by a PHP version, turning it on restarts every site running that version. See [holding a compiled cache in memory](../usage/framework-definitions.md#holding-a-compiled-cache-in-memory).
+
 ## Installing and updating
 
 The builds are downloaded, not compiled here. Switching to the native runtime fetches whatever versions your sites run, verifying each against a published sha256, and `lerd use <version>` fetches one on demand:

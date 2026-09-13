@@ -46,6 +46,8 @@ and test against, but the pull request goes to **lerd-env/frameworks**.
      `detail:` string
    - `commands` — dashboard/TUI custom commands with `icon` and `confirm` where
      destructive
+   - `tmpfs_paths` — cache directories worth holding in memory on macOS, which a
+     site opts into with `cache_in_memory` in `.lerd.local.yaml`
    - `devtools.jobs` — the method that runs a queued job, so the Debug window
      reports the framework's queue. One entry with `implements` (usually the
      job interface), `class` or `extends`, plus `method` and an optional `name`

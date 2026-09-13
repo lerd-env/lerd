@@ -22,7 +22,7 @@ func checkHostMountedPath(path string, spec config.DoctorCheck) (Check, bool) {
 // passed in. Linux shares a filesystem with PHP and a natively served site runs
 // PHP on the host, so neither crosses a VM boundary and neither gets a row.
 func hostMountedPathOn(goos string, native bool, path string, spec config.DoctorCheck) (Check, bool) {
-	if goos != "darwin" || native {
+	if goos != "darwin" || native || cacheHeldInMemory(path) {
 		return Check{}, false
 	}
 	var present []string
@@ -39,7 +39,13 @@ func hostMountedPathOn(goos string, native bool, path string, spec config.Doctor
 		detail = fmt.Sprintf("%s %s on the macOS bind mount, so every read and write there crosses virtiofs. Moving %s onto a path inside the container is worth a large part of the request time.",
 			strings.Join(present, ", "), Plural(len(present), "sits", "sit"), Plural(len(present), "it", "them"))
 	}
-	return Check{Name: spec.Name, Status: triggeredStatus(spec, StatusWarn), Detail: detail, Fix: spec.Fix}, true
+	// Only offer the button where there is something to mount: a framework that
+	// declares no path would hand the user a fix that cannot do anything.
+	fix := spec.Fix
+	if len(config.TmpfsPathsForDir(path)) > 0 {
+		fix = FixCacheInMemory
+	}
+	return Check{Name: spec.Name, Status: triggeredStatus(spec, StatusWarn), Detail: detail, Fix: fix}, true
 }
 
 // siteServedNatively reports whether the host PHP serves this project. An
@@ -47,4 +53,11 @@ func hostMountedPathOn(goos string, native bool, path string, spec config.Doctor
 func siteServedNatively(path string) bool {
 	site, err := config.FindSiteByPath(path)
 	return err == nil && site != nil && site.IsNative()
+}
+
+// cacheHeldInMemory reports whether the site mounts the declared paths as tmpfs
+// inside the container, which takes them off the mount this check warns about.
+func cacheHeldInMemory(path string) bool {
+	proj, err := config.LoadProjectConfig(path)
+	return err == nil && proj != nil && proj.CacheInMemory
 }

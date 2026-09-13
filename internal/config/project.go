@@ -106,6 +106,11 @@ type ProjectConfig struct {
 	// into its own database (named <parent_db>_<sanitized_branch>) so
 	// migrations don't bleed into the parent. Off by default.
 	DBIsolated bool `yaml:"db_isolated,omitempty"`
+
+	// CacheInMemory mounts the framework's declared tmpfs_paths as tmpfs inside
+	// the PHP container, keeping the compiled cache off the macOS bind mount.
+	// The cache dies with the container and the host sees an empty directory.
+	CacheInMemory bool `yaml:"cache_in_memory,omitempty"`
 	// EnvOverrides maps env keys to template values that are resolved and
 	// written into the worktree's .env when a worktree is created. Supported
 	// placeholders: {{domain}} (worktree domain), {{scheme}} (http/https),
